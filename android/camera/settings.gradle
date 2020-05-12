@@ -1,0 +1,2 @@
+rootProject.name='Hela Surveillance Camera'
+include ':app-surveillance-camera'
