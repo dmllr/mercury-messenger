@@ -10,23 +10,27 @@ class CameraBufferSource: public StreamSource {
 	AMediaCodecBufferInfo info;
 	uint8_t* buffer = nullptr;
 	uint64_t timeStart_us = 0;
+
+protected:
+	std::shared_ptr<CameraManager> camera_manager;
+
 public:
-	CameraBufferSource(std::shared_ptr<CameraManager*> camera_manager) : camera_manager(camera_manager) {
+	CameraBufferSource(std::shared_ptr<CameraManager> camera_manager) : camera_manager(camera_manager) {
 	}
 
     virtual void start() {
-		(*camera_manager)->codec()->start();
-		(*camera_manager)->addCaptureRequestTarget(CaptureTarget::ENCODER_SURFACE_IDX, (*camera_manager)->surface());
-		(*camera_manager)->setStreamRequested(true);
+		camera_manager->codec()->start();
+		camera_manager->addCaptureRequestTarget(CaptureTarget::ENCODER_SURFACE_IDX, camera_manager->surface());
+		camera_manager->setStreamRequested(true);
 		loadNextSample();
 	}
 
     virtual void stop() {
-//		(*camera_manager)->codec()->stop();
+//		camera_manager->codec()->stop();
     }
 
     virtual void loadNextSample() {
-		const auto& codec = (*camera_manager)->codec()->getCodec();
+		const auto& codec = camera_manager->codec()->getCodec();
 		auto index = AMediaCodec_dequeueOutputBuffer(codec, &info, 100000);  // TODO const timeout
 		if (likely(index >= 0)) {
 			if (unlikely(info.flags == AMEDIACODEC_BUFFER_FLAG_CODEC_CONFIG)) {
@@ -164,12 +168,9 @@ public:
 //		return units;
 //	}
 
-protected:
-	std::shared_ptr<CameraManager*> camera_manager;
-
-private:
-	std::optional<std::vector<std::byte>> previousUnitType5 = std::nullopt;
-	std::optional<std::vector<std::byte>> previousUnitType7 = std::nullopt;
-	std::optional<std::vector<std::byte>> previousUnitType8 = std::nullopt;
+//private:
+//	std::optional<std::vector<std::byte>> previousUnitType5 = std::nullopt;
+//	std::optional<std::vector<std::byte>> previousUnitType7 = std::nullopt;
+//	std::optional<std::vector<std::byte>> previousUnitType8 = std::nullopt;
 
 };

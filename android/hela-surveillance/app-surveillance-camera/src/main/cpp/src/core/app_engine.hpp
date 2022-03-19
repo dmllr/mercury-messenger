@@ -26,7 +26,7 @@ class AppEngine {
 	int32_t request_width;
 	int32_t request_height;
 	jobject preview_surface = nullptr;
-	CameraManager* camera_manager = nullptr;
+	std::shared_ptr<CameraManager> camera_manager;
 	RtcManager* rtc_manager = nullptr;
 	server::StreamingServer* streaming_server = nullptr;
 	ImageFormat compatible_camera_res;
@@ -38,7 +38,7 @@ public:
 				  request_height(h) {
 		memset(&compatible_camera_res, 0, sizeof(compatible_camera_res));
 
-		camera_manager = new CameraManager();
+		camera_manager = std::make_shared<CameraManager>();
 		camera_manager->matchCaptureSizeRequest(request_width, request_height, &compatible_camera_res);
 
 		rtc_manager = new RtcManager();
@@ -61,11 +61,6 @@ public:
 	}
 
 	~AppEngine() {
-		if (camera_manager) {
-			delete camera_manager;
-			camera_manager = nullptr;
-		}
-
 		if (streaming_server) {
 			delete streaming_server;
 			streaming_server = nullptr;
@@ -124,9 +119,7 @@ public:
 protected:
 
 	std::shared_ptr<Stream> createRtcStream() {
-		auto cm = std::make_shared<CameraManager*>(camera_manager);
-
-		auto video = std::make_shared<CameraBufferSource>(cm);
+		auto video = std::make_shared<CameraBufferSource>(camera_manager);
 		auto audio = std::make_shared<OPUSFileParser>("/fake/path", true);
 
 		return std::make_shared<Stream>(video, audio);
