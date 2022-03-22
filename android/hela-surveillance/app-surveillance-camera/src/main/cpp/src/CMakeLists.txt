@@ -1,9 +1,7 @@
 add_library(camera-lib SHARED
 	lib.cpp
 
-	#datachannel-example
 	rtc/dispatchqueue.cpp
-#	rtc/h264fileparser.cpp
 	rtc/helpers.cpp
 
 	# temporary
@@ -12,8 +10,6 @@ add_library(camera-lib SHARED
 
 	rtc/stream.cpp
 )
-
-link_libraries(crypto ssl)
 
 target_compile_features(camera-lib PUBLIC cxx_std_17)
 

@@ -19,6 +19,7 @@
 #include "helpers.hpp"
 
 #include <ctime>
+#include <utility>
 
 #ifdef _MSC_VER
 // taken from https://stackoverflow.com/questions/10905892/equivalent-of-gettimeday-for-windows
@@ -66,8 +67,8 @@ using namespace std;
 using namespace rtc;
 
 ClientTrackData::ClientTrackData(shared_ptr<Track> track, shared_ptr<RtcpSrReporter> sender) {
-	this->track = track;
-	this->sender = sender;
+	this->track = std::move(track);
+	this->sender = std::move(sender);
 }
 
 void Client::setState(State state) {
@@ -86,7 +87,7 @@ ClientTrack::ClientTrack(string id, shared_ptr<ClientTrackData> trackData) {
 }
 
 uint64_t currentTimeInMicroSeconds() {
-	struct timeval time;
-	gettimeofday(&time, NULL);
+	struct timeval time{};
+	gettimeofday(&time, nullptr);
 	return uint64_t(time.tv_sec) * 1000 * 1000 + time.tv_usec;
 }

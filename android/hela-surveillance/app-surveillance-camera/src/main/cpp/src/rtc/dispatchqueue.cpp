@@ -21,9 +21,8 @@
 
 DispatchQueue::DispatchQueue(std::string name, size_t threadCount) :
     name{std::move(name)}, threads(threadCount) {
-    for(size_t i = 0; i < threads.size(); i++)
-    {
-        threads[i] = std::thread(&DispatchQueue::dispatchThreadHandler, this);
+    for(auto & i : threads) {
+        i = std::thread(&DispatchQueue::dispatchThreadHandler, this);
     }
 }
 
@@ -35,11 +34,9 @@ DispatchQueue::~DispatchQueue() {
     condition.notify_all();
 
     // Wait for threads to finish before we exit
-    for(size_t i = 0; i < threads.size(); i++)
-    {
-        if(threads[i].joinable())
-        {
-            threads[i].join();
+    for(auto & thread : threads) {
+        if(thread.joinable()) {
+            thread.join();
         }
     }
 }
@@ -69,16 +66,16 @@ void DispatchQueue::dispatch(fp_t&& op) {
     condition.notify_one();
 }
 
-void DispatchQueue::dispatchThreadHandler(void) {
+void DispatchQueue::dispatchThreadHandler() {
     std::unique_lock<std::mutex> lock(lockMutex);
     do {
         //Wait until we have data or a quit signal
         condition.wait(lock, [this]{
-            return (queue.size() || quit);
+            return (!queue.empty() || quit);
         });
 
         //after wait, we own the lock
-        if(!quit && queue.size())
+        if(!quit && !queue.empty())
         {
             auto op = std::move(queue.front());
             queue.pop();

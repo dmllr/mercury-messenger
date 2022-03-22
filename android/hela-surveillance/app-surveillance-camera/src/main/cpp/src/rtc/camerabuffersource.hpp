@@ -79,77 +79,77 @@ public:
 		}
     }
 
-	void deliver() {
-		auto v = std::vector<uint8_t>(&buffer[0] + info.offset, &buffer[0] + info.offset + info.size);
-		sample = *reinterpret_cast<std::vector<std::byte> *>(&v);
-		sampleTime_us = info.presentationTimeUs - timeStart_us;
-//		sampleTime_us += sampleDuration_us;
-
-//		auto z = (std::byte)0;
-//		auto o = (std::byte)1;
-//		unsigned long long i = 0;
-//		while (i < sample.size()) {
-//			while (i + 3 < sample.size() && (sample[i] != z || sample[i+1] != z || sample[i+2] != z || sample[i+3] != o))
-//				i++;
-//			if (i + 4 >= sample.size())
-//				break;
-//			auto naluStartIndex = i;
-//			i += 4;
-//			while (i + 4 < sample.size() && (sample[i+1] != z || sample[i+2] != z || sample[i+3] != z || sample[i+4] != o))
-//				i++;
-//			if (i >= sample.size())
-//				break;
-//			auto naluEndIndex = i;
+//	void deliver() {
+//		auto v = std::vector<uint8_t>(&buffer[0] + info.offset, &buffer[0] + info.offset + info.size);
+//		sample = *reinterpret_cast<std::vector<std::byte> *>(&v);
+//		sampleTime_us = info.presentationTimeUs - timeStart_us;
+////		sampleTime_us += sampleDuration_us;
 //
-//			LOGD << "NALU from " << naluStartIndex << " to " << naluEndIndex << " out of " << sample.size();
+////		auto z = (std::byte)0;
+////		auto o = (std::byte)1;
+////		unsigned long long i = 0;
+////		while (i < sample.size()) {
+////			while (i + 3 < sample.size() && (sample[i] != z || sample[i+1] != z || sample[i+2] != z || sample[i+3] != o))
+////				i++;
+////			if (i + 4 >= sample.size())
+////				break;
+////			auto naluStartIndex = i;
+////			i += 4;
+////			while (i + 4 < sample.size() && (sample[i+1] != z || sample[i+2] != z || sample[i+3] != z || sample[i+4] != o))
+////				i++;
+////			if (i >= sample.size())
+////				break;
+////			auto naluEndIndex = i;
+////
+////			LOGD << "NALU from " << naluStartIndex << " to " << naluEndIndex << " out of " << sample.size();
+////
+////			auto header = reinterpret_cast<rtc::NalUnitHeader*>(sample.data() + naluStartIndex + 4);
+////			auto type = header->unitType();
+////			switch (type) {
+////				case 7:
+////					previousUnitType7 = {sample.begin() + naluStartIndex, sample.begin() + naluEndIndex};
+////					break;
+////				case 8:
+////					previousUnitType8 = {sample.begin() + naluStartIndex, sample.begin() + naluEndIndex};;
+////					break;
+////				case 5:
+////					previousUnitType5 = {sample.begin() + naluStartIndex, sample.begin() + naluEndIndex};;
+////					break;
+////			}
+////		}
 //
-//			auto header = reinterpret_cast<rtc::NalUnitHeader*>(sample.data() + naluStartIndex + 4);
-//			auto type = header->unitType();
-//			switch (type) {
-//				case 7:
-//					previousUnitType7 = {sample.begin() + naluStartIndex, sample.begin() + naluEndIndex};
-//					break;
-//				case 8:
-//					previousUnitType8 = {sample.begin() + naluStartIndex, sample.begin() + naluEndIndex};;
-//					break;
-//				case 5:
-//					previousUnitType5 = {sample.begin() + naluStartIndex, sample.begin() + naluEndIndex};;
-//					break;
-//			}
-//		}
-
-
-//		auto f = std::ofstream("hello.mp4", std::ios::out | std::ios::app | std::ios::binary);
-//		f.write((const char*)&buffer[0], size);
-//		f.flush();
-//		f.close();
-
-//		auto lengthPtr = (uint8_t*) (sample.data() + 5);
-//		*lengthPtr = *lengthPtr & 0b00000001;
-
-		LOGI << std::hex
-				 << std::setfill('0') << std::setw(2) << static_cast<unsigned>(buffer[0]) << " "
-				 << std::setfill('0') << std::setw(2) << static_cast<unsigned>(buffer[1]) << " "
-				 << std::setfill('0') << std::setw(2) << static_cast<unsigned>(buffer[2]) << " "
-				 << std::setfill('0') << std::setw(2) << static_cast<unsigned>(buffer[3]) << " "
-				 << std::setfill('0') << std::setw(2) << static_cast<unsigned>(buffer[4]) << " "
-				 << std::setfill('0') << std::setw(2) << static_cast<unsigned>(buffer[5]) << " "
-				 << std::setfill('0') << std::setw(2) << static_cast<unsigned>(buffer[6]) << " "
-				 << std::setfill('0') << std::setw(2) << static_cast<unsigned>(buffer[7]) << " "
-				 << std::setfill('0') << std::setw(2) << static_cast<unsigned>(buffer[8]) << " "
-				 << std::setfill('0') << std::setw(2) << static_cast<unsigned>(buffer[9]) << " "
-				 << std::setfill('0') << std::setw(2) << static_cast<unsigned>(buffer[10]) << " "
-				 << std::setfill('0') << std::setw(2) << static_cast<unsigned>(buffer[11]) << " "
-				 << std::setfill('0') << std::setw(2) << static_cast<unsigned>(buffer[12]) << " "
-				 << std::setfill('0') << std::setw(2) << static_cast<unsigned>(buffer[13]) << " "
-				 << std::setfill('0') << std::setw(2) << static_cast<unsigned>(buffer[14]) << " "
-				 << std::setfill('0') << std::setw(2) << static_cast<unsigned>(buffer[15]) << " "
-				 << std::setfill('0') << std::setw(2) << static_cast<unsigned>(buffer[16]) << " "
-				 << std::setfill('0') << std::setw(2) << static_cast<unsigned>(buffer[17]) << " "
-				 << std::setfill('0') << std::setw(2) << static_cast<unsigned>(buffer[18]) << " "
-				 << std::setfill('0') << std::setw(2) << static_cast<unsigned>(buffer[19]) << " "
-				 ;
-	}
+//
+////		auto f = std::ofstream("hello.mp4", std::ios::out | std::ios::app | std::ios::binary);
+////		f.write((const char*)&buffer[0], size);
+////		f.flush();
+////		f.close();
+//
+////		auto lengthPtr = (uint8_t*) (sample.data() + 5);
+////		*lengthPtr = *lengthPtr & 0b00000001;
+//
+//		LOGI << std::hex
+//				 << std::setfill('0') << std::setw(2) << static_cast<unsigned>(buffer[0]) << " "
+//				 << std::setfill('0') << std::setw(2) << static_cast<unsigned>(buffer[1]) << " "
+//				 << std::setfill('0') << std::setw(2) << static_cast<unsigned>(buffer[2]) << " "
+//				 << std::setfill('0') << std::setw(2) << static_cast<unsigned>(buffer[3]) << " "
+//				 << std::setfill('0') << std::setw(2) << static_cast<unsigned>(buffer[4]) << " "
+//				 << std::setfill('0') << std::setw(2) << static_cast<unsigned>(buffer[5]) << " "
+//				 << std::setfill('0') << std::setw(2) << static_cast<unsigned>(buffer[6]) << " "
+//				 << std::setfill('0') << std::setw(2) << static_cast<unsigned>(buffer[7]) << " "
+//				 << std::setfill('0') << std::setw(2) << static_cast<unsigned>(buffer[8]) << " "
+//				 << std::setfill('0') << std::setw(2) << static_cast<unsigned>(buffer[9]) << " "
+//				 << std::setfill('0') << std::setw(2) << static_cast<unsigned>(buffer[10]) << " "
+//				 << std::setfill('0') << std::setw(2) << static_cast<unsigned>(buffer[11]) << " "
+//				 << std::setfill('0') << std::setw(2) << static_cast<unsigned>(buffer[12]) << " "
+//				 << std::setfill('0') << std::setw(2) << static_cast<unsigned>(buffer[13]) << " "
+//				 << std::setfill('0') << std::setw(2) << static_cast<unsigned>(buffer[14]) << " "
+//				 << std::setfill('0') << std::setw(2) << static_cast<unsigned>(buffer[15]) << " "
+//				 << std::setfill('0') << std::setw(2) << static_cast<unsigned>(buffer[16]) << " "
+//				 << std::setfill('0') << std::setw(2) << static_cast<unsigned>(buffer[17]) << " "
+//				 << std::setfill('0') << std::setw(2) << static_cast<unsigned>(buffer[18]) << " "
+//				 << std::setfill('0') << std::setw(2) << static_cast<unsigned>(buffer[19]) << " "
+//				 ;
+//	}
 
 //	std::vector<std::byte> initialNALUS() {
 //		std::vector<std::byte> units{};

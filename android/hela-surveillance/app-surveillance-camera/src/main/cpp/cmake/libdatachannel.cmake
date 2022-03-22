@@ -1,6 +1,7 @@
-#import_remote("https://github.com/dmllr/libdatachannel.git" TAG "master" ALIAS libdatachannel)
+import_remote("https://github.com/paullouisageneau/libdatachannel.git" TAG "fa18a6bae6c7efcc23ff0722e0f7c4668ca0e6e0" DST "${CMAKE_SOURCE_DIR}/_imported/libdatachannel" ALIAS libdatachannel NO_CMAKE)
+# about v0.16.6
 
-set(libdatachannel_path ${CMAKE_CURRENT_LIST_DIR}/../libs/datachannel)
+#set(libdatachannel_path ${CMAKE_CURRENT_LIST_DIR}/../libs/datachannel)
 
 set(BUILD_SHARED_LIBS OFF) # to force usrsctp to be built static
 
@@ -166,6 +167,7 @@ target_link_libraries(datachannel
 set_target_properties(datachannel PROPERTIES
 	CXX_STANDARD 17
 )
+target_compile_features(datachannel PUBLIC cxx_std_17)
 target_compile_definitions(datachannel PRIVATE
 	RTC_ENABLE_MEDIA
 	RTC_ENABLE_WEBSOCKET
