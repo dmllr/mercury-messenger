@@ -27,8 +27,8 @@ class AppEngine {
 	int32_t request_height;
 	jobject preview_surface = nullptr;
 	std::shared_ptr<CameraManager> camera_manager;
-	RtcManager* rtc_manager = nullptr;
-	server::StreamingServer* streaming_server = nullptr;
+	std::shared_ptr<RtcManager> rtc_manager;
+	std::shared_ptr<server::StreamingServer> streaming_server;
 	ImageFormat compatible_camera_res;
 
 public:
@@ -41,12 +41,12 @@ public:
 		camera_manager = std::make_shared<CameraManager>();
 		camera_manager->matchCaptureSizeRequest(request_width, request_height, &compatible_camera_res);
 
-		rtc_manager = new RtcManager();
+		rtc_manager = std::make_shared<RtcManager>();
 		const auto stream = createRtcStream();
 		rtc_manager->setStream(stream);
 		rtc_manager->start();
 
-		streaming_server = new server::StreamingServer();
+		streaming_server = std::make_shared<server::StreamingServer>();
 		streaming_server->start(camera_manager->codec()->getCodec());
 		streaming_server->onSessionStart = [this]() {
 			if (streaming_server->getActiveSessions().size() == 1)
@@ -61,11 +61,6 @@ public:
 	}
 
 	~AppEngine() {
-		if (streaming_server) {
-			delete streaming_server;
-			streaming_server = nullptr;
-		}
-
 		if (preview_surface) {
 			env->DeleteGlobalRef(preview_surface);
 			preview_surface = nullptr;
@@ -114,7 +109,6 @@ public:
 	void requestRtc() {
 		rtc_manager->start();
 	}
-
 
 protected:
 

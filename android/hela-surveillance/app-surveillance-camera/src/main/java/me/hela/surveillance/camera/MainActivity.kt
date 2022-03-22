@@ -166,7 +166,7 @@ class MainActivity : Activity(), TextureView.SurfaceTextureListener, ServiceConn
 		val cameraPreviewSize = cameraService?.cameraPreviewSize ?: return
 
 		resizeTextureView(width, height)
-		texture!!.setDefaultBufferSize(cameraPreviewSize.width, cameraPreviewSize.height)
+		texture.setDefaultBufferSize(cameraPreviewSize.width, cameraPreviewSize.height)
 
 		val surface = Surface(texture)
 		previewSurface = surface

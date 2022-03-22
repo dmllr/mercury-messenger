@@ -85,27 +85,20 @@ class CameraService : Service() {
 	}
 
 	private fun createNativeCamera() {
-//		val display = windowManager.defaultDisplay
-//		val height = display.mode.physicalHeight
-//		val width = display.mode.physicalWidth
-		val height = 320
-		val width = 240
+		val width = 1280;
+		val height = 720
 		cameraEngine = createCameraEngine(width, height)
 		cameraPreviewSize = getMinimumCompatiblePreviewSize(cameraEngine)
 	}
 
 	private fun startForeground() {
-		val channel =
-			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-				createNotificationChannel()
-			else ""
+		val channel = createNotificationChannel()
 
 		val notificationBuilder = NotificationCompat.Builder(this, channel)
 		val builder = notificationBuilder.setOngoing(true)
 			.setSmallIcon(R.drawable.ic_camera_stream)
 			.setPriority(PRIORITY_MIN)
-		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-			builder.setCategory(Notification.CATEGORY_SERVICE)
+		builder.setCategory(Notification.CATEGORY_SERVICE)
 
 		val notification = builder.build()
 		notification.flags + Notification.FLAG_NO_CLEAR
