@@ -17,10 +17,13 @@
 #include <__mutex_base>
 #include <mutex>
 
-#include "camera_manager.hpp"
-#include "camera/camera_utils.hpp"
-#include "logging/logging.h"
 #include "camera_codec.hpp"
+#include "camera_manager.hpp"
+
+#include "camera/camera_utils.hpp"
+#include "utils/jni_utils.h"
+#include "logging/logging.h"
+
 
 enum class CaptureSessionState : int32_t {
 	READY = 0,  // session is ready
@@ -260,6 +263,30 @@ public:
 		ACameraManager_deleteCameraIdList(cameraIds);
 	}
 
+	void bringActivityToForeground() {
+		JNIEnv* env = NULL;
+		gJavaVM->AttachCurrentThread(&env, NULL);
+		if (env == NULL) {
+			return;
+		}
+		static jmethodID mid = NULL;
+
+		jclass clazz = loaderFindClass(env, "me/hela/surveillance/camera/MainActivity");
+
+		if (clazz == NULL) {
+			return;
+		}
+		if (mid == NULL) {
+			mid = env->GetStaticMethodID(clazz, "bringActivityToForeground", "()V");
+		}
+		if (mid == NULL) {
+			return;
+		} else {
+            env->CallStaticVoidMethod(clazz, mid);
+			env->DeleteLocalRef(clazz);
+		}
+	}
+
 	void renewCaptureSession() {
 		if (capture_session_state == CaptureSessionState::ACTIVE) {
 			stopCapture();
@@ -274,6 +301,8 @@ public:
 
 		if (!active_requests)
 			return;
+
+		bringActivityToForeground();
 
 		auto status = ACameraManager_openCamera(camera_manager, active_camera_id.c_str(), GetDeviceListener(), &cameras[active_camera_id].device);
 		Log::assert_or_die(status == ACAMERA_OK, "ACameraManager_openCamera call failed with code: %#x, %s", status, GetErrorStr(status));

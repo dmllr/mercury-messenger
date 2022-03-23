@@ -15,6 +15,7 @@ import android.view.Surface
 import android.view.TextureView
 import android.view.View
 import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat.startActivity
 import me.hela.surveillance.camera.databinding.ActivityMainBinding
 
 
@@ -40,6 +41,8 @@ class MainActivity : Activity(), TextureView.SurfaceTextureListener, ServiceConn
 		setEventHandlers()
 
 		checkAndRequestCamera()
+
+		appContext = applicationContext;
 	}
 
 	private fun setDefaults() {
@@ -203,5 +206,15 @@ class MainActivity : Activity(), TextureView.SurfaceTextureListener, ServiceConn
 
 	companion object {
 		private const val PERMISSION_REQUEST_CODE_CAMERA: Int = 1
+
+		lateinit var appContext: Context
+
+		@JvmStatic
+		fun bringActivityToForeground() {
+			val intent = Intent(appContext, MainActivity::class.java)
+			intent.action = Intent.ACTION_MAIN
+			intent.addCategory(Intent.CATEGORY_LAUNCHER)
+			startActivity(appContext, intent, null)
+		}
 	}
 }

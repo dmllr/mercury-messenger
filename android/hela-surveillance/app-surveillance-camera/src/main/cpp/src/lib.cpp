@@ -1,6 +1,7 @@
 #include <jni.h>
 #include <cstring>
 #include <logging/logging.h>
+#include "utils/jni_utils.h"
 
 #include "core/app_engine.hpp"
 #include "camera/camera_codec.hpp"
@@ -12,6 +13,7 @@
  *   the top level application engine object
  */
 AppEngine* cameraEngine = nullptr;
+
 
 /**
  * createCamera() Create application instance and NDK camera object
@@ -153,4 +155,29 @@ Java_me_hela_surveillance_camera_CameraService_requestRtc(
 		jlong appmgr) {
 	const auto& app = reinterpret_cast<AppEngine*>(appmgr);
 	app->requestRtc();
+}
+
+JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void* reserved) {
+	// Grab the context ClassLoader of the current thread, if any.
+	JNIEnv* env;
+	if (vm->GetEnv((void**) &env, JNI_VERSION_1_6) != JNI_OK) {
+		return JNI_ERR;
+	}
+
+	gJavaVM = vm;
+	obtainClassLoader(env);
+
+	return JNI_VERSION_1_6;
+}
+
+JNIEXPORT void JNICALL JNI_OnUnLoad(JavaVM* jvm, void* reserved) {
+	JNIEnv* env;
+	if (jvm->GetEnv((void**)&env, JNI_VERSION_1_6) != JNI_OK) {
+		return;
+	}
+
+	if (gClassLoader != nullptr) {
+		env->DeleteWeakGlobalRef(gClassLoader);
+		gClassLoader = nullptr;
+	}
 }
