@@ -1,7 +1,7 @@
 #include <jni.h>
 #include <cstring>
-#include <logging/logging.h>
-#include "utils/jni_utils.h"
+
+#include "logging/logging.h"
 
 #include "core/app_engine.hpp"
 #include "camera/camera_codec.hpp"
@@ -12,7 +12,7 @@
  * AppEngine object:
  *   the top level application engine object
  */
-AppEngine* cameraEngine = nullptr;
+AppEngine* engine = nullptr;
 
 
 /**
@@ -29,33 +29,33 @@ AppEngine* cameraEngine = nullptr;
  * @return application object instance ( not used in this sample )
  */
 extern "C" JNIEXPORT jlong JNICALL
-Java_me_hela_surveillance_camera_CameraService_createCameraEngine(
+Java_me_hela_surveillance_camera_CameraService_createAppEngine(
 		JNIEnv* env,
 		jobject instance,
 		jint width, jint height) {
-	cameraEngine = new AppEngine(env, instance, width, height);
-	return reinterpret_cast<jlong>(cameraEngine);
+    engine = new AppEngine(env, instance, width, height);
+	return reinterpret_cast<jlong>(engine);
 }
 
 /**
- * deleteCamera():
+ * deleteAppEngine():
  *   releases native application object, which
  *   triggers native camera object be released
  */
 extern "C" JNIEXPORT void JNICALL
-Java_me_hela_surveillance_camera_CameraService_deleteCameraEngine(
+Java_me_hela_surveillance_camera_CameraService_deleteAppEngine(
 		JNIEnv* env,
 		jobject instance,
 		jlong appmgr) {
-	if (!cameraEngine || !appmgr)
+	if (!engine || !appmgr)
 		return;
 	auto app = reinterpret_cast<AppEngine*>(appmgr);
-	LOGF_IF(app != cameraEngine) << "NdkCamera Obj mismatch";
+	LOGF_IF(app != engine) << "NdkCamera Obj mismatch";
 
 	delete app;
 
 	// also reset the private global object
-	cameraEngine = nullptr;
+	engine = nullptr;
 }
 
 /**s
@@ -133,14 +133,14 @@ Java_me_hela_surveillance_camera_CameraService_onPreviewSurfaceDestroyed(
 
 	app->removePreviewSurface();
 
-	jclass cls = env->FindClass("android/view/Surface");
-	jmethodID toString = env->GetMethodID(cls, "toString", "()Ljava/lang/String;");
+	auto cls = env->FindClass("android/view/Surface");
+	auto toString = env->GetMethodID(cls, "toString", "()Ljava/lang/String;");
 
 	auto destroyObjStr = reinterpret_cast<jstring>(env->CallObjectMethod(surface, toString));
-	const char* destroyObjName = env->GetStringUTFChars(destroyObjStr, nullptr);
+	auto destroyObjName = env->GetStringUTFChars(destroyObjStr, nullptr);
 
 	auto appObjStr = reinterpret_cast<jstring>(env->CallObjectMethod(app->getSurfaceObject(), toString));
-	const char* appObjName = env->GetStringUTFChars(appObjStr, nullptr);
+	auto appObjName = env->GetStringUTFChars(appObjStr, nullptr);
 
 	LOGF_IF(strcmp(destroyObjName, appObjName)) << "object name mismatch";
 
@@ -164,9 +164,6 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void* reserved) {
 		return JNI_ERR;
 	}
 
-	gJavaVM = vm;
-	obtainClassLoader(env);
-
 	return JNI_VERSION_1_6;
 }
 
@@ -174,10 +171,5 @@ JNIEXPORT void JNICALL JNI_OnUnLoad(JavaVM* jvm, void* reserved) {
 	JNIEnv* env;
 	if (jvm->GetEnv((void**)&env, JNI_VERSION_1_6) != JNI_OK) {
 		return;
-	}
-
-	if (gClassLoader != nullptr) {
-		env->DeleteWeakGlobalRef(gClassLoader);
-		gClassLoader = nullptr;
 	}
 }

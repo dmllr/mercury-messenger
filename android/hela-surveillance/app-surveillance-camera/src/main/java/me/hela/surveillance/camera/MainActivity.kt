@@ -41,8 +41,6 @@ class MainActivity : Activity(), TextureView.SurfaceTextureListener, ServiceConn
 		setEventHandlers()
 
 		checkAndRequestCamera()
-
-		appContext = applicationContext;
 	}
 
 	private fun setDefaults() {
@@ -206,15 +204,5 @@ class MainActivity : Activity(), TextureView.SurfaceTextureListener, ServiceConn
 
 	companion object {
 		private const val PERMISSION_REQUEST_CODE_CAMERA: Int = 1
-
-		lateinit var appContext: Context
-
-		@JvmStatic
-		fun bringActivityToForeground() {
-			val intent = Intent(appContext, MainActivity::class.java)
-			intent.action = Intent.ACTION_MAIN
-			intent.addCategory(Intent.CATEGORY_LAUNCHER)
-			startActivity(appContext, intent, null)
-		}
 	}
 }

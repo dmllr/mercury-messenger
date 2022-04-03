@@ -11,8 +11,8 @@
 #include "camera/camera_manager.hpp"
 #include "camera/camera_codec.hpp"
 #include "server/streaming-server.hpp"
-#include <rtc/rtc_manager.hpp>
-#include <rtc/camerabuffersource.hpp>
+#include "rtc/rtc_manager.hpp"
+#include "rtc/camerabuffersource.hpp"
 
 //temporary
 #include <rtc/opusfileparser.hpp>
@@ -23,6 +23,7 @@
  */
 class AppEngine {
 	JNIEnv* env;
+    jobject service_instance;
 	int32_t request_width;
 	int32_t request_height;
 	jobject preview_surface = nullptr;
@@ -34,6 +35,7 @@ class AppEngine {
 public:
 	explicit AppEngine(JNIEnv* env, jobject instance, jint w, jint h)
 				: env(env),
+				  service_instance(env->NewWeakGlobalRef(instance)),
 				  request_width(w),
 				  request_height(h) {
 		memset(&compatible_camera_res, 0, sizeof(compatible_camera_res));
@@ -109,6 +111,7 @@ public:
 	void requestRtc() {
 		rtc_manager->start();
 	}
+
 
 protected:
 

@@ -46,7 +46,7 @@ class CameraService : Service() {
 	}
 
 	override fun onDestroy() {
-		deleteCameraEngine(cameraEngine)
+		deleteAppEngine(cameraEngine)
 
 		super.onDestroy()
 	}
@@ -58,7 +58,7 @@ class CameraService : Service() {
 		return START_STICKY;
 	}
 
-	override fun onBind(intent: Intent): IBinder? {
+	override fun onBind(intent: Intent): IBinder {
 		return streamingServiceBinder
 	}
 
@@ -87,7 +87,7 @@ class CameraService : Service() {
 	private fun createNativeCamera() {
 		val width = 1280;
 		val height = 720
-		cameraEngine = createCameraEngine(width, height)
+		cameraEngine = createAppEngine(width, height)
 		cameraPreviewSize = getMinimumCompatiblePreviewSize(cameraEngine)
 	}
 
@@ -140,8 +140,9 @@ class CameraService : Service() {
 
 
 	// camera-lib
-	private external fun createCameraEngine(width: Int, height: Int): Long
-	private external fun deleteCameraEngine(ndkCamera: Long)
+	private external fun createAppEngine(width: Int, height: Int): Long
+	private external fun deleteAppEngine(ndkCamera: Long)
+
 	private external fun getMinimumCompatiblePreviewSize(ndkCamera: Long): Size
 
 	private external fun requestPreview(ndkCamera: Long, preview: Boolean)
