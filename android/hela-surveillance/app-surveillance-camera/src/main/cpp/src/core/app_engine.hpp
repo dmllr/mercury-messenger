@@ -13,7 +13,7 @@
 #include "server/streaming-server.hpp"
 #include "rtc/rtc_manager.hpp"
 #include "rtc/audio_buffer_source.hpp"
-#include "rtc/camerabuffersource.hpp"
+#include "rtc/camera_buffer_source.hpp"
 
 
 /**

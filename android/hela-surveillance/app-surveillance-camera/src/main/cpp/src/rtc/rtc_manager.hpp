@@ -5,10 +5,10 @@
 #include "rtc/rtc.h"
 #include "nlohmann/json.hpp"
 #include "helpers.hpp"
-#include "dispatchqueue.hpp"
+#include "dispatch_queue.hpp"
 
 #ifdef ANDROID
-#include "camerabuffersource.hpp"
+#include "camera_buffer_source.hpp"
 #endif
 #include "stream.hpp"
 

@@ -4,7 +4,7 @@ add_library(camera-lib SHARED
 	audio/audio_common.cpp
 	audio/audio_recorder.cpp
 
-	rtc/dispatchqueue.cpp
+		rtc/dispatch_queue.cpp
 	rtc/helpers.cpp
 	rtc/stream.cpp
 )

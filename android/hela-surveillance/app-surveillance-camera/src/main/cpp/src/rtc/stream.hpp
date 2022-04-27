@@ -19,7 +19,7 @@
 #ifndef stream_hpp
 #define stream_hpp
 
-#include "dispatchqueue.hpp"
+#include "dispatch_queue.hpp"
 #include "rtc/rtc.hpp"
 
 class StreamSource {
