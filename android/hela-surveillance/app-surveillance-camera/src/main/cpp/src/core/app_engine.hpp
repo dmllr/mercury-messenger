@@ -12,10 +12,8 @@
 #include "camera/camera_codec.hpp"
 #include "server/streaming-server.hpp"
 #include "rtc/rtc_manager.hpp"
+#include "rtc/audio_buffer_source.hpp"
 #include "rtc/camerabuffersource.hpp"
-
-//temporary
-#include <rtc/opusfileparser.hpp>
 
 
 /**
@@ -117,7 +115,7 @@ protected:
 
 	std::shared_ptr<Stream> createRtcStream() {
 		auto video = std::make_shared<CameraBufferSource>(camera_manager);
-		auto audio = std::make_shared<OPUSFileParser>("/fake/path", true);
+		auto audio = std::make_shared<AudioBufferSource>();
 
 		return std::make_shared<Stream>(video, audio);
 	}

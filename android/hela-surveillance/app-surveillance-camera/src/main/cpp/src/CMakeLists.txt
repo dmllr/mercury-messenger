@@ -1,13 +1,11 @@
 add_library(camera-lib SHARED
 	lib.cpp
 
+	audio/audio_common.cpp
+	audio/audio_recorder.cpp
+
 	rtc/dispatchqueue.cpp
 	rtc/helpers.cpp
-
-	# temporary
-	rtc/opusfileparser.cpp
-	rtc/fileparser.cpp
-
 	rtc/stream.cpp
 )
 
@@ -18,6 +16,7 @@ target_link_libraries(camera-lib
 	log
 	camera2ndk
 	mediandk
+	OpenSLES
 	liveMedia
 	datachannel
 )
