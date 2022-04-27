@@ -15,7 +15,6 @@ import android.view.Surface
 import android.view.TextureView
 import android.view.View
 import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat.startActivity
 import me.hela.surveillance.camera.databinding.ActivityMainBinding
 
 
@@ -72,6 +71,10 @@ class MainActivity : Activity(), TextureView.SurfaceTextureListener, ServiceConn
 	private fun checkAndRequestCamera() {
 		if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
 			ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), PERMISSION_REQUEST_CODE_CAMERA)
+			return
+		}
+		if (ActivityCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+			ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), PERMISSION_REQUEST_CODE_RECORD_AUDIO)
 			return
 		}
 
@@ -136,7 +139,7 @@ class MainActivity : Activity(), TextureView.SurfaceTextureListener, ServiceConn
 	}
 
 	override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
-		if (PERMISSION_REQUEST_CODE_CAMERA != requestCode) {
+		if (requestCode != PERMISSION_REQUEST_CODE_CAMERA && requestCode != PERMISSION_REQUEST_CODE_RECORD_AUDIO) {
 			super.onRequestPermissionsResult(requestCode, permissions, grantResults)
 			return
 		}
@@ -204,5 +207,6 @@ class MainActivity : Activity(), TextureView.SurfaceTextureListener, ServiceConn
 
 	companion object {
 		private const val PERMISSION_REQUEST_CODE_CAMERA: Int = 1
+		private const val PERMISSION_REQUEST_CODE_RECORD_AUDIO: Int = 2
 	}
 }

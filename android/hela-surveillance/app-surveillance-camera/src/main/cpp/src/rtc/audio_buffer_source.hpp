@@ -18,15 +18,47 @@ protected:
 
 public:
 	AudioBufferSource() {
-		SampleFormat sampleFormat;
-		memset(&sampleFormat, 0, sizeof(sampleFormat));
-		sampleFormat.pcmFormat_ = static_cast<uint16_t>(SL_PCMSAMPLEFORMAT_FIXED_16);
+		//
+		SLObjectItf slEngineObj_;
+		SLEngineItf slEngineItf_;
+		auto result = slCreateEngine(&slEngineObj_, 0, NULL, 0, NULL, NULL);
+		SLASSERT(result);
 
+		result = (*slEngineObj_)->Realize(slEngineObj_, SL_BOOLEAN_FALSE);
+		SLASSERT(result);
+
+		result = (*slEngineObj_)->GetInterface(slEngineObj_, SL_IID_ENGINE, &slEngineItf_);
+		SLASSERT(result);
+
+		// compute the RECOMMENDED fast audio buffer size:
+		//   the lower latency required
+		//     *) the smaller the buffer should be (adjust it here) AND
+		//     *) the less buffering should be before starting player AFTER
+		//        receiving the recorder buffer
+		//   Adjust the bufSize here to fit your bill [before it busts]
+		auto fastPathFramesPerBuf = 976; // todo real
+		uint32_t bufSize = fastPathFramesPerBuf * AUDIO_SAMPLE_CHANNELS * SL_PCMSAMPLEFORMAT_FIXED_16;
+		bufSize = (bufSize + 7) >> 3;  // bits --> byte
+		auto bufCount_ = BUF_COUNT;
+		auto bufs_ = allocateSampleBufs(bufCount_, bufSize);
+		assert(bufs_);
+
+		freeBufQueue_ = new AudioQueue(bufCount_);
+		recBufQueue_ = new AudioQueue(bufCount_);
+		assert(freeBufQueue_ && recBufQueue_);
+		for (uint32_t i = 0; i < bufCount_; i++) {
+			freeBufQueue_->push(&bufs_[i]);
+		}
+		
+		//
+        SampleFormat sampleFormat;
+//		memset(&sampleFormat, 0, sizeof(sampleFormat));
+		sampleFormat.pcmFormat_ = static_cast<uint16_t>(SL_PCMSAMPLEFORMAT_FIXED_16);
 		// SampleFormat.representation_ = SL_ANDROID_PCM_REPRESENTATION_SIGNED_INT;
 		sampleFormat.channels_ = AUDIO_SAMPLE_CHANNELS;
-		sampleFormat.sampleRate_ = static_cast<SLmilliHertz>(20000 * 1000) * 1000;
-		sampleFormat.framesPerBuf_ = 24;//engine.fastPathFramesPerBuf_;
-		recorder = std::make_shared<AudioRecorder>(&sampleFormat, nullptr); //engine.slEngineItf_);
+		sampleFormat.sampleRate_ = static_cast<SLmilliHertz>(44100) * 1000;
+		sampleFormat.framesPerBuf_ = fastPathFramesPerBuf;
+		recorder = std::make_shared<AudioRecorder>(&sampleFormat, slEngineItf_);
 		if (!recorder) {
 			return;
 		}
@@ -43,10 +75,10 @@ public:
 			case ENGINE_SERVICE_MSG_RECORDED_AUDIO_AVAILABLE: {
 				// adding audio delay effect
 //				sample_buf *buf = static_cast<sample_buf *>(data);
-//				assert(engine.fastPathFramesPerBuf_ ==
-//					   buf->size_ / engine.sampleChannels_ / (engine.bitsPerSample_ / 8));
-//				engine.delayEffect_->process(reinterpret_cast<int16_t *>(buf->buf_),
-//											 engine.fastPathFramesPerBuf_);
+//				assert(fastPathFramesPerBuf_ ==
+//					   buf->size_ / sampleChannels_ / (bitsPerSample_ / 8));
+//				delayEffect_->process(reinterpret_cast<int16_t *>(buf->buf_),
+//											 fastPathFramesPerBuf_);
 				break;
 			}
 			default:
