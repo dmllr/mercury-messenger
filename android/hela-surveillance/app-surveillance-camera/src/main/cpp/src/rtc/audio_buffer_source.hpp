@@ -8,8 +8,7 @@
 
 
 class AudioBufferSource: public StreamSource {
-	uint8_t* buffer = nullptr;
-	uint64_t timeStart_us = 0;
+    std::vector<uint8_t> accumulative_buffer = {};
 
 protected:
 	std::shared_ptr<AudioRecorder> recorder;
@@ -49,10 +48,10 @@ public:
 		for (uint32_t i = 0; i < bufCount_; i++) {
 			freeBufQueue_->push(&bufs_[i]);
 		}
-		
+
 		//
         SampleFormat sampleFormat;
-//		memset(&sampleFormat, 0, sizeof(sampleFormat));
+		memset(&sampleFormat, 0, sizeof(sampleFormat));
 		sampleFormat.pcmFormat_ = static_cast<uint16_t>(SL_PCMSAMPLEFORMAT_FIXED_16);
 		// SampleFormat.representation_ = SL_ANDROID_PCM_REPRESENTATION_SIGNED_INT;
 		sampleFormat.channels_ = AUDIO_SAMPLE_CHANNELS;
@@ -63,22 +62,19 @@ public:
 			return;
 		}
 		recorder->SetBufQueues(freeBufQueue_, recBufQueue_);
-		recorder->RegisterCallback(EngineService, nullptr);//(void *)&engine);
+		recorder->RegisterCallback(EngineService, this);//(void *)&engine);
 	}
 
 	static bool EngineService(void *ctx, uint32_t msg, void *data) {
 		switch (msg) {
 			case ENGINE_SERVICE_MSG_RETRIEVE_DUMP_BUFS: {
-//				*(static_cast<uint32_t *>(data)) = dbgEngineGetBufCount();
+				*(static_cast<uint32_t*>(data)) = 2000; // todo ????
 				break;
 			}
 			case ENGINE_SERVICE_MSG_RECORDED_AUDIO_AVAILABLE: {
-				// adding audio delay effect
-//				sample_buf *buf = static_cast<sample_buf *>(data);
-//				assert(fastPathFramesPerBuf_ ==
-//					   buf->size_ / sampleChannels_ / (bitsPerSample_ / 8));
-//				delayEffect_->process(reinterpret_cast<int16_t *>(buf->buf_),
-//											 fastPathFramesPerBuf_);
+				auto buf = static_cast<sample_buf*>(data);
+				auto ths = reinterpret_cast<AudioBufferSource*>(ctx);
+				ths->accumulative_buffer.insert(ths->accumulative_buffer.end(), &buf->buf_[0], &buf->buf_[buf->size_]);
 				break;
 			}
 			default:
@@ -90,7 +86,6 @@ public:
 
     virtual void start() {
 		recorder->Start();
-		loadNextSample();
 	}
 
     virtual void stop() {
@@ -98,7 +93,10 @@ public:
     }
 
     virtual void loadNextSample() {
+	    sampleTime_us += (1. / 30.) * 1000. * 1000.; // todo make it normal
 		sample.clear();
+//		sample.assign(accumulative_buffer.begin(), accumulative_buffer.end());
+//		accumulative_buffer.clear();
     }
 
 };
