@@ -25,7 +25,7 @@
 /*
  * Audio Sample Controls...
  */
-#define AUDIO_SAMPLE_CHANNELS 1
+#define AUDIO_CHANNELS 1
 
 /*
  * Sample Buffer Controls...
@@ -65,8 +65,8 @@ __inline__ uint64_t GetSystemTicks(void) {
  * Interface for player and recorder to communicate with engine
  */
 #define ENGINE_SERVICE_MSG_KICKSTART_PLAYER 1
-#define ENGINE_SERVICE_MSG_RETRIEVE_DUMP_BUFS 2
-#define ENGINE_SERVICE_MSG_RECORDED_AUDIO_AVAILABLE 3
+#define RECORDER_CALLBACK_MSG_RETRIEVE_DUMP_BUFS 2
+#define RECORDER_CALLBACK_MSG_RECORDED_AUDIO_AVAILABLE 3
 typedef bool (*ENGINE_CALLBACK)(void* pCTX, uint32_t msg, void* pData);
 
 /*

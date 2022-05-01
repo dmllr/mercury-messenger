@@ -37,7 +37,7 @@ void AudioRecorder::ProcessSLCallback(SLAndroidSimpleBufferQueueItf bq) {
   dataBuf->size_ = dataBuf->cap_;  // device only calls us when it is really
                                    // full
 
-  callback_(ctx_, ENGINE_SERVICE_MSG_RECORDED_AUDIO_AVAILABLE, dataBuf);
+  callback_(ctx_, RECORDER_CALLBACK_MSG_RECORDED_AUDIO_AVAILABLE, dataBuf);
   recQueue_->push(dataBuf);
 
   sample_buf *freeBuf;

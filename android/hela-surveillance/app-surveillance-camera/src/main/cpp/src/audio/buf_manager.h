@@ -157,7 +157,7 @@ class ProducerConsumerQueue {
 };
 
 struct sample_buf {
-  uint8_t* buf_;   // audio sample container
+  int16_t* buf_;   // audio sample container
   uint32_t cap_;   // buffer capacity in byte
   uint32_t size_;  // audio sample size (n buf) in byte
 };
@@ -184,7 +184,7 @@ __inline__ sample_buf* allocateSampleBufs(uint32_t count, uint32_t sizeInByte) {
   uint32_t allocSize = (sizeInByte + 3) & ~3;  // padding to 4 bytes aligned
   uint32_t i;
   for (i = 0; i < count; i++) {
-    bufs[i].buf_ = new uint8_t[allocSize];
+    bufs[i].buf_ = new int16_t[allocSize];
     if (bufs[i].buf_ == nullptr) {
       LOGW << "====Requesting " << count << " buffers, allocated " << i << " in " << __FUNCTION__;
       break;
