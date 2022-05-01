@@ -7,5 +7,6 @@ include(cmake/import_remote.cmake)
 include("cmake/libopenssl.cmake")
 include("cmake/libliveMedia.cmake")
 include("cmake/libdatachannel.cmake")
+include("cmake/libopus.cmake")
 
 add_subdirectory("src")

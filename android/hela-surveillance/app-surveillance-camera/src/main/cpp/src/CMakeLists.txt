@@ -19,6 +19,7 @@ target_link_libraries(camera-lib
 	OpenSLES
 	liveMedia
 	datachannel
+	opus
 )
 
 target_include_directories(camera-lib
