@@ -1,10 +1,12 @@
 add_library(camera-lib SHARED
 	lib.cpp
 
+	audio/AudioEngine.h
+	audio/AudioEngine.cpp
+	audio/audio_common.h
 	audio/audio_common.cpp
-	audio/audio_recorder.cpp
 
-		rtc/dispatch_queue.cpp
+	rtc/dispatch_queue.cpp
 	rtc/helpers.cpp
 	rtc/stream.cpp
 )
@@ -16,7 +18,8 @@ target_link_libraries(camera-lib
 	log
 	camera2ndk
 	mediandk
-	OpenSLES
+	aaudio
+	OpenSLES # kill
 	liveMedia
 	datachannel
 	opus
