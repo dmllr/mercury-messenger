@@ -20,51 +20,41 @@
 #include <thread>
 #include "audio_common.h"
 
-class AudioEngine {
+class Recorder {
 
 public:
-    ~AudioEngine();
+    ~Recorder();
     void setRecordingDeviceId(int32_t deviceId);
-    void setPlaybackDeviceId(int32_t deviceId);
-    aaudio_data_callback_result_t dataCallback(AAudioStream *stream,
-                                               void *audioData,
-                                               int32_t numFrames);
-    void errorCallback(AAudioStream *stream,
-                       aaudio_result_t  __unused error);
+
+    aaudio_result_t read(void *audioData, int32_t numFrames);
+
+    void start();
+    void stop();
+    void restart();
+
+    void errorCallback(AAudioStream *stream, aaudio_result_t  __unused error);
 
 private:
-
     bool isFirstDataCallback_ = true;
     int32_t recordingDeviceId_ = AAUDIO_UNSPECIFIED;
-    int32_t playbackDeviceId_ = AAUDIO_UNSPECIFIED;
-    aaudio_format_t format_ = AAUDIO_FORMAT_PCM_I16;
+    aaudio_format_t format_ = AAUDIO_FORMAT_PCM_FLOAT;
     int32_t sampleRate_;
     int32_t inputChannelCount_ = kMonoChannelCount;
-    int32_t outputChannelCount_ = kStereoChannelCount;
     AAudioStream *recordingStream_ = nullptr;
-    AAudioStream *playStream_ = nullptr;
     int32_t framesPerBurst_;
     std::mutex restartingLock_;
 
     void openRecordingStream();
     void drainRecordingStream(void *audioData, int32_t numFrames);
-    void openPlaybackStream();
 
     void startStream(AAudioStream* stream);
     void stopStream(AAudioStream* stream);
     void closeStream(AAudioStream* stream);
 
-    void openAllStreams();
-    void closeAllStreams();
-    void restartStreams();
     AAudioStreamBuilder* createStreamBuilder();
 
-    void setupCommonStreamParameters(AAudioStreamBuilder *builder);
     void setupRecordingStreamParameters(AAudioStreamBuilder *builder);
-    void setupPlaybackStreamParameters(AAudioStreamBuilder *builder);
-    void warnIfNotLowLatency(AAudioStream *stream);
-
-
+    static void warnIfNotLowLatency(AAudioStream *stream);
 };
 
 #endif //AAUDIO_ECHOAUDIOENGINE_H

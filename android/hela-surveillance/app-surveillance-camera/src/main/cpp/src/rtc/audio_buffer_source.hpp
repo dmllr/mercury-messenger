@@ -7,12 +7,14 @@
 #include "opus.h"
 
 #include "stream.hpp"
+#include "audio/recorder.h"
 
 
 class AudioBufferSource: public StreamSource {
-//	static constexpr int MAX_ENCODED_BUFFER_SIZE = 8192;
-//	std::array<unsigned char, MAX_ENCODED_BUFFER_SIZE> encoded_buffer = {};
-	rtc::binary accumulative_buffer = {};
+	static constexpr int MAX_PCM_BUFFER_SIZE = 8192;
+	std::array<float, MAX_PCM_BUFFER_SIZE> pcm_buffer = {};
+	std::array<unsigned char, MAX_PCM_BUFFER_SIZE> encoded_buffer = {};
+//	rtc::binary accumulative_buffer = {};
 
 protected:
 	static constexpr auto AUDIO_CHANNELS = 1;
@@ -20,11 +22,16 @@ protected:
 //	AudioQueue *freeBufQueue_;  // Owner of the queue
 //	AudioQueue *recBufQueue_;   // Owner of the queue
 
+	std::unique_ptr<Recorder> recorder = nullptr;
+
     OpusEncoder* opus_encoder;
 	int fastPathFramesPerBuf = 24000 / 200;// was 976; // todo real
 
 public:
 	AudioBufferSource() {
+		recorder = std::make_unique<Recorder>();
+//		recorder->setRecordingDeviceId(0);
+
 //		//
 //		SLObjectItf slEngineObj_;
 //		SLEngineItf slEngineItf_;
@@ -105,7 +112,7 @@ public:
 //	}
 
     virtual void start() {
-//		recorder->Start();
+		recorder->start();
 	}
 
     virtual void stop() {
@@ -116,8 +123,19 @@ public:
 	    sampleTime_us += (1. / 30.) * 1000. * 1000.; // todo make it normal
 		sample.clear();
 		// todo threadsafe
-		sample.assign(accumulative_buffer.begin(), accumulative_buffer.end());
-		accumulative_buffer.clear();
+		for (auto frames = recorder->read(&pcm_buffer[0], fastPathFramesPerBuf); frames > 0; frames = recorder->read(&pcm_buffer[0], fastPathFramesPerBuf)) {
+			if (likely(frames > 0)) {
+				auto size = opus_encode_float(opus_encoder, &pcm_buffer[0], frames,
+											  encoded_buffer.data(), encoded_buffer.size());
+				if (likely(size > 0)) {
+					sample.insert(
+							sample.end(),
+							reinterpret_cast<std::byte *>(&encoded_buffer[0]),
+							reinterpret_cast<std::byte *>(&encoded_buffer[size])
+					);
+				}
+			}
+		}
     }
 
 };
