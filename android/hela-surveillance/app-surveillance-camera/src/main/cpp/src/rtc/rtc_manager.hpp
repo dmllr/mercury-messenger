@@ -386,8 +386,8 @@ private:
 	std::optional<std::shared_ptr<Stream>> avStream = std::nullopt;
 
 #ifdef ANDROID
-	const std::string defaultIPAddress = "10.0.2.2";
-//	const std::string defaultIPAddress = "10.1.1.24";
+//	const std::string defaultIPAddress = "10.0.2.2";
+	const std::string defaultIPAddress = "10.1.1.24";
 #else
 	const std::string defaultIPAddress = "127.0.0.1";
 #endif

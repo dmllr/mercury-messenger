@@ -11,13 +11,14 @@
 
 
 class AudioBufferSource: public StreamSource {
-	static constexpr int MAX_PCM_BUFFER_SIZE = 8192;
+	static constexpr auto fastPathFramesPerBuf = 24000 / 200;// was 976; // todo real
+	static constexpr auto AUDIO_CHANNELS = kMonoChannelCount;
+	static constexpr auto MAX_PCM_BUFFER_SIZE = 8192;
 	std::array<float, MAX_PCM_BUFFER_SIZE> pcm_buffer = {};
 	std::array<unsigned char, MAX_PCM_BUFFER_SIZE> encoded_buffer = {};
 //	rtc::binary accumulative_buffer = {};
 
 protected:
-	static constexpr auto AUDIO_CHANNELS = 1;
 //	std::shared_ptr<AudioRecorder> recorder;
 //	AudioQueue *freeBufQueue_;  // Owner of the queue
 //	AudioQueue *recBufQueue_;   // Owner of the queue
@@ -25,7 +26,6 @@ protected:
 	std::unique_ptr<Recorder> recorder = nullptr;
 
     OpusEncoder* opus_encoder;
-	int fastPathFramesPerBuf = 24000 / 200;// was 976; // todo real
 
 public:
 	AudioBufferSource() {
@@ -123,17 +123,16 @@ public:
 	    sampleTime_us += (1. / 30.) * 1000. * 1000.; // todo make it normal
 		sample.clear();
 		// todo threadsafe
-		for (auto frames = recorder->read(&pcm_buffer[0], fastPathFramesPerBuf); frames > 0; frames = recorder->read(&pcm_buffer[0], fastPathFramesPerBuf)) {
-			if (likely(frames > 0)) {
-				auto size = opus_encode_float(opus_encoder, &pcm_buffer[0], frames,
-											  encoded_buffer.data(), encoded_buffer.size());
-				if (likely(size > 0)) {
-					sample.insert(
-							sample.end(),
-							reinterpret_cast<std::byte *>(&encoded_buffer[0]),
-							reinterpret_cast<std::byte *>(&encoded_buffer[size])
-					);
-				}
+		auto frames = recorder->read(pcm_buffer.data(), fastPathFramesPerBuf);
+		if (likely(frames > 0)) {
+			auto size = opus_encode_float(opus_encoder, &pcm_buffer[0], frames,
+										  encoded_buffer.data(), encoded_buffer.size());
+			if (likely(size > 0)) {
+				sample.insert(
+						sample.end(),
+						reinterpret_cast<std::byte *>(&encoded_buffer[0]),
+						reinterpret_cast<std::byte *>(&encoded_buffer[size])
+				);
 			}
 		}
     }

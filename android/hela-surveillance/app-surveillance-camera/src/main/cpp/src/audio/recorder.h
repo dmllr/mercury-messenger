@@ -36,12 +36,12 @@ public:
 
 private:
     bool isFirstDataCallback_ = true;
-    int32_t recordingDeviceId_ = AAUDIO_UNSPECIFIED;
     aaudio_format_t format_ = AAUDIO_FORMAT_PCM_FLOAT;
-    int32_t sampleRate_;
+    int32_t recordingDeviceId_ = AAUDIO_UNSPECIFIED;
+    int32_t sampleRate_ = 44100;
     int32_t inputChannelCount_ = kMonoChannelCount;
+    int32_t framesPerBurst_ = 24000 / 200; // todo sync with audio_buffer_source
     AAudioStream *recordingStream_ = nullptr;
-    int32_t framesPerBurst_;
     std::mutex restartingLock_;
 
     void openRecordingStream();
