@@ -1,24 +1,8 @@
-/*
- * Copyright 2017 The Android Open Source Project
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 #include "recorder.h"
 
 #include "logging/logging.h"
 #include <climits>
-#include <assert.h>
+#include <cassert>
 #include "audio_common.h"
 
 
@@ -118,8 +102,8 @@ void Recorder::openRecordingStream() {
 void Recorder::setupRecordingStreamParameters(AAudioStreamBuilder *builder) {
     AAudioStreamBuilder_setDeviceId(builder, recordingDeviceId_);
     AAudioStreamBuilder_setDirection(builder, AAUDIO_DIRECTION_INPUT);
-    AAudioStreamBuilder_setSampleRate(builder, sampleRate_);
-    AAudioStreamBuilder_setChannelCount(builder, inputChannelCount_);
+    AAudioStreamBuilder_setSampleRate(builder, sampleRate);
+    AAudioStreamBuilder_setChannelCount(builder, channelCount);
 
     AAudioStreamBuilder_setFormat(builder, format_);
     // We request EXCLUSIVE mode since this will give us the lowest possible latency.
@@ -194,10 +178,11 @@ aaudio_result_t Recorder::read(void* audioData, int32_t numFrames) {
     * If there's not enough audio data from input stream, fill the rest of buffer with
     * 0 (silence) and continue to loop
     */
-//    numFrames -= frameCount;
-//    if (numFrames > 0) {
-//        memset(static_cast<int16_t *>(audioData) + frameCount * outputChannelCount_, 0, sizeof(int16_t) * numFrames * outputChannelCount_);
-//    }
+    numFrames -= frameCount;
+    if (numFrames > 0) {
+        memset(static_cast<float*>(audioData) + frameCount * channelCount, 0, sizeof(float) * numFrames * channelCount);
+    }
+
     return frameCount;
 }
 

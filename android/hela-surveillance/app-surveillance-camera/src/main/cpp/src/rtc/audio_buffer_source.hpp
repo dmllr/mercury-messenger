@@ -11,9 +11,7 @@
 
 
 class AudioBufferSource: public StreamSource {
-	static constexpr auto fastPathFramesPerBuf = 24000 / 200;// was 976; // todo real
-	static constexpr auto AUDIO_CHANNELS = kMonoChannelCount;
-	static constexpr auto MAX_PCM_BUFFER_SIZE = 8192;
+	static constexpr auto MAX_PCM_BUFFER_SIZE = Recorder::framesPerBurst * Recorder::channelCount * sizeof(float);
 	std::array<float, MAX_PCM_BUFFER_SIZE> pcm_buffer = {};
 	std::array<unsigned char, MAX_PCM_BUFFER_SIZE> encoded_buffer = {};
 
@@ -28,7 +26,7 @@ public:
 
 		// opus
         auto error = 0;
-		opus_encoder = opus_encoder_create(24000, AUDIO_CHANNELS, OPUS_APPLICATION_AUDIO, &error);
+		opus_encoder = opus_encoder_create(Recorder::sampleRate, Recorder::channelCount, OPUS_APPLICATION_AUDIO, &error);
 		assert(error == OPUS_OK);
 		assert(opus_encoder != nullptr);
 	}
@@ -45,9 +43,9 @@ public:
 	    sampleTime_us += (1. / 30.) * 1000. * 1000.; // todo make it normal
 		sample.clear();
 		// todo threadsafe
-		auto frames = recorder->read(pcm_buffer.data(), fastPathFramesPerBuf);
+		auto frames = recorder->read(pcm_buffer.data(), Recorder::framesPerBurst);
 		if (likely(frames > 0)) {
-			auto size = opus_encode_float(opus_encoder, &pcm_buffer[0], frames,
+			auto size = opus_encode_float(opus_encoder, &pcm_buffer[0], Recorder::framesPerBurst,
 										  encoded_buffer.data(), encoded_buffer.size());
 			if (likely(size > 0)) {
 				sample.insert(
