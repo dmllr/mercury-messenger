@@ -8,7 +8,8 @@
 #include "dispatch_queue.hpp"
 
 #ifdef ANDROID
-#include "camera_buffer_source.hpp"
+// for initial NALUs
+//#include "camera_buffer_source.hpp"
 #endif
 #include "stream.hpp"
 
@@ -125,11 +126,18 @@ protected:
 			LOGI << "The local ID is: " << localId.c_str();
 
 			auto ws = std::make_shared<rtc::WebSocket>();
-			ws->onOpen([]() { LOGI << "WebSocket connected, signaling ready"; });
 
-			ws->onClosed([]() {LOGI << "WebSocket closed"; });
+			ws->onOpen([]() {
+				LOGI << "WebSocket connected, signaling ready";
+			});
 
-			ws->onError([](const std::string& error) { LOGI << "WebSocket failed: " << error.c_str(); });
+			ws->onClosed([]() {
+				LOGI << "WebSocket closed";
+			});
+
+			ws->onError([](const std::string& error) {
+				LOGI << "WebSocket failed: " << error.c_str();
+			});
 
 			ws->onMessage([&](std::variant<rtc::binary, std::string> data) {
 				if (!std::holds_alternative<std::string>(data))
@@ -141,7 +149,7 @@ protected:
 				});
 			});
 
-			const std::string url = "ws://" + ip_address + ":" + std::to_string(port) + "/" + localId;
+			const std::string url = "wss://" + ip_address + ":" + std::to_string(port) + "/" + localId;
 			LOGI << "Url is " << url.c_str();
 			ws->open(url);
 
@@ -387,7 +395,8 @@ private:
 
 #ifdef ANDROID
 //	const std::string defaultIPAddress = "10.0.2.2";
-	const std::string defaultIPAddress = "10.1.1.24";
+//	const std::string defaultIPAddress = "10.1.1.24";
+	const std::string defaultIPAddress = "app.hela.me";
 #else
 	const std::string defaultIPAddress = "127.0.0.1";
 #endif

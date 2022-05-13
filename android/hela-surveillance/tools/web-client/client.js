@@ -16,7 +16,8 @@ function randomString(len) {
 }
 
 const receiveID = randomString(10);
-const websocket = new WebSocket('ws://127.0.0.1:8000/' + receiveID);
+const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+const websocket = new WebSocket(protocol + '//app.hela.me:8000/' + receiveID);
 websocket.onopen = function () {
     document.getElementById('start').disabled = false;
 }

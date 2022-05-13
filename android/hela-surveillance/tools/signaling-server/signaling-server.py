@@ -66,12 +66,13 @@ if __name__ == '__main__':
     # Usage: ./server.py [[host:]port] [SSL certificate file]
     endpoint_or_port = sys.argv[1] if len(sys.argv) > 1 else "8000"
     ssl_cert = sys.argv[2] if len(sys.argv) > 2 else None
+    ssl_key = sys.argv[3] if len(sys.argv) > 3 else None
 
     endpoint = endpoint_or_port if ':' in endpoint_or_port else "0.0.0.0:" + endpoint_or_port
 
     if ssl_cert:
         ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-        ssl_context.load_cert_chain(ssl_cert)
+        ssl_context.load_cert_chain(ssl_cert, keyfile=ssl_key)
     else:
         ssl_context = None
 

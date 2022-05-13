@@ -1,3 +1,7 @@
+/*
+ * https://github.com/googlearchive/android-audio-high-performance/blob/master/aaudio/echo/src/main/cpp/EchoAudioEngine.cpp
+ */
+
 #include "recorder.h"
 
 #include "logging/logging.h"
