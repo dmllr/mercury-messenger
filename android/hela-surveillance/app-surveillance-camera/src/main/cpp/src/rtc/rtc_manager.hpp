@@ -393,13 +393,7 @@ private:
 	/// Audio and video stream
 	std::optional<std::shared_ptr<Stream>> avStream = std::nullopt;
 
-#ifdef ANDROID
-//	const std::string defaultIPAddress = "10.0.2.2";
-//	const std::string defaultIPAddress = "10.1.1.24";
 	const std::string defaultIPAddress = "app.hela.me";
-#else
-	const std::string defaultIPAddress = "127.0.0.1";
-#endif
 	const uint16_t defaultPort = 8000;
 	std::string ip_address = defaultIPAddress;
 	uint16_t port = defaultPort;

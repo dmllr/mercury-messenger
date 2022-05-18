@@ -17,11 +17,11 @@ include("${src_path}/cmake/libdatachannel.cmake")
 add_executable(test-rtc
 	test/rtc/main.cpp
 
-	${src_path}/src/rtc/dispatchqueue.cpp
-	${src_path}/src/rtc/fileparser.cpp
-	${src_path}/src/rtc/h264fileparser.cpp
+	${libdatachannel_path}/examples/streamer/fileparser.cpp
+	${libdatachannel_path}/examples/streamer/h264fileparser.cpp
+	${libdatachannel_path}/examples/streamer/opusfileparser.cpp
 	${src_path}/src/rtc/helpers.cpp
-	${src_path}/src/rtc/opusfileparser.cpp
+	${src_path}/src/rtc/dispatch_queue.cpp
 	${src_path}/src/rtc/stream.cpp
 )
 
@@ -32,4 +32,5 @@ target_link_libraries(test-rtc
 target_include_directories(test-rtc
 	PRIVATE
 	"${src_path}/src"
+	"${libdatachannel_path}/examples/streamer"
 )
