@@ -1,8 +1,7 @@
 add_library(camera-lib SHARED
 	lib.cpp
-
-		audio/recorder.h
-		audio/recorder.cpp
+	audio/recorder.h
+	audio/recorder.cpp
 	audio/audio_common.h
 	audio/audio_common.cpp
 

@@ -1,9 +1,12 @@
-import_remote("https://github.com/paullouisageneau/libdatachannel.git" TAG "fa18a6bae6c7efcc23ff0722e0f7c4668ca0e6e0" DST "${CMAKE_SOURCE_DIR}/_imported/libdatachannel" ALIAS libdatachannel NO_CMAKE)
-# about v0.16.6
+import_remote("https://github.com/paullouisageneau/libdatachannel.git" TAG "v0.17.3" DST "${CMAKE_SOURCE_DIR}/_imported/libdatachannel" ALIAS libdatachannel NO_CMAKE)
 
 #set(libdatachannel_path ${CMAKE_CURRENT_LIST_DIR}/../libs/datachannel)
 
 set(BUILD_SHARED_LIBS OFF) # to force usrsctp to be built static
+set(NO_WEBSOCKET OFF)
+set(NO_MEDIA OFF)
+set(NO_EXAMPLES ON)
+set(NO_TESTS ON)
 
 include(${CMAKE_CURRENT_LIST_DIR}/libplog.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/libjuice.cmake)
@@ -91,7 +94,6 @@ set(LIBDATACHANNEL_IMPL_SOURCES
 	${libdatachannel_path}/src/impl/track.cpp
 	${libdatachannel_path}/src/impl/utils.cpp
 	${libdatachannel_path}/src/impl/processor.cpp
-	${libdatachannel_path}/src/impl/base64.cpp
 	${libdatachannel_path}/src/impl/sha.cpp
 	${libdatachannel_path}/src/impl/pollinterrupter.cpp
 	${libdatachannel_path}/src/impl/pollservice.cpp
@@ -123,7 +125,6 @@ set(LIBDATACHANNEL_IMPL_HEADERS
 	${libdatachannel_path}/src/impl/track.hpp
 	${libdatachannel_path}/src/impl/utils.hpp
 	${libdatachannel_path}/src/impl/processor.hpp
-	${libdatachannel_path}/src/impl/base64.hpp
 	${libdatachannel_path}/src/impl/sha.hpp
 	${libdatachannel_path}/src/impl/pollinterrupter.hpp
 	${libdatachannel_path}/src/impl/pollservice.hpp
