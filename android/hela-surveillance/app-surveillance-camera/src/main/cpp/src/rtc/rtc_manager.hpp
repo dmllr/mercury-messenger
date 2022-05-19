@@ -31,33 +31,33 @@ public:
 
 	}
 
-	void setStream(std::shared_ptr<Stream> stream) {
+	void setStream(const std::shared_ptr<Stream>& stream) {
 		avStream = stream;
 
 		// set callback responsible for sample sending
 		stream->onSample([this, ws = make_weak_ptr(stream)](Stream::StreamSourceType type, uint64_t sampleTime, rtc::binary sample) {
-			std::vector<ClientTrack> tracks{};
-			std::string streamType = type == Stream::StreamSourceType::Video ? "video" : "audio";
+			auto tracks{std::vector<ClientTrack>()};
+			auto streamType = type == Stream::StreamSourceType::Video ? "video" : "audio";
 			// get track for given type
-			std::function<std::optional<std::shared_ptr<ClientTrackData>>(std::shared_ptr<Client>)> getTrackData =
-					[type](std::shared_ptr<Client> client) {
+			auto getTrackData =
+					[type](const std::shared_ptr<Client>& client) {
 						return type == Stream::StreamSourceType::Video ? client->video : client->audio;
 					};
 
 			// get all clients with Ready state
-			for (auto id_client: clients) {
+			for (const auto& id_client: clients) {
 				auto id = id_client.first;
 				auto client = id_client.second;
 				auto optTrackData = getTrackData(client);
 				if (client->getState() == Client::State::Ready && optTrackData.has_value()) {
 					auto trackData = optTrackData.value();
-					tracks.push_back(ClientTrack(id, trackData));
+					tracks.emplace_back(id, trackData);
 				}
 			}
 
 			if (!tracks.empty()) {
 				auto message = rtc::make_message(move(sample));
-				for (auto clientTrack: tracks) {
+				for (const auto& clientTrack: tracks) {
 					auto client = clientTrack.id;
 					auto trackData = clientTrack.trackData;
 					// sample time is in us, we need to convert it to seconds
@@ -173,7 +173,7 @@ protected:
 		}
 	}
 
-	void wsOnMessage(json message, rtc::Configuration config, std::shared_ptr<rtc::WebSocket> ws) {
+	void wsOnMessage(json message, const rtc::Configuration& config, const std::shared_ptr<rtc::WebSocket>& ws) {
 		auto it = message.find("id");
 		if (it == message.end())
 			return;
@@ -197,7 +197,7 @@ protected:
 		}
 	}
 
-	std::shared_ptr<Client> createPeerConnection(const rtc::Configuration &config, std::weak_ptr<rtc::WebSocket> wws, std::string id) {
+	std::shared_ptr<Client> createPeerConnection(const rtc::Configuration &config, const std::weak_ptr<rtc::WebSocket>& wws, std::string id) {
 		auto pc = std::make_shared<rtc::PeerConnection>(config);
 		std::shared_ptr<Client> client(new Client(pc));
 
@@ -257,7 +257,7 @@ protected:
 			}
 		});
 
-		dc->onMessage(nullptr, [id, wdc = make_weak_ptr(dc)](std::string msg) {
+		dc->onMessage(nullptr, [id, wdc = make_weak_ptr(dc)](const std::string& msg) {
 			LOGI << "Message from " << id << " received: " << msg;
 			if (auto dc = wdc.lock()) {
 				dc->send("Ping");
@@ -286,7 +286,7 @@ protected:
 //		}
 	}
 
-	std::shared_ptr<ClientTrackData> addVideo(const std::shared_ptr<rtc::PeerConnection> pc, const uint8_t payloadType, const uint32_t ssrc, const std::string cname, const std::string msid, const std::function<void (void)> onOpen) {
+	std::shared_ptr<ClientTrackData> addVideo(const std::shared_ptr<rtc::PeerConnection>& pc, const uint8_t payloadType, const uint32_t ssrc, const std::string cname, const std::string msid, const std::function<void (void)> onOpen) {
 		auto video = rtc::Description::Video(cname);
 		video.addH264Codec(payloadType);
 		video.addSSRC(ssrc, cname, msid, cname);
@@ -315,7 +315,7 @@ protected:
 		return trackData;
 	}
 
-	std::shared_ptr<ClientTrackData> addAudio(const std::shared_ptr<rtc::PeerConnection> pc, const uint8_t payloadType, const uint32_t ssrc, const std::string cname, const std::string msid, const std::function<void (void)> onOpen) {
+	std::shared_ptr<ClientTrackData> addAudio(const std::shared_ptr<rtc::PeerConnection>& pc, const uint8_t payloadType, const uint32_t ssrc, const std::string& cname, const std::string msid, const std::function<void (void)> onOpen) {
 		auto audio = rtc::Description::Audio(cname);
 		audio.addOpusCodec(payloadType);
 		audio.addSSRC(ssrc, cname, msid, cname);
@@ -342,7 +342,7 @@ protected:
 	/// Add client to stream
 	/// @param client Client
 	/// @param adding_video True if adding video
-	void addToStream(std::shared_ptr<Client> client, bool isAddingVideo) {
+	void addToStream(const std::shared_ptr<Client>& client, bool isAddingVideo) {
 		if (client->getState() == Client::State::Waiting) {
 			client->setState(isAddingVideo ? Client::State::WaitingForAudio : Client::State::WaitingForVideo);
 		} else if ((client->getState() == Client::State::WaitingForAudio && !isAddingVideo)
