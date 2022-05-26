@@ -1,0 +1,9 @@
+To override an "unknown CA" problem, add
+
+        SSL_CTX_set_custom_verify(mCtx, SSL_VERIFY_PEER,
+            [](SSL *ssl, uint8_t *out_alert) -> ssl_verify_result_t {
+                return ssl_verify_ok;
+            });
+
+to the line 326 at
+android/hela-surveillance/app-surveillance-camera/src/main/cpp/_imported/libdatachannel/src/impl/tlstransport.cpp

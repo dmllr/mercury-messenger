@@ -18,7 +18,6 @@ target_link_libraries(camera-lib
 	camera2ndk
 	mediandk
 	aaudio
-	OpenSLES # kill
 	liveMedia
 	datachannel
 	opus
