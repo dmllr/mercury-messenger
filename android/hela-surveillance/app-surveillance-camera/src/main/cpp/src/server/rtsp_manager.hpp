@@ -10,8 +10,8 @@
 
 #include <media/NdkMediaCodec.h>
 
-#include "camera-framed-source.hpp"
-#include "camera-media-subsession.hpp"
+#include "camera_framed_source.hpp"
+#include "camera_media_subsession.hpp"
 
 #include "logging/logging.h"
 #include "utils/likely.h"
@@ -19,17 +19,19 @@
 
 namespace server {
 
-class StreamingServer {
-	std::thread server_thread;
+class RtspManager {
+	static constexpr auto target = CaptureTarget::RTSP_ENCODER_SURFACE;
 
 	UsageEnvironment* env;
 	RTSPServer* rtsp_server;
 	std::map<unsigned, void*> active_sessions;
 
-public:
-	std::function<void()> onSessionStart;
-	std::function<void()> onSessionStop;
+	std::thread server_thread;
 
+protected:
+	std::shared_ptr<CameraManager> camera_manager;
+
+public:
 	void startEventLoop() {
 		server_thread = std::thread {[this]() {
 			env->taskScheduler().doEventLoop(); // never returns
@@ -38,7 +40,10 @@ public:
 		LOGI << "server_thread ready";
 	}
 
-	~StreamingServer() {
+	RtspManager(std::shared_ptr<CameraManager> camera_manager) : camera_manager(camera_manager) {
+	}
+
+	~RtspManager() {
 		shutdown();
 	}
 
@@ -60,13 +65,11 @@ public:
 			switch (command) {
 				case CameraMediaSubsession::START:
 					active_sessions[clientSessionId] = token;
-					if (likely(onSessionStart))
-						onSessionStart();
+					camera_manager->addConsumer(target);
 					break;
 				case CameraMediaSubsession::STOP:
 					active_sessions.erase(clientSessionId);
-					if (likely(onSessionStop))
-						onSessionStop();
+					camera_manager->removeConsumer(target);
 					break;
 			}
 		}));

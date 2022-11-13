@@ -110,7 +110,7 @@ void Stream::start() {
     if (isRunning) {
         return;
     }
-    _isRunning = true;
+    isRunning = true;
     startTime = currentTimeInMicroSeconds();
     audio->start();
     video->start();
@@ -124,7 +124,7 @@ void Stream::stop() {
     if (!isRunning) {
         return;
     }
-    _isRunning = false;
+    isRunning = false;
     dispatchQueue.removePending();
     audio->stop();
     video->stop();

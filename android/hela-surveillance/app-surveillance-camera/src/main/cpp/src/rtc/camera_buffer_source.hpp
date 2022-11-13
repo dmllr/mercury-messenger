@@ -7,6 +7,8 @@
 
 
 class CameraBufferSource: public StreamSource {
+	static constexpr auto target = CaptureTarget::RTC_ENCODER_SURFACE;
+
 	AMediaCodecBufferInfo info;
 	uint8_t* buffer = nullptr;
 	uint64_t timeStart_us = 0;
@@ -20,13 +22,13 @@ public:
 
     virtual void start() {
 		camera_manager->codec()->start();
-		camera_manager->addCaptureRequestTarget(CaptureTarget::ENCODER_SURFACE_IDX, camera_manager->surface());
-		camera_manager->setStreamRequested(true);
+		camera_manager->addConsumer(target);
 		loadNextSample();
 	}
 
     virtual void stop() {
-//		camera_manager->codec()->stop();
+		camera_manager->removeConsumer(target);
+		camera_manager->codec()->stop();
     }
 
     virtual void loadNextSample() {

@@ -10,7 +10,7 @@
 
 #include "camera/camera_manager.hpp"
 #include "camera/camera_codec.hpp"
-#include "server/streaming-server.hpp"
+#include "server/rtsp_manager.hpp"
 #include "rtc/rtc_manager.hpp"
 #include "rtc/audio_buffer_source.hpp"
 #include "rtc/camera_buffer_source.hpp"
@@ -27,7 +27,7 @@ class AppEngine {
 	jobject preview_surface = nullptr;
 	std::shared_ptr<CameraManager> camera_manager;
 	std::shared_ptr<RtcManager> rtc_manager;
-	std::shared_ptr<server::StreamingServer> streaming_server;
+	std::shared_ptr<server::RtspManager> rtsp_manager;
 	ImageFormat compatible_camera_res;
 
 public:
@@ -46,18 +46,8 @@ public:
 		rtc_manager->setStream(stream);
 		rtc_manager->start();
 
-		streaming_server = std::make_shared<server::StreamingServer>();
-		streaming_server->start(camera_manager->codec()->getCodec());
-		streaming_server->onSessionStart = [this]() {
-			if (streaming_server->getActiveSessions().size() == 1)
-				camera_manager->addCaptureRequestTarget(CaptureTarget::ENCODER_SURFACE_IDX, camera_manager->surface());
-			camera_manager->setStreamRequested(streaming_server->hasActiveSessions());
-		};
-		streaming_server->onSessionStop = [this]() {
-			camera_manager->setStreamRequested(streaming_server->hasActiveSessions());
-			if (!streaming_server->hasActiveSessions())
-				camera_manager->removeCaptureRequestTarget(CaptureTarget::ENCODER_SURFACE_IDX);
-		};
+		rtsp_manager = std::make_shared<server::RtspManager>(camera_manager);
+		rtsp_manager->start(camera_manager->codec()->getCodec());
 	}
 
 	~AppEngine() {
@@ -89,8 +79,6 @@ public:
 			env->DeleteGlobalRef(preview_surface);
 
 		preview_surface = env->NewGlobalRef(surface);
-
-		camera_manager->addCaptureRequestTarget(CaptureTarget::PREVIEW_SURFACE_IDX, ANativeWindow_fromSurface(env, surface));
 	}
 
 	void removePreviewSurface() {
@@ -99,11 +87,18 @@ public:
 			preview_surface = nullptr;
 		}
 
-		camera_manager->removeCaptureRequestTarget(CaptureTarget::PREVIEW_SURFACE_IDX);
+		camera_manager->removeCaptureRequestTarget(CaptureTarget::PREVIEW_SURFACE);
 	}
 
 	void requestPreview(bool start) {
-		camera_manager->setPreviewRequested(start);
+		static constexpr auto target = CaptureTarget::PREVIEW_SURFACE;
+
+		if (start) {
+			camera_manager->registerSurfaceForTarget(target, ANativeWindow_fromSurface(env, preview_surface));
+			camera_manager->addConsumer(target);
+		} else {
+			camera_manager->removeConsumer(target);
+		}
 	}
 
 	void requestRtc() {

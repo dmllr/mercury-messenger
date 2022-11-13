@@ -36,7 +36,7 @@ public:
 	}
 
     virtual void stop() {
-//		recorder->codec()->stop(); // todo
+		recorder->stop();
     }
 
     virtual void loadNextSample() {

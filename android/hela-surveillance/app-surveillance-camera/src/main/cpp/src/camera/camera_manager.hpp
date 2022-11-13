@@ -28,17 +28,16 @@ enum class CaptureSessionState : int32_t {
 	READY = 0,  // session is ready
 	ACTIVE,     // session is busy
 	CLOSED,     // session is closed by itself or a new session evicts
-	MAX_STATE
 };
 
 enum CaptureTarget {
-	PREVIEW_SURFACE_IDX = 0,
-	ENCODER_SURFACE_IDX,
-	CAPTURE_TARGET_COUNT,
+	PREVIEW_SURFACE = 0,
+	RTSP_ENCODER_SURFACE,
+	RTC_ENCODER_SURFACE,
 };
 
 struct CameraRequest {
-	bool is_active;
+	size_t n_consumers;
 	ANativeWindow* output_window;
 	ACaptureSessionOutput* session_output;
 	ACameraOutputTarget* target;
@@ -174,7 +173,7 @@ public:
 		camera_codec(std::make_shared<CameraCodec>(CameraCodec())),
 		output_container(nullptr),
 		capture_session(nullptr),
-		capture_session_state(CaptureSessionState::MAX_STATE)
+		capture_session_state(CaptureSessionState::CLOSED)
 	 {
 		camera_manager = ACameraManager_create();
 		Log::assert_or_die(camera_manager != nullptr, "Failed to create camera_manager");
@@ -272,7 +271,7 @@ public:
 
 		auto active_requests = false;
 		for (auto& it : camera_requests)
-			active_requests |= it.second.is_active;
+			active_requests |= it.second.n_consumers > 0;
 
 		if (!active_requests)
 			return;
@@ -288,6 +287,10 @@ public:
 
 		for (auto& it : camera_requests) {
 			auto& req = it.second;
+
+			if (req.n_consumers <= 0) {
+				continue;
+			}
 
 			ANativeWindow_acquire(req.output_window);
 
@@ -324,24 +327,19 @@ public:
 		return camera_codec;
 	}
 
-	ANativeWindow* surface() {
-		return camera_codec->getSurface();
-	}
-
 	void startCapture() {
-		ACaptureRequest* requests[CAPTURE_TARGET_COUNT];
-		auto sz = 0U;
+		auto requests{std::vector<ACaptureRequest*>()};
 		for (auto& it : camera_requests) {
 			auto& req = it.second;
-			if (req.is_active)
-				requests[sz++] = req.capture_request;
+			if (req.n_consumers > 0)
+				requests.emplace_back(req.capture_request);
 		}
 
-		if (likely(sz)) {
-			Log::i("For the camera Capture Session requested Repeating Request for %d requests", sz);
+		if (likely(!requests.empty())) {
+			Log::i("For the camera Capture Session requested Repeating Request for %d requests", requests.size());
 			auto status = ACameraCaptureSession_setRepeatingRequest(
 				capture_session, nullptr,
-				sz, std::move(requests),
+				requests.size(), std::move(requests.data()),
 				nullptr
 			);
 			Log::assert_or_die(status == ACAMERA_OK, "ACameraCaptureSession_setRepeatingRequest call failed with code: %#x, %s", status, GetErrorStr(status));
@@ -378,7 +376,7 @@ public:
 		}
 	}
 
-	void addCaptureRequestTarget(CaptureTarget target, ANativeWindow* window) {
+	void registerSurfaceForTarget(CaptureTarget target, ANativeWindow* window) {
 		if (camera_requests.find(target) == camera_requests.end())
 			camera_requests[target] = CameraRequest();
 
@@ -389,20 +387,25 @@ public:
 		camera_requests.erase(target);
 	}
 
-	void setPreviewRequested(bool start) {
-		camera_requests[PREVIEW_SURFACE_IDX].is_active = start;
+	void addConsumer(CaptureTarget target) {
+		if (camera_requests[target].n_consumers == 0) {
+			// first consumer added
+			if (target == CaptureTarget::RTC_ENCODER_SURFACE || target == CaptureTarget::RTSP_ENCODER_SURFACE) {
+				registerSurfaceForTarget(target, camera_codec->getSurface());
+			}
+		}
+		camera_requests[target].n_consumers++;
 		renewCaptureSession();
 	}
 
-	void setStreamRequested(bool start) {
-//		if (start)
-//			camera_codec->start();
-
-		camera_requests[ENCODER_SURFACE_IDX].is_active = start;
+	void removeConsumer(CaptureTarget target) {
+		camera_requests[target].n_consumers--;
+		Log::assert_or_die(camera_requests[target].n_consumers >= 0, "Number of consumers for target %d is below 0", target);
+		if (camera_requests[target].n_consumers == 0) {
+			// no more consumers
+			removeCaptureRequestTarget(target);
+		}
 		renewCaptureSession();
-
-//		if (!start)
-//			camera_codec->stop();
 	}
 
 	/**
@@ -522,8 +525,6 @@ private:
 			Log::w("CaptureSession is %s", (ses ? "NOT our session" : "NULL"));
 			return;
 		}
-
-		Log::assert_or_die(state < CaptureSessionState::MAX_STATE, "Wrong state %d", state);
 
 		capture_session_state = state;
 	}

@@ -43,8 +43,8 @@ class Stream: std::enable_shared_from_this<Stream> {
     uint64_t startTime = 0;
     std::mutex mutex;
     DispatchQueue dispatchQueue = DispatchQueue("StreamQueue");
+    bool isRunning = false;
 
-    bool _isRunning = false;
 public:
     const std::shared_ptr<StreamSource> audio;
     const std::shared_ptr<StreamSource> video;
@@ -66,7 +66,6 @@ public:
     void onSample(std::function<void (StreamSourceType, uint64_t, rtc::binary)> handler);
     void start();
     void stop();
-    const bool & isRunning = _isRunning;
 };
 
 

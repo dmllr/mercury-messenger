@@ -93,9 +93,15 @@ public:
 
 			MainThread.dispatch([this, ws]() {
 				if (clients.empty()) {
+                    LOGI << "clients.empty(): true";
 					// we have no clients, stop the stream
 					if (auto stream = ws.lock()) {
+                        LOGI << "stream->stop() now";
 						stream->stop();
+					}
+				} else {
+					for (auto& c : clients) {
+						LOGI << "client: " << c.first << (int)c.second->getState();
 					}
 				}
 			});
@@ -207,7 +213,9 @@ protected:
 				state == rtc::PeerConnection::State::Failed ||
 				state == rtc::PeerConnection::State::Closed) {
 				// remove disconnected client
+                LOGI << "clients.erase(" << id << "); ";
 				MainThread.dispatch([this, id]() {
+                    LOGI << "main: clients.erase(" << id << "); ";
 					clients.erase(id);
 				});
 			}
