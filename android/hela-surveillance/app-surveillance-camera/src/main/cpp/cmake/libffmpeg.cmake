@@ -1,3 +1,9 @@
+# sudo apt install libavcodec-dev
+# sudo apt install libavcformat-dev
+# sudo apt install libavformat-dev
+# sudo apt install libavdevice-dev
+# sudo apt install libswscale-dev
+
 find_path(AVCODEC_INCLUDE_DIR libavcodec/avcodec.h)
 find_library(AVCODEC_LIBRARY avcodec)
 

@@ -5,13 +5,13 @@
 #include <opencv2/videoio.hpp>
 #include <opencv2/highgui.hpp>
 #include <opencv2/highgui/highgui_c.h>
-#include <opencv2/videoio/legacy/constants_c.h>
+#include <opencv2/imgproc.hpp>
 
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavutil/imgutils.h>
 #include <libavutil/opt.h>
-#include "libswscale/swscale.h"
+//#include "libswscale/swscale.h"
 }
 
 class CameraStreamer {
@@ -63,7 +63,7 @@ public:
         /* open it */
         ret = avcodec_open2(c, codec, NULL);
         if (ret < 0) {
-            fprintf(stderr, "Could not open codec: %s\n", av_err2str(ret));
+            fprintf(stderr, "Could not open codec");
             exit(1);
         }
 
@@ -109,24 +109,24 @@ public:
         av_packet_free(&pkt);
     }
 
-    AVFrame *cvmatToAvframe(cv::Mat *image, AVFrame *frame) {
-        int width = image->cols;
-        int height = image->rows;
-        int cvLinesizes[1];
-        cvLinesizes[0] = image->step1();
-        if (frame == nullptr) {
-            frame = av_frame_alloc();
-            av_image_alloc(frame->data, frame->linesize, width, height,
-                           AVPixelFormat::AV_PIX_FMT_YUV420P, 1);
-        }
-        auto conversion = sws_getContext(
-                width, height, AVPixelFormat::AV_PIX_FMT_BGR24, width, height,
-                (AVPixelFormat)frame->format, SWS_FAST_BILINEAR, NULL, NULL, NULL);
-        sws_scale(conversion, &image->data, cvLinesizes, 0, height, frame->data,
-                  frame->linesize);
-        sws_freeContext(conversion);
-        return frame;
-    }
+//    AVFrame *cvmatToAvframe(cv::Mat *image, AVFrame *frame) {
+//        int width = image->cols;
+//        int height = image->rows;
+//        int cvLinesizes[1];
+//        cvLinesizes[0] = image->step1();
+//        if (frame == nullptr) {
+//            frame = av_frame_alloc();
+//            av_image_alloc(frame->data, frame->linesize, width, height,
+//                           AVPixelFormat::AV_PIX_FMT_YUV420P, 1);
+//        }
+//        auto conversion = sws_getContext(
+//                width, height, AVPixelFormat::AV_PIX_FMT_BGR24, width, height,
+//                (AVPixelFormat)frame->format, SWS_FAST_BILINEAR, NULL, NULL, NULL);
+//        sws_scale(conversion, &image->data, cvLinesizes, 0, height, frame->data,
+//                  frame->linesize);
+//        sws_freeContext(conversion);
+//        return frame;
+//    }
 
     int start() {
         auto cvf = cv::Mat();
@@ -137,12 +137,25 @@ public:
             return -1;
         }
 
+
+//        AVFrame *frame = av_frame_alloc();
+//        frame->format = encoderContext->pix_fmt;
+//        frame->width = encoderContext->width;
+//        frame->height = encoderContext->height;
+//        av_frame_get_buffer(frame, 32);
+
         // create a window and display the video capture
         cv::namedWindow("Video Capture", CV_WINDOW_AUTOSIZE);
         for (int i=0; i<100; i++) {
             cap >> cvf;
 
-            cvmatToAvframe(&cvf, frame);
+//            cvmatToAvframe(&cvf, frame);
+            // convert the OpenCV Mat to an AVFrame
+            cv::Mat yuvMat;
+            cv::cvtColor(cvf, yuvMat, cv::COLOR_BGR2YUV_I420);
+            av_image_fill_arrays(frame->data, frame->linesize, yuvMat.data,
+                                 AV_PIX_FMT_YUV420P, frame->width, frame->height, 32);
+
             encode(frame);
 
             imshow("Video Capture", cvf);
