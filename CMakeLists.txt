@@ -45,12 +45,12 @@ target_include_directories(test-rtc
 add_executable(mac
 	macos/src/main.cpp
 
-	#	${libdatachannel_path}/examples/streamer/fileparser.cpp
-	#	${libdatachannel_path}/examples/streamer/h264fileparser.cpp
-	#	${libdatachannel_path}/examples/streamer/opusfileparser.cpp
-	#	${src_path}/src/rtc/helpers.cpp
-	#	${src_path}/src/rtc/dispatch_queue.cpp
-	#	${src_path}/src/rtc/stream.cpp
+	${libdatachannel_path}/examples/streamer/fileparser.cpp
+	${libdatachannel_path}/examples/streamer/h264fileparser.cpp
+	${libdatachannel_path}/examples/streamer/opusfileparser.cpp
+	${src_path}/src/rtc/helpers.cpp
+	${src_path}/src/rtc/dispatch_queue.cpp
+	${src_path}/src/rtc/stream.cpp
 )
 set_property(TARGET mac PROPERTY CXX_STANDARD 17)
 target_compile_features(mac PRIVATE cxx_std_17)
@@ -64,8 +64,8 @@ target_link_libraries(mac PRIVATE
 	${AVFORMAT_LIBRARIES}
 	${AVUTIL_LIBRARIES}
 	${SWSCALE_LIBRARIES}
-#		avcodec
-#	datachannel
+
+	datachannel
 )
 target_include_directories(mac
 	PRIVATE
@@ -93,5 +93,7 @@ target_include_directories(mac
 
 	"${CMAKE_CURRENT_BINARY_DIR}"
 
+	# tmp
+	"${libdatachannel_path}/examples/streamer"
 )
 target_link_directories(mac PRIVATE /usr/local/Cellar/ffmpeg/5.1.2/lib)

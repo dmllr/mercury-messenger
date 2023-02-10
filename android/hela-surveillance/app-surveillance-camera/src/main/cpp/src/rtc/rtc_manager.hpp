@@ -18,7 +18,7 @@
 #include <unordered_map>
 
 
-DispatchQueue MainThread("Main");
+DispatchQueue MainThread("Main", 1);
 template <class T> std::weak_ptr<T> make_weak_ptr(std::shared_ptr<T> ptr) { return ptr; }
 
 
@@ -70,7 +70,7 @@ public:
 					rtpConfig->timestamp = rtpConfig->startTimestamp + elapsedTimestamp;
 
 					// get elapsed time in clock rate from last RTCP sender report
-					auto reportElapsedTimestamp = rtpConfig->timestamp - trackData->sender->previousReportedTimestamp;
+					auto reportElapsedTimestamp = rtpConfig->timestamp - trackData->sender->lastReportedTimestamp();
 					// check if last report was at least 1 second ago
 					if (rtpConfig->timestampToSeconds(reportElapsedTimestamp) > 1) {
 						trackData->sender->setNeedsToReport();
@@ -93,10 +93,10 @@ public:
 
 			MainThread.dispatch([this, ws]() {
 				if (clients.empty()) {
-                    LOGI << "clients.empty(): true";
+					LOGI << "clients.empty(): true";
 					// we have no clients, stop the stream
 					if (auto stream = ws.lock()) {
-                        LOGI << "stream->stop() now";
+						LOGI << "stream->stop() now";
 						stream->stop();
 					}
 				} else {
@@ -106,7 +106,6 @@ public:
 				}
 			});
 		});
-
 	}
 
 	void start() {
@@ -213,9 +212,9 @@ protected:
 				state == rtc::PeerConnection::State::Failed ||
 				state == rtc::PeerConnection::State::Closed) {
 				// remove disconnected client
-                LOGI << "clients.erase(" << id << "); ";
+				LOGI << "clients.erase(" << id << "); ";
 				MainThread.dispatch([this, id]() {
-                    LOGI << "main: clients.erase(" << id << "); ";
+					LOGI << "main: clients.erase(" << id << "); ";
 					clients.erase(id);
 				});
 			}
@@ -365,13 +364,9 @@ protected:
 			auto currentTime_us = double(currentTimeInMicroSeconds());
 			auto currentTime_s = currentTime_us / (1000 * 1000);
 
-			// set start time of stream
-			video->sender->rtpConfig->setStartTime(currentTime_s, rtc::RtpPacketizationConfig::EpochStart::T1970);
-			audio->sender->rtpConfig->setStartTime(currentTime_s, rtc::RtpPacketizationConfig::EpochStart::T1970);
-
-			// start stat recording of RTCP SR
-			video->sender->startRecording();
-			audio->sender->startRecording();
+//			// set start time of stream
+//			video->sender->rtpConfig->setStartTime(currentTime_s, rtc::RtpPacketizationConfig::EpochStart::T1970);
+//			audio->sender->rtpConfig->setStartTime(currentTime_s, rtc::RtpPacketizationConfig::EpochStart::T1970);
 
 //			if (avStream.has_value()) {
 //				sendInitialNalus(avStream.value(), video);

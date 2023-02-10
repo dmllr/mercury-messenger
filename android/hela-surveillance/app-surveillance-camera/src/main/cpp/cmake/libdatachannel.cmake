@@ -1,4 +1,4 @@
-import_remote("https://github.com/paullouisageneau/libdatachannel.git" TAG "v0.17.3" DST "${CMAKE_SOURCE_DIR}/_imported/libdatachannel" ALIAS libdatachannel NO_CMAKE)
+import_remote("https://github.com/paullouisageneau/libdatachannel.git" TAG "v0.18.2" DST "${CMAKE_SOURCE_DIR}/_imported/libdatachannel" ALIAS libdatachannel NO_CMAKE)
 
 #set(libdatachannel_path ${CMAKE_CURRENT_LIST_DIR}/../libs/datachannel)
 
@@ -100,6 +100,7 @@ set(LIBDATACHANNEL_IMPL_SOURCES
 	${libdatachannel_path}/src/impl/tcpserver.cpp
 	${libdatachannel_path}/src/impl/tcptransport.cpp
 	${libdatachannel_path}/src/impl/tlstransport.cpp
+	${libdatachannel_path}/src/impl/transport.cpp
 	${libdatachannel_path}/src/impl/verifiedtlstransport.cpp
 	${libdatachannel_path}/src/impl/websocket.cpp
 	${libdatachannel_path}/src/impl/websocketserver.cpp
@@ -131,6 +132,7 @@ set(LIBDATACHANNEL_IMPL_HEADERS
 	${libdatachannel_path}/src/impl/tcpserver.hpp
 	${libdatachannel_path}/src/impl/tcptransport.hpp
 	${libdatachannel_path}/src/impl/tlstransport.hpp
+	${libdatachannel_path}/src/impl/transport.hpp
 	${libdatachannel_path}/src/impl/verifiedtlstransport.hpp
 	${libdatachannel_path}/src/impl/websocket.hpp
 	${libdatachannel_path}/src/impl/websocketserver.hpp

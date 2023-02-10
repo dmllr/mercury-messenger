@@ -1,6 +1,6 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <chrono>
+#include <iostream>
+#include <string>
 
 #include <opencv2/videoio.hpp>
 #include <opencv2/highgui.hpp>
@@ -14,14 +14,20 @@ extern "C" {
 //#include "libswscale/swscale.h"
 }
 
-class CameraStreamer {
+#include "rtc/rtc_manager.hpp"
+#include "rtc/stream.hpp"
+
+// tmp
+#include "../../_imported/libdatachannel/examples/streamer/opusfileparser.hpp"
+
+
+class VideoStreamSource : public StreamSource {
 public:
-    CameraStreamer() {
+    VideoStreamSource() {
         auto codec_name = "libx264";
 
         int ret;
 
-        /* find the mpeg1video encoder */
         codec = avcodec_find_encoder_by_name(codec_name);
         if (!codec) {
             fprintf(stderr, "Codec '%s' not found\n", codec_name);
@@ -89,89 +95,64 @@ public:
         }
     }
 
-    ~CameraStreamer() {
-        /* flush the encoder */
-        encode(nullptr);
-
-//        /* Add sequence end code to have a real MPEG file.
-//           It makes only sense because this tiny examples writes packets
-//           directly. This is called "elementary stream" and only works for some
-//           codecs. To create a valid file, you usually need to write packets
-//           into a proper file format or protocol; see muxing.c.
-//         */
-//        uint8_t endcode[] = {0, 0, 1, 0xb7};
-//        if (codec->id == AV_CODEC_ID_MPEG1VIDEO || codec->id == AV_CODEC_ID_MPEG2VIDEO)
-//            fwrite(endcode, 1, sizeof(endcode), f);
-//        fclose(f);
-
+    ~VideoStreamSource() {
         avcodec_free_context(&c);
         av_frame_free(&frame);
         av_packet_free(&pkt);
     }
 
-//    AVFrame *cvmatToAvframe(cv::Mat *image, AVFrame *frame) {
-//        int width = image->cols;
-//        int height = image->rows;
-//        int cvLinesizes[1];
-//        cvLinesizes[0] = image->step1();
-//        if (frame == nullptr) {
-//            frame = av_frame_alloc();
-//            av_image_alloc(frame->data, frame->linesize, width, height,
-//                           AVPixelFormat::AV_PIX_FMT_YUV420P, 1);
-//        }
-//        auto conversion = sws_getContext(
-//                width, height, AVPixelFormat::AV_PIX_FMT_BGR24, width, height,
-//                (AVPixelFormat)frame->format, SWS_FAST_BILINEAR, NULL, NULL, NULL);
-//        sws_scale(conversion, &image->data, cvLinesizes, 0, height, frame->data,
-//                  frame->linesize);
-//        sws_freeContext(conversion);
-//        return frame;
-//    }
+    void loadNextSample() override {
+        cap >> cvf;
 
-    int start() {
-        auto cvf = cv::Mat();
+        // convert the OpenCV Mat to an AVFrame
+        cv::cvtColor(cvf, yuvMat, cv::COLOR_BGR2YUV_I420);
+        av_image_fill_arrays(frame->data, frame->linesize, yuvMat.data,
+                             AV_PIX_FMT_YUV420P, frame->width, frame->height, 32);
 
-        cv::VideoCapture cap = cv::VideoCapture();
+        encode();
+
+        imshow("Video Capture", cvf);
+        cv::waitKey(1);
+    }
+
+    rtc::binary getSample() override {
+        return sample;
+    }
+
+    void start() override {
+        cvf = cv::Mat();
+        cap = cv::VideoCapture();
         cap.open(0);
         if (!cap.isOpened()) {
-            return -1;
+            return;
         }
 
-
-//        AVFrame *frame = av_frame_alloc();
-//        frame->format = encoderContext->pix_fmt;
-//        frame->width = encoderContext->width;
-//        frame->height = encoderContext->height;
-//        av_frame_get_buffer(frame, 32);
+        timeStart_us = std::chrono::time_point_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now()).time_since_epoch().count();
 
         // create a window and display the video capture
         cv::namedWindow("Video Capture", CV_WINDOW_AUTOSIZE);
-        for (int i=0; i<100; i++) {
-            cap >> cvf;
+    }
 
-//            cvmatToAvframe(&cvf, frame);
-            // convert the OpenCV Mat to an AVFrame
-            cv::Mat yuvMat;
-            cv::cvtColor(cvf, yuvMat, cv::COLOR_BGR2YUV_I420);
-            av_image_fill_arrays(frame->data, frame->linesize, yuvMat.data,
-                                 AV_PIX_FMT_YUV420P, frame->width, frame->height, 32);
+    void stop() override {
+    }
 
-            encode(frame);
+    uint64_t getSampleTime_us() override {
+//        return std::chrono::time_point_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now()).time_since_epoch().count();
+        timeStart_us += getSampleDuration_us();
+        return timeStart_us;
+    }
 
-            imshow("Video Capture", cvf);
-            cv::waitKey(1);
-        }
-
-        return 0;
+    uint64_t getSampleDuration_us() override {
+        return 1e+9 * (c->framerate.num / c->framerate.den);
     }
 
 protected:
-    void encode(AVFrame *frame) {
+    void encode() {
         int ret;
 
         /* send the frame to the encoder */
         if (frame)
-            printf("Send frame %3\n", frame->pts);
+            printf("Send frame %3ld\n", frame->pts);
 
         ret = avcodec_send_frame(c, frame);
         if (ret < 0) {
@@ -188,26 +169,64 @@ protected:
                 exit(1);
             }
 
-            printf("Write packet %3 (size=%5d)\n", pkt->pts, pkt->size);
+            printf("Write packet %3ld (size=%5d)\n", pkt->pts, pkt->size);
 
             // ############# stream the packet
 //            fwrite(pkt->data, 1, pkt->size, outfile);
+            sample.clear();
+            sample.insert(
+                    sample.end(),
+                    reinterpret_cast<std::byte*>(&pkt->data),
+                    reinterpret_cast<std::byte*>(&pkt->data[pkt->size]));
 
             av_packet_unref(pkt);
         }
     }
 
 private:
+    // capture
+    cv::VideoCapture cap;
+    cv::Mat cvf;
+    cv::Mat yuvMat;
+
     // encoding
     const AVCodec *codec;
     AVCodecContext *c = nullptr;
     AVFrame *frame;
     AVPacket *pkt;
+
+    uint64_t timeStart_us = 0;
+
+    // endoded buffer
+    rtc::binary sample;
 };
 
+std::shared_ptr<Stream> createStream() {
+    auto video = std::make_shared<VideoStreamSource>();
+    auto audio = std::make_shared<OPUSFileParser>("/Users/denis.miller/dev/github/hela-surveillance/samples/opus", true);
+
+    auto stream = std::make_shared<Stream>(video, audio);
+
+    return stream;
+}
+
 int main(int argc, char **argv) {
-    auto cs = CameraStreamer();
-    cs.start();
+    auto stream = createStream();
+
+    auto rtc_manager = new RtcManager();
+    rtc_manager->setStream(stream);
+    rtc_manager->start();
+
+    while (true) {
+        std::string id;
+        std::cout << "Enter to exit" << std::endl;
+        std::cin >> id;
+        std::cin.ignore();
+        std::cout << "exiting" << std::endl;
+        break;
+    }
+
+    delete rtc_manager;
 
     return 0;
 }
