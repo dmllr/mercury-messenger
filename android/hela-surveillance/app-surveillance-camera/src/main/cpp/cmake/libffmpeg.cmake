@@ -4,20 +4,49 @@
 # sudo apt install libavdevice-dev
 # sudo apt install libswscale-dev
 
-find_path(AVCODEC_INCLUDE_DIR libavcodec/avcodec.h)
-find_library(AVCODEC_LIBRARY avcodec)
 
-find_path(AVFORMAT_INCLUDE_DIR libavformat/avformat.h)
-find_library(AVFORMAT_LIBRARY avformat)
+if(UNIX AND NOT APPLE)
+    set(PKG_CONFIG_EXECUTABLE "pkg-config")
+    set(AVCODEC_PKGCONFIG_NAME "libavcodec")
+    set(AVFORMAT_PKGCONFIG_NAME "libavformat")
+    set(AVUTIL_PKGCONFIG_NAME "libavutil")
+    set(SWSCALE_PKGCONFIG_NAME "libswscale")
+elseif(APPLE)
+    set(PKG_CONFIG_EXECUTABLE "brew list pkg-config || pkg-config")
+    set(AVCODEC_PKGCONFIG_NAME "ffmpeg-4.3 libavcodec")
+    set(AVFORMAT_PKGCONFIG_NAME "ffmpeg-4.3 libavformat")
+    set(AVUTIL_PKGCONFIG_NAME "ffmpeg-4.3 libavutil")
+    set(SWSCALE_PKGCONFIG_NAME "ffmpeg-4.3 libswscale")
+endif()
 
-find_path(AVUTIL_INCLUDE_DIR libavutil/avutil.h)
-find_library(AVUTIL_LIBRARY avutil)
+find_package(PkgConfig REQUIRED)
 
-find_path(AVDEVICE_INCLUDE_DIR libavdevice/avdevice.h)
-find_library(AVDEVICE_LIBRARY avdevice)
+pkg_check_modules(AVCODEC REQUIRED ${AVCODEC_PKGCONFIG_NAME})
+pkg_check_modules(AVFORMAT REQUIRED ${AVFORMAT_PKGCONFIG_NAME})
+pkg_check_modules(AVUTIL REQUIRED ${AVUTIL_PKGCONFIG_NAME})
+pkg_check_modules(SWSCALE REQUIRED ${SWSCALE_PKGCONFIG_NAME})
 
-find_path(SWSCALE_INCLUDE_DIR libswscale/swscale.h)
-find_library(SWSCALE_LIBRARY swscale)
+#include_directories(${AVCODEC_INCLUDE_DIRS} ${AVFORMAT_INCLUDE_DIRS}
+#        ${AVUTIL_INCLUDE_DIRS} ${SWSCALE_INCLUDE_DIRS})
+#target_link_libraries(your_target ${AVCODEC_LIBRARIES} ${AVFORMAT_LIBRARIES}
+#        ${AVUTIL_LIBRARIES} ${SWSCALE_LIBRARIES})
+
+
+
+#find_path(AVCODEC_INCLUDE_DIR libavcodec/avcodec.h)
+#find_library(AVCODEC_LIBRARY avcodec)
+#
+#find_path(AVFORMAT_INCLUDE_DIR libavformat/avformat.h)
+#find_library(AVFORMAT_LIBRARY avformat)
+#
+#find_path(AVUTIL_INCLUDE_DIR libavutil/avutil.h)
+#find_library(AVUTIL_LIBRARY avutil)
+#
+#find_path(AVDEVICE_INCLUDE_DIR libavdevice/avdevice.h)
+#find_library(AVDEVICE_LIBRARY avdevice)
+#
+#find_path(SWSCALE_INCLUDE_DIR libswscale/swscale.h)
+#find_library(SWSCALE_LIBRARY swscale)
 
 #include_directories(${AVCODEC_INCLUDE_DIR})
 #include_directories(${AVFORMAT_INCLUDE_DIR})

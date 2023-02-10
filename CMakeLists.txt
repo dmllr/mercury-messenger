@@ -59,7 +59,11 @@ target_link_libraries(mac PRIVATE
 	opencv_core opencv_highgui opencv_imgproc opencv_videoio
 #	${AVCODEC_LIBRARY} ${AVFORMAT_LIBRARY} ${AVUTIL_LIBRARY} ${AVDEVICE_LIBRARY}
 #	PkgConfig::LIBAV
-	${AVUTIL_LIBRARY} ${AVCODEC_LIBRARY} ${SWSCALE_LIBRARY}
+#	${AVUTIL_LIBRARY} ${AVCODEC_LIBRARY} ${SWSCALE_LIBRARY}
+	${AVCODEC_LIBRARIES}
+	${AVFORMAT_LIBRARIES}
+	${AVUTIL_LIBRARIES}
+	${SWSCALE_LIBRARIES}
 #		avcodec
 #	datachannel
 )
@@ -79,9 +83,13 @@ target_include_directories(mac
 	"${libopencv_path}/modules/videoio/include"
 
 #	"${libffmpeg_path}"
-	${AVUTIL_INCLUDE_DIR}
-	${AVCODEC_INCLUDE_DIR}
-	${SWSCALE_INCLUDE_DIR}
+	${AVCODEC_INCLUDE_DIRS}
+	${AVFORMAT_INCLUDE_DIRS}
+	${AVUTIL_INCLUDE_DIRS}
+	${SWSCALE_INCLUDE_DIRS}
+#	${AVUTIL_INCLUDE_DIR}
+#	${AVCODEC_INCLUDE_DIR}
+#	${SWSCALE_INCLUDE_DIR}
 
 	"${CMAKE_CURRENT_BINARY_DIR}"
 
