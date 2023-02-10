@@ -109,6 +109,7 @@ public:
         av_image_fill_arrays(frame->data, frame->linesize, yuvMat.data,
                              AV_PIX_FMT_YUV420P, frame->width, frame->height, 32);
 
+        sample.clear();
         encode();
 
         imshow("Video Capture", cvf);
@@ -127,7 +128,7 @@ public:
             return;
         }
 
-        timeStart_us = std::chrono::time_point_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now()).time_since_epoch().count();
+        timeStart_us = 0;//std::chrono::time_point_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now()).time_since_epoch().count();
 
         // create a window and display the video capture
         cv::namedWindow("Video Capture", CV_WINDOW_AUTOSIZE);
@@ -138,12 +139,11 @@ public:
 
     uint64_t getSampleTime_us() override {
 //        return std::chrono::time_point_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now()).time_since_epoch().count();
-        timeStart_us += getSampleDuration_us();
         return timeStart_us;
     }
 
     uint64_t getSampleDuration_us() override {
-        return 1e+9 * (c->framerate.num / c->framerate.den);
+        return 1e+9 * c->framerate.num / c->framerate.den;
     }
 
 protected:
@@ -173,11 +173,11 @@ protected:
 
             // ############# stream the packet
 //            fwrite(pkt->data, 1, pkt->size, outfile);
-            sample.clear();
             sample.insert(
                     sample.end(),
                     reinterpret_cast<std::byte*>(&pkt->data),
                     reinterpret_cast<std::byte*>(&pkt->data[pkt->size]));
+            timeStart_us += getSampleDuration_us();
 
             av_packet_unref(pkt);
         }
