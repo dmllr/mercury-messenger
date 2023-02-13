@@ -11,7 +11,7 @@ extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavutil/imgutils.h>
 #include <libavutil/opt.h>
-//#include "libswscale/swscale.h"
+#include "libswscale/swscale.h"
 }
 
 #include "rtc/rtc_manager.hpp"
@@ -22,183 +22,107 @@ extern "C" {
 
 
 class VideoStreamSource : public StreamSource {
+private:
+    cv::VideoCapture cap;
+    cv::Mat cv_frame;
+    rtc::binary encoded_data;
+    std::chrono::time_point<std::chrono::steady_clock> start_time;
+    AVCodecContext *codec_context;
+    AVFrame *av_frame;
+
 public:
-    VideoStreamSource() {
-        auto codec_name = "libx264";
-
-        int ret;
-
-        codec = avcodec_find_encoder_by_name(codec_name);
-        if (!codec) {
-            fprintf(stderr, "Codec '%s' not found\n", codec_name);
-            exit(1);
-        }
-
-        c = avcodec_alloc_context3(codec);
-        if (!c) {
-            fprintf(stderr, "Could not allocate video codec context\n");
-            exit(1);
-        }
-
-        pkt = av_packet_alloc();
-        if (!pkt)
-            exit(1);
-
-        /* put sample parameters */
-        c->bit_rate = 400000;
-        /* resolution must be a multiple of two */
-        c->width = 352;
-        c->height = 288;
-        /* frames per second */
-        c->time_base = (AVRational) {1, 25};
-        c->framerate = (AVRational) {25, 1};
-
-        /* emit one intra frame every ten frames
-         * check frame pict_type before passing frame
-         * to encoder, if frame->pict_type is AV_PICTURE_TYPE_I
-         * then gop_size is ignored and the output of encoder
-         * will always be I frame irrespective to gop_size
-         */
-        c->gop_size = 10;
-        c->max_b_frames = 1;
-        c->pix_fmt = AV_PIX_FMT_YUV420P;
-
-        if (codec->id == AV_CODEC_ID_H264)
-            av_opt_set(c->priv_data, "preset", "slow", 0);
-
-        /* open it */
-        ret = avcodec_open2(c, codec, NULL);
-        if (ret < 0) {
-            fprintf(stderr, "Could not open codec");
-            exit(1);
-        }
-
-//    f = fopen(filename, "wb");
-//    if (!f) {
-//        fprintf(stderr, "Could not open %s\n", filename);
-//        exit(1);
-//    }
-
-        frame = av_frame_alloc();
-        if (!frame) {
-            fprintf(stderr, "Could not allocate video frame\n");
-            exit(1);
-        }
-        frame->format = c->pix_fmt;
-        frame->width = c->width;
-        frame->height = c->height;
-
-        ret = av_frame_get_buffer(frame, 0);
-        if (ret < 0) {
-            fprintf(stderr, "Could not allocate the video frame data\n");
-            exit(1);
-        }
-    }
-
-    ~VideoStreamSource() {
-        avcodec_free_context(&c);
-        av_frame_free(&frame);
-        av_packet_free(&pkt);
-    }
-
-    void loadNextSample() override {
-        cap >> cvf;
-
-        // convert the OpenCV Mat to an AVFrame
-        cv::cvtColor(cvf, yuvMat, cv::COLOR_BGR2YUV_I420);
-        av_image_fill_arrays(frame->data, frame->linesize, yuvMat.data,
-                             AV_PIX_FMT_YUV420P, frame->width, frame->height, 32);
-
-        sample.clear();
-        encode();
-
-        imshow("Video Capture", cvf);
-        cv::waitKey(1);
-    }
-
-    rtc::binary getSample() override {
-        return sample;
-    }
+    VideoStreamSource() : cap(0) {} // default constructor, initialize cap with default camera
 
     void start() override {
-        cvf = cv::Mat();
-        cap = cv::VideoCapture();
-        cap.open(0);
-        if (!cap.isOpened()) {
+        cap.open(0); // open the default camera
+        start_time = std::chrono::steady_clock::now();
+
+        // find h.264 codec and allocate the codec context
+        AVCodec *codec = avcodec_find_encoder(AV_CODEC_ID_H264);
+        codec_context = avcodec_alloc_context3(codec);
+        if (!codec_context) {
+            throw std::runtime_error("Could not allocate codec context");
+        }
+
+        codec_context->bit_rate = 400000;
+        codec_context->width = cap.get(cv::CAP_PROP_FRAME_WIDTH);
+        codec_context->height = cap.get(cv::CAP_PROP_FRAME_HEIGHT);
+        codec_context->time_base = (AVRational){1, 25};
+        codec_context->framerate = (AVRational){25, 1};
+        codec_context->gop_size = 10;
+        codec_context->max_b_frames = 1;
+        codec_context->pix_fmt = AV_PIX_FMT_YUV420P;
+
+        if (avcodec_open2(codec_context, codec, nullptr) < 0) {
+            throw std::runtime_error("Could not open codec");
+        }
+
+        // initialize the frame
+        // Allocate a frame to hold the converted image
+        av_frame = av_frame_alloc();
+        if (!av_frame) {
+            std::cerr << "Failed to allocate converted frame" << std::endl;
             return;
         }
 
-        timeStart_us = 0;//std::chrono::time_point_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now()).time_since_epoch().count();
+        int num_bytes = av_image_get_buffer_size(codec_context->pix_fmt, codec_context->width, codec_context->height, 1);
+        std::vector<uint8_t> converted_frame_buffer(num_bytes);
+        av_image_fill_arrays(av_frame->data, av_frame->linesize, converted_frame_buffer.data(), codec_context->pix_fmt, codec_context->width, codec_context->height, 1);
+        av_frame->width = codec_context->width;
+        av_frame->height = codec_context->height;
+        av_frame->format = codec_context->pix_fmt;
+    }
 
-        // create a window and display the video capture
-        cv::namedWindow("Video Capture", CV_WINDOW_AUTOSIZE);
+    void loadNextSample() override {
+        cap >> cv_frame;
+        imshow("Video Capture", cv_frame);
+
+        auto sws_context = sws_getContext(
+                cv_frame.cols, cv_frame.rows, AV_PIX_FMT_BGR24, codec_context->width, codec_context->height,
+                codec_context->pix_fmt, SWS_FAST_BILINEAR, nullptr, nullptr, nullptr);
+
+        sws_scale(sws_context, &cv_frame.data, av_frame->linesize, 0, cv_frame.rows, av_frame->data, av_frame->linesize);
+
+        AVPacket* packet = av_packet_alloc();
+        if (!packet) {
+            std::cerr << "Failed to allocate packet" << std::endl;
+            return;
+        }
+        avcodec_send_frame(codec_context, av_frame);
+        while (avcodec_receive_packet(codec_context, packet) == 0) {
+            encoded_data.insert(
+                    encoded_data.end(),
+                    reinterpret_cast<std::byte*>(&packet->data),
+                    reinterpret_cast<std::byte*>(&packet->data[packet->size]));
+
+            av_packet_unref(packet);
+        }
+
+        sws_freeContext(sws_context);
+        av_packet_free(&packet);
+    }
+
+    rtc::binary getSample() override {
+        auto sample = encoded_data;
+        encoded_data.clear();
+        return sample;
     }
 
     void stop() override {
+        av_frame_free(&av_frame);
+        avcodec_free_context(&codec_context);
+        cap.release(); // release the camera
     }
 
     uint64_t getSampleTime_us() override {
-//        return std::chrono::time_point_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now()).time_since_epoch().count();
-        return timeStart_us;
+        return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start_time).count();
     }
 
     uint64_t getSampleDuration_us() override {
-        return 1e+9 * c->framerate.num / c->framerate.den;
+//        return encoded_data.size() * 8 * 1000000000 / codec_context->bit_rate;
+        return 1000000000 * codec_context->framerate.num / codec_context->framerate.den;
     }
 
-protected:
-    void encode() {
-        int ret;
-
-        /* send the frame to the encoder */
-        if (frame)
-            printf("Send frame %3ld\n", frame->pts);
-
-        ret = avcodec_send_frame(c, frame);
-        if (ret < 0) {
-            fprintf(stderr, "Error sending a frame for encoding\n");
-            exit(1);
-        }
-
-        while (ret >= 0) {
-            ret = avcodec_receive_packet(c, pkt);
-            if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
-                return;
-            else if (ret < 0) {
-                fprintf(stderr, "Error during encoding\n");
-                exit(1);
-            }
-
-            printf("Write packet %3ld (size=%5d)\n", pkt->pts, pkt->size);
-
-            // ############# stream the packet
-//            fwrite(pkt->data, 1, pkt->size, outfile);
-            sample.insert(
-                    sample.end(),
-                    reinterpret_cast<std::byte*>(&pkt->data),
-                    reinterpret_cast<std::byte*>(&pkt->data[pkt->size]));
-            timeStart_us += getSampleDuration_us();
-
-            av_packet_unref(pkt);
-        }
-    }
-
-private:
-    // capture
-    cv::VideoCapture cap;
-    cv::Mat cvf;
-    cv::Mat yuvMat;
-
-    // encoding
-    const AVCodec *codec;
-    AVCodecContext *c = nullptr;
-    AVFrame *frame;
-    AVPacket *pkt;
-
-    uint64_t timeStart_us = 0;
-
-    // endoded buffer
-    rtc::binary sample;
 };
 
 std::shared_ptr<Stream> createStream() {
@@ -212,6 +136,8 @@ std::shared_ptr<Stream> createStream() {
 
 int main(int argc, char **argv) {
     auto stream = createStream();
+
+    cv::namedWindow("Video Capture", CV_WINDOW_AUTOSIZE);
 
     auto rtc_manager = new RtcManager();
     rtc_manager->setStream(stream);
@@ -230,34 +156,3 @@ int main(int argc, char **argv) {
 
     return 0;
 }
-
-
-
-/*
-#include <opencv2/videoio.hpp>
-#include <opencv2/highgui.hpp>
-#include <opencv2/highgui/highgui_c.h>
-#include <opencv2/videoio/legacy/constants_c.h>
-
-int main(int argc, const char * argv[]) {
-    auto frame = cv::Mat();
-    auto cap = cv::VideoCapture();
-    cap.set(CV_CAP_PROP_FOURCC, CV_FOURCC('H', '2', '6', '4'));
-
-    // try to open camera
-    cap.open(0);
-    if (!cap.isOpened()) {
-        return -1;
-    }
-
-    // create a window and display the video capture
-    cv::namedWindow("Video Capture", CV_WINDOW_AUTOSIZE);
-    for (int i=0; i<100; i++) {
-        cap >> frame;
-        imshow("Video Capture", frame);
-        cv::waitKey(1);
-    }
-
-    return 0;
-}
- */
