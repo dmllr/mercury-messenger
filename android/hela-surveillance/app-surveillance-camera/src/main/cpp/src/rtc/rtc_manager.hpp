@@ -301,11 +301,7 @@ protected:
 		// create RTP configuration
 		auto rtpConfig = std::shared_ptr<rtc::RtpPacketizationConfig>(new rtc::RtpPacketizationConfig(ssrc, cname, payloadType, rtc::H264RtpPacketizer::defaultClockRate));
 		// create packetizer
-#ifdef ANDROID
 		auto packetizer = std::shared_ptr<rtc::H264RtpPacketizer>(new rtc::H264RtpPacketizer(rtc::H264RtpPacketizer::Separator::LongStartSequence, rtpConfig));
-#else
-		auto packetizer = std::shared_ptr<rtc::H264RtpPacketizer>(new rtc::H264RtpPacketizer(rtc::H264RtpPacketizer::Separator::Length, rtpConfig));
-#endif
 		// create H264 handler
 		std::shared_ptr<rtc::H264PacketizationHandler> h264Handler(new rtc::H264PacketizationHandler(packetizer));
 		// add RTCP SR handler

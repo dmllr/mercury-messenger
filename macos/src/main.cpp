@@ -26,6 +26,7 @@ private:
     cv::VideoCapture cap;
     cv::Mat cv_frame;
     rtc::binary encoded_data;
+    int encoded_data_counter;
     std::chrono::time_point<std::chrono::steady_clock> start_time;
     AVCodecContext *codec_context;
     AVFrame *av_frame;
@@ -71,6 +72,8 @@ public:
         av_frame->width = codec_context->width;
         av_frame->height = codec_context->height;
         av_frame->format = codec_context->pix_fmt;
+
+        encoded_data_counter = 0;
     }
 
     void loadNextSample() override {
@@ -93,7 +96,8 @@ public:
             encoded_data.insert(
                     encoded_data.end(),
                     reinterpret_cast<std::byte*>(&packet->data),
-                    reinterpret_cast<std::byte*>(&packet->data[packet->size]));
+                    reinterpret_cast<std::byte*>(&packet->data + packet->size));
+            encoded_data_counter++;
 
             av_packet_unref(packet);
         }
@@ -103,8 +107,15 @@ public:
     }
 
     rtc::binary getSample() override {
+        if (encoded_data_counter < 2) {
+            return rtc::binary{};
+            LOGW << "######## INITIAL COMBINATION ######## " << encoded_data_counter << std::endl;
+        }
+
         auto sample = encoded_data;
         encoded_data.clear();
+
+        LOGI << "Sending sample of size " << sample.size() << "b" << std::endl;
         return sample;
     }
 
