@@ -31,23 +31,27 @@ private:
     cv::Mat yuv_frame;
     rtc::binary encoded_data;
     std::chrono::time_point<std::chrono::steady_clock> start_time;
-    AVCodecContext* codec_context;
-    AVCodecParameters *codec_params;
+    AVCodecContext* codec_context = nullptr;
+    AVCodecParameters *codec_params = nullptr;
 
-    AVFrame* av_frame;
-    AVPacket* packet;
+    AVFrame* av_frame = nullptr;
+    AVPacket* packet = nullptr;
 
 public:
-    VideoStreamSource() {} // default constructor, initialize cap with default camera
+    VideoStreamSource() = default;
 
     void start() override {
         cap.open(0); // open the default camera
         cap.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('h', '2', '6', '4'));
 
-        while (!cap.isOpened()) {
-            cap >> cv_frame;
+        if (!cap.isOpened()) {
             std::cout << "Waiting for the capture device to be opened." << std::endl;
-            std::this_thread::sleep_for(std::chrono::milliseconds(100)); // wait for 100ms
+            return;
+        }
+        cap >> cv_frame;
+        if (cv_frame.empty()) {
+            std::cerr << "Unexpected end of stream." << std::endl;
+            return;
         }
 
         start_time = std::chrono::steady_clock::now();
