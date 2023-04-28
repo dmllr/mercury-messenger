@@ -9,6 +9,7 @@
 
 extern "C" {
 #include <libavcodec/avcodec.h>
+#include <libavutil/parseutils.h>
 #include <libavutil/imgutils.h>
 #include <libavutil/opt.h>
 #include <libavutil/time.h>
@@ -29,9 +30,10 @@ private:
     cv::Mat cv_frame;
     cv::Mat yuv_frame;
     rtc::binary encoded_data;
-    int encoded_data_counter;
     std::chrono::time_point<std::chrono::steady_clock> start_time;
     AVCodecContext* codec_context;
+    AVCodecParameters *codec_params;
+
     AVFrame* av_frame;
     AVPacket* packet;
 
@@ -65,17 +67,12 @@ public:
         codec_context->gop_size = 10;
         codec_context->max_b_frames = 1;
         codec_context->pix_fmt = AV_PIX_FMT_YUV420P;
+        av_opt_set(codec_context->priv_data, "startcode", "1", 0);
 
         std::cout << "Input pixel format: " << av_get_pix_fmt_name(codec_context->pix_fmt) << std::endl;
         std::cout << "Output pixel format: " << av_get_pix_fmt_name(codec_context->codec->pix_fmts[0]) << std::endl;
 
-        AVCodecParameters *codec_parameters = avcodec_parameters_alloc();
-        if (!codec_parameters) {
-            throw std::runtime_error("Could not allocate codec parameters");
-        }
-        if (avcodec_parameters_from_context(codec_parameters, codec_context) < 0) {
-            throw std::runtime_error("Could not copy codec parameters to encoder");
-        }
+        codec_params = avcodec_parameters_alloc();
 
         auto ret = avcodec_open2(codec_context, codec, nullptr);
         if (ret < 0) {
@@ -98,9 +95,6 @@ public:
         av_frame->format = codec_context->pix_fmt;
 
         packet = av_packet_alloc();
-
-
-        encoded_data_counter = 0;
     }
 
     void loadNextSample() override {
@@ -111,7 +105,7 @@ public:
         }
         cv::cvtColor(cv_frame, yuv_frame, cv::COLOR_BGR2YUV_I420);
 
-        imshow("Video Capture", cv_frame);
+        imshow("Video Capture", yuv_frame);
 
         av_frame->data[0] = yuv_frame.data;
         av_frame->data[1] = yuv_frame.data + codec_context->width * codec_context->height;
@@ -128,37 +122,57 @@ public:
                 return;
             }
 
+//            if (packet->flags & AV_PKT_FLAG_KEY) {
+//                uint8_t* nalus = nullptr;
+//                int nalus_size = 0;
+//
+//                // Extract SPS and PPS data from codec context
+//                for (int i = 0; i < codec_context->extradata_size - 3; i++) {
+//                    if (codec_context->extradata[i] == 0x00 &&
+//                        codec_context->extradata[i+1] == 0x00 &&
+//                        codec_context->extradata[i+2] == 0x00 &&
+//                        codec_context->extradata[i+3] == 0x01) {
+//                        nalus = codec_context->extradata + i;
+//                        nalus_size = i == 0 ? codec_context->extradata_size : i;
+//                        break;
+//                    }
+//                }
+//
+//                // If SPS and PPS data found, insert it into encoded data buffer before the keyframe
+//                if (nalus && nalus_size > 0) {
+//                    encoded_data.insert(
+//                            encoded_data.end(),
+//                            reinterpret_cast<std::byte*>(nalus),
+//                            reinterpret_cast<std::byte*>(nalus + nalus_size));
+//                }
+//            }
+
             encoded_data.insert(
                     encoded_data.end(),
-                    reinterpret_cast<std::byte*>(&packet->data),
-                    reinterpret_cast<std::byte*>(&packet->data + packet->size));
+                    reinterpret_cast<std::byte*>(packet->data),
+                    reinterpret_cast<std::byte*>(packet->data + packet->size));
         }
 
         cv::pollKey();
     }
 
     rtc::binary getSample() override {
-//        if (encoded_data_counter < 2) {
-//            return rtc::binary{};
-//            LOGW << "######## INITIAL COMBINATION ######## " << encoded_data_counter << std::endl;
-//        }
-
         auto sample = encoded_data;
         encoded_data.clear();
 
-//        std::string fn = "/home/miller/dev/github/hela-surveillance/samples/n264/sample-" + std::to_string(encoded_data_counter - 2) + ".h264";
-        std::string fn = "/home/miller/dev/github/hela-surveillance/samples/n264/sample-.h264";
-        {
+        if (0) {
+            std::string fn = "/home/miller/dev/github/hela-surveillance/samples/n264/sample.h264";
             std::ofstream fw(fn, std::ios::out | std::ios::binary | std::ios_base::app);
             fw.write(reinterpret_cast<const char*>(sample.data()), sample.size());
         }
 
-        LOGI << "Sending sample of size " << sample.size() << "b, counter "  << encoded_data_counter << std::endl;
+        LOGI << "Sending sample of size " << sample.size() << "b " << std::endl;
         return sample;
     }
 
     void stop() override {
         av_frame_free(&av_frame);
+        avcodec_parameters_free(&codec_params);
         avcodec_free_context(&codec_context);
         cap.release(); // release the camera
     }
@@ -168,7 +182,6 @@ public:
     }
 
     uint64_t getSampleDuration_us() override {
-//        return encoded_data.size() * 8 * 1000000000 / codec_context->bit_rate;
         return 1000000000 * codec_context->framerate.num / codec_context->framerate.den;
     }
 
@@ -185,41 +198,26 @@ std::shared_ptr<Stream> createStream() {
 
 int main(int argc, char **argv) {
     {
-        std::string fn = "/home/miller/dev/github/hela-surveillance/samples/n264/sample-.h264";
+        std::string fn = "/home/miller/dev/github/hela-surveillance/samples/n264/sample.h264";
         std::ofstream fw(fn, std::ios::out | std::ios::binary);
     }
 
     auto stream = createStream();
 
-//    auto rtc_manager = new RtcManager();
-//    rtc_manager->setStream(stream);
-//    rtc_manager->start();
-
-    stream->video->start();
-
-//    cv::VideoCapture cap;
-//    cv::Mat cv_frame;
-//    cap.open(0); // open the default camera
-//    cap.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('h', '2', '6', '4'));
+    auto rtc_manager = new RtcManager();
+    rtc_manager->setStream(stream);
+    rtc_manager->start();
 
     while (true) {
-//        cap >> cv_frame;
-//        imshow("Video Capture", cv_frame);
-//        cv::pollKey();
-
-        stream->video->loadNextSample();
-        stream->video->getSample();
-
-//        std::string id;
-//        std::cout << "Enter to exit" << std::endl;
-//        std::cin >> id;
-//        std::cin.ignore();
-//        std::cout << "exiting" << std::endl;
-//        break;
+        std::string id;
+        std::cout << "Enter to exit" << std::endl;
+        std::cin >> id;
+        std::cin.ignore();
+        std::cout << "exiting" << std::endl;
+        break;
     }
 
-    stream->video->stop();
-//    delete rtc_manager;
+    delete rtc_manager;
 
     return 0;
 }
