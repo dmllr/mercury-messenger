@@ -105,8 +105,6 @@ public:
         }
         cv::cvtColor(cv_frame, yuv_frame, cv::COLOR_BGR2YUV_I420);
 
-        imshow("Video Capture", yuv_frame);
-
         av_frame->data[0] = yuv_frame.data;
         av_frame->data[1] = yuv_frame.data + codec_context->width * codec_context->height;
         av_frame->data[2] = yuv_frame.data + codec_context->width * codec_context->height * 5 / 4;
