@@ -4,13 +4,14 @@
 
 #include <opencv2/videoio.hpp>
 #include <opencv2/highgui.hpp>
-#include <opencv2/highgui/highgui_c.h>
+//#include <opencv2/highgui/highgui_c.h>
 #include <opencv2/imgproc.hpp>
 
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavutil/imgutils.h>
 #include <libavutil/opt.h>
+#include <libavutil/time.h>
 #include "libswscale/swscale.h"
 }
 
@@ -19,23 +20,34 @@ extern "C" {
 
 // tmp
 #include "../../_imported/libdatachannel/examples/streamer/opusfileparser.hpp"
+#include <fstream>
 
 
 class VideoStreamSource : public StreamSource {
 private:
     cv::VideoCapture cap;
     cv::Mat cv_frame;
+    cv::Mat yuv_frame;
     rtc::binary encoded_data;
     int encoded_data_counter;
     std::chrono::time_point<std::chrono::steady_clock> start_time;
-    AVCodecContext *codec_context;
-    AVFrame *av_frame;
+    AVCodecContext* codec_context;
+    AVFrame* av_frame;
+    AVPacket* packet;
 
 public:
-    VideoStreamSource() : cap(0) {} // default constructor, initialize cap with default camera
+    VideoStreamSource() {} // default constructor, initialize cap with default camera
 
     void start() override {
         cap.open(0); // open the default camera
+        cap.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('h', '2', '6', '4'));
+
+        while (!cap.isOpened()) {
+            cap >> cv_frame;
+            std::cout << "Waiting for the capture device to be opened." << std::endl;
+            std::this_thread::sleep_for(std::chrono::milliseconds(100)); // wait for 100ms
+        }
+
         start_time = std::chrono::steady_clock::now();
 
         // find h.264 codec and allocate the codec context
@@ -54,7 +66,19 @@ public:
         codec_context->max_b_frames = 1;
         codec_context->pix_fmt = AV_PIX_FMT_YUV420P;
 
-        if (avcodec_open2(codec_context, codec, nullptr) < 0) {
+        std::cout << "Input pixel format: " << av_get_pix_fmt_name(codec_context->pix_fmt) << std::endl;
+        std::cout << "Output pixel format: " << av_get_pix_fmt_name(codec_context->codec->pix_fmts[0]) << std::endl;
+
+        AVCodecParameters *codec_parameters = avcodec_parameters_alloc();
+        if (!codec_parameters) {
+            throw std::runtime_error("Could not allocate codec parameters");
+        }
+        if (avcodec_parameters_from_context(codec_parameters, codec_context) < 0) {
+            throw std::runtime_error("Could not copy codec parameters to encoder");
+        }
+
+        auto ret = avcodec_open2(codec_context, codec, nullptr);
+        if (ret < 0) {
             throw std::runtime_error("Could not open codec");
         }
 
@@ -73,49 +97,63 @@ public:
         av_frame->height = codec_context->height;
         av_frame->format = codec_context->pix_fmt;
 
+        packet = av_packet_alloc();
+
+
         encoded_data_counter = 0;
     }
 
     void loadNextSample() override {
         cap >> cv_frame;
-        imshow("Video Capture", cv_frame);
-
-        auto sws_context = sws_getContext(
-                cv_frame.cols, cv_frame.rows, AV_PIX_FMT_BGR24, codec_context->width, codec_context->height,
-                codec_context->pix_fmt, SWS_FAST_BILINEAR, nullptr, nullptr, nullptr);
-
-        sws_scale(sws_context, &cv_frame.data, av_frame->linesize, 0, cv_frame.rows, av_frame->data, av_frame->linesize);
-
-        AVPacket* packet = av_packet_alloc();
-        if (!packet) {
-            std::cerr << "Failed to allocate packet" << std::endl;
+        if (cv_frame.empty()) {
+            std::cerr << "Unexpected end of stream." << std::endl;
             return;
         }
-        avcodec_send_frame(codec_context, av_frame);
-        while (avcodec_receive_packet(codec_context, packet) == 0) {
+        cv::cvtColor(cv_frame, yuv_frame, cv::COLOR_BGR2YUV_I420);
+
+        imshow("Video Capture", cv_frame);
+
+        av_frame->data[0] = yuv_frame.data;
+        av_frame->data[1] = yuv_frame.data + codec_context->width * codec_context->height;
+        av_frame->data[2] = yuv_frame.data + codec_context->width * codec_context->height * 5 / 4;
+        av_frame->pts = av_gettime_relative() / 1000;
+
+        int ret = avcodec_send_frame(codec_context, av_frame);
+        while (ret >= 0) {
+            ret = avcodec_receive_packet(codec_context, packet);
+            if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
+                break;
+            else if (ret < 0) {
+                std::cerr << "Error encoding frame." << std::endl;
+                return;
+            }
+
             encoded_data.insert(
                     encoded_data.end(),
                     reinterpret_cast<std::byte*>(&packet->data),
                     reinterpret_cast<std::byte*>(&packet->data + packet->size));
-            encoded_data_counter++;
-
-            av_packet_unref(packet);
         }
 
-        sws_freeContext(sws_context);
-        av_packet_free(&packet);
+        cv::pollKey();
     }
 
     rtc::binary getSample() override {
-        if (encoded_data_counter < 2) {
-            return rtc::binary{};
-            LOGW << "######## INITIAL COMBINATION ######## " << encoded_data_counter << std::endl;
-        }
+//        if (encoded_data_counter < 2) {
+//            return rtc::binary{};
+//            LOGW << "######## INITIAL COMBINATION ######## " << encoded_data_counter << std::endl;
+//        }
 
         auto sample = encoded_data;
         encoded_data.clear();
 
-        LOGI << "Sending sample of size " << sample.size() << "b" << std::endl;
+//        std::string fn = "/home/miller/dev/github/hela-surveillance/samples/n264/sample-" + std::to_string(encoded_data_counter - 2) + ".h264";
+        std::string fn = "/home/miller/dev/github/hela-surveillance/samples/n264/sample-.h264";
+        {
+            std::ofstream fw(fn, std::ios::out | std::ios::binary | std::ios_base::app);
+            fw.write(reinterpret_cast<const char*>(sample.data()), sample.size());
+        }
+
+        LOGI << "Sending sample of size " << sample.size() << "b, counter "  << encoded_data_counter << std::endl;
         return sample;
     }
 
@@ -146,24 +184,42 @@ std::shared_ptr<Stream> createStream() {
 }
 
 int main(int argc, char **argv) {
-    auto stream = createStream();
-
-    cv::namedWindow("Video Capture", CV_WINDOW_AUTOSIZE);
-
-    auto rtc_manager = new RtcManager();
-    rtc_manager->setStream(stream);
-    rtc_manager->start();
-
-    while (true) {
-        std::string id;
-        std::cout << "Enter to exit" << std::endl;
-        std::cin >> id;
-        std::cin.ignore();
-        std::cout << "exiting" << std::endl;
-        break;
+    {
+        std::string fn = "/home/miller/dev/github/hela-surveillance/samples/n264/sample-.h264";
+        std::ofstream fw(fn, std::ios::out | std::ios::binary);
     }
 
-    delete rtc_manager;
+    auto stream = createStream();
+
+//    auto rtc_manager = new RtcManager();
+//    rtc_manager->setStream(stream);
+//    rtc_manager->start();
+
+    stream->video->start();
+
+//    cv::VideoCapture cap;
+//    cv::Mat cv_frame;
+//    cap.open(0); // open the default camera
+//    cap.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('h', '2', '6', '4'));
+
+    while (true) {
+//        cap >> cv_frame;
+//        imshow("Video Capture", cv_frame);
+//        cv::pollKey();
+
+        stream->video->loadNextSample();
+        stream->video->getSample();
+
+//        std::string id;
+//        std::cout << "Enter to exit" << std::endl;
+//        std::cin >> id;
+//        std::cin.ignore();
+//        std::cout << "exiting" << std::endl;
+//        break;
+    }
+
+    stream->video->stop();
+//    delete rtc_manager;
 
     return 0;
 }
