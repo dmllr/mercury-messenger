@@ -1,7 +1,8 @@
 #pragma once
 
 #include <string>
-#include "utils/likely.h"
+
+#include "likely.h"
 
 #include <plog/Log.h>
 #include <plog/Init.h>

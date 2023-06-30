@@ -5,16 +5,14 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-set(src_path "android/hela-surveillance/app-surveillance-camera/src/main/cpp")
+set(src_path "src")
 
 include(${src_path}/cmake/import_remote.cmake)
 include("${src_path}/cmake/libopenssl.cmake")
-#include("${src_path}/cmake/libliveMedia.cmake")
 include("${src_path}/cmake/libdatachannel.cmake")
 include("${src_path}/cmake/libopencv.cmake")
 include("${src_path}/cmake/libffmpeg.cmake")
 
-#add_subdirectory("${src_path}/src")
 
 add_executable(test-rtc
 	test/rtc/main.cpp
@@ -22,9 +20,9 @@ add_executable(test-rtc
 	${libdatachannel_path}/examples/streamer/fileparser.cpp
 	${libdatachannel_path}/examples/streamer/h264fileparser.cpp
 	${libdatachannel_path}/examples/streamer/opusfileparser.cpp
-	${src_path}/src/rtc/helpers.cpp
-	${src_path}/src/rtc/dispatch_queue.cpp
-	${src_path}/src/rtc/stream.cpp
+	${src_path}/lib/rtc/helpers.cpp
+	${src_path}/lib/rtc/dispatch_queue.cpp
+	${src_path}/lib/rtc/stream.cpp
 )
 
 target_link_libraries(test-rtc
@@ -33,63 +31,45 @@ target_link_libraries(test-rtc
 
 target_include_directories(test-rtc
 	PRIVATE
-	"${src_path}/src"
+	"${src_path}/lib"
 	"${libdatachannel_path}/examples/streamer"
 )
 
-#find_package( OpenCV REQUIRED )
-#MESSAGE(STATUS "Include dirs ${OpenCV_INCLUDE_DIRS}")
-#MESSAGE(STATUS "LINK LIBRARIES ${OpenCV_LIBS}")
-
-
 add_executable(mac
-	macos/src/main.cpp
+	src/device/general/main.cpp
 
 	${libdatachannel_path}/examples/streamer/fileparser.cpp
 	${libdatachannel_path}/examples/streamer/h264fileparser.cpp
 	${libdatachannel_path}/examples/streamer/opusfileparser.cpp
-	${src_path}/src/rtc/helpers.cpp
-	${src_path}/src/rtc/dispatch_queue.cpp
-	${src_path}/src/rtc/stream.cpp
+	${src_path}/lib/rtc/helpers.cpp
+	${src_path}/lib/rtc/dispatch_queue.cpp
+	${src_path}/lib/rtc/stream.cpp
 )
 set_property(TARGET mac PROPERTY CXX_STANDARD 17)
 target_compile_features(mac PRIVATE cxx_std_17)
 target_compile_definitions(mac PUBLIC "-DBUILD_ZLIB=OFF")
 target_link_libraries(mac PRIVATE
 	opencv_core opencv_highgui opencv_imgproc opencv_videoio
-#	${AVCODEC_LIBRARY} ${AVFORMAT_LIBRARY} ${AVUTIL_LIBRARY} ${AVDEVICE_LIBRARY}
-#	PkgConfig::LIBAV
-#	${AVUTIL_LIBRARY} ${AVCODEC_LIBRARY} ${SWSCALE_LIBRARY}
-	${AVCODEC_LIBRARIES}
-	${AVFORMAT_LIBRARIES}
-	${AVUTIL_LIBRARIES}
-	${SWSCALE_LIBRARIES}
-
+	${AVCODEC_LIBRARIES} ${AVFORMAT_LIBRARIES} ${AVUTIL_LIBRARIES} ${SWSCALE_LIBRARIES}
 	datachannel
 )
 target_include_directories(mac
 	PRIVATE
 	"/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
-#	"/Library/Developer/CommandLineTools/SDKs/MacOSX12.1.sdk/usr/include/c++/v1/"
 
-	"${src_path}/src"
+	"${src_path}/lib"
+	"${src_path}/utils"
 	"${libopencv_path}/include"
 	"${libopencv_path}/modules/core/include"
-#	"${libopencv_path}/modules/calib3d/include"
-#	"${libopencv_path}/modules/features2d/include"
 	"${libopencv_path}/modules/imgcodecs/include"
 	"${libopencv_path}/modules/imgproc/include"
 	"${libopencv_path}/modules/highgui/include"
 	"${libopencv_path}/modules/videoio/include"
 
-#	"${libffmpeg_path}"
 	${AVCODEC_INCLUDE_DIRS}
 	${AVFORMAT_INCLUDE_DIRS}
 	${AVUTIL_INCLUDE_DIRS}
 	${SWSCALE_INCLUDE_DIRS}
-#	${AVUTIL_INCLUDE_DIR}
-#	${AVCODEC_INCLUDE_DIR}
-#	${SWSCALE_INCLUDE_DIR}
 
 	"${CMAKE_CURRENT_BINARY_DIR}"
 
