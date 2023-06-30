@@ -96,4 +96,4 @@ target_include_directories(mac
 	# tmp
 	"${libdatachannel_path}/examples/streamer"
 )
-target_link_directories(mac PRIVATE /usr/local/Cellar/ffmpeg/5.1.2/lib)
+target_link_directories(mac PRIVATE /usr/local/Cellar/ffmpeg/6.0/lib)

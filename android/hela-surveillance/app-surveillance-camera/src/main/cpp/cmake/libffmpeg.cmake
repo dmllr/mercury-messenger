@@ -5,18 +5,12 @@
 # sudo apt install libswscale-dev
 
 
-if(UNIX AND NOT APPLE)
+if(UNIX)
     set(PKG_CONFIG_EXECUTABLE "pkg-config")
     set(AVCODEC_PKGCONFIG_NAME "libavcodec")
     set(AVFORMAT_PKGCONFIG_NAME "libavformat")
     set(AVUTIL_PKGCONFIG_NAME "libavutil")
     set(SWSCALE_PKGCONFIG_NAME "libswscale")
-elseif(APPLE)
-    set(PKG_CONFIG_EXECUTABLE "brew list pkg-config || pkg-config")
-    set(AVCODEC_PKGCONFIG_NAME "ffmpeg-4.3 libavcodec")
-    set(AVFORMAT_PKGCONFIG_NAME "ffmpeg-4.3 libavformat")
-    set(AVUTIL_PKGCONFIG_NAME "ffmpeg-4.3 libavutil")
-    set(SWSCALE_PKGCONFIG_NAME "ffmpeg-4.3 libswscale")
 endif()
 
 find_package(PkgConfig REQUIRED)

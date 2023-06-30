@@ -10,5 +10,5 @@
 #import_remote("https://github.com/viaduck/openssl-cmake.git" TAG "master" DST "${CMAKE_SOURCE_DIR}/_imported/libopenssl" ALIAS openssl)
 
 set(BUILD_SHARED_LIBS OFF)
-set(GO_EXECUTABLE "/usr/local/go/bin/go")
+set(GO_EXECUTABLE "go")
 import_remote("https://boringssl.googlesource.com/boringssl" TAG "master" DST "${CMAKE_SOURCE_DIR}/_imported/libboringssl" ALIAS boringssl)

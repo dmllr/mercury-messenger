@@ -57,7 +57,7 @@ public:
         start_time = std::chrono::steady_clock::now();
 
         // find h.264 codec and allocate the codec context
-        AVCodec *codec = avcodec_find_encoder(AV_CODEC_ID_H264);
+        const auto* codec = avcodec_find_encoder(AV_CODEC_ID_H264);
         codec_context = avcodec_alloc_context3(codec);
         if (!codec_context) {
             throw std::runtime_error("Could not allocate codec context");

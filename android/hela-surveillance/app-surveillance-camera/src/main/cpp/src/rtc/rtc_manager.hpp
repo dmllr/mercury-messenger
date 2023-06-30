@@ -56,7 +56,7 @@ public:
 			}
 
 			if (!tracks.empty()) {
-				auto message = rtc::make_message(move(sample));
+				auto message = rtc::make_message(std::move(sample));
 				for (const auto& clientTrack: tracks) {
 					auto client = clientTrack.id;
 					auto trackData = clientTrack.trackData;
