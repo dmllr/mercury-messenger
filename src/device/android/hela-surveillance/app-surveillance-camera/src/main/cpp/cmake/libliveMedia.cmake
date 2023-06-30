@@ -24,3 +24,8 @@ target_include_directories(liveMedia
 	"${live555_path}/groupsock/include"
 	"${live555_path}/liveMedia/include"
 )
+
+target_link_libraries(liveMedia
+	ssl
+	crypto
+)

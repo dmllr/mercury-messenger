@@ -3,7 +3,8 @@
 #include <string>
 #include <vector>
 #include <fstream>
-#include "stream.hpp"
+
+#include "rtc/stream.hpp"
 
 
 class CameraBufferSource: public StreamSource {
@@ -12,6 +13,7 @@ class CameraBufferSource: public StreamSource {
 	AMediaCodecBufferInfo info;
 	uint8_t* buffer = nullptr;
 	uint64_t timeStart_us = 0;
+    rtc::binary encoded_data;
 
 protected:
 	std::shared_ptr<CameraManager> camera_manager;
@@ -23,7 +25,7 @@ public:
     virtual void start() {
 		camera_manager->codec()->start();
 		camera_manager->addConsumer(target);
-		loadNextSample();
+//		loadNextSample();
 	}
 
     virtual void stop() {
@@ -44,41 +46,56 @@ public:
 
 				timeStart_us = info.presentationTimeUs;
 
-				sample.clear();
-				sample.insert(sample.end(),
+				encoded_data.clear();
+                encoded_data.insert(encoded_data.end(),
 							  reinterpret_cast<std::byte*>(&config_buffer[config_info.offset]),
 							  reinterpret_cast<std::byte*>(&config_buffer[config_info.offset + config_info.size]));
-				sample.insert(sample.end(),
+                encoded_data.insert(encoded_data.end(),
 							  reinterpret_cast<std::byte*>(&buffer[info.offset]),
 							  reinterpret_cast<std::byte*>(&buffer[info.size]));
-				sampleTime_us = 0;
 
 				AMediaCodec_releaseOutputBuffer(codec, static_cast<size_t>(config_index), false);
 				AMediaCodec_releaseOutputBuffer(codec, static_cast<size_t>(index), false);
 			} else {
 				buffer = AMediaCodec_getOutputBuffer(codec, static_cast<size_t>(index), NULL);
-				sample.clear();
-				sample.insert(sample.end(),
+                encoded_data.clear();
+                encoded_data.insert(encoded_data.end(),
 							  reinterpret_cast<std::byte*>(&buffer[info.offset]),
 							  reinterpret_cast<std::byte*>(&buffer[info.size]));
-                sampleTime_us = info.presentationTimeUs - timeStart_us;
 				AMediaCodec_releaseOutputBuffer(codec, static_cast<size_t>(index), false);
 			}
 		} else if (index == AMEDIACODEC_INFO_OUTPUT_BUFFERS_CHANGED) {
 			LOGI << "Output buffers changed";
-			sample.clear();
+            encoded_data.clear();
 		} else if (index == AMEDIACODEC_INFO_OUTPUT_FORMAT_CHANGED) {
 			auto format = AMediaCodec_getOutputFormat(codec);
 			LOGI << "Format set to: " << AMediaFormat_toString(format);
 			AMediaFormat_delete(format);
-			sample.clear();
+            encoded_data.clear();
 		} else if (index == AMEDIACODEC_INFO_TRY_AGAIN_LATER) {
 			LOGW << "No output buffer right now";
-			sample.clear();
+            encoded_data.clear();
 		} else {
 			LOGI << "AMediaCodec_dequeueOutputBuffer unexpected return: " << index;
-			sample.clear();
+            encoded_data.clear();
 		}
+    }
+
+    rtc::binary getSample() override {
+        auto sample = encoded_data;
+        encoded_data.clear();
+
+        LOGI << "Sending sample of size " << sample.size() << "b " << std::endl;
+
+        return sample;
+    }
+
+    uint64_t getSampleTime_us() override {
+        info.presentationTimeUs - timeStart_us;
+    }
+
+    uint64_t getSampleDuration_us() override {
+        return 1000000000 / 30; // todo;
     }
 
 //	void deliver() {

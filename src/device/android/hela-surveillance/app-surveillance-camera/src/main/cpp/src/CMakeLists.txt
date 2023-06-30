@@ -1,3 +1,6 @@
+set (root ../../../../../../../../..)
+set (shared_libs ${root}/src/lib)
+
 add_library(camera-lib SHARED
 	lib.cpp
 	audio/recorder.h
@@ -5,12 +8,12 @@ add_library(camera-lib SHARED
 	audio/audio_common.h
 	audio/audio_common.cpp
 
-	rtc/dispatch_queue.hpp
-	rtc/dispatch_queue.cpp
-	rtc/helpers.hpp
-	rtc/helpers.cpp
-	rtc/stream.hpp
-	rtc/stream.cpp
+	${shared_libs}/rtc/dispatch_queue.hpp
+	${shared_libs}/rtc/dispatch_queue.cpp
+	${shared_libs}/rtc/helpers.hpp
+	${shared_libs}/rtc/helpers.cpp
+	${shared_libs}/rtc/stream.hpp
+	${shared_libs}/rtc/stream.cpp
 )
 
 target_compile_features(camera-lib PUBLIC cxx_std_17)
@@ -22,6 +25,8 @@ target_link_libraries(camera-lib
 	mediandk
 	aaudio
 	liveMedia
+	ssl
+	crypto
 	datachannel
 	opus
 )
@@ -29,4 +34,6 @@ target_link_libraries(camera-lib
 target_include_directories(camera-lib
 	PRIVATE
 	"${CMAKE_CURRENT_LIST_DIR}"
+	"${shared_libs}"
+	"${shared_libs}/../utils"
 )

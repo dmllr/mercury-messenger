@@ -1,5 +1,6 @@
 #include <media/NdkMediaCodec.h>
-#include <utils/likely.h>
+
+#include "likely.h"
 
 
 class CameraFramedSource: public FramedSource {

@@ -3,10 +3,13 @@ project(hela-surveillance)
 
 find_library(log-lib log)
 
-include(cmake/import_remote.cmake)
-include("cmake/libopenssl.cmake")
+set (root ../../../../../../../..)
+set (shared_cmake_libs_path ${root}/src/cmake)
+include(${shared_cmake_libs_path}/import_remote.cmake)
+include("${shared_cmake_libs_path}/libopenssl.cmake")
+include("${shared_cmake_libs_path}/libdatachannel.cmake")
+include("${shared_cmake_libs_path}/libopus.cmake")
+
 include("cmake/libliveMedia.cmake")
-include("cmake/libdatachannel.cmake")
-include("cmake/libopus.cmake")
 
 add_subdirectory("src")
