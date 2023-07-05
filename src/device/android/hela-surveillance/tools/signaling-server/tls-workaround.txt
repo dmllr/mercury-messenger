@@ -1,3 +1,5 @@
+Android execution fails with the "unknown CA" error in logcat, while Mac and Linux binaries work.
+
 To override an "unknown CA" problem, add
 
         SSL_CTX_set_custom_verify(mCtx, SSL_VERIFY_PEER,
@@ -5,5 +7,14 @@ To override an "unknown CA" problem, add
                 return ssl_verify_ok;
             });
 
-to the line 326 at
-android/hela-surveillance/app-surveillance-camera/src/main/cpp/_imported/libdatachannel/src/impl/tlstransport.cpp
+to the file
+src/device/android/hela-surveillance/app-surveillance-camera/src/main/cpp/_imported/libdatachannel/src/impl/tlstransport.cpp
+
+in the TlsTransport::TlsTransport constructor before the following lines:
+
+		SSL_CTX_set_options(mCtx, SSL_OP_NO_SSLv3);
+		SSL_CTX_set_min_proto_version(mCtx, TLS1_VERSION);
+		SSL_CTX_set_read_ahead(mCtx, 1);
+		SSL_CTX_set_quiet_shutdown(mCtx, 1);
+		SSL_CTX_set_info_callback(mCtx, InfoCallback);
+		SSL_CTX_set_verify(mCtx, SSL_VERIFY_NONE, NULL);
