@@ -22,18 +22,18 @@ public:
 	CameraBufferSource(std::shared_ptr<CameraManager> camera_manager) : camera_manager(camera_manager) {
 	}
 
-    virtual void start() {
+    virtual void start() override {
 		camera_manager->codec()->start();
 		camera_manager->addConsumer(target);
 //		loadNextSample();
 	}
 
-    virtual void stop() {
+    virtual void stop() override {
 		camera_manager->removeConsumer(target);
 		camera_manager->codec()->stop();
     }
 
-    virtual void loadNextSample() {
+    virtual void loadNextSample() override {
 		const auto& codec = camera_manager->codec()->getCodec();
 		auto index = AMediaCodec_dequeueOutputBuffer(codec, &info, 100000);  // TODO const timeout
 		if (likely(index >= 0)) {
@@ -91,7 +91,7 @@ public:
     }
 
     uint64_t getSampleTime_us() override {
-        info.presentationTimeUs - timeStart_us;
+        return info.presentationTimeUs - timeStart_us;
     }
 
     uint64_t getSampleDuration_us() override {

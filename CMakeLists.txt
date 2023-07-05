@@ -8,7 +8,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(src_path "src")
 
 include(${src_path}/cmake/import_remote.cmake)
-include("${src_path}/cmake/libopenssl.cmake")
+include("${src_path}/cmake/libssl.cmake")
 include("${src_path}/cmake/libdatachannel.cmake")
 include("${src_path}/cmake/libopencv.cmake")
 include("${src_path}/cmake/libffmpeg.cmake")

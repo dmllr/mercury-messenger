@@ -5,7 +5,7 @@ plugins {
 
 android {
     compileSdk 34
-    buildToolsVersion '34'
+    buildToolsVersion '34.0.0'
 
     defaultConfig {
         applicationId "me.hela.surveillance.camera"

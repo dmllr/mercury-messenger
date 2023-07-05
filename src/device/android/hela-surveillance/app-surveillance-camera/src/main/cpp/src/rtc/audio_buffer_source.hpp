@@ -35,13 +35,13 @@ public:
 		assert(opus_encoder != nullptr);
 	}
 
-    virtual void start() {
+    virtual void start() override {
 		recorder->start();
 
 		start_time = std::chrono::steady_clock::now();
 	}
 
-    virtual void stop() {
+    virtual void stop() override {
 		recorder->stop();
     }
 
