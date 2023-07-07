@@ -16,6 +16,8 @@ add_library(camera-lib SHARED
 	${shared_libs}/rtc/stream.cpp
 )
 
+add_dependencies(camera-lib ffmpeg_target)
+
 target_compile_features(camera-lib PUBLIC cxx_std_17)
 
 target_link_libraries(camera-lib
@@ -29,6 +31,10 @@ target_link_libraries(camera-lib
 	crypto
 	datachannel
 	opus
+
+	${OpenCV_LIBS}
+
+	libffmpeg
 )
 
 target_include_directories(camera-lib
@@ -36,4 +42,6 @@ target_include_directories(camera-lib
 	"${CMAKE_CURRENT_LIST_DIR}"
 	"${shared_libs}"
 	"${shared_libs}/../utils"
+
+	"${OpenCV_INCLUDE_DIRS}"
 )
