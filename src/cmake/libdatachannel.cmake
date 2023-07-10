@@ -7,6 +7,7 @@ set(NO_WEBSOCKET OFF)
 set(NO_MEDIA OFF)
 set(NO_EXAMPLES ON)
 set(NO_TESTS ON)
+set(FUZZER OFF)
 
 include(${CMAKE_CURRENT_LIST_DIR}/libplog.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/libjuice.cmake)
