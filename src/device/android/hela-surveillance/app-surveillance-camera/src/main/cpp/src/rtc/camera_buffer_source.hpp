@@ -12,7 +12,8 @@ class CameraBufferSource: public StreamSource {
 
 	AMediaCodecBufferInfo info;
 	uint8_t* buffer = nullptr;
-	uint64_t timeStart_us = 0;
+//	uint64_t timeStart_us = 0;
+    std::chrono::time_point<std::chrono::steady_clock> start_time;
     rtc::binary encoded_data;
 
 protected:
@@ -26,6 +27,8 @@ public:
 		camera_manager->codec()->start();
 		camera_manager->addConsumer(target);
 //		loadNextSample();
+
+        start_time = std::chrono::steady_clock::now();
 	}
 
     virtual void stop() override {
@@ -44,7 +47,7 @@ public:
 				index = AMediaCodec_dequeueOutputBuffer(codec, &info, 100000);  // TODO const timeout
 				buffer = AMediaCodec_getOutputBuffer(codec, static_cast<size_t>(index), NULL);
 
-				timeStart_us = info.presentationTimeUs;
+//				timeStart_us = info.presentationTimeUs;
 
 				encoded_data.clear();
                 encoded_data.insert(encoded_data.end(),
@@ -91,7 +94,7 @@ public:
     }
 
     uint64_t getSampleTime_us() override {
-        return info.presentationTimeUs - timeStart_us;
+        return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start_time).count();
     }
 
     uint64_t getSampleDuration_us() override {
