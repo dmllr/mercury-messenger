@@ -411,13 +411,15 @@ protected:
 			client->setState(Connection::State::Ready);
 		}
 		if (client->getState() == Connection::State::Ready) {
-			startStream();
+            if (hasStream()) {
+                startStream();
+            }
 		}
 	}
 
 	/// Start stream
 	void startStream() {
-		if (!avStream.has_value()) {
+		if (unlikely(!avStream.has_value())) {
 			LOGE << "Stream is not set";
 		}
 
