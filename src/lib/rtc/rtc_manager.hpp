@@ -27,9 +27,7 @@ class RtcManager {
 
 	std::thread server_thread;
 public:
-	explicit RtcManager() {
-
-	}
+	explicit RtcManager() = default;
 
 	void setStream(const std::shared_ptr<Stream>& stream) {
 		avStream = stream;
@@ -40,7 +38,7 @@ public:
 			auto streamType = type == Stream::StreamSourceType::Video ? "video" : "audio";
 			// get track for given type
 			auto getTrackData =
-					[type](const std::shared_ptr<Client>& client) {
+					[type](const std::shared_ptr<Connection>& client) {
 						return type == Stream::StreamSourceType::Video ? client->video : client->audio;
 					};
 
@@ -49,7 +47,7 @@ public:
 				auto id = id_client.first;
 				auto client = id_client.second;
 				auto optTrackData = getTrackData(client);
-				if (client->getState() == Client::State::Ready && optTrackData.has_value()) {
+				if (client->getState() == Connection::State::Ready && optTrackData.has_value()) {
 					auto trackData = optTrackData.value();
 					tracks.emplace_back(id, trackData);
 				}
@@ -108,32 +106,52 @@ public:
 		});
 	}
 
-	void start() {
-		server_thread = std::thread {[this]() {
-			startServer();
-		}};
-		server_thread.detach();
-		LOGI << "server_thread ready";
+    void setReceiver() {
+        hasReceiver_ = true;
+    }
+
+    void startServer() {
+        server_thread = std::thread {[this]() {
+            start("server");
+        }};
+        server_thread.detach();
+        LOGI << "server_thread ready";
+    }
+
+    void startClient() {
+        server_thread = std::thread {[this]() {
+            start("client");
+        }};
+        server_thread.detach();
+        LOGI << "server_thread ready";
+    }
+
+	void reload() {
+		if (hasReceiver()) {
+			requestStream();
+		}
 	}
 
 
 protected:
 
-	void startServer() {
+	void start(std::string_view localId) {
 		try {
 			rtc::Configuration config;
-			std::string stunServer = "stun:stun.l.google.com:19302";
-			LOGI << "Stun server is " << stunServer.c_str();
-			config.iceServers.emplace_back(stunServer);
+			config.iceServers.emplace_back("stun:stun.relay.metered.ca:80");
+			config.iceServers.emplace_back("turn:49880a0f046c8990b1990b35:qZCNW/57EB8GwO3A@a.relay.metered.ca:80");
+			config.iceServers.emplace_back("turn:49880a0f046c8990b1990b35:qZCNW/57EB8GwO3A@a.relay.metered.ca:80?transport=tcp");
+			config.iceServers.emplace_back("turn:49880a0f046c8990b1990b35:qZCNW/57EB8GwO3A@a.relay.metered.ca:443");
+			config.iceServers.emplace_back("turn:49880a0f046c8990b1990b35:qZCNW/57EB8GwO3A@a.relay.metered.ca:443?transport=tcp");
 
+			LOGI << "The local ID is: " << localId.data();
 
-			std::string localId = "server";
-			LOGI << "The local ID is: " << localId.c_str();
+			ws = std::make_shared<rtc::WebSocket>();
 
-			auto ws = std::make_shared<rtc::WebSocket>();
-
-			ws->onOpen([]() {
+			ws->onOpen([this]() {
 				LOGI << "WebSocket connected, signaling ready";
+
+                reload();
 			});
 
 			ws->onClosed([]() {
@@ -149,12 +167,12 @@ protected:
 					return;
 
 				json message = json::parse(std::get<std::string>(data));
-				MainThread.dispatch([this, message, config, ws]() {
-					wsOnMessage(message, config, ws);
+				MainThread.dispatch([this, message, config]() {
+					wsOnMessage(message, config);
 				});
 			});
 
-			const std::string url = "wss://" + ip_address + ":" + std::to_string(port) + "/" + localId;
+			const std::string url = "wss://" + ip_address + ":" + std::to_string(port) + "/" + localId.data();
 			LOGI << "Url is " << url.c_str();
 			ws->open(url);
 
@@ -178,7 +196,11 @@ protected:
 		}
 	}
 
-	void wsOnMessage(json message, const rtc::Configuration& config, const std::shared_ptr<rtc::WebSocket>& ws) {
+    void sendAnswer(std::shared_ptr<Connection> pc) {
+//        pc->peerConnection.
+    }
+
+	void wsOnMessage(json message, const rtc::Configuration& config) {
 		auto it = message.find("id");
 		if (it == message.end())
 			return;
@@ -189,22 +211,40 @@ protected:
 		std::string type = it->get<std::string>();
 
 		if (type == "streamRequest") {
-			std::shared_ptr<Client> c = createPeerConnection(config, make_weak_ptr(ws), id);
-			clients.emplace(id, c);
-		} else if (type == "answer") {
-			std::shared_ptr<Client> c;
+            std::shared_ptr<Connection> c = createPeerConnection(config, make_weak_ptr(ws), id);
+            clients.emplace(id, c);
+        } else if (type == "answer") {
 			if (auto jt = clients.find(id); jt != clients.end()) {
 				auto pc = clients.at(id)->peerConnection;
 				auto sdp = message["sdp"].get<std::string>();
 				auto description = rtc::Description(sdp, type);
 				pc->setRemoteDescription(description);
 			}
-		}
+        } else if (type == "offer") {
+            std::shared_ptr<Connection> pc = createPeerConnection(config, make_weak_ptr(ws), id);
+            clients.emplace(id, pc);
+            auto sdp = message["sdp"].get<std::string>();
+            auto description = rtc::Description(sdp, type);
+            pc->peerConnection->setRemoteDescription(description);
+            sendAnswer(pc);
+//            rtc = createPeerConnection();
+//            return rtc.setRemoteDescription(offer)
+//                           .then(() => sendAnswer(rtc));
+        }
 	}
 
-	std::shared_ptr<Client> createPeerConnection(const rtc::Configuration &config, const std::weak_ptr<rtc::WebSocket>& wws, std::string id) {
+    void requestStream() {
+        LOGD << "Sending a stream request message";
+        ws->send("{\n"
+                 "  \"id\": \"server\",\n"
+                 "  \"type\": \"streamRequest\",\n"
+                 "  \"receiver\": \"client\"\n"
+                 "}");
+    }
+
+    std::shared_ptr<Connection> createPeerConnection(const rtc::Configuration &config, const std::weak_ptr<rtc::WebSocket>& wws, std::string id) {
 		auto pc = std::make_shared<rtc::PeerConnection>(config);
-		std::shared_ptr<Client> client(new Client(pc));
+		std::shared_ptr<Connection> client(new Connection(pc));
 
 		pc->onStateChange([this, id](rtc::PeerConnection::State state) {
 			LOGI << "State: " << (int)state;
@@ -277,7 +317,7 @@ protected:
 		return client;
 	}
 
-	void sendInitialNalus(std::shared_ptr<Stream> stream, std::shared_ptr<ClientTrackData> video) {
+	void sendInitialNalus(std::shared_ptr<Stream> stream, std::shared_ptr<SenderTrack> video) {
 //		auto h264 = dynamic_cast<CameraBufferSource*>(stream->video.get());
 //		auto initialNalus = h264->initialNALUS();
 //
@@ -293,7 +333,7 @@ protected:
 //		}
 	}
 
-	std::shared_ptr<ClientTrackData> addVideo(const std::shared_ptr<rtc::PeerConnection>& pc, const uint8_t payloadType, const uint32_t ssrc, const std::string cname, const std::string msid, const std::function<void (void)> onOpen) {
+	std::shared_ptr<SenderTrack> addVideo(const std::shared_ptr<rtc::PeerConnection>& pc, const uint8_t payloadType, const uint32_t ssrc, const std::string cname, const std::string msid, const std::function<void (void)> onOpen) {
 		auto video = rtc::Description::Video(cname);
 		video.addH264Codec(payloadType);
 		video.addSSRC(ssrc, cname, msid, cname);
@@ -313,12 +353,12 @@ protected:
 		// set handler
 		track->setRtcpHandler(h264Handler);
 		track->onOpen(onOpen);
-		auto trackData = std::make_shared<ClientTrackData>(track, srReporter);
+		auto trackData = std::make_shared<SenderTrack>(track, srReporter);
 
 		return trackData;
 	}
 
-	std::shared_ptr<ClientTrackData> addAudio(const std::shared_ptr<rtc::PeerConnection>& pc, const uint8_t payloadType, const uint32_t ssrc, const std::string& cname, const std::string msid, const std::function<void (void)> onOpen) {
+	std::shared_ptr<SenderTrack> addAudio(const std::shared_ptr<rtc::PeerConnection>& pc, const uint8_t payloadType, const uint32_t ssrc, const std::string& cname, const std::string msid, const std::function<void (void)> onOpen) {
 		auto audio = rtc::Description::Audio(cname);
 		audio.addOpusCodec(payloadType);
 		audio.addSSRC(ssrc, cname, msid, cname);
@@ -338,18 +378,18 @@ protected:
 		// set handler
 		track->setRtcpHandler(opusHandler);
 		track->onOpen(onOpen);
-		auto trackData = std::make_shared<ClientTrackData>(track, srReporter);
+		auto trackData = std::make_shared<SenderTrack>(track, srReporter);
 		return trackData;
 	}
 
 	/// Add client to stream
 	/// @param client Client
 	/// @param adding_video True if adding video
-	void addToStream(const std::shared_ptr<Client>& client, bool isAddingVideo) {
-		if (client->getState() == Client::State::Waiting) {
-			client->setState(isAddingVideo ? Client::State::WaitingForAudio : Client::State::WaitingForVideo);
-		} else if ((client->getState() == Client::State::WaitingForAudio && !isAddingVideo)
-				   || (client->getState() == Client::State::WaitingForVideo && isAddingVideo)) {
+	void addToStream(const std::shared_ptr<Connection>& client, bool isAddingVideo) {
+		if (client->getState() == Connection::State::Waiting) {
+			client->setState(isAddingVideo ? Connection::State::WaitingForAudio : Connection::State::WaitingForVideo);
+		} else if ((client->getState() == Connection::State::WaitingForAudio && !isAddingVideo)
+				   || (client->getState() == Connection::State::WaitingForVideo && isAddingVideo)) {
 
 			// Audio and video tracks are collected now
 			assert(client->video.has_value() && client->audio.has_value());
@@ -368,9 +408,9 @@ protected:
 //				sendInitialNalus(avStream.value(), video);
 //			}
 
-			client->setState(Client::State::Ready);
+			client->setState(Connection::State::Ready);
 		}
-		if (client->getState() == Client::State::Ready) {
+		if (client->getState() == Connection::State::Ready) {
 			startStream();
 		}
 	}
@@ -386,8 +426,11 @@ protected:
 
 
 private:
+    /// websocket handler
+    std::shared_ptr<rtc::WebSocket> ws = nullptr;
+
 	/// all connected clients
-	std::unordered_map<std::string, std::shared_ptr<Client>> clients{};
+	std::unordered_map<std::string, std::shared_ptr<Connection>> clients{};
 
 	/// Audio and video stream
 	std::optional<std::shared_ptr<Stream>> avStream = std::nullopt;
@@ -396,4 +439,14 @@ private:
 	const uint16_t defaultPort = 8000;
 	std::string ip_address = defaultIPAddress;
 	uint16_t port = defaultPort;
+
+    bool hasReceiver_ = false;
+
+    bool hasStream() {
+        return avStream.has_value();
+    }
+
+    bool hasReceiver() {
+        return hasReceiver_;
+    }
 };

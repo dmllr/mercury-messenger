@@ -14,14 +14,14 @@
 
 #include <shared_mutex>
 
-struct ClientTrackData {
+struct SenderTrack {
     std::shared_ptr<rtc::Track> track;
     std::shared_ptr<rtc::RtcpSrReporter> sender;
 
-    ClientTrackData(std::shared_ptr<rtc::Track> track, std::shared_ptr<rtc::RtcpSrReporter> sender);
+    SenderTrack(std::shared_ptr<rtc::Track> track, std::shared_ptr<rtc::RtcpSrReporter> sender);
 };
 
-struct Client {
+struct Connection {
     enum class State {
         Waiting,
         WaitingForVideo,
@@ -29,11 +29,11 @@ struct Client {
         Ready
     };
     const std::shared_ptr<rtc::PeerConnection> & peerConnection = _peerConnection;
-    Client(std::shared_ptr<rtc::PeerConnection> pc) {
+    explicit Connection(std::shared_ptr<rtc::PeerConnection> pc) {
         _peerConnection = pc;
     }
-    std::optional<std::shared_ptr<ClientTrackData>> video;
-    std::optional<std::shared_ptr<ClientTrackData>> audio;
+    std::optional<std::shared_ptr<SenderTrack>> video;
+    std::optional<std::shared_ptr<SenderTrack>> audio;
     std::optional<std::shared_ptr<rtc::DataChannel>> dataChannel;
 
     void setState(State state);
@@ -50,8 +50,8 @@ private:
 
 struct ClientTrack {
     std::string id;
-    std::shared_ptr<ClientTrackData> trackData;
-    ClientTrack(std::string id, std::shared_ptr<ClientTrackData> trackData);
+    std::shared_ptr<SenderTrack> trackData;
+    ClientTrack(std::string id, std::shared_ptr<SenderTrack> trackData);
 };
 
 uint64_t currentTimeInMicroSeconds();

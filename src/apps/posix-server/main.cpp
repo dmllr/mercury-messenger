@@ -199,7 +199,7 @@ std::shared_ptr<Stream> createStream() {
 }
 
 int main(int argc, char **argv) {
-    {
+    if (false) {
         std::string fn = "/home/miller/dev/github/hela-surveillance/samples/n264/sample.h264";
         std::ofstream fw(fn, std::ios::out | std::ios::binary);
     }
@@ -208,7 +208,7 @@ int main(int argc, char **argv) {
 
     auto rtc_manager = new RtcManager();
     rtc_manager->setStream(stream);
-    rtc_manager->start();
+    rtc_manager->startServer();
 
     while (true) {
         std::string id;
