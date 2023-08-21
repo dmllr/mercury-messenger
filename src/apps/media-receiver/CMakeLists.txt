@@ -1,20 +1,6 @@
 cmake_minimum_required(VERSION 3.7)
 
-set(MEDIA_UWP_RESOURCES
-	uwp/Logo.png
-	uwp/package.appxManifest
-	uwp/SmallLogo.png
-	uwp/SmallLogo44x44.png
-	uwp/SplashScreen.png
-	uwp/StoreLogo.png
-	uwp/Windows_TemporaryKey.pfx
-)
-
-if(CMAKE_SYSTEM_NAME STREQUAL "WindowsStore")
-	add_executable(datachannel-media-receiver main.cpp ${MEDIA_UWP_RESOURCES})
-else()
-	add_executable(datachannel-media-receiver main.cpp)
-endif()
+add_executable(datachannel-media-receiver main.cpp)
 
 set_target_properties(datachannel-media-receiver PROPERTIES
     CXX_STANDARD 17

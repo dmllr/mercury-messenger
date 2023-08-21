@@ -7,7 +7,6 @@ add_executable(posix-server
 	${libdatachannel_path}/examples/streamer/h264fileparser.cpp
 	${libdatachannel_path}/examples/streamer/opusfileparser.cpp
 
-	${src_path}/lib/rtc/helpers.cpp
 	${src_path}/lib/rtc/dispatch_queue.cpp
 	${src_path}/lib/rtc/stream.cpp
 

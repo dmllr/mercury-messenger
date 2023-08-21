@@ -11,7 +11,6 @@ add_library(camera-lib SHARED
 	${shared_libs}/rtc/dispatch_queue.hpp
 	${shared_libs}/rtc/dispatch_queue.cpp
 	${shared_libs}/rtc/helpers.hpp
-	${shared_libs}/rtc/helpers.cpp
 	${shared_libs}/rtc/stream.hpp
 	${shared_libs}/rtc/stream.cpp
 )

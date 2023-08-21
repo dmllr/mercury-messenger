@@ -106,8 +106,8 @@ public:
 		});
 	}
 
-    void setReceiver() {
-        hasReceiver_ = true;
+    void setReceiver(std::function<void(rtc::binary)> receiver) {
+        this->receiver = receiver;
     }
 
     void startServer() {
@@ -196,10 +196,6 @@ protected:
 		}
 	}
 
-    void sendAnswer(std::shared_ptr<Connection> pc) {
-//        pc->peerConnection.
-    }
-
 	void wsOnMessage(json message, const rtc::Configuration& config) {
 		auto it = message.find("id");
 		if (it == message.end())
@@ -211,7 +207,7 @@ protected:
 		std::string type = it->get<std::string>();
 
 		if (type == "streamRequest") {
-            std::shared_ptr<Connection> c = createPeerConnection(config, make_weak_ptr(ws), id);
+            std::shared_ptr<Connection> c = createSendingPeerConnection(config, make_weak_ptr(ws), id);
             clients.emplace(id, c);
         } else if (type == "answer") {
 			if (auto jt = clients.find(id); jt != clients.end()) {
@@ -221,19 +217,16 @@ protected:
 				pc->setRemoteDescription(description);
 			}
         } else if (type == "offer") {
-            std::shared_ptr<Connection> pc = createPeerConnection(config, make_weak_ptr(ws), id);
+            std::shared_ptr<Connection> pc = createReceivingPeerConnection(config, make_weak_ptr(ws), id);
             clients.emplace(id, pc);
             auto sdp = message["sdp"].get<std::string>();
             auto description = rtc::Description(sdp, type);
             pc->peerConnection->setRemoteDescription(description);
-            sendAnswer(pc);
-//            rtc = createPeerConnection();
-//            return rtc.setRemoteDescription(offer)
-//                           .then(() => sendAnswer(rtc));
         }
 	}
 
     void requestStream() {
+		// TODO
         LOGD << "Sending a stream request message";
         ws->send("{\n"
                  "  \"id\": \"server\",\n"
@@ -242,82 +235,122 @@ protected:
                  "}");
     }
 
-    std::shared_ptr<Connection> createPeerConnection(const rtc::Configuration &config, const std::weak_ptr<rtc::WebSocket>& wws, std::string id) {
-		auto pc = std::make_shared<rtc::PeerConnection>(config);
-		std::shared_ptr<Connection> client(new Connection(pc));
+    std::shared_ptr<Connection> createSendingPeerConnection(const rtc::Configuration& config, std::weak_ptr<rtc::WebSocket> wws, const std::string& id) {
+        auto pc = createDefaultPeerConnection(config, wws, id);
+        std::shared_ptr<Connection> client(new Connection(pc));
 
-		pc->onStateChange([this, id](rtc::PeerConnection::State state) {
-			LOGI << "State: " << (int)state;
-			if (state == rtc::PeerConnection::State::Disconnected ||
-				state == rtc::PeerConnection::State::Failed ||
-				state == rtc::PeerConnection::State::Closed) {
-				// remove disconnected client
-				LOGI << "clients.erase(" << id << "); ";
-				MainThread.dispatch([this, id]() {
-					LOGI << "main: clients.erase(" << id << "); ";
-					clients.erase(id);
-				});
-			}
-		});
+        client->video = addVideo(pc, 102, 10001, "video-stream", "cam-stream-1", [this, id, wc = make_weak_ptr(client)]() {
+            MainThread.dispatch([this, wc]() {
+                if (auto c = wc.lock()) {
+                    addToStream(c, true);
+                }
+            });
+            LOGI << "Video from " << id << " opened";
+        });
 
-		pc->onGatheringStateChange(
-			[wpc = make_weak_ptr(pc), id, wws](rtc::PeerConnection::GatheringState state) {
-				LOGI << "Gathering State: " << (int)state;
-				if (state == rtc::PeerConnection::GatheringState::Complete) {
-					if(auto pc = wpc.lock()) {
-						auto description = pc->localDescription();
-						json message = {
-							{"id", id},
-							{"type", description->typeString()},
-							{"sdp", std::string(description.value())}
-						};
-						// Gathering complete, send answer
-						if (auto ws = wws.lock()) {
-							ws->send(message.dump());
-						}
-					}
-				}
-			});
+        client->audio = addAudio(pc, 111, 10002, "audio-stream", "cam-stream-1", [this, id, wc = make_weak_ptr(client)]() {
+            MainThread.dispatch([this, wc]() {
+                if (auto c = wc.lock()) {
+                    addToStream(c, false);
+                }
+            });
+            LOGI << "Audio from " << id << " opened";
+        });
 
-		client->video = addVideo(pc, 102, 10001, "video-stream", "cam-stream-1", [this, id, wc = make_weak_ptr(client)]() {
-			MainThread.dispatch([this, wc]() {
-				if (auto c = wc.lock()) {
-					addToStream(c, true);
-				}
-			});
-			LOGI << "Video from " << id << " opened";
-		});
+        client->dataChannel = createDefaultDataChannel(pc, id);
 
-		client->audio = addAudio(pc, 111, 10002, "audio-stream", "cam-stream-1", [this, id, wc = make_weak_ptr(client)]() {
-			MainThread.dispatch([this, wc]() {
-				if (auto c = wc.lock()) {
-					addToStream(c, false);
-				}
-			});
-			LOGI << "Audio from " << id << " opened";
-		});
+        pc->setLocalDescription();
 
-		auto dc = pc->createDataChannel("ping-pong");
-		dc->onOpen([id, wdc = make_weak_ptr(dc)]() {
-			if (auto dc = wdc.lock()) {
-				dc->send("Ping");
-			}
-		});
+        return client;
+    }
 
-		dc->onMessage(nullptr, [id, wdc = make_weak_ptr(dc)](const std::string& msg) {
-			LOGI << "Message from " << id << " received: " << msg;
-			if (auto dc = wdc.lock()) {
-				dc->send("Ping");
-			}
-		});
-		client->dataChannel = dc;
+    std::shared_ptr<Connection> createReceivingPeerConnection(const rtc::Configuration& config, std::weak_ptr<rtc::WebSocket> wws, const std::string& id) {
+        auto pc = createDefaultPeerConnection(config, wws, id);
+        std::shared_ptr<Connection> client(new Connection(pc));
 
-		pc->setLocalDescription();
+        rtc::Description::Video media("video", rtc::Description::Direction::RecvOnly);
+        media.addH264Codec(96);
+//        media.addH264Codec(102);
+        media.setBitrate(3000); // Request 3Mbps (Browsers do not encode more than 2.5MBps from a webcam)
 
-		return client;
-	}
+        auto track = pc->addTrack(media);
 
-	void sendInitialNalus(std::shared_ptr<Stream> stream, std::shared_ptr<SenderTrack> video) {
+        auto session = std::make_shared<rtc::RtcpReceivingSession>();
+        track->setMediaHandler(session);
+
+        track->onMessage(
+                [](rtc::binary message) {
+                    // received is an RTP packet
+                    LOGW << "Yes. " << message.size() << std::endl;
+                },
+				nullptr
+        );
+
+        client->dataChannel = createDefaultDataChannel(pc, id);
+
+        pc->setLocalDescription();
+
+        return client;
+    }
+
+    std::shared_ptr<rtc::PeerConnection> createDefaultPeerConnection(const rtc::Configuration& config, std::weak_ptr<rtc::WebSocket> wws, const std::string& id) {
+        auto pc = std::make_shared<rtc::PeerConnection>(config);
+
+        pc->onStateChange([this, id](rtc::PeerConnection::State state) {
+            LOGI << "State: " << (int)state;
+            if (state == rtc::PeerConnection::State::Disconnected ||
+                state == rtc::PeerConnection::State::Failed ||
+                state == rtc::PeerConnection::State::Closed) {
+                // remove disconnected client
+                LOGI << "clients.erase(" << id << "); ";
+                MainThread.dispatch([this, id]() {
+                    LOGI << "main: clients.erase(" << id << "); ";
+                    clients.erase(id);
+                });
+            }
+        });
+
+        pc->onGatheringStateChange(
+                [wpc = make_weak_ptr(pc), id, wws](rtc::PeerConnection::GatheringState state) {
+                    LOGI << "Gathering State: " << (int)state;
+                    if (state == rtc::PeerConnection::GatheringState::Complete) {
+                        if(auto pc = wpc.lock()) {
+                            auto description = pc->localDescription();
+                            json message = {
+                                    {"id", id},
+                                    {"type", description->typeString()},
+                                    {"sdp", std::string(description.value())}
+                            };
+                            // Gathering complete, send answer
+                            if (auto ws = wws.lock()) {
+                                ws->send(message.dump());
+                            }
+                        }
+                    }
+                });
+
+        return pc;
+    }
+
+    static std::shared_ptr<rtc::DataChannel> createDefaultDataChannel(std::shared_ptr<rtc::PeerConnection> pc, const std::string& id) {
+        auto dc = pc->createDataChannel("ping-pong");
+        dc->onOpen([id, wdc = make_weak_ptr(dc)]() {
+            if (auto dc = wdc.lock()) {
+                dc->send("Ping");
+            }
+        });
+
+        dc->onMessage(nullptr, [id, wdc = make_weak_ptr(dc)](const std::string& msg) {
+            LOGI << "Message from " << id << " received: " << msg;
+            if (auto dc = wdc.lock()) {
+                dc->send("Ping");
+            }
+        });
+
+        return dc;
+    }
+
+	void sendInitialNalus(std::shared_ptr<Stream> stream, std::shared_ptr<Connection::Track> video) {
 //		auto h264 = dynamic_cast<CameraBufferSource*>(stream->video.get());
 //		auto initialNalus = h264->initialNALUS();
 //
@@ -333,7 +366,7 @@ protected:
 //		}
 	}
 
-	std::shared_ptr<SenderTrack> addVideo(const std::shared_ptr<rtc::PeerConnection>& pc, const uint8_t payloadType, const uint32_t ssrc, const std::string cname, const std::string msid, const std::function<void (void)> onOpen) {
+	static std::shared_ptr<Connection::Track> addVideo(const std::shared_ptr<rtc::PeerConnection>& pc, const uint8_t payloadType, const uint32_t ssrc, const std::string cname, const std::string msid, const std::function<void (void)> onOpen) {
 		auto video = rtc::Description::Video(cname);
 		video.addH264Codec(payloadType);
 		video.addSSRC(ssrc, cname, msid, cname);
@@ -353,12 +386,12 @@ protected:
 		// set handler
 		track->setRtcpHandler(h264Handler);
 		track->onOpen(onOpen);
-		auto trackData = std::make_shared<SenderTrack>(track, srReporter);
+		auto trackData = std::make_shared<Connection::Track>(track, srReporter);
 
 		return trackData;
 	}
 
-	std::shared_ptr<SenderTrack> addAudio(const std::shared_ptr<rtc::PeerConnection>& pc, const uint8_t payloadType, const uint32_t ssrc, const std::string& cname, const std::string msid, const std::function<void (void)> onOpen) {
+	static std::shared_ptr<Connection::Track> addAudio(const std::shared_ptr<rtc::PeerConnection>& pc, const uint8_t payloadType, const uint32_t ssrc, const std::string& cname, const std::string msid, const std::function<void (void)> onOpen) {
 		auto audio = rtc::Description::Audio(cname);
 		audio.addOpusCodec(payloadType);
 		audio.addSSRC(ssrc, cname, msid, cname);
@@ -378,7 +411,7 @@ protected:
 		// set handler
 		track->setRtcpHandler(opusHandler);
 		track->onOpen(onOpen);
-		auto trackData = std::make_shared<SenderTrack>(track, srReporter);
+		auto trackData = std::make_shared<Connection::Track>(track, srReporter);
 		return trackData;
 	}
 
@@ -401,6 +434,7 @@ protected:
 			auto currentTime_s = currentTime_us / (1000 * 1000);
 
 //			// set start time of stream
+// TODO
 //			video->sender->rtpConfig->setStartTime(currentTime_s, rtc::RtpPacketizationConfig::EpochStart::T1970);
 //			audio->sender->rtpConfig->setStartTime(currentTime_s, rtc::RtpPacketizationConfig::EpochStart::T1970);
 
@@ -437,18 +471,19 @@ private:
 	/// Audio and video stream
 	std::optional<std::shared_ptr<Stream>> avStream = std::nullopt;
 
+	/// Receiver callback
+	std::optional<std::function<void(rtc::binary)>> receiver = std::nullopt;
+
 	const std::string defaultIPAddress = "app.hela.me";
 	const uint16_t defaultPort = 8000;
 	std::string ip_address = defaultIPAddress;
 	uint16_t port = defaultPort;
-
-    bool hasReceiver_ = false;
 
     bool hasStream() {
         return avStream.has_value();
     }
 
     bool hasReceiver() {
-        return hasReceiver_;
+        return receiver.has_value();
     }
 };

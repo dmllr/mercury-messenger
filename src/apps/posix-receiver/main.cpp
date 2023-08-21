@@ -17,7 +17,6 @@ extern "C" {
 }
 
 #include "rtc/rtc_manager.hpp"
-#include "rtc/stream.hpp"
 
 // tmp
 #include "../../_imported/libdatachannel/examples/streamer/opusfileparser.hpp"
@@ -26,7 +25,9 @@ extern "C" {
 
 int main(int argc, char **argv) {
     auto rtc_manager = new RtcManager();
-    rtc_manager->setReceiver();
+    rtc_manager->setReceiver([](rtc::binary message) {
+        LOGW << "Yes. " << message.size() << std::endl;
+    });
     rtc_manager->startClient();
 
     while (true) {

@@ -67,6 +67,7 @@ int main() {
 			    // This is an RTP packet
 			    sendto(sock, reinterpret_cast<const char *>(message.data()), int(message.size()), 0,
 			           reinterpret_cast<const struct sockaddr *>(&addr), sizeof(addr));
+                std::cout << "." << std::flush;
 		    },
 		    nullptr);
 

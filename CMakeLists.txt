@@ -13,3 +13,6 @@ include("src/cmake/libffmpeg.cmake")
 
 add_subdirectory(src/apps/posix-server)
 add_subdirectory(src/apps/posix-receiver)
+
+# tmp
+add_subdirectory(src/apps/media-receiver)
