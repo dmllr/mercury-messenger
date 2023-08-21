@@ -31,9 +31,31 @@ function createPeerConnection() {
         bundlePolicy: "max-bundle",
     };
 
-    if (document.getElementById('use-stun').checked) {
-        config.iceServers = [{urls: ['stun:stun.l.google.com:19302']}];
-    }
+    config.iceServers = [
+        {
+            urls: "stun:stun.relay.metered.ca:80",
+        },
+        {
+            urls: "turn:a.relay.metered.ca:80",
+            username: "49880a0f046c8990b1990b35",
+            credential: "qZCNW/57EB8GwO3A",
+        },
+        {
+            urls: "turn:a.relay.metered.ca:80?transport=tcp",
+            username: "49880a0f046c8990b1990b35",
+            credential: "qZCNW/57EB8GwO3A",
+        },
+        {
+            urls: "turn:a.relay.metered.ca:443",
+            username: "49880a0f046c8990b1990b35",
+            credential: "qZCNW/57EB8GwO3A",
+        },
+        {
+            urls: "turn:a.relay.metered.ca:443?transport=tcp",
+            username: "49880a0f046c8990b1990b35",
+            credential: "qZCNW/57EB8GwO3A",
+        },
+    ];
 
     let pc = new RTCPeerConnection(config);
 
@@ -52,6 +74,18 @@ function createPeerConnection() {
         signalingLog.textContent += ' -> ' + pc.signalingState;
     }, false);
     signalingLog.textContent = pc.signalingState;
+
+    pc.onicecandidateerror = function(event) {
+        if (event.errorCode >= 300 && event.errorCode <= 699) {
+            signalingLog.textContent += ' -> error[300-699]';
+            // Here this a standardized ICE error
+            // Do something...
+        } else if (event.errorCode >= 700 && event.errorCode <= 799) {
+            signalingLog.textContent += ' -> error[700-799]';
+            // Here, the application perhaps didn't reach the server ?
+            // Do something else...
+        }
+    }
 
     // connect audio / video
     pc.addEventListener('track', function (evt) {
