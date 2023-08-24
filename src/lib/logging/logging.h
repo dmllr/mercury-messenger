@@ -17,7 +17,7 @@
 
 struct Log {
 	static constexpr auto tag = "helaeillance";
-	static constexpr auto log_level = plog::verbose;
+	static constexpr auto log_level = plog::info;
 
 
 #ifdef ANDROID

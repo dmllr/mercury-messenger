@@ -16,7 +16,7 @@ extern "C" {
 #include "libswscale/swscale.h"
 }
 
-#include "rtc/rtc_manager.hpp"
+#include "rtc/rtc_producer.hpp"
 #include "rtc/stream.hpp"
 
 // tmp
@@ -207,9 +207,9 @@ int main(int argc, char **argv) {
 
     auto stream = createStream();
 
-    auto rtc_manager = new RtcManager();
-    rtc_manager->setStream(stream);
-    rtc_manager->startServer();
+    auto rtc = new RtcProducer();
+    rtc->setStream(stream);
+    rtc->startServer();
 
     while (true) {
         std::string id;
@@ -220,7 +220,7 @@ int main(int argc, char **argv) {
         break;
     }
 
-    delete rtc_manager;
+    delete rtc;
 
     return 0;
 }

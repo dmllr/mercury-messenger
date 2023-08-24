@@ -16,7 +16,7 @@ extern "C" {
 #include "libswscale/swscale.h"
 }
 
-#include "rtc/rtc_manager.hpp"
+#include "rtc/rtc_consumer.hpp"
 
 // tmp
 #include "../../_imported/libdatachannel/examples/streamer/opusfileparser.hpp"
@@ -24,25 +24,25 @@ extern "C" {
 
 
 int main(int argc, char **argv) {
-    auto rtc_manager = new RtcManager();
-    rtc_manager->setReceiver([](rtc::binary message) {
+    auto rtc = new RtcConsumer();
+    rtc->setReceiver([](rtc::binary message) {
         LOGW << "Yes. " << message.size() << std::endl;
     });
-    rtc_manager->startClient();
+    rtc->startClient();
 
     while (true) {
         std::string id;
         std::cout << "Enter to exit" << std::endl;
         std::cin >> id;
         if (id == "r") {
-            rtc_manager->reload();
+//            rtc->reload();
         }
         std::cin.ignore();
         std::cout << "exiting" << std::endl;
         break;
     }
 
-    delete rtc_manager;
+    delete rtc;
 
     return 0;
 }

@@ -57,7 +57,7 @@ int gettimeofday(struct timeval *tv, struct timezone *tz) {
 #endif
 
 
-struct Connection {
+struct Peer {
     struct Track {
         std::shared_ptr<rtc::Track> track;
         std::shared_ptr<rtc::RtcpSrReporter> sender;
@@ -75,7 +75,7 @@ struct Connection {
         Ready
     };
     const std::shared_ptr<rtc::PeerConnection> & peerConnection = _peerConnection;
-    explicit Connection(std::shared_ptr<rtc::PeerConnection> pc) {
+    explicit Peer(std::shared_ptr<rtc::PeerConnection> pc) {
         _peerConnection = pc;
     }
     std::optional<std::shared_ptr<Track>> video;
@@ -99,16 +99,6 @@ private:
     State state = State::Waiting;
     std::string id;
     std::shared_ptr<rtc::PeerConnection> _peerConnection;
-};
-
-struct ClientTrack {
-    std::string id;
-    std::shared_ptr<Connection::Track> trackData;
-
-    ClientTrack(const std::string& id, std::shared_ptr<Connection::Track> trackData) {
-        this->id = id;
-        this->trackData = std::move(trackData);
-    }
 };
 
 inline uint64_t currentTimeInMicroSeconds() {

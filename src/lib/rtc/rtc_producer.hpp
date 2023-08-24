@@ -4,7 +4,7 @@
 
 #include "rtc/rtc.h"
 #include "nlohmann/json.hpp"
-#include "helpers.hpp"
+#include "peer.hpp"
 #include "dispatch_queue.hpp"
 
 #ifdef ANDROID
@@ -22,32 +22,42 @@ DispatchQueue MainThread("Main", 1);
 template <class T> std::weak_ptr<T> make_weak_ptr(std::shared_ptr<T> ptr) { return ptr; }
 
 
-class RtcManager {
+class RtcProducer {
 	using json = nlohmann::json;
 
 	std::thread server_thread;
 public:
-	explicit RtcManager() = default;
+	explicit RtcProducer() = default;
 
 	void setStream(const std::shared_ptr<Stream>& stream) {
 		avStream = stream;
 
 		// set callback responsible for sample sending
 		stream->onSample([this, ws = make_weak_ptr(stream)](Stream::StreamSourceType type, uint64_t sampleTime, rtc::binary sample) {
+			struct ClientTrack {
+				std::string id;
+				std::shared_ptr<Peer::Track> trackData;
+
+				ClientTrack(const std::string& id, std::shared_ptr<Peer::Track> trackData) {
+					this->id = id;
+					this->trackData = std::move(trackData);
+				}
+			};
+
 			auto tracks{std::vector<ClientTrack>()};
 			auto streamType = type == Stream::StreamSourceType::Video ? "video" : "audio";
 			// get track for given type
 			auto getTrackData =
-					[type](const std::shared_ptr<Connection>& client) {
-						return type == Stream::StreamSourceType::Video ? client->video : client->audio;
+					[type](const std::shared_ptr<Peer>& peer) {
+						return type == Stream::StreamSourceType::Video ? peer->video : peer->audio;
 					};
 
-			// get all clients with Ready state
-			for (const auto& id_client: clients) {
-				auto id = id_client.first;
-				auto client = id_client.second;
-				auto optTrackData = getTrackData(client);
-				if (client->getState() == Connection::State::Ready && optTrackData.has_value()) {
+			// get all peers with Ready state
+			for (const auto& id_peer: peers) {
+				auto id = id_peer.first;
+				auto peer = id_peer.second;
+				auto optTrackData = getTrackData(peer);
+				if (peer->getState() == Peer::State::Ready && optTrackData.has_value()) {
 					auto trackData = optTrackData.value();
 					tracks.emplace_back(id, trackData);
 				}
@@ -56,7 +66,7 @@ public:
 			if (!tracks.empty()) {
 				auto message = rtc::make_message(std::move(sample));
 				for (const auto& clientTrack: tracks) {
-					auto client = clientTrack.id;
+					auto peer = clientTrack.id;
 					auto trackData = clientTrack.trackData;
 					// sample time is in us, we need to convert it to seconds
 					auto elapsedSeconds = double(sampleTime) / (1000 * 1000);
@@ -73,7 +83,7 @@ public:
 					if (rtpConfig->timestampToSeconds(reportElapsedTimestamp) > 1) {
 						trackData->sender->setNeedsToReport();
 					}
-					LOGV << "Sending " << streamType << " sample with size: " << message->size() << " to " << client;
+					LOGV << "Sending " << streamType << " sample with size: " << message->size() << " to " << peer;
 					bool send = false;
 					try {
 						// send sample
@@ -90,25 +100,15 @@ public:
 			}
 
 			MainThread.dispatch([this, ws]() {
-				if (clients.empty()) {
-					LOGI << "clients.empty(): true";
-					// we have no clients, stop the stream
+				if (peers.empty()) {
+					// we have no peers, stop the stream
 					if (auto stream = ws.lock()) {
-						LOGI << "stream->stop() now";
 						stream->stop();
-					}
-				} else {
-					for (auto& c : clients) {
-						LOGI << "client: " << c.first << (int)c.second->getState();
 					}
 				}
 			});
 		});
 	}
-
-    void setReceiver(std::function<void(rtc::binary)> receiver) {
-        this->receiver = receiver;
-    }
 
     void startServer() {
         server_thread = std::thread {[this]() {
@@ -118,31 +118,17 @@ public:
         LOGI << "server_thread ready";
     }
 
-    void startClient() {
-        server_thread = std::thread {[this]() {
-            start("client");
-        }};
-        server_thread.detach();
-        LOGI << "server_thread ready";
-    }
-
-	void reload() {
-		if (hasReceiver()) {
-			requestStream();
-		}
-	}
-
 
 protected:
 
 	void start(std::string_view localId) {
 		try {
 			rtc::Configuration config;
-			config.iceServers.emplace_back("stun:stun.relay.metered.ca:80");
-			config.iceServers.emplace_back("turn:49880a0f046c8990b1990b35:qZCNW/57EB8GwO3A@a.relay.metered.ca:80");
-			config.iceServers.emplace_back("turn:49880a0f046c8990b1990b35:qZCNW/57EB8GwO3A@a.relay.metered.ca:80?transport=tcp");
-			config.iceServers.emplace_back("turn:49880a0f046c8990b1990b35:qZCNW/57EB8GwO3A@a.relay.metered.ca:443");
-			config.iceServers.emplace_back("turn:49880a0f046c8990b1990b35:qZCNW/57EB8GwO3A@a.relay.metered.ca:443?transport=tcp");
+//			config.iceServers.emplace_back("stun:stun.relay.metered.ca:80");
+//			config.iceServers.emplace_back("turn:49880a0f046c8990b1990b35:qZCNW/57EB8GwO3A@a.relay.metered.ca:80");
+//			config.iceServers.emplace_back("turn:49880a0f046c8990b1990b35:qZCNW/57EB8GwO3A@a.relay.metered.ca:80?transport=tcp");
+//			config.iceServers.emplace_back("turn:49880a0f046c8990b1990b35:qZCNW/57EB8GwO3A@a.relay.metered.ca:443");
+//			config.iceServers.emplace_back("turn:49880a0f046c8990b1990b35:qZCNW/57EB8GwO3A@a.relay.metered.ca:443?transport=tcp");
 
 			LOGI << "The local ID is: " << localId.data();
 
@@ -150,8 +136,6 @@ protected:
 
 			ws->onOpen([this]() {
 				LOGI << "WebSocket connected, signaling ready";
-
-                reload();
 			});
 
 			ws->onClosed([]() {
@@ -207,39 +191,25 @@ protected:
 		std::string type = it->get<std::string>();
 
 		if (type == "streamRequest") {
-            std::shared_ptr<Connection> c = createSendingPeerConnection(config, make_weak_ptr(ws), id);
-            clients.emplace(id, c);
+            std::shared_ptr<Peer> c = createPeerConnection(config, make_weak_ptr(ws), id);
+            peers.emplace(id, c);
         } else if (type == "answer") {
-			if (auto jt = clients.find(id); jt != clients.end()) {
-				auto pc = clients.at(id)->peerConnection;
+			if (auto jt = peers.find(id); jt != peers.end()) {
+				auto pc = peers.at(id)->peerConnection;
 				auto sdp = message["sdp"].get<std::string>();
 				auto description = rtc::Description(sdp, type);
 				pc->setRemoteDescription(description);
 			}
-        } else if (type == "offer") {
-            std::shared_ptr<Connection> pc = createReceivingPeerConnection(config, make_weak_ptr(ws), id);
-            clients.emplace(id, pc);
-            auto sdp = message["sdp"].get<std::string>();
-            auto description = rtc::Description(sdp, type);
-            pc->peerConnection->setRemoteDescription(description);
-        }
+		} else {
+//			throw std::runtime_error("Unknown message type " + type);
+		}
 	}
 
-    void requestStream() {
-		// TODO
-        LOGD << "Sending a stream request message";
-        ws->send("{\n"
-                 "  \"id\": \"server\",\n"
-                 "  \"type\": \"streamRequest\",\n"
-                 "  \"receiver\": \"client\"\n"
-                 "}");
-    }
-
-    std::shared_ptr<Connection> createSendingPeerConnection(const rtc::Configuration& config, std::weak_ptr<rtc::WebSocket> wws, const std::string& id) {
+    std::shared_ptr<Peer> createPeerConnection(const rtc::Configuration& config, std::weak_ptr<rtc::WebSocket> wws, const std::string& id) {
         auto pc = createDefaultPeerConnection(config, wws, id);
-        std::shared_ptr<Connection> client(new Connection(pc));
+        std::shared_ptr<Peer> peer(new Peer(pc));
 
-        client->video = addVideo(pc, 102, 10001, "video-stream", "cam-stream-1", [this, id, wc = make_weak_ptr(client)]() {
+        peer->video = addVideo(pc, 102, 10001, "video-stream", "cam-stream-1", [this, id, wc = make_weak_ptr(peer)]() {
             MainThread.dispatch([this, wc]() {
                 if (auto c = wc.lock()) {
                     addToStream(c, true);
@@ -248,7 +218,7 @@ protected:
             LOGI << "Video from " << id << " opened";
         });
 
-        client->audio = addAudio(pc, 111, 10002, "audio-stream", "cam-stream-1", [this, id, wc = make_weak_ptr(client)]() {
+        peer->audio = addAudio(pc, 111, 10002, "audio-stream", "cam-stream-1", [this, id, wc = make_weak_ptr(peer)]() {
             MainThread.dispatch([this, wc]() {
                 if (auto c = wc.lock()) {
                     addToStream(c, false);
@@ -257,40 +227,11 @@ protected:
             LOGI << "Audio from " << id << " opened";
         });
 
-        client->dataChannel = createDefaultDataChannel(pc, id);
+        peer->dataChannel = createDefaultDataChannel(pc, id);
 
         pc->setLocalDescription();
 
-        return client;
-    }
-
-    std::shared_ptr<Connection> createReceivingPeerConnection(const rtc::Configuration& config, std::weak_ptr<rtc::WebSocket> wws, const std::string& id) {
-        auto pc = createDefaultPeerConnection(config, wws, id);
-        std::shared_ptr<Connection> client(new Connection(pc));
-
-        rtc::Description::Video media("video", rtc::Description::Direction::RecvOnly);
-        media.addH264Codec(96);
-//        media.addH264Codec(102);
-        media.setBitrate(3000); // Request 3Mbps (Browsers do not encode more than 2.5MBps from a webcam)
-
-        auto track = pc->addTrack(media);
-
-        auto session = std::make_shared<rtc::RtcpReceivingSession>();
-        track->setMediaHandler(session);
-
-        track->onMessage(
-                [](rtc::binary message) {
-                    // received is an RTP packet
-                    LOGW << "Yes. " << message.size() << std::endl;
-                },
-				nullptr
-        );
-
-        client->dataChannel = createDefaultDataChannel(pc, id);
-
-        pc->setLocalDescription();
-
-        return client;
+        return peer;
     }
 
     std::shared_ptr<rtc::PeerConnection> createDefaultPeerConnection(const rtc::Configuration& config, std::weak_ptr<rtc::WebSocket> wws, const std::string& id) {
@@ -301,11 +242,11 @@ protected:
             if (state == rtc::PeerConnection::State::Disconnected ||
                 state == rtc::PeerConnection::State::Failed ||
                 state == rtc::PeerConnection::State::Closed) {
-                // remove disconnected client
-                LOGI << "clients.erase(" << id << "); ";
+                // remove disconnected peer
+                LOGI << "peers.erase(" << id << "); ";
                 MainThread.dispatch([this, id]() {
-                    LOGI << "main: clients.erase(" << id << "); ";
-                    clients.erase(id);
+                    LOGI << "main: peers.erase(" << id << "); ";
+                    peers.erase(id);
                 });
             }
         });
@@ -314,14 +255,15 @@ protected:
                 [wpc = make_weak_ptr(pc), id, wws](rtc::PeerConnection::GatheringState state) {
                     LOGI << "Gathering State: " << (int)state;
                     if (state == rtc::PeerConnection::GatheringState::Complete) {
+                        // Gathering complete, send offer
                         if(auto pc = wpc.lock()) {
                             auto description = pc->localDescription();
                             json message = {
                                     {"id", id},
+                                    {"debug", "producer.onGatheringStateChange(complete)"},
                                     {"type", description->typeString()},
                                     {"sdp", std::string(description.value())}
                             };
-                            // Gathering complete, send answer
                             if (auto ws = wws.lock()) {
                                 ws->send(message.dump());
                             }
@@ -350,7 +292,7 @@ protected:
         return dc;
     }
 
-	void sendInitialNalus(std::shared_ptr<Stream> stream, std::shared_ptr<Connection::Track> video) {
+	void sendInitialNalus(std::shared_ptr<Stream> stream, std::shared_ptr<Peer::Track> video) {
 //		auto h264 = dynamic_cast<CameraBufferSource*>(stream->video.get());
 //		auto initialNalus = h264->initialNALUS();
 //
@@ -366,7 +308,7 @@ protected:
 //		}
 	}
 
-	static std::shared_ptr<Connection::Track> addVideo(const std::shared_ptr<rtc::PeerConnection>& pc, const uint8_t payloadType, const uint32_t ssrc, const std::string cname, const std::string msid, const std::function<void (void)> onOpen) {
+	static std::shared_ptr<Peer::Track> addVideo(const std::shared_ptr<rtc::PeerConnection>& pc, const uint8_t payloadType, const uint32_t ssrc, const std::string cname, const std::string msid, const std::function<void (void)> onOpen) {
 		auto video = rtc::Description::Video(cname);
 		video.addH264Codec(payloadType);
 		video.addSSRC(ssrc, cname, msid, cname);
@@ -386,12 +328,12 @@ protected:
 		// set handler
 		track->setRtcpHandler(h264Handler);
 		track->onOpen(onOpen);
-		auto trackData = std::make_shared<Connection::Track>(track, srReporter);
+		auto trackData = std::make_shared<Peer::Track>(track, srReporter);
 
 		return trackData;
 	}
 
-	static std::shared_ptr<Connection::Track> addAudio(const std::shared_ptr<rtc::PeerConnection>& pc, const uint8_t payloadType, const uint32_t ssrc, const std::string& cname, const std::string msid, const std::function<void (void)> onOpen) {
+	static std::shared_ptr<Peer::Track> addAudio(const std::shared_ptr<rtc::PeerConnection>& pc, const uint8_t payloadType, const uint32_t ssrc, const std::string& cname, const std::string msid, const std::function<void (void)> onOpen) {
 		auto audio = rtc::Description::Audio(cname);
 		audio.addOpusCodec(payloadType);
 		audio.addSSRC(ssrc, cname, msid, cname);
@@ -411,24 +353,22 @@ protected:
 		// set handler
 		track->setRtcpHandler(opusHandler);
 		track->onOpen(onOpen);
-		auto trackData = std::make_shared<Connection::Track>(track, srReporter);
+		auto trackData = std::make_shared<Peer::Track>(track, srReporter);
 		return trackData;
 	}
 
-	/// Add client to stream
-	/// @param client Client
-	/// @param adding_video True if adding video
-	void addToStream(const std::shared_ptr<Connection>& client, bool isAddingVideo) {
-		if (client->getState() == Connection::State::Waiting) {
-			client->setState(isAddingVideo ? Connection::State::WaitingForAudio : Connection::State::WaitingForVideo);
-		} else if ((client->getState() == Connection::State::WaitingForAudio && !isAddingVideo)
-				   || (client->getState() == Connection::State::WaitingForVideo && isAddingVideo)) {
+	/// Add peer to stream
+	void addToStream(const std::shared_ptr<Peer>& peer, bool isAddingVideo) {
+		if (peer->getState() == Peer::State::Waiting) {
+			peer->setState(isAddingVideo ? Peer::State::WaitingForAudio : Peer::State::WaitingForVideo);
+		} else if ((peer->getState() == Peer::State::WaitingForAudio && !isAddingVideo)
+				   || (peer->getState() == Peer::State::WaitingForVideo && isAddingVideo)) {
 
 			// Audio and video tracks are collected now
-			assert(client->video.has_value() && client->audio.has_value());
+			assert(peer->video.has_value() && peer->audio.has_value());
 
-			auto video = client->video.value();
-			auto audio = client->audio.value();
+			auto video = peer->video.value();
+			auto audio = peer->audio.value();
 
 			auto currentTime_us = double(currentTimeInMicroSeconds());
 			auto currentTime_s = currentTime_us / (1000 * 1000);
@@ -442,9 +382,9 @@ protected:
 //				sendInitialNalus(avStream.value(), video);
 //			}
 
-			client->setState(Connection::State::Ready);
+			peer->setState(Peer::State::Ready);
 		}
-		if (client->getState() == Connection::State::Ready) {
+		if (peer->getState() == Peer::State::Ready) {
             if (hasStream()) {
                 startStream();
             }
@@ -465,8 +405,8 @@ private:
     /// websocket handler
     std::shared_ptr<rtc::WebSocket> ws = nullptr;
 
-	/// all connected clients
-	std::unordered_map<std::string, std::shared_ptr<Connection>> clients{};
+	/// all connected peers
+	std::unordered_map<std::string, std::shared_ptr<Peer>> peers{};
 
 	/// Audio and video stream
 	std::optional<std::shared_ptr<Stream>> avStream = std::nullopt;

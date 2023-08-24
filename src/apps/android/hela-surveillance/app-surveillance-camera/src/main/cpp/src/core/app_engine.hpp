@@ -11,7 +11,7 @@
 #include "camera/camera_manager.hpp"
 #include "camera/camera_codec.hpp"
 #include "server/rtsp_manager.hpp"
-#include "rtc/rtc_manager.hpp"
+#include "rtc/rtc_producer.hpp"
 #include "rtc/audio_buffer_source.hpp"
 #include "rtc/camera_buffer_source.hpp"
 

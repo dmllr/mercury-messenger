@@ -8,7 +8,7 @@
  */
 
 #include "stream.hpp"
-#include "helpers.hpp"
+#include "peer.hpp"
 
 #ifdef _WIN32
 // taken from https://stackoverflow.com/questions/5801813/c-usleep-is-obsolete-workarounds-for-windows-mingw

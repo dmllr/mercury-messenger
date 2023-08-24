@@ -37,22 +37,22 @@ async def handle_websocket(websocket, path):
         splitted = path.split('/')
         splitted.pop(0)
         client_id = splitted.pop(0)
-        print('Client {} connected'.format(client_id))
+        print('Peer {} connected'.format(client_id))
 
         clients[client_id] = websocket
         while True:
             data = await websocket.recv()
-            print('Client {} << {}'.format(client_id, data))
+            print('"{}" << {}'.format(client_id, data))
             message = json.loads(data)
             destination_id = message['id']
             destination_websocket = clients.get(destination_id)
             if destination_websocket:
                 message['id'] = client_id
                 data = json.dumps(message)
-                print('Client {} >> {}'.format(destination_id, data))
+                print('"{}" >> {}'.format(destination_id, data))
                 await destination_websocket.send(data)
             else:
-                print('Client {} not found'.format(destination_id))
+                print('Peer "{}" not found'.format(destination_id))
 
     except Exception as e:
         print(e)
@@ -60,7 +60,7 @@ async def handle_websocket(websocket, path):
     finally:
         if client_id:
             del clients[client_id]
-            print('Client {} disconnected'.format(client_id))
+            print('Peer "{}" disconnected'.format(client_id))
 
 if __name__ == '__main__':
     # Usage: ./server.py [[host:]port] [SSL certificate file]
