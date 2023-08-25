@@ -191,22 +191,38 @@ protected:
 		std::string type = it->get<std::string>();
 
 		if (type == "streamRequest") {
-            std::shared_ptr<Peer> c = createPeerConnection(config, make_weak_ptr(ws), id);
+            std::shared_ptr<Peer> c = createPeerConnection(config, id);
             peers.emplace(id, c);
         } else if (type == "answer") {
 			if (auto jt = peers.find(id); jt != peers.end()) {
 				auto pc = peers.at(id)->peerConnection;
 				auto sdp = message["sdp"].get<std::string>();
-				auto description = rtc::Description(sdp, type);
-				pc->setRemoteDescription(description);
+				auto answer = rtc::Description(sdp, type);
+				pc->setRemoteDescription(answer);
 			}
+        } else if (type == "offer") {
+//			if (auto jt = peers.find(id); jt != peers.end()) {
+//				auto pc = peers.at(id)->peerConnection;
+//				auto sdp = message["sdp"].get<std::string>();
+//				auto offer = rtc::Description(sdp, type);
+//				pc->setRemoteDescription(offer);
+//
+//				auto answer = pc->localDescription();
+//				json reply = {
+//						{"id", "server"},
+//						{"debug", "consumer.wsOnMessage(offer)"},
+//						{"type", answer->typeString()},
+//						{"sdp", std::string(answer.value())}
+//				};
+//				ws->send(reply.dump());
+//			}
 		} else {
-//			throw std::runtime_error("Unknown message type " + type);
+			throw std::runtime_error("Unknown message type " + type);
 		}
 	}
 
-    std::shared_ptr<Peer> createPeerConnection(const rtc::Configuration& config, std::weak_ptr<rtc::WebSocket> wws, const std::string& id) {
-        auto pc = createDefaultPeerConnection(config, wws, id);
+    std::shared_ptr<Peer> createPeerConnection(const rtc::Configuration& config, const std::string& id) {
+        auto pc = createDefaultPeerConnection(config, id);
         std::shared_ptr<Peer> peer(new Peer(pc));
 
         peer->video = addVideo(pc, 102, 10001, "video-stream", "cam-stream-1", [this, id, wc = make_weak_ptr(peer)]() {
@@ -234,7 +250,7 @@ protected:
         return peer;
     }
 
-    std::shared_ptr<rtc::PeerConnection> createDefaultPeerConnection(const rtc::Configuration& config, std::weak_ptr<rtc::WebSocket> wws, const std::string& id) {
+    std::shared_ptr<rtc::PeerConnection> createDefaultPeerConnection(const rtc::Configuration& config, const std::string& id) {
         auto pc = std::make_shared<rtc::PeerConnection>(config);
 
         pc->onStateChange([this, id](rtc::PeerConnection::State state) {
@@ -252,7 +268,7 @@ protected:
         });
 
         pc->onGatheringStateChange(
-                [wpc = make_weak_ptr(pc), id, wws](rtc::PeerConnection::GatheringState state) {
+                [wpc = make_weak_ptr(pc), id, wws = make_weak_ptr(ws)](rtc::PeerConnection::GatheringState state) {
                     LOGI << "Gathering State: " << (int)state;
                     if (state == rtc::PeerConnection::GatheringState::Complete) {
                         // Gathering complete, send offer
