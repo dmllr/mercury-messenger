@@ -295,17 +295,13 @@ protected:
         return std::make_shared<Peer::Track>(track, srReporter);
     }
 
-    void addToStream(const std::shared_ptr<Peer>& peer, bool isAddingVideo) {
+    static void addToStream(const std::shared_ptr<Peer>& peer, bool isAddingVideo) {
         if (peer->getState() == Peer::State::Waiting) {
             peer->setState(isAddingVideo ? Peer::State::WaitingForAudio : Peer::State::WaitingForVideo);
         } else if ((peer->getState() == Peer::State::WaitingForAudio && !isAddingVideo)
                    || (peer->getState() == Peer::State::WaitingForVideo && isAddingVideo)) {
-
             // Audio and video tracks are collected now
             assert(peer->video.has_value() && peer->audio.has_value());
-
-            auto video = peer->video.value();
-            auto audio = peer->audio.value();
 
             peer->setState(Peer::State::Ready);
         }
