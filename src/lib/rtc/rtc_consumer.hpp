@@ -189,38 +189,37 @@ protected:
 					}
 				});
 
-        rtc::Description::Video video("video", rtc::Description::Direction::RecvOnly);
-//        video.addH264Codec(96);
-        video.addH264Codec(102);
-        video.setBitrate(3000); // Request 3Mbps (Browsers do not encode more than 2.5MBps from a webcam)
-
-        auto vtrack = pc->addTrack(video);
-        vtrack->setMediaHandler(std::make_shared<rtc::RtcpReceivingSession>());
-        vtrack->onMessage(
-                [](rtc::binary message) {
-                    // received is an RTP packet
-                    LOGW << "Video. Yes. " << message.size() << std::endl;
-                },
-				nullptr
-        );
-
-        rtc::Description::Audio audio("audio", rtc::Description::Direction::RecvOnly);
-        audio.addOpusCodec(111);
-//        audio.setBitrate(3000);
-
-        auto atrack = pc->addTrack(audio);
-        atrack->setMediaHandler(std::make_shared<rtc::RtcpReceivingSession>());
-        atrack->onMessage(
-                [](rtc::binary message) {
-                    // received is an RTP packet
-                    LOGW << "Audio. Yes. " << message.size() << std::endl;
-                },
-				nullptr
-        );
-
 		std::shared_ptr<Peer> peer(new Peer(pc));
-//		peer->audio = std::make_shared<Peer::Track>(atrack, nullptr);
-//		peer->video = std::make_shared<Peer::Track>(vtrack, nullptr);
+        peer->video = addVideo(
+            pc, 102, 10001, "video-stream", "cam-stream-1",
+            [this, id, wc = make_weak_ptr(peer)]() {
+                MainThread.dispatch([this, wc]() {
+                    if (auto c = wc.lock()) {
+                        addToStream(c, true);
+                    }
+                });
+                LOGI << "Video from " << id << " opened";
+            },
+            [this, id, wc = make_weak_ptr(peer)](rtc::binary buffer) {
+                LOGW << "VVVVVVVV";
+            }
+        );
+
+        peer->audio = addAudio(
+            pc, 111, 10002, "audio-stream", "cam-stream-1",
+            [this, id, wc = make_weak_ptr(peer)]() {
+                MainThread.dispatch([this, wc]() {
+                    if (auto c = wc.lock()) {
+                        addToStream(c, false);
+                    }
+                });
+                LOGI << "Audio from " << id << " opened";
+            },
+            [this, id, wc = make_weak_ptr(peer)](rtc::binary buffer) {
+                LOGW << "AAAAAAAA";
+            }
+        );
+
         peer->dataChannel = createDefaultDataChannel(pc, id);
 
 		peer->setState(Peer::State::Ready);
@@ -236,6 +235,80 @@ protected:
 //        }
 
 		return peer;
+    }
+
+    static std::shared_ptr<Peer::Track> addVideo(
+            const std::shared_ptr<rtc::PeerConnection>& pc,
+            const uint8_t payloadType, const uint32_t ssrc, const std::string cname, const std::string msid,
+            const std::function<void (void)> onOpen,
+            const std::function<void (rtc::binary message)> onMessage) {
+        auto video = rtc::Description::Video(cname, rtc::Description::Direction::RecvOnly);
+        video.addH264Codec(payloadType);
+        video.addSSRC(ssrc, cname, msid, cname);
+        auto track = pc->addTrack(video);
+        // create RTP configuration
+        auto rtpConfig = std::shared_ptr<rtc::RtpPacketizationConfig>(new rtc::RtpPacketizationConfig(ssrc, cname, payloadType, rtc::H264RtpPacketizer::defaultClockRate));
+        // create packetizer
+        auto packetizer = std::shared_ptr<rtc::H264RtpPacketizer>(new rtc::H264RtpPacketizer(rtc::H264RtpPacketizer::Separator::StartSequence, rtpConfig));
+        // create H264 handler
+        std::shared_ptr<rtc::H264PacketizationHandler> h264Handler(new rtc::H264PacketizationHandler(packetizer));
+        // add RTCP SR handler
+        auto srReporter = std::make_shared<rtc::RtcpSrReporter>(rtpConfig);
+        h264Handler->addToChain(srReporter);
+        // add RTCP NACK handler
+        auto nackResponder = std::make_shared<rtc::RtcpNackResponder>();
+        h264Handler->addToChain(nackResponder);
+        // set handler
+        track->setRtcpHandler(h264Handler);
+        track->onOpen(onOpen);
+        track->onMessage(onMessage, nullptr);
+
+        return std::make_shared<Peer::Track>(track, srReporter);
+    }
+
+    static std::shared_ptr<Peer::Track> addAudio(
+            const std::shared_ptr<rtc::PeerConnection>& pc,
+            const uint8_t payloadType, const uint32_t ssrc, const std::string& cname, const std::string msid,
+            const std::function<void (void)> onOpen,
+            const std::function<void (rtc::binary message)> onMessage) {
+        auto audio = rtc::Description::Audio(cname, rtc::Description::Direction::RecvOnly);
+        audio.addOpusCodec(payloadType);
+        audio.addSSRC(ssrc, cname, msid, cname);
+        auto track = pc->addTrack(audio);
+        // create RTP configuration
+        auto rtpConfig = std::shared_ptr<rtc::RtpPacketizationConfig>(new rtc::RtpPacketizationConfig(ssrc, cname, payloadType, rtc::OpusRtpPacketizer::defaultClockRate));
+        // create packetizer
+        auto packetizer = std::make_shared<rtc::OpusRtpPacketizer>(rtpConfig);
+        // create opus handler
+        auto opusHandler = std::make_shared<rtc::OpusPacketizationHandler>(packetizer);
+        // add RTCP SR handler
+        auto srReporter = std::make_shared<rtc::RtcpSrReporter>(rtpConfig);
+        opusHandler->addToChain(srReporter);
+        // add RTCP NACK handler
+        auto nackResponder = std::make_shared<rtc::RtcpNackResponder>();
+        opusHandler->addToChain(nackResponder);
+        // set handler
+        track->setRtcpHandler(opusHandler);
+        track->onOpen(onOpen);
+        track->onMessage(onMessage, nullptr);
+
+        return std::make_shared<Peer::Track>(track, srReporter);
+    }
+
+    void addToStream(const std::shared_ptr<Peer>& peer, bool isAddingVideo) {
+        if (peer->getState() == Peer::State::Waiting) {
+            peer->setState(isAddingVideo ? Peer::State::WaitingForAudio : Peer::State::WaitingForVideo);
+        } else if ((peer->getState() == Peer::State::WaitingForAudio && !isAddingVideo)
+                   || (peer->getState() == Peer::State::WaitingForVideo && isAddingVideo)) {
+
+            // Audio and video tracks are collected now
+            assert(peer->video.has_value() && peer->audio.has_value());
+
+            auto video = peer->video.value();
+            auto audio = peer->audio.value();
+
+            peer->setState(Peer::State::Ready);
+        }
     }
 
     static std::shared_ptr<rtc::DataChannel> createDefaultDataChannel(std::shared_ptr<rtc::PeerConnection> pc, const std::string& id) {
