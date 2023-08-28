@@ -30,13 +30,16 @@ int main(int argc, char **argv) {
     });
     rtc->startClient();
 
+    while (!rtc->hasPeer()) {
+        LOGI << "Requesting stream... " << std::endl;
+        rtc->requestStream();
+        std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+    }
+
     while (true) {
         std::string id;
         std::cout << "Enter to exit" << std::endl;
         std::cin >> id;
-        if (id == "r") {
-//            rtc->reload();
-        }
         std::cin.ignore();
         std::cout << "exiting" << std::endl;
         break;
