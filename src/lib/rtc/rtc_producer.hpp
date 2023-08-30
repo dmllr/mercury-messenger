@@ -11,14 +11,12 @@
 #include "rtc_transport_base.hpp"
 
 #include <memory>
-#include <thread>
-#include <unordered_map>
 
 
 class RtcProducer : public RtcTransportBase {
 	using json = nlohmann::json;
 
-	std::thread server_thread;
+//	std::thread server_thread;
 public:
 	explicit RtcProducer() = default;
 
@@ -104,11 +102,12 @@ public:
 	}
 
     void startServer() {
-        server_thread = std::thread {[this]() {
-            start("server");
-        }};
-        server_thread.detach();
-        LOGI << "server_thread ready";
+        start("server");
+//        server_thread = std::thread {[this]() {
+//            start("server");
+//        }};
+//        server_thread.detach();
+//        LOGI << "server_thread ready";
     }
 
 
@@ -187,7 +186,67 @@ protected:
         return peer;
     }
 
-	/// Start stream
+    static std::shared_ptr<Peer::Track> addVideo(
+            const std::shared_ptr<rtc::PeerConnection>& pc,
+            const rtc::Description::Direction direction,
+            const uint8_t payloadType, const uint32_t ssrc, const std::string& cname, const std::string& msid,
+            const std::function<void (void)>& onOpen,
+            const std::function<void (rtc::binary message)>& onMessage) {
+        auto video = rtc::Description::Video(cname, direction);
+        video.addH264Codec(payloadType);
+        video.addSSRC(ssrc, cname, msid, cname);
+        auto track = pc->addTrack(video);
+        // create RTP configuration
+        auto rtpConfig = std::shared_ptr<rtc::RtpPacketizationConfig>(new rtc::RtpPacketizationConfig(ssrc, cname, payloadType, rtc::H264RtpPacketizer::defaultClockRate));
+        // create packetizer
+        auto packetizer = std::shared_ptr<rtc::H264RtpPacketizer>(new rtc::H264RtpPacketizer(rtc::H264RtpPacketizer::Separator::StartSequence, rtpConfig));
+        // create H264 handler
+        std::shared_ptr<rtc::H264PacketizationHandler> h264Handler(new rtc::H264PacketizationHandler(packetizer));
+        // add RTCP SR handler
+        auto srReporter = std::make_shared<rtc::RtcpSrReporter>(rtpConfig);
+        h264Handler->addToChain(srReporter);
+        // add RTCP NACK handler
+        auto nackResponder = std::make_shared<rtc::RtcpNackResponder>();
+        h264Handler->addToChain(nackResponder);
+        // set handler
+        track->setRtcpHandler(h264Handler);
+        track->onOpen(onOpen);
+        track->onMessage(onMessage, nullptr);
+
+        return std::make_shared<Peer::Track>(track, srReporter);
+    }
+
+    static std::shared_ptr<Peer::Track> addAudio(
+            const std::shared_ptr<rtc::PeerConnection>& pc,
+            const rtc::Description::Direction direction,
+            const uint8_t payloadType, const uint32_t ssrc, const std::string& cname, const std::string& msid,
+            const std::function<void (void)>& onOpen,
+            const std::function<void (rtc::binary message)>& onMessage) {
+        auto audio = rtc::Description::Audio(cname, direction);
+        audio.addOpusCodec(payloadType);
+        audio.addSSRC(ssrc, cname, msid, cname);
+        auto track = pc->addTrack(audio);
+        // create RTP configuration
+        auto rtpConfig = std::shared_ptr<rtc::RtpPacketizationConfig>(new rtc::RtpPacketizationConfig(ssrc, cname, payloadType, rtc::OpusRtpPacketizer::defaultClockRate));
+        // create packetizer
+        auto packetizer = std::make_shared<rtc::OpusRtpPacketizer>(rtpConfig);
+        // create opus handler
+        auto opusHandler = std::make_shared<rtc::OpusPacketizationHandler>(packetizer);
+        // add RTCP SR handler
+        auto srReporter = std::make_shared<rtc::RtcpSrReporter>(rtpConfig);
+        opusHandler->addToChain(srReporter);
+        // add RTCP NACK handler
+        auto nackResponder = std::make_shared<rtc::RtcpNackResponder>();
+        opusHandler->addToChain(nackResponder);
+        // set handler
+        track->setRtcpHandler(opusHandler);
+        track->onOpen(onOpen);
+        track->onMessage(onMessage, nullptr);
+
+        return std::make_shared<Peer::Track>(track, srReporter);
+    }
+
+    /// Start stream
 	void startStream() {
 		if (unlikely(!avStream.has_value())) {
 			LOGE << "Stream is not set";

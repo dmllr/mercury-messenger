@@ -61,10 +61,18 @@ struct Peer {
     struct Track {
         std::shared_ptr<rtc::Track> track;
         std::shared_ptr<rtc::RtcpSrReporter> sender;
+        std::shared_ptr<rtc::RtcpReceivingSession> session;
 
         Track(std::shared_ptr<rtc::Track> track, std::shared_ptr<rtc::RtcpSrReporter> sender) {
             this->track = track;
             this->sender = sender;
+            this->session = nullptr;
+        }
+
+        Track(std::shared_ptr<rtc::Track> track, std::shared_ptr<rtc::RtcpReceivingSession> session) {
+            this->track = track;
+            this->sender = nullptr;
+            this->session = session;
         }
     };
 

@@ -73,6 +73,7 @@ public:
         codec_context->pix_fmt = AV_PIX_FMT_YUV420P;
         av_opt_set(codec_context->priv_data, "startcode", "1", 0);
 
+        std::cout << "Width: " << codec_context->width << ", height: " << codec_context->height << std::endl;
         std::cout << "Input pixel format: " << av_get_pix_fmt_name(codec_context->pix_fmt) << std::endl;
         std::cout << "Output pixel format: " << av_get_pix_fmt_name(codec_context->codec->pix_fmts[0]) << std::endl;
 
@@ -163,12 +164,12 @@ public:
         encoded_data.clear();
 
         if (0) {
-            std::string fn = "/home/miller/dev/github/hela-surveillance/samples/n264/sample.h264";
+            std::string fn = "/Users/denis.miller/dev/github/hela-surveillance/samples/n264/sampleou.h264";
             std::ofstream fw(fn, std::ios::out | std::ios::binary | std::ios_base::app);
             fw.write(reinterpret_cast<const char*>(sample.data()), sample.size());
         }
 
-        LOGI << "Sending sample of size " << sample.size() << "b " << std::endl;
+        LOGI << "Sending sample of size " << sample.size() << "b ";
         return sample;
     }
 
@@ -207,9 +208,9 @@ int main(int argc, char **argv) {
 
     auto stream = createStream();
 
-    auto rtc = new RtcProducer();
-    rtc->setStream(stream);
-    rtc->startServer();
+    auto rtc = RtcProducer();
+    rtc.setStream(stream);
+    rtc.startServer();
 
     while (true) {
         std::string id;
@@ -219,8 +220,6 @@ int main(int argc, char **argv) {
         std::cout << "exiting" << std::endl;
         break;
     }
-
-    delete rtc;
 
     return 0;
 }

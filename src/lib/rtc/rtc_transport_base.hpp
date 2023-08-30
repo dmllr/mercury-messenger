@@ -21,7 +21,9 @@ DispatchQueue MainThread("Main", 1);
 class RtcTransportBase {
 	using json = nlohmann::json;
 
-	std::thread server_thread;
+    const std::string ip_address = "app.hela.me";
+    const uint16_t port = 8000;
+
 public:
 	explicit RtcTransportBase() = default;
 
@@ -30,36 +32,45 @@ public:
     }
 
 protected:
-
     virtual void wsOnMessage(json message) = 0;
+    virtual void onPeerReady(const std::shared_ptr<Peer>& peer) = 0;
 
-    static rtc::Configuration getRtcConfiguration() {
-        rtc::Configuration config;
-//			config.iceServers.emplace_back("stun:stun.relay.metered.ca:80");
-//			config.iceServers.emplace_back("turn:49880a0f046c8990b1990b35:qZCNW/57EB8GwO3A@a.relay.metered.ca:80");
-//			config.iceServers.emplace_back("turn:49880a0f046c8990b1990b35:qZCNW/57EB8GwO3A@a.relay.metered.ca:80?transport=tcp");
-//			config.iceServers.emplace_back("turn:49880a0f046c8990b1990b35:qZCNW/57EB8GwO3A@a.relay.metered.ca:443");
-//			config.iceServers.emplace_back("turn:49880a0f046c8990b1990b35:qZCNW/57EB8GwO3A@a.relay.metered.ca:443?transport=tcp");
-        return config;
-    }
+    class RtcConfiguration {
+    public:
+        static rtc::Configuration& config() {
+            static rtc::Configuration config = createRtcConfiguration();
+            return config;
+        }
+
+    private:
+        static rtc::Configuration createRtcConfiguration() {
+            rtc::Configuration config;
+//            config.iceServers.emplace_back("stun:stun.relay.metered.ca:80");
+//            config.iceServers.emplace_back("turn:49880a0f046c8990b1990b35:qZCNW/57EB8GwO3A@a.relay.metered.ca:80");
+//            config.iceServers.emplace_back("turn:49880a0f046c8990b1990b35:qZCNW/57EB8GwO3A@a.relay.metered.ca:80?transport=tcp");
+//            config.iceServers.emplace_back("turn:49880a0f046c8990b1990b35:qZCNW/57EB8GwO3A@a.relay.metered.ca:443");
+//            config.iceServers.emplace_back("turn:49880a0f046c8990b1990b35:qZCNW/57EB8GwO3A@a.relay.metered.ca:443?transport=tcp");
+            return config;
+        }
+    };
 
 	void start(std::string_view localId) {
 		try {
 			LOGI << "The local ID is: " << localId.data();
 
-			ws->onOpen([this]() {
+			ws.onOpen([this]() {
 				LOGI << "WebSocket connected, signaling ready";
 			});
 
-			ws->onClosed([]() {
+			ws.onClosed([]() {
 				LOGI << "WebSocket closed";
 			});
 
-			ws->onError([](const std::string& error) {
+			ws.onError([](const std::string& error) {
 				LOGI << "WebSocket failed: " << error.c_str();
 			});
 
-			ws->onMessage([&](std::variant<rtc::binary, std::string> data) {
+			ws.onMessage([&](std::variant<rtc::binary, std::string> data) {
 				if (!std::holds_alternative<std::string>(data))
 					return;
 
@@ -71,22 +82,22 @@ protected:
 
 			const std::string url = "wss://" + ip_address + ":" + std::to_string(port) + "/" + localId.data();
 			LOGI << "Url is " << url.c_str();
-			ws->open(url);
+			ws.open(url);
 
 			LOGI << "Waiting for signaling to be connected...";
-			while (!ws->isOpen()) {
-				if (ws->isClosed())
+			while (!ws.isOpen()) {
+				if (ws.isClosed())
 					return;
 				std::this_thread::sleep_for(std::chrono::milliseconds(100));
 			}
 
-			while (true) {
-				std::this_thread::sleep_for(std::chrono::milliseconds(100));
-				// TODO Stop option
-			}
-
-			LOGI << "Cleaning up...";
-			return;
+//			while (true) {
+//				std::this_thread::sleep_for(std::chrono::milliseconds(100));
+//				// TODO Stop option
+//			}
+//
+//			LOGI << "Cleaning up...";
+//			return;
 		} catch (const std::exception& e) {
 			LOGI << "Error: " << e.what();
 			return;
@@ -94,7 +105,7 @@ protected:
 	}
 
     std::shared_ptr<rtc::PeerConnection> createDefaultPeerConnection(const std::string& id) {
-		auto pc = std::make_shared<rtc::PeerConnection>(getRtcConfiguration());
+		auto pc = std::make_shared<rtc::PeerConnection>(RtcConfiguration::config());
 
 		pc->onStateChange([this, id](rtc::PeerConnection::State state) {
 			LOGI << "State: " << (int)state;
@@ -117,79 +128,17 @@ protected:
 							auto description = pc->localDescription();
 							json message = {
 									{"id", id},
-									{"debug", "consumer.onGatheringStateChange(complete)"},
+									{"debug", "onGatheringStateChange(complete)"},
 									{"type", description->typeString()},
 									{"sdp", std::string(description.value())}
 							};
-                            ws->send(message.dump());
+                            ws.send(message.dump());
 						}
 					}
 				});
 
         return pc;
     }
-
-    static std::shared_ptr<Peer::Track> addVideo(
-            const std::shared_ptr<rtc::PeerConnection>& pc,
-            const rtc::Description::Direction direction,
-            const uint8_t payloadType, const uint32_t ssrc, const std::string& cname, const std::string& msid,
-            const std::function<void (void)>& onOpen,
-            const std::function<void (rtc::binary message)>& onMessage) {
-        auto video = rtc::Description::Video(cname, direction);
-        video.addH264Codec(payloadType);
-        video.addSSRC(ssrc, cname, msid, cname);
-        auto track = pc->addTrack(video);
-        // create RTP configuration
-        auto rtpConfig = std::shared_ptr<rtc::RtpPacketizationConfig>(new rtc::RtpPacketizationConfig(ssrc, cname, payloadType, rtc::H264RtpPacketizer::defaultClockRate));
-        // create packetizer
-        auto packetizer = std::shared_ptr<rtc::H264RtpPacketizer>(new rtc::H264RtpPacketizer(rtc::H264RtpPacketizer::Separator::StartSequence, rtpConfig));
-        // create H264 handler
-        std::shared_ptr<rtc::H264PacketizationHandler> h264Handler(new rtc::H264PacketizationHandler(packetizer));
-        // add RTCP SR handler
-        auto srReporter = std::make_shared<rtc::RtcpSrReporter>(rtpConfig);
-        h264Handler->addToChain(srReporter);
-        // add RTCP NACK handler
-        auto nackResponder = std::make_shared<rtc::RtcpNackResponder>();
-        h264Handler->addToChain(nackResponder);
-        // set handler
-        track->setRtcpHandler(h264Handler);
-        track->onOpen(onOpen);
-        track->onMessage(onMessage, nullptr);
-
-        return std::make_shared<Peer::Track>(track, srReporter);
-    }
-
-    static std::shared_ptr<Peer::Track> addAudio(
-            const std::shared_ptr<rtc::PeerConnection>& pc,
-            const rtc::Description::Direction direction,
-            const uint8_t payloadType, const uint32_t ssrc, const std::string& cname, const std::string& msid,
-            const std::function<void (void)>& onOpen,
-            const std::function<void (rtc::binary message)>& onMessage) {
-        auto audio = rtc::Description::Audio(cname, direction);
-        audio.addOpusCodec(payloadType);
-        audio.addSSRC(ssrc, cname, msid, cname);
-        auto track = pc->addTrack(audio);
-        // create RTP configuration
-        auto rtpConfig = std::shared_ptr<rtc::RtpPacketizationConfig>(new rtc::RtpPacketizationConfig(ssrc, cname, payloadType, rtc::OpusRtpPacketizer::defaultClockRate));
-        // create packetizer
-        auto packetizer = std::make_shared<rtc::OpusRtpPacketizer>(rtpConfig);
-        // create opus handler
-        auto opusHandler = std::make_shared<rtc::OpusPacketizationHandler>(packetizer);
-        // add RTCP SR handler
-        auto srReporter = std::make_shared<rtc::RtcpSrReporter>(rtpConfig);
-        opusHandler->addToChain(srReporter);
-        // add RTCP NACK handler
-        auto nackResponder = std::make_shared<rtc::RtcpNackResponder>();
-        opusHandler->addToChain(nackResponder);
-        // set handler
-        track->setRtcpHandler(opusHandler);
-        track->onOpen(onOpen);
-        track->onMessage(onMessage, nullptr);
-
-        return std::make_shared<Peer::Track>(track, srReporter);
-    }
-
-    virtual void onPeerReady(const std::shared_ptr<Peer>& peer) = 0;
 
     void addToStream(const std::shared_ptr<Peer>& peer, bool isAddingVideo) {
         if (peer->getState() == Peer::State::Waiting) {
@@ -227,7 +176,7 @@ protected:
         });
 
         dc->onMessage(nullptr, [id, wdc = make_weak_ptr(dc)](const std::string& msg) {
-            LOGI << "Message from " << id << " received: " << msg;
+            LOGE << "Message from " << id << " received: " << msg;
             if (auto dc = wdc.lock()) {
                 dc->send("Ping");
             }
@@ -238,14 +187,8 @@ protected:
 
 protected:
     /// websocket handler
-    std::shared_ptr<rtc::WebSocket> ws = std::make_shared<rtc::WebSocket>();
+    rtc::WebSocket ws;
 
 	/// all connected peers
 	std::unordered_map<std::string, std::shared_ptr<Peer>> peers{};
-
-private:
-	const std::string defaultIPAddress = "app.hela.me";
-	const uint16_t defaultPort = 8000;
-	std::string ip_address = defaultIPAddress;
-	uint16_t port = defaultPort;
 };
