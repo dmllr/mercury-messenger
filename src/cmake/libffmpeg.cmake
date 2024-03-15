@@ -94,6 +94,14 @@ if (ANDROID)
     )
 endif()
 
+if (WIN32)
+    set(CONFIGURE_PARAMS
+        --target-os=win64
+        --arch=x86_64
+        --toolchain=msvc
+    )
+endif()
+
 ExternalProject_Add(ffmpeg_target
         PREFIX ${FFMPEG_WORKDIR}
         URL "${FFMPEG_PATH}"

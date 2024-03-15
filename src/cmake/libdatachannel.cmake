@@ -180,5 +180,5 @@ target_compile_definitions(datachannel PRIVATE
 )
 
 if(WIN32)
-	target_link_libraries(datachannel PUBLIC ws2_32) # winsock2
+	target_link_libraries(datachannel ws2_32) # winsock2
 endif()
