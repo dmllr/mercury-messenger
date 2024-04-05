@@ -1,3 +1,8 @@
+# Build
+## Prerequisites
+sudo apt install liblzma-dev
+sudo apt install libiconv-hook-dev
+
 # Run
 1. Check app.hela.me:8000
    

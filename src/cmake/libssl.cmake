@@ -10,6 +10,18 @@
 #
 #import_remote("https://github.com/viaduck/openssl-cmake.git" TAG "master" DST "${CMAKE_SOURCE_DIR}/_imported/libopenssl" ALIAS openssl)
 
-set(BUILD_SHARED_LIBS OFF)
-set(GO_EXECUTABLE "go")
-import_remote("https://boringssl.googlesource.com/boringssl" TAG "master" DST "${CMAKE_SOURCE_DIR}/_imported/libboringssl" ALIAS boringssl)
+
+
+
+
+#set(BUILD_SHARED_LIBS OFF)
+#set(GO_EXECUTABLE "go")
+#
+#if(WIN32)
+#  set(USE_WIN32_CRYPTO ON)
+#endif()
+#
+#import_remote("https://boringssl.googlesource.com/boringssl" TAG "master" DST "${CMAKE_SOURCE_DIR}/_imported/libboringssl" ALIAS boringssl)
+
+set(LIB_INSTALL_DIR "${CMAKE_SOURCE_DIR}/_imported/libmbedtls_install")
+import_remote("https://github.com/Mbed-TLS/mbedtls.git" TAG "v3.6.0" DST "${CMAKE_SOURCE_DIR}/_imported/libmbedtls" ALIAS libmbedtls)

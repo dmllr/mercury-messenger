@@ -12,7 +12,7 @@ set(FFMPEG_LIBS avutil swresample avcodec avformat swscale avfilter avdevice)
 set(FFMPEG_CONFIGURE_EXTRAS --enable-jni)
 
 
-set(FFMPEG_VERSION 6.0)
+set(FFMPEG_VERSION 6.1.1)
 set(FFMPEG_URL https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.bz2)
 get_filename_component(FFMPEG_ARCHIVE_NAME ${FFMPEG_URL} NAME)
 set(FFMPEG_PATH "${CMAKE_SOURCE_DIR}/_imported/ffmpeg-${FFMPEG_VERSION}")
@@ -28,8 +28,8 @@ IF (NOT EXISTS "${FFMPEG_PATH}")
     file(DOWNLOAD ${FFMPEG_URL} "${FFMPEG_ARCHIVE_PATH}")
 
     execute_process(
-            COMMAND ${CMAKE_COMMAND} -E tar xzf "${FFMPEG_ARCHIVE_PATH}"
-            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/_imported"
+        COMMAND ${CMAKE_COMMAND} -E tar xzf "${FFMPEG_ARCHIVE_PATH}"
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/_imported"
     )
 
     # We're patching exit just before return in main function of ffmpeg.c because it will crash the application
@@ -38,12 +38,14 @@ IF (NOT EXISTS "${FFMPEG_PATH}")
     string(REPLACE "return main_return_code;" "return received_nb_signals ? 255 : main_return_code;" code "${code}")
     file(WRITE "${FFMPEG_PATH}/fftools/ffmpeg.c" "${code}")
 
-    # Due to the failure of building on MacOS, replace -soname by -install_name
-    # Probably NOT NEEDED
-    file(READ "${FFMPEG_PATH}/configure" code)
-    string(REPLACE "SHFLAGS='-shared -Wl,-soname,$$(@F)'" "SHFLAGS='-shared -Wl,-install_name,$$(@F)'" code "${code}")
-    string(REPLACE "SHFLAGS='-shared -Wl,-soname,$(SLIBNAME)'" "SHFLAGS='-shared -Wl,-install_name,$(SLIBNAME)'" code "${code}")
-    file(WRITE "${FFMPEG_PATH}/configure" "${code}")
+    # if (APPLE)
+    #     message(FATAL_ERROR "SSS")
+    #     # Due to the failure of building on MacOS, replace -soname by -install_name
+    #     file(READ "${FFMPEG_PATH}/configure" code)
+    #     string(REPLACE "SHFLAGS='-shared -Wl,-soname,$$(@F)'" "SHFLAGS='-shared -Wl,-install_name,$$(@F)'" code "${code}")
+    #     string(REPLACE "SHFLAGS='-shared -Wl,-soname,$(SLIBNAME)'" "SHFLAGS='-shared -Wl,-install_name,$(SLIBNAME)'" code "${code}")
+    #     file(WRITE "${FFMPEG_PATH}/configure" "${code}")
+    # endif()
 
     file(REMOVE "${FFMPEG_PATH}/VERSION")
 ENDIF()
@@ -96,38 +98,39 @@ endif()
 
 if (WIN32)
     set(CONFIGURE_PARAMS
-        --target-os=win64
-        --arch=x86_64
+#        --target-os=win64
+#        --arch=x86_64
         --toolchain=msvc
     )
 endif()
 
 ExternalProject_Add(ffmpeg_target
-        PREFIX ${FFMPEG_WORKDIR}
-        URL "${FFMPEG_PATH}"
-        DOWNLOAD_NO_EXTRACT 1
-        CONFIGURE_COMMAND ./configure
-            --disable-programs
-            --disable-doc
-            --disable-static
-            --enable-shared
-            --enable-protocol=file
-            --enable-pic
-            ${CONFIGURE_PARAMS}
-        BUILD_COMMAND make -j8
-        BUILD_IN_SOURCE 1
-        BUILD_BYPRODUCTS
-            ${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/libavfilter/libavfilter.${TARGET_EXT}
-            ${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/libavcodec/libavcodec.${TARGET_EXT}
-            ${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/libavdevice/libavdevice.${TARGET_EXT}
-            ${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/libavformat/libavformat.${TARGET_EXT}
-            ${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/libavutil/libavutil.${TARGET_EXT}
-            ${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/libswresample/libswresample.${TARGET_EXT}
-            ${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/libswscale/libswscale.${TARGET_EXT}
-        STEP_TARGETS copy_headers
-        LOG_CONFIGURE 1
-        LOG_BUILD 1
-        LOG_INSTALL 1
+    PREFIX ${FFMPEG_WORKDIR}
+    URL "${FFMPEG_PATH}"
+    DOWNLOAD_NO_EXTRACT 1
+    CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env -- ./configure
+        --disable-programs
+        --disable-doc
+        --disable-static
+        --enable-shared
+        --enable-protocol=file
+        --enable-pic
+        ${CONFIGURE_PARAMS}
+    BUILD_COMMAND make -j8
+    INSTALL_COMMAND ""
+    BUILD_IN_SOURCE 1
+    BUILD_BYPRODUCTS
+        ${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/libavfilter/libavfilter.${TARGET_EXT}
+        ${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/libavcodec/libavcodec.${TARGET_EXT}
+        ${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/libavdevice/libavdevice.${TARGET_EXT}
+        ${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/libavformat/libavformat.${TARGET_EXT}
+        ${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/libavutil/libavutil.${TARGET_EXT}
+        ${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/libswresample/libswresample.${TARGET_EXT}
+        ${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/libswscale/libswscale.${TARGET_EXT}
+    STEP_TARGETS copy_headers
+    LOG_CONFIGURE 1
+    LOG_BUILD 1
+    LOG_INSTALL 1
 )
 
 add_library(libffmpeg INTERFACE)
