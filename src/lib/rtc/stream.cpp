@@ -7,28 +7,11 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+#include <chrono>
+#include <thread>
+
 #include "stream.hpp"
 #include "peer.hpp"
-
-#ifdef _WIN32
-// taken from https://stackoverflow.com/questions/5801813/c-usleep-is-obsolete-workarounds-for-windows-mingw
-#include <windows.h>
-
-void usleep(__int64 usec)
-{
-    HANDLE timer;
-    LARGE_INTEGER ft;
-
-    ft.QuadPart = -(10*usec); // Convert to 100 nanosecond interval, negative value indicates relative time
-
-    timer = CreateWaitableTimer(NULL, TRUE, NULL);
-    SetWaitableTimer(timer, &ft, 0, NULL, NULL, 0);
-    WaitForSingleObject(timer, INFINITE);
-    CloseHandle(timer);
-}
-#else
-#include <unistd.h>
-#endif
 
 Stream::Stream(std::shared_ptr<StreamSource> video, std::shared_ptr<StreamSource> audio):
 	std::enable_shared_from_this<Stream>(), video(video), audio(audio) { }
@@ -57,7 +40,7 @@ std::pair<std::shared_ptr<StreamSource>, Stream::StreamSourceType> Stream::unsaf
     if (nextTime > elapsed) {
         auto waitTime = nextTime - elapsed;
         mutex.unlock();
-        usleep(waitTime);
+        std::this_thread::sleep_for(std::chrono::microseconds(waitTime));
         mutex.lock();
     }
     return {ss, sst};

@@ -23,6 +23,14 @@ set(TARGET_EXT "so")
 if(APPLE)
     set(TARGET_EXT "dylib")
 endif()
+if(WIN32)
+    set(TARGET_EXT "dll")
+endif()
+
+set(TARGET_PREFIX "lib")
+if(WIN32)
+    set(TARGET_PREFIX "")
+endif()
 
 IF (NOT EXISTS "${FFMPEG_PATH}")
     file(DOWNLOAD ${FFMPEG_URL} "${FFMPEG_ARCHIVE_PATH}")
@@ -97,6 +105,9 @@ if (ANDROID)
 endif()
 
 if (WIN32)
+    set(FFMPEG_CC ${CMAKE_C_COMPILER})
+    set(FFMPEG_CXX ${CMAKE_CXX_COMPILER})
+
     set(CONFIGURE_PARAMS
 #        --target-os=win64
 #        --arch=x86_64
@@ -108,7 +119,7 @@ ExternalProject_Add(ffmpeg_target
     PREFIX ${FFMPEG_WORKDIR}
     URL "${FFMPEG_PATH}"
     DOWNLOAD_NO_EXTRACT 1
-    CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env -- ./configure
+    CONFIGURE_COMMAND sh.exe ./configure
         --disable-programs
         --disable-doc
         --disable-static
@@ -120,13 +131,13 @@ ExternalProject_Add(ffmpeg_target
     INSTALL_COMMAND ""
     BUILD_IN_SOURCE 1
     BUILD_BYPRODUCTS
-        ${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/libavfilter/libavfilter.${TARGET_EXT}
-        ${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/libavcodec/libavcodec.${TARGET_EXT}
-        ${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/libavdevice/libavdevice.${TARGET_EXT}
-        ${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/libavformat/libavformat.${TARGET_EXT}
-        ${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/libavutil/libavutil.${TARGET_EXT}
-        ${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/libswresample/libswresample.${TARGET_EXT}
-        ${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/libswscale/libswscale.${TARGET_EXT}
+        ${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/libavfilter/${TARGET_PREFIX}avfilter.${TARGET_EXT}
+        ${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/libavcodec/${TARGET_PREFIX}avcodec.${TARGET_EXT}
+        ${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/libavdevice/${TARGET_PREFIX}avdevice.${TARGET_EXT}
+        ${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/libavformat/${TARGET_PREFIX}avformat.${TARGET_EXT}
+        ${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/libavutil/${TARGET_PREFIX}avutil.${TARGET_EXT}
+        ${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/libswresample/${TARGET_PREFIX}swresample.${TARGET_EXT}
+        ${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/libswscale/${TARGET_PREFIX}swscale.${TARGET_EXT}
     STEP_TARGETS copy_headers
     LOG_CONFIGURE 1
     LOG_BUILD 1
@@ -139,9 +150,9 @@ target_include_directories(libffmpeg INTERFACE
     ${FFMPEG_PATH}
     ${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target
 )
-foreach(_lib libavfilter libavcodec libavdevice libavformat libavutil libswresample libswscale)
+foreach(_lib avfilter avcodec avdevice avformat avutil swresample swscale)
     target_link_libraries(libffmpeg INTERFACE
-            ${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/${_lib}/${_lib}.${TARGET_EXT})
+            ${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/lib${_lib}/${TARGET_PREFIX}${_lib}.${TARGET_EXT})
 endforeach()
 if(UNIX AND NOT ANDROID)
     target_link_libraries(libffmpeg INTERFACE

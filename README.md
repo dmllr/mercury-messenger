@@ -1,7 +1,24 @@
 # Build
 ## Prerequisites
+### Ubuntu
+```sh
 sudo apt install liblzma-dev
 sudo apt install libiconv-hook-dev
+```
+
+### MacOS
+
+### Windows
+Install MSYS2 from https://github.com/msys2/msys2-installer/releases/download/2024-01-13/msys2-x86_64-20240113.exe, then
+
+```sh
+pacman -S mingw-w64-ucrt-x86_64-gcc
+pacman -S mingw-w64-x86_64-zlib
+pacman -S mingw-w64-ucrt-x86_64-diffutils
+pacman -S cmake
+pacman -S ninja
+pacman -S make
+```
 
 # Run
 1. Check app.hela.me:8000

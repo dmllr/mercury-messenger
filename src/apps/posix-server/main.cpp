@@ -66,8 +66,8 @@ public:
         codec_context->bit_rate = 400000;
         codec_context->width = cap.get(cv::CAP_PROP_FRAME_WIDTH);
         codec_context->height = cap.get(cv::CAP_PROP_FRAME_HEIGHT);
-        codec_context->time_base = (AVRational){1, 25};
-        codec_context->framerate = (AVRational){25, 1};
+        codec_context->time_base = AVRational{1, 25};
+        codec_context->framerate = AVRational{25, 1};
         codec_context->gop_size = 10;
         codec_context->max_b_frames = 1;
         codec_context->pix_fmt = AV_PIX_FMT_YUV420P;

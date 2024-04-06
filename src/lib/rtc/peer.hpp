@@ -16,8 +16,10 @@
 
 #ifdef _MSC_VER
 // taken from https://stackoverflow.com/questions/10905892/equivalent-of-gettimeday-for-windows
-#include <windows.h>
 #include <winsock2.h> // for struct timeval
+#include <windows.h>
+
+namespace {
 
 struct timezone {
 	int tz_minuteswest;
@@ -55,6 +57,8 @@ int gettimeofday(struct timeval *tv, struct timezone *tz) {
 #else
 #include <sys/time.h>
 #endif
+
+}
 
 
 struct Peer {

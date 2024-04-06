@@ -19,6 +19,8 @@ target_link_libraries(posix-server PRIVATE
 	opencv_core opencv_highgui opencv_imgproc opencv_videoio
 	libffmpeg
 	datachannel
+	plog
+	nlohmann_json
 )
 target_include_directories(posix-server
 	PRIVATE
@@ -26,6 +28,7 @@ target_include_directories(posix-server
 
 	"${src_path}/lib"
 	"${src_path}/utils"
+#	"${libjson_path}/include"
 	"${libopencv_path}/include"
 	"${libopencv_path}/modules/core/include"
 	"${libopencv_path}/modules/imgcodecs/include"

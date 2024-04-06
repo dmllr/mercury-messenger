@@ -12,6 +12,7 @@ include("src/cmake/libmbedtls.cmake")
 include("src/cmake/libdatachannel.cmake")
 include("src/cmake/libopencv.cmake")
 include("src/cmake/libffmpeg.cmake")
+include("src/cmake/libjson.cmake")
 
 add_subdirectory(src/apps/posix-server)
 add_subdirectory(src/apps/posix-receiver)

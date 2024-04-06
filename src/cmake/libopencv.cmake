@@ -1,4 +1,4 @@
-set(OpenCV_VERSION 4.8.0)
+set(OpenCV_VERSION 4.9.0)
 
 if(ANDROID)
     set(OpenCV_URL https://jaist.dl.sourceforge.net/project/opencvlibrary/${OpenCV_VERSION}/opencv-${OpenCV_VERSION}-android-sdk.zip)
