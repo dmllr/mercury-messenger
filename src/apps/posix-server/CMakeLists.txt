@@ -21,6 +21,8 @@ target_link_libraries(posix-server PRIVATE
 	datachannel
 	plog
 	nlohmann_json
+	srtp2
+	mbedtls
 )
 target_include_directories(posix-server
 	PRIVATE

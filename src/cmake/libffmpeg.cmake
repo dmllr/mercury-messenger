@@ -115,11 +115,13 @@ if (WIN32)
     )
 endif()
 
+# requires "sh" and other commands to be available
+# MSYS2 must be installed on Windows. See /README.md for the instructions
 ExternalProject_Add(ffmpeg_target
     PREFIX ${FFMPEG_WORKDIR}
     URL "${FFMPEG_PATH}"
     DOWNLOAD_NO_EXTRACT 1
-    CONFIGURE_COMMAND sh.exe ./configure
+    CONFIGURE_COMMAND sh ./configure
         --disable-programs
         --disable-doc
         --disable-static
