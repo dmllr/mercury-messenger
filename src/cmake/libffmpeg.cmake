@@ -21,7 +21,7 @@ set(FFMPEG_WORKDIR ffmpeg)
 
 set(TARGET_EXT "so")
 if(APPLE)
-    set(TARGET_EXT "dylib")
+    set(TARGET_EXT "a")
 endif()
 if(WIN32)
     set(TARGET_EXT "dll")
@@ -45,15 +45,6 @@ IF (NOT EXISTS "${FFMPEG_PATH}")
     string(REPLACE "exit_program(received_nb_signals ? 255 : main_return_code);" "//exit_program(received_nb_signals ? 255 : main_return_code);" code "${code}")
     string(REPLACE "return main_return_code;" "return received_nb_signals ? 255 : main_return_code;" code "${code}")
     file(WRITE "${FFMPEG_PATH}/fftools/ffmpeg.c" "${code}")
-
-    # if (APPLE)
-    #     message(FATAL_ERROR "SSS")
-    #     # Due to the failure of building on MacOS, replace -soname by -install_name
-    #     file(READ "${FFMPEG_PATH}/configure" code)
-    #     string(REPLACE "SHFLAGS='-shared -Wl,-soname,$$(@F)'" "SHFLAGS='-shared -Wl,-install_name,$$(@F)'" code "${code}")
-    #     string(REPLACE "SHFLAGS='-shared -Wl,-soname,$(SLIBNAME)'" "SHFLAGS='-shared -Wl,-install_name,$(SLIBNAME)'" code "${code}")
-    #     file(WRITE "${FFMPEG_PATH}/configure" "${code}")
-    # endif()
 
     file(REMOVE "${FFMPEG_PATH}/VERSION")
 ENDIF()
@@ -90,14 +81,6 @@ if (ANDROID)
     ENDIF()
 
     set(CONFIGURE_PARAMS
-#        --cc=${FFMPEG_CC}
-#        --ar=${FFMPEG_AR}
-#        --strip=${FFMPEG_STRIP}
-#        --ranlib=${FFMPEG_RANLIB}
-#        --as=${FFMPEG_AS}
-#        --nm=${FFMPEG_NM}
-#        --extra-cflags=${FFMPEG_C_FLAGS}
-#        --extra-ldflags=${FFMPEG_LD_FLAGS}
         --target-os=android
         --arch=${ARCH}
         --enable-cross-compile
@@ -108,12 +91,20 @@ if (WIN32)
     set(FFMPEG_CC ${CMAKE_C_COMPILER})
     set(FFMPEG_CXX ${CMAKE_CXX_COMPILER})
 
-    set(CONFIGURE_PARAMS
-#        --target-os=win64
-#        --arch=x86_64
-        --toolchain=msvc
-    )
+#    set(CONFIGURE_PARAMS
+##        --target-os=win64
+##        --arch=x86_64
+#        --toolchain=msvc
+#    )
 endif()
+
+set(ffmpeg_libraries "avfilter;avcodec;avdevice;avformat;avutil;swresample;swscale")
+
+set(products "")
+foreach(_lib avfilter avcodec avdevice avformat avutil swresample swscale)
+    list(APPEND products
+      "${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/lib${_lib}/${TARGET_PREFIX}${_lib}.${TARGET_EXT}")
+endforeach()
 
 # requires "sh" and other commands to be available
 # MSYS2 must be installed on Windows. See /README.md for the instructions
@@ -124,22 +115,15 @@ ExternalProject_Add(ffmpeg_target
     CONFIGURE_COMMAND sh ./configure
         --disable-programs
         --disable-doc
-        --disable-static
-        --enable-shared
+        --enable-static
+        --disable-shared
         --enable-protocol=file
         --enable-pic
         ${CONFIGURE_PARAMS}
     BUILD_COMMAND make -j8
     INSTALL_COMMAND ""
     BUILD_IN_SOURCE 1
-    BUILD_BYPRODUCTS
-        ${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/libavfilter/${TARGET_PREFIX}avfilter.${TARGET_EXT}
-        ${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/libavcodec/${TARGET_PREFIX}avcodec.${TARGET_EXT}
-        ${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/libavdevice/${TARGET_PREFIX}avdevice.${TARGET_EXT}
-        ${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/libavformat/${TARGET_PREFIX}avformat.${TARGET_EXT}
-        ${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/libavutil/${TARGET_PREFIX}avutil.${TARGET_EXT}
-        ${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/libswresample/${TARGET_PREFIX}swresample.${TARGET_EXT}
-        ${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/libswscale/${TARGET_PREFIX}swscale.${TARGET_EXT}
+    BUILD_BYPRODUCTS ${products}
     STEP_TARGETS copy_headers
     LOG_CONFIGURE 1
     LOG_BUILD 1
@@ -152,10 +136,10 @@ target_include_directories(libffmpeg INTERFACE
     ${FFMPEG_PATH}
     ${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target
 )
-foreach(_lib avfilter avcodec avdevice avformat avutil swresample swscale)
-    target_link_libraries(libffmpeg INTERFACE
-            ${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/lib${_lib}/${TARGET_PREFIX}${_lib}.${TARGET_EXT})
+foreach(_lib IN LISTS products)
+    target_link_libraries(libffmpeg INTERFACE ${_lib})
 endforeach()
+
 if(UNIX AND NOT ANDROID)
     target_link_libraries(libffmpeg INTERFACE
         lzma
