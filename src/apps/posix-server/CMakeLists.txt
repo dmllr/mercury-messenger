@@ -23,6 +23,7 @@ target_link_libraries(posix-server PRIVATE
 	nlohmann_json
 	srtp2
 	mbedtls
+	mbedcrypto
 )
 target_include_directories(posix-server
 	PRIVATE

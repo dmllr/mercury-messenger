@@ -24,3 +24,18 @@ index cdbfe596..9748f1fc 100644
  	target_compile_definitions(datachannel PRIVATE USE_MBEDTLS=1)
  	target_compile_definitions(datachannel-static PRIVATE USE_MBEDTLS=1)
  	target_link_libraries(datachannel PRIVATE MbedTLS::MbedTLS)
+diff --git a/examples/streamer/h264fileparser.cpp b/examples/streamer/h264fileparser.cpp
+index f452b845..cc8a6aa3 100644
+--- a/examples/streamer/h264fileparser.cpp
++++ b/examples/streamer/h264fileparser.cpp
+@@ -50,8 +50,8 @@ void H264FileParser::loadNextSample() {
+     }
+ }
+ 
+-vector<byte> H264FileParser::initialNALUS() {
+-    vector<byte> units{};
++vector<std::byte> H264FileParser::initialNALUS() {
++    vector<std::byte> units{};
+     if (previousUnitType7.has_value()) {
+         auto nalu = previousUnitType7.value();
+         units.insert(units.end(), nalu.begin(), nalu.end());

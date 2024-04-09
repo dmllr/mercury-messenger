@@ -1,5 +1,4 @@
-set(CMAKE_PROJECT_VERSION "v0.20.2")
-#set(CMAKE_PROJECT_NAME "libdatachannel")
+set(CMAKE_PROJECT_VERSION "v0.42.0")
 
 # for libdatachannel
 set(USE_MBEDTLS ON)
@@ -18,7 +17,7 @@ include("src/cmake/libmbedtls.cmake")
 include("src/cmake/libsrtp.cmake")
 
 import_remote("https://github.com/paullouisageneau/libdatachannel.git"
-  TAG "${CMAKE_PROJECT_VERSION}"
+  TAG "v0.20.2"
   DST "${CMAKE_SOURCE_DIR}/_imported/libdatachannel"
   PATCH "${CMAKE_CURRENT_LIST_DIR}/patches/libdatachannel.patch"
   ALIAS libdatachannel
