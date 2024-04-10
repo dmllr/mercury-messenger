@@ -6,7 +6,7 @@
 
 class RuntimeConfiguration {
 public:
-    RuntimeConfiguration(): tmpDir(std::filesystem::temp_directory_path() / std::filesystem::unique_path()) {
+    RuntimeConfiguration(): tmpDir(std::tmpnam(nullptr)) {
         std::filesystem::create_directories(tmpDir);
     }
 
