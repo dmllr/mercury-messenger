@@ -115,13 +115,15 @@ protected:
 
 	void wsOnMessage(json message) final {
 		auto it = message.find("id");
-		if (it == message.end())
+		if (it == message.end()) {
 			return;
-		std::string id = it->get<std::string>();
+        }
+		auto id = it->get<std::string>();
 		it = message.find("type");
-		if (it == message.end())
+		if (it == message.end()) {
 			return;
-		std::string type = it->get<std::string>();
+        }
+		auto type = it->get<std::string>();
 
 		if (type == "streamRequest") {
             std::shared_ptr<Peer> c = createPeerConnection(id);
