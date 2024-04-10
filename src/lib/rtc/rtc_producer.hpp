@@ -229,7 +229,7 @@ protected:
         audio.addSSRC(ssrc, cname, msid, cname);
         auto track = pc->addTrack(audio);
         // create RTP configuration
-        auto rtpConfig = std::shared_ptr<rtc::RtpPacketizationConfig>(new rtc::RtpPacketizationConfig(ssrc, cname, payloadType, rtc::OpusRtpPacketizer::DefaultClockRate));
+        auto rtpConfig = std::make_shared<rtc::RtpPacketizationConfig>(ssrc, cname, payloadType, rtc::OpusRtpPacketizer::DefaultClockRate);
         // create packetizer
         auto packetizer = std::make_shared<rtc::OpusRtpPacketizer>(rtpConfig);
         // create opus handler
