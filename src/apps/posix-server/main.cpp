@@ -18,6 +18,7 @@ extern "C" {
 
 #include "rtc/rtc_producer.hpp"
 #include "rtc/stream.hpp"
+#include "utils/runtime-config.hpp"
 
 // tmp
 #include "../../_imported/libdatachannel/examples/streamer/opusfileparser.hpp"

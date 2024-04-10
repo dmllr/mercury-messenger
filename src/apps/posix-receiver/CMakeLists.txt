@@ -25,7 +25,6 @@ target_include_directories(posix-receiver
 	"/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
 
 	"${src_path}/lib"
-	"${src_path}/utils"
 	"${libopencv_path}/include"
 	"${libopencv_path}/modules/core/include"
 	"${libopencv_path}/modules/imgcodecs/include"

@@ -34,5 +34,4 @@ target_include_directories(camera-lib
 	PRIVATE
 	"${CMAKE_CURRENT_LIST_DIR}"
 	"${shared_libs}"
-	"${shared_libs}/../utils"
 )

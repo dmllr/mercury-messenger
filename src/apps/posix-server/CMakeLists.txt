@@ -30,8 +30,6 @@ target_include_directories(posix-server
 	"/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
 
 	"${src_path}/lib"
-	"${src_path}/utils"
-#	"${libjson_path}/include"
 	"${libopencv_path}/include"
 	"${libopencv_path}/modules/core/include"
 	"${libopencv_path}/modules/imgcodecs/include"
