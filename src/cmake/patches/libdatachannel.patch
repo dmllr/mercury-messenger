@@ -65,3 +65,16 @@ index bf95250e..4a39db12 100644
  	} catch (...) {
  		mbedtls_entropy_free(&mEntropy);
  		mbedtls_ctr_drbg_free(&mDrbg);
+diff --git a/src/impl/verifiedtlstransport.cpp b/src/impl/verifiedtlstransport.cpp
+index 071a4b79..cea7b0cf 100644
+--- a/src/impl/verifiedtlstransport.cpp
++++ b/src/impl/verifiedtlstransport.cpp
+@@ -36,7 +36,7 @@ VerifiedTlsTransport::VerifiedTlsTransport(
+ 				// *cacert is a PEM content
+ 				mbedtls::check(mbedtls_x509_crt_parse(
+ 				    &mCaCert, reinterpret_cast<const unsigned char *>(cacert->c_str()),
+-				    cacert->size()));
++				    cacert->size() + 1));
+ 			}
+ 			mbedtls_ssl_conf_ca_chain(&mConf, &mCaCert, NULL);
+ 		}
