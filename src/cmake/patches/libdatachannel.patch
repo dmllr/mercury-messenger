@@ -39,3 +39,29 @@ index f452b845..cc8a6aa3 100644
      if (previousUnitType7.has_value()) {
          auto nalu = previousUnitType7.value();
          units.insert(units.end(), nalu.begin(), nalu.end());
+diff --git a/src/impl/tls.cpp b/src/impl/tls.cpp
+index 650f9074..bc9d7ba1 100644
+--- a/src/impl/tls.cpp
++++ b/src/impl/tls.cpp
+@@ -101,7 +101,7 @@ bool check(int ret, const string &message) {
+ 	if (ret < 0) {
+ 		if (ret == MBEDTLS_ERR_SSL_WANT_READ || ret == MBEDTLS_ERR_SSL_WANT_WRITE ||
+ 		    ret == MBEDTLS_ERR_SSL_ASYNC_IN_PROGRESS || ret == MBEDTLS_ERR_SSL_CRYPTO_IN_PROGRESS ||
+-		    ret == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY)
++		    ret == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY || ret == MBEDTLS_ERR_SSL_RECEIVED_NEW_SESSION_TICKET)
+ 			return false;
+ 
+ 		const size_t bufferSize = 1024;
+diff --git a/src/impl/tlstransport.cpp b/src/impl/tlstransport.cpp
+index bf95250e..4a39db12 100644
+--- a/src/impl/tlstransport.cpp
++++ b/src/impl/tlstransport.cpp
+@@ -352,6 +352,8 @@ TlsTransport::TlsTransport(variant<shared_ptr<TcpTransport>, shared_ptr<HttpProx
+ 		mbedtls::check(mbedtls_ssl_setup(&mSsl, &mConf));
+ 		mbedtls_ssl_set_bio(&mSsl, static_cast<void *>(this), WriteCallback, ReadCallback, NULL);
+ 
++		psa_crypto_init();
++
+ 	} catch (...) {
+ 		mbedtls_entropy_free(&mEntropy);
+ 		mbedtls_ctr_drbg_free(&mDrbg);

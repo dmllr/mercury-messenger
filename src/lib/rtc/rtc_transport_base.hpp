@@ -187,7 +187,10 @@ protected:
 
 protected:
     /// websocket handler
-    rtc::WebSocket ws;
+    rtc::WebSocketConfiguration ws_config {
+        .caCertificatePemFile = "/Users/denis.miller/dev/hela-surveillance/data/ZeroSSL-CA/ca_bundle.pem",
+    };
+    rtc::WebSocket ws{ws_config};
 
 	/// all connected peers
 	std::unordered_map<std::string, std::shared_ptr<Peer>> peers{};
