@@ -89,5 +89,4 @@ void Stream::stop() {
     dispatchQueue.removePending();
     audio->stop();
     video->stop();
-};
-
+}
