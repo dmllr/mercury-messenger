@@ -25,7 +25,9 @@ class RtcTransportBase {
     const uint16_t port = 8000;
 
 public:
-	explicit RtcTransportBase() = default;
+	explicit RtcTransportBase() {
+        ws_config.caCertificatePemFile = ZEROSSL_CA_BUNDLE;
+    }
 
     bool hasPeer() {
         return !peers.empty();
@@ -226,10 +228,7 @@ private:
       "S9VWqHB73Q+OyIVvIbKYcSc2w/aSuFKGSA==\n"
       "-----END CERTIFICATE-----";
 protected:
-    /// websocket handler
-    rtc::WebSocketConfiguration ws_config {
-        .caCertificatePemFile = ZEROSSL_CA_BUNDLE,
-    };
+    rtc::WebSocketConfiguration ws_config;
     rtc::WebSocket ws{ws_config};
 
 	/// all connected peers
