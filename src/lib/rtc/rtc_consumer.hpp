@@ -52,12 +52,14 @@ protected:
 
 	void wsOnMessage(json message) final {
 		auto it = message.find("id");
-		if (it == message.end())
+		if (it == message.end()) {
 			return;
+        }
 		std::string id = it->get<std::string>();
 		it = message.find("type");
-		if (it == message.end())
+		if (it == message.end()) {
 			return;
+        }
 		std::string type = it->get<std::string>();
 
 		if (type == "offer") {
@@ -82,12 +84,12 @@ protected:
 
     void onPeerReady(const std::shared_ptr<Peer>& peer) final { }
 
-    static std::shared_ptr<Peer::Track> addVideo(
+    static auto addVideo(
             const std::shared_ptr<rtc::PeerConnection>& pc,
             const rtc::Description::Direction direction,
             const uint8_t payloadType, const uint32_t ssrc, const std::string& cname, const std::string& msid,
             const std::function<void (void)>& onOpen,
-            const std::function<void (rtc::binary message)>& onMessage) {
+            const std::function<void (rtc::binary message)>& onMessage) -> std::shared_ptr<Peer::Track> {
         auto video = rtc::Description::Video(cname, direction);
         video.addH264Codec(payloadType);
 //        video.setBitrate(3000);
@@ -101,12 +103,12 @@ protected:
         return std::make_shared<Peer::Track>(track, session);
     }
 
-    static std::shared_ptr<Peer::Track> addAudio(
+    static auto addAudio(
             const std::shared_ptr<rtc::PeerConnection>& pc,
             const rtc::Description::Direction direction,
             const uint8_t payloadType, const uint32_t ssrc, const std::string& cname, const std::string& msid,
             const std::function<void (void)>& onOpen,
-            const std::function<void (rtc::binary message)>& onMessage) {
+            const std::function<void (rtc::binary message)>& onMessage) -> std::shared_ptr<Peer::Track> {
         auto audio = rtc::Description::Audio(cname, direction);
         audio.addOpusCodec(payloadType);
 
@@ -119,7 +121,7 @@ protected:
         return std::make_shared<Peer::Track>(track, session);
     }
 
-    std::shared_ptr<Peer> createPeerConnection(const std::string& id) {
+    auto createPeerConnection(const std::string& id) -> std::shared_ptr<Peer> {
 		auto pc = createDefaultPeerConnection(id);
 
 		std::shared_ptr<Peer> peer(new Peer(pc));
@@ -152,7 +154,7 @@ protected:
                 });
                 LOGI << "Audio from " << id << " opened";
             },
-            [](rtc::binary buffer) {
+            [](const rtc::binary& buffer) {
                 LOGW << "AAAAAAAA";
             }
         );
@@ -169,7 +171,7 @@ private:
     /// Receiver callback
     std::optional<std::function<void(rtc::binary)>> receiver = std::nullopt;
 
-    bool hasReceiver() {
+    auto hasReceiver() -> bool {
         return receiver.has_value();
     }
 };

@@ -14,9 +14,7 @@
 #include <thread>
 #include <unordered_map>
 
-
-DispatchQueue MainThread("Main", 1);
-
+extern DispatchQueue MainThread;
 
 class RtcTransportBase {
 	using json = nlohmann::json;
@@ -29,7 +27,7 @@ public:
         ws_config.caCertificatePemFile = ZEROSSL_CA_BUNDLE;
     }
 
-    bool hasPeer() {
+    auto hasPeer() -> bool {
         return !peers.empty();
     }
 
@@ -39,13 +37,13 @@ protected:
 
     class RtcConfiguration {
     public:
-        static rtc::Configuration& config() {
+        static auto config() -> rtc::Configuration& {
             static rtc::Configuration config = createRtcConfiguration();
             return config;
         }
 
     private:
-        static rtc::Configuration createRtcConfiguration() {
+        static auto createRtcConfiguration() -> rtc::Configuration {
             rtc::Configuration config;
 //            config.iceServers.emplace_back("stun:stun.relay.metered.ca:80");
 //            config.iceServers.emplace_back("turn:49880a0f046c8990b1990b35:qZCNW/57EB8GwO3A@a.relay.metered.ca:80");
@@ -73,8 +71,9 @@ protected:
 			});
 
 			ws.onMessage([&](std::variant<rtc::binary, std::string> data) {
-				if (!std::holds_alternative<std::string>(data))
+				if (!std::holds_alternative<std::string>(data)) {
 					return;
+                }
 
 				json message = json::parse(std::get<std::string>(data));
 				MainThread.dispatch([this, message]() {
@@ -88,8 +87,9 @@ protected:
 
 			LOGI << "Waiting for signaling to be connected...";
 			while (!ws.isOpen()) {
-				if (ws.isClosed())
+				if (ws.isClosed()) {
 					return;
+                }
 				std::this_thread::sleep_for(std::chrono::milliseconds(100));
 			}
 
@@ -106,7 +106,7 @@ protected:
 		}
 	}
 
-    std::shared_ptr<rtc::PeerConnection> createDefaultPeerConnection(const std::string& id) {
+    auto createDefaultPeerConnection(const std::string& id) -> std::shared_ptr<rtc::PeerConnection> {
 		auto pc = std::make_shared<rtc::PeerConnection>(RtcConfiguration::config());
 
 		pc->onStateChange([this, id](rtc::PeerConnection::State state) {
@@ -169,7 +169,7 @@ protected:
         }
     }
 
-    static std::shared_ptr<rtc::DataChannel> createDefaultDataChannel(std::shared_ptr<rtc::PeerConnection> pc, const std::string& id) {
+    static auto createDefaultDataChannel(std::shared_ptr<rtc::PeerConnection> pc, const std::string& id) -> std::shared_ptr<rtc::DataChannel> {
         auto dc = pc->createDataChannel("ping-pong");
         dc->onOpen([id, wdc = make_weak_ptr(dc)]() {
             if (auto dc = wdc.lock()) {
@@ -227,10 +227,11 @@ private:
       "ON51WhJ6W0xNdNJwzYASZYH+tmCWI+N60Gv2NNMGHwMZ7e9bXgzUCZH5FaBFDGR5\n"
       "S9VWqHB73Q+OyIVvIbKYcSc2w/aSuFKGSA==\n"
       "-----END CERTIFICATE-----";
+
 protected:
     rtc::WebSocketConfiguration ws_config;
     rtc::WebSocket ws{ws_config};
 
 	/// all connected peers
-	std::unordered_map<std::string, std::shared_ptr<Peer>> peers{};
+	std::unordered_map<std::string, std::shared_ptr<Peer>> peers;
 };

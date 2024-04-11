@@ -21,9 +21,9 @@ public:
     virtual void stop() = 0;
     virtual void loadNextSample() = 0;
 
-    virtual uint64_t getSampleTime_us() = 0;
-    virtual uint64_t getSampleDuration_us() = 0;
-	virtual rtc::binary getSample() = 0;
+    virtual auto getSampleTime_us() -> uint64_t = 0;
+    virtual auto getSampleDuration_us() -> uint64_t = 0;
+	virtual auto getSample() -> rtc::binary = 0;
 };
 
 class Stream: std::enable_shared_from_this<Stream> {
@@ -47,7 +47,7 @@ public:
 private:
     rtc::synchronized_callback<StreamSourceType, uint64_t, rtc::binary> sampleHandler;
 
-    std::pair<std::shared_ptr<StreamSource>, StreamSourceType> unsafePrepareForSample();
+    auto unsafePrepareForSample() -> std::pair<std::shared_ptr<StreamSource>, StreamSourceType>;
 
     void sendSample();
 

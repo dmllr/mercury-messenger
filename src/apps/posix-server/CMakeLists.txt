@@ -9,8 +9,7 @@ add_executable(posix-server
 
 	${src_path}/lib/rtc/dispatch_queue.cpp
 	${src_path}/lib/rtc/stream.cpp
-
-	${ffmpeg_src}
+	${src_path}/lib/rtc/rtc_transport_base.cpp
 )
 set_property(TARGET posix-server PROPERTY CXX_STANDARD 17)
 target_compile_features(posix-server PRIVATE cxx_std_17)
@@ -18,12 +17,10 @@ target_compile_definitions(posix-server PUBLIC "-DBUILD_ZLIB=OFF")
 target_link_libraries(posix-server PRIVATE
 	opencv_core opencv_highgui opencv_imgproc opencv_videoio
 	libffmpeg
-	datachannel
+	datachannel-static
 	plog
 	nlohmann_json
 	srtp2
-	mbedtls
-	mbedcrypto
 )
 target_include_directories(posix-server
 	PRIVATE

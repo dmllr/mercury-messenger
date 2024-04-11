@@ -18,7 +18,6 @@ extern "C" {
 
 #include "rtc/rtc_producer.hpp"
 #include "rtc/stream.hpp"
-#include "utils/runtime-config.hpp"
 
 // tmp
 #include "../../_imported/libdatachannel/examples/streamer/opusfileparser.hpp"
@@ -60,7 +59,7 @@ public:
         // find h.264 codec and allocate the codec context
         const auto* codec = avcodec_find_encoder(AV_CODEC_ID_H264);
         codec_context = avcodec_alloc_context3(codec);
-        if (!codec_context) {
+        if (codec_context == nullptr) {
             throw std::runtime_error("Could not allocate codec context");
         }
 
@@ -88,7 +87,7 @@ public:
         // initialize the frame
         // Allocate a frame to hold the converted image
         av_frame = av_frame_alloc();
-        if (!av_frame) {
+        if (av_frame == nullptr) {
             std::cerr << "Failed to allocate converted frame" << std::endl;
             return;
         }
@@ -119,9 +118,10 @@ public:
         int ret = avcodec_send_frame(codec_context, av_frame);
         while (ret >= 0) {
             ret = avcodec_receive_packet(codec_context, packet);
-            if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
+            if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
                 break;
-            else if (ret < 0) {
+            }
+            if (ret < 0) {
                 std::cerr << "Error encoding frame." << std::endl;
                 return;
             }
@@ -160,7 +160,7 @@ public:
         cv::pollKey();
     }
 
-    rtc::binary getSample() override {
+    auto getSample() -> rtc::binary override {
         auto sample = encoded_data;
         encoded_data.clear();
 
@@ -181,17 +181,17 @@ public:
         cap.release(); // release the camera
     }
 
-    uint64_t getSampleTime_us() override {
+    auto getSampleTime_us() -> uint64_t override {
         return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start_time).count();
     }
 
-    uint64_t getSampleDuration_us() override {
+    auto getSampleDuration_us() -> uint64_t override {
         return 1000000000 * codec_context->framerate.num / codec_context->framerate.den;
     }
 
 };
 
-std::shared_ptr<Stream> createStream() {
+auto createStream() -> std::shared_ptr<Stream> {
     auto video = std::make_shared<VideoStreamSource>();
 //    auto audio = nullptr;
     auto audio = std::make_shared<OPUSFileParser>("/Users/denis.miller/dev/github/hela-surveillance/samples/opus", true);
@@ -201,7 +201,7 @@ std::shared_ptr<Stream> createStream() {
     return stream;
 }
 
-int main(int argc, char **argv) {
+auto main(int argc, char **argv) -> int {
     if (false) {
         std::string fn = "/home/miller/dev/github/hela-surveillance/samples/n264/sample.h264";
         std::ofstream fw(fn, std::ios::out | std::ios::binary);

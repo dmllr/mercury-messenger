@@ -13,6 +13,7 @@
 #include "rtc/rtc.hpp"
 
 #include <shared_mutex>
+#include <utility>
 
 #ifdef _MSC_VER
 // taken from https://stackoverflow.com/questions/10905892/equivalent-of-gettimeday-for-windows
@@ -26,7 +27,7 @@ struct timezone {
 	int tz_dsttime;
 };
 
-int gettimeofday(struct timeval *tv, struct timezone *tz) {
+auto gettimeofday(struct timeval *tv, struct timezone *tz) -> int {
 	if (tv) {
 		FILETIME filetime; /* 64-bit value representing the number of 100-nanosecond intervals since
 		                      January 1, 1601 00:00 UTC */
@@ -68,15 +69,15 @@ struct Peer {
         std::shared_ptr<rtc::RtcpReceivingSession> session;
 
         Track(std::shared_ptr<rtc::Track> track, std::shared_ptr<rtc::RtcpSrReporter> sender) {
-            this->track = track;
-            this->sender = sender;
+            this->track = std::move(track);
+            this->sender = std::move(sender);
             this->session = nullptr;
         }
 
         Track(std::shared_ptr<rtc::Track> track, std::shared_ptr<rtc::RtcpReceivingSession> session) {
-            this->track = track;
+            this->track = std::move(track);
             this->sender = nullptr;
-            this->session = session;
+            this->session = std::move(session);
         }
     };
 
@@ -99,12 +100,10 @@ struct Peer {
         this->state = state;
     }
 
-    State getState() {
+    auto getState() -> State {
         std::shared_lock lock(_mutex);
         return state;
     }
-
-    uint32_t rtpStartTimestamp = 0;
 
 private:
     std::shared_mutex _mutex;
@@ -113,7 +112,7 @@ private:
     std::shared_ptr<rtc::PeerConnection> _peerConnection;
 };
 
-inline uint64_t currentTimeInMicroSeconds() {
+inline auto currentTimeInMicroSeconds() -> uint64_t {
     struct timeval time{};
     gettimeofday(&time, nullptr);
     return uint64_t(time.tv_sec) * 1000 * 1000 + time.tv_usec;

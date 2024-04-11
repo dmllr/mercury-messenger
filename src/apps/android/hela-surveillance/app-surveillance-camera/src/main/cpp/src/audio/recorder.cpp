@@ -161,8 +161,8 @@ aaudio_result_t Recorder::read(void* audioData, int32_t numFrames) {
 
     if (recordingStream_ != nullptr) {
 
-        // If this is the first data callback we want to drain the recording buffer so we're getting
-        // the most up to date data
+        // If this is the first data callback we want to drain the recording buffer, so we're getting
+        // the most up-to-date data
         if (isFirstDataCallback_) {
             drainRecordingStream(audioData, numFrames);
             isFirstDataCallback_ = false;

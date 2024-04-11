@@ -9,18 +9,19 @@
 
 #include <chrono>
 #include <thread>
+#include <utility>
 
 #include "stream.hpp"
 #include "peer.hpp"
 
 Stream::Stream(std::shared_ptr<StreamSource> video, std::shared_ptr<StreamSource> audio):
-	std::enable_shared_from_this<Stream>(), video(video), audio(audio) { }
+	video(std::move(video)), audio(std::move(audio)) { }
 
 Stream::~Stream() {
     stop();
 }
 
-std::pair<std::shared_ptr<StreamSource>, Stream::StreamSourceType> Stream::unsafePrepareForSample() {
+auto Stream::unsafePrepareForSample() -> std::pair<std::shared_ptr<StreamSource>, Stream::StreamSourceType> {
     std::shared_ptr<StreamSource> ss;
     StreamSourceType sst;
     uint64_t nextTime;
@@ -63,7 +64,7 @@ void Stream::sendSample() {
 }
 
 void Stream::onSample(std::function<void (StreamSourceType, uint64_t, rtc::binary)> handler) {
-    sampleHandler = handler;
+    sampleHandler = std::move(handler);
 }
 
 void Stream::start() {

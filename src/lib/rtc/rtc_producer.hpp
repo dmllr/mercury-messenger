@@ -36,7 +36,7 @@ public:
 			};
 
 			auto tracks{std::vector<ClientTrack>()};
-			auto streamType = type == Stream::StreamSourceType::Video ? "video" : "audio";
+			const auto *streamType = type == Stream::StreamSourceType::Video ? "video" : "audio";
 			// get track for given type
 			auto getTrackData =
 					[type](const std::shared_ptr<Peer>& peer) {
@@ -78,8 +78,9 @@ public:
 					bool send = false;
 					try {
 						// send sample
-						if (likely(message->size()))
+						if (likely(!message->empty())) {
 							send = trackData->track->send(*message);
+                        }
 					} catch (...) {
 						send = false;
 					}
@@ -142,13 +143,13 @@ protected:
 		}
 	}
 
-    void onPeerReady(const std::shared_ptr<Peer>& peer) final {
+    void onPeerReady(const std::shared_ptr<Peer>&) final {
         if (hasStream()) {
             startStream();
         }
     }
 
-    std::shared_ptr<Peer> createPeerConnection(const std::string& id) {
+    auto createPeerConnection(const std::string& id) -> std::shared_ptr<Peer> {
         auto pc = createDefaultPeerConnection(id);
 
         std::shared_ptr<Peer> peer(new Peer(pc));
@@ -188,12 +189,12 @@ protected:
         return peer;
     }
 
-    static std::shared_ptr<Peer::Track> addVideo(
+    static auto addVideo(
             const std::shared_ptr<rtc::PeerConnection>& pc,
             const rtc::Description::Direction direction,
             const uint8_t payloadType, const uint32_t ssrc, const std::string& cname, const std::string& msid,
             const std::function<void (void)>& onOpen,
-            const std::function<void (rtc::binary message)>& onMessage) {
+            const std::function<void (rtc::binary message)>& onMessage) -> std::shared_ptr<Peer::Track> {
         auto video = rtc::Description::Video(cname, direction);
         video.addH264Codec(payloadType);
         video.addSSRC(ssrc, cname, msid, cname);
@@ -218,12 +219,12 @@ protected:
         return std::make_shared<Peer::Track>(track, srReporter);
     }
 
-    static std::shared_ptr<Peer::Track> addAudio(
+    static auto addAudio(
             const std::shared_ptr<rtc::PeerConnection>& pc,
             const rtc::Description::Direction direction,
             const uint8_t payloadType, const uint32_t ssrc, const std::string& cname, const std::string& msid,
             const std::function<void (void)>& onOpen,
-            const std::function<void (rtc::binary message)>& onMessage) {
+            const std::function<void (rtc::binary message)>& onMessage) -> std::shared_ptr<Peer::Track> {
         auto audio = rtc::Description::Audio(cname, direction);
         audio.addOpusCodec(payloadType);
         audio.addSSRC(ssrc, cname, msid, cname);
@@ -261,7 +262,7 @@ private:
 	/// Audio and video stream
 	std::optional<std::shared_ptr<Stream>> avStream = std::nullopt;
 
-    bool hasStream() {
+    auto hasStream() -> bool {
         return avStream.has_value();
     }
 };

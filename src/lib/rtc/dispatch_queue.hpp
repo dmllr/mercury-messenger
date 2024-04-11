@@ -17,10 +17,10 @@
 #include <functional>
 
 class DispatchQueue {
-    typedef std::function<void(void)> fp_t;
+    using fp_t = std::function<void ()>;
 
 public:
-    DispatchQueue(std::string name, size_t threadCount = 1);
+    explicit DispatchQueue(std::string name, size_t threadCount = 1);
     ~DispatchQueue();
 
     // dispatch and copy
@@ -32,9 +32,9 @@ public:
 
     // Deleted operations
     DispatchQueue(const DispatchQueue& rhs) = delete;
-    DispatchQueue& operator=(const DispatchQueue& rhs) = delete;
+    auto operator=(const DispatchQueue& rhs) -> DispatchQueue& = delete;
     DispatchQueue(DispatchQueue&& rhs) = delete;
-    DispatchQueue& operator=(DispatchQueue&& rhs) = delete;
+    auto operator=(DispatchQueue&& rhs) -> DispatchQueue& = delete;
 
 private:
     std::string name;
