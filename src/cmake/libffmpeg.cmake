@@ -97,18 +97,18 @@ ExternalProject_Add(ffmpeg_target
   URL "${FFMPEG_PATH}"
   DOWNLOAD_NO_EXTRACT 1
   CONFIGURE_COMMAND sh ./configure
-  --disable-programs
-  --disable-doc
-  --enable-static
-  --disable-shared
-  --enable-protocol=file
-  --enable-pic
-  ${CONFIGURE_PARAMS}
+    --disable-programs
+    --disable-doc
+    --enable-static
+    --disable-shared
+    --enable-protocol=file
+    --enable-pic
+    ${CONFIGURE_PARAMS}
   BUILD_COMMAND make -j8
   INSTALL_COMMAND ""
   BUILD_IN_SOURCE 1
   BUILD_BYPRODUCTS
-  ${products}
+    ${products}
   LOG_CONFIGURE 1
   LOG_BUILD 1
   LOG_INSTALL 1
