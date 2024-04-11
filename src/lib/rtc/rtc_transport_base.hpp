@@ -178,7 +178,7 @@ protected:
         });
 
         dc->onMessage(nullptr, [id, wdc = make_weak_ptr(dc)](const std::string& msg) {
-            LOGE << "Message from " << id << " received: " << msg;
+            LOGD << "Message from " << id << " received: " << msg;
             if (auto dc = wdc.lock()) {
                 dc->send("Ping");
             }
