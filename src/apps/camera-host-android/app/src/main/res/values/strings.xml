@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Hela Surveillance</string>
+    <string name="camera_permission_required">Camera permission required. Tap here to grant the permission.</string>
+    <string name="notification_description">Surveillance: on-demand camera streaming service</string>
+</resources>
