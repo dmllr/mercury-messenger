@@ -8,7 +8,7 @@ To override an "unknown CA" problem, add
             });
 
 to the file
-src/device/android/hela-surveillance/app-surveillance-camera/src/main/cpp/_imported/libdatachannel/src/impl/tlstransport.cpp
+app/src/main/cpp/_imported/libdatachannel/src/impl/tlstransport.cpp
 
 in the TlsTransport::TlsTransport constructor before the following lines:
 

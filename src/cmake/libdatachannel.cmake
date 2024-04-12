@@ -13,8 +13,8 @@ set(ENABLE_OPENSSL ON)
 set(ENABLE_TESTING OFF)
 set(ENABLE_PROGRAMS OFF)
 
-include("src/cmake/libboringssl.cmake")
-include("src/cmake/libsrtp.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/libboringssl.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/libsrtp.cmake")
 
 import_remote("https://github.com/paullouisageneau/libdatachannel.git"
   TAG "v0.20.2"

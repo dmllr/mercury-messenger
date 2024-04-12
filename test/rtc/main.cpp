@@ -1,6 +1,6 @@
 #include <iostream>
 
-#include "../../android/hela-surveillance/app-surveillance-camera/src/main/cpp/src/rtc/rtc_manager.hpp"
+#include "../../camera-host-android/app/src/main/cpp/src/rtc/rtc_manager.hpp"
 #include "h264fileparser.hpp"
 #include "opusfileparser.hpp"
 
