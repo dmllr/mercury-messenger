@@ -74,11 +74,10 @@ public:
         codec_context->pix_fmt = AV_PIX_FMT_YUV420P;
         av_opt_set(codec_context->priv_data, "startcode", "1", 0);
 
-        // essential om Windows due to NVidia MF failure:
+        // essential to set hw_encoding=0 on Windows due to NVidia MF failure:
         // [h264_mf @ 0000024BC438BD40] MFT name: 'NVIDIA H.264 Encoder MFT'
         // [h264_mf @ 0000024BC438BD40] "format negotiation failed"
         av_opt_set(codec_context->priv_data, "hw_encoding", "0", 0); // TODO investigate
-//        av_opt_set(codec_context->priv_data, "profile", "baseline", 0);
 
         std::cout << "Width: " << codec_context->width << ", height: " << codec_context->height << std::endl;
         std::cout << "Input pixel format: " << av_get_pix_fmt_name(codec_context->pix_fmt) << std::endl;
