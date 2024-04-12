@@ -72,6 +72,8 @@ public:
         codec_context->max_b_frames = 1;
         codec_context->pix_fmt = AV_PIX_FMT_YUV420P;
         av_opt_set(codec_context->priv_data, "startcode", "1", 0);
+        av_opt_set(codec_context->priv_data, "hw_encoding", "1", 0); // TODO investigate
+        av_opt_set(codec_context->priv_data, "profile", "baseline", 0);
 
         std::cout << "Width: " << codec_context->width << ", height: " << codec_context->height << std::endl;
         std::cout << "Input pixel format: " << av_get_pix_fmt_name(codec_context->pix_fmt) << std::endl;

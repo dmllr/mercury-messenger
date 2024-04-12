@@ -79,6 +79,7 @@ if (WIN32)
 
   set(CONFIGURE_PARAMS
     --toolchain=msvc
+    --enable-w32threads
   )
 endif ()
 
@@ -96,14 +97,26 @@ ExternalProject_Add(ffmpeg_target
   PREFIX ${FFMPEG_WORKDIR}
   URL "${FFMPEG_PATH}"
   DOWNLOAD_NO_EXTRACT 1
-  CONFIGURE_COMMAND sh ./configure
-    --disable-programs
-    --disable-doc
-    --enable-static
-    --disable-shared
-    --enable-protocol=file
-    --enable-pic
-    ${CONFIGURE_PARAMS}
+  CONFIGURE_COMMAND
+    sh ./configure
+      --disable-all
+      --disable-network
+      --disable-protocols
+      --disable-filters
+      --disable-doc
+      --disable-debug
+      --disable-devices
+      --disable-parsers
+      --disable-encoders
+      --disable-decoders
+      --enable-hwaccels
+      --enable-encoder=h264
+      --enable-encoder=rawvideo
+      --enable-small
+      --enable-gpl
+      --enable-yasm
+      # --enable-libx264 // not sure it is required, anyway the library should be built/installed
+      ${CONFIGURE_PARAMS}
   BUILD_COMMAND make -j8
   INSTALL_COMMAND ""
   BUILD_IN_SOURCE 1
