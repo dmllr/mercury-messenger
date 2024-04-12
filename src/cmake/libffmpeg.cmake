@@ -99,7 +99,6 @@ ExternalProject_Add(ffmpeg_target
   DOWNLOAD_NO_EXTRACT 1
   CONFIGURE_COMMAND
     sh ./configure
-      --disable-all
       --disable-network
       --disable-protocols
       --disable-filters
@@ -107,13 +106,11 @@ ExternalProject_Add(ffmpeg_target
       --disable-debug
       --disable-devices
       --disable-parsers
-      --disable-encoders
       --disable-decoders
-      --enable-hwaccels
+      --disable-shared
+      --enable-static
       --enable-encoder=h264
       --enable-encoder=rawvideo
-      --enable-small
-      --enable-gpl
       --enable-yasm
       # --enable-libx264 // not sure it is required, anyway the library should be built/installed
       ${CONFIGURE_PARAMS}
