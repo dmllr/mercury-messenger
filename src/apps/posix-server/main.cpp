@@ -22,6 +22,7 @@ extern "C" {
 // tmp
 #include "../../_imported/libdatachannel/examples/streamer/opusfileparser.hpp"
 #include <fstream>
+#include <combaseapi.h>
 
 
 class VideoStreamSource : public StreamSource {
@@ -72,8 +73,12 @@ public:
         codec_context->max_b_frames = 1;
         codec_context->pix_fmt = AV_PIX_FMT_YUV420P;
         av_opt_set(codec_context->priv_data, "startcode", "1", 0);
-        av_opt_set(codec_context->priv_data, "hw_encoding", "1", 0); // TODO investigate
-        av_opt_set(codec_context->priv_data, "profile", "baseline", 0);
+
+        // essential om Windows due to NVidia MF failure:
+        // [h264_mf @ 0000024BC438BD40] MFT name: 'NVIDIA H.264 Encoder MFT'
+        // [h264_mf @ 0000024BC438BD40] "format negotiation failed"
+        av_opt_set(codec_context->priv_data, "hw_encoding", "0", 0); // TODO investigate
+//        av_opt_set(codec_context->priv_data, "profile", "baseline", 0);
 
         std::cout << "Width: " << codec_context->width << ", height: " << codec_context->height << std::endl;
         std::cout << "Input pixel format: " << av_get_pix_fmt_name(codec_context->pix_fmt) << std::endl;
@@ -81,6 +86,7 @@ public:
 
         codec_params = avcodec_parameters_alloc();
 
+        CoUninitialize();
         auto ret = avcodec_open2(codec_context, codec, nullptr);
         if (ret < 0) {
             throw std::runtime_error("Could not open codec");

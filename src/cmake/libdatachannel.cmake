@@ -16,12 +16,26 @@ set(PLOG_INSTALL OFF)
 set(JSON_BuildTests OFF)
 
 # for libdatachannel -> usrsctp
-set(ENABLE_MBEDTLS OFF)
-set(ENABLE_OPENSSL ON)
+set(ENABLE_MBEDTLS ${USE_MBEDTLS})
+set(ENABLE_GNUTLS ${USE_GNUTLS})
+if (NOT ${USE_MBEDTLS} AND NOT ${USE_GNUTLS})
+  set(ENABLE_OPENSSL ON)
+else()
+  set(ENABLE_OPENSSL OFF)
+endif()
 set(ENABLE_TESTING OFF)
 set(ENABLE_PROGRAMS OFF)
 
-include("${CMAKE_CURRENT_LIST_DIR}/libboringssl.cmake")
+if (${ENABLE_MBEDTLS})
+  include("${CMAKE_CURRENT_LIST_DIR}/libmbedtls.cmake")
+endif()
+if (${ENABLE_GNUTLS})
+  message(FATAL_ERROR "GnuTLS is not supported")
+endif()
+if (${ENABLE_OPENSSL})
+  include("${CMAKE_CURRENT_LIST_DIR}/libboringssl.cmake")
+endif()
+
 include("${CMAKE_CURRENT_LIST_DIR}/libsrtp.cmake")
 
 import_remote("https://github.com/paullouisageneau/libdatachannel.git"
