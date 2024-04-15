@@ -11,15 +11,12 @@ import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CameraMetadata
 import android.os.Binder
-import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import android.util.Size
 import android.view.Surface
-import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationCompat.PRIORITY_MIN
-import me.helpers.doAsync
 
 class CameraService : Service() {
 	private var cameraEngine: Long = 0
@@ -106,7 +103,6 @@ class CameraService : Service() {
 		startForeground(CAMERA_SERVICE_FG_ID, notification)
 	}
 
-	@RequiresApi(Build.VERSION_CODES.O)
 	private fun createNotificationChannel(): String {
 		val id = "surveillance-foreground-service"
 		val chan = NotificationChannel(
