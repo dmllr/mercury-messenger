@@ -22,7 +22,10 @@ extern "C" {
 // tmp
 #include "../../_imported/libdatachannel/examples/streamer/opusfileparser.hpp"
 #include <fstream>
+
+#ifdef _WIN32
 #include <combaseapi.h>
+#endif
 
 
 class VideoStreamSource : public StreamSource {
@@ -85,7 +88,9 @@ public:
 
         codec_params = avcodec_parameters_alloc();
 
+        #ifdef _WIN32
         CoUninitialize();
+        #endif
         auto ret = avcodec_open2(codec_context, codec, nullptr);
         if (ret < 0) {
             throw std::runtime_error("Could not open codec");

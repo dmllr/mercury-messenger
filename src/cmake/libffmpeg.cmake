@@ -91,6 +91,15 @@ foreach (_lib avfilter avcodec avdevice avformat avutil swresample swscale)
     "${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/lib${_lib}/lib${_lib}.a")
 endforeach ()
 
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
+  list(APPEND CONFIGURE_PARAMS "--enable-x86asm")
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
+  list(APPEND CONFIGURE_PARAMS "--disable-x86asm")
+else()
+  message(FATAL_ERROR "Unsupported processor: ${CMAKE_SYSTEM_PROCESSOR}")
+endif()
+
+
 # requires "sh" and other commands to be available
 # MSYS2 must be installed on Windows. See /README.md for the instructions
 ExternalProject_Add(ffmpeg_target
@@ -111,7 +120,6 @@ ExternalProject_Add(ffmpeg_target
       --enable-static
       --enable-encoder=h264
       --enable-encoder=rawvideo
-      --enable-yasm
       # --enable-libx264 // not sure it is required, anyway the library should be built/installed
       ${CONFIGURE_PARAMS}
   BUILD_COMMAND make -j8
