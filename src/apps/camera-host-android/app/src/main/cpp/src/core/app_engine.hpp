@@ -26,7 +26,7 @@ class AppEngine {
 	int32_t request_height;
 	jobject preview_surface = nullptr;
 	std::shared_ptr<CameraManager> camera_manager;
-	std::shared_ptr<RtcManager> rtc_manager;
+	std::shared_ptr<RtcProducer> rtc_producer;
 	std::shared_ptr<server::RtspManager> rtsp_manager;
 	ImageFormat compatible_camera_res;
 
@@ -41,10 +41,11 @@ public:
 		camera_manager = std::make_shared<CameraManager>();
 		camera_manager->matchCaptureSizeRequest(request_width, request_height, &compatible_camera_res);
 
-		rtc_manager = std::make_shared<RtcManager>();
 		const auto stream = createRtcStream();
-		rtc_manager->setStream(stream);
-		rtc_manager->start();
+
+        rtc_producer = std::make_shared<RtcProducer>();
+        rtc_producer->setStream(stream);
+        rtc_producer->startServer();
 
 		rtsp_manager = std::make_shared<server::RtspManager>(camera_manager);
 		rtsp_manager->start(camera_manager->codec()->getCodec());
@@ -102,7 +103,7 @@ public:
 	}
 
 	void requestRtc() {
-		rtc_manager->start();
+        rtc_producer->startServer();
 	}
 
 
