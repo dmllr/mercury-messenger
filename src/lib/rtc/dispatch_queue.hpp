@@ -10,41 +10,41 @@
 #ifndef dispatchqueue_hpp
 #define dispatchqueue_hpp
 
-#include <thread>
-#include <mutex>
 #include <condition_variable>
-#include <queue>
 #include <functional>
+#include <mutex>
+#include <queue>
+#include <thread>
 
 class DispatchQueue {
-    using fp_t = std::function<void ()>;
+  using fp_t = std::function<void()>;
 
 public:
-    explicit DispatchQueue(std::string name, size_t threadCount = 1);
-    ~DispatchQueue();
+  explicit DispatchQueue(std::string name, size_t threadCount = 1);
+  ~DispatchQueue();
 
-    // dispatch and copy
-    void dispatch(const fp_t& op);
-    // dispatch and move
-    void dispatch(fp_t&& op);
+  // dispatch and copy
+  void dispatch(const fp_t& op);
+  // dispatch and move
+  void dispatch(fp_t&& op);
 
-    void removePending();
+  void removePending();
 
-    // Deleted operations
-    DispatchQueue(const DispatchQueue& rhs) = delete;
-    auto operator=(const DispatchQueue& rhs) -> DispatchQueue& = delete;
-    DispatchQueue(DispatchQueue&& rhs) = delete;
-    auto operator=(DispatchQueue&& rhs) -> DispatchQueue& = delete;
+  // Deleted operations
+  DispatchQueue(const DispatchQueue& rhs) = delete;
+  auto operator=(const DispatchQueue& rhs) -> DispatchQueue& = delete;
+  DispatchQueue(DispatchQueue&& rhs) = delete;
+  auto operator=(DispatchQueue&& rhs) -> DispatchQueue& = delete;
 
 private:
-    std::string name;
-    std::mutex lockMutex;
-    std::vector<std::thread> threads;
-    std::queue<fp_t> queue;
-    std::condition_variable condition;
-    bool quit = false;
+  std::string name;
+  std::mutex lockMutex;
+  std::vector<std::thread> threads;
+  std::queue<fp_t> queue;
+  std::condition_variable condition;
+  bool quit = false;
 
-    void dispatchThreadHandler(void);
+  void dispatchThreadHandler(void);
 };
 
 #endif /* dispatchqueue_hpp */

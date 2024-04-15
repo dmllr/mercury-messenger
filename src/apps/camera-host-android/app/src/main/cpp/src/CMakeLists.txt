@@ -1,4 +1,4 @@
-set (shared_libs "${CMAKE_CURRENT_LIST_DIR}/../../../../../../../lib")
+set(shared_libs "${CMAKE_CURRENT_LIST_DIR}/../../../../../../../lib")
 
 add_library(camera-lib SHARED
   lib.cpp

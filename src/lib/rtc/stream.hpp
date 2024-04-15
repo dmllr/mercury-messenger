@@ -15,47 +15,47 @@
 
 class StreamSource {
 protected:
-
 public:
-    virtual void start() = 0;
-    virtual void stop() = 0;
-    virtual void loadNextSample() = 0;
+  virtual void start() = 0;
+  virtual void stop() = 0;
+  virtual void loadNextSample() = 0;
 
-    virtual auto getSampleTime_us() -> uint64_t = 0;
-    virtual auto getSampleDuration_us() -> uint64_t = 0;
-	virtual auto getSample() -> rtc::binary = 0;
+  virtual auto getSampleTime_us() -> uint64_t = 0;
+  virtual auto getSampleDuration_us() -> uint64_t = 0;
+  virtual auto getSample() -> rtc::binary = 0;
 };
 
-class Stream: std::enable_shared_from_this<Stream> {
-    uint64_t startTime = 0;
-    std::mutex mutex;
-    DispatchQueue dispatchQueue = DispatchQueue("StreamQueue");
+class Stream : std::enable_shared_from_this<Stream> {
+  uint64_t startTime = 0;
+  std::mutex mutex;
+  DispatchQueue dispatchQueue = DispatchQueue("StreamQueue");
 
-    bool _isRunning = false;
+  bool _isRunning = false;
+
 public:
-    const std::shared_ptr<StreamSource> audio;
-    const std::shared_ptr<StreamSource> video;
+  const std::shared_ptr<StreamSource> audio;
+  const std::shared_ptr<StreamSource> video;
 
-    Stream(std::shared_ptr<StreamSource> video, std::shared_ptr<StreamSource> audio);
-    ~Stream();
+  Stream(std::shared_ptr<StreamSource> video, std::shared_ptr<StreamSource> audio);
+  ~Stream();
 
-    enum class StreamSourceType {
-        Audio,
-        Video
-    };
+  enum class StreamSourceType {
+    Audio,
+    Video
+  };
 
 private:
-    rtc::synchronized_callback<StreamSourceType, uint64_t, rtc::binary> sampleHandler;
+  rtc::synchronized_callback<StreamSourceType, uint64_t, rtc::binary> sampleHandler;
 
-    auto unsafePrepareForSample() -> std::pair<std::shared_ptr<StreamSource>, StreamSourceType>;
+  auto unsafePrepareForSample() -> std::pair<std::shared_ptr<StreamSource>, StreamSourceType>;
 
-    void sendSample();
+  void sendSample();
 
 public:
-    void onSample(std::function<void (StreamSourceType, uint64_t, rtc::binary)> handler);
-    void start();
-    void stop();
-    const bool& isRunning = _isRunning;
+  void onSample(std::function<void(StreamSourceType, uint64_t, rtc::binary)> handler);
+  void start();
+  void stop();
+  const bool& isRunning = _isRunning;
 };
 
 

@@ -4,10 +4,10 @@
 
 #include "recorder.h"
 
-#include "logging/logging.h"
-#include <climits>
-#include <cassert>
 #include "audio_common.h"
+#include "logging/logging.h"
+#include <cassert>
+#include <climits>
 
 
 /**
@@ -24,52 +24,52 @@
  *
  * @see Recorder#errorCallback
  */
-void errorCallback(AAudioStream *stream,
-                   void *userData,
+void errorCallback(AAudioStream* stream,
+                   void* userData,
                    aaudio_result_t error) {
-    assert(userData);
-    auto* audioEngine = reinterpret_cast<Recorder *>(userData);
-    audioEngine->errorCallback(stream, error);
+  assert(userData);
+  auto* audioEngine = reinterpret_cast<Recorder*>(userData);
+  audioEngine->errorCallback(stream, error);
 }
 
 Recorder::~Recorder() {
-    stopStream(recordingStream_);
-    closeStream(recordingStream_);
+  stopStream(recordingStream_);
+  closeStream(recordingStream_);
 }
 
 void Recorder::setRecordingDeviceId(int32_t deviceId) {
-    recordingDeviceId_ = deviceId;
+  recordingDeviceId_ = deviceId;
 }
 
 void Recorder::start() {
-    openRecordingStream();
+  openRecordingStream();
 
-    if (recordingStream_ != nullptr) {
-        startStream(recordingStream_);
-    } else {
-        LOGE << "Failed to create recording stream";
-    }
+  if (recordingStream_ != nullptr) {
+    startStream(recordingStream_);
+  } else {
+    LOGE << "Failed to create recording stream";
+  }
 }
 
 void Recorder::stop() {
-    if (recordingStream_ != nullptr) {
-        closeStream(recordingStream_);
-        recordingStream_ = nullptr;
-    }
+  if (recordingStream_ != nullptr) {
+    closeStream(recordingStream_);
+    recordingStream_ = nullptr;
+  }
 }
 
 /**
  * Creates a stream builder which can be used to construct streams
  * @return a new stream builder object
  */
-AAudioStreamBuilder *Recorder::createStreamBuilder() {
+AAudioStreamBuilder* Recorder::createStreamBuilder() {
 
-    AAudioStreamBuilder *builder = nullptr;
-    aaudio_result_t result = AAudio_createStreamBuilder(&builder);
-    if (result != AAUDIO_OK) {
-        LOGE << "Error creating stream builder: " << AAudio_convertResultToText(result);
-    }
-    return builder;
+  AAudioStreamBuilder* builder = nullptr;
+  aaudio_result_t result = AAudio_createStreamBuilder(&builder);
+  if (result != AAUDIO_OK) {
+    LOGE << "Error creating stream builder: " << AAudio_convertResultToText(result);
+  }
+  return builder;
 }
 
 /**
@@ -78,59 +78,59 @@ AAudioStreamBuilder *Recorder::createStreamBuilder() {
  */
 void Recorder::openRecordingStream() {
 
-    // To create a stream we use a stream builder. This allows us to specify all the parameters
-    // for the stream prior to opening it
-    AAudioStreamBuilder *builder = createStreamBuilder();
+  // To create a stream we use a stream builder. This allows us to specify all the parameters
+  // for the stream prior to opening it
+  AAudioStreamBuilder* builder = createStreamBuilder();
 
-    if (builder != nullptr) {
-        setupRecordingStreamParameters(builder);
+  if (builder != nullptr) {
+    setupRecordingStreamParameters(builder);
 
-        // Now that the parameters are set up we can open the stream
-        aaudio_result_t result = AAudioStreamBuilder_openStream(builder, &recordingStream_);
-        if (result == AAUDIO_OK && recordingStream_ != nullptr) {
-            warnIfNotLowLatency(recordingStream_);
-            PrintAudioStreamInfo(recordingStream_);
-        } else {
-            LOGE << "Failed to create recording stream. Error: " << AAudio_convertResultToText(result);
-        }
-        AAudioStreamBuilder_delete(builder);
+    // Now that the parameters are set up we can open the stream
+    aaudio_result_t result = AAudioStreamBuilder_openStream(builder, &recordingStream_);
+    if (result == AAUDIO_OK && recordingStream_ != nullptr) {
+      warnIfNotLowLatency(recordingStream_);
+      PrintAudioStreamInfo(recordingStream_);
     } else {
-        LOGE << "Unable to obtain an AAudioStreamBuilder object";
+      LOGE << "Failed to create recording stream. Error: " << AAudio_convertResultToText(result);
     }
+    AAudioStreamBuilder_delete(builder);
+  } else {
+    LOGE << "Unable to obtain an AAudioStreamBuilder object";
+  }
 }
 
 /**
  * Sets the stream parameters which are specific to recording.
  * @param builder The recording stream builder
  */
-void Recorder::setupRecordingStreamParameters(AAudioStreamBuilder *builder) {
-    AAudioStreamBuilder_setDeviceId(builder, recordingDeviceId_);
-    AAudioStreamBuilder_setDirection(builder, AAUDIO_DIRECTION_INPUT);
-    AAudioStreamBuilder_setSampleRate(builder, sampleRate);
-    AAudioStreamBuilder_setChannelCount(builder, channelCount);
+void Recorder::setupRecordingStreamParameters(AAudioStreamBuilder* builder) {
+  AAudioStreamBuilder_setDeviceId(builder, recordingDeviceId_);
+  AAudioStreamBuilder_setDirection(builder, AAUDIO_DIRECTION_INPUT);
+  AAudioStreamBuilder_setSampleRate(builder, sampleRate);
+  AAudioStreamBuilder_setChannelCount(builder, channelCount);
 
-    AAudioStreamBuilder_setFormat(builder, format_);
-    // We request EXCLUSIVE mode since this will give us the lowest possible latency.
-    // If EXCLUSIVE mode isn't available the builder will fall back to SHARED mode.
-    AAudioStreamBuilder_setSharingMode(builder, AAUDIO_SHARING_MODE_EXCLUSIVE);
-    AAudioStreamBuilder_setPerformanceMode(builder, AAUDIO_PERFORMANCE_MODE_LOW_LATENCY);
-    AAudioStreamBuilder_setErrorCallback(builder, ::errorCallback, this);
+  AAudioStreamBuilder_setFormat(builder, format_);
+  // We request EXCLUSIVE mode since this will give us the lowest possible latency.
+  // If EXCLUSIVE mode isn't available the builder will fall back to SHARED mode.
+  AAudioStreamBuilder_setSharingMode(builder, AAUDIO_SHARING_MODE_EXCLUSIVE);
+  AAudioStreamBuilder_setPerformanceMode(builder, AAUDIO_PERFORMANCE_MODE_LOW_LATENCY);
+  AAudioStreamBuilder_setErrorCallback(builder, ::errorCallback, this);
 }
 
-void Recorder::startStream(AAudioStream *stream) {
-    aaudio_result_t result = AAudioStream_requestStart(stream);
+void Recorder::startStream(AAudioStream* stream) {
+  aaudio_result_t result = AAudioStream_requestStart(stream);
+  if (result != AAUDIO_OK) {
+    LOGE << "Error starting stream. " << AAudio_convertResultToText(result);
+  }
+}
+
+void Recorder::stopStream(AAudioStream* stream) {
+  if (stream != nullptr) {
+    aaudio_result_t result = AAudioStream_requestStop(stream);
     if (result != AAUDIO_OK) {
-        LOGE << "Error starting stream. " << AAudio_convertResultToText(result);
+      LOGE << "Error stopping stream. " << AAudio_convertResultToText(result);
     }
-}
-
-void Recorder::stopStream(AAudioStream *stream) {
-    if (stream != nullptr) {
-        aaudio_result_t result = AAudioStream_requestStop(stream);
-        if (result != AAUDIO_OK) {
-            LOGE << "Error stopping stream. " << AAudio_convertResultToText(result);
-        }
-    }
+  }
 }
 
 /**
@@ -141,53 +141,53 @@ void Recorder::stopStream(AAudioStream *stream) {
  * [the closing thread is the UI thread in this sample].
  * @param stream the stream to close
  */
-void Recorder::closeStream(AAudioStream *stream) {
-    if (stream != nullptr) {
-        aaudio_result_t result = AAudioStream_close(stream);
-        if (result != AAUDIO_OK) {
-            LOGE << "Error closing stream. " << AAudio_convertResultToText(result);
-        }
+void Recorder::closeStream(AAudioStream* stream) {
+  if (stream != nullptr) {
+    aaudio_result_t result = AAudioStream_close(stream);
+    if (result != AAUDIO_OK) {
+      LOGE << "Error closing stream. " << AAudio_convertResultToText(result);
     }
+  }
 }
 
 /**
  * @see the C method read at the top of this file
  */
 aaudio_result_t Recorder::read(void* audioData, int32_t numFrames) {
-    // frameCount could be
-    //    < 0 : error code
-    //    >= 0 : actual value read from stream
-    aaudio_result_t frameCount = 0;
+  // frameCount could be
+  //    < 0 : error code
+  //    >= 0 : actual value read from stream
+  aaudio_result_t frameCount = 0;
 
-    if (recordingStream_ != nullptr) {
+  if (recordingStream_ != nullptr) {
 
-        // If this is the first data callback we want to drain the recording buffer, so we're getting
-        // the most up-to-date data
-        if (isFirstDataCallback_) {
-            drainRecordingStream(audioData, numFrames);
-            isFirstDataCallback_ = false;
-        }
-
-        frameCount = AAudioStream_read(recordingStream_, audioData, numFrames, static_cast<int64_t>(0));
-
-//        ConvertMonoToStereo(static_cast<int16_t *>(audioData), frameCount);
-
-        if (frameCount < 0) {
-            LOGE << "****AAudioStream_read() returns " << AAudio_convertResultToText(frameCount);
-            frameCount = 0;
-        }
+    // If this is the first data callback we want to drain the recording buffer, so we're getting
+    // the most up-to-date data
+    if (isFirstDataCallback_) {
+      drainRecordingStream(audioData, numFrames);
+      isFirstDataCallback_ = false;
     }
 
-    /**
+    frameCount = AAudioStream_read(recordingStream_, audioData, numFrames, static_cast<int64_t>(0));
+
+    //        ConvertMonoToStereo(static_cast<int16_t *>(audioData), frameCount);
+
+    if (frameCount < 0) {
+      LOGE << "****AAudioStream_read() returns " << AAudio_convertResultToText(frameCount);
+      frameCount = 0;
+    }
+  }
+
+  /**
     * If there's not enough audio data from input stream, fill the rest of buffer with
     * 0 (silence) and continue to loop
     */
-    numFrames -= frameCount;
-    if (numFrames > 0) {
-        memset(static_cast<float*>(audioData) + frameCount * channelCount, 0, sizeof(float) * numFrames * channelCount);
-    }
+  numFrames -= frameCount;
+  if (numFrames > 0) {
+    memset(static_cast<float*>(audioData) + frameCount * channelCount, 0, sizeof(float) * numFrames * channelCount);
+  }
 
-    return frameCount;
+  return frameCount;
 }
 
 /**
@@ -199,25 +199,25 @@ aaudio_result_t Recorder::read(void* audioData, int32_t numFrames) {
  * @param numFrames The number of frames to read in a single read operation, this is typically the
  * size of `audioData`.
  */
-void Recorder::drainRecordingStream(void *audioData, int32_t numFrames) {
-    aaudio_result_t clearedFrames = 0;
-    do {
-        clearedFrames = AAudioStream_read(recordingStream_, audioData, numFrames, 0);
-    } while (clearedFrames > 0);
+void Recorder::drainRecordingStream(void* audioData, int32_t numFrames) {
+  aaudio_result_t clearedFrames = 0;
+  do {
+    clearedFrames = AAudioStream_read(recordingStream_, audioData, numFrames, 0);
+  } while (clearedFrames > 0);
 }
 
 /**
  * See the C method errorCallback at the top of this file
  */
-void Recorder::errorCallback(AAudioStream *stream, aaudio_result_t error) {
-    LOGI << "errorCallback has result: " << AAudio_convertResultToText(error);
-    aaudio_stream_state_t streamState = AAudioStream_getState(stream);
-    if (streamState == AAUDIO_STREAM_STATE_DISCONNECTED) {
-        // Handle stream restart on a separate thread
-        std::function<void(void)> restartStreams = std::bind(&Recorder::restart, this);
-        std::thread streamRestartThread(restartStreams);
-        streamRestartThread.detach();
-    }
+void Recorder::errorCallback(AAudioStream* stream, aaudio_result_t error) {
+  LOGI << "errorCallback has result: " << AAudio_convertResultToText(error);
+  aaudio_stream_state_t streamState = AAudioStream_getState(stream);
+  if (streamState == AAUDIO_STREAM_STATE_DISCONNECTED) {
+    // Handle stream restart on a separate thread
+    std::function<void(void)> restartStreams = std::bind(&Recorder::restart, this);
+    std::thread streamRestartThread(restartStreams);
+    streamRestartThread.detach();
+  }
 }
 
 /**
@@ -225,22 +225,22 @@ void Recorder::errorCallback(AAudioStream *stream, aaudio_result_t error) {
  * a warning.
  */
 void Recorder::restart() {
-    LOGI << "Restarting streams";
+  LOGI << "Restarting streams";
 
-    if (restartingLock_.try_lock()) {
-        stop();
-        start();
-        restartingLock_.unlock();
-    } else {
-        LOGW << "Restart stream operation already in progress - ignoring this request";
-        // We were unable to obtain the restarting lock which means the restart operation is currently
-        // active. This is probably because we received successive "stream disconnected" events.
-        // Internal issue b/63087953
-    }
+  if (restartingLock_.try_lock()) {
+    stop();
+    start();
+    restartingLock_.unlock();
+  } else {
+    LOGW << "Restart stream operation already in progress - ignoring this request";
+    // We were unable to obtain the restarting lock which means the restart operation is currently
+    // active. This is probably because we received successive "stream disconnected" events.
+    // Internal issue b/63087953
+  }
 }
 
-void Recorder::warnIfNotLowLatency(AAudioStream *stream) {
-    if (AAudioStream_getPerformanceMode(stream) != AAUDIO_PERFORMANCE_MODE_LOW_LATENCY){
-        LOGW << "Stream is NOT low latency. Check your requested format, sample rate and channel count";
-    }
+void Recorder::warnIfNotLowLatency(AAudioStream* stream) {
+  if (AAudioStream_getPerformanceMode(stream) != AAUDIO_PERFORMANCE_MODE_LOW_LATENCY) {
+    LOGW << "Stream is NOT low latency. Check your requested format, sample rate and channel count";
+  }
 }

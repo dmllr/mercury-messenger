@@ -69,12 +69,16 @@ class MainActivity : Activity(), TextureView.SurfaceTextureListener, ServiceConn
 	}
 
 	private fun checkAndRequestCamera() {
-		if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-			ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), PERMISSION_REQUEST_CODE_CAMERA)
+		if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+				!= PackageManager.PERMISSION_GRANTED) {
+			ActivityCompat.requestPermissions(this,
+				arrayOf(Manifest.permission.CAMERA), PERMISSION_REQUEST_CODE_CAMERA)
 			return
 		}
-		if (ActivityCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-			ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), PERMISSION_REQUEST_CODE_RECORD_AUDIO)
+		if (ActivityCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+				!= PackageManager.PERMISSION_GRANTED) {
+			ActivityCompat.requestPermissions(this,
+				arrayOf(Manifest.permission.RECORD_AUDIO), PERMISSION_REQUEST_CODE_RECORD_AUDIO)
 			return
 		}
 
@@ -87,7 +91,10 @@ class MainActivity : Activity(), TextureView.SurfaceTextureListener, ServiceConn
 	private fun startStreamingService() {
 		val cameraServiceIntent = Intent(applicationContext, CameraService::class.java)
 		startService(cameraServiceIntent)
-		if (applicationContext.bindService(cameraServiceIntent, this, Context.BIND_AUTO_CREATE + Context.BIND_ABOVE_CLIENT))
+		if (applicationContext.bindService(
+				cameraServiceIntent,
+				this,
+				Context.BIND_AUTO_CREATE + Context.BIND_ABOVE_CLIENT))
 			cameraServiceBound = true
 	}
 

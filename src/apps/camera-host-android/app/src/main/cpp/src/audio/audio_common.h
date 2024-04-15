@@ -18,8 +18,8 @@
 #ifndef AAUDIO_AUDIO_COMMON_H
 #define AAUDIO_AUDIO_COMMON_H
 
-#include <chrono>
 #include <aaudio/AAudio.h>
+#include <chrono>
 
 // Time constants
 #define NANOS_PER_SECOND 1000000000L
@@ -33,10 +33,10 @@ uint16_t SampleFormatToBpp(aaudio_format_t format);
  * GetSystemTicks(void):  return the time in micro sec
  */
 __inline__ uint64_t GetSystemTicks(void) {
-    struct timeval Time;
-    gettimeofday( &Time, NULL );
+  struct timeval Time;
+  gettimeofday(&Time, NULL);
 
-    return (static_cast<uint64_t>(1000000) * Time.tv_sec + Time.tv_usec);
+  return (static_cast<uint64_t>(1000000) * Time.tv_sec + Time.tv_usec);
 }
 
 /*
@@ -44,13 +44,13 @@ __inline__ uint64_t GetSystemTicks(void) {
  */
 //#define ENABLE_LOG  1
 
-void PrintAudioStreamInfo(const AAudioStream * stream);
+void PrintAudioStreamInfo(const AAudioStream* stream);
 
 int64_t timestamp_to_nanoseconds(timespec ts);
 
 int64_t get_time_nanoseconds(clockid_t clockid);
 
 // Note: buffer must be at least double the length of numFrames to accommodate the stereo data
-void ConvertMonoToStereo(int16_t *buffer, int32_t numFrames);
+void ConvertMonoToStereo(int16_t* buffer, int32_t numFrames);
 
-#endif // AAUDIO_AUDIO_COMMON_H
+#endif  // AAUDIO_AUDIO_COMMON_H

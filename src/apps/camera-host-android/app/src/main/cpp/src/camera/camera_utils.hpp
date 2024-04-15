@@ -1,28 +1,28 @@
 #pragma once
 
-#include <vector>
-#include <string>
-#include <utility>
-#include <typeinfo>
 #include <cinttypes>
+#include <string>
+#include <typeinfo>
+#include <utility>
+#include <vector>
 
-#include <media/NdkImage.h>
-#include <camera/NdkCameraManager.h>
 #include <camera/NdkCameraError.h>
+#include <camera/NdkCameraManager.h>
+#include <media/NdkImage.h>
 
 #include "logging/logging.h"
 
 
 template<typename T>
 const char* GetPairStr(T key, std::vector<std::pair<T, const char*>>& store) {
-    typedef typename std::vector<std::pair<T, const char*>>::iterator iterator;
-    for (iterator it = store.begin(); it != store.end(); ++it) {
-        if (it->first == key) {
-            return it->second;
-        }
+  typedef typename std::vector<std::pair<T, const char*>>::iterator iterator;
+  for (iterator it = store.begin(); it != store.end(); ++it) {
+    if (it->first == key) {
+      return it->second;
     }
-    Log::w("(%#08x) : UNKNOWN TAG for %s", key, typeid(store[0].first).name());
-    return "UNKNOWN";
+  }
+  Log::w("(%#08x) : UNKNOWN TAG for %s", key, typeid(store[0].first).name());
+  return "UNKNOWN";
 }
 
 using ERROR_PAIR = std::pair<camera_status_t, const char*>;
@@ -54,9 +54,9 @@ static std::vector<DEV_ERROR_PAIR> CameraDeviceErrorInfo{
 };
 
 inline const char* GetErrorStr(camera_status_t err) {
-	return GetPairStr<camera_status_t>(err, CameraErrorInfo);
+  return GetPairStr<camera_status_t>(err, CameraErrorInfo);
 }
 
 inline const char* GetCameraDeviceErrorStr(int err) {
-	return GetPairStr<int>(err, CameraDeviceErrorInfo);
+  return GetPairStr<int>(err, CameraDeviceErrorInfo);
 }
