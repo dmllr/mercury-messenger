@@ -1,8 +1,8 @@
 #include <iostream>
 
-#include "../../android/hela-surveillance/app-surveillance-camera/src/main/cpp/src/rtc/rtc_manager.hpp"
-#include "../../android/hela-surveillance/app-surveillance-camera/src/main/cpp/src/rtc/h264fileparser.hpp"
-#include "../../android/hela-surveillance/app-surveillance-camera/src/main/cpp/src/rtc/opusfileparser.hpp"
+#include "../../camera-host-android/app/src/main/cpp/src/rtc/rtc_manager.hpp"
+#include "h264fileparser.hpp"
+#include "opusfileparser.hpp"
 
 
 std::shared_ptr<Stream> createStream() {
