@@ -1,0 +1,1 @@
+rsync -raP -e "ssh -i ~/Downloads/ssh-key-2022-03-08.key" /Users/denis.miller/dev/github/hela-surveillance/android/hela-surveillance/tools/web-client ubuntu@vm0.hela.me:/var/www/app.hela.me/html/camera/
