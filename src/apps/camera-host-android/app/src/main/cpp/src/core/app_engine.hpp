@@ -112,6 +112,21 @@ public:
     rtc_producer->startServer();
   }
 
+  void setRtcStatus(int status) {
+    jclass callbackClass = env->GetObjectClass(status_update_callback);
+    jmethodID callbackMethod = env->GetMethodID(callbackClass, "onRtcStatusUpdate", "(I)V");
+    if (callbackMethod != nullptr) {
+      env->CallVoidMethod(status_update_callback, callbackMethod, status);
+    }
+  }
+
+  void setRtspStatus(int status) {
+    jclass callbackClass = env->GetObjectClass(status_update_callback);
+    jmethodID callbackMethod = env->GetMethodID(callbackClass, "onRtspStatusUpdate", "(I)V");
+    if (callbackMethod != nullptr) {
+      env->CallVoidMethod(status_update_callback, callbackMethod, status);
+    }
+  }
 
 protected:
   std::shared_ptr<Stream> createRtcStream() {
@@ -119,14 +134,5 @@ protected:
     auto audio = std::make_shared<AudioBufferSource>();
 
     return std::make_shared<Stream>(video, audio);
-  }
-
-private:
-  void setStatus(int status) {
-    jclass callbackClass = env->GetObjectClass(status_update_callback);
-    jmethodID callbackMethod = env->GetMethodID(callbackClass, "onStatusUpdate", "(I)V");
-    if (callbackMethod != nullptr) {
-      env->CallVoidMethod(status_update_callback, callbackMethod, status);
-    }
   }
 };
