@@ -1,4 +1,4 @@
-package me.hela.surveillance.camera
+package me.hela.surveillance
 
 import android.Manifest
 import android.app.Activity
@@ -56,10 +56,6 @@ class MainActivity : Activity(), TextureView.SurfaceTextureListener, ServiceConn
 			isPreview = !isPreview
 			cameraService?.startPreview(isPreview)
 		}
-
-		binding.btnRtc.setOnClickListener {
-			cameraService?.startRtc()
-		}
 	}
 
 	override fun onDestroy() {
@@ -72,13 +68,15 @@ class MainActivity : Activity(), TextureView.SurfaceTextureListener, ServiceConn
 		if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
 				!= PackageManager.PERMISSION_GRANTED) {
 			ActivityCompat.requestPermissions(this,
-				arrayOf(Manifest.permission.CAMERA), PERMISSION_REQUEST_CODE_CAMERA)
+				arrayOf(Manifest.permission.CAMERA), PERMISSION_REQUEST_CODE_CAMERA
+			)
 			return
 		}
 		if (ActivityCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
 				!= PackageManager.PERMISSION_GRANTED) {
 			ActivityCompat.requestPermissions(this,
-				arrayOf(Manifest.permission.RECORD_AUDIO), PERMISSION_REQUEST_CODE_RECORD_AUDIO)
+				arrayOf(Manifest.permission.RECORD_AUDIO), PERMISSION_REQUEST_CODE_RECORD_AUDIO
+			)
 			return
 		}
 

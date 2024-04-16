@@ -29,7 +29,7 @@ AppEngine* engine = nullptr;
  * @return application object instance ( not used in this sample )
  */
 extern "C" JNIEXPORT jlong JNICALL
-Java_me_hela_surveillance_camera_CameraService_createAppEngine(
+Java_me_hela_surveillance_CameraService_createAppEngine(
     JNIEnv* env,
     jobject instance,
     jint width, jint height) {
@@ -43,7 +43,7 @@ Java_me_hela_surveillance_camera_CameraService_createAppEngine(
  *   triggers native camera object be released
  */
 extern "C" JNIEXPORT void JNICALL
-Java_me_hela_surveillance_camera_CameraService_deleteAppEngine(
+Java_me_hela_surveillance_CameraService_deleteAppEngine(
     JNIEnv* env,
     jobject instance,
     jlong appmgr) {
@@ -70,7 +70,7 @@ Java_me_hela_surveillance_camera_CameraService_deleteAppEngine(
  *      on display device
  */
 extern "C" JNIEXPORT jobject JNICALL
-Java_me_hela_surveillance_camera_CameraService_getMinimumCompatiblePreviewSize(
+Java_me_hela_surveillance_CameraService_getMinimumCompatiblePreviewSize(
     JNIEnv* env,
     jobject instance,
     jlong appmgr) {
@@ -94,7 +94,7 @@ Java_me_hela_surveillance_camera_CameraService_getMinimumCompatiblePreviewSize(
  * display orientation. This sample only deal to back facing camera.
  */
 extern "C" JNIEXPORT jint JNICALL
-Java_me_hela_surveillance_camera_CameraService_getCameraSensorOrientation(
+Java_me_hela_surveillance_CameraService_getCameraSensorOrientation(
     JNIEnv* env,
     jobject instance,
     jlong appmgr) {
@@ -103,7 +103,7 @@ Java_me_hela_surveillance_camera_CameraService_getCameraSensorOrientation(
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_me_hela_surveillance_camera_CameraService_requestPreview(
+Java_me_hela_surveillance_CameraService_requestPreview(
     JNIEnv* env,
     jobject instance,
     jlong appmgr,
@@ -113,7 +113,7 @@ Java_me_hela_surveillance_camera_CameraService_requestPreview(
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_me_hela_surveillance_camera_CameraService_onPreviewSurfaceCreated(
+Java_me_hela_surveillance_CameraService_onPreviewSurfaceCreated(
     JNIEnv* env,
     jobject instance,
     jlong appmgr,
@@ -123,7 +123,7 @@ Java_me_hela_surveillance_camera_CameraService_onPreviewSurfaceCreated(
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_me_hela_surveillance_camera_CameraService_onPreviewSurfaceDestroyed(
+Java_me_hela_surveillance_CameraService_onPreviewSurfaceDestroyed(
     JNIEnv* env,
     jobject instance,
     jlong appmgr,
@@ -148,7 +148,7 @@ Java_me_hela_surveillance_camera_CameraService_onPreviewSurfaceDestroyed(
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_me_hela_surveillance_camera_CameraService_requestRtc(
+Java_me_hela_surveillance_CameraService_requestRtc(
     JNIEnv* env,
     jobject instance,
     jlong appmgr) {

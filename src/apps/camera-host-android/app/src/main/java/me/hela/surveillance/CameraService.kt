@@ -1,11 +1,15 @@
-package me.hela.surveillance.camera
+package me.hela.surveillance
 
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
 import android.hardware.camera2.CameraAccessException
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
@@ -16,7 +20,9 @@ import android.util.Log
 import android.util.Size
 import android.view.Surface
 import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationCompat.PRIORITY_MIN
+import androidx.core.content.ContextCompat
+import me.hela.surveillance.camera.R
+
 
 class CameraService : Service() {
 	private var cameraEngine: Long = 0
@@ -35,7 +41,8 @@ class CameraService : Service() {
 		if (isCamera2Device()) {
 			createNativeCamera()
 		} else {
-			Log.e("CameraSample", "Found legacy camera device, camera2 device required")
+			Log.e(Tune.TAG, "Found legacy camera device, camera2 device required")
+			// TODO treat error
 			return
 		}
 
@@ -88,17 +95,44 @@ class CameraService : Service() {
 		cameraPreviewSize = getMinimumCompatiblePreviewSize(cameraEngine)
 	}
 
+	private fun Int.getBitmapFromVectorDrawable(): Bitmap {
+		val drawable = ContextCompat.getDrawable(this@CameraService, this)
+		val bitmap = Bitmap.createBitmap(
+			drawable!!.intrinsicWidth,
+			drawable.intrinsicHeight, Bitmap.Config.ARGB_8888
+		)
+		val canvas = Canvas(bitmap)
+		drawable.setBounds(0, 0, canvas.width, canvas.height)
+		drawable.draw(canvas)
+		return bitmap
+	}
+
 	private fun startForeground() {
 		val channel = createNotificationChannel()
 
+		val customText = "custom text"
+		val statusIcon = R.drawable.ic_not_ready
+
+		val mainActivityIntent = Intent(this, MainActivity::class.java)
+		val pendingIntent = PendingIntent.getActivity(
+			this,
+			0,
+			mainActivityIntent,
+			PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+		)
+
 		val notificationBuilder = NotificationCompat.Builder(this, channel)
 		val builder = notificationBuilder.setOngoing(true)
+			.setLargeIcon(statusIcon.getBitmapFromVectorDrawable())
 			.setSmallIcon(R.drawable.ic_camera_stream)
-			.setPriority(PRIORITY_MIN)
-		builder.setCategory(Notification.CATEGORY_SERVICE)
+			.setContentTitle(getString(R.string.notification_title))
+			.setContentText(customText)
+			.setPriority(NotificationCompat.PRIORITY_LOW)
+			.setCategory(NotificationCompat.CATEGORY_SERVICE)
+			.setContentIntent(pendingIntent)
 
 		val notification = builder.build()
-		notification.flags + Notification.FLAG_NO_CLEAR
+		notification.flags + Notification.FLAG_NO_CLEAR or Notification.FLAG_FOREGROUND_SERVICE
 
 		startForeground(CAMERA_SERVICE_FG_ID, notification)
 	}
@@ -120,10 +154,6 @@ class CameraService : Service() {
 
 	fun startPreview(preview: Boolean) {
 		requestPreview(cameraEngine, preview)
-	}
-
-	fun startRtc() {
-		requestRtc(cameraEngine)
 	}
 
 	fun previewSurfaceCreated(surface: Surface) {
