@@ -10,38 +10,41 @@
         android:id="@+id/texturePreview"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:layout_gravity="center"
-        app:layout_constraintHeight_percent="0.33"
+        android:layout_gravity="fill"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintRight_toRightOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <ImageButton
-        android:id="@+id/btnTogglePreview"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_margin="16dp"
-        android:src="@drawable/ic_camera"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/texturePreview" />
+    <LinearLayout
+        android:id="@+id/linearLayout"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:orientation="vertical"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <ImageButton
+            android:id="@+id/btnTogglePreview"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_margin="16dp"
+            android:contentDescription="@string/toggle_camera_preview"
+            android:src="@drawable/ic_camera"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="parent" />
+
+    </LinearLayout>
 
     <Button
         android:id="@+id/btnPermissionWarning"
         android:layout_width="match_parent"
         android:layout_height="80dp"
-        android:text="@string/camera_permission_required"
+        android:text="@string/permissions_required"
         app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.0"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/texturePreview" />
+        app:layout_constraintTop_toTopOf="@+id/texturePreview" />
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:orientation="vertical"
-        android:layout_marginTop="80dp"
-        app:layout_constraintTop_toBottomOf="@+id/texturePreview"
-        app:layout_constraintBottom_toBottomOf="parent">
-
-    </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

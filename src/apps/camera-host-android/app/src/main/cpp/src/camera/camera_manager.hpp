@@ -405,9 +405,9 @@ public:
   }
 
   /**
-	 * GetSensorOrientation()
-	 *     Retrieve current sensor orientation regarding to the phone device orientation
-	 */
+   * GetSensorOrientation()
+   *     Retrieve current sensor orientation regarding to the phone device orientation
+   */
   bool getSensorOrientation(int32_t* facing, int32_t* angle) {
     if (!camera_manager)
       return false;
@@ -454,18 +454,23 @@ public:
 
     // format of the data: format, width, height, input?, type int32
     bool foundIt = false;
-    DisplayDimension foundRes(1280, 720);
+    DisplayDimension foundRes(requestWidth, requestHeight);
 
     for (int i = 0; i < entry.count; i += 4) {
       int32_t input = entry.data.i32[i + 3];
       int32_t format = entry.data.i32[i + 0];
-      if (input) continue;
+      if (input) {
+        continue;
+      }
 
       if (format == AIMAGE_FORMAT_YUV_420_888 || format == AIMAGE_FORMAT_JPEG) {
         DisplayDimension res(entry.data.i32[i + 1], entry.data.i32[i + 2]);
-        if (!disp.isSameRatio(res))
+        if (!disp.isSameRatio(res)) {
+          LOGI << "Found resolution " << res.orgWidth() << "x" << res.orgHeight() << ", format \"" << format << "\"" << " not matches ratio";
           continue;
+        }
         if (format == AIMAGE_FORMAT_YUV_420_888 && foundRes > res) {
+          LOGI << "Found resolution " << res.orgWidth() << "x" << res.orgHeight() << ", format \"" << format << "\"" << " not matches format, desired is " << AIMAGE_FORMAT_YUV_420_888;
           foundIt = true;
           foundRes = res;
         }
@@ -485,6 +490,9 @@ public:
         resView->height = 720;
       }
     }
+
+    resView->width = 7200;
+    resView->height = 12800;
 
     resView->format = AIMAGE_FORMAT_YUV_420_888;
 

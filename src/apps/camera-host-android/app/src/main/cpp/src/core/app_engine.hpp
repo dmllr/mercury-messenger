@@ -22,8 +22,6 @@
 class AppEngine {
   JNIEnv* env;
   jobject service_instance;
-  int32_t request_width;
-  int32_t request_height;
   jobject preview_surface = nullptr;
   std::shared_ptr<CameraManager> camera_manager;
   std::shared_ptr<RtcProducer> rtc_producer;
@@ -31,15 +29,19 @@ class AppEngine {
   ImageFormat compatible_camera_res;
 
 public:
-  explicit AppEngine(JNIEnv* env, jobject instance, jint w, jint h)
+  explicit AppEngine(JNIEnv* env, jobject instance)
       : env(env),
-        service_instance(env->NewWeakGlobalRef(instance)),
-        request_width(w),
-        request_height(h) {
+        service_instance(env->NewWeakGlobalRef(instance)) {
     memset(&compatible_camera_res, 0, sizeof(compatible_camera_res));
 
     camera_manager = std::make_shared<CameraManager>();
-    camera_manager->matchCaptureSizeRequest(request_width, request_height, &compatible_camera_res);
+
+    // TODO: this is for the preview texture.
+    /// width and height should be calculated as
+    /// camera_manager->matchCaptureSizeRequest(texture_width, texture_height, &compatible_camera_res);
+    compatible_camera_res.width = 1920;
+    compatible_camera_res.height = 1080;
+    compatible_camera_res.format = AIMAGE_FORMAT_YUV_420_888;
 
     const auto stream = createRtcStream();
 

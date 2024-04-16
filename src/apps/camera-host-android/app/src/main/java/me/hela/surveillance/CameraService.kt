@@ -25,164 +25,167 @@ import me.hela.surveillance.camera.R
 
 
 class CameraService : Service() {
-	private var cameraEngine: Long = 0
-	var cameraPreviewSize: Size = Size(0, 0)
+  private var cameraEngine: Long = 0
+  var cameraPreviewSize: Size = Size(0, 0)
 
 
-	inner class StreamingServiceBinder : Binder() {
-		val service: CameraService
-			get() = this@CameraService
-	}
-	private val streamingServiceBinder = StreamingServiceBinder()
+  inner class StreamingServiceBinder : Binder() {
+    val service: CameraService
+      get() = this@CameraService
+  }
 
-	override fun onCreate() {
-		super.onCreate()
+  private val streamingServiceBinder = StreamingServiceBinder()
 
-		if (isCamera2Device()) {
-			createNativeCamera()
-		} else {
-			Log.e(Tune.TAG, "Found legacy camera device, camera2 device required")
-			// TODO treat error
-			return
-		}
+  override fun onCreate() {
+    super.onCreate()
 
-		startForeground()
-	}
+    if (isCamera2Device()) {
+      createNativeCamera()
+    } else {
+      Log.e(Tune.TAG, "Found legacy camera device, camera2 device required")
+      // TODO treat error
+      return
+    }
 
-	override fun onDestroy() {
-		deleteAppEngine(cameraEngine)
+    startForeground()
+  }
 
-		super.onDestroy()
-	}
+  override fun onDestroy() {
+    deleteAppEngine(cameraEngine)
 
-	override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-		if (intent != null)
-			startForeground()
+    super.onDestroy()
+  }
 
-		return START_STICKY;
-	}
+  override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+    if (intent != null)
+      startForeground()
 
-	override fun onBind(intent: Intent): IBinder {
-		return streamingServiceBinder
-	}
+    return START_STICKY;
+  }
 
-	private fun isCamera2Device(): Boolean {
-		val camMgr = getSystemService(Context.CAMERA_SERVICE) as CameraManager
-		var camera2Dev = true
-		try {
-			val cameraIds = camMgr.cameraIdList
-			if (cameraIds.isNotEmpty()) {
-				for (id in cameraIds) {
-					val characteristics = camMgr.getCameraCharacteristics(id)
-					val deviceLevel = characteristics.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL)!!
-					val facing = characteristics.get(CameraCharacteristics.LENS_FACING)!!
-					if (deviceLevel == CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_LEGACY && facing == CameraMetadata.LENS_FACING_BACK)
-						camera2Dev = false
-				}
-			}
-		} catch (e: CameraAccessException) {
-			e.printStackTrace()
-			camera2Dev = false
-		}
+  override fun onBind(intent: Intent): IBinder {
+    return streamingServiceBinder
+  }
 
-		return camera2Dev
-	}
+  private fun isCamera2Device(): Boolean {
+    val camMgr = getSystemService(Context.CAMERA_SERVICE) as CameraManager
+    var camera2Dev = true
+    try {
+      val cameraIds = camMgr.cameraIdList
+      if (cameraIds.isNotEmpty()) {
+        for (id in cameraIds) {
+          val characteristics = camMgr.getCameraCharacteristics(id)
+          val deviceLevel =
+            characteristics.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL)!!
+          val facing = characteristics.get(CameraCharacteristics.LENS_FACING)!!
+          if (deviceLevel == CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_LEGACY && facing == CameraMetadata.LENS_FACING_BACK)
+            camera2Dev = false
+        }
+      }
+    } catch (e: CameraAccessException) {
+      e.printStackTrace()
+      camera2Dev = false
+    }
 
-	private fun createNativeCamera() {
-		val width = 1280;
-		val height = 720
-		cameraEngine = createAppEngine(width, height)
-		cameraPreviewSize = getMinimumCompatiblePreviewSize(cameraEngine)
-	}
+    return camera2Dev
+  }
 
-	private fun Int.getBitmapFromVectorDrawable(): Bitmap {
-		val drawable = ContextCompat.getDrawable(this@CameraService, this)
-		val bitmap = Bitmap.createBitmap(
-			drawable!!.intrinsicWidth,
-			drawable.intrinsicHeight, Bitmap.Config.ARGB_8888
-		)
-		val canvas = Canvas(bitmap)
-		drawable.setBounds(0, 0, canvas.width, canvas.height)
-		drawable.draw(canvas)
-		return bitmap
-	}
+  private fun createNativeCamera() {
+    cameraEngine = createAppEngine()
+    cameraPreviewSize = getMinimumCompatiblePreviewSize(cameraEngine)
+  }
 
-	private fun startForeground() {
-		val channel = createNotificationChannel()
+  private fun Int.getBitmapFromVectorDrawable(): Bitmap {
+    val drawable = ContextCompat.getDrawable(this@CameraService, this)
+    val bitmap = Bitmap.createBitmap(
+      drawable!!.intrinsicWidth,
+      drawable.intrinsicHeight, Bitmap.Config.ARGB_8888
+    )
+    val canvas = Canvas(bitmap)
+    drawable.setBounds(0, 0, canvas.width, canvas.height)
+    drawable.draw(canvas)
+    return bitmap
+  }
 
-		val customText = "custom text"
-		val statusIcon = R.drawable.ic_not_ready
+  private fun startForeground() {
+    val channel = createNotificationChannel()
 
-		val mainActivityIntent = Intent(this, MainActivity::class.java)
-		val pendingIntent = PendingIntent.getActivity(
-			this,
-			0,
-			mainActivityIntent,
-			PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-		)
+    val customText = "custom text"
+    val statusIcon = R.drawable.ic_not_ready
 
-		val notificationBuilder = NotificationCompat.Builder(this, channel)
-		val builder = notificationBuilder.setOngoing(true)
-			.setLargeIcon(statusIcon.getBitmapFromVectorDrawable())
-			.setSmallIcon(R.drawable.ic_camera_stream)
-			.setContentTitle(getString(R.string.notification_title))
-			.setContentText(customText)
-			.setPriority(NotificationCompat.PRIORITY_LOW)
-			.setCategory(NotificationCompat.CATEGORY_SERVICE)
-			.setContentIntent(pendingIntent)
+    val mainActivityIntent = Intent(this, MainActivity::class.java)
+    mainActivityIntent.flags = Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
 
-		val notification = builder.build()
-		notification.flags + Notification.FLAG_NO_CLEAR or Notification.FLAG_FOREGROUND_SERVICE
+    val pendingIntent = PendingIntent.getActivity(
+      this,
+      0,
+      mainActivityIntent,
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
 
-		startForeground(CAMERA_SERVICE_FG_ID, notification)
-	}
+    val notificationBuilder = NotificationCompat.Builder(this, channel)
+    val builder = notificationBuilder.setOngoing(true)
+      .setLargeIcon(statusIcon.getBitmapFromVectorDrawable()) // Assuming statusIcon is a drawable
+      .setSmallIcon(R.drawable.ic_camera_stream)
+      .setContentTitle(getString(R.string.notification_title))
+      .setContentText(customText)
+      .setPriority(NotificationCompat.PRIORITY_LOW)
+      .setCategory(NotificationCompat.CATEGORY_SERVICE)
+      .setContentIntent(pendingIntent)
 
-	private fun createNotificationChannel(): String {
-		val id = "surveillance-foreground-service"
-		val chan = NotificationChannel(
-			id,
-			getString(R.string.notification_description),
-			NotificationManager.IMPORTANCE_LOW)
-		chan.lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+    val notification = builder.build()
+    notification.flags = Notification.FLAG_NO_CLEAR or Notification.FLAG_FOREGROUND_SERVICE
 
-		val service = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    startForeground(CAMERA_SERVICE_FG_ID, notification)
+  }
 
-		service.createNotificationChannel(chan)
+  private fun createNotificationChannel(): String {
+    val id = "surveillance-foreground-service"
+    val chan = NotificationChannel(
+      id,
+      getString(R.string.notification_description),
+      NotificationManager.IMPORTANCE_LOW
+    )
+    chan.lockscreenVisibility = Notification.VISIBILITY_PRIVATE
 
-		return id
-	}
+    val service = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-	fun startPreview(preview: Boolean) {
-		requestPreview(cameraEngine, preview)
-	}
+    service.createNotificationChannel(chan)
 
-	fun previewSurfaceCreated(surface: Surface) {
-		onPreviewSurfaceCreated(cameraEngine, surface)
-	}
+    return id
+  }
 
-	fun previewSurfaceDestroyed(surface: Surface) {
-		onPreviewSurfaceDestroyed(cameraEngine, surface)
-	}
+  fun startPreview(preview: Boolean) {
+    requestPreview(cameraEngine, preview)
+  }
 
+  fun previewSurfaceCreated(surface: Surface) {
+    onPreviewSurfaceCreated(cameraEngine, surface)
+  }
 
-	// camera-lib
-	private external fun createAppEngine(width: Int, height: Int): Long
-	private external fun deleteAppEngine(ndkCamera: Long)
-
-	private external fun getMinimumCompatiblePreviewSize(ndkCamera: Long): Size
-
-	private external fun requestPreview(ndkCamera: Long, preview: Boolean)
-	private external fun requestRtc(ndkCamera: Long)
-
-	private external fun onPreviewSurfaceCreated(ndkCamera: Long, surface: Surface)
-	private external fun onPreviewSurfaceDestroyed(ndkCamera: Long, surface: Surface)
+  fun previewSurfaceDestroyed(surface: Surface) {
+    onPreviewSurfaceDestroyed(cameraEngine, surface)
+  }
 
 
-	companion object {
-		private const val CAMERA_SERVICE_FG_ID = 9990
+  // camera-lib
+  private external fun createAppEngine(): Long
+  private external fun deleteAppEngine(ndkCamera: Long)
 
-		init {
-			System.loadLibrary("camera-lib")
-		}
-	}
+  private external fun getMinimumCompatiblePreviewSize(ndkCamera: Long): Size
+
+  private external fun requestPreview(ndkCamera: Long, preview: Boolean)
+  private external fun requestRtc(ndkCamera: Long)
+
+  private external fun onPreviewSurfaceCreated(ndkCamera: Long, surface: Surface)
+  private external fun onPreviewSurfaceDestroyed(ndkCamera: Long, surface: Surface)
+
+
+  companion object {
+    private const val CAMERA_SERVICE_FG_ID = 9990
+
+    init {
+      System.loadLibrary("camera-lib")
+    }
+  }
 }

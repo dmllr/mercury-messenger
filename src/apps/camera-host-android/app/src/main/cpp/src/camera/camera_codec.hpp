@@ -67,8 +67,8 @@ private:
   void configure() {
     auto format = AMediaFormat_new();
 
-    auto width = 1280;
-    auto height = 720;
+    auto width = 1920;
+    auto height = 1080;
     auto frameRate = 30;
     //		auto bitRate = 57600;
     auto bitRate = static_cast<int>(0.22f * width * height * frameRate);

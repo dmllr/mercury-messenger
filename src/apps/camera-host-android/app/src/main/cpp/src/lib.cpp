@@ -31,9 +31,8 @@ AppEngine* engine = nullptr;
 extern "C" JNIEXPORT jlong JNICALL
 Java_me_hela_surveillance_CameraService_createAppEngine(
     JNIEnv* env,
-    jobject instance,
-    jint width, jint height) {
-  engine = new AppEngine(env, instance, width, height);
+    jobject instance) {
+  engine = new AppEngine(env, instance);
   return reinterpret_cast<jlong>(engine);
 }
 
