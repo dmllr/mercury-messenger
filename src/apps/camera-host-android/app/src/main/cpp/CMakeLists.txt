@@ -16,7 +16,9 @@ set (shared_cmake_libs_path ${root}/src/cmake)
 include("${shared_cmake_libs_path}/import_remote.cmake")
 include("${shared_cmake_libs_path}/libdatachannel.cmake")
 include("${shared_cmake_libs_path}/libopus.cmake")
-include("${shared_cmake_libs_path}/libjson.cmake")
+if (NOT TARGET nlohmann_json)
+  include("${shared_cmake_libs_path}/libjson.cmake")
+endif()
 
 include("cmake/libliveMedia.cmake")
 

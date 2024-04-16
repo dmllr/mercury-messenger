@@ -35,6 +35,8 @@ target_include_directories(camera-lib
   "${shared_libs}"
 )
 
+# workaround for "ninja: error: build.ninja multiple rules generate tests"
+# remove it, build, undo removal, build again
 add_test(tests
   tests.cpp
 )
