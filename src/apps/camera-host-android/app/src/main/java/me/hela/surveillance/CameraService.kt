@@ -27,13 +27,27 @@ class CameraService : Service() {
   private var cameraEngine: Long = 0
   var cameraPreviewSize: Size = Size(0, 0)
 
-
   inner class StreamingServiceBinder : Binder() {
     val service: CameraService
       get() = this@CameraService
   }
 
+  // AppEngine callback interface
+  interface StatusCallback {
+    fun onRtcStatusUpdate(status: Int)
+    fun onRtspStatusUpdate(status: Int)
+  }
+
+  inner class MyStatusCallback : StatusCallback {
+    override fun onRtcStatusUpdate(status: Int) {
+      println("Status update received: $status")
+    }
+    override fun onRtspStatusUpdate(status: Int) {
+      println("Status update received: $status")
+    }
+  }
   private val streamingServiceBinder = StreamingServiceBinder()
+  private val statusCallback = MyStatusCallback()
 
   override fun onCreate() {
     super.onCreate()
@@ -90,7 +104,7 @@ class CameraService : Service() {
   }
 
   private fun createNativeCamera() {
-    cameraEngine = createAppEngine()
+    cameraEngine = createAppEngine(statusCallback)
     cameraPreviewSize = getMinimumCompatiblePreviewSize(cameraEngine)
   }
 
@@ -124,7 +138,7 @@ class CameraService : Service() {
 
     val notificationBuilder = NotificationCompat.Builder(this, channel)
     val builder = notificationBuilder.setOngoing(true)
-      .setLargeIcon(statusIcon.getBitmapFromVectorDrawable()) // Assuming statusIcon is a drawable
+      .setLargeIcon(statusIcon.getBitmapFromVectorDrawable())
       .setSmallIcon(R.drawable.ic_camera_stream)
       .setContentTitle(getString(R.string.notification_title))
       .setContentText(customText)
@@ -167,8 +181,8 @@ class CameraService : Service() {
   }
 
 
-  // camera-lib
-  private external fun createAppEngine(): Long
+  // native lib functions
+  private external fun createAppEngine(statusCallback: StatusCallback): Long
   private external fun deleteAppEngine(ndkCamera: Long)
 
   private external fun getMinimumCompatiblePreviewSize(ndkCamera: Long): Size

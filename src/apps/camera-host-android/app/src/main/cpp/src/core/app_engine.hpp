@@ -22,6 +22,7 @@
 class AppEngine {
   JNIEnv* env;
   jobject service_instance;
+  jobject status_update_callback;
   jobject preview_surface = nullptr;
   std::shared_ptr<CameraManager> camera_manager;
   std::shared_ptr<RtcProducer> rtc_producer;
@@ -29,9 +30,10 @@ class AppEngine {
   ImageFormat compatible_camera_res;
 
 public:
-  explicit AppEngine(JNIEnv* env, jobject instance)
+  explicit AppEngine(JNIEnv* env, jobject instance, jobject status_update_callback)
       : env(env),
-        service_instance(env->NewWeakGlobalRef(instance)) {
+        service_instance(env->NewWeakGlobalRef(instance)),
+        status_update_callback(env->NewGlobalRef(status_update_callback)) {
     memset(&compatible_camera_res, 0, sizeof(compatible_camera_res));
 
     camera_manager = std::make_shared<CameraManager>();
@@ -58,6 +60,8 @@ public:
       env->DeleteGlobalRef(preview_surface);
       preview_surface = nullptr;
     }
+    env->DeleteGlobalRef(service_instance);
+    env->DeleteGlobalRef(status_update_callback);
   }
 
   const ImageFormat& getCompatibleCameraRes() const {
@@ -115,5 +119,14 @@ protected:
     auto audio = std::make_shared<AudioBufferSource>();
 
     return std::make_shared<Stream>(video, audio);
+  }
+
+private:
+  void setStatus(int status) {
+    jclass callbackClass = env->GetObjectClass(status_update_callback);
+    jmethodID callbackMethod = env->GetMethodID(callbackClass, "onStatusUpdate", "(I)V");
+    if (callbackMethod != nullptr) {
+      env->CallVoidMethod(status_update_callback, callbackMethod, status);
+    }
   }
 };
