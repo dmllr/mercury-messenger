@@ -49,6 +49,7 @@ public:
 
     rtc_producer = std::make_shared<RtcProducer>();
     rtc_producer->setStream(stream);
+    rtc_producer->setStatusCallback([this](int sender, int status) { setStatus(sender, status); });
     rtc_producer->startServer();
 
     rtsp_manager = std::make_shared<server::RtspManager>(camera_manager);
@@ -107,7 +108,7 @@ public:
     jclass callbackClass = env->GetObjectClass(status_update_callback);
     jmethodID callbackMethod = env->GetMethodID(callbackClass, "onStatusUpdate", "(II)V");
     if (callbackMethod != nullptr) {
-      env->CallVoidMethod(status_update_callback, callbackMethod, status);
+      env->CallVoidMethod(status_update_callback, callbackMethod, sender, status);
     }
   }
 

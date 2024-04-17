@@ -22,6 +22,8 @@ class RtcTransportBase {
   const std::string ip_address = "app.hela.me";
   const uint16_t port = 8000;
 
+  std::shared_ptr<std::function<void(int, int)>> status_callback_;
+
 public:
   explicit RtcTransportBase() {
     ws_config.caCertificatePemFile = ZEROSSL_CA_BUNDLE;
@@ -29,6 +31,13 @@ public:
 
   auto hasPeer() -> bool {
     return !peers.empty();
+  }
+
+  void setStatusCallback(std::function<void(int, int)> status_callback) {
+    status_callback_ = std::make_shared<std::function<void(int, int)>>(status_callback);
+    if (likely(status_callback_)) {
+      (*status_callback_)(0, 1);
+    }
   }
 
 protected:
@@ -111,6 +120,9 @@ protected:
 
     pc->onStateChange([this, id](rtc::PeerConnection::State state) {
       LOGI << "State: " << (int)state;
+      if (likely(status_callback_)) {
+        (*status_callback_)(2, static_cast<int>(state));
+      }
       if (state == rtc::PeerConnection::State::Disconnected ||
           state == rtc::PeerConnection::State::Failed ||
           state == rtc::PeerConnection::State::Closed) {
@@ -124,6 +136,9 @@ protected:
     pc->onGatheringStateChange(
         [this, wpc = make_weak_ptr(pc), id](rtc::PeerConnection::GatheringState state) {
           LOGI << "Gathering State: " << (int)state;
+          if (likely(status_callback_)) {
+            (*status_callback_)(1, static_cast<int>(state));
+          }
           if (state == rtc::PeerConnection::GatheringState::Complete) {
             // Gathering complete, send answer
             if (auto pc = wpc.lock()) {

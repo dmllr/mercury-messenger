@@ -23,7 +23,7 @@ import androidx.core.content.ContextCompat
 import me.hela.surveillance.camera.R
 
 
-class CameraService : Service() {
+class CameraService : Service(), IStatusCallback {
   private var cameraEngine: Long = 0
   var cameraPreviewSize: Size = Size(0, 0)
 
@@ -33,17 +33,8 @@ class CameraService : Service() {
   }
 
   // AppEngine callback interface
-  interface StatusCallback {
-    fun onStatusUpdate(source: Int, status: Int)
-  }
 
-  inner class MyStatusCallback : StatusCallback {
-    override fun onStatusUpdate(source: Int, status: Int) {
-      TODO("Not yet implemented")
-    }
-  }
   private val streamingServiceBinder = StreamingServiceBinder()
-  private val statusCallback = MyStatusCallback()
 
   override fun onCreate() {
     super.onCreate()
@@ -76,6 +67,10 @@ class CameraService : Service() {
     return streamingServiceBinder
   }
 
+  override fun onStatusUpdate(source: Int, status: Int) {
+    Log.e(Tune.TAG, "Status update: $source/$status")
+  }
+
   private fun isCamera2Device(): Boolean {
     val camMgr = getSystemService(Context.CAMERA_SERVICE) as CameraManager
     var camera2Dev = true
@@ -100,7 +95,7 @@ class CameraService : Service() {
   }
 
   private fun createNativeCamera() {
-    cameraEngine = createAppEngine(statusCallback)
+    cameraEngine = createAppEngine(this)
     cameraPreviewSize = getMinimumCompatiblePreviewSize(cameraEngine)
   }
 
@@ -178,7 +173,7 @@ class CameraService : Service() {
 
 
   // native lib functions
-  private external fun createAppEngine(statusCallback: StatusCallback): Long
+  private external fun createAppEngine(statusCallback: IStatusCallback): Long
   private external fun deleteAppEngine(ndkCamera: Long)
 
   private external fun getMinimumCompatiblePreviewSize(ndkCamera: Long): Size
