@@ -2,14 +2,6 @@ set(src_path "../..")
 
 add_executable(posix-server
   main.cpp
-
-  ${libdatachannel_path}/examples/streamer/fileparser.cpp
-  ${libdatachannel_path}/examples/streamer/h264fileparser.cpp
-  ${libdatachannel_path}/examples/streamer/opusfileparser.cpp
-
-  ${src_path}/lib/rtc/dispatch_queue.cpp
-  ${src_path}/lib/rtc/stream.cpp
-  ${src_path}/lib/rtc/rtc_transport_base.cpp
 )
 set_property(TARGET posix-server PROPERTY CXX_STANDARD 17)
 target_compile_features(posix-server PRIVATE cxx_std_17)
@@ -34,9 +26,10 @@ target_include_directories(posix-server
   "${libopencv_path}/modules/highgui/include"
   "${libopencv_path}/modules/videoio/include"
 
-  # for OpenCV generated files
+  # for generated files
   "${CMAKE_BINARY_DIR}"
 
   # tmp
   "${libdatachannel_path}/examples/streamer"
 )
+add_dependencies(posix-server generate_enums)

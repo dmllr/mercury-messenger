@@ -6,10 +6,6 @@ add_library(camera-lib SHARED
   audio/recorder.cpp
   audio/audio_common.h
   audio/audio_common.cpp
-
-  ${shared_libs}/rtc/dispatch_queue.cpp
-  ${shared_libs}/rtc/stream.cpp
-  ${shared_libs}/rtc/rtc_transport_base.cpp
 )
 
 target_compile_features(camera-lib PUBLIC cxx_std_20)
@@ -32,8 +28,11 @@ target_link_libraries(camera-lib
 target_include_directories(camera-lib
   PRIVATE
   "${CMAKE_CURRENT_LIST_DIR}"
+  "${CMAKE_BINARY_DIR}"
   "${shared_libs}"
 )
+
+add_dependencies(camera-lib generate_enums)
 
 # workaround for "ninja: error: build.ninja multiple rules generate tests"
 # remove it, build, undo removal, build again

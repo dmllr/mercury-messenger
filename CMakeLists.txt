@@ -9,6 +9,8 @@ set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
 
+include("src/cmake/enums/enums.cmake")
+
 include("src/cmake/import_remote.cmake")
 
 include("src/cmake/libdatachannel.cmake")

@@ -91,7 +91,7 @@ foreach (_lib avfilter avcodec avdevice avformat avutil swresample swscale)
     "${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/lib${_lib}/lib${_lib}.a")
 endforeach ()
 
-if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
   list(APPEND CONFIGURE_PARAMS "--enable-x86asm")
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
   list(APPEND CONFIGURE_PARAMS "--disable-x86asm")

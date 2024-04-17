@@ -3,18 +3,18 @@
 #include "logging/logging.h"
 #include "utils/memory.h"
 
-#include "dispatch_queue.hpp"
-#include "nlohmann/json.hpp"
-#include "peer.hpp"
+#include "rtc/dispatch_queue.hpp"
+#include "rtc/peer.hpp"
 #include "rtc/rtc.h"
+#include "rtc/stream.hpp"
 
-#include "stream.hpp"
+#include "generated/enums/event_source.h"
+
+#include "nlohmann/json.hpp"
 
 #include <memory>
 #include <thread>
 #include <unordered_map>
-
-extern DispatchQueue MainThread;
 
 class RtcTransportBase {
   using json = nlohmann::json;
@@ -22,7 +22,7 @@ class RtcTransportBase {
   const std::string ip_address = "app.hela.me";
   const uint16_t port = 8000;
 
-  std::shared_ptr<std::function<void(int, int)>> status_callback_;
+  std::shared_ptr<std::function<void(EventSource, int)>> status_callback_;
 
 public:
   explicit RtcTransportBase() {
@@ -33,14 +33,16 @@ public:
     return !peers.empty();
   }
 
-  void setStatusCallback(std::function<void(int, int)> status_callback) {
-    status_callback_ = std::make_shared<std::function<void(int, int)>>(status_callback);
+  void setStatusCallback(const std::function<void(EventSource, int)>& status_callback) {
+    status_callback_ = std::make_shared<std::function<void(EventSource, int)>>(status_callback);
     if (likely(status_callback_)) {
-      (*status_callback_)(0, 1);
+      (*status_callback_)(EventSource::System, 1);
     }
   }
 
 protected:
+  DispatchQueue MainThread = DispatchQueue("Main", 1);
+
   virtual void wsOnMessage(json message) = 0;
   virtual void onPeerReady(const std::shared_ptr<Peer>& peer) = 0;
 
@@ -121,7 +123,7 @@ protected:
     pc->onStateChange([this, id](rtc::PeerConnection::State state) {
       LOGI << "State: " << (int)state;
       if (likely(status_callback_)) {
-        (*status_callback_)(2, static_cast<int>(state));
+        (*status_callback_)(EventSource::RtcPeerConnection, static_cast<int>(state));
       }
       if (state == rtc::PeerConnection::State::Disconnected ||
           state == rtc::PeerConnection::State::Failed ||
@@ -137,7 +139,7 @@ protected:
         [this, wpc = make_weak_ptr(pc), id](rtc::PeerConnection::GatheringState state) {
           LOGI << "Gathering State: " << (int)state;
           if (likely(status_callback_)) {
-            (*status_callback_)(1, static_cast<int>(state));
+            (*status_callback_)(EventSource::RtcGathering, static_cast<int>(state));
           }
           if (state == rtc::PeerConnection::GatheringState::Complete) {
             // Gathering complete, send answer

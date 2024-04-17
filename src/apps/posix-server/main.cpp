@@ -4,7 +4,6 @@
 
 #include <opencv2/highgui.hpp>
 #include <opencv2/videoio.hpp>
-//#include <opencv2/highgui/highgui_c.h>
 #include <opencv2/imgproc.hpp>
 
 extern "C" {
@@ -20,7 +19,7 @@ extern "C" {
 #include "rtc/stream.hpp"
 
 // tmp
-#include "../../_imported/libdatachannel/examples/streamer/opusfileparser.hpp"
+#include "fileparser.hpp"
 #include <fstream>
 
 #ifdef _WIN32
@@ -81,7 +80,7 @@ public:
     // essential to set hw_encoding=0 on Windows due to NVidia MF failure:
     // [h264_mf @ 0000024BC438BD40] MFT name: 'NVIDIA H.264 Encoder MFT'
     // [h264_mf @ 0000024BC438BD40] "format negotiation failed"
-    av_opt_set(codec_context->priv_data, "hw_encoding", "1", 0);  // TODO investigate
+    av_opt_set(codec_context->priv_data, "hw_encoding", "0", 0);  // TODO investigate
 #endif
 
     std::cout << "Width: " << codec_context->width << ", height: " << codec_context->height << std::endl;

@@ -1,14 +1,4 @@
-/**
- * libdatachannel streamer example
- * Copyright (c) 2020 Filip Klembara (in2core)
- *
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at https://mozilla.org/MPL/2.0/.
- */
-
-#ifndef helpers_hpp
-#define helpers_hpp
+#pragma once
 
 #include "rtc/rtc.hpp"
 
@@ -117,5 +107,3 @@ inline auto currentTimeInMicroSeconds() -> uint64_t {
   gettimeofday(&time, nullptr);
   return uint64_t(time.tv_sec) * 1000 * 1000 + time.tv_usec;
 }
-
-#endif /* helpers_hpp */

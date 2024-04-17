@@ -10,10 +10,13 @@
 
 #include "camera/camera_codec.hpp"
 #include "camera/camera_manager.hpp"
+#include "server/rtsp_manager.hpp"
+
+#include "generated/enums/event_source.h"
+
 #include "rtc/audio_buffer_source.hpp"
 #include "rtc/camera_buffer_source.hpp"
 #include "rtc/rtc_producer.hpp"
-#include "server/rtsp_manager.hpp"
 
 
 /**
@@ -49,7 +52,7 @@ public:
 
     rtc_producer = std::make_shared<RtcProducer>();
     rtc_producer->setStream(stream);
-    rtc_producer->setStatusCallback([this](int sender, int status) { setStatus(sender, status); });
+    rtc_producer->setStatusCallback([this](EventSource sender, int status) { setStatus(sender, status); });
     rtc_producer->startServer();
 
     rtsp_manager = std::make_shared<server::RtspManager>(camera_manager);
@@ -104,11 +107,11 @@ public:
     rtc_producer->startServer();
   }
 
-  void setStatus(int sender, int status) {
+  void setStatus(EventSource sender, int status) {
     jclass callbackClass = env->GetObjectClass(status_update_callback);
     jmethodID callbackMethod = env->GetMethodID(callbackClass, "onStatusUpdate", "(II)V");
     if (callbackMethod != nullptr) {
-      env->CallVoidMethod(status_update_callback, callbackMethod, sender, status);
+      env->CallVoidMethod(status_update_callback, callbackMethod, static_cast<int>(sender), status);
     }
   }
 
