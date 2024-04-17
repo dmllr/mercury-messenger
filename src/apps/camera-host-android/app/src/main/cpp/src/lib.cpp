@@ -59,15 +59,6 @@ Java_me_hela_surveillance_CameraService_getMinimumCompatiblePreviewSize(
   return previewSize;
 }
 
-extern "C" JNIEXPORT jint JNICALL
-Java_me_hela_surveillance_CameraService_getCameraSensorOrientation(
-    JNIEnv* env,
-    jobject instance,
-    jlong appmgr) {
-  auto app = reinterpret_cast<AppEngine*>(appmgr);
-  return app->getCameraSensorOrientation(ACAMERA_LENS_FACING_BACK);
-}
-
 extern "C" JNIEXPORT void JNICALL
 Java_me_hela_surveillance_CameraService_requestPreview(
     JNIEnv* env,

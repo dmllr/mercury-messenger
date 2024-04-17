@@ -87,20 +87,20 @@ public:
     return (*this);
   }
 
-  bool operator>(DisplayDimension& other) {
+  bool operator>(const DisplayDimension& other) {
     return (width >= other.width & height >= other.height);
   }
 
-  bool operator==(DisplayDimension& other) {
+  bool operator==(const DisplayDimension& other) {
     return (width == other.width && height == other.height && is_portrait == other.is_portrait);
   }
 
-  DisplayDimension operator-(DisplayDimension& other) {
+  DisplayDimension operator-(const DisplayDimension& other) {
     DisplayDimension delta(width - other.width, height - other.height);
     return delta;
   }
 
-  bool isSameRatio(DisplayDimension& other) {
+  bool isSameRatio(const DisplayDimension& other) {
     return (width * other.height == height * other.width);
   }
 
@@ -434,69 +434,6 @@ public:
       *angle = camera_orientation;
 
     return true;
-  }
-
-  bool matchCaptureSizeRequest(
-      int32_t requestWidth,
-      int32_t requestHeight,
-      ImageFormat* resView) {
-    DisplayDimension disp(requestWidth, requestHeight);
-    if (camera_orientation == 90 || camera_orientation == 270)
-      disp.flip();
-
-    ACameraMetadata* metadata;
-    auto status = ACameraManager_getCameraCharacteristics(camera_manager, active_camera_id.c_str(), &metadata);
-    Log::assert_or_die(status == ACAMERA_OK, "ACameraManager_getCameraCharacteristics call failed with code: %#x, %s", status, GetErrorStr(status));
-
-    ACameraMetadata_const_entry entry;
-    status = ACameraMetadata_getConstEntry(metadata, ACAMERA_SCALER_AVAILABLE_STREAM_CONFIGURATIONS, &entry);
-    Log::assert_or_die(status == ACAMERA_OK, "ACameraMetadata_getConstEntry call failed with code: %#x, %s", status, GetErrorStr(status));
-
-    // format of the data: format, width, height, input?, type int32
-    bool foundIt = false;
-    DisplayDimension foundRes(requestWidth, requestHeight);
-
-    for (int i = 0; i < entry.count; i += 4) {
-      int32_t input = entry.data.i32[i + 3];
-      int32_t format = entry.data.i32[i + 0];
-      if (input) {
-        continue;
-      }
-
-      if (format == AIMAGE_FORMAT_YUV_420_888 || format == AIMAGE_FORMAT_JPEG) {
-        DisplayDimension res(entry.data.i32[i + 1], entry.data.i32[i + 2]);
-        if (!disp.isSameRatio(res)) {
-          LOGI << "Found resolution " << res.orgWidth() << "x" << res.orgHeight() << ", format \"" << format << "\"" << " not matches ratio";
-          continue;
-        }
-        if (format == AIMAGE_FORMAT_YUV_420_888 && foundRes > res) {
-          LOGI << "Found resolution " << res.orgWidth() << "x" << res.orgHeight() << ", format \"" << format << "\"" << " not matches format, desired is " << AIMAGE_FORMAT_YUV_420_888;
-          foundIt = true;
-          foundRes = res;
-        }
-      }
-    }
-
-    if (foundIt) {
-      resView->width = foundRes.orgWidth();
-      resView->height = foundRes.orgHeight();
-    } else {
-      Log::w("Did not find any compatible camera resolution, taking 1280x720");
-      if (disp.isPortrait()) {
-        resView->width = 720;
-        resView->height = 1280;
-      } else {
-        resView->width = 1280;
-        resView->height = 720;
-      }
-    }
-
-    resView->width = 7200;
-    resView->height = 12800;
-
-    resView->format = AIMAGE_FORMAT_YUV_420_888;
-
-    return foundIt;
   }
 
 private:

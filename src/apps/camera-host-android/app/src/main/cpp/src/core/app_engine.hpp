@@ -68,15 +68,6 @@ public:
     return compatible_camera_res;
   }
 
-  int32_t getCameraSensorOrientation(int32_t requestFacing) {
-    int32_t facing = 0, angle = 0;
-    if (camera_manager->getSensorOrientation(&facing, &angle) ||
-        facing == requestFacing) {
-      return angle;
-    }
-    return 0;
-  }
-
   jobject getSurfaceObject() {
     return preview_surface;
   }
@@ -112,17 +103,9 @@ public:
     rtc_producer->startServer();
   }
 
-  void setRtcStatus(int status) {
+  void setStatus(int sender, int status) {
     jclass callbackClass = env->GetObjectClass(status_update_callback);
-    jmethodID callbackMethod = env->GetMethodID(callbackClass, "onRtcStatusUpdate", "(I)V");
-    if (callbackMethod != nullptr) {
-      env->CallVoidMethod(status_update_callback, callbackMethod, status);
-    }
-  }
-
-  void setRtspStatus(int status) {
-    jclass callbackClass = env->GetObjectClass(status_update_callback);
-    jmethodID callbackMethod = env->GetMethodID(callbackClass, "onRtspStatusUpdate", "(I)V");
+    jmethodID callbackMethod = env->GetMethodID(callbackClass, "onStatusUpdate", "(II)V");
     if (callbackMethod != nullptr) {
       env->CallVoidMethod(status_update_callback, callbackMethod, status);
     }

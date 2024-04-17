@@ -34,16 +34,12 @@ class CameraService : Service() {
 
   // AppEngine callback interface
   interface StatusCallback {
-    fun onRtcStatusUpdate(status: Int)
-    fun onRtspStatusUpdate(status: Int)
+    fun onStatusUpdate(source: Int, status: Int)
   }
 
   inner class MyStatusCallback : StatusCallback {
-    override fun onRtcStatusUpdate(status: Int) {
-      println("Status update received: $status")
-    }
-    override fun onRtspStatusUpdate(status: Int) {
-      println("Status update received: $status")
+    override fun onStatusUpdate(source: Int, status: Int) {
+      TODO("Not yet implemented")
     }
   }
   private val streamingServiceBinder = StreamingServiceBinder()
@@ -192,7 +188,6 @@ class CameraService : Service() {
 
   private external fun onPreviewSurfaceCreated(ndkCamera: Long, surface: Surface)
   private external fun onPreviewSurfaceDestroyed(ndkCamera: Long, surface: Surface)
-
 
   companion object {
     private const val CAMERA_SERVICE_FG_ID = 9990
