@@ -21,6 +21,9 @@ import android.view.Surface
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import me.hela.surveillance.camera.R
+import me.hela.surveillance.events.EventSource
+import me.hela.surveillance.events.IStatusCallback
+import me.hela.surveillance.events.RtcState
 
 
 class CameraService : Service(), IStatusCallback {
@@ -69,8 +72,13 @@ class CameraService : Service(), IStatusCallback {
   }
 
   override fun onStatusUpdate(source: Int, status: Int) {
-    Log.e(Tune.TAG, "Status update: $source/$status")
-    log += "Status update: $source/$status\n"
+    val src = EventSource.fromInt(source)
+    if (src != EventSource.RTC) {
+      return;
+    }
+    val rtcState = RtcState.fromInt(status);
+    Log.e(Tune.TAG, "Status update: $source/$rtcState")
+    log += "Status update: $source/$rtcState\n"
     startForeground()
   }
 
@@ -136,6 +144,7 @@ class CameraService : Service(), IStatusCallback {
       .setSmallIcon(R.drawable.ic_camera_stream)
       .setContentTitle(getString(R.string.notification_title))
       .setContentText(customText)
+      .setStyle(NotificationCompat.BigTextStyle(notificationBuilder))
       .setPriority(NotificationCompat.PRIORITY_LOW)
       .setCategory(NotificationCompat.CATEGORY_SERVICE)
       .setContentIntent(pendingIntent)

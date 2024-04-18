@@ -32,4 +32,3 @@ target_include_directories(posix-server
   # tmp
   "${libdatachannel_path}/examples/streamer"
 )
-add_dependencies(posix-server generate_enums)

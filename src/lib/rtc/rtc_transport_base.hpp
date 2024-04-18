@@ -2,13 +2,13 @@
 
 #include "logging/logging.h"
 #include "utils/memory.h"
+#include "events/event_source.h"
+#include "events/signalling_state.h"
 
 #include "rtc/dispatch_queue.hpp"
 #include "rtc/peer.hpp"
 #include "rtc/rtc.h"
 #include "rtc/stream.hpp"
-
-#include "generated/enums/event_source.h"
 
 #include "nlohmann/json.hpp"
 
@@ -71,14 +71,23 @@ protected:
 
       ws.onOpen([this]() {
         LOGI << "WebSocket connected, signaling ready";
+        if (likely(status_callback_)) {
+          (*status_callback_)(EventSource::RTC, static_cast<int>(SignallingState::Ready));
+        }
       });
 
-      ws.onClosed([]() {
+      ws.onClosed([this]() {
         LOGI << "WebSocket closed";
+        if (likely(status_callback_)) {
+          (*status_callback_)(EventSource::RTC, static_cast<int>(SignallingState::Closed));
+        }
       });
 
-      ws.onError([](const std::string& error) {
+      ws.onError([this](const std::string& error) {
         LOGI << "WebSocket failed: " << error.c_str();
+        if (likely(status_callback_)) {
+          (*status_callback_)(EventSource::RTC, static_cast<int>(SignallingState::Failure));
+        }
       });
 
       ws.onMessage([&](std::variant<rtc::binary, std::string> data) {
@@ -113,6 +122,9 @@ protected:
       //			return;
     } catch (const std::exception& e) {
       LOGI << "Error: " << e.what();
+      if (likely(status_callback_)) {
+        (*status_callback_)(EventSource::RTC, static_cast<int>(SignallingState::Unexpected));
+      }
       return;
     }
   }
@@ -123,7 +135,7 @@ protected:
     pc->onStateChange([this, id](rtc::PeerConnection::State state) {
       LOGI << "State: " << (int)state;
       if (likely(status_callback_)) {
-        (*status_callback_)(EventSource::RtcPeerConnection, static_cast<int>(state));
+        (*status_callback_)(EventSource::RTC, 400 + static_cast<int>(state));
       }
       if (state == rtc::PeerConnection::State::Disconnected ||
           state == rtc::PeerConnection::State::Failed ||
@@ -135,11 +147,18 @@ protected:
       }
     });
 
+    pc->onIceStateChange([this, id](rtc::PeerConnection::IceState state) {
+      LOGI << "ICE State: " << (int)state;
+      if (likely(status_callback_)) {
+        (*status_callback_)(EventSource::RTC, 300 + static_cast<int>(state));
+      }
+    });
+
     pc->onGatheringStateChange(
         [this, wpc = make_weak_ptr(pc), id](rtc::PeerConnection::GatheringState state) {
           LOGI << "Gathering State: " << (int)state;
           if (likely(status_callback_)) {
-            (*status_callback_)(EventSource::RtcGathering, static_cast<int>(state));
+            (*status_callback_)(EventSource::RTC, 200 + static_cast<int>(state));
           }
           if (state == rtc::PeerConnection::GatheringState::Complete) {
             // Gathering complete, send answer
@@ -154,6 +173,13 @@ protected:
             }
           }
         });
+
+    pc->onSignalingStateChange([this, id](rtc::PeerConnection::SignalingState state) {
+      LOGI << "Signalling State: " << (int)state;
+      if (likely(status_callback_)) {
+        (*status_callback_)(EventSource::RTC, 100 + static_cast<int>(state));
+      }
+    });
 
     return pc;
   }

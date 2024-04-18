@@ -13,7 +13,6 @@ find_library(log-lib log)
 
 set (root ../../../../../../..)
 set (shared_cmake_libs_path ${root}/src/cmake)
-include("${shared_cmake_libs_path}/enums/enums.cmake")
 include("${shared_cmake_libs_path}/import_remote.cmake")
 include("${shared_cmake_libs_path}/libdatachannel.cmake")
 include("${shared_cmake_libs_path}/libopus.cmake")

@@ -12,7 +12,7 @@
 #include "camera/camera_manager.hpp"
 #include "server/rtsp_manager.hpp"
 
-#include "generated/enums/event_source.h"
+#include "events/event_source.h"
 
 #include "rtc/audio_buffer_source.hpp"
 #include "rtc/camera_buffer_source.hpp"
