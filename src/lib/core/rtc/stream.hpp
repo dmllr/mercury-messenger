@@ -7,9 +7,9 @@
 #include <mutex>
 #include <functional>
 
-#include "rtc/dispatch_queue.hpp"
+#include "core/rtc/dispatch_queue.hpp"
+#include "core/rtc/peer.hpp"
 #include "rtc/rtc.hpp"
-#include "rtc/peer.hpp"
 
 class StreamSource {
 public:

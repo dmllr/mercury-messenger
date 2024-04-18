@@ -6,9 +6,9 @@
 #include "nlohmann/json.hpp"
 #include "rtc/rtc.h"
 
-#include "peer.hpp"
+#include "core/rtc/peer.hpp"
 #include "rtc_transport_base.hpp"
-#include "stream.hpp"
+#include "core/rtc/stream.hpp"
 
 #include <memory>
 

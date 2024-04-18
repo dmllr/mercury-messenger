@@ -8,7 +8,7 @@
 #include <cstdint>
 #include <limits>
 
-#include "rtc/stream.hpp"
+#include "core/rtc/stream.hpp"
 
 class FileParser: public StreamSource {
     std::string directory;

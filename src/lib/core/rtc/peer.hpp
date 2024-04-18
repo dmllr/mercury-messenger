@@ -7,8 +7,8 @@
 
 #ifdef _MSC_VER
   // taken from https://stackoverflow.com/questions/10905892/equivalent-of-gettimeday-for-windows
-  #include <windows.h>
-  #include <winsock2.h>  // for struct timeval
+  #include <WinSock2.h>  // for struct timeval
+  #include <Windows.h>
 
 namespace {
 

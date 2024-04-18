@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-#include "rtc/stream.hpp"
+#include "core/rtc/stream.hpp"
 
 
 class CameraBufferSource : public StreamSource {

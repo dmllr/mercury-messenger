@@ -1,20 +1,22 @@
 #pragma once
 
-#include "logging/logging.h"
-#include "utils/memory.h"
-#include "events/event_source.h"
-#include "events/signalling_state.h"
-
-#include "rtc/dispatch_queue.hpp"
-#include "rtc/peer.hpp"
-#include "rtc/rtc.h"
-#include "rtc/stream.hpp"
-
-#include "nlohmann/json.hpp"
-
 #include <memory>
 #include <thread>
 #include <unordered_map>
+
+#include "nlohmann/json.hpp"
+
+#include "rtc/peerconnection.hpp"
+#include "rtc/rtc.h"
+
+#include "core/rtc/dispatch_queue.hpp"
+#include "core/rtc/peer.hpp"
+#include "core/rtc/stream.hpp"
+#include "events/event_source.h"
+#include "events/signalling_state.h"
+#include "logging/logging.h"
+#include "utils/memory.h"
+
 
 class RtcTransportBase {
   using json = nlohmann::json;
@@ -154,25 +156,24 @@ protected:
       }
     });
 
-    pc->onGatheringStateChange(
-        [this, wpc = make_weak_ptr(pc), id](rtc::PeerConnection::GatheringState state) {
-          LOGI << "Gathering State: " << (int)state;
-          if (likely(status_callback_)) {
-            (*status_callback_)(EventSource::RTC, 200 + static_cast<int>(state));
-          }
-          if (state == rtc::PeerConnection::GatheringState::Complete) {
-            // Gathering complete, send answer
-            if (auto pc = wpc.lock()) {
-              auto description = pc->localDescription();
-              json message = {
-                  {"id", id},
-                  {"debug", "onGatheringStateChange(complete)"},
-                  {"type", description->typeString()},
-                  {"sdp", std::string(description.value())}};
-              ws.send(message.dump());
-            }
-          }
-        });
+    pc->onGatheringStateChange([this, wpc = make_weak_ptr(pc), id](rtc::PeerConnection::GatheringState state) {
+      LOGI << "Gathering State: " << (int)state;
+      if (likely(status_callback_)) {
+        (*status_callback_)(EventSource::RTC, 200 + static_cast<int>(state));
+      }
+      if (state == rtc::PeerConnection::GatheringState::Complete) {
+        // Gathering complete, send answer
+        if (auto pc = wpc.lock()) {
+          auto description = pc->localDescription();
+          json message = {
+              {"id", id},
+              {"debug", "onGatheringStateChange(complete)"},
+              {"type", description->typeString()},
+              {"sdp", std::string(description.value())}};
+          ws.send(message.dump());
+        }
+      }
+    });
 
     pc->onSignalingStateChange([this, id](rtc::PeerConnection::SignalingState state) {
       LOGI << "Signalling State: " << (int)state;

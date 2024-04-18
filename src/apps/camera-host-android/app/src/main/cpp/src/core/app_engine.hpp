@@ -10,13 +10,13 @@
 
 #include "camera/camera_codec.hpp"
 #include "camera/camera_manager.hpp"
-#include "server/rtsp_manager.hpp"
 
 #include "events/event_source.h"
 
-#include "rtc/audio_buffer_source.hpp"
-#include "rtc/camera_buffer_source.hpp"
-#include "rtc/rtc_producer.hpp"
+#include "impl/rtsp/rtsp_manager.hpp"
+#include "impl/rtc/audio_buffer_source.hpp"
+#include "impl/rtc/camera_buffer_source.hpp"
+#include "core/rtc/rtc_producer.hpp"
 
 
 /**
@@ -30,7 +30,7 @@ class AppEngine {
   jobject preview_surface = nullptr;
   std::shared_ptr<CameraManager> camera_manager;
   std::shared_ptr<RtcProducer> rtc_producer;
-  std::shared_ptr<server::RtspManager> rtsp_manager;
+  std::shared_ptr<rtsp::RtspManager> rtsp_manager;
   ImageFormat compatible_camera_res;
 
 public:
@@ -57,7 +57,7 @@ public:
     rtc_producer->setStatusCallback([this](EventSource sender, int status) { setStatus(sender, status); });
     rtc_producer->startServer();
 
-    rtsp_manager = std::make_shared<server::RtspManager>(camera_manager);
+    rtsp_manager = std::make_shared<rtsp::RtspManager>(camera_manager);
     rtsp_manager->start(camera_manager->codec()->getCodec());
   }
 

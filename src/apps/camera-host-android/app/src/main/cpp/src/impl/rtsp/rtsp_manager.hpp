@@ -17,7 +17,7 @@
 #include "utils/likely.h"
 
 
-namespace server {
+namespace rtsp {
 
 class RtspManager {
   static constexpr auto target = CaptureTarget::RTSP_ENCODER_SURFACE;
@@ -99,4 +99,4 @@ public:
   }
 };
 
-}  // namespace server
+}  // namespace rtsp

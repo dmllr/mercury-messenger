@@ -15,8 +15,8 @@ extern "C" {
 #include <libavutil/time.h>
 }
 
-#include "rtc/rtc_producer.hpp"
-#include "rtc/stream.hpp"
+#include "core/rtc/rtc_producer.hpp"
+#include "core/rtc/stream.hpp"
 
 // tmp
 #include "fileparser.hpp"

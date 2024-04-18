@@ -7,7 +7,7 @@
 #include "opus.h"
 
 #include "audio/recorder.h"
-#include "rtc/stream.hpp"
+#include "core/rtc/stream.hpp"
 
 
 class AudioBufferSource : public StreamSource {
