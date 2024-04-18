@@ -14,13 +14,14 @@
  */
 AppEngine* engine = nullptr;
 
+JavaVM* g_JavaVM;
 
 extern "C" JNIEXPORT jlong JNICALL
 Java_me_hela_surveillance_CameraService_createAppEngine(
     JNIEnv* env,
     jobject instance,
     jobject statusUpdateCallback) {
-  engine = new AppEngine(env, instance, statusUpdateCallback);
+  engine = new AppEngine(g_JavaVM, env, instance, statusUpdateCallback);
   return reinterpret_cast<jlong>(engine);
 }
 
@@ -119,7 +120,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void* reserved) {
   if (vm->GetEnv((void**)&env, JNI_VERSION_1_6) != JNI_OK) {
     return JNI_ERR;
   }
-
+  g_JavaVM = vm;
   return JNI_VERSION_1_6;
 }
 

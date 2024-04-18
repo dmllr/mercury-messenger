@@ -24,6 +24,7 @@
  */
 class AppEngine {
   JNIEnv* env;
+  JavaVM* jvm;
   jobject service_instance;
   jobject status_update_callback;
   jobject preview_surface = nullptr;
@@ -33,8 +34,9 @@ class AppEngine {
   ImageFormat compatible_camera_res;
 
 public:
-  explicit AppEngine(JNIEnv* env, jobject instance, jobject status_update_callback)
-      : env(env),
+  explicit AppEngine(JavaVM* jvm, JNIEnv* env, jobject instance, jobject status_update_callback)
+      : jvm(jvm),
+        env(env),
         service_instance(env->NewWeakGlobalRef(instance)),
         status_update_callback(env->NewGlobalRef(status_update_callback)) {
     memset(&compatible_camera_res, 0, sizeof(compatible_camera_res));
@@ -107,13 +109,38 @@ public:
     rtc_producer->startServer();
   }
 
-  void setStatus(EventSource sender, int status) {
+void setStatus(EventSource sender, int status) {
+    JNIEnv* env = attachCurrentThreadIfNeeded();
+    if(env == nullptr) {
+        return;
+    }
     jclass callbackClass = env->GetObjectClass(status_update_callback);
     jmethodID callbackMethod = env->GetMethodID(callbackClass, "onStatusUpdate", "(II)V");
     if (callbackMethod != nullptr) {
-      env->CallVoidMethod(status_update_callback, callbackMethod, static_cast<int>(sender), status);
+        env->CallVoidMethod(status_update_callback, callbackMethod, static_cast<int>(sender), status);
     }
-  }
+}
+
+JNIEnv* attachCurrentThreadIfNeeded() {
+    JNIEnv *env;
+    jint res = jvm->GetEnv((void **)&env, JNI_VERSION_1_6);
+    switch (res) {
+        case JNI_OK:
+            // the current thread is already attached, return the JNIEnv.
+            return env;
+        case JNI_EDETACHED:
+            // the current thread is not attached, try to attach.
+            if (jvm->AttachCurrentThread(&env, nullptr) == JNI_OK) {
+                return env;
+            } else {
+                // failed to attach, handle error.
+                return nullptr;
+            }
+        default:
+            // unknown error, handle error.
+            return nullptr;
+    }
+}
 
 protected:
   std::shared_ptr<Stream> createRtcStream() {

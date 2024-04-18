@@ -34,7 +34,7 @@ public:
   }
 
   void setStatusCallback(const std::function<void(EventSource, int)>& status_callback) {
-    status_callback_ = std::make_shared<std::function<void(EventSource, int)>>(status_callback);
+    status_callback_ = std::make_shared<std::function<void(EventSource, int)>>(std::move(status_callback));
     if (likely(status_callback_)) {
       (*status_callback_)(EventSource::System, 1);
     }
