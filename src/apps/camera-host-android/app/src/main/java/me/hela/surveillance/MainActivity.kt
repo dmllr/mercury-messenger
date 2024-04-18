@@ -11,6 +11,7 @@ import android.graphics.Matrix
 import android.graphics.SurfaceTexture
 import android.os.Bundle
 import android.os.IBinder
+import android.util.Log
 import android.view.Surface
 import android.view.TextureView
 import android.view.View
@@ -181,7 +182,11 @@ class MainActivity : Activity(), TextureView.SurfaceTextureListener, ServiceConn
 
   private fun unbindCameraService() {
     if (cameraServiceBound) {
-      unbindService(this)
+      try {
+        unbindService(this)
+      } catch (_: IllegalArgumentException) {
+        Log.e(Tune.TAG, "Trying to unbid service that is not registered")
+      }
       cameraServiceBound = false
     }
   }

@@ -26,6 +26,7 @@ import me.hela.surveillance.camera.R
 class CameraService : Service(), IStatusCallback {
   private var cameraEngine: Long = 0
   var cameraPreviewSize: Size = Size(0, 0)
+  private var log: String = ""
 
   inner class StreamingServiceBinder : Binder() {
     val service: CameraService
@@ -69,6 +70,8 @@ class CameraService : Service(), IStatusCallback {
 
   override fun onStatusUpdate(source: Int, status: Int) {
     Log.e(Tune.TAG, "Status update: $source/$status")
+    log += "Status update: $source/$status\n"
+    startForeground()
   }
 
   private fun isCamera2Device(): Boolean {
@@ -114,7 +117,7 @@ class CameraService : Service(), IStatusCallback {
   private fun startForeground() {
     val channel = createNotificationChannel()
 
-    val customText = "custom text"
+    val customText = log
     val statusIcon = R.drawable.ic_not_ready
 
     val mainActivityIntent = Intent(this, MainActivity::class.java)
