@@ -1,8 +1,9 @@
 #pragma once
 
-enum class SignallingState : int {
-  Ready = 0,
-  Closed,
+enum class ServiceState : int {
+  Unknown = 0,
+  Standby,
+  Setup,
+  Action,
   Failure,
-  Unexpected,
 };

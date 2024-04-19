@@ -24,7 +24,6 @@ import androidx.core.graphics.drawable.DrawableCompat
 import me.hela.surveillance.camera.R
 import me.hela.surveillance.events.EventSource
 import me.hela.surveillance.events.IStatusCallback
-import me.hela.surveillance.events.NativeState
 import me.hela.surveillance.events.ServiceState
 
 
@@ -79,56 +78,13 @@ class CameraService : Service(), IStatusCallback {
 
   override fun onStatusUpdate(source: Int, status: Int) {
     val src = EventSource.fromInt(source)
-    val nativeState = NativeState.fromInt(status)
+    val state = ServiceState.fromInt(status)
 
-//    val statusIcon = when (underlyingServicesStates[EventSource.RTC]) {
-//      NativeState.Ready
-//        -> Pair(R.drawable.ic_status1_standby, R.color.colorPositive)
-//      NativeState.SignalingStable
-//        -> Pair(R.drawable.ic_status2, R.color.colorPositive)
-//      NativeState.IceFailed
-//        -> Pair(R.drawable.ic_status3, R.color.colorNegative)
-//      NativeState.PeerFailed
-//        -> Pair(R.drawable.ic_status4, R.color.colorNegative)
-//      NativeState.PeerConnecting
-//        -> Pair(R.drawable.ic_status4, R.color.colorPositive)
-//      NativeState.PeerConnected
-//        -> Pair(R.drawable.ic_in_action, R.color.colorPositive)
-//      else
-//        -> Pair(R.drawable.ic_status1_standby, R.color.colorNegative)
-//    }
-
-    underlyingServicesStates[src] = convertToServiceState(nativeState)
-    Log.e(Tune.TAG, "Status update: $src/$nativeState")
-    log += "$src/$nativeState\n"
+    underlyingServicesStates[src] = state
+    Log.e(Tune.TAG, "Status update: $src/$state")
+    log += "$src/$state\n"
 
     startForeground()
-  }
-
-  private fun convertToServiceState(nativeState: NativeState): ServiceState {
-    return when (nativeState) {
-      NativeState.SignalingHaveLocalOffer,
-      NativeState.SignalingHaveRemoteOffer,
-      NativeState.SignalingHaveLocalPranswer,
-      NativeState.SignalingHaveRemotePranswer,
-      NativeState.GatheringInProgress,
-      NativeState.GatheringComplete,
-      NativeState.IceChecking,
-      NativeState.PeerConnecting
-        -> ServiceState.Setup
-
-      NativeState.PeerConnected
-        -> ServiceState.Action
-
-      NativeState.Failure,
-      NativeState.Unexpected,
-      NativeState.IceFailed,
-      NativeState.PeerFailed
-        -> ServiceState.Failure
-
-      else
-        -> ServiceState.Standby
-    }
   }
 
   private fun isCamera2Device(): Boolean {
@@ -177,15 +133,14 @@ class CameraService : Service(), IStatusCallback {
   private fun startForeground() {
     val channel = createNotificationChannel()
 
-    val customText = log
-//    val customText =
-//        "RTC service: ${underlyingServicesStates[EventSource.RTC]}\n" +
-//        "RTSP service: ${underlyingServicesStates[EventSource.RTSP]}"
+    val customText =
+        "RTC service: ${underlyingServicesStates[EventSource.RTC]}\n" +
+        "RTSP service: ${underlyingServicesStates[EventSource.RTSP]}\n$log"
     val statusIcon = when (underlyingServicesStates[EventSource.RTC]) {
       ServiceState.Standby -> Pair(R.drawable.ic_status1_standby, R.color.colorPositive)
-      ServiceState.Setup -> Pair(R.drawable.ic_status1_standby, R.color.colorPositive)
-      ServiceState.Action  -> Pair(R.drawable.ic_in_action, R.color.colorPositive)
-      ServiceState.Failure -> Pair(R.drawable.ic_failure, R.color.colorNegative)
+      ServiceState.Setup   -> Pair(R.drawable.ic_status2,         R.color.colorPositive)
+      ServiceState.Action  -> Pair(R.drawable.ic_in_action,       R.color.colorPositive)
+      ServiceState.Failure -> Pair(R.drawable.ic_failure,         R.color.colorNegative)
       else                 -> Pair(R.drawable.ic_status1_standby, R.color.colorNegative)
     }
 

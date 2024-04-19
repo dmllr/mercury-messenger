@@ -31,16 +31,20 @@ public:
     ws_config.caCertificatePemFile = ZEROSSL_CA_BUNDLE;
   }
 
-  auto hasPeer() -> bool {
+  [[maybe_unused]] auto hasPeer() -> bool {
     return !peers.empty();
   }
 
-  void setStatusCallback(const std::function<void(EventSource, int)>& status_callback) {
+  [[maybe_unused]] void setStatusCallback(const std::function<void(EventSource, int)>& status_callback) {
     status_callback_ = std::make_shared<std::function<void(EventSource, int)>>(std::move(status_callback));
+  }
+
+  inline void reportStatus(const ServiceState state) const {
     if (likely(status_callback_)) {
-      (*status_callback_)(EventSource::System, 1);
+      (*status_callback_)(EventSource::RTC, static_cast<int>(state));
     }
   }
+
 
 protected:
   DispatchQueue MainThread = DispatchQueue("Main", 1);
@@ -68,43 +72,39 @@ protected:
   };
 
   void start(std::string_view localId) {
+    LOGI << "The local ID is: " << localId.data();
+
+    ws.onOpen([this]() {
+      LOGI << "WebSocket connected, signaling ready";
+      reportStatus(ServiceState::Standby);
+    });
+
+    ws.onClosed([this]() {
+      LOGI << "WebSocket closed";
+      reportStatus(ServiceState::Failure);
+      // TODO reopen
+    });
+
+    ws.onError([this](const std::string& error) {
+      LOGI << "WebSocket failed: " << error.c_str();
+      reportStatus(ServiceState::Failure);
+    });
+
+    ws.onMessage([&](std::variant<rtc::binary, std::string> data) {
+      if (!std::holds_alternative<std::string>(data)) {
+        return;
+      }
+
+      json message = json::parse(std::get<std::string>(data));
+      MainThread.dispatch([this, message]() {
+        wsOnMessage(message);
+      });
+    });
+
+    const std::string url = "wss://" + ip_address + ":" + std::to_string(port) + "/" + localId.data();
+    LOGI << "Signaling server URL is " << url.c_str();
+
     try {
-      LOGI << "The local ID is: " << localId.data();
-
-      ws.onOpen([this]() {
-        LOGI << "WebSocket connected, signaling ready";
-        if (likely(status_callback_)) {
-          (*status_callback_)(EventSource::RTC, static_cast<int>(SignallingState::Ready));
-        }
-      });
-
-      ws.onClosed([this]() {
-        LOGI << "WebSocket closed";
-        if (likely(status_callback_)) {
-          (*status_callback_)(EventSource::RTC, static_cast<int>(SignallingState::Closed));
-        }
-      });
-
-      ws.onError([this](const std::string& error) {
-        LOGI << "WebSocket failed: " << error.c_str();
-        if (likely(status_callback_)) {
-          (*status_callback_)(EventSource::RTC, static_cast<int>(SignallingState::Failure));
-        }
-      });
-
-      ws.onMessage([&](std::variant<rtc::binary, std::string> data) {
-        if (!std::holds_alternative<std::string>(data)) {
-          return;
-        }
-
-        json message = json::parse(std::get<std::string>(data));
-        MainThread.dispatch([this, message]() {
-          wsOnMessage(message);
-        });
-      });
-
-      const std::string url = "wss://" + ip_address + ":" + std::to_string(port) + "/" + localId.data();
-      LOGI << "Url is " << url.c_str();
       ws.open(url);
 
       LOGI << "Waiting for signaling to be connected...";
@@ -112,21 +112,10 @@ protected:
         if (ws.isClosed()) {
           return;
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
       }
-
-      //			while (true) {
-      //				std::this_thread::sleep_for(std::chrono::milliseconds(100));
-      //				// TODO Stop option
-      //			}
-      //
-      //			LOGI << "Cleaning up...";
-      //			return;
     } catch (const std::exception& e) {
       LOGI << "Error: " << e.what();
-      if (likely(status_callback_)) {
-        (*status_callback_)(EventSource::RTC, static_cast<int>(SignallingState::Unexpected));
-      }
       return;
     }
   }
@@ -136,6 +125,9 @@ protected:
 
     pc->onStateChange([this, id](rtc::PeerConnection::State state) {
       LOGI << "State: " << (int)state;
+      if (state == rtc::PeerConnection::State::Connected) {
+        reportStatus(ServiceState::Action);
+      }
       if (state == rtc::PeerConnection::State::Disconnected ||
           state == rtc::PeerConnection::State::Failed ||
           state == rtc::PeerConnection::State::Closed) {
@@ -143,11 +135,15 @@ protected:
         MainThread.dispatch([this, id]() {
           peers.erase(id);
         });
+        reportStatus(ServiceState::Standby);
       }
     });
 
     pc->onIceStateChange([this, id](rtc::PeerConnection::IceState state) {
       LOGI << "ICE State: " << (int)state;
+      if (state == rtc::PeerConnection::IceState::Failed) {
+        reportStatus(ServiceState::Failure);
+      }
     });
 
     pc->onGatheringStateChange([this, wpc = make_weak_ptr(pc), id](rtc::PeerConnection::GatheringState state) {
@@ -168,8 +164,8 @@ protected:
 
     pc->onSignalingStateChange([this, id](rtc::PeerConnection::SignalingState state) {
       LOGI << "Signalling State: " << (int)state;
-      if (likely(status_callback_)) {
-        (*status_callback_)(EventSource::RTC, 100 + static_cast<int>(state));
+      if (state == rtc::PeerConnection::SignalingState::HaveLocalOffer) {
+        reportStatus(ServiceState::Setup);
       }
     });
 
