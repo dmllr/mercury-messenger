@@ -1,6 +1,6 @@
 package me.hela.surveillance.events
 
-enum class RtcState(val value: Int) {
+enum class NativeState(val value: Int) {
   Ready(0),
   Closed(1),
   Failure(2),
@@ -32,6 +32,6 @@ enum class RtcState(val value: Int) {
   PeerClosed(405);
 
   companion object {
-    fun fromInt(value: Int) = RtcState.values().first { it.value == value }
+    fun fromInt(value: Int) = NativeState.values().first { it.value == value }
   }
 }

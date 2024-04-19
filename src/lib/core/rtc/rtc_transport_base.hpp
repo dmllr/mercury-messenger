@@ -136,9 +136,6 @@ protected:
 
     pc->onStateChange([this, id](rtc::PeerConnection::State state) {
       LOGI << "State: " << (int)state;
-      if (likely(status_callback_)) {
-        (*status_callback_)(EventSource::RTC, 400 + static_cast<int>(state));
-      }
       if (state == rtc::PeerConnection::State::Disconnected ||
           state == rtc::PeerConnection::State::Failed ||
           state == rtc::PeerConnection::State::Closed) {
@@ -151,16 +148,10 @@ protected:
 
     pc->onIceStateChange([this, id](rtc::PeerConnection::IceState state) {
       LOGI << "ICE State: " << (int)state;
-      if (likely(status_callback_)) {
-        (*status_callback_)(EventSource::RTC, 300 + static_cast<int>(state));
-      }
     });
 
     pc->onGatheringStateChange([this, wpc = make_weak_ptr(pc), id](rtc::PeerConnection::GatheringState state) {
       LOGI << "Gathering State: " << (int)state;
-      if (likely(status_callback_)) {
-        (*status_callback_)(EventSource::RTC, 200 + static_cast<int>(state));
-      }
       if (state == rtc::PeerConnection::GatheringState::Complete) {
         // Gathering complete, send answer
         if (auto pc = wpc.lock()) {

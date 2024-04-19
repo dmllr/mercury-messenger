@@ -20,16 +20,22 @@ import android.util.Size
 import android.view.Surface
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.DrawableCompat
 import me.hela.surveillance.camera.R
 import me.hela.surveillance.events.EventSource
 import me.hela.surveillance.events.IStatusCallback
-import me.hela.surveillance.events.RtcState
+import me.hela.surveillance.events.NativeState
+import me.hela.surveillance.events.ServiceState
 
 
 class CameraService : Service(), IStatusCallback {
+  private var log: String = ""
   private var cameraEngine: Long = 0
   var cameraPreviewSize: Size = Size(0, 0)
-  private var log: String = ""
+  private var underlyingServicesStates: MutableMap<EventSource, ServiceState> = mutableMapOf(
+    EventSource.RTC to ServiceState.Unknown,
+    EventSource.RTSP to ServiceState.Unknown,
+  )
 
   inner class StreamingServiceBinder : Binder() {
     val service: CameraService
@@ -64,7 +70,7 @@ class CameraService : Service(), IStatusCallback {
     if (intent != null)
       startForeground()
 
-    return START_STICKY;
+    return START_STICKY
   }
 
   override fun onBind(intent: Intent): IBinder {
@@ -73,13 +79,56 @@ class CameraService : Service(), IStatusCallback {
 
   override fun onStatusUpdate(source: Int, status: Int) {
     val src = EventSource.fromInt(source)
-    if (src != EventSource.RTC) {
-      return;
-    }
-    val rtcState = RtcState.fromInt(status);
-    Log.e(Tune.TAG, "Status update: $source/$rtcState")
-    log += "Status update: $source/$rtcState\n"
+    val nativeState = NativeState.fromInt(status)
+
+//    val statusIcon = when (underlyingServicesStates[EventSource.RTC]) {
+//      NativeState.Ready
+//        -> Pair(R.drawable.ic_status1_standby, R.color.colorPositive)
+//      NativeState.SignalingStable
+//        -> Pair(R.drawable.ic_status2, R.color.colorPositive)
+//      NativeState.IceFailed
+//        -> Pair(R.drawable.ic_status3, R.color.colorNegative)
+//      NativeState.PeerFailed
+//        -> Pair(R.drawable.ic_status4, R.color.colorNegative)
+//      NativeState.PeerConnecting
+//        -> Pair(R.drawable.ic_status4, R.color.colorPositive)
+//      NativeState.PeerConnected
+//        -> Pair(R.drawable.ic_in_action, R.color.colorPositive)
+//      else
+//        -> Pair(R.drawable.ic_status1_standby, R.color.colorNegative)
+//    }
+
+    underlyingServicesStates[src] = convertToServiceState(nativeState)
+    Log.e(Tune.TAG, "Status update: $src/$nativeState")
+    log += "$src/$nativeState\n"
+
     startForeground()
+  }
+
+  private fun convertToServiceState(nativeState: NativeState): ServiceState {
+    return when (nativeState) {
+      NativeState.SignalingHaveLocalOffer,
+      NativeState.SignalingHaveRemoteOffer,
+      NativeState.SignalingHaveLocalPranswer,
+      NativeState.SignalingHaveRemotePranswer,
+      NativeState.GatheringInProgress,
+      NativeState.GatheringComplete,
+      NativeState.IceChecking,
+      NativeState.PeerConnecting
+        -> ServiceState.Setup
+
+      NativeState.PeerConnected
+        -> ServiceState.Action
+
+      NativeState.Failure,
+      NativeState.Unexpected,
+      NativeState.IceFailed,
+      NativeState.PeerFailed
+        -> ServiceState.Failure
+
+      else
+        -> ServiceState.Standby
+    }
   }
 
   private fun isCamera2Device(): Boolean {
@@ -110,12 +159,15 @@ class CameraService : Service(), IStatusCallback {
     cameraPreviewSize = getMinimumCompatiblePreviewSize(cameraEngine)
   }
 
-  private fun Int.getBitmapFromVectorDrawable(): Bitmap {
-    val drawable = ContextCompat.getDrawable(this@CameraService, this)
+  private fun Pair<Int, Int>.getBitmapFromVectorDrawable(): Bitmap {
+    val context = this@CameraService
+    val drawable = ContextCompat.getDrawable(context, first)
+    val color = ContextCompat.getColor(context, second)
+
+    DrawableCompat.setTint(drawable!!, color)
+
     val bitmap = Bitmap.createBitmap(
-      drawable!!.intrinsicWidth,
-      drawable.intrinsicHeight, Bitmap.Config.ARGB_8888
-    )
+      drawable.intrinsicWidth, drawable.intrinsicHeight, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
     drawable.setBounds(0, 0, canvas.width, canvas.height)
     drawable.draw(canvas)
@@ -126,7 +178,16 @@ class CameraService : Service(), IStatusCallback {
     val channel = createNotificationChannel()
 
     val customText = log
-    val statusIcon = R.drawable.ic_not_ready
+//    val customText =
+//        "RTC service: ${underlyingServicesStates[EventSource.RTC]}\n" +
+//        "RTSP service: ${underlyingServicesStates[EventSource.RTSP]}"
+    val statusIcon = when (underlyingServicesStates[EventSource.RTC]) {
+      ServiceState.Standby -> Pair(R.drawable.ic_status1_standby, R.color.colorPositive)
+      ServiceState.Setup -> Pair(R.drawable.ic_status1_standby, R.color.colorPositive)
+      ServiceState.Action  -> Pair(R.drawable.ic_in_action, R.color.colorPositive)
+      ServiceState.Failure -> Pair(R.drawable.ic_failure, R.color.colorNegative)
+      else                 -> Pair(R.drawable.ic_status1_standby, R.color.colorNegative)
+    }
 
     val mainActivityIntent = Intent(this, MainActivity::class.java)
     mainActivityIntent.flags = Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
