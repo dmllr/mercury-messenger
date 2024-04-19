@@ -178,18 +178,6 @@ protected:
     } else if ((peer->getState() == Peer::State::WaitingForAudio && !isAddingVideo) || (peer->getState() == Peer::State::WaitingForVideo && isAddingVideo)) {
       // Audio and video tracks are collected now
       assert(peer->video.has_value() && peer->audio.has_value());
-
-      //            auto video = peer->video.value();
-      //            auto audio = peer->audio.value();
-      //
-      //            auto currentTime_us = double(currentTimeInMicroSeconds());
-      //            auto currentTime_s = currentTime_us / (1000 * 1000);
-      //
-      ////			// set start time of stream
-      //// TODO
-      ////			video->sender->rtpConfig->setStartTime(currentTime_s, rtc::RtpPacketizationConfig::EpochStart::T1970);
-      ////			audio->sender->rtpConfig->setStartTime(currentTime_s, rtc::RtpPacketizationConfig::EpochStart::T1970);
-
       peer->setState(Peer::State::Ready);
     }
 

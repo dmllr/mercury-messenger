@@ -28,8 +28,6 @@ public:
         this->sampleDuration_us = 1000 * 1000 / samplesPerSecond;
     }
 
-    FileParser() {}
-
     virtual ~FileParser() {
         stop();
     }
@@ -84,5 +82,6 @@ class OPUSFileParser: public FileParser {
     static const std::uint32_t defaultSamplesPerSecond = 50;
 
 public:
-    OPUSFileParser(std::string directory, bool loop, uint32_t samplesPerSecond = OPUSFileParser::defaultSamplesPerSecond) { }
+    OPUSFileParser(std::string directory, bool loop, uint32_t samplesPerSecond = OPUSFileParser::defaultSamplesPerSecond) :
+      FileParser(directory, ".opus", samplesPerSecond, loop) {}
 };

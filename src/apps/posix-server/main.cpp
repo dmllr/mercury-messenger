@@ -205,12 +205,8 @@ public:
 
 auto createStream() -> std::shared_ptr<Stream> {
   auto video = std::make_shared<VideoStreamSource>();
-  //    auto audio = nullptr;
-  auto audio = std::make_shared<OPUSFileParser>("/Users/denis.miller/dev/github/hela-surveillance/samples/opus", true);
-
-  auto stream = std::make_shared<Stream>(video, audio);
-
-  return stream;
+  auto audio = std::make_shared<OPUSFileParser>("/Users/denis.miller/dev/hela-surveillance/samples/opus", true);
+  return std::make_shared<Stream>(video, audio);
 }
 
 auto main(int argc, char** argv) -> int {
