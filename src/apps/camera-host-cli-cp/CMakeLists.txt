@@ -1,12 +1,12 @@
 set(src_path "../..")
 
-add_executable(posix-server
+add_executable(camera-host-cli-cp
   main.cpp
 )
-set_property(TARGET posix-server PROPERTY CXX_STANDARD 17)
-target_compile_features(posix-server PRIVATE cxx_std_17)
-target_compile_definitions(posix-server PUBLIC "-DBUILD_ZLIB=OFF")
-target_link_libraries(posix-server PRIVATE
+set_property(TARGET camera-host-cli-cp PROPERTY CXX_STANDARD 17)
+target_compile_features(camera-host-cli-cp PRIVATE cxx_std_17)
+target_compile_definitions(camera-host-cli-cp PUBLIC "-DBUILD_ZLIB=OFF")
+target_link_libraries(camera-host-cli-cp PRIVATE
   opencv_core opencv_highgui opencv_imgproc opencv_videoio
   libffmpeg
   datachannel-static
@@ -14,7 +14,7 @@ target_link_libraries(posix-server PRIVATE
   nlohmann_json
   srtp2
 )
-target_include_directories(posix-server
+target_include_directories(camera-host-cli-cp
   PRIVATE
   "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
 
