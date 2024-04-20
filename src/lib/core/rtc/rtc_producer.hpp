@@ -91,7 +91,8 @@ public:
             if (likely(!message->empty())) {
               send = trackData->track->send(*message);
             }
-          } catch (...) {
+          } catch (const std::exception &e) {
+            LOGE << "Exception. Unable to send " << streamType << " packet." << e.what();
             send = false;
           }
           if (!send) {

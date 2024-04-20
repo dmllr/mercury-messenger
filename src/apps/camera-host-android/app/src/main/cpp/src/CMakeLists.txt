@@ -23,6 +23,8 @@ target_link_libraries(camera-lib
   plog
   nlohmann_json
   opus
+    opencv_core opencv_highgui opencv_imgproc opencv_videoio
+    libffmpeg
 )
 
 target_include_directories(camera-lib

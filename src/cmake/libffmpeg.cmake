@@ -60,6 +60,9 @@ if (ANDROID)
 
   set(HOST_BIN ${ANDROID_NDK}/prebuilt/${ANDROID_HOST_TAG}/bin)
 
+  set( CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -Wall -O3 -fPIC" )
+  set( CMAKE_C_FLAGS  "${CMAKE_C_FLAGS} -Wall -O3 -fPIC" )
+
   set(CONFIGURE_PARAMS
     --cc=${FFMPEG_CC}
     --ar=${FFMPEG_AR}
@@ -72,9 +75,7 @@ if (ANDROID)
     --extra-cflags=${FFMPEG_C_FLAGS}
     --extra-cxxflags=${FFMPEG_CXX_FLAGS}
     --extra-ldflags=${FFMPEG_LD_FLAGS}
-    --sysroot=${CMAKE_SYSROOT}
     --enable-cross-compile
-    --enable-pic
 #    --enable-mediacodec
 #    --enable-jni
   )
@@ -101,12 +102,14 @@ foreach (_lib avfilter avcodec avdevice avformat avutil swresample swscale)
     "${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/lib${_lib}/lib${_lib}.a")
 endforeach ()
 
-if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
-  list(APPEND CONFIGURE_PARAMS "--enable-x86asm")
-elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64")
-  list(APPEND CONFIGURE_PARAMS "--disable-x86asm")
-else()
-  message(FATAL_ERROR "Unsupported processor: ${CMAKE_SYSTEM_PROCESSOR}")
+if (NOT ANDROID)
+  if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
+    list(APPEND CONFIGURE_PARAMS "--enable-x86asm")
+  elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64")
+    list(APPEND CONFIGURE_PARAMS "--disable-x86asm")
+  else()
+    message(FATAL_ERROR "Unsupported processor: ${CMAKE_SYSTEM_PROCESSOR}")
+  endif()
 endif()
 
 
@@ -126,13 +129,13 @@ ExternalProject_Add(ffmpeg_target
       --disable-devices
       --disable-parsers
       --disable-decoders
-      --disable-shared
+      --enable-shared
       --enable-static
       --enable-encoder=h264
       --enable-decoder=h264
       --enable-encoder=rawvideo
-      --enable-gpl
-      # --enable-libx264 // not sure it is required, anyway the library should be built/installed
+      --disable-asm
+      --enable-pic
       ${CONFIGURE_PARAMS}
   BUILD_COMMAND make -j${NJOBS}
   INSTALL_COMMAND ""
