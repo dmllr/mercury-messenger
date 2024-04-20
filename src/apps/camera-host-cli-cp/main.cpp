@@ -183,7 +183,7 @@ public:
       fw.write(reinterpret_cast<const char*>(sample.data()), sample.size());
     }
 
-    LOGI << "Sending sample of size " << sample.size() << "b ";
+    LOGV << "Sending sample of size " << sample.size() << "b ";
     return sample;
   }
 
