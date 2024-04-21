@@ -144,7 +144,7 @@ JNIEnv* attachCurrentThreadIfNeeded() {
 
 protected:
   std::shared_ptr<Stream> createRtcStream() {
-    auto video = std::make_shared<VideoStreamSource>();
+    auto video = std::make_shared<CameraBufferSource>(camera_manager);
     auto audio = std::make_shared<AudioBufferSource>();
 
     return std::make_shared<Stream>(video, audio);
