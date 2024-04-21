@@ -23,7 +23,7 @@ target_link_libraries(camera-lib
   plog
   nlohmann_json
   opus
-  opencv_core opencv_highgui opencv_imgproc opencv_videoio
+  libopencv
   libffmpeg
 )
 
@@ -32,13 +32,6 @@ target_include_directories(camera-lib
   "${CMAKE_CURRENT_LIST_DIR}"
   "${CMAKE_BINARY_DIR}"
   "${shared_libs}"
-
-  "${libopencv_path}/include"
-  "${libopencv_path}/modules/core/include"
-  "${libopencv_path}/modules/imgcodecs/include"
-  "${libopencv_path}/modules/imgproc/include"
-  "${libopencv_path}/modules/highgui/include"
-  "${libopencv_path}/modules/videoio/include"
 )
 
 # workaround for "ninja: error: build.ninja multiple rules generate tests"

@@ -76,6 +76,7 @@ if (ANDROID)
     --extra-cxxflags=${FFMPEG_CXX_FLAGS}
     --extra-ldflags=${FFMPEG_LD_FLAGS}
     --enable-cross-compile
+    --disable-asm
 #    --enable-mediacodec
 #    --enable-jni
   )
@@ -134,7 +135,6 @@ ExternalProject_Add(ffmpeg_target
       --enable-encoder=h264
       --enable-decoder=h264
       --enable-encoder=rawvideo
-      --disable-asm
       --enable-pic
       ${CONFIGURE_PARAMS}
   BUILD_COMMAND make -j${NJOBS}
