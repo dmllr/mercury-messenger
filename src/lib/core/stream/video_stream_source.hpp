@@ -10,6 +10,7 @@
 
 extern "C" {
 #include "libswscale/swscale.h"
+#include <libavcodec/codec.h>
 #include <libavcodec/avcodec.h>
 #include <libavutil/imgutils.h>
 #include <libavutil/opt.h>
@@ -31,7 +32,6 @@ private:
   rtc::binary encoded_data;
   std::chrono::time_point<std::chrono::steady_clock> start_time;
   AVCodecContext* codec_context = nullptr;
-  AVCodecParameters* codec_params = nullptr;
 
   AVFrame* av_frame = nullptr;
   AVPacket* packet = nullptr;
@@ -41,7 +41,7 @@ public:
 
   void start() override {
     cap.open(0);  // open the default camera
-    cap.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('h', '2', '6', '4'));
+//    cap.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('h', '2', '6', '4'));
 
     if (!cap.isOpened()) {
       std::cout << "Waiting for the capture device to be opened." << std::endl;
@@ -55,8 +55,35 @@ public:
 
     start_time = std::chrono::steady_clock::now();
 
+//    const AVCodec *c;
+//    void *iter = nullptr;
+//    while ((c = av_codec_iterate(&iter))) {
+//      if (c->id == AV_CODEC_ID_H264 && av_codec_is_encoder(c)) {
+//        LOGE << "AAAA: " << c->id << " " << c->name << " | " << c->long_name;
+//      }
+//    }
+
+//27 h264_mediacodec | H.264 Android MediaCodec encoder
+//27 h264_v4l2m2m | V4L2 mem2mem H.264 encoder wrapper
+//27 h264 | H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10
+
     // find h.264 codec and allocate the codec context
-    const auto* codec = avcodec_find_encoder(AV_CODEC_ID_H264);
+//    const auto* codec = avcodec_find_encoder(AV_CODEC_ID_H264);
+    const auto* codec = avcodec_find_encoder_by_name("h264_mediacodec");
+    if (!codec) {
+      throw std::runtime_error("Codec not found");
+    }
+    const AVPixelFormat *p = codec->pix_fmts;
+    while (*p != AV_PIX_FMT_NONE) {
+      if (*p == AV_PIX_FMT_YUV420P) {
+        break;
+      }
+      p++;
+    }
+    if (*p == AV_PIX_FMT_NONE) {
+      throw std::runtime_error("Unsupported pixel format");
+    }
+
     codec_context = avcodec_alloc_context3(codec);
     if (codec_context == nullptr) {
       throw std::runtime_error("Could not allocate codec context");
@@ -68,9 +95,14 @@ public:
     codec_context->time_base = AVRational{1, 25};
     codec_context->framerate = AVRational{25, 1};
     codec_context->gop_size = 10;
-    codec_context->max_b_frames = 1;
+    codec_context->max_b_frames = 0;
     codec_context->pix_fmt = AV_PIX_FMT_YUV420P;
+//    codec_context->pix_fmt = AV_PIX_FMT_YUV420P;
     av_opt_set(codec_context->priv_data, "startcode", "1", 0);
+    if (codec->id == AV_CODEC_ID_H264) {
+      av_opt_set(codec_context->priv_data, "preset", "slow", 0);
+//      av_opt_set(codec_context->priv_data, "profile", "baseline", 0);
+    }
 
 #ifdef _WIN32
     // essential to set hw_encoding=0 on Windows due to NVidia MF failure:
@@ -79,18 +111,16 @@ public:
     av_opt_set(codec_context->priv_data, "hw_encoding", "0", 0);  // TODO investigate
 #endif
 
-    std::cout << "Width: " << codec_context->width << ", height: " << codec_context->height << std::endl;
-    std::cout << "Input pixel format: " << av_get_pix_fmt_name(codec_context->pix_fmt) << std::endl;
-    std::cout << "Output pixel format: " << av_get_pix_fmt_name(codec_context->codec->pix_fmts[0]) << std::endl;
-
-    codec_params = avcodec_parameters_alloc();
+//    std::cout << "Width: " << codec_context->width << ", height: " << codec_context->height << std::endl;
+//    std::cout << "Input pixel format: " << av_get_pix_fmt_name(codec_context->pix_fmt) << std::endl;
+//    std::cout << "Output pixel format: " << av_get_pix_fmt_name(codec_context->codec->pix_fmts[0]) << std::endl;
 
 #ifdef _WIN32
     CoUninitialize();
 #endif
     auto ret = avcodec_open2(codec_context, codec, nullptr);
     if (ret < 0) {
-      throw std::runtime_error("Could not open codec");
+      throw std::runtime_error("Could not open codec " + std::to_string(ret));
     }
 
     // initialize the frame
@@ -179,7 +209,6 @@ public:
 
   void stop() override {
     av_frame_free(&av_frame);
-    avcodec_parameters_free(&codec_params);
     avcodec_free_context(&codec_context);
     cap.release();  // release the camera
   }

@@ -77,8 +77,12 @@ if (ANDROID)
     --extra-ldflags=${FFMPEG_LD_FLAGS}
     --enable-cross-compile
     --disable-asm
-#    --enable-mediacodec
-#    --enable-jni
+    --enable-nonfree
+    --enable-mediacodec
+    --enable-jni
+    --enable-encoder=h264_mediacodec
+    --enable-decoder=h264_mediacodec
+    --enable-hwaccel=h264_mediacodec
   )
 
   # https://trac.ffmpeg.org/ticket/4928
@@ -130,6 +134,12 @@ ExternalProject_Add(ffmpeg_target
       --disable-devices
       --disable-parsers
       --disable-decoders
+      --disable-ffmpeg
+      --disable-ffplay
+      --disable-ffprobe
+      --disable-avdevice
+      --disable-avfilter
+      --disable-postproc
       --enable-shared
       --enable-static
       --enable-encoder=h264
