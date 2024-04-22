@@ -19,10 +19,4 @@ target_include_directories(camera-host-cli-cp
   "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
 
   "${src_path}/lib"
-
-  # for generated files
-  "${CMAKE_BINARY_DIR}"
-
-  # tmp
-  "${libdatachannel_path}/examples/streamer"
 )

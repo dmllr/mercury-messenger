@@ -7,7 +7,7 @@
 #include "core/rtc/stream.hpp"
 
 
-class CameraBufferSource : public StreamSource {
+class CameraBufferSource : public Stream::Source {
   static constexpr auto target = CaptureTarget::RTC_ENCODER_SURFACE;
 
   AMediaCodecBufferInfo info;

@@ -41,13 +41,13 @@ public:
     avStream = stream;
 
     // set callback responsible for sample sending
-    stream->onSample([this, ws = make_weak_ptr(stream)](Stream::StreamSourceType type, uint64_t sampleTime, rtc::binary sample) {
+    stream->onSample([this, ws = make_weak_ptr(stream)](Stream::Source::Type type, uint64_t sampleTime, rtc::binary sample) {
       auto tracks{std::vector<ClientTrack>()};
-      const auto* streamType = type == Stream::StreamSourceType::Video ? "video" : "audio";
+      const auto* streamType = type == Stream::Source::Type::Video ? "video" : "audio";
       // get track for given type
       auto getTrackData =
           [type](const std::shared_ptr<Peer>& peer) {
-            return type == Stream::StreamSourceType::Video ? peer->video : peer->audio;
+            return type == Stream::Source::Type::Video ? peer->video : peer->audio;
           };
 
       // get all peers with Ready state

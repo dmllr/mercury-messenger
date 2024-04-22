@@ -12,7 +12,7 @@ extern "C" {
 #include <libavutil/imgutils.h>
 }
 
-#include "rtc/rtc_consumer.hpp"
+#include "core/rtc/rtc_consumer.hpp"
 
 // tmp
 #include <fstream>

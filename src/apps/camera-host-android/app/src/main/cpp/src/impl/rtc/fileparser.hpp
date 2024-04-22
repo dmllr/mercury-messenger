@@ -10,7 +10,7 @@
 
 #include "core/rtc/stream.hpp"
 
-class FileParser: public StreamSource {
+class FileParser: public Stream::Source {
     std::string directory;
     std::string extension;
     std::uint64_t sampleDuration_us;

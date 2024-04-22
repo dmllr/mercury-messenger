@@ -10,7 +10,7 @@
 #include "core/rtc/stream.hpp"
 
 
-class AudioBufferSource : public StreamSource {
+class AudioBufferSource : public Stream::Source {
   static constexpr auto MAX_PCM_BUFFER_SIZE = Recorder::framesPerBurst * Recorder::channelCount * sizeof(float);
   std::array<float, MAX_PCM_BUFFER_SIZE> pcm_buffer = {};
   std::array<unsigned char, MAX_PCM_BUFFER_SIZE> encoded_buffer = {};

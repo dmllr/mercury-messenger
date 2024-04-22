@@ -10,14 +10,13 @@ target_link_libraries(posix-receiver PRIVATE
   libopencv
   libffmpeg
   datachannel
+  plog
+  nlohmann_json
+  srtp2
 )
 target_include_directories(posix-receiver
   PRIVATE
   "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
 
-  # for OpenCV generated files
-  "${CMAKE_BINARY_DIR}"
-
-  # tmp
-  "${libdatachannel_path}/examples/streamer"
+  "${src_path}/lib"
 )

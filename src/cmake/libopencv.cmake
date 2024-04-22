@@ -40,4 +40,5 @@ target_include_directories(libopencv INTERFACE
   "${libopencv_path}/modules/imgproc/include"
   "${libopencv_path}/modules/highgui/include"
   "${libopencv_path}/modules/videoio/include"
+  "${CMAKE_BINARY_DIR}"  # for OpenCV generated files
 )
