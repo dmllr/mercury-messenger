@@ -169,10 +169,10 @@ public:
                     active_camera_id(""),
                     camera_facing(ACAMERA_LENS_FACING_BACK),
                     camera_orientation(0),
-                    camera_codec(std::make_shared<CameraCodec>(CameraCodec())),
                     output_container(nullptr),
                     capture_session(nullptr),
-                    capture_session_state(CaptureSessionState::CLOSED) {
+                    capture_session_state(CaptureSessionState::CLOSED),
+                    camera_codec(std::make_shared<CameraCodec>(CameraCodec())) {
     camera_manager = ACameraManager_create();
     Log::assert_or_die(camera_manager != nullptr, "Failed to create camera_manager");
 

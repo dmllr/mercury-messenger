@@ -17,14 +17,15 @@
 #include "impl/rtc/audio_buffer_source.hpp"
 #include "impl/rtc/camera_buffer_source.hpp"
 #include "core/rtc/rtc_producer.hpp"
+#include "core/stream/video_stream_source.hpp"
 
 
 /**
  * AppEngine
  */
 class AppEngine {
-  JNIEnv* env;
   JavaVM* jvm;
+  JNIEnv* env;
   jobject service_instance;
   jobject status_update_callback;
   jobject preview_surface = nullptr;
@@ -144,7 +145,7 @@ JNIEnv* attachCurrentThreadIfNeeded() {
 
 protected:
   std::shared_ptr<Stream> createRtcStream() {
-    auto video = std::make_shared<CameraBufferSource>(camera_manager);
+    auto video = std::make_shared<VideoStreamSource>();
     auto audio = std::make_shared<AudioBufferSource>();
 
     return std::make_shared<Stream>(video, audio);

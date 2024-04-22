@@ -40,7 +40,7 @@ private:
   const std::shared_ptr<Source> video;
 
 public:
-  Stream(std::shared_ptr<Source> video, std::shared_ptr<Source> audio) : video(std::move(video)), audio(std::move(audio)) {}
+  Stream(std::shared_ptr<Source> video, std::shared_ptr<Source> audio) : audio(std::move(audio)), video(std::move(video)) {}
   Stream(const Stream&) = delete;
   Stream(Stream&&) = delete;
   auto operator=(const Stream&) -> Stream& = delete;
