@@ -36,7 +36,6 @@ class VideoStreamSource : public Stream::Source {
 private:
   cv::VideoCapture cap;
   cv::Mat cv_frame;
-  cv::Mat yuv_frame;
   rtc::binary encoded_data;
   std::chrono::time_point<std::chrono::steady_clock> start_time;
   AVCodecContext* codec_context = nullptr;
@@ -156,15 +155,15 @@ public:
     }
 
     #ifdef __ANDROID__
-    // workaround on Android until I realize what an original frame is
-    yuv_frame = cv_frame;
+    cv::cvtColor(cv_frame, cv_frame, cv::COLOR_GRAY2RGB);
+    cv::cvtColor(cv_frame, cv_frame, cv::COLOR_RGB2YUV_I420);
     #else
-    cv::cvtColor(cv_frame, yuv_frame, cv::COLOR_BGR2YUV_I420);
+    cv::cvtColor(cv_frame, cv_frame, cv::COLOR_BGR2YUV_I420);
     #endif
 
-    av_frame->data[0] = yuv_frame.data;
-    av_frame->data[1] = yuv_frame.data + codec_context->width * codec_context->height;
-    av_frame->data[2] = yuv_frame.data + codec_context->width * codec_context->height * 5 / 4;
+    av_frame->data[0] = cv_frame.data;
+    av_frame->data[1] = cv_frame.data + codec_context->width * codec_context->height;
+    av_frame->data[2] = cv_frame.data + codec_context->width * codec_context->height * 5 / 4;
     av_frame->pts = av_gettime_relative() / 1000;
 
     int ret = avcodec_send_frame(codec_context, av_frame);
