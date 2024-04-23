@@ -140,7 +140,7 @@ ExternalProject_Add(ffmpeg_target
       --disable-avdevice
       --disable-avfilter
       --disable-postproc
-      --enable-shared
+      --disable-shared
       --enable-static
       --enable-encoder=h264
       --enable-decoder=h264

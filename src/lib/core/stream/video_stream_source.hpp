@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -13,6 +14,7 @@
 
 extern "C" {
 #include "libavcodec/codec.h"
+#include "libavcodec/codec_id.h"
 #include "libavcodec/avcodec.h"
 #include "libavcodec/packet.h"
 #include "libavutil/error.h"
@@ -73,7 +75,7 @@ public:
 
     // find h.264 codec and allocate the codec context
     const auto* codec = avcodec_find_encoder(AV_CODEC_ID_H264);
-    if (!codec) {
+    if (codec == nullptr) {
       throw std::runtime_error("Codec not found");
     }
     LOGD << "Codec selected: [" << codec->id << "] " << codec->name << " | " << codec->long_name;
