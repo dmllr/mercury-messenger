@@ -53,8 +53,6 @@ public:
 
     const auto stream = createRtcStream();
 
-//    stream->start();
-
     rtc_producer = std::make_shared<RtcProducer>();
     rtc_producer->setStream(stream);
     rtc_producer->setStatusCallback([this](EventSource sender, int status) { setStatus(sender, status); });
