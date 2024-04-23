@@ -1,24 +1,30 @@
 #pragma once
 
 #include <chrono>
+#include <cstddef>
+#include <cstdint>
 #include <iostream>
 #include <string>
+#include <vector>
 
-#include <opencv2/highgui.hpp>
 #include <opencv2/videoio.hpp>
 #include <opencv2/imgproc.hpp>
+#include <opencv2/core/mat.hpp>
 
 extern "C" {
-#include "libswscale/swscale.h"
-#include <libavcodec/codec.h>
-#include <libavcodec/avcodec.h>
-#include <libavutil/imgutils.h>
-#include <libavutil/opt.h>
-#include <libavutil/parseutils.h>
-#include <libavutil/time.h>
+#include "libavcodec/codec.h"
+#include "libavcodec/avcodec.h"
+#include "libavcodec/packet.h"
+#include "libavutil/error.h"
+#include "libavutil/imgutils.h"
+#include "libavutil/opt.h"
+#include "libavutil/pixfmt.h"
+#include "libavutil/time.h"
+#include "libavutil/frame.h"
 }
 
 #include "core/rtc/stream.hpp"
+#include "rtc/common.hpp"
 
 #ifdef _WIN32
   #include <combaseapi.h>
@@ -40,11 +46,17 @@ public:
   VideoStreamSource() = default;
 
   void start() override {
-    cap.open(0);  // open the default camera
-//    cap.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('h', '2', '6', '4'));
+    #ifdef __ANDROID__
+    constexpr auto cv_capabilities = cv::CAP_ANDROID;
+    #else
+    constexpr auto cv_capabilities = cv::CAP_ANY;
+    #endif
+
+    // open the default camera
+    cap.open(0, cv_capabilities);
 
     if (!cap.isOpened()) {
-      std::cout << "Waiting for the capture device to be opened." << std::endl;
+      std::cout << "Can't open the capture device." << std::endl;
       return;
     }
     cap >> cv_frame;
@@ -53,34 +65,26 @@ public:
       return;
     }
 
-    start_time = std::chrono::steady_clock::now();
-
-//    const AVCodec *c;
-//    void *iter = nullptr;
-//    while ((c = av_codec_iterate(&iter))) {
-//      if (c->id == AV_CODEC_ID_H264 && av_codec_is_encoder(c)) {
-//        LOGE << "AAAA: " << c->id << " " << c->name << " | " << c->long_name;
-//      }
-//    }
-
-//27 h264_mediacodec | H.264 Android MediaCodec encoder
-//27 h264_v4l2m2m | V4L2 mem2mem H.264 encoder wrapper
-//27 h264 | H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10
+    #ifdef __ANDROID__
+    constexpr auto pixel_format = AV_PIX_FMT_NV12;
+    #else
+    constexpr auto pixel_format = AV_PIX_FMT_YUV420P;
+    #endif
 
     // find h.264 codec and allocate the codec context
-//    const auto* codec = avcodec_find_encoder(AV_CODEC_ID_H264);
-    const auto* codec = avcodec_find_encoder_by_name("h264_mediacodec");
+    const auto* codec = avcodec_find_encoder(AV_CODEC_ID_H264);
     if (!codec) {
       throw std::runtime_error("Codec not found");
     }
-    const AVPixelFormat *p = codec->pix_fmts;
-    while (*p != AV_PIX_FMT_NONE) {
-      if (*p == AV_PIX_FMT_YUV420P) {
+    LOGD << "Codec selected: [" << codec->id << "] " << codec->name << " | " << codec->long_name;
+    const auto* pix_fmt = codec->pix_fmts;
+    while (*pix_fmt != AV_PIX_FMT_NONE) {
+      if (*pix_fmt == AV_PIX_FMT_YUV420P) {
         break;
       }
-      p++;
+      pix_fmt++;
     }
-    if (*p == AV_PIX_FMT_NONE) {
+    if (*pix_fmt == AV_PIX_FMT_NONE) {
       throw std::runtime_error("Unsupported pixel format");
     }
 
@@ -89,35 +93,34 @@ public:
       throw std::runtime_error("Could not allocate codec context");
     }
 
-    codec_context->bit_rate = 400000;
-    codec_context->width = cap.get(cv::CAP_PROP_FRAME_WIDTH);
-    codec_context->height = cap.get(cv::CAP_PROP_FRAME_HEIGHT);
+    //codec_context->bit_rate = 400000; // todo nado?
+    codec_context->width = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_WIDTH));
+    codec_context->height = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_HEIGHT));
     codec_context->time_base = AVRational{1, 25};
     codec_context->framerate = AVRational{25, 1};
     codec_context->gop_size = 10;
     codec_context->max_b_frames = 0;
-    codec_context->pix_fmt = AV_PIX_FMT_YUV420P;
-//    codec_context->pix_fmt = AV_PIX_FMT_YUV420P;
+    codec_context->pix_fmt = pixel_format;
     av_opt_set(codec_context->priv_data, "startcode", "1", 0);
     if (codec->id == AV_CODEC_ID_H264) {
       av_opt_set(codec_context->priv_data, "preset", "slow", 0);
-//      av_opt_set(codec_context->priv_data, "profile", "baseline", 0);
     }
 
-#ifdef _WIN32
+    #ifdef _WIN32
+    // TODO investigate
     // essential to set hw_encoding=0 on Windows due to NVidia MF failure:
     // [h264_mf @ 0000024BC438BD40] MFT name: 'NVIDIA H.264 Encoder MFT'
     // [h264_mf @ 0000024BC438BD40] "format negotiation failed"
-    av_opt_set(codec_context->priv_data, "hw_encoding", "0", 0);  // TODO investigate
-#endif
+    av_opt_set(codec_context->priv_data, "hw_encoding", "0", 0);
+    #endif
 
-//    std::cout << "Width: " << codec_context->width << ", height: " << codec_context->height << std::endl;
-//    std::cout << "Input pixel format: " << av_get_pix_fmt_name(codec_context->pix_fmt) << std::endl;
-//    std::cout << "Output pixel format: " << av_get_pix_fmt_name(codec_context->codec->pix_fmts[0]) << std::endl;
+    LOGV << "Width: " << codec_context->width << ", height: " << codec_context->height;
+    LOGV << "Input pixel format: " << av_get_pix_fmt_name(codec_context->pix_fmt);
+    LOGV << "Output pixel format: " << av_get_pix_fmt_name(codec_context->codec->pix_fmts[0]);
 
-#ifdef _WIN32
+    #ifdef _WIN32
     CoUninitialize();
-#endif
+    #endif
     auto ret = avcodec_open2(codec_context, codec, nullptr);
     if (ret < 0) {
       throw std::runtime_error("Could not open codec " + std::to_string(ret));
@@ -131,7 +134,7 @@ public:
       return;
     }
 
-    int num_bytes = av_image_get_buffer_size(codec_context->pix_fmt, codec_context->width, codec_context->height, 1);
+    const auto num_bytes = av_image_get_buffer_size(codec_context->pix_fmt, codec_context->width, codec_context->height, 1);
     std::vector<uint8_t> converted_frame_buffer(num_bytes);
     av_image_fill_arrays(av_frame->data, av_frame->linesize, converted_frame_buffer.data(), codec_context->pix_fmt, codec_context->width, codec_context->height, 1);
     av_frame->width = codec_context->width;
@@ -139,6 +142,8 @@ public:
     av_frame->format = codec_context->pix_fmt;
 
     packet = av_packet_alloc();
+
+    start_time = std::chrono::steady_clock::now();
   }
 
   void loadNextSample() override {
@@ -147,7 +152,13 @@ public:
       std::cerr << "Unexpected end of stream." << std::endl;
       return;
     }
+
+    #ifdef __ANDROID__
+    // workaround on Android until I realize what an original frame is
+    yuv_frame = cv_frame;
+    #else
     cv::cvtColor(cv_frame, yuv_frame, cv::COLOR_BGR2YUV_I420);
+    #endif
 
     av_frame->data[0] = yuv_frame.data;
     av_frame->data[1] = yuv_frame.data + codec_context->width * codec_context->height;
@@ -165,38 +176,11 @@ public:
         return;
       }
 
-      //            if (packet->flags & AV_PKT_FLAG_KEY) {
-      //                uint8_t* nalus = nullptr;
-      //                int nalus_size = 0;
-      //
-      //                // Extract SPS and PPS data from codec context
-      //                for (int i = 0; i < codec_context->extradata_size - 3; i++) {
-      //                    if (codec_context->extradata[i] == 0x00 &&
-      //                        codec_context->extradata[i+1] == 0x00 &&
-      //                        codec_context->extradata[i+2] == 0x00 &&
-      //                        codec_context->extradata[i+3] == 0x01) {
-      //                        nalus = codec_context->extradata + i;
-      //                        nalus_size = i == 0 ? codec_context->extradata_size : i;
-      //                        break;
-      //                    }
-      //                }
-      //
-      //                // If SPS and PPS data found, insert it into encoded data buffer before the keyframe
-      //                if (nalus && nalus_size > 0) {
-      //                    encoded_data.insert(
-      //                            encoded_data.end(),
-      //                            reinterpret_cast<std::byte*>(nalus),
-      //                            reinterpret_cast<std::byte*>(nalus + nalus_size));
-      //                }
-      //            }
-
       encoded_data.insert(
           encoded_data.end(),
           reinterpret_cast<std::byte*>(packet->data),
           reinterpret_cast<std::byte*>(packet->data + packet->size));
     }
-
-    cv::pollKey();
   }
 
   auto getSample() -> rtc::binary override {
