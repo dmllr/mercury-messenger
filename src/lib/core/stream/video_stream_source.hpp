@@ -161,6 +161,7 @@ public:
     cv::cvtColor(cv_frame, cv_frame, cv::COLOR_BGR2YUV_I420);
     #endif
 
+    // set YUV pointers
     av_frame->data[0] = cv_frame.data;
     av_frame->data[1] = cv_frame.data + codec_context->width * codec_context->height;
     av_frame->data[2] = cv_frame.data + codec_context->width * codec_context->height * 5 / 4;
