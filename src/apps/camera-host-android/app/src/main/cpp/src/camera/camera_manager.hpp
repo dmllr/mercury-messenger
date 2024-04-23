@@ -404,38 +404,6 @@ public:
     renewCaptureSession();
   }
 
-  /**
-   * GetSensorOrientation()
-   *     Retrieve current sensor orientation regarding to the phone device orientation
-   */
-  bool getSensorOrientation(int32_t* facing, int32_t* angle) {
-    if (!camera_manager)
-      return false;
-
-    ACameraMetadata* metadataObj;
-    ACameraMetadata_const_entry face, orientation;
-    auto status = ACameraManager_getCameraCharacteristics(camera_manager, active_camera_id.c_str(), &metadataObj);
-    Log::assert_or_die(status == ACAMERA_OK, "ACameraManager_getCameraCharacteristics call failed with code: %#x, %s", status, GetErrorStr(status));
-    status = ACameraMetadata_getConstEntry(metadataObj, ACAMERA_LENS_FACING, &face);
-    Log::assert_or_die(status == ACAMERA_OK, "ACameraMetadata_getConstEntry call failed with code: %#x, %s", status, GetErrorStr(status));
-    camera_facing = static_cast<int32_t>(face.data.u8[0]);
-
-    status = ACameraMetadata_getConstEntry(metadataObj, ACAMERA_SENSOR_ORIENTATION, &orientation);
-    Log::assert_or_die(status == ACAMERA_OK, "ACameraMetadata_getConstEntry call failed with code: %#x, %s", status, GetErrorStr(status));
-
-    Log::i("====Current SENSOR_ORIENTATION: %8d", orientation.data.i32[0]);
-
-    ACameraMetadata_free(metadataObj);
-    camera_orientation = orientation.data.i32[0];
-
-    if (facing)
-      *facing = camera_facing;
-    if (angle)
-      *angle = camera_orientation;
-
-    return true;
-  }
-
 private:
   void finishClosing() {
     ACameraCaptureSession_close(capture_session);
