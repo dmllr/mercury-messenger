@@ -99,51 +99,29 @@ public:
     camera_manager->removeCaptureRequestTarget(CaptureTarget::PREVIEW_SURFACE);
   }
 
-  void requestPreview(bool start) {
-      static bool work;
-      work = start;
-    if (start) {
-            ANativeWindow *window = ANativeWindow_fromSurface(env, preview_surface);
+  std::mutex frameMutex;
+
+    void requestPreview(bool start) {
+        work = start;
+        if (start) {
+            window = ANativeWindow_fromSurface(env, preview_surface);
             if (window == nullptr) {
                 __android_log_print(ANDROID_LOG_ERROR, "Native", "Error obtaining native window");
                 return;
             }
 
             // Open camera, initialize preview, and display using OpenCV
-            cv::VideoCapture cap(0, cv::CAP_ANDROID);
+            cap.open(0, cv::CAP_ANDROID);
             if (!cap.isOpened()) {
                 __android_log_print(ANDROID_LOG_ERROR, "Native", "Error opening camera");
                 ANativeWindow_release(window);
                 return;
             }
-        auto thread = std::thread([window, &cap](){
-            cv::Mat frame;
-            for (int i = 0; i < 25; ++i) {
-                cap >> frame;
-                if (frame.empty()) {
-                  std::cerr << "Unexpected end of stream." << std::endl;
-                  work = false;
-                }
 
-
-                // Convert frame to RGBA for display on Android surface
-//                cvtColor(frame, frame, cv::COLOR_BGR2RGBA);
-
-                ANativeWindow_acquire(window);
-                ANativeWindow_Buffer buffer;
-                if (ANativeWindow_lock(window, &buffer, nullptr) == 0) {
-                    memcpy(buffer.bits, frame.data, frame.total() * frame.elemSize());
-                    ANativeWindow_unlockAndPost(window);
-                }
-                ANativeWindow_release(window);
-            }
-
-            cap.release();
-            ANativeWindow_release(window);
-        });
-        thread.detach();
+            // Start the frame processing thread
+            frameProcessingThread = std::thread(&AppEngine::frameProcessingFunc, this);
+        }
     }
-  }
 
   void requestRtc() {
     rtc_producer->startServer();
@@ -189,4 +167,32 @@ protected:
 
     return std::make_shared<Stream>(video, audio);
   }
+
+private:
+    ANativeWindow* window;
+    cv::VideoCapture cap;
+    std::thread frameProcessingThread;
+    std::atomic<bool> work;
+
+    void frameProcessingFunc() {
+        cv::Mat frame;
+        while (work) {
+            bool readSuccess = cap.read(frame);
+            if (!readSuccess || frame.empty()) {
+                std::cerr << "Unexpected end of stream." << std::endl;
+                continue;
+            }
+
+            // Convert frame to RGBA for display on Android surface
+            cvtColor(frame, frame, cv::COLOR_BGR2RGBA);
+
+            ANativeWindow_acquire(window);
+            ANativeWindow_Buffer buffer;
+            if (ANativeWindow_lock(window, &buffer, nullptr) == 0) {
+                memcpy(buffer.bits, frame.data, frame.total() * frame.elemSize());
+                ANativeWindow_unlockAndPost(window);
+            }
+            ANativeWindow_release(window);
+        }
+    }
 };
