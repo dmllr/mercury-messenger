@@ -19,6 +19,10 @@
 #include "core/rtc/rtc_producer.hpp"
 #include "core/stream/video_stream_source.hpp"
 
+#include <opencv2/videoio.hpp>
+#include <opencv2/imgproc.hpp>
+#include <opencv2/core/mat.hpp>
+#include <opencv2/core/mat.hpp>
 
 /**
  * AppEngine
@@ -96,13 +100,48 @@ public:
   }
 
   void requestPreview(bool start) {
-    static constexpr auto target = CaptureTarget::PREVIEW_SURFACE;
-
+      static bool work;
+      work = start;
     if (start) {
-      camera_manager->registerSurfaceForTarget(target, ANativeWindow_fromSurface(env, preview_surface));
-      camera_manager->addConsumer(target);
-    } else {
-      camera_manager->removeConsumer(target);
+            ANativeWindow *window = ANativeWindow_fromSurface(env, preview_surface);
+            if (window == nullptr) {
+                __android_log_print(ANDROID_LOG_ERROR, "Native", "Error obtaining native window");
+                return;
+            }
+
+            // Open camera, initialize preview, and display using OpenCV
+            cv::VideoCapture cap(0, cv::CAP_ANDROID);
+            if (!cap.isOpened()) {
+                __android_log_print(ANDROID_LOG_ERROR, "Native", "Error opening camera");
+                ANativeWindow_release(window);
+                return;
+            }
+        auto thread = std::thread([window, &cap](){
+            cv::Mat frame;
+            for (int i = 0; i < 25; ++i) {
+                cap >> frame;
+                if (frame.empty()) {
+                  std::cerr << "Unexpected end of stream." << std::endl;
+                  work = false;
+                }
+
+
+                // Convert frame to RGBA for display on Android surface
+//                cvtColor(frame, frame, cv::COLOR_BGR2RGBA);
+
+                ANativeWindow_acquire(window);
+                ANativeWindow_Buffer buffer;
+                if (ANativeWindow_lock(window, &buffer, nullptr) == 0) {
+                    memcpy(buffer.bits, frame.data, frame.total() * frame.elemSize());
+                    ANativeWindow_unlockAndPost(window);
+                }
+                ANativeWindow_release(window);
+            }
+
+            cap.release();
+            ANativeWindow_release(window);
+        });
+        thread.detach();
     }
   }
 
