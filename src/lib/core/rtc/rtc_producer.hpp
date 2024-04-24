@@ -15,13 +15,6 @@
 
 #include "rtc_transport_base.hpp"
 
-// Calculation and sending of initial NALUs is not working as expected,
-// code is kept for historical reasons but disabled.
-// initialNALUS() are calculated only on actual "send" operation, while sendInitialNalus
-// required on addToStream and uninitialized yet.
-// Anyway, everything seems working without it.
-#define SEND_INITIAL_NALUS 0
-
 
 class RtcProducer : public RtcTransportBase {
   using json = nlohmann::json;
@@ -81,8 +74,6 @@ public:
           if (rtpConfig->timestampToSeconds(reportElapsedTimestamp) > 1) {
             trackData->sender->setNeedsToReport();
           }
-
-          calculateInitialNalus(sample);
 
           LOGV << "Sending " << streamType << " sample with size: " << message->size() << " to " << peer;
           bool send = false;
@@ -164,7 +155,6 @@ protected:
           MainThread.dispatch([this, wc]() {
             if (auto c = wc.lock()) {
               addToStream(c, true);
-              sendInitialNalus(av_stream, c->video.value());
             }
           });
           LOGI << "Video from " << id << " opened";
@@ -248,86 +238,4 @@ protected:
 private:
   /// Audio and video stream
   std::shared_ptr<Stream> av_stream;
-
-  #if SEND_INITIAL_NALUS
-  mutable std::vector<std::byte> previousUnitType5;
-  mutable std::vector<std::byte> previousUnitType7;
-  mutable std::vector<std::byte> previousUnitType8;
-
-  auto initialNALUS() -> std::vector<std::byte> {
-    std::vector<std::byte> units{};
-    if (!previousUnitType7.empty()) {
-      return previousUnitType7;
-    }
-    if (!previousUnitType8.empty()) {
-      return previousUnitType8;
-    }
-    if (!previousUnitType5.empty()) {
-      return previousUnitType5;
-    }
-    return {};
-  }
-  #endif
-
-  /// Send previous key frame so browser can show something to user
-  /// @param stream Stream
-  /// @param video Video track data
-  void sendInitialNalus(std::shared_ptr<Stream> stream, std::shared_ptr<Peer::Track> video) {
-    #if SEND_INITIAL_NALUS
-    auto initialNalus = initialNALUS();
-
-    // send previous NALU key frame so users don't have to wait to see stream works
-    if (!initialNalus.empty()) {
-      const double frameDuration_s = double(stream->video->getSampleDuration_us()) / (1000 * 1000);
-      const uint32_t frameTimestampDuration = video->sender->rtpConfig->secondsToTimestamp(frameDuration_s);
-      video->sender->rtpConfig->timestamp = video->sender->rtpConfig->startTimestamp - frameTimestampDuration * 2;
-      video->track->send(initialNalus);
-      video->sender->rtpConfig->timestamp += frameTimestampDuration;
-      // Send initial NAL units again to start stream in firefox browser
-      video->track->send(initialNalus);
-    }
-    #endif
-  }
-
-  void calculateInitialNalus(rtc::binary& sample) const {
-    #if SEND_INITIAL_NALUS
-    auto z = (std::byte)0;
-    auto o = (std::byte)1;
-    rtc::binary::difference_type i = 0;
-    while (i < sample.size()) {
-      while (i + 3 < sample.size() && (sample[i] != z || sample[i+1] != z || sample[i+2] != z || sample[i+3] != o)) {
-        i++;
-      }
-      if (i + 4 >= sample.size()) {
-        break;
-      }
-      auto naluStartIndex = i;
-      i += 4;
-      while (i + 4 < sample.size() && (sample[i+1] != z || sample[i+2] != z || sample[i+3] != z || sample[i+4] != o)) {
-        i++;
-      }
-      if (i >= sample.size()) {
-        break;
-      }
-      auto naluEndIndex = i;
-
-      LOGD << "NALU from " << naluStartIndex << " to " << naluEndIndex << " out of " << sample.size();
-
-      auto* header = reinterpret_cast<rtc::NalUnitHeader*>(sample.data() + naluStartIndex + 4);
-      auto type = header->unitType();
-      switch (type) {
-        case 7:
-          previousUnitType7 = {sample.begin() + naluStartIndex, sample.begin() + naluEndIndex};
-          break;
-        case 8:
-          previousUnitType8 = {sample.begin() + naluStartIndex, sample.begin() + naluEndIndex};;
-          break;
-        case 5:
-          previousUnitType5 = {sample.begin() + naluStartIndex, sample.begin() + naluEndIndex};;
-          break;
-      }
-    }
-    #endif
-  }
-
 };
