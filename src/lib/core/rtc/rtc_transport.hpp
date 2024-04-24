@@ -18,40 +18,26 @@
 #include "utils/memory.h"
 
 
+template <class Connection>
 class RtcTransport {
   using Json = nlohmann::json;
 
-  const std::string ip_address = "app.hela.me";
-  const uint16_t port = 8000;
+  Connection connection_;
 
   std::shared_ptr<std::function<void(EventSource, int)>> status_callback_;
-  std::shared_ptr<std::function<void(const std::shared_ptr<Peer>)>> peer_ready_callback_;
-  std::shared_ptr<std::function<std::shared_ptr<Peer>(const std::string& id)>> create_peer_connection_;
 
 public:
   RtcTransport() {
     ws_config_.caCertificatePemFile = ZEROSSL_CA_BUNDLE;
   }
+  RtcTransport(RtcTransport&&) = delete;
+  RtcTransport(const RtcTransport&) = delete;
+  auto operator=(RtcTransport&&) -> RtcTransport& = delete;
+  auto operator=(const RtcTransport&) -> RtcTransport& = delete;
   ~RtcTransport() = default;
-
-  [[maybe_unused]] auto hasPeer() -> bool {
-    return !peers_.empty();
-  }
 
   [[maybe_unused]] void SetStatusCallback(const std::function<void(EventSource, int)>& callback) {
     status_callback_ = std::make_shared<std::function<void(EventSource, int)>>(callback);
-  }
-
-  [[maybe_unused]] void SetOnPeerReadyCallback(const std::function<void(const std::shared_ptr<Peer>)>& callback) {
-    peer_ready_callback_ = std::make_shared<std::function<void(const std::shared_ptr<Peer>)>>(callback);
-  }
-
-  [[maybe_unused]] void SetCreatePeerConnection(const std::function<std::shared_ptr<Peer>(const std::string& id)>& function) {
-    create_peer_connection_ = std::make_shared<std::function<std::shared_ptr<Peer>(const std::string& id)>>(function);
-  }
-
-  auto Peers() {
-    return peers_;
   }
 
   void ReportStatus(const ServiceState state) const {
@@ -120,9 +106,9 @@ public:
       if (state == rtc::PeerConnection::State::Disconnected ||
           state == rtc::PeerConnection::State::Failed ||
           state == rtc::PeerConnection::State::Closed) {
-        // remove disconnected peer
         MainThread_.dispatch([this, id]() {
-          peers_.erase(id);
+          // remove disconnected peer
+          connection_.RemovePeer(id);
         });
         ReportStatus(ServiceState::Standby);
       }
@@ -171,9 +157,7 @@ public:
     }
 
     if (peer->getState() == Peer::State::Ready) {
-      if (peer_ready_callback_ != nullptr) {
-        (*peer_ready_callback_)(peer);
-      }
+      connection_.OnPeerReady(peer);
     }
   }
 
@@ -197,6 +181,8 @@ public:
 
 private:
   DispatchQueue MainThread_ = DispatchQueue("Main", 1);
+  rtc::WebSocketConfiguration ws_config_;
+  rtc::WebSocket ws{ws_config_};
 
   void OnWSMessage(Json message) {
     auto it = message.find("id");
@@ -211,12 +197,13 @@ private:
     auto type = it->get<std::string>();
 
     if (type == "streamRequest") {
-      std::shared_ptr<Peer> const c = (*create_peer_connection_)(id);
-      peers_.emplace(id, c);
+      std::shared_ptr<Peer> const peer = CreatePeerConnection(id);
+      MainThread_.dispatch([this, id, peer]() {
+        connection_.AddPeer(id, std::move(peer));
+      });
     } else if (type == "answer") {
-      const auto peers = peers_;
-      if (auto jt = peers.find(id); jt != peers.end()) {
-        auto pc = peers.at(id)->peerConnection;
+      if (const auto peer = connection_.GetPeer(id); peer != nullptr) {
+        auto pc = peer->peerConnection;
         auto sdp = message["sdp"].get<std::string>();
         auto answer = rtc::Description(sdp, type);
         pc->setRemoteDescription(answer);
@@ -226,6 +213,40 @@ private:
     } else {
       throw std::runtime_error("Unknown message type " + type);
     }
+  }
+
+  auto CreatePeerConnection(const std::string& id) -> std::shared_ptr<Peer> {
+    auto pc = CreateDefaultPeerConnection(id);
+
+    std::shared_ptr<Peer> peer(new Peer(pc));
+
+    peer->video = connection_.AddVideo(
+        pc,
+        [this, id, wc = make_weak_ptr(peer)]() {
+          MainThread_.dispatch([this, wc]() {
+            if (auto c = wc.lock()) {
+              AddToStream(c, true);
+            }
+          });
+          LOGI << "Video from " << id << " opened";
+        });
+
+    peer->audio = connection_.AddAudio(
+        pc,
+        [this, id, wc = make_weak_ptr(peer)]() {
+          MainThread_.dispatch([this, wc]() {
+            if (auto c = wc.lock()) {
+              AddToStream(c, false);
+            }
+          });
+          LOGI << "Audio from " << id << " opened";
+        });
+
+    peer->dataChannel = CreateDefaultDataChannel(pc, id);
+
+    pc->setLocalDescription();
+
+    return peer;
   }
 
   class RtcConfiguration {
@@ -247,6 +268,8 @@ private:
     }
   };
 
+  const std::string ip_address = "app.hela.me";
+  const uint16_t port = 8000;
   static inline std::string ZEROSSL_CA_BUNDLE =
       "-----BEGIN CERTIFICATE-----\n"
       "MIIG1TCCBL2gAwIBAgIQbFWr29AHksedBwzYEZ7WvzANBgkqhkiG9w0BAQwFADCB\n"
@@ -287,11 +310,4 @@ private:
       "ON51WhJ6W0xNdNJwzYASZYH+tmCWI+N60Gv2NNMGHwMZ7e9bXgzUCZH5FaBFDGR5\n"
       "S9VWqHB73Q+OyIVvIbKYcSc2w/aSuFKGSA==\n"
       "-----END CERTIFICATE-----";
-
-protected:
-  rtc::WebSocketConfiguration ws_config_;
-  rtc::WebSocket ws{ws_config_};
-
-  /// all connected peers
-  std::unordered_map<std::string, std::shared_ptr<Peer>> peers_;
 };

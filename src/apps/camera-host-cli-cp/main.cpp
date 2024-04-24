@@ -4,8 +4,8 @@
 
 
 auto main(int  /*argc*/, char**  /*argv*/) -> int {
-  auto rtc = RtcProducer();
-  rtc.StartServer();
+  auto rtc = RtcTransport<RtcProducer>();
+  rtc.Start("server");
 
   while (true) {
     std::string id;
