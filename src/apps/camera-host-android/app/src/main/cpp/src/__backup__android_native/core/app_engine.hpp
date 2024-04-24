@@ -75,7 +75,7 @@ public:
     return compatible_camera_res;
   }
 
-  jobject getSurfaceObject() {
+  jobject getPreviewSurface() {
     return preview_surface;
   }
 
