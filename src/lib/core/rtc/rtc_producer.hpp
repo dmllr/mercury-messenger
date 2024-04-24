@@ -19,18 +19,18 @@
 
 class RtcProducer : public RtcTransportBase {
   using Json = nlohmann::json;
-  using TrackData = std::shared_ptr<Peer::Track>;
+  using PeerTrack = std::shared_ptr<Peer::Track>;
 
-  class ClientTrack {
+  class Client {
     friend class RtcProducer;
 
     std::string id_;
-    TrackData trackData_;
+    PeerTrack track_;
 
   public:
-    ClientTrack(std::string id, std::shared_ptr<Peer::Track> trackData)
+    Client(std::string id, std::shared_ptr<Peer::Track> track)
         : id_(std::move(id)),
-          trackData_(std::move(trackData)) {}
+          track_(std::move(track)) {}
   };
 
 public:
@@ -39,7 +39,7 @@ public:
 
     // set callback responsible for sample sending
     av_stream->onSample([this, ws = make_weak_ptr(av_stream)](Stream::Source::Type type, uint64_t sampleTime, const rtc::binary& sample) {
-      auto tracks = GetAllTracksInReadyState(type);
+      auto tracks = GetAllClientsInReadyState(type);
       if (!tracks.empty()) {
         SendMessageToAllTracks(sample, type, sampleTime, tracks);
       }
@@ -58,8 +58,8 @@ public:
 
 
 private:
-  std::vector<ClientTrack> GetAllTracksInReadyState(Stream::Source::Type type) {
-    std::vector<ClientTrack> tracks;
+  std::vector<Client> GetAllClientsInReadyState(Stream::Source::Type type) {
+    std::vector<Client> tracks;
     // get track for given type
     auto get_track_data = [type](const std::shared_ptr<Peer>& peer) {
       return type == Stream::Source::Type::Video ? peer->video : peer->audio;
@@ -77,17 +77,17 @@ private:
     return tracks;
   }
 
-  static void SendMessageToAllTracks(const rtc::binary& sample, Stream::Source::Type type, uint64_t sampleTime, const std::vector<ClientTrack>& tracks) {
+  static void SendMessageToAllTracks(const rtc::binary& sample, Stream::Source::Type type, uint64_t sampleTime, const std::vector<Client>& clients) {
     const auto* stream_type = type == Stream::Source::Type::Video ? "video" : "audio";
 
-    for (const auto& client_track: tracks) {
-      ProcessTrack(client_track, sampleTime, sample, stream_type);
+    for (const auto& client: clients) {
+      ProcessTrack(client, sampleTime, sample, stream_type);
     }
   }
 
-  static void ProcessTrack(const ClientTrack& clientTrack, uint64_t sampleTime, const rtc::binary& message, const char* streamType) {
-    auto peer = clientTrack.id_;
-    auto track_data = clientTrack.trackData_;
+  static void ProcessTrack(const Client& client, uint64_t sampleTime, const rtc::binary& message, const char* streamType) {
+    auto peer = client.id_;
+    auto track_data = client.track_;
     auto elapsed_seconds = static_cast<double>(sampleTime) / Units::Microseconds;
     const auto rtp_config = track_data->sender->rtpConfig;
     auto elapsed_timestamp = rtp_config->secondsToTimestamp(elapsed_seconds);
@@ -98,31 +98,31 @@ private:
     SendSample(message, streamType, track_data);
   }
 
-  static void UpdateRtpConfig(uint32_t elapsedTimestamp, const TrackData& trackData, const std::shared_ptr<rtc::RtpPacketizationConfig>& rtp_config) {
+  static void UpdateRtpConfig(uint32_t elapsedTimestamp, const PeerTrack& track, const std::shared_ptr<rtc::RtpPacketizationConfig>& rtp_config) {
     // set new timestamp
     rtp_config->timestamp = rtp_config->startTimestamp + elapsedTimestamp;
 
     // get elapsed time in clock rate from last RTCP sender report
-    auto report_elapsed_timestamp = rtp_config->timestamp - trackData->sender->lastReportedTimestamp();
+    auto report_elapsed_timestamp = rtp_config->timestamp - track->sender->lastReportedTimestamp();
     // check if last report was at least 1 second ago
     if (rtp_config->timestampToSeconds(report_elapsed_timestamp) > 1) {
-      trackData->sender->setNeedsToReport();
+      track->sender->setNeedsToReport();
     }
   }
 
-  static void SendSample(rtc::binary message, const char* streamType, const TrackData& trackData) {
+  static void SendSample(rtc::binary message, const char* streamType, const PeerTrack& track) {
     bool send = false;
     try {
       // send sample
       if (likely(!message.empty())) {
-        send = trackData->track->send(message);
+        send = track->track->send(message);
       }
     } catch (const std::exception& e) {
-      LOGE << "Exception. Unable to send " << streamType << " packet." << e.what();
+      LOGE << "Exception: unable to send " << streamType << " packet." << e.what();
       send = false;
     }
     if (!send) {
-      LOGE << "Unable to send " << streamType << " packet";
+      LOGD << "Unable to send " << streamType << " packet";
     }
   }
 
@@ -138,7 +138,7 @@ private:
   }
 
 protected:
-  void wsOnMessage(Json message) final {
+  void OnWSMessage(Json message) final {
     auto it = message.find("id");
     if (it == message.end()) {
       return;
@@ -167,7 +167,7 @@ protected:
     }
   }
 
-  void onPeerReady(const std::shared_ptr<Peer>& /*peer*/) final {
+  void OnPeerReady(const std::shared_ptr<Peer>& /*peer*/) final {
     av_stream->start();
   }
 

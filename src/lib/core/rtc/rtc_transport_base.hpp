@@ -50,8 +50,8 @@ public:
 protected:
   DispatchQueue MainThread = DispatchQueue("Main", 1);
 
-  virtual void wsOnMessage(json message) = 0;
-  virtual void onPeerReady(const std::shared_ptr<Peer>& peer) = 0;
+  virtual void OnWSMessage(json message) = 0;
+  virtual void OnPeerReady(const std::shared_ptr<Peer>& peer) = 0;
 
   class RtcConfiguration {
   public:
@@ -98,7 +98,7 @@ protected:
 
       json message = json::parse(std::get<std::string>(data));
       MainThread.dispatch([this, message]() {
-        wsOnMessage(message);
+        OnWSMessage(message);
       });
     });
 
@@ -183,7 +183,7 @@ protected:
     }
 
     if (peer->getState() == Peer::State::Ready) {
-      onPeerReady(peer);
+      OnPeerReady(peer);
     }
   }
 
