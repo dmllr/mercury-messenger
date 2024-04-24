@@ -127,7 +127,7 @@ private:
   }
 
   void StopStreamIfNoPeers(const std::weak_ptr<Stream>& ws) {
-    MainThread.dispatch([this, ws]() {
+    MainThread_.dispatch([this, ws]() {
       if (peers_.empty()) {
         // we have no peers, stop the stream
         if (auto stream = ws.lock()) {
@@ -180,7 +180,7 @@ protected:
         pc, rtc::Description::Direction::SendOnly,
         102, 10001, "video-stream", "cam-stream-1",
         [this, id, wc = make_weak_ptr(peer)]() {
-          MainThread.dispatch([this, wc]() {
+          MainThread_.dispatch([this, wc]() {
             if (auto c = wc.lock()) {
               AddToStream(c, true);
             }
@@ -193,7 +193,7 @@ protected:
         pc, rtc::Description::Direction::SendOnly,
         111, 10002, "audio-stream", "cam-stream-1",
         [this, id, wc = make_weak_ptr(peer)]() {
-          MainThread.dispatch([this, wc]() {
+          MainThread_.dispatch([this, wc]() {
             if (auto c = wc.lock()) {
               AddToStream(c, false);
             }

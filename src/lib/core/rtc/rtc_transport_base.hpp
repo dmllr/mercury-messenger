@@ -19,7 +19,7 @@
 
 
 class RtcTransportBase {
-  using json = nlohmann::json;
+  using Json = nlohmann::json;
 
   const std::string ip_address = "app.hela.me";
   const uint16_t port = 8000;
@@ -48,9 +48,9 @@ public:
 
 
 protected:
-  DispatchQueue MainThread = DispatchQueue("Main", 1);
+  DispatchQueue MainThread_ = DispatchQueue("Main", 1);
 
-  virtual void OnWSMessage(json message) = 0;
+  virtual void OnWSMessage(Json message) = 0;
   virtual void OnPeerReady(const std::shared_ptr<Peer>& peer) = 0;
 
   class RtcConfiguration {
@@ -96,8 +96,8 @@ protected:
         return;
       }
 
-      json message = json::parse(std::get<std::string>(data));
-      MainThread.dispatch([this, message]() {
+      Json message = Json::parse(std::get<std::string>(data));
+      MainThread_.dispatch([this, message]() {
         OnWSMessage(message);
       });
     });
@@ -133,7 +133,7 @@ protected:
           state == rtc::PeerConnection::State::Failed ||
           state == rtc::PeerConnection::State::Closed) {
         // remove disconnected peer
-        MainThread.dispatch([this, id]() {
+        MainThread_.dispatch([this, id]() {
           peers_.erase(id);
         });
         reportStatus(ServiceState::Standby);
@@ -153,7 +153,7 @@ protected:
         // Gathering complete, send answer
         if (auto pc = wpc.lock()) {
           auto description = pc->localDescription();
-          json message = {
+          Json message = {
               {"id", id},
               {"debug", "onGatheringStateChange(complete)"},
               {"type", description->typeString()},
