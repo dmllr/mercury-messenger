@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <utility>
 
 #include "logging/logging.h"
 #include "utils/memory.h"
@@ -10,23 +11,26 @@
 
 #include "core/rtc/peer.hpp"
 #include "core/rtc/stream.hpp"
-#include "core/stream/video_stream_source.hpp"
 #include "core/stream/fileparser.hpp"
+#include "core/stream/video_stream_source.hpp"
 
 #include "rtc_transport_base.hpp"
 
 
 class RtcProducer : public RtcTransportBase {
   using Json = nlohmann::json;
+  using TrackData = std::shared_ptr<Peer::Track>;
 
-  struct ClientTrack {
-    std::string id;
-    std::shared_ptr<Peer::Track> trackData;
+  class ClientTrack {
+    friend class RtcProducer;
 
-    ClientTrack(const std::string& id, std::shared_ptr<Peer::Track> trackData) {
-      this->id = id;
-      this->trackData = std::move(trackData);
-    }
+    std::string id_;
+    TrackData trackData_;
+
+  public:
+    ClientTrack(std::string id, std::shared_ptr<Peer::Track> trackData)
+        : id_(std::move(id)),
+          trackData_(std::move(trackData)) {}
   };
 
 public:
@@ -34,84 +38,103 @@ public:
     av_stream = std::make_shared<Stream>(std::make_shared<VideoStreamSource>(), std::make_shared<OPUSFileParser>("silence", true));
 
     // set callback responsible for sample sending
-    av_stream->onSample([this, ws = make_weak_ptr(av_stream)](Stream::Source::Type type, uint64_t sampleTime, rtc::binary sample) {
-      auto tracks{std::vector<ClientTrack>()};
-      const auto* streamType = type == Stream::Source::Type::Video ? "video" : "audio";
-      // get track for given type
-      auto getTrackData =
-          [type](const std::shared_ptr<Peer>& peer) {
-            return type == Stream::Source::Type::Video ? peer->video : peer->audio;
-          };
-
-      // get all peers with Ready state
-      for (const auto& id_peer: peers_) {
-        auto id = id_peer.first;
-        auto peer = id_peer.second;
-        auto optTrackData = getTrackData(peer);
-        if (peer->getState() == Peer::State::Ready && optTrackData.has_value()) {
-          auto trackData = optTrackData.value();
-          tracks.emplace_back(id, trackData);
-        }
-      }
-
+    av_stream->onSample([this, ws = make_weak_ptr(av_stream)](Stream::Source::Type type, uint64_t sampleTime, const rtc::binary& sample) {
+      auto tracks = GetAllTracksInReadyState(type);
       if (!tracks.empty()) {
-        auto message = rtc::make_message(std::move(sample));
-        for (const auto& clientTrack: tracks) {
-          auto peer = clientTrack.id;
-          auto trackData = clientTrack.trackData;
-          // sample time is in us, we need to convert it to seconds
-          auto elapsedSeconds = double(sampleTime) / Units::Microseconds;
-          auto rtpConfig = trackData->sender->rtpConfig;
-          // get elapsed time in clock rate
-          uint32_t elapsedTimestamp = rtpConfig->secondsToTimestamp(elapsedSeconds);
-
-          // set new timestamp
-          rtpConfig->timestamp = rtpConfig->startTimestamp + elapsedTimestamp;
-
-          // get elapsed time in clock rate from last RTCP sender report
-          auto reportElapsedTimestamp = rtpConfig->timestamp - trackData->sender->lastReportedTimestamp();
-          // check if last report was at least 1 second ago
-          if (rtpConfig->timestampToSeconds(reportElapsedTimestamp) > 1) {
-            trackData->sender->setNeedsToReport();
-          }
-
-          LOGV << "Sending " << streamType << " sample with size: " << message->size() << " to " << peer;
-          bool send = false;
-          try {
-            // send sample
-            if (likely(!message->empty())) {
-              send = trackData->track->send(*message);
-            }
-          } catch (const std::exception &e) {
-            LOGE << "Exception. Unable to send " << streamType << " packet." << e.what();
-            send = false;
-          }
-          if (!send) {
-            LOGE << "Unable to send " << streamType << " packet";
-            break;
-          }
-        }
+        SendMessageToAllTracks(sample, type, sampleTime, tracks);
       }
-
-      MainThread.dispatch([this, ws]() {
-        if (peers_.empty()) {
-          // we have no peers, stop the stream
-          if (auto stream = ws.lock()) {
-            stream->stop();
-          }
-        }
-      });
+      StopStreamIfNoPeers(ws);
     });
   }
   RtcProducer(RtcProducer&&) = delete;
   RtcProducer(const RtcProducer&) = delete;
   RtcProducer& operator=(RtcProducer&&) = delete;
   RtcProducer& operator=(const RtcProducer&) = delete;
-
   virtual ~RtcProducer() = default;
 
   void StartServer() {
     Start("server");
+  }
+
+
+private:
+  std::vector<ClientTrack> GetAllTracksInReadyState(Stream::Source::Type type) {
+    std::vector<ClientTrack> tracks;
+    // get track for given type
+    auto get_track_data = [type](const std::shared_ptr<Peer>& peer) {
+      return type == Stream::Source::Type::Video ? peer->video : peer->audio;
+    };
+
+    // get all peers with Ready state
+    for (const auto& id_peer: peers_) {
+      auto id = id_peer.first;
+      auto peer = id_peer.second;
+      auto opt_track_data = get_track_data(peer);
+      if (peer->getState() == Peer::State::Ready && opt_track_data.has_value()) {
+        tracks.emplace_back(id, opt_track_data.value());
+      }
+    }
+    return tracks;
+  }
+
+  static void SendMessageToAllTracks(const rtc::binary& sample, Stream::Source::Type type, uint64_t sampleTime, const std::vector<ClientTrack>& tracks) {
+    const auto* stream_type = type == Stream::Source::Type::Video ? "video" : "audio";
+
+    for (const auto& client_track: tracks) {
+      ProcessTrack(client_track, sampleTime, sample, stream_type);
+    }
+  }
+
+  static void ProcessTrack(const ClientTrack& clientTrack, uint64_t sampleTime, const rtc::binary& message, const char* streamType) {
+    auto peer = clientTrack.id_;
+    auto track_data = clientTrack.trackData_;
+    auto elapsed_seconds = static_cast<double>(sampleTime) / Units::Microseconds;
+    const auto rtp_config = track_data->sender->rtpConfig;
+    auto elapsed_timestamp = rtp_config->secondsToTimestamp(elapsed_seconds);
+
+    UpdateRtpConfig(elapsed_timestamp, track_data, rtp_config);
+
+    LOGV << "Sending " << streamType << " sample with size: " << message.size() << " to " << peer;
+    SendSample(message, streamType, track_data);
+  }
+
+  static void UpdateRtpConfig(uint32_t elapsedTimestamp, const TrackData& trackData, const std::shared_ptr<rtc::RtpPacketizationConfig>& rtp_config) {
+    // set new timestamp
+    rtp_config->timestamp = rtp_config->startTimestamp + elapsedTimestamp;
+
+    // get elapsed time in clock rate from last RTCP sender report
+    auto report_elapsed_timestamp = rtp_config->timestamp - trackData->sender->lastReportedTimestamp();
+    // check if last report was at least 1 second ago
+    if (rtp_config->timestampToSeconds(report_elapsed_timestamp) > 1) {
+      trackData->sender->setNeedsToReport();
+    }
+  }
+
+  static void SendSample(rtc::binary message, const char* streamType, const TrackData& trackData) {
+    bool send = false;
+    try {
+      // send sample
+      if (likely(!message.empty())) {
+        send = trackData->track->send(message);
+      }
+    } catch (const std::exception& e) {
+      LOGE << "Exception. Unable to send " << streamType << " packet." << e.what();
+      send = false;
+    }
+    if (!send) {
+      LOGE << "Unable to send " << streamType << " packet";
+    }
+  }
+
+  void StopStreamIfNoPeers(const std::weak_ptr<Stream>& ws) {
+    MainThread.dispatch([this, ws]() {
+      if (peers_.empty()) {
+        // we have no peers, stop the stream
+        if (auto stream = ws.lock()) {
+          stream->stop();
+        }
+      }
+    });
   }
 
 protected:
