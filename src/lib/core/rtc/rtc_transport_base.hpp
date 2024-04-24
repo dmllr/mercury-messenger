@@ -28,11 +28,12 @@ class RtcTransportBase {
 
 public:
   explicit RtcTransportBase() {
-    ws_config.caCertificatePemFile = ZEROSSL_CA_BUNDLE;
+    ws_config_.caCertificatePemFile = ZEROSSL_CA_BUNDLE;
   }
+  ~RtcTransportBase() = default;
 
   [[maybe_unused]] auto hasPeer() -> bool {
-    return !peers.empty();
+    return !peers_.empty();
   }
 
   [[maybe_unused]] void setStatusCallback(const std::function<void(EventSource, int)>& status_callback) {
@@ -54,13 +55,13 @@ protected:
 
   class RtcConfiguration {
   public:
-    static auto config() -> rtc::Configuration& {
-      static rtc::Configuration config = createRtcConfiguration();
+    static auto Config() -> rtc::Configuration& {
+      static rtc::Configuration config = CreateRtcConfiguration();
       return config;
     }
 
   private:
-    static auto createRtcConfiguration() -> rtc::Configuration {
+    static auto CreateRtcConfiguration() -> rtc::Configuration {
       rtc::Configuration config;
       config.iceServers.emplace_back("stun:stun.relay.metered.ca:80");
       config.iceServers.emplace_back("turn:49880a0f046c8990b1990b35:qZCNW/57EB8GwO3A@a.relay.metered.ca:80");
@@ -71,7 +72,7 @@ protected:
     }
   };
 
-  void start(std::string_view localId) {
+  void Start(std::string_view localId) {
     LOGI << "The local ID is: " << localId.data();
 
     ws.onOpen([this]() {
@@ -120,11 +121,11 @@ protected:
     }
   }
 
-  auto createDefaultPeerConnection(const std::string& id) -> std::shared_ptr<rtc::PeerConnection> {
-    auto pc = std::make_shared<rtc::PeerConnection>(RtcConfiguration::config());
+  auto CreateDefaultPeerConnection(const std::string& id) -> std::shared_ptr<rtc::PeerConnection> {
+    auto pc = std::make_shared<rtc::PeerConnection>(RtcConfiguration::Config());
 
     pc->onStateChange([this, id](rtc::PeerConnection::State state) {
-      LOGI << "State: " << (int)state;
+      LOGI << "State: " << static_cast<int>(state);
       if (state == rtc::PeerConnection::State::Connected) {
         reportStatus(ServiceState::Action);
       }
@@ -133,21 +134,21 @@ protected:
           state == rtc::PeerConnection::State::Closed) {
         // remove disconnected peer
         MainThread.dispatch([this, id]() {
-          peers.erase(id);
+          peers_.erase(id);
         });
         reportStatus(ServiceState::Standby);
       }
     });
 
     pc->onIceStateChange([this, id](rtc::PeerConnection::IceState state) {
-      LOGI << "ICE State: " << (int)state;
+      LOGI << "ICE State: " << static_cast<int>(state);
       if (state == rtc::PeerConnection::IceState::Failed) {
         reportStatus(ServiceState::Failure);
       }
     });
 
     pc->onGatheringStateChange([this, wpc = make_weak_ptr(pc), id](rtc::PeerConnection::GatheringState state) {
-      LOGI << "Gathering State: " << (int)state;
+      LOGI << "Gathering State: " << static_cast<int>(state);
       if (state == rtc::PeerConnection::GatheringState::Complete) {
         // Gathering complete, send answer
         if (auto pc = wpc.lock()) {
@@ -163,7 +164,7 @@ protected:
     });
 
     pc->onSignalingStateChange([this, id](rtc::PeerConnection::SignalingState state) {
-      LOGI << "Signalling State: " << (int)state;
+      LOGI << "Signalling State: " << static_cast<int>(state);
       if (state == rtc::PeerConnection::SignalingState::HaveLocalOffer) {
         reportStatus(ServiceState::Setup);
       }
@@ -172,7 +173,7 @@ protected:
     return pc;
   }
 
-  void addToStream(const std::shared_ptr<Peer>& peer, bool isAddingVideo) {
+  void AddToStream(const std::shared_ptr<Peer>& peer, bool isAddingVideo) {
     if (peer->getState() == Peer::State::Waiting) {
       peer->setState(isAddingVideo ? Peer::State::WaitingForAudio : Peer::State::WaitingForVideo);
     } else if ((peer->getState() == Peer::State::WaitingForAudio && !isAddingVideo) || (peer->getState() == Peer::State::WaitingForVideo && isAddingVideo)) {
@@ -186,7 +187,7 @@ protected:
     }
   }
 
-  static auto createDefaultDataChannel(std::shared_ptr<rtc::PeerConnection> pc, const std::string& id) -> std::shared_ptr<rtc::DataChannel> {
+  static auto CreateDefaultDataChannel(std::shared_ptr<rtc::PeerConnection> pc, const std::string& id) -> std::shared_ptr<rtc::DataChannel> {
     auto dc = pc->createDataChannel("ping-pong");
     dc->onOpen([id, wdc = make_weak_ptr(dc)]() {
       if (auto dc = wdc.lock()) {
@@ -247,9 +248,9 @@ private:
       "-----END CERTIFICATE-----";
 
 protected:
-  rtc::WebSocketConfiguration ws_config;
-  rtc::WebSocket ws{ws_config};
+  rtc::WebSocketConfiguration ws_config_;
+  rtc::WebSocket ws{ws_config_};
 
   /// all connected peers
-  std::unordered_map<std::string, std::shared_ptr<Peer>> peers;
+  std::unordered_map<std::string, std::shared_ptr<Peer>> peers_;
 };

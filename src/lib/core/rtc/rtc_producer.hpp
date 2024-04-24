@@ -17,7 +17,7 @@
 
 
 class RtcProducer : public RtcTransportBase {
-  using json = nlohmann::json;
+  using Json = nlohmann::json;
 
   struct ClientTrack {
     std::string id;
@@ -44,7 +44,7 @@ public:
           };
 
       // get all peers with Ready state
-      for (const auto& id_peer: peers) {
+      for (const auto& id_peer: peers_) {
         auto id = id_peer.first;
         auto peer = id_peer.second;
         auto optTrackData = getTrackData(peer);
@@ -94,7 +94,7 @@ public:
       }
 
       MainThread.dispatch([this, ws]() {
-        if (peers.empty()) {
+        if (peers_.empty()) {
           // we have no peers, stop the stream
           if (auto stream = ws.lock()) {
             stream->stop();
@@ -103,14 +103,19 @@ public:
       });
     });
   }
+  RtcProducer(RtcProducer&&) = delete;
+  RtcProducer(const RtcProducer&) = delete;
+  RtcProducer& operator=(RtcProducer&&) = delete;
+  RtcProducer& operator=(const RtcProducer&) = delete;
+
+  virtual ~RtcProducer() = default;
 
   void StartServer() {
-    start("server");
+    Start("server");
   }
 
-
 protected:
-  void wsOnMessage(json message) final {
+  void wsOnMessage(Json message) final {
     auto it = message.find("id");
     if (it == message.end()) {
       return;
@@ -123,11 +128,11 @@ protected:
     auto type = it->get<std::string>();
 
     if (type == "streamRequest") {
-      std::shared_ptr<Peer> c = createPeerConnection(id);
-      peers.emplace(id, c);
+      std::shared_ptr<Peer> c = CreatePeerConnection(id);
+      peers_.emplace(id, c);
     } else if (type == "answer") {
-      if (auto jt = peers.find(id); jt != peers.end()) {
-        auto pc = peers.at(id)->peerConnection;
+      if (auto jt = peers_.find(id); jt != peers_.end()) {
+        auto pc = peers_.at(id)->peerConnection;
         auto sdp = message["sdp"].get<std::string>();
         auto answer = rtc::Description(sdp, type);
         pc->setRemoteDescription(answer);
@@ -143,64 +148,64 @@ protected:
     av_stream->start();
   }
 
-  auto createPeerConnection(const std::string& id) -> std::shared_ptr<Peer> {
-    auto pc = createDefaultPeerConnection(id);
+  auto CreatePeerConnection(const std::string& id) -> std::shared_ptr<Peer> {
+    auto pc = CreateDefaultPeerConnection(id);
 
     std::shared_ptr<Peer> peer(new Peer(pc));
 
-    peer->video = addVideo(
+    peer->video = AddVideo(
         pc, rtc::Description::Direction::SendOnly,
         102, 10001, "video-stream", "cam-stream-1",
         [this, id, wc = make_weak_ptr(peer)]() {
           MainThread.dispatch([this, wc]() {
             if (auto c = wc.lock()) {
-              addToStream(c, true);
+              AddToStream(c, true);
             }
           });
           LOGI << "Video from " << id << " opened";
         },
         nullptr);
 
-    peer->audio = addAudio(
+    peer->audio = AddAudio(
         pc, rtc::Description::Direction::SendOnly,
         111, 10002, "audio-stream", "cam-stream-1",
         [this, id, wc = make_weak_ptr(peer)]() {
           MainThread.dispatch([this, wc]() {
             if (auto c = wc.lock()) {
-              addToStream(c, false);
+              AddToStream(c, false);
             }
           });
           LOGI << "Audio from " << id << " opened";
         },
         nullptr);
 
-    peer->dataChannel = createDefaultDataChannel(pc, id);
+    peer->dataChannel = CreateDefaultDataChannel(pc, id);
 
     pc->setLocalDescription();
 
     return peer;
   }
 
-  static auto addVideo(
+  static auto AddVideo(
       const std::shared_ptr<rtc::PeerConnection>& pc,
       const rtc::Description::Direction direction,
-      const uint8_t payloadType, const uint32_t ssrc, const std::string& cname, const std::string& msid,
+      const uint8_t payload_type, const uint32_t ssrc, const std::string& cname, const std::string& msid,
       const std::function<void(void)>& onOpen,
       const std::function<void(rtc::binary message)>& onMessage) -> std::shared_ptr<Peer::Track> {
     auto video = rtc::Description::Video(cname, direction);
-    video.addH264Codec(payloadType);
+    video.addH264Codec(payload_type);
     video.addSSRC(ssrc, cname, msid, cname);
     auto track = pc->addTrack(video);
     // create RTP configuration
-    auto rtpConfig = std::make_shared<rtc::RtpPacketizationConfig>(ssrc, cname, payloadType, rtc::H264RtpPacketizer::defaultClockRate);
+    auto rtp_config = std::make_shared<rtc::RtpPacketizationConfig>(ssrc, cname, payload_type, rtc::H264RtpPacketizer::defaultClockRate);
     // create packetizer
-    auto packetizer = std::make_shared<rtc::H264RtpPacketizer>(rtc::NalUnit::Separator::StartSequence, rtpConfig);
+    auto packetizer = std::make_shared<rtc::H264RtpPacketizer>(rtc::NalUnit::Separator::StartSequence, rtp_config);
     // add RTCP SR handler
-    auto srReporter = std::make_shared<rtc::RtcpSrReporter>(rtpConfig);
+    auto srReporter = std::make_shared<rtc::RtcpSrReporter>(rtp_config);
     packetizer->addToChain(srReporter);
     // add RTCP NACK handler
-    auto nackResponder = std::make_shared<rtc::RtcpNackResponder>();
-    packetizer->addToChain(nackResponder);
+    auto nack_responder = std::make_shared<rtc::RtcpNackResponder>();
+    packetizer->addToChain(nack_responder);
     // set handler
     track->setMediaHandler(packetizer);
     track->onOpen(onOpen);
@@ -208,7 +213,7 @@ protected:
     return std::make_shared<Peer::Track>(track, srReporter);
   }
 
-  static auto addAudio(
+  static auto AddAudio(
       const std::shared_ptr<rtc::PeerConnection>& pc,
       const rtc::Description::Direction direction,
       const uint8_t payloadType, const uint32_t ssrc, const std::string& cname, const std::string& msid,
@@ -219,15 +224,15 @@ protected:
     audio.addSSRC(ssrc, cname, msid, cname);
     auto track = pc->addTrack(audio);
     // create RTP configuration
-    auto rtpConfig = std::make_shared<rtc::RtpPacketizationConfig>(ssrc, cname, payloadType, rtc::OpusRtpPacketizer::DefaultClockRate);
+    auto rtp_config = std::make_shared<rtc::RtpPacketizationConfig>(ssrc, cname, payloadType, rtc::OpusRtpPacketizer::DefaultClockRate);
     // create packetizer
-    auto packetizer = std::make_shared<rtc::OpusRtpPacketizer>(rtpConfig);
+    auto packetizer = std::make_shared<rtc::OpusRtpPacketizer>(rtp_config);
     // add RTCP SR handler
-    auto srReporter = std::make_shared<rtc::RtcpSrReporter>(rtpConfig);
+    auto srReporter = std::make_shared<rtc::RtcpSrReporter>(rtp_config);
     packetizer->addToChain(srReporter);
     // add RTCP NACK handler
-    auto nackResponder = std::make_shared<rtc::RtcpNackResponder>();
-    packetizer->addToChain(nackResponder);
+    auto nack_responder = std::make_shared<rtc::RtcpNackResponder>();
+    packetizer->addToChain(nack_responder);
     // set handler
     track->setMediaHandler(packetizer);
     track->onOpen(onOpen);

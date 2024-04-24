@@ -65,7 +65,7 @@ protected:
       auto offer = rtc::Description(sdp, type);
       std::shared_ptr<Peer> pc = createPeerConnection(id);
       pc->peerConnection->setRemoteDescription(offer);
-      peers.emplace(id, pc);
+      peers_.emplace(id, pc);
 
       auto answer = pc->peerConnection->localDescription();
       json reply = {
@@ -119,7 +119,7 @@ protected:
   }
 
   auto createPeerConnection(const std::string& id) -> std::shared_ptr<Peer> {
-    auto pc = createDefaultPeerConnection(id);
+    auto pc = CreateDefaultPeerConnection(id);
 
     std::shared_ptr<Peer> peer(new Peer(pc));
     peer->video = addVideo(

@@ -32,7 +32,7 @@ public:
         status_update_callback(env->NewGlobalRef(status_update_callback)) {
     rtc_producer = std::make_shared<RtcProducer>();
     rtc_producer->setStatusCallback([this](EventSource sender, int status) { setStatus(sender, status); });
-    rtc_producer->startServer();
+    rtc_producer->StartServer();
   }
 
   ~AppEngine() {
