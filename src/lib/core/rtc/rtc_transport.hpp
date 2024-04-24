@@ -25,8 +25,8 @@ class RtcTransport {
   const uint16_t port = 8000;
 
   std::shared_ptr<std::function<void(EventSource, int)>> status_callback_;
-  std::shared_ptr<std::function<void(Json)>> ws_message_callback_;
   std::shared_ptr<std::function<void(const std::shared_ptr<Peer>)>> peer_ready_callback_;
+  std::shared_ptr<std::function<std::shared_ptr<Peer>(const std::string& id)>> create_peer_connection_;
 
 public:
   RtcTransport() {
@@ -42,12 +42,12 @@ public:
     status_callback_ = std::make_shared<std::function<void(EventSource, int)>>(callback);
   }
 
-  [[maybe_unused]] void SetOnWSMessageCallback(const std::function<void(Json)>& callback) {
-    ws_message_callback_ = std::make_shared<std::function<void(Json)>>(callback);
-  }
-
   [[maybe_unused]] void SetOnPeerReadyCallback(const std::function<void(const std::shared_ptr<Peer>)>& callback) {
     peer_ready_callback_ = std::make_shared<std::function<void(const std::shared_ptr<Peer>)>>(callback);
+  }
+
+  [[maybe_unused]] void SetCreatePeerConnection(const std::function<std::shared_ptr<Peer>(const std::string& id)>& function) {
+    create_peer_connection_ = std::make_shared<std::function<std::shared_ptr<Peer>(const std::string& id)>>(function);
   }
 
   auto Peers() {
@@ -84,11 +84,9 @@ public:
         return;
       }
 
-      Json message = Json::parse(std::get<std::string>(data));
+      Json const message = Json::parse(std::get<std::string>(data));
       MainThread_.dispatch([this, message]() {
-        if (ws_message_callback_ != nullptr) {
-          (*ws_message_callback_)(message);
-        }
+        OnWSMessage(std::move(message));
       });
     });
 
@@ -197,8 +195,38 @@ public:
     return dc;
   }
 
-protected:
+private:
   DispatchQueue MainThread_ = DispatchQueue("Main", 1);
+
+  void OnWSMessage(Json message) {
+    auto it = message.find("id");
+    if (it == message.end()) {
+      return;
+    }
+    auto id = it->get<std::string>();
+    it = message.find("type");
+    if (it == message.end()) {
+      return;
+    }
+    auto type = it->get<std::string>();
+
+    if (type == "streamRequest") {
+      std::shared_ptr<Peer> const c = (*create_peer_connection_)(id);
+      peers_.emplace(id, c);
+    } else if (type == "answer") {
+      const auto peers = peers_;
+      if (auto jt = peers.find(id); jt != peers.end()) {
+        auto pc = peers.at(id)->peerConnection;
+        auto sdp = message["sdp"].get<std::string>();
+        auto answer = rtc::Description(sdp, type);
+        pc->setRemoteDescription(answer);
+      }
+    } else if (type == "offer") {
+      // do nothing
+    } else {
+      throw std::runtime_error("Unknown message type " + type);
+    }
+  }
 
   class RtcConfiguration {
   public:
@@ -219,7 +247,6 @@ protected:
     }
   };
 
-private:
   static inline std::string ZEROSSL_CA_BUNDLE =
       "-----BEGIN CERTIFICATE-----\n"
       "MIIG1TCCBL2gAwIBAgIQbFWr29AHksedBwzYEZ7WvzANBgkqhkiG9w0BAQwFADCB\n"
