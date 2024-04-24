@@ -25,8 +25,10 @@ extern "C" {
 #include "libavutil/frame.h"
 }
 
+#include "core/cross-platform/properties.hpp"
 #include "core/rtc/stream.hpp"
 #include "rtc/common.hpp"
+#include "utils/conversions.hpp"
 
 #ifdef _WIN32
   #include <combaseapi.h>
@@ -47,14 +49,8 @@ public:
   VideoStreamSource() = default;
 
   void start() override {
-    #ifdef __ANDROID__
-    constexpr auto cv_capabilities = cv::CAP_ANDROID;
-    #else
-    constexpr auto cv_capabilities = cv::CAP_ANY;
-    #endif
-
     // open the default camera
-    cap.open(0, cv_capabilities);
+    cap.open(0, CrossPlatformProperties::OpenCVCameraCapabilities);
 
     if (!cap.isOpened()) {
       std::cout << "Can't open the capture device." << std::endl;
@@ -66,42 +62,25 @@ public:
       return;
     }
 
-    #ifdef __ANDROID__
-    constexpr auto pixel_format = AV_PIX_FMT_NV12;
-    #else
-    constexpr auto pixel_format = AV_PIX_FMT_YUV420P;
-    #endif
-
     // find h.264 codec and allocate the codec context
     const auto* codec = avcodec_find_encoder(AV_CODEC_ID_H264);
     if (codec == nullptr) {
       throw std::runtime_error("Codec not found");
     }
     LOGD << "Codec selected: [" << codec->id << "] " << codec->name << " | " << codec->long_name;
-    const auto* pix_fmt = codec->pix_fmts;
-    while (*pix_fmt != AV_PIX_FMT_NONE) {
-      if (*pix_fmt == AV_PIX_FMT_YUV420P) {
-        break;
-      }
-      pix_fmt++;
-    }
-    if (*pix_fmt == AV_PIX_FMT_NONE) {
-      throw std::runtime_error("Unsupported pixel format");
-    }
 
     codec_context = avcodec_alloc_context3(codec);
     if (codec_context == nullptr) {
       throw std::runtime_error("Could not allocate codec context");
     }
 
-    //codec_context->bit_rate = 400000; // todo nado?
     codec_context->width = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_WIDTH));
     codec_context->height = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_HEIGHT));
     codec_context->time_base = AVRational{1, 25};
     codec_context->framerate = AVRational{25, 1};
     codec_context->gop_size = 10;
     codec_context->max_b_frames = 0;
-    codec_context->pix_fmt = pixel_format;
+    codec_context->pix_fmt = CrossPlatformProperties::AVCodecDestPixelFormat;
     av_opt_set(codec_context->priv_data, "startcode", "1", 0);
     if (codec->id == AV_CODEC_ID_H264) {
       av_opt_set(codec_context->priv_data, "preset", "slow", 0);
@@ -156,16 +135,15 @@ public:
 
     #ifdef __ANDROID__
     cv::cvtColor(cv_frame, cv_frame, cv::COLOR_GRAY2RGB);
-    cv::cvtColor(cv_frame, cv_frame, cv::COLOR_RGB2YUV_I420);
-    #else
-    cv::cvtColor(cv_frame, cv_frame, cv::COLOR_BGR2YUV_I420);
     #endif
+    cv::cvtColor(cv_frame, cv_frame, cv::COLOR_BGR2YUV_I420);
 
     // set YUV pointers
+    const auto size = codec_context->width * codec_context->height;
     av_frame->data[0] = cv_frame.data;
-    av_frame->data[1] = cv_frame.data + codec_context->width * codec_context->height;
-    av_frame->data[2] = cv_frame.data + codec_context->width * codec_context->height * 5 / 4;
-    av_frame->pts = av_gettime_relative() / 1000;
+    av_frame->data[1] = av_frame->data[0] + size;
+    av_frame->data[2] = av_frame->data[1] + size / 4;
+    av_frame->pts = av_gettime_relative() / Conversion::Milliseconds;
 
     int ret = avcodec_send_frame(codec_context, av_frame);
     while (ret >= 0) {
@@ -196,7 +174,7 @@ public:
   void stop() override {
     av_frame_free(&av_frame);
     avcodec_free_context(&codec_context);
-    cap.release();  // release the camera
+    cap.release();
   }
 
   auto getSampleTime_us() -> uint64_t override {
@@ -204,6 +182,6 @@ public:
   }
 
   auto getSampleDuration_us() -> uint64_t override {
-    return 1000000000 * codec_context->framerate.num / codec_context->framerate.den;
+    return Conversion::Nanoseconds * codec_context->framerate.num / codec_context->framerate.den;
   }
 };
