@@ -18,77 +18,65 @@
 #include "utils/memory.h"
 
 
-class RtcTransportBase {
+class RtcTransport {
   using Json = nlohmann::json;
 
   const std::string ip_address = "app.hela.me";
   const uint16_t port = 8000;
 
   std::shared_ptr<std::function<void(EventSource, int)>> status_callback_;
+  std::shared_ptr<std::function<void(Json)>> ws_message_callback_;
+  std::shared_ptr<std::function<void(const std::shared_ptr<Peer>)>> peer_ready_callback_;
 
 public:
-  explicit RtcTransportBase() {
+  RtcTransport() {
     ws_config_.caCertificatePemFile = ZEROSSL_CA_BUNDLE;
   }
-  ~RtcTransportBase() = default;
+  ~RtcTransport() = default;
 
   [[maybe_unused]] auto hasPeer() -> bool {
     return !peers_.empty();
   }
 
-  [[maybe_unused]] void setStatusCallback(const std::function<void(EventSource, int)>& status_callback) {
-    status_callback_ = std::make_shared<std::function<void(EventSource, int)>>(std::move(status_callback));
+  [[maybe_unused]] void SetStatusCallback(const std::function<void(EventSource, int)>& callback) {
+    status_callback_ = std::make_shared<std::function<void(EventSource, int)>>(callback);
   }
 
-  inline void reportStatus(const ServiceState state) const {
+  [[maybe_unused]] void SetOnWSMessageCallback(const std::function<void(Json)>& callback) {
+    ws_message_callback_ = std::make_shared<std::function<void(Json)>>(callback);
+  }
+
+  [[maybe_unused]] void SetOnPeerReadyCallback(const std::function<void(const std::shared_ptr<Peer>)>& callback) {
+    peer_ready_callback_ = std::make_shared<std::function<void(const std::shared_ptr<Peer>)>>(callback);
+  }
+
+  auto Peers() {
+    return peers_;
+  }
+
+  void ReportStatus(const ServiceState state) const {
     if (likely(status_callback_)) {
       (*status_callback_)(EventSource::RTC, static_cast<int>(state));
     }
   }
-
-
-protected:
-  DispatchQueue MainThread_ = DispatchQueue("Main", 1);
-
-  virtual void OnWSMessage(Json message) = 0;
-  virtual void OnPeerReady(const std::shared_ptr<Peer>& peer) = 0;
-
-  class RtcConfiguration {
-  public:
-    static auto Config() -> rtc::Configuration& {
-      static rtc::Configuration config = CreateRtcConfiguration();
-      return config;
-    }
-
-  private:
-    static auto CreateRtcConfiguration() -> rtc::Configuration {
-      rtc::Configuration config;
-      config.iceServers.emplace_back("stun:stun.relay.metered.ca:80");
-      config.iceServers.emplace_back("turn:49880a0f046c8990b1990b35:qZCNW/57EB8GwO3A@a.relay.metered.ca:80");
-      config.iceServers.emplace_back("turn:49880a0f046c8990b1990b35:qZCNW/57EB8GwO3A@a.relay.metered.ca:80?transport=tcp");
-      config.iceServers.emplace_back("turn:49880a0f046c8990b1990b35:qZCNW/57EB8GwO3A@a.relay.metered.ca:443");
-      config.iceServers.emplace_back("turn:49880a0f046c8990b1990b35:qZCNW/57EB8GwO3A@a.relay.metered.ca:443?transport=tcp");
-      return config;
-    }
-  };
 
   void Start(std::string_view localId) {
     LOGI << "The local ID is: " << localId.data();
 
     ws.onOpen([this]() {
       LOGI << "WebSocket connected, signaling ready";
-      reportStatus(ServiceState::Standby);
+      ReportStatus(ServiceState::Standby);
     });
 
     ws.onClosed([this]() {
       LOGI << "WebSocket closed";
-      reportStatus(ServiceState::Failure);
+      ReportStatus(ServiceState::Failure);
       // TODO reopen
     });
 
     ws.onError([this](const std::string& error) {
       LOGI << "WebSocket failed: " << error.c_str();
-      reportStatus(ServiceState::Failure);
+      ReportStatus(ServiceState::Failure);
     });
 
     ws.onMessage([&](std::variant<rtc::binary, std::string> data) {
@@ -98,7 +86,9 @@ protected:
 
       Json message = Json::parse(std::get<std::string>(data));
       MainThread_.dispatch([this, message]() {
-        OnWSMessage(message);
+        if (ws_message_callback_ != nullptr) {
+          (*ws_message_callback_)(message);
+        }
       });
     });
 
@@ -127,7 +117,7 @@ protected:
     pc->onStateChange([this, id](rtc::PeerConnection::State state) {
       LOGI << "State: " << static_cast<int>(state);
       if (state == rtc::PeerConnection::State::Connected) {
-        reportStatus(ServiceState::Action);
+        ReportStatus(ServiceState::Action);
       }
       if (state == rtc::PeerConnection::State::Disconnected ||
           state == rtc::PeerConnection::State::Failed ||
@@ -136,14 +126,14 @@ protected:
         MainThread_.dispatch([this, id]() {
           peers_.erase(id);
         });
-        reportStatus(ServiceState::Standby);
+        ReportStatus(ServiceState::Standby);
       }
     });
 
     pc->onIceStateChange([this, id](rtc::PeerConnection::IceState state) {
       LOGI << "ICE State: " << static_cast<int>(state);
       if (state == rtc::PeerConnection::IceState::Failed) {
-        reportStatus(ServiceState::Failure);
+        ReportStatus(ServiceState::Failure);
       }
     });
 
@@ -166,7 +156,7 @@ protected:
     pc->onSignalingStateChange([this, id](rtc::PeerConnection::SignalingState state) {
       LOGI << "Signalling State: " << static_cast<int>(state);
       if (state == rtc::PeerConnection::SignalingState::HaveLocalOffer) {
-        reportStatus(ServiceState::Setup);
+        ReportStatus(ServiceState::Setup);
       }
     });
 
@@ -183,7 +173,9 @@ protected:
     }
 
     if (peer->getState() == Peer::State::Ready) {
-      OnPeerReady(peer);
+      if (peer_ready_callback_ != nullptr) {
+        (*peer_ready_callback_)(peer);
+      }
     }
   }
 
@@ -204,6 +196,28 @@ protected:
 
     return dc;
   }
+
+protected:
+  DispatchQueue MainThread_ = DispatchQueue("Main", 1);
+
+  class RtcConfiguration {
+  public:
+    static auto Config() -> rtc::Configuration& {
+      static rtc::Configuration config = CreateRtcConfiguration();
+      return config;
+    }
+
+  private:
+    static auto CreateRtcConfiguration() -> rtc::Configuration {
+      rtc::Configuration config;
+      config.iceServers.emplace_back("stun:stun.relay.metered.ca:80");
+      config.iceServers.emplace_back("turn:49880a0f046c8990b1990b35:qZCNW/57EB8GwO3A@a.relay.metered.ca:80");
+      config.iceServers.emplace_back("turn:49880a0f046c8990b1990b35:qZCNW/57EB8GwO3A@a.relay.metered.ca:80?transport=tcp");
+      config.iceServers.emplace_back("turn:49880a0f046c8990b1990b35:qZCNW/57EB8GwO3A@a.relay.metered.ca:443");
+      config.iceServers.emplace_back("turn:49880a0f046c8990b1990b35:qZCNW/57EB8GwO3A@a.relay.metered.ca:443?transport=tcp");
+      return config;
+    }
+  };
 
 private:
   static inline std::string ZEROSSL_CA_BUNDLE =

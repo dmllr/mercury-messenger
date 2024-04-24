@@ -14,12 +14,17 @@
 #include "core/stream/fileparser.hpp"
 #include "core/stream/video_stream_source.hpp"
 
-#include "rtc_transport_base.hpp"
+#include "rtc_transport.hpp"
 
 
-class RtcProducer : public RtcTransportBase {
+class RtcProducer {
   using Json = nlohmann::json;
   using PeerTrack = std::shared_ptr<Peer::Track>;
+
+  /// @brief Audio and video stream
+  std::shared_ptr<Stream> av_stream_;
+  RtcTransport transport_;
+  DispatchQueue MainThread_ = DispatchQueue("Main", 1);
 
   class Client {
     friend class RtcProducer;
@@ -35,16 +40,19 @@ class RtcProducer : public RtcTransportBase {
 
 public:
   explicit RtcProducer() {
-    av_stream = std::make_shared<Stream>(std::make_shared<VideoStreamSource>(), std::make_shared<OPUSFileParser>("silence", true));
+    av_stream_ = std::make_shared<Stream>(std::make_shared<VideoStreamSource>(), std::make_shared<OPUSFileParser>("silence", true));
 
     // set callback responsible for sample sending
-    av_stream->onSample([this, ws = make_weak_ptr(av_stream)](Stream::Source::Type type, uint64_t sampleTime, const rtc::binary& sample) {
+    av_stream_->onSample([this, ws = make_weak_ptr(av_stream_)](Stream::Source::Type type, uint64_t sampleTime, const rtc::binary& sample) {
       auto tracks = GetAllClientsInReadyState(type);
       if (!tracks.empty()) {
         SendMessageToAllTracks(sample, type, sampleTime, tracks);
       }
       StopStreamIfNoPeers(ws);
     });
+
+    transport_.SetOnWSMessageCallback([this](Json message) { OnWSMessage(std::move(message)); });
+    transport_.SetOnPeerReadyCallback([this](const std::shared_ptr<Peer>& peer) { OnPeerReady(std::move(peer)); });
   }
   RtcProducer(RtcProducer&&) = delete;
   RtcProducer(const RtcProducer&) = delete;
@@ -53,9 +61,12 @@ public:
   virtual ~RtcProducer() = default;
 
   void StartServer() {
-    Start("server");
+    transport_.Start("server");
   }
 
+  [[maybe_unused]] void SetStatusCallback(const std::function<void(EventSource, int)>& callback) {
+    transport_.SetStatusCallback(std::move(callback));
+  }
 
 private:
   std::vector<Client> GetAllClientsInReadyState(Stream::Source::Type type) {
@@ -66,7 +77,7 @@ private:
     };
 
     // get all peers with Ready state
-    for (const auto& id_peer: peers_) {
+    for (const auto& id_peer: transport_.Peers()) {
       auto id = id_peer.first;
       auto peer = id_peer.second;
       auto opt_track_data = get_track_data(peer);
@@ -128,7 +139,7 @@ private:
 
   void StopStreamIfNoPeers(const std::weak_ptr<Stream>& ws) {
     MainThread_.dispatch([this, ws]() {
-      if (peers_.empty()) {
+      if (transport_.Peers().empty()) {
         // we have no peers, stop the stream
         if (auto stream = ws.lock()) {
           stream->stop();
@@ -137,8 +148,7 @@ private:
     });
   }
 
-protected:
-  void OnWSMessage(Json message) final {
+  void OnWSMessage(Json message) {
     auto it = message.find("id");
     if (it == message.end()) {
       return;
@@ -152,10 +162,11 @@ protected:
 
     if (type == "streamRequest") {
       std::shared_ptr<Peer> c = CreatePeerConnection(id);
-      peers_.emplace(id, c);
+      transport_.Peers().emplace(id, c);
     } else if (type == "answer") {
-      if (auto jt = peers_.find(id); jt != peers_.end()) {
-        auto pc = peers_.at(id)->peerConnection;
+      const auto peers = transport_.Peers();
+      if (auto jt = peers.find(id); jt != peers.end()) {
+        auto pc = peers.at(id)->peerConnection;
         auto sdp = message["sdp"].get<std::string>();
         auto answer = rtc::Description(sdp, type);
         pc->setRemoteDescription(answer);
@@ -167,12 +178,12 @@ protected:
     }
   }
 
-  void OnPeerReady(const std::shared_ptr<Peer>& /*peer*/) final {
-    av_stream->start();
+  void OnPeerReady(const std::shared_ptr<Peer>& /*peer*/) {
+    av_stream_->start();
   }
 
   auto CreatePeerConnection(const std::string& id) -> std::shared_ptr<Peer> {
-    auto pc = CreateDefaultPeerConnection(id);
+    auto pc = transport_.CreateDefaultPeerConnection(id);
 
     std::shared_ptr<Peer> peer(new Peer(pc));
 
@@ -182,7 +193,7 @@ protected:
         [this, id, wc = make_weak_ptr(peer)]() {
           MainThread_.dispatch([this, wc]() {
             if (auto c = wc.lock()) {
-              AddToStream(c, true);
+              transport_.AddToStream(c, true);
             }
           });
           LOGI << "Video from " << id << " opened";
@@ -195,14 +206,14 @@ protected:
         [this, id, wc = make_weak_ptr(peer)]() {
           MainThread_.dispatch([this, wc]() {
             if (auto c = wc.lock()) {
-              AddToStream(c, false);
+              transport_.AddToStream(c, false);
             }
           });
           LOGI << "Audio from " << id << " opened";
         },
         nullptr);
 
-    peer->dataChannel = CreateDefaultDataChannel(pc, id);
+    peer->dataChannel = transport_.CreateDefaultDataChannel(pc, id);
 
     pc->setLocalDescription();
 
@@ -263,7 +274,4 @@ protected:
     return std::make_shared<Peer::Track>(track, srReporter);
   }
 
-private:
-  /// Audio and video stream
-  std::shared_ptr<Stream> av_stream;
 };

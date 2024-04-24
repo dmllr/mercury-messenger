@@ -7,13 +7,13 @@
 #include "rtc/rtc.h"
 
 #include "core/rtc/peer.hpp"
-#include "rtc_transport_base.hpp"
 #include "core/rtc/stream.hpp"
+#include "rtc_transport.hpp"
 
 #include <memory>
 
 
-class RtcConsumer : public RtcTransportBase {
+class RtcConsumer : public RtcTransport {
   using json = nlohmann::json;
 
   //	std::thread server_thread;
