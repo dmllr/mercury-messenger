@@ -105,15 +105,6 @@ Java_me_hela_surveillance_CameraService_onPreviewSurfaceDestroyed(
   env->ReleaseStringUTFChars(appObjStr, appObjName);
 }
 
-extern "C" JNIEXPORT void JNICALL
-Java_me_hela_surveillance_CameraService_requestRtc(
-    JNIEnv* env,
-    jobject instance,
-    jlong appmgr) {
-  const auto& app = reinterpret_cast<AppEngine*>(appmgr);
-  app->requestRtc();
-}
-
 JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void* reserved) {
   // Grab the context ClassLoader of the current thread, if any.
   JNIEnv* env;

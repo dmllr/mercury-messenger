@@ -123,10 +123,6 @@ public:
         }
     }
 
-  void requestRtc() {
-    rtc_producer->startServer();
-  }
-
 void setStatus(EventSource sender, int status) {
     JNIEnv* env = attachCurrentThreadIfNeeded();
     if(env == nullptr) {

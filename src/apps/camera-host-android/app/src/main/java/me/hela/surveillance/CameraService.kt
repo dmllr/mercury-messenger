@@ -207,7 +207,6 @@ class CameraService : Service(), IStatusCallback {
   private external fun getMinimumCompatiblePreviewSize(ndkCamera: Long): Size
 
   private external fun requestPreview(ndkCamera: Long, preview: Boolean)
-  private external fun requestRtc(ndkCamera: Long)
 
   private external fun onPreviewSurfaceCreated(ndkCamera: Long, surface: Surface)
   private external fun onPreviewSurfaceDestroyed(ndkCamera: Long, surface: Surface)
