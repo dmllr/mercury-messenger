@@ -36,11 +36,11 @@ private:
 
   bool isRunning = false;
 
-  const std::shared_ptr<Source> audio;
-  const std::shared_ptr<Source> video;
+  const std::shared_ptr<Source> audio_;
+  const std::shared_ptr<Source> video_;
 
 public:
-  Stream(std::shared_ptr<Source> video, std::shared_ptr<Source> audio) : audio(std::move(audio)), video(std::move(video)) {}
+  Stream(std::shared_ptr<Source> video, std::shared_ptr<Source> audio) : audio_(std::move(audio)), video_(std::move(video)) {}
   Stream(const Stream&) = delete;
   Stream(Stream&&) = delete;
   auto operator=(const Stream&) -> Stream& = delete;
@@ -57,14 +57,14 @@ private:
     std::shared_ptr<Source> ss;
     Source::Type sst;
     uint64_t nextTime;
-    if (audio->getSampleTime_us() < video->getSampleTime_us()) {
-      ss = audio;
+    if (audio_->getSampleTime_us() < video_->getSampleTime_us()) {
+      ss = audio_;
       sst = Source::Type::Audio;
-      nextTime = audio->getSampleTime_us();
+      nextTime = audio_->getSampleTime_us();
     } else {
-      ss = video;
+      ss = video_;
       sst = Source::Type::Video;
-      nextTime = video->getSampleTime_us();
+      nextTime = video_->getSampleTime_us();
     }
 
     auto currentTime = currentTimeInMicroSeconds();
@@ -107,12 +107,13 @@ public:
     }
     isRunning = true;
     startTime = currentTimeInMicroSeconds();
-    audio->start();
-    video->start();
+    audio_->start();
+    video_->start();
     dispatchQueue.dispatch([this]() {
       this->sendSample();
     });
   }
+
   void stop() {
     std::lock_guard lock(mutex);
     if (!isRunning) {
@@ -120,7 +121,7 @@ public:
     }
     isRunning = false;
     dispatchQueue.removePending();
-    audio->stop();
-    video->stop();
+    audio_->stop();
+    video_->stop();
   }
 };

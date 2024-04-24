@@ -3,9 +3,7 @@
 
 #include "logging/logging.h"
 
-#include "camera/camera_codec.hpp"
-#include "camera/camera_manager.hpp"
-#include "core/app_engine.hpp"
+#include "app_engine.hpp"
 
 
 /**
@@ -39,25 +37,6 @@ Java_me_hela_surveillance_CameraService_deleteAppEngine(
 
   // also reset the private global object
   engine = nullptr;
-}
-
-extern "C" JNIEXPORT jobject JNICALL
-Java_me_hela_surveillance_CameraService_getMinimumCompatiblePreviewSize(
-    JNIEnv* env,
-    jobject instance,
-    jlong appmgr) {
-  if (!appmgr)
-    return nullptr;
-
-  auto app = reinterpret_cast<AppEngine*>(appmgr);
-  jclass cls = env->FindClass("android/util/Size");
-  jobject previewSize = env->NewObject(
-      cls,
-      env->GetMethodID(cls, "<init>", "(II)V"),
-      app->getCompatibleCameraRes().width,
-      app->getCompatibleCameraRes().height);
-
-  return previewSize;
 }
 
 extern "C" JNIEXPORT void JNICALL
@@ -96,7 +75,7 @@ Java_me_hela_surveillance_CameraService_onPreviewSurfaceDestroyed(
   auto destroyObjStr = reinterpret_cast<jstring>(env->CallObjectMethod(surface, toString));
   auto destroyObjName = env->GetStringUTFChars(destroyObjStr, nullptr);
 
-  auto appObjStr = reinterpret_cast<jstring>(env->CallObjectMethod(app->getSurfaceObject(), toString));
+  auto appObjStr = reinterpret_cast<jstring>(env->CallObjectMethod(app->getPreviewSurface(), toString));
   auto appObjName = env->GetStringUTFChars(appObjStr, nullptr);
 
   LOGF_IF(strcmp(destroyObjName, appObjName)) << "object name mismatch";

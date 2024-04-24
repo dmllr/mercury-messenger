@@ -2,10 +2,6 @@ set(shared_libs "${CMAKE_CURRENT_LIST_DIR}/../../../../../../../lib")
 
 add_library(camera-lib SHARED
   lib.cpp
-  audio/recorder.h
-  audio/recorder.cpp
-  audio/audio_common.h
-  audio/audio_common.cpp
 )
 
 target_compile_features(camera-lib PUBLIC cxx_std_20)
@@ -13,12 +9,12 @@ target_compile_features(camera-lib PUBLIC cxx_std_20)
 target_link_libraries(camera-lib
   android
   log
-  camera2ndk
-  mediandk
-  aaudio
-  liveMedia
-  ssl
-  crypto
+#  camera2ndk
+#  mediandk
+#  aaudio
+#  liveMedia
+#  ssl
+#  crypto
   datachannel
   plog
   nlohmann_json

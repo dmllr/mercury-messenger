@@ -113,50 +113,6 @@ class MainActivity : Activity(), TextureView.SurfaceTextureListener, ServiceConn
     }
   }
 
-  private fun resizeTextureView(textureWidth: Int, textureHeight: Int) {
-    val cameraPreviewSize = cameraService?.cameraPreviewSize ?: return
-
-    val rotation = windowManager.defaultDisplay.rotation
-    var newHeight: Int = textureWidth * cameraPreviewSize.width / cameraPreviewSize.height
-    if (Surface.ROTATION_90 == rotation || Surface.ROTATION_270 == rotation) {
-      newHeight = textureWidth * cameraPreviewSize.height / cameraPreviewSize.width
-    }
-    configureTransform(textureWidth, newHeight)
-  }
-
-  private fun configureTransform(width: Int, height: Int) {
-    val mDisplayOrientation = windowManager.defaultDisplay.rotation * 90
-    val matrix = Matrix()
-    if (mDisplayOrientation % 180 == 90) {
-      //final int width = getWidth();
-      //final int height = getHeight();
-      // Rotate the camera preview when the screen is landscape.
-      matrix.setPolyToPoly(
-        floatArrayOf(
-          0f, 0f,  // top left
-          width.toFloat(), 0f,  // top right
-          0f, height.toFloat(),  // bottom left
-          width.toFloat(), height.toFloat()
-        ), 0,
-        if (mDisplayOrientation == 90) floatArrayOf(
-          0f, height.toFloat(),  // top left
-          0f, 0f,  // top right
-          width.toFloat(), height.toFloat(),  // bottom left
-          width.toFloat(), 0f
-        ) else floatArrayOf(
-          width.toFloat(), 0f,  // top left
-          width.toFloat(), height.toFloat(),  // top right
-          0f, 0f,  // bottom left
-          0f, height.toFloat()
-        ), 0,
-        4
-      )
-    } else if (mDisplayOrientation == 180) {
-      matrix.postRotate(180f, width / 2.toFloat(), height / 2.toFloat())
-    }
-    binding.texturePreview.setTransform(matrix)
-  }
-
   override fun onRequestPermissionsResult(
     requestCode: Int,
     permissions: Array<out String>,
@@ -198,7 +154,6 @@ class MainActivity : Activity(), TextureView.SurfaceTextureListener, ServiceConn
 
     val cameraPreviewSize = cameraService?.cameraPreviewSize ?: return
 
-    resizeTextureView(width, height)
     texture.setDefaultBufferSize(cameraPreviewSize.width, cameraPreviewSize.height)
 
     val surface = Surface(texture)

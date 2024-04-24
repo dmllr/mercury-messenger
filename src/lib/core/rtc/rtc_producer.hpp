@@ -10,6 +10,8 @@
 
 #include "core/rtc/peer.hpp"
 #include "core/rtc/stream.hpp"
+#include "core/stream/video_stream_source.hpp"
+#include "core/stream/fileparser.hpp"
 
 #include "rtc_transport_base.hpp"
 
@@ -35,13 +37,11 @@ class RtcProducer : public RtcTransportBase {
   };
 
 public:
-  explicit RtcProducer() = default;
-
-  void setStream(const std::shared_ptr<Stream>& stream) {
-    avStream = stream;
+  explicit RtcProducer() {
+    av_stream = std::make_shared<Stream>(std::make_shared<VideoStreamSource>(), std::make_shared<OPUSFileParser>("silence", true));
 
     // set callback responsible for sample sending
-    stream->onSample([this, ws = make_weak_ptr(stream)](Stream::Source::Type type, uint64_t sampleTime, rtc::binary sample) {
+    av_stream->onSample([this, ws = make_weak_ptr(av_stream)](Stream::Source::Type type, uint64_t sampleTime, rtc::binary sample) {
       auto tracks{std::vector<ClientTrack>()};
       const auto* streamType = type == Stream::Source::Type::Video ? "video" : "audio";
       // get track for given type
@@ -149,9 +149,7 @@ protected:
   }
 
   void onPeerReady(const std::shared_ptr<Peer>& /*peer*/) final {
-    if (hasStream()) {
-      startStream();
-    }
+    av_stream->start();
   }
 
   auto createPeerConnection(const std::string& id) -> std::shared_ptr<Peer> {
@@ -166,7 +164,7 @@ protected:
           MainThread.dispatch([this, wc]() {
             if (auto c = wc.lock()) {
               addToStream(c, true);
-              sendInitialNalus(avStream.value(), c->video.value());
+              sendInitialNalus(av_stream, c->video.value());
             }
           });
           LOGI << "Video from " << id << " opened";
@@ -247,22 +245,9 @@ protected:
     return std::make_shared<Peer::Track>(track, srReporter);
   }
 
-  /// Start stream
-  void startStream() {
-    if (unlikely(!avStream.has_value())) {
-      LOGE << "Stream is not set";
-    }
-
-    avStream.value()->start();
-  }
-
 private:
   /// Audio and video stream
-  std::optional<std::shared_ptr<Stream>> avStream = std::nullopt;
-
-  auto hasStream() -> bool {
-    return avStream.has_value();
-  }
+  std::shared_ptr<Stream> av_stream;
 
   #if SEND_INITIAL_NALUS
   mutable std::vector<std::byte> previousUnitType5;

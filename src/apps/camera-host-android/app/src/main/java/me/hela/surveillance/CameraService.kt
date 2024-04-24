@@ -112,7 +112,6 @@ class CameraService : Service(), IStatusCallback {
 
   private fun createNativeCamera() {
     cameraEngine = createAppEngine(this)
-    cameraPreviewSize = getMinimumCompatiblePreviewSize(cameraEngine)
   }
 
   private fun Pair<Int, Int>.getBitmapFromVectorDrawable(): Bitmap {
@@ -134,8 +133,7 @@ class CameraService : Service(), IStatusCallback {
     val channel = createNotificationChannel()
 
     val customText =
-        "RTC service: ${underlyingServicesStates[EventSource.RTC]}\n" +
-        "RTSP service: ${underlyingServicesStates[EventSource.RTSP]}\n$log"
+        "RTC service: ${underlyingServicesStates[EventSource.RTC]}\n$log"
     val statusIcon = when (underlyingServicesStates[EventSource.RTC]) {
       ServiceState.Standby -> Pair(R.drawable.ic_status1_standby, R.color.colorPositive)
       ServiceState.Setup   -> Pair(R.drawable.ic_status2,         R.color.colorPositive)
@@ -203,8 +201,6 @@ class CameraService : Service(), IStatusCallback {
   // native lib functions
   private external fun createAppEngine(statusCallback: IStatusCallback): Long
   private external fun deleteAppEngine(ndkCamera: Long)
-
-  private external fun getMinimumCompatiblePreviewSize(ndkCamera: Long): Size
 
   private external fun requestPreview(ndkCamera: Long, preview: Boolean)
 
