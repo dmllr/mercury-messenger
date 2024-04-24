@@ -104,7 +104,7 @@ public:
     });
   }
 
-  void startServer() {
+  void StartServer() {
     start("server");
   }
 

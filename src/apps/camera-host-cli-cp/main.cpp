@@ -5,7 +5,7 @@
 
 auto main(int  /*argc*/, char**  /*argv*/) -> int {
   auto rtc = RtcProducer();
-  rtc.startServer();
+  rtc.StartServer();
 
   while (true) {
     std::string id;
