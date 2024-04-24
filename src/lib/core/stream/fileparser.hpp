@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "core/rtc/stream.hpp"
+#include "utils/units.hpp"
 
 class FileParser : public Stream::Source {
   std::string directory;
@@ -27,7 +28,7 @@ public:
     this->directory = directory;
     this->extension = extension;
     this->loop = loop;
-    this->sampleDuration_us = 1000 * 1000 / samplesPerSecond;
+    this->sampleDuration_us = Units::Nanoseconds / samplesPerSecond;
   }
   FileParser(const FileParser&) = delete;
   FileParser(FileParser&&) = delete;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "rtc/rtc.hpp"
+#include "utils/units.hpp"
 
 #include <shared_mutex>
 #include <utility>
@@ -34,8 +35,8 @@ auto gettimeofday(struct timeval* tv, struct timezone* tz) -> int {
     x.LowPart = filetime.dwLowDateTime;
     x.HighPart = filetime.dwHighDateTime;
     usec = x.QuadPart / 10 - epoch_offset_us;
-    tv->tv_sec = static_cast<long>(usec / 1000000ULL);
-    tv->tv_usec = static_cast<long>(usec % 1000000ULL);
+    tv->tv_sec = static_cast<long>(usec / Units::Microseconds);
+    tv->tv_usec = static_cast<long>(usec % Units::Microseconds);
   }
   if (tz) {
     TIME_ZONE_INFORMATION timezone;
@@ -105,5 +106,5 @@ private:
 inline auto currentTimeInMicroSeconds() -> uint64_t {
   struct timeval time {};
   gettimeofday(&time, nullptr);
-  return uint64_t(time.tv_sec) * 1000 * 1000 + time.tv_usec;
+  return uint64_t(time.tv_sec) * Units::Microseconds + time.tv_usec;
 }

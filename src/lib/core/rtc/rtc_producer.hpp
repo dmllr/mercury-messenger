@@ -60,7 +60,7 @@ public:
           auto peer = clientTrack.id;
           auto trackData = clientTrack.trackData;
           // sample time is in us, we need to convert it to seconds
-          auto elapsedSeconds = double(sampleTime) / (1000 * 1000);
+          auto elapsedSeconds = double(sampleTime) / Units::Microseconds;
           auto rtpConfig = trackData->sender->rtpConfig;
           // get elapsed time in clock rate
           uint32_t elapsedTimestamp = rtpConfig->secondsToTimestamp(elapsedSeconds);

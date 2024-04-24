@@ -28,7 +28,7 @@ extern "C" {
 #include "core/cross-platform/properties.hpp"
 #include "core/rtc/stream.hpp"
 #include "rtc/common.hpp"
-#include "utils/conversions.hpp"
+#include "utils/units.hpp"
 
 #ifdef _WIN32
   #include <combaseapi.h>
@@ -143,7 +143,7 @@ public:
     av_frame->data[0] = cv_frame.data;
     av_frame->data[1] = av_frame->data[0] + size;
     av_frame->data[2] = av_frame->data[1] + size / 4;
-    av_frame->pts = av_gettime_relative() / Conversion::Milliseconds;
+    av_frame->pts = av_gettime_relative() / Units::Milliseconds;
 
     int ret = avcodec_send_frame(codec_context, av_frame);
     while (ret >= 0) {
@@ -182,6 +182,6 @@ public:
   }
 
   auto getSampleDuration_us() -> uint64_t override {
-    return Conversion::Nanoseconds * codec_context->framerate.num / codec_context->framerate.den;
+    return Units::Nanoseconds * codec_context->framerate.num / codec_context->framerate.den;
   }
 };
