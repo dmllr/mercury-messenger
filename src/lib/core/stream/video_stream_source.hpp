@@ -3,7 +3,6 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <iostream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -48,17 +47,17 @@ private:
 public:
   VideoStreamSource() = default;
 
-  void start() override {
+  void Start() override {
     // open the default camera
     cap.open(0, CrossPlatformProperties::OpenCVCameraCapabilities);
 
     if (!cap.isOpened()) {
-      std::cout << "Can't open the capture device." << std::endl;
+      LOGE << "Can't open the capture device. This source has not been started.";
       return;
     }
     cap >> cv_frame;
     if (cv_frame.empty()) {
-      std::cerr << "Unexpected end of stream." << std::endl;
+      LOGE << "Can't capture a test frame. This source has not been started.";
       return;
     }
 
@@ -110,7 +109,7 @@ public:
     // Allocate a frame to hold the converted image
     av_frame = av_frame_alloc();
     if (av_frame == nullptr) {
-      std::cerr << "Failed to allocate converted frame" << std::endl;
+      LOGE << "Failed to allocate converted frame";
       return;
     }
 
@@ -126,10 +125,10 @@ public:
     start_time = std::chrono::steady_clock::now();
   }
 
-  void loadNextSample() override {
+  void LoadNextSample() override {
     cap >> cv_frame;
     if (cv_frame.empty()) {
-      std::cerr << "Unexpected end of stream." << std::endl;
+      LOGE << "Unexpected end of stream.";
       return;
     }
 
@@ -141,8 +140,8 @@ public:
     // set YUV pointers
     const auto size = codec_context->width * codec_context->height;
     av_frame->data[0] = cv_frame.data;
-    av_frame->data[1] = av_frame->data[0] + size;
-    av_frame->data[2] = av_frame->data[1] + size / 4;
+    av_frame->data[1] = std::next(av_frame->data[0], size);
+    av_frame->data[2] = std::next(av_frame->data[1], size / 4);
     av_frame->pts = av_gettime_relative() / Units::Milliseconds;
 
     int ret = avcodec_send_frame(codec_context, av_frame);
@@ -152,18 +151,18 @@ public:
         break;
       }
       if (ret < 0) {
-        std::cerr << "Error encoding frame." << std::endl;
+        LOGE << "Error encoding frame.";
         return;
       }
 
       encoded_data.insert(
           encoded_data.end(),
           reinterpret_cast<std::byte*>(packet->data),
-          reinterpret_cast<std::byte*>(packet->data + packet->size));
+          reinterpret_cast<std::byte*>(std::next(packet->data, packet->size)));
     }
   }
 
-  auto getSample() -> rtc::binary override {
+  auto GetSample() -> rtc::binary override {
     auto sample = encoded_data;
     encoded_data.clear();
 
@@ -171,17 +170,14 @@ public:
     return sample;
   }
 
-  void stop() override {
+  void Stop() override {
     av_frame_free(&av_frame);
     avcodec_free_context(&codec_context);
     cap.release();
   }
 
-  auto getSampleTime_us() -> uint64_t override {
+  auto GetSampleTime_us() -> uint64_t override {
     return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start_time).count();
   }
 
-  auto getSampleDuration_us() -> uint64_t override {
-    return Units::Nanoseconds * codec_context->framerate.num / codec_context->framerate.den;
-  }
 };

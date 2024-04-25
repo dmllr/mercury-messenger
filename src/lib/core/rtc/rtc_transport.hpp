@@ -18,7 +18,7 @@
 #include "utils/memory.h"
 
 
-template <class Connection>
+template <typename Connection>
 class RtcTransport {
   using Json = nlohmann::json;
 
@@ -91,6 +91,7 @@ public:
       }
     } catch (const std::exception& e) {
       LOGI << "Error: " << e.what();
+      ReportStatus(ServiceState::Failure);
       return;
     }
   }
@@ -203,7 +204,7 @@ private:
       });
     } else if (type == "answer") {
       if (const auto peer = connection_.GetPeer(id); peer != nullptr) {
-        auto pc = peer->peerConnection;
+        auto pc = peer->PeerConnection();
         auto sdp = message["sdp"].get<std::string>();
         auto answer = rtc::Description(sdp, type);
         pc->setRemoteDescription(answer);
@@ -218,7 +219,7 @@ private:
   auto CreatePeerConnection(const std::string& id) -> std::shared_ptr<Peer> {
     auto pc = CreateDefaultPeerConnection(id);
 
-    std::shared_ptr<Peer> peer(new Peer(pc));
+    auto peer = std::make_shared<Peer>(pc);
 
     peer->video = connection_.AddVideo(
         pc,

@@ -18,7 +18,6 @@
 
 
 class RtcProducer {
-  using Json = nlohmann::json;
   using PeerTrack = std::shared_ptr<Peer::Track>;
 
   /// @brief Audio and video stream
@@ -42,7 +41,7 @@ public:
     av_stream_ = std::make_shared<Stream>(std::make_shared<VideoStreamSource>(), std::make_shared<OPUSFileParser>("silence", true));
 
     // set callback responsible for sample sending
-    av_stream_->onSample([this, ws = make_weak_ptr(av_stream_)](Stream::Source::Type type, uint64_t sampleTime, const rtc::binary& sample) {
+    av_stream_->OnSample([this, ws = make_weak_ptr(av_stream_)](Stream::Source::Type type, uint64_t sampleTime, const rtc::binary& sample) {
       auto tracks = GetAllClientsInReadyState(type);
       if (!tracks.empty()) {
         SendMessageToAllTracks(sample, type, sampleTime, tracks);
@@ -72,7 +71,7 @@ public:
   }
 
   void OnPeerReady(const std::shared_ptr<Peer>& /*peer*/) {
-    av_stream_->start();
+    av_stream_->Start();
   }
 
   static auto AddVideo(
@@ -80,8 +79,8 @@ public:
       const std::function<void(void)>& onOpen) -> std::shared_ptr<Peer::Track> {
     constexpr auto payload_type = 102;
     constexpr auto ssrc = 10001;
-    constexpr auto cname = "cam-stream-1";
-    constexpr auto msid = "video-stream";
+    constexpr auto msid = "cam-NAME-stream";
+    constexpr auto cname = "video-stream";
     auto video = rtc::Description::Video(cname, rtc::Description::Direction::SendOnly);
     video.addH264Codec(payload_type);
     video.addSSRC(ssrc, cname, msid, cname);
@@ -108,8 +107,8 @@ public:
       const std::function<void(void)>& onOpen) -> std::shared_ptr<Peer::Track> {
     constexpr auto payload_type = 111;
     constexpr auto ssrc = 10002;
-    constexpr auto cname = "cam-stream-1";
-    constexpr auto msid = "audio-stream";
+    constexpr auto msid = "cam-NAME-stream";
+    constexpr auto cname = "audio-stream";
     auto audio = rtc::Description::Audio(cname, rtc::Description::Direction::SendOnly);
     audio.addOpusCodec(payload_type);
     audio.addSSRC(ssrc, cname, msid, cname);
@@ -204,7 +203,7 @@ private:
     if (peers_.empty()) {
       // we have no peers, stop the stream
       if (auto stream = ws.lock()) {
-        stream->stop();
+        stream->Stop();
       }
     }
   }

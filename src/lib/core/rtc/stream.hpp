@@ -1,6 +1,7 @@
 #pragma once
 
 #include <chrono>
+#include <cstdint>
 #include <functional>
 #include <mutex>
 #include <string>
@@ -15,23 +16,22 @@ class Stream : std::enable_shared_from_this<Stream> {
 public:
   class Source {
   public:
-    enum class Type {
+    enum class Type : std::uint8_t {
       Audio,
       Video
     };
 
-    virtual void start() = 0;
-    virtual void stop() = 0;
-    virtual void loadNextSample() = 0;
+    virtual void Start() = 0;
+    virtual void Stop() = 0;
+    virtual void LoadNextSample() = 0;
 
-    virtual auto getSampleTime_us() -> uint64_t = 0;
-    virtual auto getSampleDuration_us() -> uint64_t = 0;
-    virtual auto getSample() -> rtc::binary = 0;
+    virtual auto GetSampleTime_us() -> uint64_t = 0;
+    virtual auto GetSample() -> rtc::binary = 0;
   };
 
 private:
   uint64_t startTime = 0;
-  std::mutex mutex;
+  std::recursive_mutex mutex;
   DispatchQueue dispatchQueue = DispatchQueue("StreamQueue");
 
   bool isRunning = false;
@@ -47,81 +47,81 @@ public:
   auto operator=(Stream&&) -> Stream& = delete;
 
   ~Stream() {
-    stop();
+    Stop();
   }
 
 private:
-  rtc::synchronized_callback<Source::Type, uint64_t, rtc::binary> sampleHandler;
+  rtc::synchronized_callback<Source::Type, uint64_t, rtc::binary> sampleHandler_;
 
-  auto unsafePrepareForSample() -> std::pair<std::shared_ptr<Source>, Source::Type> {
+  auto UnsafePrepareForSample() -> std::pair<std::shared_ptr<Source>, Source::Type> {
     std::shared_ptr<Source> ss;
     Source::Type sst;
     uint64_t nextTime;
-    if (audio_->getSampleTime_us() < video_->getSampleTime_us()) {
+    if (audio_->GetSampleTime_us() < video_->GetSampleTime_us()) {
       ss = audio_;
       sst = Source::Type::Audio;
-      nextTime = audio_->getSampleTime_us();
+      nextTime = audio_->GetSampleTime_us();
     } else {
       ss = video_;
       sst = Source::Type::Video;
-      nextTime = video_->getSampleTime_us();
+      nextTime = video_->GetSampleTime_us();
     }
 
-    auto currentTime = currentTimeInMicroSeconds();
+    auto current_time = currentTimeInMicroSeconds();
 
-    auto elapsed = currentTime - startTime;
+    auto elapsed = current_time - startTime;
     if (nextTime > elapsed) {
-      auto waitTime = nextTime - elapsed;
+      auto wait_time = nextTime - elapsed;
       mutex.unlock();
-      std::this_thread::sleep_for(std::chrono::microseconds(waitTime));
+      std::this_thread::sleep_for(std::chrono::microseconds(wait_time));
       mutex.lock();
     }
     return {ss, sst};
   }
 
-  void sendSample() {
-    std::lock_guard lock(mutex);
+  void SendSample() {
+    const auto lock{std::unique_lock(mutex)};
     if (!isRunning) {
       return;
     }
-    auto ssSST = unsafePrepareForSample();
+    auto ssSST = UnsafePrepareForSample();
     auto ss = ssSST.first;
     auto sst = ssSST.second;
-    auto sample = ss->getSample();
-    sampleHandler(sst, ss->getSampleTime_us(), sample);
-    ss->loadNextSample();
+    auto sample = ss->GetSample();
+    sampleHandler_(sst, ss->GetSampleTime_us(), sample);
+    ss->LoadNextSample();
     dispatchQueue.dispatch([this]() {
-      this->sendSample();
+      this->SendSample();
     });
   }
 
 public:
-  void onSample(std::function<void(Source::Type, uint64_t, rtc::binary)> handler) {
-    sampleHandler = std::move(handler);
+  void OnSample(std::function<void(Source::Type, uint64_t, rtc::binary)> handler) {
+    sampleHandler_ = std::move(handler);
   }
 
-  void start() {
-    std::lock_guard lock(mutex);
+  void Start() {
+    const auto lock{std::unique_lock(mutex)};
     if (isRunning) {
       return;
     }
     isRunning = true;
     startTime = currentTimeInMicroSeconds();
-    audio_->start();
-    video_->start();
+    audio_->Start();
+    video_->Start();
     dispatchQueue.dispatch([this]() {
-      this->sendSample();
+      this->SendSample();
     });
   }
 
-  void stop() {
-    std::lock_guard lock(mutex);
+  void Stop() {
+    const auto lock{std::unique_lock(mutex)};
     if (!isRunning) {
       return;
     }
     isRunning = false;
     dispatchQueue.removePending();
-    audio_->stop();
-    video_->stop();
+    audio_->Stop();
+    video_->Stop();
   }
 };

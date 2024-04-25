@@ -36,21 +36,21 @@ public:
   auto operator=(FileParser&&) -> FileParser& = delete;
 
   virtual ~FileParser() {
-    stop();
+    Stop();
   }
 
-  virtual void start() override {
+  virtual void Start() override {
     sampleTime_us = std::numeric_limits<std::uint64_t>::max() - sampleDuration_us + 1;
-    loadNextSample();
+    LoadNextSample();
   }
 
-  virtual void stop() override {
+  virtual void Stop() override {
     sample = {};
     sampleTime_us = 0;
     counter = -1;
   }
 
-  virtual void loadNextSample() override {
+  virtual void LoadNextSample() override {
     std::string frame_id = std::to_string(++counter);
 
     std::string url = directory + "/sample-" + frame_id + extension;
@@ -59,7 +59,7 @@ public:
       if (loop && counter > 0) {
         loopTimestampOffset = sampleTime_us;
         counter = -1;
-        loadNextSample();
+        LoadNextSample();
         return;
       }
       sample = {};
@@ -72,17 +72,14 @@ public:
     sampleTime_us += sampleDuration_us;
   }
 
-  virtual rtc::binary getSample() override {
+  virtual rtc::binary GetSample() override {
     return sample;
   }
 
-  virtual std::uint64_t getSampleTime_us() override {
+  virtual std::uint64_t GetSampleTime_us() override {
     return sampleTime_us;
   }
 
-  virtual std::uint64_t getSampleDuration_us() override {
-    return sampleDuration_us;
-  }
 };
 
 class OPUSFileParser : public FileParser {

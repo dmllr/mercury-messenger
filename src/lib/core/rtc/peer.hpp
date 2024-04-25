@@ -78,13 +78,16 @@ struct Peer {
     WaitingForAudio,
     Ready
   };
-  const std::shared_ptr<rtc::PeerConnection>& peerConnection = _peerConnection;
-  explicit Peer(std::shared_ptr<rtc::PeerConnection> pc) {
-    _peerConnection = pc;
-  }
+
+  explicit Peer(std::shared_ptr<rtc::PeerConnection> pc) : peer_connection_(std::move(pc)) { }
+
   std::optional<std::shared_ptr<Track>> video;
   std::optional<std::shared_ptr<Track>> audio;
   std::optional<std::shared_ptr<rtc::DataChannel>> dataChannel;
+
+  std::shared_ptr<rtc::PeerConnection> PeerConnection() {
+    return peer_connection_;
+  }
 
   void setState(State state) {
     std::unique_lock lock(_mutex);
@@ -100,7 +103,7 @@ private:
   std::shared_mutex _mutex;
   State state = State::Waiting;
   std::string id;
-  std::shared_ptr<rtc::PeerConnection> _peerConnection;
+  std::shared_ptr<rtc::PeerConnection> peer_connection_;
 };
 
 inline auto currentTimeInMicroSeconds() -> uint64_t {
