@@ -17,4 +17,3 @@ include("src/cmake/libffmpeg.cmake")
 include("src/cmake/libjson.cmake")
 
 add_subdirectory(src/apps/camera-host-cli-cp)
-add_subdirectory(src/apps/posix-receiver)
