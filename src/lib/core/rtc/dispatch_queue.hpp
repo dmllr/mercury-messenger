@@ -33,6 +33,11 @@ public:
         }
     }
 
+    static DispatchQueue& MainThread() {
+      static DispatchQueue instance("Main", 1);
+      return instance;
+    }
+
     // dispatch and copy
     void dispatch(const fp_t& op) {
         std::unique_lock<std::mutex> lock(lockMutex);

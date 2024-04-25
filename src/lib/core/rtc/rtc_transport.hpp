@@ -23,6 +23,8 @@ class RtcTransport {
   using Json = nlohmann::json;
 
   Connection connection_;
+  rtc::WebSocketConfiguration ws_config_;
+  rtc::WebSocket ws{ws_config_};
 
   std::shared_ptr<std::function<void(EventSource, int)>> status_callback_;
 
@@ -71,7 +73,7 @@ public:
       }
 
       Json const message = Json::parse(std::get<std::string>(data));
-      MainThread_.dispatch([this, message]() {
+      DispatchQueue::MainThread().dispatch([this, message]() {
         OnWSMessage(std::move(message));
       });
     });
@@ -107,7 +109,7 @@ public:
       if (state == rtc::PeerConnection::State::Disconnected ||
           state == rtc::PeerConnection::State::Failed ||
           state == rtc::PeerConnection::State::Closed) {
-        MainThread_.dispatch([this, id]() {
+        DispatchQueue::MainThread().dispatch([this, id]() {
           // remove disconnected peer
           connection_.RemovePeer(id);
         });
@@ -180,11 +182,6 @@ public:
     return dc;
   }
 
-private:
-  DispatchQueue MainThread_ = DispatchQueue("Main", 1);
-  rtc::WebSocketConfiguration ws_config_;
-  rtc::WebSocket ws{ws_config_};
-
   void OnWSMessage(Json message) {
     auto it = message.find("id");
     if (it == message.end()) {
@@ -199,7 +196,7 @@ private:
 
     if (type == "streamRequest") {
       std::shared_ptr<Peer> const peer = CreatePeerConnection(id);
-      MainThread_.dispatch([this, id, peer]() {
+      DispatchQueue::MainThread().dispatch([this, id, peer]() {
         connection_.AddPeer(id, std::move(peer));
       });
     } else if (type == "answer") {
@@ -224,7 +221,7 @@ private:
     peer->video = connection_.AddVideo(
         pc,
         [this, id, wc = make_weak_ptr(peer)]() {
-          MainThread_.dispatch([this, wc]() {
+          DispatchQueue::MainThread().dispatch([this, wc]() {
             if (auto c = wc.lock()) {
               AddToStream(c, true);
             }
@@ -235,7 +232,7 @@ private:
     peer->audio = connection_.AddAudio(
         pc,
         [this, id, wc = make_weak_ptr(peer)]() {
-          MainThread_.dispatch([this, wc]() {
+          DispatchQueue::MainThread().dispatch([this, wc]() {
             if (auto c = wc.lock()) {
               AddToStream(c, false);
             }

@@ -46,7 +46,14 @@ public:
       if (!tracks.empty()) {
         SendMessageToAllTracks(sample, type, sampleTime, tracks);
       }
-      StopStreamIfNoPeers(ws);
+      DispatchQueue::MainThread().dispatch([this, ws]() {
+        if (peers_.empty()) {
+          // we have no peers, stop the stream
+          if (auto stream = ws.lock()) {
+            stream->Stop();
+          }
+        }
+      });
     });
   }
   RtcProducer(RtcProducer&&) = delete;
@@ -196,15 +203,6 @@ private:
     }
     if (!send) {
       LOGD << "Unable to send " << streamType << " packet";
-    }
-  }
-
-  void StopStreamIfNoPeers(const std::weak_ptr<Stream>& ws) {
-    if (peers_.empty()) {
-      // we have no peers, stop the stream
-      if (auto stream = ws.lock()) {
-        stream->Stop();
-      }
     }
   }
 

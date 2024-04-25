@@ -31,7 +31,7 @@ public:
 
 private:
   uint64_t startTime = 0;
-  std::recursive_mutex mutex;
+  std::mutex mutex;
   DispatchQueue dispatchQueue = DispatchQueue("StreamQueue");
 
   bool isRunning = false;
@@ -73,7 +73,9 @@ private:
     if (nextTime > elapsed) {
       auto wait_time = nextTime - elapsed;
       mutex.unlock();
-      std::this_thread::sleep_for(std::chrono::microseconds(wait_time));
+      if (wait_time > 0) {
+        std::this_thread::sleep_for(std::chrono::microseconds(wait_time));
+      }
       mutex.lock();
     }
     return {ss, sst};
