@@ -22,7 +22,7 @@ class AppEngine {
   jobject service_instance;
   jobject status_update_callback;
   jobject preview_surface = nullptr;
-  std::shared_ptr<RtcProducer> rtc_producer;
+  std::shared_ptr<RtcTransport<RtcProducer>> rtc_producer;
 
 public:
   explicit AppEngine(JavaVM* jvm, JNIEnv* env, jobject instance, jobject status_update_callback)
@@ -30,9 +30,9 @@ public:
         env(env),
         service_instance(env->NewWeakGlobalRef(instance)),
         status_update_callback(env->NewGlobalRef(status_update_callback)) {
-    rtc_producer = std::make_shared<RtcProducer>();
-    rtc_producer->setStatusCallback([this](EventSource sender, int status) { setStatus(sender, status); });
-    rtc_producer->StartServer();
+    rtc_producer = std::make_shared<RtcTransport<RtcProducer>>();
+    rtc_producer->SetStatusCallback([this](EventSource sender, int status) { setStatus(sender, status); });
+    rtc_producer->Start("server");
   }
 
   ~AppEngine() {
