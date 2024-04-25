@@ -11,7 +11,7 @@
 
 #include "core/rtc/peer.hpp"
 #include "core/rtc/stream.hpp"
-#include "core/stream/fileparser.hpp"
+#include "core/stream/audio_stream_source.hpp"
 #include "core/stream/video_stream_source.hpp"
 
 #include "rtc_transport.hpp"
@@ -38,7 +38,7 @@ class RtcProducer {
 
 public:
   explicit RtcProducer() {
-    av_stream_ = std::make_shared<Stream>(std::make_shared<VideoStreamSource>(), std::make_shared<OPUSFileParser>("silence", true));
+    av_stream_ = std::make_shared<Stream>(std::make_shared<VideoStreamSource>(), std::make_shared<AudioStreamSource>());
 
     // set callback responsible for sample sending
     av_stream_->OnSample([this, ws = make_weak_ptr(av_stream_)](Stream::Source::Type type, uint64_t sampleTime, const rtc::binary& sample) {

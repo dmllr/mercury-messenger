@@ -33,6 +33,8 @@ extern "C" {
   #include <combaseapi.h>
 #endif
 
+// TODO: better memory management
+/// deallocate on failure, on stop
 class VideoStreamSource : public Stream::Source {
 private:
   cv::VideoCapture cap;
