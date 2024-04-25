@@ -99,10 +99,8 @@ if (WIN32)
   )
 endif ()
 
-set(ffmpeg_libraries "avfilter;avcodec;avdevice;avformat;avutil;swresample;swscale")
-
 set(products "")
-foreach (_lib avfilter avcodec avdevice avformat avutil swresample swscale)
+foreach (_lib avfilter avcodec avformat avutil swresample swscale)
   list(APPEND products
     "${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/lib${_lib}/lib${_lib}.a")
 endforeach ()
@@ -137,8 +135,6 @@ ExternalProject_Add(ffmpeg_target
       --disable-ffmpeg
       --disable-ffplay
       --disable-ffprobe
-      --disable-avdevice
-      --disable-avfilter
       --disable-postproc
       --disable-shared
       --enable-static

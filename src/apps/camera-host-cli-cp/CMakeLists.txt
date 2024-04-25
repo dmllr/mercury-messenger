@@ -10,6 +10,7 @@ target_link_libraries(camera-host-cli-cp PRIVATE
   libopencv
   libffmpeg
   libminiaudio
+  opus
   datachannel-static
   plog
   nlohmann_json
