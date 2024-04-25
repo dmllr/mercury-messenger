@@ -9,6 +9,7 @@ target_compile_definitions(camera-host-cli-cp PUBLIC "-DBUILD_ZLIB=OFF")
 target_link_libraries(camera-host-cli-cp PRIVATE
   libopencv
   libffmpeg
+  libminiaudio
   datachannel-static
   plog
   nlohmann_json
