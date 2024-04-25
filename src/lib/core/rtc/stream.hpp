@@ -56,22 +56,24 @@ private:
   auto UnsafePrepareForSample() -> std::pair<std::shared_ptr<Source>, Source::Type> {
     std::shared_ptr<Source> ss;
     Source::Type sst;
-    uint64_t nextTime;
-    if (audio_->GetSampleTime_us() < video_->GetSampleTime_us()) {
+    uint64_t next_time;
+    auto at = audio_->GetSampleTime_us();
+    auto vt = video_->GetSampleTime_us();
+    if (at < vt) {
       ss = audio_;
       sst = Source::Type::Audio;
-      nextTime = audio_->GetSampleTime_us();
+      next_time = at;
     } else {
       ss = video_;
       sst = Source::Type::Video;
-      nextTime = video_->GetSampleTime_us();
+      next_time = vt;
     }
 
     auto current_time = currentTimeInMicroSeconds();
 
     auto elapsed = current_time - startTime;
-    if (nextTime > elapsed) {
-      auto wait_time = nextTime - elapsed;
+    if (next_time > elapsed) {
+      auto wait_time = next_time - elapsed;
       mutex.unlock();
       if (wait_time > 0) {
         std::this_thread::sleep_for(std::chrono::microseconds(wait_time));
@@ -86,9 +88,7 @@ private:
     if (!isRunning) {
       return;
     }
-    auto ssSST = UnsafePrepareForSample();
-    auto ss = ssSST.first;
-    auto sst = ssSST.second;
+    auto [ss, sst] = UnsafePrepareForSample();
     auto sample = ss->GetSample();
     sampleHandler_(sst, ss->GetSampleTime_us(), sample);
     ss->LoadNextSample();
@@ -109,8 +109,8 @@ public:
     }
     isRunning = true;
     startTime = currentTimeInMicroSeconds();
-    audio_->Start();
     video_->Start();
+    audio_->Start();
     dispatchQueue.dispatch([this]() {
       this->SendSample();
     });

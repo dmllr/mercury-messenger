@@ -39,17 +39,19 @@ class VideoStreamSource : public Stream::Source {
 private:
   cv::VideoCapture cap;
   cv::Mat cv_frame;
-  rtc::binary encoded_data;
-  std::chrono::time_point<std::chrono::steady_clock> start_time;
-  AVCodecContext* codec_context = nullptr;
 
+  AVCodecContext* codec_context = nullptr;
   AVFrame* av_frame = nullptr;
   AVPacket* packet = nullptr;
+
+  rtc::binary encoded_data;
+  std::chrono::time_point<std::chrono::steady_clock> start_time_;
+  uint64_t sample_time_;
 
 public:
   VideoStreamSource() = default;
 
-  void Start() override {
+  void Start() final {
     // open the default camera
     cap.open(0, CrossPlatformProperties::OpenCVCameraCapabilities);
 
@@ -124,10 +126,11 @@ public:
 
     packet = av_packet_alloc();
 
-    start_time = std::chrono::steady_clock::now();
+    start_time_ = std::chrono::steady_clock::now();
+    sample_time_ = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start_time_).count();
   }
 
-  void LoadNextSample() override {
+  void LoadNextSample() final {
     cap >> cv_frame;
     if (cv_frame.empty()) {
       LOGE << "Unexpected end of stream.";
@@ -162,24 +165,26 @@ public:
           reinterpret_cast<std::byte*>(packet->data),
           reinterpret_cast<std::byte*>(std::next(packet->data, packet->size)));
     }
+
+    sample_time_ = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start_time_).count();;
   }
 
-  auto GetSample() -> rtc::binary override {
+  auto GetSample() -> rtc::binary final {
     auto sample = encoded_data;
     encoded_data.clear();
 
-    LOGV << "Sending sample of size " << sample.size() << "b ";
+    LOGV << "Sending video sample of size " << sample.size() << "b ";
     return sample;
   }
 
-  void Stop() override {
+  void Stop() final {
     av_frame_free(&av_frame);
     avcodec_free_context(&codec_context);
     cap.release();
   }
 
-  auto GetSampleTime_us() -> uint64_t override {
-    return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start_time).count();
+  auto GetSampleTime_us() -> uint64_t final {
+    return sample_time_;
   }
 
 };
