@@ -9,18 +9,13 @@ target_compile_features(camera-lib PUBLIC cxx_std_20)
 target_link_libraries(camera-lib
   android
   log
-#  camera2ndk
-#  mediandk
-#  aaudio
-#  liveMedia
-#  ssl
-#  crypto
   datachannel
   plog
   nlohmann_json
   opus
   libopencv
   libffmpeg
+  libminiaudio
 )
 
 target_include_directories(camera-lib

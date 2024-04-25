@@ -15,6 +15,7 @@ include("src/cmake/libdatachannel.cmake")
 include("src/cmake/libopencv.cmake")
 include("src/cmake/libffmpeg.cmake")
 include("src/cmake/libminiaudio.cmake")
+include("src/cmake/libopus.cmake")
 include("src/cmake/libjson.cmake")
 
 add_subdirectory(src/apps/camera-host-cli-cp)
