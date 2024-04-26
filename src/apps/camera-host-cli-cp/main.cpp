@@ -4,6 +4,7 @@
 
 
 auto main(int  /*argc*/, char**  /*argv*/) -> int {
+  using namespace hela::eillance;
   auto rtc = RtcTransport<RtcProducer>();
   rtc.Start("server");
 

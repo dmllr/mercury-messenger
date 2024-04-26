@@ -17,6 +17,8 @@
 #include "rtc_transport.hpp"
 
 
+namespace hela::eillance {
+
 class RtcProducer {
   using PeerTrack = std::shared_ptr<Peer::Track>;
 
@@ -207,3 +209,5 @@ private:
   }
 
 };
+
+}  // namespace hela::eillance

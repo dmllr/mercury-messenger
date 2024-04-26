@@ -18,6 +18,8 @@
 #include "utils/memory.h"
 
 
+namespace hela::eillance {
+
 template <typename Connection>
 class RtcTransport {
   using Json = nlohmann::json;
@@ -309,3 +311,5 @@ public:
       "S9VWqHB73Q+OyIVvIbKYcSc2w/aSuFKGSA==\n"
       "-----END CERTIFICATE-----";
 };
+
+}  // namespace hela::eillance
