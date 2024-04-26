@@ -183,7 +183,7 @@ public:
     cap.release();
   }
 
-  auto GetSampleTime_us() -> uint64_t final {
+  auto GetSampleTime() -> uint64_t final {
     return sample_time_;
   }
 

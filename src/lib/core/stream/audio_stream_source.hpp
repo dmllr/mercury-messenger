@@ -38,13 +38,13 @@ public:
   AudioStreamSource() {
     // audio device
     device_config_.capture.format = ma_format_s16;
-    device_config_.capture.channels = 1;  // mono
+    device_config_.capture.channels = 2;  // stereo
     device_config_.sampleRate = 48000;
     device_config_.pUserData = this;
     device_config_.dataCallback = [](ma_device* device, void*, const void* frames, ma_uint32 frame_count) {
-      auto* this_ = static_cast<AudioStreamSource*>(device->pUserData);
-      if (this_ != nullptr) {
-        this_->EncodeBuffer(frames, frame_count);
+      auto* self = static_cast<AudioStreamSource*>(device->pUserData);
+      if (self != nullptr) {
+        self->EncodeBuffer(frames, frame_count);
       }
     };
 
@@ -103,7 +103,7 @@ public:
     ma_context_uninit(&context_);
   }
 
-  auto GetSampleTime_us() -> uint64_t final {
+  auto GetSampleTime() -> uint64_t final {
     return sample_time_;
   }
 

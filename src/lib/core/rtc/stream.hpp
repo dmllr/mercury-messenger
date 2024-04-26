@@ -16,6 +16,12 @@ class Stream : std::enable_shared_from_this<Stream> {
 public:
   class Source {
   public:
+    Source() = default;
+    Source(Source&&) = delete;
+    Source(const Source&) = delete;
+    Source& operator=(Source&&) = delete;
+    Source& operator=(const Source&) = delete;
+
     enum class Type : std::uint8_t {
       Audio,
       Video
@@ -25,8 +31,10 @@ public:
     virtual void Stop() = 0;
     virtual void LoadNextSample() = 0;
 
-    virtual auto GetSampleTime_us() -> uint64_t = 0;
+    virtual auto GetSampleTime() -> uint64_t = 0;
     virtual auto GetSample() -> rtc::binary = 0;
+  protected:
+    ~Source() = default;
   };
 
 private:
@@ -57,8 +65,8 @@ private:
     std::shared_ptr<Source> ss;
     Source::Type sst;
     uint64_t next_time;
-    auto at = audio_->GetSampleTime_us();
-    auto vt = video_->GetSampleTime_us();
+    auto at = audio_->GetSampleTime();
+    auto vt = video_->GetSampleTime();
     if (at < vt) {
       ss = audio_;
       sst = Source::Type::Audio;
@@ -90,7 +98,7 @@ private:
     }
     auto [ss, sst] = UnsafePrepareForSample();
     auto sample = ss->GetSample();
-    sampleHandler_(sst, ss->GetSampleTime_us(), sample);
+    sampleHandler_(sst, ss->GetSampleTime(), sample);
     ss->LoadNextSample();
     dispatchQueue.dispatch([this]() {
       this->SendSample();
