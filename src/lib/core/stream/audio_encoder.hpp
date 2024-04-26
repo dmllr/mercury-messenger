@@ -43,7 +43,7 @@ public:
     codecContext_->sample_fmt = AV_SAMPLE_FMT_FLTP;
     codecContext_->bit_rate = 64000;  // TODO: take from UI a desired bit rate
     codecContext_->sample_rate = AudioConfig::sampleRate;  // NOLINT(*-narrowing-conversions)
-    codecContext_->frame_size = codecContext_->sample_rate / 50;  // sample rate * Frame size (0.02s, i.e. 1/50s)
+    codecContext_->frame_size = AudioConfig::frameSize;
     av_channel_layout_default(&codecContext_->ch_layout, AudioConfig::channels);  // NOLINT(*-narrowing-conversions)
 
     // Open codec
