@@ -34,7 +34,7 @@ namespace hela::eillance {
 
 class VideoEncoder {
 public:
-  void Engage(const int width, const int height) {
+  void Engage(const int width, const int height, const int framerate) {
     // find h.264 codec and allocate the codec context
     const auto* codec = avcodec_find_encoder(AV_CODEC_ID_H264);
     if (codec == nullptr) {
@@ -49,15 +49,11 @@ public:
 
     codec_context_->width = static_cast<int>(width);
     codec_context_->height = static_cast<int>(height);
-    codec_context_->time_base = AVRational{1, VideoConfig::framerate};
-    codec_context_->framerate = AVRational{VideoConfig::framerate, 1};
+    codec_context_->time_base = AVRational{1, framerate};
+    codec_context_->framerate = AVRational{framerate, 1};
     codec_context_->gop_size = 10;
-    codec_context_->max_b_frames = 0;
+    codec_context_->max_b_frames = 1;
     codec_context_->pix_fmt = CrossPlatformProperties::AVCodecDestPixelFormat;
-    av_opt_set(codec_context_->priv_data, "startcode", "1", 0);
-    if (codec->id == AV_CODEC_ID_H264) {
-      av_opt_set(codec_context_->priv_data, "preset", "slow", 0);
-    }
 
     #ifdef _WIN32
     // TODO investigate

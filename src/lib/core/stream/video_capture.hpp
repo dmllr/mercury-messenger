@@ -54,14 +54,15 @@ public:
     // attempt to set desired resolution
     cap.set(cv::CAP_PROP_FRAME_WIDTH, VideoConfig::width);
     cap.set(cv::CAP_PROP_FRAME_HEIGHT, VideoConfig::height);
-
+    cap.set(cv::CAP_PROP_FPS, VideoConfig::framerate);
     // check what resolution was actually set
     const auto actual_width = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_WIDTH));
     const auto actual_height = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_HEIGHT));
+    const auto actual_fps = static_cast<int>(cap.get(cv::CAP_PROP_FPS));
 
-    LOGD << "Capture resolution set to: " << actual_width << "x" << actual_height;
+    LOGI << "Capture resolution set to: " << actual_width << "x" << actual_height << " at " << actual_fps << "fps.";
 
-    encoder_.Engage(actual_width, actual_height);
+    encoder_.Engage(actual_width, actual_height, actual_fps);
   }
 
   void CaptureAndProcessNextFrame() {
