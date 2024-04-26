@@ -8,7 +8,7 @@ namespace hela::eillance {
 
 struct Packet {
   rtc::binary data;
-  std::chrono::time_point<std::chrono::steady_clock> timestamp;
+  std::uint64_t timestamp;
 };
 
 using DataCallback = std::function<void(Packet)>;

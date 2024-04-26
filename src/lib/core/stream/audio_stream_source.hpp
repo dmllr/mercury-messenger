@@ -21,8 +21,10 @@ private:
   AudioCapture capture_;
 
   rtc::binary encoded_data_{};
-  std::chrono::time_point<std::chrono::steady_clock> start_time_;
-  std::uint64_t sample_time_{std::numeric_limits<std::uint64_t>::max()};
+  std::uint64_t start_time_{};
+  std::uint64_t sample_time_{};
+
+  int i = 0;
 
 public:
   AudioStreamSource() {
@@ -31,17 +33,21 @@ public:
           encoded_data_.end(),
           packet.data.begin(),
           packet.data.end());
-      sample_time_ = std::chrono::duration_cast<std::chrono::microseconds>(packet.timestamp - start_time_).count();
     });
   }
 
   void Start() final {
     capture_.Engage();
-    start_time_ = std::chrono::steady_clock::now();
-    sample_time_ = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start_time_).count();
+    start_time_ = currentTimeInMicroSeconds();
+    sample_time_ = start_time_;
   }
 
   void LoadNextSample() final {
+    ++i;
+
+    if (i % 5 == 0) {
+      sample_time_ = currentTimeInMicroSeconds();
+    }
   }
 
   auto GetSample() -> rtc::binary final {
@@ -57,7 +63,7 @@ public:
   }
 
   auto GetSampleTime() -> uint64_t final {
-    return sample_time_;
+    return sample_time_ - start_time_;
   }
 
 };

@@ -127,7 +127,7 @@ public:
               std::vector(
                   reinterpret_cast<std::byte*>(packet_->data),
                   reinterpret_cast<std::byte*>(std::next(packet_->data, packet_->size))),
-              std::chrono::steady_clock::now()});
+              currentTimeInMicroSeconds()});
 
       av_packet_unref(packet_);
     }

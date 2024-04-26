@@ -80,12 +80,19 @@ private:
     auto current_time = currentTimeInMicroSeconds();
 
     auto elapsed = current_time - startTime;
+    if (0) {
+      std::cout << "AT: " << at << "\n"
+                << "VT: " << vt << "\n"
+                << "NX: " << next_time << "\n"
+                << "EL: " << elapsed << "\n"
+                << "WT: " << ((next_time > elapsed) ? next_time - elapsed : 0) << "\n"
+                << " T: " << ((sst == Source::Type::Audio) ? "Audio" : "Video") << "\n"
+                << std::endl;
+    }
     if (next_time > elapsed) {
       auto wait_time = next_time - elapsed;
       mutex.unlock();
-      if (wait_time > 0) {
-        std::this_thread::sleep_for(std::chrono::microseconds(wait_time));
-      }
+      std::this_thread::sleep_for(std::chrono::microseconds(wait_time));
       mutex.lock();
     }
     return {ss, sst};
