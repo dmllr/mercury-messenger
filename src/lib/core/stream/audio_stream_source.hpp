@@ -9,7 +9,7 @@
 #include "logging/logging.h"
 
 #ifdef _WIN32
-  #include <combaseapi.h>
+#include <combaseapi.h>
 #endif
 
 #undef max
@@ -27,11 +27,11 @@ private:
 public:
   AudioStreamSource() {
     capture_.SetDataCallback([this](Packet packet) {
-        encoded_data_.insert(
+      encoded_data_.insert(
           encoded_data_.end(),
           packet.data.begin(),
           packet.data.end());
-        sample_time_ = std::chrono::duration_cast<std::chrono::microseconds>(packet.timestamp - start_time_).count();
+      sample_time_ = std::chrono::duration_cast<std::chrono::microseconds>(packet.timestamp - start_time_).count();
     });
   }
 
@@ -42,7 +42,6 @@ public:
   }
 
   void LoadNextSample() final {
-    sample_time_ = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start_time_).count();
   }
 
   auto GetSample() -> rtc::binary final {

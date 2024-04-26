@@ -1,3 +1,5 @@
+#pragma once
+
 #include <opencv2/videoio.hpp>
 extern "C" {
 #include <libavutil/pixfmt.h>

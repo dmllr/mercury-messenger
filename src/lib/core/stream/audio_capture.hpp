@@ -6,6 +6,7 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #define MINIAUDIO_IMPLEMENTATION
@@ -77,8 +78,8 @@ public:
     encoder_.Revoke();
   }
 
-  inline void SetDataCallback(DataCallback callback) {
-    encoder_.SetDataCallback(callback);
+  void SetDataCallback(DataCallback callback) {
+    encoder_.SetDataCallback(std::move(callback));
   }
 
 };
