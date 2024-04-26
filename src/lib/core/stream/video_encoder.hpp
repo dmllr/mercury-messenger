@@ -34,7 +34,7 @@ namespace hela::eillance {
 
 class VideoEncoder {
 public:
-  void Engage() {
+  void Engage(const int width, const int height) {
     // find h.264 codec and allocate the codec context
     const auto* codec = avcodec_find_encoder(AV_CODEC_ID_H264);
     if (codec == nullptr) {
@@ -47,8 +47,8 @@ public:
       throw std::runtime_error("Could not allocate codec context");
     }
 
-    codec_context_->width = static_cast<int>(VideoConfig::width);
-    codec_context_->height = static_cast<int>(VideoConfig::height);
+    codec_context_->width = static_cast<int>(width);
+    codec_context_->height = static_cast<int>(height);
     codec_context_->time_base = AVRational{1, VideoConfig::framerate};
     codec_context_->framerate = AVRational{VideoConfig::framerate, 1};
     codec_context_->gop_size = 10;
@@ -103,9 +103,9 @@ public:
     avcodec_free_context(&codec_context_);
   }
 
-  void EncodeBuffer(void* frames, std::size_t size) {
+  void EncodeBuffer(void* frames) {
     // set YUV pointers
-//    const auto size = codec_context_->width * codec_context_->height;
+    const auto size = codec_context_->width * codec_context_->height;
     av_frame_->data[0] = reinterpret_cast<std::uint8_t*>(frames);
     av_frame_->data[1] = std::next(av_frame_->data[0], size);
     av_frame_->data[2] = std::next(av_frame_->data[1], size / 4);
