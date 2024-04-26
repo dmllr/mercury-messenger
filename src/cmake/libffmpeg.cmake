@@ -77,9 +77,9 @@ if (ANDROID)
     --extra-ldflags=${FFMPEG_LD_FLAGS}
     --enable-cross-compile
     --disable-asm
-    --enable-nonfree
     --enable-mediacodec
     --enable-jni
+    --enable-pic
     --enable-encoder=h264_mediacodec
     --enable-decoder=h264_mediacodec
     --enable-hwaccel=h264_mediacodec
@@ -138,10 +138,11 @@ ExternalProject_Add(ffmpeg_target
       --disable-postproc
       --disable-shared
       --enable-static
+      --enable-nonfree
       --enable-encoder=h264
       --enable-decoder=h264
-      --enable-encoder=rawvideo
-      --enable-pic
+      --enable-encoder=opus
+      --enable-decoder=opus
       ${CONFIGURE_PARAMS}
   BUILD_COMMAND make -j${NJOBS}
   INSTALL_COMMAND ""

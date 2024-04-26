@@ -14,6 +14,7 @@ extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavutil/frame.h>
 #include <libavutil/opt.h>
+#include <libavutil/time.h>
 }
 
 #include "core/rtc/stream.hpp"
@@ -52,7 +53,7 @@ public:
     device_config_.dataCallback = [](ma_device* device, void*, const void* frames, ma_uint32 frame_count) {
       auto* self = static_cast<AudioStreamSource*>(device->pUserData);
       if (self != nullptr) {
-        self->EncodeBuffer(frames, frame_count);
+        self->EncodeBuffer(frames, frame_count); // NOLINT(*-narrowing-conversions)
       }
     };
   }
@@ -155,7 +156,7 @@ public:
     // Stop and uninitialize the audio device
     ma_device_uninit(&audio_device_);
 
-    // Uninitialize the Miniaudio context
+    // uninitialize the miniaudio context
     ma_context_uninit(&context_);
   }
 
@@ -164,8 +165,11 @@ public:
   }
 
 private:
-  void EncodeBuffer(const void* frames, ma_uint32 frame_count) {
-    const int buffer_size = av_samples_get_buffer_size(nullptr, codecContext_->ch_layout.nb_channels, frame_count, codecContext_->sample_fmt, 0);
+  void EncodeBuffer(const void* frames, int frame_count) {
+    const auto buffer_size = av_samples_get_buffer_size(nullptr, codecContext_->ch_layout.nb_channels, frame_count, codecContext_->sample_fmt, 0);
+
+    codecContext_->frame_size = frame_count; // NOLINT(*-narrowing-conversions)
+    frame_->nb_samples = frame_count; // NOLINT(*-narrowing-conversions)
 
     // Allocate temporary buffer for FFmpeg
     auto* buffer = static_cast<std::uint8_t*>(av_malloc(buffer_size)); // TODO buffer to class variable
@@ -175,10 +179,15 @@ private:
     }
 
     // Fill frame data
-    avcodec_fill_audio_frame(frame_, codecContext_->ch_layout.nb_channels, codecContext_->sample_fmt, static_cast<const std::uint8_t*>(frames), buffer_size, 0);
+    auto ret = avcodec_fill_audio_frame(frame_, codecContext_->ch_layout.nb_channels, codecContext_->sample_fmt, static_cast<const std::uint8_t*>(frames), buffer_size, 0);
+    if (ret < 0) {
+      LOGE << "Error filling audio frame";
+      return;
+    }
+    frame_->pts = av_gettime_relative() / Units::Milliseconds; // NOLINT(*-narrowing-conversions)
 
     // Encode frame
-    int ret = avcodec_send_frame(codecContext_, frame_);
+    ret = avcodec_send_frame(codecContext_, frame_);
     if (ret < 0) {
       LOGE << "Error sending frame to codec";
       return;
