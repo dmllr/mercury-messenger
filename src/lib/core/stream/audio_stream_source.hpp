@@ -59,6 +59,50 @@ public:
   }
 
   void Start() final {
+    // Find encoder
+    codec_ = avcodec_find_encoder(AV_CODEC_ID_OPUS);
+    if (codec_ == nullptr) {
+      LOGE << "Codec not found";
+      return;
+    }
+
+    // Create codec context
+    codecContext_ = avcodec_alloc_context3(codec_);
+    if (codecContext_ == nullptr) {
+      LOGE << "Failed to allocate codec context";
+      return;
+    }
+
+    // Set codec options
+    assert(device_config_.capture.format == ma_format_f32);
+    codecContext_->sample_fmt = AV_SAMPLE_FMT_FLTP;
+    codecContext_->bit_rate = 64000; // TODO: take from UI a desired bit rate
+    codecContext_->sample_rate = device_config_.sampleRate; // NOLINT(*-narrowing-conversions)
+    codecContext_->frame_size = codecContext_->sample_rate / 50; // sample rate * Frame size (0.02s, i.e. 1/50s)
+    av_channel_layout_default(&codecContext_->ch_layout, device_config_.capture.channels); // NOLINT(*-narrowing-conversions)
+
+    // Open codec
+    AVDictionary* options = nullptr;
+    av_dict_set(&options, "strict", "-2", 0);
+    if (avcodec_open2(codecContext_, codec_, &options) < 0) {
+      LOGE << "Failed to open codec";
+      return;
+    }
+
+    // Allocate frame
+    frame_ = av_frame_alloc();
+    if (frame_ == nullptr) {
+      LOGE << "Failed to allocate frame";
+      return;
+    }
+
+    // Set frame parameters
+    frame_->format = codecContext_->sample_fmt;
+    frame_->ch_layout = codecContext_->ch_layout;
+    frame_->nb_samples = codecContext_->frame_size;
+
+    packet_ = av_packet_alloc();
+
     auto result = ma_context_init(nullptr, 0, nullptr, &context_);
     if (result != MA_SUCCESS) {
       LOGE << "Failed to initialize Miniaudio context";
@@ -81,48 +125,6 @@ public:
       ma_context_uninit(&context_);
       return;
     }
-
-    // Find encoder
-    codec_ = avcodec_find_encoder(AV_CODEC_ID_OPUS);
-    if (codec_ == nullptr) {
-      LOGE << "Codec not found";
-      return;
-    }
-
-    // Create codec context
-    codecContext_ = avcodec_alloc_context3(codec_);
-    if (codecContext_ == nullptr) {
-      LOGE << "Failed to allocate codec context";
-      return;
-    }
-
-    // Set codec options
-    assert(device_config_.capture.format == ma_format_f32);
-    codecContext_->sample_fmt = AV_SAMPLE_FMT_FLTP;
-    codecContext_->bit_rate = 64000; // TODO: take from UI a desired bit rate
-    codecContext_->sample_rate = device_config_.sampleRate; // NOLINT(*-narrowing-conversions)
-    av_channel_layout_default(&codecContext_->ch_layout, device_config_.capture.channels); // NOLINT(*-narrowing-conversions)
-
-    // Open codec
-    AVDictionary* options = nullptr;
-    av_dict_set(&options, "strict", "-2", 0);
-    if (avcodec_open2(codecContext_, codec_, &options) < 0) {
-      LOGE << "Failed to open codec";
-      return;
-    }
-
-    // Allocate frame
-    frame_ = av_frame_alloc();
-    if (frame_ == nullptr) {
-      LOGE << "Failed to allocate frame";
-      return;
-    }
-
-    // Set frame parameters
-    frame_->format = codecContext_->sample_fmt;
-    frame_->ch_layout = codecContext_->ch_layout;
-
-    packet_ = av_packet_alloc();
 
     start_time_ = std::chrono::steady_clock::now();
     sample_time_ = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start_time_).count();
@@ -166,25 +168,16 @@ public:
 
 private:
   void EncodeBuffer(const void* frames, int frame_count) {
+    // Calculate buffer size based on the desired frame size
     const auto buffer_size = av_samples_get_buffer_size(nullptr, codecContext_->ch_layout.nb_channels, frame_count, codecContext_->sample_fmt, 0);
 
-    codecContext_->frame_size = frame_count; // NOLINT(*-narrowing-conversions)
-    frame_->nb_samples = frame_count; // NOLINT(*-narrowing-conversions)
-
-    // Allocate temporary buffer for FFmpeg
-    auto* buffer = static_cast<std::uint8_t*>(av_malloc(buffer_size)); // TODO buffer to class variable
-    if (buffer == nullptr) {
-      LOGE << "Failed to allocate buffer";
-      return;
-    }
-
     // Fill frame data
+    frame_->pts = av_gettime_relative() / Units::Milliseconds; // NOLINT(*-narrowing-conversions)
     auto ret = avcodec_fill_audio_frame(frame_, codecContext_->ch_layout.nb_channels, codecContext_->sample_fmt, static_cast<const std::uint8_t*>(frames), buffer_size, 0);
     if (ret < 0) {
       LOGE << "Error filling audio frame";
       return;
     }
-    frame_->pts = av_gettime_relative() / Units::Milliseconds; // NOLINT(*-narrowing-conversions)
 
     // Encode frame
     ret = avcodec_send_frame(codecContext_, frame_);
@@ -210,8 +203,6 @@ private:
 
       av_packet_unref(packet_);
     }
-
-    av_free(buffer);
   }
 
 };
