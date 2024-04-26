@@ -164,6 +164,8 @@ public:
           encoded_data.end(),
           reinterpret_cast<std::byte*>(packet->data),
           reinterpret_cast<std::byte*>(std::next(packet->data, packet->size)));
+
+      av_packet_unref(packet);
     }
 
     sample_time_ = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start_time_).count();;
@@ -179,6 +181,7 @@ public:
 
   void Stop() final {
     av_frame_free(&av_frame);
+    av_packet_free(&packet);
     avcodec_free_context(&codec_context);
     cap.release();
   }
