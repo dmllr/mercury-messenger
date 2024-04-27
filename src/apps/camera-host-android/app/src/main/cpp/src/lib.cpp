@@ -1,7 +1,7 @@
 #include <cstring>
 #include <jni.h>
 
-#include "logging/logging.h"
+#include "hela/eillance/logging/logging.h"
 
 #include "app_engine.hpp"
 
@@ -10,6 +10,7 @@
  * AppEngine object:
  *   the top level application engine object
  */
+using AppEngine = hela::eillance::AppEngine;
 AppEngine* engine = nullptr;
 
 JavaVM* g_JavaVM;

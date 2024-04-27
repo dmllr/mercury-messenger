@@ -8,13 +8,15 @@
 #include <android/native_window_jni.h>
 #include <jni.h>
 
-#include "events/event_source.h"
-#include "core/rtc/rtc_producer.hpp"
+#include "hela/eillance/events/event_source.h"
+#include "hela/eillance/rtc/producer.hpp"
 
 #include <opencv2/videoio.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/core/mat.hpp>
 
+
+namespace hela::eillance {
 
 class AppEngine {
   JavaVM* jvm;
@@ -143,3 +145,5 @@ private:
     }
   }
 };
+
+}  // namespace hela::eillance
