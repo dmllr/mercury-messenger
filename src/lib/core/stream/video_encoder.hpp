@@ -52,7 +52,7 @@ public:
     codec_context_->time_base = AVRational{1, framerate};
     codec_context_->framerate = AVRational{framerate, 1};
     codec_context_->gop_size = 10;
-    codec_context_->max_b_frames = 1;
+    codec_context_->max_b_frames = 0;
     codec_context_->pix_fmt = CrossPlatformProperties::AVCodecDestPixelFormat;
 
     #ifdef _WIN32

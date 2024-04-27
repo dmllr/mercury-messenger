@@ -31,11 +31,10 @@ private:
   cv::VideoCapture cap_;
   cv::Mat cv_frame_;
 
-//  VideoEncoder encoder_;
+  VideoEncoder encoder_;
 
 public:
-  VideoCapture() {
-  }
+  VideoCapture() = default;
 
   void Engage() {
     if (cap_.isOpened()) {
@@ -51,9 +50,9 @@ public:
     }
 
     // attempt to set desired resolution
-    cap_.set(cv::CAP_PROP_FRAME_WIDTH, VideoConfig::width);
-    cap_.set(cv::CAP_PROP_FRAME_HEIGHT, VideoConfig::height);
-    cap_.set(cv::CAP_PROP_FPS, VideoConfig::framerate);
+//    cap_.set(cv::CAP_PROP_FRAME_WIDTH, VideoConfig::width);
+//    cap_.set(cv::CAP_PROP_FRAME_HEIGHT, VideoConfig::height);
+//    cap_.set(cv::CAP_PROP_FPS, VideoConfig::framerate);
 
     cap_ >> cv_frame_;
     if (cv_frame_.empty()) {
@@ -64,11 +63,14 @@ public:
     // check what resolution was actually set
     const auto actual_width = static_cast<int>(cap_.get(cv::CAP_PROP_FRAME_WIDTH));
     const auto actual_height = static_cast<int>(cap_.get(cv::CAP_PROP_FRAME_HEIGHT));
-    const auto actual_fps = static_cast<int>(cap_.get(cv::CAP_PROP_FPS));
+    auto actual_fps = static_cast<int>(cap_.get(cv::CAP_PROP_FPS));
+    if (actual_fps <= 0) {
+      actual_fps = VideoConfig::framerate;
+    }
 
     LOGI << "Capture resolution set to: " << actual_width << "x" << actual_height << " at " << actual_fps << "fps.";
 
-//    encoder_.Engage(actual_width, actual_height, actual_fps);
+    encoder_.Engage(actual_width, actual_height, actual_fps);
   }
 
   void CaptureAndProcessNextFrame() {
@@ -83,17 +85,17 @@ public:
     #endif
     cv::cvtColor(cv_frame_, cv_frame_, cv::COLOR_BGR2YUV_I420);
 
-//    encoder_.EncodeBuffer(cv_frame_.data);
+    encoder_.EncodeBuffer(cv_frame_.data);
   }
 
   void Revoke() {
-//    encoder_.Revoke();
+    encoder_.Revoke();
 
     cap_.release();
   }
 
   void SetDataCallback(DataCallback callback) {
-//    encoder_.SetDataCallback(std::move(callback));
+    encoder_.SetDataCallback(std::move(callback));
   }
 
 };
