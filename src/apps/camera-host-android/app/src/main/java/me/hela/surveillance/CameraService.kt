@@ -81,7 +81,7 @@ class CameraService : Service(), IStatusCallback {
     val state = ServiceState.fromInt(status)
 
     underlyingServicesStates[src] = state
-    Log.e(Tune.TAG, "Status update: $src/$state")
+    Log.d(Tune.TAG, "Status update: $src/$state")
     log += "$src/$state\n"
 
     startForeground()

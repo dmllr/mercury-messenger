@@ -79,7 +79,7 @@ public:
     }
 
     #ifdef __ANDROID__
-    cv::cvtColor(cv_frame, cv_frame, cv::COLOR_GRAY2RGB);
+    cv::cvtColor(cv_frame_, cv_frame_, cv::COLOR_GRAY2RGB);
     #endif
     cv::cvtColor(cv_frame_, cv_frame_, cv::COLOR_BGR2YUV_I420);
 

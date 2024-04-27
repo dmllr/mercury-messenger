@@ -12,7 +12,6 @@ target_link_libraries(camera-lib
   datachannel
   plog
   nlohmann_json
-  opus
   libopencv
   libffmpeg
   libminiaudio
