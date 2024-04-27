@@ -9,26 +9,26 @@
 #include <vector>
 
 extern "C" {
+#include "libavcodec/avcodec.h"
 #include "libavcodec/codec.h"
 #include "libavcodec/codec_id.h"
-#include "libavcodec/avcodec.h"
 #include "libavcodec/packet.h"
 #include "libavutil/error.h"
+#include "libavutil/frame.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/opt.h"
 #include "libavutil/pixfmt.h"
 #include "libavutil/time.h"
-#include "libavutil/frame.h"
 }
 #ifdef _WIN32
   #include <combaseapi.h>
 #endif
 
-#include "core/cross-platform/properties.hpp"
-#include "core/rtc/commons.hpp"
-#include "core/stream/video_config.hpp"
-#include "logging/logging.h"
-#include "utils/units.hpp"
+#include "hela/eillance/capture//video_config.hpp"
+#include "hela/eillance/capture/properties.hpp"
+#include "hela/eillance/logging/logging.h"
+#include "hela/eillance/rtc/commons.hpp"
+#include "hela/eillance/utils/units.hpp"
 
 namespace hela::eillance {
 
@@ -55,21 +55,21 @@ public:
     codec_context_->max_b_frames = 0;
     codec_context_->pix_fmt = CrossPlatformProperties::AVCodecDestPixelFormat;
 
-    #ifdef _WIN32
+#ifdef _WIN32
     // TODO investigate
     // essential to set hw_encoding=0 on Windows due to NVidia MF failure:
     // [h264_mf @ 0000024BC438BD40] MFT name: 'NVIDIA H.264 Encoder MFT'
     // [h264_mf @ 0000024BC438BD40] "format negotiation failed"
     av_opt_set(codec_context_->priv_data, "hw_encoding", "0", 0);
-    #endif
+#endif
 
     LOGV << "Width: " << codec_context_->width << ", height: " << codec_context_->height;
     LOGV << "Input pixel format: " << av_get_pix_fmt_name(codec_context_->pix_fmt);
     LOGV << "Output pixel format: " << av_get_pix_fmt_name(codec_context_->codec->pix_fmts[0]);
 
-    #ifdef _WIN32
+#ifdef _WIN32
     CoUninitialize();
-    #endif
+#endif
     auto ret = avcodec_open2(codec_context_, codec, nullptr);
     if (ret < 0) {
       throw std::runtime_error("Could not open codec " + std::to_string(ret));

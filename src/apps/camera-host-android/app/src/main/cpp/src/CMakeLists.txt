@@ -29,3 +29,13 @@ target_include_directories(camera-lib
 add_test(tests
   tests.cpp
 )
+
+add_library(lib-tests SHARED
+    tests.cpp
+)
+target_link_libraries(lib-tests
+    PRIVATE
+    $<TARGET_OBJECTS:adder>
+    googletest::gtest
+    junit-gtest::junit-gtest
+)

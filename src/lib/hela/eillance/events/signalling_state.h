@@ -1,5 +1,7 @@
 #pragma once
 
+namespace hela::eillance {
+
 enum class ServiceState : int {
   Unknown = 0,
   Standby,
@@ -7,3 +9,5 @@ enum class ServiceState : int {
   Action,
   Failure,
 };
+
+}  // namespace hela::eillance

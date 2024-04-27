@@ -15,10 +15,11 @@ extern "C" {
 #include <libavutil/time.h>
 }
 
-#include "core/rtc/commons.hpp"
-#include "core/stream/audio_config.hpp"
-#include "logging/logging.h"
-#include "utils/units.hpp"
+#include "hela/eillance/capture//audio_config.hpp"
+#include "hela/eillance/logging/logging.h"
+#include "hela/eillance/rtc/commons.hpp"
+#include "hela/eillance/utils/time.hpp"
+#include "hela/eillance/utils/units.hpp"
 
 namespace hela::eillance {
 
@@ -41,7 +42,7 @@ public:
 
     // Set codec options
     codecContext_->sample_fmt = AV_SAMPLE_FMT_FLTP;
-    codecContext_->bit_rate = 64000;  // TODO: take from UI a desired bit rate
+    codecContext_->bit_rate = 64000;                       // TODO: take from UI a desired bit rate
     codecContext_->sample_rate = AudioConfig::sampleRate;  // NOLINT(*-narrowing-conversions)
     codecContext_->frame_size = AudioConfig::frameSize;
     av_channel_layout_default(&codecContext_->ch_layout, AudioConfig::channels);  // NOLINT(*-narrowing-conversions)

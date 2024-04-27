@@ -8,9 +8,13 @@
 #include <thread>
 #include <utility>
 
-#include "core/rtc/dispatch_queue.hpp"
-#include "core/rtc/peer.hpp"
-#include "rtc/rtc.hpp"
+#include <rtc/rtc.hpp>
+
+#include "hela/eillance/rtc/dispatch_queue.hpp"
+#include "hela/eillance/rtc/peer.hpp"
+
+
+namespace hela::eillance {
 
 class Stream : std::enable_shared_from_this<Stream> {
 public:
@@ -33,6 +37,7 @@ public:
 
     virtual auto GetSampleTime() -> uint64_t = 0;
     virtual auto GetSample() -> rtc::binary = 0;
+
   protected:
     ~Source() = default;
   };
@@ -142,3 +147,5 @@ public:
     video_->Stop();
   }
 };
+
+}  // namespace hela::eillance

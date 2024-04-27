@@ -10,15 +10,15 @@
 #include <vector>
 
 #define MINIAUDIO_IMPLEMENTATION
-#include "miniaudio.h"
+#include <miniaudio.h>
+#include <rtc/common.hpp>
 
-#include "core/rtc/commons.hpp"
-#include "core/rtc/stream.hpp"
-#include "core/stream/audio_config.hpp"
-#include "core/stream/audio_encoder.hpp"
-#include "logging/logging.h"
-#include "rtc/common.hpp"
-#include "utils/units.hpp"
+#include "hela/eillance/capture/audio_config.hpp"
+#include "hela/eillance/capture/audio_encoder.hpp"
+#include "hela/eillance/logging/logging.h"
+#include "hela/eillance/rtc/commons.hpp"
+#include "hela/eillance/rtc/stream.hpp"
+#include "hela/eillance/utils/units.hpp"
 
 #undef max
 
@@ -42,7 +42,7 @@ public:
     device_config_.dataCallback = [](ma_device* device, void*, const void* frames, ma_uint32 frame_count) {
       auto* encoder = static_cast<AudioEncoder*>(device->pUserData);
       if (encoder != nullptr) {
-        encoder->EncodeBuffer(frames, frame_count); // NOLINT(*-narrowing-conversions)
+        encoder->EncodeBuffer(frames, frame_count);  // NOLINT(*-narrowing-conversions)
       }
     };
   }
@@ -81,7 +81,6 @@ public:
   void SetDataCallback(DataCallback callback) {
     encoder_.SetDataCallback(std::move(callback));
   }
-
 };
 
 }  // namespace hela::eillance

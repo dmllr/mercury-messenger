@@ -7,10 +7,11 @@
 #include <string>
 #include <vector>
 
-#include "core/stream/video_capture.hpp"
-#include "core/rtc/stream.hpp"
-#include "rtc/common.hpp"
-#include "utils/units.hpp"
+#include <rtc/common.hpp>
+
+#include "hela/eillance/capture//video_capture.hpp"
+#include "hela/eillance/rtc/stream.hpp"
+#include "hela/eillance/utils/units.hpp"
 
 namespace hela::eillance {
 
@@ -58,7 +59,6 @@ public:
   auto GetSampleTime() -> uint64_t final {
     return sample_time_ - start_time_;
   }
-
 };
 
 }  // namespace hela::eillance

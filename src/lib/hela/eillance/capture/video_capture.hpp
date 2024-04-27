@@ -9,18 +9,18 @@
 #include <utility>
 #include <vector>
 
-#include <opencv2/videoio.hpp>
-#include <opencv2/imgproc.hpp>
 #include <opencv2/core/mat.hpp>
+#include <opencv2/imgproc.hpp>
+#include <opencv2/videoio.hpp>
+#include <rtc/common.hpp>
 
-#include "core/cross-platform/properties.hpp"
-#include "core/rtc/commons.hpp"
-#include "core/rtc/stream.hpp"
-#include "core/stream/video_config.hpp"
-#include "core/stream/video_encoder.hpp"
-#include "logging/logging.h"
-#include "rtc/common.hpp"
-#include "utils/units.hpp"
+#include "hela/eillance/capture/properties.hpp"
+#include "hela/eillance/capture/video_config.hpp"
+#include "hela/eillance/capture/video_encoder.hpp"
+#include "hela/eillance/logging/logging.h"
+#include "hela/eillance/rtc/commons.hpp"
+#include "hela/eillance/rtc/stream.hpp"
+#include "hela/eillance/utils/units.hpp"
 
 #undef max
 
@@ -50,9 +50,9 @@ public:
     }
 
     // attempt to set desired resolution
-//    cap_.set(cv::CAP_PROP_FRAME_WIDTH, VideoConfig::width);
-//    cap_.set(cv::CAP_PROP_FRAME_HEIGHT, VideoConfig::height);
-//    cap_.set(cv::CAP_PROP_FPS, VideoConfig::framerate);
+    //    cap_.set(cv::CAP_PROP_FRAME_WIDTH, VideoConfig::width);
+    //    cap_.set(cv::CAP_PROP_FRAME_HEIGHT, VideoConfig::height);
+    //    cap_.set(cv::CAP_PROP_FPS, VideoConfig::framerate);
 
     cap_ >> cv_frame_;
     if (cv_frame_.empty()) {
@@ -80,9 +80,9 @@ public:
       return;
     }
 
-    #ifdef __ANDROID__
+#ifdef __ANDROID__
     cv::cvtColor(cv_frame_, cv_frame_, cv::COLOR_GRAY2RGB);
-    #endif
+#endif
     cv::cvtColor(cv_frame_, cv_frame_, cv::COLOR_BGR2YUV_I420);
 
     encoder_.EncodeBuffer(cv_frame_.data);
@@ -97,7 +97,6 @@ public:
   void SetDataCallback(DataCallback callback) {
     encoder_.SetDataCallback(std::move(callback));
   }
-
 };
 
 }  // namespace hela::eillance

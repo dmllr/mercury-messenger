@@ -3,18 +3,16 @@
 #include <memory>
 #include <utility>
 
-#include "logging/logging.h"
-#include "utils/memory.h"
+#include <nlohmann/json.hpp>
+#include <rtc/rtc.h>
 
-#include "nlohmann/json.hpp"
-#include "rtc/rtc.h"
-
-#include "core/rtc/peer.hpp"
-#include "core/rtc/stream.hpp"
-#include "core/stream/audio_stream_source.hpp"
-#include "core/stream/video_stream_source.hpp"
-
-#include "rtc_transport.hpp"
+#include "hela/eillance/logging/logging.h"
+#include "hela/eillance/rtc/audio_stream_source.hpp"
+#include "hela/eillance/rtc/peer.hpp"
+#include "hela/eillance/rtc/stream.hpp"
+#include "hela/eillance/rtc/transport.hpp"
+#include "hela/eillance/rtc/video_stream_source.hpp"
+#include "hela/eillance/utils/memory.h"
 
 
 namespace hela::eillance {
@@ -207,7 +205,6 @@ private:
       LOGD << "Unable to send " << streamType << " packet";
     }
   }
-
 };
 
 }  // namespace hela::eillance

@@ -4,12 +4,12 @@
 #include <cstdint>
 #include <limits>
 
-#include "core/stream/audio_capture.hpp"
-#include "core/rtc/stream.hpp"
-#include "logging/logging.h"
+#include "hela/eillance/capture/audio_capture.hpp"
+#include "hela/eillance/logging/logging.h"
+#include "hela/eillance/rtc/stream.hpp"
 
 #ifdef _WIN32
-#include <combaseapi.h>
+  #include <combaseapi.h>
 #endif
 
 #undef max
@@ -65,7 +65,6 @@ public:
   auto GetSampleTime() -> uint64_t final {
     return sample_time_ - start_time_;
   }
-
 };
 
 }  // namespace hela::eillance

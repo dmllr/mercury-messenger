@@ -2,7 +2,7 @@
 
 #include <string>
 
-#include "utils/likely.h"
+#include "hela/eillance/utils/likely.h"
 
 #include <plog/Formatters/FuncMessageFormatter.h>
 #include <plog/Formatters/TxtFormatter.h>

@@ -4,23 +4,22 @@
 #include <thread>
 #include <unordered_map>
 
-#include "nlohmann/json.hpp"
+#include <nlohmann/json.hpp>
+#include <rtc/peerconnection.hpp>
+#include <rtc/rtc.h>
 
-#include "rtc/peerconnection.hpp"
-#include "rtc/rtc.h"
-
-#include "core/rtc/dispatch_queue.hpp"
-#include "core/rtc/peer.hpp"
-#include "core/rtc/stream.hpp"
-#include "events/event_source.h"
-#include "events/signalling_state.h"
-#include "logging/logging.h"
-#include "utils/memory.h"
+#include "hela/eillance/events/event_source.h"
+#include "hela/eillance/events/signalling_state.h"
+#include "hela/eillance/logging/logging.h"
+#include "hela/eillance/rtc/dispatch_queue.hpp"
+#include "hela/eillance/rtc/peer.hpp"
+#include "hela/eillance/rtc/stream.hpp"
+#include "hela/eillance/utils/memory.h"
 
 
 namespace hela::eillance {
 
-template <typename Connection>
+template<typename Connection>
 class RtcTransport {
   using Json = nlohmann::json;
 
