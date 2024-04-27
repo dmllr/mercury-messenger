@@ -4,11 +4,6 @@
 
 
 auto main(int  /*argc*/, char**  /*argv*/) -> int {
-//  hela::eillance::VideoCapture cap;
-//  cap.Engage();
-//  cap.SetDataCallback([](auto) {});
-//  cap.CaptureAndProcessNextFrame();
-
   using namespace hela::eillance;
   auto rtc = RtcTransport<RtcProducer>();
   rtc.Start("server");

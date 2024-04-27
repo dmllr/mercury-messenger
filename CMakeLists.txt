@@ -19,4 +19,5 @@ include("src/cmake/libopus.cmake")
 include("src/cmake/libjson.cmake")
 
 add_subdirectory(src/apps/camera-host-cli-cp)
-add_subdirectory(src/apps/example-capture-video-audio-cv)
+
+add_subdirectory(src/tests)
