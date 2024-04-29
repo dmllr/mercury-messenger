@@ -42,7 +42,7 @@ public:
     device_config_.dataCallback = [](ma_device* device, void*, const void* frames, ma_uint32 frame_count) {
       auto* encoder = static_cast<AudioEncoder*>(device->pUserData);
       if (encoder != nullptr) {
-        encoder->EncodeBuffer(frames, frame_count);  // NOLINT(*-narrowing-conversions)
+        encoder->EncodeBuffer(frames);  // NOLINT(*-narrowing-conversions)
       }
     };
   }
