@@ -14,7 +14,6 @@
 #include <opencv2/videoio.hpp>
 #include <rtc/common.hpp>
 
-#include "hela/eillance/capture/properties.hpp"
 #include "hela/eillance/capture/video_config.hpp"
 #include "hela/eillance/capture/video_encoder.hpp"
 #include "hela/eillance/common/packet.hpp"
@@ -33,6 +32,16 @@ private:
 
   VideoEncoder encoder_;
 
+  struct CrossPlatformProperties {
+    #if defined __ANDROID__
+    static constexpr auto openCVCameraCapabilities = cv::CAP_ANDROID;
+    #elif defined _WIN32
+    static constexpr auto openCVCameraCapabilities = cv::CAP_DSHOW;
+    #else
+    static constexpr auto openCVCameraCapabilities = cv::CAP_ANY;
+    #endif
+  };
+
 public:
   VideoCapture() = default;
 
@@ -42,7 +51,7 @@ public:
     }
 
     // open the default camera
-    cap_.open(0, CrossPlatformProperties::OpenCVCameraCapabilities);
+    cap_.open(0, CrossPlatformProperties::openCVCameraCapabilities);
 
     if (!cap_.isOpened()) {
       LOGE << "Can't open the capture device. The video source has not been started.";

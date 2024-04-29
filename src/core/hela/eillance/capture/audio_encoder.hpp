@@ -24,6 +24,12 @@ extern "C" {
 namespace hela::eillance {
 
 class AudioEncoder {
+  const AVCodec* codec_{};
+  AVCodecContext* codecContext_{};
+  AVFrame* frame_{nullptr};
+  AVPacket* packet_{nullptr};
+  DataCallback data_callback_;
+
 public:
   void Engage() {
     // Find encoder
@@ -127,12 +133,6 @@ public:
     data_callback_ = callback;
   }
 
-private:
-  const AVCodec* codec_{};
-  AVCodecContext* codecContext_{};
-  AVFrame* frame_{nullptr};
-  AVPacket* packet_{nullptr};
-  DataCallback data_callback_;
 };
 
 }  // namespace hela::eillance

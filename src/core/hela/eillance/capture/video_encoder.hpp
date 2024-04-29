@@ -25,7 +25,6 @@ extern "C" {
 #endif
 
 #include "hela/eillance/capture//video_config.hpp"
-#include "hela/eillance/capture/properties.hpp"
 #include "hela/eillance/common/packet.hpp"
 #include "hela/eillance/logging/logging.h"
 #include "hela/eillance/utils/units.hpp"
@@ -33,6 +32,22 @@ extern "C" {
 namespace hela::eillance {
 
 class VideoEncoder {
+  AVCodecContext* codec_context_ = nullptr;
+  AVFrame* av_frame_ = nullptr;
+  AVPacket* packet_ = nullptr;
+
+  DataCallback data_callback_;
+
+  struct CrossPlatformProperties {
+    #if defined __ANDROID__
+    static constexpr auto codecDestPixelFormat = AV_PIX_FMT_NV12;
+    #elif defined _WIN32
+    static constexpr auto codecDestPixelFormat = AV_PIX_FMT_YUV420P;
+    #else
+    static constexpr auto codecDestPixelFormat = AV_PIX_FMT_YUV420P;
+    #endif
+  };
+
 public:
   void Engage(const int width, const int height, const int framerate) {
     // find h.264 codec and allocate the codec context
@@ -53,15 +68,15 @@ public:
     codec_context_->framerate = AVRational{framerate, 1};
     codec_context_->gop_size = 10;
     codec_context_->max_b_frames = 0;
-    codec_context_->pix_fmt = CrossPlatformProperties::AVCodecDestPixelFormat;
+    codec_context_->pix_fmt = CrossPlatformProperties::codecDestPixelFormat;
 
-#ifdef _WIN32
+    #ifdef _WIN32
     // TODO investigate
     // essential to set hw_encoding=0 on Windows due to NVidia MF failure:
     // [h264_mf @ 0000024BC438BD40] MFT name: 'NVIDIA H.264 Encoder MFT'
     // [h264_mf @ 0000024BC438BD40] "format negotiation failed"
     av_opt_set(codec_context_->priv_data, "hw_encoding", "0", 0);
-#endif
+    #endif
 
     LOGV << "Width: " << codec_context_->width << ", height: " << codec_context_->height;
     LOGV << "Input pixel format: " << av_get_pix_fmt_name(codec_context_->pix_fmt);
@@ -133,12 +148,6 @@ public:
     data_callback_ = callback;
   }
 
-private:
-  AVCodecContext* codec_context_ = nullptr;
-  AVFrame* av_frame_ = nullptr;
-  AVPacket* packet_ = nullptr;
-
-  DataCallback data_callback_;
 };
 
 }  // namespace hela::eillance
