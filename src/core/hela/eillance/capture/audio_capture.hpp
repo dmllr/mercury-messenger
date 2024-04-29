@@ -15,8 +15,8 @@
 
 #include "hela/eillance/capture/audio_config.hpp"
 #include "hela/eillance/capture/audio_encoder.hpp"
+#include "hela/eillance/common/packet.hpp"
 #include "hela/eillance/logging/logging.h"
-#include "hela/eillance/rtc/commons.hpp"
 #include "hela/eillance/rtc/stream.hpp"
 #include "hela/eillance/utils/units.hpp"
 

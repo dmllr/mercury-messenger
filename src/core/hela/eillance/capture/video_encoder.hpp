@@ -26,8 +26,8 @@ extern "C" {
 
 #include "hela/eillance/capture//video_config.hpp"
 #include "hela/eillance/capture/properties.hpp"
+#include "hela/eillance/common/packet.hpp"
 #include "hela/eillance/logging/logging.h"
-#include "hela/eillance/rtc/commons.hpp"
 #include "hela/eillance/utils/units.hpp"
 
 namespace hela::eillance {

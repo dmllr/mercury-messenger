@@ -15,9 +15,9 @@ extern "C" {
 #include <libavutil/time.h>
 }
 
-#include "hela/eillance/capture//audio_config.hpp"
+#include "hela/eillance/capture/audio_config.hpp"
+#include "hela/eillance/common/packet.hpp"
 #include "hela/eillance/logging/logging.h"
-#include "hela/eillance/rtc/commons.hpp"
 #include "hela/eillance/utils/time.hpp"
 #include "hela/eillance/utils/units.hpp"
 

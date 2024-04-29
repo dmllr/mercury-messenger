@@ -45,9 +45,7 @@ public:
   void LoadNextSample() final {
     ++i;
 
-    if (i % 5 == 0) {
-      sample_time_ = currentTimeInMicroSeconds();
-    }
+    sample_time_ = currentTimeInMicroSeconds();
   }
 
   auto GetSample() -> rtc::binary final {
