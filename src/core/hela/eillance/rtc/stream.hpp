@@ -82,7 +82,7 @@ private:
       next_time = vt;
     }
 
-    auto current_time = currentTimeInMicroSeconds();
+    auto current_time = Time::Now();
 
     auto elapsed = current_time - startTime;
     if (0) {
@@ -128,7 +128,7 @@ public:
       return;
     }
     isRunning = true;
-    startTime = currentTimeInMicroSeconds();
+    startTime = Time::Now();
     video_->Start();
     audio_->Start();
     dispatchQueue.dispatch([this]() {

@@ -35,13 +35,13 @@ public:
 
   void Start() final {
     capture_.Engage();
-    start_time_ = currentTimeInMicroSeconds();
+    start_time_ = Time::Now();
     sample_time_ = start_time_;
   }
 
   void LoadNextSample() final {
     capture_.CaptureAndProcessNextFrame();
-    sample_time_ = currentTimeInMicroSeconds();
+    sample_time_ = Time::Now();
   }
 
   auto GetSample() -> rtc::binary final {
