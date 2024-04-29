@@ -12,6 +12,8 @@
 #include "hela/eillance/common/packet.hpp"
 #include "hela/eillance/common/stream_source_type.hpp"
 
+#include "circular_buffer.hpp"
+
 namespace hela::eillance {
 
 class CaptureManager {
@@ -24,14 +26,14 @@ public:
 private:
   struct ConsumerData {
     StreamSourceType type;
-    std::vector<Packet>::iterator position;
+    size_t position;
   };
 
   AudioCapture audio_capture_{};
   VideoCapture video_capture_{};
 
-  std::vector<Packet> audio_packets_{};
-  std::vector<Packet> video_packets_{};
+  CircularBuffer<Packet, 100> audio_packets_;
+  CircularBuffer<Packet, 100> video_packets_;
 
   std::unordered_map<ConsumerID, ConsumerData> consumers_;
   std::atomic_bool engaged_{false};
@@ -39,20 +41,20 @@ private:
 public:
   CaptureManager() {
     audio_capture_.SetDataCallback([this](Packet packet) {
-      audio_packets_.emplace_back(std::move(packet));
+      audio_packets_.push_back(std::move(packet));
     });
 
     video_capture_.SetDataCallback([this](Packet packet) {
-      video_packets_.emplace_back(std::move(packet));
+      video_packets_.push_back(std::move(packet));
     });
   }
 
   void RegisterConsumer(ConsumerID id, StreamSourceType type) {
     if (type == StreamSourceType::audio) {
-      consumers_[id] = { type, audio_packets_.begin() };
+      consumers_[id] = { type, 0 };
     }
     if (type == StreamSourceType::video) {
-      consumers_[id] = { type, video_packets_.begin() };
+      consumers_[id] = { type, 0 };
     }
     if (!consumers_.empty() && !engaged_) {
       Engage();
@@ -73,12 +75,18 @@ public:
 
     // Move Packet data based on the consumer's type
     if (type == StreamSourceType::audio) {
-      auto sample = std::move(*position);
+      if (audio_packets_.empty()) {
+        return {};
+      }
+      auto& sample = audio_packets_[position];
       ++position;
       return sample.data;
     }
     if (type == StreamSourceType::video) {
-      auto sample = std::move(*position);
+      if (video_packets_.empty()) {
+        return {};
+      }
+      auto& sample = video_packets_[position];
       ++position;
       return sample.data;
     }

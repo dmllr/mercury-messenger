@@ -4,6 +4,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <thread>
+#include <atomic>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -32,18 +34,28 @@ private:
 
   VideoEncoder encoder_;
 
+  std::thread capture_thread_;
+  std::atomic_bool capture_thread_running_{false};
+
   struct CrossPlatformProperties {
-    #if defined __ANDROID__
+#if defined __ANDROID__
     static constexpr auto openCVCameraCapabilities = cv::CAP_ANDROID;
-    #elif defined _WIN32
+#elif defined _WIN32
     static constexpr auto openCVCameraCapabilities = cv::CAP_DSHOW;
-    #else
+#else
     static constexpr auto openCVCameraCapabilities = cv::CAP_ANY;
-    #endif
+#endif
   };
 
 public:
   VideoCapture() = default;
+
+  ~VideoCapture() {
+    StopCaptureThread();
+    if (cap_.isOpened()) {
+      cap_.release();
+    }
+  }
 
   void Engage() {
     if (cap_.isOpened()) {
@@ -80,6 +92,8 @@ public:
     LOGI << "Capture resolution set to: " << actual_width << "x" << actual_height << " at " << actual_fps << "fps.";
 
     encoder_.Engage(actual_width, actual_height, actual_fps);
+
+    StartCaptureThread();
   }
 
   void CaptureAndProcessNextFrame() {
@@ -98,13 +112,31 @@ public:
   }
 
   void Revoke() {
+    StopCaptureThread();
     encoder_.Revoke();
-
     cap_.release();
   }
 
   void SetDataCallback(DataCallback callback) {
     encoder_.SetDataCallback(std::move(callback));
+  }
+
+private:
+  void StartCaptureThread() {
+    if (!capture_thread_running_.exchange(true)) {
+      capture_thread_ = std::thread([this]() {
+        while (capture_thread_running_) {
+          CaptureAndProcessNextFrame();
+        }
+      });
+    }
+  }
+
+  void StopCaptureThread() {
+    capture_thread_running_ = false;
+    if (capture_thread_.joinable()) {
+      capture_thread_.join();
+    }
   }
 };
 
