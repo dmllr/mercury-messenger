@@ -6,6 +6,7 @@
 #include <nlohmann/json.hpp>
 #include <rtc/rtc.h>
 
+#include "hela/eillance/capture/capture_manager.hpp"
 #include "hela/eillance/logging/logging.h"
 #include "hela/eillance/rtc/audio_stream_source.hpp"
 #include "hela/eillance/rtc/peer.hpp"
@@ -37,11 +38,11 @@ class RtcProducer {
   };
 
 public:
-  explicit RtcProducer() {
-    av_stream_ = std::make_shared<Stream>(std::make_shared<VideoStreamSource>(), std::make_shared<AudioStreamSource>());
+  explicit RtcProducer(std::shared_ptr<CaptureManager> capture_manager) {
+    av_stream_ = std::make_shared<Stream>(std::make_shared<VideoStreamSource>(capture_manager), std::make_shared<AudioStreamSource>(capture_manager));
 
     // set callback responsible for sample sending
-    av_stream_->OnSample([this, ws = make_weak_ptr(av_stream_)](Stream::Source::Type type, uint64_t sampleTime, const rtc::binary& sample) {
+    av_stream_->OnSample([this, ws = make_weak_ptr(av_stream_)](StreamSourceType type, uint64_t sampleTime, const rtc::binary& sample) {
       auto tracks = GetAllClientsInReadyState(type);
       if (!tracks.empty()) {
         SendMessageToAllTracks(sample, type, sampleTime, tracks);
@@ -138,11 +139,11 @@ public:
   }
 
 private:
-  std::vector<Client> GetAllClientsInReadyState(Stream::Source::Type type) {
+  std::vector<Client> GetAllClientsInReadyState(StreamSourceType type) {
     std::vector<Client> clients;
     // get track for given type
     auto get_track_data = [type](const std::shared_ptr<Peer>& peer) {
-      return type == Stream::Source::Type::Video ? peer->video : peer->audio;
+      return type == StreamSourceType::video ? peer->video : peer->audio;
     };
 
     // get all peers with Ready state
@@ -157,8 +158,8 @@ private:
     return clients;
   }
 
-  static void SendMessageToAllTracks(const rtc::binary& sample, Stream::Source::Type type, uint64_t sampleTime, const std::vector<Client>& clients) {
-    const auto* stream_type = type == Stream::Source::Type::Video ? "video" : "audio";
+  static void SendMessageToAllTracks(const rtc::binary& sample, StreamSourceType type, uint64_t sampleTime, const std::vector<Client>& clients) {
+    const auto* stream_type = type == StreamSourceType::video ? "video" : "audio";
 
     for (const auto& client: clients) {
       ProcessTrack(client, sampleTime, sample, stream_type);

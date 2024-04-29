@@ -30,7 +30,8 @@ class RtcTransport {
   std::shared_ptr<std::function<void(EventSource, int)>> status_callback_;
 
 public:
-  RtcTransport() {
+  RtcTransport(std::shared_ptr<CaptureManager> capture_manager)
+      : connection_{capture_manager} {
     ws_config_.caCertificatePemFile = ZEROSSL_CA_BUNDLE;
   }
   RtcTransport(RtcTransport&&) = delete;
