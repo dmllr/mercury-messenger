@@ -89,9 +89,9 @@ public:
     }
   }
 
-  void EncodeBuffer(const void* frames, int frame_count) {
+  void EncodeBuffer(const void* frames) {
     // Calculate buffer size based on the desired frame size
-    const auto buffer_size = av_samples_get_buffer_size(nullptr, codecContext_->ch_layout.nb_channels, frame_count, codecContext_->sample_fmt, 0);
+    const auto buffer_size = av_samples_get_buffer_size(nullptr, codecContext_->ch_layout.nb_channels, frame_->nb_samples, codecContext_->sample_fmt, 0);
 
     // Fill frame data
     frame_->pts = av_gettime_relative() / Units::Milliseconds;  // NOLINT(*-narrowing-conversions)
