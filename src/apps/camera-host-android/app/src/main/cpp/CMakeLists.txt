@@ -22,7 +22,6 @@ include("${shared_cmake_libs_path}/libminiaudio.cmake")
 if (NOT TARGET nlohmann_json)
   include("${shared_cmake_libs_path}/libjson.cmake")
 endif()
-include("cmake/libliveMedia.cmake")
 
 add_subdirectory("${shared_src_path}/core" "${CMAKE_CURRENT_BINARY_DIR}/hela-eillance-core")
 add_subdirectory("src")
