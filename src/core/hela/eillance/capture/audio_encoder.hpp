@@ -50,7 +50,6 @@ public:
     codecContext_->sample_fmt = AV_SAMPLE_FMT_FLTP;
     codecContext_->bit_rate = 64000;                       // TODO: take from UI a desired bit rate
     codecContext_->sample_rate = AudioConfig::sampleRate;  // NOLINT(*-narrowing-conversions)
-    codecContext_->frame_size = AudioConfig::frameSize;
     av_channel_layout_default(&codecContext_->ch_layout, AudioConfig::channels);  // NOLINT(*-narrowing-conversions)
 
     // Open codec
@@ -71,7 +70,6 @@ public:
     // Set frame parameters
     frame_->format = codecContext_->sample_fmt;
     frame_->ch_layout = codecContext_->ch_layout;
-    frame_->nb_samples = codecContext_->frame_size;
 
     packet_ = av_packet_alloc();
   }
@@ -89,7 +87,10 @@ public:
     }
   }
 
-  void EncodeBuffer(const void* frames) {
+  void EncodeBuffer(const void* frames, std::uint32_t nb_samples) {
+    codecContext_->frame_size = nb_samples; // NOLINT(*-narrowing-conversions)
+    frame_->nb_samples = codecContext_->frame_size;
+
     // Calculate buffer size based on the desired frame size
     const auto buffer_size = av_samples_get_buffer_size(nullptr, codecContext_->ch_layout.nb_channels, frame_->nb_samples, codecContext_->sample_fmt, 0);
 

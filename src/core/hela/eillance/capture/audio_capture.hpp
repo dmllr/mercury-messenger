@@ -39,6 +39,13 @@ public:
     device_config_.capture.channels = AudioConfig::channels;
     device_config_.sampleRate = AudioConfig::sampleRate;
     device_config_.pUserData = &encoder_;
+    device_config_.dataCallback = [](ma_device* device, void*, const void* frames, ma_uint32 nb_samples) {
+      auto* encoder = static_cast<AudioEncoder*>(device->pUserData);
+      if (encoder != nullptr) {
+        encoder->EncodeBuffer(frames, nb_samples);
+        // TODO instead of instant encoding, accumulate buffers
+      }
+    };
   }
 
   void Engage() {
@@ -66,17 +73,13 @@ public:
       ma_context_uninit(&context_);
       return;
     }
-    device_config_.dataCallback = [](ma_device* device, void*, const void* frames, ma_uint32) {
-      auto* encoder = static_cast<AudioEncoder*>(device->pUserData);
-      if (encoder != nullptr) {
-        encoder->EncodeBuffer(frames);  // NOLINT(*-narrowing-conversions)
-      }
-    };
   }
 
   void Revoke() {
-    device_config_.dataCallback = [](ma_device*, void*, const void*, ma_uint32) {};
     encoder_.Revoke();
+  }
+
+  void ProcessCapturedBuffers() {
   }
 
   void SetDataCallback(DataCallback callback) {

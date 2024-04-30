@@ -2,35 +2,27 @@
 
 #include <chrono>
 #include <cstdint>
-#include <limits>
+#include <vector>
 
-#include "hela/eillance/capture/audio_capture.hpp"
 #include "hela/eillance/logging/logging.h"
 #include "hela/eillance/rtc/stream.hpp"
 
-#ifdef _WIN32
-  #include <combaseapi.h>
-#endif
-
-#undef max
-
 namespace hela::eillance {
 
-class AudioStreamSource : public Stream::Source {
+template <class Capture>
+class StreamSource : public Stream::Source {
 private:
-  AudioCapture capture_;
+  Capture capture_{};
 
-  rtc::binary encoded_data_{};
   std::uint64_t start_time_{};
   std::uint64_t sample_time_{};
+  rtc::binary sample_{};
+  rtc::binary encoded_data_{};
 
 public:
-  AudioStreamSource() {
+  StreamSource() {
     capture_.SetDataCallback([this](Packet packet) {
-      encoded_data_.insert(
-          encoded_data_.end(),
-          packet.data.begin(),
-          packet.data.end());
+      encoded_data_.insert(encoded_data_.end(), packet.data.begin(), packet.data.end());
     });
   }
 
@@ -41,13 +33,15 @@ public:
   }
 
   void LoadNextSample() final {
+    capture_.ProcessCapturedBuffers();
+    sample_.insert(sample_.end(), encoded_data_.begin(), encoded_data_.end());
+    encoded_data_.clear();
     sample_time_ = Time::Now();
   }
 
   auto GetSample() -> rtc::binary final {
-    auto sample = encoded_data_;
-    encoded_data_.clear();
-
+    auto sample = sample_;
+    sample_.clear();
     LOGV << "Sending audio sample of size " << sample.size() << "b ";
     return sample;
   }

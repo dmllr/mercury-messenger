@@ -118,8 +118,8 @@ public:
     });
   }
 
-  void ProcessLastCapturedFrame() {
-    LOGD << "ProcessLastCapturedFrame()";
+  void ProcessCapturedBuffers() {
+    LOGD << "ProcessCapturedBuffers()";
     auto frame = cv_frame_;
     cv::cvtColor(frame, frame, cv::COLOR_BGR2YUV_YV12);
     YV12toNV12(frame, nv12_frame_);

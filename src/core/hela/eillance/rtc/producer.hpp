@@ -6,12 +6,13 @@
 #include <nlohmann/json.hpp>
 #include <rtc/rtc.h>
 
+#include "hela/eillance/capture/audio_capture.hpp"
+#include "hela/eillance/capture/video_capture.hpp"
 #include "hela/eillance/logging/logging.h"
-#include "hela/eillance/rtc/audio_stream_source.hpp"
 #include "hela/eillance/rtc/peer.hpp"
 #include "hela/eillance/rtc/stream.hpp"
+#include "hela/eillance/rtc/stream_source.hpp"
 #include "hela/eillance/rtc/transport.hpp"
-#include "hela/eillance/rtc/video_stream_source.hpp"
 #include "hela/eillance/utils/memory.h"
 
 
@@ -38,7 +39,9 @@ class RtcProducer {
 
 public:
   explicit RtcProducer() {
-    av_stream_ = std::make_shared<Stream>(std::make_shared<VideoStreamSource>(), std::make_shared<AudioStreamSource>());
+    av_stream_ = std::make_shared<Stream>(
+        std::make_shared<StreamSource<VideoCapture>>(),
+        std::make_shared<StreamSource<AudioCapture>>());
 
     // set callback responsible for sample sending
     av_stream_->OnSample([this, ws = make_weak_ptr(av_stream_)](Stream::Source::Type type, uint64_t sampleTime, const rtc::binary& sample) {
