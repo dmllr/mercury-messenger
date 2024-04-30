@@ -34,7 +34,8 @@ private:
   VideoEncoder encoder_;
 
   std::thread capture_thread_;
-  std::atomic_bool capture_thread_running_{false};
+  std::atomic_bool capture_is_running_{false};
+  DispatchQueue dispatch_queue_{"Capture", 1};
 
   struct CrossPlatformProperties {
     #if defined __ANDROID__
@@ -50,13 +51,15 @@ public:
   VideoCapture() = default;
 
   ~VideoCapture() {
-    StopCaptureThread();
-    if (cap_.isOpened()) {
-      cap_.release();
-    }
+    Revoke();
   }
 
   void Engage() {
+    if (capture_is_running_) {
+      return;
+    }
+    capture_is_running_ = true;
+
     if (cap_.isOpened()) {
       cap_.release();
     }
@@ -95,18 +98,28 @@ public:
 
     encoder_.Engage(actual_width, actual_height, actual_fps);
 
-    StartCaptureThread();
+    dispatch_queue_.dispatch([this]() {
+      CaptureFrame();
+    });
   }
 
   void CaptureFrame() {
+    LOGD << "CaptureFrame()";
+    if (!capture_is_running_) {
+      return;
+    }
     cap_ >> cv_frame_;
     if (cv_frame_.empty()) {
       LOGE << "Unexpected end of stream.";
       return;
     }
+    dispatch_queue_.dispatch([this]() {
+      CaptureFrame();
+    });
   }
 
   void ProcessLastCapturedFrame() {
+    LOGD << "ProcessLastCapturedFrame()";
     auto frame = cv_frame_;
     cv::cvtColor(frame, frame, cv::COLOR_BGR2YUV_YV12);
     YV12toNV12(frame, nv12_frame_);
@@ -114,7 +127,11 @@ public:
   }
 
   void Revoke() {
-    StopCaptureThread();
+    if (!capture_is_running_) {
+      return;
+    }
+    capture_is_running_ = false;
+    dispatch_queue_.removePending();
     encoder_.Revoke();
     cap_.release();
   }
@@ -124,23 +141,6 @@ public:
   }
 
 private:
-  void StartCaptureThread() {
-    if (!capture_thread_running_.exchange(true)) {
-      capture_thread_ = std::thread([this]() {
-        while (capture_thread_running_) {
-          CaptureFrame();
-        }
-      });
-    }
-  }
-
-  void StopCaptureThread() {
-    capture_thread_running_ = false;
-    if (capture_thread_.joinable()) {
-      capture_thread_.join();
-    }
-  }
-
   static void YV12toNV12(const cv::Mat& input, cv::Mat& output) {
     const int width = input.cols;
     const int height = input.rows * 2 / 3;
