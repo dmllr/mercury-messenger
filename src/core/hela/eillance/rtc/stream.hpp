@@ -45,7 +45,6 @@ public:
 private:
   uint64_t startTime = 0;
   std::mutex mutex;
-  DispatchQueue dispatchQueue = DispatchQueue("StreamQueue", 1);
 
   bool isRunning = false;
 
@@ -112,7 +111,7 @@ private:
     auto sample = ss->GetSample();
     sampleHandler_(sst, ss->GetSampleTime(), sample);
     ss->LoadNextSample();
-    dispatchQueue.dispatch([this]() {
+    DispatchQueue::MainThread().dispatch([this]() {
       this->SendSample();
     });
   }
@@ -131,7 +130,7 @@ public:
     startTime = Time::Now();
     video_->Start();
     audio_->Start();
-    dispatchQueue.dispatch([this]() {
+    DispatchQueue::MainThread().dispatch([this]() {
       this->SendSample();
     });
   }
@@ -142,7 +141,7 @@ public:
       return;
     }
     isRunning = false;
-    dispatchQueue.removePending();
+    DispatchQueue::MainThread().removePending();
     audio_->Stop();
     video_->Stop();
   }
