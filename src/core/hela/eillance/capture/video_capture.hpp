@@ -29,6 +29,7 @@ class VideoCapture {
 private:
   cv::VideoCapture cap_;
   cv::Mat cv_frame_;
+  cv::Mat nv12_frame_;
 
   VideoEncoder encoder_;
 
@@ -58,6 +59,9 @@ public:
       return;
     }
 
+    #if defined __ANDROID__
+    cap_.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('B','G','R','3'));
+    #endif
     // attempt to set desired resolution
     //    cap_.set(cv::CAP_PROP_FRAME_WIDTH, VideoConfig::width);
     //    cap_.set(cv::CAP_PROP_FRAME_HEIGHT, VideoConfig::height);
@@ -88,13 +92,9 @@ public:
       LOGE << "Unexpected end of stream.";
       return;
     }
-
-#ifdef __ANDROID__
-    cv::cvtColor(cv_frame_, cv_frame_, cv::COLOR_GRAY2RGB);
-#endif
-    cv::cvtColor(cv_frame_, cv_frame_, cv::COLOR_BGR2YUV_I420);
-
-    encoder_.EncodeBuffer(cv_frame_.data);
+    cv::cvtColor(cv_frame_, cv_frame_, cv::COLOR_BGR2YUV_YV12);
+    YV12toNV12(cv_frame_, nv12_frame_);
+    encoder_.EncodeBuffer(nv12_frame_.data);
   }
 
   void Revoke() {
@@ -105,6 +105,35 @@ public:
 
   void SetDataCallback(DataCallback callback) {
     encoder_.SetDataCallback(std::move(callback));
+  }
+private:
+  static void YV12toNV12(const cv::Mat& input, cv::Mat& output) {
+    const int width = input.cols;
+    const int height = input.rows * 2 / 3;
+    const int stride = input.step[0];    //Rows bytes stride - in most cases equal to width
+
+    input.copyTo(output);
+
+    // Input V color channel (in YV12 V is above U).
+    cv::Mat in_v = cv::Mat(
+        cv::Size(width / 2, height / 2),
+        CV_8UC1,
+        std::next(input.data, stride * height),
+        stride / 2);
+
+    //Input V color channel (in YV12 U is below V).
+    cv::Mat in_u = cv::Mat(
+        cv::Size(width / 2, height / 2),
+        CV_8UC1,
+        std::next(input.data, stride * height + (stride / 2)*(height / 2)),
+        stride / 2);
+
+    for (int row = 0; row < height / 2; row++) {
+      for (int col = 0; col < width / 2; col++) {
+        output.at<uchar>(height + row, 2 * col) = in_u.at<uchar>(row, col);
+        output.at<uchar>(height + row, 2 * col + 1) = in_v.at<uchar>(row, col);
+      }
+    }
   }
 };
 

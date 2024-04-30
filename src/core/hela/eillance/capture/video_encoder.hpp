@@ -38,15 +38,7 @@ class VideoEncoder {
 
   DataCallback data_callback_;
 
-  struct CrossPlatformProperties {
-    #if defined __ANDROID__
-    static constexpr auto codecDestPixelFormat = AV_PIX_FMT_NV12;
-    #elif defined _WIN32
-    static constexpr auto codecDestPixelFormat = AV_PIX_FMT_YUV420P;
-    #else
-    static constexpr auto codecDestPixelFormat = AV_PIX_FMT_YUV420P;
-    #endif
-  };
+  static constexpr auto codecDestPixelFormat = AV_PIX_FMT_NV12;
 
 public:
   void Engage(const int width, const int height, const int framerate) {
@@ -68,23 +60,23 @@ public:
     codec_context_->framerate = AVRational{framerate, 1};
     codec_context_->gop_size = 10;
     codec_context_->max_b_frames = 0;
-    codec_context_->pix_fmt = CrossPlatformProperties::codecDestPixelFormat;
+    codec_context_->pix_fmt = codecDestPixelFormat;
 
     #ifdef _WIN32
-    // TODO investigate
+    // TODO investigate, maybe fallback
     // essential to set hw_encoding=0 on Windows due to NVidia MF failure:
     // [h264_mf @ 0000024BC438BD40] MFT name: 'NVIDIA H.264 Encoder MFT'
     // [h264_mf @ 0000024BC438BD40] "format negotiation failed"
     av_opt_set(codec_context_->priv_data, "hw_encoding", "0", 0);
     #endif
 
-    LOGV << "Width: " << codec_context_->width << ", height: " << codec_context_->height;
-    LOGV << "Input pixel format: " << av_get_pix_fmt_name(codec_context_->pix_fmt);
-    LOGV << "Output pixel format: " << av_get_pix_fmt_name(codec_context_->codec->pix_fmts[0]);
+    LOGD << "Width: " << codec_context_->width << ", height: " << codec_context_->height;
+    LOGD << "Input pixel format: " << av_get_pix_fmt_name(codec_context_->pix_fmt);
+    LOGD << "Output pixel format: " << av_get_pix_fmt_name( codec_context_->codec->pix_fmts[0]);
 
-#ifdef _WIN32
+    #ifdef _WIN32
     CoUninitialize();
-#endif
+    #endif
     auto ret = avcodec_open2(codec_context_, codec, nullptr);
     if (ret < 0) {
       throw std::runtime_error("Could not open codec " + std::to_string(ret));
