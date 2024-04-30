@@ -45,7 +45,7 @@ public:
 private:
   uint64_t startTime = 0;
   std::mutex mutex;
-  DispatchQueue dispatchQueue = DispatchQueue("StreamQueue");
+  DispatchQueue dispatchQueue = DispatchQueue("StreamQueue", 1);
 
   bool isRunning = false;
 

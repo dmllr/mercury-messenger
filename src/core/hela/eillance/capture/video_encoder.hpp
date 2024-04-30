@@ -6,6 +6,7 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 extern "C" {
@@ -136,8 +137,8 @@ public:
     }
   }
 
-  inline void SetDataCallback(DataCallback callback) {
-    data_callback_ = callback;
+  void SetDataCallback(DataCallback callback) {
+    data_callback_ = std::move(callback);
   }
 
 };

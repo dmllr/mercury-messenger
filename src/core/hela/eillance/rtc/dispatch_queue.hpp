@@ -11,12 +11,12 @@
 namespace hela::eillance {
 
 class DispatchQueue {
-  using fp_t = std::function<void()>;
+  using FpT = std::function<void()>;
 
 public:
-  explicit DispatchQueue(std::string name, size_t threadCount = 1) : name(std::move(name)), threads(threadCount) {
-    for (auto& i: threads) {
-      i = std::thread(&DispatchQueue::dispatchThreadHandler, this);
+  explicit DispatchQueue(std::string name, std::size_t threadCount) : name(std::move(name)), threads(threadCount) {
+    for (auto& thread: threads) {
+      thread = std::thread(&DispatchQueue::dispatchThreadHandler, this);
     }
   }
 
@@ -41,7 +41,7 @@ public:
   }
 
   // dispatch and copy
-  void dispatch(const fp_t& op) {
+  void dispatch(const FpT& op) {
     std::unique_lock<std::mutex> lock(lockMutex);
     queue.push(op);
 
@@ -52,7 +52,7 @@ public:
   }
 
   // dispatch and move
-  void dispatch(fp_t&& op) {
+  void dispatch(FpT&& op) {
     std::unique_lock<std::mutex> lock(lockMutex);
     queue.push(std::move(op));
 
@@ -77,31 +77,31 @@ private:
   std::string name;
   std::mutex lockMutex;
   std::vector<std::thread> threads;
-  std::queue<fp_t> queue;
+  std::queue<FpT> queue;
   std::condition_variable condition;
   bool quit = false;
 
   void dispatchThreadHandler() {
     std::unique_lock<std::mutex> lock(lockMutex);
-    do {
-      //Wait until we have data or a quit signal
-      condition.wait(lock, [this] {
-        return (!queue.empty() || quit);
-      });
+    while (!quit) {
+      // Wait until we have data or a quit signal
+      condition.wait(lock, [this] { return (!queue.empty() || quit); });
 
-      //after wait, we own the lock
-      if (!quit && !queue.empty()) {
+      // After wait, we own the lock
+      if (!queue.empty()) {
         auto op = std::move(queue.front());
         queue.pop();
 
-        //unlock now that we're done messing with the queue
+        // Release the lock before executing the operation
         lock.unlock();
 
+        // Execute the operation
         op();
 
+        // Reacquire the lock before looping
         lock.lock();
       }
-    } while (!quit);
+    }
   }
 };
 
