@@ -9,7 +9,7 @@
 
 #include <rtc/common.hpp>
 
-#include "hela/eillance/capture//video_capture.hpp"
+#include "hela/eillance/capture/video_capture.hpp"
 #include "hela/eillance/rtc/stream.hpp"
 #include "hela/eillance/utils/units.hpp"
 
@@ -40,7 +40,7 @@ public:
   }
 
   void LoadNextSample() final {
-    capture_.CaptureAndProcessNextFrame();
+    capture_.ProcessLastCapturedFrame();
     sample_time_ = Time::Now();
   }
 

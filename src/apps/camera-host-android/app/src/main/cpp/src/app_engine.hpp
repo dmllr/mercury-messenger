@@ -75,6 +75,9 @@ public:
 
       // Open camera, initialize preview, and display using OpenCV
       cap.open(0, cv::CAP_ANDROID);
+      cap.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('B','G','R','3'));
+      cap.set(cv::CAP_PROP_FRAME_WIDTH, 1280);
+      cap.set(cv::CAP_PROP_FRAME_HEIGHT, 720);
       if (!cap.isOpened()) {
         __android_log_print(ANDROID_LOG_ERROR, "Native", "Error opening camera");
         ANativeWindow_release(window);
@@ -126,14 +129,14 @@ private:
   void frameProcessingFunc() {
     cv::Mat frame;
     while (work) {
-      bool readSuccess = cap.read(frame);
-      if (!readSuccess || frame.empty()) {
+      cap >> frame;
+      if (frame.empty()) {
         std::cerr << "Unexpected end of stream." << std::endl;
         continue;
       }
 
       // Convert frame to RGBA for display on Android surface
-      // cvtColor(frame, frame, cv::COLOR_BGR2RGBA);
+       cvtColor(frame, frame, cv::COLOR_BGR2RGBA);
 
       ANativeWindow_acquire(window);
       ANativeWindow_Buffer buffer;

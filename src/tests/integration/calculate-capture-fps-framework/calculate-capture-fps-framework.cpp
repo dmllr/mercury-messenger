@@ -1,3 +1,4 @@
+#include <atomic>
 #include <iostream>
 #include <chrono>
 
@@ -6,14 +7,16 @@
 int main(int /*argc*/, char** /*argv*/) {
   hela::eillance::VideoCapture cap;
   cap.Engage();
-  cap.SetDataCallback([](auto) {});
+
+  std::atomic_int frames_captured = 0;
+  cap.SetDataCallback([&frames_captured](auto) {
+    frames_captured++;
+  });
 
   constexpr int num_frames = 100; // Number of frames to capture
-  auto frames_captured = 0;
   auto start_time = std::chrono::high_resolution_clock::now();
   while (frames_captured < num_frames) {
-    cap.CaptureAndProcessNextFrame();
-    frames_captured++;
+    cap.ProcessLastCapturedFrame();
   }
   auto end_time = std::chrono::high_resolution_clock::now();
   auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);

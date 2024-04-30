@@ -33,6 +33,9 @@ private:
 
   VideoEncoder encoder_;
 
+  std::thread capture_thread_;
+  std::atomic_bool capture_thread_running_{false};
+
   struct CrossPlatformProperties {
     #if defined __ANDROID__
     static constexpr auto openCVCameraCapabilities = cv::CAP_ANDROID;
@@ -45,6 +48,13 @@ private:
 
 public:
   VideoCapture() = default;
+
+  ~VideoCapture() {
+    StopCaptureThread();
+    if (cap_.isOpened()) {
+      cap_.release();
+    }
+  }
 
   void Engage() {
     if (cap_.isOpened()) {
@@ -63,9 +73,9 @@ public:
     cap_.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('B','G','R','3'));
     #endif
     // attempt to set desired resolution
-    //    cap_.set(cv::CAP_PROP_FRAME_WIDTH, VideoConfig::width);
-    //    cap_.set(cv::CAP_PROP_FRAME_HEIGHT, VideoConfig::height);
-    //    cap_.set(cv::CAP_PROP_FPS, VideoConfig::framerate);
+    cap_.set(cv::CAP_PROP_FRAME_WIDTH, VideoConfig::width);
+    cap_.set(cv::CAP_PROP_FRAME_HEIGHT, VideoConfig::height);
+    cap_.set(cv::CAP_PROP_FPS, VideoConfig::framerate);
 
     cap_ >> cv_frame_;
     if (cv_frame_.empty()) {
@@ -84,29 +94,53 @@ public:
     LOGI << "Capture resolution set to: " << actual_width << "x" << actual_height << " at " << actual_fps << "fps.";
 
     encoder_.Engage(actual_width, actual_height, actual_fps);
+
+    StartCaptureThread();
   }
 
-  void CaptureAndProcessNextFrame() {
+  void CaptureFrame() {
     cap_ >> cv_frame_;
     if (cv_frame_.empty()) {
       LOGE << "Unexpected end of stream.";
       return;
     }
-    cv::cvtColor(cv_frame_, cv_frame_, cv::COLOR_BGR2YUV_YV12);
-    YV12toNV12(cv_frame_, nv12_frame_);
+  }
+
+  void ProcessLastCapturedFrame() {
+    auto frame = cv_frame_;
+    cv::cvtColor(frame, frame, cv::COLOR_BGR2YUV_YV12);
+    YV12toNV12(frame, nv12_frame_);
     encoder_.EncodeBuffer(nv12_frame_.data);
   }
 
   void Revoke() {
+    StopCaptureThread();
     encoder_.Revoke();
-
     cap_.release();
   }
 
   void SetDataCallback(DataCallback callback) {
     encoder_.SetDataCallback(std::move(callback));
   }
+
 private:
+  void StartCaptureThread() {
+    if (!capture_thread_running_.exchange(true)) {
+      capture_thread_ = std::thread([this]() {
+        while (capture_thread_running_) {
+          CaptureFrame();
+        }
+      });
+    }
+  }
+
+  void StopCaptureThread() {
+    capture_thread_running_ = false;
+    if (capture_thread_.joinable()) {
+      capture_thread_.join();
+    }
+  }
+
   static void YV12toNV12(const cv::Mat& input, cv::Mat& output) {
     const int width = input.cols;
     const int height = input.rows * 2 / 3;

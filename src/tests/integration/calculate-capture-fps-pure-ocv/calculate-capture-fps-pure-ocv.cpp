@@ -23,7 +23,6 @@ int main(int /*argc*/, char** /*argv*/) {
   // attempt to set desired resolution
   cap.set(cv::CAP_PROP_FRAME_WIDTH, 1280);
   cap.set(cv::CAP_PROP_FRAME_HEIGHT, 720);
-  cap.set(cv::CAP_PROP_FPS, 30);
 
   if (!cap.isOpened()) {
     std::cerr << "Can't open the capture device. The video source has not been started." << std::endl;
@@ -38,9 +37,8 @@ int main(int /*argc*/, char** /*argv*/) {
   // check what resolution was actually set
   const auto actual_width = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_WIDTH));
   const auto actual_height = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_HEIGHT));
-  const auto actual_fps = static_cast<int>(cap.get(cv::CAP_PROP_FPS));
 
-  std::cout << "Capture resolution set to: " << actual_width << "x" << actual_height << " at " << actual_fps << "fps." << std::endl;
+  std::cout << "Capture resolution set to: " << actual_width << "x" << actual_height << std::endl;
 
 
   constexpr int num_frames = 100; // Number of frames to capture
