@@ -24,8 +24,6 @@ private:
   std::uint64_t start_time_{};
   std::uint64_t sample_time_{};
 
-  int i = 0;
-
 public:
   AudioStreamSource() {
     capture_.SetDataCallback([this](Packet packet) {
@@ -43,8 +41,6 @@ public:
   }
 
   void LoadNextSample() final {
-    ++i;
-
     sample_time_ = Time::Now();
   }
 
