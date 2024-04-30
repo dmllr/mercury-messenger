@@ -10,10 +10,8 @@
 
 #include <rtc/rtc.hpp>
 
-#include "hela/eillance/common/stream_source_type.hpp"
 #include "hela/eillance/rtc/dispatch_queue.hpp"
 #include "hela/eillance/rtc/peer.hpp"
-#include "hela/eillance/utils/time.hpp"
 
 
 namespace hela::eillance {
@@ -28,8 +26,14 @@ public:
     Source& operator=(Source&&) = delete;
     Source& operator=(const Source&) = delete;
 
+    enum class Type : std::uint8_t {
+      Audio,
+      Video
+    };
+
     virtual void Start() = 0;
     virtual void Stop() = 0;
+    virtual void LoadNextSample() = 0;
 
     virtual auto GetSampleTime() -> uint64_t = 0;
     virtual auto GetSample() -> rtc::binary = 0;
@@ -60,21 +64,21 @@ public:
   }
 
 private:
-  rtc::synchronized_callback<StreamSourceType, uint64_t, rtc::binary> sampleHandler_;
+  rtc::synchronized_callback<Source::Type, uint64_t, rtc::binary> sampleHandler_;
 
-  auto UnsafePrepareForSample() -> std::pair<std::shared_ptr<Source>, StreamSourceType> {
+  auto UnsafePrepareForSample() -> std::pair<std::shared_ptr<Source>, Source::Type> {
     std::shared_ptr<Source> ss;
-    StreamSourceType sst;
+    Source::Type sst;
     uint64_t next_time;
     auto at = audio_->GetSampleTime();
     auto vt = video_->GetSampleTime();
     if (at < vt) {
       ss = audio_;
-      sst = StreamSourceType::audio;
+      sst = Source::Type::Audio;
       next_time = at;
     } else {
       ss = video_;
-      sst = StreamSourceType::video;
+      sst = Source::Type::Video;
       next_time = vt;
     }
 
@@ -87,7 +91,7 @@ private:
                 << "NX: " << next_time << "\n"
                 << "EL: " << elapsed << "\n"
                 << "WT: " << ((next_time > elapsed) ? next_time - elapsed : 0) << "\n"
-                << " T: " << ((sst == StreamSourceType::audio) ? "Audio" : "Video") << "\n"
+                << " T: " << ((sst == Source::Type::Audio) ? "Audio" : "Video") << "\n"
                 << std::endl;
     }
     if (next_time > elapsed) {
@@ -107,13 +111,14 @@ private:
     auto [ss, sst] = UnsafePrepareForSample();
     auto sample = ss->GetSample();
     sampleHandler_(sst, ss->GetSampleTime(), sample);
+    ss->LoadNextSample();
     dispatchQueue.dispatch([this]() {
       this->SendSample();
     });
   }
 
 public:
-  void OnSample(std::function<void(StreamSourceType, uint64_t, rtc::binary)> handler) {
+  void OnSample(std::function<void(Source::Type, uint64_t, rtc::binary)> handler) {
     sampleHandler_ = std::move(handler);
   }
 
