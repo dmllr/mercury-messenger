@@ -39,9 +39,9 @@ public:
 
     auto format = AMediaFormat_new();
 
-    auto width = 1920;
-    auto height = 1080;
-    auto frameRate = 30;
+    auto width = VideoConfig::width;
+    auto height = VideoConfig::height;
+    auto frameRate = VideoConfig::framerate;
     auto bitRate = static_cast<int>(0.22f * width * height * frameRate);
     auto i_frame = 30;
     auto colorFormat = 0x7f000789;  // COLOR_FormatSurface, https://developer.android.com/reference/android/media/MediaCodecInfo.CodecCapabilities#COLOR_FormatSurface
