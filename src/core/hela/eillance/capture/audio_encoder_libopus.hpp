@@ -37,7 +37,7 @@ public:
   Packet EncodeBuffer(Packet raw_buffers) {
     auto* pcm_buffer = reinterpret_cast<const float*>(raw_buffers.data.data());
 
-    const auto MAX_PCM_BUFFER_SIZE = raw_buffers.amount * 480ULL * AudioConfig::channels * sizeof(float);
+    const auto MAX_PCM_BUFFER_SIZE = 100ULL * raw_buffers.amount * 480ULL * AudioConfig::channels * sizeof(float);
     std::vector<unsigned char> encoded_buffer(MAX_PCM_BUFFER_SIZE);
 
     if (likely(raw_buffers.amount > 0)) {
