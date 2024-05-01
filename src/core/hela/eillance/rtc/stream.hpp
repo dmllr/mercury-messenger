@@ -10,8 +10,8 @@
 
 #include <rtc/rtc.hpp>
 
-#include "hela/eillance/rtc/dispatch_queue.hpp"
 #include "hela/eillance/rtc/peer.hpp"
+#include "hela/eillance/utils/dispatch_queue.hpp"
 
 
 namespace hela::eillance {

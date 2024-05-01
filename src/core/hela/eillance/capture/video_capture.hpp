@@ -19,6 +19,7 @@
 #include "hela/eillance/common/packet.hpp"
 #include "hela/eillance/logging/logging.h"
 #include "hela/eillance/rtc/stream.hpp"
+#include "hela/eillance/utils/dispatch_queue.hpp"
 #include "hela/eillance/utils/units.hpp"
 
 #undef max
@@ -93,7 +94,7 @@ public:
       actual_fps = VideoConfig::framerate;
     }
 
-    LOGI << "Capture resolution set to: " << actual_width << "x" << actual_height << " at " << actual_fps << "fps.";
+    LOGI << "Capture resolution set to: " << actual_width << "x" << actual_height;
 
     encoder_.Engage(actual_width, actual_height, actual_fps);
 

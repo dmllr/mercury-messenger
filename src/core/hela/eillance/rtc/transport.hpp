@@ -11,9 +11,9 @@
 #include "hela/eillance/events/event_source.h"
 #include "hela/eillance/events/signalling_state.h"
 #include "hela/eillance/logging/logging.h"
-#include "hela/eillance/rtc/dispatch_queue.hpp"
 #include "hela/eillance/rtc/peer.hpp"
 #include "hela/eillance/rtc/stream.hpp"
+#include "hela/eillance/utils/dispatch_queue.hpp"
 #include "hela/eillance/utils/memory.h"
 
 
