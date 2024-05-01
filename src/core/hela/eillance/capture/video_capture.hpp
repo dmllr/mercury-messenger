@@ -112,6 +112,8 @@ public:
       LOGE << "Unexpected end of stream.";
       return;
     }
+    // due to OpenCV issue, camera frames should be captured as soon as possible,
+    // otherwise a framerate will be significantly lowered
     dispatch_queue_.dispatch([this]() {
       CaptureFrame();
     });
