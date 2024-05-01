@@ -2,29 +2,27 @@
 
 #include <chrono>
 #include <cstdint>
+#include <utility>
 #include <vector>
 
+#include "hela/eillance/capture/capture.hpp"
 #include "hela/eillance/logging/logging.h"
 #include "hela/eillance/rtc/stream.hpp"
+#include "hela/eillance/utils/time.hpp"
 
 namespace hela::eillance {
 
-template <class Capture>
 class StreamSource : public Stream::Source {
 private:
-  Capture capture_{};
+  Capture capture_;
 
   std::uint64_t start_time_{};
-  std::uint64_t sample_time_{};
-  rtc::binary sample_{};
+  std::uint64_t sample_time_{start_time_};
+  Packet sample_{};
   rtc::binary encoded_data_{};
 
 public:
-  StreamSource() {
-    capture_.SetDataCallback([this](Packet packet) {
-      encoded_data_.insert(encoded_data_.end(), packet.data.begin(), packet.data.end());
-    });
-  }
+  StreamSource(Capture capture) : capture_(std::move(capture)) {};
 
   void Start() final {
     capture_.Engage();
@@ -33,17 +31,12 @@ public:
   }
 
   void LoadNextSample() final {
-    capture_.ProcessCapturedBuffers();
-    sample_.insert(sample_.end(), encoded_data_.begin(), encoded_data_.end());
-    encoded_data_.clear();
+    sample_ = capture_.FetchBuffers();
     sample_time_ = Time::Now();
   }
 
   auto GetSample() -> rtc::binary final {
-    auto sample = sample_;
-    sample_.clear();
-    LOGV << "Sending audio sample of size " << sample.size() << "b ";
-    return sample;
+    return sample_.data;
   }
 
   void Stop() final {

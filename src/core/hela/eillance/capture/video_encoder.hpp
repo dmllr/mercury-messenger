@@ -22,10 +22,11 @@ extern "C" {
 #include "libavutil/time.h"
 }
 #ifdef _WIN32
+  #undef CLSCTX_ALL
   #include <combaseapi.h>
 #endif
 
-#include "hela/eillance/capture//video_config.hpp"
+#include "hela/eillance/capture/video_config.hpp"
 #include "hela/eillance/common/packet.hpp"
 #include "hela/eillance/logging/logging.h"
 #include "hela/eillance/utils/units.hpp"
@@ -36,8 +37,6 @@ class VideoEncoder {
   AVCodecContext* codec_context_ = nullptr;
   AVFrame* av_frame_ = nullptr;
   AVPacket* packet_ = nullptr;
-
-  DataCallback data_callback_;
 
   static constexpr auto codecDestPixelFormat = AV_PIX_FMT_NV12;
 
@@ -73,7 +72,7 @@ public:
 
     LOGD << "Width: " << codec_context_->width << ", height: " << codec_context_->height;
     LOGD << "Input pixel format: " << av_get_pix_fmt_name(codec_context_->pix_fmt);
-    LOGD << "Output pixel format: " << av_get_pix_fmt_name( codec_context_->codec->pix_fmts[0]);
+    LOGD << "Output pixel format: " << av_get_pix_fmt_name(codec_context_->codec->pix_fmts[0]);
 
     #ifdef _WIN32
     CoUninitialize();
@@ -107,7 +106,7 @@ public:
     avcodec_free_context(&codec_context_);
   }
 
-  void EncodeBuffer(void* frames) {
+  Packet EncodeBuffer(void* frames) {
     // set YUV pointers
     const auto size = codec_context_->width * codec_context_->height;
     av_frame_->data[0] = reinterpret_cast<std::uint8_t*>(frames);
@@ -116,31 +115,27 @@ public:
     av_frame_->pts = av_gettime_relative() / Units::Milliseconds;
 
     int ret = avcodec_send_frame(codec_context_, av_frame_);
-    while (ret >= 0) {
-      ret = avcodec_receive_packet(codec_context_, packet_);
-      if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
-        break;
-      }
-      if (ret < 0) {
-        LOGE << "Error encoding frame.";
-        return;
-      }
-
-      data_callback_(
-          Packet{
-              std::vector(
-                  reinterpret_cast<std::byte*>(packet_->data),
-                  reinterpret_cast<std::byte*>(std::next(packet_->data, packet_->size))),
-              Time::Now()});
-
-      av_packet_unref(packet_);
+    if (ret < 0) {
+      LOGE << "Error encoding frame in avcodec_send_frame.";
+      return {};
     }
-  }
+    ret = avcodec_receive_packet(codec_context_, packet_);
+    if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+      return {};
+    }
+    if (ret < 0) {
+      LOGE << "Error encoding frame in avcodec_receive_packet.";
+      return {};
+    }
 
-  void SetDataCallback(DataCallback callback) {
-    data_callback_ = std::move(callback);
+    auto result = Packet{
+        std::vector(
+            reinterpret_cast<std::byte*>(packet_->data),
+            reinterpret_cast<std::byte*>(std::next(packet_->data, packet_->size))),
+        1};
+    av_packet_unref(packet_);
+    return result;
   }
-
 };
 
 }  // namespace hela::eillance

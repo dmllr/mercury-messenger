@@ -1,16 +1,20 @@
 #pragma once
 
-#include "rtc/common.hpp"
 #include <cstdint>
+
+#include "rtc/common.hpp"
 
 
 namespace hela::eillance {
 
 struct Packet {
   rtc::binary data;
-  std::uint64_t timestamp;
-};
+  std::uint32_t amount;
 
-using DataCallback = std::function<void(Packet)>;
+  void Clear() {
+    data.clear();
+    amount = 0;
+  }
+};
 
 }  // namespace hela::eillance

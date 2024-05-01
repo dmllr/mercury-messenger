@@ -115,6 +115,14 @@ if (NOT ANDROID)
   endif()
 endif()
 
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+  list(APPEND CONFIGURE_PARAMS "--enable-debug")
+elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
+  list(APPEND CONFIGURE_PARAMS "--disable-debug")
+else()
+  message("Unknown build type: ${CMAKE_BUILD_TYPE}, ffmpeg debug disabled")
+  list(APPEND CONFIGURE_PARAMS "--disable-debug")
+endif()
 
 # requires "sh" and other commands to be available
 # MSYS2 must be installed on Windows. See /README.md for the instructions
@@ -128,7 +136,6 @@ ExternalProject_Add(ffmpeg_target
       --disable-protocols
       --disable-filters
       --disable-doc
-      --disable-debug
       --disable-devices
       --disable-parsers
       --disable-decoders

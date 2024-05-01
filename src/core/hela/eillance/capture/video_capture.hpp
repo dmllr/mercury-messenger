@@ -33,7 +33,6 @@ private:
 
   VideoEncoder encoder_;
 
-  std::thread capture_thread_;
   std::atomic_bool capture_is_running_{false};
   DispatchQueue dispatch_queue_{"Capture", 1};
 
@@ -104,7 +103,6 @@ public:
   }
 
   void CaptureFrame() {
-    LOGD << "CaptureFrame()";
     if (!capture_is_running_) {
       return;
     }
@@ -118,12 +116,12 @@ public:
     });
   }
 
-  void ProcessCapturedBuffers() {
-    LOGD << "ProcessCapturedBuffers()";
+  Packet FetchBuffers() {
     auto frame = cv_frame_;
     cv::cvtColor(frame, frame, cv::COLOR_BGR2YUV_YV12);
     YV12toNV12(frame, nv12_frame_);
-    encoder_.EncodeBuffer(nv12_frame_.data);
+
+    return encoder_.EncodeBuffer(nv12_frame_.data);
   }
 
   void Revoke() {
@@ -136,15 +134,11 @@ public:
     cap_.release();
   }
 
-  void SetDataCallback(DataCallback callback) {
-    encoder_.SetDataCallback(std::move(callback));
-  }
-
 private:
   static void YV12toNV12(const cv::Mat& input, cv::Mat& output) {
-    const int width = input.cols;
-    const int height = input.rows * 2 / 3;
-    const int stride = input.step[0];    //Rows bytes stride - in most cases equal to width
+    const auto width = input.cols;
+    const auto height = input.rows * 2 / 3;
+    const auto stride = input.step[0];  // NOLINT(*-narrowing-conversions)
 
     input.copyTo(output);
 

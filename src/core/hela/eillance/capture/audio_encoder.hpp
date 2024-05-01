@@ -28,7 +28,6 @@ class AudioEncoder {
   AVCodecContext* codecContext_{};
   AVFrame* frame_{nullptr};
   AVPacket* packet_{nullptr};
-  DataCallback data_callback_;
 
 public:
   void Engage() {
@@ -79,59 +78,54 @@ public:
     if (packet_ != nullptr) {
       av_packet_free(&packet_);
     }
-    if (codecContext_ != nullptr) {
-      avcodec_free_context(&codecContext_);
-    }
     if (frame_ != nullptr) {
       av_frame_free(&frame_);
     }
+    if (codecContext_ != nullptr) {
+      avcodec_free_context(&codecContext_);
+    }
   }
 
-  void EncodeBuffer(const void* frames, std::uint32_t nb_samples) {
-    codecContext_->frame_size = nb_samples; // NOLINT(*-narrowing-conversions)
+  Packet EncodeBuffer(Packet raw_buffers) {
+    codecContext_->frame_size = raw_buffers.amount; // NOLINT(*-narrowing-conversions)
     frame_->nb_samples = codecContext_->frame_size;
 
-    // Calculate buffer size based on the desired frame size
-    const auto buffer_size = av_samples_get_buffer_size(nullptr, codecContext_->ch_layout.nb_channels, frame_->nb_samples, codecContext_->sample_fmt, 0);
-
-    // Fill frame data
     frame_->pts = av_gettime_relative() / Units::Milliseconds;  // NOLINT(*-narrowing-conversions)
-    auto ret = avcodec_fill_audio_frame(frame_, codecContext_->ch_layout.nb_channels, codecContext_->sample_fmt, static_cast<const std::uint8_t*>(frames), buffer_size, 0);
+    auto ret = avcodec_fill_audio_frame(
+        frame_,
+        codecContext_->ch_layout.nb_channels,
+        codecContext_->sample_fmt,
+        reinterpret_cast<const std::uint8_t*>(raw_buffers.data.data()),
+        static_cast<int>(raw_buffers.data.size()), // NOLINT(*-narrowing-conversions)
+        0);
     if (ret < 0) {
-      LOGE << "Error filling audio frame";
-      return;
+      LOGE << "Error " << ret << " filling audio frame";
+      return {};
     }
+    assert(ret == raw_buffers.data.size() && "Input buffer size and AV frame size are not equal!");
 
     // Encode frame
     ret = avcodec_send_frame(codecContext_, frame_);
     if (ret < 0) {
-      LOGE << "Error sending frame to codec";
-      return;
+      LOGE << "Error " << ret << " encoding frame in avcodec_send_frame.";
+      return {};
+    }
+    ret = avcodec_receive_packet(codecContext_, packet_);
+    if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+      return {};
+    }
+    if (ret < 0) {
+      LOGE << "Error " << ret << " encoding frame in avcodec_receive_packet.";
+      return {};
     }
 
-    while (ret >= 0) {
-      ret = avcodec_receive_packet(codecContext_, packet_);
-      if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
-        break;
-      }
-      if (ret < 0) {
-        LOGE << "Error encoding frame";
-        return;
-      }
-
-      data_callback_(
-          Packet{
-              std::vector(
-                  reinterpret_cast<std::byte*>(packet_->data),
-                  reinterpret_cast<std::byte*>(std::next(packet_->data, packet_->size))),
-              Time::Now()});
-
-      av_packet_unref(packet_);
-    }
-  }
-
-  inline void SetDataCallback(DataCallback callback) {
-    data_callback_ = callback;
+    auto result = Packet{
+            std::vector(
+                reinterpret_cast<std::byte*>(packet_->data),
+                reinterpret_cast<std::byte*>(std::next(packet_->data, packet_->size))),
+            raw_buffers.amount};
+    av_packet_unref(packet_);
+    return result;
   }
 
 };

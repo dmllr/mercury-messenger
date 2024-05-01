@@ -20,8 +20,6 @@
 #include "hela/eillance/rtc/stream.hpp"
 #include "hela/eillance/utils/units.hpp"
 
-#undef max
-
 namespace hela::eillance {
 
 class AudioCapture {
@@ -30,7 +28,11 @@ private:
   ma_device audio_device_{};
   ma_device_config device_config_{ma_device_config_init(ma_device_type_capture)};
 
+  Packet raw_buffers_;
+
   AudioEncoder encoder_;
+
+  std::mutex data_access_mutex_;
 
 public:
   AudioCapture() {
@@ -38,17 +40,36 @@ public:
     device_config_.capture.format = AudioConfig::format;
     device_config_.capture.channels = AudioConfig::channels;
     device_config_.sampleRate = AudioConfig::sampleRate;
-    device_config_.pUserData = &encoder_;
+    device_config_.pUserData = this;
     device_config_.dataCallback = [](ma_device* device, void*, const void* frames, ma_uint32 nb_samples) {
-      auto* encoder = static_cast<AudioEncoder*>(device->pUserData);
-      if (encoder != nullptr) {
-        encoder->EncodeBuffer(frames, nb_samples);
-        // TODO instead of instant encoding, accumulate buffers
+      auto* self = static_cast<AudioCapture*>(device->pUserData);
+      if (self == nullptr) {
+        return;;
+      }
+      const auto* buffer = static_cast<const std::byte*>(frames);
+      const auto size = av_samples_get_buffer_size(
+          nullptr,
+          AudioConfig::channels,
+          static_cast<int>(nb_samples),
+          AV_SAMPLE_FMT_FLTP,
+          0);
+      {
+        auto lock = std::lock_guard<decltype(data_access_mutex_)>(self->data_access_mutex_);
+        self->raw_buffers_.data.insert(
+            self->raw_buffers_.data.end(),
+            buffer,
+            std::next(buffer, size));  // NOLINT(*-narrowing-conversions)
+        self->raw_buffers_.amount += nb_samples;
+        if (0) {
+          std::cout << "+: size = " << self->raw_buffers_.data.size() << ", samples = " << self->raw_buffers_.amount << std::endl;
+        }
       }
     };
   }
 
   void Engage() {
+    raw_buffers_.Clear();
+
     encoder_.Engage();
 
     auto result = ma_context_init(nullptr, 0, nullptr, &context_);
@@ -79,12 +100,20 @@ public:
     encoder_.Revoke();
   }
 
-  void ProcessCapturedBuffers() {
+  Packet FetchBuffers() {
+    data_access_mutex_.lock();
+    auto buffers = raw_buffers_;
+    raw_buffers_.Clear();
+    if (0) {
+      std::cout << "-: size = " << buffers.data.size() << ", samples = " << buffers.amount << ", raw: size = " << raw_buffers_.data.size() << ", samples = " << raw_buffers_.amount << std::endl;
+    }
+    data_access_mutex_.unlock();
+    if (buffers.amount == 0) {
+      return {};
+    }
+    return encoder_.EncodeBuffer(std::move(buffers));
   }
 
-  void SetDataCallback(DataCallback callback) {
-    encoder_.SetDataCallback(std::move(callback));
-  }
 };
 
 }  // namespace hela::eillance
