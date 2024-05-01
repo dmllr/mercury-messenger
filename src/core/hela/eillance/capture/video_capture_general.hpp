@@ -15,7 +15,7 @@
 #include <rtc/common.hpp>
 
 #include "hela/eillance/capture/video_config.hpp"
-#include "hela/eillance/capture/video_encoder_general.hpp"
+#include "hela/eillance/capture/video_encoder_libffmpeg.hpp"
 #include "hela/eillance/common/packet.hpp"
 #include "hela/eillance/logging/logging.h"
 #include "hela/eillance/rtc/stream.hpp"
@@ -71,7 +71,7 @@ public:
     }
 
     #if defined __ANDROID__
-    cap_.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('B','G','R','3'));
+    cap_.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('N','V','2','1'));
     #endif
     // attempt to set desired resolution
     cap_.set(cv::CAP_PROP_FRAME_WIDTH, VideoConfig::width);
@@ -118,9 +118,13 @@ public:
   }
 
   Packet FetchBuffers() {
-    auto frame = cv_frame_;
-    cv::cvtColor(frame, frame, cv::COLOR_BGR2YUV_YV12);
-    YV12toNV12(frame, nv12_frame_);
+    if (cv_frame_.empty()) {
+      return {};
+    }
+//    auto frame = cv_frame_;
+//    cv::cvtColor(frame, frame, cv::COLOR_BGR2YUV_YV12);
+//    YV12toNV12(frame, nv12_frame_);
+    nv12_frame_ = cv_frame_;
 
     return encoder_.EncodeBuffer(nv12_frame_.data);
   }
