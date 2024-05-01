@@ -8,6 +8,7 @@ target_link_libraries(hela-eillance-core INTERFACE
   libffmpeg
   libminiaudio
   datachannel-static
+  opus
   plog
   nlohmann_json
   srtp2

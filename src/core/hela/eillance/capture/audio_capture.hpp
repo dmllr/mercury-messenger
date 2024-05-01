@@ -47,12 +47,7 @@ public:
         return;;
       }
       const auto* buffer = static_cast<const std::byte*>(frames);
-      const auto size = av_samples_get_buffer_size(
-          nullptr,
-          AudioConfig::channels,
-          static_cast<int>(nb_samples),
-          AV_SAMPLE_FMT_FLTP,
-          0);
+      const auto size = nb_samples * AudioConfig::channels * sizeof(float);
       {
         auto lock = std::lock_guard<decltype(data_access_mutex_)>(self->data_access_mutex_);
         self->raw_buffers_.data.insert(
