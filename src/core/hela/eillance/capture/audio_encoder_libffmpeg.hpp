@@ -90,7 +90,7 @@ public:
     codecContext_->frame_size = raw_buffers.amount; // NOLINT(*-narrowing-conversions)
     frame_->nb_samples = codecContext_->frame_size;
 
-    frame_->pts = av_gettime_relative() / Units::Milliseconds;  // NOLINT(*-narrowing-conversions)
+    frame_->pts = Time::Now();
     auto ret = avcodec_fill_audio_frame(
         frame_,
         codecContext_->ch_layout.nb_channels,

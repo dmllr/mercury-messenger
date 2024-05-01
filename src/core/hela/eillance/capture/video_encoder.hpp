@@ -112,7 +112,7 @@ public:
     av_frame_->data[0] = reinterpret_cast<std::uint8_t*>(frames);
     av_frame_->data[1] = std::next(av_frame_->data[0], size);
     av_frame_->data[2] = std::next(av_frame_->data[1], size / 4);
-    av_frame_->pts = av_gettime_relative() / Units::Milliseconds;
+    av_frame_->pts = Time::Now();
 
     int ret = avcodec_send_frame(codec_context_, av_frame_);
     if (ret < 0) {
