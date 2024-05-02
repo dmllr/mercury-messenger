@@ -35,7 +35,7 @@ public:
   }
 
   Packet EncodeBuffer(float* pcm_buffer) {
-    std::vector<unsigned char> encoded_buffer(AudioConfig::sampleSize);
+    std::vector<unsigned char> encoded_buffer(AudioConfig::encodedFrameSizeBytes);
 
     auto size = opus_encode_float(
         opus_encoder_, pcm_buffer, AudioConfig::numberOfSamples,

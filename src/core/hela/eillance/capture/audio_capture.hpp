@@ -27,7 +27,7 @@ class AudioCapture {
   ma_device audio_device_{};
   ma_device_config device_config_{ma_device_config_init(ma_device_type_capture)};
 
-  std::array<float, AudioConfig::sampleSize> pcm_buffer_;
+  std::array<float, AudioConfig::frameSize> pcm_buffer_;
 
   AudioEncoder encoder_;
 
@@ -41,6 +41,7 @@ public:
     device_config_.sampleRate = AudioConfig::sampleRate;
     device_config_.pUserData = this;
     device_config_.dataCallback = [](ma_device* device, void*, const void* frames, ma_uint32 nb_samples) {
+      assert(nb_samples == AudioConfig::numberOfSamples);
       auto* self = static_cast<AudioCapture*>(device->pUserData);
       if (self == nullptr) {
         return;;
@@ -50,7 +51,7 @@ public:
         auto lock = std::lock_guard<decltype(data_access_mutex_)>(self->data_access_mutex_);
         std::copy(
             buffer,
-            std::next(buffer, AudioConfig::sampleSize),
+            std::next(buffer, AudioConfig::frameSize),
             self->pcm_buffer_.begin());
       }
     };

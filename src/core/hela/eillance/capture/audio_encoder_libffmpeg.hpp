@@ -47,7 +47,7 @@ public:
 
     // Set codec options
     codecContext_->sample_fmt = AV_SAMPLE_FMT_FLTP;
-    codecContext_->bit_rate = 64000;                       // TODO: take from UI a desired bit rate
+    codecContext_->bit_rate = AudioConfig::encodedBitrate;
     codecContext_->sample_rate = AudioConfig::sampleRate;
     codecContext_->frame_size = AudioConfig::numberOfSamples;
     av_channel_layout_default(&codecContext_->ch_layout, AudioConfig::channels);  // NOLINT(*-narrowing-conversions)
@@ -95,7 +95,7 @@ public:
         codecContext_->ch_layout.nb_channels,
         codecContext_->sample_fmt,
         reinterpret_cast<const std::uint8_t*>(pcm_buffer),
-        AudioConfig::sampleSize,
+        AudioConfig::frameSizeBytes,
         0);
     if (ret < 0) {
       LOGE << "Error " << ret << " filling audio frame";
