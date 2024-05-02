@@ -23,12 +23,11 @@
 namespace hela::eillance {
 
 class AudioCapture {
-private:
   ma_context context_{};
   ma_device audio_device_{};
   ma_device_config device_config_{ma_device_config_init(ma_device_type_capture)};
 
-  Packet raw_buffers_;
+  std::array<float, AudioConfig::sampleSize> pcm_buffer_;
 
   AudioEncoder encoder_;
 
@@ -46,25 +45,18 @@ public:
       if (self == nullptr) {
         return;;
       }
-      const auto* buffer = static_cast<const std::byte*>(frames);
-      const auto size = nb_samples * AudioConfig::channels * sizeof(float);
+      const auto* buffer = static_cast<const float*>(frames);
       {
         auto lock = std::lock_guard<decltype(data_access_mutex_)>(self->data_access_mutex_);
-        self->raw_buffers_.data.insert(
-            self->raw_buffers_.data.end(),
+        std::copy(
             buffer,
-            std::next(buffer, size));  // NOLINT(*-narrowing-conversions)
-        self->raw_buffers_.amount += nb_samples;
-        if (0) {
-          std::cout << "+: size = " << self->raw_buffers_.data.size() << ", samples = " << self->raw_buffers_.amount << std::endl;
-        }
+            std::next(buffer, AudioConfig::sampleSize),
+            self->pcm_buffer_.begin());
       }
     };
   }
 
   void Engage() {
-    raw_buffers_.Clear();
-
     encoder_.Engage();
 
     auto result = ma_context_init(nullptr, 0, nullptr, &context_);
@@ -96,17 +88,8 @@ public:
   }
 
   Packet FetchBuffers() {
-    data_access_mutex_.lock();
-    auto buffers = raw_buffers_;
-    raw_buffers_.Clear();
-    if (0) {
-      std::cout << "-: size = " << buffers.data.size() << ", samples = " << buffers.amount << ", raw: size = " << raw_buffers_.data.size() << ", samples = " << raw_buffers_.amount << std::endl;
-    }
-    data_access_mutex_.unlock();
-    if (buffers.amount == 0) {
-      return {};
-    }
-    return encoder_.EncodeBuffer(std::move(buffers));
+    auto lock = std::lock_guard<decltype(data_access_mutex_)>(data_access_mutex_);
+    return encoder_.EncodeBuffer(pcm_buffer_.data());
   }
 
 };

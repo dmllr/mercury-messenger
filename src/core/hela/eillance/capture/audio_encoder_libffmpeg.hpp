@@ -48,7 +48,8 @@ public:
     // Set codec options
     codecContext_->sample_fmt = AV_SAMPLE_FMT_FLTP;
     codecContext_->bit_rate = 64000;                       // TODO: take from UI a desired bit rate
-    codecContext_->sample_rate = AudioConfig::sampleRate;  // NOLINT(*-narrowing-conversions)
+    codecContext_->sample_rate = AudioConfig::sampleRate;
+    codecContext_->frame_size = AudioConfig::numberOfSamples;
     av_channel_layout_default(&codecContext_->ch_layout, AudioConfig::channels);  // NOLINT(*-narrowing-conversions)
 
     // Open codec
@@ -67,6 +68,7 @@ public:
     }
 
     // Set frame parameters
+    frame_->nb_samples = codecContext_->frame_size;
     frame_->format = codecContext_->sample_fmt;
     frame_->ch_layout = codecContext_->ch_layout;
 
@@ -86,23 +88,19 @@ public:
     }
   }
 
-  Packet EncodeBuffer(Packet raw_buffers) {
-    codecContext_->frame_size = raw_buffers.amount; // NOLINT(*-narrowing-conversions)
-    frame_->nb_samples = codecContext_->frame_size;
-
+  Packet EncodeBuffer(float* pcm_buffer) {
     frame_->pts = Time::Now();
     auto ret = avcodec_fill_audio_frame(
         frame_,
         codecContext_->ch_layout.nb_channels,
         codecContext_->sample_fmt,
-        reinterpret_cast<const std::uint8_t*>(raw_buffers.data.data()),
-        static_cast<int>(raw_buffers.data.size()), // NOLINT(*-narrowing-conversions)
+        reinterpret_cast<const std::uint8_t*>(pcm_buffer),
+        AudioConfig::sampleSize,
         0);
     if (ret < 0) {
       LOGE << "Error " << ret << " filling audio frame";
       return {};
     }
-    assert(ret == raw_buffers.data.size() && "Input buffer size and AV frame size are not equal!");
 
     // Encode frame
     ret = avcodec_send_frame(codecContext_, frame_);
@@ -123,7 +121,7 @@ public:
             std::vector(
                 reinterpret_cast<std::byte*>(packet_->data),
                 reinterpret_cast<std::byte*>(std::next(packet_->data, packet_->size))),
-            raw_buffers.amount};
+            1};
     av_packet_unref(packet_);
     return result;
   }

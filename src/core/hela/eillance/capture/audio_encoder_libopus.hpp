@@ -34,24 +34,19 @@ public:
     opus_encoder_destroy(opus_encoder_);
   }
 
-  Packet EncodeBuffer(Packet raw_buffers) {
-    auto* pcm_buffer = reinterpret_cast<const float*>(raw_buffers.data.data());
+  Packet EncodeBuffer(float* pcm_buffer) {
+    std::vector<unsigned char> encoded_buffer(AudioConfig::sampleSize);
 
-    const auto MAX_PCM_BUFFER_SIZE = 100ULL * raw_buffers.amount * 480ULL * AudioConfig::channels * sizeof(float);
-    std::vector<unsigned char> encoded_buffer(MAX_PCM_BUFFER_SIZE);
-
-    if (likely(raw_buffers.amount > 0)) {
-      auto size = opus_encode_float(
-          opus_encoder_, pcm_buffer, raw_buffers.amount,
-          encoded_buffer.data(), static_cast<opus_int32>(encoded_buffer.size()));
-      if (likely(size > 0)) {
-        auto result = Packet{
-            std::vector(
-                reinterpret_cast<std::byte*>(encoded_buffer.data()),
-                reinterpret_cast<std::byte*>(std::next(encoded_buffer.data(), size))),
-            raw_buffers.amount};
-        return result;
-      }
+    auto size = opus_encode_float(
+        opus_encoder_, pcm_buffer, AudioConfig::numberOfSamples,
+        encoded_buffer.data(), static_cast<opus_int32>(encoded_buffer.size()));
+    if (likely(size > 0)) {
+      auto result = Packet{
+          std::vector(
+              reinterpret_cast<std::byte*>(encoded_buffer.data()),
+              reinterpret_cast<std::byte*>(std::next(encoded_buffer.data(), size))),
+          1};
+      return result;
     }
     return {};
   }
