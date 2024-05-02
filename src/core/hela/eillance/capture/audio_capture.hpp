@@ -41,7 +41,7 @@ public:
     device_config_.sampleRate = AudioConfig::sampleRate;
     device_config_.pUserData = this;
     device_config_.dataCallback = [](ma_device* device, void*, const void* frames, ma_uint32 nb_samples) {
-      assert(nb_samples == AudioConfig::numberOfSamples);
+      assert(nb_samples == AudioConfig::frameSize);
       auto* self = static_cast<AudioCapture*>(device->pUserData);
       if (self == nullptr) {
         return;;

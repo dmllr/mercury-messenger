@@ -5,14 +5,14 @@
 namespace hela::eillance {
 
 struct AudioConfig {
+  // This audio config assumes a sample duration to be 10ms.
   static constexpr auto format = ma_format_f32;
   static constexpr auto channels = 2U;
   static constexpr auto sampleRate = 48000ULL;
-  static constexpr auto numberOfSamples = sampleRate / 50;  // 20ms per frame
-  static constexpr auto frameSize = numberOfSamples * channels;
+  static constexpr auto frameSize = (sampleRate / 100);  // 10ms (1/100s) per frame
   static constexpr auto frameSizeBytes = frameSize * sizeof(float);
   static constexpr auto encodedBitrate = 65536ULL;
-  static constexpr auto encodedFrameSizeBytes = 8 + (encodedBitrate / 50);  // 20ms per frame
+  static constexpr auto encodedFrameSizeBytes = 2 * (encodedBitrate / 100);  // 10ms (1/100s) per frame, twice than estimated
 };
 
 }  // namespace hela::eillance

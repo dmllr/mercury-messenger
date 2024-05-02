@@ -83,11 +83,11 @@ int main() {
 
   // Encode PCM buffer frame by frame
   std::vector<hela::eillance::Packet> encoded_packets;
-  const size_t frame_size = hela::eillance::AudioConfig::numberOfSamples * hela::eillance::AudioConfig::channels;
+  const size_t frame_size = hela::eillance::AudioConfig::frameSize;
   for (size_t i = 0; i < pcm_buffer.size(); i += frame_size) {
-    const hela::eillance::Packet encodedPacket = encoder.EncodeBuffer(&pcm_buffer[i]);
-    if (!encodedPacket.data.empty()) {
-      encoded_packets.push_back(encodedPacket);
+    const hela::eillance::Packet encoded_packet = encoder.EncodeBuffer(&pcm_buffer[i]);
+    if (!encoded_packet.data.empty()) {
+      encoded_packets.push_back(encoded_packet);
     } else {
       std::cerr << "Failed to encode audio frame " << (i / frame_size) << std::endl;
       encoder.Revoke();
