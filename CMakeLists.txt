@@ -21,5 +21,5 @@ include("src/cmake/libminiaudio.cmake")
 include("src/cmake/libjson.cmake")
 
 add_subdirectory("src/core")
-add_subdirectory(src/apps/camera-host-cli-cp)
-add_subdirectory(src/tests)
+add_subdirectory("src/apps")
+add_subdirectory("src/tests")
