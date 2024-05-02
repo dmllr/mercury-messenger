@@ -22,7 +22,7 @@ int main(int argc, char** argv) {
 
   ma_encoder encoder;
   ma_encoder_config encoderConfig;
-  encoderConfig = ma_encoder_config_init(ma_encoding_format_wav, ma_format_f32, 2, 44100);
+  encoderConfig = ma_encoder_config_init(ma_encoding_format_wav, ma_format_f32, 2, 48000);
 
   if (ma_encoder_init_file(outputFile.string().c_str(), &encoderConfig, &encoder) != MA_SUCCESS) {
     std::cerr << "Failed to initialize output file.\n";
