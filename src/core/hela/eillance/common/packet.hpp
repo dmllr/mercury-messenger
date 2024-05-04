@@ -1,19 +1,79 @@
 #pragma once
 
+#include <array>
+#include <vector>
+#include <cassert>
 #include <cstdint>
 
-#include "rtc/common.hpp"
+#include <rtc/common.hpp>
+
+#include "hela/eillance/utils/time.hpp"
 
 
 namespace hela::eillance {
 
-struct Packet {
-  rtc::binary data;
-  std::uint32_t amount;
+class Packet {
+  rtc::binary buffer_{};
+  std::uint64_t timestamp_{Time::Now()};
 
-  void Clear() {
-    data.clear();
-    amount = 0;
+public:
+  Packet() = default;
+
+  /// construct from rtc::binary pointer and size
+  explicit Packet(rtc::binary&& buffer) : buffer_(std::move(buffer)) {
+  }
+
+  /// construct from std::byte pointer and size
+  Packet(const std::byte* data, std::uint32_t data_size) {
+    buffer_.insert(buffer_.begin(), data, std::next(data, data_size));
+  }
+
+  /// construct from two std::byte pointers
+  Packet(const std::byte* data_begin, const std::byte* data_end) {
+    buffer_.insert(buffer_.begin(), data_begin, data_end);
+  }
+
+  /// construct from uchar pointer and size
+  Packet(const unsigned char* data, std::uint32_t data_size) {
+    // NOLINTNEXTLINE(*-pro-type-reinterpret-cast)
+    auto* bytes = reinterpret_cast<const std::byte*>(data);
+
+    buffer_.insert(buffer_.begin(), bytes, std::next(bytes, data_size));
+  }
+
+  /// construct from two uchar pointers
+  // NOLINTNEXTLINE(*-easily-swappable-parameters)
+  Packet(const unsigned char* data_begin, const unsigned char* data_end) {
+    // NOLINTNEXTLINE(*-pro-type-reinterpret-cast)
+    auto* bytes_begin = reinterpret_cast<const std::byte*>(data_begin);
+    // NOLINTNEXTLINE(*-pro-type-reinterpret-cast)
+    auto* bytes_end = reinterpret_cast<const std::byte*>(data_end);
+
+    buffer_.insert(buffer_.begin(), bytes_begin, bytes_end);
+  }
+
+  /// construct from std::vector
+  explicit Packet(const std::vector<std::byte>& data) : buffer_(data) {
+  }
+
+  [[nodiscard]] auto buffer() {
+    return buffer_;
+  }
+
+  [[nodiscard]] auto data() {
+    return buffer_.data();
+  }
+
+  [[nodiscard]] auto timestamp() const {
+    return timestamp_;
+  }
+
+  [[nodiscard]] auto size() const {
+    return buffer_.size();
+  }
+
+  void clear() {
+    buffer_.clear();
   }
 };
 

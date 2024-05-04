@@ -5,39 +5,39 @@
 #include <string>
 #include <filesystem>
 
-void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount)
+void DataCallback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount)
 {
-  ma_encoder* pEncoder = (ma_encoder*)pDevice->pUserData;
-  MA_ASSERT(pEncoder != NULL);
+  auto* pEncoder = (ma_encoder*)pDevice->pUserData;
+  MA_ASSERT(pEncoder != nullptr);
 
-  ma_encoder_write_pcm_frames(pEncoder, pInput, frameCount, NULL);
+  ma_encoder_write_pcm_frames(pEncoder, pInput, frameCount, nullptr);
 
   (void)pOutput;
 }
 
-int main(int argc, char** argv) {
-  const auto exePath = std::filesystem::absolute(argv[0]);
-  const auto outputDir = exePath.parent_path();
-  const auto outputFile = outputDir / "recording.wav";
+int main(int  /*argc*/, char** argv) {
+  const auto exe_path = std::filesystem::absolute(argv[0]);
+  const auto output_dir = exe_path.parent_path();
+  const auto output_file = output_dir / "recording.wav";
 
   ma_encoder encoder;
-  ma_encoder_config encoderConfig;
-  encoderConfig = ma_encoder_config_init(ma_encoding_format_wav, ma_format_f32, 2, 48000);
+  ma_encoder_config encoder_config;
+  encoder_config = ma_encoder_config_init(ma_encoding_format_wav, ma_format_f32, 2, 48000);
 
-  if (ma_encoder_init_file(outputFile.string().c_str(), &encoderConfig, &encoder) != MA_SUCCESS) {
+  if (ma_encoder_init_file(output_file.string().c_str(), &encoder_config, &encoder) != MA_SUCCESS) {
     std::cerr << "Failed to initialize output file.\n";
     return -1;
   }
 
-  auto deviceConfig = ma_device_config_init(ma_device_type_capture);
-  deviceConfig.capture.format   = encoder.config.format;
-  deviceConfig.capture.channels = encoder.config.channels;
-  deviceConfig.sampleRate       = encoder.config.sampleRate;
-  deviceConfig.dataCallback     = data_callback;
-  deviceConfig.pUserData        = &encoder;
+  auto device_config = ma_device_config_init(ma_device_type_capture);
+  device_config.capture.format   = encoder.config.format;
+  device_config.capture.channels = encoder.config.channels;
+  device_config.sampleRate       = encoder.config.sampleRate;
+  device_config.dataCallback     = DataCallback;
+  device_config.pUserData        = &encoder;
 
   ma_device device;
-  auto result = ma_device_init(NULL, &deviceConfig, &device);
+  auto result = ma_device_init(NULL, &device_config, &device);
   if (result != MA_SUCCESS) {
     std::cerr << "Failed to initialize capture device." << std::endl;
     return -2;

@@ -41,12 +41,7 @@ public:
         opus_encoder_, pcm_buffer, AudioConfig::frameSize,
         encoded_buffer.data(), static_cast<opus_int32>(encoded_buffer.size()));
     if (likely(size > 0)) {
-      auto result = Packet{
-          std::vector(
-              reinterpret_cast<std::byte*>(encoded_buffer.data()),
-              reinterpret_cast<std::byte*>(std::next(encoded_buffer.data(), size))),
-          1};
-      return result;
+      return Packet{encoded_buffer.data(), static_cast<uint32_t>(size)};
     }
     return {};
   }

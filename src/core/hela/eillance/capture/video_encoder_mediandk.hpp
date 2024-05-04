@@ -126,7 +126,7 @@ public:
       encoded_data.clear();
     }
 
-    return Packet{encoded_data,1};
+    return Packet{std::move(encoded_data)};
   }
 };
 

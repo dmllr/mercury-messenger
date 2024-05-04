@@ -16,10 +16,10 @@
 
 #include "hela/eillance/capture/video_config.hpp"
 #include "hela/eillance/capture/video_encoder_libffmpeg.hpp"
+#include "hela/eillance/common/dispatch_queue.hpp"
 #include "hela/eillance/common/packet.hpp"
 #include "hela/eillance/logging/logging.h"
 #include "hela/eillance/rtc/stream.hpp"
-#include "hela/eillance/utils/dispatch_queue.hpp"
 #include "hela/eillance/utils/units.hpp"
 
 namespace hela::eillance {

@@ -17,7 +17,6 @@ private:
   Capture capture_;
 
   std::uint64_t start_time_{};
-  std::uint64_t sample_time_{start_time_};
   Packet sample_{};
   rtc::binary encoded_data_{};
 
@@ -27,16 +26,14 @@ public:
   void Start() final {
     capture_.Engage();
     start_time_ = Time::Now();
-    sample_time_ = start_time_;
   }
 
   void LoadNextSample() final {
-    sample_ = capture_.FetchBuffers();
-    sample_time_ = Time::Now();
+    sample_ = std::move(capture_.FetchBuffers());
   }
 
   auto GetSample() -> rtc::binary final {
-    return sample_.data;
+    return sample_.buffer();
   }
 
   void Stop() final {
@@ -44,7 +41,7 @@ public:
   }
 
   auto GetSampleTime() -> uint64_t final {
-    return sample_time_ - start_time_;
+    return sample_.timestamp();
   }
 };
 

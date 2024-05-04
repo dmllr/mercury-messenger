@@ -117,11 +117,7 @@ public:
       return {};
     }
 
-    auto result = Packet{
-            std::vector(
-                reinterpret_cast<std::byte*>(packet_->data),
-                reinterpret_cast<std::byte*>(std::next(packet_->data, packet_->size))),
-            1};
+    auto result = Packet{packet_->data, static_cast<uint32_t>(packet_->size)};
     av_packet_unref(packet_);
     return result;
   }

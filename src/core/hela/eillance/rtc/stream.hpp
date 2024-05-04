@@ -10,8 +10,8 @@
 
 #include <rtc/rtc.hpp>
 
+#include "hela/eillance/common/dispatch_queue.hpp"
 #include "hela/eillance/rtc/peer.hpp"
-#include "hela/eillance/utils/dispatch_queue.hpp"
 
 
 namespace hela::eillance {
@@ -70,32 +70,28 @@ private:
     std::shared_ptr<Source> ss;
     Source::Type sst;
     uint64_t next_time;
-    auto at = audio_->GetSampleTime();
-    auto vt = video_->GetSampleTime();
-    if (at < vt) {
+    if (audio_->GetSampleTime() < video_->GetSampleTime()) {
       ss = audio_;
       sst = Source::Type::Audio;
-      next_time = at;
+      next_time = audio_->GetSampleTime();
     } else {
       ss = video_;
       sst = Source::Type::Video;
-      next_time = vt;
+      next_time = video_->GetSampleTime();
     }
 
     auto current_time = Time::Now();
 
-    auto elapsed = current_time - startTime;
     if (0) {
-      std::cout << "AT: " << at << "\n"
-                << "VT: " << vt << "\n"
+      std::cout << "AT: " << audio_->GetSampleTime() << "\n"
+                << "VT: " << video_->GetSampleTime() << "\n"
                 << "NX: " << next_time << "\n"
-                << "EL: " << elapsed << "\n"
-                << "WT: " << ((next_time > elapsed) ? next_time - elapsed : 0) << "\n"
+                << "WT: " << ((next_time > current_time) ? next_time - current_time : 0) << "\n"
                 << " T: " << ((sst == Source::Type::Audio) ? "Audio" : "Video") << "\n"
                 << std::endl;
     }
-    if (next_time > elapsed) {
-      auto wait_time = next_time - elapsed;
+    if (unlikely(next_time > current_time)) {
+      auto wait_time = next_time - current_time;
       mutex.unlock();
       std::this_thread::sleep_for(std::chrono::microseconds(wait_time));
       mutex.lock();
