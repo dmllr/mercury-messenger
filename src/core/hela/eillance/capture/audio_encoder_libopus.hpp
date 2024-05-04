@@ -25,7 +25,7 @@ public:
   void Engage() {
     // opus
     auto error = 0;
-    opus_encoder_ = opus_encoder_create(AudioConfig::sampleRate, AudioConfig::channels, OPUS_APPLICATION_AUDIO, &error);
+    opus_encoder_ = opus_encoder_create(AudioConfig::sampleRate, AudioConfig::channels, OPUS_APPLICATION_VOIP, &error);
     assert(error == OPUS_OK);
     assert(opus_encoder_ != nullptr);
   }

@@ -60,12 +60,20 @@ public:
     return buffer_;
   }
 
-  [[nodiscard]] auto data() {
+  [[nodiscard]] auto data() const {
     return buffer_.data();
+  }
+
+  [[nodiscard]] auto dataAsChars() const {
+    return reinterpret_cast<const char*>(buffer_.data());
   }
 
   [[nodiscard]] auto timestamp() const {
     return timestamp_;
+  }
+
+  [[nodiscard]] auto empty() const {
+    return buffer_.empty();
   }
 
   [[nodiscard]] auto size() const {

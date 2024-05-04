@@ -87,7 +87,7 @@ int main() {
   auto empty_frames = 0;
   for (size_t i = 0; i < pcm_buffer.size(); i += frame_size) {
     const auto encoded_packet = encoder.EncodeBuffer(&pcm_buffer[i]);
-    if (!encoded_packet.data.empty()) {
+    if (!encoded_packet.empty()) {
       encoded_packets.push_back(encoded_packet);
     } else {
       empty_frames++;
@@ -122,7 +122,7 @@ int main() {
   }
 
   for (const auto& packet : encoded_packets) {
-    out_file.write(reinterpret_cast<const char*>(packet.data.data()), packet.data.size());
+    out_file.write(packet.dataAsChars(), packet.size());
   }
 
   // Check if writing was successful
