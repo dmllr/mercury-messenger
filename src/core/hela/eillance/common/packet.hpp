@@ -68,6 +68,10 @@ public:
     return reinterpret_cast<const char*>(buffer_.data());
   }
 
+  [[nodiscard]] auto dataAsUChars() const {
+    return reinterpret_cast<const unsigned char*>(buffer_.data());
+  }
+
   [[nodiscard]] auto timestamp() const {
     return timestamp_;
   }
