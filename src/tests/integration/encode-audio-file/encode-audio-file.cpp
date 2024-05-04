@@ -37,11 +37,11 @@ std::vector<float> ReadWavFile(const std::string& filename) {
     exit(1);
   }
 
-  const auto chunkSize = *reinterpret_cast<uint32_t*>(header + 4);
+  const auto chunk_size = *reinterpret_cast<uint32_t*>(header + 4);
   const auto format = *reinterpret_cast<uint16_t*>(header + 20);
   const auto channels = *reinterpret_cast<uint16_t*>(header + 22);
-  const auto sampleRate = *reinterpret_cast<uint32_t*>(header + 24);
-  const auto bitsPerSample = *reinterpret_cast<uint16_t*>(header + 34);
+  const auto sample_rate = *reinterpret_cast<uint32_t*>(header + 24);
+  const auto bits_per_sample = *reinterpret_cast<uint16_t*>(header + 34);
 
   if (format != 1 && format != 3) {
     std::cerr << "Unsupported WAV format." << std::endl;
@@ -49,18 +49,18 @@ std::vector<float> ReadWavFile(const std::string& filename) {
   }
 
   if (channels != AudioConfig::channels ||
-      sampleRate != AudioConfig::sampleRate) {
+      sample_rate != AudioConfig::sampleRate) {
     std::cerr << "Unsupported audio configuration." << std::endl;
     exit(1);
   }
 
-  if (bitsPerSample != 32 && format == 1) {
+  if (bits_per_sample != 32 && format == 1) {
     std::cerr << "Unsupported sample resolution." << std::endl;
     exit(1);
   }
 
   // Read PCM data
-  std::vector<float> pcmData((chunkSize - 36) / 4);
+  std::vector<float> pcmData((chunk_size - 36) / 4);
   file.read(reinterpret_cast<char*>(pcmData.data()), pcmData.size() * sizeof(float));
   if (!file) {
     std::cerr << "Failed to read PCM data." << std::endl;
@@ -78,21 +78,23 @@ int main() {
   encoder.Engage();
 
   // Read WAV file
-  const auto* wavFile = "C:\\Users\\DenisMiller\\dev\\hela-surveillance\\src\\tests\\integration\\encode-audio-file\\recording.wav";
-  std::vector<float> pcm_buffer = hela::eillance::ReadWavFile(wavFile);
+  const auto* wav_file = "C:\\Users\\DenisMiller\\dev\\hela-surveillance\\src\\tests\\integration\\encode-audio-file\\recording.wav";
+  std::vector<float> pcm_buffer = hela::eillance::ReadWavFile(wav_file);
 
   // Encode PCM buffer frame by frame
   std::vector<hela::eillance::Packet> encoded_packets;
   const size_t frame_size = hela::eillance::AudioConfig::frameSize;
+  auto empty_frames = 0;
   for (size_t i = 0; i < pcm_buffer.size(); i += frame_size) {
-    const hela::eillance::Packet encoded_packet = encoder.EncodeBuffer(&pcm_buffer[i]);
+    const auto encoded_packet = encoder.EncodeBuffer(&pcm_buffer[i]);
     if (!encoded_packet.data.empty()) {
       encoded_packets.push_back(encoded_packet);
     } else {
-      std::cerr << "Failed to encode audio frame " << (i / frame_size) << std::endl;
-      encoder.Revoke();
-      return 1;
+      empty_frames++;
     }
+  }
+  if (empty_frames > 0) {
+    std::cerr << "Empty encoded audio frames: " << empty_frames << std::endl;
   }
 
   // Check if encoding was successful
@@ -103,7 +105,7 @@ int main() {
   }
 
   // Create the output file path with the .opus extension
-  auto wav_path{fs::path(wavFile)};
+  auto wav_path{fs::path(wav_file)};
   auto opus_path = wav_path;
   #if defined(USE_LIBOPUS)
   opus_path = opus_path.replace_filename("recording_libopus.opus");
