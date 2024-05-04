@@ -10,7 +10,6 @@ struct AudioConfig {
   static constexpr auto channels = 2U;
   static constexpr auto sampleRate = 48000ULL;
   static constexpr auto frameSize = (sampleRate / 100);  // 10ms (1/100s) per frame
-  static constexpr auto frameSizeBytes = frameSize * sizeof(float);
   static constexpr auto encodedBitrate = 65536ULL;
   static constexpr auto encodedFrameSizeBytes = 2 * (encodedBitrate / 100);  // 10ms (1/100s) per frame, twice than estimated
 };

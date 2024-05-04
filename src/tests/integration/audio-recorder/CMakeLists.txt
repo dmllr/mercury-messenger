@@ -1,4 +1,4 @@
-set(src_path "../..")
+set(src_path "../../..")
 
 add_executable(audio-recorder
   main.cpp

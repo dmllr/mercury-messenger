@@ -9,7 +9,6 @@
 #include <utility>
 #include <vector>
 
-#define MINIAUDIO_IMPLEMENTATION
 #include <miniaudio.h>
 #include <rtc/common.hpp>
 

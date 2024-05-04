@@ -2,8 +2,15 @@ import_remote("https://github.com/mackron/miniaudio.git" TAG "0.11.21" DST "${CM
 
 add_library(libminiaudio INTERFACE
   "${libminiaudio_path}/miniaudio.h"
-  "${CMAKE_CURRENT_LIST_DIR}/libminiaudio.files/miniaudio.c"
 )
 target_include_directories(libminiaudio INTERFACE
   "${libminiaudio_path}"
+)
+target_compile_definitions(libminiaudio INTERFACE
+  MINIAUDIO_IMPLEMENTATION
+  MA_NO_DECODING
+  MA_NO_ENCODING
+  MA_NO_GENERATION
+  MA_NO_RESOURCE_MANAGER
+  MA_NO_ENGINE
 )

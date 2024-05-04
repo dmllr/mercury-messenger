@@ -1,4 +1,4 @@
-#define MINIAUDIO_IMPLEMENTATION
+#undef MA_NO_ENCODING
 #include "miniaudio.h"
 
 #include <iostream>
