@@ -16,16 +16,18 @@ class StreamSource : public Stream::Source {
 private:
   Capture capture_;
 
-  std::uint64_t start_time_{};
   Packet sample_{};
   rtc::binary encoded_data_{};
 
 public:
-  StreamSource(Capture capture) : capture_(std::move(capture)) {};
+  explicit StreamSource(Capture capture) : capture_(std::move(capture)) {};
+  StreamSource(StreamSource&&) = delete;
+  StreamSource(const StreamSource&) = delete;
+  StreamSource& operator=(StreamSource&&) = delete;
+  StreamSource& operator=(const StreamSource&) = delete;
 
   void Start() final {
     capture_.Engage();
-    start_time_ = Time::Now();
   }
 
   void LoadNextSample() final {
@@ -43,6 +45,9 @@ public:
   auto GetSampleTime() -> uint64_t final {
     return sample_.timestamp();
   }
+
+protected:
+  ~StreamSource() = default;
 };
 
 }  // namespace hela::eillance
