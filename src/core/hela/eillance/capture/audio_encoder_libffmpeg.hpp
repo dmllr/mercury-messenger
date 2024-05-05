@@ -46,7 +46,7 @@ public:
     }
 
     // Set codec options
-    codecContext_->sample_fmt = AV_SAMPLE_FMT_FLTP;
+    codecContext_->sample_fmt = AudioConfig::avSampleFormat;
     codecContext_->bit_rate = AudioConfig::bitrate;
     codecContext_->sample_rate = AudioConfig::sampleRate;
     codecContext_->frame_size = AudioConfig::frameSize;
@@ -88,7 +88,7 @@ public:
     }
   }
 
-  Packet EncodeBuffer(float* pcm_buffer) {
+  Packet EncodeBuffer(AudioConfig::sampleDataType* pcm_buffer) {
     frame_->pts = Time::Now();
     auto ret = avcodec_fill_audio_frame(
         frame_,
