@@ -12,7 +12,7 @@
 
 namespace hela::eillance {
 
-class StreamSource : public Stream::Source {
+class StreamSource final : public Stream::Source {
 private:
   Capture capture_;
 
@@ -20,6 +20,7 @@ private:
   rtc::binary encoded_data_{};
 
 public:
+  ~StreamSource() = default;
   explicit StreamSource(Capture capture) : capture_(std::move(capture)) {};
   StreamSource(StreamSource&&) = delete;
   StreamSource(const StreamSource&) = delete;
@@ -46,8 +47,6 @@ public:
     return sample_.timestamp();
   }
 
-protected:
-  ~StreamSource() = default;
 };
 
 }  // namespace hela::eillance

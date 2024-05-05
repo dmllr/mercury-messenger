@@ -47,7 +47,7 @@ public:
 
     // Set codec options
     codecContext_->sample_fmt = AV_SAMPLE_FMT_FLTP;
-    codecContext_->bit_rate = AudioConfig::encodedBitrate;
+    codecContext_->bit_rate = AudioConfig::bitrate;
     codecContext_->sample_rate = AudioConfig::sampleRate;
     codecContext_->frame_size = AudioConfig::frameSize;
     av_channel_layout_default(&codecContext_->ch_layout, AudioConfig::channels);  // NOLINT(*-narrowing-conversions)
