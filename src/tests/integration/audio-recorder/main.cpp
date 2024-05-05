@@ -1,9 +1,9 @@
-#undef MA_NO_ENCODING
 #include "miniaudio.h"
 
+#include <filesystem>
 #include <iostream>
 #include <string>
-#include <filesystem>
+#include <thread>
 
 void DataCallback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount)
 {
@@ -50,8 +50,7 @@ int main(int  /*argc*/, char** argv) {
     return -3;
   }
 
-  std::cout << "Press Enter to stop recording..." << std::endl;
-  getchar();
+  std::this_thread::sleep_for(std::chrono::milliseconds(2000));
 
   ma_device_uninit(&device);
   ma_encoder_uninit(&encoder);

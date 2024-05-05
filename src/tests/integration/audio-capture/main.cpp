@@ -1,9 +1,9 @@
+#undef MA_NO_ENCODING
 #include "miniaudio.h"
 
 #include <chrono>
 #include <cassert>
 #include <iostream>
-#include <filesystem>
 #include <thread>
 
 void data_callback(ma_device*, void*, const void* pInput, ma_uint32 frameCount) {
@@ -20,10 +20,6 @@ void data_callback(ma_device*, void*, const void* pInput, ma_uint32 frameCount) 
 }
 
 int main(int argc, char** argv) {
-  const auto exePath = std::filesystem::absolute(argv[0]);
-  const auto outputDir = exePath.parent_path();
-  const auto outputFile = outputDir / "recording.wav";
-
   auto deviceConfig = ma_device_config_init(ma_device_type_capture);
   deviceConfig.capture.format   = ma_format_f32;
   deviceConfig.capture.channels = 2;

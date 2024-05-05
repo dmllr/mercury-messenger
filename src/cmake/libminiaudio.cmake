@@ -14,3 +14,13 @@ target_compile_definitions(libminiaudio INTERFACE
   MA_NO_RESOURCE_MANAGER
   MA_NO_ENGINE
 )
+
+add_library(libminiaudio-full INTERFACE
+  "${libminiaudio_path}/miniaudio.h"
+)
+target_include_directories(libminiaudio-full INTERFACE
+  "${libminiaudio_path}"
+)
+target_compile_definitions(libminiaudio-full INTERFACE
+  MINIAUDIO_IMPLEMENTATION
+)

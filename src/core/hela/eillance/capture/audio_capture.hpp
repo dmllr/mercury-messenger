@@ -26,11 +26,11 @@ class AudioCapture {
   ma_device audio_device_{};
   ma_device_config device_config_{ma_device_config_init(ma_device_type_capture)};
 
-  std::array<float, AudioConfig::frameSize> pcm_buffer_;
+  std::array<float, AudioConfig::frameSize> pcm_buffer_{};
 
-  AudioEncoder encoder_;
+  AudioEncoder encoder_{};
 
-  std::mutex data_access_mutex_;
+  std::mutex data_access_mutex_{};
 
 public:
   AudioCapture() {
