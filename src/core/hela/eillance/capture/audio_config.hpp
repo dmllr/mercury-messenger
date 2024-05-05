@@ -1,5 +1,6 @@
 #pragma once
 
+#include <opus.h>
 #include <libavutil/samplefmt.h>
 #include <miniaudio.h>
 
@@ -7,9 +8,10 @@ namespace hela::eillance {
 
 struct AudioConfig {
   // This audio config assumes a sample duration to be 10ms.
-  using sampleDataType = float;
+  using sampleDataType = std::float_t;
   static constexpr auto maSampleFormat = ma_format_f32;
   static constexpr auto avSampleFormat = AV_SAMPLE_FMT_FLTP;
+  static constexpr auto opusEncodeFunction = opus_encode_float;
   static constexpr auto channels = 2U;
   static constexpr auto sampleRate = 48000ULL;
   static constexpr auto frameSize = (sampleRate / 100);  // 10ms (1/100s) per frame

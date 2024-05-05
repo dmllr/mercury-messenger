@@ -13,7 +13,7 @@
 #include <opus.h>
 
 #include "hela/eillance/capture/audio_config.hpp"
-#include "hela/eillance/capture/audio_encoder_libopus.hpp"
+#include "hela/eillance/capture/audio_encoder.hpp"
 
 namespace hela::eillance {
 
@@ -93,7 +93,7 @@ int main() {
   encoder.Engage();
 
   // Read WAV file
-  const auto* wav_file = "C:\\Users\\DenisMiller\\dev\\hela-surveillance\\src\\tests\\integration\\encode-decode-play-audio-file\\recording2ch.wav";
+  const auto* wav_file = "C:\\Users\\DenisMiller\\dev\\hela-surveillance\\src\\tests\\integration\\encode-decode-play-audio-file\\recording1ch.wav";
   pcm_buffer = hela::eillance::ReadWavFile(wav_file);
 
   // Initialize Opus decoder
