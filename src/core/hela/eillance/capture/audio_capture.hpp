@@ -43,7 +43,7 @@ public:
       assert(nb_samples == AudioConfig::frameSize);
       auto* self = static_cast<AudioCapture*>(device->pUserData);
       if (self == nullptr) {
-        return;;
+        return;
       }
       const auto* buffer = static_cast<const AudioConfig::sampleDataType*>(frames);
       {
