@@ -12,7 +12,7 @@ struct AudioConfig {
   static constexpr auto maSampleFormat = ma_format_s16;
   static constexpr auto avSampleFormat = AV_SAMPLE_FMT_FLTP;
   static constexpr auto opusEncodeFunction = opus_encode;
-  static constexpr auto channels = 1U;
+  static constexpr auto channels = 2U;
   static constexpr auto sampleRate = 48000ULL;
   static constexpr auto frameSize = (sampleRate / 100);  // 10ms (1/100s) per frame
   static constexpr auto frameSizeBytes = frameSize * sizeof(sampleDataType);
