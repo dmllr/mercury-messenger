@@ -8,11 +8,11 @@ namespace hela::eillance {
 
 struct AudioConfig {
   // This audio config assumes a sample duration to be 10ms.
-  using sampleDataType = std::float_t;
-  static constexpr auto maSampleFormat = ma_format_f32;
+  using sampleDataType = std::int16_t;
+  static constexpr auto maSampleFormat = ma_format_s16;
   static constexpr auto avSampleFormat = AV_SAMPLE_FMT_FLTP;
-  static constexpr auto opusEncodeFunction = opus_encode_float;
-  static constexpr auto channels = 2U;
+  static constexpr auto opusEncodeFunction = opus_encode;
+  static constexpr auto channels = 1U;
   static constexpr auto sampleRate = 48000ULL;
   static constexpr auto frameSize = (sampleRate / 100);  // 10ms (1/100s) per frame
   static constexpr auto frameSizeBytes = frameSize * sizeof(sampleDataType);
