@@ -73,18 +73,20 @@ std::vector<float> ReadWavFile(const std::string& filename) {
 
 } // namespace hela::eillance
 
-std::vector<float> pcm_buffer;
+std::vector<float> pcm_buffer_decoded(300000);
+int frame = 0;
 
 // Custom data callback function for miniaudio
 void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount) {
   // Cast output buffer to float
   auto* pOutputF32 = (float*)pOutput;
-  auto* pcm = pcm_buffer.data();
+  auto* pcm = &pcm_buffer_decoded[frame];
 
   // Fill output buffer with silence
   for (ma_uint32 i = 0; i < frameCount * pDevice->playback.channels; ++i) {
     *pOutputF32++ = *pcm++;
   }
+  frame += hela::eillance::AudioConfig::frameSize;
 }
 
 int main() {
@@ -93,8 +95,8 @@ int main() {
   encoder.Engage();
 
   // Read WAV file
-  const auto* wav_file = "C:\\Users\\DenisMiller\\dev\\hela-surveillance\\src\\tests\\integration\\encode-decode-play-audio-file\\recording1ch.wav";
-  pcm_buffer = hela::eillance::ReadWavFile(wav_file);
+  const auto* wav_file = "C:\\Users\\DenisMiller\\dev\\hela-surveillance\\src\\tests\\integration\\encode-decode-play-audio-file\\recording2ch.wav";
+  auto pcm_buffer = hela::eillance::ReadWavFile(wav_file);
 
   // Initialize Opus decoder
   int error;
@@ -105,15 +107,14 @@ int main() {
   }
 
   // Setup miniaudio
-  ma_result result;
-  ma_device device;
   ma_device_config deviceConfig = ma_device_config_init(ma_device_type_playback);
-  deviceConfig.playback.format   = ma_format_f32;
+  deviceConfig.playback.format = hela::eillance::AudioConfig::maSampleFormat;
   deviceConfig.playback.channels = hela::eillance::AudioConfig::channels;
-  deviceConfig.sampleRate        = hela::eillance::AudioConfig::sampleRate;
-  deviceConfig.dataCallback      = data_callback; // Set the custom data callback
+  deviceConfig.sampleRate = hela::eillance::AudioConfig::sampleRate;
+  deviceConfig.dataCallback = data_callback;  // Set the custom data callback
 
-  result = ma_device_init(NULL, &deviceConfig, &device);
+  ma_device device;
+  auto result = ma_device_init(NULL, &deviceConfig, &device);
   if (result != MA_SUCCESS) {
     std::cerr << "Failed to initialize playback device." << std::endl;
     return 1;
@@ -128,26 +129,29 @@ int main() {
     return 1;
   }
 
-//  // Decode encoded packets and play
-//  size_t frame_size = hela::eillance::AudioConfig::frameSize;
-//  for (size_t i = 0; i < pcm_buffer.size(); i += frame_size) {
-////    // Encode PCM frame
-////    const auto encoded_packet = encoder.EncodeBuffer(&pcm_buffer[i]);
-////    if (encoded_packet.empty()) {
-////      // Failed to encode
-////      continue;
-////    }
-////
-////    // Decode Opus packet
-////    int decoded_samples = opus_decode_float(decoder, encoded_packet.dataAsUChars(), encoded_packet.size(), pcm_buffer.data(), frame_size, 0);
-////    if (decoded_samples < 0) {
-////      std::cerr << "Failed to decode Opus packet." << std::endl;
-////      continue;
-////    }
-//  }
+  // Decode encoded packets and play
+  pcm_buffer_decoded.resize(pcm_buffer.size());
+  const auto frame_size = hela::eillance::AudioConfig::frameSize;
+  for (size_t i = 0; i < pcm_buffer.size(); i += frame_size) {
+    // Encode PCM frame
+    const auto encoded_packet = encoder.EncodeBuffer(&pcm_buffer[i]);
+    if (encoded_packet.empty()) {
+      std::cerr << "Empty encoded packet." << std::endl;
+      continue;
+    }
+    std::cout << "Encoded packet size " << encoded_packet.size() << std::endl;
+
+
+    // Decode Opus packet
+    int decoded_samples = opus_decode_float(decoder, encoded_packet.dataAsUChars(), encoded_packet.size(), &pcm_buffer_decoded[i], frame_size, 0);
+    if (decoded_samples < 0) {
+      std::cerr << "Failed to decode Opus packet." << std::endl;
+      continue;
+    }
+  }
 
   // Wait a while to let the audio play
-  ma_sleep(2000); // Adjust time as necessary
+  ma_sleep(2000);  // Adjust time as necessary
 
   // Stop playback
   ma_device_stop(&device);
