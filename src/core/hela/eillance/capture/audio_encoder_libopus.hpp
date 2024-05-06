@@ -38,7 +38,7 @@ public:
     opus_encoder_destroy(opus_encoder_);
   }
 
-  Packet EncodeBuffer(AudioConfig::sampleDataType* pcm_buffer) {
+  Packet EncodeBuffer(const AudioConfig::sampleDataType* pcm_buffer) {
     auto encoded_buffer{std::array<unsigned char, AudioConfig::encodedFrameSizeBytes>{}};
 
     auto size = AudioConfig::opusEncodeFunction(

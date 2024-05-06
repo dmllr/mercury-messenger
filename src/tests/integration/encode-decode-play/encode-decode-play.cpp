@@ -4,33 +4,27 @@
 #include <vector>
 
 #include "hela/eillance/capture/audio_config.hpp"
+#include "hela/eillance/capture/audio_encoder.hpp"
 
 using AudioConfig = hela::eillance::AudioConfig;
 
-std::vector<std::vector<unsigned char>> opus_data;
+std::vector<std::vector<std::byte>> opus_data;
 int frame = 0;
 
 // Callback function for handling captured audio data
 void on_send_frames_to_opus(ma_device* pDevice, void*, const void* pInput, ma_uint32 frameCount) {
-  auto* encoder = static_cast<OpusEncoder*>(pDevice->pUserData);
+  auto* encoder = static_cast<hela::eillance::AudioEncoder*>(pDevice->pUserData);
 
   std::cout << "FC " << frameCount << ". ";
 
   // Encode the input PCM data to Opus
   unsigned char opus_frame[4096];
-  int opus_length = AudioConfig::opusEncodeFunction(encoder, static_cast<const opus_int16*>(pInput), AudioConfig ::frameSize, opus_frame, sizeof(opus_frame));
-  if (opus_length < 0) {
-    std::cerr << "Error encoding to Opus" << std::endl;
-    return;
-  } else if (opus_length == 1) {
-    std::cerr << "Opus encoded to 1 byte" << std::endl;
-    return;
-  }
 
-  std::cout << "Opus  encoded to " << opus_length << std::endl;
+  auto encoded_packet = encoder->EncodeBuffer(static_cast<const hela::eillance::AudioConfig::sampleDataType*>(pInput));
+  std::cout << "Opus  encoded to " << encoded_packet.size() << std::endl;
 
   // Store the encoded Opus data
-  opus_data.emplace_back(opus_frame, opus_frame + opus_length);
+  opus_data.emplace_back(encoded_packet.buffer());
 }
 
 // Callback function for handling decoded audio data
@@ -53,16 +47,13 @@ void on_receive_frames_from_opus(ma_device* pDevice, void* pOutput, const void*,
 int main() {
   // Initialize Opus encoder and decoder
   int error{0};
-  OpusEncoder* encoder = opus_encoder_create(AudioConfig ::sampleRate, AudioConfig ::channels, OPUS_APPLICATION_AUDIO, &error);
-  if (error != OPUS_OK) {
-    std::cerr << "Error initializing Opus encoder: " << opus_strerror(error) << std::endl;
-    return -1;
-  }
+  auto encoder = hela::eillance::AudioEncoder{};
+  encoder.Engage();
 
   OpusDecoder* decoder = opus_decoder_create(AudioConfig ::sampleRate, AudioConfig ::channels, &error);
   if (error != OPUS_OK) {
     std::cerr << "Error initializing Opus decoder: " << opus_strerror(error) << std::endl;
-    opus_encoder_destroy(encoder);
+    encoder.Revoke();
     return -1;
   }
 
@@ -74,7 +65,7 @@ int main() {
   auto result = ma_context_init(nullptr, 0, nullptr, &context);
   if (result != MA_SUCCESS) {
     std::cerr << "Failed to initialize miniaudio context" << std::endl;
-    opus_encoder_destroy(encoder);
+    encoder.Revoke();
     opus_decoder_destroy(decoder);
     return -1;
   }
@@ -84,13 +75,13 @@ int main() {
   capture_device_config.capture.channels = AudioConfig ::channels;
   capture_device_config.sampleRate = AudioConfig ::sampleRate;
   capture_device_config.dataCallback = on_send_frames_to_opus;
-  capture_device_config.pUserData = encoder;
+  capture_device_config.pUserData = &encoder;
 
   result = ma_device_init(nullptr, &capture_device_config, &capture_device);
   if (result != MA_SUCCESS) {
     std::cerr << "Failed to initialize miniaudio capture device" << std::endl;
     ma_context_uninit(&context);
-    opus_encoder_destroy(encoder);
+    encoder.Revoke();
     opus_decoder_destroy(decoder);
     return -1;
   }
@@ -111,7 +102,7 @@ int main() {
     std::cerr << "Failed to initialize miniaudio playback device" << std::endl;
     ma_device_uninit(&capture_device);
     ma_context_uninit(&context);
-    opus_encoder_destroy(encoder);
+    encoder.Revoke();
     opus_decoder_destroy(decoder);
     return -1;
   }
@@ -123,7 +114,7 @@ int main() {
     ma_device_uninit(&playback_device);
     ma_device_uninit(&capture_device);
     ma_context_uninit(&context);
-    opus_encoder_destroy(encoder);
+    encoder.Revoke();
     opus_decoder_destroy(decoder);
     return -1;
   }
@@ -141,7 +132,7 @@ int main() {
     std::cerr << "Failed to start miniaudio playback device" << std::endl;
     ma_device_uninit(&playback_device);
     ma_context_uninit(&context);
-    opus_encoder_destroy(encoder);
+    encoder.Revoke();
     opus_decoder_destroy(decoder);
     return -1;
   }
@@ -157,7 +148,7 @@ int main() {
   ma_context_uninit(&context);
 
   // Clean up Opus encoder and decoder
-  opus_encoder_destroy(encoder);
+  encoder.Revoke();
   opus_decoder_destroy(decoder);
 
   return 0;
