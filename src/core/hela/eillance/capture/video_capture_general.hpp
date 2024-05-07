@@ -71,7 +71,7 @@ public:
     }
 
     #if defined __ANDROID__
-    cap_.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('N','V','2','1'));
+    cap_.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('B','G','R','3'));
     #endif
     // attempt to set desired resolution
     cap_.set(cv::CAP_PROP_FRAME_WIDTH, VideoConfig::width);
@@ -121,10 +121,9 @@ public:
     if (cv_frame_.empty()) {
       return {};
     }
-//    auto frame = cv_frame_;
-//    cv::cvtColor(frame, frame, cv::COLOR_BGR2YUV_YV12);
-//    YV12toNV12(frame, nv12_frame_);
-    nv12_frame_ = cv_frame_;
+    auto frame = cv_frame_;
+    cv::cvtColor(frame, frame, cv::COLOR_BGR2YUV_YV12);
+    YV12toNV12(frame, nv12_frame_);
 
     return encoder_.EncodeBuffer(nv12_frame_.data);
   }
