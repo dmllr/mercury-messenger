@@ -14,7 +14,7 @@
 
 #include <rtc/common.hpp>
 
-#include "hela/eillance/capture/android/camera_utils.hpp"
+#include "hela/eillance/utils/android-camera_utils.hpp"
 #include "hela/eillance/capture/video_config.hpp"
 #include "hela/eillance/capture/video_encoder_mediandk.hpp"
 #include "hela/eillance/common/dispatch_queue.hpp"

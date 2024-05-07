@@ -31,6 +31,7 @@ class AudioEncoder {
 
 public:
   void Engage() {
+    static_assert(std::is_same_v<AudioConfig::sampleDataType, std::float_t>, "This test isn't suppose to work on non-int16 data");
     // Find encoder
     codec_ = avcodec_find_encoder(AV_CODEC_ID_OPUS);
     if (codec_ == nullptr) {
