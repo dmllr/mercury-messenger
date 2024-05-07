@@ -85,8 +85,6 @@ private:
     if (0) {
       std::cout << "AT: " << audio_->GetSampleTime() << "\n"
                 << "VT: " << video_->GetSampleTime() << "\n"
-                << "NX: " << next_time << "\n"
-                << "WT: " << ((next_time > current_time) ? next_time - current_time : 0) << "\n"
                 << " T: " << ((sst == Source::Type::Audio) ? "Audio" : "Video") << "\n"
                 << std::endl;
     }
