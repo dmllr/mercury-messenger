@@ -8,11 +8,11 @@
 
 using AudioConfig = hela::eillance::AudioConfig;
 
-std::vector<std::vector<std::byte>> opus_data;
+std::vector<std::vector<std::byte>> opusData;
 int frame = 0;
 
 // Callback function for handling captured audio data
-void on_send_frames_to_opus(ma_device* pDevice, void*, const void* pInput, ma_uint32 frameCount) {
+void OnSendFramesToOpus(ma_device* pDevice, void*, const void* pInput, ma_uint32 frameCount) {
   auto* encoder = static_cast<hela::eillance::AudioEncoder*>(pDevice->pUserData);
 
   std::cout << "FC " << frameCount << ". ";
@@ -24,19 +24,19 @@ void on_send_frames_to_opus(ma_device* pDevice, void*, const void* pInput, ma_ui
   std::cout << "Opus  encoded to " << encoded_packet.size() << std::endl;
 
   // Store the encoded Opus data
-  opus_data.emplace_back(encoded_packet.buffer());
+  opusData.emplace_back(encoded_packet.buffer());
 }
 
 // Callback function for handling decoded audio data
-void on_receive_frames_from_opus(ma_device* pDevice, void* pOutput, const void*, ma_uint32 frameCount) {
+void OnReceiveFramesFromOpus(ma_device* pDevice, void* pOutput, const void*, ma_uint32 frameCount) {
   auto* decoder = static_cast<OpusDecoder*>(pDevice->pUserData);
 
-  if (frame >= opus_data.size()) {
+  if (frame >= opusData.size()) {
     return;
   }
 
   // Decode the input Opus data to PCM
-  const auto pcm_length = opus_decode(decoder, reinterpret_cast<const unsigned char*>(opus_data[frame].data()), frameCount, static_cast<opus_int16*>(pOutput), AudioConfig ::frameSize, 0);
+  const auto pcm_length = opus_decode(decoder, reinterpret_cast<const unsigned char*>(opusData[frame].data()), frameCount, static_cast<opus_int16*>(pOutput), AudioConfig ::frameSize, 0);
   if (pcm_length < 0) {
     std::cerr << "Error decoding from Opus" << std::endl;
     return;
@@ -74,7 +74,7 @@ int main() {
   capture_device_config.capture.format = AudioConfig::maSampleFormat;
   capture_device_config.capture.channels = AudioConfig ::channels;
   capture_device_config.sampleRate = AudioConfig ::sampleRate;
-  capture_device_config.dataCallback = on_send_frames_to_opus;
+  capture_device_config.dataCallback = OnSendFramesToOpus;
   capture_device_config.pUserData = &encoder;
 
   result = ma_device_init(nullptr, &capture_device_config, &capture_device);
@@ -94,7 +94,7 @@ int main() {
   playback_device_config.playback.format = AudioConfig::maSampleFormat;
   playback_device_config.playback.channels = AudioConfig ::channels;
   playback_device_config.sampleRate = AudioConfig ::sampleRate;
-  playback_device_config.dataCallback = on_receive_frames_from_opus;
+  playback_device_config.dataCallback = OnReceiveFramesFromOpus;
   playback_device_config.pUserData = decoder;
 
   result = ma_device_init(nullptr, &playback_device_config, &playback_device);
