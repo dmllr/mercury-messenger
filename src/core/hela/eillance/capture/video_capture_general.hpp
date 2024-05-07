@@ -101,22 +101,6 @@ public:
     });
   }
 
-  void CaptureFrame() {
-    if (!capture_is_running_) {
-      return;
-    }
-    cap_ >> cv_frame_;
-    if (cv_frame_.empty()) {
-      LOGE << "Unexpected end of stream.";
-      return;
-    }
-    // due to OpenCV issue, camera frames should be captured as soon as possible,
-    // otherwise a framerate will be significantly lowered
-    dispatch_queue_.dispatch([this]() {
-      CaptureFrame();
-    });
-  }
-
   Packet FetchBuffers() {
     if (cv_frame_.empty()) {
       return {};
@@ -139,6 +123,22 @@ public:
   }
 
 private:
+  void CaptureFrame() {
+    if (!capture_is_running_) {
+      return;
+    }
+    cap_ >> cv_frame_;
+    if (cv_frame_.empty()) {
+      LOGE << "Unexpected end of stream.";
+      return;
+    }
+    // due to OpenCV issue, camera frames should be captured as soon as possible,
+    // otherwise a framerate will be significantly lowered
+    dispatch_queue_.dispatch([this]() {
+      CaptureFrame();
+    });
+  }
+
   static void YV12toNV12(const cv::Mat& input, cv::Mat& output) {
     const auto width = input.cols;
     const auto height = input.rows * 2 / 3;
