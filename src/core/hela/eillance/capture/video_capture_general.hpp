@@ -32,6 +32,10 @@ private:
 
   VideoEncoder encoder_;
 
+  std::uint64_t last_fps_milestone;
+  std::uint32_t fps_counter;
+  std::uint32_t load_counter;
+
   std::atomic_bool capture_is_running_{false};
   DispatchQueue dispatch_queue_{"Capture", 1};
 
@@ -109,6 +113,8 @@ public:
     cv::cvtColor(frame, frame, cv::COLOR_BGR2YUV_YV12);
     YV12toNV12(frame, nv12_frame_);
 
+    load_counter++;
+
     return encoder_.EncodeBuffer(nv12_frame_.data);
   }
 
@@ -132,6 +138,20 @@ private:
       LOGE << "Unexpected end of stream.";
       return;
     }
+
+    if (fps_counter % 300 == 0) {
+      auto elapsed = (Time::Now() - last_fps_milestone) / Units::Microseconds;
+      auto fetch_fps = static_cast<double>(load_counter) / elapsed;
+      load_counter = 0;
+
+      auto capture_fps = static_cast<double>(fps_counter) / elapsed;
+      last_fps_milestone = Time::Now();
+      fps_counter = 0;
+
+      LOGI << "Capture rate FPS: " << std::setprecision(2) << std::fixed << capture_fps << ", RTC request rate FPS:" << fetch_fps;
+    }
+    fps_counter++;
+
     // due to OpenCV issue, camera frames should be captured as soon as possible,
     // otherwise a framerate will be significantly lowered
     dispatch_queue_.dispatch([this]() {

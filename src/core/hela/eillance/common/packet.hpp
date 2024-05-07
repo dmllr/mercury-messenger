@@ -56,6 +56,31 @@ public:
   explicit Packet(const std::vector<std::byte>& data) : buffer_(data) {
   }
 
+  // begin method to return the iterator to the beginning of the buffer
+  auto begin() {
+    return buffer_.begin();
+  }
+
+  // const begin method to return the const iterator to the beginning of the buffer
+  auto begin() const {
+    return buffer_.begin();
+  }
+
+  // end method to return the iterator to the end of the buffer
+  auto end() {
+    return buffer_.end();
+  }
+
+  // const end method to return the const iterator to the end of the buffer
+  auto end() const {
+    return buffer_.end();
+  }
+
+  void append(const Packet& other) {
+    buffer_.insert(buffer_.end(), other.buffer_.begin(), other.buffer_.end());
+    timestamp_ = other.timestamp_;
+  }
+
   [[nodiscard]] auto buffer() {
     return buffer_;
   }

@@ -14,6 +14,7 @@
 
 #include "hela/eillance/capture/audio_config.hpp"
 #include "hela/eillance/capture/audio_encoder.hpp"
+#include "hela/eillance/common/circular_buffer.hpp"
 #include "hela/eillance/common/packet.hpp"
 #include "hela/eillance/logging/logging.h"
 #include "hela/eillance/rtc/stream.hpp"
@@ -26,11 +27,13 @@ class AudioCapture {
   ma_device audio_device_{};
   ma_device_config device_config_{ma_device_config_init(ma_device_type_capture)};
 
-  std::array<AudioConfig::SampleDataType, AudioConfig::frameSize> pcm_buffer_{};
-
   AudioEncoder encoder_{};
+  CircularBuffer<Packet, 200> encoded_packets_;
 
-  std::mutex data_access_mutex_{};
+
+  std::uint64_t last_fps_milestone;
+  std::uint32_t fps_counter;
+  std::uint32_t load_counter;
 
 public:
   AudioCapture() {
@@ -45,14 +48,22 @@ public:
       if (self == nullptr) {
         return;
       }
-      const auto* buffer = static_cast<const AudioConfig::SampleDataType*>(frames);
-      {
-        auto lock = std::lock_guard<decltype(data_access_mutex_)>(self->data_access_mutex_);
-        std::copy(
-            buffer,
-            std::next(buffer, AudioConfig::frameSize),
-            self->pcm_buffer_.begin());
+
+      const auto encoded_packet = self->encoder_.EncodeBuffer(static_cast<const AudioConfig::SampleDataType*>(frames));
+      self->encoded_packets_.push(std::move(encoded_packet));
+
+      if (self->fps_counter % 900 == 0) {
+        auto elapsed = (Time::Now() - self->last_fps_milestone) / Units::Microseconds;
+        auto fetch_fps = static_cast<double>(self->load_counter) / elapsed;
+        self->load_counter = 0;
+
+        auto capture_fps = static_cast<double>(self->fps_counter) / elapsed;
+        self->last_fps_milestone = Time::Now();
+        self->fps_counter = 0;
+
+        LOGI << "Capture rate FPS: " << std::setprecision(2) << std::fixed << capture_fps << ", RTC request rate FPS:" << fetch_fps;
       }
+      self->fps_counter++;
     };
   }
 
@@ -88,8 +99,13 @@ public:
   }
 
   Packet FetchBuffers() {
-    auto lock = std::lock_guard<decltype(data_access_mutex_)>(data_access_mutex_);
-    return encoder_.EncodeBuffer(pcm_buffer_.data());
+    load_counter++;
+    Packet combined_packet;
+    while (!encoded_packets_.isEmpty()) {
+      Packet packet = encoded_packets_.pop();
+      combined_packet.append(packet);
+    }
+    return combined_packet;
   }
 
 };
