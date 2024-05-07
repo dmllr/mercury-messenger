@@ -49,6 +49,7 @@ public:
       return;
     }
     encoder_.Engage();
+    renewCaptureSession();
   }
 
 //  void CaptureFrame() {
