@@ -100,7 +100,7 @@ if (WIN32)
 endif ()
 
 set(products "")
-foreach (_lib avfilter avcodec avformat avutil swresample swscale)
+foreach (_lib avfilter avcodec avformat avutil swresample swscale)  # avdevice is excluded as unused
   list(APPEND products
     "${CMAKE_CURRENT_BINARY_DIR}/${FFMPEG_WORKDIR}/src/ffmpeg_target/lib${_lib}/lib${_lib}.a")
 endforeach ()
@@ -148,8 +148,6 @@ ExternalProject_Add(ffmpeg_target
       --enable-nonfree
       --enable-encoder=h264
       --enable-decoder=h264
-      --enable-encoder=opus
-      --enable-decoder=opus
       ${CONFIGURE_PARAMS}
   BUILD_COMMAND make -j${NJOBS}
   INSTALL_COMMAND ""

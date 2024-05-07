@@ -20,7 +20,7 @@ void on_send_frames_to_opus(ma_device* pDevice, void*, const void* pInput, ma_ui
   // Encode the input PCM data to Opus
   unsigned char opus_frame[4096];
 
-  auto encoded_packet = encoder->EncodeBuffer(static_cast<const hela::eillance::AudioConfig::sampleDataType*>(pInput));
+  auto encoded_packet = encoder->EncodeBuffer(static_cast<const hela::eillance::AudioConfig::SampleDataType*>(pInput));
   std::cout << "Opus  encoded to " << encoded_packet.size() << std::endl;
 
   // Store the encoded Opus data
