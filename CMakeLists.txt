@@ -20,6 +20,5 @@ include("src/cmake/libopus.cmake")
 include("src/cmake/libminiaudio.cmake")
 include("src/cmake/libjson.cmake")
 
-add_subdirectory("src/core")
-add_subdirectory("src/apps")
-add_subdirectory("src/tests")
+add_subdirectory("src")
+add_subdirectory("tests")
