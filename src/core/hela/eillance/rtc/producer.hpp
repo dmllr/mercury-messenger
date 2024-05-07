@@ -122,7 +122,7 @@ public:
     constexpr auto msid = "cam-NAME-stream";
     constexpr auto cname = "audio-stream";
     auto audio = rtc::Description::Audio(cname, rtc::Description::Direction::SendOnly);
-    audio.addPCMACodec(payload_type);
+    audio.addOpusCodec(payload_type);
     audio.addSSRC(ssrc, cname, msid, cname);
     audio.setBitrate(AudioConfig::bitrate);
     auto track = pc->addTrack(audio);
