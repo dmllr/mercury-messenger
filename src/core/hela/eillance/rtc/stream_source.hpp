@@ -32,7 +32,7 @@ public:
   }
 
   void LoadNextSample() final {
-    sample_ = std::move(capture_.FetchBuffers());
+    sample_ = capture_.FetchBuffers();
   }
 
   auto GetSample() -> rtc::binary final {

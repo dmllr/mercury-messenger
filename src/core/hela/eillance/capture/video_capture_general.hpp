@@ -76,7 +76,7 @@ public:
     // attempt to set desired resolution
     cap_.set(cv::CAP_PROP_FRAME_WIDTH, VideoConfig::width);
     cap_.set(cv::CAP_PROP_FRAME_HEIGHT, VideoConfig::height);
-    cap_.set(cv::CAP_PROP_FPS, VideoConfig::framerate);
+    cap_.set(cv::CAP_PROP_FPS, VideoConfig::frameRate);
 
     cap_ >> cv_frame_;
     if (cv_frame_.empty()) {
@@ -89,7 +89,7 @@ public:
     const auto actual_height = static_cast<int>(cap_.get(cv::CAP_PROP_FRAME_HEIGHT));
     auto actual_fps = static_cast<int>(cap_.get(cv::CAP_PROP_FPS));
     if (actual_fps <= 0) {
-      actual_fps = VideoConfig::framerate;
+      actual_fps = VideoConfig::frameRate;
     }
 
     LOGI << "Capture resolution set to: " << actual_width << "x" << actual_height;

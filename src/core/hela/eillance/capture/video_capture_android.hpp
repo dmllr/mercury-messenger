@@ -27,7 +27,6 @@
 namespace hela::eillance {
 
 class VideoCapture {
-  JNIEnv* env_{nullptr};
   ACameraManager* camera_manager_{nullptr};
   ACameraDevice *cameraDevice{nullptr};
   ACaptureSessionOutputContainer* output_container;
@@ -91,7 +90,7 @@ private:
     
     // open first available camera
     auto* cameraId = cameraIdList->cameraIds[0];
-    status = ACameraManager_openCamera(camera_manager_, cameraId, nullptr, &cameraDevice);
+    status = ACameraManager_openCamera(camera_manager_, cameraId, GetDeviceListener(), &cameraDevice);
     if (status != ACAMERA_OK) {
       Log::e("ACameraManager_openCamera call failed with code: %#x, %s", status, GetErrorStr(status));
       return;
@@ -151,6 +150,57 @@ private:
     Log::assert_or_die(status == ACAMERA_OK, "Failed to set repeating request with status: %#x, %s", status, GetErrorStr(status));
   }
   
+  /**
+   * Device State Callbacks
+   * @return ACameraDevice_stateCallbacks
+   */
+  ACameraDevice_stateCallbacks* GetDeviceListener() {
+    static ACameraDevice_stateCallbacks cameraDeviceListener = {
+        .context = this,
+        .onDisconnected = [](void* ctx, ACameraDevice* dev) {
+          reinterpret_cast<VideoCapture*>(ctx)->onDeviceState(dev);
+        },
+        .onError = [](void* ctx, ACameraDevice* dev, int err) {
+          reinterpret_cast<VideoCapture*>(ctx)->onDeviceError(dev, err);
+        },
+    };
+    return &cameraDeviceListener;
+  }
+
+  void onDeviceState(ACameraDevice* dev) {
+    auto id{ACameraDevice_getId(dev)};
+    Log::w("Device %s is disconnected", id);
+
+    if (cameraDevice != nullptr) {
+      ACameraDevice_close(cameraDevice);
+    }
+  }
+
+  void onDeviceError(ACameraDevice* dev, int err) {
+    auto id{ACameraDevice_getId(dev)};
+
+    Log::e("CameraDevice %s is in error %#x", id, err);
+    Log::e("CameraDeviceError(%#x): %s", err, GetCameraDeviceErrorStr(err));
+
+//    CameraId& cam = cameras[id];
+
+    switch (err) {
+      case ERROR_CAMERA_IN_USE:
+//        cam.available = false;
+//        cam.owner = false;
+        break;
+      case ERROR_CAMERA_SERVICE:
+      case ERROR_CAMERA_DEVICE:
+      case ERROR_CAMERA_DISABLED:
+      case ERROR_MAX_CAMERAS_IN_USE:
+//        cam.available = false;
+//        cam.owner = false;
+        break;
+      default:
+        Log::i("Unknown Camera Device Error: %#x", err);
+    }
+  }
+
   /**
    * Capture Session Callbacks
    * @return ACameraCaptureSession_stateCallbacks
