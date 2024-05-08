@@ -41,8 +41,7 @@ public:
   explicit RtcProducer() {
     av_stream_ = std::make_shared<Stream>(
         std::make_shared<StreamSource>(Capture(std::make_unique<VideoCapture>())),
-        std::make_shared<StreamSource>(Capture(std::make_unique<AudioCapture>()))
-    );
+        std::make_shared<StreamSource>(Capture(std::make_unique<AudioCapture>())));
 
     // set callback responsible for sample sending
     av_stream_->OnSample([this, ws = make_weak_ptr(av_stream_)](Stream::Source::Type type, uint64_t sampleTime, const rtc::binary& sample) {

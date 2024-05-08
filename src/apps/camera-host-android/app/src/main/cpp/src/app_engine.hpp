@@ -11,9 +11,9 @@
 #include "hela/eillance/events/event_source.h"
 #include "hela/eillance/rtc/producer.hpp"
 
-#include <opencv2/videoio.hpp>
-#include <opencv2/imgproc.hpp>
 #include <opencv2/core/mat.hpp>
+#include <opencv2/imgproc.hpp>
+#include <opencv2/videoio.hpp>
 
 
 namespace hela::eillance {
@@ -75,7 +75,7 @@ public:
 
       // Open camera, initialize preview, and display using OpenCV
       cap.open(0, cv::CAP_ANDROID);
-      cap.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('B','G','R','3'));
+      cap.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('B', 'G', 'R', '3'));
       cap.set(cv::CAP_PROP_FRAME_WIDTH, 1280);
       cap.set(cv::CAP_PROP_FRAME_HEIGHT, 720);
       if (!cap.isOpened()) {
@@ -136,7 +136,7 @@ private:
       }
 
       // Convert frame to RGBA for display on Android surface
-       cvtColor(frame, frame, cv::COLOR_BGR2RGBA);
+      cvtColor(frame, frame, cv::COLOR_BGR2RGBA);
 
       ANativeWindow_acquire(window);
       ANativeWindow_Buffer buffer;

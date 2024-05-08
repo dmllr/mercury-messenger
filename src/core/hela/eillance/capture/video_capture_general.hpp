@@ -35,21 +35,20 @@ private:
 
   TELEMETRY(
       Time::Unit last_fps_milestone;
-    std::uint32_t fps_counter;
-    std::uint32_t load_counter;
-  )
+      std::uint32_t fps_counter;
+      std::uint32_t load_counter;)
 
   std::atomic_bool capture_is_running_{false};
   DispatchQueue dispatch_queue_{"Capture", 1};
 
   struct CrossPlatformProperties {
-    #if defined __ANDROID__
+#if defined __ANDROID__
     static constexpr auto openCVCameraCapabilities = cv::CAP_ANDROID;
-    #elif defined _WIN32
+#elif defined _WIN32
     static constexpr auto openCVCameraCapabilities = cv::CAP_DSHOW;
-    #else
+#else
     static constexpr auto openCVCameraCapabilities = cv::CAP_ANY;
-    #endif
+#endif
   };
 
 public:
@@ -81,9 +80,9 @@ public:
       return;
     }
 
-    #if defined __ANDROID__
-    cap_.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('B','G','R','3'));
-    #endif
+#if defined __ANDROID__
+    cap_.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('B', 'G', 'R', '3'));
+#endif
     // attempt to set desired resolution
     cap_.set(cv::CAP_PROP_FRAME_WIDTH, VideoConfig::width);
     cap_.set(cv::CAP_PROP_FRAME_HEIGHT, VideoConfig::height);
@@ -121,8 +120,7 @@ public:
     YV12toNV12(frame, nv12_frame_);
 
     TELEMETRY(
-      load_counter++;
-    )
+        load_counter++;)
 
     return encoder_.EncodeBuffer(nv12_frame_.data);
   }
@@ -153,19 +151,17 @@ private:
     }
 
     TELEMETRY(
-      if (fps_counter % (TelemetryInterval * VideoConfig::frameRate) == 0) {
-        auto elapsed = (Time::Now() - last_fps_milestone) / Time::uS;
-        auto fetch_fps = static_cast<double>(load_counter) / elapsed;
-        load_counter = 0;
+        if (fps_counter % (TelemetryInterval * VideoConfig::frameRate) == 0) {
+          auto elapsed = (Time::Now() - last_fps_milestone) / Time::uS;
+          auto fetch_fps = static_cast<double>(load_counter) / elapsed;
+          load_counter = 0;
 
-        auto capture_fps = static_cast<double>(fps_counter) / elapsed;
-        last_fps_milestone = Time::Now();
-        fps_counter = 0;
+          auto capture_fps = static_cast<double>(fps_counter) / elapsed;
+          last_fps_milestone = Time::Now();
+          fps_counter = 0;
 
-        LOGI << "Video capture rate FPS: " << std::setprecision(2) << std::fixed << capture_fps << ", RTC request rate FPS:" << fetch_fps;
-      }
-      fps_counter++;
-    )
+          LOGI << "Video capture rate FPS: " << std::setprecision(2) << std::fixed << capture_fps << ", RTC request rate FPS:" << fetch_fps;
+        } fps_counter++;)
 
     // due to OpenCV issue, camera frames should be captured as soon as possible,
     // otherwise a framerate will be significantly lowered
@@ -192,7 +188,7 @@ private:
     cv::Mat in_u = cv::Mat(
         cv::Size(width / 2, height / 2),
         CV_8UC1,
-        std::next(input.data, stride * height + (stride / 2)*(height / 2)),
+        std::next(input.data, stride * height + (stride / 2) * (height / 2)),
         stride / 2);
 
     for (int row = 0; row < height / 2; row++) {

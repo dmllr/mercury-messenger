@@ -34,10 +34,9 @@ class AudioCapture {
   CircularBuffer<Packet, AudioConfig::samplesPerSecond> encoded_packets_;
 
   TELEMETRY(
-    Time::Unit last_fps_milestone;
-    std::uint32_t fps_counter;
-    std::uint32_t load_counter;
-  )
+      Time::Unit last_fps_milestone;
+      std::uint32_t fps_counter;
+      std::uint32_t load_counter;)
 
 public:
   AudioCapture() {
@@ -57,19 +56,17 @@ public:
       self->encoded_packets_.push(std::move(encoded_packet));
 
       TELEMETRY(
-        if (self->fps_counter % (TelemetryInterval * (AudioConfig::samplesPerSecond / AudioConfig::sampleDuration)) == 0) {
-          auto elapsed = (Time::Now() - self->last_fps_milestone) / Time::uS;
-          auto fetch_fps = static_cast<double>(self->load_counter) / elapsed;
-          self->load_counter = 0;
+          if (self->fps_counter % (TelemetryInterval * (AudioConfig::samplesPerSecond / AudioConfig::sampleDuration)) == 0) {
+            auto elapsed = (Time::Now() - self->last_fps_milestone) / Time::uS;
+            auto fetch_fps = static_cast<double>(self->load_counter) / elapsed;
+            self->load_counter = 0;
 
-          auto capture_fps = static_cast<double>(self->fps_counter) / elapsed;
-          self->last_fps_milestone = Time::Now();
-          self->fps_counter = 0;
+            auto capture_fps = static_cast<double>(self->fps_counter) / elapsed;
+            self->last_fps_milestone = Time::Now();
+            self->fps_counter = 0;
 
-          LOGI << "Audio capture rate FPS: " << std::setprecision(2) << std::fixed << capture_fps << ", RTC request rate FPS:" << fetch_fps;
-        }
-        self->fps_counter++;
-      )
+            LOGI << "Audio capture rate FPS: " << std::setprecision(2) << std::fixed << capture_fps << ", RTC request rate FPS:" << fetch_fps;
+          } self->fps_counter++;)
     };
   }
 
@@ -106,8 +103,7 @@ public:
 
   Packet FetchBuffers() {
     TELEMETRY(
-      load_counter++;
-    )
+        load_counter++;)
     Packet combined_packet;
     while (!encoded_packets_.isEmpty()) {
       Packet packet = encoded_packets_.pop();
@@ -119,7 +115,6 @@ public:
   static Time::Unit GetSampleDuration() {
     return AudioConfig::sampleDuration * Time::uS;
   }
-
 };
 
 }  // namespace hela::eillance

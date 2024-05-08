@@ -1,9 +1,9 @@
 #pragma once
 
 #include <array>
-#include <vector>
 #include <cassert>
 #include <cstdint>
+#include <vector>
 
 #include <rtc/common.hpp>
 

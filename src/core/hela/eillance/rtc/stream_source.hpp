@@ -21,7 +21,7 @@ private:
 
 public:
   ~StreamSource() = default;
-  explicit StreamSource(Capture capture) : capture_(std::move(capture)) {};
+  explicit StreamSource(Capture capture) : capture_(std::move(capture)){};
   StreamSource(StreamSource&&) = delete;
   StreamSource(const StreamSource&) = delete;
   StreamSource& operator=(StreamSource&&) = delete;
@@ -50,7 +50,6 @@ public:
   auto GetSampleDuration() -> uint64_t final {
     return capture_.GetSampleDuration();
   }
-
 };
 
 }  // namespace hela::eillance

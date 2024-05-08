@@ -18,8 +18,8 @@ extern "C" {
 #include "libavutil/time.h"
 }
 #ifdef _WIN32
-  #undef CLSCTX_ALL
-  #include <combaseapi.h>
+#undef CLSCTX_ALL
+#include <combaseapi.h>
 #endif
 
 #include "hela/eillance/capture/video_config.hpp"
@@ -57,21 +57,21 @@ public:
     codec_context_->max_b_frames = 0;
     codec_context_->pix_fmt = codecDestPixelFormat;
 
-    #ifdef _WIN32
+#ifdef _WIN32
     // TODO investigate, maybe fallback
     // essential to set hw_encoding=0 on Windows due to NVidia MF failure:
     // [h264_mf @ 0000024BC438BD40] MFT name: 'NVIDIA H.264 Encoder MFT'
     // [h264_mf @ 0000024BC438BD40] "format negotiation failed"
     av_opt_set(codec_context_->priv_data, "hw_encoding", "0", 0);
-    #endif
+#endif
 
     LOGD << "Width: " << codec_context_->width << ", height: " << codec_context_->height;
     LOGD << "Input pixel format: " << av_get_pix_fmt_name(codec_context_->pix_fmt);
     LOGD << "Output pixel format: " << av_get_pix_fmt_name(codec_context_->codec->pix_fmts[0]);
 
-    #ifdef _WIN32
+#ifdef _WIN32
     CoUninitialize();
-    #endif
+#endif
     auto ret = avcodec_open2(codec_context_, codec, nullptr);
     if (ret < 0) {
       throw std::runtime_error("Could not open codec " + std::to_string(ret));

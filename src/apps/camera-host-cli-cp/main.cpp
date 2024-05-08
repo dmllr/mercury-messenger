@@ -3,7 +3,7 @@
 #include "hela/eillance/rtc/producer.hpp"
 
 
-auto main(int  /*argc*/, char**  /*argv*/) -> int {
+auto main(int /*argc*/, char** /*argv*/) -> int {
   using namespace hela::eillance;
   auto rtc = RtcTransport<RtcProducer>();
   rtc.Start("server");

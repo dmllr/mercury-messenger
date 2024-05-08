@@ -15,4 +15,4 @@ target_link_libraries(hela-eillance-core INTERFACE
 )
 if (WIN32)
   target_link_libraries(hela-eillance-core INTERFACE Ws2_32 Secur32 Bcrypt strmiids mfplat mfuuid)
-endif()
+endif ()

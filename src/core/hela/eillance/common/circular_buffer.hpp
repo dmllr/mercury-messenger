@@ -6,7 +6,7 @@
 
 namespace hela::eillance {
 
-template <typename T, std::size_t Capacity>
+template<typename T, std::size_t Capacity>
 class CircularBuffer {
 public:
   CircularBuffer() : head_(0), tail_(0), size_(0) {}

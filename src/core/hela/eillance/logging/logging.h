@@ -9,9 +9,9 @@
 #include <plog/Init.h>
 #include <plog/Log.h>
 #ifdef ANDROID
-  #include <plog/Appenders/AndroidAppender.h>
+#include <plog/Appenders/AndroidAppender.h>
 #else
-  #include <plog/Appenders/ColorConsoleAppender.h>
+#include <plog/Appenders/ColorConsoleAppender.h>
 #endif
 
 

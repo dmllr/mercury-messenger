@@ -49,7 +49,6 @@ public:
     }
     return {};
   }
-
 };
 
 }  // namespace hela::eillance
