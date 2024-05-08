@@ -42,13 +42,13 @@ private:
   DispatchQueue dispatch_queue_{"Capture", 1};
 
   struct CrossPlatformProperties {
-#if defined __ANDROID__
+    #if defined __ANDROID__
     static constexpr auto openCVCameraCapabilities = cv::CAP_ANDROID;
-#elif defined _WIN32
+    #elif defined _WIN32
     static constexpr auto openCVCameraCapabilities = cv::CAP_DSHOW;
-#else
+    #else
     static constexpr auto openCVCameraCapabilities = cv::CAP_ANY;
-#endif
+    #endif
   };
 
 public:
@@ -80,9 +80,9 @@ public:
       return;
     }
 
-#if defined __ANDROID__
+    #if defined __ANDROID__
     cap_.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('B', 'G', 'R', '3'));
-#endif
+    #endif
     // attempt to set desired resolution
     cap_.set(cv::CAP_PROP_FRAME_WIDTH, VideoConfig::width);
     cap_.set(cv::CAP_PROP_FRAME_HEIGHT, VideoConfig::height);
@@ -115,9 +115,13 @@ public:
     if (cv_frame_.empty()) {
       return {};
     }
+    #if defined __ANDROID__
     auto frame = cv_frame_;
     cv::cvtColor(frame, frame, cv::COLOR_BGR2YUV_YV12);
     YV12toNV12(frame, nv12_frame_);
+    #else
+    cv::cvtColor(cv_frame_, nv12_frame_, cv::COLOR_BGR2YUV_I420);
+    #endif
 
     TELEMETRY(
         load_counter++;)
