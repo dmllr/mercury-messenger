@@ -17,6 +17,7 @@
 #include "hela/eillance/common/circular_buffer.hpp"
 #include "hela/eillance/common/packet.hpp"
 #include "hela/eillance/logging/logging.h"
+#include "hela/eillance/logging/telemetry.h"
 #include "hela/eillance/rtc/stream.hpp"
 #include "hela/eillance/utils/units.hpp"
 
@@ -30,10 +31,11 @@ class AudioCapture {
   AudioEncoder encoder_{};
   CircularBuffer<Packet, 200> encoded_packets_;
 
-
-  std::uint64_t last_fps_milestone;
-  std::uint32_t fps_counter;
-  std::uint32_t load_counter;
+  TELEMETRY(
+    std::uint64_t last_fps_milestone;
+    std::uint32_t fps_counter;
+    std::uint32_t load_counter;
+  )
 
 public:
   AudioCapture() {
@@ -52,18 +54,20 @@ public:
       const auto encoded_packet = self->encoder_.EncodeBuffer(static_cast<const AudioConfig::SampleDataType*>(frames));
       self->encoded_packets_.push(std::move(encoded_packet));
 
-      if (self->fps_counter % 900 == 0) {
-        auto elapsed = (Time::Now() - self->last_fps_milestone) / Units::Microseconds;
-        auto fetch_fps = static_cast<double>(self->load_counter) / elapsed;
-        self->load_counter = 0;
+      TELEMETRY(
+        if (self->fps_counter % 900 == 0) {
+          auto elapsed = (Time::Now() - self->last_fps_milestone) / Units::Microseconds;
+          auto fetch_fps = static_cast<double>(self->load_counter) / elapsed;
+          self->load_counter = 0;
 
-        auto capture_fps = static_cast<double>(self->fps_counter) / elapsed;
-        self->last_fps_milestone = Time::Now();
-        self->fps_counter = 0;
+          auto capture_fps = static_cast<double>(self->fps_counter) / elapsed;
+          self->last_fps_milestone = Time::Now();
+          self->fps_counter = 0;
 
-        LOGI << "Capture rate FPS: " << std::setprecision(2) << std::fixed << capture_fps << ", RTC request rate FPS:" << fetch_fps;
-      }
-      self->fps_counter++;
+          LOGI << "Capture rate FPS: " << std::setprecision(2) << std::fixed << capture_fps << ", RTC request rate FPS:" << fetch_fps;
+        }
+        self->fps_counter++;
+      )
     };
   }
 
@@ -99,7 +103,9 @@ public:
   }
 
   Packet FetchBuffers() {
-    load_counter++;
+    TELEMETRY(
+      load_counter++;
+    )
     Packet combined_packet;
     while (!encoded_packets_.isEmpty()) {
       Packet packet = encoded_packets_.pop();
