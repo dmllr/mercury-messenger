@@ -1,13 +1,11 @@
 package me.hela.surveillance
 
 import android.Manifest
-import android.app.Activity
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
-import android.graphics.Matrix
 import android.graphics.SurfaceTexture
 import android.os.Bundle
 import android.os.IBinder
@@ -16,16 +14,19 @@ import android.view.Surface
 import android.view.TextureView
 import android.view.View
 import androidx.core.app.ActivityCompat
+import androidx.fragment.app.FragmentActivity
+import androidx.fragment.app.FragmentContainerView
+import me.hela.surveillance.camera.R
 import me.hela.surveillance.camera.databinding.ActivityMainBinding
 
 
-class MainActivity : Activity(), TextureView.SurfaceTextureListener, ServiceConnection {
+class MainActivity : FragmentActivity(), TextureView.SurfaceTextureListener, ServiceConnection {
 
   private var cameraService: CameraService? = null
   private var cameraServiceBound: Boolean = false
 
   private var previewSurface: Surface? = null
-  private var isPreview: Boolean = false
+//  private var isPreview: Boolean = false
 
   private lateinit var binding: ActivityMainBinding
 
@@ -44,8 +45,8 @@ class MainActivity : Activity(), TextureView.SurfaceTextureListener, ServiceConn
   }
 
   private fun setDefaults() {
-    binding.btnTogglePreview.imageAlpha = 75
-    binding.btnTogglePreview.isEnabled = false
+//    binding.btnTogglePreview.imageAlpha = 75
+//    binding.btnTogglePreview.isEnabled = false
   }
 
   private fun setEventHandlers() {
@@ -53,16 +54,24 @@ class MainActivity : Activity(), TextureView.SurfaceTextureListener, ServiceConn
       checkAndRequestCamera()
     }
 
-    binding.btnTogglePreview.setOnClickListener {
-      isPreview = !isPreview
-      cameraService?.startPreview(isPreview)
-    }
+//    binding.btnTogglePreview.setOnClickListener {
+//      isPreview = !isPreview
+//      cameraService?.startPreview(isPreview)
+//    }
   }
 
   override fun onDestroy() {
     unbindCameraService()
 
     super.onDestroy()
+  }
+
+  private fun pushFragment() {
+    val fragment = CapturePreferencesFragment()
+
+    supportFragmentManager.beginTransaction()
+      .add(R.id.content_view, fragment)
+      .commit()
   }
 
   private fun checkAndRequestCamera() {
@@ -104,13 +113,13 @@ class MainActivity : Activity(), TextureView.SurfaceTextureListener, ServiceConn
   }
 
   private fun createTextureView() {
-    binding.texturePreview.surfaceTextureListener = this
-    if (binding.texturePreview.isAvailable) {
-      onSurfaceTextureAvailable(
-        binding.texturePreview.surfaceTexture!!,
-        binding.texturePreview.width, binding.texturePreview.height
-      )
-    }
+//    binding.texturePreview.surfaceTextureListener = this
+//    if (binding.texturePreview.isAvailable) {
+//      onSurfaceTextureAvailable(
+//        binding.texturePreview.surfaceTexture!!,
+//        binding.texturePreview.width, binding.texturePreview.height
+//      )
+//    }
   }
 
   override fun onRequestPermissionsResult(
@@ -134,6 +143,7 @@ class MainActivity : Activity(), TextureView.SurfaceTextureListener, ServiceConn
 
   private fun permissionGranted() {
     binding.btnPermissionWarning.visibility = View.GONE
+    pushFragment();
   }
 
   private fun unbindCameraService() {
@@ -149,8 +159,8 @@ class MainActivity : Activity(), TextureView.SurfaceTextureListener, ServiceConn
 
   // TextureView.SurfaceTextureListener implementation {
   override fun onSurfaceTextureAvailable(texture: SurfaceTexture, width: Int, height: Int) {
-    binding.btnTogglePreview.imageAlpha = 255
-    binding.btnTogglePreview.isEnabled = true
+//    binding.btnTogglePreview.imageAlpha = 255
+//    binding.btnTogglePreview.isEnabled = true
 
     val cameraPreviewSize = cameraService?.cameraPreviewSize ?: return
 
@@ -163,8 +173,8 @@ class MainActivity : Activity(), TextureView.SurfaceTextureListener, ServiceConn
   }
 
   override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
-    binding.btnTogglePreview.imageAlpha = 75
-    binding.btnTogglePreview.isEnabled = false
+//    binding.btnTogglePreview.imageAlpha = 75
+//    binding.btnTogglePreview.isEnabled = false
 
     cameraService?.previewSurfaceDestroyed(previewSurface!!)
 

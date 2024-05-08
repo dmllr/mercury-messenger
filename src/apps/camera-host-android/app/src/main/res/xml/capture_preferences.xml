@@ -1,0 +1,13 @@
+<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
+
+<!-- Default camera preference -->
+<ListPreference
+    app:key="default_camera"
+    app:title="Default Camera" />
+
+<!-- Camera resolution preference -->
+<ListPreference
+    app:key="camera_resolution"
+    app:title="Camera Resolution" />
+
+</PreferenceScreen>
