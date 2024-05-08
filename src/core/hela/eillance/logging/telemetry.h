@@ -1,5 +1,7 @@
 #pragma once
+#ifndef NDEBUG
 #define HE_TELEMETRY_ENABLED
+#endif
 
 #ifdef HE_TELEMETRY_ENABLED
 namespace hela::eillance {

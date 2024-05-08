@@ -74,21 +74,20 @@ private:
     if (audio_->GetSampleTime() < video_->GetSampleTime()) {
       ss = audio_;
       sst = Source::Type::Audio;
-      next_time = audio_->GetSampleTime() + audio_->GetSampleDuration();
+      next_time = audio_->GetSampleTime();
     } else {
       ss = video_;
       sst = Source::Type::Video;
-      next_time = video_->GetSampleTime() + video_->GetSampleDuration();
+      next_time = video_->GetSampleTime();
     }
 
     auto current_time = Time::Now();
 
-    if (0) {
-      std::cout << "AT: " << audio_->GetSampleTime() << "\n"
-                << "VT: " << video_->GetSampleTime() << "\n"
-                << " T: " << ((sst == Source::Type::Audio) ? "Audio" : "Video") << "\n"
-                << std::endl;
-    }
+    TELEMETRY(
+      LOGD << "AT: " << audio_->GetSampleTime() << "\n"
+           << "VT: " << video_->GetSampleTime() << "\n"
+           << " T: " << ((sst == Source::Type::Audio) ? "Audio" : "Video") << "\n";
+    )
     if (next_time > current_time) {
       auto wait_time = next_time - current_time;
       mutex.unlock();

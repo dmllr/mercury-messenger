@@ -56,7 +56,7 @@ public:
       self->encoded_packets_.push(std::move(encoded_packet));
 
       TELEMETRY(
-          if (self->fps_counter % (TelemetryInterval * (AudioConfig::samplesPerSecond / AudioConfig::sampleDuration)) == 0) {
+          if (self->fps_counter % (TelemetryInterval * AudioConfig::samplesPerSecond) == 0) {
             auto elapsed = (Time::Now() - self->last_fps_milestone) / Time::uS;
             auto fetch_fps = static_cast<double>(self->load_counter) / elapsed;
             self->load_counter = 0;
