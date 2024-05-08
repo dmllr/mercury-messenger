@@ -21,7 +21,7 @@
 #include "hela/eillance/logging/logging.h"
 #include "hela/eillance/rtc/stream.hpp"
 #include "hela/eillance/utils/android-camera_utils.hpp"
-#include "hela/eillance/utils/units.hpp"
+#include "hela/eillance/utils/time.hpp"
 
 
 namespace hela::eillance {
@@ -78,7 +78,7 @@ public:
   }
 
   static Time::Unit GetSampleDuration() {
-    return Units::Milliseconds / VideoConfig::frameRate;
+    return Time::uS / VideoConfig::frameRate;
   }
 
 private:
