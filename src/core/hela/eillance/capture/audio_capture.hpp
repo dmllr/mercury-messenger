@@ -116,6 +116,10 @@ public:
     return combined_packet;
   }
 
+  static std::uint64_t GetSampleDuration() {
+    return AudioConfig::sampleDuration * Units::Milliseconds;
+  }
+
 };
 
 }  // namespace hela::eillance

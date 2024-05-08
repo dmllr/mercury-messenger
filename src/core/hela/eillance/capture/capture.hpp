@@ -25,6 +25,10 @@ public:
     return self_->FetchBuffers();
   }
 
+  std::uint64_t GetSampleDuration() {
+    return self_->GetSampleDuration();
+  }
+
 private:
   struct CaptureInterface {
     CaptureInterface() = default;
@@ -36,6 +40,7 @@ private:
     virtual void Engage() = 0;
     virtual void Revoke() = 0;
     virtual Packet FetchBuffers() = 0;
+    virtual std::uint64_t GetSampleDuration() = 0;
   };
 
 public:
@@ -52,6 +57,9 @@ public:
     }
     Packet FetchBuffers() final {
       return capture_->FetchBuffers();
+    }
+    std::uint64_t GetSampleDuration() final {
+      return capture_->GetSampleDuration();
     }
   };
 

@@ -137,6 +137,10 @@ public:
     cap_.release();
   }
 
+  static std::uint64_t GetSampleDuration() {
+    return Units::Milliseconds / VideoConfig::frameRate;
+  }
+
 private:
   void CaptureFrame() {
     if (!capture_is_running_) {

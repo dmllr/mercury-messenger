@@ -36,6 +36,7 @@ public:
     virtual void LoadNextSample() = 0;
 
     virtual auto GetSampleTime() -> uint64_t = 0;
+    virtual auto GetSampleDuration() -> uint64_t = 0;
     virtual auto GetSample() -> rtc::binary = 0;
 
   protected:
@@ -73,11 +74,11 @@ private:
     if (audio_->GetSampleTime() < video_->GetSampleTime()) {
       ss = audio_;
       sst = Source::Type::Audio;
-      next_time = audio_->GetSampleTime();
+      next_time = audio_->GetSampleTime() + audio_->GetSampleDuration();
     } else {
       ss = video_;
       sst = Source::Type::Video;
-      next_time = video_->GetSampleTime();
+      next_time = video_->GetSampleTime() + video_->GetSampleDuration();
     }
 
     auto current_time = Time::Now();
@@ -88,7 +89,7 @@ private:
                 << " T: " << ((sst == Source::Type::Audio) ? "Audio" : "Video") << "\n"
                 << std::endl;
     }
-    if (unlikely(next_time > current_time)) {
+    if (next_time > current_time) {
       auto wait_time = next_time - current_time;
       mutex.unlock();
       std::this_thread::sleep_for(std::chrono::microseconds(wait_time));

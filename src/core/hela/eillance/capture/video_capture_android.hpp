@@ -77,6 +77,10 @@ public:
     camera_manager_ = nullptr;
   }
 
+  static std::uint64_t GetSampleDuration() {
+    return Units::Milliseconds / VideoConfig::frameRate;
+  }
+
 private:
   void OpenCamera() {
     // get camera ID list

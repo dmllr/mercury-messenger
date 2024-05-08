@@ -47,6 +47,10 @@ public:
     return sample_.timestamp();
   }
 
+  auto GetSampleDuration() -> uint64_t final {
+    return capture_.GetSampleDuration();
+  }
+
 };
 
 }  // namespace hela::eillance
