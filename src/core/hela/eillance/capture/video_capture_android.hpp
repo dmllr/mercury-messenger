@@ -55,18 +55,7 @@ public:
     renewCaptureSession();
   }
 
-  //  void CaptureFrame() {
-  //    dispatch_queue_.dispatch([this]() {
-  //      CaptureFrame();
-  //    });
-  //  }
-
   Packet FetchBuffers() {
-    //    auto frame = cv_frame_;
-    //    cv::cvtColor(frame, frame, cv::COLOR_BGR2YUV_YV12);
-    //    YV12toNV12(frame, nv12_frame_);
-    //
-    //    return encoder_.EncodeBuffer(nv12_frame_.data);
     return encoder_.EncodeBuffer();
   }
 

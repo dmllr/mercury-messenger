@@ -119,6 +119,7 @@ public:
       AMediaFormat_delete(format);
       encoded_data.clear();
     } else if (index == AMEDIACODEC_INFO_TRY_AGAIN_LATER) {
+      // it's okay
     } else {
       LOGI << "AMediaCodec_dequeueOutputBuffer unexpected return: " << index;
       encoded_data.clear();
