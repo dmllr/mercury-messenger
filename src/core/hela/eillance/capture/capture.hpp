@@ -24,7 +24,6 @@ public:
   Packet FetchBuffers() {
     return self_->FetchBuffers();
   }
-
   Time::Unit GetSampleDuration() {
     return self_->GetSampleDuration();
   }
