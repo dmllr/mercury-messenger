@@ -4,6 +4,9 @@
 #include <cassert>
 #include <cstddef>
 
+#undef min
+#undef max
+
 namespace hela::eillance {
 
 template<typename T, std::size_t Capacity>
@@ -11,15 +14,15 @@ class CircularBuffer {
 public:
   CircularBuffer() : head_(0), tail_(0), size_(0) {}
 
-  bool isEmpty() const {
+  [[nodiscard]] auto isEmpty() const {
     return size_ == 0;
   }
 
-  bool isFull() const {
+  [[nodiscard]] auto isFull() const {
     return size_ == Capacity;
   }
 
-  std::size_t size() const {
+  [[nodiscard]] auto size() const {
     return size_;
   }
 
