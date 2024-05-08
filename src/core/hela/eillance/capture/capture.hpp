@@ -8,15 +8,12 @@ namespace hela::eillance {
 class Capture {
 public:
   template <typename T>
-  explicit Capture(std::unique_ptr<T> x) : self_(new CaptureModel<T>(std::move(x))) {}
-
-  Capture(const Capture &x) = delete;
-
+  explicit Capture(std::unique_ptr<T> impl) : self_(new CaptureModel<T>(std::move(impl))) {}
+  Capture(const Capture&) = delete;
   Capture(Capture &&) noexcept = default;
-
-  Capture &operator=(const Capture &x) = delete;
-
-  Capture &operator=(Capture &&) noexcept = default;
+  Capture &operator=(const Capture&) = delete;
+  Capture &operator=(Capture&&) noexcept = default;
+  ~Capture() = default;
 
   void Engage() {
     self_->Engage();
@@ -30,6 +27,11 @@ public:
 
 private:
   struct CaptureInterface {
+    CaptureInterface() = default;
+    CaptureInterface(const CaptureInterface&) = delete;
+    CaptureInterface(CaptureInterface &&) noexcept = delete;
+    CaptureInterface &operator=(const CaptureInterface&) = delete;
+    CaptureInterface &operator=(CaptureInterface&&) noexcept = delete;
     virtual ~CaptureInterface() = default;
     virtual void Engage() = 0;
     virtual void Revoke() = 0;
@@ -41,7 +43,7 @@ public:
   class CaptureModel final : public CaptureInterface {
     std::unique_ptr<T> capture_;
   public:
-    explicit CaptureModel(std::unique_ptr<T> x) : capture_(std::move(x)) {}
+    explicit CaptureModel(std::unique_ptr<T> impl) : capture_(std::move(impl)) {}
     void Engage() final {
       capture_->Engage();
     }

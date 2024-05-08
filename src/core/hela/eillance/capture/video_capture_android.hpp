@@ -36,6 +36,10 @@ class VideoCapture {
 
 public:
   VideoCapture() = default;
+  VideoCapture(VideoCapture&&) = delete;
+  VideoCapture(const VideoCapture&) = delete;
+  VideoCapture& operator=(VideoCapture&&) = delete;
+  VideoCapture& operator=(const VideoCapture&) = delete;
 
   ~VideoCapture() {
     Revoke();

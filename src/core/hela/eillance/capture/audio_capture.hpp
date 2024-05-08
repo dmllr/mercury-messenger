@@ -29,7 +29,9 @@ class AudioCapture {
   ma_device_config device_config_{ma_device_config_init(ma_device_type_capture)};
 
   AudioEncoder encoder_{};
-  CircularBuffer<Packet, 200> encoded_packets_;
+
+  // buffer last 1 second of encoded data
+  CircularBuffer<Packet, AudioConfig::samplesPerSecond> encoded_packets_;
 
   TELEMETRY(
     std::uint64_t last_fps_milestone;
