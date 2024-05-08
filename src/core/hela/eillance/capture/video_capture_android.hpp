@@ -77,7 +77,7 @@ public:
     camera_manager_ = nullptr;
   }
 
-  static std::uint64_t GetSampleDuration() {
+  static Time::Unit GetSampleDuration() {
     return Units::Milliseconds / VideoConfig::frameRate;
   }
 

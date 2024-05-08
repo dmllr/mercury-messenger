@@ -14,7 +14,7 @@ namespace hela::eillance {
 
 class Packet {
   rtc::binary buffer_{};
-  std::uint64_t timestamp_{Time::Now()};
+  Time::Unit timestamp_{Time::Now()};
 
 public:
   Packet() = default;

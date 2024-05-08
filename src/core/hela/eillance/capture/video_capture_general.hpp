@@ -34,7 +34,7 @@ private:
   VideoEncoder encoder_;
 
   TELEMETRY(
-    std::uint64_t last_fps_milestone;
+      Time::Unit last_fps_milestone;
     std::uint32_t fps_counter;
     std::uint32_t load_counter;
   )
@@ -137,7 +137,7 @@ public:
     cap_.release();
   }
 
-  static std::uint64_t GetSampleDuration() {
+  static Time::Unit GetSampleDuration() {
     return Units::Milliseconds / VideoConfig::frameRate;
   }
 

@@ -34,7 +34,7 @@ class AudioCapture {
   CircularBuffer<Packet, AudioConfig::samplesPerSecond> encoded_packets_;
 
   TELEMETRY(
-    std::uint64_t last_fps_milestone;
+    Time::Unit last_fps_milestone;
     std::uint32_t fps_counter;
     std::uint32_t load_counter;
   )
@@ -116,7 +116,7 @@ public:
     return combined_packet;
   }
 
-  static std::uint64_t GetSampleDuration() {
+  static Time::Unit GetSampleDuration() {
     return AudioConfig::sampleDuration * Units::Milliseconds;
   }
 
