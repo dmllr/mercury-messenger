@@ -14,7 +14,6 @@
 #include "hela/eillance/common/packet.hpp"
 #include "hela/eillance/logging/logging.h"
 #include "hela/eillance/utils/time.hpp"
-#include "hela/eillance/utils/units.hpp"
 
 namespace hela::eillance {
 

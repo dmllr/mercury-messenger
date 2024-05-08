@@ -174,7 +174,7 @@ private:
   static void ProcessTrack(const Client& client, uint64_t sampleTime, const rtc::binary& message, const char* streamType) {
     auto peer = client.id_;
     auto track_data = client.track_;
-    auto elapsed_seconds = static_cast<double>(sampleTime) / Units::Microseconds;
+    auto elapsed_seconds = static_cast<double>(sampleTime) / Time::uS;
     const auto rtp_config = track_data->sender->rtpConfig;
     auto elapsed_timestamp = rtp_config->secondsToTimestamp(elapsed_seconds);
 

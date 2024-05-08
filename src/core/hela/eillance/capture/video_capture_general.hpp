@@ -21,7 +21,7 @@
 #include "hela/eillance/logging/logging.h"
 #include "hela/eillance/logging/telemetry.h"
 #include "hela/eillance/rtc/stream.hpp"
-#include "hela/eillance/utils/units.hpp"
+#include "hela/eillance/utils/time.hpp"
 
 namespace hela::eillance {
 
@@ -138,7 +138,7 @@ public:
   }
 
   static Time::Unit GetSampleDuration() {
-    return Units::Milliseconds / VideoConfig::frameRate;
+    return Time::uS / VideoConfig::frameRate;
   }
 
 private:
@@ -153,8 +153,8 @@ private:
     }
 
     TELEMETRY(
-      if (fps_counter % 300 == 0) {
-        auto elapsed = (Time::Now() - last_fps_milestone) / Units::Microseconds;
+      if (fps_counter % (TelemetryInterval * VideoConfig::frameRate) == 0) {
+        auto elapsed = (Time::Now() - last_fps_milestone) / Time::uS;
         auto fetch_fps = static_cast<double>(load_counter) / elapsed;
         load_counter = 0;
 
@@ -162,7 +162,7 @@ private:
         last_fps_milestone = Time::Now();
         fps_counter = 0;
 
-        LOGI << "Capture rate FPS: " << std::setprecision(2) << std::fixed << capture_fps << ", RTC request rate FPS:" << fetch_fps;
+        LOGI << "Video capture rate FPS: " << std::setprecision(2) << std::fixed << capture_fps << ", RTC request rate FPS:" << fetch_fps;
       }
       fps_counter++;
     )

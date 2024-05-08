@@ -1,7 +1,13 @@
 #pragma once
-//#define HE_TELEMETRY_ENABLED
+#define HE_TELEMETRY_ENABLED
 
 #ifdef HE_TELEMETRY_ENABLED
+namespace hela::eillance {
+
+static constexpr auto TelemetryInterval = 5;  // s
+
+}
+
 #define TELEMETRY(code) code
 #else
 #define TELEMETRY(code)

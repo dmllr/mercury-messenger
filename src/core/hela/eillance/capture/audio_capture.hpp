@@ -19,7 +19,7 @@
 #include "hela/eillance/logging/logging.h"
 #include "hela/eillance/logging/telemetry.h"
 #include "hela/eillance/rtc/stream.hpp"
-#include "hela/eillance/utils/units.hpp"
+#include "hela/eillance/utils/time.hpp"
 
 namespace hela::eillance {
 
@@ -57,8 +57,8 @@ public:
       self->encoded_packets_.push(std::move(encoded_packet));
 
       TELEMETRY(
-        if (self->fps_counter % 900 == 0) {
-          auto elapsed = (Time::Now() - self->last_fps_milestone) / Units::Microseconds;
+        if (self->fps_counter % (TelemetryInterval * (AudioConfig::samplesPerSecond / AudioConfig::sampleDuration)) == 0) {
+          auto elapsed = (Time::Now() - self->last_fps_milestone) / Time::uS;
           auto fetch_fps = static_cast<double>(self->load_counter) / elapsed;
           self->load_counter = 0;
 
@@ -66,7 +66,7 @@ public:
           self->last_fps_milestone = Time::Now();
           self->fps_counter = 0;
 
-          LOGI << "Capture rate FPS: " << std::setprecision(2) << std::fixed << capture_fps << ", RTC request rate FPS:" << fetch_fps;
+          LOGI << "Audio capture rate FPS: " << std::setprecision(2) << std::fixed << capture_fps << ", RTC request rate FPS:" << fetch_fps;
         }
         self->fps_counter++;
       )
@@ -117,7 +117,7 @@ public:
   }
 
   static Time::Unit GetSampleDuration() {
-    return AudioConfig::sampleDuration * Units::Milliseconds;
+    return AudioConfig::sampleDuration * Time::uS;
   }
 
 };
