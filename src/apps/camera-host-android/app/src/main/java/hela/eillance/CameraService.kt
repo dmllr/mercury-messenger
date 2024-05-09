@@ -1,4 +1,4 @@
-package me.hela.surveillance
+package hela.eillance
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -21,10 +21,10 @@ import android.view.Surface
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
-import me.hela.surveillance.camera.R
-import me.hela.surveillance.events.EventSource
-import me.hela.surveillance.events.IStatusCallback
-import me.hela.surveillance.events.ServiceState
+import hela.eillance.camera.R
+import hela.eillance.events.EventSource
+import hela.eillance.events.IStatusCallback
+import hela.eillance.events.ServiceState
 
 
 class CameraService : Service(), IStatusCallback {

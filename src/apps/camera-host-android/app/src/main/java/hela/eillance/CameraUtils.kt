@@ -1,4 +1,4 @@
-package me.hela.surveillance
+package hela.eillance
 
 import android.hardware.camera2.CameraAccessException
 import android.hardware.camera2.CameraCharacteristics

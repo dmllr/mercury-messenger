@@ -16,7 +16,7 @@ AppEngine* engine = nullptr;
 JavaVM* g_JavaVM;
 
 extern "C" JNIEXPORT jlong JNICALL
-Java_me_hela_surveillance_CameraService_createAppEngine(
+Java_hela_eillance_CameraService_createAppEngine(
     JNIEnv* env,
     jobject instance,
     jobject statusUpdateCallback) {
@@ -25,7 +25,7 @@ Java_me_hela_surveillance_CameraService_createAppEngine(
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_me_hela_surveillance_CameraService_deleteAppEngine(
+Java_hela_eillance_CameraService_deleteAppEngine(
     JNIEnv* env,
     jobject instance,
     jlong appmgr) {
@@ -41,7 +41,7 @@ Java_me_hela_surveillance_CameraService_deleteAppEngine(
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_me_hela_surveillance_CameraService_requestPreview(
+Java_hela_eillance_CameraService_requestPreview(
     JNIEnv* env,
     jobject instance,
     jlong appmgr,
@@ -51,7 +51,7 @@ Java_me_hela_surveillance_CameraService_requestPreview(
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_me_hela_surveillance_CameraService_onPreviewSurfaceCreated(
+Java_hela_eillance_CameraService_onPreviewSurfaceCreated(
     JNIEnv* env,
     jobject instance,
     jlong appmgr,
@@ -61,7 +61,7 @@ Java_me_hela_surveillance_CameraService_onPreviewSurfaceCreated(
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_me_hela_surveillance_CameraService_onPreviewSurfaceDestroyed(
+Java_hela_eillance_CameraService_onPreviewSurfaceDestroyed(
     JNIEnv* env,
     jobject instance,
     jlong appmgr,

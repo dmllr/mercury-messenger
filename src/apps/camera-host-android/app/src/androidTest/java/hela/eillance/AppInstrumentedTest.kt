@@ -1,4 +1,4 @@
-package me.hela.surveillance.camera
+package hela.eillance
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 

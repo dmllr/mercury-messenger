@@ -1,4 +1,4 @@
-package me.hela.surveillance
+package hela.eillance
 
 import android.Manifest
 import android.content.ComponentName
@@ -16,8 +16,8 @@ import android.view.TextureView
 import android.view.View
 import androidx.core.app.ActivityCompat
 import androidx.fragment.app.FragmentActivity
-import me.hela.surveillance.camera.R
-import me.hela.surveillance.camera.databinding.ActivityMainBinding
+import hela.eillance.camera.R
+import hela.eillance.camera.databinding.ActivityMainBinding
 
 
 class MainActivity : FragmentActivity(), TextureView.SurfaceTextureListener, ServiceConnection {

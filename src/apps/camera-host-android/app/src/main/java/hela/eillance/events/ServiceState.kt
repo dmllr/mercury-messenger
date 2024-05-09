@@ -1,4 +1,4 @@
-package me.hela.surveillance.events
+package hela.eillance.events
 
 enum class ServiceState(val value: Int) {
   Unknown(0),

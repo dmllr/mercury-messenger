@@ -1,11 +1,11 @@
-package me.hela.surveillance
+package hela.eillance
 
 import android.content.Context
 import android.hardware.camera2.CameraManager
 import android.os.Bundle
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceFragmentCompat
-import me.hela.surveillance.camera.R
+import hela.eillance.camera.R
 
 class CapturePreferencesFragment : PreferenceFragmentCompat() {
   override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {

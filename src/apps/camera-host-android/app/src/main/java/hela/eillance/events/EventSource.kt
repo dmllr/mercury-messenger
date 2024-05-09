@@ -1,4 +1,4 @@
-package me.hela.surveillance.events
+package hela.eillance.events
 
 enum class EventSource(val value: Int) {
   System(0),

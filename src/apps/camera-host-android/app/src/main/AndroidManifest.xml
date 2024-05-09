@@ -25,14 +25,14 @@
         android:theme="@style/AppTheme">
 
         <service
-            android:name="me.hela.surveillance.CameraService"
+            android:name="hela.eillance.CameraService"
             android:enabled="true"
             android:foregroundServiceType="camera|microphone|connectedDevice"
             android:exported="false">
         </service>
 
         <activity
-            android:name="me.hela.surveillance.MainActivity"
+            android:name="hela.eillance.MainActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
