@@ -52,7 +52,13 @@ public:
 
   void ReportStatus(const ServiceState state) const {
     if (status_callback_) {
-      (*status_callback_)(EventSource::RTC, static_cast<int>(state));
+      (*status_callback_)(EventSource::ConnectionStatus, static_cast<int>(state));
+    }
+  }
+
+  void ReportStateChange(const EventSource source, int state) const {
+    if (status_callback_) {
+      (*status_callback_)(source, static_cast<int>(state));
     }
   }
 
@@ -144,6 +150,7 @@ public:
 
     pc->onIceStateChange([this, id](rtc::PeerConnection::IceState state) {
       LOGI << "ICE State: " << static_cast<int>(state);
+      ReportStateChange(EventSource::IceState, static_cast<int>(state));
       if (state == rtc::PeerConnection::IceState::Failed) {
         ReportStatus(ServiceState::Failure);
       }
@@ -151,6 +158,7 @@ public:
 
     pc->onGatheringStateChange([this, wpc = make_weak_ptr(pc), id](rtc::PeerConnection::GatheringState state) {
       LOGI << "Gathering State: " << static_cast<int>(state);
+      ReportStateChange(EventSource::GatheringState, static_cast<int>(state));
       if (state == rtc::PeerConnection::GatheringState::Complete) {
         // Gathering complete, send answer
         if (auto pc = wpc.lock()) {
@@ -167,6 +175,7 @@ public:
 
     pc->onSignalingStateChange([this, id](rtc::PeerConnection::SignalingState state) {
       LOGI << "Signalling State: " << static_cast<int>(state);
+      ReportStateChange(EventSource::SignalingState, static_cast<int>(state));
       if (state == rtc::PeerConnection::SignalingState::HaveLocalOffer) {
         ReportStatus(ServiceState::Setup);
       }

@@ -32,8 +32,7 @@ class CameraService : Service(), IStatusCallback {
   private var cameraEngine: Long = 0
   var cameraPreviewSize: Size = Size(0, 0)
   private var underlyingServicesStates: MutableMap<EventSource, ServiceState> = mutableMapOf(
-    EventSource.RTC to ServiceState.Unknown,
-    EventSource.RTSP to ServiceState.Unknown,
+    EventSource.ConnectionStatus to ServiceState.Unknown,
   )
 
   inner class StreamingServiceBinder : Binder() {
@@ -49,7 +48,7 @@ class CameraService : Service(), IStatusCallback {
     super.onCreate()
 
     if (isCamera2Device()) {
-      createNativeCamera()
+      createAppEngine()
     } else {
       Log.e(Tune.TAG, "Found legacy camera device, camera2 device required")
       // TODO treat error
@@ -78,13 +77,15 @@ class CameraService : Service(), IStatusCallback {
 
   override fun onStatusUpdate(source: Int, status: Int) {
     val src = EventSource.fromInt(source)
-    val state = ServiceState.fromInt(status)
+    if (src == EventSource.ConnectionStatus) {
+      val state = ServiceState.fromInt(status)
 
-    underlyingServicesStates[src] = state
-    Log.d(Tune.TAG, "Status update: $src/$state")
-    log += "$src/$state\n"
+      underlyingServicesStates[src] = state
+      Log.d(Tune.TAG, "Status update: $src/$state")
+      log += "$src/$state\n"
 
-    startForeground()
+      startForeground()
+    }
   }
 
   private fun isCamera2Device(): Boolean {
@@ -110,7 +111,7 @@ class CameraService : Service(), IStatusCallback {
     return camera2Dev
   }
 
-  private fun createNativeCamera() {
+  private fun createAppEngine() {
     cameraEngine = createAppEngine(this)
   }
 
@@ -133,8 +134,8 @@ class CameraService : Service(), IStatusCallback {
     val channel = createNotificationChannel()
 
     val customText =
-        "RTC service: ${underlyingServicesStates[EventSource.RTC]}\n$log"
-    val statusIcon = when (underlyingServicesStates[EventSource.RTC]) {
+        "RTC service: ${underlyingServicesStates[EventSource.ConnectionStatus]}\n$log"
+    val statusIcon = when (underlyingServicesStates[EventSource.ConnectionStatus]) {
       ServiceState.Standby -> Pair(R.drawable.ic_status1_standby, R.color.colorPositive)
       ServiceState.Setup   -> Pair(R.drawable.ic_status2,         R.color.colorPositive)
       ServiceState.Action  -> Pair(R.drawable.ic_in_action,       R.color.colorPositive)

@@ -8,6 +8,6 @@ enum class ServiceState(val value: Int) {
   Failure(4);
 
   companion object {
-    fun fromInt(value: Int) = ServiceState.values().first { it.value == value }
+    fun fromInt(value: Int) = entries.first { it.value == value }
   }
 }

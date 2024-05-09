@@ -32,9 +32,9 @@ public:
         env(env),
         service_instance(env->NewWeakGlobalRef(instance)),
         status_update_callback(env->NewGlobalRef(status_update_callback)) {
-    rtc_producer = std::make_shared<hela::eillance::RtcTransport<hela::eillance::RtcProducer>>();
+    rtc_producer = std::make_shared<hela::eillance::RtcTransport<hela::eillance::RtcProducer>>("server");
     rtc_producer->SetStatusCallback([this](EventSource sender, int status) { setStatus(sender, status); });
-    rtc_producer->Start("server");
+    rtc_producer->Start();
   }
 
   ~AppEngine() {

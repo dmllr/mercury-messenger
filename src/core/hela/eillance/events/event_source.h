@@ -4,8 +4,10 @@ namespace hela::eillance {
 
 enum class EventSource : int {
   System = 0,
-  RTC,
-  RTSP,
+  ConnectionStatus,
+  GatheringState,
+  IceState,
+  SignalingState,
 };
 
 }  // namespace hela::eillance
