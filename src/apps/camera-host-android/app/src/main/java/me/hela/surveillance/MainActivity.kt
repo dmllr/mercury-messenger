@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.graphics.SurfaceTexture
 import android.os.Bundle
 import android.os.IBinder
@@ -15,13 +16,13 @@ import android.view.TextureView
 import android.view.View
 import androidx.core.app.ActivityCompat
 import androidx.fragment.app.FragmentActivity
-import androidx.fragment.app.FragmentContainerView
 import me.hela.surveillance.camera.R
 import me.hela.surveillance.camera.databinding.ActivityMainBinding
 
 
 class MainActivity : FragmentActivity(), TextureView.SurfaceTextureListener, ServiceConnection {
 
+  private var uiMode: Int = 0
   private var cameraService: CameraService? = null
   private var cameraServiceBound: Boolean = false
 
@@ -33,6 +34,10 @@ class MainActivity : FragmentActivity(), TextureView.SurfaceTextureListener, Ser
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
+
+    // Initialize uiMode with the current UI mode
+    uiMode = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+
     onWindowFocusChanged(true)
 
     binding = ActivityMainBinding.inflate(layoutInflater)
@@ -42,6 +47,16 @@ class MainActivity : FragmentActivity(), TextureView.SurfaceTextureListener, Ser
     setEventHandlers()
 
     checkAndRequestCamera()
+  }
+
+  override fun onConfigurationChanged(newConfig: Configuration) {
+    super.onConfigurationChanged(newConfig)
+
+    // Check if the theme has changed
+    if (newConfig.uiMode and Configuration.UI_MODE_NIGHT_MASK != uiMode) {
+      // Recreate the activity to apply the new theme
+      recreate()
+    }
   }
 
   private fun setDefaults() {
