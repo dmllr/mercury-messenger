@@ -51,7 +51,7 @@ public:
   }
 
   void ReportStatus(const ServiceState state) const {
-    if (likely(status_callback_)) {
+    if (status_callback_) {
       (*status_callback_)(EventSource::RTC, static_cast<int>(state));
     }
   }
