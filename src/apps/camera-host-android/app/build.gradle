@@ -52,9 +52,9 @@ android {
         resources.excludes.add("META-INF/*")
         resources.excludes.add("META-INF/plexus/*")
     }
-    android.ndkVersion '25.2.9519653'
+    android.ndkVersion '27.0.11718014'
     namespace 'me.hela.surveillance.camera'
-    ndkVersion '25.2.9519653'
+    ndkVersion ndkVersion
     dependenciesInfo {
         includeInApk false
         includeInBundle false
