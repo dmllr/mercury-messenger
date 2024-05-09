@@ -148,11 +148,11 @@ class MainActivity : FragmentActivity(), TextureView.SurfaceTextureListener, Ser
     }
 
     if (grantResults.size == 1 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-      Thread(Runnable {
+      Thread {
         runOnUiThread {
           checkAndRequestCamera()
         }
-      }).start()
+      }.start()
     }
   }
 

@@ -1,8 +1,6 @@
 package me.hela.surveillance
 
 import android.content.Context
-import android.hardware.camera2.CameraAccessException
-import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.os.Bundle
 import androidx.preference.ListPreference
