@@ -10,7 +10,7 @@
 
 #include "hela/eillance/common/dispatch_queue.hpp"
 #include "hela/eillance/events/event_source.h"
-#include "hela/eillance/events/signalling_state.h"
+#include "hela/eillance/events/service_state.h"
 #include "hela/eillance/logging/logging.h"
 #include "hela/eillance/rtc/peer.hpp"
 #include "hela/eillance/rtc/stream.hpp"
