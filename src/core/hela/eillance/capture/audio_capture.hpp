@@ -52,7 +52,7 @@ public:
         return;
       }
 
-      const auto encoded_packet = self->encoder_.EncodeBuffer(static_cast<const AudioConfig::SampleDataType*>(frames));
+      auto encoded_packet = self->encoder_.EncodeBuffer(static_cast<const AudioConfig::SampleDataType*>(frames));
       self->encoded_packets_.push(std::move(encoded_packet));
 
       TELEMETRY(
@@ -106,7 +106,7 @@ public:
         load_counter++;)
     Packet combined_packet;
     while (!encoded_packets_.isEmpty()) {
-      Packet packet = encoded_packets_.pop();
+      auto packet = encoded_packets_.pop();
       combined_packet.append(packet);
     }
     return combined_packet;
