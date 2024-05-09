@@ -10,24 +10,6 @@ import androidx.preference.PreferenceFragmentCompat
 import me.hela.surveillance.camera.R
 
 class CapturePreferencesFragment : PreferenceFragmentCompat() {
-  private fun getCameraName(cameraId: String): String {
-    val cameraManager =
-      requireContext().getSystemService(Context.CAMERA_SERVICE) as CameraManager
-    try {
-      val characteristics = cameraManager.getCameraCharacteristics(cameraId)
-      val facing = characteristics.get(CameraCharacteristics.LENS_FACING)
-      return when (facing) {
-        CameraCharacteristics.LENS_FACING_FRONT -> "Front Camera"
-        CameraCharacteristics.LENS_FACING_BACK -> "Back Camera"
-        CameraCharacteristics.LENS_FACING_EXTERNAL -> "External Camera"
-        else -> "Unknown Camera"
-      }
-    } catch (e: CameraAccessException) {
-      e.printStackTrace()
-      return "Unknown Camera"
-    }
-  }
-
   override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
     setPreferencesFromResource(R.xml.capture_preferences, rootKey)
 
@@ -41,22 +23,23 @@ class CapturePreferencesFragment : PreferenceFragmentCompat() {
     val cameraNames = arrayOfNulls<String>(cameraIds.size)
     val cameraIdsArray = arrayOfNulls<String>(cameraIds.size)
     for (i in cameraIds.indices) {
-      cameraNames[i] = getCameraName(cameraIds[i])
+      cameraNames[i] = CameraUtils.getCameraName(cameraManager, cameraIds[i])
       cameraIdsArray[i] = cameraIds[i]
     }
 
-    // Get the supported resolutions for the first camera
-    val supportedResolutions = CameraUtils.getSupportedResolutions(cameraManager, cameraIds[0])
+    // Find the default camera and camera resolution preferences
+    val defaultCameraPreference = findPreference<ListPreference>("default_camera")
+    val cameraResolutionPreference = findPreference<ListPreference>("camera_resolution")
+
+    // Get the supported resolutions for the selected camera
+    val supportedResolutions = CameraUtils.getSupportedResolutions(cameraManager,
+      defaultCameraPreference?.value ?: cameraIds[0])
 
     // Create the camera resolutions array
     val cameraResolutions = arrayOfNulls<String>(supportedResolutions.size)
     for (i in supportedResolutions.indices) {
       cameraResolutions[i] = supportedResolutions[i].toString()
     }
-
-    // Find the default camera and camera resolution preferences
-    val defaultCameraPreference = findPreference<ListPreference>("default_camera")
-    val cameraResolutionPreference = findPreference<ListPreference>("camera_resolution")
 
     // Set the entries and entry values for the preferences
     defaultCameraPreference?.entries = cameraNames
