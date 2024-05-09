@@ -23,14 +23,21 @@ template<typename Connection>
 class RtcTransport {
   using Json = nlohmann::json;
 
-  Connection connection_;
+  const std::string_view id_;
+
+  static constexpr auto minWaitBeforeReconnect_ = 1;
+  static constexpr auto maxWaitBeforeReconnect_ = 10;
+
+  Connection connection_{};
   rtc::WebSocketConfiguration ws_config_;
   rtc::WebSocket ws{ws_config_};
+  std::uint32_t connection_attempt_{0};
+  std::uint32_t wait_before_reconnect_{minWaitBeforeReconnect_};
 
   std::shared_ptr<std::function<void(EventSource, int)>> status_callback_;
 
 public:
-  RtcTransport() {
+  explicit RtcTransport(std::string_view local_id) : id_(local_id) {
     ws_config_.caCertificatePemFile = ZEROSSL_CA_BUNDLE;
   }
   RtcTransport(RtcTransport&&) = delete;
@@ -49,22 +56,36 @@ public:
     }
   }
 
-  void Start(std::string_view localId) {
-    LOGI << "The local ID is: " << localId.data();
+  void Start() {
+    LOGI << "The local ID is: " << id_.data();
+
+    connection_attempt_++;
+    if (connection_attempt_ <= 1) {
+      wait_before_reconnect_ = 0;
+    } else if (connection_attempt_ > 1 && connection_attempt_ < 10) {
+      wait_before_reconnect_ = minWaitBeforeReconnect_;
+    } else {
+      wait_before_reconnect_ = maxWaitBeforeReconnect_;
+    }
 
     ws.onOpen([this]() {
       LOGI << "WebSocket connected, signaling ready";
+      connection_attempt_ = 0;
       ReportStatus(ServiceState::Standby);
     });
 
     ws.onClosed([this]() {
-      LOGI << "WebSocket closed";
+      LOGE << "WebSocket connection closed";
       ReportStatus(ServiceState::Failure);
-      // TODO reopen
+
+      DispatchQueue::MainThread().dispatch([this]() {
+        Start();
+      });
+      LOGI << "Scheduled WebSocket reconnection in " << wait_before_reconnect_ << "s";
     });
 
     ws.onError([this](const std::string& error) {
-      LOGI << "WebSocket failed: " << error.c_str();
+      LOGE << "WebSocket connection failed: " << error.c_str();
       ReportStatus(ServiceState::Failure);
     });
 
@@ -79,8 +100,10 @@ public:
       });
     });
 
-    const std::string url = "wss://" + ip_address + ":" + std::to_string(port) + "/" + localId.data();
-    LOGI << "Signaling server URL is " << url.c_str();
+    std::this_thread::sleep_for(std::chrono::seconds(wait_before_reconnect_));
+
+    const std::string url = "wss://" + ip_address + ":" + std::to_string(port) + "/" + id_.data();
+    LOGD << "Signaling server URL is " << url.c_str();
 
     try {
       ws.open(url);
@@ -92,6 +115,7 @@ public:
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
       }
+      connection_attempt_ = 0;
     } catch (const std::exception& e) {
       LOGI << "Error: " << e.what();
       ReportStatus(ServiceState::Failure);

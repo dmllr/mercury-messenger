@@ -5,8 +5,8 @@
 
 auto main(int /*argc*/, char** /*argv*/) -> int {
   using namespace hela::eillance;
-  auto rtc = RtcTransport<RtcProducer>();
-  rtc.Start("server");
+  auto rtc = RtcTransport<RtcProducer>("server");
+  rtc.Start();
 
   while (true) {
     std::string id;
