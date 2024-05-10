@@ -1,7 +1,10 @@
 <resources>
-    <string name="app_name">Hela Surveillance</string>
+    <string name="app_name">Hela Eillance</string>
     <string name="permissions_required">Camera and microphone permissions are required. Tap here to grant the permissions.</string>
     <string name="toggle_camera_preview">Toggle camera preview.</string>
-    <string name="notification_title">Hela Surveillance</string>
-    <string name="notification_description">Surveillance: on-demand camera streaming service</string>
+    <string name="notification_title">Hela Eillance</string>
+    <string name="notification_description">Camera stream P2P connection</string>
+    <string name="preference_category_camera">Camera preferences</string>
+    <string name="preference_default_camera">Default Camera</string>
+    <string name="preference_camera_resolution">Camera Resolution</string>
 </resources>
