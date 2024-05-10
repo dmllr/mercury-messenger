@@ -1,6 +1,7 @@
 <resources>
 
     <style name="AppTheme" parent="Theme.MaterialComponents.DayNight">
+        <item name="android:padding">@dimen/min_padding</item>
     </style>
 
 </resources>

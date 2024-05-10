@@ -23,16 +23,16 @@ import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
 import hela.eillance.camera.R
 import hela.eillance.events.EventSource
-import hela.eillance.events.IStatusCallback
-import hela.eillance.events.ServiceState
+import hela.eillance.events.IStatusUpdateCallback
+import hela.eillance.events.StateService
 
 
-class CameraService : Service(), IStatusCallback {
+class CameraService : Service(), IStatusUpdateCallback {
   private var log: String = ""
   private var cameraEngine: Long = 0
   var cameraPreviewSize: Size = Size(0, 0)
-  private var underlyingServicesStates: MutableMap<EventSource, ServiceState> = mutableMapOf(
-    EventSource.ConnectionStatus to ServiceState.Unknown,
+  private var underlyingServicesStates: MutableMap<EventSource, StateService> = mutableMapOf(
+    EventSource.ConnectionStatus to StateService.Unknown,
   )
 
   inner class StreamingServiceBinder : Binder() {
@@ -76,9 +76,14 @@ class CameraService : Service(), IStatusCallback {
   }
 
   override fun onStatusUpdate(source: Int, status: Int) {
+    val intent = Intent(Tune::BroadcastActionOnStateUpdate.get())
+    intent.putExtra(Tune::BroadcastActionOnStateUpdate_source.get(), source)
+    intent.putExtra(Tune::BroadcastActionOnStateUpdate_state.get(), status)
+    sendBroadcast(intent)
+
     val src = EventSource.fromInt(source)
     if (src == EventSource.ConnectionStatus) {
-      val state = ServiceState.fromInt(status)
+      val state = StateService.fromInt(status)
 
       underlyingServicesStates[src] = state
       Log.d(Tune.TAG, "Status update: $src/$state")
@@ -136,10 +141,10 @@ class CameraService : Service(), IStatusCallback {
     val customText =
         "RTC service: ${underlyingServicesStates[EventSource.ConnectionStatus]}\n$log"
     val statusIcon = when (underlyingServicesStates[EventSource.ConnectionStatus]) {
-      ServiceState.Standby -> Pair(R.drawable.ic_status1_standby, R.color.colorPositive)
-      ServiceState.Setup   -> Pair(R.drawable.ic_status2,         R.color.colorPositive)
-      ServiceState.Action  -> Pair(R.drawable.ic_in_action,       R.color.colorPositive)
-      ServiceState.Failure -> Pair(R.drawable.ic_failure,         R.color.colorNegative)
+      StateService.Standby -> Pair(R.drawable.ic_status1_standby, R.color.colorPositive)
+      StateService.Setup   -> Pair(R.drawable.ic_status2,         R.color.colorPositive)
+      StateService.Action  -> Pair(R.drawable.ic_in_action,       R.color.colorPositive)
+      StateService.Failure -> Pair(R.drawable.ic_failure,         R.color.colorNegative)
       else                 -> Pair(R.drawable.ic_status1_standby, R.color.colorNegative)
     }
 
@@ -200,7 +205,7 @@ class CameraService : Service(), IStatusCallback {
 
 
   // native lib functions
-  private external fun createAppEngine(statusCallback: IStatusCallback): Long
+  private external fun createAppEngine(statusCallback: IStatusUpdateCallback): Long
   private external fun deleteAppEngine(ndkCamera: Long)
 
   private external fun requestPreview(ndkCamera: Long, preview: Boolean)

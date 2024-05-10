@@ -16,7 +16,7 @@ AppEngine* engine = nullptr;
 JavaVM* g_JavaVM;
 
 extern "C" JNIEXPORT jlong JNICALL
-Java_hela_eillance_CameraService_createAppEngine__Lhela_eillance_events_IStatusCallback_2(
+Java_hela_eillance_CameraService_createAppEngine__Lhela_eillance_events_IStatusUpdateCallback_2(
     JNIEnv* env,
     jobject instance,
     jobject statusUpdateCallback) {

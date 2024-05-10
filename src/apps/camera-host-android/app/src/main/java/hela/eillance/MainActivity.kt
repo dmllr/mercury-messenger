@@ -82,7 +82,7 @@ class MainActivity : FragmentActivity(), TextureView.SurfaceTextureListener, Ser
   }
 
   private fun pushFragment() {
-    val fragment = CapturePreferencesFragment()
+    val fragment = OperationFragment()
 
     supportFragmentManager.beginTransaction()
       .add(R.id.content_view, fragment)

@@ -1,5 +1,5 @@
 package hela.eillance.events
 
-interface IStatusCallback {
+interface IStatusUpdateCallback {
   fun onStatusUpdate(source: Int, status: Int)
 }
