@@ -14,6 +14,7 @@ import hela.eillance.camera.R
 import hela.eillance.events.EventSource
 import hela.eillance.events.StateIce
 import hela.eillance.events.StateIceGathering
+import hela.eillance.events.StateService
 import hela.eillance.events.StateSignalling
 import hela.eillance.events.getResourceString
 
@@ -33,8 +34,9 @@ class OperationFragment : Fragment() {
           StateIce.fromInt(state)?.getResourceString(activity!!)
         EventSource.SignalingState -> view?.findViewById<TextView>(R.id.signaling_state)?.text =
           StateSignalling.fromInt(state).getResourceString(activity!!)
+        EventSource.ConnectionStatus -> view?.findViewById<TextView>(R.id.communication_status_state)?.text =
+          StateService.fromInt(state).getResourceString(activity!!)
         EventSource.System -> {}
-        EventSource.ConnectionStatus -> {}
       }
     }
   }

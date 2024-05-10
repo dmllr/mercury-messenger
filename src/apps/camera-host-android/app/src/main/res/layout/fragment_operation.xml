@@ -9,12 +9,34 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="ICE gathering state:" />
+            android:text="@string/communication_status" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/status_divider" />
+        <TextView
+            android:id="@+id/communication_status_state"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/unknown" />
+    </TableRow>
+
+    <TableRow
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/ice_gathering_state" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/status_divider" />
         <TextView
             android:id="@+id/ice_gathering_state"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="" />
+            android:text="@string/waiting" />
     </TableRow>
 
     <TableRow
@@ -23,12 +45,16 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="ICE connection state:" />
+            android:text="@string/ice_connection_state" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/status_divider" />
         <TextView
             android:id="@+id/ice_connection_state"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="" />
+            android:text="@string/waiting" />
     </TableRow>
 
     <TableRow
@@ -37,11 +63,15 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Signaling state:" />
+            android:text="@string/signaling_state" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/status_divider" />
         <TextView
             android:id="@+id/signaling_state"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="" />
+            android:text="@string/waiting" />
     </TableRow>
 </TableLayout>

@@ -10,7 +10,14 @@
     <string name="preference_default_camera">Default Camera</string>
     <string name="preference_camera_resolution">Camera Resolution</string>
 
+    <string name="communication_status">Communication status</string>
+    <string name="ice_gathering_state">ICE gathering state</string>
+    <string name="ice_connection_state">ICE connection state</string>
+    <string name="signaling_state">Signaling state</string>
+    <string name="status_divider">:</string>
+
     <string name="unknown">Unknown</string>
+    <string name="waiting">Waiting</string>
 
     <string name="state_signalling_stable">Stable</string>
     <string name="state_signalling_have_local_offer">Have Local Offer</string>
