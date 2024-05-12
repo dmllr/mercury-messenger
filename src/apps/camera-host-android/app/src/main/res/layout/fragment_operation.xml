@@ -1,15 +1,18 @@
 <TableLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
     <TableRow
         android:layout_width="match_parent"
         android:layout_height="wrap_content">
+
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/communication_status" />
+
         <TextView
             android:id="@+id/communication_status_state"
             android:layout_width="wrap_content"
@@ -20,10 +23,12 @@
     <TableRow
         android:layout_width="match_parent"
         android:layout_height="wrap_content">
+
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/ice_gathering_state" />
+
         <TextView
             android:id="@+id/ice_gathering_state"
             android:layout_width="wrap_content"
@@ -34,10 +39,12 @@
     <TableRow
         android:layout_width="match_parent"
         android:layout_height="wrap_content">
+
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/ice_connection_state" />
+
         <TextView
             android:id="@+id/ice_connection_state"
             android:layout_width="wrap_content"
@@ -48,10 +55,12 @@
     <TableRow
         android:layout_width="match_parent"
         android:layout_height="wrap_content">
+
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/signaling_state" />
+
         <TextView
             android:id="@+id/signaling_state"
             android:layout_width="wrap_content"
@@ -62,14 +71,35 @@
     <TableRow
         android:layout_width="match_parent"
         android:layout_height="wrap_content">
+
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/ping_state" />
+
         <TextView
             android:id="@+id/ping_state"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/led" />
+    </TableRow>
+
+    <TableRow
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+        <FrameLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content">
+
+            <ImageButton
+                android:id="@+id/btn_open_camera_preferences"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+
+                android:contentDescription="@string/open_camera_preferences"
+                android:src="@drawable/ic_capture_preferences"
+                app:tint="?android:attr/textColorPrimary" />
+        </FrameLayout>
+
     </TableRow>
 </TableLayout>

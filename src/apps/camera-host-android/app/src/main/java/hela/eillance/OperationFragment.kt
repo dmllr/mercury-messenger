@@ -9,6 +9,7 @@ import androidx.fragment.app.Fragment
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageButton
 import android.widget.TextView
 import androidx.core.content.ContextCompat.getColor
 import hela.eillance.camera.R
@@ -82,6 +83,15 @@ class OperationFragment : Fragment() {
     communicationStatusState = view.findViewById(R.id.communication_status_state)
     pingState = view.findViewById(R.id.ping_state)
     defaultTextColor = pingState.currentTextColor
+
+    val openPreferencesButton = view.findViewById<ImageButton>(R.id.btn_open_camera_preferences)
+    openPreferencesButton.setOnClickListener {
+      val capturePreferencesFragment = CapturePreferencesFragment()
+      parentFragmentManager.beginTransaction()
+        .add(R.id.content_view, capturePreferencesFragment)
+        .addToBackStack(null)
+        .commit()
+    }
   }
 
 }
