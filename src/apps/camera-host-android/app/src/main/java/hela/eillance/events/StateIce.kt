@@ -23,7 +23,7 @@ enum class StateIce(val value: Int) {
       Closed to R.string.state_ice_closed,
     )
 
-    fun fromInt(value: Int?) = values().firstOrNull { it.value == value }
+    fun fromInt(value: Int?) = entries.firstOrNull { it.value == value }
   }
 }
 

@@ -62,8 +62,21 @@ public:
   void Revoke() {
     encoder_.Revoke();
     ACameraCaptureSession_stopRepeating(capture_session);
-    ACameraManager_delete(camera_manager_);
-    camera_manager_ = nullptr;
+
+    if (cameraDevice != nullptr) {
+      ACameraDevice_close(cameraDevice);
+      cameraDevice = nullptr;
+    }
+
+    if (capture_session != nullptr) {
+      ACameraCaptureSession_close(capture_session);
+      capture_session = nullptr;
+    }
+
+    if (camera_manager_ != nullptr) {
+      ACameraManager_delete(camera_manager_);
+      camera_manager_ = nullptr;
+    }
   }
 
   static Time::Unit GetSampleDuration() {
