@@ -8,6 +8,7 @@ enum class EventSource : int {
   GatheringState,
   IceState,
   SignalingState,
+  Ping,
 };
 
 }  // namespace hela::eillance

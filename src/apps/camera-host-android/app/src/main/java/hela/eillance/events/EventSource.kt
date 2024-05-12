@@ -5,7 +5,8 @@ enum class EventSource(val value: Int) {
   ConnectionStatus(1),
   GatheringState(2),
   IceState(3),
-  SignalingState(4);
+  SignalingState(4),
+  Ping(5);
 
   companion object {
     fun fromInt(value: Int) = entries.first { it.value == value }

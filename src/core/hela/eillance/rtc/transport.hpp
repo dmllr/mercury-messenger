@@ -198,7 +198,7 @@ public:
     }
   }
 
-  static auto CreateDefaultDataChannel(std::shared_ptr<rtc::PeerConnection> pc, const std::string& id) -> std::shared_ptr<rtc::DataChannel> {
+  auto CreateDefaultDataChannel(std::shared_ptr<rtc::PeerConnection> pc, const std::string& id) -> std::shared_ptr<rtc::DataChannel> {
     auto dc = pc->createDataChannel("ping-pong");
     dc->onOpen([id, wdc = make_weak_ptr(dc)]() {
       if (auto dc = wdc.lock()) {
@@ -206,11 +206,12 @@ public:
       }
     });
 
-    dc->onMessage(nullptr, [id, wdc = make_weak_ptr(dc)](const std::string& msg) {
+    dc->onMessage(nullptr, [id, wdc = make_weak_ptr(dc), this](const std::string& msg) {
       LOGD << "Message from " << id << " received: " << msg;
       if (auto dc = wdc.lock()) {
         dc->send("Ping");
       }
+      ReportStateChange(EventSource::Ping, 1);
     });
 
     return dc;
