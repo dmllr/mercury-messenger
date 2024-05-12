@@ -14,9 +14,7 @@
     <string name="ice_gathering_state">ICE gathering state</string>
     <string name="ice_connection_state">ICE connection state</string>
     <string name="signaling_state">Signaling state</string>
-
-    <string name="status_divider" translatable="false">:</string>
-    <string name="led" translatable="false">⬤</string>
+    <string name="ping_state">Signaling state</string>
 
     <string name="unknown">Unknown</string>
     <string name="waiting">Waiting</string>
