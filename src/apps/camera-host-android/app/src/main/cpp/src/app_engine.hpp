@@ -41,18 +41,7 @@ public:
     env_->DeleteGlobalRef(status_update_callback_);
   }
 
-  void setStatus(EventSource sender, int status) {
-    JNIEnv* env = attachCurrentThreadIfNeeded();
-    if (env == nullptr) {
-      return;
-    }
-    jclass callbackClass = env->GetObjectClass(status_update_callback_);
-    jmethodID callbackMethod = env->GetMethodID(callbackClass, "onStatusUpdate", "(II)V");
-    if (callbackMethod != nullptr) {
-      env->CallVoidMethod(status_update_callback_, callbackMethod, static_cast<int>(sender), status);
-    }
-  }
-
+private:
   JNIEnv* attachCurrentThreadIfNeeded() {
     JNIEnv* env;
     jint res = jvm_->GetEnv((void**)&env, JNI_VERSION_1_6);
@@ -72,8 +61,18 @@ public:
     }
   }
 
-private:
-  cv::VideoCapture cap;
+  void setStatus(EventSource sender, int status) {
+    JNIEnv* env = attachCurrentThreadIfNeeded();
+    if (env == nullptr) {
+      return;
+    }
+    jclass callbackClass = env->GetObjectClass(status_update_callback_);
+    jmethodID callbackMethod = env->GetMethodID(callbackClass, "onStatusUpdate", "(II)V");
+    if (callbackMethod != nullptr) {
+      env->CallVoidMethod(status_update_callback_, callbackMethod, static_cast<int>(sender), status);
+    }
+  }
+
 };
 
 }  // namespace hela::eillance
