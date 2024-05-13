@@ -30,24 +30,25 @@ class OperationFragment : Fragment() {
   private var defaultTextColor: Int = 0
 
   private val receiver = object : BroadcastReceiver() {
-    override fun onReceive(context: Context?, intent: Intent?) {
+    override fun onReceive(ctx: Context?, intent: Intent?) {
       val sourceValue = intent?.getIntExtra(Tune::BroadcastActionOnStateUpdate_source.get(), 0)
       val state = intent?.getIntExtra(Tune::BroadcastActionOnStateUpdate_state.get(), 0)
 
       val source = EventSource.fromInt(sourceValue!!)
+      val context = ctx!!
 
       when (source) {
         EventSource.GatheringState -> iceGatheringState.text =
-          StateIceGathering.fromInt(state).getResourceString(activity!!)
+          StateIceGathering.fromInt(state).getResourceString(context)
         EventSource.IceState -> iceConnectionState.text =
-          StateIce.fromInt(state)?.getResourceString(activity!!)
+          StateIce.fromInt(state).getResourceString(context)
         EventSource.SignalingState -> signalingState.text =
-          StateSignalling.fromInt(state).getResourceString(activity!!)
+          StateSignalling.fromInt(state).getResourceString(context)
         EventSource.ConnectionStatus -> communicationStatusState.text =
-          StateService.fromInt(state).getResourceString(activity!!)
+          StateService.fromInt(state).getResourceString(context)
         EventSource.Ping -> {
           pingState.apply {
-            setTextColor(getColor(activity!!, R.color.colorPositive))
+            setTextColor(getColor(context, R.color.colorPositive))
             postDelayed({setTextColor(defaultTextColor)}, 333)
           }
         }
@@ -55,15 +56,16 @@ class OperationFragment : Fragment() {
       }
     }
   }
+
   override fun onResume() {
     super.onResume()
     requireContext().registerReceiver(receiver, IntentFilter(Tune::BroadcastActionOnStateUpdate.get()),
       Context.RECEIVER_NOT_EXPORTED)
+    updateStatuses()
   }
 
   override fun onPause() {
     super.onPause()
-    // Unregister the receiver
     requireContext().unregisterReceiver(receiver)
   }
 
@@ -93,15 +95,18 @@ class OperationFragment : Fragment() {
         .commit()
     }
 
-    updateStatuses()
+    view.postDelayed({updateStatuses()}, 2000)
   }
 
   private fun updateStatuses() {
     val status = getStatus()
     if (status != null) {
-      status.iceState = StateIce.New
+      val context = requireContext()
+      iceGatheringState.text = status.iceGatheringState.getResourceString(context)
+      iceConnectionState.text = status.iceState.getResourceString(context)
+      signalingState.text = status.signallingState.getResourceString(context)
+      communicationStatusState.text = status.connectionState.getResourceString(context)
     }
-    // TODO update UI
   }
 
   private fun getStatus(): Status? {
