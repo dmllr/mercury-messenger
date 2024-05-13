@@ -41,6 +41,10 @@ public:
     env_->DeleteGlobalRef(status_update_callback_);
   }
 
+  Status GetStatus() {
+    return rtc_producer->GetStatus();
+  }
+
 private:
   JNIEnv* attachCurrentThreadIfNeeded() {
     JNIEnv* env;

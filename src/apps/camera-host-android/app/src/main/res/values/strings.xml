@@ -43,4 +43,11 @@
     <string name="state_ice_failed">Failed</string>
     <string name="state_ice_disconnected">Disconnected</string>
     <string name="state_ice_closed">Closed</string>
+
+    <string name="state_peer_connection_new">New</string>
+    <string name="state_peer_connection_connecting">Connecting</string>
+    <string name="state_peer_connection_connected">Connected</string>
+    <string name="state_peer_connection_disconnected">Disconnected</string>
+    <string name="state_peer_connection_failed">Failed</string>
+    <string name="state_peer_connection_closed">Closed</string>
 </resources>

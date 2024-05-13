@@ -19,11 +19,11 @@ import hela.eillance.camera.databinding.ActivityMainBinding
 
 class MainActivity : FragmentActivity(), ServiceConnection {
 
-  private var uiMode: Int = 0
-  private var cameraService: CameraService? = null
+  var cameraService: CameraService? = null
   private var cameraServiceBound: Boolean = false
-
   private lateinit var binding: ActivityMainBinding
+
+  private var uiMode: Int = 0
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)

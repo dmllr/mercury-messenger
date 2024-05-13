@@ -92,6 +92,23 @@ class OperationFragment : Fragment() {
         .addToBackStack(null)
         .commit()
     }
+
+    updateStatuses()
   }
+
+  private fun updateStatuses() {
+    val status = getStatus()
+    if (status != null) {
+      status.iceState = StateIce.New
+    }
+    // TODO update UI
+  }
+
+  private fun getStatus(): Status? {
+    val activity = requireActivity() as MainActivity
+    val cameraService = activity.cameraService
+    return cameraService?.getStatus()
+  }
+
 
 }
