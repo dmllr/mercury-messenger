@@ -17,7 +17,6 @@ import android.os.Binder
 import android.os.IBinder
 import android.util.Log
 import android.util.Size
-import android.view.Surface
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
@@ -191,27 +190,9 @@ class CameraService : Service(), IStatusUpdateCallback {
     return id
   }
 
-  fun startPreview(preview: Boolean) {
-    requestPreview(cameraEngine, preview)
-  }
-
-  fun previewSurfaceCreated(surface: Surface) {
-    onPreviewSurfaceCreated(cameraEngine, surface)
-  }
-
-  fun previewSurfaceDestroyed(surface: Surface) {
-    onPreviewSurfaceDestroyed(cameraEngine, surface)
-  }
-
-
   // native lib functions
   private external fun createAppEngine(statusCallback: IStatusUpdateCallback): Long
   private external fun deleteAppEngine(ndkCamera: Long)
-
-  private external fun requestPreview(ndkCamera: Long, preview: Boolean)
-
-  private external fun onPreviewSurfaceCreated(ndkCamera: Long, surface: Surface)
-  private external fun onPreviewSurfaceDestroyed(ndkCamera: Long, surface: Surface)
 
   companion object {
     private const val CAMERA_SERVICE_FG_ID = 9990
