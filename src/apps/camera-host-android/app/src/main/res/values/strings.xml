@@ -12,6 +12,7 @@
     <string name="preference_camera_resolution">Camera Resolution</string>
 
     <string name="communication_status">Communication status</string>
+    <string name="peer_connection_state">Peer connection state</string>
     <string name="ice_gathering_state">ICE gathering state</string>
     <string name="ice_connection_state">ICE connection state</string>
     <string name="signaling_state">Signaling state</string>

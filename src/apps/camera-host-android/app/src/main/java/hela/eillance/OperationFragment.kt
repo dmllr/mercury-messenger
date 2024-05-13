@@ -16,6 +16,7 @@ import hela.eillance.camera.R
 import hela.eillance.events.EventSource
 import hela.eillance.events.StateIce
 import hela.eillance.events.StateIceGathering
+import hela.eillance.events.StatePeerConnection
 import hela.eillance.events.StateService
 import hela.eillance.events.StateSignalling
 import hela.eillance.events.getResourceString
@@ -26,6 +27,7 @@ class OperationFragment : Fragment() {
   private lateinit var iceConnectionState: TextView
   private lateinit var signalingState: TextView
   private lateinit var communicationStatusState: TextView
+  private lateinit var peerConnectionState: TextView
   private lateinit var pingState: TextView
   private var defaultTextColor: Int = 0
 
@@ -46,6 +48,8 @@ class OperationFragment : Fragment() {
           StateSignalling.fromInt(state).getResourceString(context)
         EventSource.ConnectionStatus -> communicationStatusState.text =
           StateService.fromInt(state).getResourceString(context)
+        EventSource.PeerConnectionState -> peerConnectionState.text =
+          StatePeerConnection.fromInt(state).getResourceString(context)
         EventSource.Ping -> {
           pingState.apply {
             setTextColor(getColor(context, R.color.colorPositive))
@@ -83,6 +87,7 @@ class OperationFragment : Fragment() {
     iceConnectionState = view.findViewById(R.id.ice_connection_state)
     signalingState = view.findViewById(R.id.signaling_state)
     communicationStatusState = view.findViewById(R.id.communication_status_state)
+    peerConnectionState = view.findViewById(R.id.peer_connection_state)
     pingState = view.findViewById(R.id.ping_state)
     defaultTextColor = pingState.currentTextColor
 
@@ -106,6 +111,7 @@ class OperationFragment : Fragment() {
       iceConnectionState.text = status.iceState.getResourceString(context)
       signalingState.text = status.signallingState.getResourceString(context)
       communicationStatusState.text = status.connectionState.getResourceString(context)
+      peerConnectionState.text = status.peerConnectionState.getResourceString(context)
     }
   }
 
