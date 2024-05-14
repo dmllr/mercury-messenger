@@ -28,7 +28,6 @@ import hela.eillance.events.StateService
 
 
 class CameraService : Service(), IStatusUpdateCallback {
-  private var log: String = ""
   private var cameraEngine: Long = 0
   var cameraPreviewSize: Size = Size(0, 0)
   private var underlyingServicesStates: MutableMap<EventSource, StateService> = mutableMapOf(
@@ -87,7 +86,6 @@ class CameraService : Service(), IStatusUpdateCallback {
 
       underlyingServicesStates[src] = state
       Log.d(Tune.TAG, "Status update: $src/$state")
-      log += "$src/$state\n"
 
       startForeground()
     }
@@ -139,7 +137,7 @@ class CameraService : Service(), IStatusUpdateCallback {
     val channel = createNotificationChannel()
 
     val customText =
-        "RTC service: ${underlyingServicesStates[EventSource.ConnectionStatus]}\n$log"
+        "Service state: ${underlyingServicesStates[EventSource.ConnectionStatus]}"
     val statusIcon = when (underlyingServicesStates[EventSource.ConnectionStatus]) {
       StateService.Standby -> Pair(R.drawable.ic_status1_standby, R.color.colorPositive)
       StateService.Setup   -> Pair(R.drawable.ic_status2,         R.color.colorPositive)
@@ -164,7 +162,6 @@ class CameraService : Service(), IStatusUpdateCallback {
       .setSmallIcon(R.drawable.ic_camera_stream)
       .setContentTitle(getString(R.string.notification_title))
       .setContentText(customText)
-      .setStyle(NotificationCompat.BigTextStyle(notificationBuilder))
       .setPriority(NotificationCompat.PRIORITY_LOW)
       .setCategory(NotificationCompat.CATEGORY_SERVICE)
       .setContentIntent(pendingIntent)
