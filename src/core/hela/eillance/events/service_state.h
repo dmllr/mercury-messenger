@@ -3,11 +3,11 @@
 namespace hela::eillance {
 
 enum class ServiceState : int {
-  Unknown = 0,
-  Standby,
-  Setup,
-  Action,
-  Failure,
+  unknown = 0,
+  standby,
+  setup,
+  action,
+  failure,
 };
 
 }  // namespace hela::eillance

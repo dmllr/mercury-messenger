@@ -12,10 +12,11 @@
     <string name="preference_camera_resolution">Camera Resolution</string>
 
     <string name="communication_status">Communication status</string>
+    <string name="peer_connection_state">Peer connection state</string>
     <string name="ice_gathering_state">ICE gathering state</string>
     <string name="ice_connection_state">ICE connection state</string>
     <string name="signaling_state">Signaling state</string>
-    <string name="ping_state">Signaling state</string>
+    <string name="ping_state">Ping</string>
 
     <string name="unknown">Unknown</string>
     <string name="waiting">Waiting</string>
@@ -43,4 +44,11 @@
     <string name="state_ice_failed">Failed</string>
     <string name="state_ice_disconnected">Disconnected</string>
     <string name="state_ice_closed">Closed</string>
+
+    <string name="state_peer_connection_new">New</string>
+    <string name="state_peer_connection_connecting">Connecting</string>
+    <string name="state_peer_connection_connected">Connected</string>
+    <string name="state_peer_connection_disconnected">Disconnected</string>
+    <string name="state_peer_connection_failed">Failed</string>
+    <string name="state_peer_connection_closed">Closed</string>
 </resources>

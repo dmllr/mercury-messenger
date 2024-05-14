@@ -16,6 +16,7 @@ import hela.eillance.camera.R
 import hela.eillance.events.EventSource
 import hela.eillance.events.StateIce
 import hela.eillance.events.StateIceGathering
+import hela.eillance.events.StatePeerConnection
 import hela.eillance.events.StateService
 import hela.eillance.events.StateSignalling
 import hela.eillance.events.getResourceString
@@ -26,28 +27,32 @@ class OperationFragment : Fragment() {
   private lateinit var iceConnectionState: TextView
   private lateinit var signalingState: TextView
   private lateinit var communicationStatusState: TextView
+  private lateinit var peerConnectionState: TextView
   private lateinit var pingState: TextView
   private var defaultTextColor: Int = 0
 
   private val receiver = object : BroadcastReceiver() {
-    override fun onReceive(context: Context?, intent: Intent?) {
+    override fun onReceive(ctx: Context?, intent: Intent?) {
       val sourceValue = intent?.getIntExtra(Tune::BroadcastActionOnStateUpdate_source.get(), 0)
       val state = intent?.getIntExtra(Tune::BroadcastActionOnStateUpdate_state.get(), 0)
 
       val source = EventSource.fromInt(sourceValue!!)
+      val context = ctx!!
 
       when (source) {
         EventSource.GatheringState -> iceGatheringState.text =
-          StateIceGathering.fromInt(state).getResourceString(activity!!)
+          StateIceGathering.fromInt(state).getResourceString(context)
         EventSource.IceState -> iceConnectionState.text =
-          StateIce.fromInt(state)?.getResourceString(activity!!)
+          StateIce.fromInt(state).getResourceString(context)
         EventSource.SignalingState -> signalingState.text =
-          StateSignalling.fromInt(state).getResourceString(activity!!)
+          StateSignalling.fromInt(state).getResourceString(context)
         EventSource.ConnectionStatus -> communicationStatusState.text =
-          StateService.fromInt(state).getResourceString(activity!!)
+          StateService.fromInt(state).getResourceString(context)
+        EventSource.PeerConnectionState -> peerConnectionState.text =
+          StatePeerConnection.fromInt(state).getResourceString(context)
         EventSource.Ping -> {
           pingState.apply {
-            setTextColor(getColor(activity!!, R.color.colorPositive))
+            setTextColor(getColor(context, R.color.colorPositive))
             postDelayed({setTextColor(defaultTextColor)}, 333)
           }
         }
@@ -55,15 +60,16 @@ class OperationFragment : Fragment() {
       }
     }
   }
+
   override fun onResume() {
     super.onResume()
     requireContext().registerReceiver(receiver, IntentFilter(Tune::BroadcastActionOnStateUpdate.get()),
       Context.RECEIVER_NOT_EXPORTED)
+    updateStatuses()
   }
 
   override fun onPause() {
     super.onPause()
-    // Unregister the receiver
     requireContext().unregisterReceiver(receiver)
   }
 
@@ -81,6 +87,7 @@ class OperationFragment : Fragment() {
     iceConnectionState = view.findViewById(R.id.ice_connection_state)
     signalingState = view.findViewById(R.id.signaling_state)
     communicationStatusState = view.findViewById(R.id.communication_status_state)
+    peerConnectionState = view.findViewById(R.id.peer_connection_state)
     pingState = view.findViewById(R.id.ping_state)
     defaultTextColor = pingState.currentTextColor
 
@@ -92,6 +99,27 @@ class OperationFragment : Fragment() {
         .addToBackStack(null)
         .commit()
     }
+
+    view.postDelayed({updateStatuses()}, 2000)
   }
+
+  private fun updateStatuses() {
+    val status = getStatus()
+    if (status != null) {
+      val context = requireContext()
+      iceGatheringState.text = status.iceGatheringState.getResourceString(context)
+      iceConnectionState.text = status.iceState.getResourceString(context)
+      signalingState.text = status.signallingState.getResourceString(context)
+      communicationStatusState.text = status.connectionState.getResourceString(context)
+      peerConnectionState.text = status.peerConnectionState.getResourceString(context)
+    }
+  }
+
+  private fun getStatus(): Status? {
+    val activity = requireActivity() as MainActivity
+    val cameraService = activity.cameraService
+    return cameraService?.getStatus()
+  }
+
 
 }

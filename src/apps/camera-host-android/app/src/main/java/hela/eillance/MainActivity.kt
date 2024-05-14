@@ -7,12 +7,9 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.content.res.Configuration
-import android.graphics.SurfaceTexture
 import android.os.Bundle
 import android.os.IBinder
 import android.util.Log
-import android.view.Surface
-import android.view.TextureView
 import android.view.View
 import androidx.core.app.ActivityCompat
 import androidx.fragment.app.FragmentActivity
@@ -20,22 +17,17 @@ import hela.eillance.camera.R
 import hela.eillance.camera.databinding.ActivityMainBinding
 
 
-class MainActivity : FragmentActivity(), TextureView.SurfaceTextureListener, ServiceConnection {
+class MainActivity : FragmentActivity(), ServiceConnection {
 
-  private var uiMode: Int = 0
-  private var cameraService: CameraService? = null
+  var cameraService: CameraService? = null
   private var cameraServiceBound: Boolean = false
-
-  private var previewSurface: Surface? = null
-//  private var isPreview: Boolean = false
-
   private lateinit var binding: ActivityMainBinding
 
+  private var uiMode: Int = 0
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
 
-    // Initialize uiMode with the current UI mode
     uiMode = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
 
     onWindowFocusChanged(true)
@@ -43,7 +35,6 @@ class MainActivity : FragmentActivity(), TextureView.SurfaceTextureListener, Ser
     binding = ActivityMainBinding.inflate(layoutInflater)
     setContentView(binding.root)
 
-    setDefaults()
     setEventHandlers()
 
     checkAndRequestCamera()
@@ -59,20 +50,10 @@ class MainActivity : FragmentActivity(), TextureView.SurfaceTextureListener, Ser
     }
   }
 
-  private fun setDefaults() {
-//    binding.btnTogglePreview.imageAlpha = 75
-//    binding.btnTogglePreview.isEnabled = false
-  }
-
   private fun setEventHandlers() {
     binding.btnPermissionWarning.setOnClickListener {
       checkAndRequestCamera()
     }
-
-//    binding.btnTogglePreview.setOnClickListener {
-//      isPreview = !isPreview
-//      cameraService?.startPreview(isPreview)
-//    }
   }
 
   override fun onDestroy() {
@@ -112,7 +93,6 @@ class MainActivity : FragmentActivity(), TextureView.SurfaceTextureListener, Ser
     permissionGranted()
 
     startStreamingService()
-    createTextureView()
   }
 
   private fun startStreamingService() {
@@ -125,16 +105,6 @@ class MainActivity : FragmentActivity(), TextureView.SurfaceTextureListener, Ser
       )
     )
       cameraServiceBound = true
-  }
-
-  private fun createTextureView() {
-//    binding.texturePreview.surfaceTextureListener = this
-//    if (binding.texturePreview.isAvailable) {
-//      onSurfaceTextureAvailable(
-//        binding.texturePreview.surfaceTexture!!,
-//        binding.texturePreview.width, binding.texturePreview.height
-//      )
-//    }
   }
 
   override fun onRequestPermissionsResult(
@@ -172,40 +142,9 @@ class MainActivity : FragmentActivity(), TextureView.SurfaceTextureListener, Ser
     }
   }
 
-  // TextureView.SurfaceTextureListener implementation {
-  override fun onSurfaceTextureAvailable(texture: SurfaceTexture, width: Int, height: Int) {
-//    binding.btnTogglePreview.imageAlpha = 255
-//    binding.btnTogglePreview.isEnabled = true
-
-    val cameraPreviewSize = cameraService?.cameraPreviewSize ?: return
-
-    texture.setDefaultBufferSize(cameraPreviewSize.width, cameraPreviewSize.height)
-
-    val surface = Surface(texture)
-    previewSurface = surface
-
-    cameraService?.previewSurfaceCreated(surface)
-  }
-
-  override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
-//    binding.btnTogglePreview.imageAlpha = 75
-//    binding.btnTogglePreview.isEnabled = false
-
-    cameraService?.previewSurfaceDestroyed(previewSurface!!)
-
-    previewSurface = null
-    return true
-  }
-
-  override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {}
-
-  override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {}
-  // TextureView.SurfaceTextureListener implementation }
-
   // ServiceConnection implementation {
   override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
     cameraService = (service as CameraService.StreamingServiceBinder).service
-    createTextureView()
   }
 
   override fun onServiceDisconnected(name: ComponentName?) {

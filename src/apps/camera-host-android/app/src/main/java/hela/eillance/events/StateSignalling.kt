@@ -8,7 +8,8 @@ enum class StateSignalling(val value: Int) {
   HaveLocalOffer(1),
   HaveRemoteOffer(2),
   HaveLocalPranswer(3),
-  HaveRemotePranswer(4);
+  HaveRemotePranswer(4),
+  Unknown(99);
 
   companion object {
     val resourceMap = mapOf(
@@ -17,6 +18,7 @@ enum class StateSignalling(val value: Int) {
       HaveRemoteOffer to R.string.state_signalling_have_remote_offer,
       HaveLocalPranswer to R.string.state_signalling_have_local_pranswer,
       HaveRemotePranswer to R.string.state_signalling_have_remote_pranswer,
+      Unknown to R.string.unknown,
     )
     fun fromInt(value: Int?) = entries.first { it.value == value }
   }

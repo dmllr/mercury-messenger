@@ -13,6 +13,7 @@
 #include "hela/eillance/events/service_state.h"
 #include "hela/eillance/logging/logging.h"
 #include "hela/eillance/rtc/peer.hpp"
+#include "hela/eillance/rtc/status.hpp"
 #include "hela/eillance/rtc/stream.hpp"
 #include "hela/eillance/utils/memory.h"
 
@@ -23,21 +24,22 @@ template<typename Connection>
 class RtcTransport {
   using Json = nlohmann::json;
 
-  const std::string_view id_;
+  const std::string_view id;
 
-  static constexpr auto minWaitBeforeReconnect_ = 1;
-  static constexpr auto maxWaitBeforeReconnect_ = 10;
+  static constexpr auto minWaitBeforeReconnect = 1;
+  static constexpr auto maxWaitBeforeReconnect = 10;
 
   Connection connection_{};
   rtc::WebSocketConfiguration ws_config_;
-  rtc::WebSocket ws{ws_config_};
+  rtc::WebSocket ws_{ws_config_};
   std::uint32_t connection_attempt_{0};
-  std::uint32_t wait_before_reconnect_{minWaitBeforeReconnect_};
+  std::uint32_t wait_before_reconnect_{minWaitBeforeReconnect};
 
+  mutable Status status_{};
   std::shared_ptr<std::function<void(EventSource, int)>> status_callback_;
 
 public:
-  explicit RtcTransport(std::string_view local_id) : id_(local_id) {
+  explicit RtcTransport(std::string_view local_id) : id(local_id) {
     ws_config_.caCertificatePemFile = ZEROSSL_CA_BUNDLE;
   }
   RtcTransport(RtcTransport&&) = delete;
@@ -50,7 +52,12 @@ public:
     status_callback_ = std::make_shared<std::function<void(EventSource, int)>>(callback);
   }
 
+  [[maybe_unused]] Status GetStatus() {
+    return status_;
+  }
+
   void ReportStatus(const ServiceState state) const {
+    status_.service_state = state;
     if (status_callback_) {
       (*status_callback_)(EventSource::ConnectionStatus, static_cast<int>(state));
     }
@@ -63,26 +70,26 @@ public:
   }
 
   void Start() {
-    LOGI << "The local ID is: " << id_.data();
+    LOGI << "The local ID is: " << id.data();
 
     connection_attempt_++;
     if (connection_attempt_ <= 1) {
       wait_before_reconnect_ = 0;
     } else if (connection_attempt_ > 1 && connection_attempt_ < 10) {
-      wait_before_reconnect_ = minWaitBeforeReconnect_;
+      wait_before_reconnect_ = minWaitBeforeReconnect;
     } else {
-      wait_before_reconnect_ = maxWaitBeforeReconnect_;
+      wait_before_reconnect_ = maxWaitBeforeReconnect;
     }
 
-    ws.onOpen([this]() {
+    ws_.onOpen([this]() {
       LOGI << "WebSocket connected, signaling ready";
       connection_attempt_ = 0;
-      ReportStatus(ServiceState::Standby);
+      ReportStatus(ServiceState::standby);
     });
 
-    ws.onClosed([this]() {
+    ws_.onClosed([this]() {
       LOGE << "WebSocket connection closed";
-      ReportStatus(ServiceState::Failure);
+      ReportStatus(ServiceState::failure);
 
       DispatchQueue::MainThread().dispatch([this]() {
         Start();
@@ -90,12 +97,12 @@ public:
       LOGI << "Scheduled WebSocket reconnection in " << wait_before_reconnect_ << "s";
     });
 
-    ws.onError([this](const std::string& error) {
+    ws_.onError([this](const std::string& error) {
       LOGE << "WebSocket connection failed: " << error.c_str();
-      ReportStatus(ServiceState::Failure);
+      ReportStatus(ServiceState::failure);
     });
 
-    ws.onMessage([&](std::variant<rtc::binary, std::string> data) {
+    ws_.onMessage([&](std::variant<rtc::binary, std::string> data) {
       if (!std::holds_alternative<std::string>(data)) {
         return;
       }
@@ -108,15 +115,15 @@ public:
 
     std::this_thread::sleep_for(std::chrono::seconds(wait_before_reconnect_));
 
-    const std::string url = "wss://" + ip_address + ":" + std::to_string(port) + "/" + id_.data();
+    const std::string url = "wss://" + ip_address + ":" + std::to_string(port) + "/" + id.data();
     LOGD << "Signaling server URL is " << url.c_str();
 
     try {
-      ws.open(url);
+      ws_.open(url);
 
       LOGI << "Waiting for signaling to be connected...";
-      while (!ws.isOpen()) {
-        if (ws.isClosed()) {
+      while (!ws_.isOpen()) {
+        if (ws_.isClosed()) {
           return;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -124,7 +131,7 @@ public:
       connection_attempt_ = 0;
     } catch (const std::exception& e) {
       LOGI << "Error: " << e.what();
-      ReportStatus(ServiceState::Failure);
+      ReportStatus(ServiceState::failure);
       return;
     }
   }
@@ -134,8 +141,10 @@ public:
 
     pc->onStateChange([this, id](rtc::PeerConnection::State state) {
       LOGI << "State: " << static_cast<int>(state);
+      status_.state = state;
+      ReportStateChange(EventSource::PeerConnectionState, static_cast<int>(state));
       if (state == rtc::PeerConnection::State::Connected) {
-        ReportStatus(ServiceState::Action);
+        ReportStatus(ServiceState::action);
       }
       if (state == rtc::PeerConnection::State::Disconnected ||
           state == rtc::PeerConnection::State::Failed ||
@@ -144,7 +153,7 @@ public:
           // remove disconnected peer
           connection_.RemovePeer(id);
         });
-        ReportStatus(ServiceState::Standby);
+        ReportStatus(ServiceState::standby);
       }
     });
 
@@ -152,12 +161,13 @@ public:
       LOGI << "ICE State: " << static_cast<int>(state);
       ReportStateChange(EventSource::IceState, static_cast<int>(state));
       if (state == rtc::PeerConnection::IceState::Failed) {
-        ReportStatus(ServiceState::Failure);
+        ReportStatus(ServiceState::failure);
       }
     });
 
     pc->onGatheringStateChange([this, wpc = make_weak_ptr(pc), id](rtc::PeerConnection::GatheringState state) {
       LOGI << "Gathering State: " << static_cast<int>(state);
+      status_.gathering_state = state;
       ReportStateChange(EventSource::GatheringState, static_cast<int>(state));
       if (state == rtc::PeerConnection::GatheringState::Complete) {
         // Gathering complete, send answer
@@ -168,16 +178,17 @@ public:
               {"debug", "onGatheringStateChange(complete)"},
               {"type", description->typeString()},
               {"sdp", std::string(description.value())}};
-          ws.send(message.dump());
+          ws_.send(message.dump());
         }
       }
     });
 
     pc->onSignalingStateChange([this, id](rtc::PeerConnection::SignalingState state) {
       LOGI << "Signalling State: " << static_cast<int>(state);
+      status_.signalling_state = state;
       ReportStateChange(EventSource::SignalingState, static_cast<int>(state));
       if (state == rtc::PeerConnection::SignalingState::HaveLocalOffer) {
-        ReportStatus(ServiceState::Setup);
+        ReportStatus(ServiceState::setup);
       }
     });
 

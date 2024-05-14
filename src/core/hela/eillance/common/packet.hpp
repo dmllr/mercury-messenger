@@ -57,22 +57,22 @@ public:
   }
 
   // begin method to return the iterator to the beginning of the buffer
-  auto begin() {
+  [[nodiscard]] auto begin() {
     return buffer_.begin();
   }
 
   // const begin method to return the const iterator to the beginning of the buffer
-  auto begin() const {
+  [[nodiscard]] auto begin() const {
     return buffer_.begin();
   }
 
   // end method to return the iterator to the end of the buffer
-  auto end() {
+  [[nodiscard]] auto end() {
     return buffer_.end();
   }
 
   // const end method to return the const iterator to the end of the buffer
-  auto end() const {
+  [[nodiscard]] auto end() const {
     return buffer_.end();
   }
 
@@ -89,11 +89,11 @@ public:
     return buffer_.data();
   }
 
-  [[nodiscard]] auto dataAsChars() const {
+  [[maybe_unused]] [[nodiscard]] auto dataAsChars() const {
     return reinterpret_cast<const char*>(buffer_.data());
   }
 
-  [[nodiscard]] auto dataAsUChars() const {
+  [[maybe_unused]] [[nodiscard]] auto dataAsUChars() const {
     return reinterpret_cast<const unsigned char*>(buffer_.data());
   }
 

@@ -16,7 +16,7 @@ AppEngine* engine = nullptr;
 JavaVM* g_JavaVM;
 
 extern "C" JNIEXPORT jlong JNICALL
-Java_hela_eillance_CameraService_createAppEngine__Lhela_eillance_events_IStatusUpdateCallback_2(
+Java_hela_eillance_CameraService_createAppEngine(
     JNIEnv* env,
     jobject instance,
     jobject statusUpdateCallback) {
@@ -40,53 +40,29 @@ Java_hela_eillance_CameraService_deleteAppEngine(
   engine = nullptr;
 }
 
-extern "C" JNIEXPORT void JNICALL
-Java_hela_eillance_CameraService_requestPreview(
+extern "C" JNIEXPORT jobject JNICALL
+Java_hela_eillance_CameraService_getStatus(
     JNIEnv* env,
     jobject instance,
-    jlong appmgr,
-    jboolean start) {
+    jlong appmgr) {
   auto app = reinterpret_cast<AppEngine*>(appmgr);
-  app->requestPreview(start);
-}
+  auto status = app->GetStatus();
 
-extern "C" JNIEXPORT void JNICALL
-Java_hela_eillance_CameraService_onPreviewSurfaceCreated(
-    JNIEnv* env,
-    jobject instance,
-    jlong appmgr,
-    jobject surface) {
-  auto app = reinterpret_cast<AppEngine*>(appmgr);
-  app->addPreviewSurface(surface);
-}
+  jclass statusClass = env->FindClass("hela/eillance/Status");
+  jmethodID fromIntMethod = env->GetStaticMethodID(statusClass, "fromInt", "(IIIII)Lhela/eillance/Status;");
+  assert(fromIntMethod != nullptr && "Static method Status.fromInt can't be found");
 
-extern "C" JNIEXPORT void JNICALL
-Java_hela_eillance_CameraService_onPreviewSurfaceDestroyed(
-    JNIEnv* env,
-    jobject instance,
-    jlong appmgr,
-    jobject surface) {
-  auto app = reinterpret_cast<AppEngine*>(appmgr);
+  jobject finalStatus = env->CallStaticObjectMethod(statusClass, fromIntMethod,
+                                                    static_cast<jint>(status.service_state),
+                                                    static_cast<jint>(status.state),
+                                                    static_cast<jint>(status.ice_state),
+                                                    static_cast<jint>(status.gathering_state),
+                                                    static_cast<jint>(status.signalling_state));
 
-  app->removePreviewSurface();
-
-  auto cls = env->FindClass("android/view/Surface");
-  auto toString = env->GetMethodID(cls, "toString", "()Ljava/lang/String;");
-
-  auto destroyObjStr = reinterpret_cast<jstring>(env->CallObjectMethod(surface, toString));
-  auto destroyObjName = env->GetStringUTFChars(destroyObjStr, nullptr);
-
-  auto appObjStr = reinterpret_cast<jstring>(env->CallObjectMethod(app->getPreviewSurface(), toString));
-  auto appObjName = env->GetStringUTFChars(appObjStr, nullptr);
-
-  LOGF_IF(strcmp(destroyObjName, appObjName)) << "object name mismatch";
-
-  env->ReleaseStringUTFChars(destroyObjStr, destroyObjName);
-  env->ReleaseStringUTFChars(appObjStr, appObjName);
+  return finalStatus;
 }
 
 JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void* reserved) {
-  // Grab the context ClassLoader of the current thread, if any.
   JNIEnv* env;
   if (vm->GetEnv((void**)&env, JNI_VERSION_1_6) != JNI_OK) {
     return JNI_ERR;

@@ -16,20 +16,17 @@ import android.hardware.camera2.CameraMetadata
 import android.os.Binder
 import android.os.IBinder
 import android.util.Log
-import android.util.Size
-import android.view.Surface
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
 import hela.eillance.camera.R
 import hela.eillance.events.EventSource
-import hela.eillance.events.IStatusUpdateCallback
+import hela.eillance.events.interfaces.IStatusUpdateCallback
 import hela.eillance.events.StateService
 
 
 class CameraService : Service(), IStatusUpdateCallback {
   private var cameraEngine: Long = 0
-  var cameraPreviewSize: Size = Size(0, 0)
   private var underlyingServicesStates: MutableMap<EventSource, StateService> = mutableMapOf(
     EventSource.ConnectionStatus to StateService.Unknown,
   )
@@ -118,6 +115,10 @@ class CameraService : Service(), IStatusUpdateCallback {
     cameraEngine = createAppEngine(this)
   }
 
+  fun getStatus(): Status {
+    return getStatus(cameraEngine)
+  }
+
   private fun Pair<Int, Int>.getBitmapFromVectorDrawable(): Bitmap {
     val context = this@CameraService
     val drawable = ContextCompat.getDrawable(context, first)
@@ -188,27 +189,10 @@ class CameraService : Service(), IStatusUpdateCallback {
     return id
   }
 
-  fun startPreview(preview: Boolean) {
-    requestPreview(cameraEngine, preview)
-  }
-
-  fun previewSurfaceCreated(surface: Surface) {
-    onPreviewSurfaceCreated(cameraEngine, surface)
-  }
-
-  fun previewSurfaceDestroyed(surface: Surface) {
-    onPreviewSurfaceDestroyed(cameraEngine, surface)
-  }
-
-
   // native lib functions
   private external fun createAppEngine(statusCallback: IStatusUpdateCallback): Long
   private external fun deleteAppEngine(ndkCamera: Long)
-
-  private external fun requestPreview(ndkCamera: Long, preview: Boolean)
-
-  private external fun onPreviewSurfaceCreated(ndkCamera: Long, surface: Surface)
-  private external fun onPreviewSurfaceDestroyed(ndkCamera: Long, surface: Surface)
+  private external fun getStatus(ndkCamera: Long): Status
 
   companion object {
     private const val CAMERA_SERVICE_FG_ID = 9990
