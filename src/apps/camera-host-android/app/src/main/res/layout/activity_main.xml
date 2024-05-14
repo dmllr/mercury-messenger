@@ -6,19 +6,18 @@
     android:layout_height="match_parent"
     tools:context="hela.eillance.MainActivity">
 
-    <androidx.fragment.app.FragmentContainerView
-        android:id="@+id/content"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent">
-    </androidx.fragment.app.FragmentContainerView>
+  <androidx.fragment.app.FragmentContainerView
+      android:id="@+id/content"
+      android:layout_width="match_parent"
+      android:layout_height="match_parent" />
 
-    <Button
-        android:id="@+id/btnPermissionWarning"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:text="@string/permissions_required"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="0.0"
-        app:layout_constraintStart_toStartOf="parent" />
+  <Button
+      android:id="@+id/btnPermissionWarning"
+      android:layout_width="match_parent"
+      android:layout_height="match_parent"
+      android:text="@string/permissions_required"
+      app:layout_constraintEnd_toEndOf="parent"
+      app:layout_constraintHorizontal_bias="0.0"
+      app:layout_constraintStart_toStartOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
