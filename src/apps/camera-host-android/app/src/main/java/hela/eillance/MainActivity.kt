@@ -10,14 +10,16 @@ import android.content.res.Configuration
 import android.os.Bundle
 import android.os.IBinder
 import android.util.Log
+import android.view.MenuItem
 import android.view.View
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
-import androidx.fragment.app.FragmentActivity
+import androidx.fragment.app.FragmentManager
 import hela.eillance.camera.R
 import hela.eillance.camera.databinding.ActivityMainBinding
 
 
-class MainActivity : FragmentActivity(), ServiceConnection {
+class MainActivity : AppCompatActivity(), ServiceConnection, FragmentManager.OnBackStackChangedListener {
 
   var cameraService: CameraService? = null
   private var cameraServiceBound: Boolean = false
@@ -34,10 +36,13 @@ class MainActivity : FragmentActivity(), ServiceConnection {
 
     binding = ActivityMainBinding.inflate(layoutInflater)
     setContentView(binding.root)
-
     setEventHandlers()
-
     checkAndRequestCamera()
+
+    supportFragmentManager.addOnBackStackChangedListener(this)
+    updateActionBar()
+
+    supportActionBar?.setHomeButtonEnabled(true)
   }
 
   override fun onConfigurationChanged(newConfig: Configuration) {
@@ -58,14 +63,24 @@ class MainActivity : FragmentActivity(), ServiceConnection {
 
   override fun onDestroy() {
     unbindCameraService()
-
+    supportFragmentManager.removeOnBackStackChangedListener(this)
     super.onDestroy()
+  }
+
+  override fun onOptionsItemSelected(item: MenuItem): Boolean {
+    when (item.itemId) {
+      android.R.id.home -> {
+        onBackPressedDispatcher.onBackPressed()
+        return true
+      }
+    }
+    return super.onOptionsItemSelected(item)
   }
 
   private fun pushFragment() {
     supportFragmentManager.beginTransaction()
       .replace(R.id.content, OperationFragment.instance())
-      .commitNow()
+      .commit()
   }
 
   private fun checkAndRequestCamera() {
@@ -126,7 +141,7 @@ class MainActivity : FragmentActivity(), ServiceConnection {
 
   private fun permissionGranted() {
     binding.btnPermissionWarning.visibility = View.GONE
-    pushFragment();
+    pushFragment()
   }
 
   private fun unbindCameraService() {
@@ -140,7 +155,7 @@ class MainActivity : FragmentActivity(), ServiceConnection {
     }
   }
 
-  // ServiceConnection implementation {
+  // ServiceConnection implementation
   override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
     cameraService = (service as CameraService.StreamingServiceBinder).service
   }
@@ -148,8 +163,23 @@ class MainActivity : FragmentActivity(), ServiceConnection {
   override fun onServiceDisconnected(name: ComponentName?) {
     cameraService = null
   }
-  // ServiceConnection implementation }
+  // ServiceConnection implementation
 
+  override fun onBackStackChanged() {
+    updateActionBar()
+  }
+
+  private fun updateActionBar() {
+    val backStackCount = supportFragmentManager.backStackEntryCount
+    supportActionBar?.setDisplayHomeAsUpEnabled(backStackCount > 0)
+    if (backStackCount > 0) {
+      // Show back button, hide hamburger menu
+      supportActionBar?.setHomeAsUpIndicator(null)
+    } else {
+      // Show hamburger menu, hide back button
+      supportActionBar?.setHomeAsUpIndicator(R.drawable.ic_status2)
+    }
+  }
 
   companion object {
     private const val PERMISSION_REQUEST_CODE_CAMERA: Int = 1
