@@ -7,7 +7,7 @@ android {
     compileSdk 34
 
     defaultConfig {
-        applicationId "me.hela.surveillance.camera"
+        applicationId "hela.eillance.camera"
         minSdkVersion 28
         targetSdkVersion 34
         versionCode 1
@@ -52,10 +52,9 @@ android {
         resources.excludes.add("META-INF/*")
         resources.excludes.add("META-INF/plexus/*")
     }
-    android.ndkVersion '25.2.9519653'
-    namespace 'me.hela.surveillance.camera'
-    ndkVersion '25.2.9519653'
-    buildToolsVersion '34.0.0'
+    android.ndkVersion '27.0.11718014'
+    namespace 'hela.eillance.camera'
+    ndkVersion ndkVersion
     dependenciesInfo {
         includeInApk false
         includeInBundle false
@@ -65,12 +64,16 @@ android {
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
     implementation 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.20'
+    implementation 'com.google.android.material:material:1.12.0'
     implementation 'androidx.appcompat:appcompat:1.6.1'
-    implementation 'androidx.core:core-ktx:1.12.0'
+    implementation 'androidx.core:core-ktx:1.13.1'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
 
     implementation 'org.apache.maven.plugins:maven-compiler-plugin:3.8.0'
 
+    implementation 'androidx.test.ext:junit-gtest:1.0.0-alpha02'
+    implementation 'com.android.ndk.thirdparty:googletest:1.11.0-beta-1'
+    implementation 'androidx.preference:preference-ktx:1.2.1'
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'

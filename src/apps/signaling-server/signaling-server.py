@@ -16,13 +16,12 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import sys
-import ssl
-import json
 import asyncio
+import json
 import logging
+import ssl
+import sys
 import websockets
-
 
 logger = logging.getLogger('websockets')
 logger.setLevel(logging.INFO)
@@ -61,6 +60,7 @@ async def handle_websocket(websocket, path):
         if client_id:
             del clients[client_id]
             print('Peer "{}" disconnected'.format(client_id))
+
 
 if __name__ == '__main__':
     # Usage: ./server.py [[host:]port] [SSL certificate file]

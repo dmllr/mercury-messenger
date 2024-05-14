@@ -29,8 +29,8 @@
 <body>
 <script src="https://webrtc.github.io/adapter/adapter-latest.js"></script>
 
-<button id="start" onclick="start()" disabled>Start</button>
-<button id="stop" style="display: none" onclick="stop()">Stop</button>
+<button disabled id="start" onclick="start()">Start</button>
+<button id="stop" onclick="stop()" style="display: none">Stop</button>
 
 <h2>State</h2>
 <p>
@@ -45,7 +45,7 @@
 
 <div id="media" style="display: none">
     <h2>Media</h2>
-    <video id="video" autoplay playsinline></video>
+    <video autoplay id="video" playsinline></video>
 </div>
 
 <h2>Data channel</h2>
