@@ -3,9 +3,14 @@ package hela.eillance
 import android.content.Context
 import android.hardware.camera2.CameraManager
 import android.os.Bundle
+import android.util.TypedValue
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceFragmentCompat
 import hela.eillance.camera.R
+
 
 class CapturePreferencesFragment : PreferenceFragmentCompat() {
   companion object {
@@ -68,5 +73,17 @@ class CapturePreferencesFragment : PreferenceFragmentCompat() {
     // Set the summary providers for the preferences
     defaultCameraPreference?.summaryProvider = ListPreference.SimpleSummaryProvider.getInstance()
     cameraResolutionPreference?.summaryProvider = ListPreference.SimpleSummaryProvider.getInstance()
+  }
+
+  override fun onCreateView(
+    inflater: LayoutInflater,
+    container: ViewGroup?,
+    savedInstanceState: Bundle?
+  ): View {
+    val view = super.onCreateView(inflater, container, savedInstanceState)
+    val bgColorValue = TypedValue()
+    requireActivity().theme.resolveAttribute(android.R.attr.windowBackground, bgColorValue, true)
+    view.setBackgroundResource(bgColorValue.resourceId)
+    return view
   }
 }
