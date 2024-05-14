@@ -75,17 +75,17 @@ function createPeerConnection() {
     }, false);
     signalingLog.textContent = pc.signalingState;
 
-    pc.onicecandidateerror = function (event) {
-        if (event.errorCode >= 300 && event.errorCode <= 699) {
-            signalingLog.textContent += ' -> error[300-699]';
-            // Here this a standardized ICE error
-            // Do something...
-        } else if (event.errorCode >= 700 && event.errorCode <= 799) {
-            signalingLog.textContent += ' -> error[700-799]';
-            // Here, the application perhaps didn't reach the server ?
-            // Do something else...
-        }
-    }
+    // pc.onicecandidateerror = function(event) {
+    //     if (event.errorCode >= 300 && event.errorCode <= 699) {
+    //         signalingLog.textContent += ' -> error[300-699]';
+    //         // Here this a standardized ICE error
+    //         // Do something...
+    //     } else if (event.errorCode >= 700 && event.errorCode <= 799) {
+    //         signalingLog.textContent += ' -> error[700-799]';
+    //         // Here, the application perhaps didn't reach the server ?
+    //         // Do something else...
+    //     }
+    // }
 
     // connect audio / video
     pc.addEventListener('track', function (evt) {
@@ -237,7 +237,7 @@ function stop() {
 websocket.onmessage = async function (evt) {
     const received_msg = evt.data;
     const object = JSON.parse(received_msg);
-    if (object.type == "offer") {
+    if (object.type === "offer") {
         document.getElementById('offer-sdp').textContent = object.sdp;
         await handleOffer(object)
     }
