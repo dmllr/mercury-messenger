@@ -1,9 +1,9 @@
 <resources>
-    <string name="app_name">Hela Eillance</string>
+    <string name="app_name">Eillance</string>
 
     <string name="permissions_required">Camera and microphone permissions are required. Tap here to grant the permissions.</string>
 
-    <string name="notification_title">Hela Eillance</string>
+    <string name="notification_title">Eillance</string>
     <string name="notification_description">Camera stream P2P connection</string>
 
     <string name="open_camera_preferences">Open Camera Preferences</string>
