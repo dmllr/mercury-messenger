@@ -23,6 +23,7 @@ import hela.eillance.camera.R
 import hela.eillance.events.EventSource
 import hela.eillance.events.interfaces.IStatusUpdateCallback
 import hela.eillance.events.StateService
+import hela.eillance.events.getResourceString
 
 
 class CameraService : Service(), IStatusUpdateCallback {
@@ -138,7 +139,7 @@ class CameraService : Service(), IStatusUpdateCallback {
     val channel = createNotificationChannel()
 
     val customText =
-        "Service state: ${underlyingServicesStates[EventSource.ConnectionStatus]}"
+      underlyingServicesStates[EventSource.ConnectionStatus]?.getResourceString(this)
     val statusIcon = when (underlyingServicesStates[EventSource.ConnectionStatus]) {
       StateService.Standby -> Pair(R.drawable.ic_status1_standby, R.color.colorPositive)
       StateService.Setup   -> Pair(R.drawable.ic_status2,         R.color.colorPositive)
