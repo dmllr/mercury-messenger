@@ -75,7 +75,7 @@ function createPeerConnection() {
     }, false);
     signalingLog.textContent = pc.signalingState;
 
-    pc.onicecandidateerror = function(event) {
+    pc.onicecandidateerror = function (event) {
         if (event.errorCode >= 300 && event.errorCode <= 699) {
             signalingLog.textContent += ' -> error[300-699]';
             // Here this a standardized ICE error

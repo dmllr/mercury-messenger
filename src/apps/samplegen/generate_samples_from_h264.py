@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 
-import os
 import getopt
-import sys
 import glob
+import os
+import sys
 from functools import reduce
 from typing import Optional, List
 
@@ -74,6 +74,7 @@ def generate(input_file: str, output_dir: str, max_samples: Optional[int], fps: 
             merged_sample = H264ByteStream.merge_sample(sample)
             file.write(merged_sample)
 
+
 def count_samples(file_name: str):
     with open(file_name, "rb") as file:
         byte_stream = file.read()
@@ -118,12 +119,14 @@ def main(argv):
         sys.exit(2)
     generate(input_file, output_dir, max_samples, fps)
 
+
 def count():
     import glob
     files = glob.glob("/Users/denis.miller/dev/github/hela-surveillance/samples/h264-raw/*.h264")
     for f in files:
         print(f, count_samples(f), end="\n")
     print()
+
 
 if __name__ == "__main__":
     main(sys.argv[1:])
