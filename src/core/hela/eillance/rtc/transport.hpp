@@ -11,6 +11,7 @@
 #include "hela/eillance/common/dispatch_queue.hpp"
 #include "hela/eillance/events/event_source.h"
 #include "hela/eillance/events/service_state.h"
+#include "hela/eillance/events/system_event.h"
 #include "hela/eillance/logging/logging.h"
 #include "hela/eillance/rtc/peer.hpp"
 #include "hela/eillance/rtc/status.hpp"
@@ -66,6 +67,12 @@ public:
   void ReportStateChange(const EventSource source, int state) const {
     if (status_callback_) {
       (*status_callback_)(source, static_cast<int>(state));
+    }
+  }
+
+  void ReportEvent(const SystemEvent event) const {
+    if (status_callback_) {
+      (*status_callback_)(EventSource::System, static_cast<int>(event));
     }
   }
 
@@ -134,6 +141,7 @@ public:
       ReportStatus(ServiceState::failure);
       return;
     }
+    ReportEvent(SystemEvent::started);
   }
 
   auto CreateDefaultPeerConnection(const std::string& id) -> std::shared_ptr<rtc::PeerConnection> {

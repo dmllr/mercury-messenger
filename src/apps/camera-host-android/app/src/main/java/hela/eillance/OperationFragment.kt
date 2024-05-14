@@ -19,6 +19,7 @@ import hela.eillance.events.StateIceGathering
 import hela.eillance.events.StatePeerConnection
 import hela.eillance.events.StateService
 import hela.eillance.events.StateSignalling
+import hela.eillance.events.SystemEvent
 import hela.eillance.events.getResourceString
 
 class OperationFragment : Fragment() {
@@ -60,7 +61,11 @@ class OperationFragment : Fragment() {
             postDelayed({setTextColor(defaultTextColor)}, 333)
           }
         }
-        EventSource.System -> {}
+        EventSource.System -> {
+          if (state == SystemEvent.Started.value) {
+            updateStatuses();
+          }
+        }
       }
     }
   }
