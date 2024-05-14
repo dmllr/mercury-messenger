@@ -8,6 +8,10 @@ import androidx.preference.PreferenceFragmentCompat
 import hela.eillance.camera.R
 
 class CapturePreferencesFragment : PreferenceFragmentCompat() {
+  companion object {
+    fun instance() = CapturePreferencesFragment()
+  }
+
   override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
     setPreferencesFromResource(R.xml.capture_preferences, rootKey)
 

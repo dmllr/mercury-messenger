@@ -63,11 +63,9 @@ class MainActivity : FragmentActivity(), ServiceConnection {
   }
 
   private fun pushFragment() {
-    val fragment = OperationFragment()
-
     supportFragmentManager.beginTransaction()
-      .add(R.id.content_view, fragment)
-      .commit()
+      .replace(R.id.content, OperationFragment.instance())
+      .commitNow()
   }
 
   private fun checkAndRequestCamera() {

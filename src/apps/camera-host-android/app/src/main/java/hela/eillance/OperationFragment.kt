@@ -23,6 +23,10 @@ import hela.eillance.events.getResourceString
 
 class OperationFragment : Fragment() {
 
+  companion object {
+    fun instance() = OperationFragment()
+  }
+
   private lateinit var iceGatheringState: TextView
   private lateinit var iceConnectionState: TextView
   private lateinit var signalingState: TextView
@@ -93,9 +97,8 @@ class OperationFragment : Fragment() {
 
     val openPreferencesButton = view.findViewById<ImageButton>(R.id.btn_open_camera_preferences)
     openPreferencesButton.setOnClickListener {
-      val capturePreferencesFragment = CapturePreferencesFragment()
       parentFragmentManager.beginTransaction()
-        .add(R.id.content_view, capturePreferencesFragment)
+        .add(R.id.content, CapturePreferencesFragment.instance())
         .addToBackStack(null)
         .commit()
     }
