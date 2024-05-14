@@ -1,20 +1,4 @@
 #!/usr/bin/env python
-#
-# Python signaling server example for libdatachannel
-# Copyright (c) 2020 Paul-Louis Ageneau
-#
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU Affero General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU Affero General Public License for more details.
-#
-# You should have received a copy of the GNU Affero General Public License
-# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import asyncio
 import json
@@ -22,47 +6,73 @@ import logging
 import ssl
 import sys
 import websockets
+from authlib.oauth2.rfc6750 import BearerTokenValidator
+from auth_server import token_store  # Ensure this is the correct import
 
 logger = logging.getLogger('websockets')
 logger.setLevel(logging.INFO)
 logger.addHandler(logging.StreamHandler(sys.stdout))
 
 clients = {}
+users = {}
 
+class CustomBearerTokenValidator(BearerTokenValidator):
+    def authenticate_token(self, token_string):
+        return token_store.validate_token(token_string)
+
+    def request_invalid(self, request):
+        return False
+
+    def token_revoked(self, token):
+        return False
+
+token_validator = CustomBearerTokenValidator()
 
 async def handle_websocket(websocket, path):
-    client_id = None
+    token = None
+    user_id = None
     try:
-        splitted = path.split('/')
-        splitted.pop(0)
-        client_id = splitted.pop(0)
-        print('Peer {} connected'.format(client_id))
+        # Extract token from the query parameter (e.g., ws://localhost:8000/?token=token1)
+        query = path.split('?')[1] if '?' in path else ''
+        params = dict(qc.split('=') for qc in query.split('&'))
+        token = params.get('token')
 
-        clients[client_id] = websocket
+        if not token or not token_validator.authenticate_token(token):
+            print('Invalid or missing token. Closing connection.')
+            await websocket.close()
+            return
+
+        user_id = token_store.validate_token(token)['user']
+        print('User "{}" connected'.format(user_id))
+
+        clients[user_id] = websocket
         while True:
             data = await websocket.recv()
-            print('"{}" << {}'.format(client_id, data))
+            print('"{}" << {}'.format(user_id, data))
             message = json.loads(data)
             destination_id = message['id']
-            destination_websocket = clients.get(destination_id)
-            if destination_websocket:
-                message['id'] = client_id
+
+            # Only send message if destination user is the same
+            if destination_id in clients and clients[destination_id] == websocket:
+                destination_websocket = clients[destination_id]
+                message['id'] = user_id
                 data = json.dumps(message)
                 print('"{}" >> {}'.format(destination_id, data))
                 await destination_websocket.send(data)
             else:
-                print('Peer "{}" not found'.format(destination_id))
+                print('Peer "{}" not found or unauthorized'.format(destination_id))
 
     except Exception as e:
         print(e)
 
     finally:
-        if client_id:
-            del clients[client_id]
-            print('Peer "{}" disconnected'.format(client_id))
-
+        if user_id:
+            del clients[user_id]
+            print('User "{}" disconnected'.format(user_id))
 
 if __name__ == '__main__':
+    # Load users only if needed; now handled by auth_server.py
+
     # Usage: ./server.py [[host:]port] [SSL certificate file]
     endpoint_or_port = sys.argv[1] if len(sys.argv) > 1 else "8000"
     ssl_cert = sys.argv[2] if len(sys.argv) > 2 else None
