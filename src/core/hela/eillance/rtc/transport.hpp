@@ -41,7 +41,7 @@ class RtcTransport {
 
 public:
   explicit RtcTransport(std::string_view local_id) : id(local_id) {
-    ws_config_.caCertificatePemFile = ZEROSSL_CA_BUNDLE;
+    ws_config_.caCertificatePemFile = zerosslCaBundle;
   }
   RtcTransport(RtcTransport&&) = delete;
   RtcTransport(const RtcTransport&) = delete;
@@ -122,11 +122,10 @@ public:
 
     std::this_thread::sleep_for(std::chrono::seconds(wait_before_reconnect_));
 
-    const std::string url = "wss://" + ip_address + ":" + std::to_string(port) + "/" + id.data();
-    LOGD << "Signaling server URL is " << url.c_str();
+    LOGD << "Signaling server URL is " << signalingServerUrl;
 
     try {
-      ws_.open(url);
+      ws_.open(signalingServerUrl);
 
       LOGI << "Waiting for signaling to be connected...";
       while (!ws_.isOpen()) {
@@ -145,9 +144,9 @@ public:
   }
 
   auto CreateDefaultPeerConnection(const std::string& id) -> std::shared_ptr<rtc::PeerConnection> {
-    auto pc = std::make_shared<rtc::PeerConnection>(RtcConfiguration::Config());
+    auto peer_connection = std::make_shared<rtc::PeerConnection>(RtcConfiguration::Config());
 
-    pc->onStateChange([this, id](rtc::PeerConnection::State state) {
+    peer_connection->onStateChange([this, id](rtc::PeerConnection::State state) {
       LOGI << "State: " << static_cast<int>(state);
       status_.state = state;
       ReportStateChange(EventSource::PeerConnectionState, static_cast<int>(state));
@@ -165,7 +164,7 @@ public:
       }
     });
 
-    pc->onIceStateChange([this, id](rtc::PeerConnection::IceState state) {
+    peer_connection->onIceStateChange([this, id](rtc::PeerConnection::IceState state) {
       LOGI << "ICE State: " << static_cast<int>(state);
       ReportStateChange(EventSource::IceState, static_cast<int>(state));
       if (state == rtc::PeerConnection::IceState::Failed) {
@@ -173,17 +172,16 @@ public:
       }
     });
 
-    pc->onGatheringStateChange([this, wpc = make_weak_ptr(pc), id](rtc::PeerConnection::GatheringState state) {
+    peer_connection->onGatheringStateChange([this, wpc = make_weak_ptr(peer_connection), id](rtc::PeerConnection::GatheringState state) {
       LOGI << "Gathering State: " << static_cast<int>(state);
       status_.gathering_state = state;
       ReportStateChange(EventSource::GatheringState, static_cast<int>(state));
       if (state == rtc::PeerConnection::GatheringState::Complete) {
         // Gathering complete, send answer
-        if (auto pc = wpc.lock()) {
-          auto description = pc->localDescription();
+        if (auto peer_con = wpc.lock()) {
+          auto description = peer_con->localDescription();
           Json message = {
               {"id", id},
-              {"debug", "onGatheringStateChange(complete)"},
               {"type", description->typeString()},
               {"sdp", std::string(description.value())}};
           ws_.send(message.dump());
@@ -191,7 +189,7 @@ public:
       }
     });
 
-    pc->onSignalingStateChange([this, id](rtc::PeerConnection::SignalingState state) {
+    peer_connection->onSignalingStateChange([this, id](rtc::PeerConnection::SignalingState state) {
       LOGI << "Signalling State: " << static_cast<int>(state);
       status_.signalling_state = state;
       ReportStateChange(EventSource::SignalingState, static_cast<int>(state));
@@ -200,7 +198,7 @@ public:
       }
     });
 
-    return pc;
+    return peer_connection;
   }
 
   void AddToStream(const std::shared_ptr<Peer>& peer, bool isAddingVideo) {
@@ -320,9 +318,9 @@ public:
     }
   };
 
-  const std::string ip_address = "app.hela.me";
-  const uint16_t port = 8000;
-  static inline std::string ZEROSSL_CA_BUNDLE =
+  constexpr static auto signalingServerUrl = "wss://app.hela.me:8000";
+
+  constexpr static auto zerosslCaBundle =
       "-----BEGIN CERTIFICATE-----\n"
       "MIIG1TCCBL2gAwIBAgIQbFWr29AHksedBwzYEZ7WvzANBgkqhkiG9w0BAQwFADCB\n"
       "iDELMAkGA1UEBhMCVVMxEzARBgNVBAgTCk5ldyBKZXJzZXkxFDASBgNVBAcTC0pl\n"
