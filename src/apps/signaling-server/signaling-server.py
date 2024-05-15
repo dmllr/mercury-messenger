@@ -1,20 +1,52 @@
-#!/usr/bin/env python
-
-import asyncio
+import time
 import json
 import logging
 import ssl
 import sys
+import asyncio
 import websockets
+from authlib.oauth2.rfc6749 import grants
 from authlib.oauth2.rfc6750 import BearerTokenValidator
-from auth_server import token_store  # Ensure this is the correct import
+from authlib.common.security import generate_token
 
-logger = logging.getLogger('websockets')
-logger.setLevel(logging.INFO)
-logger.addHandler(logging.StreamHandler(sys.stdout))
+# In-memory user store
+users = {
+    "user1": "password1",
+    "user2": "password2",
+    "user3": "password3"
+}
 
-clients = {}
-users = {}
+
+class InMemoryToken:
+    def __init__(self):
+        self.tokens = {}
+
+    def generate_token(self, client, grant_type, user, scope):
+        token = generate_token()
+        self.tokens[token] = {
+            'client_id': client.client_id if client else None,
+            'user': user,
+            'scope': scope,
+            'expires_at': time.time() + 3600  # 1 hour expiry
+        }
+        return token
+
+    def validate_token(self, token):
+        token_data = self.tokens.get(token)
+        if token_data and token_data['expires_at'] > time.time():
+            return token_data
+        return None
+
+
+token_store = InMemoryToken()
+
+
+class PasswordGrant(grants.ResourceOwnerPasswordCredentialsGrant):
+    def authenticate_user(self, username, password):
+        if users.get(username) == password:
+            return username
+        return None
+
 
 class CustomBearerTokenValidator(BearerTokenValidator):
     def authenticate_token(self, token_string):
@@ -26,54 +58,95 @@ class CustomBearerTokenValidator(BearerTokenValidator):
     def token_revoked(self, token):
         return False
 
+
+logger = logging.getLogger('websockets')
+logger.setLevel(logging.INFO)
+logger.addHandler(logging.StreamHandler(sys.stdout))
+
+clients = {}
 token_validator = CustomBearerTokenValidator()
 
+
 async def handle_websocket(websocket, path):
-    token = None
     user_id = None
+    client_id = None
     try:
-        # Extract token from the query parameter (e.g., ws://localhost:8000/?token=token1)
-        query = path.split('?')[1] if '?' in path else ''
-        params = dict(qc.split('=') for qc in query.split('&'))
-        token = params.get('token')
-
-        if not token or not token_validator.authenticate_token(token):
-            print('Invalid or missing token. Closing connection.')
-            await websocket.close()
-            return
-
-        user_id = token_store.validate_token(token)['user']
-        print('User "{}" connected'.format(user_id))
-
-        clients[user_id] = websocket
         while True:
             data = await websocket.recv()
-            print('"{}" << {}'.format(user_id, data))
             message = json.loads(data)
-            destination_id = message['id']
+            if 'type' not in message:
+                continue
 
-            # Only send message if destination user is the same
-            if destination_id in clients and clients[destination_id] == websocket:
-                destination_websocket = clients[destination_id]
-                message['id'] = user_id
-                data = json.dumps(message)
-                print('"{}" >> {}'.format(destination_id, data))
-                await destination_websocket.send(data)
-            else:
-                print('Peer "{}" not found or unauthorized'.format(destination_id))
+            if message['type'] == 'authenticate':
+                username = message.get('username')
+                password = message.get('password')
+                if username in users and users[username] == password:
+                    token = token_store.generate_token(None, 'password', username, None)
+                    user_id = username
+                    print(f'User "{user_id}" authenticated')
+                    response = {
+                        "type": "authenticated",
+                        "token": token
+                    }
+                    await websocket.send(json.dumps(response))
+                else:
+                    response = {"type": "error", "error": "invalid_credentials"}
+                    await websocket.send(json.dumps(response))
+                    await websocket.close()
+                    return
+
+            elif message['type'] == 'publish_client':
+                token = message.get('token')
+                if not token or not token_validator.authenticate_token(token):
+                    response = {"type": "error", "error": "invalid_token"}
+                    await websocket.send(json.dumps(response))
+                    await websocket.close()
+                    return
+
+                user_id = token_store.validate_token(token)['user']
+                client_id = message.get('client_id')
+                if user_id not in clients:
+                    clients[user_id] = {}
+                clients[user_id][client_id] = websocket
+                print(f'Client "{user_id}/{client_id}" published')
+                await websocket.send(json.dumps({"type": "client_published", "client_id": client_id}))
+
+            elif message['type'] == 'message':
+                token = message.get('token')
+                if not token or not token_validator.authenticate_token(token):
+                    response = {"type": "error", "error": "invalid_token"}
+                    await websocket.send(json.dumps(response))
+                    await websocket.close()
+                    if user_id in clients and client_id in clients[user_id]:
+                        del clients[user_id][client_id]
+                        print(f'Peer "{user_id}/{client_id}" disconnected due to invalid token')
+                    return
+
+                user_id = token_store.validate_token(token)['user']
+                destination_id = message['id']
+                for client in clients[user_id].values():
+                    if client_id == destination_id:
+                        message['id'] = client_id
+                        data = json.dumps(message)
+                        print(f'"{destination_id}" >> {client_id}:\n{data}')
+                        await client.send(data)
+                        break
+                else:
+                    print(f'Peer "{destination_id}" not found or unauthorized')
+                    response = {"type": "error", "error": "peer_not_found"}
+                    await websocket.send(json.dumps(response))
 
     except Exception as e:
         print(e)
 
     finally:
-        if user_id:
-            del clients[user_id]
-            print('User "{}" disconnected'.format(user_id))
+        if user_id and client_id and user_id in clients and client_id in clients[user_id]:
+            del clients[user_id][client_id]
+            print(f'Peer "{user_id}/{client_id}" disconnected')
+
 
 if __name__ == '__main__':
-    # Load users only if needed; now handled by auth_server.py
-
-    # Usage: ./server.py [[host:]port] [SSL certificate file]
+    # Usage: ./signaling-server.py [[host:]port] [SSL certificate file]
     endpoint_or_port = sys.argv[1] if len(sys.argv) > 1 else "8000"
     ssl_cert = sys.argv[2] if len(sys.argv) > 2 else None
     ssl_key = sys.argv[3] if len(sys.argv) > 3 else None
@@ -86,7 +159,7 @@ if __name__ == '__main__':
     else:
         ssl_context = None
 
-    print('Listening on {}'.format(endpoint))
+    print(f'Listening on {endpoint}')
     host, port = endpoint.rsplit(':', 1)
     start_server = websockets.serve(handle_websocket, host, int(port), ssl=ssl_context)
     asyncio.get_event_loop().run_until_complete(start_server)
