@@ -2,6 +2,7 @@ import asyncio
 import websockets
 import json
 
+
 async def authenticate_and_publish_client():
     uri = "ws://localhost:8000"
 
@@ -28,8 +29,10 @@ async def authenticate_and_publish_client():
             return
 
         # Send a message to another client of the same user
-        await websocket.send(json.dumps({"type": "message", "token": token, "id": "client2", "content": "Hello, client2!"}))
+        await websocket.send(
+            json.dumps({"type": "message", "token": token, "id": "client2", "content": "Hello, client2!"}))
         response = await websocket.recv()
         print("Message response:", response)  # Response from client2 or server acknowledgment
+
 
 asyncio.run(authenticate_and_publish_client())
