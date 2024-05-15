@@ -11,6 +11,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageButton
 import android.widget.TextView
+import androidx.core.content.ContextCompat
 import androidx.core.content.ContextCompat.getColor
 import hela.eillance.camera.R
 import hela.eillance.events.EventSource
@@ -63,7 +64,7 @@ class OperationFragment : Fragment() {
         }
         EventSource.System -> {
           if (state == SystemEvent.Started.value) {
-            updateStatuses();
+            updateStatuses()
           }
         }
       }
@@ -72,8 +73,8 @@ class OperationFragment : Fragment() {
 
   override fun onResume() {
     super.onResume()
-    requireContext().registerReceiver(receiver, IntentFilter(Tune::BroadcastActionOnStateUpdate.get()),
-      Context.RECEIVER_NOT_EXPORTED)
+    ContextCompat.registerReceiver(requireContext(), receiver, IntentFilter(Tune::BroadcastActionOnStateUpdate.get()),
+      ContextCompat.RECEIVER_NOT_EXPORTED)
     updateStatuses()
   }
 
