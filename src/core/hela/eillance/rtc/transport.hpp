@@ -26,6 +26,7 @@ class RtcTransport {
   using Json = nlohmann::json;
 
   const std::string_view id;
+  std::string auth_token_;
 
   static constexpr auto minWaitBeforeReconnect = 1;
   static constexpr auto maxWaitBeforeReconnect = 10;
@@ -76,6 +77,16 @@ public:
     }
   }
 
+  void Authenticate() {
+    ws_.send(R"(
+      {
+        "type": "authenticate",
+        "username": "user1",
+        "password": "password1"
+      }
+    )");
+  }
+
   void Start() {
     LOGI << "The local ID is: " << id.data();
 
@@ -92,6 +103,8 @@ public:
       LOGI << "WebSocket connected, signaling ready";
       connection_attempt_ = 0;
       ReportStatus(ServiceState::standby);
+
+      Authenticate();
     });
 
     ws_.onClosed([this]() {
@@ -260,6 +273,8 @@ public:
       }
     } else if (type == "offer") {
       // do nothing
+    } else if (type == "authenticated") {
+      auth_token_ = message["token"].get<std::string>();
     } else {
       throw std::runtime_error("Unknown message type " + type);
     }
@@ -318,7 +333,8 @@ public:
     }
   };
 
-  constexpr static auto signalingServerUrl = "wss://app.hela.me:8000";
+//  constexpr static auto signalingServerUrl = "wss://app.hela.me:8000";
+  constexpr static auto signalingServerUrl = "ws://localhost:8000";
 
   constexpr static auto zerosslCaBundle =
       "-----BEGIN CERTIFICATE-----\n"
