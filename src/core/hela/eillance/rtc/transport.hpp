@@ -78,13 +78,22 @@ public:
   }
 
   void Authenticate() {
-    ws_.send(R"(
-      {
-        "type": "authenticate",
-        "username": "user1",
-        "password": "password1"
-      }
-    )");
+    Json message = {
+        {"id", id},
+        {"type", "authenticate"},
+        {"username", "user1"},
+        {"password", "password1"}
+    };
+    ws_.send(message.dump());
+  }
+
+  void PublishClient() {
+    Json message = {
+        {"id", id},
+        {"token", auth_token_},
+        {"type", "publish_client"},
+        {"client_id", id}};
+    ws_.send(message.dump());
   }
 
   void Start() {
@@ -127,7 +136,7 @@ public:
         return;
       }
 
-      Json const message = Json::parse(std::get<std::string>(data));
+      const auto message = Json::parse(std::get<std::string>(data));
       DispatchQueue::MainThread().dispatch([this, message]() {
         OnWSMessage(std::move(message));
       });
@@ -274,8 +283,13 @@ public:
       }
     } else if (type == "offer") {
       // do nothing
-    } else if (type == "authenticated") {
+    } else if ((type == "authenticated") && (id == "system")) {
       auth_token_ = message["token"].get<std::string>();
+      DispatchQueue::MainThread().dispatch([this]() {
+        PublishClient();
+      });
+    } else if ((type == "client_published") && (id == "system")) {
+      // do nothing
     } else {
       throw std::runtime_error("Unknown message type " + type);
     }

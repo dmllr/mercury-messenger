@@ -75,6 +75,7 @@ async def handle_websocket(websocket, path):
             data = await websocket.recv()
             message = json.loads(data)
             if 'type' not in message:
+                print(f'Unknown message received')
                 continue
 
             if message['type'] == 'authenticate':
@@ -85,12 +86,17 @@ async def handle_websocket(websocket, path):
                     user_id = username
                     print(f'User "{user_id}" authenticated')
                     response = {
+                        "id": "system",
                         "type": "authenticated",
                         "token": token
                     }
                     await websocket.send(json.dumps(response))
                 else:
-                    response = {"type": "error", "error": "invalid_credentials"}
+                    response = {
+                        "id": "system",
+                        "type": "error",
+                        "error": "invalid_credentials"
+                    }
                     await websocket.send(json.dumps(response))
                     await websocket.close()
                     return
@@ -98,7 +104,11 @@ async def handle_websocket(websocket, path):
             elif message['type'] == 'publish_client':
                 token = message.get('token')
                 if not token or not token_validator.authenticate_token(token):
-                    response = {"type": "error", "error": "invalid_token"}
+                    response = {
+                        "id": "system",
+                        "type": "error",
+                        "error": "invalid_token"
+                    }
                     await websocket.send(json.dumps(response))
                     await websocket.close()
                     return
@@ -108,13 +118,21 @@ async def handle_websocket(websocket, path):
                 if user_id not in clients:
                     clients[user_id] = {}
                 clients[user_id][client_id] = websocket
-                print(f'Client "{user_id}/{client_id}" published')
-                await websocket.send(json.dumps({"type": "client_published", "client_id": client_id}))
+                print(f'Peer "{user_id}/{client_id}" published')
+                await websocket.send(json.dumps({
+                    "id": "system",
+                    "type": "client_published",
+                    "client_id": client_id
+                }))
 
-            elif message['type'] == 'message':
+            else:
                 token = message.get('token')
                 if not token or not token_validator.authenticate_token(token):
-                    response = {"type": "error", "error": "invalid_token"}
+                    response = {
+                        "id": "system",
+                        "type": "error",
+                        "error": "invalid_token"
+                    }
                     await websocket.send(json.dumps(response))
                     await websocket.close()
                     if user_id in clients and client_id in clients[user_id]:
@@ -124,16 +142,19 @@ async def handle_websocket(websocket, path):
 
                 user_id = token_store.validate_token(token)['user']
                 destination_id = message['id']
-                for client in clients[user_id].values():
-                    if client_id == destination_id:
-                        message['id'] = client_id
-                        data = json.dumps(message)
-                        print(f'"{destination_id}" >> {client_id}:\n{data}')
-                        await client.send(data)
-                        break
+                if destination_id in clients[user_id]:
+                    client = clients[user_id][destination_id]
+                    message['id'] = client_id
+                    data = json.dumps(message)
+                    print(f'"{destination_id}" >> {client_id}:\n{data}')
+                    await client.send(data)
                 else:
-                    print(f'Peer "{destination_id}" not found or unauthorized')
-                    response = {"type": "error", "error": "peer_not_found"}
+                    print(f'Peer "{destination_id}" not published by {user_id} or unauthorized')
+                    response = {
+                        "id": "system",
+                        "type": "error",
+                        "error": "peer_not_found"
+                    }
                     await websocket.send(json.dumps(response))
 
     except Exception as e:
