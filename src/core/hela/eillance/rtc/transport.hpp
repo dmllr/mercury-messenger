@@ -195,6 +195,7 @@ public:
           auto description = peer_con->localDescription();
           Json message = {
               {"id", id},
+              {"token", auth_token_},
               {"type", description->typeString()},
               {"sdp", std::string(description.value())}};
           ws_.send(message.dump());
