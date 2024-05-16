@@ -3,7 +3,7 @@ import websockets
 import json
 
 
-async def authenticate_and_publish_client():
+async def authenticate_and_exhibit():
     uri = "ws://localhost:8000"
 
     async with websockets.connect(uri) as websocket:
@@ -19,7 +19,7 @@ async def authenticate_and_publish_client():
             return
 
         # Publish a client
-        await websocket.send(json.dumps({"type": "publish_client", "token": token, "client_id": "client1"}))
+        await websocket.send(json.dumps({"type": "exhibit", "token": token, "client_id": "client1"}))
 
         # Send a message to another client of the same user
         await websocket.send(
@@ -28,4 +28,4 @@ async def authenticate_and_publish_client():
         print("Message response:", response)  # Response from client2 or server acknowledgment
 
 
-asyncio.run(authenticate_and_publish_client())
+asyncio.run(authenticate_and_exhibit())

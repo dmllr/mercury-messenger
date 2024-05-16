@@ -166,7 +166,7 @@ private:
   void PublishClient() {
     Json message = {
         {"token", auth_token_},
-        {"type", "publish_client"},
+        {"type", "exhibit"},
         {"client_id", id}};
     ws_.send(message.dump());
   }

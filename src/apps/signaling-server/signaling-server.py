@@ -99,7 +99,7 @@ async def handle_connection(websocket, path):
                     await websocket.close()
                     return
 
-            elif message['type'] == 'publish_client':
+            elif message['type'] == 'exhibit':
                 token = message.get('token')
                 if not token or not token_validator.authenticate_token(token):
                     response = {
