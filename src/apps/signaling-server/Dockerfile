@@ -1,9 +1,10 @@
 FROM python:3.9-slim
 
 WORKDIR /a
-COPY signaling-server.py ./
-COPY ./start.sh ./
-COPY ./requirements.txt ./
+COPY auth_manager.py ./
+COPY signaling_server.py ./
+COPY start.sh ./
+COPY requirements.txt ./
 
 RUN pip3 install -r requirements.txt
 

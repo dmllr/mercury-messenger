@@ -4,7 +4,7 @@ import sys
 import asyncio
 import websockets
 import traceback
-from auth import AuthManager
+from auth_manager import AuthManager
 
 clients = {}
 authManager = AuthManager()
@@ -28,7 +28,7 @@ async def handle_connection(websocket, path):
                 username = message.get('username')
                 password = message.get('password')
                 if authManager.authorize(username, password):
-                    token = authManager.generate_token(None, 'password', username, None)
+                    token = authManager.generate_token('password', username, None)
                     user_id = username
                     print(f'User "{user_id}" authenticated')
                     response = {
@@ -113,7 +113,7 @@ async def handle_connection(websocket, path):
 
 
 if __name__ == '__main__':
-    # Usage: ./signaling-server.py [[host:]port] [SSL certificate file]
+    # Usage: ./signaling_server.py [[host:]port] [SSL certificate file]
     endpoint_or_port = sys.argv[1] if len(sys.argv) > 1 else "8000"
     ssl_cert = sys.argv[2] if len(sys.argv) > 2 else None
     ssl_key = sys.argv[3] if len(sys.argv) > 3 else None
