@@ -137,7 +137,7 @@ async def handle_connection(websocket, path):
                 if destination_id in clients[user_id]:
                     # redirect the message to a destination client
                     client = clients[user_id][destination_id]
-                    message['to'] = client_id
+                    message['from'] = client_id
                     data = json.dumps(message)
                     print(f'to: "{destination_id}" from {client_id}: {data}')
                     await client.send(data)

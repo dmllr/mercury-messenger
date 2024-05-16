@@ -99,7 +99,7 @@ public:
       }
 
       const auto message = Json::parse(std::get<std::string>(data));
-      auto it = message.find("to");
+      auto it = message.find("from");
       if (it == message.end()) {
         DispatchQueue::MainThread().dispatch([this, message]() {
           OnSystemMessage(std::move(message));
@@ -283,7 +283,7 @@ private:
   }
 
   void OnPeerMessage(Json message) {
-    auto it = message.find("to");
+    auto it = message.find("from");
     if (it == message.end()) {
       return;
     }
