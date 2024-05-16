@@ -74,7 +74,8 @@ async def handle_connection(websocket, path):
 
             message = json.loads(data)
             if 'type' not in message:
-                print(f'Unknown message received')
+                print(f'Unknown message received!')
+                print(data)
                 continue
 
             if message['type'] == 'authenticate':
@@ -183,4 +184,10 @@ if __name__ == '__main__':
     host, port = endpoint.rsplit(':', 1)
     start_server = websockets.serve(handle_connection, host, int(port), ssl=ssl_context)
     asyncio.get_event_loop().run_until_complete(start_server)
-    asyncio.get_event_loop().run_forever()
+    # noinspection PyBroadException
+    try:
+        asyncio.get_event_loop().run_forever()
+    except KeyboardInterrupt:
+        ...
+    except Exception:
+        print(traceback.format_exc())
