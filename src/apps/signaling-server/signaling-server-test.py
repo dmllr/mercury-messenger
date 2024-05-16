@@ -23,7 +23,7 @@ async def authenticate_and_exhibit():
 
         # Send a message to another client of the same user
         await websocket.send(
-            json.dumps({"type": "message", "token": token, "id": "client2", "content": "Hello, client2!"}))
+            json.dumps({"type": "message", "token": token, "to": "client1", "content": "Hello, myself!"}))
         response = await websocket.recv()
         print("Message response:", response)  # Response from client2 or server acknowledgment
 

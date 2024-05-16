@@ -1,67 +1,13 @@
-import time
 import json
 import ssl
 import sys
 import asyncio
 import websockets
 import traceback
-from authlib.oauth2.rfc6749 import grants
-from authlib.oauth2.rfc6750 import BearerTokenValidator
-from authlib.common.security import generate_token
-
-# In-memory user store
-users = {
-    "user1": "password1",
-    "user2": "password2",
-    "user3": "password3"
-}
-
-
-class InMemoryToken:
-    def __init__(self):
-        self.tokens = {}
-
-    def generate_token(self, client, grant_type, user, scope):
-        token = generate_token()
-        self.tokens[token] = {
-            'client_id': client.client_id if client else None,
-            'user': user,
-            'scope': scope,
-            'expires_at': time.time() + 3600  # 1 hour expiry
-        }
-        return token
-
-    def validate_token(self, token):
-        token_data = self.tokens.get(token)
-        if token_data and token_data['expires_at'] > time.time():
-            return token_data
-        return None
-
-
-token_store = InMemoryToken()
-
-
-class PasswordGrant(grants.ResourceOwnerPasswordCredentialsGrant):
-    def authenticate_user(self, username, password):
-        if users.get(username) == password:
-            return username
-        return None
-
-
-class CustomBearerTokenValidator(BearerTokenValidator):
-    def authenticate_token(self, token_string):
-        return token_store.validate_token(token_string)
-
-    def request_invalid(self, request):
-        return False
-
-    def token_revoked(self, token):
-        return False
-
+from auth import AuthManager
 
 clients = {}
-token_validator = CustomBearerTokenValidator()
-
+authManager = AuthManager()
 
 async def handle_connection(websocket, path):
     user_id = None
@@ -81,8 +27,8 @@ async def handle_connection(websocket, path):
             if message['type'] == 'authenticate':
                 username = message.get('username')
                 password = message.get('password')
-                if username in users and users[username] == password:
-                    token = token_store.generate_token(None, 'password', username, None)
+                if authManager.authorize(username, password):
+                    token = authManager.generate_token(None, 'password', username, None)
                     user_id = username
                     print(f'User "{user_id}" authenticated')
                     response = {
@@ -101,7 +47,7 @@ async def handle_connection(websocket, path):
 
             elif message['type'] == 'exhibit':
                 token = message.get('token')
-                if not token or not token_validator.authenticate_token(token):
+                if not token or not authManager.authenticate_token(token):
                     response = {
                         "type": "error",
                         "error": "invalid_token",
@@ -111,7 +57,7 @@ async def handle_connection(websocket, path):
                     await websocket.close()
                     return
 
-                user_id = token_store.validate_token(token)['user']
+                user_id = authManager.validate_token(token)['user']
                 client_id = message.get('client_id')
                 if user_id not in clients:
                     clients[user_id] = {}
@@ -120,7 +66,7 @@ async def handle_connection(websocket, path):
 
             else:
                 token = message.get('token')
-                if not token or not token_validator.authenticate_token(token):
+                if not token or not authManager.authenticate_token(token):
                     response = {
                         "type": "error",
                         "error": "invalid_token",
@@ -133,14 +79,14 @@ async def handle_connection(websocket, path):
                         print(f'Peer "{user_id}/{client_id}" disconnected due to invalid token')
                     return
 
-                user_id = token_store.validate_token(token)['user']
+                user_id = authManager.validate_token(token)['user']
                 destination_id = message['to']
                 if destination_id in clients[user_id]:
                     # redirect the message to a destination client
                     client = clients[user_id][destination_id]
                     message['from'] = client_id
                     data = json.dumps(message)
-                    print(f'to: "{destination_id}" from {client_id}: {data}')
+                    print(f'to: "{user_id}/{destination_id}" from "{user_id}/{client_id}": {data}')
                     await client.send(data)
                 else:
                     print(f'Peer "{destination_id}" not published by {user_id} or unauthorized')
