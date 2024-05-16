@@ -179,7 +179,7 @@ function sendAnswer(pc) {
 
             return websocket.send(JSON.stringify(
                 {
-                    id: "server",
+                    to: "server",
                     token: token,
                     type: answer.type,
                     sdp: answer.sdp
@@ -198,7 +198,7 @@ function handleOffer(offer) {
 function sendStreamRequest() {
     websocket.send(JSON.stringify(
         {
-            id: "server",
+            to: "server",
             token: token,
             type: "streamRequest"
         }));
@@ -264,9 +264,7 @@ websocket.onmessage = async function (evt) {
     } else if (object.type === "offer") {
         document.getElementById('offer-sdp').textContent = object.sdp;
         await handleOffer(object)
-    } else if (object.type === "client_published") {
-        console.log('Client published:', object.client_id);
     } else if (object.type === "error") {
-        console.error('Error:', object.error);
+        console.error('Error: ', object.error, ', message: ', object.message);
     }
 }

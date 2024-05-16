@@ -20,13 +20,6 @@ async def authenticate_and_publish_client():
 
         # Publish a client
         await websocket.send(json.dumps({"type": "publish_client", "token": token, "client_id": "client1"}))
-        response = await websocket.recv()
-        response_data = json.loads(response)
-        if response_data.get("type") == "client_published":
-            print("Client published:", response_data["client_id"])
-        else:
-            print("Failed to publish client:", response_data)
-            return
 
         # Send a message to another client of the same user
         await websocket.send(

@@ -1,10 +1,10 @@
 import time
 import json
-import logging
 import ssl
 import sys
 import asyncio
 import websockets
+import traceback
 from authlib.oauth2.rfc6749 import grants
 from authlib.oauth2.rfc6750 import BearerTokenValidator
 from authlib.common.security import generate_token
@@ -59,20 +59,19 @@ class CustomBearerTokenValidator(BearerTokenValidator):
         return False
 
 
-logger = logging.getLogger('websockets')
-logger.setLevel(logging.INFO)
-logger.addHandler(logging.StreamHandler(sys.stdout))
-
 clients = {}
 token_validator = CustomBearerTokenValidator()
 
 
-async def handle_websocket(websocket, path):
+async def handle_connection(websocket, path):
     user_id = None
     client_id = None
+    # noinspection PyBroadException
     try:
         while True:
             data = await websocket.recv()
+            print(f'<< {data}')
+
             message = json.loads(data)
             if 'type' not in message:
                 print(f'Unknown message received')
@@ -86,14 +85,12 @@ async def handle_websocket(websocket, path):
                     user_id = username
                     print(f'User "{user_id}" authenticated')
                     response = {
-                        "id": "system",
                         "type": "authenticated",
                         "token": token
                     }
                     await websocket.send(json.dumps(response))
                 else:
                     response = {
-                        "id": "system",
                         "type": "error",
                         "error": "invalid_credentials"
                     }
@@ -105,9 +102,9 @@ async def handle_websocket(websocket, path):
                 token = message.get('token')
                 if not token or not token_validator.authenticate_token(token):
                     response = {
-                        "id": "system",
                         "type": "error",
-                        "error": "invalid_token"
+                        "error": "invalid_token",
+                        "message": f'Token "{token}" failed validation'
                     }
                     await websocket.send(json.dumps(response))
                     await websocket.close()
@@ -119,19 +116,14 @@ async def handle_websocket(websocket, path):
                     clients[user_id] = {}
                 clients[user_id][client_id] = websocket
                 print(f'Peer "{user_id}/{client_id}" published')
-                await websocket.send(json.dumps({
-                    "id": "system",
-                    "type": "client_published",
-                    "client_id": client_id
-                }))
 
             else:
                 token = message.get('token')
                 if not token or not token_validator.authenticate_token(token):
                     response = {
-                        "id": "system",
                         "type": "error",
-                        "error": "invalid_token"
+                        "error": "invalid_token",
+                        "message": f'Token "{token}" failed validation'
                     }
                     await websocket.send(json.dumps(response))
                     await websocket.close()
@@ -141,24 +133,31 @@ async def handle_websocket(websocket, path):
                     return
 
                 user_id = token_store.validate_token(token)['user']
-                destination_id = message['id']
+                destination_id = message['to']
                 if destination_id in clients[user_id]:
+                    # redirect the message to a destination client
                     client = clients[user_id][destination_id]
-                    message['id'] = client_id
+                    message['to'] = client_id
                     data = json.dumps(message)
-                    print(f'"{destination_id}" >> {client_id}:\n{data}')
+                    print(f'to: "{destination_id}" from {client_id}: {data}')
                     await client.send(data)
                 else:
                     print(f'Peer "{destination_id}" not published by {user_id} or unauthorized')
                     response = {
-                        "id": "system",
                         "type": "error",
-                        "error": "peer_not_found"
+                        "error": "peer_not_found",
+                        "message": f'Peer "{user_id}/{destination_id}" not published'
                     }
                     await websocket.send(json.dumps(response))
 
-    except Exception as e:
-        print(e)
+    except KeyboardInterrupt:
+        ...
+    except websockets.exceptions.ConnectionClosedError:
+        ...
+    except websockets.exceptions.ConnectionClosedOK:
+        ...
+    except Exception:
+        print(traceback.format_exc())
 
     finally:
         if user_id and client_id and user_id in clients and client_id in clients[user_id]:
@@ -182,6 +181,6 @@ if __name__ == '__main__':
 
     print(f'Listening on {endpoint}')
     host, port = endpoint.rsplit(':', 1)
-    start_server = websockets.serve(handle_websocket, host, int(port), ssl=ssl_context)
+    start_server = websockets.serve(handle_connection, host, int(port), ssl=ssl_context)
     asyncio.get_event_loop().run_until_complete(start_server)
     asyncio.get_event_loop().run_forever()

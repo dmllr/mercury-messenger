@@ -58,44 +58,6 @@ public:
     return status_;
   }
 
-  void ReportStatus(const ServiceState state) const {
-    status_.service_state = state;
-    if (status_callback_) {
-      (*status_callback_)(EventSource::ConnectionStatus, static_cast<int>(state));
-    }
-  }
-
-  void ReportStateChange(const EventSource source, int state) const {
-    if (status_callback_) {
-      (*status_callback_)(source, static_cast<int>(state));
-    }
-  }
-
-  void ReportEvent(const SystemEvent event) const {
-    if (status_callback_) {
-      (*status_callback_)(EventSource::System, static_cast<int>(event));
-    }
-  }
-
-  void Authenticate() {
-    Json message = {
-        {"id", id},
-        {"type", "authenticate"},
-        {"username", "user1"},
-        {"password", "password1"}
-    };
-    ws_.send(message.dump());
-  }
-
-  void PublishClient() {
-    Json message = {
-        {"id", id},
-        {"token", auth_token_},
-        {"type", "publish_client"},
-        {"client_id", id}};
-    ws_.send(message.dump());
-  }
-
   void Start() {
     LOGI << "The local ID is: " << id.data();
 
@@ -137,9 +99,16 @@ public:
       }
 
       const auto message = Json::parse(std::get<std::string>(data));
-      DispatchQueue::MainThread().dispatch([this, message]() {
-        OnWSMessage(std::move(message));
-      });
+      auto it = message.find("to");
+      if (it == message.end()) {
+        DispatchQueue::MainThread().dispatch([this, message]() {
+          OnSystemMessage(std::move(message));
+        });
+      } else {
+        DispatchQueue::MainThread().dispatch([this, message]() {
+          OnPeerMessage(std::move(message));
+        });
+      }
     });
 
     std::this_thread::sleep_for(std::chrono::seconds(wait_before_reconnect_));
@@ -163,6 +132,43 @@ public:
       return;
     }
     ReportEvent(SystemEvent::started);
+  }
+
+private:
+  void ReportStatus(const ServiceState state) const {
+    status_.service_state = state;
+    if (status_callback_) {
+      (*status_callback_)(EventSource::ConnectionStatus, static_cast<int>(state));
+    }
+  }
+
+  void ReportStateChange(const EventSource source, int state) const {
+    if (status_callback_) {
+      (*status_callback_)(source, static_cast<int>(state));
+    }
+  }
+
+  void ReportEvent(const SystemEvent event) const {
+    if (status_callback_) {
+      (*status_callback_)(EventSource::System, static_cast<int>(event));
+    }
+  }
+
+  void Authenticate() {
+    Json message = {
+        {"type", "authenticate"},
+        {"username", "user1"},
+        {"password", "password1"}
+    };
+    ws_.send(message.dump());
+  }
+
+  void PublishClient() {
+    Json message = {
+        {"token", auth_token_},
+        {"type", "publish_client"},
+        {"client_id", id}};
+    ws_.send(message.dump());
   }
 
   auto CreateDefaultPeerConnection(const std::string& id) -> std::shared_ptr<rtc::PeerConnection> {
@@ -203,7 +209,7 @@ public:
         if (auto peer_con = wpc.lock()) {
           auto description = peer_con->localDescription();
           Json message = {
-              {"id", id},
+              {"to", id},
               {"token", auth_token_},
               {"type", description->typeString()},
               {"sdp", std::string(description.value())}};
@@ -257,12 +263,31 @@ public:
     return dc;
   }
 
-  void OnWSMessage(Json message) {
-    auto it = message.find("id");
+  void OnSystemMessage(Json message) {
+    auto it = message.find("type");
     if (it == message.end()) {
       return;
     }
-    auto id = it->get<std::string>();
+    auto type = it->get<std::string>();
+
+    if (type == "authenticated") {
+      auth_token_ = message["token"].get<std::string>();
+      DispatchQueue::MainThread().dispatch([this]() {
+        PublishClient();
+      });
+    } else if (type == "error") {
+      // TODO
+    } else {
+      throw std::runtime_error("Unknown message type " + type);
+    }
+  }
+
+  void OnPeerMessage(Json message) {
+    auto it = message.find("to");
+    if (it == message.end()) {
+      return;
+    }
+    auto peer_id = it->get<std::string>();
     it = message.find("type");
     if (it == message.end()) {
       return;
@@ -270,25 +295,18 @@ public:
     auto type = it->get<std::string>();
 
     if (type == "streamRequest") {
-      std::shared_ptr<Peer> const peer = CreatePeerConnection(id);
-      DispatchQueue::MainThread().dispatch([this, id, peer]() {
-        connection_.AddPeer(id, std::move(peer));
+      std::shared_ptr<Peer> const peer = CreatePeerConnection(peer_id);
+      DispatchQueue::MainThread().dispatch([this, peer_id, peer]() {
+        connection_.AddPeer(peer_id, std::move(peer));
       });
     } else if (type == "answer") {
-      if (const auto peer = connection_.GetPeer(id); peer != nullptr) {
+      if (const auto peer = connection_.GetPeer(peer_id); peer != nullptr) {
         auto pc = peer->PeerConnection();
         auto sdp = message["sdp"].get<std::string>();
         auto answer = rtc::Description(sdp, type);
         pc->setRemoteDescription(answer);
       }
     } else if (type == "offer") {
-      // do nothing
-    } else if ((type == "authenticated") && (id == "system")) {
-      auth_token_ = message["token"].get<std::string>();
-      DispatchQueue::MainThread().dispatch([this]() {
-        PublishClient();
-      });
-    } else if ((type == "client_published") && (id == "system")) {
       // do nothing
     } else {
       throw std::runtime_error("Unknown message type " + type);
