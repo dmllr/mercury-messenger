@@ -276,7 +276,7 @@ private:
         PublishClient();
       });
     } else if (type == "error") {
-      // TODO
+      LOGE << "Signaling error received: " << message["error"].get<std::string>();
     } else {
       throw std::runtime_error("Unknown message type " + type);
     }
