@@ -9,9 +9,46 @@ from auth_manager import AuthManager
 clients = {}
 authManager = AuthManager()
 
+
 async def handle_connection(websocket, path):
     user_id = None
     client_id = None
+
+    async def authenticate():
+        username = message.get('username')
+        password = message.get('password')
+        if not authManager.authorize(username, password):
+            await websocket.send(json.dumps({
+                "type": "error",
+                "error": "invalid_credentials"
+            }))
+            await websocket.close()
+            return False
+
+        token = authManager.generate_token('password', username, None)
+        print(f'User "{user_id}" authenticated')
+        await websocket.send(json.dumps({
+            "type": "authenticated",
+            "token": token
+        }))
+        return True
+
+    async def validate_token():
+        token = message.get('token')
+        if not token or not authManager.authenticate_token(token):
+            if user_id in clients and client_id in clients[user_id]:
+                del clients[user_id][client_id]
+                print(f'Peer "{user_id}/{client_id}" disconnected due to invalid token')
+            error = {
+                "type": "error",
+                "error": "invalid_token",
+                "message": f'Token "{token}" failed validation'
+            }
+            await websocket.send(json.dumps(error))
+            await websocket.close()
+            return False
+        return authManager.validate_token(token)['user']
+
     # noinspection PyBroadException
     try:
         while True:
@@ -25,77 +62,37 @@ async def handle_connection(websocket, path):
                 continue
 
             if message['type'] == 'authenticate':
-                username = message.get('username')
-                password = message.get('password')
-                if authManager.authorize(username, password):
-                    token = authManager.generate_token('password', username, None)
-                    user_id = username
-                    print(f'User "{user_id}" authenticated')
-                    response = {
-                        "type": "authenticated",
-                        "token": token
-                    }
-                    await websocket.send(json.dumps(response))
-                else:
-                    response = {
-                        "type": "error",
-                        "error": "invalid_credentials"
-                    }
-                    await websocket.send(json.dumps(response))
-                    await websocket.close()
+                if not await authenticate():
                     return
-
-            elif message['type'] == 'exhibit':
-                token = message.get('token')
-                if not token or not authManager.authenticate_token(token):
-                    response = {
-                        "type": "error",
-                        "error": "invalid_token",
-                        "message": f'Token "{token}" failed validation'
-                    }
-                    await websocket.send(json.dumps(response))
-                    await websocket.close()
-                    return
-
-                user_id = authManager.validate_token(token)['user']
-                client_id = message.get('client_id')
-                if user_id not in clients:
-                    clients[user_id] = {}
-                clients[user_id][client_id] = websocket
-                print(f'Peer "{user_id}/{client_id}" published')
-
             else:
-                token = message.get('token')
-                if not token or not authManager.authenticate_token(token):
-                    response = {
-                        "type": "error",
-                        "error": "invalid_token",
-                        "message": f'Token "{token}" failed validation'
-                    }
-                    await websocket.send(json.dumps(response))
-                    await websocket.close()
-                    if user_id in clients and client_id in clients[user_id]:
-                        del clients[user_id][client_id]
-                        print(f'Peer "{user_id}/{client_id}" disconnected due to invalid token')
+                user_id = await validate_token()
+                if not user_id:
                     return
 
-                user_id = authManager.validate_token(token)['user']
-                destination_id = message['to']
-                if destination_id in clients[user_id]:
-                    # redirect the message to a destination client
-                    client = clients[user_id][destination_id]
-                    message['from'] = client_id
-                    data = json.dumps(message)
-                    print(f'to: "{user_id}/{destination_id}" from "{user_id}/{client_id}": {data}')
-                    await client.send(data)
+                if message['type'] == 'exhibit':
+                    client_id = message.get('client_id')
+                    if user_id not in clients:
+                        clients[user_id] = {}
+                    clients[user_id][client_id] = websocket
+                    print(f'Peer "{user_id}/{client_id}" published')
+
                 else:
-                    print(f'Peer "{destination_id}" not published by {user_id} or unauthorized')
-                    response = {
-                        "type": "error",
-                        "error": "peer_not_found",
-                        "message": f'Peer "{user_id}/{destination_id}" not published'
-                    }
-                    await websocket.send(json.dumps(response))
+                    destination_id = message['to']
+                    if destination_id in clients[user_id]:
+                        # redirect the message to a destination client
+                        client = clients[user_id][destination_id]
+                        message['from'] = client_id
+                        data = json.dumps(message)
+                        print(f'to: "{user_id}/{destination_id}" from "{user_id}/{client_id}": {data}')
+                        await client.send(data)
+                    else:
+                        print(f'Peer "{destination_id}" not published by {user_id} or unauthorized')
+                        response = {
+                            "type": "error",
+                            "error": "peer_not_found",
+                            "message": f'Peer "{user_id}/{destination_id}" not published'
+                        }
+                        await websocket.send(json.dumps(response))
 
     except KeyboardInterrupt:
         ...
