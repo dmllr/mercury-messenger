@@ -19,7 +19,7 @@ import hela.eillance.events.StateIce
 import hela.eillance.events.StateIceGathering
 import hela.eillance.events.StatePeerConnection
 import hela.eillance.events.StateService
-import hela.eillance.events.StateSignalling
+import hela.eillance.events.StateSignaling
 import hela.eillance.events.SystemEvent
 import hela.eillance.events.getResourceString
 
@@ -51,7 +51,7 @@ class OperationFragment : Fragment() {
         EventSource.IceState -> iceConnectionState.text =
           StateIce.fromInt(state).getResourceString(context)
         EventSource.SignalingState -> signalingState.text =
-          StateSignalling.fromInt(state).getResourceString(context)
+          StateSignaling.fromInt(state).getResourceString(context)
         EventSource.ConnectionStatus -> communicationStatusState.text =
           StateService.fromInt(state).getResourceString(context)
         EventSource.PeerConnectionState -> peerConnectionState.text =
@@ -118,7 +118,7 @@ class OperationFragment : Fragment() {
       val context = requireContext()
       iceGatheringState.text = status.iceGatheringState.getResourceString(context)
       iceConnectionState.text = status.iceState.getResourceString(context)
-      signalingState.text = status.signallingState.getResourceString(context)
+      signalingState.text = status.signalingState.getResourceString(context)
       communicationStatusState.text = status.connectionState.getResourceString(context)
       peerConnectionState.text = status.peerConnectionState.getResourceString(context)
     }

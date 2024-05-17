@@ -21,11 +21,11 @@
   <string name="unknown">Unknown</string>
   <string name="waiting">Waiting</string>
 
-  <string name="state_signalling_stable">Stable</string>
-  <string name="state_signalling_have_local_offer">Have Local Offer</string>
-  <string name="state_signalling_have_remote_offer">Have Remote Offer</string>
-  <string name="state_signalling_have_local_pranswer">Have Local Pranswer</string>
-  <string name="state_signalling_have_remote_pranswer">Have Remote Pranswer</string>
+  <string name="state_signaling_stable">Stable</string>
+  <string name="state_signaling_have_local_offer">Have Local Offer</string>
+  <string name="state_signaling_have_remote_offer">Have Remote Offer</string>
+  <string name="state_signaling_have_local_pranswer">Have Local Pranswer</string>
+  <string name="state_signaling_have_remote_pranswer">Have Remote Pranswer</string>
 
   <string name="state_service_unknown">Unknown</string>
   <string name="state_service_standby">Standby</string>

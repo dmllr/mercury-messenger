@@ -57,7 +57,7 @@ Java_hela_eillance_CameraService_getStatus(
                                                     static_cast<jint>(status.state),
                                                     static_cast<jint>(status.ice_state),
                                                     static_cast<jint>(status.gathering_state),
-                                                    static_cast<jint>(status.signalling_state));
+                                                    static_cast<jint>(status.signaling_state));
 
   return finalStatus;
 }

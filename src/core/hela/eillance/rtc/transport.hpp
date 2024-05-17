@@ -219,8 +219,8 @@ private:
     });
 
     peer_connection->onSignalingStateChange([this, id](rtc::PeerConnection::SignalingState state) {
-      LOGI << "Signalling State: " << static_cast<int>(state);
-      status_.signalling_state = state;
+      LOGI << "Signaling State: " << static_cast<int>(state);
+      status_.signaling_state = state;
       ReportStateChange(EventSource::SignalingState, static_cast<int>(state));
       if (state == rtc::PeerConnection::SignalingState::HaveLocalOffer) {
         ReportStatus(ServiceState::setup);
