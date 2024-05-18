@@ -77,7 +77,10 @@ async def handle_connection(websocket, path):
                     print(f'Peer "{user_id}/{client_id}" published')
 
                 elif message['type'] == 'get clients':
-                    data = json.dumps(list(clients[user_id].keys()))
+                    data = json.dumps({
+                        "type": "list_of_clients",
+                        "clients": list(clients[user_id].keys())
+                    })
                     print(f'to: "{user_id}/{client_id}" as a reply to "get clients" command: : {data}')
                     await websocket.send(data)
 

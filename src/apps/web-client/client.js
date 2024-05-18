@@ -1,6 +1,7 @@
 /** @type {RTCPeerConnection} */
 let rtc;
 let token = null; // Store the token here after authentication
+let selectedClientId = null; // Store the selected client ID here
 
 const iceConnectionLog = document.getElementById('ice-connection-state'),
     iceGatheringLog = document.getElementById('ice-gathering-state'),
@@ -19,7 +20,6 @@ function randomString(len) {
 
 const receiveID = randomString(10);
 // const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-// const websocket = new WebSocket(protocol + '//app.hela.me:8000/');
 const websocket = new WebSocket('ws://localhost:8000/');
 websocket.onopen = function () {
     authenticateUser();
@@ -87,19 +87,6 @@ function createPeerConnection() {
     }, false);
     signalingLog.textContent = pc.signalingState;
 
-    // pc.onicecandidateerror = function(event) {
-    //     if (event.errorCode >= 300 && event.errorCode <= 699) {
-    //         signalingLog.textContent += ' -> error[300-699]';
-    //         // Here this a standardized ICE error
-    //         // Do something...
-    //     } else if (event.errorCode >= 700 && event.errorCode <= 799) {
-    //         signalingLog.textContent += ' -> error[700-799]';
-    //         // Here, the application perhaps didn't reach the server ?
-    //         // Do something else...
-    //     }
-    // }
-
-    // connect audio / video
     pc.addEventListener('track', function (evt) {
         console.log(evt);
         document.getElementById('media').style.display = 'block';
@@ -127,7 +114,6 @@ function createPeerConnection() {
             dataChannelLog.scrollTop = dataChannelLog.scrollHeight;
         };
         dc.onmessage = function (evt) {
-
             dataChannelLog.textContent += '< ' + evt.data + '\n';
             dataChannelLog.scrollTop = dataChannelLog.scrollHeight;
 
@@ -179,7 +165,7 @@ function sendAnswer(pc) {
 
             return websocket.send(JSON.stringify(
                 {
-                    to: "server",
+                    to: selectedClientId,
                     token: token,
                     type: answer.type,
                     sdp: answer.sdp
@@ -198,7 +184,7 @@ function handleOffer(offer) {
 function sendStreamRequest() {
     websocket.send(JSON.stringify(
         {
-            to: "server",
+            to: selectedClientId,
             token: token,
             type: "streamRequest"
         }));
@@ -246,6 +232,41 @@ function stop() {
     }, 500);
 }
 
+function refreshClientList() {
+    websocket.send(JSON.stringify({
+        type: 'get clients',
+        token: token
+    }));
+}
+
+function updateClientList(clients) {
+    const clientListDiv = document.getElementById('client-list');
+    clientListDiv.innerHTML = '';
+    clients.forEach((client, index) => {
+        if (client === receiveID) {
+            return;
+        }
+        const radioBtn = document.createElement('input');
+        radioBtn.type = 'radio';
+        radioBtn.name = 'client';
+        radioBtn.value = client;
+        radioBtn.id = 'client_' + client;
+        radioBtn.checked = index === 0;
+        radioBtn.onclick = function() {
+            selectedClientId = this.value;
+        };
+
+        const label = document.createElement('label');
+        label.htmlFor = 'client_' + client;
+        label.textContent = client;
+
+        clientListDiv.appendChild(radioBtn);
+        clientListDiv.appendChild(label);
+        clientListDiv.appendChild(document.createElement('br'));
+    });
+    selectedClientId = clients.length > 0 ? clients[0] : null;
+}
+
 websocket.onmessage = async function (evt) {
     const received_msg = evt.data;
     const object = JSON.parse(received_msg);
@@ -261,10 +282,15 @@ websocket.onmessage = async function (evt) {
             token: token,
             client_id: receiveID
         }));
+
+        // Refresh client list after authentication
+        refreshClientList();
     } else if (object.type === "offer") {
         document.getElementById('offer-sdp').textContent = object.sdp;
-        await handleOffer(object)
+        await handleOffer(object);
     } else if (object.type === "error") {
         console.error('Error: ', object.error, ', message: ', object.message);
+    } else if (object.type === "list_of_clients") {
+        updateClientList(object.clients);
     }
 }
