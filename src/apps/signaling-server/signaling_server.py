@@ -49,6 +49,14 @@ async def handle_connection(websocket, path):
             return False
         return authManager.validate_token(token)['user']
 
+    async def send_clients(connection):
+        data = json.dumps({
+            "type": "list_of_clients",
+            "clients": list(clients[user_id].keys())
+        })
+        print(f'to: "{user_id}/{client_id}" as a reply to "get clients" command: : {data}')
+        await connection.send(data)
+
     # noinspection PyBroadException
     try:
         while True:
@@ -75,14 +83,11 @@ async def handle_connection(websocket, path):
                         clients[user_id] = {}
                     clients[user_id][client_id] = websocket
                     print(f'Peer "{user_id}/{client_id}" published')
+                    for client in clients[user_id]:
+                        await send_clients(clients[user_id][client])
 
                 elif message['type'] == 'get clients':
-                    data = json.dumps({
-                        "type": "list_of_clients",
-                        "clients": list(clients[user_id].keys())
-                    })
-                    print(f'to: "{user_id}/{client_id}" as a reply to "get clients" command: : {data}')
-                    await websocket.send(data)
+                    await send_clients(websocket)
 
                 else:
                     destination_id = message['to']

@@ -277,6 +277,8 @@ private:
       });
     } else if (type == "error") {
       LOGE << "Signaling error received: " << message["error"].get<std::string>();
+    } else if (type == "list_of_clients") {
+      // ignored for producing peer, but should be treated for consuming
     } else {
       throw std::runtime_error("Unknown message type " + type);
     }
