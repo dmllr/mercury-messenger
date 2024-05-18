@@ -1,4 +1,6 @@
 import asyncio
+from asyncio import sleep
+
 import websockets
 import json
 
@@ -18,8 +20,10 @@ async def authenticate_and_exhibit():
             print("Failed to authenticate:", response_data)
             return
 
-        # Publish a client
-        await websocket.send(json.dumps({"type": "exhibit", "token": token, "client_id": "client1"}))
+        print("Publish a client")
+        await websocket.send(json.dumps({"type": "exhibit", "token": token, "client_id": "client1", "kind": "producer"}))
+        response = await websocket.recv()
+        print("Message response:", response)
 
         print("Send a message to the same client of the same user")
         await websocket.send(
@@ -34,5 +38,9 @@ async def authenticate_and_exhibit():
         response = await websocket.recv()
         print("Message response:", response)
 
+        print("Republish a client as consumer")
+        await websocket.send(json.dumps({"type": "exhibit", "token": token, "client_id": "client1", "kind": "consumer"}))
+        response = await websocket.recv()
+        print("Message response:", response)
 
 asyncio.run(authenticate_and_exhibit())

@@ -2,15 +2,33 @@ import json
 import ssl
 import sys
 import asyncio
+from typing import Union
+
 import websockets
 import traceback
+from enum import Enum
+
+from websockets import WebSocketServerProtocol
+
 from auth_manager import AuthManager
 
-clients = {}
+
+class Client:
+    class Kind(str, Enum):
+        Producer = 'producer',
+        Consumer = 'consumer'
+
+    def __init__(self, id, kind, ws):
+        self.id: str = id
+        self.kind: Client.Kind = kind
+        self.ws: WebSocketServerProtocol = ws
+
+
+clients: dict[str, dict[str, Client]] = {}
 authManager = AuthManager()
 
 
-async def handle_connection(websocket, path):
+async def handle_connection(websocket: WebSocketServerProtocol):
     user_id = None
     client_id = None
 
@@ -26,14 +44,14 @@ async def handle_connection(websocket, path):
             return False
 
         token = authManager.generate_token('password', username, None)
-        print(f'User "{user_id}" authenticated')
+        print(f'User "{username}" authenticated')
         await websocket.send(json.dumps({
             "type": "authenticated",
             "token": token
         }))
         return True
 
-    async def validate_token():
+    async def validate_token() -> Union[str, bool]:
         token = message.get('token')
         if not token or not authManager.authenticate_token(token):
             if user_id in clients and client_id in clients[user_id]:
@@ -52,16 +70,16 @@ async def handle_connection(websocket, path):
     async def send_clients(connection):
         data = json.dumps({
             "type": "list_of_clients",
-            "clients": list(clients[user_id].keys())
+            "clients": [cid for cid, c in clients[user_id].items() if c.kind == Client.Kind.Producer]
         })
-        print(f'to: "{user_id}/{client_id}" as a reply to "get clients" command: : {data}')
+        print(f'>>[{user_id}/{client_id}]: {data}')
         await connection.send(data)
 
     # noinspection PyBroadException
     try:
         while True:
             data = await websocket.recv()
-            print(f'<< {data}')
+            print(f'<<[{user_id}/{client_id}] {data}')
 
             message = json.loads(data)
             if 'type' not in message:
@@ -79,12 +97,13 @@ async def handle_connection(websocket, path):
 
                 if message['type'] == 'exhibit':
                     client_id = message.get('client_id')
+                    client_kind = message.get('kind')
                     if user_id not in clients:
                         clients[user_id] = {}
-                    clients[user_id][client_id] = websocket
+                    clients[user_id][client_id] = Client(client_id, client_kind, websocket)
                     print(f'Peer "{user_id}/{client_id}" published')
                     for client in clients[user_id]:
-                        await send_clients(clients[user_id][client])
+                        await send_clients(clients[user_id][client].ws)
 
                 elif message['type'] == 'get clients':
                     await send_clients(websocket)
@@ -96,8 +115,8 @@ async def handle_connection(websocket, path):
                         client = clients[user_id][destination_id]
                         message['from'] = client_id
                         data = json.dumps(message)
-                        print(f'to: "{user_id}/{destination_id}" from "{user_id}/{client_id}": {data}')
-                        await client.send(data)
+                        print(f'>>[{user_id}/{client_id}] from "{user_id}/{client_id}": {data}')
+                        await client.ws.send(data)
                     else:
                         print(f'Peer "{destination_id}" not published by {user_id} or unauthorized')
                         response = {

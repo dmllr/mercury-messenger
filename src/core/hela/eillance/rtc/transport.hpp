@@ -167,7 +167,8 @@ private:
     Json message = {
         {"token", auth_token_},
         {"type", "exhibit"},
-        {"client_id", id}};
+        {"client_id", id},
+        {"kind", "producer"}};
     ws_.send(message.dump());
   }
 
@@ -278,7 +279,7 @@ private:
     } else if (type == "error") {
       LOGE << "Signaling error received: " << message["error"].get<std::string>();
     } else if (type == "list_of_clients") {
-      // ignored for producing peer, but should be treated for consuming
+      // ignored for producing peer, but should be treated for consuming one
     } else {
       throw std::runtime_error("Unknown message type " + type);
     }

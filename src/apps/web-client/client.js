@@ -243,9 +243,6 @@ function updateClientList(clients) {
     const clientListDiv = document.getElementById('client-list');
     clientListDiv.innerHTML = '';
     clients.forEach((client, index) => {
-        if (client === receiveID) {
-            return;
-        }
         const radioBtn = document.createElement('input');
         radioBtn.type = 'radio';
         radioBtn.name = 'client';
@@ -280,7 +277,8 @@ websocket.onmessage = async function (evt) {
         websocket.send(JSON.stringify({
             type: 'exhibit',
             token: token,
-            client_id: receiveID
+            client_id: receiveID,
+            kind: "consumer",
         }));
 
         // Refresh client list after authentication
