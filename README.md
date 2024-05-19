@@ -35,7 +35,7 @@ pacman -S make
      -p 8000:8000 \
      -v /etc/letsencrypt:/etc/letsencrypt \
      dmllr/main:signaling_v_1_0 \
-     bash -c "python3 signaling-server.py 0.0.0.0:8000 /etc/letsencrypt/live/app.hela.me/fullchain.pem /etc/letsencrypt/live/app.hela.me/privkey.pem"
+     bash -c "python3 signaling_server.py 0.0.0.0:8000 /etc/letsencrypt/live/app.hela.me/fullchain.pem /etc/letsencrypt/live/app.hela.me/privkey.pem"
    ```
 2. Browse <a href="https://app.hela.me/camera/web-client">https://app.hela.me/camera/web-client</a>
 3. Push "Start"

@@ -54,9 +54,6 @@ async def handle_connection(websocket: WebSocketServerProtocol):
     async def validate_token() -> Union[str, bool]:
         token = message.get('token')
         if not token or not authManager.authenticate_token(token):
-            if user_id in clients and client_id in clients[user_id]:
-                del clients[user_id][client_id]
-                print(f'Peer "{user_id}/{client_id}" disconnected due to invalid token')
             error = {
                 "type": "error",
                 "error": "invalid_token",
@@ -110,7 +107,7 @@ async def handle_connection(websocket: WebSocketServerProtocol):
 
                 else:
                     destination_id = message['to']
-                    if destination_id in clients[user_id]:
+                    if destination_id not in clients[user_id]:
                         # redirect the message to a destination client
                         client = clients[user_id][destination_id]
                         message['from'] = client_id
@@ -139,6 +136,7 @@ async def handle_connection(websocket: WebSocketServerProtocol):
         if user_id and client_id and user_id in clients and client_id in clients[user_id]:
             del clients[user_id][client_id]
             print(f'Peer "{user_id}/{client_id}" disconnected')
+            await send_publishers(websocket)
 
 
 if __name__ == '__main__':
