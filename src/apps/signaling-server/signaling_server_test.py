@@ -32,9 +32,9 @@ async def authenticate_and_exhibit():
         print("Message response:", response)
 
         # Get all published clients
-        print("Send 'get clients'")
+        print("Send 'get publishers'")
         await websocket.send(
-            json.dumps({"type": "get clients", "token": token}))
+            json.dumps({"type": "get publishers", "token": token}))
         response = await websocket.recv()
         print("Message response:", response)
 

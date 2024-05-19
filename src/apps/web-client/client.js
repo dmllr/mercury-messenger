@@ -232,9 +232,9 @@ function stop() {
     }, 500);
 }
 
-function refreshClientList() {
+function refreshPublishers() {
     websocket.send(JSON.stringify({
-        type: 'get clients',
+        type: 'get publishers',
         token: token
     }));
 }
@@ -282,13 +282,13 @@ websocket.onmessage = async function (evt) {
         }));
 
         // Refresh client list after authentication
-        refreshClientList();
+        refreshPublishers();
     } else if (object.type === "offer") {
         document.getElementById('offer-sdp').textContent = object.sdp;
         await handleOffer(object);
     } else if (object.type === "error") {
         console.error('Error: ', object.error, ', message: ', object.message);
-    } else if (object.type === "list_of_clients") {
+    } else if (object.type === "info publishers") {
         updateClientList(object.clients);
     }
 }

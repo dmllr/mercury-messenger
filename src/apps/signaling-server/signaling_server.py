@@ -67,9 +67,9 @@ async def handle_connection(websocket: WebSocketServerProtocol):
             return False
         return authManager.validate_token(token)['user']
 
-    async def send_clients(connection):
+    async def send_publishers(connection):
         data = json.dumps({
-            "type": "list_of_clients",
+            "type": "info publishers",
             "clients": [cid for cid, c in clients[user_id].items() if c.kind == Client.Kind.Producer]
         })
         print(f'>>[{user_id}/{client_id}]: {data}')
@@ -103,10 +103,10 @@ async def handle_connection(websocket: WebSocketServerProtocol):
                     clients[user_id][client_id] = Client(client_id, client_kind, websocket)
                     print(f'Peer "{user_id}/{client_id}" published')
                     for client in clients[user_id]:
-                        await send_clients(clients[user_id][client].ws)
+                        await send_publishers(clients[user_id][client].ws)
 
-                elif message['type'] == 'get clients':
-                    await send_clients(websocket)
+                elif message['type'] == 'get publishers':
+                    await send_publishers(websocket)
 
                 else:
                     destination_id = message['to']
