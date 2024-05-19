@@ -25,7 +25,7 @@ template<typename Connection>
 class RtcTransport {
   using Json = nlohmann::json;
 
-  const std::string_view id;
+  const std::string id;
   std::string auth_token_;
 
   static constexpr auto minWaitBeforeReconnect = 1;
@@ -41,7 +41,7 @@ class RtcTransport {
   std::shared_ptr<std::function<void(EventSource, int)>> status_callback_;
 
 public:
-  explicit RtcTransport(std::string_view local_id) : id(local_id) {
+  explicit RtcTransport(std::string local_id) : id(local_id) {
     ws_config_.caCertificatePemFile = zerosslCaBundle;
   }
   RtcTransport(RtcTransport&&) = delete;
