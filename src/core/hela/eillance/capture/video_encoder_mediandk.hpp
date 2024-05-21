@@ -17,6 +17,8 @@ class VideoEncoder {
     STOPPED
   };
 
+  VideoConfig config_;
+
   AMediaCodec* codec{nullptr};
   ANativeWindow* surface{nullptr};
   CodecStatus status{UNKNOWN};
@@ -34,15 +36,17 @@ public:
     if (status == STARTED)
       return;
 
+    config_ = config;
+
     codec = AMediaCodec_createEncoderByType("video/avc");
     Log::assert_or_die(static_cast<bool>(codec), "There is no 'video/avc' codec support available");
 
     auto format = AMediaFormat_new();
 
-    auto width = config.width;
-    auto height = config.height;
-    auto frameRate = config.frameRate;
-    auto bitRate = config.bitrate;
+    auto width = config_.width;
+    auto height = config_.height;
+    auto frameRate = config_.frameRate;
+    auto bitRate = config_.bitrate;
     auto i_frame = 30;
     auto colorFormat = 0x7f000789;  // COLOR_FormatSurface, https://developer.android.com/reference/android/media/MediaCodecInfo.CodecCapabilities#COLOR_FormatSurface
     AMediaFormat_setString(format, AMEDIAFORMAT_KEY_MIME, "video/avc");
@@ -83,13 +87,13 @@ public:
   }
 
   Packet EncodeBuffer() {
-    auto index = AMediaCodec_dequeueOutputBuffer(codec, &info, config.frameDuration);
+    auto index = AMediaCodec_dequeueOutputBuffer(codec, &info, config_.frameDuration);
     if (likely(index >= 0)) {
       if (unlikely(info.flags == AMEDIACODEC_BUFFER_FLAG_CODEC_CONFIG)) {
         const auto config_info = info;
         const auto config_index = index;
         const auto config_buffer = AMediaCodec_getOutputBuffer(codec, static_cast<size_t>(config_index), NULL);
-        index = AMediaCodec_dequeueOutputBuffer(codec, &info, config.frameDuration);
+        index = AMediaCodec_dequeueOutputBuffer(codec, &info, config_.frameDuration);
         buffer = AMediaCodec_getOutputBuffer(codec, static_cast<size_t>(index), NULL);
 
         encoded_data.clear();

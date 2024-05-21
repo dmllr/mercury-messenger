@@ -53,7 +53,7 @@ public:
       Log::e("Failed to create camera manager");
       return;
     }
-    encoder_.Engage();
+    encoder_.Engage(config_);
     renewCaptureSession();
   }
 
@@ -81,7 +81,7 @@ public:
     }
   }
 
-  static Time::Unit GetSampleDuration() {
+  Time::Unit GetSampleDuration() {
     return Time::uS / config_.frameRate;
   }
 
