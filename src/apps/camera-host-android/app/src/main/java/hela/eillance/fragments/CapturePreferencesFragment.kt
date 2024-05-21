@@ -38,6 +38,7 @@ class CapturePreferencesFragment : PreferenceFragmentCompat() {
     // Find the default camera and camera resolution preferences
     val defaultCameraPreference = findPreference<ListPreference>("default_camera")
     val cameraResolutionPreference = findPreference<ListPreference>("camera_resolution")
+    val frameRatePreference = findPreference<ListPreference>("frame_rate")
 
     // Get the supported resolutions for the selected camera
     val supportedResolutions = CameraUtils.getSupportedResolutions(cameraManager,
@@ -54,6 +55,10 @@ class CapturePreferencesFragment : PreferenceFragmentCompat() {
     defaultCameraPreference?.entryValues = cameraIdsArray
     cameraResolutionPreference?.entries = cameraResolutions
     cameraResolutionPreference?.entryValues = cameraResolutions
+
+    val defaultFrameRates = arrayOf("10", "15", "24", "25", "30", "60")
+    frameRatePreference?.entries = defaultFrameRates
+    frameRatePreference?.entryValues = defaultFrameRates
 
     // Set a listener to update the camera resolution preference when the default camera is changed
     defaultCameraPreference?.setOnPreferenceChangeListener { _, newValue ->
