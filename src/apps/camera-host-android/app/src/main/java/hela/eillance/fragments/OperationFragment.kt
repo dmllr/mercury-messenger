@@ -1,4 +1,4 @@
-package hela.eillance
+package hela.eillance.fragments
 
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -13,6 +13,9 @@ import android.widget.ImageButton
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.core.content.ContextCompat.getColor
+import hela.eillance.MainActivity
+import hela.eillance.Status
+import hela.eillance.Tune
 import hela.eillance.camera.R
 import hela.eillance.events.EventSource
 import hela.eillance.events.StateIce
@@ -126,7 +129,7 @@ class OperationFragment : Fragment() {
 
   private fun getStatus(): Status? {
     val activity = requireActivity() as MainActivity
-    val cameraService = activity.cameraService
+    val cameraService = activity.appEngineService
     return cameraService?.getStatus()
   }
 

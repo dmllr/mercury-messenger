@@ -16,7 +16,7 @@ AppEngine* engine = nullptr;
 JavaVM* g_JavaVM;
 
 extern "C" JNIEXPORT jlong JNICALL
-Java_hela_eillance_CameraService_createAppEngine(
+Java_hela_eillance_AppEngineService_createAppEngine(
     JNIEnv* env,
     jobject instance,
     jobject statusUpdateCallback) {
@@ -25,7 +25,7 @@ Java_hela_eillance_CameraService_createAppEngine(
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_hela_eillance_CameraService_deleteAppEngine(
+Java_hela_eillance_AppEngineService_deleteAppEngine(
     JNIEnv* env,
     jobject instance,
     jlong appmgr) {
@@ -41,7 +41,7 @@ Java_hela_eillance_CameraService_deleteAppEngine(
 }
 
 extern "C" JNIEXPORT jobject JNICALL
-Java_hela_eillance_CameraService_getStatus(
+Java_hela_eillance_AppEngineService_getStatus(
     JNIEnv* env,
     jobject instance,
     jlong appmgr) {

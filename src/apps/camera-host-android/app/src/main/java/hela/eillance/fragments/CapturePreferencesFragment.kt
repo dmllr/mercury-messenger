@@ -1,4 +1,4 @@
-package hela.eillance
+package hela.eillance.fragments
 
 import android.content.Context
 import android.hardware.camera2.CameraManager
@@ -10,6 +10,7 @@ import android.view.ViewGroup
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceFragmentCompat
 import hela.eillance.camera.R
+import hela.eillance.utils.CameraUtils
 
 
 class CapturePreferencesFragment : PreferenceFragmentCompat() {
@@ -80,6 +81,7 @@ class CapturePreferencesFragment : PreferenceFragmentCompat() {
     container: ViewGroup?,
     savedInstanceState: Bundle?
   ): View {
+    // replace transparent background with the default theme color background
     val view = super.onCreateView(inflater, container, savedInstanceState)
     val bgColorValue = TypedValue()
     requireActivity().theme.resolveAttribute(android.R.attr.windowBackground, bgColorValue, true)
