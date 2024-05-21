@@ -32,6 +32,8 @@ class VideoCapture {
   ACaptureSessionOutputContainer* output_container;
   ACameraCaptureSession* capture_session;
 
+  VideoConfig config_;
+
   VideoEncoder encoder_;
 
 public:
@@ -80,7 +82,7 @@ public:
   }
 
   static Time::Unit GetSampleDuration() {
-    return Time::uS / VideoConfig::frameRate;
+    return Time::uS / config_.frameRate;
   }
 
 private:

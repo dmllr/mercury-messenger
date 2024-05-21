@@ -31,6 +31,8 @@ private:
   cv::Mat cv_frame_;
   cv::Mat nv12_frame_;
 
+  VideoConfig config_;
+
   VideoEncoder encoder_;
 
   TELEMETRY(
@@ -84,9 +86,9 @@ public:
     cap_.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('B', 'G', 'R', '3'));
     #endif
     // attempt to set desired resolution
-    cap_.set(cv::CAP_PROP_FRAME_WIDTH, VideoConfig::width);
-    cap_.set(cv::CAP_PROP_FRAME_HEIGHT, VideoConfig::height);
-    cap_.set(cv::CAP_PROP_FPS, VideoConfig::frameRate);
+    cap_.set(cv::CAP_PROP_FRAME_WIDTH, config_.width);
+    cap_.set(cv::CAP_PROP_FRAME_HEIGHT, config_.height);
+    cap_.set(cv::CAP_PROP_FPS, config_.frameRate);
 
     cap_ >> cv_frame_;
     if (cv_frame_.empty()) {
@@ -99,7 +101,7 @@ public:
     const auto actual_height = static_cast<int>(cap_.get(cv::CAP_PROP_FRAME_HEIGHT));
     auto actual_fps = static_cast<int>(cap_.get(cv::CAP_PROP_FPS));
     if (actual_fps <= 0) {
-      actual_fps = VideoConfig::frameRate;
+      actual_fps = config_.frameRate;
     }
 
     LOGI << "Capture resolution set to: " << actual_width << "x" << actual_height;
@@ -111,7 +113,7 @@ public:
     });
   }
 
-  Packet FetchBuffers() {
+  auto FetchBuffers() -> Packet {
     if (cv_frame_.empty()) {
       return {};
     }
@@ -139,8 +141,8 @@ public:
     cap_.release();
   }
 
-  static Time::Unit GetSampleDuration() {
-    return Time::uS / VideoConfig::frameRate;
+  auto GetSampleDuration() -> Time::Unit {
+    return Time::uS / config_.frameRate;
   }
 
 private:
@@ -155,7 +157,7 @@ private:
     }
 
     TELEMETRY(
-        if (fps_counter % (TelemetryInterval * VideoConfig::frameRate) == 0) {
+        if (fps_counter % (TelemetryInterval * config_.frameRate) == 0) {
           auto elapsed = (Time::Now() - last_fps_milestone) / Time::uS;
           auto fetch_fps = static_cast<double>(load_counter) / elapsed;
           load_counter = 0;

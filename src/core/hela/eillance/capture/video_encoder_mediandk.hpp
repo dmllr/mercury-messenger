@@ -30,7 +30,7 @@ public:
     return surface;
   }
 
-  void Engage() {
+  void Engage(VideoConfig config) {
     if (status == STARTED)
       return;
 
@@ -39,10 +39,10 @@ public:
 
     auto format = AMediaFormat_new();
 
-    auto width = VideoConfig::width;
-    auto height = VideoConfig::height;
-    auto frameRate = VideoConfig::frameRate;
-    auto bitRate = VideoConfig::bitrate;
+    auto width = config.width;
+    auto height = config.height;
+    auto frameRate = config.frameRate;
+    auto bitRate = config.bitrate;
     auto i_frame = 30;
     auto colorFormat = 0x7f000789;  // COLOR_FormatSurface, https://developer.android.com/reference/android/media/MediaCodecInfo.CodecCapabilities#COLOR_FormatSurface
     AMediaFormat_setString(format, AMEDIAFORMAT_KEY_MIME, "video/avc");
@@ -83,13 +83,13 @@ public:
   }
 
   Packet EncodeBuffer() {
-    auto index = AMediaCodec_dequeueOutputBuffer(codec, &info, VideoConfig::frameDuration);
+    auto index = AMediaCodec_dequeueOutputBuffer(codec, &info, config.frameDuration);
     if (likely(index >= 0)) {
       if (unlikely(info.flags == AMEDIACODEC_BUFFER_FLAG_CODEC_CONFIG)) {
         const auto config_info = info;
         const auto config_index = index;
         const auto config_buffer = AMediaCodec_getOutputBuffer(codec, static_cast<size_t>(config_index), NULL);
-        index = AMediaCodec_dequeueOutputBuffer(codec, &info, VideoConfig::frameDuration);
+        index = AMediaCodec_dequeueOutputBuffer(codec, &info, config.frameDuration);
         buffer = AMediaCodec_getOutputBuffer(codec, static_cast<size_t>(index), NULL);
 
         encoded_data.clear();
