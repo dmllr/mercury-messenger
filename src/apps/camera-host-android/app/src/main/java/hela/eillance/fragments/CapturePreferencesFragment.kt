@@ -39,6 +39,7 @@ class CapturePreferencesFragment : PreferenceFragmentCompat() {
     val defaultCameraPreference = findPreference<ListPreference>("default_camera")
     val cameraResolutionPreference = findPreference<ListPreference>("camera_resolution")
     val frameRatePreference = findPreference<ListPreference>("frame_rate")
+    val bitratePreference = findPreference<ListPreference>("bitrate")
 
     // Get the supported resolutions for the selected camera
     val supportedResolutions = CameraUtils.getSupportedResolutions(cameraManager,
@@ -60,7 +61,12 @@ class CapturePreferencesFragment : PreferenceFragmentCompat() {
     frameRatePreference?.entries = defaultFrameRates
     frameRatePreference?.entryValues = defaultFrameRates
 
-    // Set a listener to update the camera resolution preference when the default camera is changed
+    val defaultBitrates = arrayOf("Auto")
+    bitratePreference?.entries = defaultBitrates
+    bitratePreference?.entryValues = defaultBitrates
+    bitratePreference?.value = "Auto"
+
+    // Set listeners
     defaultCameraPreference?.setOnPreferenceChangeListener { _, newValue ->
       val newCameraId = newValue as String
       val newSupportedResolutions = CameraUtils.getSupportedResolutions(cameraManager, newCameraId)
@@ -75,10 +81,21 @@ class CapturePreferencesFragment : PreferenceFragmentCompat() {
 
       true
     }
+    cameraResolutionPreference?.setOnPreferenceChangeListener { _, newValue ->
+      true
+    }
+    frameRatePreference?.setOnPreferenceChangeListener { _, newValue ->
+      true
+    }
+    bitratePreference?.setOnPreferenceChangeListener { _, newValue ->
+      true
+    }
 
     // Set the summary providers for the preferences
     defaultCameraPreference?.summaryProvider = ListPreference.SimpleSummaryProvider.getInstance()
     cameraResolutionPreference?.summaryProvider = ListPreference.SimpleSummaryProvider.getInstance()
+    frameRatePreference?.summaryProvider = ListPreference.SimpleSummaryProvider.getInstance()
+    bitratePreference?.summaryProvider = ListPreference.SimpleSummaryProvider.getInstance()
   }
 
   override fun onCreateView(
