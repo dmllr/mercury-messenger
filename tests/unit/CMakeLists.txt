@@ -14,6 +14,7 @@ enable_testing()
 
 add_executable(h-e-tests
   test-audio-encoder.cpp
+  test-dispatch-queue.cpp
   test-event-queue.cpp
   test-string-utils.cpp
 )

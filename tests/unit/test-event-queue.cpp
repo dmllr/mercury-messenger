@@ -2,8 +2,10 @@
 
 #include <gtest/gtest.h>
 
+namespace hela::eillance {
+
 TEST(EventQueue, General) {
-  struct MyEvent{
+  struct MyEvent {
     int num;
   };
 
@@ -31,11 +33,9 @@ TEST(EventQueue, General) {
 }
 
 TEST(EventQueue, Singleton) {
-  struct MyEvent{
+  struct MyEvent {
     int num;
   };
-
-  using EventQueue = hela::eillance::EventQueue;
 
   std::atomic_int result = 0;
 
@@ -56,3 +56,5 @@ TEST(EventQueue, Singleton) {
 
   ASSERT_EQ(result, 42);
 }
+
+}  // namespace hela::eillance
