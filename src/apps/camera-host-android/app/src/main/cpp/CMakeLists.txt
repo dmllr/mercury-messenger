@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.7)
-project(hela-surveillance)
+project(eillance)
 
 enable_language(C)
 enable_language(CXX)
