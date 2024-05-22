@@ -122,6 +122,10 @@ class AppEngineService : Service(), IStatusUpdateCallback {
     return getStatus(appEngine)
   }
 
+  fun configureVideoCapture(conf: VideoConfig) {
+    configureVideoCapture(appEngine, conf)
+  }
+
   private fun Pair<Int, Int>.getBitmapFromVectorDrawable(): Bitmap {
     val context = this@AppEngineService
     val drawable = ContextCompat.getDrawable(context, first)

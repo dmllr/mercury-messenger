@@ -140,6 +140,10 @@ public:
     return std::make_shared<Peer::Track>(track, sr_reporter);
   }
 
+  void ConfigureVideo(VideoConfig conf) {
+    // TODO
+  }
+
 private:
   std::vector<Client> GetAllClientsInReadyState(Stream::Source::Type type) {
     std::vector<Client> clients;

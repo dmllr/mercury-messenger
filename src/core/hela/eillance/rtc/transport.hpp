@@ -59,8 +59,8 @@ public:
     return status_;
   }
 
-  void configureVideoCapture(VideoConfig conf) {
-    InvokeConfigureVideo(connection_, conf);
+  void ConfigureVideo(VideoConfig conf) {
+    InvokeConfigureVideo(connection_, std::move(conf));
   }
 
   void Start() {

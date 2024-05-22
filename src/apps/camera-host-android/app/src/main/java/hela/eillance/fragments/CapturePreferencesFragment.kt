@@ -9,6 +9,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceFragmentCompat
+import hela.eillance.MainActivity
 import hela.eillance.camera.R
 import hela.eillance.ndkio.VideoConfig
 import hela.eillance.utils.CameraUtils
@@ -50,7 +51,7 @@ class CapturePreferencesFragment : PreferenceFragmentCompat() {
     videoConfig.width = resolution?.get(0)?.toInt() ?: 0
     videoConfig.height = resolution?.get(1)?.toInt() ?: 0
     videoConfig.frameRate = frameRatePreference?.value?.toInt() ?: 30
-    videoConfig.bitrate = bitratePreference?.value?.toInt() ?: 0
+    videoConfig.bitrate = bitratePreference?.value?.toIntOrNull() ?: 0
 
     // Get the supported resolutions for the selected camera
     val supportedResolutions = CameraUtils.getSupportedResolutions(cameraManager,
@@ -79,10 +80,8 @@ class CapturePreferencesFragment : PreferenceFragmentCompat() {
 
     // Set listeners
     defaultCameraPreference?.setOnPreferenceChangeListener { _, value ->
-      videoConfig.cameraId = (value as String).toInt()
-      videoConfig.cameraName = defaultCameraPreference.entry.toString()
 
-      val newSupportedResolutions = CameraUtils.getSupportedResolutions(cameraManager, value)
+      val newSupportedResolutions = CameraUtils.getSupportedResolutions(cameraManager, value as String)
 
       val newCameraResolutions = arrayOfNulls<String>(newSupportedResolutions.size)
       for (i in newSupportedResolutions.indices) {
@@ -92,20 +91,27 @@ class CapturePreferencesFragment : PreferenceFragmentCompat() {
       cameraResolutionPreference?.entries = newCameraResolutions
       cameraResolutionPreference?.entryValues = newCameraResolutions
 
+      videoConfig.cameraId = value.toInt()
+      videoConfig.cameraName = defaultCameraPreference.entry.toString()
+      triggerConfigurationUpdate()
+
       true
     }
     cameraResolutionPreference?.setOnPreferenceChangeListener { _, value ->
       val res = (value as String).split("x")
       videoConfig.width = res[0].toInt()
       videoConfig.height = res[1].toInt()
+      triggerConfigurationUpdate()
       true
     }
     frameRatePreference?.setOnPreferenceChangeListener { _, value ->
       videoConfig.frameRate = (value as String).toInt()
+      triggerConfigurationUpdate()
       true
     }
     bitratePreference?.setOnPreferenceChangeListener { _, value ->
-      videoConfig.bitrate = (value as String).toInt()
+      videoConfig.bitrate = (value as String).toIntOrNull() ?: 0
+      triggerConfigurationUpdate()
       true
     }
 
@@ -114,6 +120,10 @@ class CapturePreferencesFragment : PreferenceFragmentCompat() {
     cameraResolutionPreference?.summaryProvider = ListPreference.SimpleSummaryProvider.getInstance()
     frameRatePreference?.summaryProvider = ListPreference.SimpleSummaryProvider.getInstance()
     bitratePreference?.summaryProvider = ListPreference.SimpleSummaryProvider.getInstance()
+  }
+
+  private fun triggerConfigurationUpdate() {
+    (requireActivity() as MainActivity).appEngineService?.configureVideoCapture(videoConfig);
   }
 
   override fun onCreateView(

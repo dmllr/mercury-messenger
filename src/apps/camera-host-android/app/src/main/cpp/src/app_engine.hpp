@@ -46,8 +46,8 @@ public:
     return rtc_producer->GetStatus();
   }
 
-  void configureVideoCapture(VideoConfig conf) {
-    rtc_producer->configureVideoCapture(std::move(conf));
+  void ConfigureVideo(VideoConfig conf) {
+    rtc_producer->ConfigureVideo(std::move(conf));
   }
 
 private:

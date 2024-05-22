@@ -49,8 +49,8 @@ Java_hela_eillance_AppEngineService_getStatus(
   auto app = reinterpret_cast<AppEngine*>(appmgr);
   auto status = app->GetStatus();
 
-  jclass statusClass = env->FindClass("hela/eillance/Status");
-  jmethodID fromIntMethod = env->GetStaticMethodID(statusClass, "fromInt", "(IIIII)Lhela/eillance/Status;");
+  jclass statusClass = env->FindClass("hela/eillance/ndkio/Status");
+  jmethodID fromIntMethod = env->GetStaticMethodID(statusClass, "fromInt", "(IIIII)Lhela/eillance/ndkio/Status;");
   assert(fromIntMethod != nullptr && "Static method Status.fromInt can't be found");
 
   return env->CallStaticObjectMethod(statusClass, fromIntMethod,
@@ -79,7 +79,7 @@ Java_hela_eillance_AppEngineService_configureVideoCapture(
   conf.frameRate = env->GetIntField(videoConfig, env->GetFieldID(videoConfigClass, "frameRate", "I"));
   conf.bitrate = env->GetIntField(videoConfig, env->GetFieldID(videoConfigClass, "bitrate", "I"));
 
-  app->configureVideoCapture(conf);
+  app->ConfigureVideo(conf);
 }
 
 JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void* reserved) {
