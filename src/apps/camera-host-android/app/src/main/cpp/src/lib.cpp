@@ -2,6 +2,7 @@
 #include <jni.h>
 
 #include "hela/eillance/logging/logging.h"
+#include "hela/eillance/capture/video_config.hpp"
 
 #include "app_engine.hpp"
 
@@ -52,14 +53,33 @@ Java_hela_eillance_AppEngineService_getStatus(
   jmethodID fromIntMethod = env->GetStaticMethodID(statusClass, "fromInt", "(IIIII)Lhela/eillance/Status;");
   assert(fromIntMethod != nullptr && "Static method Status.fromInt can't be found");
 
-  jobject finalStatus = env->CallStaticObjectMethod(statusClass, fromIntMethod,
-                                                    static_cast<jint>(status.service_state),
-                                                    static_cast<jint>(status.state),
-                                                    static_cast<jint>(status.ice_state),
-                                                    static_cast<jint>(status.gathering_state),
-                                                    static_cast<jint>(status.signaling_state));
+  return env->CallStaticObjectMethod(statusClass, fromIntMethod,
+                                                  static_cast<jint>(status.service_state),
+                                                  static_cast<jint>(status.state),
+                                                  static_cast<jint>(status.ice_state),
+                                                  static_cast<jint>(status.gathering_state),
+                                                  static_cast<jint>(status.signaling_state));
+}
 
-  return finalStatus;
+extern "C" JNIEXPORT void JNICALL
+Java_hela_eillance_AppEngineService_configureVideoCapture(
+    JNIEnv *env,
+    jobject instance,
+    jlong appmgr,
+    jobject videoConfig) {
+  auto app = reinterpret_cast<AppEngine*>(appmgr);
+
+  jclass videoConfigClass = env->GetObjectClass(videoConfig);
+
+  hela::eillance::VideoConfig conf{};
+
+  conf.cameraId = env->GetIntField(videoConfig, env->GetFieldID(videoConfigClass, "cameraId", "I"));
+  conf.width = env->GetIntField(videoConfig, env->GetFieldID(videoConfigClass, "width", "I"));
+  conf.height = env->GetIntField(videoConfig, env->GetFieldID(videoConfigClass, "height", "I"));
+  conf.frameRate = env->GetIntField(videoConfig, env->GetFieldID(videoConfigClass, "frameRate", "I"));
+  conf.bitrate = env->GetIntField(videoConfig, env->GetFieldID(videoConfigClass, "bitrate", "I"));
+
+  app->configureVideoCapture(conf);
 }
 
 JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void* reserved) {

@@ -25,6 +25,7 @@ import hela.eillance.events.interfaces.IStatusUpdateCallback
 import hela.eillance.events.StateService
 import hela.eillance.events.getResourceString
 import hela.eillance.ndkio.Status
+import hela.eillance.ndkio.VideoConfig
 
 
 class AppEngineService : Service(), IStatusUpdateCallback {
@@ -193,8 +194,9 @@ class AppEngineService : Service(), IStatusUpdateCallback {
 
   // native lib functions
   private external fun createAppEngine(statusCallback: IStatusUpdateCallback): Long
-  private external fun deleteAppEngine(ndkCamera: Long)
-  private external fun getStatus(ndkCamera: Long): Status
+  private external fun deleteAppEngine(appMgr: Long)
+  private external fun getStatus(appMgr: Long): Status
+  private external fun configureVideoCapture(appMgr: Long, conf: VideoConfig)
 
   companion object {
     private const val CAMERA_SERVICE_FG_ID = 9990

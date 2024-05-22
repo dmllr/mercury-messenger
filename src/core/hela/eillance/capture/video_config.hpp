@@ -1,5 +1,7 @@
 #pragma once
 
+#include "hela/eillance/utils/time.hpp"
+
 namespace hela::eillance {
 
 struct VideoConfigDefaults {
@@ -18,6 +20,7 @@ struct VideoConfigDefaults {
 };
 
 struct VideoConfig {
+  int cameraId{};
   std::uint32_t width{VideoConfigDefaults::width};
   std::uint32_t height{VideoConfigDefaults::height};
   std::uint8_t frameRate{VideoConfigDefaults::frameRate};

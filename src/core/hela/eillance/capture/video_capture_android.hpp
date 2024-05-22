@@ -85,6 +85,10 @@ public:
     return Time::uS / config_.frameRate;
   }
 
+  void ConfigureVideo(VideoConfig conf) {
+    ///
+  }
+
 private:
   void OpenCamera() {
     // get camera ID list

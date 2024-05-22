@@ -10,10 +10,13 @@ import android.view.ViewGroup
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceFragmentCompat
 import hela.eillance.camera.R
+import hela.eillance.ndkio.VideoConfig
 import hela.eillance.utils.CameraUtils
 
 
 class CapturePreferencesFragment : PreferenceFragmentCompat() {
+  private var videoConfig: VideoConfig = VideoConfig()
+
   companion object {
     fun instance() = CapturePreferencesFragment()
   }
@@ -41,6 +44,14 @@ class CapturePreferencesFragment : PreferenceFragmentCompat() {
     val frameRatePreference = findPreference<ListPreference>("frame_rate")
     val bitratePreference = findPreference<ListPreference>("bitrate")
 
+    videoConfig.cameraId = defaultCameraPreference?.value?.toInt() ?: 0
+    videoConfig.cameraName = defaultCameraPreference?.entry.toString()
+    val resolution = cameraResolutionPreference?.value?.split("x")
+    videoConfig.width = resolution?.get(0)?.toInt() ?: 0
+    videoConfig.height = resolution?.get(1)?.toInt() ?: 0
+    videoConfig.frameRate = frameRatePreference?.value?.toInt() ?: 30
+    videoConfig.bitrate = bitratePreference?.value?.toInt() ?: 0
+
     // Get the supported resolutions for the selected camera
     val supportedResolutions = CameraUtils.getSupportedResolutions(cameraManager,
       defaultCameraPreference?.value ?: cameraIds[0])
@@ -67,9 +78,11 @@ class CapturePreferencesFragment : PreferenceFragmentCompat() {
     bitratePreference?.value = "Auto"
 
     // Set listeners
-    defaultCameraPreference?.setOnPreferenceChangeListener { _, newValue ->
-      val newCameraId = newValue as String
-      val newSupportedResolutions = CameraUtils.getSupportedResolutions(cameraManager, newCameraId)
+    defaultCameraPreference?.setOnPreferenceChangeListener { _, value ->
+      videoConfig.cameraId = (value as String).toInt()
+      videoConfig.cameraName = defaultCameraPreference.entry.toString()
+
+      val newSupportedResolutions = CameraUtils.getSupportedResolutions(cameraManager, value)
 
       val newCameraResolutions = arrayOfNulls<String>(newSupportedResolutions.size)
       for (i in newSupportedResolutions.indices) {
@@ -81,13 +94,18 @@ class CapturePreferencesFragment : PreferenceFragmentCompat() {
 
       true
     }
-    cameraResolutionPreference?.setOnPreferenceChangeListener { _, newValue ->
+    cameraResolutionPreference?.setOnPreferenceChangeListener { _, value ->
+      val res = (value as String).split("x")
+      videoConfig.width = res[0].toInt()
+      videoConfig.height = res[1].toInt()
       true
     }
-    frameRatePreference?.setOnPreferenceChangeListener { _, newValue ->
+    frameRatePreference?.setOnPreferenceChangeListener { _, value ->
+      videoConfig.frameRate = (value as String).toInt()
       true
     }
-    bitratePreference?.setOnPreferenceChangeListener { _, newValue ->
+    bitratePreference?.setOnPreferenceChangeListener { _, value ->
+      videoConfig.bitrate = (value as String).toInt()
       true
     }
 

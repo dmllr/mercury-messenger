@@ -46,6 +46,10 @@ public:
     return rtc_producer->GetStatus();
   }
 
+  void configureVideoCapture(VideoConfig conf) {
+    rtc_producer->configureVideoCapture(std::move(conf));
+  }
+
 private:
   JNIEnv* attachCurrentThreadIfNeeded() {
     JNIEnv* env;

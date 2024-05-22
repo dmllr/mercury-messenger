@@ -58,6 +58,10 @@ public:
     return status_;
   }
 
+  void configureVideoCapture(VideoConfig conf) {
+    InvokeConfigureVideo(connection_, conf);
+  }
+
   void Start() {
     LOGI << "The local ID is: " << id.data();
 
