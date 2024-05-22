@@ -1,4 +1,4 @@
-package hela.eillance
+package hela.eillance.ndkio
 
 import hela.eillance.events.StateIce
 import hela.eillance.events.StateIceGathering

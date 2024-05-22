@@ -14,7 +14,7 @@ import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.core.content.ContextCompat.getColor
 import hela.eillance.MainActivity
-import hela.eillance.Status
+import hela.eillance.ndkio.Status
 import hela.eillance.Tune
 import hela.eillance.camera.R
 import hela.eillance.events.EventSource

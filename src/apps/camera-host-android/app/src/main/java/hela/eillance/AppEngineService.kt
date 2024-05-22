@@ -24,6 +24,7 @@ import hela.eillance.events.EventSource
 import hela.eillance.events.interfaces.IStatusUpdateCallback
 import hela.eillance.events.StateService
 import hela.eillance.events.getResourceString
+import hela.eillance.ndkio.Status
 
 
 class AppEngineService : Service(), IStatusUpdateCallback {
