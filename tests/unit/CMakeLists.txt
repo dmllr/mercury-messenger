@@ -14,7 +14,8 @@ enable_testing()
 
 add_executable(h-e-tests
   test-audio-encoder.cpp
-  test-utils.cpp
+  test-event-queue.cpp
+  test-string-utils.cpp
 )
 target_link_libraries(h-e-tests GTest::gtest_main hela-eillance-core)
 
