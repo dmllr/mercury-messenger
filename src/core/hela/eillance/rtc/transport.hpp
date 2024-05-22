@@ -24,6 +24,7 @@ namespace hela::eillance {
 template<typename Connection>
 class RtcTransport {
   using Json = nlohmann::json;
+  using StatusCallbackFunction = std::function<void(EventSource, int)>;
 
   const std::string id;
   std::string auth_token_;
@@ -38,7 +39,7 @@ class RtcTransport {
   std::uint32_t wait_before_reconnect_{minWaitBeforeReconnect};
 
   mutable Status status_{};
-  std::shared_ptr<std::function<void(EventSource, int)>> status_callback_;
+  std::shared_ptr<StatusCallbackFunction> status_callback_;
 
 public:
   explicit RtcTransport(std::string local_id) : id(local_id) {
@@ -50,8 +51,8 @@ public:
   auto operator=(const RtcTransport&) -> RtcTransport& = delete;
   ~RtcTransport() = default;
 
-  [[maybe_unused]] void SetStatusCallback(const std::function<void(EventSource, int)>& callback) {
-    status_callback_ = std::make_shared<std::function<void(EventSource, int)>>(callback);
+  [[maybe_unused]] void SetStatusCallback(const StatusCallbackFunction& callback) {
+    status_callback_ = std::make_shared<StatusCallbackFunction>(callback);
   }
 
   [[maybe_unused]] Status GetStatus() {
