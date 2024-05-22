@@ -59,10 +59,6 @@ public:
     return status_;
   }
 
-  void ConfigureVideo(VideoConfig conf) {
-    InvokeConfigureVideo(connection_, std::move(conf));
-  }
-
   void Start() {
     LOGI << "The local ID is: " << id.data();
 

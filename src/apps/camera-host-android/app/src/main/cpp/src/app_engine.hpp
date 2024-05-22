@@ -46,10 +46,6 @@ public:
     return rtc_producer->GetStatus();
   }
 
-  void ConfigureVideo(VideoConfig conf) {
-    rtc_producer->ConfigureVideo(std::move(conf));
-  }
-
 private:
   JNIEnv* attachCurrentThreadIfNeeded() {
     JNIEnv* env;

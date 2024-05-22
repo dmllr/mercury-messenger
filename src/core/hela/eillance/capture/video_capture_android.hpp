@@ -16,6 +16,7 @@
 
 #include "hela/eillance/capture/video_config.hpp"
 #include "hela/eillance/capture/video_encoder_mediandk.hpp"
+#include "hela/eillance/common/event_queue.hpp"
 #include "hela/eillance/common/dispatch_queue.hpp"
 #include "hela/eillance/common/packet.hpp"
 #include "hela/eillance/logging/logging.h"
@@ -33,8 +34,8 @@ class VideoCapture {
   ACameraCaptureSession* capture_session;
 
   VideoConfig config_;
-
   VideoEncoder encoder_;
+  EventQueue::SubscriberTypeId configure_subscriber_id_;
 
 public:
   VideoCapture() = default;
@@ -55,13 +56,14 @@ public:
     }
     encoder_.Engage(config_);
     renewCaptureSession();
-  }
 
-  Packet FetchBuffers() {
-    return encoder_.EncodeBuffer();
+    configure_subscriber_id_ = EventQueue::Instance().Subscribe<VideoConfig>(
+        [this](const VideoConfig config) { ConfigureVideo(config); });
   }
 
   void Revoke() {
+    EventQueue::Instance().Unsubscribe<VideoConfig>(configure_subscriber_id_);
+
     encoder_.Revoke();
     ACameraCaptureSession_stopRepeating(capture_session);
 
@@ -81,12 +83,17 @@ public:
     }
   }
 
+  Packet FetchBuffers() {
+    return encoder_.EncodeBuffer();
+  }
+
   Time::Unit GetSampleDuration() {
     return Time::uS / config_.frameRate;
   }
 
   void ConfigureVideo(VideoConfig conf) {
-    ///
+    (void)conf;
+    // TODO
   }
 
 private:

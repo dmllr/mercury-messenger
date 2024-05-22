@@ -7,17 +7,24 @@
 #include <mutex>
 #include <thread>
 #include <typeindex>
+#include <unordered_map>
+#include <vector>
 
 #include "hela/eillance/common/dispatch_queue.hpp"
 
 namespace hela::eillance {
 
 class EventQueue {
+public:
+  using SubscriberTypeId = std::size_t;
+
+private:
   std::mutex mutex_;
   std::condition_variable condition_;
   std::deque<std::pair<std::type_index, std::any>> events_;
-  std::unordered_map<std::type_index, std::vector<std::function<void(const std::any&)>>> subscribers_;
+  std::unordered_map<std::type_index, std::vector<std::pair<SubscriberTypeId, std::function<void(const std::any&)>>>> subscribers_;
   DispatchQueue dispatchQueue_ = DispatchQueue("EventQueue", 1);
+  SubscriberTypeId nextId_ = 0; // For unique callback identification
 
   struct TerminationEvent {
     bool terminate{true};
@@ -39,21 +46,32 @@ public:
 
   ~EventQueue() {
     dispatchQueue_.removePending();
-
     Push(TerminationEvent{});
     condition_.notify_one();
   }
 
-  // Subscribe to events of a specific type.
+  /// Subscribe to events of a specific type.
   template <typename EventType>
-  void Subscribe(const std::function<void(const EventType&)>& callback) {
+  SubscriberTypeId Subscribe(const std::function<void(const EventType&)>& callback) {
     std::lock_guard<std::mutex> lock(mutex_);
-    subscribers_[typeid(EventType)].push_back([callback](const std::any& event) {
+    SubscriberTypeId id = nextId_++;
+    subscribers_[typeid(EventType)].emplace_back(id, [callback](const std::any& event) {
       callback(std::any_cast<EventType>(event));
     });
+    return id;
   }
 
-  // Push an event to the queue.
+  /// Unsubscribe from events of a specific type.
+  template <typename EventType>
+  void Unsubscribe(SubscriberTypeId id) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto& vec = subscribers_[typeid(EventType)];
+    vec.erase(std::remove_if(vec.begin(), vec.end(), [id](const auto& pair) {
+                return pair.first == id;
+              }), vec.end());
+  }
+
+  /// Push an event to the queue.
   template <typename EventType>
   void Push(const EventType& event) {
     std::lock_guard<std::mutex> const lock(mutex_);
@@ -61,7 +79,7 @@ public:
     condition_.notify_one();
   }
 
-  // Dispatch events to subscribers.
+  /// Dispatch events to subscribers.
   void DispatchEvents() {
     std::unique_lock<std::mutex> lock(mutex_);
 
@@ -69,15 +87,15 @@ public:
     condition_.wait(lock, [this] { return !events_.empty(); });
 
     // Pop the event from the queue.
-    auto event = events_.front();
+    auto [type, contents] = events_.front();
     events_.pop_front();
 
     // Find subscribers for the event type.
-    auto& subscribers = subscribers_[event.first];
+    auto& subscribers = subscribers_[type];
 
     // Dispatch the event to subscribers.
-    for (auto& callback : subscribers) {
-      callback(std::get<1>(event));
+    for (const auto& [id, callback] : subscribers) {
+      callback(contents);
     }
 
     dispatchQueue_.dispatch([this]() { DispatchEvents(); });
@@ -87,6 +105,7 @@ private:
   template <typename FirstType, typename SecondType>
   std::pair<FirstType, SecondType> MakePair(FirstType&& first, SecondType&& second) {
     return std::pair<FirstType, SecondType>(std::forward<FirstType>(first), std::forward<SecondType>(second));
-  }};
+  }
+};
 
 } // namespace hela::eillance

@@ -4,7 +4,6 @@
 
 #include "hela/eillance/common/packet.hpp"
 #include "hela/eillance/capture/video_config.hpp"
-#include "hela/eillance/utils/invoke_configure_video.hpp"
 
 namespace hela::eillance {
 
@@ -30,10 +29,6 @@ public:
   Time::Unit GetSampleDuration() {
     return self_->GetSampleDuration();
   }
-  void ConfigureVideo(VideoConfig conf) {
-    return self_->ConfigureVideo(std::move(conf));
-  }
-
 
 private:
   struct CaptureInterface {
@@ -45,7 +40,6 @@ private:
     virtual ~CaptureInterface() = default;
     virtual void Engage() = 0;
     virtual void Revoke() = 0;
-    virtual void ConfigureVideo(VideoConfig conf) = 0;
     virtual auto FetchBuffers() -> Packet = 0;
     virtual auto GetSampleDuration() -> Time::Unit = 0;
   };
@@ -62,9 +56,6 @@ public:
     }
     void Revoke() final {
       capture_->Revoke();
-    }
-    void ConfigureVideo(VideoConfig conf) final {
-      InvokeConfigureVideo(capture_, conf);
     }
     auto FetchBuffers() -> Packet final {
       return capture_->FetchBuffers();

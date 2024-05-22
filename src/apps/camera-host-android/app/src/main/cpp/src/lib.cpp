@@ -1,8 +1,10 @@
 #include <cstring>
 #include <jni.h>
 
-#include "hela/eillance/logging/logging.h"
 #include "hela/eillance/capture/video_config.hpp"
+#include "hela/eillance/common/event_queue.hpp"
+#include "hela/eillance/logging/logging.h"
+
 
 #include "app_engine.hpp"
 
@@ -79,7 +81,7 @@ Java_hela_eillance_AppEngineService_configureVideoCapture(
   conf.frameRate = env->GetIntField(videoConfig, env->GetFieldID(videoConfigClass, "frameRate", "I"));
   conf.bitrate = env->GetIntField(videoConfig, env->GetFieldID(videoConfigClass, "bitrate", "I"));
 
-  app->ConfigureVideo(conf);
+  hela::eillance::EventQueue::Instance().Push(videoConfig);
 }
 
 JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void* reserved) {
