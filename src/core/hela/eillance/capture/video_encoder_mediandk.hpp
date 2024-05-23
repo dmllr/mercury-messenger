@@ -87,13 +87,14 @@ public:
   }
 
   Packet EncodeBuffer() {
-    auto index = AMediaCodec_dequeueOutputBuffer(codec, &info, config_.frameDuration);
+    auto timeoutUs = Time::uS / config_.frameRate;
+    auto index = AMediaCodec_dequeueOutputBuffer(codec, &info, timeoutUs);
     if (likely(index >= 0)) {
       if (unlikely(info.flags == AMEDIACODEC_BUFFER_FLAG_CODEC_CONFIG)) {
         const auto config_info = info;
         const auto config_index = index;
         const auto config_buffer = AMediaCodec_getOutputBuffer(codec, static_cast<size_t>(config_index), NULL);
-        index = AMediaCodec_dequeueOutputBuffer(codec, &info, config_.frameDuration);
+        index = AMediaCodec_dequeueOutputBuffer(codec, &info, timeoutUs);
         buffer = AMediaCodec_getOutputBuffer(codec, static_cast<size_t>(index), NULL);
 
         encoded_data.clear();

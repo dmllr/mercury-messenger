@@ -81,7 +81,7 @@ Java_hela_eillance_AppEngineService_configureVideoCapture(
   conf.frameRate = env->GetIntField(videoConfig, env->GetFieldID(videoConfigClass, "frameRate", "I"));
   conf.bitrate = env->GetIntField(videoConfig, env->GetFieldID(videoConfigClass, "bitrate", "I"));
 
-  hela::eillance::EventQueue::Instance().Push(videoConfig);
+  hela::eillance::EventQueue::Instance().Push(std::move(conf));
 }
 
 JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void* reserved) {

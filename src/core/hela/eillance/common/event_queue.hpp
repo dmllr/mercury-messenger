@@ -74,10 +74,10 @@ public:
 
   /// Push an event to the queue.
   template <typename EventType>
-  void Push(const EventType& event) {
+  void Push(const EventType&& event) {
     {
       std::lock_guard<std::mutex> const lock(sync_mutex_);
-      events_.push_back(MakePair(typeid(EventType), event));
+      events_.push_back(MakePair(typeid(EventType), std::move(event)));
     }
     condition_.notify_one();
   }
@@ -91,8 +91,14 @@ public:
     }
 
     // Pop the event from the queue.
-    auto [type, contents] = events_.front();
-    events_.pop_front();
+    std::type_index type{typeid(int)};
+    std::any contents;
+    {
+      std::lock_guard<std::mutex> const lock(sync_mutex_);
+      type = events_.front().first;
+      contents = events_.front().second;
+      events_.pop_front();
+    }
 
     // Find subscribers for the event type.
     if (subscribers_.find(type) != subscribers_.end()) {

@@ -25,7 +25,6 @@ struct VideoConfig {
   std::uint32_t height{VideoConfigDefaults::height};
   std::uint8_t frameRate{VideoConfigDefaults::frameRate};
   std::uint32_t bitrate{VideoConfigDefaults::bitrate};
-  std::uint64_t frameDuration{VideoConfigDefaults::frameDuration};
 };
 
 }  // namespace hela::eillance

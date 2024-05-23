@@ -38,13 +38,18 @@ class VideoCapture {
   EventQueue::SubscriberTypeId configure_subscriber_id_;
 
 public:
-  VideoCapture() = default;
+  VideoCapture(){
+    configure_subscriber_id_ = EventQueue::Instance().Subscribe<const VideoConfig>(
+        [this](const VideoConfig config) { ConfigureVideo(config); });
+  }
   VideoCapture(VideoCapture&&) = delete;
   VideoCapture(const VideoCapture&) = delete;
   VideoCapture& operator=(VideoCapture&&) = delete;
   VideoCapture& operator=(const VideoCapture&) = delete;
 
   ~VideoCapture() {
+    EventQueue::Instance().Unsubscribe<const VideoConfig>(configure_subscriber_id_);
+
     Revoke();
   }
 
@@ -56,14 +61,9 @@ public:
     }
     encoder_.Engage(config_);
     renewCaptureSession();
-
-    configure_subscriber_id_ = EventQueue::Instance().Subscribe<VideoConfig>(
-        [this](const VideoConfig config) { ConfigureVideo(config); });
   }
 
   void Revoke() {
-    EventQueue::Instance().Unsubscribe<VideoConfig>(configure_subscriber_id_);
-
     encoder_.Revoke();
     ACameraCaptureSession_stopRepeating(capture_session);
 
@@ -92,7 +92,7 @@ public:
   }
 
   void ConfigureVideo(VideoConfig conf) {
-    (void)conf;
+    conf.height = 999;
     // TODO
   }
 
