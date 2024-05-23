@@ -105,8 +105,11 @@ private:
     // Check if the camera is already opened
     // TODO check if cameraID changed, then reopen
     if (cameraDevice != nullptr) {
-      Log::i("Camera already opened, skipping reopening");
-      return;
+      auto active_camera_id = ACameraDevice_getId(cameraDevice);
+      if (active_camera_id == std::to_string(config_.cameraId)) {
+        Log::i("Camera already opened, skipping reopening");
+        return;
+      }
     }
 
     // get camera ID list
