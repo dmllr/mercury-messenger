@@ -27,16 +27,12 @@ class VideoEncoder {
   uint8_t* buffer{};
   rtc::binary encoded_data{};
 
-public:
-  ANativeWindow* Surface() {
-    return surface;
-  }
-
-  void Engage(VideoConfig config) {
-    if (status == STARTED)
-      return;
-
-    config_ = config;
+  void configureCodec() {
+    if (codec != nullptr) {
+      auto rc = AMediaCodec_stop(codec);
+      Log::assert_soft(AMEDIA_OK == rc, "AMediaCodec_stop failed");
+      codec = nullptr;
+    }
 
     codec = AMediaCodec_createEncoderByType("video/avc");
     Log::assert_or_die(static_cast<bool>(codec), "There is no 'video/avc' codec support available");
@@ -48,7 +44,7 @@ public:
     auto frameRate = config_.frameRate;
     auto bitRate = config_.bitrate;
     auto i_frame = 30;
-    auto colorFormat = 0x7f000789;  // COLOR_FormatSurface, https://developer.android.com/reference/android/media/MediaCodecInfo.CodecCapabilities#COLOR_FormatSurface
+    auto colorFormat = 0x7f000789;  // COLOR_FormatSurface
     AMediaFormat_setString(format, AMEDIAFORMAT_KEY_MIME, "video/avc");
     AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_HEIGHT, height);
     AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_WIDTH, width);
@@ -61,19 +57,37 @@ public:
     AMediaFormat_delete(format);
 
     auto params = AMediaFormat_new();
-    auto profile = 0x00080000;  // AVCProfileConstrainedHigh, https://developer.android.com/reference/android/media/MediaCodecInfo.CodecProfileLevel#AVCProfileConstrainedBaseline
-    auto level = 0x200;         // AVCLevel3, https://developer.android.com/reference/android/media/MediaCodecInfo.CodecProfileLevel
+    auto profile = 0x00080000;  // AVCProfileConstrainedHigh
+    auto level = 0x200;         // AVCLevel3
     AMediaFormat_setInt32(params, AMEDIAFORMAT_KEY_PROFILE, profile);
     AMediaFormat_setInt32(params, AMEDIAFORMAT_KEY_LEVEL, level);
     rc = AMediaCodec_setParameters(codec, params);
     Log::assert_or_die(AMEDIA_OK == rc, "AMediaCodec_setParameters failed");
     AMediaFormat_delete(params);
 
+    if (surface != nullptr) {
+      ANativeWindow_release(surface);
+      surface = nullptr;
+    }
+
     rc = AMediaCodec_createInputSurface(codec, &surface);
     Log::assert_or_die(AMEDIA_OK == rc, "AMediaCodec_createInputSurface failed");
 
     rc = AMediaCodec_start(codec);
     Log::assert_or_die(AMEDIA_OK == rc, "AMediaCodec_start failed");
+  }
+
+public:
+  ANativeWindow* Surface() {
+    return surface;
+  }
+
+  void Engage(VideoConfig config) {
+    if (status == STARTED)
+      return;
+
+    config_ = config;
+    configureCodec();
     status = STARTED;
   }
 
@@ -81,12 +95,32 @@ public:
     if (status == STOPPED)
       return;
 
-    auto rc = AMediaCodec_stop(codec);
-    Log::assert_soft(AMEDIA_OK == rc, "AMediaCodec_stop failed");
+    if (codec != nullptr) {
+      auto rc = AMediaCodec_stop(codec);
+      Log::assert_soft(AMEDIA_OK == rc, "AMediaCodec_stop failed");
+      codec = nullptr;
+    }
+    if (surface != nullptr) {
+      ANativeWindow_release(surface);
+      surface = nullptr;
+    }
     status = STOPPED;
   }
 
+  void UpdateConfig(VideoConfig new_config) {
+    config_ = new_config;
+    if (status == STARTED) {
+      auto rc = AMediaCodec_flush(codec);
+      Log::assert_soft(AMEDIA_OK == rc, "AMediaCodec_flush failed");
+      configureCodec();
+    }
+  }
+
   Packet EncodeBuffer() {
+    if (unlikely(codec == nullptr || surface == nullptr)) {
+      return {};
+    }
+
     auto timeoutUs = Time::uS / config_.frameRate;
     auto index = AMediaCodec_dequeueOutputBuffer(codec, &info, timeoutUs);
     if (likely(index >= 0)) {

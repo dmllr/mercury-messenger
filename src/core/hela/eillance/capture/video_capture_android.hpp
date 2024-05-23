@@ -39,8 +39,8 @@ class VideoCapture {
 
 public:
   VideoCapture(){
-    configure_subscriber_id_ = EventQueue::Instance().Subscribe<const VideoConfig>(
-        [this](const VideoConfig config) { ConfigureVideo(config); });
+    configure_subscriber_id_ = EventQueue::Instance().Subscribe<VideoConfig>(
+        [this](VideoConfig config) { ConfigureVideo(std::move(config)); });
   }
   VideoCapture(VideoCapture&&) = delete;
   VideoCapture(const VideoCapture&) = delete;
@@ -91,13 +91,24 @@ public:
     return Time::uS / config_.frameRate;
   }
 
-  void ConfigureVideo(VideoConfig conf) {
-    conf.height = 999;
-    // TODO
+  void ConfigureVideo(VideoConfig config) {
+    config_ = std::move(config);
+    encoder_.UpdateConfig(config_);
+    if (capture_session != nullptr) {
+      ACameraCaptureSession_stopRepeating(capture_session);
+      renewCaptureSession();
+    }
   }
 
 private:
   void OpenCamera() {
+    // Check if the camera is already opened
+    // TODO check if cameraID changed, then reopen
+    if (cameraDevice != nullptr) {
+      Log::i("Camera already opened, skipping reopening");
+      return;
+    }
+
     // get camera ID list
     ACameraIdList* cameraIdList = nullptr;
     auto status = ACameraManager_getCameraIdList(camera_manager_, &cameraIdList);
@@ -111,16 +122,25 @@ private:
       return;
     }
 
-    // open first available camera
-    auto* cameraId = cameraIdList->cameraIds[0];
-    status = ACameraManager_openCamera(camera_manager_, cameraId, GetDeviceListener(), &cameraDevice);
-    if (status != ACAMERA_OK) {
-      Log::e("ACameraManager_openCamera call failed with code: %#x, %s", status, GetErrorStr(status));
+    // Check if the specified camera ID is within valid range
+    if (config_.cameraId >= cameraIdList->numCameras) {
+      Log::e("Specified camera ID %d is out of range, max available ID is %d", config_.cameraId, cameraIdList->numCameras - 1);
+      ACameraManager_deleteCameraIdList(cameraIdList);
       return;
     }
 
-    // free camera list
+    // Open specified camera by config_.cameraId
+    auto* cameraId = cameraIdList->cameraIds[config_.cameraId];
+    status = ACameraManager_openCamera(camera_manager_, cameraId, GetDeviceListener(), &cameraDevice);
+    if (status != ACAMERA_OK) {
+      Log::e("ACameraManager_openCamera call failed with code: %#x, %s", status, GetErrorStr(status));
+      ACameraManager_deleteCameraIdList(cameraIdList);
+      return;
+    }
+
+    // Free camera list
     ACameraManager_deleteCameraIdList(cameraIdList);
+    Log::i("Camera %d opened successfully", config_.cameraId);
   }
 
   void renewCaptureSession() {
