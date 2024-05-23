@@ -24,12 +24,10 @@ private:
   std::condition_variable condition_;
   std::deque<std::pair<std::type_index, std::any>> events_;
   std::unordered_map<std::type_index, std::vector<std::pair<SubscriberTypeId, std::function<void(const std::any&)>>>> subscribers_;
-  DispatchQueue dispatchQueue_ = DispatchQueue("EventQueue", 1);
   SubscriberTypeId nextId_ = 0; // For unique callback identification
 
-  struct TerminationEvent {
-    bool terminate{true};
-  };
+  bool is_working_;
+  std::thread dispatch_thread_;
 
 public:
   static EventQueue& Instance() {
@@ -37,18 +35,24 @@ public:
     return instance;
   }
 
-  EventQueue() {
-    dispatchQueue_.dispatch([this]() { DispatchEvents(); });
+  EventQueue() : is_working_{true}, dispatch_thread_(&EventQueue::DispatchEvents, this) {
+    dispatch_thread_.detach();
   }
+
   EventQueue(EventQueue&&) = delete;
   EventQueue(const EventQueue&) = delete;
   EventQueue& operator=(EventQueue&&) = delete;
   EventQueue& operator=(const EventQueue&) = delete;
 
   ~EventQueue() {
-    dispatchQueue_.removePending();
-    Push(TerminationEvent{});
+    {
+      const std::lock_guard<std::mutex> lock(sync_mutex_);
+      is_working_ = false;
+    }
     condition_.notify_one();
+    if (dispatch_thread_.joinable()) {
+      dispatch_thread_.join();
+    }
   }
 
   /// Subscribe to events of a specific type.
@@ -84,27 +88,33 @@ public:
 
   /// Dispatch events to subscribers.
   void DispatchEvents() {
-    // Wait for an event to be pushed.
-    {
-      std::unique_lock<std::mutex> lock(condition_mutex_);
-      condition_.wait(lock, [this] { return !events_.empty(); });
-    }
+    while (is_working_) {
+      {
+        std::unique_lock<std::mutex> lock(condition_mutex_);
+        condition_.wait(lock, [this] { return !events_.empty() || !is_working_; });
+      }
 
-    // Pop the event from the queue.
-    auto [type, contents] = events_.front();
-    events_.pop_front();
+      if (!is_working_ && events_.empty()) {
+        break;
+      }
 
-    // Find subscribers for the event type.
-    if (subscribers_.find(type) != subscribers_.end()) {
-      auto& subscribers = subscribers_.at(type);
+      // Pop the event from the queue.
+      const std::lock_guard<std::mutex> lock(sync_mutex_);
+      if (!events_.empty()) {
+        auto event = events_.front();
+        events_.pop_front();
 
-      // Dispatch the event to subscribers.
-      for (const auto& [id, callback]: subscribers) {
-        callback(contents);
+        // Find subscribers for the event type.
+        if (subscribers_.find(event.first) != subscribers_.end()) {
+          auto& subscribers = subscribers_.at(event.first);
+
+          // Dispatch the event to subscribers.
+          for (const auto& [id, callback] : subscribers) {
+            callback(event.second);
+          }
+        }
       }
     }
-
-    dispatchQueue_.dispatch([this]() { DispatchEvents(); });
   }
 
 private:
