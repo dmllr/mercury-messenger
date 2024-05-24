@@ -4,5 +4,5 @@ pluginManagement {
     }
 }
 
-rootProject.name='Hela Surveillance'
+rootProject.name='Eillance'
 include ':app'

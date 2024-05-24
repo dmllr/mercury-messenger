@@ -11,6 +11,7 @@
 #include "hela/eillance/common/dispatch_queue.hpp"
 #include "hela/eillance/events/event_source.h"
 #include "hela/eillance/events/service_state.h"
+#include "hela/eillance/events/system_event.h"
 #include "hela/eillance/logging/logging.h"
 #include "hela/eillance/rtc/peer.hpp"
 #include "hela/eillance/rtc/status.hpp"
@@ -23,8 +24,10 @@ namespace hela::eillance {
 template<typename Connection>
 class RtcTransport {
   using Json = nlohmann::json;
+  using StatusCallbackFunction = std::function<void(EventSource, int)>;
 
-  const std::string_view id;
+  const std::string id;
+  std::string auth_token_;
 
   static constexpr auto minWaitBeforeReconnect = 1;
   static constexpr auto maxWaitBeforeReconnect = 10;
@@ -36,11 +39,11 @@ class RtcTransport {
   std::uint32_t wait_before_reconnect_{minWaitBeforeReconnect};
 
   mutable Status status_{};
-  std::shared_ptr<std::function<void(EventSource, int)>> status_callback_;
+  std::shared_ptr<StatusCallbackFunction> status_callback_;
 
 public:
-  explicit RtcTransport(std::string_view local_id) : id(local_id) {
-    ws_config_.caCertificatePemFile = ZEROSSL_CA_BUNDLE;
+  explicit RtcTransport(std::string local_id) : id(local_id) {
+    ws_config_.caCertificatePemFile = zerosslCaBundle;
   }
   RtcTransport(RtcTransport&&) = delete;
   RtcTransport(const RtcTransport&) = delete;
@@ -48,25 +51,12 @@ public:
   auto operator=(const RtcTransport&) -> RtcTransport& = delete;
   ~RtcTransport() = default;
 
-  [[maybe_unused]] void SetStatusCallback(const std::function<void(EventSource, int)>& callback) {
-    status_callback_ = std::make_shared<std::function<void(EventSource, int)>>(callback);
+  [[maybe_unused]] void SetStatusCallback(const StatusCallbackFunction& callback) {
+    status_callback_ = std::make_shared<StatusCallbackFunction>(callback);
   }
 
   [[maybe_unused]] Status GetStatus() {
     return status_;
-  }
-
-  void ReportStatus(const ServiceState state) const {
-    status_.service_state = state;
-    if (status_callback_) {
-      (*status_callback_)(EventSource::ConnectionStatus, static_cast<int>(state));
-    }
-  }
-
-  void ReportStateChange(const EventSource source, int state) const {
-    if (status_callback_) {
-      (*status_callback_)(source, static_cast<int>(state));
-    }
   }
 
   void Start() {
@@ -85,6 +75,8 @@ public:
       LOGI << "WebSocket connected, signaling ready";
       connection_attempt_ = 0;
       ReportStatus(ServiceState::standby);
+
+      Authenticate();
     });
 
     ws_.onClosed([this]() {
@@ -107,19 +99,25 @@ public:
         return;
       }
 
-      Json const message = Json::parse(std::get<std::string>(data));
-      DispatchQueue::MainThread().dispatch([this, message]() {
-        OnWSMessage(std::move(message));
-      });
+      const auto message = Json::parse(std::get<std::string>(data));
+      auto it = message.find("from");
+      if (it == message.end()) {
+        DispatchQueue::MainThread().dispatch([this, message]() {
+          OnSystemMessage(std::move(message));
+        });
+      } else {
+        DispatchQueue::MainThread().dispatch([this, message]() {
+          OnPeerMessage(std::move(message));
+        });
+      }
     });
 
     std::this_thread::sleep_for(std::chrono::seconds(wait_before_reconnect_));
 
-    const std::string url = "wss://" + ip_address + ":" + std::to_string(port) + "/" + id.data();
-    LOGD << "Signaling server URL is " << url.c_str();
+    LOGD << "Signaling server URL is " << signalingServerUrl;
 
     try {
-      ws_.open(url);
+      ws_.open(signalingServerUrl);
 
       LOGI << "Waiting for signaling to be connected...";
       while (!ws_.isOpen()) {
@@ -134,12 +132,51 @@ public:
       ReportStatus(ServiceState::failure);
       return;
     }
+    ReportEvent(SystemEvent::started);
+  }
+
+private:
+  void ReportStatus(const ServiceState state) const {
+    status_.service_state = state;
+    if (status_callback_) {
+      (*status_callback_)(EventSource::ConnectionStatus, static_cast<int>(state));
+    }
+  }
+
+  void ReportStateChange(const EventSource source, int state) const {
+    if (status_callback_) {
+      (*status_callback_)(source, static_cast<int>(state));
+    }
+  }
+
+  void ReportEvent(const SystemEvent event) const {
+    if (status_callback_) {
+      (*status_callback_)(EventSource::System, static_cast<int>(event));
+    }
+  }
+
+  void Authenticate() {
+    Json message = {
+        {"type", "authenticate"},
+        {"username", "user1"},
+        {"password", "password1"}
+    };
+    ws_.send(message.dump());
+  }
+
+  void PublishClient() {
+    Json message = {
+        {"token", auth_token_},
+        {"type", "exhibit"},
+        {"client_id", id},
+        {"kind", "producer"}};
+    ws_.send(message.dump());
   }
 
   auto CreateDefaultPeerConnection(const std::string& id) -> std::shared_ptr<rtc::PeerConnection> {
-    auto pc = std::make_shared<rtc::PeerConnection>(RtcConfiguration::Config());
+    auto peer_connection = std::make_shared<rtc::PeerConnection>(RtcConfiguration::Config());
 
-    pc->onStateChange([this, id](rtc::PeerConnection::State state) {
+    peer_connection->onStateChange([this, id](rtc::PeerConnection::State state) {
       LOGI << "State: " << static_cast<int>(state);
       status_.state = state;
       ReportStateChange(EventSource::PeerConnectionState, static_cast<int>(state));
@@ -157,7 +194,7 @@ public:
       }
     });
 
-    pc->onIceStateChange([this, id](rtc::PeerConnection::IceState state) {
+    peer_connection->onIceStateChange([this, id](rtc::PeerConnection::IceState state) {
       LOGI << "ICE State: " << static_cast<int>(state);
       ReportStateChange(EventSource::IceState, static_cast<int>(state));
       if (state == rtc::PeerConnection::IceState::Failed) {
@@ -165,17 +202,17 @@ public:
       }
     });
 
-    pc->onGatheringStateChange([this, wpc = make_weak_ptr(pc), id](rtc::PeerConnection::GatheringState state) {
+    peer_connection->onGatheringStateChange([this, wpc = make_weak_ptr(peer_connection), id](rtc::PeerConnection::GatheringState state) {
       LOGI << "Gathering State: " << static_cast<int>(state);
       status_.gathering_state = state;
       ReportStateChange(EventSource::GatheringState, static_cast<int>(state));
       if (state == rtc::PeerConnection::GatheringState::Complete) {
         // Gathering complete, send answer
-        if (auto pc = wpc.lock()) {
-          auto description = pc->localDescription();
+        if (auto peer_con = wpc.lock()) {
+          auto description = peer_con->localDescription();
           Json message = {
-              {"id", id},
-              {"debug", "onGatheringStateChange(complete)"},
+              {"to", id},
+              {"token", auth_token_},
               {"type", description->typeString()},
               {"sdp", std::string(description.value())}};
           ws_.send(message.dump());
@@ -183,16 +220,16 @@ public:
       }
     });
 
-    pc->onSignalingStateChange([this, id](rtc::PeerConnection::SignalingState state) {
-      LOGI << "Signalling State: " << static_cast<int>(state);
-      status_.signalling_state = state;
+    peer_connection->onSignalingStateChange([this, id](rtc::PeerConnection::SignalingState state) {
+      LOGI << "Signaling State: " << static_cast<int>(state);
+      status_.signaling_state = state;
       ReportStateChange(EventSource::SignalingState, static_cast<int>(state));
       if (state == rtc::PeerConnection::SignalingState::HaveLocalOffer) {
         ReportStatus(ServiceState::setup);
       }
     });
 
-    return pc;
+    return peer_connection;
   }
 
   void AddToStream(const std::shared_ptr<Peer>& peer, bool isAddingVideo) {
@@ -228,12 +265,33 @@ public:
     return dc;
   }
 
-  void OnWSMessage(Json message) {
-    auto it = message.find("id");
+  void OnSystemMessage(Json message) {
+    auto it = message.find("type");
     if (it == message.end()) {
       return;
     }
-    auto id = it->get<std::string>();
+    auto type = it->get<std::string>();
+
+    if (type == "authenticated") {
+      auth_token_ = message["token"].get<std::string>();
+      DispatchQueue::MainThread().dispatch([this]() {
+        PublishClient();
+      });
+    } else if (type == "error") {
+      LOGE << "Signaling error received: " << message["error"].get<std::string>();
+    } else if (type == "info publishers") {
+      // ignored for producing peer, but should be treated for consuming one
+    } else {
+      throw std::runtime_error("Unknown message type " + type);
+    }
+  }
+
+  void OnPeerMessage(Json message) {
+    auto it = message.find("from");
+    if (it == message.end()) {
+      return;
+    }
+    auto peer_id = it->get<std::string>();
     it = message.find("type");
     if (it == message.end()) {
       return;
@@ -241,12 +299,12 @@ public:
     auto type = it->get<std::string>();
 
     if (type == "streamRequest") {
-      std::shared_ptr<Peer> const peer = CreatePeerConnection(id);
-      DispatchQueue::MainThread().dispatch([this, id, peer]() {
-        connection_.AddPeer(id, std::move(peer));
+      std::shared_ptr<Peer> const peer = CreatePeerConnection(peer_id);
+      DispatchQueue::MainThread().dispatch([this, peer_id, peer]() {
+        connection_.AddPeer(peer_id, std::move(peer));
       });
     } else if (type == "answer") {
-      if (const auto peer = connection_.GetPeer(id); peer != nullptr) {
+      if (const auto peer = connection_.GetPeer(peer_id); peer != nullptr) {
         auto pc = peer->PeerConnection();
         auto sdp = message["sdp"].get<std::string>();
         auto answer = rtc::Description(sdp, type);
@@ -312,9 +370,10 @@ public:
     }
   };
 
-  const std::string ip_address = "app.hela.me";
-  const uint16_t port = 8000;
-  static inline std::string ZEROSSL_CA_BUNDLE =
+  constexpr static auto signalingServerUrl = "wss://app.hela.me:8000";
+//  constexpr static auto signalingServerUrl = "ws://localhost:8000";
+
+  constexpr static auto zerosslCaBundle =
       "-----BEGIN CERTIFICATE-----\n"
       "MIIG1TCCBL2gAwIBAgIQbFWr29AHksedBwzYEZ7WvzANBgkqhkiG9w0BAQwFADCB\n"
       "iDELMAkGA1UEBhMCVVMxEzARBgNVBAgTCk5ldyBKZXJzZXkxFDASBgNVBAcTC0pl\n"

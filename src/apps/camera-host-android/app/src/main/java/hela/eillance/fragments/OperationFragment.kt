@@ -1,4 +1,4 @@
-package hela.eillance
+package hela.eillance.fragments
 
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -11,14 +11,19 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageButton
 import android.widget.TextView
+import androidx.core.content.ContextCompat
 import androidx.core.content.ContextCompat.getColor
+import hela.eillance.MainActivity
+import hela.eillance.ndkio.Status
+import hela.eillance.Tune
 import hela.eillance.camera.R
 import hela.eillance.events.EventSource
 import hela.eillance.events.StateIce
 import hela.eillance.events.StateIceGathering
 import hela.eillance.events.StatePeerConnection
 import hela.eillance.events.StateService
-import hela.eillance.events.StateSignalling
+import hela.eillance.events.StateSignaling
+import hela.eillance.events.SystemEvent
 import hela.eillance.events.getResourceString
 
 class OperationFragment : Fragment() {
@@ -49,7 +54,7 @@ class OperationFragment : Fragment() {
         EventSource.IceState -> iceConnectionState.text =
           StateIce.fromInt(state).getResourceString(context)
         EventSource.SignalingState -> signalingState.text =
-          StateSignalling.fromInt(state).getResourceString(context)
+          StateSignaling.fromInt(state).getResourceString(context)
         EventSource.ConnectionStatus -> communicationStatusState.text =
           StateService.fromInt(state).getResourceString(context)
         EventSource.PeerConnectionState -> peerConnectionState.text =
@@ -60,15 +65,19 @@ class OperationFragment : Fragment() {
             postDelayed({setTextColor(defaultTextColor)}, 333)
           }
         }
-        EventSource.System -> {}
+        EventSource.System -> {
+          if (state == SystemEvent.Started.value) {
+            updateStatuses()
+          }
+        }
       }
     }
   }
 
   override fun onResume() {
     super.onResume()
-    requireContext().registerReceiver(receiver, IntentFilter(Tune::BroadcastActionOnStateUpdate.get()),
-      Context.RECEIVER_NOT_EXPORTED)
+    ContextCompat.registerReceiver(requireContext(), receiver, IntentFilter(Tune::BroadcastActionOnStateUpdate.get()),
+      ContextCompat.RECEIVER_NOT_EXPORTED)
     updateStatuses()
   }
 
@@ -112,7 +121,7 @@ class OperationFragment : Fragment() {
       val context = requireContext()
       iceGatheringState.text = status.iceGatheringState.getResourceString(context)
       iceConnectionState.text = status.iceState.getResourceString(context)
-      signalingState.text = status.signallingState.getResourceString(context)
+      signalingState.text = status.signalingState.getResourceString(context)
       communicationStatusState.text = status.connectionState.getResourceString(context)
       peerConnectionState.text = status.peerConnectionState.getResourceString(context)
     }
@@ -120,7 +129,7 @@ class OperationFragment : Fragment() {
 
   private fun getStatus(): Status? {
     val activity = requireActivity() as MainActivity
-    val cameraService = activity.cameraService
+    val cameraService = activity.appEngineService
     return cameraService?.getStatus()
   }
 

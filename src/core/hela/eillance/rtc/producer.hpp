@@ -94,7 +94,6 @@ public:
     auto video = rtc::Description::Video(cname, rtc::Description::Direction::SendOnly);
     video.addH264Codec(payload_type);
     video.addSSRC(ssrc, cname, msid, cname);
-    video.setBitrate(VideoConfig::bitrate);
     auto track = pc->addTrack(video);
     // create RTP configuration
     auto rtp_config = std::make_shared<rtc::RtpPacketizationConfig>(ssrc, cname, payload_type, rtc::H264RtpPacketizer::defaultClockRate);
@@ -123,7 +122,6 @@ public:
     auto audio = rtc::Description::Audio(cname, rtc::Description::Direction::SendOnly);
     audio.addOpusCodec(payload_type);
     audio.addSSRC(ssrc, cname, msid, cname);
-    audio.setBitrate(AudioConfig::bitrate);
     auto track = pc->addTrack(audio);
     // create RTP configuration
     auto rtp_config = std::make_shared<rtc::RtpPacketizationConfig>(ssrc, cname, payload_type, rtc::OpusRtpPacketizer::DefaultClockRate);

@@ -1,4 +1,4 @@
-package hela.eillance
+package hela.eillance.fragments
 
 import android.content.Context
 import android.hardware.camera2.CameraManager
@@ -9,10 +9,15 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceFragmentCompat
+import hela.eillance.MainActivity
 import hela.eillance.camera.R
+import hela.eillance.ndkio.VideoConfig
+import hela.eillance.utils.CameraUtils
 
 
 class CapturePreferencesFragment : PreferenceFragmentCompat() {
+  private var videoConfig: VideoConfig = VideoConfig()
+
   companion object {
     fun instance() = CapturePreferencesFragment()
   }
@@ -37,6 +42,16 @@ class CapturePreferencesFragment : PreferenceFragmentCompat() {
     // Find the default camera and camera resolution preferences
     val defaultCameraPreference = findPreference<ListPreference>("default_camera")
     val cameraResolutionPreference = findPreference<ListPreference>("camera_resolution")
+    val frameRatePreference = findPreference<ListPreference>("frame_rate")
+    val bitratePreference = findPreference<ListPreference>("bitrate")
+
+    videoConfig.cameraId = defaultCameraPreference?.value?.toInt() ?: 0
+    videoConfig.cameraName = defaultCameraPreference?.entry.toString()
+    val resolution = cameraResolutionPreference?.value?.split("x")
+    videoConfig.width = resolution?.get(0)?.toInt() ?: 0
+    videoConfig.height = resolution?.get(1)?.toInt() ?: 0
+    videoConfig.frameRate = frameRatePreference?.value?.toInt() ?: 30
+    videoConfig.bitrate = bitratePreference?.value?.toIntOrNull() ?: 0
 
     // Get the supported resolutions for the selected camera
     val supportedResolutions = CameraUtils.getSupportedResolutions(cameraManager,
@@ -54,10 +69,19 @@ class CapturePreferencesFragment : PreferenceFragmentCompat() {
     cameraResolutionPreference?.entries = cameraResolutions
     cameraResolutionPreference?.entryValues = cameraResolutions
 
-    // Set a listener to update the camera resolution preference when the default camera is changed
-    defaultCameraPreference?.setOnPreferenceChangeListener { _, newValue ->
-      val newCameraId = newValue as String
-      val newSupportedResolutions = CameraUtils.getSupportedResolutions(cameraManager, newCameraId)
+    val defaultFrameRates = arrayOf("10", "15", "24", "25", "30", "60")
+    frameRatePreference?.entries = defaultFrameRates
+    frameRatePreference?.entryValues = defaultFrameRates
+
+    val defaultBitrates = arrayOf("Auto")
+    bitratePreference?.entries = defaultBitrates
+    bitratePreference?.entryValues = defaultBitrates
+    bitratePreference?.value = "Auto"
+
+    // Set listeners
+    defaultCameraPreference?.setOnPreferenceChangeListener { _, value ->
+
+      val newSupportedResolutions = CameraUtils.getSupportedResolutions(cameraManager, value as String)
 
       val newCameraResolutions = arrayOfNulls<String>(newSupportedResolutions.size)
       for (i in newSupportedResolutions.indices) {
@@ -67,12 +91,39 @@ class CapturePreferencesFragment : PreferenceFragmentCompat() {
       cameraResolutionPreference?.entries = newCameraResolutions
       cameraResolutionPreference?.entryValues = newCameraResolutions
 
+      videoConfig.cameraId = value.toInt()
+      videoConfig.cameraName = defaultCameraPreference.entry.toString()
+      triggerConfigurationUpdate()
+
+      true
+    }
+    cameraResolutionPreference?.setOnPreferenceChangeListener { _, value ->
+      val res = (value as String).split("x")
+      videoConfig.width = res[0].toInt()
+      videoConfig.height = res[1].toInt()
+      triggerConfigurationUpdate()
+      true
+    }
+    frameRatePreference?.setOnPreferenceChangeListener { _, value ->
+      videoConfig.frameRate = (value as String).toInt()
+      triggerConfigurationUpdate()
+      true
+    }
+    bitratePreference?.setOnPreferenceChangeListener { _, value ->
+      videoConfig.bitrate = (value as String).toIntOrNull() ?: 0
+      triggerConfigurationUpdate()
       true
     }
 
     // Set the summary providers for the preferences
     defaultCameraPreference?.summaryProvider = ListPreference.SimpleSummaryProvider.getInstance()
     cameraResolutionPreference?.summaryProvider = ListPreference.SimpleSummaryProvider.getInstance()
+    frameRatePreference?.summaryProvider = ListPreference.SimpleSummaryProvider.getInstance()
+    bitratePreference?.summaryProvider = ListPreference.SimpleSummaryProvider.getInstance()
+  }
+
+  private fun triggerConfigurationUpdate() {
+    (requireActivity() as MainActivity).appEngineService?.configureVideoCapture(videoConfig);
   }
 
   override fun onCreateView(
@@ -80,6 +131,7 @@ class CapturePreferencesFragment : PreferenceFragmentCompat() {
     container: ViewGroup?,
     savedInstanceState: Bundle?
   ): View {
+    // replace transparent background with the default theme color background
     val view = super.onCreateView(inflater, container, savedInstanceState)
     val bgColorValue = TypedValue()
     requireActivity().theme.resolveAttribute(android.R.attr.windowBackground, bgColorValue, true)

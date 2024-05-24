@@ -1,10 +1,10 @@
-# Signalling server
+# Signaling server
 
-Python-based signalling server
+Python-based signaling server
 
 ## Deployed
 
-/var/app/signalling
+/var/app/signaling
 
 ## Exposed
 

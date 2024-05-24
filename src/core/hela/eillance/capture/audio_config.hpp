@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 #include <libavutil/samplefmt.h>
 #include <miniaudio.h>
 #include <opus.h>

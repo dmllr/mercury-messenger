@@ -124,20 +124,29 @@
       android:layout_width="match_parent"
       android:layout_height="wrap_content">
 
-    <FrameLayout
+    <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:orientation="horizontal"
         tools:ignore="UselessParent">
 
       <ImageButton
           android:id="@+id/btn_open_camera_preferences"
           android:layout_width="wrap_content"
           android:layout_height="wrap_content"
-
           android:contentDescription="@string/open_camera_preferences"
           android:src="@drawable/ic_capture_preferences"
           app:tint="?android:attr/textColorPrimary" />
-    </FrameLayout>
+
+      <ImageButton
+          android:id="@+id/btn_restart_service"
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content"
+          android:clickable="false"
+          android:contentDescription="@string/restart_service"
+          android:src="@drawable/ic_restart_service"
+          app:tint="?android:attr/textColorPrimary" />
+    </LinearLayout>
 
   </TableRow>
 </TableLayout>

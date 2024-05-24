@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>libdatachannel media example</title>
+    <title>Eillance Web</title>
     <style>
         button {
             padding: 8px 16px;
@@ -24,13 +24,21 @@
         #media {
             max-width: 1280px;
         }
+
+        .client-list {
+            margin-bottom: 16px;
+        }
     </style>
 </head>
 <body>
 <script src="https://webrtc.github.io/adapter/adapter-latest.js"></script>
 
-<button disabled id="start" onclick="start()">Start</button>
-<button id="stop" onclick="stop()" style="display: none">Stop</button>
+<button id="start" onclick="start()" disabled>Start</button>
+<button id="stop" style="display: none" onclick="stop()">Stop</button>
+<button id="refresh" onclick="refreshPublishers()">Refresh Clients</button>
+
+<h2>Available Clients</h2>
+<div class="client-list" id="client-list"></div>
 
 <h2>State</h2>
 <p>
@@ -45,7 +53,7 @@
 
 <div id="media" style="display: none">
     <h2>Media</h2>
-    <video autoplay id="video" playsinline></video>
+    <video id="video" autoplay playsinline></video>
 </div>
 
 <h2>Data channel</h2>

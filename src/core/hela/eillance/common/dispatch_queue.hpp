@@ -63,7 +63,7 @@ public:
   }
 
   void removePending() {
-    std::unique_lock<std::mutex> lock(lockMutex);
+    std::unique_lock<std::mutex> const lock(lockMutex);
     queue = {};
   }
 

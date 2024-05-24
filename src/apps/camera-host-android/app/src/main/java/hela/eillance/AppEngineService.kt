@@ -24,17 +24,19 @@ import hela.eillance.events.EventSource
 import hela.eillance.events.interfaces.IStatusUpdateCallback
 import hela.eillance.events.StateService
 import hela.eillance.events.getResourceString
+import hela.eillance.ndkio.Status
+import hela.eillance.ndkio.VideoConfig
 
 
-class CameraService : Service(), IStatusUpdateCallback {
-  private var cameraEngine: Long = 0
+class AppEngineService : Service(), IStatusUpdateCallback {
+  private var appEngine: Long = 0
   private var underlyingServicesStates: MutableMap<EventSource, StateService> = mutableMapOf(
     EventSource.ConnectionStatus to StateService.Unknown,
   )
 
   inner class StreamingServiceBinder : Binder() {
-    val service: CameraService
-      get() = this@CameraService
+    val service: AppEngineService
+      get() = this@AppEngineService
   }
 
   // AppEngine callback interface
@@ -56,7 +58,7 @@ class CameraService : Service(), IStatusUpdateCallback {
   }
 
   override fun onDestroy() {
-    deleteAppEngine(cameraEngine)
+    deleteAppEngine(appEngine)
 
     super.onDestroy()
   }
@@ -113,15 +115,19 @@ class CameraService : Service(), IStatusUpdateCallback {
   }
 
   private fun createAppEngine() {
-    cameraEngine = createAppEngine(this)
+    appEngine = createAppEngine(this)
   }
 
   fun getStatus(): Status {
-    return getStatus(cameraEngine)
+    return getStatus(appEngine)
+  }
+
+  fun configureVideoCapture(conf: VideoConfig) {
+    configureVideoCapture(appEngine, conf)
   }
 
   private fun Pair<Int, Int>.getBitmapFromVectorDrawable(): Bitmap {
-    val context = this@CameraService
+    val context = this@AppEngineService
     val drawable = ContextCompat.getDrawable(context, first)
     val color = ContextCompat.getColor(context, second)
 
@@ -192,8 +198,9 @@ class CameraService : Service(), IStatusUpdateCallback {
 
   // native lib functions
   private external fun createAppEngine(statusCallback: IStatusUpdateCallback): Long
-  private external fun deleteAppEngine(ndkCamera: Long)
-  private external fun getStatus(ndkCamera: Long): Status
+  private external fun deleteAppEngine(appMgr: Long)
+  private external fun getStatus(appMgr: Long): Status
+  private external fun configureVideoCapture(appMgr: Long, conf: VideoConfig)
 
   companion object {
     private const val CAMERA_SERVICE_FG_ID = 9990
