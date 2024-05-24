@@ -17,11 +17,12 @@ import androidx.core.app.ActivityCompat
 import androidx.fragment.app.FragmentManager
 import hela.eillance.camera.R
 import hela.eillance.camera.databinding.ActivityMainBinding
+import hela.eillance.fragments.OperationFragment
 
 
 class MainActivity : AppCompatActivity(), ServiceConnection, FragmentManager.OnBackStackChangedListener {
 
-  var cameraService: CameraService? = null
+  var appEngineService: AppEngineService? = null
   private var cameraServiceBound: Boolean = false
   private lateinit var binding: ActivityMainBinding
 
@@ -109,10 +110,10 @@ class MainActivity : AppCompatActivity(), ServiceConnection, FragmentManager.OnB
   }
 
   private fun startStreamingService() {
-    val cameraServiceIntent = Intent(applicationContext, CameraService::class.java)
-    startService(cameraServiceIntent)
+    val appEngineServiceIntent = Intent(applicationContext, AppEngineService::class.java)
+    startService(appEngineServiceIntent)
     if (applicationContext.bindService(
-        cameraServiceIntent,
+        appEngineServiceIntent,
         this,
         Context.BIND_AUTO_CREATE + Context.BIND_ABOVE_CLIENT
       )
@@ -157,11 +158,11 @@ class MainActivity : AppCompatActivity(), ServiceConnection, FragmentManager.OnB
 
   // ServiceConnection implementation
   override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-    cameraService = (service as CameraService.StreamingServiceBinder).service
+    appEngineService = (service as AppEngineService.StreamingServiceBinder).service
   }
 
   override fun onServiceDisconnected(name: ComponentName?) {
-    cameraService = null
+    appEngineService = null
   }
   // ServiceConnection implementation
 

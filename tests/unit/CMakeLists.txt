@@ -1,3 +1,6 @@
+set(CMAKE_USE_WIN32_THREADS_INIT ON)
+set(gtest_disable_pthreads ON)
+
 include(FetchContent)
 FetchContent_Declare(
   googletest
@@ -9,8 +12,13 @@ FetchContent_MakeAvailable(googletest)
 
 enable_testing()
 
-add_executable(test-audio-encoder test-audio-encoder.cpp)
-target_link_libraries(test-audio-encoder GTest::gtest_main hela-eillance-core)
+add_executable(h-e-tests
+  test-audio-encoder.cpp
+  test-dispatch-queue.cpp
+  test-event-queue.cpp
+  test-string-utils.cpp
+)
+target_link_libraries(h-e-tests GTest::gtest_main hela-eillance-core)
 
 include(GoogleTest)
-gtest_discover_tests(test-audio-encoder)
+gtest_discover_tests(h-e-tests)

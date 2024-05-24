@@ -1,17 +1,17 @@
-package hela.eillance
+package hela.eillance.ndkio
 
 import hela.eillance.events.StateIce
 import hela.eillance.events.StateIceGathering
 import hela.eillance.events.StatePeerConnection
 import hela.eillance.events.StateService
-import hela.eillance.events.StateSignalling
+import hela.eillance.events.StateSignaling
 
 class Status {
   var connectionState: StateService = StateService.Unknown
   var peerConnectionState: StatePeerConnection = StatePeerConnection.New
   var iceState: StateIce = StateIce.New
   var iceGatheringState: StateIceGathering = StateIceGathering.New
-  var signallingState: StateSignalling = StateSignalling.Unknown
+  var signalingState: StateSignaling = StateSignaling.Unknown
 
   companion object {
     @JvmStatic
@@ -20,14 +20,14 @@ class Status {
       peerConnectionState: Int,
       iceState: Int,
       iceGatheringState: Int,
-      signallingState: Int
+      signalingState: Int
     ): Status {
       return Status().apply {
         this.connectionState = StateService.fromInt(connectionState)
         this.peerConnectionState = StatePeerConnection.fromInt(peerConnectionState)
         this.iceState = StateIce.fromInt(iceState)
         this.iceGatheringState = StateIceGathering.fromInt(iceGatheringState)
-        this.signallingState = StateSignalling.fromInt(signallingState)
+        this.signalingState = StateSignaling.fromInt(signalingState)
       }
     }
   }

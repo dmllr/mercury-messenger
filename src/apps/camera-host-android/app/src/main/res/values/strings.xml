@@ -7,9 +7,12 @@
   <string name="notification_description">Camera stream P2P connection</string>
 
   <string name="open_camera_preferences">Open Camera Preferences</string>
-  <string name="preference_category_camera">Camera preferences</string>
-  <string name="preference_default_camera">Default Camera</string>
-  <string name="preference_camera_resolution">Camera Resolution</string>
+  <string name="restart_service">Restart Service</string>
+  <string name="preference_category_camera_encoding">Capture and encoding preferences</string>
+  <string name="preference_default_camera">Default camera</string>
+  <string name="preference_camera_resolution">Camera resolution</string>
+  <string name="preference_frame_rate">Frame rate</string>
+  <string name="preference_bitrate">Bitrate</string>
 
   <string name="communication_status">Communication status</string>
   <string name="peer_connection_state">Peer connection state</string>
@@ -21,11 +24,11 @@
   <string name="unknown">Unknown</string>
   <string name="waiting">Waiting</string>
 
-  <string name="state_signalling_stable">Stable</string>
-  <string name="state_signalling_have_local_offer">Have Local Offer</string>
-  <string name="state_signalling_have_remote_offer">Have Remote Offer</string>
-  <string name="state_signalling_have_local_pranswer">Have Local Pranswer</string>
-  <string name="state_signalling_have_remote_pranswer">Have Remote Pranswer</string>
+  <string name="state_signaling_stable">Stable</string>
+  <string name="state_signaling_have_local_offer">Have Local Offer</string>
+  <string name="state_signaling_have_remote_offer">Have Remote Offer</string>
+  <string name="state_signaling_have_local_pranswer">Have Local Pranswer</string>
+  <string name="state_signaling_have_remote_pranswer">Have Remote Pranswer</string>
 
   <string name="state_service_unknown">Unknown</string>
   <string name="state_service_standby">Standby</string>

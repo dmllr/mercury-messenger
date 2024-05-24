@@ -16,6 +16,7 @@
 
 #include "hela/eillance/capture/video_config.hpp"
 #include "hela/eillance/capture/video_encoder_mediandk.hpp"
+#include "hela/eillance/common/event_queue.hpp"
 #include "hela/eillance/common/dispatch_queue.hpp"
 #include "hela/eillance/common/packet.hpp"
 #include "hela/eillance/logging/logging.h"
@@ -29,19 +30,29 @@ namespace hela::eillance {
 class VideoCapture {
   ACameraManager* camera_manager_{nullptr};
   ACameraDevice* cameraDevice{nullptr};
-  ACaptureSessionOutputContainer* output_container;
-  ACameraCaptureSession* capture_session;
+  ACameraCaptureSession* capture_session{nullptr};
+  ACameraOutputTarget* target{nullptr};
+  ACaptureSessionOutputContainer* output_container{nullptr};
+  ACaptureSessionOutput* session_output{nullptr};
+  ACaptureRequest* capture_request{nullptr};
 
+  VideoConfig config_;
   VideoEncoder encoder_;
+  EventQueue::SubscriberTypeId configure_subscriber_id_;
 
 public:
-  VideoCapture() = default;
+  VideoCapture(){
+    configure_subscriber_id_ = EventQueue::Instance().Subscribe<VideoConfig>(
+        [this](VideoConfig config) { ConfigureVideo(std::move(config)); });
+  }
   VideoCapture(VideoCapture&&) = delete;
   VideoCapture(const VideoCapture&) = delete;
   VideoCapture& operator=(VideoCapture&&) = delete;
   VideoCapture& operator=(const VideoCapture&) = delete;
 
   ~VideoCapture() {
+    EventQueue::Instance().Unsubscribe<const VideoConfig>(configure_subscriber_id_);
+
     Revoke();
   }
 
@@ -51,40 +62,53 @@ public:
       Log::e("Failed to create camera manager");
       return;
     }
-    encoder_.Engage();
+    encoder_.Engage(config_);
     renewCaptureSession();
-  }
-
-  Packet FetchBuffers() {
-    return encoder_.EncodeBuffer();
   }
 
   void Revoke() {
     encoder_.Revoke();
     ACameraCaptureSession_stopRepeating(capture_session);
-
-    if (cameraDevice != nullptr) {
-      ACameraDevice_close(cameraDevice);
-      cameraDevice = nullptr;
-    }
-
-    if (capture_session != nullptr) {
-      ACameraCaptureSession_close(capture_session);
-      capture_session = nullptr;
-    }
-
+    FreeNativeCameraResources();
     if (camera_manager_ != nullptr) {
       ACameraManager_delete(camera_manager_);
       camera_manager_ = nullptr;
     }
   }
 
-  static Time::Unit GetSampleDuration() {
-    return Time::uS / VideoConfig::frameRate;
+  Packet FetchBuffers() {
+    return encoder_.EncodeBuffer();
+  }
+
+  Time::Unit GetSampleDuration() {
+    return Time::uS / config_.frameRate;
+  }
+
+  void ConfigureVideo(VideoConfig config) {
+    config_ = std::move(config);
+    encoder_.UpdateConfig(config_);
+    if (capture_session != nullptr) {
+      ACameraCaptureSession_stopRepeating(capture_session);
+      renewCaptureSession();
+    }
   }
 
 private:
   void OpenCamera() {
+    // Check if the camera is already opened
+    // TODO check if cameraID changed, then reopen
+    if (cameraDevice != nullptr) {
+      auto active_camera_id = ACameraDevice_getId(cameraDevice);
+      if (active_camera_id == std::to_string(config_.cameraId)) {
+        return;
+      } else {
+        ACameraDevice_close(cameraDevice);
+        cameraDevice = nullptr;
+      }
+    }
+
+    FreeNativeCameraResources();
+
     // get camera ID list
     ACameraIdList* cameraIdList = nullptr;
     auto status = ACameraManager_getCameraIdList(camera_manager_, &cameraIdList);
@@ -98,16 +122,25 @@ private:
       return;
     }
 
-    // open first available camera
-    auto* cameraId = cameraIdList->cameraIds[0];
-    status = ACameraManager_openCamera(camera_manager_, cameraId, GetDeviceListener(), &cameraDevice);
-    if (status != ACAMERA_OK) {
-      Log::e("ACameraManager_openCamera call failed with code: %#x, %s", status, GetErrorStr(status));
+    // Check if the specified camera ID is within valid range
+    if (config_.cameraId >= cameraIdList->numCameras) {
+      Log::e("Specified camera ID %d is out of range, max available ID is %d", config_.cameraId, cameraIdList->numCameras - 1);
+      ACameraManager_deleteCameraIdList(cameraIdList);
       return;
     }
 
-    // free camera list
+    // Open specified camera by config_.cameraId
+    auto* cameraId = cameraIdList->cameraIds[config_.cameraId];
+    status = ACameraManager_openCamera(camera_manager_, cameraId, GetDeviceListener(), &cameraDevice);
+    if (status != ACAMERA_OK) {
+      Log::e("ACameraManager_openCamera call failed with code: %#x, %s", status, GetErrorStr(status));
+      ACameraManager_deleteCameraIdList(cameraIdList);
+      return;
+    }
+
+    // Free camera list
     ACameraManager_deleteCameraIdList(cameraIdList);
+    Log::i("Camera %d opened successfully", config_.cameraId);
   }
 
   void renewCaptureSession() {
@@ -119,26 +152,21 @@ private:
     auto* native_window = encoder_.Surface();
     ANativeWindow_acquire(native_window);
 
-    ACaptureSessionOutput* session_output;
     status = ACaptureSessionOutput_create(native_window, &session_output);
     Log::assert_or_die(status == ACAMERA_OK, "renewCaptureSession failed with code: %#x, %s ", status, GetErrorStr(status));
 
     status = ACaptureSessionOutputContainer_add(output_container, session_output);
     Log::assert_or_die(status == ACAMERA_OK, "renewCaptureSession failed with code: %#x, %s ", status, GetErrorStr(status));
 
-    ACameraOutputTarget* target;
     status = ACameraOutputTarget_create(native_window, &target);
     Log::assert_or_die(status == ACAMERA_OK, "renewCaptureSession failed with code: %#x, %s ", status, GetErrorStr(status));
 
-    ACaptureRequest* capture_request;
     status = ACameraDevice_createCaptureRequest(cameraDevice, TEMPLATE_RECORD, &capture_request);
     Log::assert_or_die(status == ACAMERA_OK, "renewCaptureSession failed with code: %#x, %s ", status, GetErrorStr(status));
 
     status = ACaptureRequest_addTarget(capture_request, target);
     Log::assert_or_die(status == ACAMERA_OK, "renewCaptureSession failed with code: %#x, %s ", status, GetErrorStr(status));
 
-    // Create a capture session for the given preview requests
-    //    capture_session_state = CaptureSessionState::READY;
     status = ACameraDevice_createCaptureSession(
         cameraDevice,
         output_container,
@@ -146,17 +174,12 @@ private:
         &capture_session);
     Log::assert_or_die(status == ACAMERA_OK, "ACameraDevice_createCaptureSession failed with status: %#x, %s", status, GetErrorStr(status));
 
-    // Define a capture request
-    ACaptureRequest* captureRequest = nullptr;
-    status = ACameraDevice_createCaptureRequest(cameraDevice, TEMPLATE_RECORD, &captureRequest);
-    Log::assert_or_die(status == ACAMERA_OK, "Failed to create capture request with status: %#x, %s", status, GetErrorStr(status));
-
     // Add target to the capture request
-    status = ACaptureRequest_addTarget(captureRequest, target);
+    status = ACaptureRequest_addTarget(capture_request, target);
     Log::assert_or_die(status == ACAMERA_OK, "Failed to add target to capture request with status: %#x, %s", status, GetErrorStr(status));
 
     // Set repeating request for the capture session
-    status = ACameraCaptureSession_setRepeatingRequest(capture_session, nullptr, 1, &captureRequest, nullptr);
+    status = ACameraCaptureSession_setRepeatingRequest(capture_session, nullptr, 1, &capture_request, nullptr);
     Log::assert_or_die(status == ACAMERA_OK, "Failed to set repeating request with status: %#x, %s", status, GetErrorStr(status));
   }
 
@@ -241,6 +264,34 @@ private:
   //
   //    capture_session_state = state;
   //  }
+
+  void FreeNativeCameraResources() {
+    if (output_container != nullptr) {
+      ACaptureSessionOutputContainer_free(output_container);
+      output_container = nullptr;
+    }
+    if (session_output != nullptr) {
+      ACaptureSessionOutput_free(session_output);
+      session_output = nullptr;
+    }
+    if (target != nullptr) {
+      ACameraOutputTarget_free(target);
+      target = nullptr;
+    }
+    if (capture_request != nullptr) {
+      ACaptureRequest_free(capture_request);
+      capture_request = nullptr;
+    }
+    if (capture_session != nullptr) {
+      ACameraCaptureSession_close(capture_session);
+      capture_session = nullptr;
+    }
+    if (cameraDevice != nullptr) {
+      ACameraDevice_close(cameraDevice);
+      cameraDevice = nullptr;
+    }
+  }
+
 };
 
 }  // namespace hela::eillance

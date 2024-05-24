@@ -10,6 +10,7 @@
 
 #include "hela/eillance/events/event_source.h"
 #include "hela/eillance/rtc/producer.hpp"
+#include "hela/eillance/utils/string.hpp"
 
 #include <opencv2/core/mat.hpp>
 #include <opencv2/imgproc.hpp>
@@ -31,7 +32,8 @@ public:
         env_(env),
         service_instance_(env->NewWeakGlobalRef(instance)),
         status_update_callback_(env->NewGlobalRef(status_update_callback)) {
-    rtc_producer = std::make_shared<hela::eillance::RtcTransport<hela::eillance::RtcProducer>>("server");
+    EventQueue::Instance();
+    rtc_producer = std::make_shared<hela::eillance::RtcTransport<hela::eillance::RtcProducer>>(StringUtils::RandomString());
     rtc_producer->SetStatusCallback([this](EventSource sender, int status) { setStatus(sender, status); });
     rtc_producer->Start();
   }

@@ -25,7 +25,7 @@
         android:theme="@style/AppTheme">
 
         <service
-            android:name="hela.eillance.CameraService"
+            android:name="hela.eillance.AppEngineService"
             android:enabled="true"
             android:foregroundServiceType="camera|microphone|connectedDevice"
             android:exported="false">

@@ -3,7 +3,6 @@
 #include <chrono>
 #include <cstdint>
 #include <functional>
-#include <mutex>
 #include <string>
 #include <thread>
 #include <utility>
@@ -44,8 +43,6 @@ public:
   };
 
 private:
-  uint64_t startTime = 0;
-  std::mutex mutex;
   DispatchQueue dispatchQueue = DispatchQueue("StreamQueue", 1);
 
   bool isRunning = false;
@@ -90,15 +87,12 @@ private:
     )
     if (next_time > current_time) {
       auto wait_time = next_time - current_time;
-      mutex.unlock();
       std::this_thread::sleep_for(std::chrono::microseconds(wait_time));
-      mutex.lock();
     }
     return {ss, sst};
   }
 
   void SendSample() {
-    const auto lock{std::unique_lock(mutex)};
     if (!isRunning) {
       return;
     }
@@ -117,12 +111,10 @@ public:
   }
 
   void Start() {
-    const auto lock{std::unique_lock(mutex)};
     if (isRunning) {
       return;
     }
     isRunning = true;
-    startTime = Time::Now();
     video_->Start();
     audio_->Start();
     dispatchQueue.dispatch([this]() {
@@ -131,7 +123,6 @@ public:
   }
 
   void Stop() {
-    const auto lock{std::unique_lock(mutex)};
     if (!isRunning) {
       return;
     }

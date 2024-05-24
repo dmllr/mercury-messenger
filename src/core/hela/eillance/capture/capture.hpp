@@ -1,7 +1,9 @@
 #pragma once
 
-#include "hela/eillance/common/packet.hpp"
 #include <memory>
+
+#include "hela/eillance/common/packet.hpp"
+#include "hela/eillance/capture/video_config.hpp"
 
 namespace hela::eillance {
 
@@ -38,8 +40,8 @@ private:
     virtual ~CaptureInterface() = default;
     virtual void Engage() = 0;
     virtual void Revoke() = 0;
-    virtual Packet FetchBuffers() = 0;
-    virtual Time::Unit GetSampleDuration() = 0;
+    virtual auto FetchBuffers() -> Packet = 0;
+    virtual auto GetSampleDuration() -> Time::Unit = 0;
   };
 
 public:
@@ -55,10 +57,10 @@ public:
     void Revoke() final {
       capture_->Revoke();
     }
-    Packet FetchBuffers() final {
+    auto FetchBuffers() -> Packet final {
       return capture_->FetchBuffers();
     }
-    Time::Unit GetSampleDuration() final {
+    auto GetSampleDuration() -> Time::Unit final {
       return capture_->GetSampleDuration();
     }
   };

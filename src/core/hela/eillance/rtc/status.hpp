@@ -10,7 +10,7 @@ struct Status final {
   rtc::PeerConnection::State state{rtc::PeerConnection::State::New};
   rtc::PeerConnection::IceState ice_state{rtc::PeerConnection::IceState::New};
   rtc::PeerConnection::GatheringState gathering_state{rtc::PeerConnection::GatheringState::New};
-  rtc::PeerConnection::SignalingState signalling_state{rtc::PeerConnection::SignalingState::Stable};
+  rtc::PeerConnection::SignalingState signaling_state{rtc::PeerConnection::SignalingState::Stable};
 };
 
 }  // namespace hela::eillance
