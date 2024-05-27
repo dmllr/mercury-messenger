@@ -86,27 +86,15 @@ public:
 
   void ConfigureVideo(VideoConfig config) {
     config_ = std::move(config);
-    encoder_.UpdateConfig(config_);
     if (capture_session != nullptr) {
       ACameraCaptureSession_stopRepeating(capture_session);
       renewCaptureSession();
     }
+    encoder_.UpdateConfig(config_);
   }
 
 private:
   void OpenCamera() {
-    // Check if the camera is already opened
-    // TODO check if cameraID changed, then reopen
-    if (cameraDevice != nullptr) {
-      auto active_camera_id = ACameraDevice_getId(cameraDevice);
-      if (active_camera_id == std::to_string(config_.cameraId)) {
-        return;
-      } else {
-        ACameraDevice_close(cameraDevice);
-        cameraDevice = nullptr;
-      }
-    }
-
     FreeNativeCameraResources();
 
     // get camera ID list
