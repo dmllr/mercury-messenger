@@ -78,7 +78,7 @@ async def handle_connection(websocket: WebSocketServerProtocol):
     async def send_publishers(connection):
         jdump = json.dumps({
             "type": "info publishers",
-            "publishers": [{"id": cid, "profile": c.profile} for cid, c in clients[user_id].items() if c.kind == Client.Kind.Producer]
+            "clients": [cid for cid, c in clients[user_id].items() if c.kind == Client.Kind.Producer]
         })
         print(f'>>[{user_id}/{client_id}]: {jdump}')
         await connection.send(jdump)
@@ -112,7 +112,7 @@ async def handle_connection(websocket: WebSocketServerProtocol):
                         (Consumer if client_kind == Client.Kind.Consumer else Producer)(
                             client_id, client_kind, websocket))
                     if client_kind == Client.Kind.Producer:
-                        clients[user_id][client_id].profile = json.loads(message.get('profile'))
+                        clients[user_id][client_id].profile = message.get('profile')
                     print(f'Peer "{user_id}/{client_id}" published')
                     for client in clients[user_id]:
                         await send_publishers(clients[user_id][client].ws)
@@ -122,7 +122,7 @@ async def handle_connection(websocket: WebSocketServerProtocol):
 
                 else:
                     destination_id = message['to']
-                    if destination_id not in clients[user_id]:
+                    if destination_id in clients[user_id]:
                         # redirect the message to a destination client
                         client = clients[user_id][destination_id]
                         message['from'] = client_id
@@ -151,7 +151,10 @@ async def handle_connection(websocket: WebSocketServerProtocol):
         if user_id and client_id and user_id in clients and client_id in clients[user_id]:
             del clients[user_id][client_id]
             print(f'Peer "{user_id}/{client_id}" disconnected')
-            await send_publishers(websocket)
+            try:
+                await send_publishers(websocket)
+            except websockets.exceptions.ConnectionClosedOK:
+                ...
 
 
 if __name__ == '__main__':

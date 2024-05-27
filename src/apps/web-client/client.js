@@ -20,8 +20,8 @@ function randomString(len) {
 
 const receiveID = randomString(10);
 const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-const websocket = new WebSocket(protocol + '//app.hela.me:8000');
-// const websocket = new WebSocket('ws://localhost:8000/');
+// const websocket = new WebSocket(protocol + '//app.hela.me:8000');
+const websocket = new WebSocket('ws://localhost:8000/');
 websocket.onopen = function () {
     authenticateUser();
 }
@@ -247,16 +247,16 @@ function updateClientList(publishers) {
         const radioBtn = document.createElement('input');
         radioBtn.type = 'radio';
         radioBtn.name = 'client';
-        radioBtn.value = client.id;
-        radioBtn.id = 'client_' + client.id;
+        radioBtn.value = client;
+        radioBtn.id = 'client_' + client;
         radioBtn.checked = index === 0;
         radioBtn.onclick = function() {
             selectedClientId = this.value;
         };
 
         const label = document.createElement('label');
-        label.htmlFor = 'client_' + client.id;
-        label.textContent = client.id + '  ' + client.profile;
+        label.htmlFor = 'client_' + client;
+        label.textContent = client;
 
         clientListDiv.appendChild(radioBtn);
         clientListDiv.appendChild(label);
@@ -290,6 +290,6 @@ websocket.onmessage = async function (evt) {
     } else if (object.type === "error") {
         console.error('Error: ', object.error, ', message: ', object.message);
     } else if (object.type === "info publishers") {
-        updateClientList(object.publishers);
+        updateClientList(object.clients);
     }
 }

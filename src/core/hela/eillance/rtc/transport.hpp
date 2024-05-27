@@ -373,8 +373,8 @@ private:
     }
   };
 
-  constexpr static auto signalingServerUrl = "wss://app.hela.me:8000";
-//  constexpr static auto signalingServerUrl = "ws://localhost:8000";
+//  constexpr static auto signalingServerUrl = "wss://app.hela.me:8000";
+  constexpr static auto signalingServerUrl = "ws://10.0.2.2:8000";
 
   constexpr static auto zerosslCaBundle =
       "-----BEGIN CERTIFICATE-----\n"

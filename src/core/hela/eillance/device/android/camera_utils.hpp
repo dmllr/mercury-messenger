@@ -4,7 +4,6 @@
 #include <string>
 #include <typeinfo>
 #include <utility>
-#include <pair>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -88,7 +87,8 @@ auto GetSupportedResolutions(const std::string& cameraId) -> std::vector<std::pa
 }
 
 auto GetDeviceProfileAsJson() -> nlohmann::json {
-  auto cameras = getAvailableCameras();
+  using json = nlohmann::json;
+  auto cameras = GetAvailableCameras();
   auto camerasJson = json::array();
 
   for (const auto& camera : cameras) {
@@ -96,7 +96,7 @@ auto GetDeviceProfileAsJson() -> nlohmann::json {
     cameraJson["id"] = camera.first;
     cameraJson["name"] = camera.second;
 
-    auto resolutions = getSupportedResolutions(camera.first);
+    auto resolutions = GetSupportedResolutions(camera.first);
     auto resolutionsJson{json::array()};
     for (const auto& res : resolutions) {
       resolutionsJson.push_back({{"width", res.first}, {"height", res.second}});
@@ -111,7 +111,7 @@ auto GetDeviceProfileAsJson() -> nlohmann::json {
 
 template<typename T>
 const char* GetPairStr(T key, std::vector<std::pair<T, const char*>>& store) {
-  for (auto& it = store.begin(); it != store.end(); ++it) {
+  for (auto it = store.begin(); it != store.end(); ++it) {
     if (it->first == key) {
       return it->second;
     }
