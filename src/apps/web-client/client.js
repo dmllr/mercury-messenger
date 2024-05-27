@@ -240,23 +240,23 @@ function refreshPublishers() {
     }));
 }
 
-function updateClientList(clients) {
+function updateClientList(publishers) {
     const clientListDiv = document.getElementById('client-list');
     clientListDiv.innerHTML = '';
-    clients.forEach((client, index) => {
+    publishers.forEach((client, index) => {
         const radioBtn = document.createElement('input');
         radioBtn.type = 'radio';
         radioBtn.name = 'client';
-        radioBtn.value = client;
-        radioBtn.id = 'client_' + client;
+        radioBtn.value = client.id;
+        radioBtn.id = 'client_' + client.id;
         radioBtn.checked = index === 0;
         radioBtn.onclick = function() {
             selectedClientId = this.value;
         };
 
         const label = document.createElement('label');
-        label.htmlFor = 'client_' + client;
-        label.textContent = client;
+        label.htmlFor = 'client_' + client.id;
+        label.textContent = client.id + '  ' + client.profile;
 
         clientListDiv.appendChild(radioBtn);
         clientListDiv.appendChild(label);
@@ -290,6 +290,6 @@ websocket.onmessage = async function (evt) {
     } else if (object.type === "error") {
         console.error('Error: ', object.error, ', message: ', object.message);
     } else if (object.type === "info publishers") {
-        updateClientList(object.clients);
+        updateClientList(object.publishers);
     }
 }

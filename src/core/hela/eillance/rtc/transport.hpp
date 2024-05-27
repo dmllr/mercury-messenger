@@ -9,6 +9,7 @@
 #include <rtc/rtc.h>
 
 #include "hela/eillance/common/dispatch_queue.hpp"
+#include "hela/eillance/device/camera_utils.hpp"
 #include "hela/eillance/events/event_source.h"
 #include "hela/eillance/events/service_state.h"
 #include "hela/eillance/events/system_event.h"
@@ -169,7 +170,9 @@ private:
         {"token", auth_token_},
         {"type", "exhibit"},
         {"client_id", id},
-        {"kind", "producer"}};
+        {"kind", "producer"},
+        {"profile", GetDeviceProfileAsJson()},
+    };
     ws_.send(message.dump());
   }
 

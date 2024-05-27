@@ -21,7 +21,7 @@ async def authenticate_and_exhibit():
             return
 
         print("Publish a client")
-        await websocket.send(json.dumps({"type": "exhibit", "token": token, "client_id": "client1", "kind": "producer"}))
+        await websocket.send(json.dumps({"type": "exhibit", "token": token, "client_id": "client1", "kind": "producer", "profile": "{\"a\": \"b\"}"}))
         response = await websocket.recv()
         print("Message response:", response)
 
