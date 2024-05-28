@@ -46,7 +46,6 @@ class CapturePreferencesFragment : PreferenceFragmentCompat() {
     val bitratePreference = findPreference<ListPreference>("bitrate")
 
     videoConfig.cameraId = defaultCameraPreference?.value?.toInt() ?: 0
-    videoConfig.cameraName = defaultCameraPreference?.entry.toString()
     val resolution = cameraResolutionPreference?.value?.split("x")
     videoConfig.width = resolution?.get(0)?.toInt() ?: 0
     videoConfig.height = resolution?.get(1)?.toInt() ?: 0
@@ -92,7 +91,6 @@ class CapturePreferencesFragment : PreferenceFragmentCompat() {
       cameraResolutionPreference?.entryValues = newCameraResolutions
 
       videoConfig.cameraId = value.toInt()
-      videoConfig.cameraName = defaultCameraPreference.entry.toString()
       triggerConfigurationUpdate()
 
       true
@@ -124,6 +122,10 @@ class CapturePreferencesFragment : PreferenceFragmentCompat() {
 
   private fun triggerConfigurationUpdate() {
     (requireActivity() as MainActivity).appEngineService?.configureVideoCapture(videoConfig);
+  }
+
+  fun getVideoConfig(): VideoConfig {
+    return videoConfig
   }
 
   override fun onCreateView(

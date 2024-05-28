@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.hardware.camera2.CameraAccessException
@@ -19,11 +20,13 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
+import androidx.preference.PreferenceManager
 import hela.eillance.camera.R
 import hela.eillance.events.EventSource
-import hela.eillance.events.interfaces.IStatusUpdateCallback
 import hela.eillance.events.StateService
+import hela.eillance.events.SystemEvent
 import hela.eillance.events.getResourceString
+import hela.eillance.events.interfaces.IStatusUpdateCallback
 import hela.eillance.ndkio.Status
 import hela.eillance.ndkio.VideoConfig
 
@@ -80,6 +83,11 @@ class AppEngineService : Service(), IStatusUpdateCallback {
     intent.putExtra(Tune::BroadcastActionOnStateUpdate_state.get(), status)
     sendBroadcast(intent)
 
+    if (source == EventSource.System.value && status == SystemEvent.Started.value) {
+      val videoConfig = getVideoConfigPreferences()
+      configureVideoCapture(videoConfig);
+    }
+
     val src = EventSource.fromInt(source)
     if (src == EventSource.ConnectionStatus) {
       val state = StateService.fromInt(status)
@@ -89,6 +97,21 @@ class AppEngineService : Service(), IStatusUpdateCallback {
 
       startForeground()
     }
+  }
+
+  private fun getVideoConfigPreferences(): VideoConfig {
+    val preferenceManager: SharedPreferences? =
+      PreferenceManager.getDefaultSharedPreferences(this)
+
+    val videoConfig = VideoConfig()
+    videoConfig.cameraId = preferenceManager?.getString("default_camera", "0")?.toIntOrNull() ?: 0
+    val resolution = preferenceManager?.getString("camera_resolution", "0x0")?.split("x")
+    videoConfig.width = resolution?.get(0)?.toIntOrNull() ?: 0
+    videoConfig.height = resolution?.get(1)?.toIntOrNull() ?: 0
+    videoConfig.frameRate = preferenceManager?.getString("frame_rate", "30")?.toIntOrNull() ?: 30
+    videoConfig.bitrate = preferenceManager?.getString("bitrate", "0")?.toIntOrNull() ?: 0
+
+    return videoConfig
   }
 
   private fun isCamera2Device(): Boolean {

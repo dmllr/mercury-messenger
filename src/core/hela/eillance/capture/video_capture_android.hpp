@@ -86,11 +86,23 @@ public:
   }
 
   void ConfigureVideo(VideoConfig config) {
+    TELEMETRY(
+      LOGI << "Video capture configuration event triggered: " << config.width << "x" << config.height << " " << config.frameRate << "fps";)
     std::lock_guard<std::mutex> lock(capture_mutex_);
     config_ = std::move(config);
-    stopCaptureSession();
-    renewCaptureSession();
-    encoder_.UpdateConfig(config_);
+    if (config_.width == 0 || config_.height == 0) {
+      config_.width = VideoConfigDefaults::width;
+      config_.height = VideoConfigDefaults::height;
+    }
+    if (config_.frameRate == 0) {
+      config_.frameRate = VideoConfigDefaults::frameRate;
+    }
+
+    if (camera_manager_ != nullptr) {
+      stopCaptureSession();
+      renewCaptureSession();
+      encoder_.UpdateConfig(config_);
+    }
   }
 
 private:
