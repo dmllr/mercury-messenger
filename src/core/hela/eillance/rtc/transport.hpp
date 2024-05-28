@@ -27,7 +27,7 @@ class RtcTransport {
   using Json = nlohmann::json;
   using StatusCallbackFunction = std::function<void(EventSource, int)>;
 
-  std::string id;
+  std::string id_;
   std::string auth_token_;
 
   static constexpr auto minWaitBeforeReconnect = 1;
@@ -61,11 +61,14 @@ public:
   }
 
   void SetName(const std::string device_name) {
-    id = device_name;
+    id_ = device_name;
+//    DispatchQueue::MainThread().dispatch([this]() {
+//      PublishClient();
+//    });
   }
 
   void Start() {
-    LOGI << "The local ID is: " << id.data();
+    LOGI << "The local id_ is: " << id_.data();
 
     connection_attempt_++;
     if (connection_attempt_ <= 1) {
@@ -173,7 +176,7 @@ private:
     Json message = {
         {"token", auth_token_},
         {"type", "exhibit"},
-        {"client_id", id},
+        {"client_id", id_},
         {"kind", "producer"},
         {"profile", GetDeviceProfileAsJson()},
     };
@@ -262,7 +265,7 @@ private:
     });
 
     dc->onMessage(nullptr, [id, wdc = make_weak_ptr(dc), this](const std::string& msg) {
-      LOGD << "Message from " << id << " received: " << msg;
+      LOGD << "Message from " << id_ << " received: " << msg;
       if (auto dc = wdc.lock()) {
         dc->send("Ping");
       }
@@ -337,7 +340,7 @@ private:
               AddToStream(c, true);
             }
           });
-          LOGI << "Video from " << id << " opened";
+          LOGI << "Video from " << id_ << " opened";
         });
 
     peer->audio = connection_.AddAudio(
@@ -348,7 +351,7 @@ private:
               AddToStream(c, false);
             }
           });
-          LOGI << "Audio from " << id << " opened";
+          LOGI << "Audio from " << id_ << " opened";
         });
 
     peer->dataChannel = CreateDefaultDataChannel(pc, id);
