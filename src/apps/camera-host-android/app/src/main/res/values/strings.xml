@@ -8,8 +8,10 @@
 
   <string name="open_camera_preferences">Open Camera Preferences</string>
   <string name="restart_service">Restart Service</string>
+  <string name="preference_category_device">Device preferences</string>
   <string name="preference_category_video_capture_encoding">Video capture and encoding</string>
   <string name="preference_category_audio_capture_encoding">Audio capture and encoding</string>
+  <string name="preference_device_name">This device display name</string>
   <string name="preference_default_camera">Default camera</string>
   <string name="preference_camera_resolution">Camera resolution</string>
   <string name="preference_frame_rate">Frame rate</string>

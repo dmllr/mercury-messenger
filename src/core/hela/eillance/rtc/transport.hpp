@@ -27,7 +27,7 @@ class RtcTransport {
   using Json = nlohmann::json;
   using StatusCallbackFunction = std::function<void(EventSource, int)>;
 
-  const std::string id;
+  std::string id;
   std::string auth_token_;
 
   static constexpr auto minWaitBeforeReconnect = 1;
@@ -43,7 +43,7 @@ class RtcTransport {
   std::shared_ptr<StatusCallbackFunction> status_callback_;
 
 public:
-  explicit RtcTransport(std::string local_id) : id(local_id) {
+  explicit RtcTransport() {
     ws_config_.caCertificatePemFile = zerosslCaBundle;
   }
   RtcTransport(RtcTransport&&) = delete;
@@ -58,6 +58,10 @@ public:
 
   [[maybe_unused]] Status GetStatus() {
     return status_;
+  }
+
+  void SetName(const std::string device_name) {
+    id = device_name;
   }
 
   void Start() {

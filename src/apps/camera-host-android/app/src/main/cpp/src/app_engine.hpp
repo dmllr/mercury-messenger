@@ -33,7 +33,8 @@ public:
         service_instance_(env->NewWeakGlobalRef(instance)),
         status_update_callback_(env->NewGlobalRef(status_update_callback)) {
     EventQueue::Instance();
-    rtc_producer = std::make_shared<hela::eillance::RtcTransport<hela::eillance::RtcProducer>>(StringUtils::RandomString());
+    rtc_producer = std::make_shared<hela::eillance::RtcTransport<hela::eillance::RtcProducer>>();
+    rtc_producer->SetName(StringUtils::RandomString());
     rtc_producer->SetStatusCallback([this](EventSource sender, int status) { setStatus(sender, status); });
     rtc_producer->Start();
   }
@@ -45,6 +46,10 @@ public:
 
   Status GetStatus() {
     return rtc_producer->GetStatus();
+  }
+
+  void ConfigureDeviceName(const std::string device_name) {
+    rtc_producer->SetName(std::move(device_name));
   }
 
 private:

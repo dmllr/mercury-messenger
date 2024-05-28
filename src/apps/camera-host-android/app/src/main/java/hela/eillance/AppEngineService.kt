@@ -84,6 +84,9 @@ class AppEngineService : Service(), IStatusUpdateCallback {
     sendBroadcast(intent)
 
     if (source == EventSource.System.value && status == SystemEvent.Started.value) {
+      val deviceName = getDeviceNamePreference()
+      configureDeviceName(deviceName);
+
       val videoConfig = getVideoConfigPreferences()
       configureVideoCapture(videoConfig);
     }
@@ -97,6 +100,13 @@ class AppEngineService : Service(), IStatusUpdateCallback {
 
       startForeground()
     }
+  }
+
+  private fun getDeviceNamePreference(): String {
+    val preferenceManager: SharedPreferences? =
+      PreferenceManager.getDefaultSharedPreferences(this)
+
+    return preferenceManager?.getString("device_name", "Unknown device")!!
   }
 
   private fun getVideoConfigPreferences(): VideoConfig {
@@ -145,8 +155,8 @@ class AppEngineService : Service(), IStatusUpdateCallback {
     return getStatus(appEngine)
   }
 
-  fun configureVideoCapture(conf: VideoConfig) {
-    configureVideoCapture(appEngine, conf)
+  fun configureDeviceName(name: String) {
+    configureDeviceName(appEngine, name)
   }
 
   private fun Pair<Int, Int>.getBitmapFromVectorDrawable(): Bitmap {
@@ -223,7 +233,8 @@ class AppEngineService : Service(), IStatusUpdateCallback {
   private external fun createAppEngine(statusCallback: IStatusUpdateCallback): Long
   private external fun deleteAppEngine(appMgr: Long)
   private external fun getStatus(appMgr: Long): Status
-  private external fun configureVideoCapture(appMgr: Long, conf: VideoConfig)
+  private external fun configureDeviceName(appMgr: Long, name: String)
+  external fun configureVideoCapture(conf: VideoConfig)
 
   companion object {
     private const val CAMERA_SERVICE_FG_ID = 9990

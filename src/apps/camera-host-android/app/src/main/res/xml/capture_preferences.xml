@@ -2,6 +2,16 @@
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
   <PreferenceCategory
+      android:title="@string/preference_category_device"
+      app:icon="@drawable/ic_pref_group_device">
+    <EditTextPreference
+        app:defaultValue=""
+        app:icon="@drawable/ic_device_display_name"
+        app:key="device_name"
+        app:title="@string/preference_device_name" />
+  </PreferenceCategory>
+
+  <PreferenceCategory
       android:title="@string/preference_category_video_capture_encoding"
       app:icon="@drawable/ic_pref_group_video_encoding">
     <ListPreference

@@ -64,13 +64,25 @@ Java_hela_eillance_AppEngineService_getStatus(
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_hela_eillance_AppEngineService_configureVideoCapture(
+Java_hela_eillance_AppEngineService_configureDeviceName(
     JNIEnv *env,
     jobject instance,
     jlong appmgr,
-    jobject videoConfig) {
+    jstring deviceName) {
   auto app = reinterpret_cast<AppEngine*>(appmgr);
 
+  const char* deviceNameCStr = env->GetStringUTFChars(deviceName, nullptr);
+  auto device_name = std::string(deviceNameCStr);
+  env->ReleaseStringUTFChars(deviceName, deviceNameCStr);
+
+  app->ConfigureDeviceName(std::move(device_name));
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_hela_eillance_AppEngineService_configureVideoCapture(
+    JNIEnv *env,
+    jobject instance,
+    jobject videoConfig) {
   jclass videoConfigClass = env->GetObjectClass(videoConfig);
 
   hela::eillance::VideoConfig conf{};
