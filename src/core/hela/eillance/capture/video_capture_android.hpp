@@ -101,10 +101,11 @@ public:
       config_.bitrate = static_cast<int>(VideoConfigDefaults::commonBitrateMultiplier * config_.width * config_.height * config_.frameRate);
     }
 
+    encoder_.UpdateConfig(config_);
+
     if (camera_manager_ != nullptr) {
       stopCaptureSession();
       renewCaptureSession();
-      encoder_.UpdateConfig(config_);
     }
   }
 
@@ -188,13 +189,13 @@ private:
   ACameraDevice_stateCallbacks* GetDeviceListener() {
     static ACameraDevice_stateCallbacks cameraDeviceListener = {
         .context = this,
-        .onDisconnected = [](void* ctx, ACameraDevice* dev) { reinterpret_cast<VideoCapture*>(ctx)->onDeviceState(dev); },
+        .onDisconnected = [](void* ctx, ACameraDevice* dev) { reinterpret_cast<VideoCapture*>(ctx)->onDeviceDisconnected(dev); },
         .onError = [](void* ctx, ACameraDevice* dev, int err) { reinterpret_cast<VideoCapture*>(ctx)->onDeviceError(dev, err); },
     };
     return &cameraDeviceListener;
   }
 
-  void onDeviceState(ACameraDevice* dev) {
+  void onDeviceDisconnected(ACameraDevice* dev) {
     auto id{ACameraDevice_getId(dev)};
     Log::w("Device %s is disconnected", id);
 
