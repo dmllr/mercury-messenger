@@ -87,7 +87,7 @@ public:
 
   void ConfigureVideo(VideoConfig config) {
     TELEMETRY(
-      LOGI << "Video capture configuration event triggered: " << config.width << "x" << config.height << " " << config.frameRate << "fps";)
+      LOGI << "Video capture configuration event triggered: device " << config.cameraId << " " << config.width << "x" << config.height << " " << config.frameRate << "fps";)
     std::lock_guard<std::mutex> lock(capture_mutex_);
     config_ = std::move(config);
     if (config_.width == 0 || config_.height == 0) {
@@ -96,6 +96,9 @@ public:
     }
     if (config_.frameRate == 0) {
       config_.frameRate = VideoConfigDefaults::frameRate;
+    }
+    if (config_.bitrate == 0) {
+      config_.bitrate = static_cast<int>(VideoConfigDefaults::commonBitrateMultiplier * config_.width * config_.height * config_.frameRate);
     }
 
     if (camera_manager_ != nullptr) {
