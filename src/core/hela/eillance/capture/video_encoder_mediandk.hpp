@@ -131,13 +131,15 @@ public:
         index = AMediaCodec_dequeueOutputBuffer(codec, &info, timeoutUs);
         buffer = AMediaCodec_getOutputBuffer(codec, static_cast<size_t>(index), NULL);
 
-        encoded_data.clear();
-        encoded_data.insert(encoded_data.end(),
-                            reinterpret_cast<std::byte*>(&config_buffer[config_info.offset]),
-                            reinterpret_cast<std::byte*>(&config_buffer[config_info.offset + config_info.size]));
-        encoded_data.insert(encoded_data.end(),
-                            reinterpret_cast<std::byte*>(&buffer[info.offset]),
-                            reinterpret_cast<std::byte*>(&buffer[info.size]));
+        if (likely(buffer != nullptr)) {
+          encoded_data.clear();
+          encoded_data.insert(encoded_data.end(),
+                              reinterpret_cast<std::byte*>(&config_buffer[config_info.offset]),
+                              reinterpret_cast<std::byte*>(&config_buffer[config_info.offset + config_info.size]));
+          encoded_data.insert(encoded_data.end(),
+                              reinterpret_cast<std::byte*>(&buffer[info.offset]),
+                              reinterpret_cast<std::byte*>(&buffer[info.size]));
+        }
 
         AMediaCodec_releaseOutputBuffer(codec, static_cast<size_t>(config_index), false);
         AMediaCodec_releaseOutputBuffer(codec, static_cast<size_t>(index), false);
