@@ -12,10 +12,6 @@
 #include "hela/eillance/rtc/producer.hpp"
 #include "hela/eillance/utils/string.hpp"
 
-#include <opencv2/core/mat.hpp>
-#include <opencv2/imgproc.hpp>
-#include <opencv2/videoio.hpp>
-
 
 namespace hela::eillance {
 
