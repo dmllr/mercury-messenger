@@ -87,9 +87,11 @@ public:
 
   void ConfigureVideo(VideoConfig config) {
     TELEMETRY(
-      LOGI << "Video capture configuration event triggered: device " << config.cameraId << " " << config.width << "x" << config.height << " " << config.frameRate << "fps";)
+        LOGI << "Video capture configuration event triggered: device " << config.cameraId << " " << config.width << "x" << config.height << " " << config.frameRate << "fps";)
     std::lock_guard<std::mutex> lock(capture_mutex_);
     config_ = std::move(config);
+
+    // Ensure default values are set
     if (config_.width == 0 || config_.height == 0) {
       config_.width = VideoConfigDefaults::width;
       config_.height = VideoConfigDefaults::height;
@@ -104,7 +106,12 @@ public:
     encoder_.UpdateConfig(config_);
 
     if (camera_manager_ != nullptr) {
+      // Safely stop the current session before starting a new one
       stopCaptureSession();
+
+      // Wait briefly to ensure resources are released
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
       renewCaptureSession();
     }
   }
@@ -112,10 +119,11 @@ public:
 private:
   void stopCaptureSession() {
     if (capture_session != nullptr) {
-      ACameraCaptureSession_stopRepeating(capture_session);
-      ACameraCaptureSession_close(capture_session);
+//      ACameraCaptureSession_stopRepeating(capture_session);
+//      ACameraCaptureSession_close(capture_session);
       capture_session = nullptr;
     }
+    FreeNativeCameraResources();
   }
 
   void OpenCamera() {
@@ -249,14 +257,15 @@ private:
       ACaptureRequest_free(capture_request);
       capture_request = nullptr;
     }
-    if (capture_session != nullptr) {
-      ACameraCaptureSession_close(capture_session);
-      capture_session = nullptr;
-    }
+//    if (capture_session != nullptr) {
+//      ACameraCaptureSession_close(capture_session);
+//      capture_session = nullptr;
+//    }
     if (cameraDevice != nullptr) {
       ACameraDevice_close(cameraDevice);
       cameraDevice = nullptr;
     }
+    capture_session = nullptr;
   }
 };
 
