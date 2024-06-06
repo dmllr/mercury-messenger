@@ -124,22 +124,23 @@ public:
     auto timeoutUs = Time::uS / config_.frameRate;
     auto index = AMediaCodec_dequeueOutputBuffer(codec, &info, timeoutUs);
     if (likely(index >= 0)) {
-      if (unlikely(info.flags == AMEDIACODEC_BUFFER_FLAG_CODEC_CONFIG)) {
+      if (unlikely(info.flags & AMEDIACODEC_BUFFER_FLAG_CODEC_CONFIG)) {
         const auto config_info = info;
         const auto config_index = index;
         const auto config_buffer = AMediaCodec_getOutputBuffer(codec, static_cast<size_t>(config_index), NULL);
+
+        // on some SDK versions (28. 29) this delay is important before a new AMediaCodec_dequeueOutputBuffer might be called
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
         index = AMediaCodec_dequeueOutputBuffer(codec, &info, timeoutUs);
         buffer = AMediaCodec_getOutputBuffer(codec, static_cast<size_t>(index), NULL);
 
-        if (likely(buffer != nullptr)) {
-          encoded_data.clear();
-          encoded_data.insert(encoded_data.end(),
-                              reinterpret_cast<std::byte*>(&config_buffer[config_info.offset]),
-                              reinterpret_cast<std::byte*>(&config_buffer[config_info.offset + config_info.size]));
-          encoded_data.insert(encoded_data.end(),
-                              reinterpret_cast<std::byte*>(&buffer[info.offset]),
-                              reinterpret_cast<std::byte*>(&buffer[info.size]));
-        }
+        encoded_data.clear();
+        encoded_data.insert(encoded_data.end(),
+                            reinterpret_cast<std::byte*>(&config_buffer[config_info.offset]),
+                            reinterpret_cast<std::byte*>(&config_buffer[config_info.offset + config_info.size]));
+        encoded_data.insert(encoded_data.end(),
+                            reinterpret_cast<std::byte*>(&buffer[info.offset]),
+                            reinterpret_cast<std::byte*>(&buffer[info.size]));
 
         AMediaCodec_releaseOutputBuffer(codec, static_cast<size_t>(config_index), false);
         AMediaCodec_releaseOutputBuffer(codec, static_cast<size_t>(index), false);

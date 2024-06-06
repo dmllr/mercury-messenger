@@ -63,12 +63,11 @@ public:
       return;
     }
     encoder_.Engage(config_);
-    renewCaptureSession();
+    RenewCaptureSession();
   }
 
   void Revoke() {
     std::lock_guard<std::mutex> lock(capture_mutex_);
-    stopCaptureSession();
     encoder_.Revoke();
     FreeNativeCameraResources();
     if (camera_manager_ != nullptr) {
@@ -106,26 +105,12 @@ public:
     encoder_.UpdateConfig(config_);
 
     if (camera_manager_ != nullptr) {
-      // Safely stop the current session before starting a new one
-      stopCaptureSession();
-
-      // Wait briefly to ensure resources are released
-      std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
-      renewCaptureSession();
+      FreeNativeCameraResources();
+      RenewCaptureSession();
     }
   }
 
 private:
-  void stopCaptureSession() {
-    if (capture_session != nullptr) {
-//      ACameraCaptureSession_stopRepeating(capture_session);
-//      ACameraCaptureSession_close(capture_session);
-      capture_session = nullptr;
-    }
-    FreeNativeCameraResources();
-  }
-
   void OpenCamera() {
     FreeNativeCameraResources();
 
@@ -159,7 +144,7 @@ private:
     Log::i("Camera %d opened successfully", config_.cameraId);
   }
 
-  void renewCaptureSession() {
+  void RenewCaptureSession() {
     OpenCamera();
 
     auto status = ACaptureSessionOutputContainer_create(&output_container);
@@ -257,10 +242,6 @@ private:
       ACaptureRequest_free(capture_request);
       capture_request = nullptr;
     }
-//    if (capture_session != nullptr) {
-//      ACameraCaptureSession_close(capture_session);
-//      capture_session = nullptr;
-//    }
     if (cameraDevice != nullptr) {
       ACameraDevice_close(cameraDevice);
       cameraDevice = nullptr;
