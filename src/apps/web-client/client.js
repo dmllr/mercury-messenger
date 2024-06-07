@@ -54,17 +54,7 @@ function createPeerConnection() {
             credential: "qZCNW/57EB8GwO3A",
         },
         {
-            urls: "turn:a.relay.metered.ca:80?transport=tcp",
-            username: "49880a0f046c8990b1990b35",
-            credential: "qZCNW/57EB8GwO3A",
-        },
-        {
             urls: "turn:a.relay.metered.ca:443",
-            username: "49880a0f046c8990b1990b35",
-            credential: "qZCNW/57EB8GwO3A",
-        },
-        {
-            urls: "turn:a.relay.metered.ca:443?transport=tcp",
             username: "49880a0f046c8990b1990b35",
             credential: "qZCNW/57EB8GwO3A",
         },
