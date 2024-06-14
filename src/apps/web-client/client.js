@@ -8,6 +8,9 @@ const iceConnectionLog = document.getElementById('ice-connection-state'),
     signalingLog = document.getElementById('signaling-state'),
     dataChannelLog = document.getElementById('data-channel');
 
+const cameraSelect = document.getElementById('camera-select');
+const resolutionSelect = document.getElementById('resolution-select');
+
 function randomString(len) {
     const charSet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
     let randomString = '';
@@ -281,5 +284,59 @@ websocket.onmessage = async function (evt) {
         console.error('Error: ', object.error, ', message: ', object.message);
     } else if (object.type === "info publishers") {
         updateClientList(object.clients);
+    } else if (object.type === "info") {
+        populateCameraAndResolutionSelectors(object.profile);
+    }
+}
+
+function populateCameraAndResolutionSelectors(profile) {
+    cameraSelect.innerHTML = '';
+    resolutionSelect.innerHTML = '';
+
+    profile.forEach(camera => {
+        const option = document.createElement('option');
+        option.value = camera.id;
+        option.textContent = camera.name;
+        cameraSelect.appendChild(option);
+    });
+
+    if (profile.length > 0) {
+        populateResolutions(profile[0].resolutions);
+    }
+}
+
+function populateResolutions(resolutions) {
+    resolutionSelect.innerHTML = '';
+    resolutions.forEach(resolution => {
+        const option = document.createElement('option');
+        option.value = JSON.stringify(resolution);
+        option.textContent = `${resolution.width}x${resolution.height}`;
+        resolutionSelect.appendChild(option);
+    });
+}
+
+function onCameraChange() {
+    const selectedCameraId = cameraSelect.value;
+    const selectedCamera = profile.find(camera => camera.id === selectedCameraId);
+    populateResolutions(selectedCamera.resolutions);
+    sendConfiguration();
+}
+
+function onResolutionChange() {
+    sendConfiguration();
+}
+
+function sendConfiguration() {
+    const cameraId = cameraSelect.value;
+    const resolution = JSON.parse(resolutionSelect.value);
+
+    const configurationMessage = {
+        type: 'configuration',
+        camera_id: cameraId,
+        resolution: resolution
+    };
+
+    if (dc) {
+        dc.send(JSON.stringify(configurationMessage));
     }
 }

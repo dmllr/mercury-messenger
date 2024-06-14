@@ -28,6 +28,10 @@
         .client-list {
             margin-bottom: 16px;
         }
+
+        .select-container {
+            margin-bottom: 16px;
+        }
     </style>
 </head>
 <body>
@@ -39,6 +43,16 @@
 
 <h2>Available Clients</h2>
 <div class="client-list" id="client-list"></div>
+
+<h2>Camera and Resolution Selection</h2>
+<div class="select-container">
+    <label for="camera-select">Camera:</label>
+    <select id="camera-select" onchange="onCameraChange()"></select>
+</div>
+<div class="select-container">
+    <label for="resolution-select">Resolution:</label>
+    <select id="resolution-select" onchange="onResolutionChange()"></select>
+</div>
 
 <h2>State</h2>
 <p>
