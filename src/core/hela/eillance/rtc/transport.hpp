@@ -178,7 +178,6 @@ private:
         {"type", "exhibit"},
         {"client_id", id_},
         {"kind", "producer"},
-        {"profile", GetDeviceProfileAsJson()},
     };
     ws_.send(message.dump());
   }
