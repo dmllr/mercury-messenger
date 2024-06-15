@@ -269,7 +269,7 @@ websocket.onmessage = async function (evt) {
 
         // Publish the client after authentication
         websocket.send(JSON.stringify({
-            type: 'exhibit',
+            type: 'publish',
             token: token,
             client_id: receiveID,
             kind: "consumer",

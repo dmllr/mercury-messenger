@@ -22,7 +22,7 @@ async def authenticate_and_exhibit():
             return
 
         print("Publish a client")
-        await websocket.send(json.dumps({"type": "exhibit", "token": token, "client_id": "client1", "kind": "producer",
+        await websocket.send(json.dumps({"type": "publish", "token": token, "client_id": "client1", "kind": "producer",
                                          "profile": [{"id": "0", "name": "Back",
                                                       "resolutions": [{"height": 480, "width": 640},
                                                                       {"height": 480, "width": 640},
@@ -129,7 +129,7 @@ async def authenticate_and_exhibit():
 
         print("Republish a client as consumer")
         await websocket.send(
-            json.dumps({"type": "exhibit", "token": token, "client_id": "client1", "kind": "consumer"}))
+            json.dumps({"type": "publish", "token": token, "client_id": "client1", "kind": "consumer"}))
         response = await websocket.recv()
         print("Message response:", response)
 

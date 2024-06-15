@@ -175,7 +175,7 @@ private:
   void PublishClient() {
     Json message = {
         {"token", auth_token_},
-        {"type", "exhibit"},
+        {"type", "publish"},
         {"client_id", id_},
         {"kind", "producer"},
     };
@@ -320,6 +320,8 @@ private:
         pc->setRemoteDescription(answer);
       }
     } else if (type == "offer") {
+      // do nothing
+    } else if (type == "info profile") {
       // do nothing
     } else {
       throw std::runtime_error("Unknown message type " + type);

@@ -103,7 +103,7 @@ async def handle_connection(websocket: WebSocketServerProtocol):
                 if not user_id:
                     return
 
-                if message['type'] == 'exhibit':
+                if message['type'] == 'publish':
                     client_id = message.get('client_id')
                     client_kind = message.get('kind')
                     if user_id not in clients:
