@@ -23,8 +23,8 @@ function randomString(len) {
 
 const receiveID = randomString(10);
 const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-const websocket = new WebSocket(protocol + '//app.hela.me:8000');
-// const websocket = new WebSocket('ws://localhost:8000/');
+// const websocket = new WebSocket(protocol + '//app.hela.me:8000');
+const websocket = new WebSocket('ws://localhost:8000/');
 websocket.onopen = function () {
     authenticateUser();
 }
@@ -111,16 +111,23 @@ function createPeerConnection() {
             dataChannelLog.textContent += '< ' + evt.data + '\n';
             dataChannelLog.scrollTop = dataChannelLog.scrollHeight;
 
-            dcTimeout = setTimeout(function () {
-                if (dc == null && dcTimeout != null) {
-                    dcTimeout = null;
-                    return
+            if (evt.data === "Ping") {
+                dcTimeout = setTimeout(function () {
+                    if (dc == null && dcTimeout != null) {
+                        dcTimeout = null;
+                        return
+                    }
+                    const reply = 'Pong ' + current_stamp();
+                    dataChannelLog.textContent += '> ' + reply + '\n';
+                    dataChannelLog.scrollTop = dataChannelLog.scrollHeight;
+                    dc.send(reply);
+                }, 1000);
+            } else {
+                const message = JSON.parse(evt.data);
+                if (message.type === "info profile") {
+                    populateCameraAndResolutionSelectors(message.profile);
                 }
-                const message = 'Pong ' + current_stamp();
-                dataChannelLog.textContent += '> ' + message + '\n';
-                dataChannelLog.scrollTop = dataChannelLog.scrollHeight;
-                dc.send(message);
-            }, 1000);
+            }
         }
         dc.onclose = function () {
             clearTimeout(dcTimeout);
@@ -255,7 +262,7 @@ function updateClientList(publishers) {
         clientListDiv.appendChild(label);
         clientListDiv.appendChild(document.createElement('br'));
     });
-    selectedClientId = clients.length > 0 ? clients[0] : null;
+    selectedClientId = publishers.length > 0 ? publishers[0] : null;
 }
 
 websocket.onmessage = async function (evt) {
@@ -284,8 +291,8 @@ websocket.onmessage = async function (evt) {
         console.error('Error: ', object.error, ', message: ', object.message);
     } else if (object.type === "info publishers") {
         updateClientList(object.clients);
-    } else if (object.type === "info") {
-        populateCameraAndResolutionSelectors(object.profile);
+    } else {
+        console.error('Error: Unknown message type "', object.type, '" received');
     }
 }
 
