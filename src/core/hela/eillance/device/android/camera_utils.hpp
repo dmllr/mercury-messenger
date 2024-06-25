@@ -87,26 +87,26 @@ auto GetSupportedResolutions(const std::string& cameraId) -> std::vector<std::pa
 }
 
 auto GetDeviceProfileAsJson() -> nlohmann::json {
-  using json = nlohmann::json;
+  using Json = nlohmann::json;
   auto cameras = GetAvailableCameras();
-  auto camerasJson = json::array();
+  auto cameras_json = Json::array();
 
   for (const auto& camera : cameras) {
-    auto cameraJson{json()};
-    cameraJson["id"] = camera.first;
-    cameraJson["name"] = camera.second;
+    auto camera_json{Json()};
+    camera_json["id"] = camera.first;
+    camera_json["name"] = camera.second;
 
     auto resolutions = GetSupportedResolutions(camera.first);
-    auto resolutionsJson{json::array()};
+    auto resolutions_json{Json::array()};
     for (const auto& res : resolutions) {
-      resolutionsJson.push_back({{"width", res.first}, {"height", res.second}});
+      resolutions_json.push_back({{"width", res.first}, {"height", res.second}});
     }
 
-    cameraJson["resolutions"] = resolutionsJson;
-    camerasJson.push_back(cameraJson);
+    camera_json["resolutions"] = resolutions_json;
+    cameras_json.push_back(camera_json);
   }
 
-  return camerasJson;
+  return cameras_json;
 }
 
 template<typename T>

@@ -328,6 +328,8 @@ private:
       // do nothing
     } else if (type == "info profile") {
       // do nothing
+    } else if (type == "configuration") {
+      LOGE << "WWWWWWWWWWWWWWWWWWWWWWW " << message.dump(1);
     } else {
       throw std::runtime_error("Unknown message type " + type);
     }
