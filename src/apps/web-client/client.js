@@ -2,6 +2,7 @@
 let rtc;
 let token = null; // Store the token here after authentication
 let selectedClientId = null; // Store the selected client ID here
+let profile = null;
 
 const iceConnectionLog = document.getElementById('ice-connection-state'),
     iceGatheringLog = document.getElementById('ice-gathering-state'),
@@ -125,7 +126,8 @@ function createPeerConnection() {
             } else {
                 const message = JSON.parse(evt.data);
                 if (message.type === "info profile") {
-                    populateCameraAndResolutionSelectors(message.profile);
+                    profile = message.profile;
+                    populateCameraAndResolutionSelectors();
                 }
             }
         }
@@ -296,7 +298,7 @@ websocket.onmessage = async function (evt) {
     }
 }
 
-function populateCameraAndResolutionSelectors(profile) {
+function populateCameraAndResolutionSelectors() {
     cameraSelect.innerHTML = '';
     resolutionSelect.innerHTML = '';
 
@@ -343,7 +345,13 @@ function sendConfiguration() {
         resolution: resolution
     };
 
-    if (dc) {
-        dc.send(JSON.stringify(configurationMessage));
+    if (!dc) {
+        console.error("No connection is established")
+        return;
     }
+
+    var message = JSON.stringify(configurationMessage)
+    dataChannelLog.textContent += '> ' + message + '\n';
+    dataChannelLog.scrollTop = dataChannelLog.scrollHeight;
+    dc.send(message);
 }

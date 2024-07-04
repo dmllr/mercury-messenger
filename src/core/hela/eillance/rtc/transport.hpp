@@ -270,10 +270,23 @@ private:
 
     dc->onMessage(nullptr, [id, wdc = make_weak_ptr(dc), this](const std::string& msg) {
       LOGD << "Message from " << id_ << " received: " << msg;
-      if (auto dc = wdc.lock()) {
-        dc->send("Ping");
+      if (msg.starts_with("Pong ")) {
+        if (auto dc = wdc.lock()) {
+          dc->send("Ping");
+        }
+        ReportStateChange(EventSource::Ping, 1);
+        return;
       }
-      ReportStateChange(EventSource::Ping, 1);
+
+      const auto message = Json::parse(msg);
+      auto it = message.find("type");
+      if (it == message.end()) {
+        return;
+      }
+      auto type = it->get<std::string>();
+      if (type == "configuration") {
+        LOGE << "WWWWWWWWWWWWWWWWWWWWWWW " << message.dump(1);
+      }
     });
 
     return dc;
@@ -328,8 +341,6 @@ private:
       // do nothing
     } else if (type == "info profile") {
       // do nothing
-    } else if (type == "configuration") {
-      LOGE << "WWWWWWWWWWWWWWWWWWWWWWW " << message.dump(1);
     } else {
       throw std::runtime_error("Unknown message type " + type);
     }
