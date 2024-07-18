@@ -27,6 +27,10 @@ public:
   StreamSource& operator=(StreamSource&&) = delete;
   StreamSource& operator=(const StreamSource&) = delete;
 
+  void Configure(VideoConfig config) final {
+    capture_.Configure(config);
+  }
+
   void Start() final {
     capture_.Engage();
   }

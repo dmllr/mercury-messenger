@@ -270,7 +270,7 @@ private:
 
     dc->onMessage(nullptr, [id, wdc = make_weak_ptr(dc), this](const std::string& msg) {
       LOGD << "Message from " << id_ << " received: " << msg;
-      if (msg.starts_with("Pong ")) {
+      if (msg.rfind("Pong ", 0) == 0) {
         if (auto dc = wdc.lock()) {
           dc->send("Ping");
         }
@@ -279,13 +279,18 @@ private:
       }
 
       const auto message = Json::parse(msg);
-      auto it = message.find("type");
-      if (it == message.end()) {
+      const auto itr = message.find("type");
+      if (itr == message.end()) {
         return;
       }
-      auto type = it->get<std::string>();
+      auto type = itr->get<std::string>();
       if (type == "configuration") {
-        LOGE << "WWWWWWWWWWWWWWWWWWWWWWW " << message.dump(1);
+        auto config{VideoConfig()};
+        config.cameraId = std::stoi(message["camera_id"].get<std::string>());
+        config.width = message["resolution"]["width"].get<std::uint32_t>();
+        config.height = message["resolution"]["height"].get<std::uint32_t>();
+
+        connection_.ConfigureVideo(config);
       }
     });
 

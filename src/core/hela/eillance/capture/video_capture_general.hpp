@@ -145,6 +145,11 @@ public:
     return Time::uS / config_.frameRate;
   }
 
+  void ConfigureVideo(VideoConfig config) {
+    TELEMETRY(
+        LOGI << "Video capture configuration event triggered: device " << config.cameraId << " " << config.width << "x" << config.height << " " << config.frameRate << "fps";)
+  }
+
 private:
   void CaptureFrame() {
     if (!capture_is_running_) {

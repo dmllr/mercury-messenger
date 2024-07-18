@@ -20,6 +20,7 @@
 #include "hela/eillance/logging/telemetry.h"
 #include "hela/eillance/rtc/stream.hpp"
 #include "hela/eillance/utils/time.hpp"
+#include "video_config.hpp" // TMP!!
 
 namespace hela::eillance {
 
@@ -68,6 +69,10 @@ public:
             LOGI << "Audio capture rate FPS: " << std::setprecision(2) << std::fixed << capture_fps << ", RTC request rate FPS:" << fetch_fps;
           } self->fps_counter++;)
     };
+  }
+
+  void ConfigureVideo(VideoConfig) {
+    throw std::runtime_error("Do not call ConfigureVideo for audio capture");
   }
 
   void Engage() {
