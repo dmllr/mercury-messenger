@@ -3,7 +3,7 @@
 #include <memory>
 
 #include "hela/eillance/common/packet.hpp"
-#include "hela/eillance/capture/video_config.hpp"
+#include "hela/eillance/capture/config.hpp"
 
 namespace hela::eillance {
 
@@ -17,7 +17,7 @@ public:
   Capture& operator=(Capture&&) noexcept = default;
   ~Capture() = default;
 
-  void Configure(VideoConfig config) {
+  void Configure(Config config) {
     self_->Configure(config);
   }
   void Engage() {
@@ -41,7 +41,7 @@ private:
     CaptureInterface& operator=(const CaptureInterface&) = delete;
     CaptureInterface& operator=(CaptureInterface&&) noexcept = delete;
     virtual ~CaptureInterface() = default;
-    virtual void Configure(VideoConfig config) = 0;
+    virtual void Configure(Config config) = 0;
     virtual void Engage() = 0;
     virtual void Revoke() = 0;
     virtual auto FetchBuffers() -> Packet = 0;
@@ -55,8 +55,8 @@ public:
 
   public:
     explicit CaptureModel(std::unique_ptr<T> impl) : capture_(std::move(impl)) {}
-    void Configure(VideoConfig config) final {
-      capture_->ConfigureVideo(config);
+    void Configure(Config config) final {
+      capture_->Configure(config);
     }
     void Engage() final {
       capture_->Engage();

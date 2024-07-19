@@ -140,7 +140,7 @@ public:
     return std::make_shared<Peer::Track>(track, sr_reporter);
   }
 
-  void ConfigureVideo(VideoConfig config) {
+  void Configure(Config config) {
     av_stream_->Video()->Configure(config);
   }
 

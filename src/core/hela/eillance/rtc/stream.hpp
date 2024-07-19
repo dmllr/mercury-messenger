@@ -9,7 +9,7 @@
 
 #include <rtc/rtc.hpp>
 
-#include "hela/eillance/capture/video_config.hpp"
+#include "hela/eillance/capture/config.hpp"
 #include "hela/eillance/common/dispatch_queue.hpp"
 #include "hela/eillance/rtc/peer.hpp"
 
@@ -31,7 +31,7 @@ public:
       Video
     };
 
-    virtual void Configure(VideoConfig config) = 0;
+    virtual void Configure(Config config) = 0;
     virtual void Start() = 0;
     virtual void Stop() = 0;
     virtual void LoadNextSample() = 0;

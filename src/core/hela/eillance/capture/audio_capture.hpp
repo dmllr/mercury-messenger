@@ -15,12 +15,12 @@
 #include "hela/eillance/capture/audio_config.hpp"
 #include "hela/eillance/capture/audio_encoder.hpp"
 #include "hela/eillance/common/circular_buffer.hpp"
+#include "hela/eillance/capture/config.hpp"
 #include "hela/eillance/common/packet.hpp"
 #include "hela/eillance/logging/logging.h"
 #include "hela/eillance/logging/telemetry.h"
 #include "hela/eillance/rtc/stream.hpp"
 #include "hela/eillance/utils/time.hpp"
-#include "video_config.hpp" // TMP!!
 
 namespace hela::eillance {
 
@@ -71,8 +71,7 @@ public:
     };
   }
 
-  void ConfigureVideo(VideoConfig) {
-    throw std::runtime_error("Do not call ConfigureVideo for audio capture");
+  void Configure(Config) {
   }
 
   void Engage() {

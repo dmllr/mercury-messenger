@@ -14,7 +14,7 @@
 
 #include <rtc/common.hpp>
 
-#include "hela/eillance/capture/video_config.hpp"
+#include "hela/eillance/capture/config.hpp"
 #include "hela/eillance/capture/video_encoder_mediandk.hpp"
 #include "hela/eillance/common/event_queue.hpp"
 #include "hela/eillance/common/dispatch_queue.hpp"
@@ -82,6 +82,10 @@ public:
 
   Time::Unit GetSampleDuration() {
     return Time::uS / config_.frameRate;
+  }
+
+  inline void Configure(Config config) {
+    ConfigureVideo(config.video_config);
   }
 
   void ConfigureVideo(VideoConfig config) {

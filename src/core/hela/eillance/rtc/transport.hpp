@@ -285,12 +285,13 @@ private:
       }
       auto type = itr->get<std::string>();
       if (type == "configuration") {
-        auto config{VideoConfig()};
-        config.cameraId = std::stoi(message["camera_id"].get<std::string>());
-        config.width = message["resolution"]["width"].get<std::uint32_t>();
-        config.height = message["resolution"]["height"].get<std::uint32_t>();
+        auto config{Config()};
+        auto& video_config = config.video_config;
+        video_config.cameraId = std::stoi(message["camera_id"].get<std::string>());
+        video_config.width = message["resolution"]["width"].get<std::uint32_t>();
+        video_config.height = message["resolution"]["height"].get<std::uint32_t>();
 
-        connection_.ConfigureVideo(config);
+        connection_.Configure(config);
       }
     });
 
