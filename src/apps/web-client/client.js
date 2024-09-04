@@ -24,8 +24,8 @@ function randomString(len) {
 
 const receiveID = randomString(10);
 const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-// const websocket = new WebSocket(protocol + '//app.hela.me:8000');
-const websocket = new WebSocket('ws://localhost:8000/');
+const websocket = new WebSocket(protocol + '//app.hela.me:8000');
+// const websocket = new WebSocket('ws://localhost:8000/');
 websocket.onopen = function () {
     authenticateUser();
 }

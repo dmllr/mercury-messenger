@@ -42,19 +42,17 @@
 <body>
 <script src="https://webrtc.github.io/adapter/adapter-latest.js"></script>
 
-<button id="start" onclick="start()" disabled>Start</button>
-<button id="stop" style="display: none" onclick="stop()">Stop</button>
-<button id="refresh" onclick="refreshPublishers()">Refresh Clients</button>
-
 <h2>Available Clients</h2>
+<button id="refresh" onclick="refreshPublishers()">Refresh Clients</button>
 <div class="client-list" id="client-list"></div>
 
-<h2>Camera and Resolution Selection</h2>
+<button id="start" onclick="start()" disabled>Start</button>
+<button id="stop" style="display: none" onclick="stop()">Stop</button>
+
+<h2>Camera and Resolution</h2>
 <div class="select-container">
     <label for="camera-select">Camera:</label>
     <select id="camera-select" onchange="onCameraChange()"></select>
-</div>
-<div class="select-container">
     <label for="resolution-select">Resolution:</label>
     <select id="resolution-select" onchange="onResolutionChange()"></select>
 </div>
@@ -75,7 +73,7 @@
     <video id="video" autoplay playsinline></video>
 </div>
 
-<h2>Data channel</h2>
+<h2>Data Channel</h2>
 <pre id="data-channel" style="height: 200px;"></pre>
 
 <h2>SDP</h2>

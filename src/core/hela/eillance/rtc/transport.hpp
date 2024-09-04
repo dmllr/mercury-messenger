@@ -403,8 +403,8 @@ private:
     }
   };
 
-//  constexpr static auto signalingServerUrl = "wss://app.hela.me:8000";  // prod
-  constexpr static auto signalingServerUrl = "ws://10.0.2.2:8000";  // for android
+  constexpr static auto signalingServerUrl = "wss://app.hela.me:8000";  // prod
+//  constexpr static auto signalingServerUrl = "ws://10.0.2.2:8000";  // for android
 //  constexpr static auto signalingServerUrl = "ws://127.0.0.1:8000";  // for general
 
   constexpr static auto zerosslCaBundle =
