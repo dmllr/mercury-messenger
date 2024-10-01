@@ -18,7 +18,7 @@ import kotlin.random.Random
 
 
 class CapturePreferencesFragment : PreferenceFragmentCompat() {
-  private var deviceName: String = "Unknown device"
+  private var deviceName: String = ""
   private var videoConfig: VideoConfig = VideoConfig()
 
   companion object {
@@ -27,6 +27,15 @@ class CapturePreferencesFragment : PreferenceFragmentCompat() {
 
   override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
     setPreferencesFromResource(R.xml.capture_preferences, rootKey)
+
+    // Retrieve SharedPreferences
+    val sharedPreferences = requireContext().getSharedPreferences("CapturePreferences", Context.MODE_PRIVATE)
+
+    // Load deviceName from SharedPreferences if it exists
+    deviceName = sharedPreferences.getString("device_name", null) ?: randomString().also {
+      // Save the new random deviceName if not already stored
+      sharedPreferences.edit().putString("device_name", it).apply()
+    }
 
     // Get the camera manager
     val cameraManager = requireContext().getSystemService(Context.CAMERA_SERVICE) as CameraManager
@@ -42,16 +51,13 @@ class CapturePreferencesFragment : PreferenceFragmentCompat() {
       cameraIdsArray[i] = cameraIds[i]
     }
 
-    // Find the default camera and camera resolution preferences
+    // Find the preferences
     val deviceNamePreference = findPreference<EditTextPreference>("device_name")
     val defaultCameraPreference = findPreference<ListPreference>("default_camera")
     val cameraResolutionPreference = findPreference<ListPreference>("camera_resolution")
     val frameRatePreference = findPreference<ListPreference>("frame_rate")
     val bitratePreference = findPreference<ListPreference>("bitrate")
 
-    if (deviceNamePreference?.text.isNullOrEmpty()) {
-      deviceNamePreference?.text = randomString();
-    }
     deviceName = deviceNamePreference?.text ?: deviceName
     videoConfig.cameraId = defaultCameraPreference?.value?.toInt() ?: videoConfig.cameraId
     val resolution = cameraResolutionPreference?.value?.split("x")
@@ -135,11 +141,11 @@ class CapturePreferencesFragment : PreferenceFragmentCompat() {
   }
 
   private fun triggerDeviceNameUpdate() {
-    (requireActivity() as MainActivity).appEngineService?.configureDeviceName(deviceName);
+    (requireActivity() as MainActivity).appEngineService?.configureDeviceName(deviceName)
   }
 
   private fun triggerConfigurationUpdate() {
-    (requireActivity() as MainActivity).appEngineService?.configureVideoCapture(videoConfig);
+    (requireActivity() as MainActivity).appEngineService?.configureVideoCapture(videoConfig)
   }
 
   private fun randomString(): String {

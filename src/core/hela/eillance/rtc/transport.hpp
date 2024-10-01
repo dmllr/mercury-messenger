@@ -178,6 +178,7 @@ private:
         {"type", "publish"},
         {"client_id", id_},
         {"kind", "producer"},
+        {"profile", GetDeviceProfileAsJson()},
     };
     ws_.send(message.dump());
   }
@@ -256,7 +257,7 @@ private:
   }
 
   auto CreateDefaultDataChannel(std::shared_ptr<rtc::PeerConnection> pc, const std::string& id) -> std::shared_ptr<rtc::DataChannel> {
-    auto dc = pc->createDataChannel("ping-pong");
+    auto dc = pc->createDataChannel("command-channel");
     dc->onOpen([id, wdc = make_weak_ptr(dc)]() {
       if (auto dc = wdc.lock()) {
         Json message = {
@@ -403,8 +404,8 @@ private:
     }
   };
 
-  constexpr static auto signalingServerUrl = "wss://app.hela.me:8000";  // prod
-//  constexpr static auto signalingServerUrl = "ws://10.0.2.2:8000";  // for android
+//  constexpr static auto signalingServerUrl = "wss://app.hela.me:8000";  // prod
+  constexpr static auto signalingServerUrl = "ws://10.0.2.2:8000";  // for android
 //  constexpr static auto signalingServerUrl = "ws://127.0.0.1:8000";  // for general
 
   constexpr static auto zerosslCaBundle =

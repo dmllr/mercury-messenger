@@ -103,10 +103,8 @@ class AppEngineService : Service(), IStatusUpdateCallback {
   }
 
   private fun getDeviceNamePreference(): String {
-    val preferenceManager: SharedPreferences? =
-      PreferenceManager.getDefaultSharedPreferences(this)
-
-    return preferenceManager?.getString("device_name", "Unknown device")!!
+    val sharedPreferences = getSharedPreferences("CapturePreferences", Context.MODE_PRIVATE)
+    return sharedPreferences.getString("device_name", null)!!
   }
 
   private fun getVideoConfigPreferences(): VideoConfig {
