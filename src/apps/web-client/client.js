@@ -355,7 +355,6 @@ function sendConfiguration() {
     };
 
     if (!dc) {
-        console.error("No connection is established")
         return;
     }
 
