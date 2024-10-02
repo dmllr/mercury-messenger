@@ -105,6 +105,7 @@ function createPeerConnection() {
     pc.ondatachannel = function (event) {
         dc = event.channel;
         dc.onopen = function () {
+            sendConfiguration();
             dataChannelLog.textContent += '- open\n';
             dataChannelLog.scrollTop = dataChannelLog.scrollHeight;
         };
