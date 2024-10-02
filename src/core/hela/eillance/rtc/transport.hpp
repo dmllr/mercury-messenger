@@ -1,7 +1,9 @@
 #pragma once
 
+#include <atomic>
 #include <memory>
 #include <thread>
+#include <cstdint>
 #include <unordered_map>
 
 #include <nlohmann/json.hpp>
@@ -18,6 +20,7 @@
 #include "hela/eillance/rtc/status.hpp"
 #include "hela/eillance/rtc/stream.hpp"
 #include "hela/eillance/utils/memory.h"
+#include "hela/eillance/utils/string.hpp"
 
 
 namespace hela::eillance {
@@ -27,16 +30,19 @@ class RtcTransport {
   using Json = nlohmann::json;
   using StatusCallbackFunction = std::function<void(EventSource, int)>;
 
-  std::string id_;
-  std::string auth_token_;
+  std::string id_{StringUtils::RandomString()};
+  std::string device_name_{id_};
+  std::string auth_token_{};
+  std::atomic<bool> is_published_{false};
 
-  static constexpr auto minWaitBeforeReconnect = 1;
-  static constexpr auto maxWaitBeforeReconnect = 10;
+  static constexpr auto minWaitBeforeReconnect = 1U;
+  static constexpr auto maxWaitBeforeReconnect = 10U;
+  static constexpr auto maxConnectionAttempts = 10U;
 
   Connection connection_{};
-  rtc::WebSocketConfiguration ws_config_;
+  rtc::WebSocketConfiguration ws_config_{};
   rtc::WebSocket ws_{ws_config_};
-  std::uint32_t connection_attempt_{0};
+  std::uint32_t connection_attempt_{0U};
   std::uint32_t wait_before_reconnect_{minWaitBeforeReconnect};
 
   mutable Status status_{};
@@ -60,20 +66,22 @@ public:
     return status_;
   }
 
-  void SetName(const std::string device_name) {
-    id_ = device_name;
-//    DispatchQueue::MainThread().dispatch([this]() {
-//      PublishClient();
-//    });
+  void SetName(const std::string& device_name) {
+    device_name_ = device_name;
+    if (is_published_) {
+      DispatchQueue::MainThread().dispatch([this]() {
+        PublishClient();
+      });
+    }
   }
 
   void Start() {
-    LOGI << "The local id_ is: " << id_.data();
+    LOGI << "The local ID is: " << id_.data();
 
     connection_attempt_++;
     if (connection_attempt_ <= 1) {
       wait_before_reconnect_ = 0;
-    } else if (connection_attempt_ > 1 && connection_attempt_ < 10) {
+    } else if (connection_attempt_ > 1 && connection_attempt_ < maxConnectionAttempts) {
       wait_before_reconnect_ = minWaitBeforeReconnect;
     } else {
       wait_before_reconnect_ = maxWaitBeforeReconnect;
@@ -111,11 +119,11 @@ public:
       auto it = message.find("from");
       if (it == message.end()) {
         DispatchQueue::MainThread().dispatch([this, message]() {
-          OnSystemMessage(std::move(message));
+          OnSystemMessage(message);
         });
       } else {
         DispatchQueue::MainThread().dispatch([this, message]() {
-          OnPeerMessage(std::move(message));
+          OnPeerMessage(message);
         });
       }
     });
@@ -177,6 +185,7 @@ private:
         {"token", auth_token_},
         {"type", "publish"},
         {"client_id", id_},
+        {"name", device_name_},
         {"kind", "producer"},
         {"profile", GetDeviceProfileAsJson()},
     };
@@ -219,7 +228,7 @@ private:
       if (state == rtc::PeerConnection::GatheringState::Complete) {
         // Gathering complete, send answer
         if (auto peer_con = wpc.lock()) {
-          auto description = peer_con->localDescription();
+          const auto description = peer_con->localDescription();
           Json message = {
               {"to", id},
               {"token", auth_token_},
@@ -310,6 +319,7 @@ private:
       auth_token_ = message["token"].get<std::string>();
       DispatchQueue::MainThread().dispatch([this]() {
         PublishClient();
+        is_published_ = true;
       });
     } else if (type == "error") {
       LOGE << "Signaling error received: " << message["error"].get<std::string>();

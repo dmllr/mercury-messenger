@@ -18,21 +18,22 @@ class Client:
         Producer = 'producer',
         Consumer = 'consumer'
 
-    def __init__(self, id, kind, ws):
+    def __init__(self, id, name, kind, ws):
         self.id: str = id
+        self.name: str = name
         self.kind: Client.Kind = kind
         self.ws: WebSocketServerProtocol = ws
 
 
 class Producer(Client):
-    def __init__(self, id, kind, ws):
-        super().__init__(id, kind, ws)
+    def __init__(self, id, name, kind, ws):
+        super().__init__(id, name, kind, ws)
         self.profile = {}
 
 
 class Consumer(Client):
-    def __init__(self, id, kind, ws):
-        super().__init__(id, kind, ws)
+    def __init__(self, id, name, kind, ws):
+        super().__init__(id, name, kind, ws)
 
 
 clients: dict[str, dict[str, Union[Producer, Consumer]]] = {}
@@ -78,7 +79,7 @@ async def handle_connection(websocket: WebSocketServerProtocol):
     async def send_publishers(connection):
         jdump = json.dumps({
             "type": "info publishers",
-            "clients": [{"name": cid, "profile": c.profile} for cid, c in clients[user_id].items() if c.kind == Client.Kind.Producer]
+            "clients": [{"id": cid, "name": c.name, "profile": c.profile} for cid, c in clients[user_id].items() if c.kind == Client.Kind.Producer]
         })
         print(f'>>[{user_id}/{client_id}]: {jdump}')
         await connection.send(jdump)
@@ -105,12 +106,13 @@ async def handle_connection(websocket: WebSocketServerProtocol):
 
                 if message['type'] == 'publish':
                     client_id = message.get('client_id')
+                    client_name = message.get('name')
                     client_kind = message.get('kind')
                     if user_id not in clients:
                         clients[user_id] = {}
                     clients[user_id][client_id] =(
                         (Consumer if client_kind == Client.Kind.Consumer else Producer)(
-                            client_id, client_kind, websocket))
+                            client_id, client_name, client_kind, websocket))
                     if client_kind == Client.Kind.Producer:
                         clients[user_id][client_id].profile = message.get('profile')
                     print(f'Peer "{user_id}/{client_id}" published')

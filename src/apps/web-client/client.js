@@ -246,13 +246,14 @@ function updateClientList(publishers) {
     const clientListDiv = document.getElementById('client-list');
     clientListDiv.innerHTML = '';
     publishers.forEach((publisher, index) => {
-        const client = publisher.name;
+        const client_id = publisher.id;
+        const client_name = publisher.name;
         const local_profile = publisher.profile;
         const radioBtn = document.createElement('input');
         radioBtn.type = 'radio';
         radioBtn.name = 'client';
-        radioBtn.value = client;
-        radioBtn.id = 'client_' + client;
+        radioBtn.value = client_id;
+        radioBtn.id = 'client_' + client_id;
         radioBtn.onclick = function() {
             selectedClientId = this.value;
             profile = local_profile;
@@ -265,8 +266,8 @@ function updateClientList(publishers) {
         }
 
         const label = document.createElement('label');
-        label.htmlFor = 'client_' + client;
-        label.textContent = client;
+        label.htmlFor = 'client_' + client_id;
+        label.textContent = client_name;
 
         clientListDiv.appendChild(radioBtn);
         clientListDiv.appendChild(label);
