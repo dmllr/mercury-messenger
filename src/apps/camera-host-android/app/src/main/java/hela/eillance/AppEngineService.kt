@@ -29,6 +29,7 @@ import hela.eillance.events.getResourceString
 import hela.eillance.events.interfaces.IStatusUpdateCallback
 import hela.eillance.ndkio.Status
 import hela.eillance.ndkio.VideoConfig
+import kotlin.random.Random
 
 
 class AppEngineService : Service(), IStatusUpdateCallback {
@@ -104,20 +105,42 @@ class AppEngineService : Service(), IStatusUpdateCallback {
 
   private fun getDeviceNamePreference(): String {
     val sharedPreferences = getSharedPreferences("CapturePreferences", Context.MODE_PRIVATE)
-    return sharedPreferences.getString("device_name", null)!!
+    var deviceName = sharedPreferences.getString("device_name", null)
+    if (deviceName == null) {
+      deviceName = randomString();
+      sharedPreferences.edit().putString("device_name", deviceName).apply();
+      return getString(R.string.app_name)
+    }
+
+    return deviceName;
+  }
+
+  private fun randomString(): String {
+    val len = 10
+    val charSet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    val charSetLen = charSet.length
+
+    Random.Default.nextBytes(1) // Initialize random with current time
+
+    val randomString = StringBuilder(len)
+    for (i in 0 until len) {
+      val randomPos = Random.nextInt(charSetLen)
+      randomString.append(charSet[randomPos])
+    }
+
+    return randomString.toString()
   }
 
   private fun getVideoConfigPreferences(): VideoConfig {
-    val preferenceManager: SharedPreferences? =
-      PreferenceManager.getDefaultSharedPreferences(this)
+    val sharedPreferences = getSharedPreferences("CapturePreferences", Context.MODE_PRIVATE)
 
     val videoConfig = VideoConfig()
-    videoConfig.cameraId = preferenceManager?.getString("default_camera", "0")?.toIntOrNull() ?: 0
-    val resolution = preferenceManager?.getString("camera_resolution", "0x0")?.split("x")
+    videoConfig.cameraId = sharedPreferences.getString("default_camera", "0")?.toIntOrNull() ?: 0
+    val resolution = sharedPreferences.getString("camera_resolution", "0x0")?.split("x")
     videoConfig.width = resolution?.get(0)?.toIntOrNull() ?: 0
     videoConfig.height = resolution?.get(1)?.toIntOrNull() ?: 0
-    videoConfig.frameRate = preferenceManager?.getString("frame_rate", "30")?.toIntOrNull() ?: 30
-    videoConfig.bitrate = preferenceManager?.getString("bitrate", "0")?.toIntOrNull() ?: 0
+    videoConfig.frameRate = sharedPreferences.getString("frame_rate", "30")?.toIntOrNull() ?: 30
+    videoConfig.bitrate = sharedPreferences.getString("bitrate", "0")?.toIntOrNull() ?: 0
 
     return videoConfig
   }

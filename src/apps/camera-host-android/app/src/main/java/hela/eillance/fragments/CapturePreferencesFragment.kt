@@ -32,10 +32,7 @@ class CapturePreferencesFragment : PreferenceFragmentCompat() {
     val sharedPreferences = requireContext().getSharedPreferences("CapturePreferences", Context.MODE_PRIVATE)
 
     // Load deviceName from SharedPreferences if it exists
-    deviceName = sharedPreferences.getString("device_name", null) ?: randomString().also {
-      // Save the new random deviceName if not already stored
-      sharedPreferences.edit().putString("device_name", it).apply()
-    }
+    deviceName = sharedPreferences.getString("device_name", "")!!;
 
     // Get the camera manager
     val cameraManager = requireContext().getSystemService(Context.CAMERA_SERVICE) as CameraManager
@@ -146,22 +143,6 @@ class CapturePreferencesFragment : PreferenceFragmentCompat() {
 
   private fun triggerConfigurationUpdate() {
     (requireActivity() as MainActivity).appEngineService?.configureVideoCapture(videoConfig)
-  }
-
-  private fun randomString(): String {
-    val len = 10
-    val charSet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-    val charSetLen = charSet.length
-
-    Random.Default.nextBytes(1) // Initialize random with current time
-
-    val randomString = StringBuilder(len)
-    for (i in 0 until len) {
-      val randomPos = Random.nextInt(charSetLen)
-      randomString.append(charSet[randomPos])
-    }
-
-    return randomString.toString()
   }
 
   override fun onCreateView(
