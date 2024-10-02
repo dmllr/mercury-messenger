@@ -126,8 +126,11 @@ function createPeerConnection() {
             } else {
                 const message = JSON.parse(evt.data);
                 if (message.type === "info profile") {
-                    profile = message.profile;
-                    populateCameraAndResolutionSelectors();
+                    if (profile == null) {
+                        // overwrite the profile if only it wasn't set during the publication
+                        profile = message.profile;
+                        populateCameraAndResolutionSelectors();
+                    }
                 }
             }
         }
