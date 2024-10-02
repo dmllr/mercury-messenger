@@ -273,7 +273,7 @@ function updateClientList(publishers) {
         clientListDiv.appendChild(label);
         clientListDiv.appendChild(document.createElement('br'));
     });
-    selectedClientId = publishers.length > 0 ? publishers[0] : null;
+    selectedClientId = publishers.length > 0 ? publishers[0].id : null;
 }
 
 websocket.onmessage = async function (evt) {
