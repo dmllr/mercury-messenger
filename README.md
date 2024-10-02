@@ -1,3 +1,12 @@
+# Configure
+## Configure `~/.ssh/config`
+```text
+Host vm0.hela.me
+HostName vm0.hela.me
+IdentityFile ~/.ssh/ssh-key-2022-03-08.key
+User ubuntu
+```
+
 # Build
 ## Prerequisites
 ### Ubuntu
@@ -7,6 +16,7 @@ sudo apt install libiconv-hook-dev
 ```
 
 ### MacOS
+
 
 ### Windows
 Install MSYS2 from https://github.com/msys2/msys2-installer/releases/download/2024-01-13/msys2-x86_64-20240113.exe, then
