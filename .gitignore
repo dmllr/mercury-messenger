@@ -1,6 +1,9 @@
 .idea
 /_imported/
 /build/
+/bin/
 /out/
-cmake-build-debug
-cmake-build-release
+/lib/
+/cmake-build-debug/
+/cmake-build-release/
+/pyvenv.cfg
