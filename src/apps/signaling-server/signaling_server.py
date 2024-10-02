@@ -78,7 +78,7 @@ async def handle_connection(websocket: WebSocketServerProtocol):
     async def send_publishers(connection):
         jdump = json.dumps({
             "type": "info publishers",
-            "clients": [cid for cid, c in clients[user_id].items() if c.kind == Client.Kind.Producer]
+            "clients": [{"name": cid, "profile": c.profile} for cid, c in clients[user_id].items() if c.kind == Client.Kind.Producer]
         })
         print(f'>>[{user_id}/{client_id}]: {jdump}')
         await connection.send(jdump)

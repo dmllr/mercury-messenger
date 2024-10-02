@@ -97,6 +97,11 @@ auto GetDeviceProfileAsJson() -> nlohmann::json {
     camera_json["name"] = camera.second;
 
     auto resolutions = GetSupportedResolutions(camera.first);
+    // Erase the duplicate resolutions
+    std::sort(resolutions.begin(), resolutions.end());
+    auto last = std::unique(resolutions.begin(), resolutions.end());
+    resolutions.erase(last, resolutions.end());
+
     auto resolutions_json{Json::array()};
     for (const auto& res : resolutions) {
       resolutions_json.push_back({{"width", res.first}, {"height", res.second}});

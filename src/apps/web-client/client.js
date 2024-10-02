@@ -24,8 +24,8 @@ function randomString(len) {
 
 const receiveID = randomString(10);
 const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-const websocket = new WebSocket(protocol + '//app.hela.me:8000');
-// const websocket = new WebSocket('ws://localhost:8000/');
+// const websocket = new WebSocket(protocol + '//app.hela.me:8000');
+const websocket = new WebSocket('ws://localhost:8000/');
 websocket.onopen = function () {
     authenticateUser();
 }
@@ -245,16 +245,24 @@ function refreshPublishers() {
 function updateClientList(publishers) {
     const clientListDiv = document.getElementById('client-list');
     clientListDiv.innerHTML = '';
-    publishers.forEach((client, index) => {
+    publishers.forEach((publisher, index) => {
+        const client = publisher.name;
+        const local_profile = publisher.profile;
         const radioBtn = document.createElement('input');
         radioBtn.type = 'radio';
         radioBtn.name = 'client';
         radioBtn.value = client;
         radioBtn.id = 'client_' + client;
-        radioBtn.checked = index === 0;
         radioBtn.onclick = function() {
             selectedClientId = this.value;
+            profile = local_profile;
+            populateCameraAndResolutionSelectors();
         };
+        if (index === 0) {
+            radioBtn.checked = true;
+            profile = local_profile;
+            populateCameraAndResolutionSelectors();
+        }
 
         const label = document.createElement('label');
         label.htmlFor = 'client_' + client;
@@ -350,7 +358,7 @@ function sendConfiguration() {
         return;
     }
 
-    var message = JSON.stringify(configurationMessage)
+    const message = JSON.stringify(configurationMessage);
     dataChannelLog.textContent += '> ' + message + '\n';
     dataChannelLog.scrollTop = dataChannelLog.scrollHeight;
     dc.send(message);
