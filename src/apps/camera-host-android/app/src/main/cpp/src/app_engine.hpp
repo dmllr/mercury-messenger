@@ -30,7 +30,7 @@ public:
         status_update_callback_(env->NewGlobalRef(status_update_callback)) {
     EventQueue::Instance();
     rtc_producer_ = std::make_shared<hela::eillance::RtcTransport<hela::eillance::RtcProducer>>();
-    rtc_producer_->SetName(GetSharedPreferenceValue("device_name", StringUtils::RandomString()));
+    rtc_producer_->SetName(GetSharedPreferenceValue("device_name", "StringUtils::RandomString()"));
     rtc_producer_->SetStatusCallback([this](EventSource sender, int status) { SetStatus(sender, status); });
     DispatchQueue::MainThread().dispatch([this]() {
       rtc_producer_->Start();
@@ -56,18 +56,24 @@ public:
       return default_value;  // Handle the case where env is not attached
     }
 
-    // Retrieve the SharedPreferences object from the service_instance_
-    jclass service_class = env->GetObjectClass(service_instance_);
-    jmethodID get_shared_pref_method = env->GetMethodID(service_class, "getSharedPreferences", "(Ljava/lang/String;I)Landroid/content/SharedPreferences;");
+    // Retrieve the SharedPreferences object via PreferenceManager.getDefaultSharedPreferences()
+    jclass preference_manager_class = env->FindClass("androidx/preference/PreferenceManager");
+    jmethodID get_default_shared_pref_method = env->GetStaticMethodID(
+        preference_manager_class,
+        "getDefaultSharedPreferences",
+        "(Landroid/content/Context;)Landroid/content/SharedPreferences;"
+    );
 
-    if (get_shared_pref_method == nullptr) {
+    if (get_default_shared_pref_method == nullptr) {
       return default_value;
     }
 
-    // Name of SharedPreferences and mode (0 for MODE_PRIVATE)
-    jstring pref_name = env->NewStringUTF("your_shared_pref_name");
-    jobject shared_preferences = env->CallObjectMethod(service_instance_, get_shared_pref_method, pref_name, 0);
-    env->DeleteLocalRef(pref_name);
+    // Call getDefaultSharedPreferences with the current context (service_instance_)
+    jobject shared_preferences = env->CallStaticObjectMethod(
+        preference_manager_class,
+        get_default_shared_pref_method,
+        service_instance_
+    );
 
     if (shared_preferences == nullptr) {
       return default_value;
@@ -86,7 +92,7 @@ public:
     jstring j_default_value = env->NewStringUTF(default_value.c_str());
 
     // Call getString on the SharedPreferences object
-    jstring j_result = (jstring)env->CallObjectMethod(shared_preferences, get_string_method, j_key, j_default_value);
+    auto* j_result = static_cast<jstring>(env->CallObjectMethod(shared_preferences, get_string_method, j_key, j_default_value));
 
     // Release local references
     env->DeleteLocalRef(j_key);
@@ -96,7 +102,6 @@ public:
       return default_value;  // Return default if not found
     }
 
-    // Convert jstring to std::string
     const char* result_cstr = env->GetStringUTFChars(j_result, nullptr);
     std::string result(result_cstr);
     env->ReleaseStringUTFChars(j_result, result_cstr);
