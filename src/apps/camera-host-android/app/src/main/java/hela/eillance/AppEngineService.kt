@@ -29,7 +29,6 @@ import hela.eillance.events.getResourceString
 import hela.eillance.events.interfaces.IStatusUpdateCallback
 import hela.eillance.ndkio.Status
 import hela.eillance.ndkio.VideoConfig
-import kotlin.random.Random
 
 
 class AppEngineService : Service(), IStatusUpdateCallback {
@@ -104,35 +103,13 @@ class AppEngineService : Service(), IStatusUpdateCallback {
   }
 
   private fun getDeviceNamePreference(): String {
-    val sharedPreferences = getSharedPreferences("CapturePreferences", Context.MODE_PRIVATE)
-    var deviceName = sharedPreferences.getString("device_name", null)
-    if (deviceName == null) {
-      deviceName = randomString();
-      sharedPreferences.edit().putString("device_name", deviceName).apply();
-      return getString(R.string.app_name)
-    }
-
-    return deviceName;
-  }
-
-  private fun randomString(): String {
-    val len = 10
-    val charSet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-    val charSetLen = charSet.length
-
-    Random.Default.nextBytes(1) // Initialize random with current time
-
-    val randomString = StringBuilder(len)
-    for (i in 0 until len) {
-      val randomPos = Random.nextInt(charSetLen)
-      randomString.append(charSet[randomPos])
-    }
-
-    return randomString.toString()
+    val sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this)
+    val deviceName = sharedPreferences.getString("device_name", "")
+    return deviceName!!;
   }
 
   private fun getVideoConfigPreferences(): VideoConfig {
-    val sharedPreferences = getSharedPreferences("CapturePreferences", Context.MODE_PRIVATE)
+    val sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this)
 
     val videoConfig = VideoConfig()
     videoConfig.cameraId = sharedPreferences.getString("default_camera", "0")?.toIntOrNull() ?: 0

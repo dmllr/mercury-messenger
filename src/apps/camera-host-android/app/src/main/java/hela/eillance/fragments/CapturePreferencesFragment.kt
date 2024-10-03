@@ -14,7 +14,6 @@ import hela.eillance.MainActivity
 import hela.eillance.camera.R
 import hela.eillance.ndkio.VideoConfig
 import hela.eillance.utils.CameraUtils
-import kotlin.random.Random
 
 
 class CapturePreferencesFragment : PreferenceFragmentCompat() {
@@ -27,12 +26,6 @@ class CapturePreferencesFragment : PreferenceFragmentCompat() {
 
   override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
     setPreferencesFromResource(R.xml.capture_preferences, rootKey)
-
-    // Retrieve SharedPreferences
-    val sharedPreferences = requireContext().getSharedPreferences("CapturePreferences", Context.MODE_PRIVATE)
-
-    // Load deviceName from SharedPreferences if it exists
-    deviceName = sharedPreferences.getString("device_name", "")!!;
 
     // Get the camera manager
     val cameraManager = requireContext().getSystemService(Context.CAMERA_SERVICE) as CameraManager
