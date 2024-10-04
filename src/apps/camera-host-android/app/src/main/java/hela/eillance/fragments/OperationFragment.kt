@@ -133,5 +133,4 @@ class OperationFragment : Fragment() {
     return cameraService?.getStatus()
   }
 
-
 }
