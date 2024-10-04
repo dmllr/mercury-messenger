@@ -6,6 +6,8 @@
   <string name="notification_title">Eillance</string>
   <string name="notification_description">Camera stream P2P connection</string>
 
+  <string name="toolbar_user_icon">User manu button</string>
+
   <string name="open_camera_preferences">Open Camera Preferences</string>
   <string name="restart_service">Restart Service</string>
   <string name="preference_category_device">Device preferences</string>

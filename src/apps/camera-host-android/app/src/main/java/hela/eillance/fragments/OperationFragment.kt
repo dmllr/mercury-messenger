@@ -9,14 +9,12 @@ import androidx.fragment.app.Fragment
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.ImageButton
-import android.widget.TextView
 import androidx.core.content.ContextCompat
-import androidx.core.content.ContextCompat.getColor
 import hela.eillance.MainActivity
 import hela.eillance.ndkio.Status
 import hela.eillance.Tune
 import hela.eillance.camera.R
+import hela.eillance.camera.databinding.FragmentOperationBinding
 import hela.eillance.events.EventSource
 import hela.eillance.events.StateIce
 import hela.eillance.events.StateIceGathering
@@ -32,12 +30,9 @@ class OperationFragment : Fragment() {
     fun instance() = OperationFragment()
   }
 
-  private lateinit var iceGatheringState: TextView
-  private lateinit var iceConnectionState: TextView
-  private lateinit var signalingState: TextView
-  private lateinit var communicationStatusState: TextView
-  private lateinit var peerConnectionState: TextView
-  private lateinit var pingState: TextView
+  private var _binding: FragmentOperationBinding? = null
+  private val binding get() = _binding!!
+
   private var defaultTextColor: Int = 0
 
   private val receiver = object : BroadcastReceiver() {
@@ -49,22 +44,28 @@ class OperationFragment : Fragment() {
       val context = ctx!!
 
       when (source) {
-        EventSource.GatheringState -> iceGatheringState.text =
+        EventSource.GatheringState -> binding.iceGatheringState.text =
           StateIceGathering.fromInt(state).getResourceString(context)
-        EventSource.IceState -> iceConnectionState.text =
+
+        EventSource.IceState -> binding.iceConnectionState.text =
           StateIce.fromInt(state).getResourceString(context)
-        EventSource.SignalingState -> signalingState.text =
+
+        EventSource.SignalingState -> binding.signalingState.text =
           StateSignaling.fromInt(state).getResourceString(context)
-        EventSource.ConnectionStatus -> communicationStatusState.text =
+
+        EventSource.ConnectionStatus -> binding.communicationStatusState.text =
           StateService.fromInt(state).getResourceString(context)
-        EventSource.PeerConnectionState -> peerConnectionState.text =
+
+        EventSource.PeerConnectionState -> binding.peerConnectionState.text =
           StatePeerConnection.fromInt(state).getResourceString(context)
+
         EventSource.Ping -> {
-          pingState.apply {
-            setTextColor(getColor(context, R.color.colorPositive))
-            postDelayed({setTextColor(defaultTextColor)}, 333)
+          binding.pingState.apply {
+            setTextColor(ContextCompat.getColor(context, R.color.colorPositive))
+            postDelayed({ setTextColor(defaultTextColor) }, 333)
           }
         }
+
         EventSource.System -> {
           if (state == SystemEvent.Started.value) {
             updateStatuses()
@@ -76,8 +77,10 @@ class OperationFragment : Fragment() {
 
   override fun onResume() {
     super.onResume()
-    ContextCompat.registerReceiver(requireContext(), receiver, IntentFilter(Tune::BroadcastActionOnStateUpdate.get()),
-      ContextCompat.RECEIVER_NOT_EXPORTED)
+    ContextCompat.registerReceiver(
+      requireContext(), receiver, IntentFilter(Tune::BroadcastActionOnStateUpdate.get()),
+      ContextCompat.RECEIVER_NOT_EXPORTED
+    )
     updateStatuses()
   }
 
@@ -89,41 +92,42 @@ class OperationFragment : Fragment() {
   override fun onCreateView(
     inflater: LayoutInflater, container: ViewGroup?,
     savedInstanceState: Bundle?
-  ): View? {
-    return inflater.inflate(R.layout.fragment_operation, container, false)
+  ): View {
+    _binding = FragmentOperationBinding.inflate(inflater, container, false)
+    return binding.root
   }
 
   override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
     super.onViewCreated(view, savedInstanceState)
 
-    iceGatheringState = view.findViewById(R.id.ice_gathering_state)
-    iceConnectionState = view.findViewById(R.id.ice_connection_state)
-    signalingState = view.findViewById(R.id.signaling_state)
-    communicationStatusState = view.findViewById(R.id.communication_status_state)
-    peerConnectionState = view.findViewById(R.id.peer_connection_state)
-    pingState = view.findViewById(R.id.ping_state)
-    defaultTextColor = pingState.currentTextColor
+    defaultTextColor = binding.pingState.currentTextColor
 
-    val openPreferencesButton = view.findViewById<ImageButton>(R.id.btn_open_camera_preferences)
-    openPreferencesButton.setOnClickListener {
+    binding.btnOpenCameraPreferences.setOnClickListener {
       parentFragmentManager.beginTransaction()
         .add(R.id.content, CapturePreferencesFragment.instance())
         .addToBackStack(null)
         .commit()
     }
+    binding.communicationStatusState.setOnClickListener {
+      /// show popup
+    }
+    view.postDelayed({ updateStatuses() }, 2000)
+  }
 
-    view.postDelayed({updateStatuses()}, 2000)
+  override fun onDestroyView() {
+    super.onDestroyView()
+    _binding = null
   }
 
   private fun updateStatuses() {
     val status = getStatus()
     if (status != null) {
       val context = requireContext()
-      iceGatheringState.text = status.iceGatheringState.getResourceString(context)
-      iceConnectionState.text = status.iceState.getResourceString(context)
-      signalingState.text = status.signalingState.getResourceString(context)
-      communicationStatusState.text = status.connectionState.getResourceString(context)
-      peerConnectionState.text = status.peerConnectionState.getResourceString(context)
+      binding.iceGatheringState.text = status.iceGatheringState.getResourceString(context)
+      binding.iceConnectionState.text = status.iceState.getResourceString(context)
+      binding.signalingState.text = status.signalingState.getResourceString(context)
+      binding.communicationStatusState.text = status.connectionState.getResourceString(context)
+      binding.peerConnectionState.text = status.peerConnectionState.getResourceString(context)
     }
   }
 
@@ -132,5 +136,4 @@ class OperationFragment : Fragment() {
     val cameraService = activity.appEngineService
     return cameraService?.getStatus()
   }
-
 }
