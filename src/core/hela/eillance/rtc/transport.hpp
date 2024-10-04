@@ -161,7 +161,7 @@ private:
 
   void ReportStateChange(const EventSource source, int state) const {
     if (status_callback_) {
-      (*status_callback_)(source, static_cast<int>(state));
+      (*status_callback_)(source, state);
     }
   }
 
@@ -269,6 +269,8 @@ private:
     auto dc = pc->createDataChannel("command-channel");
     dc->onOpen([id, wdc = make_weak_ptr(dc)]() {
       if (auto dc = wdc.lock()) {
+        dc->send("Ping");
+
         Json message = {
           {"type", "info profile"},
           {"profile", GetDeviceProfileAsJson()},
