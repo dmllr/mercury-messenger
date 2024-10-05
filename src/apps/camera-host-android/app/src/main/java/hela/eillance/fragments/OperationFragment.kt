@@ -5,17 +5,14 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Bundle
-import android.view.Gravity
 import androidx.fragment.app.Fragment
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.PopupWindow
 import androidx.core.content.ContextCompat
 import hela.eillance.MainActivity
 import hela.eillance.ndkio.Status
 import hela.eillance.Tune
-import hela.eillance.camera.R
 import hela.eillance.camera.databinding.FragmentOperationBinding
 import hela.eillance.events.EventSource
 import hela.eillance.events.StateService
@@ -28,8 +25,6 @@ class OperationFragment : Fragment() {
     fun instance() = OperationFragment()
   }
 
-  private lateinit var popupView: View
-  private lateinit var popupWindow: PopupWindow
   private var _binding: FragmentOperationBinding? = null
   private val binding get() = _binding!!
 
@@ -85,19 +80,6 @@ class OperationFragment : Fragment() {
   override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
     super.onViewCreated(view, savedInstanceState)
 
-    // Create the popup window
-    popupView = layoutInflater.inflate(R.layout.fragment_operation_status_popup, null)
-    popupWindow = PopupWindow(
-      popupView,
-      ViewGroup.LayoutParams.WRAP_CONTENT,
-      ViewGroup.LayoutParams.WRAP_CONTENT,
-      true
-    )
-
-    // Bindings
-    binding.communicationStatusState.setOnClickListener {
-      showStatusPopup(binding.communicationStatusState)
-    }
     view.postDelayed({ updateStatuses() }, 2000)
   }
 
@@ -112,11 +94,6 @@ class OperationFragment : Fragment() {
       val context = requireContext()
       binding.communicationStatusState.text = status.connectionState.getResourceString(context)
     }
-  }
-
-  private fun showStatusPopup(anchorView: View) {
-    // Show the popup window
-    popupWindow.showAsDropDown(anchorView, 0, 0)
   }
 
   private fun getStatus(): Status? {
