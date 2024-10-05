@@ -5,10 +5,12 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Bundle
+import android.view.Gravity
 import androidx.fragment.app.Fragment
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.PopupWindow
 import androidx.core.content.ContextCompat
 import hela.eillance.MainActivity
 import hela.eillance.ndkio.Status
@@ -16,11 +18,7 @@ import hela.eillance.Tune
 import hela.eillance.camera.R
 import hela.eillance.camera.databinding.FragmentOperationBinding
 import hela.eillance.events.EventSource
-import hela.eillance.events.StateIce
-import hela.eillance.events.StateIceGathering
-import hela.eillance.events.StatePeerConnection
 import hela.eillance.events.StateService
-import hela.eillance.events.StateSignaling
 import hela.eillance.events.SystemEvent
 import hela.eillance.events.getResourceString
 
@@ -30,10 +28,10 @@ class OperationFragment : Fragment() {
     fun instance() = OperationFragment()
   }
 
+  private lateinit var popupView: View
+  private lateinit var popupWindow: PopupWindow
   private var _binding: FragmentOperationBinding? = null
   private val binding get() = _binding!!
-
-  private var defaultTextColor: Int = 0
 
   private val receiver = object : BroadcastReceiver() {
     override fun onReceive(ctx: Context?, intent: Intent?) {
@@ -44,33 +42,20 @@ class OperationFragment : Fragment() {
       val context = ctx!!
 
       when (source) {
-        EventSource.GatheringState -> binding.iceGatheringState.text =
-          StateIceGathering.fromInt(state).getResourceString(context)
-
-        EventSource.IceState -> binding.iceConnectionState.text =
-          StateIce.fromInt(state).getResourceString(context)
-
-        EventSource.SignalingState -> binding.signalingState.text =
-          StateSignaling.fromInt(state).getResourceString(context)
-
         EventSource.ConnectionStatus -> binding.communicationStatusState.text =
           StateService.fromInt(state).getResourceString(context)
-
-        EventSource.PeerConnectionState -> binding.peerConnectionState.text =
-          StatePeerConnection.fromInt(state).getResourceString(context)
-
-        EventSource.Ping -> {
-          binding.pingState.apply {
-            setTextColor(ContextCompat.getColor(context, R.color.colorPositive))
-            postDelayed({ setTextColor(defaultTextColor) }, 333)
-          }
-        }
 
         EventSource.System -> {
           if (state == SystemEvent.Started.value) {
             updateStatuses()
           }
         }
+
+        EventSource.PeerConnectionState -> {}
+        EventSource.GatheringState -> {}
+        EventSource.IceState -> {}
+        EventSource.SignalingState -> {}
+        EventSource.Ping -> {}
       }
     }
   }
@@ -100,16 +85,18 @@ class OperationFragment : Fragment() {
   override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
     super.onViewCreated(view, savedInstanceState)
 
-    defaultTextColor = binding.pingState.currentTextColor
+    // Create the popup window
+    popupView = layoutInflater.inflate(R.layout.fragment_operation_status_popup, null)
+    popupWindow = PopupWindow(
+      popupView,
+      ViewGroup.LayoutParams.WRAP_CONTENT,
+      ViewGroup.LayoutParams.WRAP_CONTENT,
+      true
+    )
 
-    binding.btnOpenCameraPreferences.setOnClickListener {
-      parentFragmentManager.beginTransaction()
-        .add(R.id.content, CapturePreferencesFragment.instance())
-        .addToBackStack(null)
-        .commit()
-    }
+    // Bindings
     binding.communicationStatusState.setOnClickListener {
-      /// show popup
+      showStatusPopup(binding.communicationStatusState)
     }
     view.postDelayed({ updateStatuses() }, 2000)
   }
@@ -123,12 +110,13 @@ class OperationFragment : Fragment() {
     val status = getStatus()
     if (status != null) {
       val context = requireContext()
-      binding.iceGatheringState.text = status.iceGatheringState.getResourceString(context)
-      binding.iceConnectionState.text = status.iceState.getResourceString(context)
-      binding.signalingState.text = status.signalingState.getResourceString(context)
       binding.communicationStatusState.text = status.connectionState.getResourceString(context)
-      binding.peerConnectionState.text = status.peerConnectionState.getResourceString(context)
     }
+  }
+
+  private fun showStatusPopup(anchorView: View) {
+    // Show the popup window
+    popupWindow.showAsDropDown(anchorView, 0, 0)
   }
 
   private fun getStatus(): Status? {

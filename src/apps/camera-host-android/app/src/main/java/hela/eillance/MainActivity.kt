@@ -10,14 +10,21 @@ import android.content.res.Configuration
 import android.os.Bundle
 import android.os.IBinder
 import android.util.Log
+import android.view.Gravity
+import android.view.LayoutInflater
 import android.view.MenuItem
 import android.view.View
+import android.view.ViewGroup
+import android.widget.Button
+import android.widget.PopupWindow
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.PopupMenu
 import androidx.core.app.ActivityCompat
 import androidx.fragment.app.FragmentManager
 import hela.eillance.camera.R
 import hela.eillance.camera.databinding.ActivityMainBinding
+import hela.eillance.fragments.CapturePreferencesFragment
 import hela.eillance.fragments.OperationFragment
 
 
@@ -72,6 +79,40 @@ class MainActivity : AppCompatActivity(), ServiceConnection,
   private fun setEventHandlers() {
     binding.btnPermissionWarning.setOnClickListener {
       checkAndRequestCamera()
+    }
+    binding.userIcon.setOnClickListener {
+      val popup = PopupMenu(this, it)
+      popup.menuInflater.inflate(R.menu.user_menu, popup.menu)
+      popup.setOnMenuItemClickListener { menuItem ->
+        when (menuItem.itemId) {
+          R.id.menu_item_preferences -> {
+            val fragmentTag = CapturePreferencesFragment::class.java.simpleName
+            val fragmentManager = supportFragmentManager
+
+            // Check the fragment currently on top of the stack
+            val currentFragment = fragmentManager.findFragmentById(R.id.content)
+
+            // If the top fragment is already the one we want, do nothing
+            if (currentFragment is CapturePreferencesFragment) {
+              return@setOnMenuItemClickListener true
+            }
+
+            // If the fragment already exists in the stack, pop to it
+            if (fragmentManager.findFragmentByTag(fragmentTag) != null) {
+              fragmentManager.popBackStackImmediate(fragmentTag, 0)
+            } else {
+              // Otherwise, add the fragment and assign it a unique tag
+              fragmentManager.beginTransaction()
+                .replace(R.id.content, CapturePreferencesFragment.instance(), fragmentTag)
+                .addToBackStack(fragmentTag)
+                .commit()
+            }
+            true
+          }
+          else -> false  // return false if the click is not handled
+        }
+      }
+      popup.show()
     }
   }
 

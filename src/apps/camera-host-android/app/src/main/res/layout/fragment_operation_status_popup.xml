@@ -1,0 +1,120 @@
+<TableLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/Padded"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+  <TableRow
+      style="@style/Padded"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content">
+
+    <TextView
+        style="@style/Padded"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/communication_status" />
+
+    <TextView
+        android:id="@+id/communication_status_state"
+        style="@style/Padded"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/unknown" />
+  </TableRow>
+
+  <TableRow
+      style="@style/Padded"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content">
+
+    <TextView
+        style="@style/Padded"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/peer_connection_state" />
+
+    <TextView
+        android:id="@+id/peer_connection_state"
+        style="@style/Padded"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/waiting" />
+  </TableRow>
+
+  <TableRow
+      style="@style/Padded"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content">
+
+    <TextView
+        style="@style/Padded"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/ice_gathering_state" />
+
+    <TextView
+        android:id="@+id/ice_gathering_state"
+        style="@style/Padded"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/waiting" />
+  </TableRow>
+
+  <TableRow
+      style="@style/Padded"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content">
+
+    <TextView
+        style="@style/Padded"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/ice_connection_state" />
+
+    <TextView
+        android:id="@+id/ice_connection_state"
+        style="@style/Padded"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/waiting" />
+  </TableRow>
+
+  <TableRow
+      style="@style/Padded"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content">
+
+    <TextView
+        style="@style/Padded"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/signaling_state" />
+
+    <TextView
+        android:id="@+id/signaling_state"
+        style="@style/Padded"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/waiting" />
+  </TableRow>
+
+  <TableRow
+      style="@style/Padded"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content">
+
+    <TextView
+        style="@style/Padded"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/ping_state" />
+
+    <TextView
+        android:id="@+id/ping_state"
+        style="@style/Padded"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/led" />
+  </TableRow>
+
+</TableLayout>
