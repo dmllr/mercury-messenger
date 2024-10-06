@@ -2,6 +2,7 @@
 let rtc;
 let token = null; // Store the token here after authentication
 let selectedClientId = null; // Store the selected client ID here
+let selectedResolution = null;
 let profile = null;
 
 const iceConnectionLog = document.getElementById('ice-connection-state'),
@@ -329,18 +330,57 @@ function populateCameraAndResolutionSelectors() {
 
 function populateResolutions(resolutions) {
     resolutionSelect.innerHTML = '';
-    resolutions.forEach(resolution => {
+
+    // If there is a previously selected resolution, find the closest one
+    if (selectedResolution) {
+        resolutions.sort((a, b) => {
+            // Priority 1: width difference
+            const widthDiffA = Math.abs(a.width - selectedResolution.width);
+            const widthDiffB = Math.abs(b.width - selectedResolution.width);
+
+            if (widthDiffA !== widthDiffB) return widthDiffA - widthDiffB;
+
+            // Priority 2: total pixel difference (width * height)
+            const pixelsA = a.width * a.height;
+            const pixelsB = b.width * b.height;
+            const pixelDiffA = Math.abs(pixelsA - (selectedResolution.width * selectedResolution.height));
+            const pixelDiffB = Math.abs(pixelsB - (selectedResolution.width * selectedResolution.height));
+
+            return pixelDiffA - pixelDiffB;
+        });
+    }
+
+    // Populate the resolutions
+    resolutions.forEach((resolution, index) => {
         const option = document.createElement('option');
         option.value = JSON.stringify(resolution);
         option.textContent = `${resolution.width}x${resolution.height}`;
+
+        // Select the first option or the closest match
+        if (index === 0 || (selectedResolution && resolution.width === resolutions[0].width && resolution.height === resolutions[0].height)) {
+            option.selected = true;
+        }
+
         resolutionSelect.appendChild(option);
     });
+
+    // Update the selectedResolution with the newly selected option
+    selectedResolution = resolutions[0];
 }
 
 function onCameraChange() {
+    // Save the currently selected resolution
+    if (resolutionSelect.value) {
+        selectedResolution = JSON.parse(resolutionSelect.value);
+    }
+
     const selectedCameraId = cameraSelect.value;
     const selectedCamera = profile.find(camera => camera.id === selectedCameraId);
+
+    // Populate resolutions for the new camera
     populateResolutions(selectedCamera.resolutions);
+
+    // Send updated configuration
     sendConfiguration();
 }
 
