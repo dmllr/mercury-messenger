@@ -155,8 +155,14 @@ async def handle_connection(websocket: WebSocketServerProtocol):
             print(f'Peer "{user_id}/{client_id}" disconnected')
             try:
                 await send_publishers(websocket)
+            except KeyboardInterrupt:
+                ...
+            except websockets.exceptions.ConnectionClosedError:
+                ...
             except websockets.exceptions.ConnectionClosedOK:
                 ...
+            except Exception:
+                print(traceback.format_exc())
 
 
 if __name__ == '__main__':
