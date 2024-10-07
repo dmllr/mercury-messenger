@@ -145,6 +145,9 @@ public:
       connection_attempt_ = 0;
     } catch (const std::exception& e) {
       LOGI << "Error: " << e.what();
+      if (ws_.isOpen()) {
+        ws_.close();
+      }
       ReportStatus(ServiceState::failure);
       return;
     }
