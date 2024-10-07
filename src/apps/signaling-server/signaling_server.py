@@ -40,6 +40,22 @@ clients: dict[str, dict[str, Union[Producer, Consumer]]] = {}
 authManager = AuthManager()
 
 
+async def check_client_liveliness():
+    while True:
+        disconnected_clients = []
+        for user_id, user_clients in clients.items():
+            for client_id, client in list(user_clients.items()):
+                if client.ws.closed:
+                    disconnected_clients.append((user_id, client_id))
+
+        for user_id, client_id in disconnected_clients:
+            del clients[user_id][client_id]
+            print(f'Removed disconnected client "{user_id}/{client_id}"')
+            if not clients[user_id]:  # If no more clients for this user, delete user entry
+                del clients[user_id]
+        await asyncio.sleep(10)  # Run every 10 seconds
+
+
 async def handle_connection(websocket: WebSocketServerProtocol):
     user_id = None
     client_id = None
@@ -84,7 +100,6 @@ async def handle_connection(websocket: WebSocketServerProtocol):
         print(f'>>[{user_id}/{client_id}]: {jdump}')
         await connection.send(jdump)
 
-    # noinspection PyBroadException
     try:
         while True:
             data = await websocket.recv()
@@ -140,33 +155,23 @@ async def handle_connection(websocket: WebSocketServerProtocol):
                         }
                         await websocket.send(json.dumps(response))
 
-    except KeyboardInterrupt:
-        ...
     except websockets.exceptions.ConnectionClosedError:
-        ...
+        print(f"Connection closed with error for client {user_id}/{client_id}")
     except websockets.exceptions.ConnectionClosedOK:
-        ...
+        print(f"Connection closed gracefully for client {user_id}/{client_id}")
     except Exception:
         print(traceback.format_exc())
-
     finally:
         if user_id and client_id and user_id in clients and client_id in clients[user_id]:
             del clients[user_id][client_id]
             print(f'Peer "{user_id}/{client_id}" disconnected')
             try:
                 await send_publishers(websocket)
-            except KeyboardInterrupt:
-                ...
-            except websockets.exceptions.ConnectionClosedError:
-                ...
-            except websockets.exceptions.ConnectionClosedOK:
-                ...
             except Exception:
                 print(traceback.format_exc())
 
 
 if __name__ == '__main__':
-    # Usage: ./signaling_server.py [[host:]port] [SSL certificate file]
     endpoint_or_port = sys.argv[1] if len(sys.argv) > 1 else "8000"
     ssl_cert = sys.argv[2] if len(sys.argv) > 2 else None
     ssl_key = sys.argv[3] if len(sys.argv) > 3 else None
@@ -182,11 +187,13 @@ if __name__ == '__main__':
     print(f'Listening on {endpoint}')
     host, port = endpoint.rsplit(':', 1)
     start_server = websockets.serve(handle_connection, host, int(port), ssl=ssl_context)
-    asyncio.get_event_loop().run_until_complete(start_server)
-    # noinspection PyBroadException
+
+    loop = asyncio.get_event_loop()
+    loop.create_task(check_client_liveliness())
+    loop.run_until_complete(start_server)
     try:
-        asyncio.get_event_loop().run_forever()
+        loop.run_forever()
     except KeyboardInterrupt:
-        ...
+        pass
     except Exception:
         print(traceback.format_exc())
