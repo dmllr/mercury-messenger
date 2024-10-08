@@ -92,13 +92,17 @@ async def handle_connection(websocket: WebSocketServerProtocol):
             return False
         return authManager.validate_token(token)['user']
 
-    async def send_publishers(connection):
+    async def send_publishers_for_client(connection):
         jdump = json.dumps({
             "type": "info publishers",
             "clients": [{"id": cid, "name": c.name, "profile": c.profile} for cid, c in clients[user_id].items() if c.kind == Client.Kind.Producer]
         })
         print(f'>>[{user_id}/{client_id}]: {jdump}')
         await connection.send(jdump)
+
+    async def send_publishers():
+        for client in clients[user_id]:
+            await send_publishers_for_client(clients[user_id][client].ws)
 
     try:
         while True:
@@ -131,11 +135,10 @@ async def handle_connection(websocket: WebSocketServerProtocol):
                     if client_kind == Client.Kind.Producer:
                         clients[user_id][client_id].profile = message.get('profile')
                     print(f'Peer "{user_id}/{client_id}" published')
-                    for client in clients[user_id]:
-                        await send_publishers(clients[user_id][client].ws)
+                    await send_publishers()
 
                 elif message['type'] == 'get publishers':
-                    await send_publishers(websocket)
+                    await send_publishers_for_client(websocket)
 
                 else:
                     destination_id = message['to']
@@ -166,7 +169,7 @@ async def handle_connection(websocket: WebSocketServerProtocol):
             del clients[user_id][client_id]
             print(f'Peer "{user_id}/{client_id}" disconnected')
             try:
-                await send_publishers(websocket)
+                await send_publishers()
             except Exception:
                 print(traceback.format_exc())
 
