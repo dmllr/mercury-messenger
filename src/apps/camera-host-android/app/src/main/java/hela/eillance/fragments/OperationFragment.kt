@@ -89,6 +89,9 @@ class OperationFragment : Fragment() {
   }
 
   private fun updateStatuses() {
+    if (activity == null)
+      return
+
     val status = getStatus()
     if (status != null) {
       val context = requireContext()
