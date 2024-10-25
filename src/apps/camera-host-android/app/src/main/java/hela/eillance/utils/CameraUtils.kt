@@ -35,7 +35,8 @@ object CameraUtils {
   fun getSupportedResolutions(cameraManager: CameraManager, cameraId: String?): List<Size> {
     try {
       val characteristics = cameraManager.getCameraCharacteristics(cameraId!!)
-      val streamConfigurationMap = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)!!
+      val streamConfigurationMap =
+        characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)!!
 
       val videoResolutions = streamConfigurationMap.getOutputSizes(MediaRecorder::class.java)
       return listOf(

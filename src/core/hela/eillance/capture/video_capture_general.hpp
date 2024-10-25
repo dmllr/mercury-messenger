@@ -27,30 +27,28 @@ namespace hela::eillance {
 
 class VideoCapture {
 private:
-  cv::VideoCapture cap_;
-  cv::Mat cv_frame_;
-  cv::Mat nv12_frame_;
-
-  VideoConfig config_;
-
-  VideoEncoder encoder_;
+  cv::VideoCapture cap_{};
+  cv::Mat cv_frame_{};
+  cv::Mat nv12_frame_{};
+  VideoConfig config_{};
+  VideoEncoder encoder_{};
 
   TELEMETRY(
-      Time::Unit last_fps_milestone;
-      std::uint32_t fps_counter;
-      std::uint32_t load_counter;)
+      Time::Unit last_fps_milestone_{};
+      std::uint32_t fps_counter_{};
+      std::uint32_t load_counter_{};)
 
   std::atomic_bool capture_is_running_{false};
   DispatchQueue dispatch_queue_{"Capture", 1};
 
   struct CrossPlatformProperties {
-    #if defined __ANDROID__
+#if defined __ANDROID__
     static constexpr auto openCVCameraCapabilities = cv::CAP_ANDROID;
-    #elif defined _WIN32
+#elif defined _WIN32
     static constexpr auto openCVCameraCapabilities = cv::CAP_DSHOW;
-    #else
+#else
     static constexpr auto openCVCameraCapabilities = cv::CAP_ANY;
-    #endif
+#endif
   };
 
 public:
@@ -82,9 +80,9 @@ public:
       return;
     }
 
-    #if defined __ANDROID__
+#if defined __ANDROID__
     cap_.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('B', 'G', 'R', '3'));
-    #endif
+#endif
     // attempt to set desired resolution
     cap_.set(cv::CAP_PROP_FRAME_WIDTH, config_.width);
     cap_.set(cv::CAP_PROP_FRAME_HEIGHT, config_.height);
@@ -117,16 +115,16 @@ public:
     if (cv_frame_.empty()) {
       return {};
     }
-    #if defined __ANDROID__
+#if defined __ANDROID__
     auto frame = cv_frame_;
     cv::cvtColor(frame, frame, cv::COLOR_BGR2YUV_YV12);
     YV12toNV12(frame, nv12_frame_);
-    #else
+#else
     cv::cvtColor(cv_frame_, nv12_frame_, cv::COLOR_BGR2YUV_I420);
-    #endif
+#endif
 
     TELEMETRY(
-        load_counter++;)
+        load_counter_++;)
 
     return encoder_.EncodeBuffer(nv12_frame_.data);
   }
@@ -167,17 +165,17 @@ private:
     }
 
     TELEMETRY(
-        if (fps_counter % (TelemetryInterval * config_.frameRate) == 0) {
-          auto elapsed = (Time::Now() - last_fps_milestone) / Time::uS;
-          auto fetch_fps = static_cast<double>(load_counter) / elapsed;
-          load_counter = 0;
+        if (fps_counter_ % (TelemetryInterval * config_.frameRate) == 0) {
+          auto elapsed = (Time::Now() - last_fps_milestone_) / Time::uS;
+          auto fetch_fps = static_cast<double>(load_counter_) / elapsed;
+          load_counter_ = 0;
 
-          auto capture_fps = static_cast<double>(fps_counter) / elapsed;
-          last_fps_milestone = Time::Now();
-          fps_counter = 0;
+          auto capture_fps = static_cast<double>(fps_counter_) / elapsed;
+          last_fps_milestone_ = Time::Now();
+          fps_counter_ = 0;
 
           LOGI << "Video capture rate FPS: " << std::setprecision(2) << std::fixed << capture_fps << ", RTC request rate FPS:" << fetch_fps;
-        } fps_counter++;)
+        } fps_counter_++;)
 
     // due to OpenCV issue, camera frames should be captured as soon as possible,
     // otherwise a framerate will be significantly lowered

@@ -149,7 +149,7 @@ private:
     std::vector<Client> clients;
     // get track for given type
     auto get_track_data = [type](const std::shared_ptr<Peer>& peer) {
-      return type == Stream::Source::Type::Video ? peer->video : peer->audio;
+      return type == Stream::Source::Type::video ? peer->video : peer->audio;
     };
 
     // get all peers with Ready state
@@ -165,7 +165,7 @@ private:
   }
 
   static void SendMessageToAllTracks(const rtc::binary& sample, Stream::Source::Type type, uint64_t sampleTime, const std::vector<Client>& clients) {
-    const auto* stream_type = type == Stream::Source::Type::Video ? "video" : "audio";
+    const auto* stream_type = type == Stream::Source::Type::video ? "video" : "audio";
 
     for (const auto& client: clients) {
       ProcessTrack(client, sampleTime, sample, stream_type);

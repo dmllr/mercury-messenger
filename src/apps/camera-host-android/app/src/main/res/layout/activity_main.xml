@@ -15,7 +15,7 @@
       app:layout_constraintTop_toTopOf="parent">
 
     <ImageView
-        android:id="@+id/user_icon"
+        android:id="@+id/icUserIcon"
         android:layout_width="40dp"
         android:layout_height="40dp"
         android:layout_gravity="end"

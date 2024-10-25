@@ -2,8 +2,8 @@
 
 #include <memory>
 
-#include "hela/eillance/common/packet.hpp"
 #include "hela/eillance/capture/config.hpp"
+#include "hela/eillance/common/packet.hpp"
 
 namespace hela::eillance {
 

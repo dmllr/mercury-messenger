@@ -17,7 +17,7 @@
 
 namespace hela::eillance {
 
-auto GetAvailableCameras() -> std::vector<std::pair<std::string, std::string>> {
+inline auto GetAvailableCameras() -> std::vector<std::pair<std::string, std::string>> {
   ACameraManager* cameraManager = ACameraManager_create();
   if (!cameraManager) {
     LOGE << "Failed to create camera manager";
@@ -33,18 +33,18 @@ auto GetAvailableCameras() -> std::vector<std::pair<std::string, std::string>> {
 
   std::vector<std::pair<std::string, std::string>> cameras;
   for (int i = 0; i < cameraIdList->numCameras; ++i) {
-    const char* cameraId = cameraIdList->cameraIds[i];
+    const char* camera_id = cameraIdList->cameraIds[i];
 
     ACameraMetadata* metadata = nullptr;
-    if (ACameraManager_getCameraCharacteristics(cameraManager, cameraId, &metadata) != ACAMERA_OK) {
-      LOGE << "Failed to get camera characteristics for camera ID: " << cameraId;
+    if (ACameraManager_getCameraCharacteristics(cameraManager, camera_id, &metadata) != ACAMERA_OK) {
+      LOGE << "Failed to get camera characteristics for camera ID: " << camera_id;
       continue;
     }
 
     ACameraMetadata_const_entry entry;
     if (ACameraMetadata_getConstEntry(metadata, ACAMERA_LENS_FACING, &entry) == ACAMERA_OK) {
       const char* facing = (entry.data.u8[0] == ACAMERA_LENS_FACING_FRONT) ? "Front" : "Back";
-      cameras.push_back({cameraId, facing});
+      cameras.emplace_back(camera_id, facing);
     }
 
     ACameraMetadata_free(metadata);
@@ -56,17 +56,17 @@ auto GetAvailableCameras() -> std::vector<std::pair<std::string, std::string>> {
   return cameras;
 }
 
-auto GetSupportedResolutions(const std::string& cameraId) -> std::vector<std::pair<int32_t, int32_t>> {
-  ACameraManager* cameraManager = ACameraManager_create();
-  if (!cameraManager) {
+inline auto GetSupportedResolutions(const std::string& cameraId) -> std::vector<std::pair<int32_t, int32_t>> {
+  ACameraManager* camera_manager = ACameraManager_create();
+  if (!camera_manager) {
     LOGE << "Failed to create camera manager";
     return {};
   }
 
   ACameraMetadata* metadata = nullptr;
-  if (ACameraManager_getCameraCharacteristics(cameraManager, cameraId.c_str(), &metadata) != ACAMERA_OK) {
+  if (ACameraManager_getCameraCharacteristics(camera_manager, cameraId.c_str(), &metadata) != ACAMERA_OK) {
     LOGE << "Failed to get camera characteristics for camera ID: " << cameraId.c_str();
-    ACameraManager_delete(cameraManager);
+    ACameraManager_delete(camera_manager);
     return {};
   }
 
@@ -81,17 +81,17 @@ auto GetSupportedResolutions(const std::string& cameraId) -> std::vector<std::pa
   }
 
   ACameraMetadata_free(metadata);
-  ACameraManager_delete(cameraManager);
+  ACameraManager_delete(camera_manager);
 
   return resolutions;
 }
 
-auto GetDeviceProfileAsJson() -> nlohmann::json {
+inline auto GetDeviceProfileAsJson() -> nlohmann::json {
   using Json = nlohmann::json;
   auto cameras = GetAvailableCameras();
   auto cameras_json = Json::array();
 
-  for (const auto& camera : cameras) {
+  for (const auto& camera: cameras) {
     auto camera_json{Json()};
     camera_json["id"] = camera.first;
     camera_json["name"] = camera.second;
@@ -103,7 +103,7 @@ auto GetDeviceProfileAsJson() -> nlohmann::json {
     resolutions.erase(last, resolutions.end());
 
     auto resolutions_json{Json::array()};
-    for (const auto& res : resolutions) {
+    for (const auto& res: resolutions) {
       resolutions_json.push_back({{"width", res.first}, {"height", res.second}});
     }
 
@@ -115,7 +115,7 @@ auto GetDeviceProfileAsJson() -> nlohmann::json {
 }
 
 template<typename T>
-const char* GetPairStr(T key, std::vector<std::pair<T, const char*>>& store) {
+const char* GetPairStr(T key, const std::vector<std::pair<T, const char*>>& store) {
   for (auto it = store.begin(); it != store.end(); ++it) {
     if (it->first == key) {
       return it->second;
@@ -125,8 +125,8 @@ const char* GetPairStr(T key, std::vector<std::pair<T, const char*>>& store) {
   return "UNKNOWN";
 }
 
-using ERROR_PAIR = std::pair<camera_status_t, const char*>;
-static std::vector<ERROR_PAIR> CameraErrorInfo{
+using ErrorPair = std::pair<camera_status_t, const char*>;
+static const std::vector<ErrorPair> cameraErrorInfo{
     std::make_pair(ACAMERA_OK, "ACAMERA_OK"),
     std::make_pair(ACAMERA_ERROR_UNKNOWN, "ACAMERA_ERROR_UNKNOWN"),
     std::make_pair(ACAMERA_ERROR_INVALID_PARAMETER, "ACAMERA_ERROR_INVALID_PARAMETER"),
@@ -144,8 +144,8 @@ static std::vector<ERROR_PAIR> CameraErrorInfo{
     std::make_pair(ACAMERA_ERROR_PERMISSION_DENIED, "ACAMERA_ERROR_PERMISSION_DENIED"),
 };
 
-using DEV_ERROR_PAIR = std::pair<int, const char*>;
-static std::vector<DEV_ERROR_PAIR> CameraDeviceErrorInfo{
+using DevErrorPair = std::pair<int, const char*>;
+static const std::vector<DevErrorPair> cameraDeviceErrorInfo{
     std::make_pair(ERROR_CAMERA_IN_USE, "ERROR_CAMERA_IN_USE"),
     std::make_pair(ERROR_MAX_CAMERAS_IN_USE, "ERROR_MAX_CAMERAS_IN_USE"),
     std::make_pair(ERROR_CAMERA_DISABLED, "ERROR_CAMERA_DISABLED"),
@@ -154,11 +154,11 @@ static std::vector<DEV_ERROR_PAIR> CameraDeviceErrorInfo{
 };
 
 inline const char* GetErrorStr(camera_status_t err) {
-  return GetPairStr<camera_status_t>(err, CameraErrorInfo);
+  return GetPairStr<camera_status_t>(err, cameraErrorInfo);
 }
 
 inline const char* GetCameraDeviceErrorStr(int err) {
-  return GetPairStr<int>(err, CameraDeviceErrorInfo);
+  return GetPairStr<int>(err, cameraDeviceErrorInfo);
 }
 
 }  // namespace hela::eillance

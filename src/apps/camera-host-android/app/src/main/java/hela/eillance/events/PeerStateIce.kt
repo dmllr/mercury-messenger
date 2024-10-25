@@ -3,7 +3,7 @@ package hela.eillance.events
 import android.content.Context
 import hela.eillance.camera.R
 
-enum class StateIce(val value: Int) {
+enum class PeerStateIce(val value: Int) {
   New(0),
   Checking(1),
   Connected(2),
@@ -25,9 +25,10 @@ enum class StateIce(val value: Int) {
 
     fun fromInt(value: Int?) = entries.first { it.value == value }
   }
-}
 
-fun StateIce.getResourceString(context: Context): String {
-  val resourceId = StateIce.resourceMap[this] ?: R.string.unknown
-  return context.getString(resourceId)
+  @Suppress("unused")
+  fun getResourceString(context: Context): String {
+    val resourceId = resourceMap[this] ?: R.string.fr_operation_status_unknown
+    return context.getString(resourceId)
+  }
 }

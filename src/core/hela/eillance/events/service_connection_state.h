@@ -1,11 +1,14 @@
 #pragma once
 
+#include <cstdint>
+
 namespace hela::eillance {
 
-enum class SystemEvent : int {
+enum class ServiceConnectionState : std::uint8_t {
   unknown = 0,
-  started,
+  establishing,
   online,
+  failure,
 };
 
 }  // namespace hela::eillance

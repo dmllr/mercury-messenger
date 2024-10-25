@@ -3,7 +3,7 @@ package hela.eillance.events
 import android.content.Context
 import hela.eillance.camera.R
 
-enum class StateSignaling(val value: Int) {
+enum class PeerStateSignaling(val value: Int) {
   Stable(0),
   HaveLocalOffer(1),
   HaveRemoteOffer(2),
@@ -18,13 +18,15 @@ enum class StateSignaling(val value: Int) {
       HaveRemoteOffer to R.string.state_signaling_have_remote_offer,
       HaveLocalPranswer to R.string.state_signaling_have_local_pranswer,
       HaveRemotePranswer to R.string.state_signaling_have_remote_pranswer,
-      Unknown to R.string.unknown,
+      Unknown to R.string.fr_operation_status_unknown,
     )
+
     fun fromInt(value: Int?) = entries.first { it.value == value }
   }
-}
 
-fun StateSignaling.getResourceString(context: Context): String {
-  val resourceId = StateSignaling.resourceMap[this] ?: R.string.unknown
-  return context.getString(resourceId)
+  @Suppress("unused")
+  fun getResourceString(context: Context): String {
+    val resourceId = resourceMap[this] ?: R.string.fr_operation_status_unknown
+    return context.getString(resourceId)
+  }
 }
