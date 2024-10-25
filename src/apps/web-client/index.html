@@ -2,71 +2,105 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Eillance Web</title>
+    <link rel="icon" href="favicon.ico" sizes="any" />
+    <link rel="icon" href="icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <!-- Bootstrap CSS via CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
+        body {
+            padding-top: 20px;
+            background-color: #f8f9fa;
+        }
+        h2 {
+            margin-bottom: 16px;
+        }
         button {
-            padding: 8px 16px;
+            margin-top: 8px;
         }
-
-        pre {
-            overflow-x: hidden;
-            overflow-y: auto;
+        .client-list {
+            padding: 16px;
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
         }
-
-        video {
-            width: 100%;
-        }
-
-        .option {
-            margin-bottom: 8px;
-        }
-
         #media {
             max-width: 1280px;
+            margin-top: 16px;
         }
-
-        .client-list {
+        .select-container {
             margin-bottom: 16px;
+        }
+        video {
+            width: 100%;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        pre {
+            background-color: #e9ecef;
+            padding: 12px;
+            border-radius: 8px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            max-height: 300px;
+            overflow-y: auto;
         }
     </style>
 </head>
 <body>
-<script src="https://webrtc.github.io/adapter/adapter-latest.js"></script>
 
-<button id="start" onclick="start()" disabled>Start</button>
-<button id="stop" style="display: none" onclick="stop()">Stop</button>
-<button id="refresh" onclick="refreshPublishers()">Refresh Clients</button>
+<div class="container">
+    <h2 class="text-center">Available Clients</h2>
+    <div class="text-center">
+        <button id="refresh" class="btn btn-primary" onclick="refreshPublishers()">Refresh Clients</button>
+    </div>
+    <div class="client-list mt-3" id="client-list"></div>
 
-<h2>Available Clients</h2>
-<div class="client-list" id="client-list"></div>
+    <div class="text-center">
+        <button id="start" class="btn btn-success" onclick="start()" disabled>Start</button>
+        <button id="stop" class="btn btn-danger" style="display: none" onclick="stop()">Stop</button>
+    </div>
 
-<h2>State</h2>
-<p>
-    ICE gathering state: <span id="ice-gathering-state"></span>
-</p>
-<p>
-    ICE connection state: <span id="ice-connection-state"></span>
-</p>
-<p>
-    Signaling state: <span id="signaling-state"></span>
-</p>
+    <h2 class="mt-4">Camera and Resolution</h2>
+    <div class="row select-container">
+        <div class="col-md-6 mb-3">
+            <label for="camera-select" class="form-label">Camera:</label>
+            <select id="camera-select" class="form-select" onchange="onCameraChange()"></select>
+        </div>
+        <div class="col-md-6 mb-3">
+            <label for="resolution-select" class="form-label">Resolution:</label>
+            <select id="resolution-select" class="form-select" onchange="onResolutionChange()"></select>
+        </div>
+    </div>
 
-<div id="media" style="display: none">
-    <h2>Media</h2>
-    <video id="video" autoplay playsinline></video>
+    <h2>State</h2>
+    <p>ICE gathering state: <span id="ice-gathering-state"></span></p>
+    <p>ICE connection state: <span id="ice-connection-state"></span></p>
+    <p>Signaling state: <span id="signaling-state"></span></p>
+
+    <div id="media" class="mt-4" style="display: none">
+        <h2>Media</h2>
+        <video id="video" autoplay playsinline></video>
+    </div>
+
+    <h2 class="mt-4">Data Channel</h2>
+    <pre id="data-channel"></pre>
+
+    <h2 class="mt-4">SDP</h2>
+
+    <h3>Offer</h3>
+    <pre id="offer-sdp"></pre>
+
+    <h3>Answer</h3>
+    <pre id="answer-sdp"></pre>
 </div>
 
-<h2>Data channel</h2>
-<pre id="data-channel" style="height: 200px;"></pre>
-
-<h2>SDP</h2>
-
-<h3>Offer</h3>
-<pre id="offer-sdp"></pre>
-
-<h3>Answer</h3>
-<pre id="answer-sdp"></pre>
-
+<!-- Bootstrap JS and dependencies via CDN -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://webrtc.github.io/adapter/adapter-latest.js"></script>
 <script src="client.js"></script>
 
 </body>

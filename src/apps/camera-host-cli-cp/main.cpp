@@ -6,7 +6,8 @@
 
 auto main(int /*argc*/, char** /*argv*/) -> int {
   using namespace hela::eillance;
-  auto rtc = RtcTransport<RtcProducer>(StringUtils::RandomString());
+  auto rtc = RtcTransport<RtcProducer>();
+  rtc.SetName("CLI::" + StringUtils::RandomString());
   rtc.Start();
 
   while (true) {

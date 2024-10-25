@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "hela/eillance/capture/capture.hpp"
+#include "hela/eillance/capture/config.hpp"
 #include "hela/eillance/logging/logging.h"
 #include "hela/eillance/rtc/stream.hpp"
 #include "hela/eillance/utils/time.hpp"
@@ -26,6 +27,10 @@ public:
   StreamSource(const StreamSource&) = delete;
   StreamSource& operator=(StreamSource&&) = delete;
   StreamSource& operator=(const StreamSource&) = delete;
+
+  void Configure(Config config) final {
+    capture_.Configure(config);
+  }
 
   void Start() final {
     capture_.Engage();

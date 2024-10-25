@@ -9,6 +9,7 @@
 
 #include <rtc/rtc.hpp>
 
+#include "hela/eillance/capture/config.hpp"
 #include "hela/eillance/common/dispatch_queue.hpp"
 #include "hela/eillance/rtc/peer.hpp"
 
@@ -30,6 +31,7 @@ public:
       Video
     };
 
+    virtual void Configure(Config config) = 0;
     virtual void Start() = 0;
     virtual void Stop() = 0;
     virtual void LoadNextSample() = 0;
@@ -56,6 +58,14 @@ public:
   Stream(Stream&&) = delete;
   auto operator=(const Stream&) -> Stream& = delete;
   auto operator=(Stream&&) -> Stream& = delete;
+
+  auto Audio() {
+    return audio_;
+  }
+
+  auto Video() {
+    return video_;
+  }
 
   ~Stream() {
     Stop();

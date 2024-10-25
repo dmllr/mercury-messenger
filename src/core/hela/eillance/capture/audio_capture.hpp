@@ -15,6 +15,7 @@
 #include "hela/eillance/capture/audio_config.hpp"
 #include "hela/eillance/capture/audio_encoder.hpp"
 #include "hela/eillance/common/circular_buffer.hpp"
+#include "hela/eillance/capture/config.hpp"
 #include "hela/eillance/common/packet.hpp"
 #include "hela/eillance/logging/logging.h"
 #include "hela/eillance/logging/telemetry.h"
@@ -68,6 +69,9 @@ public:
             LOGI << "Audio capture rate FPS: " << std::setprecision(2) << std::fixed << capture_fps << ", RTC request rate FPS:" << fetch_fps;
           } self->fps_counter++;)
     };
+  }
+
+  void Configure(Config) {
   }
 
   void Engage() {

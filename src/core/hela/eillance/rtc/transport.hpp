@@ -1,7 +1,9 @@
 #pragma once
 
+#include <atomic>
 #include <memory>
 #include <thread>
+#include <cstdint>
 #include <unordered_map>
 
 #include <nlohmann/json.hpp>
@@ -9,6 +11,7 @@
 #include <rtc/rtc.h>
 
 #include "hela/eillance/common/dispatch_queue.hpp"
+#include "hela/eillance/device/camera_utils.hpp"
 #include "hela/eillance/events/event_source.h"
 #include "hela/eillance/events/service_state.h"
 #include "hela/eillance/events/system_event.h"
@@ -17,6 +20,7 @@
 #include "hela/eillance/rtc/status.hpp"
 #include "hela/eillance/rtc/stream.hpp"
 #include "hela/eillance/utils/memory.h"
+#include "hela/eillance/utils/string.hpp"
 
 
 namespace hela::eillance {
@@ -26,23 +30,26 @@ class RtcTransport {
   using Json = nlohmann::json;
   using StatusCallbackFunction = std::function<void(EventSource, int)>;
 
-  const std::string id;
-  std::string auth_token_;
+  std::string id_{StringUtils::RandomString()};
+  std::string device_name_{id_};
+  std::string auth_token_{};
+  std::atomic<bool> is_published_{false};
 
-  static constexpr auto minWaitBeforeReconnect = 1;
-  static constexpr auto maxWaitBeforeReconnect = 10;
+  static constexpr auto minWaitBeforeReconnect = 1U;
+  static constexpr auto maxWaitBeforeReconnect = 10U;
+  static constexpr auto maxConnectionAttempts = 10U;
 
   Connection connection_{};
-  rtc::WebSocketConfiguration ws_config_;
+  rtc::WebSocketConfiguration ws_config_{};
   rtc::WebSocket ws_{ws_config_};
-  std::uint32_t connection_attempt_{0};
+  std::uint32_t connection_attempt_{0U};
   std::uint32_t wait_before_reconnect_{minWaitBeforeReconnect};
 
   mutable Status status_{};
   std::shared_ptr<StatusCallbackFunction> status_callback_;
 
 public:
-  explicit RtcTransport(std::string local_id) : id(local_id) {
+  explicit RtcTransport() {
     ws_config_.caCertificatePemFile = zerosslCaBundle;
   }
   RtcTransport(RtcTransport&&) = delete;
@@ -59,13 +66,22 @@ public:
     return status_;
   }
 
+  void SetName(const std::string& device_name) {
+    device_name_ = device_name;
+    if (is_published_) {
+      DispatchQueue::MainThread().dispatch([this]() {
+        PublishClient();
+      });
+    }
+  }
+
   void Start() {
-    LOGI << "The local ID is: " << id.data();
+    LOGI << "The local ID is: " << id_.data();
 
     connection_attempt_++;
     if (connection_attempt_ <= 1) {
       wait_before_reconnect_ = 0;
-    } else if (connection_attempt_ > 1 && connection_attempt_ < 10) {
+    } else if (connection_attempt_ > 1 && connection_attempt_ < maxConnectionAttempts) {
       wait_before_reconnect_ = minWaitBeforeReconnect;
     } else {
       wait_before_reconnect_ = maxWaitBeforeReconnect;
@@ -103,11 +119,11 @@ public:
       auto it = message.find("from");
       if (it == message.end()) {
         DispatchQueue::MainThread().dispatch([this, message]() {
-          OnSystemMessage(std::move(message));
+          OnSystemMessage(message);
         });
       } else {
         DispatchQueue::MainThread().dispatch([this, message]() {
-          OnPeerMessage(std::move(message));
+          OnPeerMessage(message);
         });
       }
     });
@@ -129,6 +145,9 @@ public:
       connection_attempt_ = 0;
     } catch (const std::exception& e) {
       LOGI << "Error: " << e.what();
+      if (ws_.isOpen()) {
+        ws_.close();
+      }
       ReportStatus(ServiceState::failure);
       return;
     }
@@ -145,7 +164,7 @@ private:
 
   void ReportStateChange(const EventSource source, int state) const {
     if (status_callback_) {
-      (*status_callback_)(source, static_cast<int>(state));
+      (*status_callback_)(source, state);
     }
   }
 
@@ -167,9 +186,12 @@ private:
   void PublishClient() {
     Json message = {
         {"token", auth_token_},
-        {"type", "exhibit"},
-        {"client_id", id},
-        {"kind", "producer"}};
+        {"type", "publish"},
+        {"client_id", id_},
+        {"name", device_name_},
+        {"kind", "producer"},
+        {"profile", GetDeviceProfileAsJson()},
+    };
     ws_.send(message.dump());
   }
 
@@ -209,7 +231,7 @@ private:
       if (state == rtc::PeerConnection::GatheringState::Complete) {
         // Gathering complete, send answer
         if (auto peer_con = wpc.lock()) {
-          auto description = peer_con->localDescription();
+          const auto description = peer_con->localDescription();
           Json message = {
               {"to", id},
               {"token", auth_token_},
@@ -247,19 +269,45 @@ private:
   }
 
   auto CreateDefaultDataChannel(std::shared_ptr<rtc::PeerConnection> pc, const std::string& id) -> std::shared_ptr<rtc::DataChannel> {
-    auto dc = pc->createDataChannel("ping-pong");
+    auto dc = pc->createDataChannel("command-channel");
     dc->onOpen([id, wdc = make_weak_ptr(dc)]() {
       if (auto dc = wdc.lock()) {
         dc->send("Ping");
+
+        Json message = {
+          {"type", "info profile"},
+          {"profile", GetDeviceProfileAsJson()},
+        };
+
+        dc->send(message.dump());
       }
     });
 
     dc->onMessage(nullptr, [id, wdc = make_weak_ptr(dc), this](const std::string& msg) {
-      LOGD << "Message from " << id << " received: " << msg;
-      if (auto dc = wdc.lock()) {
-        dc->send("Ping");
+      LOGD << "Message from " << id_ << " received: " << msg;
+      if (msg.rfind("Pong ", 0) == 0) {
+        if (auto dc = wdc.lock()) {
+          dc->send("Ping");
+        }
+        ReportStateChange(EventSource::Ping, 1);
+        return;
       }
-      ReportStateChange(EventSource::Ping, 1);
+
+      const auto message = Json::parse(msg);
+      const auto itr = message.find("type");
+      if (itr == message.end()) {
+        return;
+      }
+      auto type = itr->get<std::string>();
+      if (type == "configuration") {
+        auto config{Config()};
+        auto& video_config = config.video_config;
+        video_config.cameraId = std::stoi(message["camera_id"].get<std::string>());
+        video_config.width = message["resolution"]["width"].get<std::uint32_t>();
+        video_config.height = message["resolution"]["height"].get<std::uint32_t>();
+
+        connection_.Configure(config);
+      }
     });
 
     return dc;
@@ -276,6 +324,7 @@ private:
       auth_token_ = message["token"].get<std::string>();
       DispatchQueue::MainThread().dispatch([this]() {
         PublishClient();
+        is_published_ = true;
       });
     } else if (type == "error") {
       LOGE << "Signaling error received: " << message["error"].get<std::string>();
@@ -312,6 +361,8 @@ private:
       }
     } else if (type == "offer") {
       // do nothing
+    } else if (type == "info profile") {
+      // do nothing
     } else {
       throw std::runtime_error("Unknown message type " + type);
     }
@@ -330,7 +381,7 @@ private:
               AddToStream(c, true);
             }
           });
-          LOGI << "Video from " << id << " opened";
+          LOGI << "Video from " << id_ << " opened";
         });
 
     peer->audio = connection_.AddAudio(
@@ -341,7 +392,7 @@ private:
               AddToStream(c, false);
             }
           });
-          LOGI << "Audio from " << id << " opened";
+          LOGI << "Audio from " << id_ << " opened";
         });
 
     peer->dataChannel = CreateDefaultDataChannel(pc, id);
@@ -363,15 +414,14 @@ private:
       rtc::Configuration config;
       config.iceServers.emplace_back("stun:stun.relay.metered.ca:80");
       config.iceServers.emplace_back("turn:49880a0f046c8990b1990b35:qZCNW/57EB8GwO3A@a.relay.metered.ca:80");
-      config.iceServers.emplace_back("turn:49880a0f046c8990b1990b35:qZCNW/57EB8GwO3A@a.relay.metered.ca:80?transport=tcp");
       config.iceServers.emplace_back("turn:49880a0f046c8990b1990b35:qZCNW/57EB8GwO3A@a.relay.metered.ca:443");
-      config.iceServers.emplace_back("turn:49880a0f046c8990b1990b35:qZCNW/57EB8GwO3A@a.relay.metered.ca:443?transport=tcp");
       return config;
     }
   };
 
-  constexpr static auto signalingServerUrl = "wss://app.hela.me:8000";
-//  constexpr static auto signalingServerUrl = "ws://localhost:8000";
+  constexpr static auto signalingServerUrl = "wss://app.hela.me:8000";  // prod
+//  constexpr static auto signalingServerUrl = "ws://10.0.2.2:8000";  // for android emulator
+//  constexpr static auto signalingServerUrl = "ws://127.0.0.1:8000";  // for general
 
   constexpr static auto zerosslCaBundle =
       "-----BEGIN CERTIFICATE-----\n"

@@ -18,14 +18,42 @@ class Client:
         Producer = 'producer',
         Consumer = 'consumer'
 
-    def __init__(self, id, kind, ws):
+    def __init__(self, id, name, kind, ws):
         self.id: str = id
+        self.name: str = name
         self.kind: Client.Kind = kind
         self.ws: WebSocketServerProtocol = ws
 
 
-clients: dict[str, dict[str, Client]] = {}
+class Producer(Client):
+    def __init__(self, id, name, kind, ws):
+        super().__init__(id, name, kind, ws)
+        self.profile = {}
+
+
+class Consumer(Client):
+    def __init__(self, id, name, kind, ws):
+        super().__init__(id, name, kind, ws)
+
+
+clients: dict[str, dict[str, Union[Producer, Consumer]]] = {}
 authManager = AuthManager()
+
+
+async def check_client_liveliness():
+    while True:
+        disconnected_clients = []
+        for user_id, user_clients in clients.items():
+            for client_id, client in list(user_clients.items()):
+                if client.ws.closed:
+                    disconnected_clients.append((user_id, client_id))
+
+        for user_id, client_id in disconnected_clients:
+            del clients[user_id][client_id]
+            print(f'Removed disconnected client "{user_id}/{client_id}"')
+            if not clients[user_id]:  # If no more clients for this user, delete user entry
+                del clients[user_id]
+        await asyncio.sleep(10)  # Run every 10 seconds
 
 
 async def handle_connection(websocket: WebSocketServerProtocol):
@@ -64,15 +92,18 @@ async def handle_connection(websocket: WebSocketServerProtocol):
             return False
         return authManager.validate_token(token)['user']
 
-    async def send_publishers(connection):
-        data = json.dumps({
+    async def send_publishers_for_client(connection):
+        jdump = json.dumps({
             "type": "info publishers",
-            "clients": [cid for cid, c in clients[user_id].items() if c.kind == Client.Kind.Producer]
+            "clients": [{"id": cid, "name": c.name, "profile": c.profile} for cid, c in clients[user_id].items() if c.kind == Client.Kind.Producer]
         })
-        print(f'>>[{user_id}/{client_id}]: {data}')
-        await connection.send(data)
+        print(f'>>[{user_id}/{client_id}]: {jdump}')
+        await connection.send(jdump)
 
-    # noinspection PyBroadException
+    async def send_publishers():
+        for client in clients[user_id]:
+            await send_publishers_for_client(clients[user_id][client].ws)
+
     try:
         while True:
             data = await websocket.recv()
@@ -92,22 +123,26 @@ async def handle_connection(websocket: WebSocketServerProtocol):
                 if not user_id:
                     return
 
-                if message['type'] == 'exhibit':
+                if message['type'] == 'publish':
                     client_id = message.get('client_id')
+                    client_name = message.get('name')
                     client_kind = message.get('kind')
                     if user_id not in clients:
                         clients[user_id] = {}
-                    clients[user_id][client_id] = Client(client_id, client_kind, websocket)
+                    clients[user_id][client_id] =(
+                        (Consumer if client_kind == Client.Kind.Consumer else Producer)(
+                            client_id, client_name, client_kind, websocket))
+                    if client_kind == Client.Kind.Producer:
+                        clients[user_id][client_id].profile = message.get('profile')
                     print(f'Peer "{user_id}/{client_id}" published')
-                    for client in clients[user_id]:
-                        await send_publishers(clients[user_id][client].ws)
+                    await send_publishers()
 
                 elif message['type'] == 'get publishers':
-                    await send_publishers(websocket)
+                    await send_publishers_for_client(websocket)
 
                 else:
                     destination_id = message['to']
-                    if destination_id not in clients[user_id]:
+                    if destination_id in clients[user_id]:
                         # redirect the message to a destination client
                         client = clients[user_id][destination_id]
                         message['from'] = client_id
@@ -123,24 +158,23 @@ async def handle_connection(websocket: WebSocketServerProtocol):
                         }
                         await websocket.send(json.dumps(response))
 
-    except KeyboardInterrupt:
-        ...
     except websockets.exceptions.ConnectionClosedError:
-        ...
+        print(f"Connection closed with error for client {user_id}/{client_id}")
     except websockets.exceptions.ConnectionClosedOK:
-        ...
+        print(f"Connection closed gracefully for client {user_id}/{client_id}")
     except Exception:
         print(traceback.format_exc())
-
     finally:
         if user_id and client_id and user_id in clients and client_id in clients[user_id]:
             del clients[user_id][client_id]
             print(f'Peer "{user_id}/{client_id}" disconnected')
-            await send_publishers(websocket)
+            try:
+                await send_publishers()
+            except Exception:
+                print(traceback.format_exc())
 
 
 if __name__ == '__main__':
-    # Usage: ./signaling_server.py [[host:]port] [SSL certificate file]
     endpoint_or_port = sys.argv[1] if len(sys.argv) > 1 else "8000"
     ssl_cert = sys.argv[2] if len(sys.argv) > 2 else None
     ssl_key = sys.argv[3] if len(sys.argv) > 3 else None
@@ -156,11 +190,13 @@ if __name__ == '__main__':
     print(f'Listening on {endpoint}')
     host, port = endpoint.rsplit(':', 1)
     start_server = websockets.serve(handle_connection, host, int(port), ssl=ssl_context)
-    asyncio.get_event_loop().run_until_complete(start_server)
-    # noinspection PyBroadException
+
+    loop = asyncio.get_event_loop()
+    loop.create_task(check_client_liveliness())
+    loop.run_until_complete(start_server)
     try:
-        asyncio.get_event_loop().run_forever()
+        loop.run_forever()
     except KeyboardInterrupt:
-        ...
+        pass
     except Exception:
         print(traceback.format_exc())
