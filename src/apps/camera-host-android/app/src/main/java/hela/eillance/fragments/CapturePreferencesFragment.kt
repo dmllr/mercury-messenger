@@ -7,6 +7,7 @@ import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.preference.EditTextPreference
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceFragmentCompat
 import hela.eillance.MainActivity
@@ -16,6 +17,7 @@ import hela.eillance.utils.CameraUtils
 
 
 class CapturePreferencesFragment : PreferenceFragmentCompat() {
+  private var deviceName: String = ""
   private var videoConfig: VideoConfig = VideoConfig()
 
   companion object {
@@ -39,19 +41,20 @@ class CapturePreferencesFragment : PreferenceFragmentCompat() {
       cameraIdsArray[i] = cameraIds[i]
     }
 
-    // Find the default camera and camera resolution preferences
+    // Find the preferences
+    val deviceNamePreference = findPreference<EditTextPreference>("device_name")
     val defaultCameraPreference = findPreference<ListPreference>("default_camera")
     val cameraResolutionPreference = findPreference<ListPreference>("camera_resolution")
     val frameRatePreference = findPreference<ListPreference>("frame_rate")
     val bitratePreference = findPreference<ListPreference>("bitrate")
 
-    videoConfig.cameraId = defaultCameraPreference?.value?.toInt() ?: 0
-    videoConfig.cameraName = defaultCameraPreference?.entry.toString()
+    deviceName = deviceNamePreference?.text ?: deviceName
+    videoConfig.cameraId = defaultCameraPreference?.value?.toInt() ?: videoConfig.cameraId
     val resolution = cameraResolutionPreference?.value?.split("x")
-    videoConfig.width = resolution?.get(0)?.toInt() ?: 0
-    videoConfig.height = resolution?.get(1)?.toInt() ?: 0
-    videoConfig.frameRate = frameRatePreference?.value?.toInt() ?: 30
-    videoConfig.bitrate = bitratePreference?.value?.toIntOrNull() ?: 0
+    videoConfig.width = resolution?.get(0)?.toInt() ?: videoConfig.width
+    videoConfig.height = resolution?.get(1)?.toInt() ?: videoConfig.height
+    videoConfig.frameRate = frameRatePreference?.value?.toInt() ?: videoConfig.frameRate
+    videoConfig.bitrate = bitratePreference?.value?.toIntOrNull() ?: videoConfig.bitrate
 
     // Get the supported resolutions for the selected camera
     val supportedResolutions = CameraUtils.getSupportedResolutions(cameraManager,
@@ -79,6 +82,11 @@ class CapturePreferencesFragment : PreferenceFragmentCompat() {
     bitratePreference?.value = "Auto"
 
     // Set listeners
+    deviceNamePreference?.setOnPreferenceChangeListener { _, value ->
+      deviceName = value.toString()
+      triggerDeviceNameUpdate()
+      true
+    }
     defaultCameraPreference?.setOnPreferenceChangeListener { _, value ->
 
       val newSupportedResolutions = CameraUtils.getSupportedResolutions(cameraManager, value as String)
@@ -92,7 +100,6 @@ class CapturePreferencesFragment : PreferenceFragmentCompat() {
       cameraResolutionPreference?.entryValues = newCameraResolutions
 
       videoConfig.cameraId = value.toInt()
-      videoConfig.cameraName = defaultCameraPreference.entry.toString()
       triggerConfigurationUpdate()
 
       true
@@ -116,14 +123,19 @@ class CapturePreferencesFragment : PreferenceFragmentCompat() {
     }
 
     // Set the summary providers for the preferences
+    deviceNamePreference?.summaryProvider = EditTextPreference.SimpleSummaryProvider.getInstance()
     defaultCameraPreference?.summaryProvider = ListPreference.SimpleSummaryProvider.getInstance()
     cameraResolutionPreference?.summaryProvider = ListPreference.SimpleSummaryProvider.getInstance()
     frameRatePreference?.summaryProvider = ListPreference.SimpleSummaryProvider.getInstance()
     bitratePreference?.summaryProvider = ListPreference.SimpleSummaryProvider.getInstance()
   }
 
+  private fun triggerDeviceNameUpdate() {
+    (requireActivity() as MainActivity).appEngineService?.configureDeviceName(deviceName)
+  }
+
   private fun triggerConfigurationUpdate() {
-    (requireActivity() as MainActivity).appEngineService?.configureVideoCapture(videoConfig);
+    (requireActivity() as MainActivity).appEngineService?.configureVideoCapture(videoConfig)
   }
 
   override fun onCreateView(

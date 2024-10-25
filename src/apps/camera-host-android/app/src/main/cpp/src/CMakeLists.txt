@@ -8,6 +8,8 @@ target_compile_features(camera-lib PUBLIC cxx_std_20)
 
 target_link_libraries(camera-lib
   android
+  camera2ndk
+  mediandk
   log
   hela-eillance-core
 )

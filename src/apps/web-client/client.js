@@ -2,11 +2,16 @@
 let rtc;
 let token = null; // Store the token here after authentication
 let selectedClientId = null; // Store the selected client ID here
+let selectedResolution = null;
+let profile = null;
 
 const iceConnectionLog = document.getElementById('ice-connection-state'),
     iceGatheringLog = document.getElementById('ice-gathering-state'),
     signalingLog = document.getElementById('signaling-state'),
     dataChannelLog = document.getElementById('data-channel');
+
+const cameraSelect = document.getElementById('camera-select');
+const resolutionSelect = document.getElementById('resolution-select');
 
 function randomString(len) {
     const charSet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -54,17 +59,7 @@ function createPeerConnection() {
             credential: "qZCNW/57EB8GwO3A",
         },
         {
-            urls: "turn:a.relay.metered.ca:80?transport=tcp",
-            username: "49880a0f046c8990b1990b35",
-            credential: "qZCNW/57EB8GwO3A",
-        },
-        {
             urls: "turn:a.relay.metered.ca:443",
-            username: "49880a0f046c8990b1990b35",
-            credential: "qZCNW/57EB8GwO3A",
-        },
-        {
-            urls: "turn:a.relay.metered.ca:443?transport=tcp",
             username: "49880a0f046c8990b1990b35",
             credential: "qZCNW/57EB8GwO3A",
         },
@@ -111,6 +106,7 @@ function createPeerConnection() {
     pc.ondatachannel = function (event) {
         dc = event.channel;
         dc.onopen = function () {
+            sendConfiguration();
             dataChannelLog.textContent += '- open\n';
             dataChannelLog.scrollTop = dataChannelLog.scrollHeight;
         };
@@ -118,16 +114,27 @@ function createPeerConnection() {
             dataChannelLog.textContent += '< ' + evt.data + '\n';
             dataChannelLog.scrollTop = dataChannelLog.scrollHeight;
 
-            dcTimeout = setTimeout(function () {
-                if (dc == null && dcTimeout != null) {
-                    dcTimeout = null;
-                    return
+            if (evt.data === "Ping") {
+                dcTimeout = setTimeout(function () {
+                    if (dc == null && dcTimeout != null) {
+                        dcTimeout = null;
+                        return
+                    }
+                    const reply = 'Pong ' + current_stamp();
+                    dataChannelLog.textContent += '> ' + reply + '\n';
+                    dataChannelLog.scrollTop = dataChannelLog.scrollHeight;
+                    dc.send(reply);
+                }, 1000);
+            } else {
+                const message = JSON.parse(evt.data);
+                if (message.type === "info profile") {
+                    if (profile == null) {
+                        // overwrite the profile if only it wasn't set during the publication
+                        profile = message.profile;
+                        populateCameraAndResolutionSelectors();
+                    }
                 }
-                const message = 'Pong ' + current_stamp();
-                dataChannelLog.textContent += '> ' + message + '\n';
-                dataChannelLog.scrollTop = dataChannelLog.scrollHeight;
-                dc.send(message);
-            }, 1000);
+            }
         }
         dc.onclose = function () {
             clearTimeout(dcTimeout);
@@ -240,29 +247,38 @@ function refreshPublishers() {
     }));
 }
 
-function updateClientList(clients) {
+function updateClientList(publishers) {
     const clientListDiv = document.getElementById('client-list');
     clientListDiv.innerHTML = '';
-    clients.forEach((client, index) => {
+    publishers.forEach((publisher, index) => {
+        const client_id = publisher.id;
+        const client_name = publisher.name;
+        const local_profile = publisher.profile;
         const radioBtn = document.createElement('input');
         radioBtn.type = 'radio';
         radioBtn.name = 'client';
-        radioBtn.value = client;
-        radioBtn.id = 'client_' + client;
-        radioBtn.checked = index === 0;
+        radioBtn.value = client_id;
+        radioBtn.id = 'client_' + client_id;
         radioBtn.onclick = function() {
             selectedClientId = this.value;
+            profile = local_profile;
+            populateCameraAndResolutionSelectors();
         };
+        if (index === 0) {
+            radioBtn.checked = true;
+            profile = local_profile;
+            populateCameraAndResolutionSelectors();
+        }
 
         const label = document.createElement('label');
-        label.htmlFor = 'client_' + client;
-        label.textContent = client;
+        label.htmlFor = 'client_' + client_id;
+        label.textContent = client_name;
 
         clientListDiv.appendChild(radioBtn);
         clientListDiv.appendChild(label);
         clientListDiv.appendChild(document.createElement('br'));
     });
-    selectedClientId = clients.length > 0 ? clients[0] : null;
+    selectedClientId = publishers.length > 0 ? publishers[0].id : null;
 }
 
 websocket.onmessage = async function (evt) {
@@ -276,7 +292,7 @@ websocket.onmessage = async function (evt) {
 
         // Publish the client after authentication
         websocket.send(JSON.stringify({
-            type: 'exhibit',
+            type: 'publish',
             token: token,
             client_id: receiveID,
             kind: "consumer",
@@ -291,5 +307,103 @@ websocket.onmessage = async function (evt) {
         console.error('Error: ', object.error, ', message: ', object.message);
     } else if (object.type === "info publishers") {
         updateClientList(object.clients);
+    } else {
+        console.error('Error: Unknown message type "', object.type, '" received');
     }
+}
+
+function populateCameraAndResolutionSelectors() {
+    cameraSelect.innerHTML = '';
+    resolutionSelect.innerHTML = '';
+
+    profile.forEach(camera => {
+        const option = document.createElement('option');
+        option.value = camera.id;
+        option.textContent = camera.name;
+        cameraSelect.appendChild(option);
+    });
+
+    if (profile.length > 0) {
+        populateResolutions(profile[0].resolutions);
+    }
+}
+
+function populateResolutions(resolutions) {
+    resolutionSelect.innerHTML = '';
+
+    // If there is a previously selected resolution, find the closest one
+    if (selectedResolution) {
+        resolutions.sort((a, b) => {
+            // Priority 1: width difference
+            const widthDiffA = Math.abs(a.width - selectedResolution.width);
+            const widthDiffB = Math.abs(b.width - selectedResolution.width);
+
+            if (widthDiffA !== widthDiffB) return widthDiffA - widthDiffB;
+
+            // Priority 2: total pixel difference (width * height)
+            const pixelsA = a.width * a.height;
+            const pixelsB = b.width * b.height;
+            const pixelDiffA = Math.abs(pixelsA - (selectedResolution.width * selectedResolution.height));
+            const pixelDiffB = Math.abs(pixelsB - (selectedResolution.width * selectedResolution.height));
+
+            return pixelDiffA - pixelDiffB;
+        });
+    }
+
+    // Populate the resolutions
+    resolutions.forEach((resolution, index) => {
+        const option = document.createElement('option');
+        option.value = JSON.stringify(resolution);
+        option.textContent = `${resolution.width}x${resolution.height}`;
+
+        // Select the first option or the closest match
+        if (index === 0 || (selectedResolution && resolution.width === resolutions[0].width && resolution.height === resolutions[0].height)) {
+            option.selected = true;
+        }
+
+        resolutionSelect.appendChild(option);
+    });
+
+    // Update the selectedResolution with the newly selected option
+    selectedResolution = resolutions[0];
+}
+
+function onCameraChange() {
+    // Save the currently selected resolution
+    if (resolutionSelect.value) {
+        selectedResolution = JSON.parse(resolutionSelect.value);
+    }
+
+    const selectedCameraId = cameraSelect.value;
+    const selectedCamera = profile.find(camera => camera.id === selectedCameraId);
+
+    // Populate resolutions for the new camera
+    populateResolutions(selectedCamera.resolutions);
+
+    // Send updated configuration
+    sendConfiguration();
+}
+
+function onResolutionChange() {
+    sendConfiguration();
+}
+
+function sendConfiguration() {
+    const cameraId = cameraSelect.value;
+    const resolution = JSON.parse(resolutionSelect.value);
+
+    const configurationMessage = {
+        type: 'configuration',
+        camera_id: cameraId,
+        resolution: resolution
+    };
+
+    if (!dc) {
+        return;
+    }
+
+    const message = JSON.stringify(configurationMessage);
+    dataChannelLog.textContent += '> ' + message + '\n';
+    dataChannelLog.scrollTop = dataChannelLog.scrollHeight;
+    dc.send(message);
 }

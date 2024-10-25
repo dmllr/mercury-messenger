@@ -121,29 +121,32 @@ public:
       return {};
     }
 
+    encoded_data.clear();
+
     auto timeoutUs = Time::uS / config_.frameRate;
     auto index = AMediaCodec_dequeueOutputBuffer(codec, &info, timeoutUs);
     if (likely(index >= 0)) {
-      if (unlikely(info.flags == AMEDIACODEC_BUFFER_FLAG_CODEC_CONFIG)) {
-        const auto config_info = info;
-        const auto config_index = index;
-        const auto config_buffer = AMediaCodec_getOutputBuffer(codec, static_cast<size_t>(config_index), NULL);
-        index = AMediaCodec_dequeueOutputBuffer(codec, &info, timeoutUs);
+      if (unlikely(info.flags & AMEDIACODEC_BUFFER_FLAG_CODEC_CONFIG)) {
         buffer = AMediaCodec_getOutputBuffer(codec, static_cast<size_t>(index), NULL);
-
-        encoded_data.clear();
-        encoded_data.insert(encoded_data.end(),
-                            reinterpret_cast<std::byte*>(&config_buffer[config_info.offset]),
-                            reinterpret_cast<std::byte*>(&config_buffer[config_info.offset + config_info.size]));
         encoded_data.insert(encoded_data.end(),
                             reinterpret_cast<std::byte*>(&buffer[info.offset]),
                             reinterpret_cast<std::byte*>(&buffer[info.size]));
-
-        AMediaCodec_releaseOutputBuffer(codec, static_cast<size_t>(config_index), false);
         AMediaCodec_releaseOutputBuffer(codec, static_cast<size_t>(index), false);
+
+        // on some SDK versions (28. 29) this delay is important before a new AMediaCodec_dequeueOutputBuffer might be called
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+        index = AMediaCodec_dequeueOutputBuffer(codec, &info, timeoutUs);
+        if (index > 0) {
+          buffer = AMediaCodec_getOutputBuffer(codec, static_cast<size_t>(index), NULL);
+
+          encoded_data.insert(encoded_data.end(),
+                              reinterpret_cast<std::byte*>(&buffer[info.offset]),
+                              reinterpret_cast<std::byte*>(&buffer[info.size]));
+          AMediaCodec_releaseOutputBuffer(codec, static_cast<size_t>(index), false);
+        }
       } else {
         buffer = AMediaCodec_getOutputBuffer(codec, static_cast<size_t>(index), NULL);
-        encoded_data.clear();
         encoded_data.insert(encoded_data.end(),
                             reinterpret_cast<std::byte*>(&buffer[info.offset]),
                             reinterpret_cast<std::byte*>(&buffer[info.size]));
@@ -151,20 +154,17 @@ public:
       }
     } else if (index == AMEDIACODEC_INFO_OUTPUT_BUFFERS_CHANGED) {
       LOGI << "Output buffers changed";
-      encoded_data.clear();
     } else if (index == AMEDIACODEC_INFO_OUTPUT_FORMAT_CHANGED) {
       auto format = AMediaCodec_getOutputFormat(codec);
       LOGI << "Format set to: " << AMediaFormat_toString(format);
       AMediaFormat_delete(format);
-      encoded_data.clear();
     } else if (index == AMEDIACODEC_INFO_TRY_AGAIN_LATER) {
       // it's okay
     } else {
       LOGI << "AMediaCodec_dequeueOutputBuffer unexpected return: " << index;
-      encoded_data.clear();
     }
 
-    return Packet{std::move(encoded_data)};
+    return Packet{encoded_data};
   }
 };
 

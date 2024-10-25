@@ -10,22 +10,30 @@ import android.content.res.Configuration
 import android.os.Bundle
 import android.os.IBinder
 import android.util.Log
+import android.view.Gravity
+import android.view.LayoutInflater
 import android.view.MenuItem
 import android.view.View
+import android.view.ViewGroup
+import android.widget.Button
+import android.widget.PopupWindow
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.PopupMenu
 import androidx.core.app.ActivityCompat
 import androidx.fragment.app.FragmentManager
 import hela.eillance.camera.R
 import hela.eillance.camera.databinding.ActivityMainBinding
+import hela.eillance.fragments.CapturePreferencesFragment
 import hela.eillance.fragments.OperationFragment
 
 
-class MainActivity : AppCompatActivity(), ServiceConnection, FragmentManager.OnBackStackChangedListener {
+class MainActivity : AppCompatActivity(), ServiceConnection,
+  FragmentManager.OnBackStackChangedListener {
 
   var appEngineService: AppEngineService? = null
   private var cameraServiceBound: Boolean = false
   private lateinit var binding: ActivityMainBinding
-
   private var uiMode: Int = 0
 
   override fun onCreate(savedInstanceState: Bundle?) {
@@ -33,17 +41,29 @@ class MainActivity : AppCompatActivity(), ServiceConnection, FragmentManager.OnB
 
     uiMode = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
 
-    onWindowFocusChanged(true)
-
     binding = ActivityMainBinding.inflate(layoutInflater)
     setContentView(binding.root)
     setEventHandlers()
     checkAndRequestCamera()
 
+    val toolbar: androidx.appcompat.widget.Toolbar = findViewById(R.id.toolbar)
+    setSupportActionBar(toolbar)
+
     supportFragmentManager.addOnBackStackChangedListener(this)
     updateActionBar()
 
     supportActionBar?.setHomeButtonEnabled(true)
+
+    // Handle back button with OnBackPressedDispatcher
+    onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+      override fun handleOnBackPressed() {
+        if (supportFragmentManager.backStackEntryCount > 0) {
+          supportFragmentManager.popBackStack()
+        } else {
+          finish() // or handle other back navigation logic
+        }
+      }
+    })
   }
 
   override fun onConfigurationChanged(newConfig: Configuration) {
@@ -60,6 +80,40 @@ class MainActivity : AppCompatActivity(), ServiceConnection, FragmentManager.OnB
     binding.btnPermissionWarning.setOnClickListener {
       checkAndRequestCamera()
     }
+    binding.userIcon.setOnClickListener {
+      val popup = PopupMenu(this, it)
+      popup.menuInflater.inflate(R.menu.user_menu, popup.menu)
+      popup.setOnMenuItemClickListener { menuItem ->
+        when (menuItem.itemId) {
+          R.id.menu_item_preferences -> {
+            val fragmentTag = CapturePreferencesFragment::class.java.simpleName
+            val fragmentManager = supportFragmentManager
+
+            // Check the fragment currently on top of the stack
+            val currentFragment = fragmentManager.findFragmentById(R.id.content)
+
+            // If the top fragment is already the one we want, do nothing
+            if (currentFragment is CapturePreferencesFragment) {
+              return@setOnMenuItemClickListener true
+            }
+
+            // If the fragment already exists in the stack, pop to it
+            if (fragmentManager.findFragmentByTag(fragmentTag) != null) {
+              fragmentManager.popBackStackImmediate(fragmentTag, 0)
+            } else {
+              // Otherwise, add the fragment and assign it a unique tag
+              fragmentManager.beginTransaction()
+                .replace(R.id.content, CapturePreferencesFragment.instance(), fragmentTag)
+                .addToBackStack(fragmentTag)
+                .commit()
+            }
+            true
+          }
+          else -> false  // return false if the click is not handled
+        }
+      }
+      popup.show()
+    }
   }
 
   override fun onDestroy() {
@@ -69,13 +123,19 @@ class MainActivity : AppCompatActivity(), ServiceConnection, FragmentManager.OnB
   }
 
   override fun onOptionsItemSelected(item: MenuItem): Boolean {
-    when (item.itemId) {
+    return when (item.itemId) {
       android.R.id.home -> {
-        onBackPressedDispatcher.onBackPressed()
-        return true
+        // Handle the back button event, popping the fragment back stack
+        if (supportFragmentManager.backStackEntryCount > 0) {
+          supportFragmentManager.popBackStack()
+        } else {
+          finish() // Handle default action
+        }
+        true
       }
+
+      else -> super.onOptionsItemSelected(item)
     }
-    return super.onOptionsItemSelected(item)
   }
 
   private fun pushFragment() {
@@ -150,7 +210,7 @@ class MainActivity : AppCompatActivity(), ServiceConnection, FragmentManager.OnB
       try {
         unbindService(this)
       } catch (_: IllegalArgumentException) {
-        Log.e(Tune.TAG, "Trying to unbid service that is not registered")
+        Log.e(Tune.TAG, "Trying to unbind service that is not registered")
       }
       cameraServiceBound = false
     }
@@ -168,6 +228,11 @@ class MainActivity : AppCompatActivity(), ServiceConnection, FragmentManager.OnB
 
   override fun onBackStackChanged() {
     updateActionBar()
+  }
+
+  override fun onSupportNavigateUp(): Boolean {
+    onBackPressedDispatcher.onBackPressed() // Use OnBackPressedDispatcher instead
+    return true
   }
 
   private fun updateActionBar() {

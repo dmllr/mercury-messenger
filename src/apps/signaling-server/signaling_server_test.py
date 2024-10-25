@@ -1,8 +1,7 @@
 import asyncio
-from asyncio import sleep
-
 import websockets
 import json
+import time
 
 
 async def authenticate_and_exhibit():
@@ -21,7 +20,30 @@ async def authenticate_and_exhibit():
             return
 
         print("Publish a client")
-        await websocket.send(json.dumps({"type": "exhibit", "token": token, "client_id": "client1", "kind": "producer"}))
+        await websocket.send(json.dumps({"type": "publish", "token": token, "client_id": "client1", "name": "Nice name", "kind": "producer",
+                                         "profile": [{"id": "0", "name": "Back",
+                                                      "resolutions": [{"height": 480, "width": 640},
+                                                                      {"height": 144, "width": 176},
+                                                                      {"height": 960, "width": 1280}]},
+                                                     {"id": "1", "name": "Front",
+                                                      "resolutions": [{"height": 1440, "width": 1920},
+                                                                      {"height": 1080, "width": 1920},
+                                                                      {"height": 600, "width": 800},
+                                                                      {"height": 240, "width": 320}]}]}))
+        response = await websocket.recv()
+        print("Message response:", response)
+
+        print("Rename a client")
+        await websocket.send(json.dumps({"type": "publish", "token": token, "client_id": "client1", "name": "Brand new name", "kind": "producer",
+                                         "profile": [{"id": "0", "name": "Back",
+                                                      "resolutions": [{"height": 480, "width": 640},
+                                                                      {"height": 144, "width": 176},
+                                                                      {"height": 960, "width": 1280}]},
+                                                     {"id": "1", "name": "Front",
+                                                      "resolutions": [{"height": 1440, "width": 1920},
+                                                                      {"height": 1080, "width": 1920},
+                                                                      {"height": 600, "width": 800},
+                                                                      {"height": 240, "width": 320}]}]}))
         response = await websocket.recv()
         print("Message response:", response)
 
@@ -38,9 +60,13 @@ async def authenticate_and_exhibit():
         response = await websocket.recv()
         print("Message response:", response)
 
+        time.sleep(1)
+
         print("Republish a client as consumer")
-        await websocket.send(json.dumps({"type": "exhibit", "token": token, "client_id": "client1", "kind": "consumer"}))
+        await websocket.send(
+            json.dumps({"type": "publish", "token": token, "client_id": "client1", "kind": "consumer"}))
         response = await websocket.recv()
         print("Message response:", response)
+
 
 asyncio.run(authenticate_and_exhibit())
