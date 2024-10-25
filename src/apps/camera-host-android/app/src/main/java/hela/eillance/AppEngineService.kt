@@ -7,7 +7,6 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.hardware.camera2.CameraAccessException
@@ -20,29 +19,23 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.preference.PreferenceManager
 import hela.eillance.camera.R
 import hela.eillance.events.EventSource
-import hela.eillance.events.StateService
-import hela.eillance.events.SystemEvent
-import hela.eillance.events.getResourceString
-import hela.eillance.events.interfaces.IStatusUpdateCallback
-import hela.eillance.ndkio.Status
+import hela.eillance.events.ServiceConnectionState
+import hela.eillance.events.interfaces.INativeBridge
 import hela.eillance.ndkio.VideoConfig
 
 
-class AppEngineService : Service(), IStatusUpdateCallback {
+class AppEngineService : Service(), INativeBridge {
   private var appEngine: Long = 0
-  private var underlyingServicesStates: MutableMap<EventSource, StateService> = mutableMapOf(
-    EventSource.ConnectionStatus to StateService.Unknown,
-  )
+  private var serviceConnectionState: ServiceConnectionState = ServiceConnectionState.Unknown
 
   inner class StreamingServiceBinder : Binder() {
     val service: AppEngineService
       get() = this@AppEngineService
   }
-
-  // AppEngine callback interface
 
   private val streamingServiceBinder = StreamingServiceBinder()
 
@@ -77,26 +70,23 @@ class AppEngineService : Service(), IStatusUpdateCallback {
     return streamingServiceBinder
   }
 
-  override fun onStatusUpdate(source: Int, status: Int) {
+  override fun onStatusUpdate(peerId: String, source: Int, status: Int) {
     val intent = Intent(Tune::BroadcastActionOnStateUpdate.get())
+    intent.putExtra(Tune::BroadcastActionOnStateUpdate_peer_id.get(), peerId)
     intent.putExtra(Tune::BroadcastActionOnStateUpdate_source.get(), source)
     intent.putExtra(Tune::BroadcastActionOnStateUpdate_state.get(), status)
-    sendBroadcast(intent)
+    LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
 
-    if (source == EventSource.System.value && status == SystemEvent.Started.value) {
-      val deviceName = getDeviceNamePreference()
-      configureDeviceName(deviceName);
+    if (source == EventSource.System.value) {
+      serviceConnectionState = ServiceConnectionState.fromInt(status)
 
-      val videoConfig = getVideoConfigPreferences()
-      configureVideoCapture(videoConfig);
-    }
+      if (status == ServiceConnectionState.Establishing.value) {
+        val deviceName = getDeviceNamePreference()
+        configureDeviceName(deviceName)
 
-    val src = EventSource.fromInt(source)
-    if (src == EventSource.ConnectionStatus) {
-      val state = StateService.fromInt(status)
-
-      underlyingServicesStates[src] = state
-      Log.d(Tune.TAG, "Status update: $src/$state")
+        val videoConfig = getVideoConfigPreferences()
+        configureVideoCapture(videoConfig)
+      }
 
       startForeground()
     }
@@ -105,7 +95,7 @@ class AppEngineService : Service(), IStatusUpdateCallback {
   private fun getDeviceNamePreference(): String {
     val sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this)
     val deviceName = sharedPreferences.getString("device_name", "")
-    return deviceName!!;
+    return deviceName!!
   }
 
   private fun getVideoConfigPreferences(): VideoConfig {
@@ -149,8 +139,8 @@ class AppEngineService : Service(), IStatusUpdateCallback {
     appEngine = createAppEngine(this)
   }
 
-  fun getStatus(): Status {
-    return getStatus(appEngine)
+  fun getServiceConnectionState(): ServiceConnectionState {
+    return getServiceConnectionState(appEngine)
   }
 
   fun configureDeviceName(name: String) {
@@ -165,7 +155,8 @@ class AppEngineService : Service(), IStatusUpdateCallback {
     DrawableCompat.setTint(drawable!!, color)
 
     val bitmap = Bitmap.createBitmap(
-      drawable.intrinsicWidth, drawable.intrinsicHeight, Bitmap.Config.ARGB_8888)
+      drawable.intrinsicWidth, drawable.intrinsicHeight, Bitmap.Config.ARGB_8888
+    )
     val canvas = Canvas(bitmap)
     drawable.setBounds(0, 0, canvas.width, canvas.height)
     drawable.draw(canvas)
@@ -175,14 +166,12 @@ class AppEngineService : Service(), IStatusUpdateCallback {
   private fun startForeground() {
     val channel = createNotificationChannel()
 
-    val customText =
-      underlyingServicesStates[EventSource.ConnectionStatus]?.getResourceString(this)
-    val statusIcon = when (underlyingServicesStates[EventSource.ConnectionStatus]) {
-      StateService.Standby -> Pair(R.drawable.ic_status1_standby, R.color.colorPositive)
-      StateService.Setup   -> Pair(R.drawable.ic_status2,         R.color.colorPositive)
-      StateService.Action  -> Pair(R.drawable.ic_in_action,       R.color.colorPositive)
-      StateService.Failure -> Pair(R.drawable.ic_failure,         R.color.colorNegative)
-      else                 -> Pair(R.drawable.ic_status1_standby, R.color.colorNegative)
+    val customText = serviceConnectionState.getResourceString(this)
+    val statusIcon = when (serviceConnectionState) {
+      ServiceConnectionState.Unknown -> Pair(R.drawable.ic_status1_standby, R.color.colorNegative)
+      ServiceConnectionState.Establishing -> Pair(R.drawable.ic_status2, R.color.colorPositive)
+      ServiceConnectionState.Online -> Pair(R.drawable.ic_status1_standby, R.color.colorPositive)
+      ServiceConnectionState.Failure -> Pair(R.drawable.ic_failure, R.color.colorNegative)
     }
 
     val mainActivityIntent = Intent(this, MainActivity::class.java)
@@ -228,9 +217,9 @@ class AppEngineService : Service(), IStatusUpdateCallback {
   }
 
   // native lib functions
-  private external fun createAppEngine(statusCallback: IStatusUpdateCallback): Long
+  private external fun createAppEngine(nativeBridge: INativeBridge): Long
   private external fun deleteAppEngine(appMgr: Long)
-  private external fun getStatus(appMgr: Long): Status
+  private external fun getServiceConnectionState(appMgr: Long): ServiceConnectionState
   private external fun configureDeviceName(appMgr: Long, name: String)
   external fun configureVideoCapture(conf: VideoConfig)
 
@@ -238,7 +227,7 @@ class AppEngineService : Service(), IStatusUpdateCallback {
     private const val CAMERA_SERVICE_FG_ID = 9990
 
     init {
-      System.loadLibrary("camera-lib")
+      System.loadLibrary("app-engine-lib")
     }
   }
 }

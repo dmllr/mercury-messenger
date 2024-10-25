@@ -57,8 +57,10 @@ class CapturePreferencesFragment : PreferenceFragmentCompat() {
     videoConfig.bitrate = bitratePreference?.value?.toIntOrNull() ?: videoConfig.bitrate
 
     // Get the supported resolutions for the selected camera
-    val supportedResolutions = CameraUtils.getSupportedResolutions(cameraManager,
-      defaultCameraPreference?.value ?: cameraIds[0])
+    val supportedResolutions = CameraUtils.getSupportedResolutions(
+      cameraManager,
+      defaultCameraPreference?.value ?: cameraIds[0]
+    )
 
     // Create the camera resolutions array
     val cameraResolutions = arrayOfNulls<String>(supportedResolutions.size)
@@ -89,7 +91,8 @@ class CapturePreferencesFragment : PreferenceFragmentCompat() {
     }
     defaultCameraPreference?.setOnPreferenceChangeListener { _, value ->
 
-      val newSupportedResolutions = CameraUtils.getSupportedResolutions(cameraManager, value as String)
+      val newSupportedResolutions =
+        CameraUtils.getSupportedResolutions(cameraManager, value as String)
 
       val newCameraResolutions = arrayOfNulls<String>(newSupportedResolutions.size)
       for (i in newSupportedResolutions.indices) {

@@ -3,7 +3,7 @@ package hela.eillance.events
 import android.content.Context
 import hela.eillance.camera.R
 
-enum class StatePeerConnection(val value: Int) {
+enum class PeerStateLink(val value: Int) {
   New(0),
   Connecting(1),
   Connected(2),
@@ -23,9 +23,10 @@ enum class StatePeerConnection(val value: Int) {
 
     fun fromInt(value: Int?) = entries.first { it.value == value }
   }
-}
 
-fun StatePeerConnection.getResourceString(context: Context): String {
-  val resourceId = StatePeerConnection.resourceMap[this] ?: R.string.unknown
-  return context.getString(resourceId)
+  @Suppress("unused")
+  fun getResourceString(context: Context): String {
+    val resourceId = resourceMap[this] ?: R.string.fr_operation_status_unknown
+    return context.getString(resourceId)
+  }
 }

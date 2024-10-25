@@ -10,13 +10,8 @@ import android.content.res.Configuration
 import android.os.Bundle
 import android.os.IBinder
 import android.util.Log
-import android.view.Gravity
-import android.view.LayoutInflater
 import android.view.MenuItem
 import android.view.View
-import android.view.ViewGroup
-import android.widget.Button
-import android.widget.PopupWindow
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.PopupMenu
@@ -80,7 +75,7 @@ class MainActivity : AppCompatActivity(), ServiceConnection,
     binding.btnPermissionWarning.setOnClickListener {
       checkAndRequestCamera()
     }
-    binding.userIcon.setOnClickListener {
+    binding.icUserIcon.setOnClickListener {
       val popup = PopupMenu(this, it)
       popup.menuInflater.inflate(R.menu.user_menu, popup.menu)
       popup.setOnMenuItemClickListener { menuItem ->
@@ -109,6 +104,7 @@ class MainActivity : AppCompatActivity(), ServiceConnection,
             }
             true
           }
+
           else -> false  // return false if the click is not handled
         }
       }

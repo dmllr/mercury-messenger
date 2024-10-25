@@ -27,8 +27,8 @@ public:
     Source& operator=(const Source&) = delete;
 
     enum class Type : std::uint8_t {
-      Audio,
-      Video
+      audio,
+      video
     };
 
     virtual void Configure(Config config) = 0;
@@ -45,12 +45,10 @@ public:
   };
 
 private:
-  DispatchQueue dispatchQueue = DispatchQueue("StreamQueue", 1);
-
-  bool isRunning = false;
-
-  const std::shared_ptr<Source> audio_;
-  const std::shared_ptr<Source> video_;
+  DispatchQueue dispatchQueue_ = DispatchQueue("StreamQueue", 1);
+  std::shared_ptr<Source> audio_;
+  std::shared_ptr<Source> video_;
+  bool isRunning_ = false;
 
 public:
   Stream(std::shared_ptr<Source> video, std::shared_ptr<Source> audio) : audio_(std::move(audio)), video_(std::move(video)) {}
@@ -75,42 +73,41 @@ private:
   rtc::synchronized_callback<Source::Type, uint64_t, rtc::binary> sampleHandler_;
 
   auto UnsafePrepareForSample() -> std::pair<std::shared_ptr<Source>, Source::Type> {
-    std::shared_ptr<Source> ss;
-    Source::Type sst;
-    uint64_t next_time;
+    std::shared_ptr<Source> src;
+    Source::Type srct{};
+    uint64_t next_time{};
     if (audio_->GetSampleTime() < video_->GetSampleTime()) {
-      ss = audio_;
-      sst = Source::Type::Audio;
+      src = audio_;
+      srct = Source::Type::audio;
       next_time = audio_->GetSampleTime();
     } else {
-      ss = video_;
-      sst = Source::Type::Video;
+      src = video_;
+      srct = Source::Type::video;
       next_time = video_->GetSampleTime();
     }
 
     auto current_time = Time::Now();
 
     TELEMETRY(
-      LOGD << "AT: " << audio_->GetSampleTime() << "\n"
-           << "VT: " << video_->GetSampleTime() << "\n"
-           << " T: " << ((sst == Source::Type::Audio) ? "Audio" : "Video") << "\n";
-    )
+        LOGD << "AT: " << audio_->GetSampleTime() << "\n"
+             << "VT: " << video_->GetSampleTime() << "\n"
+             << " T: " << ((srct == Source::Type::audio) ? "Audio" : "Video") << "\n";)
     if (next_time > current_time) {
       auto wait_time = next_time - current_time;
       std::this_thread::sleep_for(std::chrono::microseconds(wait_time));
     }
-    return {ss, sst};
+    return {src, srct};
   }
 
   void SendSample() {
-    if (!isRunning) {
+    if (!isRunning_) {
       return;
     }
     auto [ss, sst] = UnsafePrepareForSample();
     auto sample = ss->GetSample();
     sampleHandler_(sst, ss->GetSampleTime(), sample);
     ss->LoadNextSample();
-    dispatchQueue.dispatch([this]() {
+    dispatchQueue_.dispatch([this]() {
       this->SendSample();
     });
   }
@@ -121,23 +118,23 @@ public:
   }
 
   void Start() {
-    if (isRunning) {
+    if (isRunning_) {
       return;
     }
-    isRunning = true;
+    isRunning_ = true;
     video_->Start();
     audio_->Start();
-    dispatchQueue.dispatch([this]() {
+    dispatchQueue_.dispatch([this]() {
       this->SendSample();
     });
   }
 
   void Stop() {
-    if (!isRunning) {
+    if (!isRunning_) {
       return;
     }
-    isRunning = false;
-    dispatchQueue.removePending();
+    isRunning_ = false;
+    dispatchQueue_.removePending();
     audio_->Stop();
     video_->Stop();
   }

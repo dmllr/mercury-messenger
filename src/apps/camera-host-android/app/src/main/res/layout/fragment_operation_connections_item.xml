@@ -1,0 +1,47 @@
+<androidx.cardview.widget.CardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginStart="12dp"
+    android:layout_marginEnd="12dp"
+    android:layout_marginTop="4dp"
+    android:layout_marginBottom="4dp">
+
+  <TableLayout
+      style="@style/TableRowItem"
+      android:layout_width="match_parent"
+      android:layout_height="match_parent">
+
+    <TableRow
+        style="@style/TableRowItem"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+      <LinearLayout
+          android:layout_weight="1"
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content">
+        <TextView
+            style="@android:style/TextAppearance.DeviceDefault.SearchResult.Title"
+            android:id="@+id/txClientName"
+            android:layout_weight="1"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content" />
+        <TextView
+            style="@style/TableRowItem"
+            android:id="@+id/pingState"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/led" />
+        <TextView
+            style="@style/TableRowItem"
+            android:id="@+id/peerConnectionState"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"/>
+      </LinearLayout>
+    </TableRow>
+
+  </TableLayout>
+
+</androidx.cardview.widget.CardView>
+

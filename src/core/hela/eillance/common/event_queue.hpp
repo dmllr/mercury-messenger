@@ -25,7 +25,7 @@ private:
   std::deque<std::pair<std::type_index, std::any>> events_;
   std::unordered_map<std::type_index, std::vector<std::pair<SubscriberTypeId, std::function<void(const std::any&)>>>> subscribers_;
   DispatchQueue dispatchQueue_ = DispatchQueue("EventQueue", 1);
-  SubscriberTypeId nextId_ = 0; // For unique callback identification
+  SubscriberTypeId nextId_ = 0;  // For unique callback identification
 
   struct TerminationEvent {
     bool terminate{true};
@@ -52,9 +52,9 @@ public:
   }
 
   /// Subscribe to events of a specific type.
-  template <typename EventType>
+  template<typename EventType>
   SubscriberTypeId Subscribe(const std::function<void(const EventType&)>& callback) {
-    std::lock_guard<std::mutex> lock(sync_mutex_);
+    const auto lock = std::lock_guard<std::mutex>(sync_mutex_);
     SubscriberTypeId id = nextId_++;
     subscribers_[typeid(EventType)].emplace_back(id, [callback](const std::any& event) {
       callback(std::any_cast<EventType>(event));
@@ -63,17 +63,18 @@ public:
   }
 
   /// Unsubscribe from events of a specific type.
-  template <typename EventType>
+  template<typename EventType>
   void Unsubscribe(SubscriberTypeId id) {
-    std::lock_guard<std::mutex> lock(sync_mutex_);
+    const auto lock = std::lock_guard<std::mutex>(sync_mutex_);
     auto& vec = subscribers_[typeid(EventType)];
     vec.erase(std::remove_if(vec.begin(), vec.end(), [id](const auto& pair) {
                 return pair.first == id;
-              }), vec.end());
+              }),
+              vec.end());
   }
 
   /// Push an event to the queue.
-  template <typename EventType>
+  template<typename EventType>
   void Push(const EventType&& event) {
     {
       std::lock_guard<std::mutex> const lock(sync_mutex_);
@@ -114,10 +115,10 @@ public:
   }
 
 private:
-  template <typename FirstType, typename SecondType>
+  template<typename FirstType, typename SecondType>
   std::pair<FirstType, SecondType> MakePair(FirstType&& first, SecondType&& second) {
     return std::pair<FirstType, SecondType>(std::forward<FirstType>(first), std::forward<SecondType>(second));
   }
 };
 
-} // namespace hela::eillance
+}  // namespace hela::eillance

@@ -17,17 +17,16 @@ namespace hela::eillance {
 
 class AppEngine {
   JavaVM* jvm_;
-  JNIEnv* env_;
   jobject service_instance_;
-  jobject status_update_callback_;
+  jobject native_bridge_;
   std::shared_ptr<hela::eillance::RtcTransport<hela::eillance::RtcProducer>> rtc_producer_;
 
 public:
-  explicit AppEngine(JavaVM* jvm, JNIEnv* env, jobject instance, jobject status_update_callback)
+  // NOLINTNEXTLINE(*-easily-swappable-parameters)
+  explicit AppEngine(JavaVM* jvm, JNIEnv* env, jobject instance, jobject native_bridge)
       : jvm_(jvm),
-        env_(env),
         service_instance_(env->NewWeakGlobalRef(instance)),
-        status_update_callback_(env->NewGlobalRef(status_update_callback)) {
+        native_bridge_(env->NewGlobalRef(native_bridge)) {
     EventQueue::Instance();
 
     auto device_name = GetSharedPreferenceValue("device_name", "");
@@ -37,19 +36,25 @@ public:
     }
     rtc_producer_ = std::make_shared<hela::eillance::RtcTransport<hela::eillance::RtcProducer>>();
     rtc_producer_->SetName(device_name);
-    rtc_producer_->SetStatusCallback([this](EventSource sender, int status) { SetStatus(sender, status); });
+    rtc_producer_->SetStatusCallback([this](const std::string& peer_id, EventSource sender, int status) { SetStatus(peer_id, sender, status); });
     DispatchQueue::MainThread().dispatch([this]() {
       rtc_producer_->Start();
     });
   }
 
+  AppEngine(AppEngine&&) = delete;
+  AppEngine(const AppEngine&) = delete;
+  AppEngine& operator=(AppEngine&&) = delete;
+  AppEngine& operator=(const AppEngine&) = delete;
+
   ~AppEngine() {
-    env_->DeleteGlobalRef(service_instance_);
-    env_->DeleteGlobalRef(status_update_callback_);
+    JNIEnv* env = AttachCurrentThreadIfNeeded();
+    env->DeleteGlobalRef(service_instance_);
+    env->DeleteGlobalRef(native_bridge_);
   }
 
-  Status GetStatus() {
-    return rtc_producer_->GetStatus();
+  ServiceConnectionState GetServiceConnectionState() {
+    return rtc_producer_->GetServiceConnectionState();
   }
 
   void ConfigureDeviceName(const std::string& device_name) {
@@ -63,8 +68,8 @@ public:
     }
 
     // Retrieve the SharedPreferences object via PreferenceManager.getDefaultSharedPreferences()
-    jclass preference_manager_class = env->FindClass("androidx/preference/PreferenceManager");
-    jmethodID get_default_shared_pref_method = env->GetStaticMethodID(
+    auto* preference_manager_class = env->FindClass("androidx/preference/PreferenceManager");
+    auto* get_default_shared_pref_method = env->GetStaticMethodID(
         preference_manager_class,
         "getDefaultSharedPreferences",
         "(Landroid/content/Context;)Landroid/content/SharedPreferences;"
@@ -75,7 +80,8 @@ public:
     }
 
     // Call getDefaultSharedPreferences with the current context (service_instance_)
-    jobject shared_preferences = env->CallStaticObjectMethod(
+    // NOLINTNEXTLINE(*-vararg)
+    auto* shared_preferences = env->CallStaticObjectMethod(
         preference_manager_class,
         get_default_shared_pref_method,
         service_instance_
@@ -86,18 +92,19 @@ public:
     }
 
     // Get the 'contains' method from SharedPreferences class
-    jclass shared_pref_class = env->GetObjectClass(shared_preferences);
-    jmethodID contains_method = env->GetMethodID(shared_pref_class, "contains", "(Ljava/lang/String;)Z");
+    auto* shared_pref_class = env->GetObjectClass(shared_preferences);
+    auto* contains_method = env->GetMethodID(shared_pref_class, "contains", "(Ljava/lang/String;)Z");
 
     if (contains_method == nullptr) {
       return false;
     }
 
     // Convert the key to jstring
-    jstring j_key = env->NewStringUTF(key.c_str());
+    auto* j_key = env->NewStringUTF(key.c_str());
 
     // Check if the key exists in the shared preferences
-    jboolean has_value = env->CallBooleanMethod(shared_preferences, contains_method, j_key);
+    // NOLINTNEXTLINE(*-vararg)
+    const auto has_value = env->CallBooleanMethod(shared_preferences, contains_method, j_key);
 
     // Release local references
     env->DeleteLocalRef(j_key);
@@ -124,6 +131,7 @@ public:
     }
 
     // Call getDefaultSharedPreferences with the current context (service_instance_)
+    // NOLINTNEXTLINE(*-vararg)
     jobject shared_preferences = env->CallStaticObjectMethod(
         preference_manager_class,
         get_default_shared_pref_method,
@@ -147,7 +155,8 @@ public:
     jstring j_default_value = env->NewStringUTF(default_value.c_str());
 
     // Call getString on the SharedPreferences object
-    auto* j_result = static_cast<jstring>(env->CallObjectMethod(shared_preferences, get_string_method, j_key, j_default_value));
+    // NOLINTNEXTLINE(*-vararg)
+    auto* j_result = reinterpret_cast<jstring>(env->CallObjectMethod(shared_preferences, get_string_method, j_key, j_default_value));
 
     // Release local references
     env->DeleteLocalRef(j_key);
@@ -183,6 +192,7 @@ public:
     }
 
     // Call getDefaultSharedPreferences with the current context (service_instance_)
+    // NOLINTNEXTLINE(*-vararg)
     jobject shared_preferences = env->CallStaticObjectMethod(
         preference_manager_class,
         get_default_shared_pref_method,
@@ -196,6 +206,7 @@ public:
     // Get the 'edit' method from SharedPreferences class to start modifying the preferences
     jclass shared_pref_class = env->GetObjectClass(shared_preferences);
     jmethodID edit_method = env->GetMethodID(shared_pref_class, "edit", "()Landroid/content/SharedPreferences$Editor;");
+    // NOLINTNEXTLINE(*-vararg)
     jobject editor = env->CallObjectMethod(shared_preferences, edit_method);
 
     if (editor != nullptr) {
@@ -208,10 +219,12 @@ public:
       jstring j_value = env->NewStringUTF(value.c_str());
 
       // Save the value using putString
+      // NOLINTNEXTLINE(*-vararg)
       env->CallObjectMethod(editor, put_string_method, j_key, j_value);
 
       // Apply the changes
       jmethodID apply_method = env->GetMethodID(shared_pref_editor_class, "apply", "()V");
+      // NOLINTNEXTLINE(*-vararg)
       env->CallVoidMethod(editor, apply_method);
 
       // Release local references
@@ -223,8 +236,8 @@ public:
 
 private:
   JNIEnv* AttachCurrentThreadIfNeeded() {
-    JNIEnv* env;
-    jint res = jvm_->GetEnv((void**)&env, JNI_VERSION_1_6);
+    JNIEnv* env{};
+    const jint res = jvm_->GetEnv((void**)&env, JNI_VERSION_1_6);
     switch (res) {
       case JNI_OK:
         // the current thread is already attached, return the JNIEnv.
@@ -241,15 +254,19 @@ private:
     }
   }
 
-  void SetStatus(EventSource sender, int status) {
-    JNIEnv* env = AttachCurrentThreadIfNeeded();
+  void SetStatus(const std::string& peer_id, EventSource sender, int status) {
+    auto* env = AttachCurrentThreadIfNeeded();
     if (env == nullptr) {
       return;
     }
-    jclass callback_class = env->GetObjectClass(status_update_callback_);
-    jmethodID callback_method = env->GetMethodID(callback_class, "onStatusUpdate", "(II)V");
+
+    jclass callback_class = env->GetObjectClass(native_bridge_);
+    jmethodID callback_method = env->GetMethodID(callback_class, "onStatusUpdate", "(Ljava/lang/String;II)V");
     if (callback_method != nullptr) {
-      env->CallVoidMethod(status_update_callback_, callback_method, static_cast<int>(sender), status);
+      jstring j_peer_id = env->NewStringUTF(peer_id.c_str());
+      // NOLINTNEXTLINE(*-vararg)
+      env->CallVoidMethod(native_bridge_, callback_method, j_peer_id, static_cast<int>(sender), status);
+      env->DeleteLocalRef(j_peer_id);
     }
   }
 
