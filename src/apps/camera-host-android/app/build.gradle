@@ -51,6 +51,7 @@ android {
     packagingOptions {
         resources.excludes.add("META-INF/*")
         resources.excludes.add("META-INF/plexus/*")
+        resources.excludes.add("licenses/*")
     }
     android.ndkVersion '27.0.11718014'
     namespace 'hela.eillance.camera'
