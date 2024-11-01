@@ -2,7 +2,9 @@
 let rtc;
 let token = null; // Store the token here after authentication
 let selectedClientId = null; // Store the selected client ID here
-let selectedResolution = null;
+// Define selectedCameraId globally so it can be accessed across functions
+let selectedCameraId = 'auto'; // Start with 'auto' as default
+// let selectedResolution = null;
 let profile = null;
 
 const iceConnectionLog = document.getElementById('ice-connection-state'),
@@ -316,10 +318,25 @@ function populateCameraAndResolutionSelectors() {
     cameraSelect.innerHTML = '';
     resolutionSelect.innerHTML = '';
 
-    if (profile == null) {
+    // Add "Auto" option to the camera selector
+    const autoCameraOption = document.createElement('option');
+    autoCameraOption.value = 'auto';
+    autoCameraOption.textContent = 'Auto';
+    cameraSelect.appendChild(autoCameraOption);
+
+    if (!profile || !Array.isArray(profile)) {
+        // If profile is missing or invalid, set only "Auto" for camera and resolution
+        const autoResolutionOption = document.createElement('option');
+        autoResolutionOption.value = 'auto';
+        autoResolutionOption.textContent = 'Auto';
+        resolutionSelect.appendChild(autoResolutionOption);
+
+        // Disable resolution selector since only "Auto" is available
+        resolutionSelect.disabled = true;
         return;
     }
 
+    // Populate cameras from profile if available
     profile.forEach(camera => {
         const option = document.createElement('option');
         option.value = camera.id;
@@ -327,65 +344,67 @@ function populateCameraAndResolutionSelectors() {
         cameraSelect.appendChild(option);
     });
 
+    // Default to "Auto" for resolution initially and disable the selector
+    const autoResolutionOption = document.createElement('option');
+    autoResolutionOption.value = 'auto';
+    autoResolutionOption.textContent = 'Auto';
+    resolutionSelect.appendChild(autoResolutionOption);
+    resolutionSelect.disabled = true;
+
     if (profile.length > 0) {
-        populateResolutions(profile[0].resolutions);
+        // Populate resolutions for the first camera by default (if any)
+        cameraSelect.selectedIndex = 1; // Select the first actual camera (not "Auto")
+        selectedCameraId = profile[0].id; // Set the selected camera ID to the first camera's ID
+        populateResolutions(profile[0].resolutions); // Populate resolutions based on the first camera
     }
 }
 
 function populateResolutions(resolutions) {
     resolutionSelect.innerHTML = '';
 
-    // If there is a previously selected resolution, find the closest one
-    if (selectedResolution) {
-        resolutions.sort((a, b) => {
-            // Priority 1: width difference
-            const widthDiffA = Math.abs(a.width - selectedResolution.width);
-            const widthDiffB = Math.abs(b.width - selectedResolution.width);
+    // Add "Auto" option at the top for resolution
+    const autoResolutionOption = document.createElement('option');
+    autoResolutionOption.value = 'auto';
+    autoResolutionOption.textContent = 'Auto';
+    resolutionSelect.appendChild(autoResolutionOption);
 
-            if (widthDiffA !== widthDiffB) return widthDiffA - widthDiffB;
-
-            // Priority 2: total pixel difference (width * height)
-            const pixelsA = a.width * a.height;
-            const pixelsB = b.width * b.height;
-            const pixelDiffA = Math.abs(pixelsA - (selectedResolution.width * selectedResolution.height));
-            const pixelDiffB = Math.abs(pixelsB - (selectedResolution.width * selectedResolution.height));
-
-            return pixelDiffA - pixelDiffB;
-        });
+    // Check if a specific camera is selected and there are available resolutions
+    if (selectedCameraId === 'auto' || !resolutions || resolutions.length === 0) {
+        resolutionSelect.value = 'auto';
+        resolutionSelect.disabled = true;
+        return;
     }
 
-    // Populate the resolutions
-    resolutions.forEach((resolution, index) => {
+    // Enable resolution selector and populate it with available resolutions
+    resolutionSelect.disabled = false;
+    resolutions.forEach((resolution) => {
         const option = document.createElement('option');
         option.value = JSON.stringify(resolution);
         option.textContent = `${resolution.width}x${resolution.height}`;
-
-        // Select the first option or the closest match
-        if (index === 0 || (selectedResolution && resolution.width === resolutions[0].width && resolution.height === resolutions[0].height)) {
-            option.selected = true;
-        }
-
         resolutionSelect.appendChild(option);
     });
 
-    // Update the selectedResolution with the newly selected option
-    selectedResolution = resolutions[0];
+    // Select the first non-auto resolution by default
+    resolutionSelect.selectedIndex = 1;
 }
 
 function onCameraChange() {
-    // Save the currently selected resolution
-    if (resolutionSelect.value) {
-        selectedResolution = JSON.parse(resolutionSelect.value);
+    selectedCameraId = cameraSelect.value; // Update the global selectedCameraId
+
+    if (selectedCameraId === 'auto') {
+        // Set resolution to "Auto" and disable the selector if camera is set to "Auto"
+        resolutionSelect.value = 'auto';
+        resolutionSelect.disabled = true;
+    } else {
+        // Get the selected camera and populate its resolutions
+        const selectedCamera = profile.find(camera => camera.id === selectedCameraId);
+        populateResolutions(selectedCamera ? selectedCamera.resolutions : []);
     }
 
-    const selectedCameraId = cameraSelect.value;
-    const selectedCamera = profile.find(camera => camera.id === selectedCameraId);
-
-    // Populate resolutions for the new camera
-    populateResolutions(selectedCamera.resolutions);
-
-    // Send updated configuration
-    sendConfiguration();
+    // Only send configuration if not set to "Auto"
+    if (selectedCameraId !== 'auto') {
+        sendConfiguration();
+    }
 }
 
 function onResolutionChange() {
@@ -394,7 +413,12 @@ function onResolutionChange() {
 
 function sendConfiguration() {
     const cameraId = cameraSelect.value;
-    const resolution = JSON.parse(resolutionSelect.value);
+    const resolution = resolutionSelect.value !== 'auto' ? JSON.parse(resolutionSelect.value) : null;
+
+    // Do not send configuration if either camera or resolution is "Auto"
+    if (cameraId === 'auto' || resolution === null) {
+        return;
+    }
 
     const configurationMessage = {
         type: 'configuration',
