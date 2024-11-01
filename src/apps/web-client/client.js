@@ -316,6 +316,10 @@ function populateCameraAndResolutionSelectors() {
     cameraSelect.innerHTML = '';
     resolutionSelect.innerHTML = '';
 
+    if (profile == null) {
+        return;
+    }
+
     profile.forEach(camera => {
         const option = document.createElement('option');
         option.value = camera.id;
