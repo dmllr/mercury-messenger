@@ -407,3 +407,20 @@ function sendConfiguration() {
     dataChannelLog.scrollTop = dataChannelLog.scrollHeight;
     dc.send(message);
 }
+
+function onRotationChange() {
+    const rotationSelect = document.getElementById('rotation-select');
+    const videoElement = document.getElementById('video');
+    const videoContainer = document.getElementById('video-container');
+    const selectedRotation = parseInt(rotationSelect.value);
+
+    // Apply rotation using CSS transform
+    videoElement.style.transform = `rotate(${selectedRotation}deg)`;
+
+    // Adjust container padding based on rotation
+    if (selectedRotation === 90 || selectedRotation === 270) {
+        videoContainer.style.padding = '20% 0'; // Adjusts padding for vertical orientation
+    } else {
+        videoContainer.style.padding = '0'; // No extra padding needed for horizontal orientation
+    }
+}

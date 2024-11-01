@@ -38,6 +38,14 @@
             width: 100%;
             border-radius: 8px;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease;
+        }
+        #video-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 0; /* Default padding, will adjust dynamically */
+            transition: padding 0.3s ease; /* Smooth padding transition */
         }
         pre {
             background-color: #e9ecef;
@@ -66,13 +74,22 @@
 
     <h2 class="mt-4">Camera and Resolution</h2>
     <div class="row select-container">
-        <div class="col-md-6 mb-3">
+        <div class="col-md-4 mb-3">
             <label for="camera-select" class="form-label">Camera:</label>
             <select id="camera-select" class="form-select" onchange="onCameraChange()"></select>
         </div>
-        <div class="col-md-6 mb-3">
+        <div class="col-md-4 mb-3">
             <label for="resolution-select" class="form-label">Resolution:</label>
             <select id="resolution-select" class="form-select" onchange="onResolutionChange()"></select>
+        </div>
+        <div class="col-md-4 mb-3">
+            <label for="rotation-select" class="form-label">Rotation:</label>
+            <select id="rotation-select" class="form-select" onchange="onRotationChange()">
+                <option value="0">0°</option>
+                <option value="90">90°</option>
+                <option value="180">180°</option>
+                <option value="270">270°</option>
+            </select>
         </div>
     </div>
 
@@ -83,7 +100,9 @@
 
     <div id="media" class="mt-4" style="display: none">
         <h2>Media</h2>
-        <video id="video" autoplay playsinline></video>
+        <div id="video-container">
+            <video id="video" autoplay playsinline></video>
+        </div>
     </div>
 
     <h2 class="mt-4">Data Channel</h2>
