@@ -11,15 +11,15 @@
 
 namespace hela::eillance {
 
-auto GetAvailableCameras() -> std::vector<std::pair<std::string, std::string>> {
+inline auto GetAvailableCameras() -> std::vector<std::pair<std::string, std::string>> {
   return {};
 }
 
-auto GetSupportedResolutions(const std::string& cameraId) -> std::vector<std::pair<int32_t, int32_t>> {
+inline auto GetSupportedResolutions(const std::string& cameraId) -> std::vector<std::pair<int32_t, int32_t>> {
   return {};
 }
 
-auto GetDeviceProfileAsJson() -> nlohmann::json {
+inline auto GetDeviceProfileAsJson() -> nlohmann::json {
   return {};
 }
 

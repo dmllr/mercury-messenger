@@ -139,7 +139,7 @@ public:
     cap_.release();
   }
 
-  auto GetSampleDuration() -> Time::Unit {
+  auto GetSampleDuration() const -> Time::Unit {
     return Time::uS / config_.frameRate;
   }
 
