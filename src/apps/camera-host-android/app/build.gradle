@@ -21,7 +21,7 @@ android {
         }
         externalNativeBuild {
             cmake {
-//                cppFlags "-std=c++17"
+                targets "app-engine-tests"
             }
         }
     }

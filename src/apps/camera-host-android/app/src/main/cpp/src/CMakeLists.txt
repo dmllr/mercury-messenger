@@ -18,10 +18,14 @@ enable_testing()
 
 set(GTEST_ROOT "${ANDROID_NDK}/sources/third_party/googletest")
 add_library(gtest STATIC "${GTEST_ROOT}/src/gtest_main.cc" "${GTEST_ROOT}/src/gtest-all.cc")
-target_include_directories(gtest PRIVATE "${GTEST_ROOT}" "${GTEST_ROOT}/include")
+target_include_directories(gtest PRIVATE "${GTEST_ROOT}")
+target_include_directories(gtest PUBLIC "${GTEST_ROOT}/include")
 
 add_executable(app-engine-tests
   tests.cpp
 )
 
-target_link_libraries(app-engine-tests gtest)
+target_link_libraries(app-engine-tests
+    gtest
+    app-engine-lib
+)
