@@ -3,14 +3,21 @@ import ssl
 import sys
 import asyncio
 from typing import Union
-
-import websockets
-import traceback
+import logging
 from enum import Enum
 
+import websockets
 from websockets import WebSocketServerProtocol
 
 from auth_manager import AuthManager
+
+
+# Configure logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logging.getLogger("websockets").addHandler(logging.NullHandler())
 
 
 class Client:
@@ -50,7 +57,7 @@ async def check_client_liveliness():
 
         for user_id, client_id in disconnected_clients:
             del clients[user_id][client_id]
-            print(f'Removed disconnected client "{user_id}/{client_id}"')
+            logging.info(f'Removed disconnected client "{user_id}/{client_id}"')
             if not clients[user_id]:  # If no more clients for this user, delete user entry
                 del clients[user_id]
         await asyncio.sleep(10)  # Run every 10 seconds
@@ -72,7 +79,7 @@ async def handle_connection(websocket: WebSocketServerProtocol):
             return False
 
         token = authManager.generate_token('password', username, None)
-        print(f'User "{username}" authenticated')
+        logging.info(f'User "{username}" authenticated')
         await websocket.send(json.dumps({
             "type": "authenticated",
             "token": token
@@ -97,7 +104,7 @@ async def handle_connection(websocket: WebSocketServerProtocol):
             "type": "info publishers",
             "clients": [{"id": cid, "name": c.name, "profile": c.profile} for cid, c in clients[user_id].items() if c.kind == Client.Kind.Producer]
         })
-        print(f'>>[{user_id}/{client_id}]: {jdump}')
+        logging.debug(f'>>[{user_id}/{client_id}]: {jdump}')
         await connection.send(jdump)
 
     async def send_publishers():
@@ -107,12 +114,11 @@ async def handle_connection(websocket: WebSocketServerProtocol):
     try:
         while True:
             data = await websocket.recv()
-            print(f'<<[{user_id}/{client_id}] {data}')
+            logging.debug(f'<<[{user_id}/{client_id}] {data}')
 
             message = json.loads(data)
             if 'type' not in message:
-                print(f'Unknown message received!')
-                print(data)
+                logging.warning(f'Unknown message received: {data}')
                 continue
 
             if message['type'] == 'authenticate':
@@ -129,12 +135,12 @@ async def handle_connection(websocket: WebSocketServerProtocol):
                     client_kind = message.get('kind')
                     if user_id not in clients:
                         clients[user_id] = {}
-                    clients[user_id][client_id] =(
+                    clients[user_id][client_id] = (
                         (Consumer if client_kind == Client.Kind.Consumer else Producer)(
                             client_id, client_name, client_kind, websocket))
                     if client_kind == Client.Kind.Producer:
                         clients[user_id][client_id].profile = message.get('profile')
-                    print(f'Peer "{user_id}/{client_id}" published')
+                    logging.info(f'Peer "{user_id}/{client_id}" published')
                     await send_publishers()
 
                 elif message['type'] == 'get publishers':
@@ -143,14 +149,14 @@ async def handle_connection(websocket: WebSocketServerProtocol):
                 else:
                     destination_id = message['to']
                     if destination_id in clients[user_id]:
-                        # redirect the message to a destination client
+                        # Redirect the message to a destination client
                         client = clients[user_id][destination_id]
                         message['from'] = client_id
                         data = json.dumps(message)
-                        print(f'>>[{user_id}/{client_id}] from "{user_id}/{client_id}": {data}')
+                        logging.debug(f'>>[{user_id}/{client_id}] from "{user_id}/{client_id}": {data}')
                         await client.ws.send(data)
                     else:
-                        print(f'Peer "{destination_id}" not published by {user_id} or unauthorized')
+                        logging.warning(f'Peer "{destination_id}" not published by {user_id} or unauthorized')
                         response = {
                             "type": "error",
                             "error": "peer_not_found",
@@ -158,20 +164,20 @@ async def handle_connection(websocket: WebSocketServerProtocol):
                         }
                         await websocket.send(json.dumps(response))
 
-    except websockets.exceptions.ConnectionClosedError:
-        print(f"Connection closed with error for client {user_id}/{client_id}")
+    except websockets.exceptions.ConnectionClosedError as e:
+        logging.error(f"Connection closed with error for client {user_id}/{client_id}: {e}", exc_info=True)
     except websockets.exceptions.ConnectionClosedOK:
-        print(f"Connection closed gracefully for client {user_id}/{client_id}")
-    except Exception:
-        print(traceback.format_exc())
+        logging.info(f"Connection closed gracefully for client {user_id}/{client_id}")
+    except Exception as e:
+        logging.error(f"Unexpected error for client {user_id}/{client_id}: {e}", exc_info=True)
     finally:
         if user_id and client_id and user_id in clients and client_id in clients[user_id]:
             del clients[user_id][client_id]
-            print(f'Peer "{user_id}/{client_id}" disconnected')
+            logging.info(f'Peer "{user_id}/{client_id}" disconnected')
             try:
                 await send_publishers()
-            except Exception:
-                print(traceback.format_exc())
+            except Exception as e:
+                logging.error("Error while sending publishers", exc_info=True)
 
 
 if __name__ == '__main__':
@@ -187,7 +193,7 @@ if __name__ == '__main__':
     else:
         ssl_context = None
 
-    print(f'Listening on {endpoint}')
+    logging.info(f'Listening on {endpoint}')
     host, port = endpoint.rsplit(':', 1)
     start_server = websockets.serve(handle_connection, host, int(port), ssl=ssl_context)
 
@@ -198,5 +204,5 @@ if __name__ == '__main__':
         loop.run_forever()
     except KeyboardInterrupt:
         pass
-    except Exception:
-        print(traceback.format_exc())
+    except Exception as e:
+        logging.error("Server error", exc_info=True)
