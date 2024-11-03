@@ -49,7 +49,7 @@ public:
       if (!tracks.empty()) {
         SendMessageToAllTracks(sample, type, sampleTime, tracks);
       }
-      DispatchQueue::MainThread().dispatch([this, ws]() {
+      DispatchQueue::MainThread().Dispatch([this, ws]() {
         if (peers_.empty()) {
           // we have no peers, stop the stream
           if (auto stream = ws.lock()) {

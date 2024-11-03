@@ -14,21 +14,19 @@ class DispatchQueue {
   using FpT = std::function<void()>;
 
 public:
-  explicit DispatchQueue(std::string name, std::size_t threadCount) : name(std::move(name)), threads(threadCount) {
-    for (auto& thread: threads) {
-      thread = std::thread(&DispatchQueue::dispatchThreadHandler, this);
+  explicit DispatchQueue(std::string name, std::size_t threadCount) : name_(std::move(name)), threads_(threadCount) {
+    for (auto& thread: threads_) {
+      thread = std::thread(&DispatchQueue::DispatchThreadHandler, this);
     }
   }
 
   ~DispatchQueue() {
-    // Signal to dispatch threads that it's time to wrap up
-    std::unique_lock<std::mutex> lock(lockMutex);
-    quit = true;
+    std::unique_lock<std::mutex> lock(lockMutex_);
+    quit_ = true;
     lock.unlock();
-    condition.notify_all();
+    condition_.notify_all();
 
-    // Wait for threads to finish before we exit
-    for (auto& thread: threads) {
+    for (auto& thread: threads_) {
       if (thread.joinable()) {
         thread.join();
       }
@@ -40,65 +38,56 @@ public:
     return instance;
   }
 
-  // dispatch and copy
-  void dispatch(const FpT& op) {
-    std::unique_lock<std::mutex> lock(lockMutex);
-    queue.push(op);
-
-    // Manual unlocking is done before notifying, to avoid waking up
-    // the waiting thread only to block again (see notify_one for details)
+  void Dispatch(const FpT& op) {
+    std::unique_lock<std::mutex> lock(lockMutex_);
+    queue_.push(op);
     lock.unlock();
-    condition.notify_one();
+    condition_.notify_one();
   }
 
-  // dispatch and move
-  void dispatch(FpT&& op) {
-    std::unique_lock<std::mutex> lock(lockMutex);
-    queue.push(std::move(op));
-
-    // Manual unlocking is done before notifying, to avoid waking up
-    // the waiting thread only to block again (see notify_one for details)
+  void Dispatch(FpT&& op) {
+    std::unique_lock<std::mutex> lock(lockMutex_);
+    queue_.push(std::move(op));
     lock.unlock();
-    condition.notify_one();
+    condition_.notify_one();
   }
 
-  void removePending() {
-    std::unique_lock<std::mutex> const lock(lockMutex);
-    queue = {};
+  void DispatchAfter(std::chrono::milliseconds delay, FpT op) {
+    auto delayed_op = [delay, op = std::move(op)]() {
+      std::this_thread::sleep_for(delay);
+      op();
+    };
+    Dispatch(std::move(delayed_op));
   }
 
-  // Deleted operations
+  void RemovePending() {
+    std::unique_lock<std::mutex> const lock(lockMutex_);
+    queue_ = {};
+  }
+
   DispatchQueue(const DispatchQueue& rhs) = delete;
   auto operator=(const DispatchQueue& rhs) -> DispatchQueue& = delete;
   DispatchQueue(DispatchQueue&& rhs) = delete;
   auto operator=(DispatchQueue&& rhs) -> DispatchQueue& = delete;
 
 private:
-  std::string name;
-  std::mutex lockMutex;
-  std::vector<std::thread> threads;
-  std::queue<FpT> queue;
-  std::condition_variable condition;
-  bool quit = false;
+  std::string name_;
+  std::mutex lockMutex_;
+  std::vector<std::thread> threads_;
+  std::queue<FpT> queue_;
+  std::condition_variable condition_;
+  bool quit_ = false;
 
-  void dispatchThreadHandler() {
-    std::unique_lock<std::mutex> lock(lockMutex);
-    while (!quit) {
-      // Wait until we have data or a quit signal
-      condition.wait(lock, [this] { return (!queue.empty() || quit); });
+  void DispatchThreadHandler() {
+    std::unique_lock<std::mutex> lock(lockMutex_);
+    while (!quit_) {
+      condition_.wait(lock, [this] { return (!queue_.empty() || quit_); });
 
-      // After wait, we own the lock
-      if (!queue.empty()) {
-        auto op = std::move(queue.front());
-        queue.pop();
-
-        // Release the lock before executing the operation
+      if (!queue_.empty()) {
+        auto op = std::move(queue_.front());
+        queue_.pop();
         lock.unlock();
-
-        // Execute the operation
         op();
-
-        // Reacquire the lock before looping
         lock.lock();
       }
     }

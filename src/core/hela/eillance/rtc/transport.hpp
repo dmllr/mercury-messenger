@@ -66,7 +66,7 @@ public:
   void SetName(const std::string& device_name) {
     device_name_ = device_name;
     if (is_published_) {
-      DispatchQueue::MainThread().dispatch([this]() {
+      DispatchQueue::MainThread().Dispatch([this]() {
         PublishClient();
       });
     }
@@ -96,7 +96,7 @@ public:
       LOGE << "WebSocket connection closed";
       ReportServiceConnectionState(ServiceConnectionState::failure);
 
-      DispatchQueue::MainThread().dispatch([this]() {
+      DispatchQueue::MainThread().Dispatch([this]() {
         Start();
       });
       LOGI << "Scheduled WebSocket reconnection in " << wait_before_reconnect_ << "s";
@@ -115,11 +115,11 @@ public:
       const auto message = Json::parse(std::get<std::string>(data));
       auto it = message.find("from");
       if (it == message.end()) {
-        DispatchQueue::MainThread().dispatch([this, message]() {
+        DispatchQueue::MainThread().Dispatch([this, message]() {
           OnSystemMessage(message);
         });
       } else {
-        DispatchQueue::MainThread().dispatch([this, message]() {
+        DispatchQueue::MainThread().Dispatch([this, message]() {
           OnPeerMessage(message);
         });
       }
@@ -194,7 +194,7 @@ private:
       if (state == rtc::PeerConnection::State::Disconnected ||
           state == rtc::PeerConnection::State::Failed ||
           state == rtc::PeerConnection::State::Closed) {
-        DispatchQueue::MainThread().dispatch([this, peer_id]() {
+        DispatchQueue::MainThread().Dispatch([this, peer_id]() {
           connection_.RemovePeer(peer_id);
         });
       }
@@ -298,7 +298,7 @@ private:
 
     if (type == "authenticated") {
       auth_token_ = message["token"].get<std::string>();
-      DispatchQueue::MainThread().dispatch([this]() {
+      DispatchQueue::MainThread().Dispatch([this]() {
         PublishClient();
         is_published_ = true;
       });
@@ -325,7 +325,7 @@ private:
 
     if (type == "streamRequest") {
       std::shared_ptr<Peer> const peer = CreatePeerConnection(peer_id);
-      DispatchQueue::MainThread().dispatch([this, peer_id, peer]() {
+      DispatchQueue::MainThread().Dispatch([this, peer_id, peer]() {
         connection_.AddPeer(peer_id, std::move(peer));
       });
     } else if (type == "answer") {
@@ -352,7 +352,7 @@ private:
     peer->video = connection_.AddVideo(
         pc,
         [this, peer_id, wc = make_weak_ptr(peer)]() {
-          DispatchQueue::MainThread().dispatch([this, wc]() {
+          DispatchQueue::MainThread().Dispatch([this, wc]() {
             if (auto c = wc.lock()) {
               AddToStream(c, true);
             }
@@ -363,7 +363,7 @@ private:
     peer->audio = connection_.AddAudio(
         pc,
         [this, peer_id, wc = make_weak_ptr(peer)]() {
-          DispatchQueue::MainThread().dispatch([this, wc]() {
+          DispatchQueue::MainThread().Dispatch([this, wc]() {
             if (auto c = wc.lock()) {
               AddToStream(c, false);
             }

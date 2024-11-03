@@ -107,7 +107,7 @@ private:
     auto sample = ss->GetSample();
     sampleHandler_(sst, ss->GetSampleTime(), sample);
     ss->LoadNextSample();
-    dispatchQueue_.dispatch([this]() {
+    dispatchQueue_.Dispatch([this]() {
       this->SendSample();
     });
   }
@@ -124,7 +124,7 @@ public:
     isRunning_ = true;
     video_->Start();
     audio_->Start();
-    dispatchQueue_.dispatch([this]() {
+    dispatchQueue_.Dispatch([this]() {
       this->SendSample();
     });
   }
@@ -134,7 +134,7 @@ public:
       return;
     }
     isRunning_ = false;
-    dispatchQueue_.removePending();
+    dispatchQueue_.RemovePending();
     audio_->Stop();
     video_->Stop();
   }

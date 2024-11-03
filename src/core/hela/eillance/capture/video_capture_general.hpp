@@ -106,7 +106,7 @@ public:
 
     encoder_.Engage(actual_width, actual_height, actual_fps);
 
-    dispatch_queue_.dispatch([this]() {
+    dispatch_queue_.Dispatch([this]() {
       CaptureFrame();
     });
   }
@@ -134,7 +134,7 @@ public:
       return;
     }
     capture_is_running_ = false;
-    dispatch_queue_.removePending();
+    dispatch_queue_.RemovePending();
     encoder_.Revoke();
     cap_.release();
   }
@@ -179,7 +179,7 @@ private:
 
     // due to OpenCV issue, camera frames should be captured as soon as possible,
     // otherwise a framerate will be significantly lowered
-    dispatch_queue_.dispatch([this]() {
+    dispatch_queue_.Dispatch([this]() {
       CaptureFrame();
     });
   }
