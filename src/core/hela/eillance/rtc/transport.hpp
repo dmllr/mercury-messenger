@@ -27,7 +27,7 @@ class RtcTransport {
   using Json = nlohmann::json;
   using StatusCallbackFunction = std::function<void(const std::string& peer_id, EventSource, int)>;
 
-  std::string id_{StringUtils::RandomString()};
+  std::string id_{};
   std::string device_name_{id_};
   std::string auth_token_{};
   std::atomic<bool> is_published_{false};
@@ -37,8 +37,7 @@ class RtcTransport {
   static constexpr auto maxConnectionAttempts = 10U;
 
   Connection connection_{};
-  rtc::WebSocketConfiguration ws_config_{};
-  rtc::WebSocket ws_{ws_config_};
+  std::unique_ptr<rtc::WebSocket> ws_;
   std::uint32_t connection_attempt_{0U};
   std::uint32_t wait_before_reconnect_{minWaitBeforeReconnect};
 
@@ -46,9 +45,7 @@ class RtcTransport {
   std::shared_ptr<StatusCallbackFunction> status_callback_{};
 
 public:
-  explicit RtcTransport() {
-    ws_config_.caCertificatePemFile = zerosslCaBundle;
-  }
+  RtcTransport() = default;
   RtcTransport(RtcTransport&&) = delete;
   RtcTransport(const RtcTransport&) = delete;
   auto operator=(RtcTransport&&) -> RtcTransport& = delete;
@@ -67,12 +64,16 @@ public:
     device_name_ = device_name;
     if (is_published_) {
       DispatchQueue::MainThread().Dispatch([this]() {
-        PublishClient();
+        Publish();
       });
     }
   }
 
   void Start() {
+    // it is necessary to renew the peer ID in case of reconnect, so the
+    // signaling server would threaten it differently until a previous
+    // connection considered broken.
+    id_ = StringUtils::RandomString();
     LOGI << "The local ID is: " << id_.data();
 
     connection_attempt_++;
@@ -84,57 +85,30 @@ public:
       wait_before_reconnect_ = maxWaitBeforeReconnect;
     }
 
-    ws_.onOpen([this]() {
-      LOGI << "WebSocket connected, signaling ready";
-      connection_attempt_ = 0;
-      ReportServiceConnectionState(ServiceConnectionState::establishing);
+    auto ws_config = rtc::WebSocketConfiguration{
+        // .disableTlsVerification = true,  // TODO: check
+        .caCertificatePemFile = zerosslCaBundle
+    };
 
-      Authenticate();
-    });
-
-    ws_.onClosed([this]() {
-      LOGE << "WebSocket connection closed";
-      ReportServiceConnectionState(ServiceConnectionState::failure);
-
-      DispatchQueue::MainThread().Dispatch([this]() {
-        Start();
-      });
-      LOGI << "Scheduled WebSocket reconnection in " << wait_before_reconnect_ << "s";
-    });
-
-    ws_.onError([this](const std::string& error) {
-      LOGE << "WebSocket connection failed: " << error.c_str();
-      ReportServiceConnectionState(ServiceConnectionState::failure);
-    });
-
-    ws_.onMessage([&](std::variant<rtc::binary, std::string> data) {
-      if (!std::holds_alternative<std::string>(data)) {
-        return;
-      }
-
-      const auto message = Json::parse(std::get<std::string>(data));
-      auto it = message.find("from");
-      if (it == message.end()) {
-        DispatchQueue::MainThread().Dispatch([this, message]() {
-          OnSystemMessage(message);
-        });
-      } else {
-        DispatchQueue::MainThread().Dispatch([this, message]() {
-          OnPeerMessage(message);
-        });
-      }
-    });
+    ws_ = std::make_unique<rtc::WebSocket>(ws_config);
+    ws_->onOpen([this]() { OnWebSocketOpen(); });
+    ws_->onClosed([this]() { OnWebSocketClosed(); });
+    ws_->onError([this](const std::string& error) { OnWebSocketError(error); });
+    ws_->onMessage(
+        [](const rtc::binary&) { /* no usage for binary messages */ },
+        [this](const std::string& data) { OnWebSocketMessage(data); }
+    );
 
     std::this_thread::sleep_for(std::chrono::seconds(wait_before_reconnect_));
 
     LOGD << "Signaling server URL is " << signalingServerUrl;
 
     try {
-      ws_.open(signalingServerUrl);
+      ws_->open(signalingServerUrl);
 
       LOGI << "Waiting for signaling to be connected...";
-      while (!ws_.isOpen()) {
-        if (ws_.isClosed()) {
+      while (!ws_->isOpen()) {
+        if (ws_->isClosed()) {
           return;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -142,16 +116,56 @@ public:
       connection_attempt_ = 0;
     } catch (const std::exception& e) {
       LOGI << "Error: " << e.what();
-      if (ws_.isOpen()) {
-        ws_.close();
+      if (ws_->isOpen()) {
+        ws_->close();
       }
       ReportServiceConnectionState(ServiceConnectionState::failure);
-      return;
     }
-    ReportServiceConnectionState(ServiceConnectionState::online);
+  }
+
+  void Stop() {
+    ws_->close();
   }
 
 private:
+  void OnWebSocketOpen() {
+    LOGI << "WebSocket connected, signaling ready";
+    connection_attempt_ = 0;
+
+    ReportServiceConnectionState(ServiceConnectionState::establishing);
+    Authenticate();
+    ReportServiceConnectionState(ServiceConnectionState::online);
+  }
+
+  void OnWebSocketClosed() {
+    LOGE << "WebSocket connection closed";
+    ReportServiceConnectionState(ServiceConnectionState::failure);
+
+    DispatchQueue::MainThread().Dispatch([this]() {
+      Start();
+    });
+    LOGI << "Scheduled WebSocket reconnection in " << wait_before_reconnect_ << "s";
+  }
+
+  void OnWebSocketError(const std::string& error) {
+    LOGE << "WebSocket connection failed: " << error.c_str();
+    ReportServiceConnectionState(ServiceConnectionState::failure);
+  }
+
+  void OnWebSocketMessage(const std::string& data) {
+    const auto message = Json::parse(data);
+    auto it = message.find("from");
+    if (it == message.end()) {
+      DispatchQueue::MainThread().Dispatch([this, message]() {
+        OnSystemMessage(message);
+      });
+    } else {
+      DispatchQueue::MainThread().Dispatch([this, message]() {
+        OnPeerMessage(message);
+      });
+    }
+  }
+
   void ReportPeerStateChange(const std::string& peer_id, const EventSource source, int state) const {
     if (status_callback_) {
       (*status_callback_)(peer_id, source, state);
@@ -165,15 +179,29 @@ private:
     }
   }
 
+  void WsSendMessage(const Json& message) {
+    if (!ws_->isOpen()) {
+      LOGE << "Can't send a WebSocket message, the connection has been closed";
+      return;
+    }
+    try {
+      ws_->send(message.dump());
+    } catch (const std::runtime_error& e) {
+      LOGE << "Can't send a WebSocket message due to the exception: " << e.what();
+    } catch (const std::exception& e) {
+      LOGE << "Can't send a WebSocket message due to the exception: " << e.what();
+    }
+  }
+
   void Authenticate() {
     const Json message = {
         {"type", "authenticate"},
         {"username", "user1"},
         {"password", "password1"}};
-    ws_.send(message.dump());
+    WsSendMessage(message);
   }
 
-  void PublishClient() {
+  void Publish() {
     const Json message = {
         {"token", auth_token_},
         {"type", "publish"},
@@ -182,7 +210,7 @@ private:
         {"kind", "producer"},
         {"profile", GetDeviceProfileAsJson()},
     };
-    ws_.send(message.dump());
+    WsSendMessage(message);
   }
 
   auto CreateDefaultPeerConnection(const std::string& peer_id) -> std::shared_ptr<rtc::PeerConnection> {
@@ -217,7 +245,7 @@ private:
               {"token", auth_token_},
               {"type", description->typeString()},
               {"sdp", std::string(description.value())}};
-          ws_.send(message.dump());
+          WsSendMessage(message);
         }
       }
     });
@@ -299,12 +327,12 @@ private:
     if (type == "authenticated") {
       auth_token_ = message["token"].get<std::string>();
       DispatchQueue::MainThread().Dispatch([this]() {
-        PublishClient();
+        Publish();
         is_published_ = true;
       });
     } else if (type == "error") {
       LOGE << "Signaling error received: " << message["error"].get<std::string>();
-    } else if (type == "info publishers") {
+    } else if (type == "info producers") {
       // ignored for producing peer, but should be treated for consuming one
     } else {
       throw std::runtime_error("Unknown message type " + type);
@@ -396,8 +424,8 @@ private:
   };
 
   constexpr static auto signalingServerUrl = "wss://app.hela.me:8000";  // prod
-  // constexpr static auto signalingServerUrl = "ws://10.0.2.2:8000";  // for android emulator
-  // constexpr static auto signalingServerUrl = "ws://127.0.0.1:8000";  // for general
+//  constexpr static auto signalingServerUrl = "ws://10.0.2.2:8000";  // for android emulator
+//  constexpr static auto signalingServerUrl = "ws://127.0.0.1:8000";  // for general
 
   constexpr static auto zerosslCaBundle =
       "-----BEGIN CERTIFICATE-----\n"

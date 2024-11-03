@@ -244,7 +244,7 @@ function stop() {
 
 function refreshPublishers() {
     websocket.send(JSON.stringify({
-        type: 'get publishers',
+        type: 'get producers',
         token: token
     }));
 }
@@ -307,7 +307,7 @@ websocket.onmessage = async function (evt) {
         await handleOffer(object);
     } else if (object.type === "error") {
         console.error('Error: ', object.error, ', message: ', object.message);
-    } else if (object.type === "info publishers") {
+    } else if (object.type === "info producers") {
         updateClientList(object.clients);
     } else {
         console.error('Error: Unknown message type "', object.type, '" received');

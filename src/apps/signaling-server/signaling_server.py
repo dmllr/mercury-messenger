@@ -11,7 +11,6 @@ from websockets import WebSocketServerProtocol
 
 from auth_manager import AuthManager
 
-
 # Configure logging
 logging.basicConfig(
     level=logging.DEBUG,
@@ -22,7 +21,7 @@ logging.getLogger("websockets").addHandler(logging.NullHandler())
 
 class Client:
     class Kind(str, Enum):
-        Producer = 'producer',
+        Producer = 'producer'
         Consumer = 'consumer'
 
     def __init__(self, id, name, kind, ws):
@@ -101,16 +100,21 @@ async def handle_connection(websocket: WebSocketServerProtocol):
 
     async def send_publishers_for_client(connection):
         jdump = json.dumps({
-            "type": "info publishers",
-            "clients": [{"id": cid, "name": c.name, "profile": c.profile} for cid, c in clients[user_id].items() if c.kind == Client.Kind.Producer]
+            "type": "info producers",
+            "clients": [
+                {"id": cid, "name": c.name, "profile": c.profile}
+                for cid, c in clients[user_id].items() if c.kind == Client.Kind.Producer
+            ]
         })
         logging.debug(f'>>[{user_id}/{client_id}]: {jdump}')
         await connection.send(jdump)
 
     async def send_publishers():
-        for client in clients[user_id]:
-            await send_publishers_for_client(clients[user_id][client].ws)
+        for peer_id, peer in clients[user_id].items():
+            if peer.kind == Client.Kind.Consumer:
+                await send_publishers_for_client(peer.ws)
 
+    # noinspection PyBroadException
     try:
         while True:
             data = await websocket.recv()
@@ -133,23 +137,23 @@ async def handle_connection(websocket: WebSocketServerProtocol):
                     client_id = message.get('client_id')
                     client_name = message.get('name')
                     client_kind = message.get('kind')
-                    if user_id not in clients:
-                        clients[user_id] = {}
-                    clients[user_id][client_id] = (
-                        (Consumer if client_kind == Client.Kind.Consumer else Producer)(
-                            client_id, client_name, client_kind, websocket))
+
+                    client_class = Consumer if client_kind == Client.Kind.Consumer else Producer
+                    client_instance = client_class(client_id, client_name, client_kind, websocket)
+                    clients.setdefault(user_id, {})[client_id] = client_instance
+
                     if client_kind == Client.Kind.Producer:
-                        clients[user_id][client_id].profile = message.get('profile')
+                        client_instance.profile = message.get('profile')
+
                     logging.info(f'Peer "{user_id}/{client_id}" published')
                     await send_publishers()
 
-                elif message['type'] == 'get publishers':
+                elif message['type'] == 'get producers':
                     await send_publishers_for_client(websocket)
 
                 else:
                     destination_id = message['to']
                     if destination_id in clients[user_id]:
-                        # Redirect the message to a destination client
                         client = clients[user_id][destination_id]
                         message['from'] = client_id
                         data = json.dumps(message)
@@ -164,19 +168,21 @@ async def handle_connection(websocket: WebSocketServerProtocol):
                         }
                         await websocket.send(json.dumps(response))
 
-    except websockets.exceptions.ConnectionClosedError as e:
-        logging.error(f"Connection closed with error for client {user_id}/{client_id}: {e}", exc_info=True)
+    except asyncio.exceptions.CancelledError:
+        logging.error(f"Connection closed with error for client {user_id}/{client_id}", exc_info=True)
+    except websockets.exceptions.ConnectionClosedError:
+        logging.error(f"Connection closed with error for client {user_id}/{client_id}", exc_info=True)
     except websockets.exceptions.ConnectionClosedOK:
         logging.info(f"Connection closed gracefully for client {user_id}/{client_id}")
-    except Exception as e:
-        logging.error(f"Unexpected error for client {user_id}/{client_id}: {e}", exc_info=True)
+    except Exception:
+        logging.error(f"Unexpected error for client {user_id}/{client_id}", exc_info=True)
     finally:
         if user_id and client_id and user_id in clients and client_id in clients[user_id]:
             del clients[user_id][client_id]
             logging.info(f'Peer "{user_id}/{client_id}" disconnected')
             try:
                 await send_publishers()
-            except Exception as e:
+            except Exception:
                 logging.error("Error while sending publishers", exc_info=True)
 
 
@@ -200,9 +206,10 @@ if __name__ == '__main__':
     loop = asyncio.get_event_loop()
     loop.create_task(check_client_liveliness())
     loop.run_until_complete(start_server)
+    # noinspection PyBroadException
     try:
         loop.run_forever()
     except KeyboardInterrupt:
         pass
-    except Exception as e:
+    except Exception:
         logging.error("Server error", exc_info=True)
