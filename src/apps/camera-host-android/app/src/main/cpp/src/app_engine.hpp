@@ -37,7 +37,7 @@ public:
     rtc_producer_ = std::make_shared<hela::eillance::RtcTransport<hela::eillance::RtcProducer>>();
     rtc_producer_->SetName(device_name);
     rtc_producer_->SetStatusCallback([this](const std::string& peer_id, EventSource sender, int status) { SetStatus(peer_id, sender, status); });
-    DispatchQueue::MainThread().dispatch([this]() {
+    DispatchQueue::MainThread().Dispatch([this]() {
       rtc_producer_->Start();
     });
   }

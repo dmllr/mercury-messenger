@@ -11,12 +11,12 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
   rtc.Start();
 
   while (true) {
-    std::string id;
-    std::cout << "Enter to exit" << std::endl;
-    std::cin >> id;
+    char key;
+    std::cout << "Enter to restart" << std::endl;
+    std::cin >> key;
     std::cin.ignore();
-    std::cout << "exiting" << std::endl;
-    break;
+
+    rtc.Stop();
   }
 
   return 0;
