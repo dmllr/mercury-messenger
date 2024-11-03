@@ -38,7 +38,7 @@ public:
   }
 
   EventQueue() {
-    dispatchQueue_.dispatch([this]() { DispatchEvents(); });
+    dispatchQueue_.Dispatch([this]() { DispatchEvents(); });
   }
   EventQueue(EventQueue&&) = delete;
   EventQueue(const EventQueue&) = delete;
@@ -46,7 +46,7 @@ public:
   EventQueue& operator=(const EventQueue&) = delete;
 
   ~EventQueue() {
-    dispatchQueue_.removePending();
+    dispatchQueue_.RemovePending();
     Push(TerminationEvent{});
     condition_.notify_one();
   }
@@ -111,7 +111,7 @@ public:
       }
     }
 
-    dispatchQueue_.dispatch([this]() { DispatchEvents(); });
+    dispatchQueue_.Dispatch([this]() { DispatchEvents(); });
   }
 
 private:
