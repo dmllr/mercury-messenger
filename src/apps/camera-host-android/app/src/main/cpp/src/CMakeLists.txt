@@ -14,6 +14,11 @@ target_link_libraries(app-engine-lib
   hela-eillance-core
 )
 
+if(NOT CMAKE_BUILD_TYPE STREQUAL "Release")
+  target_compile_definitions(app-engine-lib PUBLIC CHECK_JNI)
+endif()
+
+
 enable_testing()
 
 set(GTEST_ROOT "${ANDROID_NDK}/sources/third_party/googletest")

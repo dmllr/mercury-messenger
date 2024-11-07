@@ -31,13 +31,14 @@ class RtcTransport {
   std::string device_name_{id_};
   std::string auth_token_{};
   std::atomic<bool> is_published_{false};
+  std::atomic<bool> is_offline_{false};
 
   static constexpr auto minWaitBeforeReconnect = 1U;
   static constexpr auto maxWaitBeforeReconnect = 10U;
   static constexpr auto maxConnectionAttempts = 10U;
 
   Connection connection_{};
-  std::unique_ptr<rtc::WebSocket> ws_;
+  std::unique_ptr<rtc::WebSocket> ws_{nullptr};
   std::uint32_t connection_attempt_{0U};
   std::uint32_t wait_before_reconnect_{minWaitBeforeReconnect};
 
@@ -76,20 +77,20 @@ public:
     id_ = StringUtils::RandomString();
     LOGI << "The local ID is: " << id_.data();
 
-    connection_attempt_++;
-    if (connection_attempt_ <= 1) {
-      wait_before_reconnect_ = 0;
-    } else if (connection_attempt_ > 1 && connection_attempt_ < maxConnectionAttempts) {
-      wait_before_reconnect_ = minWaitBeforeReconnect;
-    } else {
-      wait_before_reconnect_ = maxWaitBeforeReconnect;
-    }
-
     auto ws_config = rtc::WebSocketConfiguration{
         // .disableTlsVerification = true,  // TODO: check
         .caCertificatePemFile = zerosslCaBundle
     };
 
+    if (ws_ != nullptr) {
+      ws_->resetCallbacks();
+      if (ws_->isOpen()) {
+        ws_->close();
+        while (!ws_->isClosed()) {
+          std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+      }
+    }
     ws_ = std::make_unique<rtc::WebSocket>(ws_config);
     ws_->onOpen([this]() { OnWebSocketOpen(); });
     ws_->onClosed([this]() { OnWebSocketClosed(); });
@@ -98,8 +99,6 @@ public:
         [](const rtc::binary&) { /* no usage for binary messages */ },
         [this](const std::string& data) { OnWebSocketMessage(data); }
     );
-
-    std::this_thread::sleep_for(std::chrono::seconds(wait_before_reconnect_));
 
     LOGD << "Signaling server URL is " << signalingServerUrl;
 
@@ -114,6 +113,7 @@ public:
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
       }
       connection_attempt_ = 0;
+      is_offline_ = false;
     } catch (const std::exception& e) {
       LOGI << "Error: " << e.what();
       if (ws_->isOpen()) {
@@ -124,7 +124,9 @@ public:
   }
 
   void Stop() {
+    is_offline_ = true;
     ws_->close();
+    ReportServiceConnectionState(ServiceConnectionState::disconnected);
   }
 
 private:
@@ -141,10 +143,24 @@ private:
     LOGE << "WebSocket connection closed";
     ReportServiceConnectionState(ServiceConnectionState::failure);
 
+    if (is_offline_) {
+      return;
+    }
+
+    connection_attempt_++;
+    if (connection_attempt_ <= 1) {
+      wait_before_reconnect_ = 0;
+    } else if (connection_attempt_ > 1 && connection_attempt_ < maxConnectionAttempts) {
+      wait_before_reconnect_ = minWaitBeforeReconnect;
+    } else {
+      wait_before_reconnect_ = maxWaitBeforeReconnect;
+    }
+
     DispatchQueue::MainThread().Dispatch([this]() {
+      std::this_thread::sleep_for(std::chrono::seconds(wait_before_reconnect_));
       Start();
     });
-    LOGI << "Scheduled WebSocket reconnection in " << wait_before_reconnect_ << "s";
+    LOGI << "Scheduled WebSocket reconnect in " << wait_before_reconnect_ << "s";
   }
 
   void OnWebSocketError(const std::string& error) {

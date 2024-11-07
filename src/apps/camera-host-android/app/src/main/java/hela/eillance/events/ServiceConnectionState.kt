@@ -7,7 +7,8 @@ enum class ServiceConnectionState(val value: Int) {
   Unknown(0),
   Establishing(1),
   Online(2),
-  Failure(3);
+  Failure(3),
+  Disconnected(4);
 
   companion object {
     val resourceMap = mapOf(
@@ -15,6 +16,7 @@ enum class ServiceConnectionState(val value: Int) {
       Establishing to R.string.service_connection_state_establishing,
       Online to R.string.service_connection_state_online,
       Failure to R.string.service_connection_state_failure,
+      Disconnected to R.string.service_connection_state_disconnected,
     )
 
     @JvmStatic

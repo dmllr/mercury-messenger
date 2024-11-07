@@ -12,7 +12,6 @@
 #include "hela/eillance/rtc/producer.hpp"
 #include "hela/eillance/utils/string.hpp"
 
-
 namespace hela::eillance {
 
 class AppEngine {
@@ -49,8 +48,36 @@ public:
 
   ~AppEngine() {
     JNIEnv* env = AttachCurrentThreadIfNeeded();
-    env->DeleteGlobalRef(service_instance_);
-    env->DeleteGlobalRef(native_bridge_);
+    if (env == nullptr) {
+      LOGE << "Failed to get JNIEnv in destructor.";
+      return;
+    }
+
+    rtc_producer_->SetStatusCallback(nullptr);
+
+    if (service_instance_ != nullptr && (env->IsSameObject(service_instance_, nullptr) == 0u)) {
+      LOGD << "Deleting service_instance_ GlobalRef.";
+      env->DeleteWeakGlobalRef(service_instance_);
+      service_instance_ = nullptr;
+    }
+
+    if (native_bridge_ != nullptr && !env->IsSameObject(native_bridge_, nullptr)) {
+      LOGD << "Deleting native_bridge_ GlobalRef.";
+      env->DeleteGlobalRef(native_bridge_);
+      native_bridge_ = nullptr;
+    }
+  }
+
+  void Start() {
+    DispatchQueue::MainThread().Dispatch([this]() {
+      rtc_producer_->Start();
+    });
+  }
+
+  void Stop() {
+    DispatchQueue::MainThread().Dispatch([this]() {
+      rtc_producer_->Stop();
+    });
   }
 
   ServiceConnectionState GetServiceConnectionState() {

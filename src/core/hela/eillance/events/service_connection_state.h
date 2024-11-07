@@ -9,6 +9,7 @@ enum class ServiceConnectionState : std::uint8_t {
   establishing,
   online,
   failure,
+  disconnected
 };
 
 }  // namespace hela::eillance
