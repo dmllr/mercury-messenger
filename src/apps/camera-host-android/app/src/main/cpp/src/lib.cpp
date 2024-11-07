@@ -1,113 +1,96 @@
-#include <cstring>
 #include <jni.h>
+#include <string>
+#include <cassert>
 
 #include "app_engine.hpp"
-
 #include "hela/eillance/capture/video_config.hpp"
 #include "hela/eillance/common/event_queue.hpp"
 #include "hela/eillance/logging/logging.h"
 
-/// @brief Application engine class alias
 using AppEngine = hela::eillance::AppEngine;
 
 namespace {
 
-/// @brief AppEngine object: the top level application engine object
-AppEngine* engine = nullptr;
-
 /// @brief Global JVM object
-JavaVM* javaVm;
+JavaVM* javaVm = nullptr;
 
 }  // namespace
 
 extern "C" JNIEXPORT jlong JNICALL
-Java_hela_eillance_AppEngineService_createAppEngine(
-    JNIEnv* env,
-    jobject instance,
-    jobject nativeBridge) {
-  engine = new AppEngine(javaVm, env, instance, nativeBridge);
-  return reinterpret_cast<jlong>(engine);
+Java_hela_eillance_AppEngineService_createAppEngine(  // NOLINT(readability-identifier-naming)
+    JNIEnv* env, jobject instance, jobject nativeBridge) {
+  return reinterpret_cast<jlong>(new AppEngine(javaVm, env, instance, nativeBridge));  // NOLINT(*-pro-type-reinterpret-cast)
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_hela_eillance_AppEngineService_deleteAppEngine(
-    JNIEnv* env,
-    jobject instance,
-    jlong appmgr) {
-  if (!engine || !appmgr) {
-    return;
-  }
-  auto* app = reinterpret_cast<AppEngine*>(appmgr);
-  LOGF_IF(app != engine) << "NdkCamera Obj mismatch";
+Java_hela_eillance_AppEngineService_deleteAppEngine(  // NOLINT(readability-identifier-naming)
+    JNIEnv* /*env*/, jobject /*instance*/, jlong appmgr) {
 
+  auto* app = reinterpret_cast<AppEngine*>(appmgr); // NOLINT(*-pro-type-reinterpret-cast, *-no-int-to-ptr)
   delete app;
+}
 
-  // also reset the private global object
-  engine = nullptr;
+extern "C" JNIEXPORT void JNICALL
+Java_hela_eillance_AppEngineService_start(  // NOLINT(readability-identifier-naming)
+    JNIEnv* env, jobject  /*instance*/, jlong appmgr) {
+
+  auto* app = reinterpret_cast<AppEngine*>(appmgr); // NOLINT(*-pro-type-reinterpret-cast, *-no-int-to-ptr)
+  app->Start();
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_hela_eillance_AppEngineService_stop(  // NOLINT(readability-identifier-naming)
+    JNIEnv* env, jobject  /*instance*/, jlong appmgr) {
+
+  auto* app = reinterpret_cast<AppEngine*>(appmgr); // NOLINT(*-pro-type-reinterpret-cast, *-no-int-to-ptr)
+  app->Stop();
 }
 
 extern "C" JNIEXPORT jobject JNICALL
-Java_hela_eillance_AppEngineService_getServiceConnectionState(
-    JNIEnv* env,
-    jobject instance,
-    jlong appmgr) {
-  auto* app = reinterpret_cast<AppEngine*>(appmgr);
-  auto status = app->GetServiceConnectionState();
+Java_hela_eillance_AppEngineService_getServiceConnectionState(  // NOLINT(readability-identifier-naming)
+    JNIEnv* env, jobject /*instance*/, jlong appmgr) {
 
-  auto* clss = env->FindClass("hela/eillance/events/ServiceConnectionState");
-  assert(clss != nullptr && "Class ServiceConnectionState can't be found");
-  auto* from_int_method = env->GetStaticMethodID(clss, "fromInt", "(I)Lhela/eillance/events/ServiceConnectionState;");
+  auto* app = reinterpret_cast<AppEngine*>(appmgr); // NOLINT(*-pro-type-reinterpret-cast, *-no-int-to-ptr)
+  auto status = static_cast<int>(app->GetServiceConnectionState());
+
+  jclass cls = env->FindClass("hela/eillance/events/ServiceConnectionState");
+  assert(cls != nullptr && "Class ServiceConnectionState can't be found");
+
+  jmethodID from_int_method = env->GetStaticMethodID(cls, "fromInt", "(I)Lhela/eillance/events/ServiceConnectionState;");
   assert(from_int_method != nullptr && "Static method ServiceConnectionState.fromInt can't be found");
 
   // NOLINTNEXTLINE(*-vararg)
-  return env->CallStaticObjectMethod(clss, from_int_method, static_cast<jint>(status));
+  return env->CallStaticObjectMethod(cls, from_int_method, status);
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_hela_eillance_AppEngineService_configureDeviceName(
-    JNIEnv *env,
-    jobject instance,
-    jlong appmgr,
-    jstring deviceName) {
-  auto* app = reinterpret_cast<AppEngine*>(appmgr);
+Java_hela_eillance_AppEngineService_configureDeviceName(  // NOLINT(readability-identifier-naming)
+    JNIEnv* env, jobject  /*instance*/, jlong appmgr, jstring deviceName) {
 
-  const char* deviceNameCStr = env->GetStringUTFChars(deviceName, nullptr);
-  auto device_name = std::string(deviceNameCStr);
-  env->ReleaseStringUTFChars(deviceName, deviceNameCStr);
+  auto* app = reinterpret_cast<AppEngine*>(appmgr); // NOLINT(*-pro-type-reinterpret-cast, *-no-int-to-ptr)
+  auto* device_name_c_str = env->GetStringUTFChars(deviceName, nullptr);
+  auto device_name_str = std::string(device_name_c_str);
+  env->ReleaseStringUTFChars(deviceName, device_name_c_str);
 
-  app->ConfigureDeviceName(std::move(device_name));
+  app->ConfigureDeviceName(device_name_str);
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_hela_eillance_AppEngineService_configureVideoCapture(
-    JNIEnv *env,
-    jobject instance,
-    jobject videoConfig) {
-  jclass videoConfigClass = env->GetObjectClass(videoConfig);
+Java_hela_eillance_AppEngineService_configureVideoCapture(  // NOLINT(readability-identifier-naming)
+    JNIEnv* env, jobject  /*instance*/, jlong appmgr, jobject videoConfig) {
 
-  hela::eillance::VideoConfig conf{};
-
-  conf.cameraId = env->GetIntField(videoConfig, env->GetFieldID(videoConfigClass, "cameraId", "I"));
-  conf.width = env->GetIntField(videoConfig, env->GetFieldID(videoConfigClass, "width", "I"));
-  conf.height = env->GetIntField(videoConfig, env->GetFieldID(videoConfigClass, "height", "I"));
-  conf.frameRate = env->GetIntField(videoConfig, env->GetFieldID(videoConfigClass, "frameRate", "I"));
-  conf.bitrate = env->GetIntField(videoConfig, env->GetFieldID(videoConfigClass, "bitrate", "I"));
+  auto conf = hela::eillance::VideoConfig{};
+  jclass video_config_class = env->GetObjectClass(videoConfig);
+  conf.cameraId = env->GetIntField(videoConfig, env->GetFieldID(video_config_class, "cameraId", "I"));
+  conf.width = env->GetIntField(videoConfig, env->GetFieldID(video_config_class, "width", "I"));
+  conf.height = env->GetIntField(videoConfig, env->GetFieldID(video_config_class, "height", "I"));
+  conf.frameRate = env->GetIntField(videoConfig, env->GetFieldID(video_config_class, "frameRate", "I"));
+  conf.bitrate = env->GetIntField(videoConfig, env->GetFieldID(video_config_class, "bitrate", "I"));
 
   hela::eillance::EventQueue::Instance().Push(std::move(conf));
 }
 
-JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void* reserved) {
-  JNIEnv* env;
-  if (vm->GetEnv((void**)&env, JNI_VERSION_1_6) != JNI_OK) {
-    return JNI_ERR;
-  }
+JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
   javaVm = vm;
   return JNI_VERSION_1_6;
-}
-
-JNIEXPORT void JNICALL JNI_OnUnLoad(JavaVM* jvm, void* reserved) {
-  JNIEnv* env;
-  if (jvm->GetEnv((void**)&env, JNI_VERSION_1_6) != JNI_OK) {
-    return;
-  }
 }

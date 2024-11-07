@@ -38,6 +38,7 @@
   <string name="service_connection_state_establishing">Establishing</string>
   <string name="service_connection_state_online">Online</string>
   <string name="service_connection_state_failure">Failure</string>
+  <string name="service_connection_state_disconnected">No network</string>
 
   <string name="state_service_unknown">Unknown</string>
   <string name="state_service_standby">Standby</string>

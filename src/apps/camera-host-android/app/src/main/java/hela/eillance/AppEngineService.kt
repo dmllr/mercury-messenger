@@ -1,5 +1,6 @@
 package hela.eillance
 
+import android.app.ActivityManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -13,6 +14,10 @@ import android.hardware.camera2.CameraAccessException
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CameraMetadata
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.os.Binder
 import android.os.IBinder
 import android.util.Log
@@ -26,11 +31,14 @@ import hela.eillance.events.EventSource
 import hela.eillance.events.ServiceConnectionState
 import hela.eillance.events.interfaces.INativeBridge
 import hela.eillance.ndkio.VideoConfig
-
+import java.util.concurrent.atomic.AtomicLong
 
 class AppEngineService : Service(), INativeBridge {
-  private var appEngine: Long = 0
+  private var appEngine: AtomicLong = AtomicLong(0)
   private var serviceConnectionState: ServiceConnectionState = ServiceConnectionState.Unknown
+
+  private lateinit var connectivityManager: ConnectivityManager
+  private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
   inner class StreamingServiceBinder : Binder() {
     val service: AppEngineService
@@ -41,28 +49,24 @@ class AppEngineService : Service(), INativeBridge {
 
   override fun onCreate() {
     super.onCreate()
-
     if (isCamera2Device()) {
-      createAppEngine()
+      appEngine.set(createAppEngine(this))
     } else {
-      Log.e(Tune.TAG, "Found legacy camera device, camera2 device required")
-      // TODO treat error
+      Log.e("Tune", "Found legacy camera device, camera2 device required")
       return
     }
-
     startForeground()
+    setupNetworkMonitoring()
   }
 
   override fun onDestroy() {
-    deleteAppEngine(appEngine)
-
+    stopNetworkMonitoring()
+    deleteAppEngine(appEngine.get())
     super.onDestroy()
   }
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-    if (intent != null)
-      startForeground()
-
+    intent?.let { startForeground() }
     return START_STICKY
   }
 
@@ -82,69 +86,46 @@ class AppEngineService : Service(), INativeBridge {
 
       if (status == ServiceConnectionState.Establishing.value) {
         val deviceName = getDeviceNamePreference()
-        configureDeviceName(deviceName)
+        configureDeviceName(appEngine.get(), deviceName)
 
         val videoConfig = getVideoConfigPreferences()
-        configureVideoCapture(videoConfig)
+        configureVideoCapture(appEngine.get(), videoConfig)
       }
 
       startForeground()
     }
   }
 
-  private fun getDeviceNamePreference(): String {
-    val sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this)
-    val deviceName = sharedPreferences.getString("device_name", "")
-    return deviceName!!
-  }
+  private fun getDeviceNamePreference(): String =
+    PreferenceManager.getDefaultSharedPreferences(this)
+      .getString("device_name", "") ?: ""
 
   private fun getVideoConfigPreferences(): VideoConfig {
     val sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this)
-
-    val videoConfig = VideoConfig()
-    videoConfig.cameraId = sharedPreferences.getString("default_camera", "0")?.toIntOrNull() ?: 0
-    val resolution = sharedPreferences.getString("camera_resolution", "0x0")?.split("x")
-    videoConfig.width = resolution?.get(0)?.toIntOrNull() ?: 0
-    videoConfig.height = resolution?.get(1)?.toIntOrNull() ?: 0
-    videoConfig.frameRate = sharedPreferences.getString("frame_rate", "30")?.toIntOrNull() ?: 30
-    videoConfig.bitrate = sharedPreferences.getString("bitrate", "0")?.toIntOrNull() ?: 0
-
-    return videoConfig
+    return VideoConfig().apply {
+      cameraId = sharedPreferences.getString("default_camera", "0")?.toIntOrNull() ?: 0
+      sharedPreferences.getString("camera_resolution", "0x0")
+        ?.split("x")?.let {
+          width = it.getOrNull(0)?.toIntOrNull() ?: 0
+          height = it.getOrNull(1)?.toIntOrNull() ?: 0
+        }
+      frameRate = sharedPreferences.getString("frame_rate", "30")?.toIntOrNull() ?: 30
+      bitrate = sharedPreferences.getString("bitrate", "0")?.toIntOrNull() ?: 0
+    }
   }
 
   private fun isCamera2Device(): Boolean {
     val camMgr = getSystemService(Context.CAMERA_SERVICE) as CameraManager
-    var camera2Dev = true
-    try {
-      val cameraIds = camMgr.cameraIdList
-      if (cameraIds.isNotEmpty()) {
-        for (id in cameraIds) {
-          val characteristics = camMgr.getCameraCharacteristics(id)
-          val deviceLevel =
-            characteristics.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL)!!
-          val facing = characteristics.get(CameraCharacteristics.LENS_FACING)!!
-          if (deviceLevel == CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_LEGACY && facing == CameraMetadata.LENS_FACING_BACK)
-            camera2Dev = false
-        }
+    return try {
+      camMgr.cameraIdList.any {
+        val characteristics = camMgr.getCameraCharacteristics(it)
+        characteristics.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL) !=
+            CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_LEGACY
       }
     } catch (e: CameraAccessException) {
       e.printStackTrace()
-      camera2Dev = false
+      false
     }
-
-    return camera2Dev
-  }
-
-  private fun createAppEngine() {
-    appEngine = createAppEngine(this)
-  }
-
-  fun getServiceConnectionState(): ServiceConnectionState {
-    return getServiceConnectionState(appEngine)
-  }
-
-  fun configureDeviceName(name: String) {
-    configureDeviceName(appEngine, name)
   }
 
   private fun Pair<Int, Int>.getBitmapFromVectorDrawable(): Bitmap {
@@ -164,64 +145,141 @@ class AppEngineService : Service(), INativeBridge {
   }
 
   private fun startForeground() {
-    val channel = createNotificationChannel()
+    if (!isForegroundAllowed()) {
+      Log.e("AppEngineService", "Cannot start foreground service in the current state.")
+      return
+    }
 
-    val customText = serviceConnectionState.getResourceString(this)
+    val channel = createNotificationChannel()
     val statusIcon = when (serviceConnectionState) {
       ServiceConnectionState.Unknown -> Pair(R.drawable.ic_status1_standby, R.color.colorNegative)
       ServiceConnectionState.Establishing -> Pair(R.drawable.ic_status2, R.color.colorPositive)
-      ServiceConnectionState.Online -> Pair(R.drawable.ic_status1_standby, R.color.colorPositive)
-      ServiceConnectionState.Failure -> Pair(R.drawable.ic_failure, R.color.colorNegative)
+      else -> Pair(R.drawable.ic_failure, R.color.colorNegative)
     }
 
-    val mainActivityIntent = Intent(this, MainActivity::class.java)
-    mainActivityIntent.flags = Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+    val mainActivityIntent = Intent(this, MainActivity::class.java).apply {
+      flags = Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+    }
 
-    val pendingIntent = PendingIntent.getActivity(
-      this,
-      0,
-      mainActivityIntent,
-      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-    )
-
-    val notificationBuilder = NotificationCompat.Builder(this, channel)
-    val builder = notificationBuilder.setOngoing(true)
+    val notification = NotificationCompat.Builder(this, channel)
+      .setOngoing(true)
       .setLargeIcon(statusIcon.getBitmapFromVectorDrawable())
       .setSmallIcon(R.drawable.ic_camera_stream)
       .setContentTitle(getString(R.string.notification_title))
-      .setContentText(customText)
+      .setContentText(serviceConnectionState.getResourceString(this))
       .setPriority(NotificationCompat.PRIORITY_LOW)
-      .setCategory(NotificationCompat.CATEGORY_SERVICE)
-      .setContentIntent(pendingIntent)
+      .setContentIntent(
+        PendingIntent.getActivity(
+          this, 0, mainActivityIntent,
+          PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+      ).build().apply {
+        flags = Notification.FLAG_NO_CLEAR or Notification.FLAG_FOREGROUND_SERVICE
+      }
 
-    val notification = builder.build()
-    notification.flags = Notification.FLAG_NO_CLEAR or Notification.FLAG_FOREGROUND_SERVICE
+    try {
+      startForeground(CAMERA_SERVICE_FG_ID, notification)
+    } catch (e: Exception) {
+      Log.e("AppEngineService", "Failed to start foreground: ${e.message}")
+    }
+  }
 
-    startForeground(CAMERA_SERVICE_FG_ID, notification)
+  private fun isForegroundAllowed(): Boolean {
+    // Ensure that the app is allowed to start a foreground service.
+    val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+    return activityManager.appTasks.any { task ->
+      task.taskInfo.baseIntent.component?.className?.contains("MainActivity") ?: false
+    }
   }
 
   private fun createNotificationChannel(): String {
     val id = "surveillance-foreground-service"
-    val chan = NotificationChannel(
-      id,
-      getString(R.string.notification_description),
-      NotificationManager.IMPORTANCE_LOW
-    )
-    chan.lockscreenVisibility = Notification.VISIBILITY_PRIVATE
-
     val service = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-
-    service.createNotificationChannel(chan)
-
+    service.createNotificationChannel(
+      NotificationChannel(
+        id, getString(R.string.notification_description),
+        NotificationManager.IMPORTANCE_LOW
+      ).apply { lockscreenVisibility = Notification.VISIBILITY_PRIVATE }
+    )
     return id
   }
 
-  // native lib functions
+  private fun setupNetworkMonitoring() {
+    connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    networkCallback = object : ConnectivityManager.NetworkCallback() {
+
+      private val availableNetworks: MutableSet<Network> = HashSet()
+
+      override fun onAvailable(network: Network) {
+        val networkCapabilities = connectivityManager.getNetworkCapabilities(network)
+        val hasInternetCapability =
+          networkCapabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+
+        if (hasInternetCapability == true) {
+          availableNetworks.add(network)
+          sendNetworkState()
+        }
+      }
+
+      override fun onLost(network: Network) {
+        availableNetworks.remove(network)
+        sendNetworkState()
+      }
+
+      private fun sendNetworkState() {
+        if (availableNetworks.isNotEmpty()) {
+          start()
+        } else {
+          stop()
+        }
+      }
+    }
+
+    val request = NetworkRequest.Builder()
+      .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+      .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+      .addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR)
+      .build()
+    connectivityManager.registerNetworkCallback(request, networkCallback!!)
+  }
+
+  private fun stopNetworkMonitoring() {
+    networkCallback?.let {
+      connectivityManager.unregisterNetworkCallback(it)
+    }
+  }
+
   private external fun createAppEngine(nativeBridge: INativeBridge): Long
+
   private external fun deleteAppEngine(appMgr: Long)
+  fun deleteAppEngine() {
+    return deleteAppEngine(appEngine.getAndSet(0))
+  }
+
+  private external fun start(appMgr: Long)
+  fun start() {
+    return start(appEngine.get())
+  }
+
+  private external fun stop(appMgr: Long)
+  fun stop() {
+    return stop(appEngine.get())
+  }
+
   private external fun getServiceConnectionState(appMgr: Long): ServiceConnectionState
+  fun getServiceConnectionState(): ServiceConnectionState {
+    return getServiceConnectionState(appEngine.get())
+  }
+
   private external fun configureDeviceName(appMgr: Long, name: String)
-  external fun configureVideoCapture(conf: VideoConfig)
+  fun configureDeviceName(name: String) {
+    return configureDeviceName(appEngine.get(), name)
+  }
+
+  private external fun configureVideoCapture(appMgr: Long, conf: VideoConfig)
+  fun configureVideoCapture(conf: VideoConfig) {
+    return configureVideoCapture(appEngine.get(), conf)
+  }
 
   companion object {
     private const val CAMERA_SERVICE_FG_ID = 9990
