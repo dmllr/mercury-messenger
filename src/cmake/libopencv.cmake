@@ -1,4 +1,4 @@
-set(OpenCV_VERSION 4.9.0)
+set(OpenCV_VERSION 4.10.0)
 
 set(BUILD_SHARED_LIBS OFF)
 

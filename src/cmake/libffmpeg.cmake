@@ -12,8 +12,8 @@ set(FFMPEG_LIBS avutil swresample avcodec avformat swscale avfilter avdevice)
 set(FFMPEG_CONFIGURE_EXTRAS --enable-jni)
 
 
-set(FFMPEG_VERSION 6.1.1)
-set(FFMPEG_URL https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.bz2)
+set(FFMPEG_VERSION 7.1)
+set(FFMPEG_URL "https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.bz2")
 get_filename_component(FFMPEG_ARCHIVE_NAME ${FFMPEG_URL} NAME)
 set(FFMPEG_PATH "${CMAKE_SOURCE_DIR}/_imported/ffmpeg-${FFMPEG_VERSION}")
 set(FFMPEG_ARCHIVE_PATH "${CMAKE_SOURCE_DIR}/_imported/${FFMPEG_ARCHIVE_NAME}")
