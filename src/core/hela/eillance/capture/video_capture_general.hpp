@@ -80,13 +80,16 @@ public:
       return;
     }
 
-#if defined __ANDROID__
-    cap_.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('B', 'G', 'R', '3'));
-#endif
     // attempt to set desired resolution
     cap_.set(cv::CAP_PROP_FRAME_WIDTH, config_.width);
     cap_.set(cv::CAP_PROP_FRAME_HEIGHT, config_.height);
-    cap_.set(cv::CAP_PROP_FPS, config_.frameRate);
+    cap_.set(cv::CAP_PROP_BUFFERSIZE , 8);
+    cap_.set(cv::CAP_PROP_FPS, 25);
+#if defined __ANDROID__
+    cap_.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('B', 'G', 'R', '3'));
+#else
+    cap_.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'));
+#endif
 
     cap_ >> cv_frame_;
     if (cv_frame_.empty()) {
@@ -106,12 +109,13 @@ public:
 
     encoder_.Engage(actual_width, actual_height, actual_fps);
 
-    dispatch_queue_.Dispatch([this]() {
-      CaptureFrame();
-    });
+//    dispatch_queue_.Dispatch([this]() {
+//      CaptureFrame();
+//    });
   }
 
   auto FetchBuffers() -> Packet {
+    CaptureFrame();
     if (cv_frame_.empty()) {
       return {};
     }
@@ -179,9 +183,9 @@ private:
 
     // due to OpenCV issue, camera frames should be captured as soon as possible,
     // otherwise a framerate will be significantly lowered
-    dispatch_queue_.Dispatch([this]() {
-      CaptureFrame();
-    });
+//    dispatch_queue_.Dispatch([this]() {
+//      CaptureFrame();
+//    });
   }
 
   static void YV12toNV12(const cv::Mat& input, cv::Mat& output) {
