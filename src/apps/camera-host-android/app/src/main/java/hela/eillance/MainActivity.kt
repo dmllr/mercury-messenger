@@ -173,8 +173,9 @@ class MainActivity : AppCompatActivity(), ServiceConnection,
         this,
         Context.BIND_AUTO_CREATE + Context.BIND_ABOVE_CLIENT
       )
-    )
+    ) {
       cameraServiceBound = true
+    }
   }
 
   override fun onRequestPermissionsResult(
