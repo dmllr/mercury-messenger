@@ -13,7 +13,6 @@ import android.graphics.Canvas
 import android.hardware.camera2.CameraAccessException
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
-import android.hardware.camera2.CameraMetadata
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
