@@ -55,7 +55,7 @@ public:
 
     rtc_producer_->SetStatusCallback(nullptr);
 
-    if (service_instance_ != nullptr && (env->IsSameObject(service_instance_, nullptr) == 0u)) {
+    if (service_instance_ != nullptr && (env->IsSameObject(service_instance_, nullptr) == 0U)) {
       LOGD << "Deleting service_instance_ GlobalRef.";
       env->DeleteWeakGlobalRef(service_instance_);
       service_instance_ = nullptr;

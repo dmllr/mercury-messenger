@@ -18,24 +18,12 @@
 
 namespace hela::eillance {
 
-class RtcProducer {
+class RtcProducer : public RtcTransport {
+  using Json = nlohmann::json;
   using PeerTrack = std::shared_ptr<Peer::Track>;
 
   /// @brief Audio and video stream
   std::shared_ptr<Stream> av_stream_;
-  std::unordered_map<std::string, std::shared_ptr<Peer>> peers_;
-
-  class Client {
-    friend class RtcProducer;
-
-    std::string id_;
-    PeerTrack track_;
-
-  public:
-    Client(std::string id, std::shared_ptr<Peer::Track> track)
-        : id_(std::move(id)),
-          track_(std::move(track)) {}
-  };
 
 public:
   explicit RtcProducer() {
@@ -45,10 +33,7 @@ public:
 
     // set callback responsible for sample sending
     av_stream_->OnSample([this, ws = make_weak_ptr(av_stream_)](Stream::Source::Type type, uint64_t sampleTime, const rtc::binary& sample) {
-      auto tracks = GetAllClientsInReadyState(type);
-      if (!tracks.empty()) {
-        SendMessageToAllTracks(sample, type, sampleTime, tracks);
-      }
+      SendSampleToReadyPeers(sample, type, sampleTime);
       DispatchQueue::MainThread().Dispatch([this, ws]() {
         if (peers_.empty()) {
           // we have no peers, stop the stream
@@ -65,28 +50,50 @@ public:
   RtcProducer& operator=(const RtcProducer&) = delete;
   virtual ~RtcProducer() = default;
 
-  void AddPeer(const std::string id, const std::shared_ptr<Peer>& peer) {
-    peers_.emplace(id, peer);
-  }
-
-  auto GetPeer(const std::string id) -> std::shared_ptr<Peer> {
-    if (auto it = peers_.find(id); it != peers_.end()) {
-      return peers_.at(id);
-    }
-    return nullptr;
-  }
-
-  void RemovePeer(const std::string& id) {
-    peers_.erase(id);
-  }
-
-  void OnPeerReady(const std::shared_ptr<Peer>& /*peer*/) {
+  void OnPeerReady(const std::shared_ptr<Peer>& /*peer*/) final {
     av_stream_->Start();
   }
 
-  static auto AddVideo(
+  void ProcessPeerMessage(Json message) final {
+    auto it = message.find("from");
+    if (it == message.end()) {
+      return;
+    }
+    auto peer_id = it->get<std::string>();
+    it = message.find("type");
+    if (it == message.end()) {
+      return;
+    }
+    auto type = it->get<std::string>();
+
+    if (type == "streamRequest") {
+      std::shared_ptr<Peer> const peer = CreatePeerConnection(peer_id);
+      DispatchQueue::MainThread().Dispatch([this, peer_id, peer]() {
+        AddPeer(peer_id, peer);
+      });
+    } else if (type == "answer") {
+      if (const auto peer = GetPeer(peer_id); peer != nullptr) {
+        auto pc = peer->PeerConnection();
+        auto sdp = message["sdp"].get<std::string>();
+        auto answer = rtc::Description(sdp, type);
+        pc->setRemoteDescription(answer);
+      }
+    } else if (type == "offer") {
+      // do nothing
+    } else if (type == "info profile") {
+      // do nothing
+    } else {
+      throw std::runtime_error("Unknown message type " + type);
+    }
+  }
+
+  void ProcessSystemMessage(const std::string& type, Json message) final {
+    throw std::runtime_error("Unknown message type in Producer's ProcessSystemMessage: " + type);
+  }
+
+  auto AddVideo(
       const std::shared_ptr<rtc::PeerConnection>& pc,
-      const std::function<void(void)>& onOpen) -> std::shared_ptr<Peer::Track> {
+      const std::function<void(void)>& onOpen) -> std::shared_ptr<Peer::Track> final {
     constexpr auto payload_type = 102;
     constexpr auto ssrc = 10001;
     constexpr auto msid = "cam-NAME-stream";
@@ -112,9 +119,9 @@ public:
     return std::make_shared<Peer::Track>(track, sr_reporter);
   }
 
-  static auto AddAudio(
+  auto AddAudio(
       const std::shared_ptr<rtc::PeerConnection>& pc,
-      const std::function<void(void)>& onOpen) -> std::shared_ptr<Peer::Track> {
+      const std::function<void(void)>& onOpen) -> std::shared_ptr<Peer::Track> final {
     constexpr auto payload_type = 111;
     constexpr auto ssrc = 10002;
     constexpr auto msid = "cam-NAME-stream";
@@ -140,54 +147,61 @@ public:
     return std::make_shared<Peer::Track>(track, sr_reporter);
   }
 
-  void Configure(Config config) {
+  Json GetPublishMessage() final {
+    return Json{
+        {"kind", "producer"},
+        {"profile", GetDeviceProfileAsJson()},
+    };
+  }
+
+  void Configure(Config config) final {
     av_stream_->Video()->Configure(config);
   }
 
 private:
-  std::vector<Client> GetAllClientsInReadyState(Stream::Source::Type type) {
-    std::vector<Client> clients;
+  void SendSampleToReadyPeers(
+      const rtc::binary& sample,
+      const Stream::Source::Type type,
+      const uint64_t sample_time) {
     // get track for given type
     auto get_track_data = [type](const std::shared_ptr<Peer>& peer) {
       return type == Stream::Source::Type::video ? peer->video : peer->audio;
     };
 
+    const auto* stream_type = type == Stream::Source::Type::video ? "video" : "audio";
     // get all peers with Ready state
     for (const auto& id_peer: peers_) {
       auto id = id_peer.first;
       auto peer = id_peer.second;
       auto opt_track_data = get_track_data(peer);
       if (peer->getState() == Peer::State::Ready && opt_track_data.has_value()) {
-        clients.emplace_back(id, opt_track_data.value());
+        ProcessTrack(id, opt_track_data.value(), sample_time, sample, stream_type);
       }
     }
-    return clients;
   }
 
-  static void SendMessageToAllTracks(const rtc::binary& sample, Stream::Source::Type type, uint64_t sampleTime, const std::vector<Client>& clients) {
-    const auto* stream_type = type == Stream::Source::Type::video ? "video" : "audio";
-
-    for (const auto& client: clients) {
-      ProcessTrack(client, sampleTime, sample, stream_type);
-    }
-  }
-
-  static void ProcessTrack(const Client& client, uint64_t sampleTime, const rtc::binary& message, const char* streamType) {
-    auto peer = client.id_;
-    auto track_data = client.track_;
-    auto elapsed_seconds = static_cast<double>(sampleTime) / Time::uS;
-    const auto rtp_config = track_data->sender->rtpConfig;
+  static void ProcessTrack(
+      const std::string& peer_id,
+      const std::shared_ptr<Peer::Track>& track,
+      const uint64_t sample_time,
+      const rtc::binary& sample,
+      const char* stream_type) {
+    auto elapsed_seconds = static_cast<double>(sample_time) / Time::uS;
+    const auto rtp_config = track->sender->rtpConfig;
     auto elapsed_timestamp = rtp_config->secondsToTimestamp(elapsed_seconds);
 
-    UpdateRtpConfig(elapsed_timestamp, track_data, rtp_config);
+    UpdateRtpConfig(elapsed_timestamp, track, rtp_config);
 
-    LOGV << "Sending " << streamType << " sample with size: " << message.size() << " to " << peer;
-    SendSample(message, streamType, track_data);
+    LOGV << "Sending " << stream_type << " sample with size: " << sample.size() << " to " << peer_id;
+    SendSample(sample, stream_type, track);
   }
 
-  static void UpdateRtpConfig(uint32_t elapsedTimestamp, const PeerTrack& track, const std::shared_ptr<rtc::RtpPacketizationConfig>& rtp_config) {
+  static void UpdateRtpConfig(
+      const uint32_t elapsed_timestamp,
+      const PeerTrack& track,
+      const std::shared_ptr<rtc::RtpPacketizationConfig>& rtp_config) {
     // set new timestamp
-    rtp_config->timestamp = rtp_config->startTimestamp + elapsedTimestamp;
+    rtp_config->timestamp = rtp_config->startTimestamp + elapsed_timestamp;
 
     // get elapsed time in clock rate from last RTCP sender report
     auto report_elapsed_timestamp = rtp_config->timestamp - track->sender->lastReportedTimestamp();
