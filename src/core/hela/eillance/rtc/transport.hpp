@@ -22,7 +22,6 @@
 
 namespace hela::eillance {
 
-template<typename Connection>
 class RtcTransport {
   using Json = nlohmann::json;
   using StatusCallbackFunction = std::function<void(const std::string& peer_id, EventSource, int)>;
@@ -37,13 +36,15 @@ class RtcTransport {
   static constexpr auto maxWaitBeforeReconnect = 10U;
   static constexpr auto maxConnectionAttempts = 10U;
 
-  Connection connection_{};
   std::unique_ptr<rtc::WebSocket> ws_{nullptr};
   std::uint32_t connection_attempt_{0U};
   std::uint32_t wait_before_reconnect_{minWaitBeforeReconnect};
 
   mutable ServiceConnectionState service_connection_state_{ServiceConnectionState::unknown};
   std::shared_ptr<StatusCallbackFunction> status_callback_{};
+
+protected:
+  std::unordered_map<std::string, std::shared_ptr<Peer>> peers_;
 
 public:
   RtcTransport() = default;
@@ -129,6 +130,68 @@ public:
     ReportServiceConnectionState(ServiceConnectionState::disconnected);
   }
 
+protected:
+  virtual Json GetPublishMessage() = 0;
+  virtual void OnPeerReady(const std::shared_ptr<Peer>& peer) = 0;
+  virtual void ProcessPeerMessage(Json message) = 0;
+  virtual void ProcessSystemMessage(const std::string& type, Json message) = 0;
+  virtual auto AddVideo(
+      const std::shared_ptr<rtc::PeerConnection>& pc,
+      const std::function<void(void)>& onOpen) -> std::shared_ptr<Peer::Track> = 0;
+  virtual auto AddAudio(
+      const std::shared_ptr<rtc::PeerConnection>& pc,
+      const std::function<void(void)>& onOpen) -> std::shared_ptr<Peer::Track> = 0;
+  virtual void Configure(Config config) = 0;
+
+  void AddPeer(const std::string id, const std::shared_ptr<Peer>& peer) {
+    peers_.emplace(id, peer);
+  }
+
+  auto GetPeer(const std::string id) -> std::shared_ptr<Peer> {
+    if (auto it = peers_.find(id); it != peers_.end()) {
+      return peers_.at(id);
+    }
+    return nullptr;
+  }
+
+  void RemovePeer(const std::string& id) {
+    peers_.erase(id);
+  }
+
+  auto CreatePeerConnection(const std::string& peer_id) -> std::shared_ptr<Peer> {
+    auto pc = CreateDefaultPeerConnection(peer_id);
+
+    auto peer = std::make_shared<Peer>(pc);
+
+    peer->video = AddVideo(
+        pc,
+        [this, peer_id, wc = make_weak_ptr(peer)]() {
+          DispatchQueue::MainThread().Dispatch([this, wc]() {
+            if (auto c = wc.lock()) {
+              AddToStream(c, true);
+            }
+          });
+          LOGI << "Video from " << id_ << " opened";
+        });
+
+    peer->audio = AddAudio(
+        pc,
+        [this, peer_id, wc = make_weak_ptr(peer)]() {
+          DispatchQueue::MainThread().Dispatch([this, wc]() {
+            if (auto c = wc.lock()) {
+              AddToStream(c, false);
+            }
+          });
+          LOGI << "Audio from " << id_ << " opened";
+        });
+
+    peer->dataChannel = CreateDefaultDataChannel(pc, peer_id);
+
+    pc->setLocalDescription();
+
+    return peer;
+  }
+
 private:
   void OnWebSocketOpen() {
     LOGI << "WebSocket connected, signaling ready";
@@ -177,7 +240,7 @@ private:
       });
     } else {
       DispatchQueue::MainThread().Dispatch([this, message]() {
-        OnPeerMessage(message);
+        ProcessPeerMessage(message);
       });
     }
   }
@@ -218,14 +281,12 @@ private:
   }
 
   void Publish() {
-    const Json message = {
-        {"token", auth_token_},
-        {"type", "publish"},
-        {"client_id", id_},
-        {"name", device_name_},
-        {"kind", "producer"},
-        {"profile", GetDeviceProfileAsJson()},
-    };
+    auto message = GetPublishMessage();
+    message["type"] = "publish";
+    message["token"] = auth_token_;
+    message["client_id"] = id_;
+    message["name"] = device_name_;
+
     WsSendMessage(message);
   }
 
@@ -239,7 +300,7 @@ private:
           state == rtc::PeerConnection::State::Failed ||
           state == rtc::PeerConnection::State::Closed) {
         DispatchQueue::MainThread().Dispatch([this, peer_id]() {
-          connection_.RemovePeer(peer_id);
+          RemovePeer(peer_id);
         });
       }
     });
@@ -284,7 +345,7 @@ private:
     }
 
     if (peer->getState() == Peer::State::Ready) {
-      connection_.OnPeerReady(peer);
+      OnPeerReady(peer);
     }
   }
 
@@ -326,7 +387,7 @@ private:
         video_config.width = message["resolution"]["width"].get<std::uint32_t>();
         video_config.height = message["resolution"]["height"].get<std::uint32_t>();
 
-        connection_.Configure(config);
+        Configure(config);
       }
     });
 
@@ -348,78 +409,9 @@ private:
       });
     } else if (type == "error") {
       LOGE << "Signaling error received: " << message["error"].get<std::string>();
-    } else if (type == "info producers") {
-      // ignored for producing peer, but should be treated for consuming one
     } else {
-      throw std::runtime_error("Unknown message type " + type);
+      ProcessSystemMessage(type, message);
     }
-  }
-
-  void OnPeerMessage(Json message) {
-    auto it = message.find("from");
-    if (it == message.end()) {
-      return;
-    }
-    auto peer_id = it->get<std::string>();
-    it = message.find("type");
-    if (it == message.end()) {
-      return;
-    }
-    auto type = it->get<std::string>();
-
-    if (type == "streamRequest") {
-      std::shared_ptr<Peer> const peer = CreatePeerConnection(peer_id);
-      DispatchQueue::MainThread().Dispatch([this, peer_id, peer]() {
-        connection_.AddPeer(peer_id, std::move(peer));
-      });
-    } else if (type == "answer") {
-      if (const auto peer = connection_.GetPeer(peer_id); peer != nullptr) {
-        auto pc = peer->PeerConnection();
-        auto sdp = message["sdp"].get<std::string>();
-        auto answer = rtc::Description(sdp, type);
-        pc->setRemoteDescription(answer);
-      }
-    } else if (type == "offer") {
-      // do nothing
-    } else if (type == "info profile") {
-      // do nothing
-    } else {
-      throw std::runtime_error("Unknown message type " + type);
-    }
-  }
-
-  auto CreatePeerConnection(const std::string& peer_id) -> std::shared_ptr<Peer> {
-    auto pc = CreateDefaultPeerConnection(peer_id);
-
-    auto peer = std::make_shared<Peer>(pc);
-
-    peer->video = connection_.AddVideo(
-        pc,
-        [this, peer_id, wc = make_weak_ptr(peer)]() {
-          DispatchQueue::MainThread().Dispatch([this, wc]() {
-            if (auto c = wc.lock()) {
-              AddToStream(c, true);
-            }
-          });
-          LOGI << "Video from " << id_ << " opened";
-        });
-
-    peer->audio = connection_.AddAudio(
-        pc,
-        [this, peer_id, wc = make_weak_ptr(peer)]() {
-          DispatchQueue::MainThread().Dispatch([this, wc]() {
-            if (auto c = wc.lock()) {
-              AddToStream(c, false);
-            }
-          });
-          LOGI << "Audio from " << id_ << " opened";
-        });
-
-    peer->dataChannel = CreateDefaultDataChannel(pc, peer_id);
-
-    pc->setLocalDescription();
-
-    return peer;
   }
 
   class RtcConfiguration {
