@@ -52,7 +52,7 @@ public:
   RtcTransport(const RtcTransport&) = delete;
   auto operator=(RtcTransport&&) -> RtcTransport& = delete;
   auto operator=(const RtcTransport&) -> RtcTransport& = delete;
-  ~RtcTransport() = default;
+  virtual ~RtcTransport() = default;
 
   [[maybe_unused]] void SetStatusCallback(const StatusCallbackFunction& callback) {
     status_callback_ = std::make_shared<StatusCallbackFunction>(callback);
@@ -190,6 +190,11 @@ protected:
     pc->setLocalDescription();
 
     return peer;
+  }
+
+  void SendPeerMessage(Json& message) {
+    message["token"] = auth_token_;
+    WsSendMessage(message);
   }
 
 private:

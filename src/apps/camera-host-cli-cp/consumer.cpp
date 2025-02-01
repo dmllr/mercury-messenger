@@ -9,6 +9,9 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
   auto rtc = RtcConsumer();
   rtc.SetName("CLI::" + StringUtils::RandomString());
   rtc.Start();
+  rtc.SetClientAddedCallback([&rtc](){
+    rtc.SendStreamRequest();
+  });
 
   while (true) {
     char key;
