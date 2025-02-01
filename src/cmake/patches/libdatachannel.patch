@@ -2,28 +2,6 @@ diff --git a/CMakeLists.txt b/CMakeLists.txt
 index cdbfe596..f38c40f9 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -331,7 +331,9 @@ else()
- 		target_link_libraries(datachannel PRIVATE libSRTP::srtp2)
- 		target_link_libraries(datachannel-static PRIVATE libSRTP::srtp2)
- 	else()
--		add_subdirectory(deps/libsrtp EXCLUDE_FROM_ALL)
-+		if(NOT TARGET srtp2)
-+			add_subdirectory(deps/libsrtp EXCLUDE_FROM_ALL)
-+		endif()
- 		target_compile_definitions(datachannel PRIVATE RTC_SYSTEM_SRTP=0)
- 		target_compile_definitions(datachannel-static PRIVATE RTC_SYSTEM_SRTP=0)
- 		target_link_libraries(datachannel PRIVATE srtp2)
-@@ -360,7 +362,9 @@ if (USE_GNUTLS)
- 		target_link_libraries(datachannel-static PRIVATE Nettle::Nettle)
- 	endif()
- elseif(USE_MBEDTLS)
--	find_package(MbedTLS 3 REQUIRED)
-+	if(NOT TARGET MbedTLS::MbedTLS)
-+		find_package(MbedTLS 3 REQUIRED)
-+	endif()
- 	target_compile_definitions(datachannel PRIVATE USE_MBEDTLS=1)
- 	target_compile_definitions(datachannel-static PRIVATE USE_MBEDTLS=1)
- 	target_link_libraries(datachannel PRIVATE MbedTLS::MbedTLS)
 @@ -382,7 +386,9 @@ else()
              endif()
  		endif()
@@ -35,57 +13,3 @@ index cdbfe596..f38c40f9 100644
  	target_compile_definitions(datachannel PRIVATE USE_GNUTLS=0)
  	target_compile_definitions(datachannel-static PRIVATE USE_GNUTLS=0)
  	target_link_libraries(datachannel PRIVATE OpenSSL::SSL)
-diff --git a/examples/streamer/h264fileparser.cpp b/examples/streamer/h264fileparser.cpp
-index f452b845..cc8a6aa3 100644
---- a/examples/streamer/h264fileparser.cpp
-+++ b/examples/streamer/h264fileparser.cpp
-@@ -50,8 +50,8 @@ void H264FileParser::loadNextSample() {
-     }
- }
- 
--vector<byte> H264FileParser::initialNALUS() {
--    vector<byte> units{};
-+vector<std::byte> H264FileParser::initialNALUS() {
-+    vector<std::byte> units{};
-     if (previousUnitType7.has_value()) {
-         auto nalu = previousUnitType7.value();
-         units.insert(units.end(), nalu.begin(), nalu.end());
-diff --git a/src/impl/tls.cpp b/src/impl/tls.cpp
-index 650f9074..bc9d7ba1 100644
---- a/src/impl/tls.cpp
-+++ b/src/impl/tls.cpp
-@@ -101,7 +101,7 @@ bool check(int ret, const string &message) {
- 	if (ret < 0) {
- 		if (ret == MBEDTLS_ERR_SSL_WANT_READ || ret == MBEDTLS_ERR_SSL_WANT_WRITE ||
- 		    ret == MBEDTLS_ERR_SSL_ASYNC_IN_PROGRESS || ret == MBEDTLS_ERR_SSL_CRYPTO_IN_PROGRESS ||
--		    ret == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY)
-+		    ret == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY || ret == MBEDTLS_ERR_SSL_RECEIVED_NEW_SESSION_TICKET)
- 			return false;
- 
- 		const size_t bufferSize = 1024;
-diff --git a/src/impl/tlstransport.cpp b/src/impl/tlstransport.cpp
-index bf95250e..4a39db12 100644
---- a/src/impl/tlstransport.cpp
-+++ b/src/impl/tlstransport.cpp
-@@ -352,6 +352,8 @@ TlsTransport::TlsTransport(variant<shared_ptr<TcpTransport>, shared_ptr<HttpProx
- 		mbedtls::check(mbedtls_ssl_setup(&mSsl, &mConf));
- 		mbedtls_ssl_set_bio(&mSsl, static_cast<void *>(this), WriteCallback, ReadCallback, NULL);
- 
-+		psa_crypto_init();
-+
- 	} catch (...) {
- 		mbedtls_entropy_free(&mEntropy);
- 		mbedtls_ctr_drbg_free(&mDrbg);
-diff --git a/src/impl/verifiedtlstransport.cpp b/src/impl/verifiedtlstransport.cpp
-index 071a4b79..cea7b0cf 100644
---- a/src/impl/verifiedtlstransport.cpp
-+++ b/src/impl/verifiedtlstransport.cpp
-@@ -36,7 +36,7 @@ VerifiedTlsTransport::VerifiedTlsTransport(
- 				// *cacert is a PEM content
- 				mbedtls::check(mbedtls_x509_crt_parse(
- 				    &mCaCert, reinterpret_cast<const unsigned char *>(cacert->c_str()),
--				    cacert->size()));
-+				    cacert->size() + 1));
- 			}
- 			mbedtls_ssl_conf_ca_chain(&mConf, &mCaCert, NULL);
- 		}
