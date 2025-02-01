@@ -18,7 +18,7 @@ class AppEngine {
   JavaVM* jvm_;
   jobject service_instance_;
   jobject native_bridge_;
-  std::shared_ptr<hela::eillance::RtcTransport<hela::eillance::RtcProducer>> rtc_producer_;
+  std::shared_ptr<RtcProducer> rtc_producer_;
 
 public:
   // NOLINTNEXTLINE(*-easily-swappable-parameters)
@@ -33,7 +33,7 @@ public:
       device_name = StringUtils::RandomString();
       SetSharedPreferenceValue("device_name", device_name);
     }
-    rtc_producer_ = std::make_shared<hela::eillance::RtcTransport<hela::eillance::RtcProducer>>();
+    rtc_producer_ = std::make_shared<RtcProducer>();
     rtc_producer_->SetName(device_name);
     rtc_producer_->SetStatusCallback([this](const std::string& peer_id, EventSource sender, int status) { SetStatus(peer_id, sender, status); });
     DispatchQueue::MainThread().Dispatch([this]() {

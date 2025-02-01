@@ -18,7 +18,7 @@
 
 namespace hela::eillance {
 
-class RtcProducer : public RtcTransport {
+class RtcProducer final : public RtcTransport {
   using Json = nlohmann::json;
   using PeerTrack = std::shared_ptr<Peer::Track>;
 
@@ -48,7 +48,7 @@ public:
   RtcProducer(const RtcProducer&) = delete;
   RtcProducer& operator=(RtcProducer&&) = delete;
   RtcProducer& operator=(const RtcProducer&) = delete;
-  virtual ~RtcProducer() = default;
+  ~RtcProducer() final = default;
 
   void OnPeerReady(const std::shared_ptr<Peer>& /*peer*/) final {
     av_stream_->Start();
