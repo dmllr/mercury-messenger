@@ -131,16 +131,16 @@ private:
     auto track = pc->addTrack(video);
     // create RTP configuration
     auto rtp_config = std::make_shared<rtc::RtpPacketizationConfig>(ssrc, cname, payload_type, rtc::H264RtpPacketizer::defaultClockRate);
-//    // create packetizer
-//    auto packetizer = std::make_shared<rtc::H264RtpPacketizer>(rtc::NalUnit::Separator::StartSequence, rtp_config);
-//    // add RTCP SR handler
+//    // create depacketizer
+    auto depacketizer = std::make_shared<rtc::H264RtpDepacketizer>(rtc::NalUnit::Separator::StartSequence);
+    // add RTCP SR handler
     auto sr_reporter = std::make_shared<rtc::RtcpSrReporter>(rtp_config);
-//    packetizer->addToChain(sr_reporter);
-//    // add RTCP NACK handler
-//    auto nack_responder = std::make_shared<rtc::RtcpNackResponder>();
-//    packetizer->addToChain(nack_responder);
-//    // set handler
-//    track->setMediaHandler(packetizer);
+    depacketizer->addToChain(sr_reporter);
+    // add RTCP NACK handler
+    auto nack_responder = std::make_shared<rtc::RtcpNackResponder>();
+    depacketizer->addToChain(nack_responder);
+    // set handler
+    track->setMediaHandler(depacketizer);
     track->onOpen(onOpen);
 
     return std::make_shared<Peer::Track>(track, sr_reporter);
@@ -159,16 +159,16 @@ private:
     auto track = pc->addTrack(audio);
     // create RTP configuration
     auto rtp_config = std::make_shared<rtc::RtpPacketizationConfig>(ssrc, cname, payload_type, rtc::OpusRtpPacketizer::DefaultClockRate);
-//    // create packetizer
-//    auto packetizer = std::make_shared<rtc::OpusRtpPacketizer>(rtp_config);
+    // create depacketizer
+    auto depacketizer = std::make_shared<rtc::OpusRtpDepacketizer>();
     // add RTCP SR handler
     auto sr_reporter = std::make_shared<rtc::RtcpSrReporter>(rtp_config);
-//    packetizer->addToChain(sr_reporter);
-//    // add RTCP NACK handler
-//    auto nack_responder = std::make_shared<rtc::RtcpNackResponder>();
-//    packetizer->addToChain(nack_responder);
-//    // set handler
-//    track->setMediaHandler(packetizer);
+    depacketizer->addToChain(sr_reporter);
+    // add RTCP NACK handler
+    auto nack_responder = std::make_shared<rtc::RtcpNackResponder>();
+    depacketizer->addToChain(nack_responder);
+    // set handler
+    track->setMediaHandler(depacketizer);
     track->onOpen(onOpen);
 
     return std::make_shared<Peer::Track>(track, sr_reporter);
