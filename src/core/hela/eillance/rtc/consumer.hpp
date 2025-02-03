@@ -55,8 +55,7 @@ public:
     auto selected_client_id = clients_.begin()->id;
     Json request = {
         {"to", selected_client_id},
-        {"type", "streamRequest"}
-    };
+        {"type", "streamRequest"}};
     SendPeerMessage(request);
   }
 
@@ -88,20 +87,20 @@ private:
         AddPeer(peer_id, peer);
       });
 
-//      SendAnswer(peer_id, pc->localDescription().value());
-//      pc->createAnswer([this, peer_id, pc](rtc::Description answer) {
-//        pc->setLocalDescription(answer, [this, peer_id, pc]() {
-//          if (pc->iceGatheringState() == rtc::PeerConnection::IceGatheringState::Complete) {
-//            SendAnswer(peer_id, pc->localDescription().value());
-//          } else {
-//            pc->onGatheringStateChange([this, peer_id, pc](rtc::PeerConnection::IceGatheringState state) {
-//              if (state == rtc::PeerConnection::IceGatheringState::Complete) {
-//                SendAnswer(peer_id, pc->localDescription().value());
-//              }
-//            });
-//          }
-//        });
-//      });
+      //      SendAnswer(peer_id, pc->localDescription().value());
+      //      pc->createAnswer([this, peer_id, pc](rtc::Description answer) {
+      //        pc->setLocalDescription(answer, [this, peer_id, pc]() {
+      //          if (pc->iceGatheringState() == rtc::PeerConnection::IceGatheringState::Complete) {
+      //            SendAnswer(peer_id, pc->localDescription().value());
+      //          } else {
+      //            pc->onGatheringStateChange([this, peer_id, pc](rtc::PeerConnection::IceGatheringState state) {
+      //              if (state == rtc::PeerConnection::IceGatheringState::Complete) {
+      //                SendAnswer(peer_id, pc->localDescription().value());
+      //              }
+      //            });
+      //          }
+      //        });
+      //      });
 
     } else if (type == "info profile") {
       // TODO
@@ -129,21 +128,18 @@ private:
     video.addH264Codec(payload_type);
     video.addSSRC(ssrc, cname, msid, cname);
     auto track = pc->addTrack(video);
-    // create RTP configuration
-    auto rtp_config = std::make_shared<rtc::RtpPacketizationConfig>(ssrc, cname, payload_type, rtc::H264RtpPacketizer::defaultClockRate);
-//    // create depacketizer
+    // create depacketizer
     auto depacketizer = std::make_shared<rtc::H264RtpDepacketizer>(rtc::NalUnit::Separator::StartSequence);
-    // add RTCP SR handler
-    auto sr_reporter = std::make_shared<rtc::RtcpSrReporter>(rtp_config);
-    depacketizer->addToChain(sr_reporter);
-    // add RTCP NACK handler
-    auto nack_responder = std::make_shared<rtc::RtcpNackResponder>();
-    depacketizer->addToChain(nack_responder);
     // set handler
     track->setMediaHandler(depacketizer);
     track->onOpen(onOpen);
+    track->onMessage(
+        [](const rtc::binary& data) {
+          std::cout << "Binary data received " << data.size() << std::endl;
+        },
+        [](const std::string&) { /* can't be */ });
 
-    return std::make_shared<Peer::Track>(track, sr_reporter);
+    return std::make_shared<Peer::Track>(track, depacketizer);
   }
 
   auto AddAudio(
@@ -193,7 +189,7 @@ private:
     }
 
     // Parse new clients
-    for (const auto& item : json) {
+    for (const auto& item: json) {
       ClientInfo client;
       client.id = item.at("id").get<std::string>();
       client.name = item.at("name").get<std::string>();
@@ -214,19 +210,19 @@ private:
       (*on_client_list_changed_)();
     }
 
-//    // Auto-select first client
-//    if (!clients_.empty()) {
-//      selectedClientId_ = clients_[0].id;
-//      profile_ = clients_[0].profile;
-//      HELA_LOG_DEBUG("Selected default client: %s", selectedClientId_.c_str());
-//    } else {
-//      selectedClientId_.clear();
-//      profile_ = nlohmann::json::array();
-//    }
+    //    // Auto-select first client
+    //    if (!clients_.empty()) {
+    //      selectedClientId_ = clients_[0].id;
+    //      profile_ = clients_[0].profile;
+    //      HELA_LOG_DEBUG("Selected default client: %s", selectedClientId_.c_str());
+    //    } else {
+    //      selectedClientId_.clear();
+    //      profile_ = nlohmann::json::array();
+    //    }
 
     // for debugging purposes
     LOGI << "Updated client list:";
-    for (const auto& client : clients_) {
+    for (const auto& client: clients_) {
       LOGI << "  - " << client.id.c_str() << " (" << client.name.c_str() << ") with " << client.profile.size() << " profile entries";
     }
   }
@@ -235,8 +231,7 @@ private:
     Json answer = {
         {"to", peer_id},
         {"type", "answer"},
-        {"sdp", sdp}
-    };
+        {"sdp", sdp}};
     SendPeerMessage(answer);
   }
 };

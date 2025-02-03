@@ -11,18 +11,18 @@ struct Peer {
   struct Track {
     std::shared_ptr<rtc::Track> track;
     std::shared_ptr<rtc::RtcpSrReporter> sender;
-    std::shared_ptr<rtc::RtcpReceivingSession> session;
+    std::shared_ptr<rtc::H264RtpDepacketizer> session;
 
-    Track(std::shared_ptr<rtc::Track> track, std::shared_ptr<rtc::RtcpSrReporter> sender) {
-      this->track = std::move(track);
-      this->sender = std::move(sender);
-      this->session = nullptr;
+    Track(std::shared_ptr<rtc::Track> track, std::shared_ptr<rtc::RtcpSrReporter> sender)
+        : track(std::move(track)),
+          sender(std::move(sender)),
+          session(nullptr) {
     }
 
-    Track(std::shared_ptr<rtc::Track> track, std::shared_ptr<rtc::RtcpReceivingSession> session) {
-      this->track = std::move(track);
-      this->sender = nullptr;
-      this->session = std::move(session);
+    Track(std::shared_ptr<rtc::Track> track, std::shared_ptr<rtc::H264RtpDepacketizer> session)
+        : track(std::move(track)),
+          sender(nullptr),
+          session(std::move(session)) {
     }
   };
 
@@ -35,28 +35,28 @@ struct Peer {
 
   explicit Peer(std::shared_ptr<rtc::PeerConnection> pc) : peer_connection_(std::move(pc)) {}
 
-  std::optional<std::shared_ptr<Track>> video;
-  std::optional<std::shared_ptr<Track>> audio;
-  std::optional<std::shared_ptr<rtc::DataChannel>> dataChannel;
+  std::shared_ptr<Track> video_;
+  std::shared_ptr<Track> audio_;
+  std::shared_ptr<rtc::DataChannel> data_channel_;
 
   std::shared_ptr<rtc::PeerConnection> PeerConnection() {
     return peer_connection_;
   }
 
-  void setState(State state) {
-    std::unique_lock lock(_mutex);
-    this->state = state;
+  void SetState(State state) {
+    std::unique_lock lock(mutex_);
+    this->state_ = state;
   }
 
-  auto getState() -> State {
-    std::shared_lock lock(_mutex);
-    return state;
+  auto GetState() -> State {
+    std::shared_lock lock(mutex_);
+    return state_;
   }
 
 private:
-  std::shared_mutex _mutex;
-  State state = State::Waiting;
-  std::string id;
+  std::shared_mutex mutex_;
+  State state_ = State::Waiting;
+  std::string id_;
   std::shared_ptr<rtc::PeerConnection> peer_connection_;
 };
 

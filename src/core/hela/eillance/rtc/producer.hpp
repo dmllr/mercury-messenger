@@ -35,7 +35,7 @@ public:
     av_stream_->OnSample([this, ws = make_weak_ptr(av_stream_)](Stream::Source::Type type, uint64_t sampleTime, const rtc::binary& sample) {
       SendSampleToReadyPeers(sample, type, sampleTime);
       DispatchQueue::MainThread().Dispatch([this, ws]() {
-        if (peers_.empty()) {
+        if (GetPeers().empty()) {
           // we have no peers, stop the stream
           if (auto stream = ws.lock()) {
             stream->Stop();
@@ -165,17 +165,17 @@ private:
       const uint64_t sample_time) {
     // get track for given type
     auto get_track_data = [type](const std::shared_ptr<Peer>& peer) {
-      return type == Stream::Source::Type::video ? peer->video : peer->audio;
+      return type == Stream::Source::Type::video ? peer->video_ : peer->audio_;
     };
 
     const auto* stream_type = type == Stream::Source::Type::video ? "video" : "audio";
     // get all peers with Ready state
-    for (const auto& id_peer: peers_) {
+    for (const auto& id_peer: GetPeers()) {
       auto id = id_peer.first;
       auto peer = id_peer.second;
       auto opt_track_data = get_track_data(peer);
-      if (peer->getState() == Peer::State::Ready && opt_track_data.has_value()) {
-        ProcessTrack(id, opt_track_data.value(), sample_time, sample, stream_type);
+      if (peer->GetState() == Peer::State::Ready && (opt_track_data != nullptr)) {
+        ProcessTrack(id, opt_track_data, sample_time, sample, stream_type);
       }
     }
   }
