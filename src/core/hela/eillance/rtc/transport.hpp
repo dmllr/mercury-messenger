@@ -43,7 +43,6 @@ class RtcTransport {
   mutable ServiceConnectionState service_connection_state_{ServiceConnectionState::unknown};
   std::shared_ptr<StatusCallbackFunction> status_callback_{};
 
-protected:
   std::unordered_map<std::string, std::shared_ptr<Peer>> peers_;
 
 public:
@@ -80,8 +79,7 @@ public:
 
     auto ws_config = rtc::WebSocketConfiguration{
         // .disableTlsVerification = true,  // TODO: check
-        .caCertificatePemFile = zerosslCaBundle
-    };
+        .caCertificatePemFile = zerosslCaBundle};
 
     if (ws_ != nullptr) {
       ws_->resetCallbacks();
@@ -98,8 +96,7 @@ public:
     ws_->onError([this](const std::string& error) { OnWebSocketError(error); });
     ws_->onMessage(
         [](const rtc::binary&) { /* no usage for binary messages */ },
-        [this](const std::string& data) { OnWebSocketMessage(data); }
-    );
+        [this](const std::string& data) { OnWebSocketMessage(data); });
 
     LOGD << "Signaling server URL is " << signalingServerUrl;
 
@@ -147,11 +144,15 @@ protected:
     peers_.emplace(id, peer);
   }
 
-  auto GetPeer(const std::string id) -> std::shared_ptr<Peer> {
+  auto GetPeer(const std::string id) const -> std::shared_ptr<Peer> {
     if (auto it = peers_.find(id); it != peers_.end()) {
       return peers_.at(id);
     }
     return nullptr;
+  }
+
+  auto GetPeers() const {
+    return peers_;
   }
 
   void RemovePeer(const std::string& id) {
@@ -159,12 +160,12 @@ protected:
   }
 
   auto CreatePeerConnection(const std::string& peer_id) -> std::shared_ptr<Peer> {
-    auto pc = CreateDefaultPeerConnection(peer_id);
+    auto peer_connection = CreateDefaultPeerConnection(peer_id);
 
-    auto peer = std::make_shared<Peer>(pc);
+    auto peer = std::make_shared<Peer>(peer_connection);
 
-    peer->video = AddVideo(
-        pc,
+    peer->video_ = AddVideo(
+        peer_connection,
         [this, peer_id, wc = make_weak_ptr(peer)]() {
           DispatchQueue::MainThread().Dispatch([this, wc]() {
             if (auto c = wc.lock()) {
@@ -174,8 +175,8 @@ protected:
           LOGI << "Video from " << id_ << " opened";
         });
 
-    peer->audio = AddAudio(
-        pc,
+    peer->audio_ = AddAudio(
+        peer_connection,
         [this, peer_id, wc = make_weak_ptr(peer)]() {
           DispatchQueue::MainThread().Dispatch([this, wc]() {
             if (auto c = wc.lock()) {
@@ -185,9 +186,9 @@ protected:
           LOGI << "Audio from " << id_ << " opened";
         });
 
-    peer->dataChannel = CreateDefaultDataChannel(pc, peer_id);
+    peer->data_channel_ = CreateDefaultDataChannel(peer_connection, peer_id);
 
-    pc->setLocalDescription();
+    peer_connection->setLocalDescription();
 
     return peer;
   }
@@ -238,8 +239,8 @@ private:
 
   void OnWebSocketMessage(const std::string& data) {
     const auto message = Json::parse(data);
-    auto it = message.find("from");
-    if (it == message.end()) {
+    auto itr = message.find("from");
+    if (itr == message.end()) {
       DispatchQueue::MainThread().Dispatch([this, message]() {
         OnSystemMessage(message);
       });
@@ -341,22 +342,22 @@ private:
   }
 
   void AddToStream(const std::shared_ptr<Peer>& peer, bool isAddingVideo) {
-    if (peer->getState() == Peer::State::Waiting) {
-      peer->setState(isAddingVideo ? Peer::State::WaitingForAudio : Peer::State::WaitingForVideo);
-    } else if ((peer->getState() == Peer::State::WaitingForAudio && !isAddingVideo) || (peer->getState() == Peer::State::WaitingForVideo && isAddingVideo)) {
+    if (peer->GetState() == Peer::State::Waiting) {
+      peer->SetState(isAddingVideo ? Peer::State::WaitingForAudio : Peer::State::WaitingForVideo);
+    } else if ((peer->GetState() == Peer::State::WaitingForAudio && !isAddingVideo) || (peer->GetState() == Peer::State::WaitingForVideo && isAddingVideo)) {
       // Audio and video tracks are collected now
-      assert(peer->video.has_value() && peer->audio.has_value());
-      peer->setState(Peer::State::Ready);
+      assert(peer->video_ != nullptr && peer->audio_ != nullptr);
+      peer->SetState(Peer::State::Ready);
     }
 
-    if (peer->getState() == Peer::State::Ready) {
+    if (peer->GetState() == Peer::State::Ready) {
       OnPeerReady(peer);
     }
   }
 
   auto CreateDefaultDataChannel(std::shared_ptr<rtc::PeerConnection> pc, const std::string& peer_id) -> std::shared_ptr<rtc::DataChannel> {
-    auto dc = pc->createDataChannel("command-channel");
-    dc->onOpen([peer_id, wdc = make_weak_ptr(dc)]() {
+    auto data_channel = pc->createDataChannel("command-channel");
+    data_channel->onOpen([peer_id, wdc = make_weak_ptr(data_channel)]() {
       if (auto dc = wdc.lock()) {
         dc->send("Ping");
 
@@ -369,7 +370,7 @@ private:
       }
     });
 
-    dc->onMessage(nullptr, [peer_id, wdc = make_weak_ptr(dc), this](const std::string& msg) {
+    data_channel->onMessage(nullptr, [peer_id, wdc = make_weak_ptr(data_channel), this](const std::string& msg) {
       LOGD << "Message from " << id_ << " received: " << msg;
       if (msg.rfind("Pong ", 0) == 0) {  // starts_with is not supported by all compilers
         if (auto dc = wdc.lock()) {
@@ -396,15 +397,15 @@ private:
       }
     });
 
-    return dc;
+    return data_channel;
   }
 
   void OnSystemMessage(Json message) {
-    auto it = message.find("type");
-    if (it == message.end()) {
+    auto itr = message.find("type");
+    if (itr == message.end()) {
       return;
     }
-    auto type = it->get<std::string>();
+    auto type = itr->get<std::string>();
 
     if (type == "authenticated") {
       auth_token_ = message["token"].get<std::string>();
@@ -437,8 +438,8 @@ private:
   };
 
   constexpr static auto signalingServerUrl = "wss://app.hela.me:8000";  // prod
-//  constexpr static auto signalingServerUrl = "ws://10.0.2.2:8000";  // for android emulator
-//  constexpr static auto signalingServerUrl = "ws://127.0.0.1:8000";  // for general
+                                                                        //  constexpr static auto signalingServerUrl = "ws://10.0.2.2:8000";  // for android emulator
+                                                                        //  constexpr static auto signalingServerUrl = "ws://127.0.0.1:8000";  // for general
 
   constexpr static auto zerosslCaBundle =
       "-----BEGIN CERTIFICATE-----\n"
