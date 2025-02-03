@@ -133,11 +133,15 @@ private:
     // set handler
     track->setMediaHandler(depacketizer);
     track->onOpen(onOpen);
+    track->onFrame(
+        [](const rtc::binary& data, rtc::FrameInfo fi) {
+          std::cout << "Frame data received " << data.size() << " " << fi.payloadType << std::endl;
+        });
     track->onMessage(
-        [](const rtc::binary& data) {
-          std::cout << "Binary data received " << data.size() << std::endl;
+        [](const rtc::binary&  /*data*/) {
+          std::cout << "Control message received" << std::endl;
         },
-        [](const std::string&) { /* can't be */ });
+        nullptr);
 
     return std::make_shared<Peer::Track>(track, depacketizer);
   }
@@ -194,15 +198,6 @@ private:
       client.id = item.at("id").get<std::string>();
       client.name = item.at("name").get<std::string>();
       client.profile = item.at("profile");
-
-      // Validate profile format
-      if (!client.profile.is_array()) {
-
-
-        LOGW << "Invalid profile format for client " << client.id.c_str();
-        continue;
-      }
-
       clients_.push_back(std::move(client));
     }
 
