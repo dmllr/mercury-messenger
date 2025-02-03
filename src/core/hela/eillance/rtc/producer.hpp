@@ -192,7 +192,7 @@ private:
 
     UpdateRtpConfig(elapsed_timestamp, track, rtp_config);
 
-    LOGV << "Sending " << stream_type << " sample with size: " << sample.size() << " to " << peer_id;
+    LOGI << "Sending " << stream_type << " sample with size: " << sample.size() << " to " << peer_id;
     SendSample(sample, stream_type, track);
   }
 
