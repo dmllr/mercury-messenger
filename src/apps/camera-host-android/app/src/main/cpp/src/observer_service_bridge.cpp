@@ -8,7 +8,9 @@
 #include <android/native_window_jni.h>
 #include <media/NdkMediaCodec.h>
 
+#include "hela/eillance/rtc/consumer.hpp"
 #include "hela/eillance/logging/logging.h"
+#include "hela/eillance/utils/string.hpp"
 
 namespace {
 
@@ -19,18 +21,30 @@ JavaVM* javaVm = nullptr;
 
 ANativeWindow* nativeWindow = nullptr;
 AMediaCodec* mediaCodec = nullptr;
-std::vector<uint8_t> sps, pps;
+std::vector<std::byte> sps, pps;
 bool codecConfigured = false;
+hela::eillance::RtcConsumer consumer{};
 
+void ProcessFrame(const rtc::binary& vector);
 extern "C" JNIEXPORT void JNICALL
 Java_hela_eillance_ObserverActivity_initDecoder(  // NOLINT(*-identifier-naming)
     JNIEnv* env, jobject, jobject surface) {
   nativeWindow = ANativeWindow_fromSurface(env, surface);
+
+  consumer.SetName("CLI::" + StringUtils::RandomString());
+  consumer.Start();
+  consumer.SetClientAddedCallback([](){
+    consumer.SendStreamRequest();
+  });
+  consumer.SetFrameReceivedCallback([](const rtc::binary& frame) {
+    ProcessFrame(frame);
+  });
 }
 
 extern "C" JNIEXPORT void JNICALL
 Java_hela_eillance_ObserverActivity_releaseDecoder(  // NOLINT(*-identifier-naming)
     JNIEnv*, jobject) {
+  consumer.Stop();
   if (mediaCodec != nullptr) {
     AMediaCodec_stop(mediaCodec);
     AMediaCodec_delete(mediaCodec);
@@ -42,13 +56,13 @@ Java_hela_eillance_ObserverActivity_releaseDecoder(  // NOLINT(*-identifier-nami
   }
 }
 
-void ParseSps(const uint8_t* data, size_t size, std::int32_t* width, std::int32_t* height) {
+void ParseSps(const std::byte* data, size_t size, std::int32_t* width, std::int32_t* height) {
   // Simplified: Replace with actual SPS parsing
   *width = 1280;
   *height = 720;
 }
 
-void ConfigureCodec(const uint8_t* spsData, size_t spsSize, const uint8_t* ppsData, size_t ppsSize) {
+void ConfigureCodec(const std::byte* spsData, size_t spsSize, const std::byte* ppsData, size_t ppsSize) {
   mediaCodec = AMediaCodec_createDecoderByType("video/avc");
   AMediaFormat* format = AMediaFormat_new();
   AMediaFormat_setString(format, AMEDIAFORMAT_KEY_MIME, "video/avc");
@@ -67,7 +81,7 @@ void ConfigureCodec(const uint8_t* spsData, size_t spsSize, const uint8_t* ppsDa
   codecConfigured = true;
 }
 
-void ProcessFrame(std::vector<uint8_t> data) {
+void ProcessFrame(const rtc::binary& data) {
   std::size_t start_code_len = 0;
   if (data.size() >= 4 && memcmp(data.data(), "\x00\x00\x00\x01", 4) == 0) {
     start_code_len = 4;
@@ -77,10 +91,13 @@ void ProcessFrame(std::vector<uint8_t> data) {
     return;
   }
 
-  std::uint8_t nal_type = data[start_code_len] & 0x1F;
-  if (nal_type == 7) { // SPS
+  constexpr auto nal_type_code = std::byte{0x1F};
+  constexpr auto nal_type_sps = std::byte{0x07};
+  constexpr auto nal_type_pps = std::byte{0x08};
+  auto nal_type = data[start_code_len] & nal_type_code;
+  if (nal_type == nal_type_sps) { // SPS
     sps.assign(data.begin() + start_code_len, data.end());
-  } else if (nal_type == 8) { // PPS
+  } else if (nal_type == nal_type_pps) { // PPS
     pps.assign(data.begin() + start_code_len, data.end());
   }
 
