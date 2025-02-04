@@ -26,7 +26,7 @@ import hela.eillance.fragments.OperationFragment
 class PerformerActivity : AppCompatActivity(), ServiceConnection,
   FragmentManager.OnBackStackChangedListener {
 
-  var appEngineService: AppEngineService? = null
+  var performerService: PerformerService? = null
   private var cameraServiceBound: Boolean = false
   private lateinit var binding: ActivityPerformerBinding
   private var uiMode: Int = 0
@@ -166,10 +166,10 @@ class PerformerActivity : AppCompatActivity(), ServiceConnection,
   }
 
   private fun startStreamingService() {
-    val appEngineServiceIntent = Intent(applicationContext, AppEngineService::class.java)
-    startService(appEngineServiceIntent)
+    val performerServiceIntent = Intent(applicationContext, PerformerService::class.java)
+    startService(performerServiceIntent)
     if (applicationContext.bindService(
-        appEngineServiceIntent,
+        performerServiceIntent,
         this,
         Context.BIND_AUTO_CREATE + Context.BIND_ABOVE_CLIENT
       )
@@ -215,11 +215,11 @@ class PerformerActivity : AppCompatActivity(), ServiceConnection,
 
   // ServiceConnection implementation
   override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-    appEngineService = (service as AppEngineService.StreamingServiceBinder).service
+    performerService = (service as PerformerService.StreamingServiceBinder).service
   }
 
   override fun onServiceDisconnected(name: ComponentName?) {
-    appEngineService = null
+    performerService = null
   }
   // ServiceConnection implementation
 

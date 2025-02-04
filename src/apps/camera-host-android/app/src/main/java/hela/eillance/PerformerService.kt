@@ -32,7 +32,7 @@ import hela.eillance.events.interfaces.INativeBridge
 import hela.eillance.ndkio.VideoConfig
 import java.util.concurrent.atomic.AtomicLong
 
-class AppEngineService : Service(), INativeBridge {
+class PerformerService : Service(), INativeBridge {
   private var appEngine: AtomicLong = AtomicLong(0)
   private var serviceConnectionState: ServiceConnectionState = ServiceConnectionState.Unknown
 
@@ -40,8 +40,8 @@ class AppEngineService : Service(), INativeBridge {
   private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
   inner class StreamingServiceBinder : Binder() {
-    val service: AppEngineService
-      get() = this@AppEngineService
+    val service: PerformerService
+      get() = this@PerformerService
   }
 
   private val streamingServiceBinder = StreamingServiceBinder()
@@ -128,7 +128,7 @@ class AppEngineService : Service(), INativeBridge {
   }
 
   private fun Pair<Int, Int>.getBitmapFromVectorDrawable(): Bitmap {
-    val context = this@AppEngineService
+    val context = this@PerformerService
     val drawable = ContextCompat.getDrawable(context, first)
     val color = ContextCompat.getColor(context, second)
 
@@ -145,7 +145,7 @@ class AppEngineService : Service(), INativeBridge {
 
   private fun startForeground() {
     if (!isForegroundAllowed()) {
-      Log.e("AppEngineService", "Cannot start foreground service in the current state.")
+      Log.e("PerformerService", "Cannot start foreground service in the current state.")
       return
     }
 
@@ -179,7 +179,7 @@ class AppEngineService : Service(), INativeBridge {
     try {
       startForeground(CAMERA_SERVICE_FG_ID, notification)
     } catch (e: Exception) {
-      Log.e("AppEngineService", "Failed to start foreground: ${e.message}")
+      Log.e("PerformerService", "Failed to start foreground: ${e.message}")
     }
   }
 
@@ -284,7 +284,7 @@ class AppEngineService : Service(), INativeBridge {
     private const val CAMERA_SERVICE_FG_ID = 9990
 
     init {
-      System.loadLibrary("app-engine-lib")
+      System.loadLibrary("lib-performer-service-impl")
     }
   }
 }
