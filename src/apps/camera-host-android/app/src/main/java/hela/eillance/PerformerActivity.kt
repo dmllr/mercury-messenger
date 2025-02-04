@@ -6,16 +6,18 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
-import android.content.res.Configuration
 import android.os.Bundle
 import android.os.IBinder
 import android.util.Log
 import android.view.MenuItem
 import android.view.View
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.PopupMenu
 import androidx.core.app.ActivityCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.fragment.app.FragmentManager
 import hela.eillance.camera.R
 import hela.eillance.camera.databinding.ActivityPerformerBinding
@@ -29,15 +31,19 @@ class PerformerActivity : AppCompatActivity(), ServiceConnection,
   var performerService: PerformerService? = null
   private var cameraServiceBound: Boolean = false
   private lateinit var binding: ActivityPerformerBinding
-  private var uiMode: Int = 0
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
 
-    uiMode = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
-
+    enableEdgeToEdge()
     binding = ActivityPerformerBinding.inflate(layoutInflater)
     setContentView(binding.root)
+    ViewCompat.setOnApplyWindowInsetsListener(binding.main) { v, insets ->
+      val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+      v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
+      insets
+    }
+
     setEventHandlers()
     checkAndRequestCamera()
 
@@ -59,16 +65,6 @@ class PerformerActivity : AppCompatActivity(), ServiceConnection,
         }
       }
     })
-  }
-
-  override fun onConfigurationChanged(newConfig: Configuration) {
-    super.onConfigurationChanged(newConfig)
-
-    // Check if the theme has changed
-    if (newConfig.uiMode and Configuration.UI_MODE_NIGHT_MASK != uiMode) {
-      // Recreate the activity to apply the new theme
-      recreate()
-    }
   }
 
   private fun setEventHandlers() {
