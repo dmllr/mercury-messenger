@@ -18,17 +18,17 @@ import androidx.appcompat.widget.PopupMenu
 import androidx.core.app.ActivityCompat
 import androidx.fragment.app.FragmentManager
 import hela.eillance.camera.R
-import hela.eillance.camera.databinding.ActivityMainBinding
+import hela.eillance.camera.databinding.ActivityPerformerBinding
 import hela.eillance.fragments.CapturePreferencesFragment
 import hela.eillance.fragments.OperationFragment
 
 
-class MainActivity : AppCompatActivity(), ServiceConnection,
+class PerformerActivity : AppCompatActivity(), ServiceConnection,
   FragmentManager.OnBackStackChangedListener {
 
   var appEngineService: AppEngineService? = null
   private var cameraServiceBound: Boolean = false
-  private lateinit var binding: ActivityMainBinding
+  private lateinit var binding: ActivityPerformerBinding
   private var uiMode: Int = 0
 
   override fun onCreate(savedInstanceState: Bundle?) {
@@ -36,7 +36,7 @@ class MainActivity : AppCompatActivity(), ServiceConnection,
 
     uiMode = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
 
-    binding = ActivityMainBinding.inflate(layoutInflater)
+    binding = ActivityPerformerBinding.inflate(layoutInflater)
     setContentView(binding.root)
     setEventHandlers()
     checkAndRequestCamera()

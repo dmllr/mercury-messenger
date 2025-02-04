@@ -4,14 +4,14 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context="hela.eillance.MainActivity">
+    android:fitsSystemWindows="false"
+    tools:context="hela.eillance.PerformerActivity">
 
   <!-- Toolbar with User Icon -->
   <androidx.appcompat.widget.Toolbar
       android:id="@+id/toolbar"
       android:layout_width="match_parent"
       android:layout_height="wrap_content"
-      app:popupTheme="@style/ThemeOverlay.AppCompat.Light"
       app:layout_constraintTop_toTopOf="parent">
 
     <ImageView

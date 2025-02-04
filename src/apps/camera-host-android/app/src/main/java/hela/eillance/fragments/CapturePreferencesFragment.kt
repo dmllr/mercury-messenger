@@ -10,7 +10,7 @@ import android.view.ViewGroup
 import androidx.preference.EditTextPreference
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceFragmentCompat
-import hela.eillance.MainActivity
+import hela.eillance.PerformerActivity
 import hela.eillance.camera.R
 import hela.eillance.ndkio.VideoConfig
 import hela.eillance.utils.CameraUtils
@@ -134,11 +134,11 @@ class CapturePreferencesFragment : PreferenceFragmentCompat() {
   }
 
   private fun triggerDeviceNameUpdate() {
-    (requireActivity() as MainActivity).appEngineService?.configureDeviceName(deviceName)
+    (requireActivity() as PerformerActivity).appEngineService?.configureDeviceName(deviceName)
   }
 
   private fun triggerConfigurationUpdate() {
-    (requireActivity() as MainActivity).appEngineService?.configureVideoCapture(videoConfig)
+    (requireActivity() as PerformerActivity).appEngineService?.configureVideoCapture(videoConfig)
   }
 
   override fun onCreateView(
