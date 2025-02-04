@@ -15,7 +15,7 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.recyclerview.widget.DefaultItemAnimator
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import hela.eillance.MainActivity
+import hela.eillance.PerformerActivity
 import hela.eillance.Tune
 import hela.eillance.camera.R
 import hela.eillance.camera.databinding.FragmentOperationBinding
@@ -112,7 +112,7 @@ class OperationFragment : Fragment() {
 
   private fun updateServiceConnectionState() {
     activity ?: return
-    val appEngineService = (activity as MainActivity).appEngineService ?: return
+    val appEngineService = (activity as PerformerActivity).appEngineService ?: return
     val state = appEngineService.getServiceConnectionState()
     binding.txCommunicationState.text = state.getResourceString(requireContext())
   }

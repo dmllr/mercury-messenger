@@ -4,7 +4,7 @@
     <uses-feature android:name="android.hardware.camera" />
     <uses-feature android:name="android.hardware.src.camera.autofocus" />
 
-    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
@@ -17,28 +17,33 @@
 
     <application
         android:allowBackup="true"
-        android:launchMode="singleTop"
         android:icon="@drawable/ic_camera_stream"
         android:label="@string/app_name"
+        android:launchMode="singleTop"
         android:roundIcon="@drawable/ic_camera_stream"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
-
-        <service
-            android:name="hela.eillance.AppEngineService"
-            android:enabled="true"
-            android:foregroundServiceType="camera|microphone|connectedDevice"
-            android:exported="false">
-        </service>
-
         <activity
-            android:name="hela.eillance.MainActivity"
+            android:name="hela.eillance.ObserverActivity"
+            android:exported="false" />
+        <activity
+            android:name="hela.eillance.PerformerActivity"
+            android:exported="true" />
+        <activity
+            android:name="hela.eillance.LauncherActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
+
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <service
+            android:name="hela.eillance.AppEngineService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="camera|microphone|connectedDevice">
+        </service>
     </application>
 
 </manifest>

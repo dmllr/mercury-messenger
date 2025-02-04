@@ -156,7 +156,7 @@ class AppEngineService : Service(), INativeBridge {
       else -> Pair(R.drawable.ic_failure, R.color.colorNegative)
     }
 
-    val mainActivityIntent = Intent(this, MainActivity::class.java).apply {
+    val performerActivityIntent = Intent(this, PerformerActivity::class.java).apply {
       flags = Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
     }
 
@@ -169,7 +169,7 @@ class AppEngineService : Service(), INativeBridge {
       .setPriority(NotificationCompat.PRIORITY_LOW)
       .setContentIntent(
         PendingIntent.getActivity(
-          this, 0, mainActivityIntent,
+          this, 0, performerActivityIntent,
           PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
       ).build().apply {
@@ -187,7 +187,7 @@ class AppEngineService : Service(), INativeBridge {
     // Ensure that the app is allowed to start a foreground service.
     val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
     return activityManager.appTasks.any { task ->
-      task.taskInfo.baseIntent.component?.className?.contains("MainActivity") ?: false
+      task.taskInfo.baseIntent.component?.className?.contains("PerformerActivity") ?: false
     }
   }
 
