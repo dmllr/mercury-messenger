@@ -11,7 +11,6 @@
 #include <rtc/rtc.h>
 
 #include "hela/eillance/common/dispatch_queue.hpp"
-#include "hela/eillance/device/camera_utils.hpp"
 #include "hela/eillance/events/event_source.h"
 #include "hela/eillance/events/service_connection_state.h"
 #include "hela/eillance/logging/logging.h"
@@ -361,12 +360,12 @@ private:
       if (auto dc = wdc.lock()) {
         dc->send("Ping");
 
-        const Json message = {
-            {"type", "info profile"},
-            {"profile", GetDeviceProfileAsJson()},
-        };
-
-        dc->send(message.dump());
+// TODO it shouldn't be here for the sake of consumer
+//        const Json message = {
+//            {"type", "info profile"},
+//            {"profile", GetDeviceProfileAsJson()},
+//        };
+//        dc->send(message.dump());
       }
     });
 
@@ -438,8 +437,8 @@ private:
   };
 
   constexpr static auto signalingServerUrl = "wss://app.hela.me:8000";  // prod
-                                                                        //  constexpr static auto signalingServerUrl = "ws://10.0.2.2:8000";  // for android emulator
-                                                                        //  constexpr static auto signalingServerUrl = "ws://127.0.0.1:8000";  // for general
+//  constexpr static auto signalingServerUrl = "ws://10.0.2.2:8000";  // for android emulator
+//  constexpr static auto signalingServerUrl = "ws://127.0.0.1:8000";  // for general
 
   constexpr static auto zerosslCaBundle =
       "-----BEGIN CERTIFICATE-----\n"

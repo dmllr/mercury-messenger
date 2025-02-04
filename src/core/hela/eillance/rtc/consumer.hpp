@@ -27,6 +27,7 @@ struct ClientInfo {
 class RtcConsumer final : public RtcTransport {
   using Json = nlohmann::json;
   using OnClientListChangedCallback = std::function<void()>;
+  using OnFrameReceivedCallback = std::function<void(const rtc::binary&)>;
 
   /// @brief Audio and video stream
   std::shared_ptr<Stream> av_stream_;
@@ -34,8 +35,10 @@ class RtcConsumer final : public RtcTransport {
   /// @brief Connected publishers
   std::vector<ClientInfo> clients_;
 
-  /// @brief
+  /// @brief A callback to be called when a client list is updated
   std::shared_ptr<OnClientListChangedCallback> on_client_list_changed_{};
+  /// @brief A callback to be called when a new frame is received
+  std::shared_ptr<OnFrameReceivedCallback> on_frame_received_{};
 
 public:
   RtcConsumer() = default;
@@ -61,6 +64,10 @@ public:
 
   [[maybe_unused]] void SetClientAddedCallback(const OnClientListChangedCallback& callback) {
     on_client_list_changed_ = std::make_shared<OnClientListChangedCallback>(callback);
+  }
+
+  [[maybe_unused]] void SetFrameReceivedCallback (const OnFrameReceivedCallback & callback) {
+    on_frame_received_ = std::make_shared<OnFrameReceivedCallback >(callback);
   }
 
 private:
@@ -134,8 +141,11 @@ private:
     track->setMediaHandler(depacketizer);
     track->onOpen(onOpen);
     track->onFrame(
-        [](const rtc::binary& data, rtc::FrameInfo fi) {
+        [this](const rtc::binary& data, rtc::FrameInfo fi) {
           std::cout << "Frame data received " << data.size() << " " << fi.payloadType << std::endl;
+          if (on_frame_received_ != nullptr) {
+            (*on_frame_received_)(data);
+          }
         });
     track->onMessage(
         [](const rtc::binary&  /*data*/) {
