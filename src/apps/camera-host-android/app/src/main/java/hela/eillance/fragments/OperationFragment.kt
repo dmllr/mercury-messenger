@@ -112,7 +112,7 @@ class OperationFragment : Fragment() {
 
   private fun updateServiceConnectionState() {
     activity ?: return
-    val appEngineService = (activity as PerformerActivity).appEngineService ?: return
+    val appEngineService = (activity as PerformerActivity).performerService ?: return
     val state = appEngineService.getServiceConnectionState()
     binding.txCommunicationState.text = state.getResourceString(requireContext())
   }

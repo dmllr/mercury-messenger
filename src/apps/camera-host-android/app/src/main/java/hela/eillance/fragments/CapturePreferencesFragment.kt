@@ -134,11 +134,11 @@ class CapturePreferencesFragment : PreferenceFragmentCompat() {
   }
 
   private fun triggerDeviceNameUpdate() {
-    (requireActivity() as PerformerActivity).appEngineService?.configureDeviceName(deviceName)
+    (requireActivity() as PerformerActivity).performerService?.configureDeviceName(deviceName)
   }
 
   private fun triggerConfigurationUpdate() {
-    (requireActivity() as PerformerActivity).appEngineService?.configureVideoCapture(videoConfig)
+    (requireActivity() as PerformerActivity).performerService?.configureVideoCapture(videoConfig)
   }
 
   override fun onCreateView(

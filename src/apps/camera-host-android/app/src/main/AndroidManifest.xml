@@ -39,7 +39,7 @@
             </intent-filter>
         </activity>
         <service
-            android:name="hela.eillance.AppEngineService"
+            android:name="hela.eillance.PerformerService"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="camera|microphone|connectedDevice">

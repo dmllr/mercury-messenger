@@ -14,7 +14,7 @@
 
 namespace hela::eillance {
 
-class AppEngine {
+class PerformerEngine {
   JavaVM* jvm_;
   jobject service_instance_;
   jobject native_bridge_;
@@ -22,7 +22,7 @@ class AppEngine {
 
 public:
   // NOLINTNEXTLINE(*-easily-swappable-parameters)
-  explicit AppEngine(JavaVM* jvm, JNIEnv* env, jobject instance, jobject native_bridge)
+  explicit PerformerEngine(JavaVM* jvm, JNIEnv* env, jobject instance, jobject native_bridge)
       : jvm_(jvm),
         service_instance_(env->NewWeakGlobalRef(instance)),
         native_bridge_(env->NewGlobalRef(native_bridge)) {
@@ -41,12 +41,12 @@ public:
     });
   }
 
-  AppEngine(AppEngine&&) = delete;
-  AppEngine(const AppEngine&) = delete;
-  AppEngine& operator=(AppEngine&&) = delete;
-  AppEngine& operator=(const AppEngine&) = delete;
+  PerformerEngine(PerformerEngine&&) = delete;
+  PerformerEngine(const PerformerEngine&) = delete;
+  PerformerEngine& operator=(PerformerEngine&&) = delete;
+  PerformerEngine& operator=(const PerformerEngine&) = delete;
 
-  ~AppEngine() {
+  ~PerformerEngine() {
     JNIEnv* env = AttachCurrentThreadIfNeeded();
     if (env == nullptr) {
       LOGE << "Failed to get JNIEnv in destructor.";
