@@ -284,7 +284,7 @@ class PerformerService : Service(), INativeBridge {
     private const val CAMERA_SERVICE_FG_ID = 9990
 
     init {
-      System.loadLibrary("lib-performer-service-impl")
+      System.loadLibrary("lib-performer-service-bridge")
     }
   }
 }
