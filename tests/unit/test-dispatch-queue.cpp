@@ -8,7 +8,7 @@ TEST(DispatchQueueTest, DispatchAndExecute) {
   DispatchQueue queue("TestQueue", 1);
 
   int counter = 0;
-  queue.dispatch([&counter]() { counter++; });
+  queue.Dispatch([&counter]() { counter++; });
 
   // Wait for the operation to execute
   std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -20,7 +20,7 @@ TEST(DispatchQueueTest, DispatchAndMove) {
   DispatchQueue queue("TestQueue", 1);
 
   int counter = 0;
-  queue.dispatch(std::move([&counter]() { counter++; }));
+  queue.Dispatch(std::move([&counter]() { counter++; }));
 
   // Wait for the operation to execute
   std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -32,10 +32,10 @@ TEST(DispatchQueueTest, RemovePending) {
   DispatchQueue queue("TestQueue", 1);
 
   int counter = 0;
-  queue.dispatch([&counter]() { counter++; });
+  queue.Dispatch([&counter]() { counter++; });
 
   // Remove the pending operation
-  queue.removePending();
+  queue.RemovePending();
 
   // Wait for the operation to execute (it shouldn't)
   std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -45,7 +45,7 @@ TEST(DispatchQueueTest, RemovePending) {
 
 TEST(DispatchQueueTest, MainThread) {
   int counter = 0;
-  DispatchQueue::MainThread().dispatch([&counter]() { counter++; });
+  DispatchQueue::MainThread().Dispatch([&counter]() { counter++; });
 
   // Wait for the operation to execute
   std::this_thread::sleep_for(std::chrono::milliseconds(10));
