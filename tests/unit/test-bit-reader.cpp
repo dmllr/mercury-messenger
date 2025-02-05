@@ -28,18 +28,21 @@ TEST(BitReaderTest, ReadBits) {
 }
 
 TEST(BitReaderTest, ReadUE) {
-  std::uint8_t data[] = {0b00000010, 0b11000000}; // 000000 1 0 11000000 -> UE: 2
+  std::uint8_t data[] = {0b00010000, 0b00100000, 0b01000000};
   BitReader reader(data, sizeof(data));
 
-  EXPECT_EQ(reader.ReadUE(), 2);
+  EXPECT_EQ(reader.ReadUE(), 7);
+  EXPECT_EQ(reader.ReadUE(), 7);
+  EXPECT_EQ(reader.ReadUE(), 7);
 }
 
 TEST(BitReaderTest, ReadSE) {
-  std::uint8_t data[] = {0b00000011, 0b00000010}; // UE: 3 -> SE: -1, UE: 2 -> SE: 1
+  std::uint8_t data[] = {0b01100101, 0b00010000};
   BitReader reader(data, sizeof(data));
 
   EXPECT_EQ(reader.ReadSE(), -1);
-  EXPECT_EQ(reader.ReadSE(), 1);
+  EXPECT_EQ(reader.ReadSE(), -2);
+  EXPECT_EQ(reader.ReadSE(), 4);
 }
 
 TEST(BitReaderTest, ReadBit_OutOfBounds) {
