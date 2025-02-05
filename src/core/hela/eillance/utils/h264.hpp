@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <vector>
 #include <cstdint>
 #include <cstddef>
@@ -234,7 +235,7 @@ inline void H264Parser::ProcessFrame(const rtc::binary& data) {
     nalu.insert(
         nalu.end(),
         std::next(data.begin(), nalu_start),
-        std::next(data.begin() + next_start));
+        std::next(data.begin(), next_start));
 
     // Determine the NAL unit type.
     constexpr auto nal_type_mask = std::byte{0x1F};

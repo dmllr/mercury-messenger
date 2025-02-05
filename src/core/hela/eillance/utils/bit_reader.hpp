@@ -20,7 +20,7 @@ public:
     if (byte_offset_ >= size_) {
       return false;
     }
-    bit = (data_[byte_offset_] >> (7U - bit_offset_)) & 0x01;
+    bit = (data_[byte_offset_] >> (7U - bit_offset_)) & 0x01U;
     bit_offset_++;
     if (bit_offset_ == 8) {
       bit_offset_ = 0;
@@ -46,36 +46,30 @@ public:
   std::uint32_t ReadUE() {
     std::uint32_t zeros = 0;
     std::uint32_t bit = 0;
-    while (true) {
-      if (!ReadBit(bit)) {
-        break;
-      }
-      if (bit == 0) {
-        zeros++;
-      } else {
-        break;
-      }
+
+    // Count leading zeros
+    while (ReadBit(bit) && bit == 0) {
+      zeros++;
     }
-    std::uint32_t value = 0;
-    if (zeros > 0) {
-      std::uint32_t rest = ReadBits(zeros);
-      value = (1U << zeros) - 1 + rest;
-    }
-    return value;
+
+    // Read the remaining bits after the leading 0s
+    std::uint32_t rest = ReadBits(zeros);
+
+    // Compute Exp-Golomb value
+    return (1U << zeros) - 1 + rest;
   }
 
   // Read a signed Exp-Golomb coded value.
-  int32_t ReadSE() {
+  std::int32_t ReadSE() {
     std::uint32_t code_num = ReadUE();
-    int32_t value = ((code_num & 1U) != 0U)
-                        ? static_cast<int32_t>((code_num + 1) >> 1U)
-                        : -static_cast<int32_t>(code_num >> 1U);
-    return value;
+    return ((code_num & 1U) != 0U)
+               ? static_cast<int32_t>((code_num + 1) >> 1U)
+               : -static_cast<int32_t>(code_num >> 1U);
   }
 
 private:
   const std::uint8_t* data_;
-  std::size_t size_;
-  std::size_t byte_offset_;
+  std::uint32_t size_;
+  std::uint32_t byte_offset_;
   std::uint8_t bit_offset_;
 };
