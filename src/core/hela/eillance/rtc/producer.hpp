@@ -8,6 +8,7 @@
 
 #include "hela/eillance/capture/audio_capture.hpp"
 #include "hela/eillance/capture/video_capture.hpp"
+#include "hela/eillance/device/camera_utils.hpp"
 #include "hela/eillance/logging/logging.h"
 #include "hela/eillance/rtc/peer.hpp"
 #include "hela/eillance/rtc/stream.hpp"
