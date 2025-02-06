@@ -40,11 +40,11 @@ protected:
   const std::string frame003_path = "files/3frames/003.h264";  // P/B frame
 
   // Callback log to record callback invocations.
-  std::string callbackLog;
+  std::string callbackLog_;
 
   // Helper: append a message to the callback log.
   void log(const std::string &message) {
-    callbackLog += message + "\n";
+    callbackLog_ += message + "\n";
   }
 
   // Dummy SPS and PPS data.
@@ -69,11 +69,17 @@ protected:
 // multiple NALUs should trigger input/output callbacks.
 //
 TEST_F(H264ParserTest, FirstFrameLeadsToConfiguration) {
-  H264Parser parser;
+  hela::eillance::H264Parser parser;
 
   // Set callbacks that log their invocation.
-  parser.SetOnConfigureCallback([&](const std::vector<std::byte>&, const std::vector<std::byte>&) {
+  parser.SetOnConfigureCallback(
+      [&](
+          const hela::eillance::VideoConfig& conf,
+          const std::vector<std::byte>&,
+          const std::vector<std::byte>&) {
     log("onConfigure");
+    ASSERT_EQ(conf.width, 1280);
+    ASSERT_EQ(conf.height, 720);
   });
   parser.SetOnInputBufferCallback([&](const std::vector<std::byte>&) -> bool {
     log("onInputBuffer");
@@ -87,9 +93,9 @@ TEST_F(H264ParserTest, FirstFrameLeadsToConfiguration) {
   auto i_frame_data = LoadFile(frame001_path);
   parser.ProcessFrame(i_frame_data);
 
-  EXPECT_NE(callbackLog.find("onConfigure"), std::string::npos);
-  EXPECT_NE(callbackLog.find("onInputBuffer"), std::string::npos);
-  EXPECT_NE(callbackLog.find("onOutputBuffer"), std::string::npos);
+  EXPECT_NE(callbackLog_.find("onConfigure"), std::string::npos);
+  EXPECT_NE(callbackLog_.find("onInputBuffer"), std::string::npos);
+  EXPECT_NE(callbackLog_.find("onOutputBuffer"), std::string::npos);
 }
 
 //
@@ -97,10 +103,10 @@ TEST_F(H264ParserTest, FirstFrameLeadsToConfiguration) {
 // should not trigger input/output callbacks.
 //
 TEST_F(H264ParserTest, PBFramesDoNotTriggerConfigure) {
-  H264Parser parser;
+  hela::eillance::H264Parser parser;
 
   // Set callbacks that log their invocation.
-  parser.SetOnConfigureCallback([&](const std::vector<std::byte>&, const std::vector<std::byte>&) {
+  parser.SetOnConfigureCallback([&](const hela::eillance::VideoConfig&, const std::vector<std::byte>&, const std::vector<std::byte>&) {
     log("onConfigure");
   });
   parser.SetOnInputBufferCallback([&](const std::vector<std::byte>&) -> bool {
@@ -116,9 +122,9 @@ TEST_F(H264ParserTest, PBFramesDoNotTriggerConfigure) {
   // Load the third (003.h264) frame
   parser.ProcessFrame(LoadFile(frame003_path));
 
-  EXPECT_EQ(callbackLog.find("onConfigure"), std::string::npos);
-  EXPECT_EQ(callbackLog.find("onInputBuffer"), std::string::npos);
-  EXPECT_EQ(callbackLog.find("onOutputBuffer"), std::string::npos);
+  EXPECT_EQ(callbackLog_.find("onConfigure"), std::string::npos);
+  EXPECT_EQ(callbackLog_.find("onInputBuffer"), std::string::npos);
+  EXPECT_EQ(callbackLog_.find("onOutputBuffer"), std::string::npos);
 }
 
 //
@@ -129,14 +135,14 @@ TEST_F(H264ParserTest, PBFramesDoNotTriggerConfigure) {
 // within a single input buffer.
 //
 TEST_F(H264ParserTest, ConfiguredFrameProcessing) { // NOLINT(*-function-cognitive-complexity)
-  H264Parser parser;
+  hela::eillance::H264Parser parser;
 
   // Set up counters to check callback invocations.
   int configure_count = 0;
   int input_count = 0;
   int output_count = 0;
 
-  parser.SetOnConfigureCallback([&](const std::vector<std::byte>&, const std::vector<std::byte>&) {
+  parser.SetOnConfigureCallback([&](const hela::eillance::VideoConfig&, const std::vector<std::byte>&, const std::vector<std::byte>&) {
     log("onConfigure");
     ++configure_count;
   });
@@ -164,19 +170,19 @@ TEST_F(H264ParserTest, ConfiguredFrameProcessing) { // NOLINT(*-function-cogniti
   // Non-SPS/PPS frames (I, P, or B) should trigger the input and output callbacks.
   EXPECT_EQ(input_count, 2);
   EXPECT_EQ(output_count, 2);
-  EXPECT_NE(callbackLog.find("onConfigure"), std::string::npos);
-  EXPECT_NE(callbackLog.find("onInputBuffer"), std::string::npos);
-  EXPECT_NE(callbackLog.find("onOutputBuffer"), std::string::npos);
+  EXPECT_NE(callbackLog_.find("onConfigure"), std::string::npos);
+  EXPECT_NE(callbackLog_.find("onInputBuffer"), std::string::npos);
+  EXPECT_NE(callbackLog_.find("onOutputBuffer"), std::string::npos);
 }
 
 //
 // Processing invalid data (with no valid start code) should result in no callbacks.
 //
 TEST_F(H264ParserTest, NoActionOnInvalidStartCode) {
-  H264Parser parser;
+  hela::eillance::H264Parser parser;
 
   // Set callbacks to record any invocation.
-  parser.SetOnConfigureCallback([&](const std::vector<std::byte>&, const std::vector<std::byte>&) {
+  parser.SetOnConfigureCallback([&](const hela::eillance::VideoConfig&, const std::vector<std::byte>&, const std::vector<std::byte>&) {
     log("onConfigure");
   });
   parser.SetOnInputBufferCallback([&](const std::vector<std::byte>&) -> bool {
@@ -192,5 +198,5 @@ TEST_F(H264ParserTest, NoActionOnInvalidStartCode) {
   parser.ProcessFrame(invalid_data);
 
   // Expect that no callbacks have been invoked.
-  EXPECT_TRUE(callbackLog.empty());
+  EXPECT_TRUE(callbackLog_.empty());
 }
