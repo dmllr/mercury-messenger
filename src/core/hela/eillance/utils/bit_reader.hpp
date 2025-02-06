@@ -9,6 +9,8 @@
 
 #include <rtc/rtc.hpp>
 
+namespace hela::eillance {
+
 /// @brief A simple bitstream reader for SPS parsing.
 class BitReader {
 public:
@@ -31,6 +33,7 @@ public:
 
   // Read n bits and return as an unsigned integer.
   std::uint32_t ReadBits(std::uint32_t n) {
+    assert(n < 8 * sizeof(std::uint32_t));
     std::uint32_t bits = 0;
     for (int i = 0; i < n; i++) {
       std::uint32_t bit = 0;
@@ -40,6 +43,11 @@ public:
       bits = (bits << 1U) | bit;
     }
     return bits;
+  }
+
+  // Read byte and return as an unsigned integer.
+  std::uint32_t ReadByte() {
+    return ReadBits(8);
   }
 
   // Read an unsigned Exp-Golomb coded value.
@@ -73,3 +81,5 @@ private:
   std::uint32_t byte_offset_;
   std::uint8_t bit_offset_;
 };
+
+}  // namespace hela::eillance
