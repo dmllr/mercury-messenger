@@ -36,10 +36,7 @@ public:
   /// 4‑byte big‑endian size header.
   /// @param frameBuffer The frame buffer containing a series of NAL units.
   /// @return True on success, false otherwise.
-  using InputBufferCallback = std::function<bool(const std::vector<std::byte>& frameBuffer)>;
-  /// @brief Callback type for handling output buffer.
-  /// Called when an output frame is ready (for example, after decoding).
-  using OutputBufferCallback = std::function<void()>;
+  using InputBufferCallback = std::function<void(const std::vector<std::byte>& frameBuffer)>;
 
   /// @brief Process an incoming H.264 buffer that may contain multiple NAL units.
   /// The input data is expected to contain one or more start codes
@@ -52,9 +49,6 @@ public:
   [[maybe_unused]] void SetOnInputBufferCallback(const InputBufferCallback& callback) {
     on_input_buffer_ = std::make_unique<InputBufferCallback>(callback);
   }
-  [[maybe_unused]] void SetOnOutputBufferCallback(const OutputBufferCallback& callback) {
-    on_output_buffer_ = std::make_unique<OutputBufferCallback>(callback);
-  }
 
 private:
   bool is_codec_configured_ = false;
@@ -65,7 +59,6 @@ private:
 
   std::unique_ptr<ConfigureCallback> on_configure_{};
   std::unique_ptr<InputBufferCallback> on_input_buffer_{};
-  std::unique_ptr<OutputBufferCallback> on_output_buffer_{};
 
   /// @brief Removes H.264 emulation prevention bytes from a given byte array.
   /// @param data Pointer to the input data.
@@ -304,11 +297,7 @@ inline void H264Parser::ProcessFrame(const rtc::binary& data) {
   // If the codec is configured, and we have any non-SPS/PPS data, forward it.
   if (is_codec_configured_ && !combined_frame_buffer.empty()) {
     if (on_input_buffer_ != nullptr) {
-      auto success = (*on_input_buffer_)(combined_frame_buffer);
-      (void)success;
-    }
-    if (on_output_buffer_ != nullptr) {
-      (*on_output_buffer_)();
+      (*on_input_buffer_)(combined_frame_buffer);
     }
   }
 }
