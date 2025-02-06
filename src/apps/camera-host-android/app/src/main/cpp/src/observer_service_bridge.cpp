@@ -26,8 +26,8 @@ hela::eillance::RtcConsumer consumer{};
 hela::eillance::H264Parser h264Parser;
 using VideoConfig = hela::eillance::VideoConfig;
 
-/// @brief Initializes the codec with SPS/PPS.
-void ConfigureCodec(const VideoConfig& conf, const std::vector<std::byte>& sps, const std::vector<std::byte>& pps) {
+/// @brief Initializes the codec with @c VideoConfig.
+void ConfigureCodec(const VideoConfig& conf) {
   if (codecConfigured) {
     LOGI << "Codec already configured, skipping reconfiguration.";
     return;
@@ -124,13 +124,9 @@ void HandleInputBuffer(const std::vector<std::byte>& frameBuffer) {
 
 /// @brief Initializes the H.264 parser and sets up callbacks.
 void InitH264Parser() {
-  h264Parser.SetOnConfigureCallback(
-      [](
-          const VideoConfig& conf,
-          const std::vector<std::byte>& sps,
-          const std::vector<std::byte>& pps) {
+  h264Parser.SetOnConfigureCallback([](const VideoConfig& conf) {
     LOGI << "Received SPS/PPS, configuring codec...";
-    ConfigureCodec(conf, sps, pps);
+    ConfigureCodec(conf);
   });
 
   h264Parser.SetOnInputBufferCallback([](const std::vector<std::byte>& frameBuffer) {
