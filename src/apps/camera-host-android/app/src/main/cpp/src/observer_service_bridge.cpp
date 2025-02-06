@@ -33,13 +33,6 @@ void ConfigureCodec(const VideoConfig& conf, const std::vector<std::byte>& sps, 
     return;
   }
 
-  // Convert std::vector<std::byte> to std::vector<uint8_t>
-  std::vector<uint8_t> sps_bytes(sps.size());
-  std::vector<uint8_t> pps_bytes(pps.size());
-
-  std::memcpy(sps_bytes.data(), sps.data(), sps.size());
-  std::memcpy(pps_bytes.data(), pps.data(), pps.size());
-
   AMediaFormat* format = AMediaFormat_new();
   if (format == nullptr) {
     LOGE << "Failed to create AMediaFormat.";
@@ -47,10 +40,9 @@ void ConfigureCodec(const VideoConfig& conf, const std::vector<std::byte>& sps, 
   }
 
   AMediaFormat_setString(format, AMEDIAFORMAT_KEY_MIME, "video/avc");
-  AMediaFormat_setBuffer(format, "csd-0", sps_bytes.data(), sps_bytes.size());
-  AMediaFormat_setBuffer(format, "csd-1", pps_bytes.data(), pps_bytes.size());
   AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_WIDTH, static_cast<std::int32_t>(conf.width));
   AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_HEIGHT, static_cast<std::int32_t>(conf.height));
+  AMediaFormat_setInt32(format,AMEDIAFORMAT_KEY_COLOR_FORMAT, 13);
 
   mediaCodec = AMediaCodec_createDecoderByType("video/avc");
   if (mediaCodec == nullptr) {
@@ -72,6 +64,35 @@ void ConfigureCodec(const VideoConfig& conf, const std::vector<std::byte>& sps, 
   AMediaFormat_delete(format);
 }
 
+/// @brief Handles output buffers and renders frames to nativeWindow.
+void HandleOutputBuffer() {
+  if (!codecConfigured || mediaCodec == nullptr) {
+    return;
+  }
+
+  AMediaCodecBufferInfo info;
+  while (true) {
+    const auto output_buffer_index = AMediaCodec_dequeueOutputBuffer(mediaCodec, &info, 0);
+
+    if (output_buffer_index >= 0) {
+      // Render the buffer to nativeWindow
+      AMediaCodec_releaseOutputBuffer(mediaCodec, output_buffer_index, true);
+
+    } else if (output_buffer_index == AMEDIACODEC_INFO_OUTPUT_BUFFERS_CHANGED) {
+      LOGI << "Output buffers changed.";
+
+    } else if (output_buffer_index == AMEDIACODEC_INFO_OUTPUT_FORMAT_CHANGED) {
+      AMediaFormat* newFormat = AMediaCodec_getOutputFormat(mediaCodec);
+      LOGI << "Output format changed: " << AMediaFormat_toString(newFormat);
+      AMediaFormat_delete(newFormat);
+
+    } else if (output_buffer_index == AMEDIACODEC_INFO_TRY_AGAIN_LATER) {
+      // No available output buffer, exit the loop
+      break;
+    }
+  }
+}
+
 /// @brief Sends the parsed frame data to the codec.
 void HandleInputBuffer(const std::vector<std::byte>& frameBuffer) {
   if (!codecConfigured) {
@@ -79,9 +100,10 @@ void HandleInputBuffer(const std::vector<std::byte>& frameBuffer) {
     return;
   }
 
-  const auto buf_index = AMediaCodec_dequeueInputBuffer(mediaCodec, 0);
+  int buf_index = AMediaCodec_dequeueInputBuffer(mediaCodec, 10000); // 10ms timeout
   if (buf_index < 0) {
     LOGW << "No available input buffer.";
+    HandleOutputBuffer();
     return;
   }
 
@@ -95,6 +117,9 @@ void HandleInputBuffer(const std::vector<std::byte>& frameBuffer) {
   const auto copy_size = std::min(frameBuffer.size(), buf_size);
   std::memcpy(buf, frameBuffer.data(), copy_size);
   AMediaCodec_queueInputBuffer(mediaCodec, buf_index, 0, copy_size, 0, 0);
+
+  // Process output buffers immediately after input
+  HandleOutputBuffer();
 }
 
 /// @brief Initializes the H.264 parser and sets up callbacks.
