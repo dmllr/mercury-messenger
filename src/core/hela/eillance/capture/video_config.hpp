@@ -24,6 +24,18 @@ struct VideoConfig {
   std::uint32_t height{VideoConfigDefaults::height};
   std::uint16_t frameRate{VideoConfigDefaults::frameRate};
   std::uint32_t bitrate{VideoConfigDefaults::bitrate};
+
+  bool operator==(const VideoConfig& other) const {
+    return cameraId == other.cameraId &&
+           width == other.width &&
+           height == other.height &&
+           frameRate == other.frameRate &&
+           bitrate == other.bitrate;
+  }
+
+  bool operator!=(const VideoConfig& other) const {
+    return !(*this == other);
+  }
 };
 
 }  // namespace hela::eillance

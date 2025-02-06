@@ -74,9 +74,7 @@ TEST_F(H264ParserTest, FirstFrameLeadsToConfiguration) {
   // Set callbacks that log their invocation.
   parser.SetOnConfigureCallback(
       [&](
-          const hela::eillance::VideoConfig& conf,
-          const std::vector<std::byte>&,
-          const std::vector<std::byte>&) {
+          const hela::eillance::VideoConfig& conf) {
     log("onConfigure");
     ASSERT_EQ(conf.width, 1280);
     ASSERT_EQ(conf.height, 720);
@@ -101,7 +99,7 @@ TEST_F(H264ParserTest, PBFramesDoNotTriggerConfigure) {
   hela::eillance::H264Parser parser;
 
   // Set callbacks that log their invocation.
-  parser.SetOnConfigureCallback([&](const hela::eillance::VideoConfig&, const std::vector<std::byte>&, const std::vector<std::byte>&) {
+  parser.SetOnConfigureCallback([&](const hela::eillance::VideoConfig&) {
     log("onConfigure");
   });
   parser.SetOnInputBufferCallback([&](const std::vector<std::byte>&) {
@@ -131,7 +129,7 @@ TEST_F(H264ParserTest, ConfiguredFrameProcessing) { // NOLINT(*-function-cogniti
   int configure_count = 0;
   int input_count = 0;
 
-  parser.SetOnConfigureCallback([&](const hela::eillance::VideoConfig&, const std::vector<std::byte>&, const std::vector<std::byte>&) {
+  parser.SetOnConfigureCallback([&](const hela::eillance::VideoConfig&) {
     log("onConfigure");
     ++configure_count;
   });
@@ -153,7 +151,7 @@ TEST_F(H264ParserTest, ConfiguredFrameProcessing) { // NOLINT(*-function-cogniti
 
   // Non-SPS/PPS frames (I, P, or B) should trigger the input and output callbacks.
   EXPECT_EQ(configure_count, 1);
-  EXPECT_EQ(input_count, 3);
+  EXPECT_EQ(input_count, 4);
   EXPECT_NE(callbackLog_.find("onConfigure"), std::string::npos);
   EXPECT_NE(callbackLog_.find("onInputBuffer"), std::string::npos);
 }
@@ -165,7 +163,7 @@ TEST_F(H264ParserTest, NoActionOnInvalidStartCode) {
   hela::eillance::H264Parser parser;
 
   // Set callbacks to record any invocation.
-  parser.SetOnConfigureCallback([&](const hela::eillance::VideoConfig&, const std::vector<std::byte>&, const std::vector<std::byte>&) {
+  parser.SetOnConfigureCallback([&](const hela::eillance::VideoConfig&) {
     log("onConfigure");
   });
   parser.SetOnInputBufferCallback([&](const std::vector<std::byte>&) {

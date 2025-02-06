@@ -27,9 +27,7 @@ public:
   /// @brief Callback type for codec configuration.
   /// @param sps Sequence Parameter Set (SPS) data.
   /// @param pps Picture Parameter Set (PPS) data.
-  using ConfigureCallback = std::function<void(const VideoConfig& conf,
-                                               const std::vector<std::byte>& sps,
-                                               const std::vector<std::byte>& pps)>;
+  using ConfigureCallback = std::function<void(const VideoConfig& conf)>;
 
   /// @brief Callback type for handling input buffer.
   /// The frame buffer contains a series of NAL units where each NALU is preceded by a
@@ -52,10 +50,7 @@ public:
 
 private:
   bool is_codec_configured_ = false;
-  std::vector<std::byte> sps_;
-  std::vector<std::byte> pps_;
-  std::int32_t current_width_ = 0;
-  std::int32_t current_height_ = 0;
+  VideoConfig current_config_ = {};
 
   std::unique_ptr<ConfigureCallback> on_configure_{};
   std::unique_ptr<InputBufferCallback> on_input_buffer_{};
@@ -82,13 +77,12 @@ private:
   /// @brief Parses an SPS (Sequence Parameter Set) to extract the frame width and height.
   /// @param data Pointer to the SPS data (after start code).
   /// @param size Size of the SPS data.
-  /// @param width Output parameter for the width in pixels.
-  /// @param height Output parameter for the height in pixels.
-  static void ParseSps(const std::byte* data, std::size_t size, std::int32_t* width, std::int32_t* height) {
+  /// @return VideoConfig containing the frame width and height.
+  static auto ParseSps(const std::vector<std::byte>& sps) -> VideoConfig {
     // Remove emulation prevention bytes.
     // NOLINTNEXTLINE(*-pro-type-reinterpret-cast)
-    const auto* byte_data = reinterpret_cast<const uint8_t*>(data);
-    std::vector<uint8_t> rbsp = RemoveEmulationPreventionBytes(byte_data, size);
+    const auto* byte_data = reinterpret_cast<const uint8_t*>(sps.data());
+    std::vector<uint8_t> rbsp = RemoveEmulationPreventionBytes(byte_data, sps.size());
     BitReader br(rbsp.data(), rbsp.size());
 
     const auto nal_header = br.ReadByte();
@@ -191,8 +185,10 @@ private:
       height_pixels -= (frame_crop_top_offset + frame_crop_bottom_offset) * crop_unit_y;
     }
 
-    *width = static_cast<std::int32_t>(width_pixels);
-    *height = static_cast<std::int32_t>(height_pixels);
+    auto conf = VideoConfig();
+    conf.width = width_pixels;
+    conf.height = height_pixels;
+    return conf;
   }
 };
 
@@ -251,33 +247,19 @@ inline void H264Parser::ProcessFrame(const rtc::binary& data) {
     if (nal_unit_type == nal_type_sps) {
       // Process SPS: update stored SPS and extract resolution.
       const std::vector<std::byte>& new_sps = nalu;
-      std::int32_t new_width = 0;
-      std::int32_t new_height = 0;
-      ParseSps(new_sps.data(), new_sps.size(), &new_width, &new_height);
-      if (is_codec_configured_ && (new_width != current_width_ || new_height != current_height_)) {
-        is_codec_configured_ = false;
+      auto config = ParseSps(new_sps);
+      if (!is_codec_configured_ || (config != current_config_)) {
+        current_config_ = config;
+        if (on_configure_ != nullptr) {
+          (*on_configure_)(current_config_);
+        }
+        is_codec_configured_ = true;
       }
-      sps_ = new_sps;
-      current_width_ = new_width;
-      current_height_ = new_height;
     } else if (nal_unit_type == nal_type_pps) {
-      // Process PPS.
-      pps_ = nalu;
+      // ignore PPS
     } else {
     }
     pos = next_start;
-  }
-
-  // After processing all NALUs in this input buffer, trigger configuration
-  // if both SPS and PPS have been received and configuration has not yet been done.
-  if (!sps_.empty() && !pps_.empty() && !is_codec_configured_) {
-    if (on_configure_ != nullptr) {
-      auto conf = VideoConfig();
-      conf.width = current_width_;
-      conf.height = current_height_;
-      (*on_configure_)(conf, sps_, pps_);
-    }
-    is_codec_configured_ = true;
   }
 
   // If the codec is configured, and we have any non-SPS/PPS data, forward it.
