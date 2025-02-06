@@ -197,8 +197,6 @@ private:
 };
 
 inline void H264Parser::ProcessFrame(const rtc::binary& data) {
-  // This combined buffer will hold all non-SPS/PPS NALUs.
-  std::vector<std::byte> combined_frame_buffer;
   std::uint32_t pos = 0;
   while (pos < data.size()) {
     // Detect a start code (either 00 00 00 01 or 00 00 01).
@@ -252,7 +250,7 @@ inline void H264Parser::ProcessFrame(const rtc::binary& data) {
 
     if (nal_unit_type == nal_type_sps) {
       // Process SPS: update stored SPS and extract resolution.
-      std::vector<std::byte> new_sps = nalu;
+      const std::vector<std::byte>& new_sps = nalu;
       std::int32_t new_width = 0;
       std::int32_t new_height = 0;
       ParseSps(new_sps.data(), new_sps.size(), &new_width, &new_height);
@@ -266,18 +264,6 @@ inline void H264Parser::ProcessFrame(const rtc::binary& data) {
       // Process PPS.
       pps_ = nalu;
     } else {
-      // For any other NALU (slice, SEI, etc.), add it to the combined frame.
-      // Prepend a 4-byte big-endian header with the NALU size.
-      auto nalu_size = static_cast<uint32_t>(nalu.size());
-      constexpr auto char_bit = 8U;
-      constexpr auto full_bitmask = 0xFFU;
-      auto header = std::array<std::byte, 4>{
-          std::byte{static_cast<unsigned char>((nalu_size >> (char_bit * 3)) & full_bitmask)},
-          std::byte{static_cast<unsigned char>((nalu_size >> (char_bit * 2)) & full_bitmask)},
-          std::byte{static_cast<unsigned char>((nalu_size >> (char_bit * 1)) & full_bitmask)},
-          std::byte{static_cast<unsigned char>((nalu_size >> (char_bit * 0)) & full_bitmask)}};
-      combined_frame_buffer.insert(combined_frame_buffer.end(), std::begin(header), std::end(header));
-      combined_frame_buffer.insert(combined_frame_buffer.end(), nalu.begin(), nalu.end());
     }
     pos = next_start;
   }
@@ -295,9 +281,9 @@ inline void H264Parser::ProcessFrame(const rtc::binary& data) {
   }
 
   // If the codec is configured, and we have any non-SPS/PPS data, forward it.
-  if (is_codec_configured_ && !combined_frame_buffer.empty()) {
+  if (is_codec_configured_) {
     if (on_input_buffer_ != nullptr) {
-      (*on_input_buffer_)(combined_frame_buffer);
+      (*on_input_buffer_)(data);
     }
   }
 }
