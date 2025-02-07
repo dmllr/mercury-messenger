@@ -255,9 +255,8 @@ inline void H264Parser::ProcessFrame(const rtc::binary& data) {
         }
         is_codec_configured_ = true;
       }
-    } else if (nal_unit_type == nal_type_pps) {
-      // ignore PPS
     } else {
+      // ignore others
     }
     pos = next_start;
   }
