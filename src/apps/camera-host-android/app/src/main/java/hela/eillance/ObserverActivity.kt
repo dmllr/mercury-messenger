@@ -51,9 +51,19 @@ class ObserverActivity : AppCompatActivity(),
   }
 
   override fun onStreamResolutionChange(width: Int, height: Int) {
-    val newHeight = binding.outputSurface.width * height / width
-    // TODO: make it work properly
-    binding.outputSurface.layoutParams.height = newHeight
-    binding.outputSurface.requestLayout()
+    if (width == 0 || height == 0) {
+      return
+    }
+
+    binding.outputSurface.post {
+      val surfaceWidth = binding.outputSurface.width
+      val newHeight = surfaceWidth * height / width
+
+      binding.outputSurface.layoutParams = binding.outputSurface.layoutParams.apply {
+        this.height = newHeight
+      }
+
+      binding.outputSurface.requestLayout() // Ensure UI updates
+    }
   }
 }
