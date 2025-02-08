@@ -10,19 +10,16 @@ namespace hela::eillance {
 struct Peer {
   struct Track {
     std::shared_ptr<rtc::Track> track;
-    std::shared_ptr<rtc::RtcpSrReporter> sender;
-    std::shared_ptr<rtc::H264RtpDepacketizer> session;
+    std::shared_ptr<rtc::RtcpSrReporter> reporter;
 
-    Track(std::shared_ptr<rtc::Track> track, std::shared_ptr<rtc::RtcpSrReporter> sender)
+    explicit Track(std::shared_ptr<rtc::Track> track)
         : track(std::move(track)),
-          sender(std::move(sender)),
-          session(nullptr) {
+          reporter(nullptr) {
     }
 
-    Track(std::shared_ptr<rtc::Track> track, std::shared_ptr<rtc::H264RtpDepacketizer> session)
+    Track(std::shared_ptr<rtc::Track> track, std::shared_ptr<rtc::RtcpSrReporter> reporter)
         : track(std::move(track)),
-          sender(nullptr),
-          session(std::move(session)) {
+          reporter(std::move(reporter)) {
     }
   };
 

@@ -14,7 +14,7 @@ namespace hela::eillance {
 /// @brief A simple bitstream reader for SPS parsing.
 class BitReader {
 public:
-  BitReader(const std::uint8_t* data, std::size_t size)
+  BitReader(const std::uint8_t* data, std::uint32_t size)
       : data_(data), size_(size), byte_offset_(0), bit_offset_(0) {}
 
   // Read a single bit (returns in 'bit').
@@ -35,7 +35,7 @@ public:
   std::uint32_t ReadBits(std::uint32_t n) {
     assert(n < 8 * sizeof(std::uint32_t));
     std::uint32_t bits = 0;
-    for (int i = 0; i < n; i++) {
+    for (std::uint32_t i = 0U; i < n; i++) {
       std::uint32_t bit = 0;
       if (!ReadBit(bit)) {
         break;

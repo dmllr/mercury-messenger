@@ -188,7 +188,7 @@ private:
       const rtc::binary& sample,
       const char* stream_type) {
     auto elapsed_seconds = static_cast<double>(sample_time) / Time::uS;
-    const auto rtp_config = track->sender->rtpConfig;
+    const auto rtp_config = track->reporter->rtpConfig;
     auto elapsed_timestamp = rtp_config->secondsToTimestamp(elapsed_seconds);
 
     UpdateRtpConfig(elapsed_timestamp, track, rtp_config);
@@ -205,10 +205,10 @@ private:
     rtp_config->timestamp = rtp_config->startTimestamp + elapsed_timestamp;
 
     // get elapsed time in clock rate from last RTCP sender report
-    auto report_elapsed_timestamp = rtp_config->timestamp - track->sender->lastReportedTimestamp();
+    auto report_elapsed_timestamp = rtp_config->timestamp - track->reporter->lastReportedTimestamp();
     // check if last report was at least 1 second ago
     if (rtp_config->timestampToSeconds(report_elapsed_timestamp) > 1) {
-      track->sender->setNeedsToReport();
+      track->reporter->setNeedsToReport();
     }
   }
 
