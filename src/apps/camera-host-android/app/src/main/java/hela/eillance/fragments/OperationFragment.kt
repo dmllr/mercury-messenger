@@ -19,9 +19,9 @@ import hela.eillance.PerformerActivity
 import hela.eillance.Tune
 import hela.eillance.camera.R
 import hela.eillance.camera.databinding.FragmentOperationBinding
-import hela.eillance.events.EventSource
-import hela.eillance.events.PeerStateLink
-import hela.eillance.events.ServiceConnectionState
+import hela.eillance.ndkio.EventSource
+import hela.eillance.ndkio.PeerStateLink
+import hela.eillance.ndkio.ServiceConnectionState
 import java.util.Vector
 
 class OperationFragment : Fragment() {

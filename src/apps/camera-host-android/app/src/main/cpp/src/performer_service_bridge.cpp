@@ -54,10 +54,10 @@ Java_hela_eillance_PerformerService_getServiceConnectionState(  // NOLINT(readab
   auto* app = reinterpret_cast<PerformerEngine*>(appmgr); // NOLINT(*-pro-type-reinterpret-cast, *-no-int-to-ptr)
   auto status = static_cast<int>(app->GetServiceConnectionState());
 
-  jclass cls = env->FindClass("hela/eillance/events/ServiceConnectionState");
+  jclass cls = env->FindClass("hela/eillance/ndkio/ServiceConnectionState");
   assert(cls != nullptr && "Class ServiceConnectionState can't be found");
 
-  jmethodID from_int_method = env->GetStaticMethodID(cls, "fromInt", "(I)Lhela/eillance/events/ServiceConnectionState;");
+  jmethodID from_int_method = env->GetStaticMethodID(cls, "fromInt", "(I)Lhela/eillance/ndkio/ServiceConnectionState;");
   assert(from_int_method != nullptr && "Static method ServiceConnectionState.fromInt can't be found");
 
   // NOLINTNEXTLINE(*-vararg)

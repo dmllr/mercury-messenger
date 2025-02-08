@@ -1,4 +1,4 @@
-package hela.eillance.events
+package hela.eillance.ndkio
 
 enum class EventSource(val value: Int) {
   System(0),

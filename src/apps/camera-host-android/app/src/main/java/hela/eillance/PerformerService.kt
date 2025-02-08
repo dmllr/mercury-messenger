@@ -26,9 +26,9 @@ import androidx.core.graphics.drawable.DrawableCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.preference.PreferenceManager
 import hela.eillance.camera.R
-import hela.eillance.events.EventSource
-import hela.eillance.events.ServiceConnectionState
-import hela.eillance.events.interfaces.INativeBridge
+import hela.eillance.ndkio.EventSource
+import hela.eillance.ndkio.ServiceConnectionState
+import hela.eillance.ndkio.interfaces.INativeBridge
 import hela.eillance.ndkio.VideoConfig
 import java.util.concurrent.atomic.AtomicLong
 
