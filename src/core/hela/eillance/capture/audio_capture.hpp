@@ -102,11 +102,10 @@ public:
   }
 
   void Revoke() {
-    encoder_.Revoke();
-
     ma_device_stop(&audio_device_);
     ma_device_uninit(&audio_device_);
     ma_context_uninit(&context_);
+    encoder_.Revoke();
   }
 
   Packet FetchBuffers() {
