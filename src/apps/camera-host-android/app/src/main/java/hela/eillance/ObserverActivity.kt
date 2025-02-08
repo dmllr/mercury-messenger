@@ -8,8 +8,12 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import hela.eillance.camera.databinding.ActivityObserverBinding
 import androidx.core.view.WindowInsetsCompat
+import hela.eillance.ndkio.interfaces.IObserverNativeBridge
 
-class ObserverActivity : AppCompatActivity(), SurfaceHolder.Callback {
+class ObserverActivity : AppCompatActivity(),
+  SurfaceHolder.Callback,
+  IObserverNativeBridge
+{
   private lateinit var binding: ActivityObserverBinding
 
   override fun onCreate(savedInstanceState: Bundle?) {
@@ -27,7 +31,7 @@ class ObserverActivity : AppCompatActivity(), SurfaceHolder.Callback {
   }
 
   override fun surfaceCreated(holder: SurfaceHolder) {
-    initDecoder(holder.surface)
+    initDecoder(this, holder.surface)
   }
 
   override fun surfaceDestroyed(holder: SurfaceHolder) {
@@ -37,12 +41,19 @@ class ObserverActivity : AppCompatActivity(), SurfaceHolder.Callback {
   override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
   }
 
-  private external fun initDecoder(surface: Surface)
+  private external fun initDecoder(nativeBridge: IObserverNativeBridge, surface: Surface)
   private external fun releaseDecoder()
 
   companion object {
     init {
       System.loadLibrary("lib-observer-service-bridge")
     }
+  }
+
+  override fun onStreamResolutionChange(width: Int, height: Int) {
+    val newHeight = binding.outputSurface.width * height / width
+    // TODO: make it work properly
+    binding.outputSurface.layoutParams.height = newHeight
+    binding.outputSurface.requestLayout()
   }
 }

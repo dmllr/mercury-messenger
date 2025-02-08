@@ -25,7 +25,7 @@ Java_hela_eillance_PerformerService_createAppEngine(  // NOLINT(readability-iden
 
 extern "C" JNIEXPORT void JNICALL
 Java_hela_eillance_PerformerService_deleteAppEngine(  // NOLINT(readability-identifier-naming)
-    JNIEnv* /*env*/, jobject /*instance*/, jlong appmgr) {
+    JNIEnv*, jobject /*instance*/, jlong appmgr) {
 
   auto* app = reinterpret_cast<PerformerEngine*>(appmgr); // NOLINT(*-pro-type-reinterpret-cast, *-no-int-to-ptr)
   delete app;
@@ -33,7 +33,7 @@ Java_hela_eillance_PerformerService_deleteAppEngine(  // NOLINT(readability-iden
 
 extern "C" JNIEXPORT void JNICALL
 Java_hela_eillance_PerformerService_start(  // NOLINT(readability-identifier-naming)
-    JNIEnv* env, jobject  /*instance*/, jlong appmgr) {
+    JNIEnv*, jobject  /*instance*/, jlong appmgr) {
 
   auto* app = reinterpret_cast<PerformerEngine*>(appmgr); // NOLINT(*-pro-type-reinterpret-cast, *-no-int-to-ptr)
   app->Start();
@@ -41,7 +41,7 @@ Java_hela_eillance_PerformerService_start(  // NOLINT(readability-identifier-nam
 
 extern "C" JNIEXPORT void JNICALL
 Java_hela_eillance_PerformerService_stop(  // NOLINT(readability-identifier-naming)
-    JNIEnv* env, jobject  /*instance*/, jlong appmgr) {
+    JNIEnv*, jobject  /*instance*/, jlong appmgr) {
 
   auto* app = reinterpret_cast<PerformerEngine*>(appmgr); // NOLINT(*-pro-type-reinterpret-cast, *-no-int-to-ptr)
   app->Stop();
@@ -78,7 +78,7 @@ Java_hela_eillance_PerformerService_configureDeviceName(  // NOLINT(readability-
 
 extern "C" JNIEXPORT void JNICALL
 Java_hela_eillance_PerformerService_configureVideoCapture(  // NOLINT(readability-identifier-naming)
-    JNIEnv* env, jobject  /*instance*/, jlong appmgr, jobject videoConfig) {
+    JNIEnv* env, jobject  /*instance*/, jlong /*appmgr*/, jobject videoConfig) {
 
   auto conf = hela::eillance::VideoConfig{};
   jclass video_config_class = env->GetObjectClass(videoConfig);

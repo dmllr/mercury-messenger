@@ -124,16 +124,10 @@ private:
     track->onOpen(onOpen);
     track->onFrame(
         [this](const rtc::binary& data, rtc::FrameInfo fi) {
-          std::cout << "Frame data received " << data.size() << " " << fi.payloadType << std::endl;
           if (on_frame_received_ != nullptr) {
             (*on_frame_received_)(data);
           }
         });
-    track->onMessage(
-        [](const rtc::binary&  /*data*/) {
-          std::cout << "Control message received" << std::endl;
-        },
-        nullptr);
 
     return std::make_shared<Peer::Track>(track);
   }

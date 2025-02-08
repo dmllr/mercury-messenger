@@ -22,7 +22,7 @@ class PerformerEngine {
 
 public:
   // NOLINTNEXTLINE(*-easily-swappable-parameters)
-  explicit PerformerEngine(JavaVM* jvm, JNIEnv* env, jobject instance, jobject native_bridge)
+  PerformerEngine(JavaVM* jvm, JNIEnv* env, jobject instance, jobject native_bridge)
       : jvm_(jvm),
         service_instance_(env->NewWeakGlobalRef(instance)),
         native_bridge_(env->NewGlobalRef(native_bridge)) {

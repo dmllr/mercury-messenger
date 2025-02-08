@@ -22,15 +22,23 @@
 namespace hela::eillance {
 
 class ObserverEngine {
+  JavaVM* jvm_;
+  jobject native_bridge_{nullptr};
+
   ANativeWindow* nativeWindow_{nullptr};
   AMediaCodec* mediaCodec_{nullptr};
   bool codecConfigured_{false};
 
-  hela::eillance::RtcConsumer consumer_{};
-  hela::eillance::H264Parser h264Parser_{};
+  RtcConsumer consumer_{};
+  H264Parser h264Parser_{};
+
+  hela::eillance::EventQueue::SubscriberTypeId configure_subscriber_id_{0};
 
 public:
-  ObserverEngine() = default;
+  ObserverEngine(JavaVM* jvm, JNIEnv*)
+      : jvm_(jvm) {
+    EventQueue::Instance();
+  }
   ObserverEngine(ObserverEngine&&) = delete;
   ObserverEngine(const ObserverEngine&) = delete;
   auto& operator=(ObserverEngine&&) = delete;
@@ -38,10 +46,26 @@ public:
 
   ~ObserverEngine() {
     Stop();
+
+    JNIEnv* env = AttachCurrentThreadIfNeeded();
+    if (env == nullptr) {
+      LOGE << "Failed to get JNIEnv in destructor.";
+      return;
+    }
+
+    if (native_bridge_ != nullptr && (env->IsSameObject(native_bridge_, nullptr) == JNI_FALSE)) {
+      LOGD << "Deleting native_bridge_ GlobalRef.";
+      env->DeleteGlobalRef(native_bridge_);
+      native_bridge_ = nullptr;
+    }
   }
 
   void SetTargetSurface(JNIEnv* env, jobject surface) {
     nativeWindow_ = ANativeWindow_fromSurface(env, surface);
+  }
+
+  void SetNativeBridge(JNIEnv* env, jobject native_bridge) {
+    native_bridge_ = env->NewGlobalRef(native_bridge);
   }
 
   void Start() {
@@ -54,10 +78,13 @@ public:
     consumer_.SetFrameReceivedCallback([this](const rtc::binary& frame) {
       h264Parser_.ProcessFrame(frame);
     });
-    LOGI << "Decoder initialized and ready.";
+    configure_subscriber_id_ = EventQueue::Instance().Subscribe<VideoConfig>(
+        [this](VideoConfig config) { ConfigureSurfaceResolution(config); });
+    LOGI << "Observer engine is initialized and ready.";
   }
 
   void Stop() {
+    EventQueue::Instance().Unsubscribe<VideoConfig>(configure_subscriber_id_);
     consumer_.Stop();
     if (mediaCodec_ != nullptr) {
       AMediaCodec_stop(mediaCodec_);
@@ -73,6 +100,25 @@ public:
   }
 
 private:
+  JNIEnv* AttachCurrentThreadIfNeeded() {
+    JNIEnv* env{};
+    const jint res = jvm_->GetEnv((void**)&env, JNI_VERSION_1_6);
+    switch (res) {
+      case JNI_OK:
+        // the current thread is already attached, return the JNIEnv.
+        return env;
+      case JNI_EDETACHED:
+        // the current thread is not attached, try to attach.
+        if (jvm_->AttachCurrentThread(&env, nullptr) == JNI_OK) {
+          return env;
+        } else {
+          return nullptr;
+        }
+      default:
+        return nullptr;
+    }
+  }
+
   /// @brief Initializes the codec with @c VideoConfig.
   void ConfigureCodec(const VideoConfig& conf) {
     if (codecConfigured_) {
@@ -148,7 +194,8 @@ private:
       return;
     }
 
-    int buf_index = AMediaCodec_dequeueInputBuffer(mediaCodec_, 10000); // 10ms timeout
+    constexpr auto timeout = 10000ULL;
+    auto buf_index = AMediaCodec_dequeueInputBuffer(mediaCodec_, timeout);
     if (buf_index < 0) {
       LOGW << "No available input buffer.";
       HandleOutputBuffer();
@@ -172,14 +219,33 @@ private:
 
   /// @brief Initializes the H.264 parser and sets up callbacks.
   void InitH264Parser() {
-    h264Parser_.SetOnConfigureCallback([this](const VideoConfig& conf) {
-      LOGI << "Received SPS/PPS, configuring codec...";
+    h264Parser_.SetOnConfigureCallback([this](const VideoConfig conf) {
+      LOGI << "Configuration change callback triggered, configuring codec...";
       ConfigureCodec(conf);
+      EventQueue::Instance().Push(conf);
     });
 
     h264Parser_.SetOnInputBufferCallback([this](const std::vector<std::byte>& frameBuffer) {
       HandleInputBuffer(frameBuffer);
     });
+  }
+
+  void ConfigureSurfaceResolution(VideoConfig config) {
+    if (native_bridge_ == nullptr) {
+      return;
+    }
+
+    auto* env = AttachCurrentThreadIfNeeded();
+    if (env == nullptr) {
+      return;
+    }
+
+    jclass callback_class = env->GetObjectClass(native_bridge_);
+    jmethodID callback_method = env->GetMethodID(callback_class, "onStreamResolutionChange", "(II)V");
+    if (callback_method != nullptr) {
+      // NOLINTNEXTLINE(*-vararg)
+      env->CallVoidMethod(native_bridge_, callback_method, static_cast<int>(config.width), static_cast<int>(config.height));
+    }
   }
 };
 
