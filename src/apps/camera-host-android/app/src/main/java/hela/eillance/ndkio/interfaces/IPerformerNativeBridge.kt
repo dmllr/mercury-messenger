@@ -1,5 +1,5 @@
 package hela.eillance.ndkio.interfaces
 
-interface INativeBridge {
+interface IPerformerNativeBridge {
   fun onStatusUpdate(peerId: String, source: Int, status: Int)
 }

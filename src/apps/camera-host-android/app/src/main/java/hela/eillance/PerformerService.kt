@@ -28,11 +28,11 @@ import androidx.preference.PreferenceManager
 import hela.eillance.camera.R
 import hela.eillance.ndkio.EventSource
 import hela.eillance.ndkio.ServiceConnectionState
-import hela.eillance.ndkio.interfaces.INativeBridge
+import hela.eillance.ndkio.interfaces.IPerformerNativeBridge
 import hela.eillance.ndkio.VideoConfig
 import java.util.concurrent.atomic.AtomicLong
 
-class PerformerService : Service(), INativeBridge {
+class PerformerService : Service(), IPerformerNativeBridge {
   private var appEngine: AtomicLong = AtomicLong(0)
   private var serviceConnectionState: ServiceConnectionState = ServiceConnectionState.Unknown
 
@@ -248,7 +248,7 @@ class PerformerService : Service(), INativeBridge {
     }
   }
 
-  private external fun createAppEngine(nativeBridge: INativeBridge): Long
+  private external fun createAppEngine(nativeBridge: IPerformerNativeBridge): Long
 
   private external fun deleteAppEngine(appMgr: Long)
   fun deleteAppEngine() {

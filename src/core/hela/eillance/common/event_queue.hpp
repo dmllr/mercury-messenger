@@ -75,7 +75,7 @@ public:
 
   /// Push an event to the queue.
   template<typename EventType>
-  void Push(const EventType&& event) {
+  void Push(const EventType& event) {
     {
       std::lock_guard<std::mutex> const lock(sync_mutex_);
       events_.push_back(MakePair(typeid(EventType), std::move(event)));
