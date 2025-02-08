@@ -1,18 +1,16 @@
 package hela.eillance
 
-import android.graphics.SurfaceTexture
 import android.os.Bundle
 import android.view.Surface
-import android.view.TextureView.SurfaceTextureListener
+import android.view.SurfaceHolder
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import hela.eillance.camera.databinding.ActivityObserverBinding
 import androidx.core.view.WindowInsetsCompat
 
-class ObserverActivity : AppCompatActivity(), SurfaceTextureListener {
+class ObserverActivity : AppCompatActivity(), SurfaceHolder.Callback {
   private lateinit var binding: ActivityObserverBinding
-  private lateinit var surface: Surface
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
@@ -25,26 +23,18 @@ class ObserverActivity : AppCompatActivity(), SurfaceTextureListener {
       insets
     }
 
-    binding.outputSurface.apply {
-      surfaceTextureListener = this@ObserverActivity
-    }
+    binding.outputSurface.holder.addCallback(this)
   }
 
-  override fun onSurfaceTextureAvailable(stx: SurfaceTexture, width: Int, height: Int) {
-    surface = Surface(stx)
-    initDecoder(surface)
+  override fun surfaceCreated(holder: SurfaceHolder) {
+    initDecoder(holder.surface)
   }
 
-  override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
+  override fun surfaceDestroyed(holder: SurfaceHolder) {
     releaseDecoder()
-    surface.release()
-    return true
   }
 
-  override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {
-  }
-
-  override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {
+  override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
   }
 
   private external fun initDecoder(surface: Surface)
