@@ -1,4 +1,4 @@
-package hela.eillance.events
+package hela.eillance.ndkio
 
 import android.content.Context
 import hela.eillance.camera.R
