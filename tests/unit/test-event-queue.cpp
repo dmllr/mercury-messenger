@@ -181,20 +181,19 @@ TEST(EventQueue, MultipleVideoConfigEvent) {
   ASSERT_EQ(result.bitrate, 3000000);
 }
 
-// TODO investigate!
-//TEST(EventQueue, EventNotHandledAfterUnsubscribe) {
-//  bool event_handled = false;
-//
-//  const auto id = EventQueue::Instance().Subscribe<std::string>([&event_handled](const std::string&) {
-//    event_handled = true;
-//  });
-//  EventQueue::Instance().Unsubscribe<std::string>(id);
-//  EventQueue::Instance().Push(std::string("Test Event"));
-//
-//  // Allow some time for the event to be processed
-//  std::this_thread::sleep_for(std::chrono::milliseconds(10));
-//
-//  EXPECT_FALSE(event_handled);
-//}
+TEST(EventQueue, EventNotHandledAfterUnsubscribe) {
+  bool event_handled = false;
+
+  const auto id = EventQueue::Instance().Subscribe<std::string>([&event_handled](const std::string&) {
+    event_handled = true;
+  });
+  EventQueue::Instance().Unsubscribe<std::string>(id);
+  EventQueue::Instance().Push(std::string("Test Event"));
+
+  // Allow some time for the event to be processed
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+  EXPECT_FALSE(event_handled);
+}
 
 }  // namespace hela::eillance

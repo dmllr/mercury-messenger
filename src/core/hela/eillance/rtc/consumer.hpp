@@ -83,9 +83,7 @@ private:
     }
     auto type = it->get<std::string>();
 
-    if (type == "answer") {
-      // shouldn't
-    } else if (type == "offer") {
+    if (type == "offer") {
       auto sdp = message["sdp"].get<std::string>();
       std::shared_ptr<Peer> const peer = CreatePeerConnection(peer_id);
       auto pc = peer->PeerConnection();
@@ -93,22 +91,6 @@ private:
       DispatchQueue::MainThread().Dispatch([this, peer_id, peer]() {
         AddPeer(peer_id, peer);
       });
-
-      //      SendAnswer(peer_id, pc->localDescription().value());
-      //      pc->createAnswer([this, peer_id, pc](rtc::Description answer) {
-      //        pc->setLocalDescription(answer, [this, peer_id, pc]() {
-      //          if (pc->iceGatheringState() == rtc::PeerConnection::IceGatheringState::Complete) {
-      //            SendAnswer(peer_id, pc->localDescription().value());
-      //          } else {
-      //            pc->onGatheringStateChange([this, peer_id, pc](rtc::PeerConnection::IceGatheringState state) {
-      //              if (state == rtc::PeerConnection::IceGatheringState::Complete) {
-      //                SendAnswer(peer_id, pc->localDescription().value());
-      //              }
-      //            });
-      //          }
-      //        });
-      //      });
-
     } else if (type == "info profile") {
       // TODO
     } else {
@@ -153,7 +135,7 @@ private:
         },
         nullptr);
 
-    return std::make_shared<Peer::Track>(track, depacketizer);
+    return std::make_shared<Peer::Track>(track);
   }
 
   auto AddAudio(
@@ -181,7 +163,7 @@ private:
     track->setMediaHandler(depacketizer);
     track->onOpen(onOpen);
 
-    return std::make_shared<Peer::Track>(track, sr_reporter);
+    return std::make_shared<Peer::Track>(track);
   }
 
   Json GetPublishMessage() final {
@@ -215,16 +197,6 @@ private:
       (*on_client_list_changed_)();
     }
 
-    //    // Auto-select first client
-    //    if (!clients_.empty()) {
-    //      selectedClientId_ = clients_[0].id;
-    //      profile_ = clients_[0].profile;
-    //      HELA_LOG_DEBUG("Selected default client: %s", selectedClientId_.c_str());
-    //    } else {
-    //      selectedClientId_.clear();
-    //      profile_ = nlohmann::json::array();
-    //    }
-
     // for debugging purposes
     LOGI << "Updated client list:";
     for (const auto& client: clients_) {
@@ -232,13 +204,6 @@ private:
     }
   }
 
-  void SendAnswer(const std::string& peer_id, const std::string& sdp) {
-    Json answer = {
-        {"to", peer_id},
-        {"type", "answer"},
-        {"sdp", sdp}};
-    SendPeerMessage(answer);
-  }
 };
 
 }  // namespace hela::eillance
