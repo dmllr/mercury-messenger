@@ -86,8 +86,7 @@ private:
     if (type == "offer") {
       auto sdp = message["sdp"].get<std::string>();
       std::shared_ptr<Peer> const peer = CreatePeerConnection(peer_id);
-      auto pc = peer->PeerConnection();
-      pc->setRemoteDescription(rtc::Description(sdp, rtc::Description::Type::Offer));
+      peer->peer_connection_->setRemoteDescription(rtc::Description(sdp, rtc::Description::Type::Offer));
       DispatchQueue::MainThread().Dispatch([this, peer_id, peer]() {
         AddPeer(peer_id, peer);
       });
