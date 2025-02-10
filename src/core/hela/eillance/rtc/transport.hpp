@@ -122,6 +122,10 @@ public:
 
   void Stop() {
     is_offline_ = true;
+    for (auto& [peer_id, peer] : peers_) {
+      peer->data_channel_->close();
+      peer->peer_connection_->close();
+    }
     ws_->close();
     ReportServiceConnectionState(ServiceConnectionState::disconnected);
   }
@@ -371,6 +375,13 @@ private:
 
     data_channel->onMessage(nullptr, [peer_id, wdc = make_weak_ptr(data_channel), this](const std::string& msg) {
       LOGD << "Message from " << id_ << " received: " << msg;
+      if (msg.rfind("Ping ", 0) == 0) {  // starts_with is not supported by all compilers
+        if (auto dc = wdc.lock()) {
+          dc->send("Pong");
+        }
+        ReportPeerStateChange(peer_id, EventSource::ping, 1);
+        return;
+      }
       if (msg.rfind("Pong ", 0) == 0) {  // starts_with is not supported by all compilers
         if (auto dc = wdc.lock()) {
           dc->send("Ping");

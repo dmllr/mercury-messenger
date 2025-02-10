@@ -74,10 +74,9 @@ public:
       });
     } else if (type == "answer") {
       if (const auto peer = GetPeer(peer_id); peer != nullptr) {
-        auto pc = peer->PeerConnection();
         auto sdp = message["sdp"].get<std::string>();
         auto answer = rtc::Description(sdp, type);
-        pc->setRemoteDescription(answer);
+        peer->peer_connection_->setRemoteDescription(answer);
       }
     } else if (type == "offer") {
       // do nothing
@@ -188,7 +187,7 @@ private:
       const rtc::binary& sample,
       const char* stream_type) {
     auto elapsed_seconds = static_cast<double>(sample_time) / Time::uS;
-    const auto rtp_config = track->reporter->rtpConfig;
+    const auto rtp_config = track->Reporter()->rtpConfig;
     auto elapsed_timestamp = rtp_config->secondsToTimestamp(elapsed_seconds);
 
     UpdateRtpConfig(elapsed_timestamp, track, rtp_config);
@@ -205,19 +204,19 @@ private:
     rtp_config->timestamp = rtp_config->startTimestamp + elapsed_timestamp;
 
     // get elapsed time in clock rate from last RTCP sender report
-    auto report_elapsed_timestamp = rtp_config->timestamp - track->reporter->lastReportedTimestamp();
+    auto report_elapsed_timestamp = rtp_config->timestamp - track->Reporter()->lastReportedTimestamp();
     // check if last report was at least 1 second ago
     if (rtp_config->timestampToSeconds(report_elapsed_timestamp) > 1) {
-      track->reporter->setNeedsToReport();
+      track->Reporter()->setNeedsToReport();
     }
   }
 
-  static void SendSample(rtc::binary message, const char* streamType, const PeerTrack& track) {
+  static void SendSample(const rtc::binary& message, const char* streamType, const PeerTrack& track) {
     bool send = false;
     try {
       // send sample
       if (likely(!message.empty())) {
-        send = track->track->send(message);
+        send = track->Send(message);
       }
     } catch (const std::exception& e) {
       LOGE << "Exception: unable to send " << streamType << " packet." << e.what();
