@@ -77,8 +77,11 @@ public:
     LOGI << "The local ID is: " << id_.data();
 
     auto ws_config = rtc::WebSocketConfiguration{
-        .disableTlsVerification = true,  // TODO: check
-        .caCertificatePemFile = zerosslCaBundle};
+//        .disableTlsVerification = true,  // TODO: check
+        .caCertificatePemFile = zerosslCaBundle,
+//        .certificatePemFile = sscert,
+//        .keyPemFile = sskey
+    };
 
     if (ws_ != nullptr) {
       ws_->resetCallbacks();
@@ -445,6 +448,91 @@ private:
 //  constexpr static auto signalingServerUrl = "ws://10.0.2.2:8000";  // for android emulator
 //  constexpr static auto signalingServerUrl = "ws://127.0.0.1:8000";  // for general
 
+  constexpr static auto sscert =
+      "-----BEGIN CERTIFICATE-----\n"
+      "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\n"
+      "q53DhA==\n"
+      "-----END CERTIFICATE-----   ";
+  constexpr static auto sskey =
+      "-----BEGIN PRIVATE KEY-----\n"
+      "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\n"
+      "63oIhSpqW90Hc+y4va84Rse7s3Pt\n"
+      "-----END PRIVATE KEY-----\n";
   constexpr static auto zerosslCaBundle =
       "-----BEGIN CERTIFICATE-----\n"
       "MIIG1TCCBL2gAwIBAgIQbFWr29AHksedBwzYEZ7WvzANBgkqhkiG9w0BAQwFADCB\n"
