@@ -19,6 +19,8 @@
 #include "hela/eillance/utils/string.hpp"
 #include "hela/eillance/utils/h264.hpp"
 
+#include "class_refs.hpp"
+
 namespace hela::eillance {
 
 class ObserverEngine {
@@ -72,8 +74,9 @@ public:
     InitH264Parser();
     consumer_.SetName("CLI::" + std::string(StringUtils::RandomString()));
     consumer_.Start();
-    consumer_.SetClientAddedCallback([this]() {
-      consumer_.SendStreamRequest();
+    consumer_.SetClientChangedCallback([this](const std::vector<ClientInfo>& clients) {
+//      consumer_.SendStreamRequest();
+      UpdateClientList(clients);
     });
     consumer_.SetFrameReceivedCallback([this](const rtc::binary& frame) {
       h264Parser_.ProcessFrame(frame);
@@ -247,6 +250,86 @@ private:
       env->CallVoidMethod(native_bridge_, callback_method, static_cast<int>(config.width), static_cast<int>(config.height));
     }
   }
+
+  void UpdateClientList(const std::vector<ClientInfo>& clients) {
+    if (native_bridge_ == nullptr) {
+      return;
+    }
+
+    JNIEnv* env = nullptr;
+    jvm_->AttachCurrentThread(&env, nullptr);
+    if (env == nullptr) {
+      return;
+    }
+
+    auto& classref = ClassRefs::Instance();
+
+    // Look up the callback method.
+    jclass callback_cls = env->GetObjectClass(native_bridge_);
+    jmethodID callback_method = env->GetMethodID(callback_cls, "onClientListUpdate", "(Ljava/util/List;)V");
+    if (callback_method == nullptr) {
+      env->DeleteLocalRef(callback_cls);
+      return;
+    }
+
+    // Create the Java ArrayList to hold ClientInfo objects.
+    jobject java_list = classref.Class("java/util/ArrayList").NewObject(env);
+
+    for (const auto& client : clients) {
+      jstring id = env->NewStringUTF(client.id.c_str());
+      jstring name = env->NewStringUTF(client.name.c_str());
+
+      // Create Camera list
+      jobject camera_list = classref.Class("java/util/ArrayList").NewObject(env);
+
+      for (const auto& camera : client.profile) {
+        jstring cam_id = env->NewStringUTF(camera.id.c_str());
+        jstring cam_name = env->NewStringUTF(camera.name.c_str());
+
+        // Create Resolution list
+        jobject res_list = classref.Class("java/util/ArrayList").NewObject(env);
+
+        for (const auto& res : camera.resolutions) {
+          jobject jres = classref.Class("hela/eillance/ndkio/Resolution")
+                             .NewObject(env, res.width, res.height);
+          jmethodID add_method = env->GetMethodID(classref.Class("java/util/ArrayList").Class(), "add", "(Ljava/lang/Object;)Z");
+          // NOLINTNEXTLINE(*-vararg)
+          env->CallBooleanMethod(res_list, add_method, jres);
+
+          env->DeleteLocalRef(jres);
+        }
+
+        jobject jcamera = classref.Class("hela/eillance/ndkio/Camera")
+                              .NewObject(env, cam_id, cam_name, res_list);
+        jmethodID add_method = env->GetMethodID(classref.Class("java/util/ArrayList").Class(), "add", "(Ljava/lang/Object;)Z");
+        // NOLINTNEXTLINE(*-vararg)
+        env->CallBooleanMethod(camera_list, add_method, jcamera);
+
+        env->DeleteLocalRef(jcamera);
+        env->DeleteLocalRef(cam_id);
+        env->DeleteLocalRef(cam_name);
+        env->DeleteLocalRef(res_list);
+      }
+
+      jobject jclient = classref.Class("hela/eillance/ndkio/ClientInfo")
+                            .NewObject(env, id, name, camera_list);
+      jmethodID add_method = env->GetMethodID(classref.Class("java/util/ArrayList").Class(), "add", "(Ljava/lang/Object;)Z");
+      // NOLINTNEXTLINE(*-vararg)
+      env->CallBooleanMethod(java_list, add_method, jclient);
+
+      env->DeleteLocalRef(jclient);
+      env->DeleteLocalRef(id);
+      env->DeleteLocalRef(name);
+      env->DeleteLocalRef(camera_list);
+    }
+
+    // NOLINTNEXTLINE(*-vararg)
+    env->CallVoidMethod(native_bridge_, callback_method, java_list);
+
+    env->DeleteLocalRef(java_list);
+    env->DeleteLocalRef(callback_cls);
+  }
+
 };
 
 }  // namespace hela::eillance
