@@ -33,10 +33,10 @@ struct Peer {
   };
 
   enum class State {
-    Waiting,
-    WaitingForVideo,
-    WaitingForAudio,
-    Ready
+    waiting,
+    waitingForVideo,
+    waitingForAudio,
+    ready
   };
 
   explicit Peer(std::shared_ptr<rtc::PeerConnection> pc) : peer_connection_(std::move(pc)) {}
@@ -47,18 +47,18 @@ struct Peer {
   std::shared_ptr<rtc::PeerConnection> peer_connection_;
 
   void SetState(State state) {
-    std::unique_lock lock(mutex_);
+    const auto lock = std::unique_lock(mutex_);
     this->state_ = state;
   }
 
   auto GetState() -> State {
-    std::shared_lock lock(mutex_);
+    const auto lock = std::unique_lock(mutex_);
     return state_;
   }
 
 private:
   std::shared_mutex mutex_;
-  State state_ = State::Waiting;
+  State state_ = State::waiting;
   std::string id_;
 };
 

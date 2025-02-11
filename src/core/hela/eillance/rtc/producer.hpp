@@ -51,6 +51,14 @@ public:
   RtcProducer& operator=(const RtcProducer&) = delete;
   ~RtcProducer() final = default;
 
+  void OnPeerAdded(const std::string& /*peer_id*/, const std::shared_ptr<Peer>& peer) final {
+    const Json message = {
+        {"type", "info profile"},
+        {"profile", GetDeviceProfileAsJson()},
+    };
+    peer->data_channel_->send(message.dump());
+  }
+
   void OnPeerReady(const std::shared_ptr<Peer>& /*peer*/) final {
     av_stream_->Start();
   }
@@ -174,7 +182,7 @@ private:
       auto id = id_peer.first;
       auto peer = id_peer.second;
       auto opt_track_data = get_track_data(peer);
-      if (peer->GetState() == Peer::State::Ready && (opt_track_data != nullptr)) {
+      if (peer->GetState() == Peer::State::ready && (opt_track_data != nullptr)) {
         ProcessTrack(id, opt_track_data, sample_time, sample, stream_type);
       }
     }

@@ -77,7 +77,7 @@ public:
     LOGI << "The local ID is: " << id_.data();
 
     auto ws_config = rtc::WebSocketConfiguration{
-        // .disableTlsVerification = true,  // TODO: check
+        .disableTlsVerification = true,  // TODO: check
         .caCertificatePemFile = zerosslCaBundle};
 
     if (ws_ != nullptr) {
@@ -132,6 +132,7 @@ public:
 
 protected:
   virtual Json GetPublishMessage() = 0;
+  virtual void OnPeerAdded(const std::string& peer_id, const std::shared_ptr<Peer>& peer) = 0;
   virtual void OnPeerReady(const std::shared_ptr<Peer>& peer) = 0;
   virtual void ProcessPeerMessage(Json message) = 0;
   virtual void ProcessSystemMessage(const std::string& type, Json message) = 0;
@@ -345,15 +346,15 @@ private:
   }
 
   void AddToStream(const std::shared_ptr<Peer>& peer, bool isAddingVideo) {
-    if (peer->GetState() == Peer::State::Waiting) {
-      peer->SetState(isAddingVideo ? Peer::State::WaitingForAudio : Peer::State::WaitingForVideo);
-    } else if ((peer->GetState() == Peer::State::WaitingForAudio && !isAddingVideo) || (peer->GetState() == Peer::State::WaitingForVideo && isAddingVideo)) {
+    if (peer->GetState() == Peer::State::waiting) {
+      peer->SetState(isAddingVideo ? Peer::State::waitingForAudio : Peer::State::waitingForVideo);
+    } else if ((peer->GetState() == Peer::State::waitingForAudio && !isAddingVideo) || (peer->GetState() == Peer::State::waitingForVideo && isAddingVideo)) {
       // Audio and video tracks are collected now
       assert(peer->video_ != nullptr && peer->audio_ != nullptr);
-      peer->SetState(Peer::State::Ready);
+      peer->SetState(Peer::State::ready);
     }
 
-    if (peer->GetState() == Peer::State::Ready) {
+    if (peer->GetState() == Peer::State::ready) {
       OnPeerReady(peer);
     }
   }
@@ -363,13 +364,6 @@ private:
     data_channel->onOpen([peer_id, wdc = make_weak_ptr(data_channel)]() {
       if (auto dc = wdc.lock()) {
         dc->send("Ping");
-
-// TODO it shouldn't be here for the sake of consumer
-//        const Json message = {
-//            {"type", "info profile"},
-//            {"profile", GetDeviceProfileAsJson()},
-//        };
-//        dc->send(message.dump());
       }
     });
 
