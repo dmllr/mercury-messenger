@@ -64,4 +64,6 @@
   <string name="state_peer_connection_disconnected">Disconnected</string>
   <string name="state_peer_connection_failed">Failed</string>
   <string name="state_peer_connection_closed">Closed</string>
+
+  <string name="rotate">Rotate</string>
 </resources>

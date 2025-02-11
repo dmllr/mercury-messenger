@@ -11,7 +11,7 @@ std::unique_ptr<hela::eillance::ObserverEngine> observer{};
 
 /// @brief JNI function to initialize the decoder with a SurfaceTexture from Kotlin.
 extern "C" JNIEXPORT void JNICALL
-Java_hela_eillance_ObserverActivity_initDecoder(  // NOLINT(*-identifier-naming)
+Java_hela_eillance_fragments_ObserverOperationFragment_initDecoder(  // NOLINT(*-identifier-naming)
     JNIEnv* env, jobject, jobject native_bridge, jobject surface) {
   namespace he = hela::eillance;
   observer = std::make_unique<he::ObserverEngine>(javaVm, env);
@@ -22,7 +22,7 @@ Java_hela_eillance_ObserverActivity_initDecoder(  // NOLINT(*-identifier-naming)
 
 /// @brief JNI function to release decoder resources.
 extern "C" JNIEXPORT void JNICALL
-Java_hela_eillance_ObserverActivity_releaseDecoder(  // NOLINT(*-identifier-naming)
+Java_hela_eillance_fragments_ObserverOperationFragment_releaseDecoder(  // NOLINT(*-identifier-naming)
     JNIEnv*, jobject) {
   observer->Stop();
 }
