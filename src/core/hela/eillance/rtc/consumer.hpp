@@ -19,21 +19,31 @@
 namespace hela::eillance {
 
 struct ClientInfo {
+  struct Camera {
+    struct Resolution {
+      std::uint16_t width;
+      std::uint16_t height;
+    };
+    std::string id;
+    std::string name;
+    std::vector<Resolution> resolutions;
+  };
   std::string id;
   std::string name;
-  nlohmann::json profile;
+  std::vector<Camera> profile;
 };
 
 class RtcConsumer final : public RtcTransport {
   using Json = nlohmann::json;
-  using OnClientListChangedCallback = std::function<void()>;
+  using ClientList = std::vector<ClientInfo>;
+  using OnClientListChangedCallback = std::function<void(const ClientList&)>;
   using OnFrameReceivedCallback = std::function<void(const rtc::binary&)>;
 
   /// @brief Audio and video stream
   std::shared_ptr<Stream> av_stream_;
 
   /// @brief Connected publishers
-  std::vector<ClientInfo> clients_;
+  ClientList clients_;
 
   /// @brief A callback to be called when a client list is updated
   std::shared_ptr<OnClientListChangedCallback> on_client_list_changed_{};
@@ -65,7 +75,7 @@ public:
     SendPeerMessage(request);
   }
 
-  [[maybe_unused]] void SetClientAddedCallback(const OnClientListChangedCallback& callback) {
+  [[maybe_unused]] void SetClientChangedCallback(const OnClientListChangedCallback& callback) {
     on_client_list_changed_ = std::make_shared<OnClientListChangedCallback>(callback);
   }
 
@@ -185,18 +195,32 @@ private:
       ClientInfo client;
       client.id = item.at("id").get<std::string>();
       client.name = item.at("name").get<std::string>();
-      client.profile = item.at("profile");
+      const auto& profile_json = item.at("profile");
+      for (const auto& cam_item : profile_json) {
+        ClientInfo::Camera camera;
+        camera.id = cam_item.at("id").get<std::string>();
+        camera.name = cam_item.at("name").get<std::string>();
+
+        const auto& resolutions_json = cam_item.at("resolutions");
+        for (const auto& res_item : resolutions_json) {
+          ClientInfo::Camera::Resolution res{};
+          res.width = res_item.at("width").get<std::uint16_t>();
+          res.height = res_item.at("height").get<std::uint16_t>();
+          camera.resolutions.push_back(res);
+        }
+        client.profile.push_back(camera);
+      }
       clients_.push_back(std::move(client));
     }
 
     if (on_client_list_changed_ != nullptr) {
-      (*on_client_list_changed_)();
+      (*on_client_list_changed_)(clients_);
     }
 
     // for debugging purposes
     LOGI << "Updated client list:";
     for (const auto& client: clients_) {
-      LOGI << "  - " << client.id.c_str() << " (" << client.name.c_str() << ") with " << client.profile.size() << " profile entries";
+      LOGI << "  - " << client.id.c_str() << " (" << client.name.c_str() << ") with " << client.profile.size() << " camera entries";
     }
   }
 

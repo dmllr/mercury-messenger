@@ -21,7 +21,7 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
   auto rtc = RtcConsumer();
   rtc.SetName("CLI::" + StringUtils::RandomString());
   rtc.Start();
-  rtc.SetClientAddedCallback([&rtc](){
+  rtc.SetClientChangedCallback([&rtc](const std::vector<ClientInfo>& /*clients*/){
     rtc.SendStreamRequest();
   });
   rtc.SetFrameReceivedCallback([&rtc, &frame_count, &all_frames_file](const rtc::binary& frame) {
