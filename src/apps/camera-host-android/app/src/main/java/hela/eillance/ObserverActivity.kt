@@ -1,18 +1,15 @@
 package hela.eillance
 
 import android.os.Bundle
-import android.view.Surface
-import android.view.SurfaceHolder
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
-import hela.eillance.camera.databinding.ActivityObserverBinding
 import androidx.core.view.WindowInsetsCompat
-import hela.eillance.ndkio.interfaces.IObserverNativeBridge
+import hela.eillance.camera.R
+import hela.eillance.camera.databinding.ActivityObserverBinding
+import hela.eillance.fragments.ObserverDevicesFragment
 
-class ObserverActivity : AppCompatActivity(),
-  SurfaceHolder.Callback,
-  IObserverNativeBridge
+class ObserverActivity : AppCompatActivity()
 {
   private lateinit var binding: ActivityObserverBinding
 
@@ -27,43 +24,8 @@ class ObserverActivity : AppCompatActivity(),
       insets
     }
 
-    binding.outputSurface.holder.addCallback(this)
-  }
-
-  override fun surfaceCreated(holder: SurfaceHolder) {
-    initDecoder(this, holder.surface)
-  }
-
-  override fun surfaceDestroyed(holder: SurfaceHolder) {
-    releaseDecoder()
-  }
-
-  override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
-  }
-
-  private external fun initDecoder(nativeBridge: IObserverNativeBridge, surface: Surface)
-  private external fun releaseDecoder()
-
-  companion object {
-    init {
-      System.loadLibrary("lib-observer-service-bridge")
-    }
-  }
-
-  override fun onStreamResolutionChange(width: Int, height: Int) {
-    if (width == 0 || height == 0) {
-      return
-    }
-
-    binding.outputSurface.post {
-      val surfaceWidth = binding.outputSurface.width
-      val newHeight = surfaceWidth * height / width
-
-      binding.outputSurface.layoutParams = binding.outputSurface.layoutParams.apply {
-        this.height = newHeight
-      }
-
-      binding.outputSurface.requestLayout() // Ensure UI updates
-    }
+    supportFragmentManager.beginTransaction()
+      .replace(R.id.content, ObserverDevicesFragment.instance())
+      .commit()
   }
 }

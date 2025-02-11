@@ -18,19 +18,19 @@ import androidx.recyclerview.widget.RecyclerView
 import hela.eillance.PerformerActivity
 import hela.eillance.Tune
 import hela.eillance.camera.R
-import hela.eillance.camera.databinding.FragmentOperationBinding
+import hela.eillance.camera.databinding.FragmentPerformerOperationBinding
 import hela.eillance.ndkio.EventSource
 import hela.eillance.ndkio.PeerStateLink
 import hela.eillance.ndkio.ServiceConnectionState
 import java.util.Vector
 
-class OperationFragment : Fragment() {
+class PerformerOperationFragment : Fragment() {
 
   companion object {
-    fun instance() = OperationFragment()
+    fun instance() = PerformerOperationFragment()
   }
 
-  private var _binding: FragmentOperationBinding? = null
+  private var _binding: FragmentPerformerOperationBinding? = null
   private val binding get() = _binding!!
   private val connectionsListAdapter = ConnectionsListAdapter()
 
@@ -87,7 +87,7 @@ class OperationFragment : Fragment() {
     inflater: LayoutInflater, container: ViewGroup?,
     savedInstanceState: Bundle?
   ): View {
-    _binding = FragmentOperationBinding.inflate(inflater, container, false)
+    _binding = FragmentPerformerOperationBinding.inflate(inflater, container, false)
 
     binding.lsConnectedClients.layoutManager = LinearLayoutManager(requireContext())
     binding.lsConnectedClients.adapter = connectionsListAdapter
@@ -155,7 +155,7 @@ class OperationFragment : Fragment() {
 
     override fun onCreateViewHolder(viewGroup: ViewGroup, viewType: Int): ViewHolder {
       val view = LayoutInflater.from(viewGroup.context)
-        .inflate(R.layout.fragment_operation_connections_item, viewGroup, false)
+        .inflate(R.layout.fragment_performer_operation_connections_item, viewGroup, false)
       return ViewHolder(view)
     }
 

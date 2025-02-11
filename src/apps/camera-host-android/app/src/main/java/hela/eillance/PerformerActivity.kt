@@ -22,7 +22,7 @@ import androidx.fragment.app.FragmentManager
 import hela.eillance.camera.R
 import hela.eillance.camera.databinding.ActivityPerformerBinding
 import hela.eillance.fragments.CapturePreferencesFragment
-import hela.eillance.fragments.OperationFragment
+import hela.eillance.fragments.PerformerOperationFragment
 
 
 class PerformerActivity : AppCompatActivity(), ServiceConnection,
@@ -132,7 +132,7 @@ class PerformerActivity : AppCompatActivity(), ServiceConnection,
 
   private fun pushFragment() {
     supportFragmentManager.beginTransaction()
-      .replace(R.id.content, OperationFragment.instance())
+      .replace(R.id.content, PerformerOperationFragment.instance())
       .commit()
   }
 
