@@ -64,13 +64,9 @@ public:
   void OnPeerReady(const std::shared_ptr<Peer>& /*peer*/) final {
   }
 
-  void SendStreamRequest() {
-    if (clients_.empty()) {
-      return;
-    }
-    auto selected_client_id = clients_.begin()->id;
+  void SendStreamRequest(const std::string& client_id) {
     Json request = {
-        {"to", selected_client_id},
+        {"to", client_id},
         {"type", "streamRequest"}};
     SendPeerMessage(request);
   }

@@ -12,13 +12,14 @@ import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import hela.eillance.ObserverActivity
 import hela.eillance.camera.R
 import hela.eillance.camera.databinding.FragmentObserverDevicesBinding
 import hela.eillance.ndkio.ClientInfo
 import java.util.Vector
 
 interface DevicesListAdapterEventListener {
-  fun onItemClicked(id: String)
+  fun onItemClicked(device: ClientInfo)
 }
 
 class ObserverDevicesFragment : Fragment(), DevicesListAdapterEventListener {
@@ -95,7 +96,7 @@ class ObserverDevicesFragment : Fragment(), DevicesListAdapterEventListener {
       val device = dataSet[position]
       viewHolder.deviceName.text = device.name
       viewHolder.card.setOnClickListener {
-        listener.onItemClicked(device.id)
+        listener.onItemClicked(device)
       }
     }
 
@@ -104,11 +105,9 @@ class ObserverDevicesFragment : Fragment(), DevicesListAdapterEventListener {
     }
   }
 
-  override fun onItemClicked(id: String) {
-    val fragment = ObserverOperationFragment.new()
-    activity?.supportFragmentManager?.beginTransaction()
-      ?.add(R.id.content, fragment, "ObserverOperationFragment")
-      ?.commit()
+  override fun onItemClicked(device: ClientInfo) {
+    (activity as ObserverActivity)
+      .putFragment(ObserverOperationFragment(device))
   }
 
 }

@@ -2,10 +2,13 @@ package hela.eillance
 
 import android.os.Bundle
 import android.view.Surface
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.fragment.app.Fragment
+import androidx.fragment.app.FragmentManager
 import hela.eillance.camera.R
 import hela.eillance.camera.databinding.ActivityObserverBinding
 import hela.eillance.fragments.ObserverDevicesFragment
@@ -26,19 +29,72 @@ class ObserverActivity : AppCompatActivity(), IObserverNativeBridge {
       v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
       insets
     }
+    setSupportActionBar(binding.toolbar)
 
     initEngine(this)
 
     supportFragmentManager.beginTransaction()
       .replace(R.id.content, ObserverDevicesFragment.instance)
       .commit()
+
+    supportFragmentManager.addOnBackStackChangedListener {
+      if (supportFragmentManager.backStackEntryCount > 0) { // show back button
+        supportActionBar!!.setDisplayHomeAsUpEnabled(true)
+        binding.toolbar.setNavigationOnClickListener {
+          onBackPressedDispatcher.onBackPressed()
+        }
+      } else { //show hamburger
+        supportActionBar!!.setDisplayHomeAsUpEnabled(false)
+      }
+    }
+
+    onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+      override fun handleOnBackPressed() {
+        if (!popFragment()) {
+          if (!isEnabled) {
+            isEnabled = true
+          }
+          finish()
+        }
+      }
+    })
+  }
+
+  fun putFragment(fragment: Fragment) {
+    supportFragmentManager.beginTransaction()
+      .add(R.id.content, fragment)
+      .addToBackStack(BACKSTACK)
+      .commit()
+
+    triggerUIUpdatesOnFragmentNavigation(supportFragmentManager, +1)
+  }
+
+  private fun popFragment(): Boolean {
+    val c = supportFragmentManager.backStackEntryCount
+    if (c == 0)
+      return false
+
+    supportFragmentManager.popBackStack()
+
+    triggerUIUpdatesOnFragmentNavigation(supportFragmentManager, -1)
+
+    return true
+  }
+
+  private fun triggerUIUpdatesOnFragmentNavigation(fm: FragmentManager, direction: Int) {
+    val c = fm.backStackEntryCount + direction
+    val actionBar = supportActionBar!!
+    actionBar.setDisplayHomeAsUpEnabled(c > 0)
+    actionBar.setDisplayShowHomeEnabled(c > 0)
   }
 
   private external fun initEngine(nativeBridge: IObserverNativeBridge)
   external fun initDecoder(surface: Surface)
   external fun releaseDecoder()
+  external fun sendStreamRequest(clientId: String)
 
   companion object {
+    const val BACKSTACK = "fragments_backstack"
     init {
       System.loadLibrary("lib-observer-service-bridge")
     }
