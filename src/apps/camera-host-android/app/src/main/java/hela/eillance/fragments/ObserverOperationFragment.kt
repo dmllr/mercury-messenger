@@ -42,8 +42,25 @@ class ObserverOperationFragment : Fragment(), SurfaceHolder.Callback {
   override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
   }
 
+  fun onStreamResolutionChange(width: Int, height: Int) {
+    if (width == 0 || height == 0) {
+      return
+    }
+
+    binding.outputSurface.post {
+      val surfaceWidth = binding.outputSurface.width
+      val newHeight = surfaceWidth * height / width
+
+      binding.outputSurface.layoutParams = binding.outputSurface.layoutParams.apply {
+        this.height = newHeight
+      }
+
+      binding.outputSurface.requestLayout() // Ensure UI updates
+    }
+  }
+
   companion object {
-    fun instance() = ObserverOperationFragment()
+    val instance = ObserverOperationFragment()
   }
 
 }

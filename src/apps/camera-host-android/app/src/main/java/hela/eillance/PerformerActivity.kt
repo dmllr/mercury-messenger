@@ -94,7 +94,7 @@ class PerformerActivity : AppCompatActivity(), ServiceConnection,
             } else {
               // Otherwise, add the fragment and assign it a unique tag
               fragmentManager.beginTransaction()
-                .replace(R.id.content, CapturePreferencesFragment.instance(), fragmentTag)
+                .replace(R.id.content, CapturePreferencesFragment.new(), fragmentTag)
                 .addToBackStack(fragmentTag)
                 .commit()
             }
@@ -132,7 +132,7 @@ class PerformerActivity : AppCompatActivity(), ServiceConnection,
 
   private fun pushFragment() {
     supportFragmentManager.beginTransaction()
-      .replace(R.id.content, PerformerOperationFragment.instance())
+      .replace(R.id.content, PerformerOperationFragment.instance)
       .commit()
   }
 
