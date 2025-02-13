@@ -25,6 +25,7 @@ extern "C" JNIEXPORT void JNICALL
 Java_hela_eillance_ObserverActivity_initDecoder(  // NOLINT(*-identifier-naming)
     JNIEnv* env, jobject, jobject surface) {
   observer->SetTargetSurface(env, surface);
+  observer->SendStreamRequest();
 }
 
 /// @brief JNI function to release decoder resources.

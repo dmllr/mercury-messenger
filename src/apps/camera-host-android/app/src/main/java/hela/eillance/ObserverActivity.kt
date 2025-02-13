@@ -45,7 +45,8 @@ class ObserverActivity : AppCompatActivity(), IObserverNativeBridge {
   }
 
   override fun onStreamResolutionChange(width: Int, height: Int) {
-    ObserverOperationFragment.instance.onStreamResolutionChange(width, height)
+    val fragment = supportFragmentManager.findFragmentByTag("ObserverOperationFragment")
+    (fragment as ObserverOperationFragment?)?.onStreamResolutionChange(width, height)
   }
 
   override fun onClientListUpdate(clients: List<ClientInfo>) {
