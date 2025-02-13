@@ -27,7 +27,7 @@ import java.util.Vector
 class PerformerOperationFragment : Fragment() {
 
   companion object {
-    fun instance() = PerformerOperationFragment()
+    val instance = PerformerOperationFragment()
   }
 
   private var _binding: FragmentPerformerOperationBinding? = null

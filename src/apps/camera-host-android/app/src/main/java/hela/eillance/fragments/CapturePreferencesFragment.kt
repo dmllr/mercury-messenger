@@ -21,7 +21,7 @@ class CapturePreferencesFragment : PreferenceFragmentCompat() {
   private var videoConfig: VideoConfig = VideoConfig()
 
   companion object {
-    fun instance() = CapturePreferencesFragment()
+    fun new() = CapturePreferencesFragment()
   }
 
   override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {

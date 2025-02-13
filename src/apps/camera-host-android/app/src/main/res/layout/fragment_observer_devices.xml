@@ -7,5 +7,10 @@
     android:layout_height="match_parent"
     tools:context="hela.eillance.ObserverActivity">
 
+  <androidx.recyclerview.widget.RecyclerView
+      android:id="@+id/list_devices"
+      android:layout_width="match_parent"
+      android:layout_height="match_parent"
+      tools:listitem="@layout/fragment_observer_devices_item" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
