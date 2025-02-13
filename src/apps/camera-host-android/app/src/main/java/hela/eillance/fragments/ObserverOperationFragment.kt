@@ -8,8 +8,9 @@ import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import hela.eillance.ObserverActivity
 import hela.eillance.camera.databinding.FragmentObserverOperationBinding
+import hela.eillance.ndkio.ClientInfo
 
-class ObserverOperationFragment : Fragment(), SurfaceHolder.Callback {
+class ObserverOperationFragment(val client: ClientInfo) : Fragment(), SurfaceHolder.Callback {
 
   private var _binding: FragmentObserverOperationBinding? = null
   private val binding get() = _binding!!
@@ -30,16 +31,23 @@ class ObserverOperationFragment : Fragment(), SurfaceHolder.Callback {
   }
 
   override fun surfaceCreated(holder: SurfaceHolder) {
-    val a = activity as ObserverActivity
-    a.initDecoder(holder.surface)
+    (activity as ObserverActivity).initDecoder(holder.surface)
   }
 
   override fun surfaceDestroyed(holder: SurfaceHolder) {
-    val a = activity as ObserverActivity
-    a.releaseDecoder()
+    (activity as ObserverActivity).releaseDecoder()
   }
 
   override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+  }
+
+  override fun onStart() {
+    super.onStart()
+    sendStreamRequest()
+  }
+
+  private fun sendStreamRequest() {
+    (activity as ObserverActivity).sendStreamRequest(client.id)
   }
 
   fun onStreamResolutionChange(width: Int, height: Int) {
@@ -57,10 +65,6 @@ class ObserverOperationFragment : Fragment(), SurfaceHolder.Callback {
 
       binding.outputSurface.requestLayout() // Ensure UI updates
     }
-  }
-
-  companion object {
-    fun new() = ObserverOperationFragment()
   }
 
 }

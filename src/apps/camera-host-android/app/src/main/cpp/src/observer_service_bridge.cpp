@@ -1,3 +1,6 @@
+#include <jni.h>
+#include <string>
+
 #include "class_refs.hpp"
 #include "observer_engine.hpp"
 
@@ -25,7 +28,6 @@ extern "C" JNIEXPORT void JNICALL
 Java_hela_eillance_ObserverActivity_initDecoder(  // NOLINT(*-identifier-naming)
     JNIEnv* env, jobject, jobject surface) {
   observer->SetTargetSurface(env, surface);
-  observer->SendStreamRequest();
 }
 
 /// @brief JNI function to release decoder resources.
@@ -33,6 +35,21 @@ extern "C" JNIEXPORT void JNICALL
 Java_hela_eillance_ObserverActivity_releaseDecoder(  // NOLINT(*-identifier-naming)
     JNIEnv*, jobject) {
   observer->Stop();
+}
+
+/// @brief JNI function to initiate a stream request.
+extern "C" JNIEXPORT void JNICALL
+Java_hela_eillance_ObserverActivity_sendStreamRequest(  // NOLINT(*-identifier-naming)
+    JNIEnv* env, jobject, jstring client_id) {
+  if (client_id == nullptr) {
+    return;
+  }
+
+  const char* chars = env->GetStringUTFChars(client_id, nullptr);
+  const std::string client_id_str(chars);
+  env->ReleaseStringUTFChars(client_id, chars);
+
+  observer->SendStreamRequest(client_id_str);
 }
 
 jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {

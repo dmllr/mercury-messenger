@@ -101,8 +101,8 @@ public:
     LOGI << "Decoder resources released.";
   }
 
-  void SendStreamRequest() {
-    consumer_.SendStreamRequest();
+  void SendStreamRequest(const std::string& client_id) {
+    consumer_.SendStreamRequest(client_id);
   }
 
 private:
