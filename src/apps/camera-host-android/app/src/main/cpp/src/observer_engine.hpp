@@ -75,7 +75,6 @@ public:
     consumer_.SetName("CLI::" + std::string(StringUtils::RandomString()));
     consumer_.Start();
     consumer_.SetClientChangedCallback([this](const std::vector<ClientInfo>& clients) {
-//      consumer_.SendStreamRequest();
       UpdateClientList(clients);
     });
     consumer_.SetFrameReceivedCallback([this](const rtc::binary& frame) {
@@ -100,6 +99,10 @@ public:
     }
     codecConfigured_ = false;
     LOGI << "Decoder resources released.";
+  }
+
+  void SendStreamRequest() {
+    consumer_.SendStreamRequest();
   }
 
 private:

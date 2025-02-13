@@ -7,6 +7,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import androidx.cardview.widget.CardView
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -16,7 +17,11 @@ import hela.eillance.camera.databinding.FragmentObserverDevicesBinding
 import hela.eillance.ndkio.ClientInfo
 import java.util.Vector
 
-class ObserverDevicesFragment : Fragment() {
+interface DevicesListAdapterEventListener {
+  fun onItemClicked(id: String)
+}
+
+class ObserverDevicesFragment : Fragment(), DevicesListAdapterEventListener {
 
   companion object {
     val instance = ObserverDevicesFragment()
@@ -24,7 +29,7 @@ class ObserverDevicesFragment : Fragment() {
 
   private var _binding: FragmentObserverDevicesBinding? = null
   private val binding get() = _binding!!
-  private val devicesListAdapter = DevicesListAdapter()
+  private val devicesListAdapter = DevicesListAdapter(this)
 
   override fun onCreateView(
     inflater: LayoutInflater, container: ViewGroup?,
@@ -46,7 +51,7 @@ class ObserverDevicesFragment : Fragment() {
     devicesListAdapter.update(clients)
   }
 
-  class DevicesListAdapter :
+  class DevicesListAdapter(val listener: DevicesListAdapterEventListener) :
     RecyclerView.Adapter<DevicesListAdapter.ViewHolder>() {
 
     private val dataSet: Vector<ClientInfo> = Vector()
@@ -76,6 +81,7 @@ class ObserverDevicesFragment : Fragment() {
     }
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+      val card: CardView = view.findViewById(R.id.card_device)
       val deviceName: TextView = view.findViewById(R.id.text_device_name)
     }
 
@@ -88,11 +94,21 @@ class ObserverDevicesFragment : Fragment() {
     override fun onBindViewHolder(viewHolder: ViewHolder, position: Int) {
       val device = dataSet[position]
       viewHolder.deviceName.text = device.name
+      viewHolder.card.setOnClickListener {
+        listener.onItemClicked(device.id)
+      }
     }
 
     override fun getItemCount(): Int {
       return dataSet.size
     }
+  }
+
+  override fun onItemClicked(id: String) {
+    val fragment = ObserverOperationFragment.new()
+    activity?.supportFragmentManager?.beginTransaction()
+      ?.add(R.id.content, fragment, "ObserverOperationFragment")
+      ?.commit()
   }
 
 }

@@ -60,7 +60,7 @@ class ObserverOperationFragment : Fragment(), SurfaceHolder.Callback {
   }
 
   companion object {
-    val instance = ObserverOperationFragment()
+    fun new() = ObserverOperationFragment()
   }
 
 }
