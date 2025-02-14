@@ -28,15 +28,17 @@ struct ClientInfo {
     std::string name;
     std::vector<Resolution> resolutions;
   };
+  using Profile = std::vector<Camera>;
   std::string id;
   std::string name;
-  std::vector<Camera> profile;
+  Profile profile;
 };
 
 class RtcConsumer final : public RtcTransport {
   using Json = nlohmann::json;
   using ClientList = std::vector<ClientInfo>;
   using OnClientListChangedCallback = std::function<void(const ClientList&)>;
+  using OnProfileReceivedCallback = std::function<void(const std::string&, const ClientInfo::Profile&)>;
   using OnFrameReceivedCallback = std::function<void(const rtc::binary&)>;
 
   /// @brief Audio and video stream
@@ -47,6 +49,8 @@ class RtcConsumer final : public RtcTransport {
 
   /// @brief A callback to be called when a client list is updated
   std::shared_ptr<OnClientListChangedCallback> on_client_list_changed_{};
+  /// @brief A callback to be called when a profile info is received
+  std::shared_ptr<OnProfileReceivedCallback> on_profile_received_{};
   /// @brief A callback to be called when a new frame is received
   std::shared_ptr<OnFrameReceivedCallback> on_frame_received_{};
 
@@ -70,6 +74,10 @@ public:
 
   [[maybe_unused]] void SetClientChangedCallback(const OnClientListChangedCallback& callback) {
     on_client_list_changed_ = std::make_shared<OnClientListChangedCallback>(callback);
+  }
+
+  [[maybe_unused]] void SetProfileReceivedCallback(const OnProfileReceivedCallback& callback) {
+    on_profile_received_ = std::make_shared<OnProfileReceivedCallback>(callback);
   }
 
   [[maybe_unused]] void SetFrameReceivedCallback (const OnFrameReceivedCallback & callback) {
@@ -97,7 +105,10 @@ private:
         AddPeer(peer_id, peer);
       });
     } else if (type == "info profile") {
-      // TODO
+      if (on_profile_received_ != nullptr) {
+        auto&& profile = ParseDeviceProfile(message.at("profile"));
+        (*on_profile_received_)(peer_id, profile);
+      }
     } else {
       throw std::runtime_error("Unknown message type " + type);
     }
@@ -185,24 +196,11 @@ private:
 
     // Parse new clients
     for (const auto& item: json) {
-      ClientInfo client;
-      client.id = item.at("id").get<std::string>();
-      client.name = item.at("name").get<std::string>();
-      const auto& profile_json = item.at("profile");
-      for (const auto& cam_item : profile_json) {
-        ClientInfo::Camera camera;
-        camera.id = cam_item.at("id").get<std::string>();
-        camera.name = cam_item.at("name").get<std::string>();
-
-        const auto& resolutions_json = cam_item.at("resolutions");
-        for (const auto& res_item : resolutions_json) {
-          ClientInfo::Camera::Resolution res{};
-          res.width = res_item.at("width").get<std::uint16_t>();
-          res.height = res_item.at("height").get<std::uint16_t>();
-          camera.resolutions.push_back(res);
-        }
-        client.profile.push_back(camera);
-      }
+      ClientInfo client {
+        .id = item.at("id").get<std::string>(),
+        .name = item.at("name").get<std::string>(),
+        .profile = ParseDeviceProfile(item.at("profile"))
+      };
       clients_.push_back(std::move(client));
     }
 
@@ -215,6 +213,25 @@ private:
     for (const auto& client: clients_) {
       LOGI << "  - " << client.id.c_str() << " (" << client.name.c_str() << ") with " << client.profile.size() << " camera entries";
     }
+  }
+
+  static auto ParseDeviceProfile(Json jprofile) -> std::vector<ClientInfo::Camera> {
+    auto profile = std::vector<ClientInfo::Camera>{};
+    for (const auto& cam_item : jprofile) {
+      ClientInfo::Camera camera;
+      camera.id = cam_item.at("id").get<std::string>();
+      camera.name = cam_item.at("name").get<std::string>();
+
+      const auto& resolutions_json = cam_item.at("resolutions");
+      for (const auto& res_item : resolutions_json) {
+        ClientInfo::Camera::Resolution res{};
+        res.width = res_item.at("width").get<std::uint16_t>();
+        res.height = res_item.at("height").get<std::uint16_t>();
+        camera.resolutions.push_back(res);
+      }
+      profile.push_back(camera);
+    }
+    return profile;
   }
 
 };

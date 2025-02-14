@@ -14,6 +14,7 @@ import hela.eillance.camera.databinding.ActivityObserverBinding
 import hela.eillance.fragments.ObserverDevicesFragment
 import hela.eillance.fragments.ObserverOperationFragment
 import hela.eillance.ndkio.ClientInfo
+import hela.eillance.ndkio.Profile
 import hela.eillance.ndkio.interfaces.IObserverNativeBridge
 
 class ObserverActivity : AppCompatActivity(), IObserverNativeBridge {
@@ -102,10 +103,19 @@ class ObserverActivity : AppCompatActivity(), IObserverNativeBridge {
 
   override fun onStreamResolutionChange(width: Int, height: Int) {
     val fragment = supportFragmentManager.findFragmentByTag("ObserverOperationFragment")
-    (fragment as ObserverOperationFragment?)?.onStreamResolutionChange(width, height)
+        as ObserverOperationFragment?
+    fragment?.onStreamResolutionChange(width, height)
+  }
+
+  override fun onDeviceProfileReceived(peerId: String, profile: Profile) {
+    val fragment = supportFragmentManager.findFragmentByTag("ObserverOperationFragment")
+        as ObserverOperationFragment?
+    assert(peerId == (fragment?.device?.id ?: ""))
+    fragment?.onDeviceProfileReceived(profile)
   }
 
   override fun onClientListUpdate(clients: List<ClientInfo>) {
     ObserverDevicesFragment.instance.updateClientList(clients)
   }
+
 }

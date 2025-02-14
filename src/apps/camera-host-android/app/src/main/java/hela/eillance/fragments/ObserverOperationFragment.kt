@@ -13,9 +13,10 @@ import hela.eillance.camera.R
 import hela.eillance.camera.databinding.FragmentObserverOperationBinding
 import hela.eillance.ndkio.Camera
 import hela.eillance.ndkio.ClientInfo
+import hela.eillance.ndkio.Profile
 import hela.eillance.ndkio.Resolution
 
-class ObserverOperationFragment(private val device: ClientInfo)
+class ObserverOperationFragment(val device: ClientInfo)
   : Fragment(),
   SurfaceHolder.Callback
 {
@@ -106,6 +107,10 @@ class ObserverOperationFragment(private val device: ClientInfo)
 
       binding.outputSurface.requestLayout() // Ensure UI updates
     }
+  }
+
+  fun onDeviceProfileReceived(profile: Profile) {
+    TODO("Not yet implemented")
   }
 
 }
