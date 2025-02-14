@@ -16,7 +16,7 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
     std::cin >> key;
     std::cin.ignore();
 
-    rtc.Stop();
+    rtc.Terminate();
   }
 
   return 0;

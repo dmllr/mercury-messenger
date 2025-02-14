@@ -21,12 +21,13 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
   auto rtc = RtcConsumer();
   rtc.SetName("CLI::" + StringUtils::RandomString());
   rtc.Start();
-  rtc.SetClientChangedCallback([&rtc](const std::vector<ClientInfo>& /*clients*/){
-    rtc.SendStreamRequest();
+  rtc.SetClientChangedCallback([&rtc](const std::vector<ClientInfo>& clients){
+    auto& client = clients.front();
+    rtc.SendStreamRequest(client.id);
   });
   rtc.SetFrameReceivedCallback([&rtc, &frame_count, &all_frames_file](const rtc::binary& frame) {
     if (frame_count >= 100) {
-      rtc.Stop();
+      rtc.Terminate();
       std::this_thread::sleep_for(std::chrono::seconds(1));
       Terminate();
       return;
@@ -56,7 +57,7 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
     std::cin >> key;
     std::cin.ignore();
 
-    rtc.Stop();
+    rtc.Terminate();
   }
 
   return 0;
