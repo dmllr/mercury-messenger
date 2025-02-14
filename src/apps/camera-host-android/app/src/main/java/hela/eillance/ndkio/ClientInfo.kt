@@ -1,5 +1,9 @@
 package hela.eillance.ndkio
 
+typealias Devices = List<ClientInfo>
+typealias Profile = List<Camera>
+typealias Resolutions = List<Resolution>
+
 data class Resolution(
   val width: Int,
   val height: Int
@@ -8,11 +12,11 @@ data class Resolution(
 data class Camera(
   val id: String,
   val name: String,
-  val resolutions: List<Resolution>
+  val resolutions: Resolutions
 )
 
 data class ClientInfo(
   val id: String,
   val name: String,
-  val profile: List<Camera>
+  val profile: Profile
 )
