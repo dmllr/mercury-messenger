@@ -104,11 +104,6 @@ private:
       DispatchQueue::MainThread().Dispatch([this, peer_id, peer]() {
         AddPeer(peer_id, peer);
       });
-    } else if (type == "info profile") {
-      if (on_profile_received_ != nullptr) {
-        auto&& profile = ParseDeviceProfile(message.at("profile"));
-        (*on_profile_received_)(peer_id, profile);
-      }
     } else {
       throw std::runtime_error("Unknown message type " + type);
     }
@@ -120,6 +115,21 @@ private:
     } else {
       throw std::runtime_error("Unknown message type in Consumer's ProcessSystemMessage: " + type);
     }
+  }
+
+  void ProcessDataChannelMessage(const std::string& peer_id, Json message) final {
+    const auto itr = message.find("type");
+    if (itr == message.end()) {
+      return;
+    }
+    auto type = itr->get<std::string>();
+    if (type == "info profile") {
+      if (on_profile_received_ != nullptr) {
+        auto&& profile = ParseDeviceProfile(message.at("profile"));
+        (*on_profile_received_)(peer_id, profile);
+      }
+    }
+
   }
 
   auto AddVideo(
@@ -180,9 +190,6 @@ private:
     return Json{
         {"kind", "consumer"},
     };
-  }
-
-  void Configure(Config config) final {
   }
 
   void UpdateClientList(const nlohmann::json& json) {

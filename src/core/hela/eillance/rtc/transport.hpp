@@ -139,13 +139,13 @@ protected:
   virtual void OnPeerReady(const std::shared_ptr<Peer>& peer) = 0;
   virtual void ProcessPeerMessage(Json message) = 0;
   virtual void ProcessSystemMessage(const std::string& type, Json message) = 0;
+  virtual void ProcessDataChannelMessage(const std::string& peer_id, Json message) = 0;
   virtual auto AddVideo(
       const std::shared_ptr<rtc::PeerConnection>& pc,
       const std::function<void(void)>& onOpen) -> std::shared_ptr<Peer::Track> = 0;
   virtual auto AddAudio(
       const std::shared_ptr<rtc::PeerConnection>& pc,
       const std::function<void(void)>& onOpen) -> std::shared_ptr<Peer::Track> = 0;
-  virtual void Configure(Config config) = 0;
 
   void AddPeer(const std::string id, const std::shared_ptr<Peer>& peer) {
     peers_.emplace(id, peer);
@@ -388,21 +388,7 @@ private:
         return;
       }
 
-      const auto message = Json::parse(msg);
-      const auto itr = message.find("type");
-      if (itr == message.end()) {
-        return;
-      }
-      auto type = itr->get<std::string>();
-      if (type == "configuration") {
-        auto config{Config()};
-        auto& video_config = config.video_config;
-        video_config.cameraId = std::stoi(message["camera_id"].get<std::string>());
-        video_config.width = message["resolution"]["width"].get<std::uint32_t>();
-        video_config.height = message["resolution"]["height"].get<std::uint32_t>();
-
-        Configure(config);
-      }
+      ProcessDataChannelMessage(peer_id, Json::parse(msg));
     });
 
     return data_channel;
