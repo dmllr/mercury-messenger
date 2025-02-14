@@ -88,8 +88,6 @@ public:
       }
     } else if (type == "offer") {
       // do nothing
-    } else if (type == "info profile") {
-      // do nothing
     } else {
       throw std::runtime_error("Unknown message type " + type);
     }
@@ -97,6 +95,23 @@ public:
 
   void ProcessSystemMessage(const std::string& type, Json message) final {
     throw std::runtime_error("Unknown message type in Producer's ProcessSystemMessage: " + type);
+  }
+
+  void ProcessDataChannelMessage(const std::string& peer_id, Json message) final {
+    const auto itr = message.find("type");
+    if (itr == message.end()) {
+      return;
+    }
+    auto type = itr->get<std::string>();
+    if (type == "configuration") {
+      auto config{Config()};
+      auto& video_config = config.video_config;
+      video_config.cameraId = std::stoi(message["camera_id"].get<std::string>());
+      video_config.width = message["resolution"]["width"].get<std::uint32_t>();
+      video_config.height = message["resolution"]["height"].get<std::uint32_t>();
+
+      Configure(config);
+    }
   }
 
   auto AddVideo(
@@ -162,7 +177,7 @@ public:
     };
   }
 
-  void Configure(Config config) final {
+  void Configure(Config config) {
     av_stream_->Video()->Configure(config);
   }
 
