@@ -65,5 +65,7 @@
   <string name="state_peer_connection_failed">Failed</string>
   <string name="state_peer_connection_closed">Closed</string>
 
-  <string name="rotate">Rotate</string>
+  <string name="fr_observer_operation_change_video_orientation">Rotate</string>
+  <string name="fr_observer_operation_default_camera">Default camera</string>
+  <string name="fr_observer_operation_default_resolution">Default resolution</string>
 </resources>
