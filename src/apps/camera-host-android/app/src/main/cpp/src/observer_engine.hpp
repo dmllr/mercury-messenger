@@ -47,7 +47,7 @@ public:
   auto& operator=(const ObserverEngine&) = delete;
 
   ~ObserverEngine() {
-    Stop();
+    Terminate();
 
     JNIEnv* env = AttachCurrentThreadIfNeeded();
     if (env == nullptr) {
@@ -71,8 +71,7 @@ public:
   }
 
   void Start() {
-    InitH264Parser();
-    consumer_.SetName("CLI::" + std::string(StringUtils::RandomString()));
+    consumer_.SetName(std::string(StringUtils::RandomString()));
     consumer_.Start();
     consumer_.SetClientChangedCallback([this](const std::vector<ClientInfo>& clients) {
       UpdateClientList(clients);
@@ -85,9 +84,9 @@ public:
     LOGI << "Observer engine is initialized and ready.";
   }
 
-  void Stop() {
+  void StopStreaming() {
     EventQueue::Instance().Unsubscribe<VideoConfig>(configure_subscriber_id_);
-    consumer_.Stop();
+    consumer_.StopStreaming();
     if (mediaCodec_ != nullptr) {
       AMediaCodec_stop(mediaCodec_);
       AMediaCodec_delete(mediaCodec_);
@@ -101,7 +100,13 @@ public:
     LOGI << "Decoder resources released.";
   }
 
+  void Terminate() {
+    StopStreaming();
+    consumer_.Terminate();
+  }
+
   void SendStreamRequest(const std::string& client_id) {
+    InitH264Parser();
     consumer_.SendStreamRequest(client_id);
   }
 
@@ -142,7 +147,7 @@ private:
     AMediaFormat_setString(format, AMEDIAFORMAT_KEY_MIME, "video/avc");
     AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_WIDTH, static_cast<std::int32_t>(conf.width));
     AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_HEIGHT, static_cast<std::int32_t>(conf.height));
-    AMediaFormat_setInt32(format,AMEDIAFORMAT_KEY_COLOR_FORMAT, color_format);  // COLOR_FormatSurface
+    AMediaFormat_setInt32(format,AMEDIAFORMAT_KEY_COLOR_FORMAT, color_format);
 
     mediaCodec_ = AMediaCodec_createDecoderByType("video/avc");
     if (mediaCodec_ == nullptr) {
@@ -166,26 +171,23 @@ private:
 
   /// @brief Handles output buffers and renders frames to nativeWindow_.
   void HandleOutputBuffer() {
-    if (!codecConfigured_ || mediaCodec_ == nullptr) {
-      return;
-    }
-
     AMediaCodecBufferInfo info;
     while (true) {
+      if (!codecConfigured_ || mediaCodec_ == nullptr) {
+        return;
+      }
+
       const auto output_buffer_index = AMediaCodec_dequeueOutputBuffer(mediaCodec_, &info, 0);
 
       if (output_buffer_index >= 0) {
         // Render the buffer to nativeWindow_
         AMediaCodec_releaseOutputBuffer(mediaCodec_, output_buffer_index, true);
-
       } else if (output_buffer_index == AMEDIACODEC_INFO_OUTPUT_BUFFERS_CHANGED) {
         LOGI << "Output buffers changed.";
-
       } else if (output_buffer_index == AMEDIACODEC_INFO_OUTPUT_FORMAT_CHANGED) {
         AMediaFormat* newFormat = AMediaCodec_getOutputFormat(mediaCodec_);
         LOGI << "Output format changed: " << AMediaFormat_toString(newFormat);
         AMediaFormat_delete(newFormat);
-
       } else if (output_buffer_index == AMEDIACODEC_INFO_TRY_AGAIN_LATER) {
         // No available output buffer, exit the loop
         break;
@@ -225,6 +227,7 @@ private:
 
   /// @brief Initializes the H.264 parser and sets up callbacks.
   void InitH264Parser() {
+    h264Parser_.Reset();
     h264Parser_.SetOnConfigureCallback([this](const VideoConfig conf) {
       LOGI << "Configuration change callback triggered, configuring codec...";
       ConfigureCodec(conf);

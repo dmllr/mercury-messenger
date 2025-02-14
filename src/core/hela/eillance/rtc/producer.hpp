@@ -51,7 +51,7 @@ public:
   RtcProducer& operator=(const RtcProducer&) = delete;
   ~RtcProducer() final = default;
 
-  void OnPeerAdded(const std::string& /*peer_id*/, const std::shared_ptr<Peer>& peer) final {
+  void OnPeerDataChannelConnected(const std::shared_ptr<Peer>& peer) final {
     const Json message = {
         {"type", "info profile"},
         {"profile", GetDeviceProfileAsJson()},
@@ -76,7 +76,7 @@ public:
     auto type = it->get<std::string>();
 
     if (type == "streamRequest") {
-      std::shared_ptr<Peer> const peer = CreatePeerConnection(peer_id);
+      const auto peer = CreatePeerConnection(peer_id);
       DispatchQueue::MainThread().Dispatch([this, peer_id, peer]() {
         AddPeer(peer_id, peer);
       });

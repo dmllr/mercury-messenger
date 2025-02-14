@@ -123,19 +123,23 @@ public:
     }
   }
 
-  void Stop() {
+  void StopStreaming() {
     is_offline_ = true;
     for (auto& [peer_id, peer] : peers_) {
       peer->data_channel_->close();
       peer->peer_connection_->close();
     }
-    ws_->close();
     ReportServiceConnectionState(ServiceConnectionState::disconnected);
+  }
+
+  void Terminate() {
+    StopStreaming();
+    ws_->close();
   }
 
 protected:
   virtual Json GetPublishMessage() = 0;
-  virtual void OnPeerAdded(const std::string& peer_id, const std::shared_ptr<Peer>& peer) = 0;
+  virtual void OnPeerDataChannelConnected(const std::shared_ptr<Peer>& peer) = 0;
   virtual void OnPeerReady(const std::shared_ptr<Peer>& peer) = 0;
   virtual void ProcessPeerMessage(Json message) = 0;
   virtual void ProcessSystemMessage(const std::string& type, Json message) = 0;
@@ -364,10 +368,11 @@ private:
 
   auto CreateDefaultDataChannel(std::shared_ptr<rtc::PeerConnection> pc, const std::string& peer_id) -> std::shared_ptr<rtc::DataChannel> {
     auto data_channel = pc->createDataChannel("command-channel");
-    data_channel->onOpen([peer_id, wdc = make_weak_ptr(data_channel)]() {
+    data_channel->onOpen([this, peer_id, wdc = make_weak_ptr(data_channel)]() {
       if (auto dc = wdc.lock()) {
         dc->send("Ping");
       }
+      OnPeerDataChannelConnected(GetPeer(peer_id));
     });
 
     data_channel->onMessage(nullptr, [peer_id, wdc = make_weak_ptr(data_channel), this](const std::string& msg) {

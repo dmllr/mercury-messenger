@@ -76,7 +76,7 @@ public:
 
   void Stop() {
     DispatchQueue::MainThread().Dispatch([this]() {
-      rtc_producer_->Stop();
+      rtc_producer_->Terminate();
     });
   }
 

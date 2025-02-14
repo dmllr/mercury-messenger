@@ -41,6 +41,13 @@ public:
   /// (either 0x00000001 or 0x000001) that separate NAL units.
   void ProcessFrame(const rtc::binary& data);
 
+  /// @brief Resets the internal state of the parser preparing for a new stream.
+  void Reset() {
+    current_config_ = {.width = 0, .height = 0};
+    on_configure_ = {};
+    on_input_buffer_ = {};
+  }
+
   [[maybe_unused]] void SetOnConfigureCallback(const ConfigureCallback& callback) {
     on_configure_ = std::make_unique<ConfigureCallback>(callback);
   }
@@ -49,8 +56,7 @@ public:
   }
 
 private:
-  bool is_codec_configured_ = false;
-  VideoConfig current_config_ = {};
+  VideoConfig current_config_ = {.width = 0, .height = 0};
 
   std::unique_ptr<ConfigureCallback> on_configure_{};
   std::unique_ptr<InputBufferCallback> on_input_buffer_{};
@@ -192,7 +198,7 @@ private:
   }
 };
 
-inline void H264Parser::ProcessFrame(const rtc::binary& data) {
+void H264Parser::ProcessFrame(const rtc::binary& data) {
   std::uint32_t pos = 0;
   while (pos < data.size()) {
     // Detect a start code (either 00 00 00 01 or 00 00 01).
@@ -248,12 +254,11 @@ inline void H264Parser::ProcessFrame(const rtc::binary& data) {
       // Process SPS: update stored SPS and extract resolution.
       const std::vector<std::byte>& new_sps = nalu;
       auto config = ParseSps(new_sps);
-      if (!is_codec_configured_ || (config != current_config_)) {
+      if (config != current_config_) {
         current_config_ = config;
         if (on_configure_ != nullptr) {
           (*on_configure_)(current_config_);
         }
-        is_codec_configured_ = true;
       }
     } else {
       // ignore others
@@ -261,11 +266,9 @@ inline void H264Parser::ProcessFrame(const rtc::binary& data) {
     pos = next_start;
   }
 
-  // If the codec is configured, and we have any non-SPS/PPS data, forward it.
-  if (is_codec_configured_) {
-    if (on_input_buffer_ != nullptr) {
-      (*on_input_buffer_)(data);
-    }
+  // forward the frame as it is
+  if (on_input_buffer_ != nullptr) {
+    (*on_input_buffer_)(data);
   }
 }
 

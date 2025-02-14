@@ -34,7 +34,7 @@ Java_hela_eillance_ObserverActivity_initDecoder(  // NOLINT(*-identifier-naming)
 extern "C" JNIEXPORT void JNICALL
 Java_hela_eillance_ObserverActivity_releaseDecoder(  // NOLINT(*-identifier-naming)
     JNIEnv*, jobject) {
-  observer->Stop();
+  observer->StopStreaming();
 }
 
 /// @brief JNI function to initiate a stream request.

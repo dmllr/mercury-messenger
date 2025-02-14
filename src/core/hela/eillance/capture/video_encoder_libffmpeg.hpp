@@ -41,7 +41,7 @@ class VideoEncoder {
 #endif
 
   // List of preferred codecs in priority order
-  const std::vector<AVCodecID> preferred_codecs_ = {
+  const std::vector<AVCodecID> preferred_codecs = {
       AV_CODEC_ID_H264,    // try H.264 codec first
   };
 
@@ -69,7 +69,9 @@ class VideoEncoder {
 
   void AllocateFrame(int width, int height) {
     av_frame_ = av_frame_alloc();
-    if (!av_frame_) throw std::runtime_error("Failed to allocate frame");
+    if (av_frame_ == nullptr) {
+      throw std::runtime_error("Failed to allocate frame");
+    }
 
     const auto num_bytes = av_image_get_buffer_size(codec_context_->pix_fmt, width, height, 1);
     converted_frame_buffer_.resize(num_bytes);
@@ -89,7 +91,7 @@ public:
     CoUninitialize();
 #endif
     const AVCodec* codec = nullptr;
-    for (const auto& codec_id : preferred_codecs_) {
+    for (const auto& codec_id : preferred_codecs) {
       codec = avcodec_find_encoder(codec_id);
       if (codec && SetupCodecContext(codec, width, height, framerate)) {
         LOGD << "Using codec: [" << codec->id << "] " << codec->name << " | " << codec->long_name;
@@ -98,7 +100,7 @@ public:
     }
 
     // Fallback to software encoder if hardware encoders fail
-    if (!codec_context_) {
+    if (codec_context_ == nullptr) {
       codec = avcodec_find_encoder(AV_CODEC_ID_H264);
       if (!SetupCodecContext(codec, width, height, framerate)) {
         throw std::runtime_error("Failed to initialize any encoder.");
@@ -119,6 +121,10 @@ public:
   }
 
   Packet EncodeBuffer(void* frames) {
+    if (codec_context_ == nullptr) {
+      return {};
+    }
+
     const auto size = codec_context_->width * codec_context_->height;
     av_frame_->data[0] = reinterpret_cast<std::uint8_t*>(frames);
     av_frame_->data[1] = std::next(av_frame_->data[0], size);

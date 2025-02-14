@@ -58,11 +58,8 @@ public:
   RtcConsumer& operator=(const RtcConsumer&) = delete;
   ~RtcConsumer() final = default;
 
-  void OnPeerAdded(const std::string& /*peer_id*/, const std::shared_ptr<Peer>& /*peer*/) final {
-  }
-
-  void OnPeerReady(const std::shared_ptr<Peer>& /*peer*/) final {
-  }
+  void OnPeerDataChannelConnected(const std::shared_ptr<Peer>& /*peer*/) final { }
+  void OnPeerReady(const std::shared_ptr<Peer>& /*peer*/) final { }
 
   void SendStreamRequest(const std::string& client_id) {
     Json request = {
