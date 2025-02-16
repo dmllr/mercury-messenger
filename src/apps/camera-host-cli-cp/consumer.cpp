@@ -22,6 +22,9 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
   rtc.SetName("CLI::" + StringUtils::RandomString());
   rtc.Start();
   rtc.SetClientChangedCallback([&rtc](const std::vector<ClientInfo>& clients){
+    if (clients.empty()) {
+      return;
+    }
     auto& client = clients.front();
     rtc.SendStreamRequest(client.id);
   });
