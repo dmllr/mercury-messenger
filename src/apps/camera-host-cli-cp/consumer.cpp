@@ -8,11 +8,6 @@
 #include "hela/eillance/utils/string.hpp"
 
 
-void Terminate() {
-  std::cout << "Terminating after 100 frames." << std::endl;
-  exit(0);
-}
-
 auto main(int /*argc*/, char** /*argv*/) -> int {
   int frame_count = 0;
   std::ofstream all_frames_file("_all.h264", std::ios::binary | std::ios::app);
@@ -32,8 +27,8 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
     if (frame_count >= 100) {
       rtc.Terminate();
       std::this_thread::sleep_for(std::chrono::seconds(1));
-      Terminate();
-      return;
+      std::cout << "Terminating after 100 frames." << std::endl;
+      exit(0);
     }
 
     // Create numbered filename

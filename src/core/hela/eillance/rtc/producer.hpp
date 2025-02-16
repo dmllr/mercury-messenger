@@ -51,7 +51,7 @@ public:
   RtcProducer& operator=(const RtcProducer&) = delete;
   ~RtcProducer() final = default;
 
-  void OnPeerDataChannelConnected(const std::shared_ptr<Peer>& peer) final {
+  static void OnPeerDataChannelConnected(const std::shared_ptr<Peer>& peer) {
     if (!peer->data_channel_->isOpen()) {
       return;
     }
@@ -79,7 +79,8 @@ public:
     auto type = it->get<std::string>();
 
     if (type == "streamRequest") {
-      const auto peer = CreatePeerConnection(peer_id);
+      const auto peer = CreatePeer(peer_id);
+      peer->data_channel_ = CreateDataChannel(peer->peer_connection_, peer_id);
       DispatchQueue::MainThread().Dispatch([this, peer_id, peer]() {
         AddPeer(peer_id, peer);
       });
@@ -96,11 +97,11 @@ public:
     }
   }
 
-  void ProcessSystemMessage(const std::string& type, Json message) final {
+  void ProcessSystemMessage(const std::string& type, Json  /*message*/) final {
     throw std::runtime_error("Unknown message type in Producer's ProcessSystemMessage: " + type);
   }
 
-  void ProcessDataChannelMessage(const std::string& peer_id, Json message) final {
+  void ProcessDataChannelMessage(const std::string&  /*peer_id*/, Json message) {
     const auto itr = message.find("type");
     if (itr == message.end()) {
       return;
@@ -185,6 +186,31 @@ public:
   }
 
 private:
+  auto CreateDataChannel(std::shared_ptr<rtc::PeerConnection> pc, const std::string& peer_id) -> std::shared_ptr<rtc::DataChannel> {
+    auto data_channel = pc->createDataChannel("command-channel");
+    data_channel->onOpen([this, peer_id, wdc = make_weak_ptr(data_channel)]() {
+      if (auto dc = wdc.lock()) {
+        dc->send("Ping");
+      }
+      OnPeerDataChannelConnected(GetPeer(peer_id));
+    });
+
+    data_channel->onMessage(nullptr, [peer_id, wdc = make_weak_ptr(data_channel), this](const std::string& msg) {
+      LOGI << "Message from " << peer_id << " received: " << msg;
+      if (msg.rfind("Pong", 0) == 0) {  // NOLINT(*-use-starts-ends-with) starts_with is not supported by all compilers
+        if (auto dc = wdc.lock()) {
+          dc->send("Ping");
+        }
+        ReportPeerStateChange(peer_id, EventSource::ping, 1);
+        return;
+      }
+
+      ProcessDataChannelMessage(peer_id, Json::parse(msg));
+    });
+
+    return data_channel;
+  }
+
   void SendSampleToReadyPeers(
       const rtc::binary& sample,
       const Stream::Source::Type type,
