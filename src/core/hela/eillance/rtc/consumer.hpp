@@ -62,7 +62,6 @@ public:
   RtcConsumer& operator=(const RtcConsumer&) = delete;
   ~RtcConsumer() final = default;
 
-  void OnPeerDataChannelConnected(const std::shared_ptr<Peer>& /*peer*/) final { }
   void OnPeerReady(const std::shared_ptr<Peer>& /*peer*/) final { }
 
   void SendStreamRequest(const std::string& client_id) {
@@ -84,6 +83,27 @@ public:
     on_frame_received_ = std::make_shared<OnFrameReceivedCallback >(callback);
   }
 
+  void SetupDataChannel(const std::shared_ptr<Peer>& peer, const std::string& peer_id,
+                        const std::shared_ptr<rtc::DataChannel>& data_channel) {
+    peer->data_channel_ = data_channel;
+    peer->data_channel_->onOpen([]() {});
+    peer->data_channel_->onClosed([]() {});
+    peer->data_channel_->onMessage(nullptr, [this, &peer_id, peer](const std::string& msg) {
+      if (msg.rfind("Ping", 0) == 0) {  // NOLINT(*-use-starts-ends-with) starts_with is not supported by all compilers
+        auto ping_pong_interval = std::chrono::milliseconds(1000); // NOLINT(*-magic-numbers)
+        DispatchQueue::MainThread().DispatchAfter(ping_pong_interval, [peer]() {
+          if (peer->data_channel_->isOpen()) {
+            peer->data_channel_->send("Pong");
+          }
+        });
+        ReportPeerStateChange(peer_id, EventSource::ping, 1);
+        return;
+      }
+
+      ProcessDataChannelMessage(peer_id, Json::parse(msg));
+    });
+  }
+
 private:
   void ProcessPeerMessage(Json message) final {
     auto it = message.find("from");
@@ -99,7 +119,11 @@ private:
 
     if (type == "offer") {
       auto sdp = message["sdp"].get<std::string>();
-      std::shared_ptr<Peer> const peer = CreatePeerConnection(peer_id);
+      std::shared_ptr<Peer> const peer = CreatePeer(peer_id);
+      // NOLINTNEXTLINE(*-unnecessary-value-param)
+      peer->peer_connection_->onDataChannel([this, &peer_id, peer](std::shared_ptr<rtc::DataChannel> data_channel) {
+        SetupDataChannel(peer, peer_id, data_channel);
+      });
       peer->peer_connection_->setRemoteDescription(rtc::Description(sdp, rtc::Description::Type::Offer));
       DispatchQueue::MainThread().Dispatch([this, peer_id, peer]() {
         AddPeer(peer_id, peer);
@@ -117,7 +141,7 @@ private:
     }
   }
 
-  void ProcessDataChannelMessage(const std::string& peer_id, Json message) final {
+  void ProcessDataChannelMessage(const std::string& peer_id, Json message) {
     const auto itr = message.find("type");
     if (itr == message.end()) {
       return;
@@ -129,7 +153,6 @@ private:
         (*on_profile_received_)(peer_id, profile);
       }
     }
-
   }
 
   auto AddVideo(

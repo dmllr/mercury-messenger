@@ -8,6 +8,7 @@
 
 #include <nlohmann/json.hpp>
 #include <rtc/peerconnection.hpp>
+#include <utility>
 #include <rtc/rtc.h>
 
 #include "hela/eillance/common/dispatch_queue.hpp"
@@ -122,6 +123,8 @@ public:
   void StopStreaming() {
     is_offline_ = true;
     for (auto& [peer_id, peer] : peers_) {
+      auto state = static_cast<int>(peer->GetState());
+      LOGI << "Closing peer " << peer_id << " in a " << state << " state.";
       peer->data_channel_->close();
       peer->peer_connection_->close();
     }
@@ -135,11 +138,9 @@ public:
 
 protected:
   virtual Json GetPublishMessage() = 0;
-  virtual void OnPeerDataChannelConnected(const std::shared_ptr<Peer>& peer) = 0;
   virtual void OnPeerReady(const std::shared_ptr<Peer>& peer) = 0;
   virtual void ProcessPeerMessage(Json message) = 0;
   virtual void ProcessSystemMessage(const std::string& type, Json message) = 0;
-  virtual void ProcessDataChannelMessage(const std::string& peer_id, Json message) = 0;
   virtual auto AddVideo(
       const std::shared_ptr<rtc::PeerConnection>& pc,
       const std::function<void(void)>& onOpen) -> std::shared_ptr<Peer::Track> = 0;
@@ -147,13 +148,13 @@ protected:
       const std::shared_ptr<rtc::PeerConnection>& pc,
       const std::function<void(void)>& onOpen) -> std::shared_ptr<Peer::Track> = 0;
 
-  void AddPeer(const std::string id, const std::shared_ptr<Peer>& peer) {
-    peers_.emplace(id, peer);
+  void AddPeer(const std::string& peer_id, const std::shared_ptr<Peer>& peer) {
+    peers_.emplace(std::string(peer_id), peer);
   }
 
-  auto GetPeer(const std::string id) const -> std::shared_ptr<Peer> {
-    if (auto it = peers_.find(id); it != peers_.end()) {
-      return peers_.at(id);
+  auto GetPeer(const std::string& peer_id) const -> std::shared_ptr<Peer> {
+    if (auto it = peers_.find(peer_id); it != peers_.end()) {
+      return peers_.at(peer_id);
     }
     return nullptr;
   }
@@ -162,17 +163,14 @@ protected:
     return peers_;
   }
 
-  void RemovePeer(const std::string& id) {
-    peers_.erase(id);
+  void RemovePeer(const std::string& peer_id) {
+    peers_.erase(peer_id);
   }
 
-  auto CreatePeerConnection(const std::string& peer_id) -> std::shared_ptr<Peer> {
-    auto peer_connection = CreateDefaultPeerConnection(peer_id);
-
-    auto peer = std::make_shared<Peer>(peer_connection);
-
+  auto CreatePeer(const std::string& peer_id) -> std::shared_ptr<Peer> {
+    auto peer = std::make_shared<Peer>(CreatePeerConnection(peer_id));
     peer->video_ = AddVideo(
-        peer_connection,
+        peer->peer_connection_,
         [this, peer_id, wc = make_weak_ptr(peer)]() {
           DispatchQueue::MainThread().Dispatch([this, wc]() {
             if (auto c = wc.lock()) {
@@ -181,9 +179,8 @@ protected:
           });
           LOGI << "Video from " << id_ << " opened";
         });
-
     peer->audio_ = AddAudio(
-        peer_connection,
+        peer->peer_connection_,
         [this, peer_id, wc = make_weak_ptr(peer)]() {
           DispatchQueue::MainThread().Dispatch([this, wc]() {
             if (auto c = wc.lock()) {
@@ -193,16 +190,18 @@ protected:
           LOGI << "Audio from " << id_ << " opened";
         });
 
-    peer->data_channel_ = CreateDefaultDataChannel(peer_connection, peer_id);
-
-    peer_connection->setLocalDescription();
-
     return peer;
   }
 
   void SendPeerMessage(Json& message) {
     message["token"] = auth_token_;
     WsSendMessage(message);
+  }
+
+  void ReportPeerStateChange(const std::string& peer_id, const EventSource source, int state) const {
+    if (status_callback_) {
+      (*status_callback_)(peer_id, source, state);
+    }
   }
 
 private:
@@ -258,12 +257,6 @@ private:
     }
   }
 
-  void ReportPeerStateChange(const std::string& peer_id, const EventSource source, int state) const {
-    if (status_callback_) {
-      (*status_callback_)(peer_id, source, state);
-    }
-  }
-
   void ReportServiceConnectionState(const ServiceConnectionState state) const {
     service_connection_state_ = state;
     if (status_callback_) {
@@ -303,7 +296,7 @@ private:
     WsSendMessage(message);
   }
 
-  auto CreateDefaultPeerConnection(const std::string& peer_id) -> std::shared_ptr<rtc::PeerConnection> {
+  auto CreatePeerConnection(const std::string& peer_id) -> std::shared_ptr<rtc::PeerConnection> {
     auto peer_connection = std::make_shared<rtc::PeerConnection>(RtcConfiguration::Config());
 
     peer_connection->onStateChange([this, peer_id](rtc::PeerConnection::State state) {
@@ -345,7 +338,7 @@ private:
       ReportPeerStateChange(peer_id, EventSource::signalingState, static_cast<int>(state));
     });
 
-    return peer_connection;
+    return std::move(peer_connection);
   }
 
   void AddToStream(const std::shared_ptr<Peer>& peer, bool isAddingVideo) {
@@ -360,38 +353,6 @@ private:
     if (peer->GetState() == Peer::State::ready) {
       OnPeerReady(peer);
     }
-  }
-
-  auto CreateDefaultDataChannel(std::shared_ptr<rtc::PeerConnection> pc, const std::string& peer_id) -> std::shared_ptr<rtc::DataChannel> {
-    auto data_channel = pc->createDataChannel("command-channel");
-    data_channel->onOpen([this, peer_id, wdc = make_weak_ptr(data_channel)]() {
-      if (auto dc = wdc.lock()) {
-        dc->send("Ping");
-      }
-      OnPeerDataChannelConnected(GetPeer(peer_id));
-    });
-
-    data_channel->onMessage(nullptr, [peer_id, wdc = make_weak_ptr(data_channel), this](const std::string& msg) {
-      LOGD << "Message from " << id_ << " received: " << msg;
-      if (msg.rfind("Ping ", 0) == 0) {  // starts_with is not supported by all compilers
-        if (auto dc = wdc.lock()) {
-          dc->send("Pong");
-        }
-        ReportPeerStateChange(peer_id, EventSource::ping, 1);
-        return;
-      }
-      if (msg.rfind("Pong ", 0) == 0) {  // starts_with is not supported by all compilers
-        if (auto dc = wdc.lock()) {
-          dc->send("Ping");
-        }
-        ReportPeerStateChange(peer_id, EventSource::ping, 1);
-        return;
-      }
-
-      ProcessDataChannelMessage(peer_id, Json::parse(msg));
-    });
-
-    return data_channel;
   }
 
   void OnSystemMessage(Json message) {
