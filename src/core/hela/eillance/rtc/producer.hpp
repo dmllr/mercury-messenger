@@ -52,6 +52,9 @@ public:
   ~RtcProducer() final = default;
 
   void OnPeerDataChannelConnected(const std::shared_ptr<Peer>& peer) final {
+    if (!peer->data_channel_->isOpen()) {
+      return;
+    }
     const Json message = {
         {"type", "info profile"},
         {"profile", GetDeviceProfileAsJson()},
