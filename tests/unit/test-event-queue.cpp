@@ -25,7 +25,7 @@ TEST(EventQueue, General) {
 
   // Push an event to the queue.
   auto event{MyEvent{42}};
-  event_queue.Push(std::move(event));
+  event_queue.Push(event);
 
   std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
@@ -49,7 +49,7 @@ TEST(EventQueue, Singleton) {
 
   // Push an event to the queue.
   auto event{MyEvent{42}};
-  EventQueue::Instance().Push(std::move(event));
+  EventQueue::Instance().Push(event);
 
   std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
@@ -67,6 +67,8 @@ TEST(EventQueue, SubscribeForString) {
 
   // Allow some time for the event to be processed
   std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  // Unsubscribe not to interfere with other tests
+  EventQueue::Instance().Unsubscribe<std::string>(id);
 
   EXPECT_TRUE(event_handled);
 }
@@ -141,7 +143,7 @@ TEST(EventQueue, VideoConfigEvent) {
   ASSERT_EQ(result.frameRate, VideoConfigDefaults::frameRate);
   ASSERT_EQ(result.bitrate, VideoConfigDefaults::bitrate);
 
-  auto conf = VideoConfig{2,1920,1080,42,3000000};
+  auto conf = VideoConfig{2, 1920, 1080, 42, 3000000};
 
   EventQueue::Instance().Push(std::move(conf));
 
@@ -167,10 +169,10 @@ TEST(EventQueue, MultipleVideoConfigEvent) {
   ASSERT_EQ(result.frameRate, VideoConfigDefaults::frameRate);
   ASSERT_EQ(result.bitrate, VideoConfigDefaults::bitrate);
 
-  auto conf42 = VideoConfig{2,1920,1080,43,3000000};
-  EventQueue::Instance().Push(std::move(conf42));
-  auto conf43 = VideoConfig{2,1920,1080,43,3000000};
-  EventQueue::Instance().Push(std::move(conf43));
+  auto conf42 = VideoConfig{2, 1920, 1080, 42, 3000000};
+  EventQueue::Instance().Push(conf42);
+  auto conf43 = VideoConfig{2, 1920, 1080, 43, 3000000};
+  EventQueue::Instance().Push(conf43);
 
   std::this_thread::sleep_for(std::chrono::milliseconds(10));
 

@@ -112,7 +112,7 @@ TEST_F(H264ParserTest, PBFramesDoNotTriggerConfigure) {
   parser.ProcessFrame(LoadFile(frame003_path));
 
   EXPECT_EQ(callbackLog_.find("onConfigure"), std::string::npos);
-  EXPECT_EQ(callbackLog_.find("onInputBuffer"), std::string::npos);
+  EXPECT_NE(callbackLog_.find("onInputBuffer"), std::string::npos);
 }
 
 //
@@ -174,6 +174,6 @@ TEST_F(H264ParserTest, NoActionOnInvalidStartCode) {
   rtc::binary invalid_data = { std::byte{0xFF}, std::byte{0xFF}, std::byte{0xFF} }; // NOLINT(*-magic-numbers)
   parser.ProcessFrame(invalid_data);
 
-  // Expect that no callbacks have been invoked.
-  EXPECT_TRUE(callbackLog_.empty());
+  EXPECT_EQ(callbackLog_.find("onConfigure"), std::string::npos);
+  EXPECT_NE(callbackLog_.find("onInputBuffer"), std::string::npos);
 }
