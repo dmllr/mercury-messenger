@@ -121,7 +121,7 @@ private:
       auto sdp = message["sdp"].get<std::string>();
       std::shared_ptr<Peer> const peer = CreatePeer(peer_id);
       // NOLINTNEXTLINE(*-unnecessary-value-param)
-      peer->peer_connection_->onDataChannel([this, &peer_id, peer](std::shared_ptr<rtc::DataChannel> data_channel) {
+      peer->peer_connection_->onDataChannel([this, peer_id, peer](std::shared_ptr<rtc::DataChannel> data_channel) {
         SetupDataChannel(peer, peer_id, data_channel);
       });
       peer->peer_connection_->setRemoteDescription(rtc::Description(sdp, rtc::Description::Type::Offer));

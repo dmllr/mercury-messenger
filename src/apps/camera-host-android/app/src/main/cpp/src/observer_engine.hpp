@@ -1,6 +1,8 @@
 #pragma once
 
 #include <jni.h>
+
+#include <atomic>
 #include <string>
 #include <vector>
 #include <cstring>
@@ -29,7 +31,7 @@ class ObserverEngine {
 
   ANativeWindow* nativeWindow_{nullptr};
   AMediaCodec* mediaCodec_{nullptr};
-  bool codecConfigured_{false};
+  std::atomic<bool> codecConfigured_{false};
 
   RtcConsumer consumer_{};
   H264Parser h264Parser_{};
@@ -176,7 +178,7 @@ private:
   void HandleOutputBuffer() {
     AMediaCodecBufferInfo info;
     while (true) {
-      if (!codecConfigured_ || mediaCodec_ == nullptr) {
+      if ((!codecConfigured_) || (mediaCodec_ == nullptr)) {
         return;
       }
 
@@ -188,9 +190,9 @@ private:
       } else if (output_buffer_index == AMEDIACODEC_INFO_OUTPUT_BUFFERS_CHANGED) {
         LOGI << "Output buffers changed.";
       } else if (output_buffer_index == AMEDIACODEC_INFO_OUTPUT_FORMAT_CHANGED) {
-        AMediaFormat* newFormat = AMediaCodec_getOutputFormat(mediaCodec_);
-        LOGI << "Output format changed: " << AMediaFormat_toString(newFormat);
-        AMediaFormat_delete(newFormat);
+        AMediaFormat* new_format = AMediaCodec_getOutputFormat(mediaCodec_);
+        LOGI << "Output format changed: " << AMediaFormat_toString(new_format);
+        AMediaFormat_delete(new_format);
       } else if (output_buffer_index == AMEDIACODEC_INFO_TRY_AGAIN_LATER) {
         // No available output buffer, exit the loop
         break;
@@ -260,6 +262,34 @@ private:
     }
   }
 
+  static void SetBridgeProfile(JNIEnv* env, jobject& java_list, const ClientInfo::Profile& profile) {
+    auto& classref = ClassRefs::Instance();
+
+    for (const auto& camera : profile) {
+      jstring cam_id = env->NewStringUTF(camera.id.c_str());
+      jstring cam_name = env->NewStringUTF(camera.name.c_str());
+
+      jobject res_list = classref.Class("java/util/ArrayList").NewObject(env);
+      jmethodID add_method = env->GetMethodID(classref.Class("java/util/ArrayList").Class(), "add", "(Ljava/lang/Object;)Z");
+
+      for (const auto& res : camera.resolutions) {
+        jobject jres = classref.Class("hela/eillance/ndkio/Resolution").NewObject(env, res.width, res.height);
+        // NOLINTNEXTLINE(*-vararg)
+        env->CallBooleanMethod(res_list, add_method, jres);
+        env->DeleteLocalRef(jres);
+      }
+
+      jobject jcamera = classref.Class("hela/eillance/ndkio/Camera").NewObject(env, cam_id, cam_name, res_list);
+      // NOLINTNEXTLINE(*-vararg)
+      env->CallBooleanMethod(java_list, add_method, jcamera);
+
+      env->DeleteLocalRef(jcamera);
+      env->DeleteLocalRef(cam_id);
+      env->DeleteLocalRef(cam_name);
+      env->DeleteLocalRef(res_list);
+    }
+  }
+
   void UpdateClientList(const std::vector<ClientInfo>& clients) {
     if (native_bridge_ == nullptr) {
       return;
@@ -281,48 +311,17 @@ private:
       return;
     }
 
-    // Create the Java ArrayList to hold ClientInfo objects.
     jobject java_list = classref.Class("java/util/ArrayList").NewObject(env);
+    jmethodID add_method = env->GetMethodID(classref.Class("java/util/ArrayList").Class(), "add", "(Ljava/lang/Object;)Z");
 
     for (const auto& client : clients) {
       jstring id = env->NewStringUTF(client.id.c_str());
       jstring name = env->NewStringUTF(client.name.c_str());
-
-      // Create Camera list
       jobject camera_list = classref.Class("java/util/ArrayList").NewObject(env);
 
-      for (const auto& camera : client.profile) {
-        jstring cam_id = env->NewStringUTF(camera.id.c_str());
-        jstring cam_name = env->NewStringUTF(camera.name.c_str());
+      SetBridgeProfile(env, camera_list, client.profile);
 
-        // Create Resolution list
-        jobject res_list = classref.Class("java/util/ArrayList").NewObject(env);
-
-        for (const auto& res : camera.resolutions) {
-          jobject jres = classref.Class("hela/eillance/ndkio/Resolution")
-                             .NewObject(env, res.width, res.height);
-          jmethodID add_method = env->GetMethodID(classref.Class("java/util/ArrayList").Class(), "add", "(Ljava/lang/Object;)Z");
-          // NOLINTNEXTLINE(*-vararg)
-          env->CallBooleanMethod(res_list, add_method, jres);
-
-          env->DeleteLocalRef(jres);
-        }
-
-        jobject jcamera = classref.Class("hela/eillance/ndkio/Camera")
-                              .NewObject(env, cam_id, cam_name, res_list);
-        jmethodID add_method = env->GetMethodID(classref.Class("java/util/ArrayList").Class(), "add", "(Ljava/lang/Object;)Z");
-        // NOLINTNEXTLINE(*-vararg)
-        env->CallBooleanMethod(camera_list, add_method, jcamera);
-
-        env->DeleteLocalRef(jcamera);
-        env->DeleteLocalRef(cam_id);
-        env->DeleteLocalRef(cam_name);
-        env->DeleteLocalRef(res_list);
-      }
-
-      jobject jclient = classref.Class("hela/eillance/ndkio/ClientInfo")
-                            .NewObject(env, id, name, camera_list);
-      jmethodID add_method = env->GetMethodID(classref.Class("java/util/ArrayList").Class(), "add", "(Ljava/lang/Object;)Z");
+      jobject jclient = classref.Class("hela/eillance/ndkio/ClientInfo").NewObject(env, id, name, camera_list);
       // NOLINTNEXTLINE(*-vararg)
       env->CallBooleanMethod(java_list, add_method, jclient);
 
@@ -334,7 +333,6 @@ private:
 
     // NOLINTNEXTLINE(*-vararg)
     env->CallVoidMethod(native_bridge_, callback_method, java_list);
-
     env->DeleteLocalRef(java_list);
     env->DeleteLocalRef(callback_cls);
   }
@@ -351,8 +349,6 @@ private:
     }
 
     auto& classref = ClassRefs::Instance();
-
-    // Look up the callback method.
     jclass callback_cls = env->GetObjectClass(native_bridge_);
     jmethodID callback_method = env->GetMethodID(callback_cls, "onDeviceProfileReceived", "(Ljava/lang/String;Ljava/util/List;)V");
     if (callback_method == nullptr) {
@@ -361,36 +357,10 @@ private:
     }
 
     jstring jpeer_id = env->NewStringUTF(peer_id.c_str());
-
-    // Create the Java ArrayList to hold Camera objects.
     jobject camera_list = classref.Class("java/util/ArrayList").NewObject(env);
+    SetBridgeProfile(env, camera_list, profile);
 
-    for (const auto& camera : profile) {
-      jstring cam_id = env->NewStringUTF(camera.id.c_str());
-      jstring cam_name = env->NewStringUTF(camera.name.c_str());
-
-      // Create Resolution list
-      jobject res_list = classref.Class("java/util/ArrayList").NewObject(env);
-
-      for (const auto& res : camera.resolutions) {
-        jobject jres = classref.Class("hela/eillance/ndkio/Resolution")
-                           .NewObject(env, res.width, res.height);
-        jmethodID add_method = env->GetMethodID(classref.Class("java/util/ArrayList").Class(), "add", "(Ljava/lang/Object;)Z");
-        env->CallBooleanMethod(res_list, add_method, jres);
-        env->DeleteLocalRef(jres);
-      }
-
-      jobject jcamera = classref.Class("hela/eillance/ndkio/Camera")
-                            .NewObject(env, cam_id, cam_name, res_list);
-      jmethodID add_method = env->GetMethodID(classref.Class("java/util/ArrayList").Class(), "add", "(Ljava/lang/Object;)Z");
-      env->CallBooleanMethod(camera_list, add_method, jcamera);
-
-      env->DeleteLocalRef(jcamera);
-      env->DeleteLocalRef(cam_id);
-      env->DeleteLocalRef(cam_name);
-      env->DeleteLocalRef(res_list);
-    }
-
+    // NOLINTNEXTLINE(*-vararg)
     env->CallVoidMethod(native_bridge_, callback_method, jpeer_id, camera_list);
 
     env->DeleteLocalRef(jpeer_id);

@@ -28,8 +28,8 @@ import androidx.preference.PreferenceManager
 import hela.eillance.camera.R
 import hela.eillance.ndkio.EventSource
 import hela.eillance.ndkio.ServiceConnectionState
-import hela.eillance.ndkio.interfaces.IPerformerNativeBridge
 import hela.eillance.ndkio.VideoConfig
+import hela.eillance.ndkio.interfaces.IPerformerNativeBridge
 import java.util.concurrent.atomic.AtomicLong
 
 class PerformerService : Service(), IPerformerNativeBridge {
@@ -166,7 +166,7 @@ class PerformerService : Service(), IPerformerNativeBridge {
       .setSmallIcon(R.drawable.ic_camera_stream)
       .setContentTitle(getString(R.string.notification_title))
       .setContentText(serviceConnectionState.getResourceString(this))
-      .setPriority(NotificationCompat.PRIORITY_LOW)
+      .setPriority(NotificationCompat.PRIORITY_HIGH)
       .setContentIntent(
         PendingIntent.getActivity(
           this, 0, performerActivityIntent,

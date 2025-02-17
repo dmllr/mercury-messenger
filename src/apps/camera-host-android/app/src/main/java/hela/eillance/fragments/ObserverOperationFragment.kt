@@ -1,6 +1,8 @@
 package hela.eillance.fragments
 
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.LayoutInflater
 import android.view.SurfaceHolder
 import android.view.View
@@ -11,53 +13,44 @@ import androidx.fragment.app.Fragment
 import hela.eillance.ObserverActivity
 import hela.eillance.camera.R
 import hela.eillance.camera.databinding.FragmentObserverOperationBinding
-import hela.eillance.ndkio.Camera
 import hela.eillance.ndkio.ClientInfo
 import hela.eillance.ndkio.Profile
-import hela.eillance.ndkio.Resolution
 
 class ObserverOperationFragment(val device: ClientInfo)
-  : Fragment(),
-  SurfaceHolder.Callback
+  : Fragment(), SurfaceHolder.Callback
 {
   private var _binding: FragmentObserverOperationBinding? = null
   private val binding get() = _binding!!
-  private inner class CameraSpinnerAdapter(cameras: List<Camera>)
-    : ArrayAdapter<String>(requireContext(), android.R.layout.simple_spinner_item) {
-    init {
-      add(getString(R.string.fr_observer_operation_default_camera))
-      addAll(
-        cameras.map { it.id })
-    }
-  }
-  private inner class CameraResolutionSpinnerAdapter(resolutions: List<Resolution>)
-    : ArrayAdapter<String>(requireContext(), android.R.layout.simple_spinner_item) {
-    init {
-      add(getString(R.string.fr_observer_operation_default_resolution))
-      addAll(
-        resolutions.map { "${it.width}×${it.height}" })
-    }
-  }
+  private var profile: Profile = device.profile
 
   override fun onCreateView(
     inflater: LayoutInflater, container: ViewGroup?,
     savedInstanceState: Bundle?
   ): View {
     _binding = FragmentObserverOperationBinding.inflate(inflater, container, false)
+    val defaultCameraAdapter: ArrayAdapter<String> =
+      ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item,
+        listOf(getString(R.string.fr_observer_operation_default_camera)))
     val defaultResolutionAdapter: ArrayAdapter<String> =
       ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item,
         listOf(getString(R.string.fr_observer_operation_default_resolution)))
-    val cameraSpinnerAdapter = CameraSpinnerAdapter(device.profile)
 
     binding.outputSurface.holder.addCallback(this)
-    binding.selectCamera.adapter = cameraSpinnerAdapter
+    binding.selectCamera.adapter = defaultCameraAdapter
     binding.selectCameraResolution.adapter = defaultResolutionAdapter
     binding.selectCamera.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
       override fun onItemSelected(parent: AdapterView<*>, view: View?, position: Int, id: Long) {
-        if (position == 0) {
+        if (position >= profile.size) {
+          Handler(Looper.getMainLooper()).post {
           binding.selectCameraResolution.adapter = defaultResolutionAdapter
-        } else {
-          binding.selectCameraResolution.adapter = CameraResolutionSpinnerAdapter(device.profile[position - 1].resolutions)
+            }
+          return
+        }
+        val adapter: ArrayAdapter<String> =
+          ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item,
+            profile[position].resolutions.map { "${it.width}×${it.height}" })
+        Handler(Looper.getMainLooper()).post {
+          binding.selectCameraResolution.adapter = adapter
         }
       }
       override fun onNothingSelected(parent: AdapterView<*>) {
@@ -105,12 +98,18 @@ class ObserverOperationFragment(val device: ClientInfo)
         this.height = newHeight
       }
 
-      binding.outputSurface.requestLayout() // Ensure UI updates
+      binding.outputSurface.requestLayout()
     }
   }
 
   fun onDeviceProfileReceived(profile: Profile) {
-    TODO("Not yet implemented")
+    this.profile = profile
+    val adapter: ArrayAdapter<String> =
+      ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item,
+        this.profile.map { "${it.id}: ${it.name}" })
+    Handler(Looper.getMainLooper()).post {
+      binding.selectCamera.adapter = adapter
+    }
   }
 
 }
