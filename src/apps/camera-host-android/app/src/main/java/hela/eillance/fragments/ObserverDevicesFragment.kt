@@ -107,7 +107,7 @@ class ObserverDevicesFragment : Fragment(), DevicesListAdapterEventListener {
 
   override fun onItemClicked(device: ClientInfo) {
     (activity as ObserverActivity)
-      .putFragment(ObserverOperationFragment(device))
+      .putFragment(ObserverOperationFragment(device), "ObserverOperationFragment")
   }
 
 }

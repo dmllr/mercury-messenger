@@ -125,7 +125,7 @@ public:
     for (auto& [peer_id, peer] : peers_) {
       auto state = static_cast<int>(peer->GetState());
       LOGI << "Closing peer " << peer_id << " in a " << state << " state.";
-      if (peer->data_channel_->isOpen()) {
+      if ((peer->data_channel_ != nullptr) && peer->data_channel_->isOpen()) {
         SendTerminationMessage(peer);
         peer->data_channel_->close();
       }

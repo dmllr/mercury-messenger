@@ -61,9 +61,9 @@ class ObserverActivity : AppCompatActivity(), IObserverNativeBridge {
     })
   }
 
-  fun putFragment(fragment: Fragment) {
+  fun putFragment(fragment: Fragment, tag: String? = null) {
     supportFragmentManager.beginTransaction()
-      .add(R.id.content, fragment)
+      .add(R.id.content, fragment, tag)
       .addToBackStack(BACKSTACK)
       .commit()
 
