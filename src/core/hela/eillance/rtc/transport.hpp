@@ -125,7 +125,10 @@ public:
     for (auto& [peer_id, peer] : peers_) {
       auto state = static_cast<int>(peer->GetState());
       LOGI << "Closing peer " << peer_id << " in a " << state << " state.";
-      peer->data_channel_->close();
+      if (peer->data_channel_->isOpen()) {
+        SendTerminationMessage(peer);
+        peer->data_channel_->close();
+      }
       peer->peer_connection_->close();
     }
     ReportServiceConnectionState(ServiceConnectionState::disconnected);
@@ -373,6 +376,16 @@ private:
     } else {
       ProcessSystemMessage(type, message);
     }
+  }
+
+  static void SendTerminationMessage(const std::shared_ptr<Peer>& peer) {
+    if (!peer->data_channel_->isOpen()) {
+      return;
+    }
+    const Json message = {
+        {"type", "termination"},
+    };
+    peer->data_channel_->send(message.dump());
   }
 
   class RtcConfiguration {

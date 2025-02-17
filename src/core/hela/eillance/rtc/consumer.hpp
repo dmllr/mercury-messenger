@@ -152,6 +152,8 @@ private:
         auto&& profile = ParseDeviceProfile(message.at("profile"));
         (*on_profile_received_)(peer_id, profile);
       }
+    } else if (type == "termination") {
+      RemovePeer(peer_id);
     }
   }
 

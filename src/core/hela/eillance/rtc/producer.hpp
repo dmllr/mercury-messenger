@@ -34,7 +34,7 @@ public:
 
     // set callback responsible for sample sending
     av_stream_->OnSample([this, ws = make_weak_ptr(av_stream_)](Stream::Source::Type type, uint64_t sampleTime, const rtc::binary& sample) {
-      SendSampleToReadyPeers(sample, type, sampleTime);
+      SendSampleToPeers(sample, type, sampleTime);
       DispatchQueue::MainThread().Dispatch([this, ws]() {
         if (GetPeers().empty()) {
           // we have no peers, stop the stream
@@ -101,7 +101,7 @@ public:
     throw std::runtime_error("Unknown message type in Producer's ProcessSystemMessage: " + type);
   }
 
-  void ProcessDataChannelMessage(const std::string&  /*peer_id*/, Json message) {
+  void ProcessDataChannelMessage(const std::string&  peer_id, Json message) {
     const auto itr = message.find("type");
     if (itr == message.end()) {
       return;
@@ -115,6 +115,8 @@ public:
       video_config.height = message["resolution"]["height"].get<std::uint32_t>();
 
       Configure(config);
+    } else if (type == "termination") {
+      RemovePeer(peer_id);
     }
   }
 
@@ -211,7 +213,7 @@ private:
     return data_channel;
   }
 
-  void SendSampleToReadyPeers(
+  void SendSampleToPeers(
       const rtc::binary& sample,
       const Stream::Source::Type type,
       const uint64_t sample_time) {
@@ -278,6 +280,7 @@ private:
       LOGD << "Unable to send " << streamType << " packet";
     }
   }
+
 };
 
 }  // namespace hela::eillance
