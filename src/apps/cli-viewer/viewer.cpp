@@ -5,8 +5,6 @@
 #include <iostream>
 
 #include "hela/eillance/rtc/viewer.hpp"
-#include "hela/eillance/utils/string.hpp"
-
 
 auto main(int /*argc*/, char** /*argv*/) -> int {
   int frame_count = 0;
@@ -14,7 +12,7 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
 
   using namespace hela::eillance;
   auto rtc = RtcViewer();
-  rtc.SetName("CLI::" + StringUtils::RandomString());
+  rtc.SetId("CLI::Viewer");
   rtc.Start();
   rtc.SetClientChangedCallback([&rtc](const std::vector<Device>& clients){
     if (clients.empty()) {
