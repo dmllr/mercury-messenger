@@ -40,16 +40,53 @@ Java_hela_eillance_ObserverActivity_releaseDecoder(  // NOLINT(*-identifier-nami
 /// @brief JNI function to initiate a stream request.
 extern "C" JNIEXPORT void JNICALL
 Java_hela_eillance_ObserverActivity_sendStreamRequest(  // NOLINT(*-identifier-naming)
-    JNIEnv* env, jobject, jstring client_id) {
-  if (client_id == nullptr) {
-    return;
-  }
-
+    JNIEnv* env, jobject, jstring client_id, jobject jconfig) {
+  assert((client_id != nullptr) && (jconfig != nullptr));
   const char* chars = env->GetStringUTFChars(client_id, nullptr);
   const std::string client_id_str(chars);
   env->ReleaseStringUTFChars(client_id, chars);
 
-  observer->SendStreamRequest(client_id_str);
+  // Config class
+  jclass config_class = env->GetObjectClass(jconfig);
+
+  // VideoConfig field
+  jfieldID video_field = env->GetFieldID(config_class, "video", "Lhela/eillance/ndkio/VideoConfig;");
+  jobject jvideo_config = env->GetObjectField(jconfig, video_field);
+
+  // AudioConfig field
+  jfieldID audio_field = env->GetFieldID(config_class, "audio", "Lhela/eillance/ndkio/AudioConfig;");
+  jobject jaudio_config = env->GetObjectField(jconfig, audio_field);
+
+  hela::eillance::Config config;
+
+  // populate VideoConfig
+  if (jvideo_config != nullptr) {
+    jclass video_config_class = env->GetObjectClass(jvideo_config);
+    jfieldID camera_id_field = env->GetFieldID(video_config_class, "cameraId", "I");
+    jfieldID width_field = env->GetFieldID(video_config_class, "width", "I");
+    jfieldID height_field = env->GetFieldID(video_config_class, "height", "I");
+    jfieldID frame_rate_field = env->GetFieldID(video_config_class, "frameRate", "I");
+    jfieldID bitrate_field = env->GetFieldID(video_config_class, "bitrate", "I");
+
+    config.video_config.cameraId = env->GetIntField(jvideo_config, camera_id_field);
+    config.video_config.width = env->GetIntField(jvideo_config, width_field);
+    config.video_config.height = env->GetIntField(jvideo_config, height_field);
+    config.video_config.frameRate = env->GetIntField(jvideo_config, frame_rate_field);
+    config.video_config.bitrate = env->GetIntField(jvideo_config, bitrate_field);
+
+    env->DeleteLocalRef(video_config_class);
+  }
+
+  // populate AudioConfig
+  if (jaudio_config != nullptr) {
+    // so far audio is not configurable, skip everything, but keep commented
+  }
+
+  env->DeleteLocalRef(config_class);
+  env->DeleteLocalRef(jvideo_config);
+  env->DeleteLocalRef(jaudio_config);
+
+  observer->SendStreamRequest(client_id_str, config);
 }
 
 jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {

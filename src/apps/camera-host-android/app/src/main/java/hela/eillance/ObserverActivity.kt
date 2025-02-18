@@ -14,6 +14,7 @@ import hela.eillance.camera.databinding.ActivityObserverBinding
 import hela.eillance.fragments.ObserverDevicesFragment
 import hela.eillance.fragments.ObserverOperationFragment
 import hela.eillance.ndkio.ClientInfo
+import hela.eillance.ndkio.Config
 import hela.eillance.ndkio.Profile
 import hela.eillance.ndkio.interfaces.IObserverNativeBridge
 
@@ -92,7 +93,7 @@ class ObserverActivity : AppCompatActivity(), IObserverNativeBridge {
   private external fun initEngine(nativeBridge: IObserverNativeBridge)
   external fun initDecoder(surface: Surface)
   external fun releaseDecoder()
-  external fun sendStreamRequest(clientId: String)
+  external fun sendStreamRequest(clientId: String, config: Config)
 
   companion object {
     const val BACKSTACK = "fragments_backstack"

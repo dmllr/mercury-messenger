@@ -7,3 +7,12 @@ data class VideoConfig(
   var frameRate: Int = 0,
   var bitrate: Int = 0,
 )
+
+data class AudioConfig(
+  var channels: Int = 2,
+)
+
+data class Config(
+  var video: VideoConfig = VideoConfig(),
+  var audio: AudioConfig = AudioConfig(),
+)
