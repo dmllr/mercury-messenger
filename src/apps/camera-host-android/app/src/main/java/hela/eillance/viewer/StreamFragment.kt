@@ -1,5 +1,6 @@
-package hela.eillance.fragments
+package hela.eillance.viewer
 
+import android.R
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -10,9 +11,7 @@ import android.view.ViewGroup
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import androidx.fragment.app.Fragment
-import hela.eillance.ObserverActivity
-import hela.eillance.camera.R
-import hela.eillance.camera.databinding.FragmentObserverOperationBinding
+import hela.eillance.camera.databinding.FragmentViewerStreamBinding
 import hela.eillance.ndkio.ClientInfo
 import hela.eillance.ndkio.Config
 import hela.eillance.ndkio.Profile
@@ -20,25 +19,26 @@ import hela.eillance.ndkio.Resolution
 
 private const val RESOLUTION_SEPARATOR = "×"
 
-class ObserverOperationFragment(internal val device: ClientInfo) : Fragment(), SurfaceHolder.Callback {
+class StreamFragment(internal val device: ClientInfo) : Fragment(),
+  SurfaceHolder.Callback {
 
-  private var _binding: FragmentObserverOperationBinding? = null
+  private var _binding: FragmentViewerStreamBinding? = null
   private val binding get() = _binding!!
   private var profile: Profile = device.profile
 
   private val defaultCameraAdapter: ArrayAdapter<String> by lazy {
     ArrayAdapter(
       requireContext(),
-      android.R.layout.simple_spinner_item,
-      listOf(getString(R.string.fr_observer_operation_default_camera))
+      R.layout.simple_spinner_item,
+      listOf(getString(hela.eillance.camera.R.string.fr_observer_operation_default_camera))
     )
   }
 
   private val defaultResolutionAdapter: ArrayAdapter<String> by lazy {
     ArrayAdapter(
       requireContext(),
-      android.R.layout.simple_spinner_item,
-      listOf(getString(R.string.fr_observer_operation_default_resolution))
+      R.layout.simple_spinner_item,
+      listOf(getString(hela.eillance.camera.R.string.fr_observer_operation_default_resolution))
     )
   }
 
@@ -46,7 +46,7 @@ class ObserverOperationFragment(internal val device: ClientInfo) : Fragment(), S
     inflater: LayoutInflater, container: ViewGroup?,
     savedInstanceState: Bundle?
   ): View {
-    _binding = FragmentObserverOperationBinding.inflate(inflater, container, false)
+    _binding = FragmentViewerStreamBinding.inflate(inflater, container, false)
 
     binding.outputSurface.holder.addCallback(this)
     binding.selectCamera.adapter = defaultCameraAdapter
@@ -69,11 +69,11 @@ class ObserverOperationFragment(internal val device: ClientInfo) : Fragment(), S
   }
 
   override fun surfaceCreated(holder: SurfaceHolder) {
-    (activity as? ObserverActivity)?.initDecoder(holder.surface)
+    (activity as? ViewerActivity)?.initDecoder(holder.surface)
   }
 
   override fun surfaceDestroyed(holder: SurfaceHolder) {
-    (activity as? ObserverActivity)?.releaseDecoder()
+    (activity as? ViewerActivity)?.releaseDecoder()
   }
 
   override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
@@ -98,7 +98,7 @@ class ObserverOperationFragment(internal val device: ClientInfo) : Fragment(), S
         config.video.height = resolution.height
       }
     }
-    (activity as? ObserverActivity)?.sendStreamRequest(device.id, config)
+    (activity as? ViewerActivity)?.sendStreamRequest(device.id, config)
   }
 
   fun onStreamResolutionChange(width: Int, height: Int) {
@@ -127,7 +127,7 @@ class ObserverOperationFragment(internal val device: ClientInfo) : Fragment(), S
   private fun updateCameraSpinner(cameraNames: List<String>) {
     val adapter = ArrayAdapter(
       requireContext(),
-      android.R.layout.simple_spinner_item,
+      R.layout.simple_spinner_item,
       cameraNames
     )
     Handler(Looper.getMainLooper()).post {
@@ -147,7 +147,7 @@ class ObserverOperationFragment(internal val device: ClientInfo) : Fragment(), S
     val resolutionStrings = resolutions.map { it.toResolutionString() }
     val adapter = ArrayAdapter(
       requireContext(),
-      android.R.layout.simple_spinner_item,
+      R.layout.simple_spinner_item,
       resolutionStrings
     )
     Handler(Looper.getMainLooper()).post {

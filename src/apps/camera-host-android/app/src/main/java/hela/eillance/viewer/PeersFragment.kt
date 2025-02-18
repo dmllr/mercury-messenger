@@ -1,4 +1,4 @@
-package hela.eillance.fragments
+package hela.eillance.viewer
 
 import android.os.Bundle
 import android.os.Handler
@@ -12,9 +12,8 @@ import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import hela.eillance.ObserverActivity
 import hela.eillance.camera.R
-import hela.eillance.camera.databinding.FragmentObserverDevicesBinding
+import hela.eillance.camera.databinding.FragmentViewerPeersBinding
 import hela.eillance.ndkio.ClientInfo
 import java.util.Vector
 
@@ -22,13 +21,13 @@ interface DevicesListAdapterEventListener {
   fun onItemClicked(device: ClientInfo)
 }
 
-class ObserverDevicesFragment : Fragment(), DevicesListAdapterEventListener {
+class PeersFragment : Fragment(), DevicesListAdapterEventListener {
 
   companion object {
-    val instance = ObserverDevicesFragment()
+    val instance = PeersFragment()
   }
 
-  private var _binding: FragmentObserverDevicesBinding? = null
+  private var _binding: FragmentViewerPeersBinding? = null
   private val binding get() = _binding!!
   private val devicesListAdapter = DevicesListAdapter(this)
 
@@ -36,7 +35,7 @@ class ObserverDevicesFragment : Fragment(), DevicesListAdapterEventListener {
     inflater: LayoutInflater, container: ViewGroup?,
     savedInstanceState: Bundle?
   ): View {
-    _binding = FragmentObserverDevicesBinding.inflate(inflater, container, false)
+    _binding = FragmentViewerPeersBinding.inflate(inflater, container, false)
     binding.listDevices.layoutManager = LinearLayoutManager(requireContext())
     binding.listDevices.adapter = devicesListAdapter
 
@@ -88,7 +87,7 @@ class ObserverDevicesFragment : Fragment(), DevicesListAdapterEventListener {
 
     override fun onCreateViewHolder(viewGroup: ViewGroup, viewType: Int): ViewHolder {
       val view = LayoutInflater.from(viewGroup.context)
-        .inflate(R.layout.fragment_observer_devices_item, viewGroup, false)
+        .inflate(R.layout.fragment_viewer_peers_peer, viewGroup, false)
       return ViewHolder(view)
     }
 
@@ -106,8 +105,8 @@ class ObserverDevicesFragment : Fragment(), DevicesListAdapterEventListener {
   }
 
   override fun onItemClicked(device: ClientInfo) {
-    (activity as ObserverActivity)
-      .putFragment(ObserverOperationFragment(device), "ObserverOperationFragment")
+    (activity as ViewerActivity)
+      .putFragment(StreamFragment(device), StreamFragment::class.java.canonicalName)
   }
 
 }

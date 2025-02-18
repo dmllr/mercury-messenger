@@ -16,39 +16,39 @@
 #include <rtc/rtc.hpp>
 
 #include "hela/eillance/capture/video_config.hpp"
-#include "hela/eillance/rtc/consumer.hpp"
 #include "hela/eillance/logging/logging.h"
-#include "hela/eillance/utils/string.hpp"
+#include "hela/eillance/rtc/viewer.hpp"
 #include "hela/eillance/utils/h264.hpp"
+#include "hela/eillance/utils/string.hpp"
 
 #include "class_refs.hpp"
 
 namespace hela::eillance {
 
-class ObserverEngine {
+class ViewerEngine {
   JavaVM* jvm_;
   jobject native_bridge_{nullptr};
 
-  ANativeWindow* nativeWindow_{nullptr};
-  AMediaCodec* mediaCodec_{nullptr};
-  std::atomic<bool> codecConfigured_{false};
+  ANativeWindow* native_window_{nullptr};
+  AMediaCodec* media_codec_{nullptr};
+  std::atomic<bool> is_codec_configured_{false};
 
-  RtcConsumer consumer_{};
-  H264Parser h264Parser_{};
+  RtcViewer rtc_viewer_{};
+  H264Parser h264_parser_{};
 
   hela::eillance::EventQueue::SubscriberTypeId configure_subscriber_id_{0};
 
 public:
-  ObserverEngine(JavaVM* jvm, JNIEnv*)
+  ViewerEngine(JavaVM* jvm, JNIEnv*)
       : jvm_(jvm) {
     EventQueue::Instance();
   }
-  ObserverEngine(ObserverEngine&&) = delete;
-  ObserverEngine(const ObserverEngine&) = delete;
-  auto& operator=(ObserverEngine&&) = delete;
-  auto& operator=(const ObserverEngine&) = delete;
+  ViewerEngine(ViewerEngine&&) = delete;
+  ViewerEngine(const ViewerEngine&) = delete;
+  auto& operator=(ViewerEngine&&) = delete;
+  auto& operator=(const ViewerEngine&) = delete;
 
-  ~ObserverEngine() {
+  ~ViewerEngine() {
     Terminate();
 
     JNIEnv* env = AttachCurrentThreadIfNeeded();
@@ -65,7 +65,7 @@ public:
   }
 
   void SetTargetSurface(JNIEnv* env, jobject surface) {
-    nativeWindow_ = ANativeWindow_fromSurface(env, surface);
+    native_window_ = ANativeWindow_fromSurface(env, surface);
   }
 
   void SetNativeBridge(JNIEnv* env, jobject native_bridge) {
@@ -73,46 +73,46 @@ public:
   }
 
   void Start() {
-    consumer_.SetName(std::string(StringUtils::RandomString()));
-    consumer_.Start();
-    consumer_.SetClientChangedCallback([this](const std::vector<ClientInfo>& clients) {
+    rtc_viewer_.SetName(std::string(StringUtils::RandomString()));
+    rtc_viewer_.Start();
+    rtc_viewer_.SetClientChangedCallback([this](const std::vector<ClientInfo>& clients) {
       UpdateClientList(clients);
     });
-    consumer_.SetProfileReceivedCallback([this](const std::string& peer_id, const ClientInfo::Profile& profile) {
+    rtc_viewer_.SetProfileReceivedCallback([this](const std::string& peer_id, const ClientInfo::Profile& profile) {
       UpdateProfile(peer_id, profile);
     });
-    consumer_.SetFrameReceivedCallback([this](const rtc::binary& frame) {
-      h264Parser_.ProcessFrame(frame);
+    rtc_viewer_.SetFrameReceivedCallback([this](const rtc::binary& frame) {
+      h264_parser_.ProcessFrame(frame);
     });
     configure_subscriber_id_ = EventQueue::Instance().Subscribe<VideoConfig>(
         [this](VideoConfig config) { ConfigureSurfaceResolution(config); });
-    LOGI << "Observer engine is initialized and ready.";
+    LOGI << "Viewer engine is initialized and ready.";
   }
 
   void StopStreaming() {
     EventQueue::Instance().Unsubscribe<VideoConfig>(configure_subscriber_id_);
-    consumer_.StopStreaming();
-    if (mediaCodec_ != nullptr) {
-      AMediaCodec_stop(mediaCodec_);
-      AMediaCodec_delete(mediaCodec_);
-      mediaCodec_ = nullptr;
+    rtc_viewer_.StopStreaming();
+    if (media_codec_ != nullptr) {
+      AMediaCodec_stop(media_codec_);
+      AMediaCodec_delete(media_codec_);
+      media_codec_ = nullptr;
     }
-    if (nativeWindow_ != nullptr) {
-      ANativeWindow_release(nativeWindow_);
-      nativeWindow_ = nullptr;
+    if (native_window_ != nullptr) {
+      ANativeWindow_release(native_window_);
+      native_window_ = nullptr;
     }
-    codecConfigured_ = false;
+    is_codec_configured_ = false;
     LOGI << "Decoder resources released.";
   }
 
   void Terminate() {
     StopStreaming();
-    consumer_.Terminate();
+    rtc_viewer_.Terminate();
   }
 
   void SendStreamRequest(const std::string& client_id, const Config& config) {
     InitH264Parser();
-    consumer_.SendStreamRequest(client_id, config);
+    rtc_viewer_.SendStreamRequest(client_id, config);
   }
 
 private:
@@ -137,7 +137,7 @@ private:
 
   /// @brief Initializes the codec with @c VideoConfig.
   void ConfigureCodec(const VideoConfig& conf) {
-    if (codecConfigured_) {
+    if (is_codec_configured_) {
       LOGI << "Codec already configured, skipping reconfiguration.";
       return;
     }
@@ -154,43 +154,43 @@ private:
     AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_HEIGHT, static_cast<std::int32_t>(conf.height));
     AMediaFormat_setInt32(format,AMEDIAFORMAT_KEY_COLOR_FORMAT, color_format);
 
-    mediaCodec_ = AMediaCodec_createDecoderByType("video/avc");
-    if (mediaCodec_ == nullptr) {
+    media_codec_ = AMediaCodec_createDecoderByType("video/avc");
+    if (media_codec_ == nullptr) {
       LOGE << "Failed to create AMediaCodec.";
       AMediaFormat_delete(format);
       return;
     }
 
-    if (AMediaCodec_configure(mediaCodec_, format, nativeWindow_, nullptr, 0) != AMEDIA_OK) {
+    if (AMediaCodec_configure(media_codec_, format, native_window_, nullptr, 0) != AMEDIA_OK) {
       LOGE << "AMediaCodec configuration failed.";
-      AMediaCodec_delete(mediaCodec_);
-      mediaCodec_ = nullptr;
+      AMediaCodec_delete(media_codec_);
+      media_codec_ = nullptr;
     } else {
-      AMediaCodec_start(mediaCodec_);
-      codecConfigured_ = true;
+      AMediaCodec_start(media_codec_);
+      is_codec_configured_ = true;
       LOGI << "MediaCodec successfully configured.";
     }
 
     AMediaFormat_delete(format);
   }
 
-  /// @brief Handles output buffers and renders frames to nativeWindow_.
+  /// @brief Handles output buffers and renders frames to native_window_.
   void HandleOutputBuffer() {
     AMediaCodecBufferInfo info;
     while (true) {
-      if ((!codecConfigured_) || (mediaCodec_ == nullptr)) {
+      if ((!is_codec_configured_) || (media_codec_ == nullptr)) {
         return;
       }
 
-      const auto output_buffer_index = AMediaCodec_dequeueOutputBuffer(mediaCodec_, &info, 0);
+      const auto output_buffer_index = AMediaCodec_dequeueOutputBuffer(media_codec_, &info, 0);
 
       if (output_buffer_index >= 0) {
-        // Render the buffer to nativeWindow_
-        AMediaCodec_releaseOutputBuffer(mediaCodec_, output_buffer_index, true);
+        // Render the buffer to native_window_
+        AMediaCodec_releaseOutputBuffer(media_codec_, output_buffer_index, true);
       } else if (output_buffer_index == AMEDIACODEC_INFO_OUTPUT_BUFFERS_CHANGED) {
         LOGI << "Output buffers changed.";
       } else if (output_buffer_index == AMEDIACODEC_INFO_OUTPUT_FORMAT_CHANGED) {
-        AMediaFormat* new_format = AMediaCodec_getOutputFormat(mediaCodec_);
+        AMediaFormat* new_format = AMediaCodec_getOutputFormat(media_codec_);
         LOGI << "Output format changed: " << AMediaFormat_toString(new_format);
         AMediaFormat_delete(new_format);
       } else if (output_buffer_index == AMEDIACODEC_INFO_TRY_AGAIN_LATER) {
@@ -202,13 +202,13 @@ private:
 
   /// @brief Sends the parsed frame data to the codec.
   void HandleInputBuffer(const std::vector<std::byte>& frameBuffer) {
-    if (!codecConfigured_) {
+    if (!is_codec_configured_) {
       LOGW << "Codec not configured yet, dropping frame.";
       return;
     }
 
     constexpr auto timeout = 10000ULL;
-    auto buf_index = AMediaCodec_dequeueInputBuffer(mediaCodec_, timeout);
+    auto buf_index = AMediaCodec_dequeueInputBuffer(media_codec_, timeout);
     if (buf_index < 0) {
       LOGW << "No available input buffer.";
       HandleOutputBuffer();
@@ -216,7 +216,7 @@ private:
     }
 
     size_t buf_size = 0;
-    auto *buf = AMediaCodec_getInputBuffer(mediaCodec_, buf_index, &buf_size);
+    auto *buf = AMediaCodec_getInputBuffer(media_codec_, buf_index, &buf_size);
     if (buf == nullptr) {
       LOGW << "Failed to get input buffer.";
       return;
@@ -224,7 +224,7 @@ private:
 
     const auto copy_size = std::min(frameBuffer.size(), buf_size);
     std::memcpy(buf, frameBuffer.data(), copy_size);
-    AMediaCodec_queueInputBuffer(mediaCodec_, buf_index, 0, copy_size, 0, 0);
+    AMediaCodec_queueInputBuffer(media_codec_, buf_index, 0, copy_size, 0, 0);
 
     // Process output buffers immediately after input
     HandleOutputBuffer();
@@ -232,14 +232,14 @@ private:
 
   /// @brief Initializes the H.264 parser and sets up callbacks.
   void InitH264Parser() {
-    h264Parser_.Reset();
-    h264Parser_.SetOnConfigureCallback([this](const VideoConfig conf) {
+    h264_parser_.Reset();
+    h264_parser_.SetOnConfigureCallback([this](const VideoConfig conf) {
       LOGI << "Configuration change callback triggered, configuring codec...";
       ConfigureCodec(conf);
       EventQueue::Instance().Push(conf);
     });
 
-    h264Parser_.SetOnInputBufferCallback([this](const std::vector<std::byte>& frameBuffer) {
+    h264_parser_.SetOnInputBufferCallback([this](const std::vector<std::byte>& frameBuffer) {
       HandleInputBuffer(frameBuffer);
     });
   }

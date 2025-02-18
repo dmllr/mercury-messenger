@@ -1,4 +1,4 @@
-package hela.eillance.fragments
+package hela.eillance.streamer
 
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -15,22 +15,21 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.recyclerview.widget.DefaultItemAnimator
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import hela.eillance.PerformerActivity
 import hela.eillance.Tune
 import hela.eillance.camera.R
-import hela.eillance.camera.databinding.FragmentPerformerOperationBinding
+import hela.eillance.camera.databinding.FragmentStreamerOperationBinding
 import hela.eillance.ndkio.EventSource
 import hela.eillance.ndkio.PeerStateLink
 import hela.eillance.ndkio.ServiceConnectionState
 import java.util.Vector
 
-class PerformerOperationFragment : Fragment() {
+class OperationFragment : Fragment() {
 
   companion object {
-    val instance = PerformerOperationFragment()
+    val instance = OperationFragment()
   }
 
-  private var _binding: FragmentPerformerOperationBinding? = null
+  private var _binding: FragmentStreamerOperationBinding? = null
   private val binding get() = _binding!!
   private val connectionsListAdapter = ConnectionsListAdapter()
 
@@ -87,7 +86,7 @@ class PerformerOperationFragment : Fragment() {
     inflater: LayoutInflater, container: ViewGroup?,
     savedInstanceState: Bundle?
   ): View {
-    _binding = FragmentPerformerOperationBinding.inflate(inflater, container, false)
+    _binding = FragmentStreamerOperationBinding.inflate(inflater, container, false)
 
     binding.lsConnectedClients.layoutManager = LinearLayoutManager(requireContext())
     binding.lsConnectedClients.adapter = connectionsListAdapter
@@ -112,7 +111,7 @@ class PerformerOperationFragment : Fragment() {
 
   private fun updateServiceConnectionState() {
     activity ?: return
-    val appEngineService = (activity as PerformerActivity).performerService ?: return
+    val appEngineService = (activity as StreamerActivity).streamerService ?: return
     val state = appEngineService.getServiceConnectionState()
     binding.txCommunicationState.text = state.getResourceString(requireContext())
   }
@@ -155,7 +154,7 @@ class PerformerOperationFragment : Fragment() {
 
     override fun onCreateViewHolder(viewGroup: ViewGroup, viewType: Int): ViewHolder {
       val view = LayoutInflater.from(viewGroup.context)
-        .inflate(R.layout.fragment_performer_operation_connections_item, viewGroup, false)
+        .inflate(R.layout.fragment_streamer_operation_peer, viewGroup, false)
       return ViewHolder(view)
     }
 

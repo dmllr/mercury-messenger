@@ -2,7 +2,7 @@
 #include <iostream>
 #include <chrono>
 
-#include "hela/eillance/rtc/producer.hpp"
+#include "hela/eillance/rtc/streamer.hpp"
 
 int main(int /*argc*/, char** /*argv*/) {
   hela::eillance::VideoCapture cap;

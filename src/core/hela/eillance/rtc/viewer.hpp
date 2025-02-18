@@ -34,7 +34,7 @@ struct ClientInfo {
   Profile profile;
 };
 
-class RtcConsumer final : public RtcTransport {
+class RtcViewer final : public RtcTransport {
   using Json = nlohmann::json;
   using ClientList = std::vector<ClientInfo>;
   using OnClientListChangedCallback = std::function<void(const ClientList&)>;
@@ -55,12 +55,12 @@ class RtcConsumer final : public RtcTransport {
   std::shared_ptr<OnFrameReceivedCallback> on_frame_received_{};
 
 public:
-  RtcConsumer() = default;
-  RtcConsumer(RtcConsumer&&) = delete;
-  RtcConsumer(const RtcConsumer&) = delete;
-  RtcConsumer& operator=(RtcConsumer&&) = delete;
-  RtcConsumer& operator=(const RtcConsumer&) = delete;
-  ~RtcConsumer() final = default;
+  RtcViewer() = default;
+  RtcViewer(RtcViewer&&) = delete;
+  RtcViewer(const RtcViewer&) = delete;
+  RtcViewer& operator=(RtcViewer&&) = delete;
+  RtcViewer& operator=(const RtcViewer&) = delete;
+  ~RtcViewer() final = default;
 
   void OnPeerReady(const std::shared_ptr<Peer>& /*peer*/) final { }
 
@@ -145,10 +145,10 @@ private:
   }
 
   void ProcessSystemMessage(const std::string& type, Json message) final {
-    if (type == "info producers") {
+    if (type == "info streamers") {
       UpdateClientList(message["clients"]);
     } else {
-      throw std::runtime_error("Unknown message type in Consumer's ProcessSystemMessage: " + type);
+      throw std::runtime_error("Unknown message type in Viewer's ProcessSystemMessage: " + type);
     }
   }
 
@@ -224,7 +224,7 @@ private:
 
   Json GetPublishMessage() final {
     return Json{
-        {"kind", "consumer"},
+        {"kind", "viewer"},
     };
   }
 

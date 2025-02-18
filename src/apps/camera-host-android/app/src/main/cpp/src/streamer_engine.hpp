@@ -9,20 +9,20 @@
 #include <jni.h>
 
 #include "hela/eillance/events/event_source.h"
-#include "hela/eillance/rtc/producer.hpp"
+#include "hela/eillance/rtc/streamer.hpp"
 #include "hela/eillance/utils/string.hpp"
 
 namespace hela::eillance {
 
-class PerformerEngine {
+class StreamerEngine {
   JavaVM* jvm_;
   jobject service_instance_;
   jobject native_bridge_;
-  std::shared_ptr<RtcProducer> rtc_producer_;
+  std::shared_ptr<RtcStreamer> rtc_streamer_;
 
 public:
   // NOLINTNEXTLINE(*-easily-swappable-parameters)
-  PerformerEngine(JavaVM* jvm, JNIEnv* env, jobject instance, jobject native_bridge)
+  StreamerEngine(JavaVM* jvm, JNIEnv* env, jobject instance, jobject native_bridge)
       : jvm_(jvm),
         service_instance_(env->NewWeakGlobalRef(instance)),
         native_bridge_(env->NewGlobalRef(native_bridge)) {
@@ -33,27 +33,27 @@ public:
       device_name = StringUtils::RandomString();
       SetSharedPreferenceValue("device_name", device_name);
     }
-    rtc_producer_ = std::make_shared<RtcProducer>();
-    rtc_producer_->SetName(device_name);
-    rtc_producer_->SetStatusCallback([this](const std::string& peer_id, EventSource sender, int status) { SetStatus(peer_id, sender, status); });
+    rtc_streamer_ = std::make_shared<RtcStreamer>();
+    rtc_streamer_->SetName(device_name);
+    rtc_streamer_->SetStatusCallback([this](const std::string& peer_id, EventSource sender, int status) { SetStatus(peer_id, sender, status); });
     DispatchQueue::MainThread().Dispatch([this]() {
-      rtc_producer_->Start();
+      rtc_streamer_->Start();
     });
   }
 
-  PerformerEngine(PerformerEngine&&) = delete;
-  PerformerEngine(const PerformerEngine&) = delete;
-  PerformerEngine& operator=(PerformerEngine&&) = delete;
-  PerformerEngine& operator=(const PerformerEngine&) = delete;
+  StreamerEngine(StreamerEngine&&) = delete;
+  StreamerEngine(const StreamerEngine&) = delete;
+  StreamerEngine& operator=(StreamerEngine&&) = delete;
+  StreamerEngine& operator=(const StreamerEngine&) = delete;
 
-  ~PerformerEngine() {
+  ~StreamerEngine() {
     JNIEnv* env = AttachCurrentThreadIfNeeded();
     if (env == nullptr) {
       LOGE << "Failed to get JNIEnv in destructor.";
       return;
     }
 
-    rtc_producer_->SetStatusCallback(nullptr);
+    rtc_streamer_->SetStatusCallback(nullptr);
 
     if (service_instance_ != nullptr && (env->IsSameObject(service_instance_, nullptr) == 0U)) {
       LOGD << "Deleting service_instance_ GlobalRef.";
@@ -70,22 +70,22 @@ public:
 
   void Start() {
     DispatchQueue::MainThread().Dispatch([this]() {
-      rtc_producer_->Start();
+      rtc_streamer_->Start();
     });
   }
 
   void Stop() {
     DispatchQueue::MainThread().Dispatch([this]() {
-      rtc_producer_->Terminate();
+      rtc_streamer_->Terminate();
     });
   }
 
   ServiceConnectionState GetServiceConnectionState() {
-    return rtc_producer_->GetServiceConnectionState();
+    return rtc_streamer_->GetServiceConnectionState();
   }
 
   void ConfigureDeviceName(const std::string& device_name) {
-    rtc_producer_->SetName(device_name);
+    rtc_streamer_->SetName(device_name);
   }
 
   bool HasSharedPreferenceValue(const std::string& key) {

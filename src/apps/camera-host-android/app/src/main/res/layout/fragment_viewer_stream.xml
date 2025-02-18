@@ -5,7 +5,7 @@
     android:id="@+id/main"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context="hela.eillance.ObserverActivity">
+    tools:context="hela.eillance.viewer.ViewerActivity">
 
   <SurfaceView
       android:id="@+id/output_surface"

@@ -1,1 +1,2 @@
-add_subdirectory(camera-host-cli-cp)
+add_subdirectory(cli-streamer)
+add_subdirectory(cli-viewer)

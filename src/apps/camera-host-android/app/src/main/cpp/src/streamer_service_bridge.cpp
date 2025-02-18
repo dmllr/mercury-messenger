@@ -6,9 +6,9 @@
 #include "hela/eillance/common/event_queue.hpp"
 #include "hela/eillance/logging/logging.h"
 
-#include "performer_engine.hpp"
+#include "streamer_engine.hpp"
 
-using PerformerEngine = hela::eillance::PerformerEngine;
+using Engine = hela::eillance::StreamerEngine;
 
 namespace {
 
@@ -18,40 +18,40 @@ JavaVM* javaVm = nullptr;
 }  // namespace
 
 extern "C" JNIEXPORT jlong JNICALL
-Java_hela_eillance_PerformerService_createAppEngine(  // NOLINT(readability-identifier-naming)
+Java_hela_eillance_streamer_StreamerService_createAppEngine(  // NOLINT(readability-identifier-naming)
     JNIEnv* env, jobject instance, jobject nativeBridge) {
-  return reinterpret_cast<jlong>(new PerformerEngine(javaVm, env, instance, nativeBridge));  // NOLINT(*-pro-type-reinterpret-cast)
+  return reinterpret_cast<jlong>(new Engine(javaVm, env, instance, nativeBridge));  // NOLINT(*-pro-type-reinterpret-cast)
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_hela_eillance_PerformerService_deleteAppEngine(  // NOLINT(readability-identifier-naming)
+Java_hela_eillance_streamer_StreamerService_deleteAppEngine(  // NOLINT(readability-identifier-naming)
     JNIEnv*, jobject /*instance*/, jlong appmgr) {
 
-  auto* app = reinterpret_cast<PerformerEngine*>(appmgr); // NOLINT(*-pro-type-reinterpret-cast, *-no-int-to-ptr)
+  auto* app = reinterpret_cast<Engine*>(appmgr); // NOLINT(*-pro-type-reinterpret-cast, *-no-int-to-ptr)
   delete app;
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_hela_eillance_PerformerService_start(  // NOLINT(readability-identifier-naming)
+Java_hela_eillance_streamer_StreamerService_start(  // NOLINT(readability-identifier-naming)
     JNIEnv*, jobject  /*instance*/, jlong appmgr) {
 
-  auto* app = reinterpret_cast<PerformerEngine*>(appmgr); // NOLINT(*-pro-type-reinterpret-cast, *-no-int-to-ptr)
+  auto* app = reinterpret_cast<Engine*>(appmgr); // NOLINT(*-pro-type-reinterpret-cast, *-no-int-to-ptr)
   app->Start();
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_hela_eillance_PerformerService_stop(  // NOLINT(readability-identifier-naming)
+Java_hela_eillance_streamer_StreamerService_stop(  // NOLINT(readability-identifier-naming)
     JNIEnv*, jobject  /*instance*/, jlong appmgr) {
 
-  auto* app = reinterpret_cast<PerformerEngine*>(appmgr); // NOLINT(*-pro-type-reinterpret-cast, *-no-int-to-ptr)
+  auto* app = reinterpret_cast<Engine*>(appmgr); // NOLINT(*-pro-type-reinterpret-cast, *-no-int-to-ptr)
   app->Stop();
 }
 
 extern "C" JNIEXPORT jobject JNICALL
-Java_hela_eillance_PerformerService_getServiceConnectionState(  // NOLINT(readability-identifier-naming)
+Java_hela_eillance_streamer_StreamerService_getServiceConnectionState(  // NOLINT(readability-identifier-naming)
     JNIEnv* env, jobject /*instance*/, jlong appmgr) {
 
-  auto* app = reinterpret_cast<PerformerEngine*>(appmgr); // NOLINT(*-pro-type-reinterpret-cast, *-no-int-to-ptr)
+  auto* app = reinterpret_cast<Engine*>(appmgr); // NOLINT(*-pro-type-reinterpret-cast, *-no-int-to-ptr)
   auto status = static_cast<int>(app->GetServiceConnectionState());
 
   jclass cls = env->FindClass("hela/eillance/ndkio/ServiceConnectionState");
@@ -65,10 +65,10 @@ Java_hela_eillance_PerformerService_getServiceConnectionState(  // NOLINT(readab
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_hela_eillance_PerformerService_configureDeviceName(  // NOLINT(readability-identifier-naming)
+Java_hela_eillance_streamer_StreamerService_configureDeviceName(  // NOLINT(readability-identifier-naming)
     JNIEnv* env, jobject  /*instance*/, jlong appmgr, jstring deviceName) {
 
-  auto* app = reinterpret_cast<PerformerEngine*>(appmgr); // NOLINT(*-pro-type-reinterpret-cast, *-no-int-to-ptr)
+  auto* app = reinterpret_cast<Engine*>(appmgr); // NOLINT(*-pro-type-reinterpret-cast, *-no-int-to-ptr)
   auto* device_name_c_str = env->GetStringUTFChars(deviceName, nullptr);
   auto device_name_str = std::string(device_name_c_str);
   env->ReleaseStringUTFChars(deviceName, device_name_c_str);
@@ -77,7 +77,7 @@ Java_hela_eillance_PerformerService_configureDeviceName(  // NOLINT(readability-
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_hela_eillance_PerformerService_configureVideoCapture(  // NOLINT(readability-identifier-naming)
+Java_hela_eillance_streamer_StreamerService_configureVideoCapture(  // NOLINT(readability-identifier-naming)
     JNIEnv* env, jobject  /*instance*/, jlong /*appmgr*/, jobject videoConfig) {
 
   auto conf = hela::eillance::VideoConfig{};

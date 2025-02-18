@@ -1,4 +1,4 @@
-package hela.eillance
+package hela.eillance.viewer
 
 import android.os.Bundle
 import android.view.Surface
@@ -10,21 +10,19 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
 import hela.eillance.camera.R
-import hela.eillance.camera.databinding.ActivityObserverBinding
-import hela.eillance.fragments.ObserverDevicesFragment
-import hela.eillance.fragments.ObserverOperationFragment
+import hela.eillance.camera.databinding.ActivityViewerBinding
 import hela.eillance.ndkio.ClientInfo
 import hela.eillance.ndkio.Config
 import hela.eillance.ndkio.Profile
-import hela.eillance.ndkio.interfaces.IObserverNativeBridge
+import hela.eillance.ndkio.interfaces.IViewerNativeBridge
 
-class ObserverActivity : AppCompatActivity(), IObserverNativeBridge {
-  private lateinit var binding: ActivityObserverBinding
+class ViewerActivity : AppCompatActivity(), IViewerNativeBridge {
+  private lateinit var binding: ActivityViewerBinding
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
-    binding = ActivityObserverBinding.inflate(layoutInflater)
+    binding = ActivityViewerBinding.inflate(layoutInflater)
     setContentView(binding.root)
     ViewCompat.setOnApplyWindowInsetsListener(binding.main) { v, insets ->
       val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
@@ -36,7 +34,7 @@ class ObserverActivity : AppCompatActivity(), IObserverNativeBridge {
     initEngine(this)
 
     supportFragmentManager.beginTransaction()
-      .replace(R.id.content, ObserverDevicesFragment.instance)
+      .replace(R.id.content, PeersFragment.instance)
       .commit()
 
     supportFragmentManager.addOnBackStackChangedListener {
@@ -90,7 +88,7 @@ class ObserverActivity : AppCompatActivity(), IObserverNativeBridge {
     actionBar.setDisplayShowHomeEnabled(c > 0)
   }
 
-  private external fun initEngine(nativeBridge: IObserverNativeBridge)
+  private external fun initEngine(nativeBridge: IViewerNativeBridge)
   external fun initDecoder(surface: Surface)
   external fun releaseDecoder()
   external fun sendStreamRequest(clientId: String, config: Config)
@@ -98,25 +96,27 @@ class ObserverActivity : AppCompatActivity(), IObserverNativeBridge {
   companion object {
     const val BACKSTACK = "fragments_backstack"
     init {
-      System.loadLibrary("lib-observer-service-bridge")
+      System.loadLibrary("lib-viewer-service-bridge")
     }
   }
 
   override fun onStreamResolutionChange(width: Int, height: Int) {
-    val fragment = supportFragmentManager.findFragmentByTag("ObserverOperationFragment")
-        as ObserverOperationFragment?
+    val fragment = supportFragmentManager.findFragmentByTag(
+      StreamFragment::class.java.canonicalName)
+        as StreamFragment?
     fragment?.onStreamResolutionChange(width, height)
   }
 
   override fun onDeviceProfileReceived(peerId: String, profile: Profile) {
-    val fragment = supportFragmentManager.findFragmentByTag("ObserverOperationFragment")
-        as ObserverOperationFragment?
+    val fragment = supportFragmentManager.findFragmentByTag(
+      StreamFragment::class.java.canonicalName)
+        as StreamFragment?
     assert(peerId == (fragment?.device?.id ?: ""))
     fragment?.onDeviceProfileReceived(profile)
   }
 
   override fun onClientListUpdate(clients: List<ClientInfo>) {
-    ObserverDevicesFragment.instance.updateClientList(clients)
+    PeersFragment.instance.updateClientList(clients)
   }
 
 }
