@@ -1,6 +1,7 @@
 #pragma once
 
 #include <jni.h>
+#include <sys/system_properties.h>
 
 #include <atomic>
 #include <string>
@@ -42,6 +43,25 @@ public:
   ViewerEngine(JavaVM* jvm, JNIEnv*)
       : jvm_(jvm) {
     EventQueue::Instance();
+
+//    auto device_id = GetSharedPreferenceValue("device_id", "");
+//    if (device_id.empty()) {
+//      device_id = StringUtils::RandomString();
+//      SetSharedPreferenceValue("device_id", device_id);
+//    }
+//    auto device_name = GetSharedPreferenceValue("device_name", "");
+//    if (device_name.empty()) {
+//      char model_string[PROP_VALUE_MAX + 1];
+//      __system_property_get("ro.product.model", model_string);
+//      device_name = std::string(model_string);
+//      SetSharedPreferenceValue("device_name", device_name);
+//    }
+//    rtc_viewer_.SetId(device_id);
+//    rtc_viewer_.SetName(device_name);
+    rtc_viewer_.SetId(StringUtils::RandomString());
+    char model_string[PROP_VALUE_MAX + 1];
+    __system_property_get("ro.product.model", model_string);
+    rtc_viewer_.SetName(std::string(model_string));
   }
   ViewerEngine(ViewerEngine&&) = delete;
   ViewerEngine(const ViewerEngine&) = delete;
@@ -73,7 +93,6 @@ public:
   }
 
   void Start() {
-    rtc_viewer_.SetName(std::string(StringUtils::RandomString()));
     rtc_viewer_.Start();
     rtc_viewer_.SetClientChangedCallback([this](const std::vector<Device>& clients) {
       UpdateClientList(clients);

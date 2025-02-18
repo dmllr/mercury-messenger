@@ -97,7 +97,7 @@ public:
     }
   }
 
-  void ProcessSystemMessage(const std::string& type, Json  /*message*/) final {
+  void ProcessSystemMessage(const std::string& type, Json  message) final {
     throw std::runtime_error("Unknown message type in Streamer's ProcessSystemMessage: " + type);
   }
 

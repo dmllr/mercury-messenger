@@ -18,7 +18,7 @@ logging.basicConfig(
 logging.getLogger("websockets").addHandler(logging.NullHandler())
 
 
-class Client:
+class Peer:
     class Kind(str, Enum):
         Streamer = 'streamer'
         Viewer = 'viewer'
@@ -26,22 +26,23 @@ class Client:
     def __init__(self, id, name, kind, ws):
         self.id: str = id
         self.name: str = name
-        self.kind: Client.Kind = kind
+        self.kind: Peer.Kind = kind
         self.ws: websockets.WebSocketServerProtocol = ws
 
 
-class Streamer(Client):
+class Streamer(Peer):
     def __init__(self, id, name, kind, ws):
         super().__init__(id, name, kind, ws)
         self.profile = {}
 
 
-class Viewer(Client):
+class Viewer(Peer):
     def __init__(self, id, name, kind, ws):
         super().__init__(id, name, kind, ws)
 
 
-clients: dict[str, dict[str, Union[Streamer, Viewer]]] = {}
+# Mapping: user_id -> (client_id -> Client instance)
+peers: dict[str, dict[str, Union[Streamer, Viewer]]] = {}
 authManager = AuthManager()
 
 
@@ -82,23 +83,41 @@ async def handle_connection(websocket: websockets.WebSocketServerProtocol):
             return False
         return authManager.validate_token(token)['user']
 
-    async def send_publishers_for_client(connection):
+    async def send_streaming_peers_to_viewer(connection):
         """Sends the list of streamers to a client"""
         jdump = json.dumps({
             "type": "info streamers",
             "clients": [
                 {"id": cid, "name": c.name, "profile": c.profile}
-                for cid, c in clients[user_id].items() if c.kind == Client.Kind.Streamer
+                for cid, c in peers[user_id].items() if c.kind == Peer.Kind.Streamer
             ]
         })
         logging.debug(f'>>[{user_id}/{client_id}]: {jdump}')
         await connection.send(jdump)
 
-    async def send_publishers():
+    async def send_streaming_peers_to_all_viewers():
         """Sends the updated list of streamers to all viewers"""
-        for peer in clients[user_id].values():
-            if peer.kind == Client.Kind.Viewer:
-                await send_publishers_for_client(peer.ws)
+        for peer in peers.get(user_id, {}).values():
+            if peer.kind == Peer.Kind.Viewer:
+                await send_streaming_peers_to_viewer(peer.ws)
+
+    async def notify_peer_disconnected(disconnected_client: Peer):
+        """
+        Notifies opposite type clients that a peer has disconnected.
+        For example, if a streamer disconnects, notify viewers; if a viewer disconnects, notify streamers.
+        """
+        target_kind = Peer.Kind.Viewer if disconnected_client.kind == Peer.Kind.Streamer else Peer.Kind.Streamer
+        notification = json.dumps({
+            "type": "peer disconnected",
+            "id": disconnected_client.id,
+        })
+        for peer in peers.get(user_id, {}).values():
+            if peer.kind == target_kind:
+                try:
+                    logging.debug(f'Notifying {user_id}/{peer.id} of disconnection of {disconnected_client.id}')
+                    await peer.ws.send(notification)
+                except Exception:
+                    logging.error(f"Error notifying peer {user_id}/{peer.id} about disconnection of {disconnected_client.id}", exc_info=True)
 
     try:
         async for data in websocket:
@@ -122,27 +141,50 @@ async def handle_connection(websocket: websockets.WebSocketServerProtocol):
                     client_name = message.get('name')
                     client_kind = message.get('kind')
 
-                    client_class = Viewer if client_kind == Client.Kind.Viewer else Streamer
-                    client_instance = client_class(client_id, client_name, client_kind, websocket)
-                    clients.setdefault(user_id, {})[client_id] = client_instance
-
-                    if client_kind == Client.Kind.Streamer:
-                        client_instance.profile = message.get('profile')
+                    user_clients = peers.setdefault(user_id, {})
+                    existing_client = user_clients.get(client_id)
+                    if existing_client:
+                        if existing_client.ws != websocket:
+                            logging.info(f'Replacing existing connection for client "{user_id}/{client_id}"')
+                            try:
+                                await existing_client.ws.close(code=4001, reason="Replaced by new connection")
+                            except Exception:
+                                logging.exception("Error closing old connection")
+                            await notify_peer_disconnected(existing_client)
+                            # Create a new client instance for the new connection.
+                            client_class = Viewer if client_kind == Peer.Kind.Viewer else Streamer
+                            client_instance = client_class(client_id, client_name, client_kind, websocket)
+                            if client_kind == Peer.Kind.Streamer:
+                                client_instance.profile = message.get('profile')
+                            user_clients[client_id] = client_instance
+                        else:
+                            # Same connection: update the client's information.
+                            logging.info(f'Updating client "{user_id}/{client_id}" on the same connection')
+                            existing_client.name = client_name
+                            existing_client.kind = client_kind
+                            if client_kind == Peer.Kind.Streamer:
+                                existing_client.profile = message.get('profile')
+                    else:
+                        client_class = Viewer if client_kind == Peer.Kind.Viewer else Streamer
+                        client_instance = client_class(client_id, client_name, client_kind, websocket)
+                        if client_kind == Peer.Kind.Streamer:
+                            client_instance.profile = message.get('profile')
+                        user_clients[client_id] = client_instance
 
                     logging.info(f'Peer "{user_id}/{client_id}" published')
-                    await send_publishers()
+                    await send_streaming_peers_to_all_viewers()
 
                 elif message['type'] == 'get streamers':
-                    await send_publishers_for_client(websocket)
+                    await send_streaming_peers_to_viewer(websocket)
 
                 else:
                     destination_id = message.get('to')
-                    if destination_id in clients[user_id]:
-                        client = clients[user_id][destination_id]
+                    if destination_id in peers[user_id]:
+                        client = peers[user_id][destination_id]
                         message['from'] = client_id
-                        data = json.dumps(message)
-                        logging.debug(f'>>[{user_id}/{client_id}] to "{user_id}/{destination_id}": {data}')
-                        await client.ws.send(data)
+                        data_to_send = json.dumps(message)
+                        logging.debug(f'>>[{user_id}/{client_id}] to "{user_id}/{destination_id}": {data_to_send}')
+                        await client.ws.send(data_to_send)
                     else:
                         logging.warning(f'Peer "{destination_id}" not found')
                         response = {
@@ -157,13 +199,16 @@ async def handle_connection(websocket: websockets.WebSocketServerProtocol):
     except Exception:
         logging.error(f"Unexpected error for client {user_id}/{client_id}", exc_info=True)
     finally:
-        if user_id and client_id and user_id in clients and client_id in clients[user_id]:
-            del clients[user_id][client_id]
+        # On disconnect, remove the client and notify opposite peers.
+        if user_id and client_id and user_id in peers and client_id in peers[user_id]:
+            disconnected_client = peers[user_id][client_id]
+            del peers[user_id][client_id]
             logging.info(f'Peer "{user_id}/{client_id}" disconnected')
             try:
-                await send_publishers()
+                await send_streaming_peers_to_all_viewers()
             except Exception:
-                logging.error("Error while sending publishers", exc_info=True)
+                logging.error("Error while sending the streamer list", exc_info=True)
+            await notify_peer_disconnected(disconnected_client)
 
 
 async def main():

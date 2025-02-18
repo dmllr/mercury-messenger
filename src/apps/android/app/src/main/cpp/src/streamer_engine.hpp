@@ -1,12 +1,14 @@
 #pragma once
 
+#include <jni.h>
+#include <sys/system_properties.h>
+
 #include <functional>
 #include <thread>
 
 #include <android/native_activity.h>
 #include <android/native_window.h>
 #include <android/native_window_jni.h>
-#include <jni.h>
 
 #include "hela/eillance/events/event_source.h"
 #include "hela/eillance/rtc/streamer.hpp"
@@ -28,12 +30,20 @@ public:
         native_bridge_(env->NewGlobalRef(native_bridge)) {
     EventQueue::Instance();
 
+    auto device_id = GetSharedPreferenceValue("device_id", "");
+    if (device_id.empty()) {
+      device_id = StringUtils::RandomString();
+      SetSharedPreferenceValue("device_id", device_id);
+    }
     auto device_name = GetSharedPreferenceValue("device_name", "");
     if (device_name.empty()) {
-      device_name = StringUtils::RandomString();
+      char model_string[PROP_VALUE_MAX + 1];
+      __system_property_get("ro.product.model", model_string);
+      device_name = std::string(model_string);
       SetSharedPreferenceValue("device_name", device_name);
     }
     rtc_streamer_ = std::make_shared<RtcStreamer>();
+    rtc_streamer_->SetId(device_id);
     rtc_streamer_->SetName(device_name);
     rtc_streamer_->SetStatusCallback([this](const std::string& peer_id, EventSource sender, int status) { SetStatus(peer_id, sender, status); });
     DispatchQueue::MainThread().Dispatch([this]() {

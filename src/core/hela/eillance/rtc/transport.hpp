@@ -70,11 +70,16 @@ public:
     }
   }
 
+  void SetId(const std::string& id) {
+    assert(!is_published_);
+    id_ = id;
+    if (device_name_.empty()) {
+      device_name_ = id_;
+    }
+  }
+
   void Start() {
-    // it is necessary to renew the peer ID in case of reconnect, so the
-    // signaling server would threaten it differently until a previous
-    // connection considered broken.
-    id_ = StringUtils::RandomString();
+    assert(!id_.empty());
     LOGI << "The local ID is: " << id_.data();
 
     auto ws_config = rtc::WebSocketConfiguration{
@@ -373,6 +378,9 @@ private:
       });
     } else if (type == "error") {
       LOGE << "Signaling error received: " << message["error"].get<std::string>();
+    } else if (type == "peer disconnected") {
+      const auto disconnected_peer_id = message["id"].get<std::string>();
+      RemovePeer(disconnected_peer_id);
     } else {
       ProcessSystemMessage(type, message);
     }
