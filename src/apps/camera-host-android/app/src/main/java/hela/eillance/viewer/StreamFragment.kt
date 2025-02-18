@@ -12,14 +12,14 @@ import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import androidx.fragment.app.Fragment
 import hela.eillance.camera.databinding.FragmentViewerStreamBinding
-import hela.eillance.ndkio.ClientInfo
+import hela.eillance.ndkio.Device
 import hela.eillance.ndkio.Config
 import hela.eillance.ndkio.Profile
 import hela.eillance.ndkio.Resolution
 
 private const val RESOLUTION_SEPARATOR = "×"
 
-class StreamFragment(internal val device: ClientInfo) : Fragment(),
+class StreamFragment(internal val device: Device) : Fragment(),
   SurfaceHolder.Callback {
 
   private var _binding: FragmentViewerStreamBinding? = null

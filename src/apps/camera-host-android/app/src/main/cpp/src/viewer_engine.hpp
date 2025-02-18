@@ -75,10 +75,10 @@ public:
   void Start() {
     rtc_viewer_.SetName(std::string(StringUtils::RandomString()));
     rtc_viewer_.Start();
-    rtc_viewer_.SetClientChangedCallback([this](const std::vector<ClientInfo>& clients) {
+    rtc_viewer_.SetClientChangedCallback([this](const std::vector<Device>& clients) {
       UpdateClientList(clients);
     });
-    rtc_viewer_.SetProfileReceivedCallback([this](const std::string& peer_id, const ClientInfo::Profile& profile) {
+    rtc_viewer_.SetProfileReceivedCallback([this](const std::string& peer_id, const Device::Profile& profile) {
       UpdateProfile(peer_id, profile);
     });
     rtc_viewer_.SetFrameReceivedCallback([this](const rtc::binary& frame) {
@@ -262,7 +262,7 @@ private:
     }
   }
 
-  static void SetBridgeProfile(JNIEnv* env, jobject& java_list, const ClientInfo::Profile& profile) {
+  static void SetBridgeProfile(JNIEnv* env, jobject& java_list, const Device::Profile& profile) {
     auto& classref = ClassRefs::Instance();
 
     for (const auto& camera : profile) {
@@ -290,7 +290,7 @@ private:
     }
   }
 
-  void UpdateClientList(const std::vector<ClientInfo>& clients) {
+  void UpdateClientList(const std::vector<Device>& clients) {
     if (native_bridge_ == nullptr) {
       return;
     }
@@ -321,7 +321,7 @@ private:
 
       SetBridgeProfile(env, camera_list, client.profile);
 
-      jobject jclient = classref.Class("hela/eillance/ndkio/ClientInfo").NewObject(env, id, name, camera_list);
+      jobject jclient = classref.Class("hela/eillance/ndkio/Device").NewObject(env, id, name, camera_list);
       // NOLINTNEXTLINE(*-vararg)
       env->CallBooleanMethod(java_list, add_method, jclient);
 
@@ -337,7 +337,7 @@ private:
     env->DeleteLocalRef(callback_cls);
   }
 
-  void UpdateProfile(const std::string& peer_id, const ClientInfo::Profile& profile) {
+  void UpdateProfile(const std::string& peer_id, const Device::Profile& profile) {
     if (native_bridge_ == nullptr) {
       return;
     }

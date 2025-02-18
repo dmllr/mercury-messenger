@@ -16,7 +16,7 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
   auto rtc = RtcViewer();
   rtc.SetName("CLI::" + StringUtils::RandomString());
   rtc.Start();
-  rtc.SetClientChangedCallback([&rtc](const std::vector<ClientInfo>& clients){
+  rtc.SetClientChangedCallback([&rtc](const std::vector<Device>& clients){
     if (clients.empty()) {
       return;
     }

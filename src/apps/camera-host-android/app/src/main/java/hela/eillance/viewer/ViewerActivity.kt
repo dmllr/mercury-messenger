@@ -11,7 +11,7 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
 import hela.eillance.camera.R
 import hela.eillance.camera.databinding.ActivityViewerBinding
-import hela.eillance.ndkio.ClientInfo
+import hela.eillance.ndkio.Device
 import hela.eillance.ndkio.Config
 import hela.eillance.ndkio.Profile
 import hela.eillance.ndkio.interfaces.IViewerNativeBridge
@@ -115,7 +115,7 @@ class ViewerActivity : AppCompatActivity(), IViewerNativeBridge {
     fragment?.onDeviceProfileReceived(profile)
   }
 
-  override fun onClientListUpdate(clients: List<ClientInfo>) {
+  override fun onClientListUpdate(clients: List<Device>) {
     PeersFragment.instance.updateClientList(clients)
   }
 
