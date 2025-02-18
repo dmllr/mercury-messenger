@@ -110,9 +110,9 @@ public:
     consumer_.Terminate();
   }
 
-  void SendStreamRequest(const std::string& client_id) {
+  void SendStreamRequest(const std::string& client_id, const Config& config) {
     InitH264Parser();
-    consumer_.SendStreamRequest(client_id);
+    consumer_.SendStreamRequest(client_id, config);
   }
 
 private:

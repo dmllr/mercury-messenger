@@ -64,10 +64,21 @@ public:
 
   void OnPeerReady(const std::shared_ptr<Peer>& /*peer*/) final { }
 
-  void SendStreamRequest(const std::string& client_id) {
+  void SendStreamRequest(const std::string& client_id, const Config& config) {
     Json request = {
         {"to", client_id},
-        {"type", "streamRequest"}};
+        {"type", "streamRequest"},
+        {"config", {
+          {"video", {
+            {"cameraId", config.video_config.cameraId},
+            {"width", config.video_config.width},
+            {"height", config.video_config.height},
+            {"frameRate", config.video_config.frameRate},
+            {"bitrate", config.video_config.bitrate},
+          },
+          {"audio", {}},
+       }},
+    }};
     SendPeerMessage(request);
   }
 

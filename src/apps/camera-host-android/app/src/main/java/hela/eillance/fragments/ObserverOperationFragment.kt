@@ -14,45 +14,48 @@ import hela.eillance.ObserverActivity
 import hela.eillance.camera.R
 import hela.eillance.camera.databinding.FragmentObserverOperationBinding
 import hela.eillance.ndkio.ClientInfo
+import hela.eillance.ndkio.Config
 import hela.eillance.ndkio.Profile
+import hela.eillance.ndkio.Resolution
 
-class ObserverOperationFragment(val device: ClientInfo)
-  : Fragment(), SurfaceHolder.Callback
-{
+private const val RESOLUTION_SEPARATOR = "×"
+
+class ObserverOperationFragment(internal val device: ClientInfo) : Fragment(), SurfaceHolder.Callback {
+
   private var _binding: FragmentObserverOperationBinding? = null
   private val binding get() = _binding!!
   private var profile: Profile = device.profile
+
+  private val defaultCameraAdapter: ArrayAdapter<String> by lazy {
+    ArrayAdapter(
+      requireContext(),
+      android.R.layout.simple_spinner_item,
+      listOf(getString(R.string.fr_observer_operation_default_camera))
+    )
+  }
+
+  private val defaultResolutionAdapter: ArrayAdapter<String> by lazy {
+    ArrayAdapter(
+      requireContext(),
+      android.R.layout.simple_spinner_item,
+      listOf(getString(R.string.fr_observer_operation_default_resolution))
+    )
+  }
 
   override fun onCreateView(
     inflater: LayoutInflater, container: ViewGroup?,
     savedInstanceState: Bundle?
   ): View {
     _binding = FragmentObserverOperationBinding.inflate(inflater, container, false)
-    val defaultCameraAdapter: ArrayAdapter<String> =
-      ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item,
-        listOf(getString(R.string.fr_observer_operation_default_camera)))
-    val defaultResolutionAdapter: ArrayAdapter<String> =
-      ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item,
-        listOf(getString(R.string.fr_observer_operation_default_resolution)))
 
     binding.outputSurface.holder.addCallback(this)
     binding.selectCamera.adapter = defaultCameraAdapter
     binding.selectCameraResolution.adapter = defaultResolutionAdapter
     binding.selectCamera.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
       override fun onItemSelected(parent: AdapterView<*>, view: View?, position: Int, id: Long) {
-        if (position >= profile.size) {
-          Handler(Looper.getMainLooper()).post {
-          binding.selectCameraResolution.adapter = defaultResolutionAdapter
-            }
-          return
-        }
-        val adapter: ArrayAdapter<String> =
-          ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item,
-            profile[position].resolutions.map { "${it.width}×${it.height}" })
-        Handler(Looper.getMainLooper()).post {
-          binding.selectCameraResolution.adapter = adapter
-        }
+        updateResolutionSpinner(position)
       }
+
       override fun onNothingSelected(parent: AdapterView<*>) {
       }
     }
@@ -66,11 +69,11 @@ class ObserverOperationFragment(val device: ClientInfo)
   }
 
   override fun surfaceCreated(holder: SurfaceHolder) {
-    (activity as ObserverActivity).initDecoder(holder.surface)
+    (activity as? ObserverActivity)?.initDecoder(holder.surface)
   }
 
   override fun surfaceDestroyed(holder: SurfaceHolder) {
-    (activity as ObserverActivity).releaseDecoder()
+    (activity as? ObserverActivity)?.releaseDecoder()
   }
 
   override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
@@ -82,7 +85,20 @@ class ObserverOperationFragment(val device: ClientInfo)
   }
 
   private fun sendStreamRequest() {
-    (activity as ObserverActivity).sendStreamRequest(device.id)
+    val config = Config()
+    val selectedCameraPosition = binding.selectCamera.selectedItemPosition
+    if (selectedCameraPosition in profile.indices) {
+      val camera = profile[selectedCameraPosition]
+      config.video.cameraId = camera.id.toInt()
+
+      val selectedResolutionPosition = binding.selectCameraResolution.selectedItemPosition
+      if (selectedResolutionPosition in camera.resolutions.indices) {
+        val resolution = camera.resolutions[selectedResolutionPosition]
+        config.video.width = resolution.width
+        config.video.height = resolution.height
+      }
+    }
+    (activity as? ObserverActivity)?.sendStreamRequest(device.id, config)
   }
 
   fun onStreamResolutionChange(width: Int, height: Int) {
@@ -104,12 +120,41 @@ class ObserverOperationFragment(val device: ClientInfo)
 
   fun onDeviceProfileReceived(profile: Profile) {
     this.profile = profile
-    val adapter: ArrayAdapter<String> =
-      ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item,
-        this.profile.map { "${it.id}: ${it.name}" })
+    val cameraNames = profile.map { "${it.id}: ${it.name}" }
+    updateCameraSpinner(cameraNames)
+  }
+
+  private fun updateCameraSpinner(cameraNames: List<String>) {
+    val adapter = ArrayAdapter(
+      requireContext(),
+      android.R.layout.simple_spinner_item,
+      cameraNames
+    )
     Handler(Looper.getMainLooper()).post {
       binding.selectCamera.adapter = adapter
     }
   }
 
+  private fun updateResolutionSpinner(cameraPosition: Int) {
+    if (cameraPosition !in profile.indices) {
+      Handler(Looper.getMainLooper()).post {
+        binding.selectCameraResolution.adapter = defaultResolutionAdapter
+      }
+      return
+    }
+
+    val resolutions = profile[cameraPosition].resolutions
+    val resolutionStrings = resolutions.map { it.toResolutionString() }
+    val adapter = ArrayAdapter(
+      requireContext(),
+      android.R.layout.simple_spinner_item,
+      resolutionStrings
+    )
+    Handler(Looper.getMainLooper()).post {
+      binding.selectCameraResolution.adapter = adapter
+    }
+  }
+  private fun Resolution.toResolutionString(): String {
+    return "${this.width}$RESOLUTION_SEPARATOR${this.height}"
+  }
 }
