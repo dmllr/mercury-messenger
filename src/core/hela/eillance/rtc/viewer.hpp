@@ -18,7 +18,7 @@
 
 namespace hela::eillance {
 
-struct ClientInfo {
+struct Device {
   struct Camera {
     struct Resolution {
       std::uint16_t width;
@@ -36,16 +36,16 @@ struct ClientInfo {
 
 class RtcViewer final : public RtcTransport {
   using Json = nlohmann::json;
-  using ClientList = std::vector<ClientInfo>;
-  using OnClientListChangedCallback = std::function<void(const ClientList&)>;
-  using OnProfileReceivedCallback = std::function<void(const std::string&, const ClientInfo::Profile&)>;
+  using Devices = std::vector<Device>;
+  using OnClientListChangedCallback = std::function<void(const Devices&)>;
+  using OnProfileReceivedCallback = std::function<void(const std::string&, const Device::Profile&)>;
   using OnFrameReceivedCallback = std::function<void(const rtc::binary&)>;
 
   /// @brief Audio and video stream
   std::shared_ptr<Stream> av_stream_;
 
   /// @brief Connected publishers
-  ClientList clients_;
+  Devices devices_;
 
   /// @brief A callback to be called when a client list is updated
   std::shared_ptr<OnClientListChangedCallback> on_client_list_changed_{};
@@ -230,7 +230,7 @@ private:
 
   void UpdateClientList(const nlohmann::json& json) {
     // Clear existing clients
-    clients_.clear();
+    devices_.clear();
 
     if (!json.is_array()) {
       LOGW << "Received invalid client list format";
@@ -239,35 +239,35 @@ private:
 
     // Parse new clients
     for (const auto& item: json) {
-      ClientInfo client {
+      Device client {
         .id = item.at("id").get<std::string>(),
         .name = item.at("name").get<std::string>(),
         .profile = ParseDeviceProfile(item.at("profile"))
       };
-      clients_.push_back(std::move(client));
+      devices_.push_back(std::move(client));
     }
 
     if (on_client_list_changed_ != nullptr) {
-      (*on_client_list_changed_)(clients_);
+      (*on_client_list_changed_)(devices_);
     }
 
     // for debugging purposes
     LOGI << "Updated client list:";
-    for (const auto& client: clients_) {
+    for (const auto& client: devices_) {
       LOGI << "  - " << client.id.c_str() << " (" << client.name.c_str() << ") with " << client.profile.size() << " camera entries";
     }
   }
 
-  static auto ParseDeviceProfile(Json jprofile) -> std::vector<ClientInfo::Camera> {
-    auto profile = std::vector<ClientInfo::Camera>{};
+  static auto ParseDeviceProfile(Json jprofile) -> std::vector<Device::Camera> {
+    auto profile = std::vector<Device::Camera>{};
     for (const auto& cam_item : jprofile) {
-      ClientInfo::Camera camera;
+      Device::Camera camera;
       camera.id = cam_item.at("id").get<std::string>();
       camera.name = cam_item.at("name").get<std::string>();
 
       const auto& resolutions_json = cam_item.at("resolutions");
       for (const auto& res_item : resolutions_json) {
-        ClientInfo::Camera::Resolution res{};
+        Device::Camera::Resolution res{};
         res.width = res_item.at("width").get<std::uint16_t>();
         res.height = res_item.at("height").get<std::uint16_t>();
         camera.resolutions.push_back(res);

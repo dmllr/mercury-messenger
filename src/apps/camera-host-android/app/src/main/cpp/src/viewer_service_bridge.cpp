@@ -101,7 +101,7 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
   try {
     auto& classref = ClassRefs::Instance();
     classref.RegisterCtor(env, "java/util/ArrayList", "()V");
-    classref.RegisterCtor(env, "hela/eillance/ndkio/ClientInfo", "(Ljava/lang/String;Ljava/lang/String;Ljava/util/List;)V");
+    classref.RegisterCtor(env, "hela/eillance/ndkio/Device", "(Ljava/lang/String;Ljava/lang/String;Ljava/util/List;)V");
     classref.RegisterCtor(env, "hela/eillance/ndkio/Camera", "(Ljava/lang/String;Ljava/lang/String;Ljava/util/List;)V");
     classref.RegisterCtor(env, "hela/eillance/ndkio/Resolution", "(II)V");
   } catch (const std::exception& e) {

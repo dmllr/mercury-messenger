@@ -14,11 +14,11 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import hela.eillance.camera.R
 import hela.eillance.camera.databinding.FragmentViewerPeersBinding
-import hela.eillance.ndkio.ClientInfo
+import hela.eillance.ndkio.Device
 import java.util.Vector
 
 interface DevicesListAdapterEventListener {
-  fun onItemClicked(device: ClientInfo)
+  fun onItemClicked(device: Device)
 }
 
 class PeersFragment : Fragment(), DevicesListAdapterEventListener {
@@ -47,16 +47,16 @@ class PeersFragment : Fragment(), DevicesListAdapterEventListener {
     _binding = null
   }
 
-  fun updateClientList(clients: List<ClientInfo>) {
+  fun updateClientList(clients: List<Device>) {
     devicesListAdapter.update(clients)
   }
 
   class DevicesListAdapter(val listener: DevicesListAdapterEventListener) :
     RecyclerView.Adapter<DevicesListAdapter.ViewHolder>() {
 
-    private val dataSet: Vector<ClientInfo> = Vector()
+    private val dataSet: Vector<Device> = Vector()
 
-    fun update(clients: List<ClientInfo>) {
+    fun update(clients: List<Device>) {
       Handler(Looper.getMainLooper()).post {
         val oldData = dataSet
 
@@ -104,7 +104,7 @@ class PeersFragment : Fragment(), DevicesListAdapterEventListener {
     }
   }
 
-  override fun onItemClicked(device: ClientInfo) {
+  override fun onItemClicked(device: Device) {
     (activity as ViewerActivity)
       .putFragment(StreamFragment(device), StreamFragment::class.java.canonicalName)
   }
