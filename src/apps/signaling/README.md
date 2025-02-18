@@ -7,7 +7,7 @@ Python-based signaling server
 /var/app/signaling-server
 
 ```bash
-rsync -raP ./src/apps/signaling-server vm0.hela.me:/var/app/
+rsync -raP ./src/apps/signaling vm0.hela.me:/var/app/
 ```
 
 ### Update
