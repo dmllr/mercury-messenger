@@ -12,8 +12,8 @@ import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import androidx.fragment.app.Fragment
 import hela.eillance.camera.databinding.FragmentViewerStreamBinding
-import hela.eillance.ndkio.Device
 import hela.eillance.ndkio.Config
+import hela.eillance.ndkio.Device
 import hela.eillance.ndkio.Profile
 import hela.eillance.ndkio.Resolution
 
@@ -125,6 +125,13 @@ class StreamFragment(internal val device: Device) : Fragment(),
   }
 
   private fun updateCameraSpinner(cameraNames: List<String>) {
+    if (cameraNames.isEmpty()) {
+      Handler(Looper.getMainLooper()).post {
+        binding.selectCamera.adapter = defaultCameraAdapter
+      }
+      return
+    }
+
     val adapter = ArrayAdapter(
       requireContext(),
       R.layout.simple_spinner_item,
