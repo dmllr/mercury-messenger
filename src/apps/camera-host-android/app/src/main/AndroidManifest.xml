@@ -24,10 +24,10 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
         <activity
-            android:name="hela.eillance.ObserverActivity"
+            android:name="hela.eillance.viewer.ViewerActivity"
             android:exported="false" />
         <activity
-            android:name="hela.eillance.PerformerActivity"
+            android:name="hela.eillance.streamer.StreamerActivity"
             android:exported="false" />
         <activity
             android:name="hela.eillance.LauncherActivity"
@@ -38,7 +38,7 @@
             </intent-filter>
         </activity>
         <service
-            android:name="hela.eillance.PerformerService"
+            android:name="hela.eillance.streamer.StreamerService"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="camera|microphone|connectedDevice">

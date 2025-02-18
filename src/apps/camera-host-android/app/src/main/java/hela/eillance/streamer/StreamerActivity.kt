@@ -1,4 +1,4 @@
-package hela.eillance
+package hela.eillance.streamer
 
 import android.Manifest
 import android.content.ComponentName
@@ -19,24 +19,23 @@ import androidx.core.app.ActivityCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.fragment.app.FragmentManager
+import hela.eillance.Tune
 import hela.eillance.camera.R
-import hela.eillance.camera.databinding.ActivityPerformerBinding
-import hela.eillance.fragments.CapturePreferencesFragment
-import hela.eillance.fragments.PerformerOperationFragment
+import hela.eillance.camera.databinding.ActivityStreamerBinding
 
 
-class PerformerActivity : AppCompatActivity(), ServiceConnection,
+class StreamerActivity : AppCompatActivity(), ServiceConnection,
   FragmentManager.OnBackStackChangedListener {
 
-  var performerService: PerformerService? = null
+  var streamerService: StreamerService? = null
   private var cameraServiceBound: Boolean = false
-  private lateinit var binding: ActivityPerformerBinding
+  private lateinit var binding: ActivityStreamerBinding
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
 
     enableEdgeToEdge()
-    binding = ActivityPerformerBinding.inflate(layoutInflater)
+    binding = ActivityStreamerBinding.inflate(layoutInflater)
     setContentView(binding.root)
     ViewCompat.setOnApplyWindowInsetsListener(binding.main) { v, insets ->
       val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
@@ -132,7 +131,7 @@ class PerformerActivity : AppCompatActivity(), ServiceConnection,
 
   private fun pushFragment() {
     supportFragmentManager.beginTransaction()
-      .replace(R.id.content, PerformerOperationFragment.instance)
+      .replace(R.id.content, OperationFragment.instance)
       .commit()
   }
 
@@ -162,10 +161,10 @@ class PerformerActivity : AppCompatActivity(), ServiceConnection,
   }
 
   private fun startStreamingService() {
-    val performerServiceIntent = Intent(applicationContext, PerformerService::class.java)
-    startService(performerServiceIntent)
+    val streamerServiceIntent = Intent(applicationContext, StreamerService::class.java)
+    startService(streamerServiceIntent)
     if (applicationContext.bindService(
-        performerServiceIntent,
+        streamerServiceIntent,
         this,
         Context.BIND_AUTO_CREATE + Context.BIND_ABOVE_CLIENT
       )
@@ -211,11 +210,11 @@ class PerformerActivity : AppCompatActivity(), ServiceConnection,
 
   // ServiceConnection implementation
   override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-    performerService = (service as PerformerService.StreamingServiceBinder).service
+    streamerService = (service as StreamerService.StreamingServiceBinder).service
   }
 
   override fun onServiceDisconnected(name: ComponentName?) {
-    performerService = null
+    streamerService = null
   }
   // ServiceConnection implementation
 

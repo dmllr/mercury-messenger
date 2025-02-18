@@ -19,7 +19,7 @@
 
 namespace hela::eillance {
 
-class RtcProducer final : public RtcTransport {
+class RtcStreamer final : public RtcTransport {
   using Json = nlohmann::json;
   using PeerTrack = std::shared_ptr<Peer::Track>;
 
@@ -27,7 +27,7 @@ class RtcProducer final : public RtcTransport {
   std::shared_ptr<Stream> av_stream_;
 
 public:
-  explicit RtcProducer() {
+  explicit RtcStreamer() {
     av_stream_ = std::make_shared<Stream>(
         std::make_shared<StreamSource>(Capture(std::make_unique<VideoCapture>())),
         std::make_shared<StreamSource>(Capture(std::make_unique<AudioCapture>())));
@@ -45,11 +45,11 @@ public:
       });
     });
   }
-  RtcProducer(RtcProducer&&) = delete;
-  RtcProducer(const RtcProducer&) = delete;
-  RtcProducer& operator=(RtcProducer&&) = delete;
-  RtcProducer& operator=(const RtcProducer&) = delete;
-  ~RtcProducer() final = default;
+  RtcStreamer(RtcStreamer&&) = delete;
+  RtcStreamer(const RtcStreamer&) = delete;
+  RtcStreamer& operator=(RtcStreamer&&) = delete;
+  RtcStreamer& operator=(const RtcStreamer&) = delete;
+  ~RtcStreamer() final = default;
 
   static void OnPeerDataChannelConnected(const std::shared_ptr<Peer>& peer) {
     if (!peer->data_channel_->isOpen()) {
@@ -98,7 +98,7 @@ public:
   }
 
   void ProcessSystemMessage(const std::string& type, Json  /*message*/) final {
-    throw std::runtime_error("Unknown message type in Producer's ProcessSystemMessage: " + type);
+    throw std::runtime_error("Unknown message type in Streamer's ProcessSystemMessage: " + type);
   }
 
   void ProcessDataChannelMessage(const std::string&  peer_id, Json message) {
@@ -178,7 +178,7 @@ public:
 
   Json GetPublishMessage() final {
     return Json{
-        {"kind", "producer"},
+        {"kind", "streamer"},
         {"profile", GetDeviceProfileAsJson()},
     };
   }

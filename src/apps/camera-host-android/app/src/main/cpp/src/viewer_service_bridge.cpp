@@ -2,44 +2,44 @@
 #include <string>
 
 #include "class_refs.hpp"
-#include "observer_engine.hpp"
+#include "viewer_engine.hpp"
 
 namespace {
 
 /// @brief Global JVM object
 JavaVM* javaVm = nullptr;
 
-std::unique_ptr<hela::eillance::ObserverEngine> observer{};
+std::unique_ptr<hela::eillance::ViewerEngine> observer{};
 
 }  // namespace
 
 /// @brief JNI function to initialize the observer engine.
 extern "C" JNIEXPORT void JNICALL
-Java_hela_eillance_ObserverActivity_initEngine(  // NOLINT(*-identifier-naming)
+Java_hela_eillance_viewer_ViewerActivity_initEngine(  // NOLINT(*-identifier-naming)
     JNIEnv* env, jobject, jobject native_bridge) {
   namespace he = hela::eillance;
-  observer = std::make_unique<he::ObserverEngine>(javaVm, env);
+  observer = std::make_unique<he::ViewerEngine>(javaVm, env);
   observer->SetNativeBridge(env, native_bridge);
   observer->Start();
 }
 
 /// @brief JNI function to initialize the decoder with a Surface from UI.
 extern "C" JNIEXPORT void JNICALL
-Java_hela_eillance_ObserverActivity_initDecoder(  // NOLINT(*-identifier-naming)
+Java_hela_eillance_viewer_ViewerActivity_initDecoder(  // NOLINT(*-identifier-naming)
     JNIEnv* env, jobject, jobject surface) {
   observer->SetTargetSurface(env, surface);
 }
 
 /// @brief JNI function to release decoder resources.
 extern "C" JNIEXPORT void JNICALL
-Java_hela_eillance_ObserverActivity_releaseDecoder(  // NOLINT(*-identifier-naming)
+Java_hela_eillance_viewer_ViewerActivity_releaseDecoder(  // NOLINT(*-identifier-naming)
     JNIEnv*, jobject) {
   observer->StopStreaming();
 }
 
 /// @brief JNI function to initiate a stream request.
 extern "C" JNIEXPORT void JNICALL
-Java_hela_eillance_ObserverActivity_sendStreamRequest(  // NOLINT(*-identifier-naming)
+Java_hela_eillance_viewer_ViewerActivity_sendStreamRequest(  // NOLINT(*-identifier-naming)
     JNIEnv* env, jobject, jstring client_id, jobject jconfig) {
   assert((client_id != nullptr) && (jconfig != nullptr));
   const char* chars = env->GetStringUTFChars(client_id, nullptr);

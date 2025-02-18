@@ -20,7 +20,7 @@ async def authenticate_and_exhibit():
             return
 
         print("Publish a client")
-        await websocket.send(json.dumps({"type": "publish", "token": token, "client_id": "client1", "name": "Nice name", "kind": "producer",
+        await websocket.send(json.dumps({"type": "publish", "token": token, "client_id": "client1", "name": "Nice name", "kind": "streamer",
                                          "profile": [{"id": "0", "name": "Back",
                                                       "resolutions": [{"height": 480, "width": 640},
                                                                       {"height": 144, "width": 176},
@@ -34,7 +34,7 @@ async def authenticate_and_exhibit():
         print("Message response:", response)
 
         print("Rename a client")
-        await websocket.send(json.dumps({"type": "publish", "token": token, "client_id": "client1", "name": "Brand new name", "kind": "producer",
+        await websocket.send(json.dumps({"type": "publish", "token": token, "client_id": "client1", "name": "Brand new name", "kind": "streamer",
                                          "profile": [{"id": "0", "name": "Back",
                                                       "resolutions": [{"height": 480, "width": 640},
                                                                       {"height": 144, "width": 176},
@@ -54,17 +54,17 @@ async def authenticate_and_exhibit():
         print("Message response:", response)
 
         # Get all published clients
-        print("Send 'get producers'")
+        print("Send 'get streamers'")
         await websocket.send(
-            json.dumps({"type": "get producers", "token": token}))
+            json.dumps({"type": "get streamers", "token": token}))
         response = await websocket.recv()
         print("Message response:", response)
 
         time.sleep(1)
 
-        print("Republish a client as consumer")
+        print("Republish a client as viewer")
         await websocket.send(
-            json.dumps({"type": "publish", "token": token, "client_id": "client1", "kind": "consumer"}))
+            json.dumps({"type": "publish", "token": token, "client_id": "client1", "kind": "viewer"}))
         response = await websocket.recv()
         print("Message response:", response)
 

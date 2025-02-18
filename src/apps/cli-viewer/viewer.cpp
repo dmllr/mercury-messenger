@@ -4,7 +4,7 @@
 #include <sstream>
 #include <iostream>
 
-#include "hela/eillance/rtc/consumer.hpp"
+#include "hela/eillance/rtc/viewer.hpp"
 #include "hela/eillance/utils/string.hpp"
 
 
@@ -13,7 +13,7 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
   std::ofstream all_frames_file("_all.h264", std::ios::binary | std::ios::app);
 
   using namespace hela::eillance;
-  auto rtc = RtcConsumer();
+  auto rtc = RtcViewer();
   rtc.SetName("CLI::" + StringUtils::RandomString());
   rtc.Start();
   rtc.SetClientChangedCallback([&rtc](const std::vector<ClientInfo>& clients){
@@ -21,7 +21,7 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
       return;
     }
     auto& client = clients.front();
-    rtc.SendStreamRequest(client.id);
+    rtc.SendStreamRequest(client.id, Config{});
   });
   rtc.SetFrameReceivedCallback([&rtc, &frame_count, &all_frames_file](const rtc::binary& frame) {
     if (frame_count >= 100) {

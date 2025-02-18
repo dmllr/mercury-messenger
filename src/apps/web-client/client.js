@@ -244,7 +244,7 @@ function stop() {
 
 function refreshPublishers() {
     websocket.send(JSON.stringify({
-        type: 'get producers',
+        type: 'get streamers',
         token: token
     }));
 }
@@ -297,7 +297,7 @@ websocket.onmessage = async function (evt) {
             type: 'publish',
             token: token,
             client_id: receiveID,
-            kind: "consumer",
+            kind: "viewer",
         }));
 
         // Refresh client list after authentication
@@ -307,7 +307,7 @@ websocket.onmessage = async function (evt) {
         await handleOffer(object);
     } else if (object.type === "error") {
         console.error('Error: ', object.error, ', message: ', object.message);
-    } else if (object.type === "info producers") {
+    } else if (object.type === "info streamers") {
         updateClientList(object.clients);
     } else {
         console.error('Error: Unknown message type "', object.type, '" received');

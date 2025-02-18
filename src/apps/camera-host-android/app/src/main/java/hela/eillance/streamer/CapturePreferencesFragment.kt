@@ -1,4 +1,4 @@
-package hela.eillance.fragments
+package hela.eillance.streamer
 
 import android.content.Context
 import android.hardware.camera2.CameraManager
@@ -10,10 +10,8 @@ import android.view.ViewGroup
 import androidx.preference.EditTextPreference
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceFragmentCompat
-import hela.eillance.PerformerActivity
 import hela.eillance.camera.R
 import hela.eillance.ndkio.VideoConfig
-import hela.eillance.utils.CameraUtils
 
 
 class CapturePreferencesFragment : PreferenceFragmentCompat() {
@@ -134,11 +132,11 @@ class CapturePreferencesFragment : PreferenceFragmentCompat() {
   }
 
   private fun triggerDeviceNameUpdate() {
-    (requireActivity() as PerformerActivity).performerService?.configureDeviceName(deviceName)
+    (requireActivity() as StreamerActivity).streamerService?.configureDeviceName(deviceName)
   }
 
   private fun triggerConfigurationUpdate() {
-    (requireActivity() as PerformerActivity).performerService?.configureVideoCapture(videoConfig)
+    (requireActivity() as StreamerActivity).streamerService?.configureVideoCapture(videoConfig)
   }
 
   override fun onCreateView(

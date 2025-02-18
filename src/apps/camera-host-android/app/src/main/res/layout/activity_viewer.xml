@@ -6,7 +6,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:fitsSystemWindows="false"
-    tools:context="hela.eillance.PerformerActivity">
+    tools:context="hela.eillance.streamer.StreamerActivity">
 
   <!-- Toolbar with User Icon -->
   <androidx.appcompat.widget.Toolbar

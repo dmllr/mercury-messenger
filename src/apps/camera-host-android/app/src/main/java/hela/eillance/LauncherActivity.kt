@@ -5,6 +5,8 @@ import android.content.SharedPreferences
 import android.os.Bundle
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import hela.eillance.streamer.StreamerActivity
+import hela.eillance.viewer.ViewerActivity
 
 class LauncherActivity : AppCompatActivity() {
 
@@ -51,12 +53,12 @@ class LauncherActivity : AppCompatActivity() {
   }
 
   private fun startCameraActivity() {
-    startActivity(Intent(this, PerformerActivity::class.java))
+    startActivity(Intent(this, StreamerActivity::class.java))
     finish()
   }
 
   private fun startControllerActivity() {
-    startActivity(Intent(this, ObserverActivity::class.java))
+    startActivity(Intent(this, ViewerActivity::class.java))
     finish()
   }
 }

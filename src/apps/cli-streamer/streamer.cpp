@@ -1,12 +1,12 @@
 #include <iostream>
 
-#include "hela/eillance/rtc/producer.hpp"
+#include "hela/eillance/rtc/streamer.hpp"
 #include "hela/eillance/utils/string.hpp"
 
 
 auto main(int /*argc*/, char** /*argv*/) -> int {
   using namespace hela::eillance;
-  auto rtc = RtcProducer();
+  auto rtc = RtcStreamer();
   rtc.SetName("CLI::" + StringUtils::RandomString());
   rtc.Start();
 

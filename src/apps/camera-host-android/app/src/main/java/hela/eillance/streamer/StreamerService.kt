@@ -1,4 +1,4 @@
-package hela.eillance
+package hela.eillance.streamer
 
 import android.app.ActivityManager
 import android.app.Notification
@@ -25,14 +25,15 @@ import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.preference.PreferenceManager
+import hela.eillance.Tune
 import hela.eillance.camera.R
 import hela.eillance.ndkio.EventSource
 import hela.eillance.ndkio.ServiceConnectionState
 import hela.eillance.ndkio.VideoConfig
-import hela.eillance.ndkio.interfaces.IPerformerNativeBridge
+import hela.eillance.ndkio.interfaces.IStreamerNativeBridge
 import java.util.concurrent.atomic.AtomicLong
 
-class PerformerService : Service(), IPerformerNativeBridge {
+class StreamerService : Service(), IStreamerNativeBridge {
   private var appEngine: AtomicLong = AtomicLong(0)
   private var serviceConnectionState: ServiceConnectionState = ServiceConnectionState.Unknown
 
@@ -40,8 +41,8 @@ class PerformerService : Service(), IPerformerNativeBridge {
   private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
   inner class StreamingServiceBinder : Binder() {
-    val service: PerformerService
-      get() = this@PerformerService
+    val service: StreamerService
+      get() = this@StreamerService
   }
 
   private val streamingServiceBinder = StreamingServiceBinder()
@@ -128,7 +129,7 @@ class PerformerService : Service(), IPerformerNativeBridge {
   }
 
   private fun Pair<Int, Int>.getBitmapFromVectorDrawable(): Bitmap {
-    val context = this@PerformerService
+    val context = this@StreamerService
     val drawable = ContextCompat.getDrawable(context, first)
     val color = ContextCompat.getColor(context, second)
 
@@ -145,7 +146,7 @@ class PerformerService : Service(), IPerformerNativeBridge {
 
   private fun startForeground() {
     if (!isForegroundAllowed()) {
-      Log.e("PerformerService", "Cannot start foreground service in the current state.")
+      Log.e("StreamerService", "Cannot start foreground service in the current state.")
       return
     }
 
@@ -156,7 +157,7 @@ class PerformerService : Service(), IPerformerNativeBridge {
       else -> Pair(R.drawable.ic_failure, R.color.colorNegative)
     }
 
-    val performerActivityIntent = Intent(this, PerformerActivity::class.java).apply {
+    val streamerActivityIntent = Intent(this, StreamerActivity::class.java).apply {
       flags = Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
     }
 
@@ -169,7 +170,7 @@ class PerformerService : Service(), IPerformerNativeBridge {
       .setPriority(NotificationCompat.PRIORITY_HIGH)
       .setContentIntent(
         PendingIntent.getActivity(
-          this, 0, performerActivityIntent,
+          this, 0, streamerActivityIntent,
           PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
       ).build().apply {
@@ -179,7 +180,7 @@ class PerformerService : Service(), IPerformerNativeBridge {
     try {
       startForeground(CAMERA_SERVICE_FG_ID, notification)
     } catch (e: Exception) {
-      Log.e("PerformerService", "Failed to start foreground: ${e.message}")
+      Log.e("StreamerService", "Failed to start foreground: ${e.message}")
     }
   }
 
@@ -187,7 +188,7 @@ class PerformerService : Service(), IPerformerNativeBridge {
     // Ensure that the app is allowed to start a foreground service.
     val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
     return activityManager.appTasks.any { task ->
-      task.taskInfo.baseIntent.component?.className?.contains("PerformerActivity") ?: false
+      task.taskInfo.baseIntent.component?.className?.contains("StreamerActivity") ?: false
     }
   }
 
@@ -248,7 +249,7 @@ class PerformerService : Service(), IPerformerNativeBridge {
     }
   }
 
-  private external fun createAppEngine(nativeBridge: IPerformerNativeBridge): Long
+  private external fun createAppEngine(nativeBridge: IStreamerNativeBridge): Long
 
   private external fun deleteAppEngine(appMgr: Long)
   fun deleteAppEngine() {
@@ -284,7 +285,7 @@ class PerformerService : Service(), IPerformerNativeBridge {
     private const val CAMERA_SERVICE_FG_ID = 9990
 
     init {
-      System.loadLibrary("lib-performer-service-bridge")
+      System.loadLibrary("lib-streamer-service-bridge")
     }
   }
 }

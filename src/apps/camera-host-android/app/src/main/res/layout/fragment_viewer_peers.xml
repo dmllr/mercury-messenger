@@ -5,12 +5,12 @@
     android:id="@+id/main"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context="hela.eillance.ObserverActivity">
+    tools:context="hela.eillance.viewer.ViewerActivity">
 
   <androidx.recyclerview.widget.RecyclerView
       android:id="@+id/list_devices"
       android:layout_width="match_parent"
       android:layout_height="match_parent"
-      tools:listitem="@layout/fragment_observer_devices_item" />
+      tools:listitem="@layout/fragment_viewer_peers_peer" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
