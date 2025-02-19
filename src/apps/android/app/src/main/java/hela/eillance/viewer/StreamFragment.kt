@@ -14,6 +14,7 @@ import androidx.fragment.app.Fragment
 import hela.eillance.camera.databinding.FragmentViewerStreamBinding
 import hela.eillance.ndkio.Config
 import hela.eillance.ndkio.Device
+import hela.eillance.ndkio.EventSource
 import hela.eillance.ndkio.Profile
 import hela.eillance.ndkio.Resolution
 
@@ -161,6 +162,13 @@ class StreamFragment(internal val device: Device) : Fragment(),
       binding.selectCameraResolution.adapter = adapter
     }
   }
+
+  internal fun onStatusUpdate(source: EventSource, status: Int) {
+    Handler(Looper.getMainLooper()).post {
+      binding.txStatus.text = "${source.name}: $status"
+    }
+  }
+
   private fun Resolution.toResolutionString(): String {
     return "${this.width}$RESOLUTION_SEPARATOR${this.height}"
   }
