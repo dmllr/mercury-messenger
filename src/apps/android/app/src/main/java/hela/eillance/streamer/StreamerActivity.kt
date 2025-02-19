@@ -6,16 +6,19 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
+import android.provider.Settings
 import android.util.Log
 import android.view.MenuItem
 import android.view.View
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.PopupMenu
-import androidx.core.app.ActivityCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.fragment.app.FragmentManager
@@ -44,7 +47,7 @@ class StreamerActivity : AppCompatActivity(), ServiceConnection,
     }
 
     setEventHandlers()
-    checkAndRequestCamera()
+    checkAndRequestPermissions()
 
     val toolbar: androidx.appcompat.widget.Toolbar = findViewById(R.id.toolbar)
     setSupportActionBar(toolbar)
@@ -68,7 +71,10 @@ class StreamerActivity : AppCompatActivity(), ServiceConnection,
 
   private fun setEventHandlers() {
     binding.btnPermissionWarning.setOnClickListener {
-      checkAndRequestCamera()
+      val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+        putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+      }
+      startActivity(intent)
     }
     binding.icUserIcon.setOnClickListener {
       val popup = PopupMenu(this, it)
@@ -129,35 +135,58 @@ class StreamerActivity : AppCompatActivity(), ServiceConnection,
     }
   }
 
-  private fun pushFragment() {
+  private fun pushOperationFragment() {
     supportFragmentManager.beginTransaction()
       .replace(R.id.content, OperationFragment.instance)
       .commit()
   }
 
-  private fun checkAndRequestCamera() {
-    if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
-      != PackageManager.PERMISSION_GRANTED
-    ) {
-      ActivityCompat.requestPermissions(
-        this,
-        arrayOf(Manifest.permission.CAMERA), PERMISSION_REQUEST_CODE_CAMERA
-      )
-      return
+  private fun checkAndRequestPermissions() {
+    val permissionsToRequest = mutableListOf<String>()
+
+    if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+      permissionsToRequest.add(Manifest.permission.CAMERA)
     }
-    if (ActivityCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
-      != PackageManager.PERMISSION_GRANTED
-    ) {
-      ActivityCompat.requestPermissions(
-        this,
-        arrayOf(Manifest.permission.RECORD_AUDIO), PERMISSION_REQUEST_CODE_RECORD_AUDIO
-      )
-      return
+
+    if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+      permissionsToRequest.add(Manifest.permission.RECORD_AUDIO)
+    }
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+      checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+      permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS)
+    }
+
+    if (permissionsToRequest.isNotEmpty()) {
+      // Show rationale if needed
+      if (shouldShowRationale(permissionsToRequest)) {
+        showPermissionRationale(permissionsToRequest.toTypedArray())
+      } else {
+        requestPermissions(permissionsToRequest.toTypedArray(), PERMISSION_REQUEST_CODE)
+      }
+      return;
     }
 
     permissionGranted()
-
     startStreamingService()
+  }
+
+  private fun shouldShowRationale(permissions: List<String>): Boolean {
+    return permissions.any { shouldShowRequestPermissionRationale(it) }
+  }
+
+  private fun showPermissionRationale(permissions: Array<String>) {
+    AlertDialog.Builder(this)
+      .setTitle(getString(R.string.permissions_required_rationale_title))
+      .setMessage(getString(R.string.permissions_required_rationale_text))
+      .setPositiveButton(getString(R.string.grant_permissions)) { _, _ ->
+        requestPermissions(permissions, PERMISSION_REQUEST_CODE)
+      }
+      .setNegativeButton(getString(android.R.string.cancel)) { dialog, _ ->
+        dialog.dismiss()
+      }
+      .setCancelable(false)
+      .show()
   }
 
   private fun startStreamingService() {
@@ -178,23 +207,37 @@ class StreamerActivity : AppCompatActivity(), ServiceConnection,
     permissions: Array<out String>,
     grantResults: IntArray
   ) {
-    if (requestCode != PERMISSION_REQUEST_CODE_CAMERA && requestCode != PERMISSION_REQUEST_CODE_RECORD_AUDIO) {
-      super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-      return
-    }
+    super.onRequestPermissionsResult(requestCode, permissions, grantResults)
 
-    if (grantResults.size == 1 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-      Thread {
-        runOnUiThread {
-          checkAndRequestCamera()
-        }
-      }.start()
+    if (requestCode == PERMISSION_REQUEST_CODE) {
+      if (grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
+        permissionGranted()
+        startStreamingService()
+      } else {
+        showSettingsRedirectDialog()
+      }
     }
+  }
+
+  private fun showSettingsRedirectDialog() {
+    AlertDialog.Builder(this)
+      .setTitle("Permissions Required")
+      .setMessage("You have denied necessary permissions. To enable streaming, please allow them in settings.")
+      .setPositiveButton("Open Settings") { _, _ ->
+        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+          data = Uri.parse("package:$packageName")
+        }
+        startActivity(intent)
+      }
+      .setNegativeButton("Cancel") { dialog, _ ->
+        dialog.dismiss()
+      }
+      .show()
   }
 
   private fun permissionGranted() {
     binding.btnPermissionWarning.visibility = View.GONE
-    pushFragment()
+    pushOperationFragment()
   }
 
   private fun unbindCameraService() {
@@ -240,7 +283,6 @@ class StreamerActivity : AppCompatActivity(), ServiceConnection,
   }
 
   companion object {
-    private const val PERMISSION_REQUEST_CODE_CAMERA: Int = 1
-    private const val PERMISSION_REQUEST_CODE_RECORD_AUDIO: Int = 2
+    private const val PERMISSION_REQUEST_CODE: Int = 10001
   }
 }
