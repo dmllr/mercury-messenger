@@ -1,7 +1,7 @@
 set(CMAKE_PROJECT_VERSION "v0.42.0")
 
 # for libdatachannel
-set(USE_MBEDTLS OFF)
+set(USE_MBEDTLS ON)
 set(USE_GNUTLS OFF)
 set(NO_TESTS ON)
 set(NO_EXAMPLES ON)
