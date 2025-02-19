@@ -2,6 +2,9 @@
   <string name="app_name">Eillance</string>
 
   <string name="permissions_required">Camera and microphone permissions are required. Tap here to grant the permissions.</string>
+  <string name="permissions_required_rationale_title">Important Permissions Required</string>
+  <string name="permissions_required_rationale_text"><![CDATA[This app configured to provide remote peer-to-peer (P2P) access to your camera and microphone, enabling live streaming on demand.\n\nTo function properly, we need the following permissions:\n\n- **Camera & Microphone**: Required to stream video and audio. Without these, remote viewing is impossible.\n- **Notifications** (Android 13+): Necessary to run the camera in the foreground, ensuring reliable streaming. Without this, Android will block access.\n\nGranting these permissions ensures uninterrupted service. You can revoke them anytime in system settings.]]></string>
+  <string name="grant_permissions">Grant Permissions</string>
 
   <string name="notification_title">Eillance</string>
   <string name="notification_description">Camera stream P2P connection</string>

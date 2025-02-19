@@ -42,7 +42,7 @@
       android:layout_width="match_parent"
       android:layout_height="match_parent"
       android:text="@string/permissions_required"
-      android:visibility="gone"
+      android:visibility="visible"
       app:layout_constraintEnd_toEndOf="parent"
       app:layout_constraintHorizontal_bias="0.0"
       app:layout_constraintStart_toStartOf="parent" />
