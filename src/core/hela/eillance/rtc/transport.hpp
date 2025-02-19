@@ -83,6 +83,7 @@ public:
     LOGI << "The local ID is: " << id_.data();
 
     auto ws_config = rtc::WebSocketConfiguration{
+        .disableTlsVerification = true
     };
 
     if (ws_ != nullptr) {
