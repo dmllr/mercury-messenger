@@ -62,6 +62,8 @@ public:
     char model_string[PROP_VALUE_MAX + 1];
     __system_property_get("ro.product.model", model_string);
     rtc_viewer_.SetName(std::string(model_string));
+
+    rtc_viewer_.SetStatusCallback([this](const std::string& peer_id, EventSource sender, int status) { SetStatus(peer_id, sender, status); });
   }
   ViewerEngine(ViewerEngine&&) = delete;
   ViewerEngine(const ViewerEngine&) = delete;
@@ -385,6 +387,22 @@ private:
     env->DeleteLocalRef(jpeer_id);
     env->DeleteLocalRef(camera_list);
     env->DeleteLocalRef(callback_cls);
+  }
+
+  void SetStatus(const std::string& peer_id, EventSource sender, int status) {
+    auto* env = AttachCurrentThreadIfNeeded();
+    if (env == nullptr) {
+      return;
+    }
+
+    jclass callback_class = env->GetObjectClass(native_bridge_);
+    jmethodID callback_method = env->GetMethodID(callback_class, "onStatusUpdate", "(Ljava/lang/String;II)V");
+    if (callback_method != nullptr) {
+      jstring j_peer_id = env->NewStringUTF(peer_id.c_str());
+      // NOLINTNEXTLINE(*-vararg)
+      env->CallVoidMethod(native_bridge_, callback_method, j_peer_id, static_cast<int>(sender), status);
+      env->DeleteLocalRef(j_peer_id);
+    }
   }
 
 };

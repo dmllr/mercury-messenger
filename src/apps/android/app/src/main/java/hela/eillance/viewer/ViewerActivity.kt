@@ -11,8 +11,9 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
 import hela.eillance.camera.R
 import hela.eillance.camera.databinding.ActivityViewerBinding
-import hela.eillance.ndkio.Device
 import hela.eillance.ndkio.Config
+import hela.eillance.ndkio.Device
+import hela.eillance.ndkio.EventSource
 import hela.eillance.ndkio.Profile
 import hela.eillance.ndkio.interfaces.IViewerNativeBridge
 
@@ -98,6 +99,15 @@ class ViewerActivity : AppCompatActivity(), IViewerNativeBridge {
     init {
       System.loadLibrary("lib-viewer-service-bridge")
     }
+  }
+
+  override fun onStatusUpdate(peerId: String, source: Int, status: Int) {
+    val fragment = supportFragmentManager.findFragmentByTag(
+      StreamFragment::class.java.canonicalName)
+        as StreamFragment?
+    assert(peerId == (fragment?.device?.id ?: ""))
+
+    fragment?.onStatusUpdate(EventSource.fromInt(source!!), status)
   }
 
   override fun onStreamResolutionChange(width: Int, height: Int) {
