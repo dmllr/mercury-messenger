@@ -1,4 +1,5 @@
 #include <jni.h>
+#include <cassert>
 #include <string>
 
 #include "class_refs.hpp"
@@ -12,6 +13,50 @@ JavaVM* javaVm = nullptr;
 std::unique_ptr<hela::eillance::ViewerEngine> observer{};
 
 }  // namespace
+
+namespace {
+
+hela::eillance::Config createConfigFromJni(JNIEnv* env, jobject jconfig) {
+    assert(jconfig != nullptr);
+
+    // Config class
+    jclass config_class = env->GetObjectClass(jconfig);
+
+    // VideoConfig field
+    jfieldID video_field = env->GetFieldID(config_class, "video", "Lhela/eillance/ndkio/VideoConfig;");
+    jobject jvideo_config = env->GetObjectField(jconfig, video_field);
+
+    // AudioConfig field
+    jfieldID audio_field = env->GetFieldID(config_class, "audio", "Lhela/eillance/ndkio/AudioConfig;");
+    jobject jaudio_config = env->GetObjectField(jconfig, audio_field);
+
+    hela::eillance::Config config;
+
+    // populate VideoConfig
+    if (jvideo_config != nullptr) {
+        jclass video_config_class = env->GetObjectClass(jvideo_config);
+        jfieldID camera_id_field = env->GetFieldID(video_config_class, "cameraId", "I");
+        jfieldID width_field = env->GetFieldID(video_config_class, "width", "I");
+        jfieldID height_field = env->GetFieldID(video_config_class, "height", "I");
+        jfieldID frame_rate_field = env->GetFieldID(video_config_class, "frameRate", "I");
+        jfieldID bitrate_field = env->GetFieldID(video_config_class, "bitrate", "I");
+
+        config.video_config.cameraId = env->GetIntField(jvideo_config, camera_id_field);
+        config.video_config.width = env->GetIntField(jvideo_config, width_field);
+        config.video_config.height = env->GetIntField(jvideo_config, height_field);
+        config.video_config.frameRate = env->GetIntField(jvideo_config, frame_rate_field);
+        config.video_config.bitrate = env->GetIntField(jvideo_config, bitrate_field);
+    }
+
+    // populate AudioConfig
+    if (jaudio_config != nullptr) {
+      // so far audio is not configurable, skip everything
+    }
+
+    return config;
+}
+
+} // namespace
 
 /// @brief JNI function to initialize the observer engine.
 extern "C" JNIEXPORT void JNICALL
@@ -40,53 +85,23 @@ Java_hela_eillance_viewer_ViewerActivity_releaseDecoder(  // NOLINT(*-identifier
 /// @brief JNI function to initiate a stream request.
 extern "C" JNIEXPORT void JNICALL
 Java_hela_eillance_viewer_ViewerActivity_sendStreamRequest(  // NOLINT(*-identifier-naming)
-    JNIEnv* env, jobject, jstring client_id, jobject jconfig) {
-  assert((client_id != nullptr) && (jconfig != nullptr));
-  const char* chars = env->GetStringUTFChars(client_id, nullptr);
-  const std::string client_id_str(chars);
-  env->ReleaseStringUTFChars(client_id, chars);
+    JNIEnv* env, jobject, jstring peer_id, jobject jconfig) {
+  const char* chars = env->GetStringUTFChars(peer_id, nullptr);
+  const std::string peer_id_str(chars);
+  env->ReleaseStringUTFChars(peer_id, chars);
+  const auto config = createConfigFromJni(env, jconfig);
+  observer->SendStreamRequest(peer_id_str, config);
+}
 
-  // Config class
-  jclass config_class = env->GetObjectClass(jconfig);
-
-  // VideoConfig field
-  jfieldID video_field = env->GetFieldID(config_class, "video", "Lhela/eillance/ndkio/VideoConfig;");
-  jobject jvideo_config = env->GetObjectField(jconfig, video_field);
-
-  // AudioConfig field
-  jfieldID audio_field = env->GetFieldID(config_class, "audio", "Lhela/eillance/ndkio/AudioConfig;");
-  jobject jaudio_config = env->GetObjectField(jconfig, audio_field);
-
-  hela::eillance::Config config;
-
-  // populate VideoConfig
-  if (jvideo_config != nullptr) {
-    jclass video_config_class = env->GetObjectClass(jvideo_config);
-    jfieldID camera_id_field = env->GetFieldID(video_config_class, "cameraId", "I");
-    jfieldID width_field = env->GetFieldID(video_config_class, "width", "I");
-    jfieldID height_field = env->GetFieldID(video_config_class, "height", "I");
-    jfieldID frame_rate_field = env->GetFieldID(video_config_class, "frameRate", "I");
-    jfieldID bitrate_field = env->GetFieldID(video_config_class, "bitrate", "I");
-
-    config.video_config.cameraId = env->GetIntField(jvideo_config, camera_id_field);
-    config.video_config.width = env->GetIntField(jvideo_config, width_field);
-    config.video_config.height = env->GetIntField(jvideo_config, height_field);
-    config.video_config.frameRate = env->GetIntField(jvideo_config, frame_rate_field);
-    config.video_config.bitrate = env->GetIntField(jvideo_config, bitrate_field);
-
-    env->DeleteLocalRef(video_config_class);
-  }
-
-  // populate AudioConfig
-  if (jaudio_config != nullptr) {
-    // so far audio is not configurable, skip everything, but keep commented
-  }
-
-  env->DeleteLocalRef(config_class);
-  env->DeleteLocalRef(jvideo_config);
-  env->DeleteLocalRef(jaudio_config);
-
-  observer->SendStreamRequest(client_id_str, config);
+/// @brief JNI function to initiate a configuration request.
+extern "C" JNIEXPORT void JNICALL
+Java_hela_eillance_viewer_ViewerActivity_sendConfigurationRequest(  // NOLINT(*-identifier-naming)
+    JNIEnv* env, jobject, jstring peer_id, jobject jconfig) {
+  const char* chars = env->GetStringUTFChars(peer_id, nullptr);
+  const std::string peer_id_str(chars);
+  env->ReleaseStringUTFChars(peer_id, chars);
+  const auto config = createConfigFromJni(env, jconfig);
+  observer->SendConfigurationRequest(peer_id_str, config);
 }
 
 jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
@@ -101,7 +116,7 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
   try {
     auto& classref = ClassRefs::Instance();
     classref.RegisterCtor(env, "java/util/ArrayList", "()V");
-    classref.RegisterCtor(env, "hela/eillance/ndkio/Device", "(Ljava/lang/String;Ljava/lang/String;Ljava/util/List;)V");
+    classref.RegisterCtor(env, "hela/eillance/ndkio/Peer", "(Ljava/lang/String;Ljava/lang/String;Ljava/util/List;)V");
     classref.RegisterCtor(env, "hela/eillance/ndkio/Camera", "(Ljava/lang/String;Ljava/lang/String;Ljava/util/List;)V");
     classref.RegisterCtor(env, "hela/eillance/ndkio/Resolution", "(II)V");
   } catch (const std::exception& e) {

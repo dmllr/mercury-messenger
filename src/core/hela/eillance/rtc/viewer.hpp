@@ -37,7 +37,7 @@ struct Device {
 class RtcViewer final : public RtcTransport {
   using Json = nlohmann::json;
   using Devices = std::vector<Device>;
-  using OnClientListChangedCallback = std::function<void(const Devices&)>;
+  using OnPeerListChangedCallback = std::function<void(const Devices&)>;
   using OnProfileReceivedCallback = std::function<void(const std::string&, const Device::Profile&)>;
   using OnFrameReceivedCallback = std::function<void(const rtc::binary&)>;
 
@@ -47,8 +47,8 @@ class RtcViewer final : public RtcTransport {
   /// @brief Connected publishers
   Devices devices_;
 
-  /// @brief A callback to be called when a client list is updated
-  std::shared_ptr<OnClientListChangedCallback> on_client_list_changed_{};
+  /// @brief A callback to be called when a peer list is updated
+  std::shared_ptr<OnPeerListChangedCallback> on_peer_list_changed_{};
   /// @brief A callback to be called when a profile info is received
   std::shared_ptr<OnProfileReceivedCallback> on_profile_received_{};
   /// @brief A callback to be called when a new frame is received
@@ -64,26 +64,39 @@ public:
 
   void OnPeerReady(const std::shared_ptr<Peer>& /*peer*/) final { }
 
-  void SendStreamRequest(const std::string& client_id, const Config& config) {
-    Json request = {
-        {"to", client_id},
-        {"type", "streamRequest"},
-        {"config", {
-          {"video", {
-            {"cameraId", config.video_config.cameraId},
-            {"width", config.video_config.width},
-            {"height", config.video_config.height},
-            {"frameRate", config.video_config.frameRate},
-            {"bitrate", config.video_config.bitrate},
-          },
-          {"audio", {}},
-       }},
-    }};
-    SendPeerMessage(request);
+  Json ComposeConfig(const Config& config) const {
+    return {
+      {"video", {
+        {"cameraId", config.video_config.cameraId},
+        {"width", config.video_config.width},
+        {"height", config.video_config.height},
+        {"frameRate", config.video_config.frameRate},
+        {"bitrate", config.video_config.bitrate},
+      }},
+      {"audio", {}},
+    };
   }
 
-  [[maybe_unused]] void SetClientChangedCallback(const OnClientListChangedCallback& callback) {
-    on_client_list_changed_ = std::make_shared<OnClientListChangedCallback>(callback);
+
+  void SendStreamRequest(const std::string& peer_id, const Config& config) {
+    Json request = {
+        {"to", peer_id},
+        {"type", "streamRequest"},
+        {"config", ComposeConfig(config)},
+    };
+    SendPeerMessage(peer_id, request);
+  }
+
+  void SendConfigurationRequest(const std::string& peer_id, const Config& config) {
+    const Json request = {
+        {"type", "configuration"},
+        {"config", ComposeConfig(config)},
+    };
+    SendPeerDataChannelMessage(peer_id, request);
+  }
+
+  [[maybe_unused]] void SetPeerChangedCallback(const OnPeerListChangedCallback& callback) {
+    on_peer_list_changed_ = std::make_shared<OnPeerListChangedCallback>(callback);
   }
 
   [[maybe_unused]] void SetProfileReceivedCallback(const OnProfileReceivedCallback& callback) {
@@ -146,7 +159,7 @@ private:
 
   void ProcessSystemMessage(const std::string& type, Json message) final {
     if (type == "info streamers") {
-      UpdateClientList(message["clients"]);
+      UpdatePeerList(message["peers"]);
     } else {
       throw std::runtime_error("Unknown message type in Viewer's ProcessSystemMessage: " + type);
     }
@@ -228,33 +241,33 @@ private:
     };
   }
 
-  void UpdateClientList(const nlohmann::json& json) {
-    // Clear existing clients
+  void UpdatePeerList(const nlohmann::json& json) {
+    // Clear existing peers
     devices_.clear();
 
     if (!json.is_array()) {
-      LOGW << "Received invalid client list format";
+      LOGE << "Received invalid peer list format";
       return;
     }
 
-    // Parse new clients
+    // Parse new peers
     for (const auto& item: json) {
-      Device client {
+      Device peer {
         .id = item.at("id").get<std::string>(),
         .name = item.at("name").get<std::string>(),
         .profile = ParseDeviceProfile(item.at("profile"))
       };
-      devices_.push_back(std::move(client));
+      devices_.push_back(std::move(peer));
     }
 
-    if (on_client_list_changed_ != nullptr) {
-      (*on_client_list_changed_)(devices_);
+    if (on_peer_list_changed_ != nullptr) {
+      (*on_peer_list_changed_)(devices_);
     }
 
     // for debugging purposes
-    LOGI << "Updated client list:";
-    for (const auto& client: devices_) {
-      LOGI << "  - " << client.id.c_str() << " (" << client.name.c_str() << ") with " << client.profile.size() << " camera entries";
+    LOGI << "Updated peer list:";
+    for (const auto& peer: devices_) {
+      LOGI << "  - " << peer.id.c_str() << " (" << peer.name.c_str() << ") with " << peer.profile.size() << " camera entries";
     }
   }
 

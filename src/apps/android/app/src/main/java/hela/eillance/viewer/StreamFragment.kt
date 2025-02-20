@@ -1,6 +1,5 @@
 package hela.eillance.viewer
 
-import android.R
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -13,24 +12,26 @@ import android.widget.ArrayAdapter
 import androidx.fragment.app.Fragment
 import hela.eillance.camera.databinding.FragmentViewerStreamBinding
 import hela.eillance.ndkio.Config
-import hela.eillance.ndkio.Device
 import hela.eillance.ndkio.EventSource
+import hela.eillance.ndkio.Peer
 import hela.eillance.ndkio.Profile
 import hela.eillance.ndkio.Resolution
+import hela.eillance.ndkio.ServiceConnectionState
 
 private const val RESOLUTION_SEPARATOR = "×"
 
-class StreamFragment(internal val device: Device) : Fragment(),
+class StreamFragment(internal val peer: Peer) : Fragment(),
   SurfaceHolder.Callback {
 
+  private var peerConnectionState: ServiceConnectionState = ServiceConnectionState.Unknown
   private var _binding: FragmentViewerStreamBinding? = null
   private val binding get() = _binding!!
-  private var profile: Profile = device.profile
+  private var profile: Profile = peer.profile
 
   private val defaultCameraAdapter: ArrayAdapter<String> by lazy {
     ArrayAdapter(
       requireContext(),
-      R.layout.simple_spinner_item,
+      android.R.layout.simple_spinner_item,
       listOf(getString(hela.eillance.camera.R.string.fr_observer_operation_default_camera))
     )
   }
@@ -38,7 +39,7 @@ class StreamFragment(internal val device: Device) : Fragment(),
   private val defaultResolutionAdapter: ArrayAdapter<String> by lazy {
     ArrayAdapter(
       requireContext(),
-      R.layout.simple_spinner_item,
+      android.R.layout.simple_spinner_item,
       listOf(getString(hela.eillance.camera.R.string.fr_observer_operation_default_resolution))
     )
   }
@@ -56,9 +57,13 @@ class StreamFragment(internal val device: Device) : Fragment(),
       override fun onItemSelected(parent: AdapterView<*>, view: View?, position: Int, id: Long) {
         updateResolutionSpinner(position)
       }
-
-      override fun onNothingSelected(parent: AdapterView<*>) {
+      override fun onNothingSelected(parent: AdapterView<*>) {}
+    }
+    binding.selectCameraResolution.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+      override fun onItemSelected(parent: AdapterView<*>, view: View?, position: Int, id: Long) {
+        sendConfigurationRequest()
       }
+      override fun onNothingSelected(parent: AdapterView<*>) {}
     }
 
     return binding.root
@@ -86,20 +91,14 @@ class StreamFragment(internal val device: Device) : Fragment(),
   }
 
   private fun sendStreamRequest() {
-    val config = Config()
-    val selectedCameraPosition = binding.selectCamera.selectedItemPosition
-    if (selectedCameraPosition in profile.indices) {
-      val camera = profile[selectedCameraPosition]
-      config.video.cameraId = camera.id.toInt()
+    (activity as? ViewerActivity)?.sendStreamRequest(peer.id, composeConfigurationMessage())
+  }
 
-      val selectedResolutionPosition = binding.selectCameraResolution.selectedItemPosition
-      if (selectedResolutionPosition in camera.resolutions.indices) {
-        val resolution = camera.resolutions[selectedResolutionPosition]
-        config.video.width = resolution.width
-        config.video.height = resolution.height
-      }
+  private fun sendConfigurationRequest() {
+    if (peerConnectionState != ServiceConnectionState.Online) {
+      return
     }
-    (activity as? ViewerActivity)?.sendStreamRequest(device.id, config)
+    (activity as? ViewerActivity)?.sendConfigurationRequest(peer.id, composeConfigurationMessage())
   }
 
   fun onStreamResolutionChange(width: Int, height: Int) {
@@ -135,7 +134,7 @@ class StreamFragment(internal val device: Device) : Fragment(),
 
     val adapter = ArrayAdapter(
       requireContext(),
-      R.layout.simple_spinner_item,
+      android.R.layout.simple_spinner_item,
       cameraNames
     )
     Handler(Looper.getMainLooper()).post {
@@ -155,7 +154,7 @@ class StreamFragment(internal val device: Device) : Fragment(),
     val resolutionStrings = resolutions.map { it.toResolutionString() }
     val adapter = ArrayAdapter(
       requireContext(),
-      R.layout.simple_spinner_item,
+      android.R.layout.simple_spinner_item,
       resolutionStrings
     )
     Handler(Looper.getMainLooper()).post {
@@ -163,7 +162,27 @@ class StreamFragment(internal val device: Device) : Fragment(),
     }
   }
 
+  private fun composeConfigurationMessage(): Config {
+    val config = Config()
+    val selectedCameraPosition = binding.selectCamera.selectedItemPosition
+    if (selectedCameraPosition in profile.indices) {
+      val camera = profile[selectedCameraPosition]
+      config.video.cameraId = camera.id.toInt()
+
+      val selectedResolutionPosition = binding.selectCameraResolution.selectedItemPosition
+      if (selectedResolutionPosition in camera.resolutions.indices) {
+        val resolution = camera.resolutions[selectedResolutionPosition]
+        config.video.width = resolution.width
+        config.video.height = resolution.height
+      }
+    }
+    return config
+  }
+
   internal fun onStatusUpdate(source: EventSource, status: Int) {
+    if (source == EventSource.PeerConnectionState) {
+      peerConnectionState = ServiceConnectionState.fromInt(status);
+    }
     Handler(Looper.getMainLooper()).post {
       binding.txStatus.text = "${source.name}: $status"
     }
