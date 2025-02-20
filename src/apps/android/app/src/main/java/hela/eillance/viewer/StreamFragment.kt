@@ -120,7 +120,7 @@ class StreamFragment(internal val peer: Peer) : Fragment(),
 
   fun onDeviceProfileReceived(profile: Profile) {
     this.profile = profile
-    val cameraNames = profile.map { "${it.id}: ${it.name}" }
+    val cameraNames = profile.map { it.name }
     updateCameraSpinner(cameraNames)
   }
 
@@ -167,7 +167,7 @@ class StreamFragment(internal val peer: Peer) : Fragment(),
     val selectedCameraPosition = binding.selectCamera.selectedItemPosition
     if (selectedCameraPosition in profile.indices) {
       val camera = profile[selectedCameraPosition]
-      config.video.cameraId = camera.id.toInt()
+      config.video.cameraId = selectedCameraPosition
 
       val selectedResolutionPosition = binding.selectCameraResolution.selectedItemPosition
       if (selectedResolutionPosition in camera.resolutions.indices) {
