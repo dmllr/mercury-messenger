@@ -89,6 +89,20 @@ class ViewerActivity : AppCompatActivity(), IViewerNativeBridge {
     actionBar.setDisplayShowHomeEnabled(c > 0)
   }
 
+  private fun getStreamingFragment(): StreamFragment? {
+    val fragment = supportFragmentManager.findFragmentByTag(
+      StreamFragment::class.java.canonicalName) as StreamFragment?
+    return fragment
+  }
+
+  private fun getStreamingFragmentWithCheck(peerId: String): StreamFragment? {
+    val fragment = getStreamingFragment()
+    if (fragment == null || fragment.peer.id != peerId) {
+      return null
+    }
+    return fragment
+  }
+
   private external fun initEngine(nativeBridge: IViewerNativeBridge)
   external fun initDecoder(surface: Surface)
   external fun releaseDecoder()
@@ -103,27 +117,18 @@ class ViewerActivity : AppCompatActivity(), IViewerNativeBridge {
   }
 
   override fun onStatusUpdate(peerId: String, source: Int, status: Int) {
-    val fragment = supportFragmentManager.findFragmentByTag(
-      StreamFragment::class.java.canonicalName)
-        as StreamFragment?
-    assert(peerId == (fragment?.peer?.id ?: ""))
-
-    fragment?.onStatusUpdate(EventSource.fromInt(source!!), status)
+    val fragment = getStreamingFragmentWithCheck(peerId) ?: return
+    fragment.onStatusUpdate(EventSource.fromInt(source), status)
   }
 
   override fun onStreamResolutionChange(width: Int, height: Int) {
-    val fragment = supportFragmentManager.findFragmentByTag(
-      StreamFragment::class.java.canonicalName)
-        as StreamFragment?
-    fragment?.onStreamResolutionChange(width, height)
+    val fragment = getStreamingFragment() ?: return
+    fragment.onStreamResolutionChange(width, height)
   }
 
   override fun onDeviceProfileReceived(peerId: String, profile: Profile) {
-    val fragment = supportFragmentManager.findFragmentByTag(
-      StreamFragment::class.java.canonicalName)
-        as StreamFragment?
-    assert(peerId == (fragment?.peer?.id ?: ""))
-    fragment?.onDeviceProfileReceived(profile)
+    val fragment = getStreamingFragment() ?: return
+    fragment.onDeviceProfileReceived(profile)
   }
 
   override fun onPeerListUpdate(peers: List<Peer>) {
