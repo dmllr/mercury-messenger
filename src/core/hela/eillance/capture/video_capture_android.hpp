@@ -51,7 +51,7 @@ public:
   VideoCapture& operator=(const VideoCapture&) = delete;
 
   ~VideoCapture() {
-    EventQueue::Instance().Unsubscribe<const VideoConfig>(configure_subscriber_id_);
+    EventQueue::Instance().Unsubscribe<VideoConfig>(configure_subscriber_id_);
     Revoke();
   }
 
