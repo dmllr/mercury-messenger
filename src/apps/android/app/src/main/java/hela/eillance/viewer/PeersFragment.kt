@@ -14,11 +14,11 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import hela.eillance.camera.R
 import hela.eillance.camera.databinding.FragmentViewerPeersBinding
-import hela.eillance.ndkio.Device
+import hela.eillance.ndkio.Peer
 import java.util.Vector
 
 interface DevicesListAdapterEventListener {
-  fun onItemClicked(device: Device)
+  fun onItemClicked(peer: Peer)
 }
 
 class PeersFragment : Fragment(), DevicesListAdapterEventListener {
@@ -47,16 +47,16 @@ class PeersFragment : Fragment(), DevicesListAdapterEventListener {
     _binding = null
   }
 
-  fun updateClientList(clients: List<Device>) {
+  fun updatePeerList(clients: List<Peer>) {
     devicesListAdapter.update(clients)
   }
 
   class DevicesListAdapter(val listener: DevicesListAdapterEventListener) :
     RecyclerView.Adapter<DevicesListAdapter.ViewHolder>() {
 
-    private val dataSet: Vector<Device> = Vector()
+    private val dataSet: Vector<Peer> = Vector()
 
-    fun update(clients: List<Device>) {
+    fun update(clients: List<Peer>) {
       Handler(Looper.getMainLooper()).post {
         val oldData = dataSet
 
@@ -104,9 +104,9 @@ class PeersFragment : Fragment(), DevicesListAdapterEventListener {
     }
   }
 
-  override fun onItemClicked(device: Device) {
+  override fun onItemClicked(peer: Peer) {
     (activity as ViewerActivity)
-      .putFragment(StreamFragment(device), StreamFragment::class.java.canonicalName)
+      .putFragment(StreamFragment(peer), StreamFragment::class.java.canonicalName)
   }
 
 }

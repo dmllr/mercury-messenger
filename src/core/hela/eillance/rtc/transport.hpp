@@ -202,9 +202,14 @@ protected:
     return peer;
   }
 
-  void SendPeerMessage(Json& message) {
+  void SendPeerMessage(const std::string& peer_id, Json& message) {
     message["token"] = auth_token_;
+    message["to"] = peer_id;
     WsSendMessage(message);
+  }
+
+  void SendPeerDataChannelMessage(const std::string& peer_id, const Json& message) {
+    GetPeer(peer_id)->data_channel_->send(message.dump());
   }
 
   void ReportPeerStateChange(const std::string& peer_id, const EventSource source, int state) const {
@@ -299,7 +304,7 @@ private:
     auto message = GetPublishMessage();
     message["type"] = "publish";
     message["token"] = auth_token_;
-    message["client_id"] = id_;
+    message["peer_id"] = id_;
     message["name"] = device_name_;
 
     WsSendMessage(message);

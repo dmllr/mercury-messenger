@@ -12,8 +12,8 @@ import androidx.fragment.app.FragmentManager
 import hela.eillance.camera.R
 import hela.eillance.camera.databinding.ActivityViewerBinding
 import hela.eillance.ndkio.Config
-import hela.eillance.ndkio.Device
 import hela.eillance.ndkio.EventSource
+import hela.eillance.ndkio.Peer
 import hela.eillance.ndkio.Profile
 import hela.eillance.ndkio.interfaces.IViewerNativeBridge
 
@@ -92,7 +92,8 @@ class ViewerActivity : AppCompatActivity(), IViewerNativeBridge {
   private external fun initEngine(nativeBridge: IViewerNativeBridge)
   external fun initDecoder(surface: Surface)
   external fun releaseDecoder()
-  external fun sendStreamRequest(clientId: String, config: Config)
+  external fun sendStreamRequest(peerId: String, config: Config)
+  external fun sendConfigurationRequest(peerId: String, config: Config)
 
   companion object {
     const val BACKSTACK = "fragments_backstack"
@@ -105,7 +106,7 @@ class ViewerActivity : AppCompatActivity(), IViewerNativeBridge {
     val fragment = supportFragmentManager.findFragmentByTag(
       StreamFragment::class.java.canonicalName)
         as StreamFragment?
-    assert(peerId == (fragment?.device?.id ?: ""))
+    assert(peerId == (fragment?.peer?.id ?: ""))
 
     fragment?.onStatusUpdate(EventSource.fromInt(source!!), status)
   }
@@ -121,12 +122,12 @@ class ViewerActivity : AppCompatActivity(), IViewerNativeBridge {
     val fragment = supportFragmentManager.findFragmentByTag(
       StreamFragment::class.java.canonicalName)
         as StreamFragment?
-    assert(peerId == (fragment?.device?.id ?: ""))
+    assert(peerId == (fragment?.peer?.id ?: ""))
     fragment?.onDeviceProfileReceived(profile)
   }
 
-  override fun onClientListUpdate(clients: List<Device>) {
-    PeersFragment.instance.updateClientList(clients)
+  override fun onPeerListUpdate(peers: List<Peer>) {
+    PeersFragment.instance.updatePeerList(peers)
   }
 
 }

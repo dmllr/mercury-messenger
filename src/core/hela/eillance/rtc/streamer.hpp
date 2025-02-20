@@ -110,9 +110,10 @@ public:
     if (type == "configuration") {
       auto config{Config()};
       auto& video_config = config.video_config;
-      video_config.cameraId = std::stoi(message["camera_id"].get<std::string>());
-      video_config.width = message["resolution"]["width"].get<std::uint32_t>();
-      video_config.height = message["resolution"]["height"].get<std::uint32_t>();
+      auto& jvc = message["config"]["video"];
+      video_config.cameraId = jvc["cameraId"].get<int>();
+      video_config.width = jvc["width"].get<std::uint32_t>();
+      video_config.height = jvc["height"].get<std::uint32_t>();
 
       Configure(config);
     } else if (type == "termination") {

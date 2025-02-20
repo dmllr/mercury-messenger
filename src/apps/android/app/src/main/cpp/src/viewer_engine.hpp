@@ -59,9 +59,9 @@ public:
 //    rtc_viewer_.SetId(device_id);
 //    rtc_viewer_.SetName(device_name);
     rtc_viewer_.SetId(StringUtils::RandomString());
-    char model_string[PROP_VALUE_MAX + 1];
-    __system_property_get("ro.product.model", model_string);
-    rtc_viewer_.SetName(std::string(model_string));
+    std::array<char, PROP_VALUE_MAX + 1> model_string;
+    __system_property_get("ro.product.model", model_string.data());
+    rtc_viewer_.SetName(std::string(model_string.data()));
 
     rtc_viewer_.SetStatusCallback([this](const std::string& peer_id, EventSource sender, int status) { SetStatus(peer_id, sender, status); });
   }
@@ -96,8 +96,8 @@ public:
 
   void Start() {
     rtc_viewer_.Start();
-    rtc_viewer_.SetClientChangedCallback([this](const std::vector<Device>& clients) {
-      UpdateClientList(clients);
+    rtc_viewer_.SetPeerChangedCallback([this](const std::vector<Device>& peers) {
+      UpdatePeerList(peers);
     });
     rtc_viewer_.SetProfileReceivedCallback([this](const std::string& peer_id, const Device::Profile& profile) {
       UpdateProfile(peer_id, profile);
@@ -111,6 +111,7 @@ public:
   }
 
   void StopStreaming() {
+    is_codec_configured_ = false;
     EventQueue::Instance().Unsubscribe<VideoConfig>(configure_subscriber_id_);
     rtc_viewer_.StopStreaming();
     if (media_codec_ != nullptr) {
@@ -122,7 +123,6 @@ public:
       ANativeWindow_release(native_window_);
       native_window_ = nullptr;
     }
-    is_codec_configured_ = false;
     LOGI << "Decoder resources released.";
   }
 
@@ -131,9 +131,13 @@ public:
     rtc_viewer_.Terminate();
   }
 
-  void SendStreamRequest(const std::string& client_id, const Config& config) {
+  void SendStreamRequest(const std::string& peer_id, const Config& config) {
     InitH264Parser();
-    rtc_viewer_.SendStreamRequest(client_id, config);
+    rtc_viewer_.SendStreamRequest(peer_id, config);
+  }
+
+  void SendConfigurationRequest(const std::string& peer_id, const Config& config) {
+    rtc_viewer_.SendConfigurationRequest(peer_id, config);
   }
 
 private:
@@ -198,26 +202,23 @@ private:
   /// @brief Handles output buffers and renders frames to native_window_.
   void HandleOutputBuffer() {
     AMediaCodecBufferInfo info;
-    while (true) {
-      if ((!is_codec_configured_) || (media_codec_ == nullptr)) {
-        return;
-      }
+    if ((!is_codec_configured_) || (media_codec_ == nullptr)) {
+      return;
+    }
 
-      const auto output_buffer_index = AMediaCodec_dequeueOutputBuffer(media_codec_, &info, 0);
+    const auto output_buffer_index = AMediaCodec_dequeueOutputBuffer(media_codec_, &info, 0);
 
-      if (output_buffer_index >= 0) {
-        // Render the buffer to native_window_
-        AMediaCodec_releaseOutputBuffer(media_codec_, output_buffer_index, true);
-      } else if (output_buffer_index == AMEDIACODEC_INFO_OUTPUT_BUFFERS_CHANGED) {
-        LOGI << "Output buffers changed.";
-      } else if (output_buffer_index == AMEDIACODEC_INFO_OUTPUT_FORMAT_CHANGED) {
-        AMediaFormat* new_format = AMediaCodec_getOutputFormat(media_codec_);
-        LOGI << "Output format changed: " << AMediaFormat_toString(new_format);
-        AMediaFormat_delete(new_format);
-      } else if (output_buffer_index == AMEDIACODEC_INFO_TRY_AGAIN_LATER) {
-        // No available output buffer, exit the loop
-        break;
-      }
+    if (output_buffer_index >= 0) {
+      // Render the buffer to native_window_
+      AMediaCodec_releaseOutputBuffer(media_codec_, output_buffer_index, true);
+    } else if (output_buffer_index == AMEDIACODEC_INFO_OUTPUT_BUFFERS_CHANGED) {
+      LOGI << "Output buffers changed.";
+    } else if (output_buffer_index == AMEDIACODEC_INFO_OUTPUT_FORMAT_CHANGED) {
+      AMediaFormat* new_format = AMediaCodec_getOutputFormat(media_codec_);
+      LOGI << "Output format changed: " << AMediaFormat_toString(new_format);
+      AMediaFormat_delete(new_format);
+    } else if (output_buffer_index == AMEDIACODEC_INFO_TRY_AGAIN_LATER) {
+      // No available output buffer, exit
     }
   }
 
@@ -311,7 +312,7 @@ private:
     }
   }
 
-  void UpdateClientList(const std::vector<Device>& clients) {
+  void UpdatePeerList(const std::vector<Device>& peers) {
     if (native_bridge_ == nullptr) {
       return;
     }
@@ -326,7 +327,7 @@ private:
 
     // Look up the callback method.
     jclass callback_cls = env->GetObjectClass(native_bridge_);
-    jmethodID callback_method = env->GetMethodID(callback_cls, "onClientListUpdate", "(Ljava/util/List;)V");
+    jmethodID callback_method = env->GetMethodID(callback_cls, "onPeerListUpdate", "(Ljava/util/List;)V");
     if (callback_method == nullptr) {
       env->DeleteLocalRef(callback_cls);
       return;
@@ -335,18 +336,18 @@ private:
     jobject java_list = classref.Class("java/util/ArrayList").NewObject(env);
     jmethodID add_method = env->GetMethodID(classref.Class("java/util/ArrayList").Class(), "add", "(Ljava/lang/Object;)Z");
 
-    for (const auto& client : clients) {
-      jstring id = env->NewStringUTF(client.id.c_str());
-      jstring name = env->NewStringUTF(client.name.c_str());
+    for (const auto& peer : peers) {
+      jstring id = env->NewStringUTF(peer.id.c_str());
+      jstring name = env->NewStringUTF(peer.name.c_str());
       jobject camera_list = classref.Class("java/util/ArrayList").NewObject(env);
 
-      SetBridgeProfile(env, camera_list, client.profile);
+      SetBridgeProfile(env, camera_list, peer.profile);
 
-      jobject jclient = classref.Class("hela/eillance/ndkio/Device").NewObject(env, id, name, camera_list);
+      jobject jpeer = classref.Class("hela/eillance/ndkio/Peer").NewObject(env, id, name, camera_list);
       // NOLINTNEXTLINE(*-vararg)
-      env->CallBooleanMethod(java_list, add_method, jclient);
+      env->CallBooleanMethod(java_list, add_method, jpeer);
 
-      env->DeleteLocalRef(jclient);
+      env->DeleteLocalRef(jpeer);
       env->DeleteLocalRef(id);
       env->DeleteLocalRef(name);
       env->DeleteLocalRef(camera_list);

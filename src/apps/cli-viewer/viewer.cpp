@@ -12,14 +12,15 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
 
   using namespace hela::eillance;
   auto rtc = RtcViewer();
-  rtc.SetId("CLI::Viewer");
+  rtc.SetId("CLI::Viewer " + StringUtils::RandomString());
+  rtc.SetName("CLI::Viewer " + StringUtils::RandomString());
   rtc.Start();
-  rtc.SetClientChangedCallback([&rtc](const std::vector<Device>& clients){
-    if (clients.empty()) {
+  rtc.SetPeerChangedCallback([&rtc](const std::vector<Device>& peers){
+    if (peers.empty()) {
       return;
     }
-    auto& client = clients.front();
-    rtc.SendStreamRequest(client.id, Config{});
+    auto& peer = peers.front();
+    rtc.SendStreamRequest(peer.id, Config{});
   });
   rtc.SetFrameReceivedCallback([&rtc, &frame_count, &all_frames_file](const rtc::binary& frame) {
     if (frame_count >= 100) {
