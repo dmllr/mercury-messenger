@@ -3,7 +3,55 @@ plugins {
     id 'org.jetbrains.kotlin.android'
 }
 
+Properties keystoreProps = new Properties()
+def keystoreConfigFile = file('keystore.config')
+
+if (keystoreConfigFile.exists()) {
+    keystoreProps.load(new FileInputStream(keystoreConfigFile))
+} else {
+    throw new GradleException("""
+        Keystore configuration file 'keystore.config' not found. 
+        
+        Please create a file named 'keystore.config' in the root of your module directory.
+        
+        Add the following properties to the file, replacing the placeholders with your actual keystore information:
+        
+        storeFile=<path_to_your_keystore_file>
+        storePassword=<your_keystore_password>
+        keyAlias=<your_key_alias>
+        keyPassword=<your_key_password>
+    """)
+}
+
+Properties versionProps = new Properties()
+def versionPropsFile = file('version.properties')
+if (versionPropsFile.exists()) {
+    versionProps.load(new FileInputStream(versionPropsFile))
+}
+def vCode = (versionProps['VERSION_CODE'] ?: "0").toInteger()
+def runTasks = gradle.startParameter.taskNames
+if (runTasks.toString().contains('bundleRelease')) {
+    vCode++
+    versionProps['VERSION_CODE'] = vCode.toString()
+    versionProps.store(versionPropsFile.newWriter(), null)
+}
+
 android {
+    signingConfigs {
+        debug {
+            storeFile file(keystoreProps['storeFile'])
+            storePassword keystoreProps['storePassword']
+            keyAlias keystoreProps['keyAlias']
+            keyPassword keystoreProps['keyPassword']
+        }
+        release {
+            storeFile file(keystoreProps['storeFile'])
+            storePassword keystoreProps['storePassword']
+            keyAlias keystoreProps['keyAlias']
+            keyPassword keystoreProps['keyPassword']
+        }
+    }
+
     compileSdk 35
 
     defaultConfig {
@@ -65,13 +113,17 @@ dependencies {
     implementation 'androidx.appcompat:appcompat:1.7.0'
     implementation 'androidx.core:core-ktx:1.15.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.2.0'
+    implementation 'androidx.preference:preference-ktx:1.2.1'
 
-    implementation 'org.apache.maven.plugins:maven-compiler-plugin:3.13.0'
+    implementation 'com.firebaseui:firebase-ui-auth:8.0.2'
+
+    implementation 'org.apache.maven.plugins:maven-compiler-plugin:3.14.0'
 
     implementation 'androidx.test.ext:junit-gtest:1.0.0-alpha02'
     implementation 'com.android.ndk.thirdparty:googletest:1.11.0-beta-1'
-    implementation 'androidx.preference:preference-ktx:1.2.1'
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.2.1'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.6.1'
 }
+
+apply plugin: 'com.google.gms.google-services'
