@@ -5,10 +5,28 @@ import android.content.SharedPreferences
 import android.os.Bundle
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import com.firebase.ui.auth.AuthUI
+import com.firebase.ui.auth.FirebaseAuthUIActivityResultContract
+import com.firebase.ui.auth.data.model.FirebaseAuthUIAuthenticationResult
+import com.google.firebase.auth.FirebaseAuth
+import hela.eillance.camera.R
 import hela.eillance.streamer.StreamerActivity
 import hela.eillance.viewer.ViewerActivity
 
 class LauncherActivity : AppCompatActivity() {
+
+  private val signInLauncher = registerForActivityResult(
+    FirebaseAuthUIActivityResultContract(),
+  ) { res ->
+    this.onSignInResult(res)
+  }
+
+  // authentication providers
+  private val providers = arrayListOf(
+    AuthUI.IdpConfig.EmailBuilder().build(),
+    AuthUI.IdpConfig.PhoneBuilder().build(),
+    AuthUI.IdpConfig.GoogleBuilder().build(),
+  )
 
   private lateinit var sharedPrefs: SharedPreferences
 
@@ -16,13 +34,39 @@ class LauncherActivity : AppCompatActivity() {
     super.onCreate(savedInstanceState)
     sharedPrefs = getSharedPreferences("app_prefs", MODE_PRIVATE)
 
-    // while in development, ask each time
-    showRoleSelectionDialog()
+    val auth = FirebaseAuth.getInstance()
+    if (auth.currentUser != null) {
+      // already signed in
+
+      // while in development, ask each time
+      showRoleSelectionDialog()
 //    when (sharedPrefs.getString("role", null)) {
 //      null -> showRoleSelectionDialog() // First launch
 //      "camera" -> startCameraActivity()
 //      "controller" -> startControllerActivity()
 //    }
+    } else {
+      val signInIntent = AuthUI.getInstance()
+        .createSignInIntentBuilder()
+        .setAvailableProviders(providers)
+        .setLogo(R.drawable.ic_camera)
+        .setIsSmartLockEnabled(false)
+        .build()
+      signInLauncher.launch(signInIntent)
+    }
+  }
+
+  private fun onSignInResult(result: FirebaseAuthUIAuthenticationResult) {
+    val response = result.idpResponse
+    if (result.resultCode == RESULT_OK) {
+      // successfully signed in
+      val user = FirebaseAuth.getInstance().currentUser
+      // ...
+    } else {
+      // sign in failed. If response is null the user canceled the
+      // sign-in flow using the back button. Otherwise check
+      // response.getError().getErrorCode() and handle the error.
+    }
   }
 
   private fun showRoleSelectionDialog() {
