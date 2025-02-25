@@ -5,7 +5,7 @@ if(WIN32)
   set(USE_WIN32_CRYPTO ON)
 endif()
 
-import_remote("https://boringssl.googlesource.com/boringssl" TAG "master" DST "${CMAKE_SOURCE_DIR}/_imported/libboringssl" ALIAS boringssl)
+import_remote("https://boringssl.googlesource.com/boringssl" TAG "master" DST "${CMAKE_SOURCE_DIR}/_imported" ALIAS boringssl)
 
 set(OPENSSL_INCLUDE_DIR "${boringssl_path}/include")
 add_library(OpenSSL::SSL ALIAS ssl)

@@ -27,7 +27,7 @@ if (ANDROID)
     set(BUILD_ANDROID_SERVICE OFF)
 endif()
 
-import_remote("https://github.com/opencv/opencv.git" TAG "${OpenCV_VERSION}" DST "${CMAKE_SOURCE_DIR}/_imported/libopencv" ALIAS libopencv)
+import_remote("https://github.com/opencv/opencv.git" TAG "${OpenCV_VERSION}" DST "${CMAKE_SOURCE_DIR}/_imported" ALIAS libopencv)
 
 add_library(libopencv INTERFACE)
 target_link_libraries(libopencv INTERFACE

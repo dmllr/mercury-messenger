@@ -1,7 +1,7 @@
 set(DISABLE_PACKAGE_CONFIG_AND_INSTALL OFF)
 import_remote("https://github.com/Mbed-TLS/mbedtls.git"
   TAG "v3.6.0"
-  DST "${CMAKE_SOURCE_DIR}/_imported/libmbedtls"
+  DST "${CMAKE_SOURCE_DIR}/_imported"
   ALIAS libmbedtls)
 
 target_compile_definitions(mbedtls PUBLIC MBEDTLS_SSL_DTLS_SRTP)

@@ -1,4 +1,4 @@
-import_remote("https://github.com/rgaufman/live555.git" TAG "master" DST "${CMAKE_SOURCE_DIR}/_imported/liblivemedia" ALIAS live555 NO_CMAKE)
+import_remote("https://github.com/rgaufman/live555.git" TAG "master" DST "${CMAKE_SOURCE_DIR}/_imported" ALIAS live555 NO_CMAKE)
 
 file(GLOB LIVE_MEDIA_SRCS
   "${live555_path}/liveMedia/*.c"

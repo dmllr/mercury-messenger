@@ -9,4 +9,4 @@ set(OPUS_BUILD_PROGRAMS OFF)
 set(HAVE_LIBM OFF)
 set(LIBM "")
 
-import_remote("https://gitlab.xiph.org/xiph/opus.git" TAG "v1.5.2" DST "${CMAKE_SOURCE_DIR}/_imported/libopus" ALIAS opus)
+import_remote("https://gitlab.xiph.org/xiph/opus.git" TAG "v1.5.2" DST "${CMAKE_SOURCE_DIR}/_imported" ALIAS opus)

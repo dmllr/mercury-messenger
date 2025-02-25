@@ -40,7 +40,7 @@ include("${CMAKE_CURRENT_LIST_DIR}/libsrtp.cmake")
 
 import_remote("https://github.com/paullouisageneau/libdatachannel.git"
   TAG "v0.22.4"
-  DST "${CMAKE_SOURCE_DIR}/_imported/libdatachannel"
+  DST "${CMAKE_SOURCE_DIR}/_imported"
   PATCH "${CMAKE_CURRENT_LIST_DIR}/patches/libdatachannel.patch"
   ALIAS libdatachannel
 )
