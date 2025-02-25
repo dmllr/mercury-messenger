@@ -13,7 +13,7 @@ if (WIN32)
   set(PATH_SUFFIXES "C:/msys64/usr/bin")
 endif()
 
-import_remote("https://github.com/viaduck/openssl-cmake.git" TAG "v3" DST "${CMAKE_SOURCE_DIR}/_imported/libopenssl" ALIAS openssl)
+import_remote("https://github.com/viaduck/openssl-cmake.git" TAG "v3" DST "${CMAKE_SOURCE_DIR}/_imported" ALIAS openssl)
 
 add_library(OpenSSL::SSL ALIAS ssl)
 add_library(OpenSSL::Crypto ALIAS crypto)
