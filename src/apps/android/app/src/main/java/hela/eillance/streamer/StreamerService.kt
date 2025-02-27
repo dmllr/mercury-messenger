@@ -32,10 +32,8 @@ import hela.eillance.ndkio.EventSource
 import hela.eillance.ndkio.ServiceConnectionState
 import hela.eillance.ndkio.VideoConfig
 import hela.eillance.ndkio.interfaces.IStreamerNativeBridge
-import java.util.concurrent.atomic.AtomicLong
 
 class StreamerService : Service(), IStreamerNativeBridge {
-  private var appEngine: AtomicLong = AtomicLong(0)
   private var serviceConnectionState: ServiceConnectionState = ServiceConnectionState.Unknown
 
   private lateinit var connectivityManager: ConnectivityManager
@@ -50,19 +48,17 @@ class StreamerService : Service(), IStreamerNativeBridge {
 
   override fun onCreate() {
     super.onCreate()
-    if (isCamera2Device()) {
-      appEngine.set(createAppEngine(this))
-    } else {
-      Log.e("Tune", "Found legacy camera device, camera2 device required")
+    if (!isCamera2Device()) {
+      Log.e(javaClass.simpleName, "Found legacy camera device, camera2 device required")
       return
     }
+    initEngine(this)
     startForeground()
     setupNetworkMonitoring()
   }
 
   override fun onDestroy() {
     stopNetworkMonitoring()
-    deleteAppEngine(appEngine.get())
     super.onDestroy()
   }
 
@@ -87,10 +83,10 @@ class StreamerService : Service(), IStreamerNativeBridge {
 
       if (status == ServiceConnectionState.Establishing.value) {
         val deviceName = getDeviceNamePreference()
-        configureDeviceName(appEngine.get(), deviceName)
+        configureDeviceName(deviceName)
 
         val videoConfig = getVideoConfigPreferences()
-        configureVideoCapture(appEngine.get(), videoConfig)
+        configureVideoCapture(videoConfig)
       }
 
       startForeground()
@@ -229,7 +225,7 @@ class StreamerService : Service(), IStreamerNativeBridge {
 
       private fun sendNetworkState() {
         if (availableNetworks.isNotEmpty()) {
-          start()
+          checkAuthAndStart()
         } else {
           stop()
         }
@@ -250,57 +246,28 @@ class StreamerService : Service(), IStreamerNativeBridge {
     }
   }
 
-  private external fun createAppEngine(nativeBridge: IStreamerNativeBridge): Long
-
-  private external fun deleteAppEngine(appMgr: Long)
-
-  fun deleteAppEngine() {
-    return deleteAppEngine(appEngine.getAndSet(0))
-  }
-
-  private external fun updateAuthToken(appMgr: Long, token: String)
-
-  private external fun start(appMgr: Long)
-
-  fun start() {
+  fun checkAuthAndStart() {
     val user = FirebaseAuth.getInstance().currentUser
     user?.getIdToken(true)?.addOnCompleteListener { task ->
       if (task.isSuccessful) {
         val idToken = task.result?.token
         if (idToken != null) {
-          updateAuthToken(appEngine.get(), idToken)
+          updateAuthToken(idToken)
+          start()
         }
       } else {
         Log.e("FirebaseAuth", "Failed to get ID token", task.exception)
       }
     }
-
-    return start(appEngine.get())
   }
 
-  private external fun stop(appMgr: Long)
-
-  fun stop() {
-    return stop(appEngine.get())
-  }
-
-  private external fun getServiceConnectionState(appMgr: Long): ServiceConnectionState
-
-  fun getServiceConnectionState(): ServiceConnectionState {
-    return getServiceConnectionState(appEngine.get())
-  }
-
-  private external fun configureDeviceName(appMgr: Long, name: String)
-
-  fun configureDeviceName(name: String) {
-    return configureDeviceName(appEngine.get(), name)
-  }
-
-  private external fun configureVideoCapture(appMgr: Long, conf: VideoConfig)
-
-  fun configureVideoCapture(conf: VideoConfig) {
-    return configureVideoCapture(appEngine.get(), conf)
-  }
+  private external fun initEngine(nativeBridge: IStreamerNativeBridge)
+  private external fun updateAuthToken(token: String)
+  private external fun start()
+  external fun stop()
+  external fun getServiceConnectionState(): ServiceConnectionState
+  external fun configureDeviceName(name: String)
+  external fun configureVideoCapture(conf: VideoConfig)
 
   companion object {
     private const val CAMERA_SERVICE_FG_ID = 9990

@@ -12,7 +12,8 @@ import firebase_admin
 from firebase_admin import auth, credentials
 
 # Initialize Firebase Admin.
-cred = credentials.Certificate("C:\\Users\\DenisMiller\\Downloads\\eillancex-firebase-adminsdk-fbsvc-b42c47be20.json")
+cred = credentials.Certificate("/etc/secret/eillancex-firebase-adminsdk-fbsvc-b42c47be20.json")
+# cred = credentials.Certificate("C:\\Users\\DenisMiller\\Downloads\\eillancex-firebase-adminsdk-fbsvc-b42c47be20.json")
 firebase_admin.initialize_app(cred)
 # firebase_admin.initialize_app(options={"projectId": "eillancex"})
 

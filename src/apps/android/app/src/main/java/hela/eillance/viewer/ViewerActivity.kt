@@ -1,5 +1,6 @@
 package hela.eillance.viewer
 
+import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import android.view.Surface
@@ -11,6 +12,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
 import com.google.firebase.auth.FirebaseAuth
+import hela.eillance.LauncherActivity
 import hela.eillance.camera.R
 import hela.eillance.camera.databinding.ActivityViewerBinding
 import hela.eillance.ndkio.Config
@@ -74,6 +76,8 @@ class ViewerActivity : AppCompatActivity(), IViewerNativeBridge {
         }
       } else {
         Log.e("FirebaseAuth", "Failed to get ID token", task.exception)
+        startActivity(Intent(this, LauncherActivity::class.java))
+        finish()
       }
     }
   }
