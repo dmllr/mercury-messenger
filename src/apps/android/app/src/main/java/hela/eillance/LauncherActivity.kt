@@ -37,14 +37,7 @@ class LauncherActivity : AppCompatActivity() {
     val auth = FirebaseAuth.getInstance()
     if (auth.currentUser != null) {
       // already signed in
-
-      // while in development, ask each time
-      showRoleSelectionDialog()
-//    when (sharedPrefs.getString("role", null)) {
-//      null -> showRoleSelectionDialog() // First launch
-//      "camera" -> startCameraActivity()
-//      "controller" -> startControllerActivity()
-//    }
+      followSelectedRole()
     } else {
       val signInIntent = AuthUI.getInstance()
         .createSignInIntentBuilder()
@@ -56,12 +49,21 @@ class LauncherActivity : AppCompatActivity() {
     }
   }
 
+  private fun followSelectedRole() {
+    // while in development, ask each time
+    showRoleSelectionDialog()
+//    when (sharedPrefs.getString("role", null)) {
+//      null -> showRoleSelectionDialog() // First launch
+//      "camera" -> startCameraActivity()
+//      "controller" -> startControllerActivity()
+//    }
+  }
+
   private fun onSignInResult(result: FirebaseAuthUIAuthenticationResult) {
     val response = result.idpResponse
     if (result.resultCode == RESULT_OK) {
       // successfully signed in
-      val user = FirebaseAuth.getInstance().currentUser
-      // ...
+      followSelectedRole()
     } else {
       // sign in failed. If response is null the user canceled the
       // sign-in flow using the back button. Otherwise check

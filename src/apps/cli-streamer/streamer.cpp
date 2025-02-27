@@ -6,6 +6,8 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
   using namespace hela::eillance;
   auto rtc = RtcStreamer();
   rtc.SetId("CLI::Streamer");
+  rtc.SetName("CLI::Streamer");
+  rtc.UpdateAuthToken("SSKJhkjhdiuadiuh");
 //  rtc.SetId("CLI::Streamer " + StringUtils::RandomString());
 //  rtc.SetName("CLI::Streamer" + StringUtils::RandomString());
   rtc.Start();

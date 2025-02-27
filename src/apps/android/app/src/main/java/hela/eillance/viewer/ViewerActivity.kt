@@ -1,6 +1,7 @@
 package hela.eillance.viewer
 
 import android.os.Bundle
+import android.util.Log
 import android.view.Surface
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
@@ -9,6 +10,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
+import com.google.firebase.auth.FirebaseAuth
 import hela.eillance.camera.R
 import hela.eillance.camera.databinding.ActivityViewerBinding
 import hela.eillance.ndkio.Config
@@ -61,6 +63,26 @@ class ViewerActivity : AppCompatActivity(), IViewerNativeBridge {
     })
   }
 
+  override fun onResume() {
+    super.onResume()
+    val user = FirebaseAuth.getInstance().currentUser
+    user?.getIdToken(true)?.addOnCompleteListener { task ->
+      if (task.isSuccessful) {
+        val idToken = task.result?.token
+        if (idToken != null) {
+          updateAuthToken(idToken)
+        }
+      } else {
+        Log.e("FirebaseAuth", "Failed to get ID token", task.exception)
+      }
+    }
+  }
+
+  override fun onPause() {
+    super.onPause()
+    updateAuthToken("")
+  }
+
   fun putFragment(fragment: Fragment, tag: String? = null) {
     supportFragmentManager.beginTransaction()
       .add(R.id.content, fragment, tag)
@@ -106,6 +128,7 @@ class ViewerActivity : AppCompatActivity(), IViewerNativeBridge {
   private external fun initEngine(nativeBridge: IViewerNativeBridge)
   external fun initDecoder(surface: Surface)
   external fun releaseDecoder()
+  private external fun updateAuthToken(token: String)
   external fun sendStreamRequest(peerId: String, config: Config)
   external fun sendConfigurationRequest(peerId: String, config: Config)
 

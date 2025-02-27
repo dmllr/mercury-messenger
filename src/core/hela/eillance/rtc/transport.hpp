@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <cassert>
 #include <memory>
 #include <thread>
 #include <unordered_map>
@@ -76,6 +77,14 @@ public:
     if (device_name_.empty()) {
       device_name_ = id_;
     }
+  }
+
+  void UpdateAuthToken(const std::string& token) {
+    auth_token_ = token;
+    DispatchQueue::MainThread().Dispatch([this]() {
+      Publish();
+      is_published_ = true;
+    });
   }
 
   void Start() {
@@ -203,6 +212,7 @@ protected:
   }
 
   void SendPeerMessage(const std::string& peer_id, Json& message) {
+    assert(!auth_token_.empty());
     message["token"] = auth_token_;
     message["to"] = peer_id;
     WsSendMessage(message);
@@ -223,8 +233,6 @@ private:
     LOGI << "WebSocket connected, signaling ready";
     connection_attempt_ = 0;
 
-    ReportServiceConnectionState(ServiceConnectionState::establishing);
-    Authenticate();
     ReportServiceConnectionState(ServiceConnectionState::online);
   }
 
@@ -292,15 +300,8 @@ private:
     }
   }
 
-  void Authenticate() {
-    const Json message = {
-        {"type", "authenticate"},
-        {"username", "user1"},
-        {"password", "password1"}};
-    WsSendMessage(message);
-  }
-
   void Publish() {
+    assert(!auth_token_.empty());
     auto message = GetPublishMessage();
     message["type"] = "publish";
     message["token"] = auth_token_;
@@ -308,6 +309,7 @@ private:
     message["name"] = device_name_;
 
     WsSendMessage(message);
+    is_published_ = true;
   }
 
   auto CreatePeerConnection(const std::string& peer_id) -> std::shared_ptr<rtc::PeerConnection> {
@@ -331,6 +333,7 @@ private:
     });
 
     peer_connection->onGatheringStateChange([this, wpc = make_weak_ptr(peer_connection), peer_id](rtc::PeerConnection::GatheringState state) {
+      assert(!auth_token_.empty());
       LOGI << "Gathering State: " << static_cast<int>(state);
       ReportPeerStateChange(peer_id, EventSource::gatheringState, static_cast<int>(state));
       if (state == rtc::PeerConnection::GatheringState::Complete) {
@@ -376,14 +379,9 @@ private:
     }
     auto type = itr->get<std::string>();
 
-    if (type == "authenticated") {
-      auth_token_ = message["token"].get<std::string>();
-      DispatchQueue::MainThread().Dispatch([this]() {
-        Publish();
-        is_published_ = true;
-      });
-    } else if (type == "error") {
+    if (type == "error") {
       LOGE << "Signaling error received: " << message["error"].get<std::string>();
+      ReportServiceConnectionState(ServiceConnectionState::failure);
     } else if (type == "peer disconnected") {
       const auto disconnected_peer_id = message["id"].get<std::string>();
       RemovePeer(disconnected_peer_id);

@@ -131,6 +131,10 @@ public:
     rtc_viewer_.Terminate();
   }
 
+  void UpdateAuthToken(const std::string& token) {
+    rtc_viewer_.UpdateAuthToken(token);
+  }
+
   void SendStreamRequest(const std::string& peer_id, const Config& config) {
     InitH264Parser();
     rtc_viewer_.SendStreamRequest(peer_id, config);

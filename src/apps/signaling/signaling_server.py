@@ -8,7 +8,13 @@ from enum import Enum
 
 import websockets
 
-from auth_manager import AuthManager
+import firebase_admin
+from firebase_admin import auth, credentials
+
+# Initialize Firebase Admin.
+cred = credentials.Certificate("C:\\Users\\DenisMiller\\Downloads\\eillancex-firebase-adminsdk-fbsvc-b42c47be20.json")
+firebase_admin.initialize_app(cred)
+# firebase_admin.initialize_app(options={"projectId": "eillancex"})
 
 # Configure logging
 logging.basicConfig(
@@ -43,7 +49,6 @@ class Viewer(Peer):
 
 # Mapping: user_id -> (peer_id -> Peer instance)
 peers: dict[str, dict[str, Union[Streamer, Viewer]]] = {}
-authManager = AuthManager()
 
 
 async def handle_connection(websocket: websockets.WebSocketServerProtocol):
@@ -51,37 +56,35 @@ async def handle_connection(websocket: websockets.WebSocketServerProtocol):
     user_id = None
     peer_id = None
 
-    async def authenticate():
-        username = message.get('username')
-        password = message.get('password')
-        if not authManager.authorize(username, password):
-            await websocket.send(json.dumps({
-                "type": "error",
-                "error": "invalid_credentials"
-            }))
-            await websocket.close()
-            return False
-
-        token = authManager.generate_token('password', username, None)
-        logging.info(f'User "{username}" authenticated')
-        await websocket.send(json.dumps({
-            "type": "authenticated",
-            "token": token
-        }))
-        return True
-
-    async def validate_token() -> Union[str, bool]:
-        token = message.get('token')
-        if not token or not authManager.authenticate_token(token):
+    async def validate_token(message) -> Union[str, None]:
+        """
+        Checks that the incoming message contains a valid token.
+        Returns the user ID (uid) if valid, otherwise sends an error
+        and closes the connection.
+        """
+        token = message.get("token")
+        if not token:
             error = {
                 "type": "error",
-                "error": "invalid_token",
-                "message": f'Token "{token}" failed validation'
+                "error": "missing_token",
+                "message": "Token is required"
             }
             await websocket.send(json.dumps(error))
             await websocket.close()
-            return False
-        return authManager.validate_token(token)['user']
+            return None
+        try:
+            decoded_token = auth.verify_id_token(token)
+            return decoded_token.get("uid")
+        except Exception as e:
+            logging.error("Token verification failed", exc_info=True)
+            error = {
+                "type": "error",
+                "error": "invalid_token",
+                "message": "Token invalid"
+            }
+            await websocket.send(json.dumps(error))
+            await websocket.close()
+            return None
 
     async def send_streaming_peers_to_viewer(connection):
         """Sends the list of streamers to a peer"""
@@ -122,77 +125,83 @@ async def handle_connection(websocket: websockets.WebSocketServerProtocol):
     try:
         async for data in websocket:
             logging.debug(f'<<[{user_id}/{peer_id}] {data}')
-
             message = json.loads(data)
-            if 'type' not in message:
-                logging.warning(f'Unknown message received: {data}')
-                continue
 
-            if message['type'] == 'authenticate':
-                if not await authenticate():
-                    return
-            else:
-                user_id = await validate_token()
+            # Validate Firebase token on the first message (or every message if you prefer)
+            if user_id is None:
+                user_id = await validate_token(message)
                 if not user_id:
                     return
+            else:
+                # Optionally, ensure subsequent messages use a token for the same user.
+                token_uid = await validate_token(message)
+                if token_uid != user_id:
+                    error = {
+                        "type": "error",
+                        "error": "user_mismatch",
+                        "message": "Firebase token does not match established user"
+                    }
+                    await websocket.send(json.dumps(error))
+                    await websocket.close()
+                    return
 
-                if message['type'] == 'publish':
-                    peer_id = message.get('peer_id')
-                    peer_name = message.get('name')
-                    peer_kind = message.get('kind')
+            if message['type'] == 'publish':
+                peer_id = message.get('peer_id')
+                peer_name = message.get('name')
+                peer_kind = message.get('kind')
 
-                    user_peers = peers.setdefault(user_id, {})
-                    existing_peer = user_peers.get(peer_id)
-                    if existing_peer:
-                        if existing_peer.ws != websocket:
-                            logging.info(f'Replacing existing connection for peer "{user_id}/{peer_id}"')
-                            try:
-                                await existing_peer.ws.close(code=4001, reason="Replaced by new connection")
-                            except Exception:
-                                logging.exception("Error closing old connection")
-                            await notify_peer_disconnected(existing_peer)
-                            # Create a new peer instance for the new connection.
-                            peer_class = Viewer if peer_kind == Peer.Kind.Viewer else Streamer
-                            peer_instance = peer_class(peer_id, peer_name, peer_kind, websocket)
-                            if peer_kind == Peer.Kind.Streamer:
-                                peer_instance.profile = message.get('profile')
-                            user_peers[peer_id] = peer_instance
-                        else:
-                            # Same connection: update the peer's information.
-                            logging.info(f'Updating peer "{user_id}/{peer_id}" on the same connection')
-                            existing_peer.name = peer_name
-                            existing_peer.kind = peer_kind
-                            if peer_kind == Peer.Kind.Streamer:
-                                existing_peer.profile = message.get('profile')
-                    else:
+                user_peers = peers.setdefault(user_id, {})
+                existing_peer = user_peers.get(peer_id)
+                if existing_peer:
+                    if existing_peer.ws != websocket:
+                        logging.info(f'Replacing existing connection for peer "{user_id}/{peer_id}"')
+                        try:
+                            await existing_peer.ws.close(code=4001, reason="Replaced by new connection")
+                        except Exception:
+                            logging.exception("Error closing old connection")
+                        await notify_peer_disconnected(existing_peer)
+                        # Create a new peer instance for the new connection.
                         peer_class = Viewer if peer_kind == Peer.Kind.Viewer else Streamer
                         peer_instance = peer_class(peer_id, peer_name, peer_kind, websocket)
                         if peer_kind == Peer.Kind.Streamer:
                             peer_instance.profile = message.get('profile')
                         user_peers[peer_id] = peer_instance
-
-                    logging.info(f'Peer "{user_id}/{peer_id}" published')
-                    await send_streaming_peers_to_all_viewers()
-
-                elif message['type'] == 'get streamers':
-                    await send_streaming_peers_to_viewer(websocket)
-
-                else:
-                    destination_id = message.get('to')
-                    if destination_id in peers[user_id]:
-                        peer = peers[user_id][destination_id]
-                        message['from'] = peer_id
-                        data_to_send = json.dumps(message)
-                        logging.debug(f'>>[{user_id}/{peer_id}] to "{user_id}/{destination_id}": {data_to_send}')
-                        await peer.ws.send(data_to_send)
                     else:
-                        logging.warning(f'Peer "{destination_id}" not found')
-                        response = {
-                            "type": "error",
-                            "error": "peer_not_found",
-                            "message": f'Peer "{user_id}/{destination_id}" not found'
-                        }
-                        await websocket.send(json.dumps(response))
+                        # Same connection: update the peer's information.
+                        logging.info(f'Updating peer "{user_id}/{peer_id}" on the same connection')
+                        existing_peer.name = peer_name
+                        existing_peer.kind = peer_kind
+                        if peer_kind == Peer.Kind.Streamer:
+                            existing_peer.profile = message.get('profile')
+                else:
+                    peer_class = Viewer if peer_kind == Peer.Kind.Viewer else Streamer
+                    peer_instance = peer_class(peer_id, peer_name, peer_kind, websocket)
+                    if peer_kind == Peer.Kind.Streamer:
+                        peer_instance.profile = message.get('profile')
+                    user_peers[peer_id] = peer_instance
+
+                logging.info(f'Peer "{user_id}/{peer_id}" published')
+                await send_streaming_peers_to_all_viewers()
+
+            elif message['type'] == 'get streamers':
+                await send_streaming_peers_to_viewer(websocket)
+
+            else:
+                destination_id = message.get('to')
+                if destination_id in peers[user_id]:
+                    peer = peers[user_id][destination_id]
+                    message['from'] = peer_id
+                    data_to_send = json.dumps(message)
+                    logging.debug(f'>>[{user_id}/{peer_id}] to "{user_id}/{destination_id}": {data_to_send}')
+                    await peer.ws.send(data_to_send)
+                else:
+                    logging.warning(f'Peer "{destination_id}" not found')
+                    response = {
+                        "type": "error",
+                        "error": "peer_not_found",
+                        "message": f'Peer "{user_id}/{destination_id}" not found'
+                    }
+                    await websocket.send(json.dumps(response))
 
     except (asyncio.CancelledError, websockets.ConnectionClosedError, websockets.ConnectionClosedOK):
         logging.info(f"Connection closed for peer {user_id}/{peer_id}")
