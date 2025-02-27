@@ -82,6 +82,16 @@ Java_hela_eillance_viewer_ViewerActivity_releaseDecoder(  // NOLINT(*-identifier
   observer->StopStreaming();
 }
 
+/// @brief JNI function to update a user token.
+extern "C" JNIEXPORT void JNICALL
+Java_hela_eillance_viewer_ViewerActivity_updateAuthToken(  // NOLINT(*-identifier-naming)
+    JNIEnv* env, jobject, jstring jtoken) {
+  const char* chars = env->GetStringUTFChars(jtoken, nullptr);
+  const std::string token(chars);
+  env->ReleaseStringUTFChars(jtoken, chars);
+  observer->UpdateAuthToken(token);
+}
+
 /// @brief JNI function to initiate a stream request.
 extern "C" JNIEXPORT void JNICALL
 Java_hela_eillance_viewer_ViewerActivity_sendStreamRequest(  // NOLINT(*-identifier-naming)

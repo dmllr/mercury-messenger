@@ -20,7 +20,7 @@ class StreamerEngine {
   JavaVM* jvm_;
   jobject service_instance_;
   jobject native_bridge_;
-  std::shared_ptr<RtcStreamer> rtc_streamer_;
+  RtcStreamer rtc_streamer_;
 
 public:
   // NOLINTNEXTLINE(*-easily-swappable-parameters)
@@ -42,12 +42,11 @@ public:
       device_name = std::string(model_string);
       SetSharedPreferenceValue("device_name", device_name);
     }
-    rtc_streamer_ = std::make_shared<RtcStreamer>();
-    rtc_streamer_->SetId(device_id);
-    rtc_streamer_->SetName(device_name);
-    rtc_streamer_->SetStatusCallback([this](const std::string& peer_id, EventSource sender, int status) { SetStatus(peer_id, sender, status); });
+    rtc_streamer_.SetId(device_id);
+    rtc_streamer_.SetName(device_name);
+    rtc_streamer_.SetStatusCallback([this](const std::string& peer_id, EventSource sender, int status) { SetStatus(peer_id, sender, status); });
     DispatchQueue::MainThread().Dispatch([this]() {
-      rtc_streamer_->Start();
+      rtc_streamer_.Start();
     });
   }
 
@@ -63,7 +62,7 @@ public:
       return;
     }
 
-    rtc_streamer_->SetStatusCallback(nullptr);
+    rtc_streamer_.SetStatusCallback(nullptr);
 
     if (service_instance_ != nullptr && (env->IsSameObject(service_instance_, nullptr) == 0U)) {
       LOGD << "Deleting service_instance_ GlobalRef.";
@@ -80,22 +79,26 @@ public:
 
   void Start() {
     DispatchQueue::MainThread().Dispatch([this]() {
-      rtc_streamer_->Start();
+      rtc_streamer_.Start();
     });
   }
 
   void Stop() {
     DispatchQueue::MainThread().Dispatch([this]() {
-      rtc_streamer_->Terminate();
+      rtc_streamer_.Terminate();
     });
   }
 
+void UpdateAuthToken(const std::string& token) {
+    rtc_streamer_.UpdateAuthToken(token);
+}
+
   ServiceConnectionState GetServiceConnectionState() {
-    return rtc_streamer_->GetServiceConnectionState();
+    return rtc_streamer_.GetServiceConnectionState();
   }
 
   void ConfigureDeviceName(const std::string& device_name) {
-    rtc_streamer_->SetName(device_name);
+    rtc_streamer_.SetName(device_name);
   }
 
   bool HasSharedPreferenceValue(const std::string& key) {

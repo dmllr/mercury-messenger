@@ -47,6 +47,17 @@ Java_hela_eillance_streamer_StreamerService_stop(  // NOLINT(readability-identif
   app->Stop();
 }
 
+/// @brief JNI function to update a user token.
+extern "C" JNIEXPORT void JNICALL
+Java_hela_eillance_streamer_StreamerService_updateAuthToken(  // NOLINT(*-identifier-naming)
+        JNIEnv* env, jobject, jlong appmgr, jstring jtoken) {
+    auto* app = reinterpret_cast<Engine*>(appmgr); // NOLINT(*-pro-type-reinterpret-cast, *-no-int-to-ptr)
+    const char* chars = env->GetStringUTFChars(jtoken, nullptr);
+    const std::string token(chars);
+    env->ReleaseStringUTFChars(jtoken, chars);
+    app->UpdateAuthToken(token);
+}
+
 extern "C" JNIEXPORT jobject JNICALL
 Java_hela_eillance_streamer_StreamerService_getServiceConnectionState(  // NOLINT(readability-identifier-naming)
     JNIEnv* env, jobject /*instance*/, jlong appmgr) {

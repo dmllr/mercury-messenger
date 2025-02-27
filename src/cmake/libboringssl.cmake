@@ -7,6 +7,8 @@ endif()
 
 import_remote("https://boringssl.googlesource.com/boringssl" TAG "master" DST "${CMAKE_SOURCE_DIR}/_imported" ALIAS boringssl)
 
+set(BORINGSSL_ROOT_DIR  "${boringssl_path}")
+set(OPENSSL_ROOT_DIR "${boringssl_path}")
 set(OPENSSL_INCLUDE_DIR "${boringssl_path}/include")
 add_library(OpenSSL::SSL ALIAS ssl)
 add_library(OpenSSL::Crypto ALIAS crypto)

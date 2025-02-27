@@ -25,6 +25,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.preference.PreferenceManager
+import com.google.firebase.auth.FirebaseAuth
 import hela.eillance.Tune
 import hela.eillance.camera.R
 import hela.eillance.ndkio.EventSource
@@ -252,31 +253,51 @@ class StreamerService : Service(), IStreamerNativeBridge {
   private external fun createAppEngine(nativeBridge: IStreamerNativeBridge): Long
 
   private external fun deleteAppEngine(appMgr: Long)
+
   fun deleteAppEngine() {
     return deleteAppEngine(appEngine.getAndSet(0))
   }
 
+  private external fun updateAuthToken(appMgr: Long, token: String)
+
   private external fun start(appMgr: Long)
+
   fun start() {
+    val user = FirebaseAuth.getInstance().currentUser
+    user?.getIdToken(true)?.addOnCompleteListener { task ->
+      if (task.isSuccessful) {
+        val idToken = task.result?.token
+        if (idToken != null) {
+          updateAuthToken(appEngine.get(), idToken)
+        }
+      } else {
+        Log.e("FirebaseAuth", "Failed to get ID token", task.exception)
+      }
+    }
+
     return start(appEngine.get())
   }
 
   private external fun stop(appMgr: Long)
+
   fun stop() {
     return stop(appEngine.get())
   }
 
   private external fun getServiceConnectionState(appMgr: Long): ServiceConnectionState
+
   fun getServiceConnectionState(): ServiceConnectionState {
     return getServiceConnectionState(appEngine.get())
   }
 
   private external fun configureDeviceName(appMgr: Long, name: String)
+
   fun configureDeviceName(name: String) {
     return configureDeviceName(appEngine.get(), name)
   }
 
   private external fun configureVideoCapture(appMgr: Long, conf: VideoConfig)
+
   fun configureVideoCapture(conf: VideoConfig) {
     return configureVideoCapture(appEngine.get(), conf)
   }
