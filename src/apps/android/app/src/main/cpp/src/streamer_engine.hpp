@@ -24,10 +24,9 @@ class StreamerEngine {
 
 public:
   // NOLINTNEXTLINE(*-easily-swappable-parameters)
-  StreamerEngine(JavaVM* jvm, JNIEnv* env, jobject instance, jobject native_bridge)
+  StreamerEngine(JavaVM* jvm, JNIEnv* env, jobject instance)
       : jvm_(jvm),
-        service_instance_(env->NewWeakGlobalRef(instance)),
-        native_bridge_(env->NewGlobalRef(native_bridge)) {
+        service_instance_(env->NewWeakGlobalRef(instance)) {
     EventQueue::Instance();
 
     auto device_id = GetSharedPreferenceValue("device_id", "");
@@ -75,6 +74,10 @@ public:
       env->DeleteGlobalRef(native_bridge_);
       native_bridge_ = nullptr;
     }
+  }
+
+  void SetNativeBridge(JNIEnv* env, jobject native_bridge) {
+    native_bridge_ = env->NewGlobalRef(native_bridge);
   }
 
   void Start() {

@@ -22,7 +22,6 @@ import androidx.appcompat.widget.PopupMenu
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.fragment.app.FragmentManager
-import hela.eillance.Tune
 import hela.eillance.camera.R
 import hela.eillance.camera.databinding.ActivityStreamerBinding
 
@@ -245,7 +244,7 @@ class StreamerActivity : AppCompatActivity(), ServiceConnection,
       try {
         unbindService(this)
       } catch (_: IllegalArgumentException) {
-        Log.e(Tune.TAG, "Trying to unbind service that is not registered")
+        Log.e(javaClass.simpleName, "Trying to unbind service that is not registered")
       }
       cameraServiceBound = false
     }

@@ -81,10 +81,6 @@ public:
 
   void UpdateAuthToken(const std::string& token) {
     auth_token_ = token;
-    DispatchQueue::MainThread().Dispatch([this]() {
-      Publish();
-      is_published_ = true;
-    });
   }
 
   void Start() {
@@ -107,10 +103,10 @@ public:
     ws_ = std::make_unique<rtc::WebSocket>(ws_config);
     ws_->onOpen([this]() { OnWebSocketOpen(); });
     ws_->onClosed([this]() { OnWebSocketClosed(); });
-    ws_->onError([this](const std::string& error) { OnWebSocketError(error); });
-    ws_->onMessage(
-        [](const rtc::binary&) { /* no usage for binary messages */ },
-        [this](const std::string& data) { OnWebSocketMessage(data); });
+    ws_->onError([this](const std::string& error) {
+      OnWebSocketError(error); });
+    ws_->onMessage(nullptr, [this](const std::string& data) {
+      OnWebSocketMessage(data); });
 
     LOGD << "Signaling server URL is " << signalingServerUrl;
 
@@ -232,6 +228,11 @@ private:
   void OnWebSocketOpen() {
     LOGI << "WebSocket connected, signaling ready";
     connection_attempt_ = 0;
+
+    DispatchQueue::MainThread().Dispatch([this]() {
+      Publish();
+      is_published_ = true;
+    });
 
     ReportServiceConnectionState(ServiceConnectionState::online);
   }
@@ -417,10 +418,15 @@ private:
     }
   };
 
-  constexpr static auto signalingServerUrl = "wss://app.hela.me:8000";  // prod
-//  constexpr static auto signalingServerUrl = "ws://10.0.2.2:8000";  // for android emulator
-//  constexpr static auto signalingServerUrl = "ws://127.0.0.1:8000";  // for general
-
+#if 0 // NOLINT(*-avoid-unconditional-preprocessor-if)
+  constexpr static auto signalingServerUrl = "wss://app.hela.me:8000";
+#else
+#if ANDROID
+  constexpr static auto signalingServerUrl = "ws://10.0.2.2:8000";
+#else
+  constexpr static auto signalingServerUrl = "ws://127.0.0.1:8000";
+#endif
+#endif
 };
 
 }  // namespace hela::eillance

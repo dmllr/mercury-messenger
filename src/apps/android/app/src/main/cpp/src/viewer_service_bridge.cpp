@@ -1,5 +1,6 @@
 #include <jni.h>
 #include <cassert>
+#include <memory>
 #include <string>
 
 #include "class_refs.hpp"
@@ -10,7 +11,8 @@ namespace {
 /// @brief Global JVM object
 JavaVM* javaVm = nullptr;
 
-std::unique_ptr<hela::eillance::ViewerEngine> observer{};
+/// @brief Viewer Engine instance
+std::unique_ptr<hela::eillance::ViewerEngine> viewerEngine{};
 
 }  // namespace
 
@@ -58,28 +60,28 @@ hela::eillance::Config createConfigFromJni(JNIEnv* env, jobject jconfig) {
 
 } // namespace
 
-/// @brief JNI function to initialize the observer engine.
+/// @brief JNI function to initialize the viewerEngine engine.
 extern "C" JNIEXPORT void JNICALL
 Java_hela_eillance_viewer_ViewerActivity_initEngine(  // NOLINT(*-identifier-naming)
     JNIEnv* env, jobject, jobject native_bridge) {
   namespace he = hela::eillance;
-  observer = std::make_unique<he::ViewerEngine>(javaVm, env);
-  observer->SetNativeBridge(env, native_bridge);
-  observer->Start();
+  viewerEngine = std::make_unique<he::ViewerEngine>(javaVm, env);
+  viewerEngine->SetNativeBridge(env, native_bridge);
+  viewerEngine->Start();
 }
 
 /// @brief JNI function to initialize the decoder with a Surface from UI.
 extern "C" JNIEXPORT void JNICALL
 Java_hela_eillance_viewer_ViewerActivity_initDecoder(  // NOLINT(*-identifier-naming)
     JNIEnv* env, jobject, jobject surface) {
-  observer->SetTargetSurface(env, surface);
+  viewerEngine->SetTargetSurface(env, surface);
 }
 
 /// @brief JNI function to release decoder resources.
 extern "C" JNIEXPORT void JNICALL
 Java_hela_eillance_viewer_ViewerActivity_releaseDecoder(  // NOLINT(*-identifier-naming)
     JNIEnv*, jobject) {
-  observer->StopStreaming();
+  viewerEngine->StopStreaming();
 }
 
 /// @brief JNI function to update a user token.
@@ -89,7 +91,7 @@ Java_hela_eillance_viewer_ViewerActivity_updateAuthToken(  // NOLINT(*-identifie
   const char* chars = env->GetStringUTFChars(jtoken, nullptr);
   const std::string token(chars);
   env->ReleaseStringUTFChars(jtoken, chars);
-  observer->UpdateAuthToken(token);
+  viewerEngine->UpdateAuthToken(token);
 }
 
 /// @brief JNI function to initiate a stream request.
@@ -100,7 +102,7 @@ Java_hela_eillance_viewer_ViewerActivity_sendStreamRequest(  // NOLINT(*-identif
   const std::string peer_id_str(chars);
   env->ReleaseStringUTFChars(peer_id, chars);
   const auto config = createConfigFromJni(env, jconfig);
-  observer->SendStreamRequest(peer_id_str, config);
+  viewerEngine->SendStreamRequest(peer_id_str, config);
 }
 
 /// @brief JNI function to initiate a configuration request.
@@ -111,7 +113,7 @@ Java_hela_eillance_viewer_ViewerActivity_sendConfigurationRequest(  // NOLINT(*-
   const std::string peer_id_str(chars);
   env->ReleaseStringUTFChars(peer_id, chars);
   const auto config = createConfigFromJni(env, jconfig);
-  observer->SendConfigurationRequest(peer_id_str, config);
+  viewerEngine->SendConfigurationRequest(peer_id_str, config);
 }
 
 jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
