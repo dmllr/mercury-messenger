@@ -124,7 +124,7 @@ endfunction()
 
 function(git_apply destdir patch)
 	execute_process(
-			COMMAND "${GIT_EXECUTABLE}" apply "${patch}"
+			COMMAND "${GIT_EXECUTABLE}" apply --ignore-space-change --ignore-whitespace "${patch}"
 			WORKING_DIRECTORY "${destdir}"
 			RESULT_VARIABLE exitstatus ERROR_VARIABLE err
 			OUTPUT_QUIET
