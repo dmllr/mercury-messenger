@@ -1,13 +1,13 @@
-diff --git a/CMakeLists.txt b/CMakeLists.txt
-index cdbfe596..f38c40f9 100644
+﻿diff --git a/CMakeLists.txt b/CMakeLists.txt
+index fe3eef1f..59b4f6b4 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -382,7 +386,9 @@ else()
+@@ -430,7 +430,9 @@ else()
              endif()
  		endif()
  	endif()
 -	find_package(OpenSSL REQUIRED)
-+	if (NOT TARGET OpenSSL::SSL)
++	if(NOT TARGET OpenSSL::SSL)
 +		find_package(OpenSSL REQUIRED)
 +	endif()
  	target_compile_definitions(datachannel PRIVATE USE_GNUTLS=0)
