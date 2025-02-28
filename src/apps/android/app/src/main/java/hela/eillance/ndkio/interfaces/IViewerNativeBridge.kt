@@ -1,6 +1,7 @@
 package hela.eillance.ndkio.interfaces
 
 import hela.eillance.ndkio.Devices
+import hela.eillance.ndkio.EventSource
 import hela.eillance.ndkio.Profile
 
 interface IViewerNativeBridge {
