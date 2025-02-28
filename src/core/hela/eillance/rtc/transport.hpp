@@ -81,6 +81,9 @@ public:
 
   void UpdateAuthToken(const std::string& token) {
     auth_token_ = token;
+    DispatchQueue::MainThread().Dispatch([this]() {
+      Publish();
+    });
   }
 
   void Start() {
@@ -208,7 +211,6 @@ protected:
   }
 
   void SendPeerMessage(const std::string& peer_id, Json& message) {
-    assert(!auth_token_.empty());
     message["token"] = auth_token_;
     message["to"] = peer_id;
     WsSendMessage(message);
@@ -228,10 +230,10 @@ private:
   void OnWebSocketOpen() {
     LOGI << "WebSocket connected, signaling ready";
     connection_attempt_ = 0;
-
     DispatchQueue::MainThread().Dispatch([this]() {
-      Publish();
-      is_published_ = true;
+      if (!auth_token_.empty()) {
+        Publish();
+      }
     });
 
     ReportServiceConnectionState(ServiceConnectionState::online);
@@ -334,7 +336,6 @@ private:
     });
 
     peer_connection->onGatheringStateChange([this, wpc = make_weak_ptr(peer_connection), peer_id](rtc::PeerConnection::GatheringState state) {
-      assert(!auth_token_.empty());
       LOGI << "Gathering State: " << static_cast<int>(state);
       ReportPeerStateChange(peer_id, EventSource::gatheringState, static_cast<int>(state));
       if (state == rtc::PeerConnection::GatheringState::Complete) {
@@ -383,7 +384,7 @@ private:
     if (type == "error") {
       LOGE << "Signaling error received: " << message["error"].get<std::string>();
       ReportServiceConnectionState(ServiceConnectionState::failure);
-    } else if (type == "peer disconnected") {
+    } else if (type == "peer_disconnected") {
       const auto disconnected_peer_id = message["id"].get<std::string>();
       RemovePeer(disconnected_peer_id);
     } else {
@@ -418,7 +419,7 @@ private:
     }
   };
 
-#if 0 // NOLINT(*-avoid-unconditional-preprocessor-if)
+#if 1 // NOLINT(*-avoid-unconditional-preprocessor-if)
   constexpr static auto signalingServerUrl = "wss://app.hela.me:8000";
 #else
 #if ANDROID

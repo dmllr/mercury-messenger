@@ -81,7 +81,7 @@ public:
   void SendStreamRequest(const std::string& peer_id, const Config& config) {
     Json request = {
         {"to", peer_id},
-        {"type", "streamRequest"},
+        {"type", "stream_request"},
         {"config", ComposeConfig(config)},
     };
     SendPeerMessage(peer_id, request);
@@ -158,7 +158,7 @@ private:
   }
 
   void ProcessSystemMessage(const std::string& type, Json message) final {
-    if (type == "info streamers") {
+    if (type == "streamers") {
       UpdatePeerList(message["peers"]);
     } else {
       throw std::runtime_error("Unknown message type in Viewer's ProcessSystemMessage: " + type);
@@ -171,7 +171,7 @@ private:
       return;
     }
     auto type = itr->get<std::string>();
-    if (type == "info profile") {
+    if (type == "profile") {
       if (on_profile_received_ != nullptr) {
         auto&& profile = ParseDeviceProfile(message.at("profile"));
         (*on_profile_received_)(peer_id, profile);

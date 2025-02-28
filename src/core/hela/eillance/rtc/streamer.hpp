@@ -56,7 +56,7 @@ public:
       return;
     }
     const Json message = {
-        {"type", "info profile"},
+        {"type", "profile"},
         {"profile", GetDeviceProfileAsJson()},
     };
     peer->data_channel_->send(message.dump());
@@ -78,7 +78,7 @@ public:
     }
     auto type = it->get<std::string>();
 
-    if (type == "streamRequest") {
+    if (type == "stream_request") {
       const auto peer = CreatePeer(peer_id);
       peer->data_channel_ = CreateDataChannel(peer->peer_connection_, peer_id);
       DispatchQueue::MainThread().Dispatch([this, peer_id, peer]() {
