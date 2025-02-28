@@ -3,108 +3,164 @@ package hela.eillance
 import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Bundle
-import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.app.AppCompatActivity
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import com.firebase.ui.auth.AuthUI
 import com.firebase.ui.auth.FirebaseAuthUIActivityResultContract
 import com.firebase.ui.auth.data.model.FirebaseAuthUIAuthenticationResult
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.firebase.auth.FirebaseAuth
 import hela.eillance.camera.R
 import hela.eillance.streamer.StreamerActivity
+import hela.eillance.theme.EillanceTheme
 import hela.eillance.viewer.ViewerActivity
 
-class LauncherActivity : AppCompatActivity() {
+class LauncherActivity : ComponentActivity() {
+    // authentication providers
+    private val providers = arrayListOf(
+        AuthUI.IdpConfig.EmailBuilder().build(),
+        AuthUI.IdpConfig.PhoneBuilder().build(),
+        AuthUI.IdpConfig.GoogleBuilder().build(),
+    )
+    private lateinit var sharedPrefs: SharedPreferences
 
-  private val signInLauncher = registerForActivityResult(
-    FirebaseAuthUIActivityResultContract(),
-  ) { res ->
-    this.onSignInResult(res)
-  }
-
-  // authentication providers
-  private val providers = arrayListOf(
-    AuthUI.IdpConfig.EmailBuilder().build(),
-    AuthUI.IdpConfig.PhoneBuilder().build(),
-    AuthUI.IdpConfig.GoogleBuilder().build(),
-  )
-
-  private lateinit var sharedPrefs: SharedPreferences
-
-  override fun onCreate(savedInstanceState: Bundle?) {
-    super.onCreate(savedInstanceState)
-    sharedPrefs = getSharedPreferences("app_prefs", MODE_PRIVATE)
-
-    val auth = FirebaseAuth.getInstance()
-    if (auth.currentUser != null) {
-      // already signed in
-      followSelectedRole()
-    } else {
-      val signInIntent = AuthUI.getInstance()
-        .createSignInIntentBuilder()
-        .setAvailableProviders(providers)
-        .setLogo(R.drawable.ic_camera)
-        .setIsSmartLockEnabled(false)
-        .build()
-      signInLauncher.launch(signInIntent)
+    private val signInLauncher = registerForActivityResult(
+        FirebaseAuthUIActivityResultContract(),
+    ) { res ->
+        this.onSignInResult(res)
     }
-  }
 
-  private fun followSelectedRole() {
-    // while in development, ask each time
-    showRoleSelectionDialog()
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        sharedPrefs = getSharedPreferences("app_prefs", MODE_PRIVATE)
+
+        enableEdgeToEdge()
+
+        setContent {
+            EillanceTheme {
+                MaterialTheme {
+                    Surface(modifier = Modifier.fillMaxSize()) {
+                        if (FirebaseAuth.getInstance().currentUser == null) {
+                            launchSignInFlow()
+                        } else {
+                            followSelectedRole()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun launchSignInFlow() {
+        val signInIntent = AuthUI.getInstance()
+            .createSignInIntentBuilder()
+            .setAvailableProviders(providers)
+            .setLogo(R.drawable.ic_camera)
+            .setIsSmartLockEnabled(false)
+            .build()
+        signInLauncher.launch(signInIntent)
+    }
+
+    private fun followSelectedRole() {
+        // while in development, ask each time
+        showRoleSelectionDialog()
 //    when (sharedPrefs.getString("role", null)) {
 //      null -> showRoleSelectionDialog() // First launch
 //      "camera" -> startCameraActivity()
-//      "controller" -> startControllerActivity()
-//    }
-  }
-
-  private fun onSignInResult(result: FirebaseAuthUIAuthenticationResult) {
-    val response = result.idpResponse
-    if (result.resultCode == RESULT_OK) {
-      // successfully signed in
-      followSelectedRole()
-    } else {
-      // sign in failed. If response is null the user canceled the
-      // sign-in flow using the back button. Otherwise check
-      // response.getError().getErrorCode() and handle the error.
+//      "viewer" -> startViewerActivity()
     }
-  }
 
-  private fun showRoleSelectionDialog() {
-    AlertDialog.Builder(this)
-      .setTitle("Select Mode")
-      .setMessage("Choose how you want to use this device")
-      .setPositiveButton("Camera Device") { _, _ ->
-        saveRoleAndLaunch("camera")
-      }
-      .setNegativeButton("Controller Device") { _, _ ->
-        saveRoleAndLaunch("controller")
-      }
-      .setCancelable(false)
-      .show()
-  }
 
-  private fun saveRoleAndLaunch(role: String) {
+    @Composable
+    fun EillanceApp() {
+        val context = LocalContext.current
+        val auth = FirebaseAuth.getInstance()
+        val signInLauncher =
+            rememberLauncherForActivityResult(FirebaseAuthUIActivityResultContract()) { res ->
+                onSignInResult(res)
+            }
+
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            if (auth.currentUser == null) {
+                Button(onClick = {
+                    val signInIntent = AuthUI.getInstance()
+                        .createSignInIntentBuilder()
+                        .setAvailableProviders(providers)
+                        .setLogo(R.drawable.ic_camera)
+                        .setIsSmartLockEnabled(false)
+                        .build()
+                    signInLauncher.launch(signInIntent)
+                }) {
+                    Text("Sign In")
+                }
+            } else {
+                // already signed in
+                followSelectedRole()
+            }
+        }
+    }
+
+    private fun onSignInResult(result: FirebaseAuthUIAuthenticationResult?) {
+        if (result?.resultCode == RESULT_OK) {
+            // successfully signed in
+            followSelectedRole()
+        } else {
+            // sign in failed.
+        }
+    }
+
+    private fun showRoleSelectionDialog() {
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Select Mode")
+            .setMessage("Choose how you want to use this device")
+            .setPositiveButton("Camera Device") { _, _ ->
+                saveRoleAndLaunch("camera")
+            }
+            .setNegativeButton("Viewer Device") { _, _ ->
+                saveRoleAndLaunch("viewer")
+            }
+            .setCancelable(false)
+            .show()
+}
+
+private fun saveRoleAndLaunch(role: String) {
     with(sharedPrefs.edit()) {
-      putString("role", role)
-      apply()
+        putString("role", role)
+        apply()
     }
 
     when (role) {
-      "camera" -> startCameraActivity()
-      "controller" -> startControllerActivity()
+        "camera" -> startCameraActivity()
+        "viewer" -> startViewerActivity()
     }
     finish()
-  }
+}
 
-  private fun startCameraActivity() {
+private fun startCameraActivity() {
     startActivity(Intent(this, StreamerActivity::class.java))
     finish()
-  }
+}
 
-  private fun startControllerActivity() {
+private fun startViewerActivity() {
     startActivity(Intent(this, ViewerActivity::class.java))
     finish()
-  }
+}
+
 }

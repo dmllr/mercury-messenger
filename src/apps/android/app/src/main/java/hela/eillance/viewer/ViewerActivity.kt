@@ -4,65 +4,116 @@ import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import android.view.Surface
-import androidx.activity.OnBackPressedCallback
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.appcompat.app.AppCompatActivity
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.fragment.app.Fragment
-import androidx.fragment.app.FragmentManager
+import androidx.activity.viewModels
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
 import com.google.firebase.auth.FirebaseAuth
 import hela.eillance.LauncherActivity
-import hela.eillance.camera.R
-import hela.eillance.camera.databinding.ActivityViewerBinding
 import hela.eillance.ndkio.Config
 import hela.eillance.ndkio.EventSource
 import hela.eillance.ndkio.Peer
 import hela.eillance.ndkio.Profile
 import hela.eillance.ndkio.interfaces.IViewerNativeBridge
 
-class ViewerActivity : AppCompatActivity(), IViewerNativeBridge {
-  private lateinit var binding: ActivityViewerBinding
+class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
+
+  private lateinit var navController: NavHostController
+  private val viewModel: ViewerViewModel by viewModels()
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
-    binding = ActivityViewerBinding.inflate(layoutInflater)
-    setContentView(binding.root)
-    ViewCompat.setOnApplyWindowInsetsListener(binding.main) { v, insets ->
-      val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-      v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
-      insets
-    }
-    setSupportActionBar(binding.toolbar)
 
     initEngine(this)
 
-    supportFragmentManager.beginTransaction()
-      .replace(R.id.content, PeersFragment.instance)
-      .commit()
+    setContent {
+      navController = rememberNavController()
+      AppContent(navController, viewModel)
+    }
+  }
 
-    supportFragmentManager.addOnBackStackChangedListener {
-      if (supportFragmentManager.backStackEntryCount > 0) { // show back button
-        supportActionBar!!.setDisplayHomeAsUpEnabled(true)
-        binding.toolbar.setNavigationOnClickListener {
-          onBackPressedDispatcher.onBackPressed()
+  @Composable
+  fun AppContent(navController: NavHostController, viewModel: ViewerViewModel) {
+    val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
+    MaterialTheme {
+      Scaffold(
+        topBar = { AppTopBar(currentRoute, navController, viewModel) }
+      ) { paddingValues ->
+        Surface(
+          modifier = Modifier
+            .fillMaxSize()
+            .padding(paddingValues),
+          color = MaterialTheme.colorScheme.background
+        ) {
+          NavHost(navController = navController, startDestination = "peers") {
+            composable("peers") {
+              PeersScreen(
+                peers = viewModel.peers,
+                onPeerClicked = { peer ->
+                  viewModel.selectedPeer = peer
+                  navController.navigate("stream")
+                }
+              )
+            }
+            composable("stream") {
+              StreamScreen(
+                peer = viewModel.selectedPeer!!,
+                initDecoder = { surface -> initDecoder(surface) },
+                releaseDecoder = { releaseDecoder() },
+                viewModel = viewModel
+              )
+            }
+          }
         }
-      } else { //show hamburger
-        supportActionBar!!.setDisplayHomeAsUpEnabled(false)
       }
     }
+  }
 
-    onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
-      override fun handleOnBackPressed() {
-        if (!popFragment()) {
-          if (!isEnabled) {
-            isEnabled = true
+  @OptIn(ExperimentalMaterial3Api::class)
+  @Composable
+  fun AppTopBar(
+    currentRoute: String?,
+    navController: NavHostController,
+    viewModel: ViewerViewModel
+  ) {
+    TopAppBar(
+      title = {
+        Text(
+          when (currentRoute) {
+            "peers" -> "Available Devices"
+            "stream" -> viewModel.selectedPeer?.name ?: "Stream"
+            else -> "Surveillance Viewer"
           }
-          finish()
+        )
+      },
+      navigationIcon = {
+        if (currentRoute != "peers") {
+          IconButton(onClick = { navController.popBackStack() }) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+          }
         }
       }
-    })
+    )
   }
 
   override fun onResume() {
@@ -87,48 +138,6 @@ class ViewerActivity : AppCompatActivity(), IViewerNativeBridge {
     updateAuthToken("")
   }
 
-  fun putFragment(fragment: Fragment, tag: String? = null) {
-    supportFragmentManager.beginTransaction()
-      .add(R.id.content, fragment, tag)
-      .addToBackStack(BACKSTACK)
-      .commit()
-
-    triggerUIUpdatesOnFragmentNavigation(supportFragmentManager, +1)
-  }
-
-  private fun popFragment(): Boolean {
-    val c = supportFragmentManager.backStackEntryCount
-    if (c == 0)
-      return false
-
-    supportFragmentManager.popBackStack()
-
-    triggerUIUpdatesOnFragmentNavigation(supportFragmentManager, -1)
-
-    return true
-  }
-
-  private fun triggerUIUpdatesOnFragmentNavigation(fm: FragmentManager, direction: Int) {
-    val c = fm.backStackEntryCount + direction
-    val actionBar = supportActionBar!!
-    actionBar.setDisplayHomeAsUpEnabled(c > 0)
-    actionBar.setDisplayShowHomeEnabled(c > 0)
-  }
-
-  private fun getStreamingFragment(): StreamFragment? {
-    val fragment = supportFragmentManager.findFragmentByTag(
-      StreamFragment::class.java.canonicalName) as StreamFragment?
-    return fragment
-  }
-
-  private fun getStreamingFragmentWithCheck(peerId: String): StreamFragment? {
-    val fragment = getStreamingFragment()
-    if (fragment == null || fragment.peer.id != peerId) {
-      return null
-    }
-    return fragment
-  }
-
   private external fun initEngine(nativeBridge: IViewerNativeBridge)
   external fun initDecoder(surface: Surface)
   external fun releaseDecoder()
@@ -137,29 +146,24 @@ class ViewerActivity : AppCompatActivity(), IViewerNativeBridge {
   external fun sendConfigurationRequest(peerId: String, config: Config)
 
   companion object {
-    const val BACKSTACK = "fragments_backstack"
     init {
       System.loadLibrary("lib-viewer-service-bridge")
     }
   }
 
   override fun onStatusUpdate(peerId: String, source: Int, status: Int) {
-    val fragment = getStreamingFragmentWithCheck(peerId) ?: return
-    fragment.onStatusUpdate(EventSource.fromInt(source), status)
+    viewModel.updatePeerStatus(peerId, EventSource.fromInt(source), status)
   }
 
   override fun onStreamResolutionChange(width: Int, height: Int) {
-    val fragment = getStreamingFragment() ?: return
-    fragment.onStreamResolutionChange(width, height)
+    viewModel.updateStreamResolution(width, height)
   }
 
   override fun onDeviceProfileReceived(peerId: String, profile: Profile) {
-    val fragment = getStreamingFragment() ?: return
-    fragment.onDeviceProfileReceived(profile)
+    viewModel.updateDeviceProfile(profile)
   }
 
   override fun onPeerListUpdate(peers: List<Peer>) {
-    PeersFragment.instance.updatePeerList(peers)
+    viewModel.peers = peers
   }
-
 }
