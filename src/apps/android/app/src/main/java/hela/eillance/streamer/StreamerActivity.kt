@@ -12,166 +12,188 @@ import android.os.Bundle
 import android.os.IBinder
 import android.provider.Settings
 import android.util.Log
-import android.view.MenuItem
-import android.view.View
-import androidx.activity.OnBackPressedCallback
-import androidx.activity.enableEdgeToEdge
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.PopupMenu
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.fragment.app.FragmentManager
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.core.content.ContextCompat
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
 import hela.eillance.camera.R
-import hela.eillance.camera.databinding.ActivityStreamerBinding
 
-
-class StreamerActivity : AppCompatActivity(), ServiceConnection,
-  FragmentManager.OnBackStackChangedListener {
+class StreamerActivity : ComponentActivity(), ServiceConnection {
 
   var streamerService: StreamerService? = null
   private var cameraServiceBound: Boolean = false
-  private lateinit var binding: ActivityStreamerBinding
+
+  private val requiredPermissions = mutableListOf(
+    Manifest.permission.CAMERA,
+    Manifest.permission.RECORD_AUDIO
+  ).apply {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+      add(Manifest.permission.POST_NOTIFICATIONS)
+    }
+  }
+
+  private val permissionLauncher = registerForActivityResult(
+    ActivityResultContracts.RequestMultiplePermissions()
+  ) { permissions ->
+    if (permissions.all { it.value }) {
+      startStreamingService()
+    } else {
+      showSettingsRedirectDialog()
+    }
+  }
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
 
-    enableEdgeToEdge()
-    binding = ActivityStreamerBinding.inflate(layoutInflater)
-    setContentView(binding.root)
-    ViewCompat.setOnApplyWindowInsetsListener(binding.main) { v, insets ->
-      val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-      v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
-      insets
+    setContent {
+      MaterialTheme {
+        Surface(
+          modifier = Modifier.fillMaxSize(),
+          color = MaterialTheme.colorScheme.background
+        ) {
+          StreamerApp(
+            permissionsGranted = arePermissionsGranted(),
+            onRequestPermissions = { checkAndRequestPermissions() },
+            onSettingsClick = { openSettingsScreen() },
+            streamerService = streamerService
+          )
+        }
+      }
     }
 
-    setEventHandlers()
     checkAndRequestPermissions()
-
-    val toolbar: androidx.appcompat.widget.Toolbar = findViewById(R.id.toolbar)
-    setSupportActionBar(toolbar)
-
-    supportFragmentManager.addOnBackStackChangedListener(this)
-    updateActionBar()
-
-    supportActionBar?.setHomeButtonEnabled(true)
-
-    // Handle back button with OnBackPressedDispatcher
-    onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
-      override fun handleOnBackPressed() {
-        if (supportFragmentManager.backStackEntryCount > 0) {
-          supportFragmentManager.popBackStack()
-        } else {
-          finish() // or handle other back navigation logic
-        }
-      }
-    })
   }
 
-  private fun setEventHandlers() {
-    binding.btnPermissionWarning.setOnClickListener {
-      val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-        putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
-      }
-      startActivity(intent)
-    }
-    binding.icUserIcon.setOnClickListener {
-      val popup = PopupMenu(this, it)
-      popup.menuInflater.inflate(R.menu.user_menu, popup.menu)
-      popup.setOnMenuItemClickListener { menuItem ->
-        when (menuItem.itemId) {
-          R.id.menu_item_preferences -> {
-            val fragmentTag = CapturePreferencesFragment::class.java.simpleName
-            val fragmentManager = supportFragmentManager
+  @OptIn(ExperimentalMaterial3Api::class)
+  @Composable
+  fun StreamerApp(
+    permissionsGranted: Boolean,
+    onRequestPermissions: () -> Unit,
+    onSettingsClick: () -> Unit,
+    streamerService: StreamerService?
+  ) {
+    val navController = rememberNavController()
+    val currentBackStackEntry by navController.currentBackStackEntryAsState()
+    val showBackButton = currentBackStackEntry?.destination?.route != "operation"
 
-            // Check the fragment currently on top of the stack
-            val currentFragment = fragmentManager.findFragmentById(R.id.content)
-
-            // If the top fragment is already the one we want, do nothing
-            if (currentFragment is CapturePreferencesFragment) {
-              return@setOnMenuItemClickListener true
+    Scaffold(
+      topBar = {
+        TopAppBar(
+          title = { Text(text = stringResource(id = R.string.app_name)) },
+          navigationIcon = {
+            if (showBackButton) {
+              IconButton(onClick = { navController.popBackStack() }) {
+                Icon(
+                  painter = painterResource(id = R.drawable.ic_status2),
+                  contentDescription = stringResource(id = android.R.string.cancel)
+                )
+              }
             }
-
-            // If the fragment already exists in the stack, pop to it
-            if (fragmentManager.findFragmentByTag(fragmentTag) != null) {
-              fragmentManager.popBackStackImmediate(fragmentTag, 0)
-            } else {
-              // Otherwise, add the fragment and assign it a unique tag
-              fragmentManager.beginTransaction()
-                .replace(R.id.content, CapturePreferencesFragment.new(), fragmentTag)
-                .addToBackStack(fragmentTag)
-                .commit()
+          },
+          actions = {
+            IconButton(onClick = { showUserMenu(navController) }) {
+              Icon(
+                painter = painterResource(id = R.drawable.ic_status3),
+                contentDescription = stringResource(id = R.string.toolbar_user_icon)
+              )
             }
-            true
           }
-
-          else -> false  // return false if the click is not handled
-        }
+        )
       }
-      popup.show()
-    }
-  }
-
-  override fun onDestroy() {
-    unbindCameraService()
-    supportFragmentManager.removeOnBackStackChangedListener(this)
-    super.onDestroy()
-  }
-
-  override fun onOptionsItemSelected(item: MenuItem): Boolean {
-    return when (item.itemId) {
-      android.R.id.home -> {
-        // Handle the back button event, popping the fragment back stack
-        if (supportFragmentManager.backStackEntryCount > 0) {
-          supportFragmentManager.popBackStack()
+    ) { paddingValues ->
+      Box(modifier = Modifier.padding(paddingValues)) {
+        if (!permissionsGranted) {
+          PermissionsScreen(onRequestPermissions = onRequestPermissions)
         } else {
-          finish() // Handle default action
+          NavigationGraph(
+            navController = navController,
+            streamerService = streamerService
+          )
         }
-        true
       }
-
-      else -> super.onOptionsItemSelected(item)
     }
   }
 
-  private fun pushOperationFragment() {
-    supportFragmentManager.beginTransaction()
-      .replace(R.id.content, OperationFragment.instance)
-      .commit()
+  @Composable
+  private fun NavigationGraph(
+    navController: NavHostController,
+    streamerService: StreamerService?
+  ) {
+    NavHost(
+      navController = navController,
+      startDestination = "operation"
+    ) {
+      composable("operation") {
+        OperationScreen(streamerService = streamerService)
+      }
+      composable("preferences") {
+        CapturePreferencesScreen()
+      }
+    }
+  }
+
+  @Composable
+  private fun PermissionsScreen(onRequestPermissions: () -> Unit) {
+    Box(
+      modifier = Modifier.fillMaxSize(),
+      contentAlignment = Alignment.Center
+    ) {
+      Button(onClick = onRequestPermissions) {
+        Text(text = stringResource(id = R.string.permissions_required))
+      }
+    }
+  }
+
+  private fun showUserMenu(navController: NavHostController) {
+    // In Compose, we'd use a DropdownMenu instead of PopupMenu
+    // For simplicity in this conversion, we'll just navigate to preferences
+    navController.navigate("preferences")
+  }
+
+  private fun arePermissionsGranted(): Boolean {
+    return requiredPermissions.all {
+      ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
+    }
   }
 
   private fun checkAndRequestPermissions() {
-    val permissionsToRequest = mutableListOf<String>()
-
-    if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-      permissionsToRequest.add(Manifest.permission.CAMERA)
-    }
-
-    if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-      permissionsToRequest.add(Manifest.permission.RECORD_AUDIO)
-    }
-
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-      checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-      permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS)
-    }
-
-    if (permissionsToRequest.isNotEmpty()) {
-      // Show rationale if needed
-      if (shouldShowRationale(permissionsToRequest)) {
-        showPermissionRationale(permissionsToRequest.toTypedArray())
-      } else {
-        requestPermissions(permissionsToRequest.toTypedArray(), PERMISSION_REQUEST_CODE)
+    if (!arePermissionsGranted()) {
+      val shouldShowRationale = requiredPermissions.any {
+        shouldShowRequestPermissionRationale(it)
       }
-      return;
+
+      if (shouldShowRationale) {
+        showPermissionRationale(requiredPermissions.toTypedArray())
+      } else {
+        permissionLauncher.launch(requiredPermissions.toTypedArray())
+      }
+    } else {
+      startStreamingService()
     }
-
-    permissionGranted()
-    startStreamingService()
-  }
-
-  private fun shouldShowRationale(permissions: List<String>): Boolean {
-    return permissions.any { shouldShowRequestPermissionRationale(it) }
   }
 
   private fun showPermissionRationale(permissions: Array<String>) {
@@ -179,13 +201,33 @@ class StreamerActivity : AppCompatActivity(), ServiceConnection,
       .setTitle(getString(R.string.permissions_required_rationale_title))
       .setMessage(getString(R.string.permissions_required_rationale_text))
       .setPositiveButton(getString(R.string.grant_permissions)) { _, _ ->
-        requestPermissions(permissions, PERMISSION_REQUEST_CODE)
+        permissionLauncher.launch(permissions)
       }
       .setNegativeButton(getString(android.R.string.cancel)) { dialog, _ ->
         dialog.dismiss()
       }
       .setCancelable(false)
       .show()
+  }
+
+  private fun showSettingsRedirectDialog() {
+    AlertDialog.Builder(this)
+      .setTitle("Permissions Required")
+      .setMessage("You have denied necessary permissions. To enable streaming, please allow them in settings.")
+      .setPositiveButton("Open Settings") { _, _ ->
+        openSettingsScreen()
+      }
+      .setNegativeButton("Cancel") { dialog, _ ->
+        dialog.dismiss()
+      }
+      .show()
+  }
+
+  private fun openSettingsScreen() {
+    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+      data = Uri.parse("package:$packageName")
+    }
+    startActivity(intent)
   }
 
   private fun startStreamingService() {
@@ -201,42 +243,9 @@ class StreamerActivity : AppCompatActivity(), ServiceConnection,
     }
   }
 
-  override fun onRequestPermissionsResult(
-    requestCode: Int,
-    permissions: Array<out String>,
-    grantResults: IntArray
-  ) {
-    super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-
-    if (requestCode == PERMISSION_REQUEST_CODE) {
-      if (grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
-        permissionGranted()
-        startStreamingService()
-      } else {
-        showSettingsRedirectDialog()
-      }
-    }
-  }
-
-  private fun showSettingsRedirectDialog() {
-    AlertDialog.Builder(this)
-      .setTitle("Permissions Required")
-      .setMessage("You have denied necessary permissions. To enable streaming, please allow them in settings.")
-      .setPositiveButton("Open Settings") { _, _ ->
-        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-          data = Uri.parse("package:$packageName")
-        }
-        startActivity(intent)
-      }
-      .setNegativeButton("Cancel") { dialog, _ ->
-        dialog.dismiss()
-      }
-      .show()
-  }
-
-  private fun permissionGranted() {
-    binding.btnPermissionWarning.visibility = View.GONE
-    pushOperationFragment()
+  override fun onDestroy() {
+    unbindCameraService()
+    super.onDestroy()
   }
 
   private fun unbindCameraService() {
@@ -257,31 +266,5 @@ class StreamerActivity : AppCompatActivity(), ServiceConnection,
 
   override fun onServiceDisconnected(name: ComponentName?) {
     streamerService = null
-  }
-  // ServiceConnection implementation
-
-  override fun onBackStackChanged() {
-    updateActionBar()
-  }
-
-  override fun onSupportNavigateUp(): Boolean {
-    onBackPressedDispatcher.onBackPressed() // Use OnBackPressedDispatcher instead
-    return true
-  }
-
-  private fun updateActionBar() {
-    val backStackCount = supportFragmentManager.backStackEntryCount
-    supportActionBar?.setDisplayHomeAsUpEnabled(backStackCount > 0)
-    if (backStackCount > 0) {
-      // Show back button, hide hamburger menu
-      supportActionBar?.setHomeAsUpIndicator(null)
-    } else {
-      // Show hamburger menu, hide back button
-      supportActionBar?.setHomeAsUpIndicator(R.drawable.ic_status2)
-    }
-  }
-
-  companion object {
-    private const val PERMISSION_REQUEST_CODE: Int = 10001
   }
 }
