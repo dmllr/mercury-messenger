@@ -65,8 +65,7 @@ extern "C" JNIEXPORT void JNICALL
 Java_hela_eillance_viewer_ViewerActivity_initEngine(  // NOLINT(*-identifier-naming)
     JNIEnv* env, jobject, jobject native_bridge) {
   namespace he = hela::eillance;
-  viewerEngine = std::make_unique<he::ViewerEngine>(javaVm, env);
-  viewerEngine->SetNativeBridge(env, native_bridge);
+  viewerEngine = std::make_unique<he::ViewerEngine>(javaVm, env, native_bridge);
   viewerEngine->Start();
 }
 

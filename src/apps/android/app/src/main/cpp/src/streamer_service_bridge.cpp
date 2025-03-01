@@ -27,7 +27,6 @@ Java_hela_eillance_streamer_StreamerService_initEngine(  // NOLINT(*-identifier-
     JNIEnv* env, jobject, jobject native_bridge) {
   namespace he = hela::eillance;
   streamerEngine = std::make_unique<he::StreamerEngine>(javaVm, env, native_bridge);
-  streamerEngine->SetNativeBridge(env, native_bridge);
   streamerEngine->Start();
 }
 

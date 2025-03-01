@@ -23,12 +23,14 @@
 #include "hela/eillance/utils/string.hpp"
 
 #include "class_refs.hpp"
+#include "shared_preferences.hpp"
 
 namespace hela::eillance {
 
 class ViewerEngine {
   JavaVM* jvm_;
   jobject native_bridge_{nullptr};
+  SharedPreferences prefs_;
 
   ANativeWindow* native_window_{nullptr};
   AMediaCodec* media_codec_{nullptr};
@@ -40,31 +42,32 @@ class ViewerEngine {
   hela::eillance::EventQueue::SubscriberTypeId configure_subscriber_id_{0};
 
 public:
-  ViewerEngine(JavaVM* jvm, JNIEnv*)
-      : jvm_(jvm) {
+  ViewerEngine(JavaVM* jvm, JNIEnv* env, jobject instance)
+      : jvm_(jvm),
+        native_bridge_(env->NewGlobalRef(instance)),
+        prefs_(jvm, native_bridge_) {
     EventQueue::Instance();
 
-//    auto device_id = GetSharedPreferenceValue("device_id", "");
-//    if (device_id.empty()) {
-//      device_id = StringUtils::RandomString();
-//      SetSharedPreferenceValue("device_id", device_id);
-//    }
-//    auto device_name = GetSharedPreferenceValue("device_name", "");
-//    if (device_name.empty()) {
-//      char model_string[PROP_VALUE_MAX + 1];
-//      __system_property_get("ro.product.model", model_string);
-//      device_name = std::string(model_string);
-//      SetSharedPreferenceValue("device_name", device_name);
-//    }
-//    rtc_viewer_.SetId(device_id);
-//    rtc_viewer_.SetName(device_name);
-    rtc_viewer_.SetId(StringUtils::RandomString());
-    std::array<char, PROP_VALUE_MAX + 1> model_string;
-    __system_property_get("ro.product.model", model_string.data());
-    rtc_viewer_.SetName(std::string(model_string.data()));
-
-    rtc_viewer_.SetStatusCallback([this](const std::string& peer_id, EventSource sender, int status) { SetStatus(peer_id, sender, status); });
+    auto device_id = prefs_.GetString("device_id", "");
+    if (device_id.empty()) {
+      device_id = StringUtils::RandomString();
+      prefs_.SetString("device_id", device_id);
+    }
+    auto device_name = prefs_.GetString("device_name", "");
+    if (device_name.empty()) {
+      char model_string[PROP_VALUE_MAX + 1];
+      __system_property_get("ro.product.model", model_string);
+      device_name = std::string(model_string);
+      prefs_.SetString("device_name", device_name);
+    }
+    rtc_viewer_.SetId(device_id);
+    rtc_viewer_.SetName(device_name);
+    rtc_viewer_.SetStatusCallback(
+        [this](const std::string& peer_id, EventSource sender, int status) {
+          SetStatus(peer_id, sender, status);
+        });
   }
+
   ViewerEngine(ViewerEngine&&) = delete;
   ViewerEngine(const ViewerEngine&) = delete;
   auto& operator=(ViewerEngine&&) = delete;
@@ -88,10 +91,6 @@ public:
 
   void SetTargetSurface(JNIEnv* env, jobject surface) {
     native_window_ = ANativeWindow_fromSurface(env, surface);
-  }
-
-  void SetNativeBridge(JNIEnv* env, jobject native_bridge) {
-    native_bridge_ = env->NewGlobalRef(native_bridge);
   }
 
   void Start() {
