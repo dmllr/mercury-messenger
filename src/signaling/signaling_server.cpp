@@ -1,102 +1,34 @@
 #include <chrono>
-#include <fstream>
+#include <csignal>
 #include <memory>
 #include <mutex>
-#include <sstream>
+#include <string>
 #include <optional>
 #include <thread>
 #include <unordered_map>
 
-#include "rtc/websocket.hpp"
-#include "rtc/websocketserver.hpp"
-#include <cpr/cpr.h>
-#include <csignal>
+#include <rtc/websocket.hpp>
+#include <rtc/websocketserver.hpp>
 #include <nlohmann/json.hpp>
+#include <plog/Log.h>
+#include <plog/Init.h>
+#include <plog/Appenders/ColorConsoleAppender.h>
+#include <plog/Formatters/TxtFormatter.h>
 
-#include "hela/eillance/logging/logging.h"
+#include "args_parser.hpp"
+#include "firebase_verifier.hpp"
 
-using Json = nlohmann::json;
-
-// Configuration constants
-const std::string serviceAccountPath = "C:\\Users\\DenisMiller\\Downloads\\eillancex-firebase-adminsdk-fbsvc-b42c47be20.json";
-//const std::string serviceAccountPath = "/etc/secret/firebase-service-account.json";
-const std::chrono::minutes tokenRefreshInterval{5};
-
-class FirebaseVerifier {
-public:
-  FirebaseVerifier() {
-    LoadServiceAccount();
-  }
-
-  std::optional<std::string> VerifyToken(const std::string& token) {
-    try {
-      // Use Google's token verification endpoint
-      const std::string verify_url = "https://identitytoolkit.googleapis.com/v1/accounts:lookup";
-
-      // Make the verification request
-      auto post = cpr::Post(
-          cpr::Url{verify_url},
-          cpr::Parameters{{"key", apiKey_}},  // API key from your service account
-          cpr::Body{R"({"idToken":")" + token + R"("})"},
-          cpr::Header{{"Content-Type", "application/json"}}
-      );
-
-      if (post.status_code != cpr::status::HTTP_OK) {
-        LOGE << "Token verification failed: " << post.text;
-        return std::nullopt;
-      }
-
-      // Parse the response
-      Json response = Json::parse(post.text);
-
-      // Check if the token is valid
-      if (response["users"].empty()) {
-        LOGE << "Token doesn't belong to any user";
-        return std::nullopt;
-      }
-
-      // Return the user ID
-      return response["users"][0]["localId"];
-
-    } catch (const std::exception& e) {
-      LOGE << "Token verification failed: " << e.what();
-      return std::nullopt;
-    }
-  }
+struct Log {
+  static constexpr auto tag = "helaeillance";
+  static constexpr auto logLevel = plog::info;
 
 private:
-  std::string projectId_;
-  std::string apiKey_;
-
-  void LoadServiceAccount() {
-    std::ifstream file(serviceAccountPath);
-    if (!file.is_open()) {
-      throw std::runtime_error("Failed to open service account file: " + serviceAccountPath);
-    }
-
-    Json service_account;
-    file >> service_account;
-    projectId_ = service_account["project_id"];
-
-    // Try to get API key from environment variable first
-    const char* env_api_key = std::getenv("FIREBASE_API_KEY"); // NOLINT(*-mt-unsafe)
-    if (env_api_key != nullptr) {
-      apiKey_ = env_api_key;
-    } else {
-      // Fallback to a separate config file
-      std::ifstream api_key_file("firebase_api_key.txt");
-      if (api_key_file.is_open()) {
-        std::getline(api_key_file, apiKey_);
-      }
-    }
-
-    if (apiKey_.empty()) {
-      LOGE << "Warning: API key not found. Please set FIREBASE_API_KEY environment variable or create firebase_api_key.txt";
-    }
-  }
+  inline static plog::ColorConsoleAppender<plog::TxtFormatter> appender;
+  inline const static plog::Logger<0>& logger = plog::init(logLevel, &appender);
 };
 
 class SignalingServer {
+  using Json = nlohmann::json;
   using UserId = std::string;
   using PeerId = std::string;
 
@@ -115,14 +47,11 @@ class SignalingServer {
   };
 
 public:
-  SignalingServer(uint16_t port, bool ssl) : verifier_(std::make_unique<FirebaseVerifier>()) {
-    rtc::WebSocketServer::Configuration config;
-    config.port = port;
-    config.enableTls = ssl;
-    // TODO: Configure SSL certs
-
+  explicit SignalingServer(const rtc::WebSocketServer::Configuration& config) : verifier_(std::make_unique<FirebaseVerifier>()) {
     server_ = std::make_unique<rtc::WebSocketServer>(config);
-    server_->onClient([this](std::shared_ptr<rtc::WebSocket> ws) { HandleConnection(ws); });
+    server_->onClient([this](std::shared_ptr<rtc::WebSocket> ws) {
+      HandleConnection(ws);
+    });
   }
 
 private:
@@ -251,7 +180,7 @@ private:
     return true;
   }
 
-  void HandlePublish(std::shared_ptr<rtc::WebSocket> ws, const Json& msg, const UserId user_id) {
+  void HandlePublish(std::shared_ptr<rtc::WebSocket> ws, const Json& msg, const UserId& user_id) {
     PeerId peer_id = msg["peer_id"];
     Peer new_peer{
         .id = peer_id,
@@ -307,7 +236,7 @@ private:
   }
 
   // NOLINTNEXTLINE(*-easily-swappable-parameters)
-  void NotifyPeerDisconnected(const UserId user_id, const PeerId& disconnected_peer_id) {
+  void NotifyPeerDisconnected(const UserId& user_id, const PeerId& disconnected_peer_id) {
     Json notification = {
         {"type", "peer_disconnected"},
         {"id", disconnected_peer_id}
@@ -363,23 +292,33 @@ void SignalHandler(int signum) {
 }
 
 int main(int argc, char* argv[]) {
-  uint16_t port = 8000;
-  bool ssl = false;
+  const auto default_port = uint16_t{8000};
+  auto config = rtc::WebSocketServer::Configuration();
+  config.port = default_port;
 
-  if (argc > 1) {
-    port = std::stoi(argv[1]);
+  ArgsParser args(argc, argv);
+  const auto& port_arg = args.GetInt("--port");
+  if (port_arg.has_value()) {
+    config.port = port_arg.value();
   }
-  if (argc > 2) {
-    ssl = std::string(argv[2]) == "ssl";
+
+  config.certificatePemFile = args.Get("--ssl-cert");
+  config.keyPemFile = args.Get("--ssl-cert-key");
+  if (config.certificatePemFile.has_value() && config.keyPemFile.has_value()) {
+    config.enableTls = true;
   }
 
   // Register signal handler
   std::signal(SIGINT, SignalHandler);
 
-  SignalingServer server(port, ssl);
+  auto server = SignalingServer(config);
 
-  LOGI << "Signaling server running on port " << port
-            << (ssl ? " with SSL" : "");
+  LOGI << "Signaling server running on port " << config.port;
+  if (config.certificatePemFile.has_value() && config.keyPemFile.has_value()) {
+    LOGI << "  * connection is secure.";
+  } else {
+    LOGW << "  * connection is insecure!";
+  }
   LOGI << "Press Ctrl+C to exit";
 
   // Keep the program running until SIGINT (Ctrl+C) is received
