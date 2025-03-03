@@ -1,9 +1,11 @@
 include("../cmake/libdatachannel.cmake")
-include("../cmake/libopencv.cmake")
-include("../cmake/libffmpeg.cmake")
 include("../cmake/libopus.cmake")
 include("../cmake/libminiaudio.cmake")
 include("../cmake/libjson.cmake")
+if (NOT ANDROID)
+  include("../cmake/libopencv.cmake")
+  include("../cmake/libffmpeg.cmake")
+endif ()
 
 add_library(hela-eillance-logging INTERFACE)
 target_include_directories(hela-eillance-logging INTERFACE
