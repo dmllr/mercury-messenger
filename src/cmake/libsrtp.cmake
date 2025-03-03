@@ -11,4 +11,7 @@ import_remote("https://github.com/cisco/libsrtp.git"
 	TAG "v2.6.0"
 	DST "${CMAKE_SOURCE_DIR}/_imported"
 	PATCH "${CMAKE_CURRENT_LIST_DIR}/patches/libsrtp.patch"
-	ALIAS libsrtp )
+	ALIAS libsrtp)
+
+set(Usrsctp_LIBRARY "usrsctp" CACHE INTERNAL "" FORCE)
+set(Usrsctp_INCLUDE_DIR "${libsrtp_path}/include" CACHE INTERNAL "" FORCE)
