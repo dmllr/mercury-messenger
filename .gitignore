@@ -1,6 +1,7 @@
 .idea
 /_imported/
 /build/
+/build-deploy/
 /bin/
 /out/
 /lib/
