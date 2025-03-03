@@ -1,3 +1,16 @@
+include("../cmake/libdatachannel.cmake")
+include("../cmake/libopencv.cmake")
+include("../cmake/libffmpeg.cmake")
+include("../cmake/libopus.cmake")
+include("../cmake/libminiaudio.cmake")
+include("../cmake/libjson.cmake")
+
+add_library(hela-eillance-logging INTERFACE)
+target_include_directories(hela-eillance-logging INTERFACE
+  "${CMAKE_CURRENT_SOURCE_DIR}"
+  "${CMAKE_BINARY_DIR}"
+)
+
 add_library(hela-eillance-core INTERFACE)
 target_include_directories(hela-eillance-core INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}"
