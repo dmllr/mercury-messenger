@@ -15,21 +15,25 @@ Development Environment used to compile and deploy the Signaling server.
 ### Oneliner
 
 ```shell
-docker run --rm -v ${HOME}:${HOME} -w ${PWD} \
-  hela-eillance-devenv bash -c \
-  "cmake -GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=src/cmake/toolchain-x86_64-clang.cmake -B build-deploy && cmake --build build-deploy --target hela-eillance-signaling --config Release"
+docker run --rm -v ${PWD}:/workspace -w /workspace hela-eillance-devenv bash -c "cmake -GNinja -DCMAKE_BUILD_TYPE=Release -B build-deploy && cmake --build build-deploy --target hela-eillance-signaling --config Release && strip build-deploy/bin/hela-eillance-signaling"
 ```
 
 ### CMake Configure
 
 ```shell
-docker run --rm -v ${HOME}:${HOME} -w ${PWD} hela-eillance-devenv cmake -GNinja -DCMAKE_BUILD_TYPE=Release -B build-deploy
+docker run --rm -v ${PWD}:/workspace -w /workspace hela-eillance-devenv bash -c "cmake -GNinja -DCMAKE_BUILD_TYPE=Release -B build-deploy"
 ```
 
 ### Build
 
 ```shell
-docker run --rm -v ${HOME}:${HOME} -w ${PWD} hela-eillance-devenv cmake --build build-deploy --target hela-eillance-signaling --config Release
+docker run --rm -v ${PWD}:/workspace -w /workspace hela-eillance-devenv bash -c "cmake --build build-deploy --target hela-eillance-signaling --config Release && strip build-deploy/bin/hela-eillance-signaling"
+```
+
+### Deploy
+
+```shell
+docker run --rm -v ${PWD}:/workspace -v ${HOME}/.ssh:/workspace/.ssh -w /workspace hela-eillance-devenv bash -c "chmod  400 /workspace/.ssh/vm0.ssh.key && scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i /workspace/.ssh/vm0.ssh.key build-deploy/bin/hela-eillance-signaling ubuntu@vm0.hela.me:/var/app/signaling-server/"
 ```
 
 ### Server-side configuration
@@ -48,9 +52,17 @@ User ubuntu
 1. Check app.hela.me:8000
    
    If any problem, restart the signaling server
+
    ```shell
    ssh -i ~/Downloads/ssh-key-2022-03-08.key ubuntu@app.hela.me
    ```
+   
+   ```shell
+   FIREBASE_API_KEY=... /var/app/signaling-server/hela-eillance-signaling --port=8000 --ssl-cert="/etc/letsencrypt/archive/app.hela.me/fullchain18.pem" --ssl-cert-key="/etc/letsencrypt/archive/app.hela.me/privkey18.pem"
+   ```
+   
+   or
+   
    ```shell
    docker run \
      -it \
