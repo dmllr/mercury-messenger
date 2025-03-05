@@ -23,6 +23,7 @@ struct Log {
   static constexpr auto logLevel = plog::info;
 
 private:
+  // NOLINTNEXTLINE(*-statically-constructed-objects)
   inline static plog::ColorConsoleAppender<plog::TxtFormatter> appender;
   inline const static plog::Logger<0>& logger = plog::init(logLevel, &appender);
 };
@@ -98,7 +99,8 @@ private:
       {
         std::lock_guard<std::mutex> lock(peersMutex_);
         if (!user_id->empty() && !peer_id->empty()) {
-          if (peers_[*user_id].erase(*peer_id) != 0U) {
+          auto ere = peers_[*user_id].erase(*peer_id);
+          if (ere != 0U) {
             is_notification_required = true;
           }
         }
@@ -210,28 +212,20 @@ private:
   }
 
   void BroadcastStreamers(const UserId& user_id) {
-    Json response;
-    response["type"] = "streamers";
-    std::vector<std::shared_ptr<rtc::WebSocket>> viewers;
+    std::vector<Peer> viewers;
 
     {
       std::lock_guard<std::mutex> lock(peersMutex_);
 
       for (const auto& [id, peer] : peers_[user_id]) {
-        if (peer.type == PeerType::streamer) {
-          response["peers"].push_back({{"id", id}, {"name", peer.name}, {"profile", peer.profile}});
-        }
-      }
-
-      for (const auto& [id, peer] : peers_[user_id]) {
         if (peer.type == PeerType::viewer) {
-          viewers.push_back(peer.ws);
+          viewers.push_back(peer);
         }
       }
     }
 
-    for (const auto& ws : viewers) {
-      ws->send(response.dump());
+    for (const auto& peer : viewers) {
+      SendStreamers(peer.ws, peer.id);
     }
   }
 
