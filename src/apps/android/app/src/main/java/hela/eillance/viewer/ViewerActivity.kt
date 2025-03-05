@@ -34,6 +34,7 @@ import hela.eillance.ndkio.EventSource
 import hela.eillance.ndkio.Peer
 import hela.eillance.ndkio.Profile
 import hela.eillance.ndkio.interfaces.IViewerNativeBridge
+import hela.eillance.theme.EillanceTheme
 
 class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
 
@@ -55,7 +56,7 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
   @Composable
   fun AppContent(navController: NavHostController, viewModel: ViewerViewModel) {
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
-    MaterialTheme {
+    EillanceTheme {
       Scaffold(
         topBar = { AppTopBar(currentRoute, navController, viewModel) }
       ) { paddingValues ->
