@@ -60,7 +60,7 @@ public:
       device_name = std::string(model_string);
       prefs_.SetString("device_name", device_name);
     }
-    rtc_viewer_.SetId(device_id);
+    rtc_viewer_.SetId("V-" + device_id);
     rtc_viewer_.SetName(device_name);
     rtc_viewer_.SetStatusCallback(
         [this](const std::string& peer_id, EventSource sender, int status) {
