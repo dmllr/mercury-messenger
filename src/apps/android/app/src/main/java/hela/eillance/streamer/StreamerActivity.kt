@@ -41,6 +41,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import hela.eillance.camera.R
+import hela.eillance.theme.EillanceTheme
 
 class StreamerActivity : ComponentActivity(), ServiceConnection {
 
@@ -70,7 +71,7 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
     super.onCreate(savedInstanceState)
 
     setContent {
-      MaterialTheme {
+      EillanceTheme {
         Surface(
           modifier = Modifier.fillMaxSize(),
           color = MaterialTheme.colorScheme.background

@@ -169,7 +169,7 @@ fun PeerItemCard(
     ) {
       Text(
         text = peerId,
-        style = MaterialTheme.typography.bodyMedium,
+        style = hela.eillance.theme.Typography.bodyMedium,
         modifier = Modifier.weight(1f)
       )
 
