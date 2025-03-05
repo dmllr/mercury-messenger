@@ -306,7 +306,10 @@ private:
   }
 
   void Publish() {
-    assert(!auth_token_.empty());
+    if (auth_token_.empty()) {
+      return;
+    }
+
     auto message = GetPublishMessage();
     message["type"] = "publish";
     message["token"] = auth_token_;
