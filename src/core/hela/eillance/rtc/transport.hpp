@@ -422,12 +422,12 @@ private:
   };
 
 #if 1 // NOLINT(*-avoid-unconditional-preprocessor-if)
-  constexpr static auto signalingServerUrl = "wss://app.hela.me:8000";
+  constexpr static auto signalingServerUrl = "ws://app.hela.me:8000";
 #else
 #if ANDROID
-  constexpr static auto signalingServerUrl = "wss://10.0.2.2:8888";
+  constexpr static auto signalingServerUrl = "ws://10.0.2.2:8888";
 #else
-  constexpr static auto signalingServerUrl = "wss://127.0.0.1:8888";
+  constexpr static auto signalingServerUrl = "ws://127.0.0.1:8888";
 #endif
 #endif
 };

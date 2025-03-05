@@ -298,9 +298,10 @@ int main(int argc, char* argv[]) {
 
   config.certificatePemFile = args.Get("--ssl-cert");
   config.keyPemFile = args.Get("--ssl-cert-key");
-  if (config.certificatePemFile.has_value() && config.keyPemFile.has_value()) {
-    config.enableTls = true;
-  }
+// temporary until mbedtls double lock issue is resolved
+//  if (config.certificatePemFile.has_value() && config.keyPemFile.has_value()) {
+//    config.enableTls = true;
+//  }
 
   // Register signal handler
   std::signal(SIGINT, SignalHandler);
