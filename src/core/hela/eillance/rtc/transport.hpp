@@ -104,14 +104,16 @@ public:
       }
     }
     ws_ = std::make_unique<rtc::WebSocket>(ws_config);
-    ws_->onOpen([this]() { OnWebSocketOpen(); });
-    ws_->onClosed([this]() { OnWebSocketClosed(); });
+    ws_->onOpen([this]() {
+      OnWebSocketOpen(); });
+    ws_->onClosed([this]() {
+      OnWebSocketClosed(); });
     ws_->onError([this](const std::string& error) {
       OnWebSocketError(error); });
     ws_->onMessage(nullptr, [this](const std::string& data) {
       OnWebSocketMessage(data); });
 
-    LOGD << "Signaling server URL is " << signalingServerUrl;
+    LOGI << "Signaling server URL is " << signalingServerUrl;
 
     try {
       ws_->open(signalingServerUrl);
@@ -423,9 +425,9 @@ private:
   constexpr static auto signalingServerUrl = "wss://app.hela.me:8000";
 #else
 #if ANDROID
-  constexpr static auto signalingServerUrl = "ws://10.0.2.2:8000";
+  constexpr static auto signalingServerUrl = "wss://10.0.2.2:8888";
 #else
-  constexpr static auto signalingServerUrl = "ws://127.0.0.1:8000";
+  constexpr static auto signalingServerUrl = "wss://127.0.0.1:8888";
 #endif
 #endif
 };
