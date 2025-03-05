@@ -44,7 +44,7 @@ public:
       device_name = std::string(model_string);
       prefs_.SetString("device_name", device_name);
     }
-    rtc_streamer_.SetId(device_id);
+    rtc_streamer_.SetId("S-" + device_id);
     rtc_streamer_.SetName(device_name);
     rtc_streamer_.SetStatusCallback(
         [this](const std::string& peer_id, EventSource sender, int status) {
