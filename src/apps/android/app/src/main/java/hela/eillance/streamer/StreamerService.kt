@@ -22,6 +22,7 @@ import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.createBitmap
 import androidx.core.graphics.drawable.DrawableCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.preference.PreferenceManager
@@ -132,9 +133,7 @@ class StreamerService : Service(), IStreamerNativeBridge {
 
     DrawableCompat.setTint(drawable!!, color)
 
-    val bitmap = Bitmap.createBitmap(
-      drawable.intrinsicWidth, drawable.intrinsicHeight, Bitmap.Config.ARGB_8888
-    )
+    val bitmap = createBitmap(drawable.intrinsicWidth, drawable.intrinsicHeight)
     val canvas = Canvas(bitmap)
     drawable.setBounds(0, 0, canvas.width, canvas.height)
     drawable.draw(canvas)
@@ -263,7 +262,7 @@ class StreamerService : Service(), IStreamerNativeBridge {
 
   private external fun initEngine(nativeBridge: IStreamerNativeBridge)
   private external fun updateAuthToken(token: String)
-  private external fun start()
+  external fun start()
   external fun stop()
   external fun getServiceConnectionState(): ServiceConnectionState
   external fun configureDeviceName(name: String)

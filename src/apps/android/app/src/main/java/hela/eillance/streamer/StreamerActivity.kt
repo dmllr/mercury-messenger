@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -30,6 +32,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -41,12 +46,12 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import hela.eillance.camera.R
+import hela.eillance.ndkio.ServiceConnectionState
 import hela.eillance.theme.EillanceTheme
 
 class StreamerActivity : ComponentActivity(), ServiceConnection {
 
-  var streamerService: StreamerService? = null
-  private var cameraServiceBound: Boolean = false
+  private var streamerService: StreamerService? = null
 
   private val requiredPermissions = mutableListOf(
     Manifest.permission.CAMERA,
@@ -79,8 +84,10 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
           StreamerApp(
             permissionsGranted = arePermissionsGranted(),
             onRequestPermissions = { checkAndRequestPermissions() },
-            onSettingsClick = { openSettingsScreen() },
-            streamerService = streamerService
+            streamerService = streamerService,
+            onStartService = { startStreamingService() },
+            onStopService = { stopStreamingService() },
+            onRestartService = { restartStreamingService() }
           )
         }
       }
@@ -94,12 +101,15 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
   fun StreamerApp(
     permissionsGranted: Boolean,
     onRequestPermissions: () -> Unit,
-    onSettingsClick: () -> Unit,
-    streamerService: StreamerService?
+    streamerService: StreamerService?,
+    onStartService: () -> Unit,
+    onStopService: () -> Unit,
+    onRestartService: () -> Unit
   ) {
     val navController = rememberNavController()
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
     val showBackButton = currentBackStackEntry?.destination?.route != "operation"
+    var isUserMenuExpanded by remember { mutableStateOf(false) }
 
     Scaffold(
       topBar = {
@@ -116,10 +126,32 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
             }
           },
           actions = {
-            IconButton(onClick = { showUserMenu(navController) }) {
-              Icon(
-                painter = painterResource(id = R.drawable.ic_status3),
-                contentDescription = stringResource(id = R.string.toolbar_user_icon)
+            Box {
+              IconButton(onClick = { isUserMenuExpanded = true }) {
+                Icon(
+                  painter = painterResource(id = R.drawable.ic_status3),
+                  contentDescription = stringResource(id = R.string.toolbar_user_icon)
+                )
+              }
+              UserMenu(
+                expanded = isUserMenuExpanded,
+                onDismissRequest = { isUserMenuExpanded = false },
+                onPreferencesClick = {
+                  navController.navigate("preferences")
+                  isUserMenuExpanded = false
+                },
+                onServiceStart = {
+                  onStartService()
+                  isUserMenuExpanded = false
+                },
+                onServiceStop = {
+                  onStopService()
+                  isUserMenuExpanded = false
+                },
+                onRestartService = {
+                  onRestartService()
+                  isUserMenuExpanded = false
+                }
               )
             }
           }
@@ -140,6 +172,67 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
   }
 
   @Composable
+  private fun UserMenu(
+    expanded: Boolean,
+    onDismissRequest: () -> Unit,
+    onPreferencesClick: () -> Unit,
+    onServiceStart: () -> Unit,
+    onServiceStop: () -> Unit,
+    onRestartService: () -> Unit
+  ) {
+    DropdownMenu(
+      expanded = expanded,
+      onDismissRequest = onDismissRequest
+    ) {
+      DropdownMenuItem(
+        text = { Text(stringResource(id = R.string.menu_capture_preferences)) },
+        onClick = onPreferencesClick,
+        leadingIcon = {
+          Icon(
+            painter = painterResource(id = R.drawable.ic_capture_preferences),
+            contentDescription = stringResource(id = R.string.menu_capture_preferences)
+          )
+        }
+      )
+
+      DropdownMenuItem(
+        text = { Text(stringResource(id = R.string.menu_stop_service)) },
+        onClick = onServiceStop,
+        leadingIcon = {
+          Icon(
+            painter = painterResource(id = R.drawable.ic_stop_service),
+            contentDescription = stringResource(id = R.string.menu_stop_service)
+          )
+        }
+      )
+
+      DropdownMenuItem(
+        text = { Text(stringResource(id = R.string.menu_start_service)) },
+        enabled = streamerService == null
+            || streamerService!!.getServiceConnectionState() != ServiceConnectionState.Online,
+        onClick = onServiceStart,
+        leadingIcon = {
+          Icon(
+            painter = painterResource(id = R.drawable.ic_start_service),
+            contentDescription = stringResource(id = R.string.menu_start_service)
+          )
+        }
+      )
+
+      DropdownMenuItem(
+        text = { Text(stringResource(id = R.string.menu_restart_service)) },
+        onClick = onRestartService,
+        leadingIcon = {
+          Icon(
+            painter = painterResource(id = R.drawable.ic_restart_service),
+            contentDescription = stringResource(id = R.string.menu_restart_service)
+          )
+        }
+      )
+    }
+  }
+
+  @Composable
   private fun NavigationGraph(
     navController: NavHostController,
     streamerService: StreamerService?
@@ -152,7 +245,7 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
         OperationScreen(streamerService = streamerService)
       }
       composable("preferences") {
-        CapturePreferencesScreen()
+        CapturePreferencesScreen(streamerService = streamerService!!)
       }
     }
   }
@@ -167,12 +260,6 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
         Text(text = stringResource(id = R.string.permissions_required))
       }
     }
-  }
-
-  private fun showUserMenu(navController: NavHostController) {
-    // In Compose, we'd use a DropdownMenu instead of PopupMenu
-    // For simplicity in this conversion, we'll just navigate to preferences
-    navController.navigate("preferences")
   }
 
   private fun arePermissionsGranted(): Boolean {
@@ -232,16 +319,32 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
   }
 
   private fun startStreamingService() {
+    if (streamerService != null) {
+      streamerService?.start()
+    } else {
+      startStreamingForegroundService()
+    }
+  }
+
+  private fun stopStreamingService() {
+    streamerService?.stop()
+  }
+
+  private fun restartStreamingService() {
+    streamerService?.let { service ->
+      service.stop()
+      service.start()
+    }
+  }
+
+  private fun startStreamingForegroundService() {
     val streamerServiceIntent = Intent(applicationContext, StreamerService::class.java)
     startService(streamerServiceIntent)
-    if (applicationContext.bindService(
-        streamerServiceIntent,
-        this,
-        Context.BIND_AUTO_CREATE + Context.BIND_ABOVE_CLIENT
-      )
-    ) {
-      cameraServiceBound = true
-    }
+    applicationContext.bindService(
+      streamerServiceIntent,
+      this,
+      Context.BIND_AUTO_CREATE + Context.BIND_ABOVE_CLIENT
+    )
   }
 
   override fun onDestroy() {
@@ -250,13 +353,13 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
   }
 
   private fun unbindCameraService() {
-    if (cameraServiceBound) {
+    if (streamerService != null) {
       try {
         unbindService(this)
       } catch (_: IllegalArgumentException) {
         Log.e(javaClass.simpleName, "Trying to unbind service that is not registered")
       }
-      cameraServiceBound = false
+      streamerService = null
     }
   }
 

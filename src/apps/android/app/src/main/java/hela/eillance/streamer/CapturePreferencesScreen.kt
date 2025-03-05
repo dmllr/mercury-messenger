@@ -27,7 +27,7 @@ import hela.eillance.camera.R
 import hela.eillance.ndkio.VideoConfig
 
 @Composable
-fun CapturePreferencesScreen() {
+fun CapturePreferencesScreen(streamerService: StreamerService) {
   val context = LocalContext.current
   val activity = context as StreamerActivity
   val scrollState = rememberScrollState()
@@ -91,7 +91,7 @@ fun CapturePreferencesScreen() {
             onDismiss = { showDeviceNameDialog = false },
             onConfirm = { newValue ->
               deviceName = newValue
-              activity.streamerService?.configureDeviceName(newValue)
+              streamerService.configureDeviceName(newValue)
               showDeviceNameDialog = false
             }
           )
@@ -127,7 +127,7 @@ fun CapturePreferencesScreen() {
               val newResolutions = CameraUtils.getSupportedResolutions(cameraManager, newValue)
               supportedResolutions = newResolutions.map { it.toString() }
 
-              activity.streamerService?.configureVideoCapture(videoConfig)
+              streamerService.configureVideoCapture(videoConfig)
               showCameraDialog = false
             }
           )
@@ -154,7 +154,7 @@ fun CapturePreferencesScreen() {
                 val width = resolution[0].toIntOrNull() ?: videoConfig.width
                 val height = resolution[1].toIntOrNull() ?: videoConfig.height
                 videoConfig = videoConfig.copy(width = width, height = height)
-                activity.streamerService?.configureVideoCapture(videoConfig)
+                streamerService.configureVideoCapture(videoConfig)
               }
               showResolutionDialog = false
             }
@@ -180,7 +180,7 @@ fun CapturePreferencesScreen() {
             onConfirm = { newValue ->
               val frameRate = newValue.toIntOrNull() ?: videoConfig.frameRate
               videoConfig = videoConfig.copy(frameRate = frameRate)
-              activity.streamerService?.configureVideoCapture(videoConfig)
+              streamerService.configureVideoCapture(videoConfig)
               showFrameRateDialog = false
             }
           )
@@ -205,7 +205,7 @@ fun CapturePreferencesScreen() {
             onConfirm = { newValue ->
               val bitrate = if (newValue == "Auto") 0 else newValue.toIntOrNull() ?: 0
               videoConfig = videoConfig.copy(bitrate = bitrate)
-              activity.streamerService?.configureVideoCapture(videoConfig)
+              streamerService.configureVideoCapture(videoConfig)
               showBitrateDialog = false
             }
           )

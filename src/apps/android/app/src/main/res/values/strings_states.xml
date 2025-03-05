@@ -1,0 +1,38 @@
+<resources>
+  <string name="state_signaling_stable">Stable</string>
+  <string name="state_signaling_have_local_offer">Have Local Offer</string>
+  <string name="state_signaling_have_remote_offer">Have Remote Offer</string>
+  <string name="state_signaling_have_local_pranswer">Have Local Pranswer</string>
+  <string name="state_signaling_have_remote_pranswer">Have Remote Pranswer</string>
+
+  <string name="service_connection_state_unknown">Unknown</string>
+  <string name="service_connection_state_establishing">Establishing</string>
+  <string name="service_connection_state_online">Online</string>
+  <string name="service_connection_state_failure">Failure</string>
+  <string name="service_connection_state_disconnected">No network</string>
+
+  <string name="state_service_unknown">Unknown</string>
+  <string name="state_service_standby">Standby</string>
+  <string name="state_service_setup">Setup</string>
+  <string name="state_service_action">Action</string>
+  <string name="state_service_failure">Failure</string>
+
+  <string name="state_ice_gathering_new">New</string>
+  <string name="state_ice_gathering_in_progress">In Progress</string>
+  <string name="state_ice_gathering_complete">Complete</string>
+
+  <string name="state_ice_new">New</string>
+  <string name="state_ice_checking">Checking</string>
+  <string name="state_ice_connected">Connected</string>
+  <string name="state_ice_completed">Completed</string>
+  <string name="state_ice_failed">Failed</string>
+  <string name="state_ice_disconnected">Disconnected</string>
+  <string name="state_ice_closed">Closed</string>
+
+  <string name="state_peer_connection_new">New</string>
+  <string name="state_peer_connection_connecting">Connecting</string>
+  <string name="state_peer_connection_connected">Connected</string>
+  <string name="state_peer_connection_disconnected">Disconnected</string>
+  <string name="state_peer_connection_failed">Failed</string>
+  <string name="state_peer_connection_closed">Closed</string>
+</resources>

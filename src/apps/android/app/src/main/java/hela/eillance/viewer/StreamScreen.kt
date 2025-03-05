@@ -52,6 +52,8 @@ fun StreamScreen(
   viewModel: ViewerViewModel = viewModel()
 ) {
   val context = LocalContext.current
+  val defaultCameraLabel = stringResource(R.string.viewer_StreamScreen_default_camera)
+  val defaultResolutionsLabel = stringResource(R.string.viewer_StreamScreen_default_resolution)
   val status by viewModel.peerStatus.observeAsState()
   val resolution by viewModel.streamResolution.observeAsState()
   val profile by viewModel.deviceProfile.observeAsState()
@@ -61,12 +63,12 @@ fun StreamScreen(
   var statusText by remember { mutableStateOf("") }
 
   // Camera selection state
-  var cameraOptions by remember { mutableStateOf(listOf("Default Camera")) }
+  var cameraOptions by remember { mutableStateOf(listOf(defaultCameraLabel)) }
   var selectedCameraIndex by remember { mutableIntStateOf(0) }
   var expandedCamera by remember { mutableStateOf(false) }
 
   // Resolution selection state
-  var resolutionOptions by remember { mutableStateOf(listOf("Default Resolution")) }
+  var resolutionOptions by remember { mutableStateOf(listOf(defaultResolutionsLabel)) }
   var selectedResolutionIndex by remember { mutableIntStateOf(0) }
   var expandedResolution by remember { mutableStateOf(false) }
 
@@ -77,7 +79,7 @@ fun StreamScreen(
   // Update camera options when profile changes
   fun updateCameraOptions(profile: Profile) {
     val names = profile.map { it.name }
-    cameraOptions = names.ifEmpty { listOf("Default Camera") }
+    cameraOptions = names.ifEmpty { listOf(defaultCameraLabel) }
   }
 
   // Update resolution options when camera selection changes
@@ -86,7 +88,7 @@ fun StreamScreen(
       val resolutions = deviceProfile[cameraIndex].resolutions
       resolutionOptions = resolutions.map { "${it.width}$RESOLUTION_SEPARATOR${it.height}" }
     } else {
-      resolutionOptions = listOf("Default Resolution")
+      resolutionOptions = listOf(defaultResolutionsLabel)
     }
     selectedResolutionIndex = 0
   }
@@ -277,7 +279,7 @@ fun StreamScreen(
     ) {
       Icon(
         painter = painterResource(id = R.drawable.ic_surface_rotate),
-        contentDescription = stringResource(id = R.string.fr_observer_operation_change_video_orientation)
+        contentDescription = stringResource(id = R.string.viewer_StreamScreen_change_video_orientation)
       )
     }
 
