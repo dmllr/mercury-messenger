@@ -245,19 +245,16 @@ private:
     // Clear existing peers
     devices_.clear();
 
-    if (!json.is_array()) {
-      LOGE << "Received invalid peer list format";
-      return;
-    }
-
-    // Parse new peers
-    for (const auto& item: json) {
-      Device peer {
-        .id = item.at("id").get<std::string>(),
-        .name = item.at("name").get<std::string>(),
-        .profile = ParseDeviceProfile(item.at("profile"))
-      };
-      devices_.push_back(std::move(peer));
+    if (json.is_array()) {
+      // Parse new peers
+      for (const auto &item: json) {
+        Device peer{
+            .id = item.at("id").get<std::string>(),
+            .name = item.at("name").get<std::string>(),
+            .profile = ParseDeviceProfile(item.at("profile"))
+        };
+        devices_.push_back(std::move(peer));
+      }
     }
 
     if (on_peer_list_changed_ != nullptr) {
