@@ -140,8 +140,8 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
   }
 
   private external fun initEngine(nativeBridge: IViewerNativeBridge)
-  external fun initDecoder(surface: Surface)
-  external fun releaseDecoder()
+  private external fun initDecoder(surface: Surface)
+  private external fun releaseDecoder()
   private external fun updateAuthToken(token: String)
   external fun sendStreamRequest(peerId: String, config: Config)
   external fun sendConfigurationRequest(peerId: String, config: Config)
