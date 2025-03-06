@@ -9,7 +9,8 @@ enum class PeerStateLink(val value: Int) {
   Connected(2),
   Disconnected(3),
   Failed(4),
-  Closed(5);
+  Closed(5),
+  Unknown(99);
 
   companion object {
     val resourceMap = mapOf(
@@ -21,7 +22,8 @@ enum class PeerStateLink(val value: Int) {
       Closed to R.string.state_peer_connection_closed,
     )
 
-    fun fromInt(value: Int?) = entries.first { it.value == value }
+    @JvmStatic
+    fun fromInt(value: Int) = entries.firstOrNull { it.value == value } ?: New
   }
 
   @Suppress("unused")

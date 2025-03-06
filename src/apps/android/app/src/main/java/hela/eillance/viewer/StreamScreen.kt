@@ -122,7 +122,7 @@ fun StreamScreen(
       if (source == EventSource.PeerConnectionState) {
         peerConnectionState = ServiceConnectionState.fromInt(statusCode)
       }
-      statusText = "${source.name}: $statusCode"
+      statusText = "${source.name}: ${peerConnectionState.getResourceString(context)}"
     }
   }
 
