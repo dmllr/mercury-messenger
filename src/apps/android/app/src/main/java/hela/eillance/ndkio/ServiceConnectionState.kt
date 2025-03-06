@@ -4,23 +4,26 @@ import android.content.Context
 import hela.eillance.camera.R
 
 enum class ServiceConnectionState(val value: Int) {
-  Unknown(0),
+  New(0),
   Establishing(1),
   Online(2),
-  Failure(3),
-  Disconnected(4);
+  Disconnected(3),
+  Failure(4),
+  Closed(5),
+  Unknown(99);
 
   companion object {
     val resourceMap = mapOf(
-      Unknown to R.string.service_connection_state_unknown,
+      New to R.string.service_connection_state_new,
       Establishing to R.string.service_connection_state_establishing,
       Online to R.string.service_connection_state_online,
+      Disconnected to R.string.service_connection_state_online,
       Failure to R.string.service_connection_state_failure,
-      Disconnected to R.string.service_connection_state_disconnected,
+      Closed to R.string.service_connection_state_closed,
     )
 
     @JvmStatic
-    fun fromInt(value: Int) = entries.first { it.value == value }
+    fun fromInt(value: Int) = entries.firstOrNull { it.value == value } ?: Unknown
   }
 
   @Suppress("unused")

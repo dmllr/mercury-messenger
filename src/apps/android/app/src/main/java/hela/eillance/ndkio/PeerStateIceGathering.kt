@@ -6,7 +6,8 @@ import hela.eillance.camera.R
 enum class PeerStateIceGathering(val value: Int) {
   New(0),
   InProgress(1),
-  Complete(2);
+  Complete(2),
+  Unknown(99);
 
   companion object {
     val resourceMap = mapOf(
@@ -15,7 +16,8 @@ enum class PeerStateIceGathering(val value: Int) {
       Complete to R.string.state_ice_gathering_complete,
     )
 
-    fun fromInt(value: Int?) = entries.first { it.value == value }
+    @JvmStatic
+    fun fromInt(value: Int) = entries.firstOrNull { it.value == value } ?: Unknown
   }
 
   @Suppress("unused")

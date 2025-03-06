@@ -17,11 +17,11 @@ enum class PeerStateSignaling(val value: Int) {
       HaveLocalOffer to R.string.state_signaling_have_local_offer,
       HaveRemoteOffer to R.string.state_signaling_have_remote_offer,
       HaveLocalPranswer to R.string.state_signaling_have_local_pranswer,
-      HaveRemotePranswer to R.string.state_signaling_have_remote_pranswer,
-      Unknown to R.string.fr_operation_status_unknown,
+      HaveRemotePranswer to R.string.state_signaling_have_remote_pranswer
     )
 
-    fun fromInt(value: Int?) = entries.first { it.value == value }
+    @JvmStatic
+    fun fromInt(value: Int) = entries.firstOrNull { it.value == value } ?: Unknown
   }
 
   @Suppress("unused")

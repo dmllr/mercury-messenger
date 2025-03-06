@@ -10,7 +10,8 @@ enum class PeerStateIce(val value: Int) {
   Completed(3),
   Failed(4),
   Disconnected(5),
-  Closed(6);
+  Closed(6),
+  Unknown(99);
 
   companion object {
     val resourceMap = mapOf(
@@ -23,7 +24,8 @@ enum class PeerStateIce(val value: Int) {
       Closed to R.string.state_ice_closed,
     )
 
-    fun fromInt(value: Int?) = entries.first { it.value == value }
+    @JvmStatic
+    fun fromInt(value: Int) = entries.firstOrNull { it.value == value } ?: Unknown
   }
 
   @Suppress("unused")
