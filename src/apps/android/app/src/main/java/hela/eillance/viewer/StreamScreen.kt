@@ -25,6 +25,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -195,13 +196,20 @@ fun StreamScreen(
         }
     )
 
+    val transparentTextFieldColors = ExposedDropdownMenuDefaults.textFieldColors(
+      unfocusedIndicatorColor = Color.Transparent,
+      focusedIndicatorColor = Color.Transparent,
+      unfocusedContainerColor = Color.Transparent,
+      focusedContainerColor = Color.Transparent
+    )
+
     // Camera selection dropdown
     ExposedDropdownMenuBox(
       expanded = expandedCamera,
       onExpandedChange = { expandedCamera = it },
       modifier = Modifier
         .constrainAs(cameraSpinner) {
-          top.linkTo(surface.bottom)
+          bottom.linkTo(surface.bottom)
           start.linkTo(parent.start)
         }
     ) {
@@ -210,7 +218,7 @@ fun StreamScreen(
         onValueChange = {},
         readOnly = true,
         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedCamera) },
-        colors = ExposedDropdownMenuDefaults.textFieldColors(),
+        colors = transparentTextFieldColors,
         modifier = Modifier.menuAnchor()
       )
 
@@ -238,7 +246,7 @@ fun StreamScreen(
       onExpandedChange = { expandedResolution = it },
       modifier = Modifier
         .constrainAs(resolutionSpinner) {
-          top.linkTo(surface.bottom)
+          bottom.linkTo(surface.bottom)
           start.linkTo(cameraSpinner.end, 8.dp)
         }
     ) {
@@ -247,7 +255,7 @@ fun StreamScreen(
         onValueChange = {},
         readOnly = true,
         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedResolution) },
-        colors = ExposedDropdownMenuDefaults.textFieldColors(),
+        colors = transparentTextFieldColors,
         modifier = Modifier.menuAnchor()
       )
 
@@ -273,8 +281,8 @@ fun StreamScreen(
       onClick = { /* Implement rotation logic if needed */ },
       modifier = Modifier
         .constrainAs(rotateButton) {
-          bottom.linkTo(surface.bottom)
-          end.linkTo(parent.end)
+          top.linkTo(surface.top)
+          start.linkTo(surface.start)
         }
     ) {
       Icon(
