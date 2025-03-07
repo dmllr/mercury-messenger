@@ -27,6 +27,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -34,6 +36,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -91,7 +94,6 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
           StreamerApp(
             permissionsGranted = permissionsGranted.value,
             onRequestPermissions = { checkAndRequestPermissions() },
-            streamerService = streamerService,
             onStartService = { startStreamingService() },
             onStopService = { stopStreamingService() },
             onRestartService = { restartStreamingService() }
@@ -108,7 +110,6 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
   fun StreamerApp(
     permissionsGranted: Boolean,
     onRequestPermissions: () -> Unit,
-    streamerService: StreamerService?,
     onStartService: () -> Unit,
     onStopService: () -> Unit,
     onRestartService: () -> Unit
@@ -170,8 +171,7 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
           PermissionsScreen(onRequestPermissions = onRequestPermissions)
         } else {
           NavigationGraph(
-            navController = navController,
-            streamerService = streamerService
+            navController = navController
           )
         }
       }
@@ -241,18 +241,34 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
 
   @Composable
   private fun NavigationGraph(
-    navController: NavHostController,
-    streamerService: StreamerService?
+    navController: NavHostController
   ) {
-    NavHost(
-      navController = navController,
-      startDestination = "operation"
-    ) {
-      composable("operation") {
-        OperationScreen(streamerService = streamerService)
-      }
-      composable("preferences") {
-        CapturePreferencesScreen(streamerService = streamerService!!)
+    val snackbarHostState = remember { SnackbarHostState() }
+    rememberCoroutineScope()
+
+    Scaffold(
+      snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
+    ) { innerPadding ->
+      NavHost(
+        navController = navController,
+        startDestination = "operation",
+        modifier = Modifier.padding(innerPadding)
+      ) {
+        composable("operation") {
+          OperationScreen(streamerService)
+        }
+        composable("preferences") {
+          if (streamerService != null) {
+            CapturePreferencesScreen(streamerService!!)
+          } else {
+            Box(modifier = Modifier.fillMaxSize()) {
+              Text(
+                text = stringResource(R.string.internal_error_service_not_available),
+                modifier = Modifier.align(Alignment.Center)
+              )
+            }
+          }
+        }
       }
     }
   }
@@ -317,12 +333,12 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
 
   private fun showSettingsRedirectDialog() {
     AlertDialog.Builder(this)
-      .setTitle("Permissions Required")
-      .setMessage("You have denied necessary permissions. To enable streaming, please allow them in settings.")
-      .setPositiveButton("Open Settings") { _, _ ->
+      .setTitle(getString(R.string.permissions_required_dialog_title))
+      .setMessage(getString(R.string.permissions_required_dialog_text))
+      .setPositiveButton(getString(R.string.permissions_required_dialog_open_settings)) { _, _ ->
         openSettingsScreen()
       }
-      .setNegativeButton("Cancel") { dialog, _ ->
+      .setNegativeButton(android.R.string.cancel) { dialog, _ ->
         dialog.dismiss()
       }
       .show()
