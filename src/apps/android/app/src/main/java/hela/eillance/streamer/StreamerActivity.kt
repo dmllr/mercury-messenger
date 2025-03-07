@@ -6,7 +6,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
@@ -20,6 +19,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -39,7 +39,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -52,6 +54,7 @@ import hela.eillance.theme.EillanceTheme
 class StreamerActivity : ComponentActivity(), ServiceConnection {
 
   private var streamerService: StreamerService? = null
+  private var permissionsGranted = mutableStateOf(false)
 
   private val requiredPermissions = mutableListOf(
     Manifest.permission.CAMERA,
@@ -66,6 +69,7 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
     ActivityResultContracts.RequestMultiplePermissions()
   ) { permissions ->
     if (permissions.all { it.value }) {
+      permissionsGranted.value = true
       startStreamingService()
     } else {
       showSettingsRedirectDialog()
@@ -75,6 +79,9 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
 
+    // Initialize permissions state
+    permissionsGranted.value = arePermissionsGranted()
+
     setContent {
       EillanceTheme {
         Surface(
@@ -82,7 +89,7 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
           color = MaterialTheme.colorScheme.background
         ) {
           StreamerApp(
-            permissionsGranted = arePermissionsGranted(),
+            permissionsGranted = permissionsGranted.value,
             onRequestPermissions = { checkAndRequestPermissions() },
             streamerService = streamerService,
             onStartService = { startStreamingService() },
@@ -254,10 +261,18 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
   private fun PermissionsScreen(onRequestPermissions: () -> Unit) {
     Box(
       modifier = Modifier.fillMaxSize(),
-      contentAlignment = Alignment.Center
+      contentAlignment = Alignment.TopCenter
     ) {
-      Button(onClick = onRequestPermissions) {
-        Text(text = stringResource(id = R.string.permissions_required))
+      Button(
+        onClick = onRequestPermissions,
+        modifier = Modifier.padding(16.dp),
+        shape = MaterialTheme.shapes.extraSmall,
+        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+      ) {
+        Text(
+          text = stringResource(id = R.string.permissions_required),
+          modifier = Modifier.padding(8.dp),
+        )
       }
     }
   }
@@ -280,6 +295,8 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
         permissionLauncher.launch(requiredPermissions.toTypedArray())
       }
     } else {
+      // Update permissions state when all permissions are granted
+      permissionsGranted.value = true
       startStreamingService()
     }
   }
@@ -313,7 +330,7 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
 
   private fun openSettingsScreen() {
     val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-      data = Uri.parse("package:$packageName")
+      data = "package:$packageName".toUri()
     }
     startActivity(intent)
   }
@@ -345,6 +362,18 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
       this,
       Context.BIND_AUTO_CREATE + Context.BIND_ABOVE_CLIENT
     )
+  }
+
+  override fun onResume() {
+    super.onResume()
+    // Check permissions again when returning to the app
+    val currentPermissionsStatus = arePermissionsGranted()
+    if (currentPermissionsStatus != permissionsGranted.value) {
+      permissionsGranted.value = currentPermissionsStatus
+      if (currentPermissionsStatus) {
+        startStreamingService()
+      }
+    }
   }
 
   override fun onDestroy() {
