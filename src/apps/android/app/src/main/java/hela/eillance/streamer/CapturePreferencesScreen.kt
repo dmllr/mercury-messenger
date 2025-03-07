@@ -107,7 +107,8 @@ fun CapturePreferencesScreen(streamerService: StreamerService) {
         ListPreference(
           title = stringResource(R.string.preference_default_camera),
           icon = painterResource(R.drawable.ic_pref_default_camera),
-          summary = cameraNames.getOrNull(videoConfig.cameraId) ?: "Default Camera",
+          summary = cameraNames.getOrNull(videoConfig.cameraId)
+            ?: stringResource(R.string.preference_default_camera),
           onClick = { showCameraDialog = true }
         )
 
