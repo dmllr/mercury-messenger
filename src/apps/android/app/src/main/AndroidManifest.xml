@@ -25,13 +25,16 @@
         android:theme="@style/AppTheme">
         <activity
             android:name="hela.eillance.viewer.ViewerActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:configChanges="orientation|screenSize" />
         <activity
             android:name="hela.eillance.streamer.StreamerActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:configChanges="orientation|screenSize" />
         <activity
             android:name="hela.eillance.LauncherActivity"
-            android:exported="true">
+            android:exported="true"
+            android:configChanges="orientation|screenSize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
