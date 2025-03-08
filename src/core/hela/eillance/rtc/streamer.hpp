@@ -199,7 +199,7 @@ private:
     });
 
     data_channel->onMessage(nullptr, [peer_id, wdc = make_weak_ptr(data_channel), this](const std::string& msg) {
-      LOGI << "Message from " << peer_id << " received: " << msg;
+      LOGV << "Message from " << peer_id << " received: " << msg;
       if (msg.rfind("Pong", 0) == 0) {  // NOLINT(*-use-starts-ends-with) starts_with is not supported by all compilers
         if (auto dc = wdc.lock()) {
           dc->send("Ping");
@@ -247,7 +247,7 @@ private:
 
     UpdateRtpConfig(elapsed_timestamp, track, rtp_config);
 
-    LOGI << "Sending " << stream_type << " sample with size: " << sample.size() << " to " << peer_id;
+    LOGV << "Sending " << stream_type << " sample with size: " << sample.size() << " to " << peer_id;
     SendSample(sample, stream_type, track);
   }
 
