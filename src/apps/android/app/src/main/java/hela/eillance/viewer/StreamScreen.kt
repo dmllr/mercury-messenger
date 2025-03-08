@@ -1,11 +1,17 @@
 package hela.eillance.viewer
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import android.content.pm.ActivityInfo
 import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -44,6 +50,26 @@ import hela.eillance.ndkio.ServiceConnectionState
 
 private const val RESOLUTION_SEPARATOR = "×"
 
+@Composable
+fun LockScreenOrientation(orientation: Int) {
+  val context = LocalContext.current
+  DisposableEffect(orientation) {
+    val activity = context.findActivity() ?: return@DisposableEffect onDispose {}
+    val originalOrientation = activity.requestedOrientation
+    activity.requestedOrientation = orientation
+    onDispose {
+      // restore original orientation when view disappears
+      activity.requestedOrientation = originalOrientation
+    }
+  }
+}
+
+fun Context.findActivity(): Activity? = when (this) {
+  is Activity -> this
+  is ContextWrapper -> baseContext.findActivity()
+  else -> null
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StreamScreen(
@@ -74,8 +100,14 @@ fun StreamScreen(
   var expandedResolution by remember { mutableStateOf(false) }
 
   // Surface dimensions
-  var surfaceWidth by remember { mutableIntStateOf(0) }
-  var surfaceHeight by remember { mutableIntStateOf(250) }
+  var surfaceLongEdge by remember { mutableIntStateOf(0) }
+  var surfaceShortEdge by remember { mutableIntStateOf(250) }
+
+  var orientation by remember { mutableIntStateOf(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT) }
+  LockScreenOrientation(orientation)
+
+  // Determine if we're in portrait mode
+  val isPortrait = orientation == ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
 
   // Update camera options when profile changes
   fun updateCameraOptions(profile: Profile) {
@@ -118,7 +150,7 @@ fun StreamScreen(
   }
 
   // Handle status updates
-  LaunchedEffect(key1 = status) {
+  LaunchedEffect(status) {
     status?.let { (source, statusCode) ->
       if (source == EventSource.PeerConnectionState) {
         peerConnectionState = ServiceConnectionState.fromInt(statusCode)
@@ -128,16 +160,20 @@ fun StreamScreen(
   }
 
   // Handle resolution changes
-  LaunchedEffect(key1 = resolution) {
+  LaunchedEffect(resolution, orientation) {
     resolution?.let { (width, height) ->
-      if (width > 0 && height > 0 && surfaceWidth > 0) {
-        surfaceHeight = (surfaceWidth * height) / width
+      if (width > 0 && height > 0) {
+        if (isPortrait) {
+          surfaceShortEdge = (surfaceLongEdge * height) / width
+        } else {
+          surfaceLongEdge = (surfaceShortEdge * width) / height
+        }
       }
     }
   }
 
   // Handle profile updates
-  LaunchedEffect(key1 = profile) {
+  LaunchedEffect(profile) {
     profile?.let {
       deviceProfile = it
       updateCameraOptions(it)
@@ -145,13 +181,13 @@ fun StreamScreen(
       // If there are cameras available, select the first one automatically
       if (it.isNotEmpty()) {
         selectedCameraIndex = 0
-        updateResolutionOptions(0) // Set resolutions for the first camera
+        updateResolutionOptions(0)
       }
     }
   }
 
   // Initial stream request on composition
-  LaunchedEffect(key1 = true) {
+  LaunchedEffect(true) {
     (context as? ViewerActivity)?.sendStreamRequest(peer.id, composeConfigurationMessage())
   }
 
@@ -161,6 +197,36 @@ fun StreamScreen(
     val (surface, cameraSpinner, resolutionSpinner, rotateButton, statusTextRef) = createRefs()
 
     val density = LocalDensity.current.density
+
+    // Surface view for video output with orientation-dependent modifiers
+    val surfaceModifier = if (isPortrait) {
+      Modifier
+        .fillMaxWidth()
+        .height(surfaceShortEdge.dp)
+        .onGloballyPositioned { layoutCoordinates ->
+          if (surfaceLongEdge == 0) {
+            surfaceLongEdge = (layoutCoordinates.size.width / density).toInt()
+          }
+        }
+        .constrainAs(surface) {
+          top.linkTo(parent.top)
+          start.linkTo(parent.start)
+          end.linkTo(parent.end)
+        }
+    } else {
+      Modifier
+        .fillMaxHeight()
+        .width(surfaceLongEdge.dp)
+        .onGloballyPositioned { layoutCoordinates ->
+          surfaceShortEdge = (layoutCoordinates.size.height / density).toInt()
+        }
+        .constrainAs(surface) {
+          top.linkTo(parent.top)
+          bottom.linkTo(parent.bottom)
+          start.linkTo(parent.start)
+          end.linkTo(parent.end)
+        }
+    }
 
     // Surface view for video output
     AndroidView(
@@ -181,19 +247,7 @@ fun StreamScreen(
           })
         }
       },
-      modifier = Modifier
-        .fillMaxWidth()
-        .height(surfaceHeight.dp)
-        .onGloballyPositioned { layoutCoordinates ->
-          if (surfaceWidth == 0) { // Only update once to prevent unnecessary recomputations
-            surfaceWidth = (layoutCoordinates.size.width / density).toInt()
-          }
-        }
-        .constrainAs(surface) {
-          top.linkTo(parent.top)
-          start.linkTo(parent.start)
-          end.linkTo(parent.end)
-        }
+      modifier = surfaceModifier
     )
 
     val transparentTextFieldColors = ExposedDropdownMenuDefaults.textFieldColors(
@@ -278,7 +332,13 @@ fun StreamScreen(
 
     // Rotate button
     IconButton(
-      onClick = { /* Implement rotation logic if needed */ },
+      onClick = {
+        orientation = if (orientation == ActivityInfo.SCREEN_ORIENTATION_PORTRAIT) {
+          ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        } else {
+          ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        }
+      },
       modifier = Modifier
         .constrainAs(rotateButton) {
           top.linkTo(surface.top)
@@ -305,7 +365,7 @@ fun StreamScreen(
   }
 
   // Handle cleanup
-  DisposableEffect(key1 = Unit) {
+  DisposableEffect(Unit) {
     onDispose {
       releaseDecoder()
     }
