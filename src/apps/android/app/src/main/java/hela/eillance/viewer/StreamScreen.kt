@@ -85,6 +85,10 @@ fun StreamScreen(
   val configuration = LocalContext.current.resources.configuration
   val isPortrait = configuration.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT
 
+  // Remember the current video dimensions for proper aspect ratio calculation
+  var videoWidth by remember { mutableIntStateOf(0) }
+  var videoHeight by remember { mutableIntStateOf(0) }
+
   // Update camera options when profile changes
   fun updateCameraOptions(profile: Profile) {
     val names = profile.map { it.name }
@@ -135,6 +139,16 @@ fun StreamScreen(
     }
   }
 
+  // Handle resolution updates
+  LaunchedEffect(resolution) {
+    resolution?.let { (width, height) ->
+      if (width > 0 && height > 0) {
+        videoWidth = width
+        videoHeight = height
+      }
+    }
+  }
+
   // Handle profile updates
   LaunchedEffect(profile) {
     profile?.let {
@@ -168,17 +182,7 @@ fun StreamScreen(
     modifier = Modifier
       .fillMaxSize()
   ) {
-    val (surface, cameraSpinner, resolutionSpinner, statusTextRef, backButton, controlsOverlay) = createRefs()
-
-    // Calculate surface dimensions to maintain aspect ratio while filling the screen
-    val surfaceModifier = Modifier
-      .constrainAs(surface) {
-        top.linkTo(parent.top)
-        bottom.linkTo(parent.bottom)
-        start.linkTo(parent.start)
-        end.linkTo(parent.end)
-      }
-      .fillMaxSize()
+    val (surface, controlsOverlay) = createRefs()
 
     // Surface view for video output
     AndroidView(
@@ -194,35 +198,64 @@ fun StreamScreen(
             }
 
             override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
-              // Update the surface dimensions based on the resolution when the surface changes
-              resolution?.let { (videoWidth, videoHeight) ->
-                if (videoWidth > 0 && videoHeight > 0) {
-                  val videoAspectRatio = videoWidth.toFloat() / videoHeight.toFloat()
-                  val surfaceAspectRatio = width.toFloat() / height.toFloat()
+              if (videoWidth <= 0 || videoHeight <= 0) return
 
-                  // Adjust the view dimensions to maintain aspect ratio
-                  // This is handled internally by the SurfaceHolder
-                  if (surfaceAspectRatio > videoAspectRatio) {
-                    // Surface is wider than video - center horizontally
-                    val scaledWidth = (height * videoAspectRatio).toInt()
-                    val xOffset = (width - scaledWidth) / 2
-                    holder.setFixedSize(scaledWidth, height)
+              val deviceIsPortrait = height > width
+              val videoIsLandscape = videoWidth > videoHeight
 
-                    // We can't directly set the position of the surface content
-                    // but the decoder will handle scaling appropriately
-                  } else {
-                    // Surface is taller than video - center vertically
-                    val scaledHeight = (width / videoAspectRatio).toInt()
-                    val yOffset = (height - scaledHeight) / 2
-                    holder.setFixedSize(width, scaledHeight)
-                  }
+              if (deviceIsPortrait && videoIsLandscape) {
+                // In portrait mode, when video is landscape, we need to calculate dimensions
+                // to account for the 90-degree rotation by using the reversed aspect ratio
+
+                // For portrait orientation with landscape video, use height as the fixed dimension
+                // and calculate width based on the video's height-to-width ratio
+                val scaledWidth = (height * (videoHeight.toFloat() / videoWidth.toFloat())).toInt()
+
+                if (scaledWidth <= width) {
+                  // If calculated width fits within available width, use it
+                  holder.setFixedSize(scaledWidth, height)
+                } else {
+                  // Otherwise, use width as the fixed dimension and scale height
+                  val scaledHeight = (width * (videoWidth.toFloat() / videoHeight.toFloat())).toInt()
+                  holder.setFixedSize(width, scaledHeight)
+                }
+              } else if (!deviceIsPortrait && !videoIsLandscape) {
+                // Landscape device with portrait video
+                val scaledHeight = (width * (videoHeight.toFloat() / videoWidth.toFloat())).toInt()
+
+                if (scaledHeight <= height) {
+                  holder.setFixedSize(width, scaledHeight)
+                } else {
+                  val scaledWidth = (height * (videoWidth.toFloat() / videoHeight.toFloat())).toInt()
+                  holder.setFixedSize(scaledWidth, height)
+                }
+              } else {
+                // Normal case: orientations match
+                val videoAspectRatio = videoWidth.toFloat() / videoHeight.toFloat()
+                val surfaceAspectRatio = width.toFloat() / height.toFloat()
+
+                if (surfaceAspectRatio > videoAspectRatio) {
+                  // Surface is wider than needed
+                  val scaledWidth = (height * videoAspectRatio).toInt()
+                  holder.setFixedSize(scaledWidth, height)
+                } else {
+                  // Surface is taller than needed
+                  val scaledHeight = (width / videoAspectRatio).toInt()
+                  holder.setFixedSize(width, scaledHeight)
                 }
               }
             }
           })
         }
       },
-      modifier = surfaceModifier
+      modifier = Modifier
+        .constrainAs(surface) {
+          top.linkTo(parent.top)
+          bottom.linkTo(parent.bottom)
+          start.linkTo(parent.start)
+          end.linkTo(parent.end)
+        }
+        .fillMaxSize()
     )
 
     // Semi-transparent overlay for controls
