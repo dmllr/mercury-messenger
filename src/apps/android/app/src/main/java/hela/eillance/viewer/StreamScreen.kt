@@ -1,14 +1,16 @@
 package hela.eillance.viewer
 
-import android.content.pm.ActivityInfo
 import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.DropdownMenu
@@ -29,12 +31,10 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -48,20 +48,6 @@ import hela.eillance.ndkio.Profile
 import hela.eillance.ndkio.ServiceConnectionState
 
 private const val RESOLUTION_SEPARATOR = "×"
-
-@Composable
-fun LockScreenOrientation(orientation: Int) {
-  val context = LocalContext.current
-  DisposableEffect(orientation) {
-    val activity = (context as? ViewerActivity) ?: return@DisposableEffect onDispose {}
-    val originalOrientation = activity.requestedOrientation
-    activity.requestedOrientation = orientation
-    onDispose {
-      // restore original orientation when view disappears
-      activity.requestedOrientation = originalOrientation
-    }
-  }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -92,19 +78,12 @@ fun StreamScreen(
   var selectedResolutionIndex by remember { mutableIntStateOf(0) }
   var expandedResolution by remember { mutableStateOf(false) }
 
-  // Surface dimensions
-  var surfaceLongEdge by remember { mutableIntStateOf(0) }
-  var surfaceShortEdge by remember { mutableIntStateOf(250) }
+  // Fullscreen state - starts as true by default
+  var isFullscreen by remember { mutableStateOf(true) }
 
-  var orientation by remember { mutableIntStateOf(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT) }
-
-  // Fullscreen state
-  var isFullscreen by remember { mutableStateOf(false) }
-
-  LockScreenOrientation(orientation)
-
-  // Determine if we're in portrait mode
-  val isPortrait = orientation == ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+  // Detect current orientation from configuration
+  val configuration = LocalContext.current.resources.configuration
+  val isPortrait = configuration.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT
 
   // Update camera options when profile changes
   fun updateCameraOptions(profile: Profile) {
@@ -156,19 +135,6 @@ fun StreamScreen(
     }
   }
 
-  // Handle resolution changes
-  LaunchedEffect(resolution, orientation) {
-    resolution?.let { (width, height) ->
-      if (width > 0 && height > 0) {
-        if (isPortrait) {
-          surfaceShortEdge = (surfaceLongEdge * height) / width
-        } else {
-          surfaceLongEdge = (surfaceShortEdge * width) / height
-        }
-      }
-    }
-  }
-
   // Handle profile updates
   LaunchedEffect(profile) {
     profile?.let {
@@ -188,47 +154,31 @@ fun StreamScreen(
     (context as? ViewerActivity)?.sendStreamRequest(peer.id, composeConfigurationMessage())
   }
 
+  // Set fullscreen mode when the screen opens
+  LaunchedEffect(true) {
+    (context as? ViewerActivity)?.setFullscreenMode(true)
+  }
+
   // Notify the activity about fullscreen state changes
   LaunchedEffect(isFullscreen) {
     (context as? ViewerActivity)?.setFullscreenMode(isFullscreen)
   }
 
   ConstraintLayout(
-    modifier = Modifier.fillMaxSize()
+    modifier = Modifier
+      .fillMaxSize()
   ) {
-    val (surface, cameraSpinner, resolutionSpinner, fullscreenButton, statusTextRef, backButton) = createRefs()
+    val (surface, cameraSpinner, resolutionSpinner, statusTextRef, backButton, controlsOverlay) = createRefs()
 
-    val density = LocalDensity.current.density
-
-    // Surface view for video output with orientation-dependent modifiers
-    val surfaceModifier = if (isPortrait) {
-      Modifier
-        .fillMaxWidth()
-        .height(surfaceShortEdge.dp)
-        .onGloballyPositioned { layoutCoordinates ->
-          if (surfaceLongEdge == 0) {
-            surfaceLongEdge = (layoutCoordinates.size.width / density).toInt()
-          }
-        }
-        .constrainAs(surface) {
-          top.linkTo(parent.top)
-          start.linkTo(parent.start)
-          end.linkTo(parent.end)
-        }
-    } else {
-      Modifier
-        .fillMaxHeight()
-        .width(surfaceLongEdge.dp)
-        .onGloballyPositioned { layoutCoordinates ->
-          surfaceShortEdge = (layoutCoordinates.size.height / density).toInt()
-        }
-        .constrainAs(surface) {
-          top.linkTo(parent.top)
-          bottom.linkTo(parent.bottom)
-          start.linkTo(parent.start)
-          end.linkTo(parent.end)
-        }
-    }
+    // Calculate surface dimensions to maintain aspect ratio while filling the screen
+    val surfaceModifier = Modifier
+      .constrainAs(surface) {
+        top.linkTo(parent.top)
+        bottom.linkTo(parent.bottom)
+        start.linkTo(parent.start)
+        end.linkTo(parent.end)
+      }
+      .fillMaxSize()
 
     // Surface view for video output
     AndroidView(
@@ -244,7 +194,30 @@ fun StreamScreen(
             }
 
             override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
-              // Not used
+              // Update the surface dimensions based on the resolution when the surface changes
+              resolution?.let { (videoWidth, videoHeight) ->
+                if (videoWidth > 0 && videoHeight > 0) {
+                  val videoAspectRatio = videoWidth.toFloat() / videoHeight.toFloat()
+                  val surfaceAspectRatio = width.toFloat() / height.toFloat()
+
+                  // Adjust the view dimensions to maintain aspect ratio
+                  // This is handled internally by the SurfaceHolder
+                  if (surfaceAspectRatio > videoAspectRatio) {
+                    // Surface is wider than video - center horizontally
+                    val scaledWidth = (height * videoAspectRatio).toInt()
+                    val xOffset = (width - scaledWidth) / 2
+                    holder.setFixedSize(scaledWidth, height)
+
+                    // We can't directly set the position of the surface content
+                    // but the decoder will handle scaling appropriately
+                  } else {
+                    // Surface is taller than video - center vertically
+                    val scaledHeight = (width / videoAspectRatio).toInt()
+                    val yOffset = (height - scaledHeight) / 2
+                    holder.setFixedSize(width, scaledHeight)
+                  }
+                }
+              }
             }
           })
         }
@@ -252,28 +225,34 @@ fun StreamScreen(
       modifier = surfaceModifier
     )
 
-    val transparentTextFieldColors = ExposedDropdownMenuDefaults.textFieldColors(
-      unfocusedIndicatorColor = Color.Transparent,
-      focusedIndicatorColor = Color.Transparent,
-      unfocusedContainerColor = Color.Transparent,
-      focusedContainerColor = Color.Transparent
-    )
+    // Semi-transparent overlay for controls
+    Box(
+      modifier = Modifier
+        .fillMaxSize()
+        .constrainAs(controlsOverlay) {
+          top.linkTo(parent.top)
+          bottom.linkTo(parent.bottom)
+          start.linkTo(parent.start)
+          end.linkTo(parent.end)
+        }
+    ) {
+      val transparentTextFieldColors = ExposedDropdownMenuDefaults.textFieldColors(
+        unfocusedIndicatorColor = Color.Transparent,
+        focusedIndicatorColor = Color.Transparent,
+        unfocusedContainerColor = Color.Transparent,
+        focusedContainerColor = Color.Transparent
+      )
 
-    // Only show back button in fullscreen mode
-    if (isFullscreen) {
+      // Back button in top-left corner
       IconButton(
         onClick = {
-          if (isFullscreen) {
-            isFullscreen = false
-          } else {
-            (context as? ViewerActivity)?.onBackPressedDispatcher?.onBackPressed()
-          }
+          // Exit fullscreen mode and let the activity handle back navigation
+          isFullscreen = false
+          (context as? ViewerActivity)?.onBackPressedDispatcher?.onBackPressed()
         },
         modifier = Modifier
-          .constrainAs(backButton) {
-            top.linkTo(parent.top, 16.dp)
-            start.linkTo(parent.start, 16.dp)
-          }
+          .padding(16.dp)
+          .align(Alignment.TopStart)
       ) {
         Icon(
           imageVector = Icons.AutoMirrored.Filled.ArrowBack,
@@ -281,125 +260,93 @@ fun StreamScreen(
           tint = Color.White
         )
       }
-    }
 
-    // Camera selection dropdown
-    ExposedDropdownMenuBox(
-      expanded = expandedCamera,
-      onExpandedChange = { expandedCamera = it },
-      modifier = Modifier
-        .constrainAs(cameraSpinner) {
-          bottom.linkTo(surface.bottom)
-          start.linkTo(parent.start)
-        }
-    ) {
-      TextField(
-        value = cameraOptions.getOrElse(selectedCameraIndex) { "Default Camera" },
-        onValueChange = {},
-        readOnly = true,
-        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedCamera) },
-        colors = transparentTextFieldColors,
-        modifier = Modifier.menuAnchor()
-      )
-
-      DropdownMenu(
-        expanded = expandedCamera,
-        onDismissRequest = { expandedCamera = false }
-      ) {
-        cameraOptions.forEachIndexed { index, option ->
-          DropdownMenuItem(
-            text = { Text(option) },
-            onClick = {
-              selectedCameraIndex = index
-              expandedCamera = false
-              updateResolutionOptions(index)
-              sendConfigurationRequest()
-            }
-          )
-        }
-      }
-    }
-
-    // Resolution selection dropdown
-    ExposedDropdownMenuBox(
-      expanded = expandedResolution,
-      onExpandedChange = { expandedResolution = it },
-      modifier = Modifier
-        .constrainAs(resolutionSpinner) {
-          bottom.linkTo(surface.bottom)
-          start.linkTo(cameraSpinner.end, 8.dp)
-        }
-    ) {
-      TextField(
-        value = resolutionOptions.getOrElse(selectedResolutionIndex) { "Default Resolution" },
-        onValueChange = {},
-        readOnly = true,
-        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedResolution) },
-        colors = transparentTextFieldColors,
-        modifier = Modifier.menuAnchor()
-      )
-
-      DropdownMenu(
-        expanded = expandedResolution,
-        onDismissRequest = { expandedResolution = false }
-      ) {
-        resolutionOptions.forEachIndexed { index, option ->
-          DropdownMenuItem(
-            text = { Text(option) },
-            onClick = {
-              selectedResolutionIndex = index
-              expandedResolution = false
-              sendConfigurationRequest()
-            }
-          )
-        }
-      }
-    }
-
-    // Fullscreen button
-    IconButton(
-      onClick = {
-        if (!isFullscreen) {
-          // Enter fullscreen mode
-          isFullscreen = true
-          orientation = if (orientation == ActivityInfo.SCREEN_ORIENTATION_PORTRAIT) {
-            ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-          } else {
-            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-          }
-        } else {
-          // Exit fullscreen mode
-          isFullscreen = false
-        }
-      },
-      modifier = Modifier
-        .constrainAs(fullscreenButton) {
-          top.linkTo(surface.top)
-          start.linkTo(surface.start)
-        }
-    ) {
-      Icon(
-        painter = painterResource(id = if (isFullscreen) R.drawable.ic_fullscreen_exit else R.drawable.ic_fullscreen),
-        contentDescription = stringResource(
-          id = if (isFullscreen)
-            R.string.viewer_StreamScreen_exit_fullscreen
-          else
-            R.string.viewer_StreamScreen_enter_fullscreen_mode
+      // Status text in center
+      if (statusText.isNotEmpty()) {
+        Text(
+          text = statusText,
+          color = Color.White,
+          modifier = Modifier
+            .background(Color.Black.copy(alpha = 0.5f), shape = RoundedCornerShape(4.dp))
+            .padding(8.dp)
+            .align(Alignment.Center)
         )
-      )
-    }
+      }
 
-    // Status text
-    Text(
-      text = statusText,
-      modifier = Modifier
-        .constrainAs(statusTextRef) {
-          top.linkTo(surface.top)
-          bottom.linkTo(surface.bottom)
-          start.linkTo(surface.start)
-          end.linkTo(surface.end)
+      // Control elements at bottom
+      Row(
+        modifier = Modifier
+          .fillMaxWidth()
+          .background(Color.Black.copy(alpha = 0.5f))
+          .padding(8.dp)
+          .align(Alignment.BottomCenter),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        // Camera selection dropdown
+        ExposedDropdownMenuBox(
+          expanded = expandedCamera,
+          onExpandedChange = { expandedCamera = it }
+        ) {
+          TextField(
+            value = cameraOptions.getOrElse(selectedCameraIndex) { "Default Camera" },
+            onValueChange = {},
+            readOnly = true,
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedCamera) },
+            colors = transparentTextFieldColors,
+            modifier = Modifier.menuAnchor()
+          )
+
+          DropdownMenu(
+            expanded = expandedCamera,
+            onDismissRequest = { expandedCamera = false }
+          ) {
+            cameraOptions.forEachIndexed { index, option ->
+              DropdownMenuItem(
+                text = { Text(option) },
+                onClick = {
+                  selectedCameraIndex = index
+                  expandedCamera = false
+                  updateResolutionOptions(index)
+                  sendConfigurationRequest()
+                }
+              )
+            }
+          }
         }
-    )
+
+        // Resolution selection dropdown
+        ExposedDropdownMenuBox(
+          expanded = expandedResolution,
+          onExpandedChange = { expandedResolution = it }
+        ) {
+          TextField(
+            value = resolutionOptions.getOrElse(selectedResolutionIndex) { "Default Resolution" },
+            onValueChange = {},
+            readOnly = true,
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedResolution) },
+            colors = transparentTextFieldColors,
+            modifier = Modifier.menuAnchor()
+          )
+
+          DropdownMenu(
+            expanded = expandedResolution,
+            onDismissRequest = { expandedResolution = false }
+          ) {
+            resolutionOptions.forEachIndexed { index, option ->
+              DropdownMenuItem(
+                text = { Text(option) },
+                onClick = {
+                  selectedResolutionIndex = index
+                  expandedResolution = false
+                  sendConfigurationRequest()
+                }
+              )
+            }
+          }
+        }
+      }
+    }
   }
 
   // Handle cleanup
@@ -407,9 +354,7 @@ fun StreamScreen(
     onDispose {
       releaseDecoder()
       // Make sure to exit fullscreen mode when disposing
-      if (isFullscreen) {
-        (context as? ViewerActivity)?.setFullscreenMode(false)
-      }
+      (context as? ViewerActivity)?.setFullscreenMode(false)
     }
   }
 }
