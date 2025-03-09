@@ -4,10 +4,12 @@ import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import android.view.Surface
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -21,7 +23,13 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -41,6 +49,9 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
   private lateinit var navController: NavHostController
   private val viewModel: ViewerViewModel by viewModels()
 
+  // Track fullscreen mode state
+  private var isFullscreen by mutableStateOf(false)
+
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
@@ -58,12 +69,17 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
     EillanceTheme {
       Scaffold(
-        topBar = { AppTopBar(currentRoute, navController, viewModel) }
+        topBar = {
+          // Only show the TopAppBar when not in fullscreen mode
+          if (!isFullscreen) {
+            AppTopBar(currentRoute, navController, viewModel)
+          }
+        }
       ) { paddingValues ->
         Surface(
           modifier = Modifier
             .fillMaxSize()
-            .padding(paddingValues),
+            .padding(paddingValues.takeIf { !isFullscreen } ?: PaddingValues(0.dp)),
           color = MaterialTheme.colorScheme.background
         ) {
           NavHost(navController = navController, startDestination = "peers") {
@@ -117,6 +133,29 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
     )
   }
 
+  // Method to set fullscreen mode
+  fun setFullscreenMode(fullscreen: Boolean) {
+    isFullscreen = fullscreen
+
+    val windowInsetsController = WindowInsetsControllerCompat(window, window.decorView)
+
+    if (fullscreen) {
+      // Hide the system bars
+      windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
+      windowInsetsController.systemBarsBehavior =
+        WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+
+      // Keep screen on during fullscreen mode
+      window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    } else {
+      // Show the system bars
+      windowInsetsController.show(WindowInsetsCompat.Type.systemBars())
+
+      // Remove keep screen on flag
+      window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    }
+  }
+
   override fun onResume() {
     super.onResume()
     val user = FirebaseAuth.getInstance().currentUser
@@ -137,6 +176,20 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
   override fun onPause() {
     super.onPause()
     updateAuthToken("")
+
+    // Exit fullscreen mode when activity is paused
+    if (isFullscreen) {
+      setFullscreenMode(false)
+    }
+  }
+
+  override fun onBackPressed() {
+    // First check if we're in fullscreen mode
+    if (isFullscreen) {
+      setFullscreenMode(false)
+    } else {
+      super.onBackPressed()
+    }
   }
 
   private external fun initEngine(nativeBridge: IViewerNativeBridge)

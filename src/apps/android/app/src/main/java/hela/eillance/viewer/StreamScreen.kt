@@ -1,8 +1,5 @@
 package hela.eillance.viewer
 
-import android.app.Activity
-import android.content.Context
-import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
 import android.view.Surface
 import android.view.SurfaceHolder
@@ -12,6 +9,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -54,7 +53,7 @@ private const val RESOLUTION_SEPARATOR = "×"
 fun LockScreenOrientation(orientation: Int) {
   val context = LocalContext.current
   DisposableEffect(orientation) {
-    val activity = context.findActivity() ?: return@DisposableEffect onDispose {}
+    val activity = (context as? ViewerActivity) ?: return@DisposableEffect onDispose {}
     val originalOrientation = activity.requestedOrientation
     activity.requestedOrientation = orientation
     onDispose {
@@ -62,12 +61,6 @@ fun LockScreenOrientation(orientation: Int) {
       activity.requestedOrientation = originalOrientation
     }
   }
-}
-
-fun Context.findActivity(): Activity? = when (this) {
-  is Activity -> this
-  is ContextWrapper -> baseContext.findActivity()
-  else -> null
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -104,6 +97,10 @@ fun StreamScreen(
   var surfaceShortEdge by remember { mutableIntStateOf(250) }
 
   var orientation by remember { mutableIntStateOf(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT) }
+
+  // Fullscreen state
+  var isFullscreen by remember { mutableStateOf(false) }
+
   LockScreenOrientation(orientation)
 
   // Determine if we're in portrait mode
@@ -191,10 +188,15 @@ fun StreamScreen(
     (context as? ViewerActivity)?.sendStreamRequest(peer.id, composeConfigurationMessage())
   }
 
+  // Notify the activity about fullscreen state changes
+  LaunchedEffect(isFullscreen) {
+    (context as? ViewerActivity)?.setFullscreenMode(isFullscreen)
+  }
+
   ConstraintLayout(
     modifier = Modifier.fillMaxSize()
   ) {
-    val (surface, cameraSpinner, resolutionSpinner, rotateButton, statusTextRef) = createRefs()
+    val (surface, cameraSpinner, resolutionSpinner, fullscreenButton, statusTextRef, backButton) = createRefs()
 
     val density = LocalDensity.current.density
 
@@ -256,6 +258,30 @@ fun StreamScreen(
       unfocusedContainerColor = Color.Transparent,
       focusedContainerColor = Color.Transparent
     )
+
+    // Only show back button in fullscreen mode
+    if (isFullscreen) {
+      IconButton(
+        onClick = {
+          if (isFullscreen) {
+            isFullscreen = false
+          } else {
+            (context as? ViewerActivity)?.onBackPressedDispatcher?.onBackPressed()
+          }
+        },
+        modifier = Modifier
+          .constrainAs(backButton) {
+            top.linkTo(parent.top, 16.dp)
+            start.linkTo(parent.start, 16.dp)
+          }
+      ) {
+        Icon(
+          imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+          contentDescription = "Back",
+          tint = Color.White
+        )
+      }
+    }
 
     // Camera selection dropdown
     ExposedDropdownMenuBox(
@@ -330,24 +356,36 @@ fun StreamScreen(
       }
     }
 
-    // Rotate button
+    // Fullscreen button
     IconButton(
       onClick = {
-        orientation = if (orientation == ActivityInfo.SCREEN_ORIENTATION_PORTRAIT) {
-          ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        if (!isFullscreen) {
+          // Enter fullscreen mode
+          isFullscreen = true
+          orientation = if (orientation == ActivityInfo.SCREEN_ORIENTATION_PORTRAIT) {
+            ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+          } else {
+            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+          }
         } else {
-          ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+          // Exit fullscreen mode
+          isFullscreen = false
         }
       },
       modifier = Modifier
-        .constrainAs(rotateButton) {
+        .constrainAs(fullscreenButton) {
           top.linkTo(surface.top)
           start.linkTo(surface.start)
         }
     ) {
       Icon(
-        painter = painterResource(id = R.drawable.ic_surface_rotate),
-        contentDescription = stringResource(id = R.string.viewer_StreamScreen_change_video_orientation)
+        painter = painterResource(id = if (isFullscreen) R.drawable.ic_fullscreen_exit else R.drawable.ic_fullscreen),
+        contentDescription = stringResource(
+          id = if (isFullscreen)
+            R.string.viewer_StreamScreen_exit_fullscreen
+          else
+            R.string.viewer_StreamScreen_enter_fullscreen_mode
+        )
       )
     }
 
@@ -368,6 +406,10 @@ fun StreamScreen(
   DisposableEffect(Unit) {
     onDispose {
       releaseDecoder()
+      // Make sure to exit fullscreen mode when disposing
+      if (isFullscreen) {
+        (context as? ViewerActivity)?.setFullscreenMode(false)
+      }
     }
   }
 }
