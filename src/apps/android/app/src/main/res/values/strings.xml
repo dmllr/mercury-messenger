@@ -42,7 +42,8 @@
   <string name="fr_operation_status_unknown">Unknown</string>
   <string name="fr_operation_status_waiting">Waiting</string>
 
-  <string name="viewer_StreamScreen_change_video_orientation">Rotate</string>
+  <string name="viewer_StreamScreen_enter_fullscreen_mode">Enter fullscreen mode</string>
+  <string name="viewer_StreamScreen_exit_fullscreen">Exit fullscreen mode</string>
   <string name="viewer_StreamScreen_default_camera">Default Camera</string>
   <string name="viewer_StreamScreen_default_resolution">Default Resolution</string>
 </resources>
