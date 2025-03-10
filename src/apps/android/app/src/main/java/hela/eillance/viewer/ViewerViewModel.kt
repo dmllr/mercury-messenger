@@ -17,8 +17,15 @@ class ViewerViewModel : ViewModel() {
     private val _peerStatus = MutableLiveData<Pair<EventSource, Int>>()
     val peerStatus: LiveData<Pair<EventSource, Int>> = _peerStatus
 
-    private val _streamResolution = MutableLiveData<Pair<Int, Int>>()
-    val streamResolution: LiveData<Pair<Int, Int>> = _streamResolution
+    private val _streamInfo = MutableLiveData<Triple<Int, Int, Int>>() // width, height, rotation
+    val streamInfo: LiveData<Triple<Int, Int, Int>> = _streamInfo
+
+    val streamWidth: Int
+        get() = _streamInfo.value?.first ?: 0
+    val streamHeight: Int
+        get() = _streamInfo.value?.second ?: 0
+    val streamRotation: Int
+        get() = _streamInfo.value?.third ?: 0
 
     private val _deviceProfile = MutableLiveData<Profile>()
     val deviceProfile: LiveData<Profile> = _deviceProfile
@@ -29,8 +36,8 @@ class ViewerViewModel : ViewModel() {
         }
     }
 
-    fun updateStreamResolution(width: Int, height: Int) {
-        _streamResolution.postValue(Pair(width, height))
+    fun updateStreamInfo(width: Int, height: Int, rotation: Int) {
+        _streamInfo.postValue(Triple(width, height, rotation))
     }
 
     fun updateDeviceProfile(profile: Profile) {

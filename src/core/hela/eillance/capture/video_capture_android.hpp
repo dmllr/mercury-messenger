@@ -3,6 +3,7 @@
 #include <mutex>
 #include <string>
 #include <vector>
+#include <atomic>
 
 #include <camera/NdkCameraCaptureSession.h>
 #include <camera/NdkCameraDevice.h>
@@ -11,10 +12,12 @@
 #include <media/NdkImageReader.h>
 #include <media/NdkMediaCodec.h>
 #include <media/NdkMediaFormat.h>
+#include <android/sensor.h>
 
 #include <rtc/common.hpp>
 
 #include "hela/eillance/capture/config.hpp"
+#include "hela/eillance/capture/orientation.hpp"
 #include "hela/eillance/capture/video_encoder_mediandk.hpp"
 #include "hela/eillance/common/dispatch_queue.hpp"
 #include "hela/eillance/common/event_queue.hpp"
@@ -35,10 +38,20 @@ class VideoCapture {
   ACaptureSessionOutput* session_output_{nullptr};
   ACaptureRequest* capture_request_{nullptr};
 
+  // Sensor-related members for orientation detection
+  ASensorManager* sensor_manager_{nullptr};
+  const ASensor* accelerometer_{nullptr};
+  ASensorEventQueue* sensor_event_queue_{nullptr};
+  std::atomic<DeviceOrientation> current_orientation_{DeviceOrientation::LandscapeToLeft};
+  std::atomic<bool> orientation_monitoring_active_{false};
+
   VideoConfig config_;
   VideoEncoder encoder_;
   EventQueue::SubscriberTypeId configure_subscriber_id_;
   std::mutex capture_mutex_;
+
+  // Thread for sensor monitoring
+  std::thread orientation_thread_;
 
 public:
   VideoCapture() {
@@ -52,6 +65,7 @@ public:
 
   ~VideoCapture() {
     EventQueue::Instance().Unsubscribe<VideoConfig>(configure_subscriber_id_);
+    StopOrientationMonitoring();
     Revoke();
   }
 
@@ -62,12 +76,15 @@ public:
       Log::e("Failed to create camera manager");
       return;
     }
+
+    StartOrientationMonitoring();
     encoder_.Engage(config_);
     RenewCaptureSession();
   }
 
   void Revoke() {
     const auto lock = std::lock_guard<std::mutex>(capture_mutex_);
+    StopOrientationMonitoring();
     encoder_.Revoke();
     FreeNativeCameraResources();
     if (camera_manager_ != nullptr) {
@@ -106,6 +123,8 @@ public:
       config_.bitrate = static_cast<int>(VideoConfigDefaults::commonBitrateMultiplier * config_.width * config_.height * config_.frameRate);
     }
 
+    config_.rotation = static_cast<int>(current_orientation_.load());
+
     encoder_.UpdateConfig(config_);
 
     if (camera_manager_ != nullptr) {
@@ -115,6 +134,85 @@ public:
   }
 
 private:
+  void StartOrientationMonitoring() {
+    if (orientation_monitoring_active_.load()) {
+      return;
+    }
+
+    orientation_monitoring_active_ = true;
+    orientation_thread_ = std::thread([this]() {
+      sensor_manager_ = ASensorManager_getInstance();
+      accelerometer_ = ASensorManager_getDefaultSensor(sensor_manager_, ASENSOR_TYPE_ACCELEROMETER);
+
+      if (!accelerometer_) {
+        Log::e("Failed to get accelerometer sensor");
+        orientation_monitoring_active_ = false;
+        return;
+      }
+
+      ALooper* looper = ALooper_prepare(ALOOPER_PREPARE_ALLOW_NON_CALLBACKS);
+      sensor_event_queue_ = ASensorManager_createEventQueue(
+          sensor_manager_, looper, ALOOPER_POLL_CALLBACK, nullptr, nullptr);
+
+      ASensorEventQueue_enableSensor(sensor_event_queue_, accelerometer_);
+      ASensorEventQueue_setEventRate(sensor_event_queue_, accelerometer_,
+                                     (1000L / 10) * 1000); // 10 Hz sampling rate
+
+      DeviceOrientation last_orientation = current_orientation_.load();
+
+      while (orientation_monitoring_active_.load()) {
+        ASensorEvent event;
+        while (ASensorEventQueue_getEvents(sensor_event_queue_, &event, 1) > 0) {
+          if (event.type == ASENSOR_TYPE_ACCELEROMETER) {
+            float x = event.acceleration.x;
+            float y = event.acceleration.y;
+
+            DeviceOrientation new_orientation;
+
+            // Determine orientation from accelerometer readings
+            if (std::abs(x) > std::abs(y)) {
+              // Landscape orientation
+              new_orientation = (x > 0) ? DeviceOrientation::LandscapeToLeft : DeviceOrientation::LandscapeToRight;
+            } else {
+              // Portrait orientation
+              new_orientation = (y > 0) ? DeviceOrientation::Portrait : DeviceOrientation::UpsideDown;
+            }
+
+            if (new_orientation != last_orientation) {
+              current_orientation_ = new_orientation;
+              last_orientation = new_orientation;
+
+              // Update encoder with new orientation
+              ConfigureVideo(config_);
+
+              Log::i("Device orientation changed to: %d degrees", static_cast<int>(new_orientation));
+            }
+          }
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      }
+
+      if (sensor_event_queue_) {
+        ASensorEventQueue_disableSensor(sensor_event_queue_, accelerometer_);
+        ASensorManager_destroyEventQueue(sensor_manager_, sensor_event_queue_);
+        sensor_event_queue_ = nullptr;
+      }
+
+      sensor_manager_ = nullptr;
+      accelerometer_ = nullptr;
+    });
+  }
+
+  void StopOrientationMonitoring() {
+    if (orientation_monitoring_active_.load()) {
+      orientation_monitoring_active_ = false;
+      if (orientation_thread_.joinable()) {
+        orientation_thread_.join();
+      }
+    }
+  }
+
   void OpenCamera() {
     FreeNativeCameraResources();
 

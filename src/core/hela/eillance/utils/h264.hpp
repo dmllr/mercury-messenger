@@ -43,23 +43,18 @@ public:
 
   /// @brief Resets the internal state of the parser preparing for a new stream.
   void Reset() {
-    current_config_ = {.width = 0, .height = 0};
+    current_config_ = {.width = 0, .height = 0, .rotation = 0};
     on_configure_ = {};
-    on_input_buffer_ = {};
   }
 
   [[maybe_unused]] void SetOnConfigureCallback(const ConfigureCallback& callback) {
     on_configure_ = std::make_unique<ConfigureCallback>(callback);
   }
-  [[maybe_unused]] void SetOnInputBufferCallback(const InputBufferCallback& callback) {
-    on_input_buffer_ = std::make_unique<InputBufferCallback>(callback);
-  }
 
 private:
-  VideoConfig current_config_ = {.width = 0, .height = 0};
+  VideoConfig current_config_ = {.width = 0, .height = 0, .rotation = 0};
 
   std::unique_ptr<ConfigureCallback> on_configure_{};
-  std::unique_ptr<InputBufferCallback> on_input_buffer_{};
 
   /// @brief Removes H.264 emulation prevention bytes from a given byte array.
   /// @param data Pointer to the input data.
@@ -159,6 +154,24 @@ private:
       frame_crop_bottom_offset = br.ReadUE();
     }
 
+    // Check for VUI parameters which might contain rotation information
+    uint32_t rotation = 0;
+    auto vui_parameters_present_flag = br.ReadBits(1);
+    if (vui_parameters_present_flag != 0U) {
+      // VUI parameters parsing
+      auto aspect_ratio_info_present_flag = br.ReadBits(1);
+      if (aspect_ratio_info_present_flag != 0U) {
+        // Skip aspect ratio info
+        auto aspect_ratio_idc = br.ReadByte();
+        if (aspect_ratio_idc == 255) {  // Extended_SAR
+          br.ReadBits(16);  // sar_width
+          br.ReadBits(16);  // sar_height
+        }
+      }
+
+      // Skip other VUI parameters until we get to the SEI message parsing
+    }
+
     // Calculate picture dimensions.
     uint32_t macroblock_width = pic_width_in_mbs_minus1 + 1;
     uint32_t macroblock_height = pic_height_in_map_units_minus1 + 1;
@@ -194,12 +207,90 @@ private:
     auto conf = VideoConfig();
     conf.width = width_pixels;
     conf.height = height_pixels;
+    // Note: rotation will be set from SEI parsing
     return conf;
+  }
+
+  /// @brief Parse SEI (Supplemental Enhancement Information) message for rotation metadata
+  /// @param sei SEI message data
+  /// @return Rotation angle in degrees (0, 90, 180, or 270)
+  static uint32_t ParseSeiForRotation(const std::vector<std::byte>& sei) {
+    // NOLINTNEXTLINE(*-pro-type-reinterpret-cast)
+    const auto* byte_data = reinterpret_cast<const uint8_t*>(sei.data());
+    std::vector<uint8_t> rbsp = RemoveEmulationPreventionBytes(byte_data, sei.size());
+
+    // Skip NAL header
+    if (rbsp.size() < 2) return 0;
+
+    size_t pos = 1; // Skip the NAL header byte
+
+    // Parse SEI payload type
+    uint32_t payload_type = 0;
+    while (pos < rbsp.size() && rbsp[pos] == 0xFF) {
+      payload_type += 0xFF;
+      pos++;
+    }
+    if (pos < rbsp.size()) {
+      payload_type += rbsp[pos++];
+    }
+
+    // Parse SEI payload size
+    uint32_t payload_size = 0;
+    while (pos < rbsp.size() && rbsp[pos] == 0xFF) {
+      payload_size += 0xFF;
+      pos++;
+    }
+    if (pos < rbsp.size()) {
+      payload_size += rbsp[pos++];
+    }
+
+    // Check if we have a user data unregistered SEI message (payload_type == 5)
+    if (payload_type == 5 && pos + payload_size <= rbsp.size()) {
+      // Log the first few bytes to help with debugging
+      std::string payload_hex;
+      for (size_t i = 0; i < std::min(payload_size, 32u); i++) {
+        char hex[8];
+        snprintf(hex, sizeof(hex), "%02x ", rbsp[pos + i]);
+        payload_hex += hex;
+      }
+      // Search for UUID (first 16 bytes)
+      if (payload_size >= 16) {
+        // Skip UUID (16 bytes)
+        pos += 16;
+
+        // Convert remaining payload to string for easier parsing
+        std::string payload_str;
+        for (size_t i = pos; i < pos + payload_size - 16 && i < rbsp.size(); i++) {
+          payload_str += static_cast<char>(rbsp[i]);
+        }
+
+        // Look for rotation marker
+        size_t rotation_pos = payload_str.find("rotation-degrees:");
+        if (rotation_pos != std::string::npos) {
+          rotation_pos += 17; // Skip "rotation-degrees:"
+
+          // Parse the rotation value
+          if (rotation_pos < payload_str.length()) {
+            if (payload_str.substr(rotation_pos, 2) == "90") {
+              return 90;
+            } else if (payload_str.substr(rotation_pos, 3) == "180") {
+              return 180;
+            } else if (payload_str.substr(rotation_pos, 3) == "270") {
+              return 270;
+            }
+          }
+        }
+      }
+    }
+
+    return 0; // Default: no rotation
   }
 };
 
 void H264Parser::ProcessFrame(const rtc::binary& data) {
   std::uint32_t pos = 0;
+  bool config_updated = false;
+
   while (pos < data.size()) {
     // Detect a start code (either 00 00 00 01 or 00 00 01).
     std::uint32_t start_code_len = 0;
@@ -217,6 +308,12 @@ void H264Parser::ProcessFrame(const rtc::binary& data) {
 
     // The NALU starts immediately after the start code.
     auto nalu_start = pos + start_code_len;
+
+    // Skip if we're at the end of the data
+    if (nalu_start >= data.size()) {
+      break;
+    }
+
     // Find the next start code.
     auto next_start = nalu_start;
     while (next_start < data.size()) {
@@ -245,30 +342,50 @@ void H264Parser::ProcessFrame(const rtc::binary& data) {
       pos = next_start;
       continue;
     }
+
     const std::byte nal_header = nalu[0];
     const std::byte nal_unit_type = nal_header & nal_type_mask;
     constexpr auto nal_type_sps = std::byte{0x07};
     constexpr auto nal_type_pps = std::byte{0x08};
+    constexpr auto nal_type_sei = std::byte{0x06};
+
+    LOGD << "Found NAL unit type: " << static_cast<int>(nal_unit_type) << " size: " << nalu.size();
 
     if (nal_unit_type == nal_type_sps) {
       // Process SPS: update stored SPS and extract resolution.
       const std::vector<std::byte>& new_sps = nalu;
       auto config = ParseSps(new_sps);
+
+      // Preserve rotation if we already have it
+      config.rotation = current_config_.rotation;
+
       if (config != current_config_) {
-        current_config_ = config;
-        if (on_configure_ != nullptr) {
-          (*on_configure_)(current_config_);
-        }
+        current_config_.width = config.width;
+        current_config_.height = config.height;
+        config_updated = true;
+        LOGI << "Updated config from SPS: " << config.width << "x" << config.height;
       }
-    } else {
-      // ignore others
+    } else if (nal_unit_type == nal_type_sei) {
+      // Process SEI: look for rotation information
+      LOGI << "Processing SEI NAL unit";
+      const std::vector<std::byte>& sei_data = nalu;
+      uint32_t rotation = ParseSeiForRotation(sei_data);
+
+      if (rotation != current_config_.rotation) {
+        current_config_.rotation = rotation;
+        config_updated = true;
+        LOGI << "Updated rotation from SEI: " << rotation << " degrees";
+      }
     }
+
     pos = next_start;
   }
 
-  // forward the frame as it is
-  if (on_input_buffer_ != nullptr) {
-    (*on_input_buffer_)(data);
+  // If either SPS or SEI updates changed our configuration, notify via callback
+  if (config_updated && on_configure_ != nullptr) {
+    LOGI << "Configuration changed, notifying: " << current_config_.width << "x"
+         << current_config_.height << " rotation: " << current_config_.rotation;
+    (*on_configure_)(current_config_);
   }
 }
 
