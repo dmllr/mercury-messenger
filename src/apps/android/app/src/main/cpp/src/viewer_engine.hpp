@@ -103,6 +103,7 @@ public:
     });
     rtc_viewer_.SetFrameReceivedCallback([this](const rtc::binary& frame) {
       h264_parser_.ProcessFrame(frame);
+      HandleInputBuffer(frame);
     });
     configure_subscriber_id_ = EventQueue::Instance().Subscribe<VideoConfig>(
         [this](VideoConfig config) { ConfigureSurfaceResolution(config); });
@@ -176,11 +177,14 @@ private:
       return;
     }
 
+    LOGI << "Configuring decoder with dimensions: " << conf.width << "x" << conf.height
+         << " (rotation: " << conf.rotation << " degrees)";
+
     const auto color_format = 0x7f000789;  // COLOR_FormatSurface
     AMediaFormat_setString(format, AMEDIAFORMAT_KEY_MIME, "video/avc");
-    AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_WIDTH, static_cast<std::int32_t>(conf.width));
-    AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_HEIGHT, static_cast<std::int32_t>(conf.height));
-    AMediaFormat_setInt32(format,AMEDIAFORMAT_KEY_COLOR_FORMAT, color_format);
+    AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_WIDTH, conf.width);
+    AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_HEIGHT, conf.height);
+    AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_COLOR_FORMAT, color_format);
 
     media_codec_ = AMediaCodec_createDecoderByType("video/avc");
     if (media_codec_ == nullptr) {
@@ -263,10 +267,6 @@ private:
       ConfigureCodec(conf);
       EventQueue::Instance().Push(conf);
     });
-
-    h264_parser_.SetOnInputBufferCallback([this](const std::vector<std::byte>& frameBuffer) {
-      HandleInputBuffer(frameBuffer);
-    });
   }
 
   void ConfigureSurfaceResolution(VideoConfig config) {
@@ -280,10 +280,13 @@ private:
     }
 
     jclass callback_class = env->GetObjectClass(native_bridge_);
-    jmethodID callback_method = env->GetMethodID(callback_class, "onStreamResolutionChange", "(II)V");
+    jmethodID callback_method = env->GetMethodID(callback_class, "onStreamInfoChange", "(III)V");
     if (callback_method != nullptr) {
       // NOLINTNEXTLINE(*-vararg)
-      env->CallVoidMethod(native_bridge_, callback_method, static_cast<int>(config.width), static_cast<int>(config.height));
+      env->CallVoidMethod(native_bridge_, callback_method,
+                          static_cast<int>(config.width),
+                          static_cast<int>(config.height),
+                          static_cast<int>(config.rotation));
     }
   }
 

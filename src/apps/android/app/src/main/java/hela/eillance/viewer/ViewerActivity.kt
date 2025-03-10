@@ -209,8 +209,8 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
     viewModel.updatePeerStatus(peerId, EventSource.fromInt(source), status)
   }
 
-  override fun onStreamResolutionChange(width: Int, height: Int) {
-    viewModel.updateStreamResolution(width, height)
+  override fun onStreamInfoChange(width: Int, height: Int, rotation: Int) {
+    viewModel.updateStreamInfo(width, height, rotation)
   }
 
   override fun onDeviceProfileReceived(peerId: String, profile: Profile) {

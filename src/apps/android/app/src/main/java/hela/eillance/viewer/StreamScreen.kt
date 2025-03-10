@@ -1,25 +1,29 @@
 package hela.eillance.viewer
 
+import android.content.res.Configuration
+import android.graphics.Matrix
+import android.graphics.SurfaceTexture
 import android.view.Surface
-import android.view.SurfaceHolder
-import android.view.SurfaceView
+import android.view.TextureView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
@@ -34,8 +38,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.constraintlayout.compose.ConstraintLayout
@@ -61,7 +67,7 @@ fun StreamScreen(
   val defaultCameraLabel = stringResource(R.string.viewer_StreamScreen_default_camera)
   val defaultResolutionsLabel = stringResource(R.string.viewer_StreamScreen_default_resolution)
   val status by viewModel.peerStatus.observeAsState()
-  val resolution by viewModel.streamResolution.observeAsState()
+  val streamInfo by viewModel.streamInfo.observeAsState()
   val profile by viewModel.deviceProfile.observeAsState()
 
   var peerConnectionState by remember { mutableStateOf(ServiceConnectionState.Unknown) }
@@ -78,16 +84,13 @@ fun StreamScreen(
   var selectedResolutionIndex by remember { mutableIntStateOf(0) }
   var expandedResolution by remember { mutableStateOf(false) }
 
+  // Add rotation state (0, 90, 180, 270 degrees)
+  var localRotation by remember { mutableIntStateOf(0) }
+
+  var textureView by remember { mutableStateOf<TextureView?>(null) }
+
   // Fullscreen state - starts as true by default
   var isFullscreen by remember { mutableStateOf(true) }
-
-  // Detect current orientation from configuration
-  val configuration = LocalContext.current.resources.configuration
-  val isPortrait = configuration.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT
-
-  // Remember the current video dimensions for proper aspect ratio calculation
-  var videoWidth by remember { mutableIntStateOf(0) }
-  var videoHeight by remember { mutableIntStateOf(0) }
 
   // Update camera options when profile changes
   fun updateCameraOptions(profile: Profile) {
@@ -129,23 +132,106 @@ fun StreamScreen(
     }
   }
 
+  // Calculate transform matrix based on device and video orientations
+  fun calculateTransformMatrix(): Matrix {
+    // Incoming video default is landscape, top to left, this means rotation 0
+    //    rotation: 0
+    //    /---------------------\
+    //    |                     |   +-----> stream width, physical width
+    //    | o   <-- top camera  |   |
+    //    |                     |   v stream height, physical height
+    //    \---------------------/
+    //
+    //    rotation: 90
+    //    /-------------\
+    //    |      o      |           +-----> stream height, physical width
+    //    |      ^      |           |
+    //    |     top     |           v stream width, physical height
+    //    |             |
+    //    |             |
+    //    |             |
+    //    \-------------/
+    // viewModel.streamRotation specifies angle to rotate the video by
+
+    val matrix = Matrix()
+
+    val view = textureView ?: return matrix
+
+    // Stream details
+    val streamRotation = viewModel.streamRotation + localRotation
+    val isStreamPortrait = streamRotation == 90 || streamRotation == 270
+    var streamWidth = viewModel.streamWidth.toFloat()
+    var streamHeight = viewModel.streamHeight.toFloat()
+
+    // View details
+    val isViewPortrait =
+      (context.resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT)
+    val viewWidth = view.width.toFloat()
+    val viewHeight = view.height.toFloat()
+
+    if (streamWidth == 0f || streamHeight == 0f || viewWidth == 0f || viewHeight == 0f) {
+      return matrix
+    }
+
+    // Center of the view. Perform all operations on this point.
+    val pivotX = viewWidth / 2f
+    val pivotY = viewHeight / 2f
+
+    matrix.postRotate(streamRotation.toFloat(), pivotX, pivotY)
+
+    // The scale to maintain aspect ratio
+    val scaleAspectX = streamHeight / streamWidth
+    val scaleAspectY = streamWidth / streamHeight
+
+    when {
+      // Stream portrait, view portrait
+      isStreamPortrait && isViewPortrait -> {
+        // first, maintain aspect ratio
+        matrix.postScale(scaleAspectX, scaleAspectY, pivotX, pivotY)
+        // next, fit the view
+        val scaleToFit = viewWidth / streamWidth
+        matrix.postScale(scaleToFit, scaleToFit, pivotX, pivotY)
+      }
+      // Both landscape
+      !isStreamPortrait && !isViewPortrait -> {
+        // just maintain aspect ratio
+        matrix.postScale(scaleAspectX, 1f, pivotX, pivotY)
+      }
+      // Stream portrait, view landscape
+      isStreamPortrait && !isViewPortrait -> {
+        val scaleToFit = viewHeight / streamWidth
+        matrix.postScale(scaleToFit, scaleToFit, pivotX, pivotY)
+      }
+      // Stream landscape, view portrait
+      else -> { // !isStreamPortrait && isViewPortrait
+        val scaleToFit = viewWidth / streamWidth
+        matrix.postScale(scaleAspectY * scaleToFit, scaleAspectX * scaleToFit, pivotX, pivotY)
+      }
+    }
+
+    return matrix
+  }
+
+  // Rotate video by 90 degrees
+  fun rotateVideo() {
+    localRotation = (localRotation + 90) % 360
+    textureView?.setTransform(calculateTransformMatrix())
+  }
+
   // Handle status updates
   LaunchedEffect(status) {
     status?.let { (source, statusCode) ->
       if (source == EventSource.PeerConnectionState) {
         peerConnectionState = ServiceConnectionState.fromInt(statusCode)
       }
-      statusText = "${source.name}: ${peerConnectionState.getResourceString(context)}"
+      statusText += "${source.name}: ${peerConnectionState.getResourceString(context)}\n"
     }
   }
 
   // Handle resolution updates
-  LaunchedEffect(resolution) {
-    resolution?.let { (width, height) ->
-      if (width > 0 && height > 0) {
-        videoWidth = width
-        videoHeight = height
-      }
+  LaunchedEffect(streamInfo) {
+    streamInfo?.let { (_, _, _) ->
+      textureView?.setTransform(calculateTransformMatrix())
     }
   }
 
@@ -182,79 +268,44 @@ fun StreamScreen(
     modifier = Modifier
       .fillMaxSize()
   ) {
-    val (surface, controlsOverlay) = createRefs()
+    var (videoSurface, controlsOverlay) = createRefs()
 
-    // Surface view for video output
+    // TextureView for video output
     AndroidView(
       factory = { ctx ->
-        SurfaceView(ctx).apply {
-          holder.addCallback(object : SurfaceHolder.Callback {
-            override fun surfaceCreated(holder: SurfaceHolder) {
-              initDecoder(holder.surface)
+        TextureView(ctx).apply {
+          textureView = this
+          surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+            override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
+              // Initialize decoder with a Surface created from the SurfaceTexture
+              initDecoder(Surface(surface))
             }
 
-            override fun surfaceDestroyed(holder: SurfaceHolder) {
+            override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {
+              // Update transform when size changes
+              setTransform(calculateTransformMatrix())
+            }
+
+            override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
               releaseDecoder()
+              return true
             }
 
-            override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
-              if (videoWidth <= 0 || videoHeight <= 0) return
-
-              val deviceIsPortrait = height > width
-              val videoIsLandscape = videoWidth > videoHeight
-
-              if (deviceIsPortrait && videoIsLandscape) {
-                // In portrait mode, when video is landscape, we need to calculate dimensions
-                // to account for the 90-degree rotation by using the reversed aspect ratio
-
-                // For portrait orientation with landscape video, use height as the fixed dimension
-                // and calculate width based on the video's height-to-width ratio
-                val scaledWidth = (height * (videoHeight.toFloat() / videoWidth.toFloat())).toInt()
-
-                if (scaledWidth <= width) {
-                  // If calculated width fits within available width, use it
-                  holder.setFixedSize(scaledWidth, height)
-                } else {
-                  // Otherwise, use width as the fixed dimension and scale height
-                  val scaledHeight = (width * (videoWidth.toFloat() / videoHeight.toFloat())).toInt()
-                  holder.setFixedSize(width, scaledHeight)
-                }
-              } else if (!deviceIsPortrait && !videoIsLandscape) {
-                // Landscape device with portrait video
-                val scaledHeight = (width * (videoHeight.toFloat() / videoWidth.toFloat())).toInt()
-
-                if (scaledHeight <= height) {
-                  holder.setFixedSize(width, scaledHeight)
-                } else {
-                  val scaledWidth = (height * (videoWidth.toFloat() / videoHeight.toFloat())).toInt()
-                  holder.setFixedSize(scaledWidth, height)
-                }
-              } else {
-                // Normal case: orientations match
-                val videoAspectRatio = videoWidth.toFloat() / videoHeight.toFloat()
-                val surfaceAspectRatio = width.toFloat() / height.toFloat()
-
-                if (surfaceAspectRatio > videoAspectRatio) {
-                  // Surface is wider than needed
-                  val scaledWidth = (height * videoAspectRatio).toInt()
-                  holder.setFixedSize(scaledWidth, height)
-                } else {
-                  // Surface is taller than needed
-                  val scaledHeight = (width / videoAspectRatio).toInt()
-                  holder.setFixedSize(width, scaledHeight)
-                }
-              }
+            override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {
+              // This method is called frequently when frames are rendered
+              // No need to do anything here for our use case
             }
-          })
+          }
         }
       },
       modifier = Modifier
-        .constrainAs(surface) {
+        .constrainAs(videoSurface) {
           top.linkTo(parent.top)
           bottom.linkTo(parent.bottom)
           start.linkTo(parent.start)
           end.linkTo(parent.end)
         }
+        .background(Color.Black)
         .fillMaxSize()
     )
 
@@ -273,7 +324,9 @@ fun StreamScreen(
         unfocusedIndicatorColor = Color.Transparent,
         focusedIndicatorColor = Color.Transparent,
         unfocusedContainerColor = Color.Transparent,
-        focusedContainerColor = Color.Transparent
+        focusedContainerColor = Color.Transparent,
+        unfocusedTextColor = Color.White,
+        focusedTextColor = Color.White
       )
 
       // Back button in top-left corner
@@ -310,16 +363,19 @@ fun StreamScreen(
       Row(
         modifier = Modifier
           .fillMaxWidth()
+          .heightIn(min = 56.dp)
           .background(Color.Black.copy(alpha = 0.5f))
-          .padding(8.dp)
+          .padding(horizontal = 8.dp, vertical = 12.dp)
           .align(Alignment.BottomCenter),
-        horizontalArrangement = Arrangement.SpaceEvenly,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
       ) {
-        // Camera selection dropdown
+        // Updated Camera selection dropdown
         ExposedDropdownMenuBox(
           expanded = expandedCamera,
-          onExpandedChange = { expandedCamera = it }
+          onExpandedChange = { expandedCamera = it },
+          modifier = Modifier
+            .weight(1f)
         ) {
           TextField(
             value = cameraOptions.getOrElse(selectedCameraIndex) { "Default Camera" },
@@ -327,31 +383,37 @@ fun StreamScreen(
             readOnly = true,
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedCamera) },
             colors = transparentTextFieldColors,
-            modifier = Modifier.menuAnchor()
+            modifier = Modifier
+              .menuAnchor(MenuAnchorType.PrimaryNotEditable, true)
           )
 
-          DropdownMenu(
+          ExposedDropdownMenu(
             expanded = expandedCamera,
-            onDismissRequest = { expandedCamera = false }
+            onDismissRequest = { expandedCamera = false },
+            modifier = Modifier
+              .background(Color.DarkGray.copy(alpha = 0.9f))
           ) {
             cameraOptions.forEachIndexed { index, option ->
-              DropdownMenuItem(
-                text = { Text(option) },
+              androidx.compose.material3.DropdownMenuItem(
+                text = { Text(text = option, color = Color.White) },
                 onClick = {
                   selectedCameraIndex = index
                   expandedCamera = false
                   updateResolutionOptions(index)
                   sendConfigurationRequest()
-                }
+                },
+                contentPadding = androidx.compose.material3.MenuDefaults.DropdownMenuItemContentPadding
               )
             }
           }
         }
 
-        // Resolution selection dropdown
+        // Updated Resolution selection dropdown
         ExposedDropdownMenuBox(
           expanded = expandedResolution,
-          onExpandedChange = { expandedResolution = it }
+          onExpandedChange = { expandedResolution = it },
+          modifier = Modifier
+            .weight(1f)
         ) {
           TextField(
             value = resolutionOptions.getOrElse(selectedResolutionIndex) { "Default Resolution" },
@@ -359,24 +421,42 @@ fun StreamScreen(
             readOnly = true,
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedResolution) },
             colors = transparentTextFieldColors,
-            modifier = Modifier.menuAnchor()
+            modifier = Modifier
+              .menuAnchor(MenuAnchorType.PrimaryNotEditable, true)
           )
 
-          DropdownMenu(
+          ExposedDropdownMenu(
             expanded = expandedResolution,
-            onDismissRequest = { expandedResolution = false }
+            onDismissRequest = { expandedResolution = false },
+            modifier = Modifier
+              .background(Color.DarkGray.copy(alpha = 0.9f))
           ) {
             resolutionOptions.forEachIndexed { index, option ->
-              DropdownMenuItem(
-                text = { Text(option) },
+              androidx.compose.material3.DropdownMenuItem(
+                text = { Text(text = option, color = Color.White) },
                 onClick = {
                   selectedResolutionIndex = index
                   expandedResolution = false
                   sendConfigurationRequest()
-                }
+                },
+                contentPadding = androidx.compose.material3.MenuDefaults.DropdownMenuItemContentPadding
               )
             }
           }
+        }
+
+        // Rotation Button
+        IconButton(
+          onClick = { rotateVideo() },
+          modifier = Modifier
+            .size(47.dp)
+            .aspectRatio(1f)
+        ) {
+          Icon(
+            imageVector = ImageVector.vectorResource(R.drawable.ic_surface_rotate),
+            contentDescription = "Rotate Video",
+            tint = Color.White
+          )
         }
       }
     }
