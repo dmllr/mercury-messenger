@@ -4,19 +4,11 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.Button
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import com.firebase.ui.auth.AuthUI
 import com.firebase.ui.auth.FirebaseAuthUIActivityResultContract
 import com.firebase.ui.auth.data.model.FirebaseAuthUIAuthenticationResult
@@ -80,39 +72,6 @@ class LauncherActivity : ComponentActivity() {
 //      "viewer" -> startViewerActivity()
     }
 
-
-    @Composable
-    fun EillanceApp() {
-        val context = LocalContext.current
-        val auth = FirebaseAuth.getInstance()
-        val signInLauncher =
-            rememberLauncherForActivityResult(FirebaseAuthUIActivityResultContract()) { res ->
-                onSignInResult(res)
-            }
-
-        Column(
-            modifier = Modifier.fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            if (auth.currentUser == null) {
-                Button(onClick = {
-                    val signInIntent = AuthUI.getInstance()
-                        .createSignInIntentBuilder()
-                        .setAvailableProviders(providers)
-                        .setLogo(R.drawable.ic_camera)
-                        .setIsSmartLockEnabled(false)
-                        .build()
-                    signInLauncher.launch(signInIntent)
-                }) {
-                    Text("Sign In")
-                }
-            } else {
-                // already signed in
-                followSelectedRole()
-            }
-        }
-    }
 
     private fun onSignInResult(result: FirebaseAuthUIAuthenticationResult?) {
         if (result?.resultCode == RESULT_OK) {
