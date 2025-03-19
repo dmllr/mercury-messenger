@@ -225,7 +225,7 @@ private:
     }
 
     for (const auto& peer : viewers) {
-      SendStreamers(peer.ws, peer.id);
+      SendStreamers(peer.ws, user_id);
     }
   }
 
