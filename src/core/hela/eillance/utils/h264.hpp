@@ -12,6 +12,7 @@
 
 #include <rtc/rtc.hpp>
 #include "hela/eillance/capture/video_config.hpp"
+#include "hela/eillance/logging/logging.h"
 #include "hela/eillance/utils/bit_reader.hpp"
 
 namespace hela::eillance {
