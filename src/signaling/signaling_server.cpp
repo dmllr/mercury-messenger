@@ -309,7 +309,7 @@ int main(int argc, char* argv[]) {
   auto server = SignalingServer(config);
 
   LOGI << "Signaling server running on port " << config.port;
-  if (config.certificatePemFile.has_value() && config.keyPemFile.has_value()) {
+  if (config.enableTls) {
     LOGI << "  * connection is secure.";
   } else {
     LOGW << "  * connection is insecure!";
