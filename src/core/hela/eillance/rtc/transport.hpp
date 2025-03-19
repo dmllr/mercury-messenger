@@ -90,19 +90,15 @@ public:
     assert(!id_.empty());
     LOGI << "The local ID is: " << id_.data();
 
+    if (ws_ != nullptr && ws_->isOpen()) {
+      LOGW << "The streamer service for ID " << id_.data() << " is started already, skipping...";
+      return;
+    }
+
     auto ws_config = rtc::WebSocketConfiguration{
         .disableTlsVerification = true
     };
 
-    if (ws_ != nullptr) {
-      ws_->resetCallbacks();
-      if (ws_->isOpen()) {
-        ws_->close();
-        while (!ws_->isClosed()) {
-          std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        }
-      }
-    }
     ws_ = std::make_unique<rtc::WebSocket>(ws_config);
     ws_->onOpen([this]() {
       OnWebSocketOpen(); });
@@ -151,8 +147,13 @@ public:
   }
 
   void Terminate() {
-    StopStreaming();
-    ws_->close();
+    if (ws_ != nullptr) {
+      StopStreaming();
+      ws_->resetCallbacks();
+      if (ws_->isOpen()) {
+        ws_->close();
+      }
+    }
   }
 
 protected:
@@ -424,8 +425,8 @@ private:
     }
   };
 
-#if 1 // NOLINT(*-avoid-unconditional-preprocessor-if)
-  constexpr static auto signalingServerUrl = "ws://app.hela.me:8000";
+#if 0 // NOLINT(*-avoid-unconditional-preprocessor-if)
+  constexpr static auto signalingServerUrl = "wss://app.hela.me:8000";
 #else
 #if ANDROID
   constexpr static auto signalingServerUrl = "ws://10.0.2.2:8888";
