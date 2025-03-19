@@ -20,7 +20,7 @@
 
 struct Log {
   static constexpr auto tag = "helaeillance";
-  static constexpr auto logLevel = plog::debug;
+  static constexpr auto logLevel = plog::info;
 
 private:
   // NOLINTNEXTLINE(*-statically-constructed-objects)
@@ -66,61 +66,73 @@ private:
     auto user_id = std::make_shared<std::string>();
     auto peer_id = std::make_shared<std::string>();
 
-    ws->onMessage(nullptr, [ws, user_id, peer_id, this](const std::string& msg) {
-      try {
-        LOGD << "Received message: length=" << msg.length();
-        auto json = Json::parse(msg);
-
-        if (!ValidateMessage(ws, json, *user_id)) {
-          LOGD << "Message validation failed";
-          return;
-        }
-
-        const auto& type = json["type"].get<std::string>();
-        LOGD << "Processing message type: " << type;
-        if (type == "publish") {
-          HandlePublish(ws, json, *user_id);
-          // Update peer_id when a peer publishes
-          if (json.contains("peer_id")) {
-            *peer_id = json["peer_id"];
-            LOGD << "Updated peer_id: " << *peer_id;
-          }
-        } else if (type == "get_streamers") {
-          LOGD << "Processing get_streamers request for user_id: " << *user_id;
-          SendStreamers(ws, *user_id);
-        } else {
-          LOGD << "Relaying message from user_id: " << *user_id << ", peer_id: " << *peer_id;
-          RelayMessage(json, *user_id, *peer_id);
-        }
-      } catch (const std::exception& e) {
-        LOGE << "Message handling error: " << e.what();
-        SendError(ws, "invalid_message", e.what());
-      }
+    ws->onMessage(nullptr, [this, ws, user_id, peer_id](const std::string& msg) {
+      HandleMessage(ws, msg, *user_id, *peer_id);
     });
 
     ws->onOpen([]() {
       LOGD << "WebSocket connection opened";
     });
 
-    ws->onClosed([user_id, peer_id, this] {
-      LOGD << "WebSocket connection closed for user_id: " << *user_id << ", peer_id: " << *peer_id;
-      bool is_notification_required = false;
-      {
-        std::lock_guard<std::mutex> lock(peersMutex_);
-        if (!user_id->empty() && !peer_id->empty()) {
-          auto ere = peers_[*user_id].erase(*peer_id);
-          if (ere != 0U) {
-            LOGD << "Removed peer: " << *peer_id << " for user: " << *user_id;
-            is_notification_required = true;
-          }
+    ws->onClosed([this, user_id, peer_id]() {
+      HandleDisconnection(*user_id, *peer_id);
+    });
+  }
+
+  void HandleMessage(std::shared_ptr<rtc::WebSocket> ws, const std::string& msg,
+                                      UserId& user_id, PeerId& peer_id) {
+    try {
+      LOGD << "Received message: length=" << msg.length();
+      auto json = Json::parse(msg);
+
+      if (!ValidateMessage(ws, json, user_id)) {
+        LOGD << "Message validation failed";
+        return;
+      }
+
+      const auto& type = json["type"].get<std::string>();
+      LOGD << "Processing message type: " << type;
+
+      if (type == "publish") {
+        HandlePublish(ws, json, user_id);
+        // Update peer_id when a peer publishes
+        if (json.contains("peer_id")) {
+          peer_id = json["peer_id"];
+          LOGD << "Updated peer_id: " << peer_id;
+        }
+      } else if (type == "get_streamers") {
+        LOGD << "Processing get_streamers request for user_id: " << user_id;
+        SendStreamers(ws, user_id);
+      } else {
+        LOGD << "Relaying message from user_id: " << user_id << ", peer_id: " << peer_id;
+        RelayMessage(json, user_id, peer_id);
+      }
+    } catch (const std::exception& e) {
+      LOGE << "Message handling error: " << e.what();
+      SendError(ws, "invalid_message", e.what());
+    }
+  }
+
+  void HandleDisconnection(const UserId& user_id, const PeerId& peer_id) {
+    LOGD << "WebSocket connection closed for user_id: " << user_id << ", peer_id: " << peer_id;
+    bool is_notification_required = false;
+
+    {
+      std::lock_guard<std::mutex> lock(peersMutex_);
+      if (!user_id.empty() && !peer_id.empty()) {
+        auto ere = peers_[user_id].erase(peer_id);
+        if (ere != 0U) {
+          LOGD << "Removed peer: " << peer_id << " for user: " << user_id;
+          is_notification_required = true;
         }
       }
-      if (is_notification_required) {
-        LOGD << "Notifying peer disconnection: " << *peer_id;
-        NotifyPeerDisconnected(*user_id, *peer_id);
-        BroadcastStreamers(*user_id);
-      }
-    });
+    }
+
+    if (is_notification_required) {
+      LOGD << "Notifying peer disconnection: " << peer_id;
+      NotifyPeerDisconnected(user_id, peer_id);
+      BroadcastStreamers(user_id);
+    }
   }
 
   void SendStreamers(const std::shared_ptr<rtc::WebSocket>& ws, const UserId& user_id) {
