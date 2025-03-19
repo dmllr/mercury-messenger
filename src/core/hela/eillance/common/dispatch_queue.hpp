@@ -56,6 +56,10 @@ public:
 
   /// Dispatch an operation immediately.
   void Dispatch(const FpT& op) {
+    if (!op) {
+      return;
+    }
+
     auto now = std::chrono::steady_clock::now();
     {
       std::unique_lock<std::mutex> lock(lockMutex_);
@@ -66,6 +70,10 @@ public:
 
   /// Dispatch an operation immediately.
   void Dispatch(FpT&& op) {
+    if (!op) {
+      return;
+    }
+
     auto now = std::chrono::steady_clock::now();
     {
       std::unique_lock<std::mutex> lock(lockMutex_);
@@ -75,11 +83,15 @@ public:
   }
 
   /// Dispatch an operation to be executed after a delay.
-  void DispatchAfter(std::chrono::milliseconds delay, FpT op) {
+  void DispatchAfter(std::chrono::milliseconds delay, const FpT&& op) {
+    if (!op) {
+      return;
+    }
+
     auto scheduled_time = std::chrono::steady_clock::now() + delay;
     {
       std::unique_lock<std::mutex> lock(lockMutex_);
-      queue_.push(ScheduledTask{scheduled_time, std::move(op)});
+      queue_.push(ScheduledTask{scheduled_time, op});
     }
     condition_.notify_one();
   }
@@ -100,7 +112,6 @@ private:
   std::string name_;
   std::mutex lockMutex_;
   std::vector<std::thread> threads_;
-  /// Priority queue to store scheduled tasks
   std::priority_queue<ScheduledTask, std::vector<ScheduledTask>, CompareScheduledTask> queue_;
   std::condition_variable condition_;
   bool quit_ = false;
@@ -108,25 +119,55 @@ private:
   /// Thread handler that waits until tasks are ready to execute.
   void DispatchThreadHandler() {
     std::unique_lock<std::mutex> lock(lockMutex_);
+
     while (!quit_) {
+      // Wait for work if queue is empty
       if (queue_.empty()) {
         // Wait until a task is added or the queue is shutting down.
         condition_.wait(lock, [this] { return quit_ || !queue_.empty(); });
-      } else {
-        auto now = std::chrono::steady_clock::now();
-        auto next_task_time = queue_.top().executeTime;
-        if (next_task_time > now) {
-          // Wait until the next task's scheduled time or until a new task is added.
-          condition_.wait_until(lock, next_task_time);
-        } else {
-          // Task is due: pop it and execute outside the lock.
-          auto scheduled_task = queue_.top();
-          queue_.pop();
-          lock.unlock();
-          scheduled_task.task();
-          lock.lock();
-        }
+        continue;
       }
+
+      // Check if the task is ready to execute
+      auto now = std::chrono::steady_clock::now();
+      const auto& next_task = queue_.top();
+
+      // If task is scheduled for the future, wait until it's time
+      if (next_task.executeTime > now) {
+        condition_.wait_until(lock, next_task.executeTime, [this, &next_task, &now] {
+          if (quit_) {
+            return true;
+          }
+          if (queue_.empty()) {
+            return false;
+          }
+
+          // Check if the top task has changed or is now due
+          now = std::chrono::steady_clock::now();
+          return queue_.top().executeTime != next_task.executeTime || queue_.top().executeTime <= now;
+        });
+
+        continue;
+      }
+
+      // Extract the task making a copy (important)
+      auto task = queue_.top().task;
+      queue_.pop();
+
+      // Release the lock before executing the task
+      lock.unlock();
+
+      // Execute the task (with exception handling)
+      try {
+        if (task) {
+          task();
+        }
+      } catch (...) { // NOLINT(*-empty-catch)
+        // Prevent exceptions from killing the thread
+      }
+
+      // Re-acquire the lock to continue processing
+      lock.lock();
     }
   }
 };
