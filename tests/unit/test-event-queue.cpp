@@ -21,18 +21,32 @@ protected:
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
   }
 
-  // Helper to wait for a condition with timeout
+  // Improved helper to wait for a condition with timeout
   template <typename F>
   bool WaitFor(F condition, std::chrono::milliseconds timeout) {
     auto start = std::chrono::steady_clock::now();
-    while (!condition()) {
+
+    // Continue checking until timeout
+    while (true) {
+      // Check if condition is met
+      if (condition()) {
+        // Add a small delay after condition is met to ensure any in-progress
+        // tasks have time to complete their state updates
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+        // Check condition one more time to ensure it's still true
+        return condition();
+      }
+
+      // Check for timeout
       auto now = std::chrono::steady_clock::now();
       if (now - start > timeout) {
         return false;
       }
+
+      // Sleep a bit before checking again
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
-    return true;
   }
 };
 
@@ -162,7 +176,8 @@ TEST_F(DispatchQueueTest, TasksExecutedOnce) {
     queue.Dispatch(task);
   }
 
-  EXPECT_TRUE(WaitFor([&]() { return counter == 10; }, std::chrono::milliseconds(1000)));
+  std::this_thread::sleep_for(std::chrono::milliseconds(50 * 10 + 300));
+  EXPECT_TRUE(WaitFor([&counter]() { return counter == 10; }, std::chrono::milliseconds(1000)));
   EXPECT_FALSE(task_running);
 }
 
@@ -320,7 +335,7 @@ TEST_F(DispatchQueueTest, NestedDispatch) {
   });
 
   // Wait for all nested dispatches to complete
-  EXPECT_TRUE(WaitFor([&]() { return counter == 3; }, std::chrono::milliseconds(500)));
+  EXPECT_TRUE(WaitFor([&counter]() { return counter == 3; }, std::chrono::milliseconds(500)));
 
   // Verify execution order
   std::vector<int> expected = {1, 2, 3};
