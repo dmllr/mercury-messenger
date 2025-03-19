@@ -223,8 +223,10 @@ fun StreamScreen(
     status?.let { (source, statusCode) ->
       if (source == EventSource.PeerConnectionState) {
         peerConnectionState = ServiceConnectionState.fromInt(statusCode)
+        statusText += "${source.name}: ${peerConnectionState.getResourceString(context)}\n"
+      } else {
+        statusText += "${source.name}: $statusCode\n"
       }
-      statusText += "${source.name}: ${peerConnectionState.getResourceString(context)}\n"
     }
   }
 
