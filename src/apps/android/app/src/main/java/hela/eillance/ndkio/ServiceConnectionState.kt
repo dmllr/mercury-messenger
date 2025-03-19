@@ -17,7 +17,7 @@ enum class ServiceConnectionState(val value: Int) {
       New to R.string.service_connection_state_new,
       Establishing to R.string.service_connection_state_establishing,
       Online to R.string.service_connection_state_online,
-      Disconnected to R.string.service_connection_state_online,
+      Disconnected to R.string.service_connection_state_disconnected,
       Failure to R.string.service_connection_state_failure,
       Closed to R.string.service_connection_state_closed,
     )
