@@ -28,7 +28,8 @@ void SignalHandler(int signum) {
 
 int main(int argc, char* argv[]) {
   auto ws_config = rtc::WebSocketConfiguration{
-      .disableTlsVerification = true
+      .disableTlsVerification = true,
+      .pingInterval = std::chrono::milliseconds(1000),
   };
 
   auto ws_ = std::make_unique<rtc::WebSocket>(ws_config);
