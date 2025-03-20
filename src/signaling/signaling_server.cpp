@@ -344,10 +344,9 @@ int main(int argc, char* argv[]) {
   if (config.keyPemFile.has_value()) {
     LOGD << "SSL key file: " << *config.keyPemFile;
   }
-  // temporary until mbedtls double lock issue is resolved
-  //  if (config.certificatePemFile.has_value() && config.keyPemFile.has_value()) {
-  //    config.enableTls = true;
-  //  }
+  if (config.certificatePemFile.has_value() && config.keyPemFile.has_value()) {
+    config.enableTls = true;
+  }
 
   // Register signal handler
   std::signal(SIGINT, SignalHandler);
