@@ -15,3 +15,4 @@ add_library(OpenSSL::Crypto ALIAS crypto)
 
 target_compile_definitions(ssl PUBLIC WIN32_LEAN_AND_MEAN)
 target_compile_definitions(crypto PUBLIC WIN32_LEAN_AND_MEAN)
+include_directories("${boringssl_path}/include")
