@@ -101,14 +101,11 @@ private:
           LOGD << "Updated peer_id: " << peer_id;
         }
       } else if (type == "get_streamers") {
-        LOGD << "Processing get_streamers request for user_id: " << user_id;
         SendStreamers(ws, user_id);
       } else {
-        LOGD << "Relaying message from user_id: " << user_id << ", peer_id: " << peer_id;
         RelayMessage(json, user_id, peer_id);
       }
     } catch (const std::exception& e) {
-      LOGE << "Message handling error: " << e.what();
       SendError(ws, "invalid_message", e.what());
     }
   }
@@ -136,7 +133,7 @@ private:
   }
 
   void SendStreamers(const std::shared_ptr<rtc::WebSocket>& ws, const UserId& user_id) {
-    LOGD << "Building streamers list for user_id: " << user_id;
+    LOGD << "Processing get_streamers request for user_id: " << user_id;
     Json response;
     response["type"] = "streamers";
     response["peers"] = Json::array();
@@ -188,10 +185,8 @@ private:
   }
 
   bool ValidateMessage(std::shared_ptr<rtc::WebSocket> ws, const Json& msg, UserId& user_id) {
-    LOGD << "Validating message token";
     auto token = msg.value("token", "");
     if (token.empty()) {
-      LOGD << "Token validation failed: missing token";
       SendError(ws, "missing_token", "Token required");
       return false;
     }
@@ -199,17 +194,14 @@ private:
     if (user_id.empty()) {
       auto uid = verifier_->VerifyToken(token);
       if (!uid) {
-        LOGD << "Token verification failed for new user";
         SendError(ws, "invalid_token", "Token verification failed");
         return false;
       }
       user_id = *uid;
       LOGD << "User authenticated: " << user_id;
     } else {
-      LOGD << "Verifying token for existing user: " << user_id;
       auto uid = verifier_->VerifyToken(token);
       if (!uid || *uid != user_id) {
-        LOGD << "Token user mismatch: expected=" << user_id;
         SendError(ws, "user_mismatch", "Token user mismatch");
         return false;
       }
@@ -243,7 +235,6 @@ private:
         }
       }
 
-      // Add new peer
       LOGD << "Adding new peer to user: " << user_id;
       user_peers[peer_id] = std::move(new_peer);
     }
@@ -299,12 +290,10 @@ private:
       }
 
       auto target_type = (peer_it->second.type == PeerType::streamer) ? PeerType::viewer : PeerType::streamer;
-      LOGD << "Target type for notifications: " << (target_type == PeerType::streamer ? "streamer" : "viewer");
 
       // Collect WebSockets of peers of the opposite type
       for (const auto& [id, peer] : user_peers) {
         if (peer.type == target_type) {
-          LOGD << "Adding target to notification list: " << id;
           targets.push_back(peer.ws);
         }
       }
@@ -317,7 +306,7 @@ private:
   }
 
   static void SendError(std::shared_ptr<rtc::WebSocket> ws, const std::string& error, const std::string& message) {
-    LOGD << "Sending error: " << error << " - " << message;
+    LOGD << "Sending error response: " << error << " - " << message;
     Json response = {
         {"type", "error"},
         {"error", error},
@@ -341,15 +330,12 @@ int main(int argc, char* argv[]) {
   auto config = rtc::WebSocketServer::Configuration();
   config.port = default_port;
 
-  LOGD << "Parsing command line arguments";
   ArgsParser args(argc, argv);
   const auto& port_arg = args.GetInt("--port");
   if (port_arg.has_value()) {
-    LOGD << "Custom port requested: " << port_arg.value();
     config.port = port_arg.value();
   }
 
-  LOGD << "Checking for SSL certificate files";
   config.certificatePemFile = args.Get("--ssl-cert");
   config.keyPemFile = args.Get("--ssl-cert-key");
   if (config.certificatePemFile.has_value()) {
@@ -364,10 +350,8 @@ int main(int argc, char* argv[]) {
   //  }
 
   // Register signal handler
-  LOGD << "Registering signal handler";
   std::signal(SIGINT, SignalHandler);
 
-  LOGD << "Creating SignalingServer instance";
   auto server = SignalingServer(config);
 
   LOGI << "Signaling server running on port " << config.port;
