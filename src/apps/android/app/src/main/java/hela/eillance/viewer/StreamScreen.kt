@@ -15,7 +15,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -51,6 +53,10 @@ import hela.eillance.camera.R
 import hela.eillance.ndkio.Config
 import hela.eillance.ndkio.EventSource
 import hela.eillance.ndkio.Peer
+import hela.eillance.ndkio.PeerStateIce
+import hela.eillance.ndkio.PeerStateIceGathering
+import hela.eillance.ndkio.PeerStateLink
+import hela.eillance.ndkio.PeerStateSignaling
 import hela.eillance.ndkio.Profile
 import hela.eillance.ndkio.ServiceConnectionState
 import kotlinx.coroutines.delay
@@ -76,6 +82,10 @@ fun StreamScreen(
   var peerConnectionState by remember { mutableStateOf(ServiceConnectionState.Unknown) }
   var deviceProfile by remember { mutableStateOf(peer.profile) }
   var statusText by remember { mutableStateOf("") }
+  val statusScrollState = rememberScrollState()
+
+  // Flag to control status visibility
+  var showStatus by remember { mutableStateOf(true) }
 
   // Camera selection state
   var cameraOptions by remember { mutableStateOf(listOf(defaultCameraLabel)) }
@@ -130,6 +140,17 @@ fun StreamScreen(
       }
     }
     return config
+  }
+
+  // Decode status code to human-readable string based on the source
+  fun decodeStatusCode(source: EventSource, statusCode: Int): String {
+    return when (source) {
+      EventSource.PeerConnectionState -> PeerStateLink.fromInt(statusCode).getResourceString(context)
+      EventSource.IceState -> PeerStateIce.fromInt(statusCode).getResourceString(context)
+      EventSource.GatheringState -> PeerStateIceGathering.fromInt(statusCode).getResourceString(context)
+      EventSource.SignalingState -> PeerStateSignaling.fromInt(statusCode).getResourceString(context)
+      else -> ""
+    }
   }
 
   // Send configuration request
@@ -240,14 +261,22 @@ fun StreamScreen(
     currentScale = scale
   }
 
-  // Handle status updates
+  // Handle status updates with improved readability
   LaunchedEffect(status) {
     status?.let { (source, statusCode) ->
+      val decodedStatus = decodeStatusCode(source, statusCode)
+
+      // Special handling for PeerConnectionState
       if (source == EventSource.PeerConnectionState) {
         peerConnectionState = ServiceConnectionState.fromInt(statusCode)
         statusText += "${source.name}: ${peerConnectionState.getResourceString(context)}\n"
+
+        // Hide status when connection is Online, show otherwise
+        showStatus = peerConnectionState != ServiceConnectionState.Online
       } else if (source != EventSource.Ping) { // Skip ping events as they're handled separately
-        statusText += "${source.name}: $statusCode\n"
+        if (decodedStatus.isNotEmpty()) {
+          statusText += "${source.name}: $decodedStatus\n"
+        }
       }
     }
   }
@@ -408,16 +437,22 @@ fun StreamScreen(
           .align(Alignment.TopEnd)
       )
 
-      // Status text in center
-      if (statusText.isNotEmpty()) {
-        Text(
-          text = statusText,
-          color = Color.White,
+      // Scrollable status text in center, only visible when not connected
+      if (statusText.isNotEmpty() && showStatus) {
+        Box(
           modifier = Modifier
             .background(Color.Black.copy(alpha = 0.5f), shape = RoundedCornerShape(4.dp))
             .padding(8.dp)
+            .heightIn(max = 200.dp)
             .align(Alignment.Center)
-        )
+        ) {
+          Text(
+            text = statusText,
+            color = Color.White,
+            modifier = Modifier
+              .verticalScroll(statusScrollState)
+          )
+        }
       }
 
       // Control elements at bottom
