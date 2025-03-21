@@ -54,6 +54,11 @@ public:
     return instance;
   }
 
+  static DispatchQueue& CodecThread() {
+    static DispatchQueue instance("Codec", 1);
+    return instance;
+  }
+
   /// Dispatch an operation immediately.
   void Dispatch(const FpT& op) {
     if (!op) {
@@ -94,6 +99,11 @@ public:
       queue_.push(ScheduledTask{scheduled_time, op});
     }
     condition_.notify_one();
+  }
+
+  /// Get the size of the queue.
+  auto Size() -> std::size_t {
+    return queue_.size();
   }
 
   /// Remove any pending tasks.

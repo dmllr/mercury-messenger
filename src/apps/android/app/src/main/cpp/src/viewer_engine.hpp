@@ -102,8 +102,15 @@ public:
       UpdateProfile(peer_id, profile);
     });
     rtc_viewer_.SetFrameReceivedCallback([this](const rtc::binary& frame) {
-      h264_parser_.ProcessFrame(frame);
-      HandleInputBuffer(frame);
+      auto& ctr = DispatchQueue::CodecThread();
+      if (ctr.Size() > 10) {
+        LOGW << "Decoding queue is full, dropping frames.";
+        ctr.RemovePending();
+      }
+      DispatchQueue::CodecThread().Dispatch([this, frame]() {
+        h264_parser_.ProcessFrame(frame);
+        HandleInputBuffer(frame);
+      });
     });
     configure_subscriber_id_ = EventQueue::Instance().Subscribe<VideoConfig>(
         [this](VideoConfig config) { ConfigureSurfaceResolution(config); });
@@ -236,27 +243,34 @@ private:
       return;
     }
 
-    constexpr auto timeout = 10000ULL;
+    constexpr auto timeout = 5000ULL;
     auto buf_index = AMediaCodec_dequeueInputBuffer(media_codec_, timeout);
-    if (buf_index < 0) {
-      LOGW << "No available input buffer.";
-      HandleOutputBuffer();
+    if (buf_index >= 0) {
+      size_t buf_size = 0;
+      auto *buf = AMediaCodec_getInputBuffer(media_codec_, buf_index, &buf_size);
+      if (buf != nullptr) {
+        const auto copy_size = std::min(frameBuffer.size(), buf_size);
+        std::memcpy(buf, frameBuffer.data(), copy_size);
+        AMediaCodec_queueInputBuffer(media_codec_, buf_index, 0, copy_size, 0, 0);
+      }
+    }
+
+    ProcessAllOutputBuffers();
+  }
+
+  /// @brief Process all available output buffers.
+  void ProcessAllOutputBuffers() {
+    if (!is_codec_configured_ || media_codec_ == nullptr) {
       return;
     }
 
-    size_t buf_size = 0;
-    auto *buf = AMediaCodec_getInputBuffer(media_codec_, buf_index, &buf_size);
-    if (buf == nullptr) {
-      LOGW << "Failed to get input buffer.";
-      return;
+    AMediaCodecBufferInfo info;
+    int output_buffer_index;
+
+    // Process all available output buffers
+    while ((output_buffer_index = AMediaCodec_dequeueOutputBuffer(media_codec_, &info, 0)) >= 0) {
+      AMediaCodec_releaseOutputBuffer(media_codec_, output_buffer_index, true);
     }
-
-    const auto copy_size = std::min(frameBuffer.size(), buf_size);
-    std::memcpy(buf, frameBuffer.data(), copy_size);
-    AMediaCodec_queueInputBuffer(media_codec_, buf_index, 0, copy_size, 0, 0);
-
-    // Process output buffers immediately after input
-    HandleOutputBuffer();
   }
 
   /// @brief Initializes the H.264 parser and sets up callbacks.
