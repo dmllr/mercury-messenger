@@ -92,7 +92,7 @@ inline auto GetDeviceProfileAsJson() -> nlohmann::json {
   auto cameras_json = Json::array();
 
   for (const auto& camera: cameras) {
-    auto camera_json{Json()};
+    Json camera_json{};
     camera_json["id"] = camera.first;
     camera_json["name"] = camera.second;
 
@@ -102,7 +102,7 @@ inline auto GetDeviceProfileAsJson() -> nlohmann::json {
     auto last = std::unique(resolutions.begin(), resolutions.end());
     resolutions.erase(last, resolutions.end());
 
-    auto resolutions_json{Json::array()};
+    Json resolutions_json = Json::array();
     for (const auto& res: resolutions) {
       resolutions_json.push_back({{"width", res.first}, {"height", res.second}});
     }

@@ -269,7 +269,8 @@ private:
   }
 
   static auto ParseDeviceProfile(Json jprofile) -> std::vector<Device::Camera> {
-    auto profile = std::vector<Device::Camera>{};
+    Device::Profile profile;
+    profile.reserve(jprofile.size());
     for (const auto& cam_item : jprofile) {
       Device::Camera camera;
       camera.id = cam_item.at("id").get<std::string>();
