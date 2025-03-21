@@ -102,9 +102,8 @@ android {
         resources.excludes.add("META-INF/sisu/*")
         resources.excludes.add("licenses/*")
     }
-    android.ndkVersion '27.0.11718014'
     namespace 'hela.eillance.camera'
-    ndkVersion '28.0.12916984'
+    ndkVersion '29.0.13113456 rc1'
     dependenciesInfo {
         includeInApk false
         includeInBundle false
@@ -113,14 +112,14 @@ android {
 
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
-    implementation 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:2.1.10'
+    implementation 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:2.1.20'
     implementation 'com.google.android.material:material:1.12.0'
     implementation 'androidx.appcompat:appcompat:1.7.0'
     implementation 'androidx.core:core-ktx:1.15.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.2.1'
     implementation 'androidx.preference:preference-ktx:1.2.1'
 
-    implementation 'com.firebaseui:firebase-ui-auth:8.0.2'
+    implementation 'com.firebaseui:firebase-ui-auth:9.0.0'
 
     implementation 'org.apache.maven.plugins:maven-compiler-plugin:3.14.0'
 
@@ -128,20 +127,20 @@ dependencies {
     implementation 'com.android.ndk.thirdparty:googletest:1.11.0-beta-1'
     implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.8.7'
     implementation 'androidx.activity:activity-compose:1.10.1'
-    implementation platform('androidx.compose:compose-bom:2025.02.00')
+    implementation platform('androidx.compose:compose-bom:2025.03.00')
     implementation 'androidx.compose.ui:ui'
     implementation 'androidx.compose.ui:ui-graphics'
     implementation 'androidx.compose.ui:ui-tooling-preview'
     implementation 'androidx.compose.material3:material3'
-    implementation 'androidx.navigation:navigation-runtime-ktx:2.8.8'
-    implementation 'androidx.navigation:navigation-compose:2.8.8'
+    implementation 'androidx.navigation:navigation-runtime-ktx:2.8.9'
+    implementation 'androidx.navigation:navigation-compose:2.8.9'
     implementation 'androidx.compose.runtime:runtime-livedata:1.7.8'
     implementation "androidx.constraintlayout:constraintlayout-compose:1.1.1"
 
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.2.1'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.6.1'
-    androidTestImplementation platform('androidx.compose:compose-bom:2025.02.00')
+    androidTestImplementation platform('androidx.compose:compose-bom:2025.03.00')
     androidTestImplementation 'androidx.compose.ui:ui-test-junit4'
     debugImplementation 'androidx.compose.ui:ui-tooling'
     debugImplementation 'androidx.compose.ui:ui-test-manifest'
