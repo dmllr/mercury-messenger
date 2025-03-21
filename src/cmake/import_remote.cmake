@@ -225,6 +225,7 @@ function (import_remote input)
 				VAR dest
 		)
 		set("${remote_alias}_path" "${dest}" CACHE STRING "" FORCE)
+		set("${remote_alias}_binary_path" "${import_remote_bin_path}/${remote_key}" CACHE STRING "" FORCE)
 		set(cmake_path "${OPTS_CMAKE}")
 		if ("${cmake_path}" STREQUAL "")
 			set(cmake_path "${import_remote_default_cmake_root}")

@@ -10,8 +10,17 @@ set(CPR_BUILD_TESTS OFF CACHE INTERNAL "" FORCE)
 if (${ENABLE_MBEDTLS})
   set(CPR_FORCE_MBEDTLS_BACKEND ON CACHE INTERNAL "" FORCE)
 endif()
+if (${ENABLE_OPENSSL})
+  set(CPR_FORCE_OPENSSL_BACKEND ON CACHE INTERNAL "" FORCE)
+endif()
 
 if(WIN32)
   add_definitions(-DNOMINMAX)
 endif()
-import_remote("https://github.com/libcpr/cpr.git" TAG "1.11.2" DST "${CMAKE_SOURCE_DIR}/_imported" ALIAS cpr)
+
+import_remote(
+  "https://github.com/libcpr/cpr.git"
+  TAG "1.11.2"
+  DST "${CMAKE_SOURCE_DIR}/_imported"
+  ALIAS cpr
+)

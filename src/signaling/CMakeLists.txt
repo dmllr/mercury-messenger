@@ -11,6 +11,8 @@ target_compile_features(hela-eillance-signaling PRIVATE cxx_std_20)
 target_link_libraries(hela-eillance-signaling PUBLIC
   datachannel-static
   plog
+  ssl
+  crypto
   nlohmann_json
   cpr
 )
