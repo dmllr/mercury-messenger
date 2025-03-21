@@ -52,4 +52,5 @@ class ViewerViewModel : ViewModel() {
     fun updateDeviceProfile(profile: Profile) {
         _deviceProfile.postValue(profile)
     }
+
 }
