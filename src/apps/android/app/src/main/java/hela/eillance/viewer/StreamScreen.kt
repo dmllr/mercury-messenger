@@ -31,6 +31,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -90,6 +91,7 @@ fun StreamScreen(
   var localRotation by remember { mutableIntStateOf(0) }
 
   var textureView by remember { mutableStateOf<TextureView?>(null) }
+  var currentScale by remember { mutableFloatStateOf(1f) }
 
   // Fullscreen state - starts as true by default
   var isFullscreen by remember { mutableStateOf(true) }
@@ -138,7 +140,7 @@ fun StreamScreen(
   }
 
   // Calculate transform matrix based on device and video orientations
-  fun calculateTransformMatrix(): Matrix {
+  fun calculateTransformMatrix(scale: Float = 1f): Matrix {
     // Incoming video default is landscape, top to left, this means rotation 0
     //    rotation: 0
     //    /---------------------\
@@ -214,6 +216,11 @@ fun StreamScreen(
       }
     }
 
+    // Apply user scale if greater than 1
+    if (scale > 1f) {
+      matrix.postScale(scale, scale, pivotX, pivotY)
+    }
+
     return matrix
   }
 
@@ -221,6 +228,16 @@ fun StreamScreen(
   fun rotateVideo() {
     localRotation = (localRotation + 90) % 360
     textureView?.setTransform(calculateTransformMatrix())
+  }
+
+  val (scale, _, gestureModifier) = rememberTextureViewScaling(
+    textureView = textureView,
+    calculateBaseMatrix = { calculateTransformMatrix() }
+  )
+
+  // Update currentScale when scale changes
+  LaunchedEffect(scale) {
+    currentScale = scale
   }
 
   // Handle status updates
@@ -248,7 +265,7 @@ fun StreamScreen(
   // Handle resolution updates
   LaunchedEffect(streamInfo) {
     streamInfo?.let { (_, _, _) ->
-      textureView?.setTransform(calculateTransformMatrix())
+      textureView?.setTransform(calculateTransformMatrix(currentScale))
     }
   }
 
@@ -324,6 +341,7 @@ fun StreamScreen(
         }
         .background(Color.Black)
         .fillMaxSize()
+        .then(gestureModifier)
     )
 
     // Semi-transparent overlay for controls
@@ -345,6 +363,22 @@ fun StreamScreen(
         unfocusedTextColor = Color.White,
         focusedTextColor = Color.White
       )
+
+      // Add scale indicator when zoomed
+      if (currentScale > 1.01f) {
+        Text(
+          text = "${(currentScale * 100).toInt()}%",
+          color = Color.White,
+          modifier = Modifier
+            .padding(16.dp)
+            .background(
+              color = Color.Black.copy(alpha = 0.3f),
+              shape = RoundedCornerShape(4.dp)
+            )
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+            .align(Alignment.TopCenter)
+        )
+      }
 
       // Back button in top-left corner
       IconButton(
