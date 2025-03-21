@@ -20,6 +20,10 @@ class ViewerViewModel : ViewModel() {
     private val _streamInfo = MutableLiveData<Triple<Int, Int, Int>>() // width, height, rotation
     val streamInfo: LiveData<Triple<Int, Int, Int>> = _streamInfo
 
+    // Add a ping event LiveData
+    private val _pingEvent = MutableLiveData<Long>()
+    val pingEvent: LiveData<Long> = _pingEvent
+
     val streamWidth: Int
         get() = _streamInfo.value?.first ?: 0
     val streamHeight: Int
@@ -33,6 +37,11 @@ class ViewerViewModel : ViewModel() {
     fun updatePeerStatus(peerId: String, source: EventSource, status: Int) {
         if (selectedPeer?.id == peerId) {
             _peerStatus.postValue(Pair(source, status))
+
+            // Special handling for ping events to trigger UI updates
+            if (source == EventSource.Ping) {
+                _pingEvent.postValue(System.currentTimeMillis())
+            }
         }
     }
 

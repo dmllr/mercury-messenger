@@ -52,6 +52,7 @@ import hela.eillance.ndkio.EventSource
 import hela.eillance.ndkio.Peer
 import hela.eillance.ndkio.Profile
 import hela.eillance.ndkio.ServiceConnectionState
+import kotlinx.coroutines.delay
 
 private const val RESOLUTION_SEPARATOR = "×"
 
@@ -67,6 +68,7 @@ fun StreamScreen(
   val defaultCameraLabel = stringResource(R.string.viewer_StreamScreen_default_camera)
   val defaultResolutionsLabel = stringResource(R.string.viewer_StreamScreen_default_resolution)
   val status by viewModel.peerStatus.observeAsState()
+  val pingEvent by viewModel.pingEvent.observeAsState()
   val streamInfo by viewModel.streamInfo.observeAsState()
   val profile by viewModel.deviceProfile.observeAsState()
 
@@ -91,6 +93,9 @@ fun StreamScreen(
 
   // Fullscreen state - starts as true by default
   var isFullscreen by remember { mutableStateOf(true) }
+
+  // Ping indicator state
+  var pingColor by remember { mutableStateOf(Color.Transparent) }
 
   // Update camera options when profile changes
   fun updateCameraOptions(profile: Profile) {
@@ -224,9 +229,19 @@ fun StreamScreen(
       if (source == EventSource.PeerConnectionState) {
         peerConnectionState = ServiceConnectionState.fromInt(statusCode)
         statusText += "${source.name}: ${peerConnectionState.getResourceString(context)}\n"
-      } else {
+      } else if (source != EventSource.Ping) { // Skip ping events as they're handled separately
         statusText += "${source.name}: $statusCode\n"
       }
+    }
+  }
+
+  // Handle ping events with dedicated LiveData
+  LaunchedEffect(pingEvent) {
+    pingEvent?.let {
+      // Flash the ping indicator
+      pingColor = Color.Green
+      delay(333)
+      pingColor = Color.Transparent
     }
   }
 
@@ -348,6 +363,16 @@ fun StreamScreen(
           tint = Color.White
         )
       }
+
+      // Ping indicator in top-right corner
+      Text(
+        text = stringResource(id = R.string.led),
+        color = pingColor,
+        modifier = Modifier
+          .padding(16.dp)
+          .padding(horizontal = 8.dp, vertical = 4.dp)
+          .align(Alignment.TopEnd)
+      )
 
       // Status text in center
       if (statusText.isNotEmpty()) {

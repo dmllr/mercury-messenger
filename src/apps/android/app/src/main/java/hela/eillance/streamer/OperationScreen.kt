@@ -162,12 +162,12 @@ fun PeerItemCard(
 
   // ping indicator flash effect
   LaunchedEffect(lastPingTimestamp) {
-    if (lastPingTimestamp != null && lastPingTimestamp > lastProcessedTimestamp) {
-      lastProcessedTimestamp = lastPingTimestamp
+      if (lastPingTimestamp != null) {
+        lastProcessedTimestamp = lastPingTimestamp
+      }
       pingColor = Color.Green
       delay(333)
       pingColor = Color.Transparent
-    }
   }
 
   Card(
