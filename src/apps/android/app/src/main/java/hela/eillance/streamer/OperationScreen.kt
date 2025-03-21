@@ -44,6 +44,8 @@ fun OperationScreen(streamerService: StreamerService?) {
   val context = LocalContext.current
   var connectionState by remember { mutableStateOf(ServiceConnectionState.Unknown) }
   var peerConnections by remember { mutableStateOf<Map<String, Map<EventSource, Int>>>(emptyMap()) }
+  // Add a ping timestamp map to track when pings are received for each peer
+  var peerPingTimestamps by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }
 
   // Initialize state from service
   LaunchedEffect(streamerService) {
@@ -73,6 +75,13 @@ fun OperationScreen(streamerService: StreamerService?) {
               peerState[source] = state
               currentPeers[peerId] = peerState
               peerConnections = currentPeers
+
+              // record the timestamp for a Ping even
+              if (source == EventSource.Ping) {
+                val currentTimestamps = peerPingTimestamps.toMutableMap()
+                currentTimestamps[peerId] = System.currentTimeMillis()
+                peerPingTimestamps = currentTimestamps
+              }
             }
           }
         }
@@ -130,6 +139,7 @@ fun OperationScreen(streamerService: StreamerService?) {
         PeerItemCard(
           peerId = peerId,
           states = peerConnections[peerId] ?: emptyMap(),
+          lastPingTimestamp = peerPingTimestamps[peerId],
           modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 4.dp)
@@ -143,14 +153,17 @@ fun OperationScreen(streamerService: StreamerService?) {
 fun PeerItemCard(
   peerId: String,
   states: Map<EventSource, Int>,
+  lastPingTimestamp: Long?,
   modifier: Modifier = Modifier
 ) {
   val context = LocalContext.current
   var pingColor by remember { mutableStateOf(Color.Transparent) }
+  var lastProcessedTimestamp by remember { mutableStateOf(0L) }
 
-  // Handle ping indicator flash effect
-  LaunchedEffect(states[EventSource.Ping]) {
-    states[EventSource.Ping]?.let {
+  // ping indicator flash effect
+  LaunchedEffect(lastPingTimestamp) {
+    if (lastPingTimestamp != null && lastPingTimestamp > lastProcessedTimestamp) {
+      lastProcessedTimestamp = lastPingTimestamp
       pingColor = Color.Green
       delay(333)
       pingColor = Color.Transparent
