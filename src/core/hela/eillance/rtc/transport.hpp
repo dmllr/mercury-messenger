@@ -426,7 +426,7 @@ private:
     }
   };
 
-#if 0 // NOLINT(*-avoid-unconditional-preprocessor-if)
+#if 1 // NOLINT(*-avoid-unconditional-preprocessor-if)
   constexpr static auto signalingServerUrl = "wss://app.hela.me:8000";
 #else
 #if ANDROID
