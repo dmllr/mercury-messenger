@@ -58,7 +58,6 @@ class LauncherActivity : ComponentActivity() {
             .createSignInIntentBuilder()
             .setAvailableProviders(providers)
             .setLogo(R.drawable.ic_camera)
-            .setIsSmartLockEnabled(false)
             .build()
         signInLauncher.launch(signInIntent)
     }
