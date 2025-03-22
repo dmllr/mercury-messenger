@@ -48,7 +48,7 @@ class VideoEncoder {
     AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_HEIGHT, config_.height);
     AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_BIT_RATE, config_.bitrate);
     AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_FRAME_RATE, config_.frameRate);
-    AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_I_FRAME_INTERVAL, 30);
+    AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_I_FRAME_INTERVAL, 2);
     AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_COLOR_FORMAT, 0x7f000789);  // COLOR_FormatSurface
 
     auto rc = AMediaCodec_configure(codec, format, nullptr, nullptr, AMEDIACODEC_CONFIGURE_FLAG_ENCODE);
