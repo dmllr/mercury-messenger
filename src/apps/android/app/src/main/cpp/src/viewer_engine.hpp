@@ -102,13 +102,13 @@ public:
       UpdateProfile(peer_id, profile);
     });
     rtc_viewer_.SetFrameReceivedCallback([this](const rtc::binary& frame) {
+      h264_parser_.ProcessFrame(frame);
       auto& ctr = DispatchQueue::CodecThread();
       if (ctr.Size() > 10) {
         LOGW << "Decoding queue is full, dropping frames.";
         ctr.RemovePending();
       }
       DispatchQueue::CodecThread().Dispatch([this, frame]() {
-        h264_parser_.ProcessFrame(frame);
         HandleInputBuffer(frame);
       });
     });
@@ -267,9 +267,10 @@ private:
     AMediaCodecBufferInfo info;
     int output_buffer_index;
 
-    // Process all available output buffers
-    while ((output_buffer_index = AMediaCodec_dequeueOutputBuffer(media_codec_, &info, 0)) >= 0) {
-      AMediaCodec_releaseOutputBuffer(media_codec_, output_buffer_index, true);
+    // Use a timeout to avoid blocking
+    const int64_t timeoutUs = 5000; // 5ms
+    while ((output_buffer_index = AMediaCodec_dequeueOutputBuffer(media_codec_, &info, timeoutUs)) >= 0) {
+      AMediaCodec_releaseOutputBuffer(media_codec_, output_buffer_index, info.size > 0);
     }
   }
 
