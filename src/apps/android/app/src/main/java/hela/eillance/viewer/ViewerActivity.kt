@@ -6,6 +6,7 @@ import android.util.Log
 import android.view.Surface
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
@@ -63,6 +64,20 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
   // Track fullscreen mode state
   private var isFullscreen by mutableStateOf(false)
 
+    private val backPressedCallback = object : OnBackPressedCallback(true) {
+        override fun handleOnBackPressed() {
+            // First check if we're in fullscreen mode
+            if (isFullscreen) {
+                setFullscreenMode(false)
+            } else {
+                // If not in fullscreen, let the system handle the back press
+                isEnabled = false // Disable this callback temporarily
+                onBackPressedDispatcher.onBackPressed() // Trigger the default back press
+                isEnabled = true
+            }
+        }
+    }
+
   companion object {
     init {
       System.loadLibrary("lib-viewer-service-bridge")
@@ -72,6 +87,8 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
+
+    onBackPressedDispatcher.addCallback(this, backPressedCallback)
 
     initEngine(this)
 
@@ -289,15 +306,6 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
     // Exit fullscreen mode when activity is paused
     if (isFullscreen) {
       setFullscreenMode(false)
-    }
-  }
-
-  override fun onBackPressed() {
-    // First check if we're in fullscreen mode
-    if (isFullscreen) {
-      setFullscreenMode(false)
-    } else {
-      super.onBackPressed()
     }
   }
 
