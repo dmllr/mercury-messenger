@@ -35,7 +35,7 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import hela.eillance.Tune
 import hela.eillance.camera.R
 import hela.eillance.ndkio.EventSource
-import hela.eillance.ndkio.PeerStateLink
+import hela.eillance.ndkio.PeerConnectionState
 import hela.eillance.ndkio.ServiceConnectionState
 import kotlinx.coroutines.delay
 
@@ -196,7 +196,7 @@ fun PeerItemCard(
       // Peer connection state
       states[EventSource.PeerConnectionState]?.let { stateValue ->
         Text(
-          text = PeerStateLink.fromInt(stateValue).getResourceString(context),
+          text = PeerConnectionState.fromInt(stateValue).getResourceString(context),
           modifier = Modifier.padding(start = 4.dp)
         )
       }

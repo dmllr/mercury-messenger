@@ -53,12 +53,11 @@ import hela.eillance.camera.R
 import hela.eillance.ndkio.Config
 import hela.eillance.ndkio.EventSource
 import hela.eillance.ndkio.Peer
+import hela.eillance.ndkio.PeerConnectionState
 import hela.eillance.ndkio.PeerStateIce
 import hela.eillance.ndkio.PeerStateIceGathering
-import hela.eillance.ndkio.PeerStateLink
 import hela.eillance.ndkio.PeerStateSignaling
 import hela.eillance.ndkio.Profile
-import hela.eillance.ndkio.ServiceConnectionState
 import kotlinx.coroutines.delay
 
 private const val RESOLUTION_SEPARATOR = "×"
@@ -79,7 +78,7 @@ fun StreamScreen(
   val streamInfo by viewModel.streamInfo.observeAsState()
   val profile by viewModel.deviceProfile.observeAsState()
 
-  var peerConnectionState by remember { mutableStateOf(ServiceConnectionState.Unknown) }
+  var peerConnectionState by remember { mutableStateOf(PeerConnectionState.Unknown) }
   var deviceProfile by remember { mutableStateOf(peer.profile) }
   var statusText by remember { mutableStateOf("") }
   val statusScrollState = rememberScrollState()
@@ -145,7 +144,7 @@ fun StreamScreen(
   // Decode status code to human-readable string based on the source
   fun decodeStatusCode(source: EventSource, statusCode: Int): String {
     return when (source) {
-      EventSource.PeerConnectionState -> PeerStateLink.fromInt(statusCode).getResourceString(context)
+      EventSource.PeerConnectionState -> PeerConnectionState.fromInt(statusCode).getResourceString(context)
       EventSource.IceState -> PeerStateIce.fromInt(statusCode).getResourceString(context)
       EventSource.GatheringState -> PeerStateIceGathering.fromInt(statusCode).getResourceString(context)
       EventSource.SignalingState -> PeerStateSignaling.fromInt(statusCode).getResourceString(context)
@@ -155,7 +154,7 @@ fun StreamScreen(
 
   // Send configuration request
   fun sendConfigurationRequest() {
-    if (peerConnectionState == ServiceConnectionState.Online) {
+    if (peerConnectionState == PeerConnectionState.Connected) {
       (context as? ViewerActivity)?.sendConfigurationRequest(peer.id, composeConfigurationMessage())
     }
   }
@@ -268,11 +267,11 @@ fun StreamScreen(
 
       // Special handling for PeerConnectionState
       if (source == EventSource.PeerConnectionState) {
-        peerConnectionState = ServiceConnectionState.fromInt(statusCode)
+        peerConnectionState = PeerConnectionState.fromInt(statusCode)
         statusText += "${source.name}: ${peerConnectionState.getResourceString(context)}\n"
 
         // Hide status when connection is Online, show otherwise
-        showStatus = peerConnectionState != ServiceConnectionState.Online
+        showStatus = peerConnectionState != PeerConnectionState.Connected
       } else if (source != EventSource.Ping) { // Skip ping events as they're handled separately
         if (decodedStatus.isNotEmpty()) {
           statusText += "${source.name}: $decodedStatus\n"
