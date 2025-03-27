@@ -9,21 +9,20 @@ import androidx.lifecycle.ViewModel
 import hela.eillance.ndkio.EventSource
 import hela.eillance.ndkio.Peer
 import hela.eillance.ndkio.Profile
+import hela.eillance.ndkio.ServiceConnectionState
 
 class ViewerViewModel : ViewModel() {
     var peers by mutableStateOf(listOf<Peer>())
     var selectedPeer by mutableStateOf<Peer?>(null)
+
+    private val _connectionStatus = MutableLiveData<Int>(ServiceConnectionState.Unknown.ordinal)
+    val connectionStatus: LiveData<Int> = _connectionStatus
 
     private val _peerStatus = MutableLiveData<Pair<EventSource, Int>>()
     val peerStatus: LiveData<Pair<EventSource, Int>> = _peerStatus
 
     private val _streamInfo = MutableLiveData<Triple<Int, Int, Int>>() // width, height, rotation
     val streamInfo: LiveData<Triple<Int, Int, Int>> = _streamInfo
-
-    // Add a ping event LiveData
-    private val _pingEvent = MutableLiveData<Long>()
-    val pingEvent: LiveData<Long> = _pingEvent
-
     val streamWidth: Int
         get() = _streamInfo.value?.first ?: 0
     val streamHeight: Int
@@ -31,11 +30,20 @@ class ViewerViewModel : ViewModel() {
     val streamRotation: Int
         get() = _streamInfo.value?.third ?: 0
 
+    // Add a ping event LiveData
+    private val _pingEvent = MutableLiveData<Long>()
+    val pingEvent: LiveData<Long> = _pingEvent
+
     private val _deviceProfile = MutableLiveData<Profile>()
     val deviceProfile: LiveData<Profile> = _deviceProfile
 
     fun updatePeerStatus(peerId: String, source: EventSource, status: Int) {
-        if (selectedPeer?.id == peerId) {
+        if (source == EventSource.System) {
+            _connectionStatus.postValue(status)
+        }
+
+        // For other sources, only update if it's the selected peer
+        else if (selectedPeer?.id == peerId) {
             _peerStatus.postValue(Pair(source, status))
 
             // Special handling for ping events to trigger UI updates
@@ -52,5 +60,4 @@ class ViewerViewModel : ViewModel() {
     fun updateDeviceProfile(profile: Profile) {
         _deviceProfile.postValue(profile)
     }
-
 }
