@@ -100,6 +100,8 @@ public:
         .pingInterval = std::chrono::milliseconds(1000),
     };
 
+    ReportServiceConnectionState(ServiceConnectionState::establishing);
+
     ws_ = std::make_unique<rtc::WebSocket>(ws_config);
     ws_->onOpen([this]() {
       OnWebSocketOpen(); });
@@ -144,7 +146,6 @@ public:
       }
       peer->peer_connection_->close();
     }
-    ReportServiceConnectionState(ServiceConnectionState::disconnected);
   }
 
   void Terminate() {

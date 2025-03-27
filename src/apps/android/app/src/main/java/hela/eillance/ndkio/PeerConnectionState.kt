@@ -3,7 +3,7 @@ package hela.eillance.ndkio
 import android.content.Context
 import hela.eillance.camera.R
 
-enum class PeerStateLink(val value: Int) {
+enum class PeerConnectionState(val value: Int) {
   New(0),
   Connecting(1),
   Connected(2),
