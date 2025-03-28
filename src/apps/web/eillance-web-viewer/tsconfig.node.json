@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "composite": true,
+    "skipLibCheck": true,
+    "module": "ESNext",
+    "moduleResolution": "bundler", // Or "NodeNext" / "Node16"
+    "allowSyntheticDefaultImports": true,
+    "strict": true,
+    "declaration": true,           // Generate .d.ts files
+    "emitDeclarationOnly": true,   // ONLY generate .d.ts files
+    "declarationMap": true         // Optional: Source maps for .d.ts
+  },
+  "include": ["vite.config.ts"]
+}
