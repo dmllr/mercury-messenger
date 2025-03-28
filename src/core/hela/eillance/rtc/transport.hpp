@@ -6,6 +6,7 @@
 #include <memory>
 #include <thread>
 #include <unordered_map>
+#include <functional>
 
 #include <nlohmann/json.hpp>
 #include <rtc/peerconnection.hpp>
@@ -22,6 +23,63 @@
 #include "hela/eillance/utils/string.hpp"
 
 namespace hela::eillance {
+
+/**
+ * @brief Interface for RtcTransport delegate
+ *
+ * Defines the callback interface that RtcTransport will use to communicate with its owner
+ */
+class RtcTransportDelegate {
+public:
+  using Json = nlohmann::json;
+
+  virtual ~RtcTransportDelegate() = default;
+
+  /**
+   * @brief Get the publish message for this transport
+   * @return Json object containing the publish message
+   */
+  virtual Json GetPublishMessage() = 0;
+
+  /**
+   * @brief Called when a peer is ready
+   * @param peer The peer that is ready
+   */
+  virtual void OnPeerReady(const std::shared_ptr<Peer>& peer) = 0;
+
+  /**
+   * @brief Process a message from a peer
+   * @param message The message to process
+   */
+  virtual void ProcessPeerMessage(Json message) = 0;
+
+  /**
+   * @brief Process a system message
+   * @param type The message type
+   * @param message The message to process
+   */
+  virtual void ProcessSystemMessage(const std::string& type, Json message) = 0;
+
+  /**
+   * @brief Add a video track to a peer connection
+   * @param pc The peer connection
+   * @param onOpen Callback to be called when the track is opened
+   * @return The created track
+   */
+  virtual std::shared_ptr<Peer::Track> AddVideo(
+      const std::shared_ptr<rtc::PeerConnection>& pc,
+      const std::function<void(void)>& onOpen) = 0;
+
+  /**
+   * @brief Add an audio track to a peer connection
+   * @param pc The peer connection
+   * @param onOpen Callback to be called when the track is opened
+   * @return The created track
+   */
+  virtual std::shared_ptr<Peer::Track> AddAudio(
+      const std::shared_ptr<rtc::PeerConnection>& pc,
+      const std::function<void(void)>& onOpen) = 0;
+};
 
 class RtcTransport {
   using Json = nlohmann::json;
@@ -46,19 +104,31 @@ class RtcTransport {
 
   std::unordered_map<std::string, std::shared_ptr<Peer>> peers_;
 
+  // Delegate for callbacks
+  RtcTransportDelegate* delegate_{nullptr};
+
 public:
-  RtcTransport() = default;
+  /**
+   * @brief Construct an RtcTransport.
+   * @param delegate A non-null pointer to an object implementing the IRtcTransportDelegate interface.
+   *                 The delegate's lifetime must exceed the RtcTransport's lifetime.
+   */
+  explicit RtcTransport(RtcTransportDelegate* delegate) : delegate_(delegate) {
+    assert(delegate_ != nullptr && "RtcTransport requires a valid delegate");
+  }
+
+  RtcTransport() = delete;
   RtcTransport(RtcTransport&&) = delete;
   RtcTransport(const RtcTransport&) = delete;
   auto operator=(RtcTransport&&) -> RtcTransport& = delete;
   auto operator=(const RtcTransport&) -> RtcTransport& = delete;
-  virtual ~RtcTransport() = default;
+  ~RtcTransport() = default;
 
   [[maybe_unused]] void SetStatusCallback(const StatusCallbackFunction& callback) {
     status_callback_ = std::make_shared<StatusCallbackFunction>(callback);
   }
 
-  [[maybe_unused]] ServiceConnectionState GetServiceConnectionState() {
+  [[maybe_unused]] auto GetServiceConnectionState() {
     return service_connection_state_;
   }
 
@@ -158,18 +228,6 @@ public:
     }
   }
 
-protected:
-  virtual Json GetPublishMessage() = 0;
-  virtual void OnPeerReady(const std::shared_ptr<Peer>& peer) = 0;
-  virtual void ProcessPeerMessage(Json message) = 0;
-  virtual void ProcessSystemMessage(const std::string& type, Json message) = 0;
-  virtual auto AddVideo(
-      const std::shared_ptr<rtc::PeerConnection>& pc,
-      const std::function<void(void)>& onOpen) -> std::shared_ptr<Peer::Track> = 0;
-  virtual auto AddAudio(
-      const std::shared_ptr<rtc::PeerConnection>& pc,
-      const std::function<void(void)>& onOpen) -> std::shared_ptr<Peer::Track> = 0;
-
   void AddPeer(const std::string& peer_id, const std::shared_ptr<Peer>& peer) {
     peers_.emplace(std::string(peer_id), peer);
   }
@@ -191,7 +249,8 @@ protected:
 
   auto CreatePeer(const std::string& peer_id) -> std::shared_ptr<Peer> {
     auto peer = std::make_shared<Peer>(CreatePeerConnection(peer_id));
-    peer->video_ = AddVideo(
+
+    peer->video_ = delegate_->AddVideo(
         peer->peer_connection_,
         [this, peer_id, wc = make_weak_ptr(peer)]() {
           DispatchQueue::MainThread().Dispatch([this, wc]() {
@@ -201,7 +260,8 @@ protected:
           });
           LOGI << "Video from " << id_ << " opened";
         });
-    peer->audio_ = AddAudio(
+
+    peer->audio_ = delegate_->AddAudio(
         peer->peer_connection_,
         [this, peer_id, wc = make_weak_ptr(peer)]() {
           DispatchQueue::MainThread().Dispatch([this, wc]() {
@@ -222,7 +282,10 @@ protected:
   }
 
   void SendPeerDataChannelMessage(const std::string& peer_id, const Json& message) {
-    GetPeer(peer_id)->data_channel_->send(message.dump());
+    auto peer = GetPeer(peer_id);
+    if (peer && peer->data_channel_) {
+      peer->data_channel_->send(message.dump());
+    }
   }
 
   void ReportPeerStateChange(const std::string& peer_id, const EventSource source, int state) const {
@@ -282,7 +345,7 @@ private:
       });
     } else {
       DispatchQueue::MainThread().Dispatch([this, message]() {
-        ProcessPeerMessage(message);
+        delegate_->ProcessPeerMessage(message);
       });
     }
   }
@@ -321,6 +384,10 @@ private:
 
     WsSendMessage(message);
     is_published_ = true;
+  }
+
+  Json GetPublishMessage() {
+    return delegate_->GetPublishMessage();
   }
 
   auto CreatePeerConnection(const std::string& peer_id) -> std::shared_ptr<rtc::PeerConnection> {
@@ -377,8 +444,8 @@ private:
       peer->SetState(Peer::State::ready);
     }
 
-    if (peer->GetState() == Peer::State::ready) {
-      OnPeerReady(peer);
+    if (peer->GetState() == Peer::State::ready && delegate_) {
+      delegate_->OnPeerReady(peer);
     }
   }
 
@@ -396,7 +463,7 @@ private:
       const auto disconnected_peer_id = message["id"].get<std::string>();
       RemovePeer(disconnected_peer_id);
     } else {
-      ProcessSystemMessage(type, message);
+      delegate_->ProcessSystemMessage(type, message);
     }
   }
 

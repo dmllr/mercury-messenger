@@ -19,12 +19,20 @@
 
 namespace hela::eillance {
 
-class RtcStreamer final : public RtcTransport {
+/**
+ * @brief RTC streamer implementation
+ *
+ * Handles streaming audio and video over WebRTC
+ */
+class RtcStreamer final : public RtcTransportDelegate {
   using Json = nlohmann::json;
   using PeerTrack = std::shared_ptr<Peer::Track>;
 
   /// @brief Audio and video stream
   std::shared_ptr<Stream> av_stream_;
+
+  /// @brief RTC transport delegate
+  std::shared_ptr<RtcTransport> transport_;
 
 public:
   explicit RtcStreamer() {
@@ -32,11 +40,13 @@ public:
         std::make_shared<StreamSource>(Capture(std::make_unique<VideoCapture>())),
         std::make_shared<StreamSource>(Capture(std::make_unique<AudioCapture>())));
 
-    // set callback responsible for sample sending
+    transport_ = std::make_shared<RtcTransport>(this);
+
+    // set callback responsible for sending the sample
     av_stream_->OnSample([this, ws = make_weak_ptr(av_stream_)](Stream::Source::Type type, uint64_t sampleTime, const rtc::binary& sample) {
       SendSampleToPeers(sample, type, sampleTime);
       DispatchQueue::MainThread().Dispatch([this, ws]() {
-        if (GetPeers().empty()) {
+        if (transport_->GetPeers().empty()) {
           // we have no peers, stop the stream
           if (auto stream = ws.lock()) {
             stream->Stop();
@@ -45,11 +55,44 @@ public:
       });
     });
   }
+
   RtcStreamer(RtcStreamer&&) = delete;
   RtcStreamer(const RtcStreamer&) = delete;
   RtcStreamer& operator=(RtcStreamer&&) = delete;
   RtcStreamer& operator=(const RtcStreamer&) = delete;
-  ~RtcStreamer() final = default;
+  ~RtcStreamer() = default;
+
+  void SetId(const std::string& id) {
+    transport_->SetId(id);
+  }
+
+  void SetName(const std::string& name) {
+    transport_->SetName(name);
+  }
+
+  void UpdateAuthToken(const std::string& token) {
+    transport_->UpdateAuthToken(token);
+  }
+
+  void Start() {
+    transport_->Start();
+  }
+
+  void StopStreaming() {
+    transport_->StopStreaming();
+  }
+
+  void Terminate() {
+    transport_->Terminate();
+  }
+
+  [[maybe_unused]] auto GetServiceConnectionState() {
+    return transport_->GetServiceConnectionState();
+  }
+
+  void SetStatusCallback(const std::function<void(const std::string& peer_id, EventSource, int)>& callback) {
+    transport_->SetStatusCallback(callback);
+  }
 
   static void OnPeerDataChannelConnected(const std::shared_ptr<Peer>& peer) {
     if (!peer->data_channel_->isOpen()) {
@@ -79,13 +122,13 @@ public:
     auto type = it->get<std::string>();
 
     if (type == "stream_request") {
-      const auto peer = CreatePeer(peer_id);
+      const auto peer = transport_->CreatePeer(peer_id);
       peer->data_channel_ = CreateDataChannel(peer->peer_connection_, peer_id);
       DispatchQueue::MainThread().Dispatch([this, peer_id, peer]() {
-        AddPeer(peer_id, peer);
+        transport_->AddPeer(peer_id, peer);
       });
     } else if (type == "answer") {
-      if (const auto peer = GetPeer(peer_id); peer != nullptr) {
+      if (const auto peer = transport_->GetPeer(peer_id); peer != nullptr) {
         auto sdp = message["sdp"].get<std::string>();
         auto answer = rtc::Description(sdp, type);
         peer->peer_connection_->setRemoteDescription(answer);
@@ -97,11 +140,11 @@ public:
     }
   }
 
-  void ProcessSystemMessage(const std::string& type, Json  message) final {
+  void ProcessSystemMessage(const std::string& type, Json message) final {
     throw std::runtime_error("Unknown message type in Streamer's ProcessSystemMessage: " + type);
   }
 
-  void ProcessDataChannelMessage(const std::string&  peer_id, Json message) {
+  void ProcessDataChannelMessage(const std::string& peer_id, Json message) {
     const auto itr = message.find("type");
     if (itr == message.end()) {
       return;
@@ -117,7 +160,7 @@ public:
 
       Configure(config);
     } else if (type == "termination") {
-      RemovePeer(peer_id);
+      transport_->RemovePeer(peer_id);
     }
   }
 
@@ -195,7 +238,7 @@ private:
       if (auto dc = wdc.lock()) {
         dc->send("Ping");
       }
-      OnPeerDataChannelConnected(GetPeer(peer_id));
+      OnPeerDataChannelConnected(transport_->GetPeer(peer_id));
     });
 
     data_channel->onMessage(nullptr, [peer_id, wdc = make_weak_ptr(data_channel), this](const std::string& msg) {
@@ -204,7 +247,7 @@ private:
         if (auto dc = wdc.lock()) {
           dc->send("Ping");
         }
-        ReportPeerStateChange(peer_id, EventSource::ping, 1);
+        transport_->ReportPeerStateChange(peer_id, EventSource::ping, 1);
         return;
       }
 
@@ -225,7 +268,7 @@ private:
 
     const auto* stream_type = type == Stream::Source::Type::video ? "video" : "audio";
     // get all peers with Ready state
-    for (const auto& id_peer: GetPeers()) {
+    for (const auto& id_peer: transport_->GetPeers()) {
       auto id = id_peer.first;
       auto peer = id_peer.second;
       auto opt_track_data = get_track_data(peer);
@@ -281,7 +324,6 @@ private:
       LOGD << "Unable to send " << streamType << " packet";
     }
   }
-
 };
 
 }  // namespace hela::eillance

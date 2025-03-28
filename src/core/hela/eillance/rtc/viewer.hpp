@@ -34,15 +34,20 @@ struct Device {
   Profile profile;
 };
 
-class RtcViewer final : public RtcTransport {
+/**
+ * @brief RTC viewer implementation
+ *
+ * Handles viewing remote audio and video streams over WebRTC
+ */
+class RtcViewer final : public RtcTransportDelegate {
   using Json = nlohmann::json;
   using Devices = std::vector<Device>;
   using OnPeerListChangedCallback = std::function<void(const Devices&)>;
   using OnProfileReceivedCallback = std::function<void(const std::string&, const Device::Profile&)>;
   using OnFrameReceivedCallback = std::function<void(const rtc::binary&)>;
 
-  /// @brief Audio and video stream
-  std::shared_ptr<Stream> av_stream_;
+  /// @brief RTC transport delegate
+  std::shared_ptr<RtcTransport> transport_;
 
   /// @brief Connected publishers
   Devices devices_;
@@ -55,14 +60,52 @@ class RtcViewer final : public RtcTransport {
   std::shared_ptr<OnFrameReceivedCallback> on_frame_received_{};
 
 public:
-  RtcViewer() = default;
+  RtcViewer() {
+    transport_ = std::make_shared<RtcTransport>(this);
+  }
+
   RtcViewer(RtcViewer&&) = delete;
   RtcViewer(const RtcViewer&) = delete;
   RtcViewer& operator=(RtcViewer&&) = delete;
   RtcViewer& operator=(const RtcViewer&) = delete;
-  ~RtcViewer() final = default;
+  ~RtcViewer() = default;
 
+  void SetId(const std::string& id) {
+    transport_->SetId(id);
+  }
+
+  void SetName(const std::string& name) {
+    transport_->SetName(name);
+  }
+
+  void UpdateAuthToken(const std::string& token) {
+    transport_->UpdateAuthToken(token);
+  }
+
+  void Start() {
+    transport_->Start();
+  }
+
+  void StopStreaming() {
+    transport_->StopStreaming();
+  }
+
+  void Terminate() {
+    transport_->Terminate();
+  }
+
+  void SetStatusCallback(const std::function<void(const std::string& peer_id, EventSource, int)>& callback) {
+    transport_->SetStatusCallback(callback);
+  }
+
+  // RtcTransportDelegate implementation
   void OnPeerReady(const std::shared_ptr<Peer>& /*peer*/) final { }
+
+  Json GetPublishMessage() final {
+    return Json{
+        {"kind", "viewer"},
+    };
+  }
 
   Json ComposeConfig(const Config& config) const {
     return {
@@ -77,14 +120,13 @@ public:
     };
   }
 
-
   void SendStreamRequest(const std::string& peer_id, const Config& config) {
     Json request = {
         {"to", peer_id},
         {"type", "stream_request"},
         {"config", ComposeConfig(config)},
     };
-    SendPeerMessage(peer_id, request);
+    transport_->SendPeerMessage(peer_id, request);
   }
 
   void SendConfigurationRequest(const std::string& peer_id, const Config& config) {
@@ -92,7 +134,7 @@ public:
         {"type", "configuration"},
         {"config", ComposeConfig(config)},
     };
-    SendPeerDataChannelMessage(peer_id, request);
+    transport_->SendPeerDataChannelMessage(peer_id, request);
   }
 
   [[maybe_unused]] void SetPeerChangedCallback(const OnPeerListChangedCallback& callback) {
@@ -120,7 +162,7 @@ public:
             peer->data_channel_->send("Pong");
           }
         });
-        ReportPeerStateChange(peer_id, EventSource::ping, 1);
+        transport_->ReportPeerStateChange(peer_id, EventSource::ping, 1);
         return;
       }
 
@@ -128,7 +170,7 @@ public:
     });
   }
 
-private:
+  // RtcTransportDelegate implementation
   void ProcessPeerMessage(Json message) final {
     auto it = message.find("from");
     if (it == message.end()) {
@@ -143,14 +185,14 @@ private:
 
     if (type == "offer") {
       auto sdp = message["sdp"].get<std::string>();
-      std::shared_ptr<Peer> const peer = CreatePeer(peer_id);
+      std::shared_ptr<Peer> const peer = transport_->CreatePeer(peer_id);
       // NOLINTNEXTLINE(*-unnecessary-value-param)
       peer->peer_connection_->onDataChannel([this, peer_id, peer](std::shared_ptr<rtc::DataChannel> data_channel) {
         SetupDataChannel(peer, peer_id, data_channel);
       });
       peer->peer_connection_->setRemoteDescription(rtc::Description(sdp, rtc::Description::Type::Offer));
       DispatchQueue::MainThread().Dispatch([this, peer_id, peer]() {
-        AddPeer(peer_id, peer);
+        transport_->AddPeer(peer_id, peer);
       });
     } else {
       throw std::runtime_error("Unknown message type " + type);
@@ -177,7 +219,7 @@ private:
         (*on_profile_received_)(peer_id, profile);
       }
     } else if (type == "termination") {
-      RemovePeer(peer_id);
+      transport_->RemovePeer(peer_id);
     }
   }
 
@@ -235,12 +277,7 @@ private:
     return std::make_shared<Peer::Track>(track);
   }
 
-  Json GetPublishMessage() final {
-    return Json{
-        {"kind", "viewer"},
-    };
-  }
-
+private:
   void UpdatePeerList(const nlohmann::json& json) {
     // Clear existing peers
     devices_.clear();
@@ -287,7 +324,6 @@ private:
     }
     return profile;
   }
-
 };
 
 }  // namespace hela::eillance

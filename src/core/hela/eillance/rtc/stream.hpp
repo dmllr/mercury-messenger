@@ -11,6 +11,8 @@
 
 #include "hela/eillance/capture/config.hpp"
 #include "hela/eillance/common/dispatch_queue.hpp"
+#include "hela/eillance/logging/logging.h"
+#include "hela/eillance/logging/telemetry.h"
 #include "hela/eillance/rtc/peer.hpp"
 
 
@@ -115,6 +117,10 @@ private:
 public:
   void OnSample(std::function<void(Source::Type, uint64_t, rtc::binary)> handler) {
     sampleHandler_ = std::move(handler);
+  }
+
+  auto inline IsRunning() {
+    return isRunning_;
   }
 
   void Start() {
