@@ -5,6 +5,7 @@
 #include <utility>
 #include <vector>
 
+#include "hela/eillance/common/packet.hpp"
 #include "hela/eillance/capture/video_config.hpp"
 #include "hela/eillance/logging/logging.h"
 

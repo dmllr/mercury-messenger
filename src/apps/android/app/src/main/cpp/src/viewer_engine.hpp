@@ -16,6 +16,7 @@
 
 #include <rtc/rtc.hpp>
 
+#include "hela/eillance/common/event_queue.hpp"
 #include "hela/eillance/capture/video_config.hpp"
 #include "hela/eillance/logging/logging.h"
 #include "hela/eillance/rtc/viewer.hpp"
@@ -39,7 +40,7 @@ class ViewerEngine {
   RtcViewer rtc_viewer_{};
   H264Parser h264_parser_{};
 
-  hela::eillance::EventQueue::SubscriberTypeId configure_subscriber_id_{0};
+  EventQueue::SubscriberTypeId configure_subscriber_id_{0};
 
 public:
   ViewerEngine(JavaVM* jvm, JNIEnv* env, jobject instance)
