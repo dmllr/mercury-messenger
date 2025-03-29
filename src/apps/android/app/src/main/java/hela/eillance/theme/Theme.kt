@@ -1,5 +1,7 @@
 package hela.eillance.theme
 
+import android.content.Context
+import android.content.res.Configuration
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
@@ -9,6 +11,10 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
@@ -16,10 +22,40 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
+// custom colors here
+@Immutable // Good practice for theme objects
+data class ExtendedColors(
+    val success: Color,
+    val onSuccess: Color,
+    val warning: Color,
+    val onWarning: Color,
+)
+
+val LightExtendedColors = ExtendedColors(
+    success = Color(0xFF4CAF50),
+    onSuccess = Color.White,
+    warning = Color(0xFFFFC107),
+    onWarning = Color.Black,
+)
+
+val DarkExtendedColors = ExtendedColors(
+    success = Color(0xFF81C784),
+    onSuccess = Color.Black,
+    warning = Color(0xFFFFD54F),
+    onWarning = Color.Black,
+)
+
+// CompositionLocal to hold the ExtendedColors instance
+val LocalExtendedColors = staticCompositionLocalOf {
+    // Provide a default (e.g., light theme)
+    // This default should ideally not be used if the theme is set up correctly.
+    LightExtendedColors
+}
+
 private val DarkColorScheme = darkColorScheme(
     primary = Color(0xFFD0BCFF),
     secondary = Color(0xFFCCC2DC),
-    tertiary = Color(0xFFEFB8C8)
+    tertiary = Color(0xFFEFB8C8),
 )
 
 private val LightColorScheme = lightColorScheme(
@@ -41,6 +77,8 @@ val Typography = Typography(
 @Composable
 fun EillanceTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
+    // Note: Dynamic color won't apply to your *custom* colors by default.
+    // You'd need more complex logic to derive custom colors from the dynamic scheme if desired.
     dynamicColor: Boolean = true,
     content: @Composable () -> Unit
 ) {
@@ -49,14 +87,53 @@ fun EillanceTheme(
             val context = LocalContext.current
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
-
         darkTheme -> DarkColorScheme
         else -> LightColorScheme
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        content = content
-    )
+    // Select the correct set of custom colors based on the theme
+    val extendedColors = if (darkTheme) DarkExtendedColors else LightExtendedColors
+
+    // Provide the standard MaterialTheme AND your custom colors
+    CompositionLocalProvider(LocalExtendedColors provides extendedColors) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = Typography,
+            content = content
+        )
+    }
 }
+
+// an extension property for easier access
+@Suppress("unused")
+val MaterialTheme.extendedColors: ExtendedColors
+    @Composable
+    @ReadOnlyComposable // Ensures this is just reading the CompositionLocal value
+    get() = LocalExtendedColors.current
+
+/**
+ * Gets the appropriate set of [ExtendedColors] based on the current system theme (light/dark)
+ * determined from the receiver [Context].
+ *
+ * Note: This checks the *system* configuration at the time of calling.
+ * - It does **not** reflect Material You dynamic colors.
+ * - It does **not** reflect in-app theme overrides if your app allows forcing light/dark mode
+ *   independent of the system setting.
+ *
+ * @receiver The context used to determine the current UI mode (light/dark).
+ * @return The [DarkExtendedColors] if the system is in dark mode, otherwise [LightExtendedColors].
+ */
+@Suppress("unused")
+val Context.themedColors: ExtendedColors
+    get() {
+        // Check the system's current UI mode configuration
+        val nightModeFlags = this.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+        val isDarkMode = nightModeFlags == Configuration.UI_MODE_NIGHT_YES
+
+        // Return the corresponding predefined color set
+        return if (isDarkMode) {
+            DarkExtendedColors
+        } else {
+            LightExtendedColors
+        }
+    }
