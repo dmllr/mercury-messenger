@@ -20,6 +20,8 @@ import android.net.NetworkRequest
 import android.os.Binder
 import android.os.IBinder
 import android.util.Log
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.createBitmap
@@ -33,6 +35,7 @@ import hela.eillance.ndkio.EventSource
 import hela.eillance.ndkio.ServiceConnectionState
 import hela.eillance.ndkio.VideoConfig
 import hela.eillance.ndkio.interfaces.IStreamerNativeBridge
+import hela.eillance.theme.themedColors
 
 class StreamerService : Service(), IStreamerNativeBridge {
   private var serviceConnectionState: ServiceConnectionState = ServiceConnectionState.Unknown
@@ -126,12 +129,12 @@ class StreamerService : Service(), IStreamerNativeBridge {
     }
   }
 
-  private fun Pair<Int, Int>.getBitmapFromVectorDrawable(): Bitmap {
+  private fun Pair<Int, Color>.getBitmapFromVectorDrawable(): Bitmap {
     val context = this@StreamerService
     val drawable = ContextCompat.getDrawable(context, first)
-    val color = ContextCompat.getColor(context, second)
+    val color = second
 
-    DrawableCompat.setTint(drawable!!, color)
+    DrawableCompat.setTint(drawable!!, color.toArgb())
 
     val bitmap = createBitmap(drawable.intrinsicWidth, drawable.intrinsicHeight)
     val canvas = Canvas(bitmap)
@@ -148,9 +151,9 @@ class StreamerService : Service(), IStreamerNativeBridge {
 
     val channel = createNotificationChannel()
     val statusIcon = when (serviceConnectionState) {
-      ServiceConnectionState.Unknown -> Pair(R.drawable.ic_status1_standby, R.color.colorNegative)
-      ServiceConnectionState.Establishing -> Pair(R.drawable.ic_status2, R.color.colorPositive)
-      else -> Pair(R.drawable.ic_failure, R.color.colorNegative)
+      ServiceConnectionState.Online -> Pair(R.drawable.ic_status1_standby, themedColors.success)
+      ServiceConnectionState.Establishing -> Pair(R.drawable.ic_status2, themedColors.success)
+      else -> Pair(R.drawable.ic_failure, themedColors.warning)
     }
 
     val streamerActivityIntent = Intent(this, StreamerActivity::class.java).apply {
