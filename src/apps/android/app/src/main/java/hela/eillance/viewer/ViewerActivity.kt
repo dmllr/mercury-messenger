@@ -30,6 +30,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
@@ -41,6 +42,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -59,7 +61,9 @@ import hela.eillance.theme.EillanceTheme
 class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
 
   private lateinit var navController: NavHostController
-  private val viewModel: ViewerViewModel by viewModels()
+  private val viewModel: ViewerViewModel by viewModels {
+    ViewModelProvider.AndroidViewModelFactory.getInstance(application)
+  }
 
   // Track fullscreen mode state
   private var isFullscreen by mutableStateOf(false)
@@ -102,20 +106,12 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
   fun AppContent(navController: NavHostController, viewModel: ViewerViewModel) {
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
 
-    // Observe the peers list (this is already a Compose State)
-    val peers = viewModel.peers
+    // Observe the combined list of displayed peers (StoredPeer) from StateFlow
+    val displayedPeers by viewModel.displayedPeers.collectAsState()
 
-    // Observe the selected peer (this is already a Compose State)
-    val selectedPeer = viewModel.selectedPeer
-
-    // Observe connection status directly - this will refresh UI when connection state changes
+    // Observe connection status
     val connectionStatusState = viewModel.connectionStatus.observeAsState(ServiceConnectionState.Unknown.ordinal)
-
-    // Convert to ServiceConnectionState enum
     val connectionState = ServiceConnectionState.fromInt(connectionStatusState.value)
-
-    // Still observe peer status for peer-specific events, if needed
-    val peerStatusState = viewModel.peerStatus.observeAsState()
 
     EillanceTheme {
       Scaffold(
@@ -134,28 +130,35 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
         ) {
           when (connectionState) {
             ServiceConnectionState.Online -> {
-              // Show normal content
               NavHost(navController = navController, startDestination = "peers") {
                 composable("peers") {
                   PeersScreen(
-                    peers = peers,
-                    onPeerClicked = { peer ->
-                      viewModel.selectedPeer = peer
-                      navController.navigate("stream")
+                    peers = displayedPeers,
+                    onPeerClicked = { storedPeer ->
+                      viewModel.selectPeerById(storedPeer.id)
+                      if (viewModel.selectedPeer != null) {
+                        navController.navigate("stream")
+                      } else {
+                        Log.w("ViewerActivity", "Navigation to stream cancelled, peer ${storedPeer.id} could not be selected.")
+                      }
+                    },
+                    onRemovePeer = { peerIdToRemove ->
+                      viewModel.removePeer(peerIdToRemove)
                     }
                   )
                 }
                 composable("stream") {
-                  if (selectedPeer != null) {
+                  val currentSelectedPeer = viewModel.selectedPeer
+                  if (currentSelectedPeer != null) {
                     StreamScreen(
-                      peer = selectedPeer,
+                      peer = currentSelectedPeer,
                       initDecoder = { surface -> initDecoder(surface) },
                       releaseDecoder = { releaseDecoder() },
-                      viewModel = viewModel
+                      viewModel = viewModel,
                     )
                   } else {
-                    // Handle case where selectedPeer is null
                     LaunchedEffect(Unit) {
+                      Log.w("ViewerActivity", "StreamScreen composed with null selectedPeer, navigating back.")
                       navController.popBackStack()
                     }
                   }
@@ -164,7 +167,13 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
             }
             ServiceConnectionState.Failure -> {
               ErrorScreen("Connection failed. Please check your network and try again.", onRetry = {
-                TODO()
+                Log.d("ViewerActivity", "Retry button clicked - Re-initializing engine potentially?")
+                // TODO better retry
+                // For now, just restart the activity
+                val intent = Intent(this@ViewerActivity, ViewerActivity::class.java)
+                intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+                startActivity(intent)
+                finish()
               })
             }
             else -> {
@@ -318,19 +327,23 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
 
   override fun onStatusUpdate(peerId: String, source: Int, status: Int) {
     val eventSource = EventSource.fromInt(source)
+    Log.d("ViewerActivity", "onStatusUpdate: Peer=$peerId, Source=$eventSource, Status=$status")
     viewModel.updatePeerStatus(peerId, eventSource, status)
   }
 
   override fun onStreamInfoChange(width: Int, height: Int, rotation: Int) {
+    Log.d("ViewerActivity", "onStreamInfoChange: W=$width, H=$height, R=$rotation")
     viewModel.updateStreamInfo(width, height, rotation)
   }
 
   override fun onDeviceProfileReceived(peerId: String, profile: Profile) {
+    Log.d("ViewerActivity", "onDeviceProfileReceived: Peer=$peerId, Profile Cameras=${profile.size}")
     viewModel.updateDeviceProfile(profile)
   }
 
   override fun onPeerListUpdate(peers: List<Peer>) {
-    viewModel.peers = peers
+    Log.d("ViewerActivity", "onPeerListUpdate: Received ${peers.size} peers.")
+    viewModel.updatePeerList(peers)
   }
 
 }
