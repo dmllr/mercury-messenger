@@ -1,6 +1,5 @@
 package hela.eillance.streamer
 
-import android.app.ActivityManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -18,6 +17,7 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.os.Binder
+import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.compose.ui.graphics.Color
@@ -144,12 +144,7 @@ class StreamerService : Service(), IStreamerNativeBridge {
   }
 
   private fun startForeground() {
-    if (!isForegroundAllowed()) {
-      Log.e("StreamerService", "Cannot start foreground service in the current state.")
-      return
-    }
-
-    val channel = createNotificationChannel()
+    val channelId = createNotificationChannel()
     val statusIcon = when (serviceConnectionState) {
       ServiceConnectionState.Online -> Pair(R.drawable.ic_status1_standby, themedColors.success)
       ServiceConnectionState.Establishing -> Pair(R.drawable.ic_status2, themedColors.success)
@@ -158,48 +153,56 @@ class StreamerService : Service(), IStreamerNativeBridge {
 
     val streamerActivityIntent = Intent(this, StreamerActivity::class.java).apply {
       flags = Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+      // Or maybe FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_CLEAR_TASK if want to restart it cleanly
     }
 
-    val notification = NotificationCompat.Builder(this, channel)
+    val pendingIntent = PendingIntent.getActivity(
+      this, 0, streamerActivityIntent,
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+
+    val notificationBuilder = NotificationCompat.Builder(this, channelId)
       .setOngoing(true)
       .setLargeIcon(statusIcon.getBitmapFromVectorDrawable())
       .setSmallIcon(R.drawable.ic_camera_stream)
       .setContentTitle(getString(R.string.notification_title))
       .setContentText(serviceConnectionState.getResourceString(this))
       .setPriority(NotificationCompat.PRIORITY_HIGH)
-      .setContentIntent(
-        PendingIntent.getActivity(
-          this, 0, streamerActivityIntent,
-          PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-      ).build().apply {
-        flags = Notification.FLAG_NO_CLEAR or Notification.FLAG_FOREGROUND_SERVICE
-      }
+      .setContentIntent(pendingIntent)
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+      notificationBuilder.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
+    }
+
+    val notification = notificationBuilder.build()
 
     try {
       startForeground(CAMERA_SERVICE_FG_ID, notification)
+      Log.i("StreamerService", "Successfully called startForeground with ID: $CAMERA_SERVICE_FG_ID")
     } catch (e: Exception) {
-      Log.e("StreamerService", "Failed to start foreground: ${e.message}")
-    }
-  }
-
-  private fun isForegroundAllowed(): Boolean {
-    // Ensure that the app is allowed to start a foreground service.
-    val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-    return activityManager.appTasks.any { task ->
-      task.taskInfo.baseIntent.component?.className?.contains("StreamerActivity") ?: false
+      Log.e("StreamerService", "Failed to start foreground with ID $CAMERA_SERVICE_FG_ID", e)
+       stopSelf()
     }
   }
 
   private fun createNotificationChannel(): String {
     val id = "surveillance-foreground-service"
+    val name = getString(R.string.notification_channel_name)
+    val descriptionText = getString(R.string.notification_channel_description)
+
+    // IMPORTANCE_DEFAULT or higher for foreground service
+    val importance = NotificationManager.IMPORTANCE_DEFAULT
+
+    val channel = NotificationChannel(id, name, importance).apply {
+      description = descriptionText
+      lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+      // disable sound/vibration if using higher importance
+      setSound(null, null)
+      enableVibration(false)
+    }
     val service = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-    service.createNotificationChannel(
-      NotificationChannel(
-        id, getString(R.string.notification_description),
-        NotificationManager.IMPORTANCE_LOW
-      ).apply { lockscreenVisibility = Notification.VISIBILITY_PRIVATE }
-    )
+    service.createNotificationChannel(channel)
+    Log.d("StreamerService", "Notification channel '$id' created or updated.")
     return id
   }
 
