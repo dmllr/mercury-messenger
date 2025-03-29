@@ -2,7 +2,6 @@ package hela.eillance.streamer
 
 import android.Manifest
 import android.content.ComponentName
-import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
@@ -372,12 +371,16 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
 
   private fun startStreamingForegroundService() {
     val streamerServiceIntent = Intent(applicationContext, StreamerService::class.java)
-    startService(streamerServiceIntent)
-    applicationContext.bindService(
+
+    Log.i(javaClass.simpleName, "Attempting to start and bind StreamerService.")
+    ContextCompat.startForegroundService(applicationContext, streamerServiceIntent)
+
+    val bound = applicationContext.bindService(
       streamerServiceIntent,
       this,
-      Context.BIND_AUTO_CREATE + Context.BIND_ABOVE_CLIENT
+      BIND_AUTO_CREATE
     )
+    Log.i(javaClass.simpleName, "Called bindService, result: $bound")
   }
 
   override fun onResume() {

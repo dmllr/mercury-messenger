@@ -18,6 +18,8 @@
 
   <string name="notification_title">Eillance</string>
   <string name="notification_description">Camera stream P2P connection</string>
+  <string name="notification_channel_name">Camera streaming notifications</string>
+  <string name="notification_channel_description">You\'ll be notified when the camera stream is active.</string>
 
   <string name="toolbar_user_icon">User manu button</string>
   <string name="toolbar_user_menu_preferences">Preferences</string>
