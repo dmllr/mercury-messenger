@@ -37,6 +37,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -68,7 +69,8 @@ fun StreamScreen(
   peer: Peer,
   initDecoder: (Surface) -> Unit,
   releaseDecoder: () -> Unit,
-  viewModel: ViewerViewModel = viewModel()
+  viewModel: ViewerViewModel = viewModel(),
+  onTextureViewAvailable: (TextureView?) -> Unit = {}
 ) {
   val context = LocalContext.current
   val defaultCameraLabel = stringResource(R.string.viewer_StreamScreen_default_camera)
@@ -100,6 +102,7 @@ fun StreamScreen(
   var localRotation by remember { mutableIntStateOf(0) }
 
   var textureView by remember { mutableStateOf<TextureView?>(null) }
+  val currentTextureView by rememberUpdatedState(textureView)
   var currentScale by remember { mutableFloatStateOf(1f) }
 
   // Fullscreen state - starts as true by default
@@ -255,6 +258,15 @@ fun StreamScreen(
     calculateBaseMatrix = { calculateTransformMatrix() }
   )
 
+  // Trigger preview capture when connected and TextureView is available
+  LaunchedEffect(peerConnectionState, currentTextureView) {
+    if (peerConnectionState == PeerConnectionState.Connected && currentTextureView != null) {
+      // Add a small delay to allow the first frame(s) to render
+      delay(2000)
+      viewModel.captureAndStorePreview(peer.id, currentTextureView)
+    }
+  }
+
   // Update currentScale when scale changes
   LaunchedEffect(scale) {
     currentScale = scale
@@ -336,27 +348,26 @@ fun StreamScreen(
     AndroidView(
       factory = { ctx ->
         TextureView(ctx).apply {
-          textureView = this
-          surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+          this.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
             override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
-              // Initialize decoder with a Surface created from the SurfaceTexture
+              textureView = this@apply
+              onTextureViewAvailable(this@apply)
               initDecoder(Surface(surface))
-            }
-
-            override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {
-              // Update transform when size changes
               setTransform(calculateTransformMatrix())
             }
 
+            override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {
+              setTransform(calculateTransformMatrix(currentScale))
+            }
+
             override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
+              textureView = null
+              onTextureViewAvailable(null)
               releaseDecoder()
               return true
             }
 
-            override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {
-              // This method is called frequently when frames are rendered
-              // No need to do anything here for our use case
-            }
+            override fun onSurfaceTextureUpdated(surface: SurfaceTexture) { }
           }
         }
       },

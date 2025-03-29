@@ -26,23 +26,20 @@ import androidx.compose.ui.unit.sp
 @Immutable // Good practice for theme objects
 data class ExtendedColors(
     val success: Color,
-    val onSuccess: Color,
     val warning: Color,
-    val onWarning: Color,
+    val offline: Color,
 )
 
 val LightExtendedColors = ExtendedColors(
     success = Color(0xFF4CAF50),
-    onSuccess = Color.White,
     warning = Color(0xFFFFC107),
-    onWarning = Color.Black,
+    offline = Color.White.copy(alpha = 0.7f),
 )
 
 val DarkExtendedColors = ExtendedColors(
     success = Color(0xFF81C784),
-    onSuccess = Color.Black,
     warning = Color(0xFFFFD54F),
-    onWarning = Color.Black,
+    offline = Color.White.copy(alpha = 0.5f),
 )
 
 // CompositionLocal to hold the ExtendedColors instance
