@@ -1,3 +1,4 @@
+// Add these at the top of your useWebRTC.ts file
 import { useState, useEffect, useRef, useCallback, useContext } from 'react';
 import { SignalingContext } from '@/contexts/SignalingContext';
 import { useAuth } from './useAuth';
@@ -40,13 +41,46 @@ export function useWebRTC(peerId: string | null) {
     const [error, setError] = useState<string | null>(null);
     const [remoteProfile, setRemoteProfile] = useState<Peer['profile'] | null>(null);
 
+    // New: Add a message queue and processing flag
+    const messageQueue = useRef<SignalingMessage[]>([]);
+    const isProcessingMessage = useRef<boolean>(false);
 
     const { idToken } = useAuth();
     const signaling = useContext(SignalingContext);
 
+    // --- Message Queue Processing ---
+    const processMessageQueue = useCallback(async () => {
+        if (isProcessingMessage.current || messageQueue.current.length === 0) {
+            return;
+        }
+
+        isProcessingMessage.current = true;
+        try {
+            const message = messageQueue.current.shift(); // Get next message
+            if (message) {
+                // Process message based on type
+                await processSignalingMessage(message);
+            }
+        } catch (error) {
+            console.error("Error processing message from queue:", error);
+            setError(`Error processing message: ${error}`);
+        } finally {
+            isProcessingMessage.current = false;
+
+            // Continue processing queue if there are more messages
+            if (messageQueue.current.length > 0) {
+                setTimeout(processMessageQueue, 0); // Use setTimeout to avoid deep recursion
+            }
+        }
+    }, []);
+
     // --- Cleanup ---
     const closeConnection = useCallback(() => {
         console.log("Closing WebRTC connection...");
+        // Clear message queue
+        messageQueue.current = [];
+        isProcessingMessage.current = false;
+
         if (dataChannel.current) {
             try {
                 // Optionally send termination message before closing
@@ -81,7 +115,6 @@ export function useWebRTC(peerId: string | null) {
         setIsDataChannelOpen(false);
         setError(null);
         setRemoteProfile(null); // Clear profile on close
-
     }, []); // No dependencies needed for cleanup refs
 
     // --- Data Channel Handlers ---
@@ -203,8 +236,13 @@ export function useWebRTC(peerId: string | null) {
         if (pc.current) {
             console.log("Signaling state changed:", pc.current.signalingState);
             setSignalingState(pc.current.signalingState);
+
+            // Process queue when signaling state changes to stable
+            if (pc.current.signalingState === 'stable') {
+                setTimeout(processMessageQueue, 0);
+            }
         }
-    }, []);
+    }, [processMessageQueue]);
 
 
     // --- Create Peer Connection ---
@@ -241,8 +279,8 @@ export function useWebRTC(peerId: string | null) {
         }
     }, [closeConnection, handleIceCandidate, handleTrack, handleConnectionStateChange, handleIceConnectionStateChange, handleSignalingStateChange, setupDataChannel]);
 
-    // --- Handle Incoming Signaling Messages for THIS peer ---
-    const handleSignalingMessage = useCallback(async (message: SignalingMessage) => {
+    // --- Process a signaling message (called by queue processor) ---
+    const processSignalingMessage = useCallback(async (message: SignalingMessage) => {
         if (!pc.current && message.type !== PeerMessageType.OFFER) {
             console.warn("Received signaling message but PeerConnection is not initialized:", message.type);
             // Ignore candidates/answers if we haven't processed an offer yet
@@ -253,8 +291,9 @@ export function useWebRTC(peerId: string | null) {
             switch (message.type) {
                 case PeerMessageType.OFFER:
                     if (message.sdp && message.from === peerId) {
-                        console.log("Received OFFER from", message.from);
-                        // Create PC if it doesn't exist (should ideally be created before this)
+                        console.log("Processing OFFER from", message.from);
+
+                        // Create PC if it doesn't exist
                         if (!pc.current) {
                             console.warn("Received offer but PC not ready, creating PC first.");
                             createPeerConnection();
@@ -263,55 +302,76 @@ export function useWebRTC(peerId: string | null) {
                             throw new Error("Failed to create PeerConnection before handling offer.");
                         }
 
-                        await pc.current.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: message.sdp }));
-                        console.log("Remote description (offer) set.");
+                        // Only set remote description if we're in a valid state
+                        if (pc.current.signalingState === 'stable' ||
+                            pc.current.signalingState === 'have-local-pranswer') {
 
-                        // Create Answer
-                        const answer = await pc.current.createAnswer();
-                        await pc.current.setLocalDescription(answer);
-                        console.log("Local description (answer) set.");
+                            await pc.current.setRemoteDescription(new RTCSessionDescription({
+                                type: 'offer',
+                                sdp: message.sdp
+                            }));
+                            console.log("Remote description (offer) set.");
 
-                        // Send Answer back via signaling
-                        if (idToken && peerId) {
-                            if (answer.sdp) { // Check if sdp exists
-                                const answerMsg: AnswerMessage = { // Use specific type
-                                    type: PeerMessageType.ANSWER,
-                                    to: peerId,
-                                    sdp: answer.sdp, // Now guaranteed to be string
-                                    token: idToken,
-                                };
-                                signaling?.sendMessage(answerMsg);
-                                console.log("Sent ANSWER");
-                            } else {
-                                console.error("Failed to create answer with SDP.");
-                                // Handle error appropriately, maybe close connection
-                                setError("Failed to create valid answer SDP.");
-                                closeConnection();
+                            // Create Answer
+                            const answer = await pc.current.createAnswer();
+                            await pc.current.setLocalDescription(answer);
+                            console.log("Local description (answer) set.");
+
+                            // Send Answer back via signaling
+                            if (idToken && peerId) {
+                                if (answer.sdp) {
+                                    const answerMsg: AnswerMessage = {
+                                        type: PeerMessageType.ANSWER,
+                                        to: peerId,
+                                        sdp: answer.sdp,
+                                        token: idToken,
+                                    };
+                                    signaling?.sendMessage(answerMsg);
+                                    console.log("Sent ANSWER");
+                                } else {
+                                    console.error("Failed to create answer with SDP.");
+                                    setError("Failed to create valid answer SDP.");
+                                    closeConnection();
+                                }
                             }
+                        } else {
+                            console.warn(`Cannot set remote offer in current signaling state: ${pc.current.signalingState}`);
+                            // Queue this message again to retry later when state changes
+                            messageQueue.current.unshift(message);
                         }
                     }
                     break;
 
                 case PeerMessageType.ICE_CANDIDATE:
                     if (message.candidate && message.from === peerId && pc.current) {
-                        console.log("Received ICE candidate from", message.from);
+                        console.log("Processing ICE candidate from", message.from);
                         // Ensure remote description is set before adding candidates
                         if (pc.current.remoteDescription) {
                             await pc.current.addIceCandidate(new RTCIceCandidate(message.candidate));
                             console.log("Added ICE candidate.");
                         } else {
-                            console.warn("Received ICE candidate before remote description was set. Queuing or ignoring might be needed.");
-                            // Basic approach: ignore if remote desc not set yet. More robust: queue candidates.
+                            console.warn("Received ICE candidate before remote description was set. Queuing for later.");
+                            // Queue candidate for later processing
+                            messageQueue.current.push(message);
                         }
                     }
                     break;
 
-                // Viewer typically doesn't receive ANSWER, but handle just in case
                 case PeerMessageType.ANSWER:
-                    if (message.sdp && 'from' in message && message.from === peerId && pc.current && pc.current.signalingState === 'have-local-offer') {
-                        console.log("Received ANSWER from", message.from);
-                        await pc.current.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: message.sdp }));
-                        console.log("Remote description (answer) set.");
+                    if (message.sdp && 'from' in message && message.from === peerId && pc.current) {
+                        console.log("Processing ANSWER from", message.from);
+
+                        if (pc.current.signalingState === 'have-local-offer') {
+                            await pc.current.setRemoteDescription(new RTCSessionDescription({
+                                type: 'answer',
+                                sdp: message.sdp
+                            }));
+                            console.log("Remote description (answer) set.");
+                        } else {
+                            console.warn(`Cannot set remote answer in current signaling state: ${pc.current.signalingState}`);
+                            // Queue for later if in wrong state
+                            messageQueue.current.push(message);
+                        }
                     }
                     break;
 
@@ -320,12 +380,27 @@ export function useWebRTC(peerId: string | null) {
                     break;
             }
         } catch (e: any) {
-            console.error("Error handling signaling message:", message.type, e);
-            setError(`Error handling ${message.type}: ${e.message}`);
-            closeConnection(); // Close connection on error during setup
+            console.error("Error processing signaling message:", message.type, e);
+            setError(`Error processing ${message.type}: ${e.message}`);
+            // Don't close connection on all errors - specific fatal errors only
+            if (e.message.includes("Cannot set local answer when createAnswer has not been called") ||
+                e.message.includes("Cannot create answer in signaling state")) {
+                console.error("Fatal signaling error, closing connection");
+                closeConnection();
+            }
         }
-    }, [pc, peerId, createPeerConnection, idToken, signaling, closeConnection]);
+    }, [peerId, createPeerConnection, idToken, signaling, closeConnection]);
 
+    // --- Handle Incoming Signaling Messages for THIS peer ---
+    const handleSignalingMessage = useCallback((message: SignalingMessage) => {
+        // Add message to queue and process when ready
+        messageQueue.current.push(message);
+
+        // Attempt to process queue
+        if (!isProcessingMessage.current) {
+            processMessageQueue();
+        }
+    }, [processMessageQueue]);
 
     // --- Subscribe to relevant signaling messages ---
     useEffect(() => {
