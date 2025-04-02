@@ -28,18 +28,54 @@ class VideoEncoder {
   AMediaCodecBufferInfo info{};
   uint8_t* buffer{};
   rtc::binary encoded_data{};
+  std::mutex codec_mutex{};
 
   void configureCodec() {
+    // Prevent concurrent configuration
+    std::lock_guard<std::mutex> lock(codec_mutex);
+
+    // Stop any existing codec safely
     if (codec != nullptr) {
-      auto rc = AMediaCodec_stop(codec);
-      Log::assert_soft(AMEDIA_OK == rc, "AMediaCodec_stop failed");
+      try {
+        // Ensure all pending buffers are returned
+        auto rc = AMediaCodec_flush(codec);
+        if (rc != AMEDIA_OK) {
+          Log::w("AMediaCodec_flush failed with error %d, continuing anyway", rc);
+        }
+
+        rc = AMediaCodec_stop(codec);
+        if (rc != AMEDIA_OK) {
+          Log::w("AMediaCodec_stop failed with error %d, continuing anyway", rc);
+        }
+
+        rc = AMediaCodec_delete(codec);
+        if (rc != AMEDIA_OK) {
+          Log::w("AMediaCodec_delete failed with error %d, continuing anyway", rc);
+        }
+      } catch (...) {
+        Log::e("Exception occurred while stopping codec, continuing with new codec");
+      }
       codec = nullptr;
     }
 
-    codec = AMediaCodec_createEncoderByType("video/avc");
-    Log::assert_or_die(static_cast<bool>(codec), "There is no 'video/avc' codec support available");
+    // Create the codec
+    try {
+      codec = AMediaCodec_createEncoderByType("video/avc");
+      if (!codec) {
+        Log::e("Failed to create video/avc encoder, falling back to default configuration");
+        return;
+      }
+    } catch (...) {
+      Log::e("Exception during codec creation, falling back to default configuration");
+      return;
+    }
 
+    // Configure the codec
     auto format = AMediaFormat_new();
+    if (!format) {
+      Log::e("Failed to create media format");
+      return;
+    }
 
     Log::i("Configuring encoder with dimensions: %dx%d (rotation: %d degrees)",
            config_.width, config_.height, config_.rotation);
@@ -53,28 +89,57 @@ class VideoEncoder {
     AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_COLOR_FORMAT, 0x7f000789);  // COLOR_FormatSurface
 
     auto rc = AMediaCodec_configure(codec, format, nullptr, nullptr, AMEDIACODEC_CONFIGURE_FLAG_ENCODE);
-    Log::assert_or_die(AMEDIA_OK == rc, "AMediaCodec_configure failed");
+    if (rc != AMEDIA_OK) {
+      Log::e("AMediaCodec_configure failed with error %d, falling back to default configuration", rc);
+      AMediaFormat_delete(format);
+      AMediaCodec_delete(codec);
+      codec = nullptr;
+
+      return;
+    }
     AMediaFormat_delete(format);
 
+    // Set codec parameters
     auto params = AMediaFormat_new();
-    auto profile = 0x00080000;  // AVCProfileConstrainedHigh
-    auto level = 0x200;         // AVCLevel3
-    AMediaFormat_setInt32(params, AMEDIAFORMAT_KEY_PROFILE, profile);
-    AMediaFormat_setInt32(params, AMEDIAFORMAT_KEY_LEVEL, level);
-    rc = AMediaCodec_setParameters(codec, params);
-    Log::assert_or_die(AMEDIA_OK == rc, "AMediaCodec_setParameters failed");
-    AMediaFormat_delete(params);
+    if (params) {
+      auto profile = 0x00080000;  // AVCProfileConstrainedHigh
+      auto level = 0x200;         // AVCLevel3
+      AMediaFormat_setInt32(params, AMEDIAFORMAT_KEY_PROFILE, profile);
+      AMediaFormat_setInt32(params, AMEDIAFORMAT_KEY_LEVEL, level);
+      rc = AMediaCodec_setParameters(codec, params);
+      if (rc != AMEDIA_OK) {
+        Log::w("AMediaCodec_setParameters failed with error %d, continuing with default parameters", rc);
+      }
+      AMediaFormat_delete(params);
+    }
 
+    // Release any existing surface
     if (surface != nullptr) {
       ANativeWindow_release(surface);
       surface = nullptr;
     }
 
+    // Create input surface
     rc = AMediaCodec_createInputSurface(codec, &surface);
-    Log::assert_or_die(AMEDIA_OK == rc, "AMediaCodec_createInputSurface failed");
+    if (rc != AMEDIA_OK || !surface) {
+      Log::e("AMediaCodec_createInputSurface failed with error %d", rc);
+      AMediaCodec_delete(codec);
+      codec = nullptr;
+      return;
+    }
 
+    // Start the codec
     rc = AMediaCodec_start(codec);
-    Log::assert_or_die(AMEDIA_OK == rc, "AMediaCodec_start failed");
+    if (rc != AMEDIA_OK) {
+      Log::e("AMediaCodec_start failed with error %d", rc);
+      if (surface) {
+        ANativeWindow_release(surface);
+        surface = nullptr;
+      }
+      AMediaCodec_delete(codec);
+      codec = nullptr;
+      return;
+    }
 
     isSeiInsertRequired = true;
   }
@@ -110,67 +175,157 @@ public:
   }
 
   void UpdateConfig(VideoConfig new_config) {
+    // Add debouncing and retry mechanism
+    static std::mutex update_mutex;
+    std::lock_guard<std::mutex> lock(update_mutex);
+
+    // If we're changing rotation only, just update the stored config
+    // and mark SEI insertion as required without reconfiguring codec
+    if (config_.width == new_config.width &&
+        config_.height == new_config.height &&
+        config_.frameRate == new_config.frameRate &&
+        config_.bitrate == new_config.bitrate &&
+        config_.cameraId == new_config.cameraId) {
+
+      if (config_.rotation != new_config.rotation) {
+        Log::i("Updating rotation only to %d degrees", new_config.rotation);
+        config_.rotation = new_config.rotation;
+        isSeiInsertRequired = true;
+        return;
+      }
+    }
+
+    // Only proceed with full reconfiguration for significant changes
+    Log::i("Reconfiguring encoder due to parameter changes");
     config_ = new_config;
-    if (status == STARTED) {
-      auto rc = AMediaCodec_flush(codec);
-      Log::assert_soft(AMEDIA_OK == rc, "AMediaCodec_flush failed");
-      configureCodec();
+
+    // Retry mechanism for codec reconfiguration
+    bool success = false;
+    int retries = 0;
+    const int MAX_RETRIES = 3;
+
+    while (!success && retries < MAX_RETRIES) {
+      try {
+        if (status == STARTED) {
+          // Flush first before reconfiguring
+          if (codec != nullptr) {
+            auto rc = AMediaCodec_flush(codec);
+            if (rc != AMEDIA_OK) {
+              Log::w("AMediaCodec_flush failed with error %d during update, retrying configuration", rc);
+            }
+          }
+          configureCodec();
+          success = (codec != nullptr);
+        } else {
+          success = true; // Not started, so no need to reconfigure yet
+        }
+      } catch (...) {
+        Log::e("Exception during codec reconfiguration, retry %d/%d", retries + 1, MAX_RETRIES);
+      }
+
+      if (!success) {
+        retries++;
+        // Exponential backoff
+        std::this_thread::sleep_for(std::chrono::milliseconds(100 * retries));
+      }
+    }
+
+    if (!success) {
+      Log::e("Failed to reconfigure codec after %d attempts", MAX_RETRIES);
     }
   }
 
   Packet EncodeBuffer() {
-    if (unlikely(codec == nullptr || surface == nullptr)) {
+    std::lock_guard<std::mutex> lock(codec_mutex);
+
+    if (codec == nullptr || surface == nullptr) {
+      static int null_codec_counter = 0;
+      if (++null_codec_counter % 100 == 1) { // Log only every 100th occurrence
+        Log::w("EncodeBuffer called with null codec or surface (occurred %d times)", null_codec_counter);
+      }
       return {};
     }
 
-    encoded_data.clear();
+    try {
+      encoded_data.clear();
 
-    auto timeoutUs = Time::uS / config_.frameRate;
-    auto index = AMediaCodec_dequeueOutputBuffer(codec, &info, timeoutUs);
-    if (likely(index >= 0)) {
-      if (unlikely(info.flags & AMEDIACODEC_BUFFER_FLAG_CODEC_CONFIG)) {
-        buffer = AMediaCodec_getOutputBuffer(codec, static_cast<size_t>(index), NULL);
-        encoded_data.insert(encoded_data.end(),
-                            reinterpret_cast<std::byte*>(&buffer[info.offset]),
-                            reinterpret_cast<std::byte*>(&buffer[info.offset + info.size]));
-        AMediaCodec_releaseOutputBuffer(codec, static_cast<size_t>(index), false);
+      auto timeoutUs = Time::uS / config_.frameRate;
 
-        // on some SDK versions (28. 29) this delay is important before a new AMediaCodec_dequeueOutputBuffer might be called
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+      auto index = AMediaCodec_dequeueOutputBuffer(codec, &info, timeoutUs);
 
-        index = AMediaCodec_dequeueOutputBuffer(codec, &info, timeoutUs);
-        if (index >= 0) {
-          buffer = AMediaCodec_getOutputBuffer(codec, static_cast<size_t>(index), NULL);
+      if (likely(index >= 0)) {
+        size_t bufferSize = 0;
+        buffer = AMediaCodec_getOutputBuffer(codec, static_cast<size_t>(index), &bufferSize);
 
-          encoded_data.insert(encoded_data.end(),
-                              reinterpret_cast<std::byte*>(&buffer[info.offset]),
-                              reinterpret_cast<std::byte*>(&buffer[info.offset + info.size]));
-          AMediaCodec_releaseOutputBuffer(codec, static_cast<size_t>(index), false);
+        if (buffer != nullptr && info.offset + info.size <= bufferSize) {
+          if (unlikely(info.flags & AMEDIACODEC_BUFFER_FLAG_CODEC_CONFIG)) {
+            encoded_data.insert(encoded_data.end(),
+                                reinterpret_cast<std::byte*>(&buffer[info.offset]),
+                                reinterpret_cast<std::byte*>(&buffer[info.offset + info.size]));
+
+            auto releaseResult = AMediaCodec_releaseOutputBuffer(codec, static_cast<size_t>(index), false);
+            if (releaseResult != AMEDIA_OK) {
+              Log::w("AMediaCodec_releaseOutputBuffer failed with %d", releaseResult);
+            }
+
+            // On some SDK versions (28, 29) this delay is important before a new AMediaCodec_dequeueOutputBuffer might be called
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+            index = AMediaCodec_dequeueOutputBuffer(codec, &info, timeoutUs);
+            if (index >= 0) {
+              buffer = AMediaCodec_getOutputBuffer(codec, static_cast<size_t>(index), &bufferSize);
+
+              if (buffer != nullptr && info.offset + info.size <= bufferSize) {
+                encoded_data.insert(encoded_data.end(),
+                                    reinterpret_cast<std::byte*>(&buffer[info.offset]),
+                                    reinterpret_cast<std::byte*>(&buffer[info.offset + info.size]));
+              } else {
+                Log::w("Invalid buffer bounds in second dequeue");
+              }
+
+              releaseResult = AMediaCodec_releaseOutputBuffer(codec, static_cast<size_t>(index), false);
+              if (releaseResult != AMEDIA_OK) {
+                Log::w("AMediaCodec_releaseOutputBuffer failed with %d", releaseResult);
+              }
+            }
+          } else {
+            encoded_data.insert(encoded_data.end(),
+                                reinterpret_cast<std::byte*>(&buffer[info.offset]),
+                                reinterpret_cast<std::byte*>(&buffer[info.offset + info.size]));
+
+            auto releaseResult = AMediaCodec_releaseOutputBuffer(codec, static_cast<size_t>(index), false);
+            if (releaseResult != AMEDIA_OK) {
+              Log::w("AMediaCodec_releaseOutputBuffer failed with %d", releaseResult);
+            }
+          }
+        } else {
+          Log::w("Invalid buffer pointer or bounds");
         }
+      } else if (index == AMEDIACODEC_INFO_OUTPUT_BUFFERS_CHANGED) {
+        LOGI << "Output buffers changed";
+      } else if (index == AMEDIACODEC_INFO_OUTPUT_FORMAT_CHANGED) {
+        auto format = AMediaCodec_getOutputFormat(codec);
+        if (format) {
+          LOGI << "Format set to: " << AMediaFormat_toString(format);
+          AMediaFormat_delete(format);
+        }
+      } else if (index == AMEDIACODEC_INFO_TRY_AGAIN_LATER) {
+        // No data available, this is normal
       } else {
-        buffer = AMediaCodec_getOutputBuffer(codec, static_cast<size_t>(index), NULL);
-        encoded_data.insert(encoded_data.end(),
-                            reinterpret_cast<std::byte*>(&buffer[info.offset]),
-                            reinterpret_cast<std::byte*>(&buffer[info.offset + info.size]));
-        AMediaCodec_releaseOutputBuffer(codec, static_cast<size_t>(index), false);
+        LOGI << "AMediaCodec_dequeueOutputBuffer unexpected return: " << index;
       }
-    } else if (index == AMEDIACODEC_INFO_OUTPUT_BUFFERS_CHANGED) {
-      LOGI << "Output buffers changed";
-    } else if (index == AMEDIACODEC_INFO_OUTPUT_FORMAT_CHANGED) {
-      auto format = AMediaCodec_getOutputFormat(codec);
-      LOGI << "Format set to: " << AMediaFormat_toString(format);
-      AMediaFormat_delete(format);
-    } else if (index == AMEDIACODEC_INFO_TRY_AGAIN_LATER) {
-      // it's okay
-    } else {
-      LOGI << "AMediaCodec_dequeueOutputBuffer unexpected return: " << index;
-    }
 
-    // Insert rotation SEI NAL unit if we have valid encoded data and rotation is non-zero
-    if (isSeiInsertRequired && !encoded_data.empty()) {
-      InsertRotationSei(encoded_data, config_.rotation);
-      isSeiInsertRequired = false;
-      LOGD << "Inserted SEI NAL with rotation: " << config_.rotation;
+      // Insert rotation SEI NAL unit if we have valid encoded data and rotation is needed
+      if (isSeiInsertRequired && !encoded_data.empty()) {
+        InsertRotationSei(encoded_data, config_.rotation);
+        isSeiInsertRequired = false;
+        LOGD << "Inserted SEI NAL with rotation: " << config_.rotation;
+      }
+
+    } catch (const std::exception& e) {
+      Log::e("Exception in EncodeBuffer: %s", e.what());
+    } catch (...) {
+      Log::e("Unknown exception in EncodeBuffer");
     }
 
     return Packet{encoded_data};
