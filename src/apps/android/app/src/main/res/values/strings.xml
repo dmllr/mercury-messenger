@@ -39,7 +39,8 @@
   <string name="fr_operation_ice_connection_state">ICE connection state</string>
   <string name="fr_operation_signaling_state">Signaling state</string>
   <string name="fr_operation_ping_state">Ping</string>
-  <string name="fr_operation_connected_clients">Connections</string>
+  <string name="fr_operation_connected_clients_title">Connections</string>
+  <string name="fr_operation_no_connected_clients">No viewers connected</string>
 
   <string name="fr_operation_status_unknown">Unknown</string>
   <string name="fr_operation_status_waiting">Waiting</string>

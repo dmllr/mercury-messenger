@@ -1,9 +1,5 @@
 package hela.eillance.streamer
 
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -18,8 +14,8 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,137 +25,27 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.localbroadcastmanager.content.LocalBroadcastManager
-import hela.eillance.Tune
 import hela.eillance.camera.R
 import hela.eillance.ndkio.EventSource
 import hela.eillance.ndkio.PeerConnectionState
-import hela.eillance.ndkio.ServiceConnectionState
 import kotlinx.coroutines.delay
 
+/**
+ * Display operation screen with connected clients
+ */
 @Composable
-fun OperationScreen(streamerService: StreamerService?) {
-  val context = LocalContext.current
-  var connectionState by remember { mutableStateOf(ServiceConnectionState.Unknown) }
-  var peerConnections by remember { mutableStateOf<Map<String, Map<EventSource, Int>>>(emptyMap()) }
-  // Add a ping timestamp map to track when pings are received for each peer
-  var peerPingTimestamps by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }
-  var isScreenActive by remember { mutableStateOf(true) }
-
-  // Update connection state on screen open
-  LaunchedEffect(Unit) {
-    streamerService?.getServiceConnectionState()?.let {
-      connectionState = it
-    }
-  }
-
-  // Observe lifecycle events to update connection state when app comes to foreground
-  val lifecycleOwner = LocalLifecycleOwner.current
-  DisposableEffect(lifecycleOwner) {
-    val observer = LifecycleEventObserver { _, event ->
-      when (event) {
-        Lifecycle.Event.ON_RESUME -> {
-          isScreenActive = true
-          streamerService?.getServiceConnectionState()?.let {
-            connectionState = it
-          }
-        }
-        Lifecycle.Event.ON_PAUSE -> {
-          isScreenActive = false
-        }
-        else -> {}
-      }
-    }
-    lifecycleOwner.lifecycle.addObserver(observer)
-    onDispose {
-      lifecycleOwner.lifecycle.removeObserver(observer)
-    }
-  }
-
-  // Periodic status update every 2 seconds when screen is active
-  LaunchedEffect(isScreenActive) {
-    while (isScreenActive) {
-      streamerService?.getServiceConnectionState()?.let {
-        connectionState = it
-      }
-      delay(2000) // 2 seconds interval
-    }
-  }
-
-  // Register for broadcast updates
-  DisposableEffect(Unit) {
-    val receiver = object : BroadcastReceiver() {
-      override fun onReceive(ctx: Context?, intent: Intent?) {
-        val action = intent?.action
-        when (action) {
-          Tune::BroadcastActionOnStateUpdate.get() -> {
-            val sourceValue = intent.getIntExtra(Tune::BroadcastActionOnStateUpdate_source.get(), 0)
-            val peerId = intent.getStringExtra(Tune::BroadcastActionOnStateUpdate_peer_id.get())
-            val state = intent.getIntExtra(Tune::BroadcastActionOnStateUpdate_state.get(), 0)
-
-            val source = EventSource.fromInt(sourceValue)
-
-            if (source == EventSource.System) {
-              connectionState = ServiceConnectionState.fromInt(state)
-            } else if (peerId != null) {
-              val currentPeers = peerConnections.toMutableMap()
-              val peerState = currentPeers[peerId]?.toMutableMap() ?: mutableMapOf()
-              peerState[source] = state
-              currentPeers[peerId] = peerState
-              peerConnections = currentPeers
-
-              // record the timestamp for a Ping even
-              if (source == EventSource.Ping) {
-                val currentTimestamps = peerPingTimestamps.toMutableMap()
-                currentTimestamps[peerId] = System.currentTimeMillis()
-                peerPingTimestamps = currentTimestamps
-              }
-            }
-          }
-        }
-      }
-    }
-
-    val intentFilter = IntentFilter(Tune::BroadcastActionOnStateUpdate.get())
-    LocalBroadcastManager.getInstance(context).registerReceiver(receiver, intentFilter)
-
-    onDispose {
-      LocalBroadcastManager.getInstance(context).unregisterReceiver(receiver)
-    }
-  }
+fun OperationScreen(viewModel: StreamerViewModel) {
+  val peerConnections by viewModel.peerConnections.collectAsState()
+  val peerPingTimestamps by viewModel.peerPingTimestamps.collectAsState()
 
   Column(
     modifier = Modifier
       .fillMaxSize()
-      .padding(16.dp)
   ) {
-    // Connection Status Section
+    // Connected Clients Section heading
     Text(
-      text = stringResource(id = R.string.fr_operation_communication_status),
-      style = MaterialTheme.typography.titleMedium,
-      textAlign = TextAlign.Center,
-      modifier = Modifier.fillMaxWidth()
-    )
-
-    Spacer(modifier = Modifier.height(8.dp))
-
-    Text(
-      text = connectionState.getResourceString(context),
-      style = MaterialTheme.typography.bodyMedium,
-      textAlign = TextAlign.Center,
-      modifier = Modifier.fillMaxWidth()
-    )
-
-    Spacer(modifier = Modifier.height(16.dp))
-
-    // Connected Clients Section
-    Text(
-      text = stringResource(id = R.string.fr_operation_connected_clients),
+      text = stringResource(id = R.string.fr_operation_connected_clients_title),
       style = MaterialTheme.typography.titleMedium,
       modifier = Modifier.padding(start = 12.dp)
     )
@@ -182,10 +68,27 @@ fun OperationScreen(streamerService: StreamerService?) {
             .padding(horizontal = 12.dp, vertical = 4.dp)
         )
       }
+
+      // Show empty state when no peers are connected
+      if (peerConnections.isEmpty()) {
+        item {
+          Text(
+            text = stringResource(id = R.string.fr_operation_no_connected_clients),
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(16.dp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+          )
+        }
+      }
     }
   }
 }
 
+/**
+ * Card displaying an individual peer connection
+ */
 @Composable
 fun PeerItemCard(
   peerId: String,
@@ -199,12 +102,12 @@ fun PeerItemCard(
 
   // ping indicator flash effect
   LaunchedEffect(lastPingTimestamp) {
-    if (lastPingTimestamp != null) {
+    if (lastPingTimestamp != null && lastPingTimestamp != lastProcessedTimestamp) {
       lastProcessedTimestamp = lastPingTimestamp
+      pingColor = Color.Green
+      delay(333)
+      pingColor = Color.Transparent
     }
-    pingColor = Color.Green
-    delay(333)
-    pingColor = Color.Transparent
   }
 
   Card(
