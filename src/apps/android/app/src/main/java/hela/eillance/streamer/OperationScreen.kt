@@ -31,6 +31,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import hela.eillance.Tune
 import hela.eillance.camera.R
@@ -47,10 +50,26 @@ fun OperationScreen(streamerService: StreamerService?) {
   // Add a ping timestamp map to track when pings are received for each peer
   var peerPingTimestamps by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }
 
-  // Initialize state from service
-  LaunchedEffect(streamerService) {
+  // Update connection state on screen open
+  LaunchedEffect(Unit) {
     streamerService?.getServiceConnectionState()?.let {
       connectionState = it
+    }
+  }
+
+  // Observe lifecycle events to update connection state when app comes to foreground
+  val lifecycleOwner = LocalLifecycleOwner.current
+  DisposableEffect(lifecycleOwner) {
+    val observer = LifecycleEventObserver { _, event ->
+      if (event == Lifecycle.Event.ON_RESUME) {
+        streamerService?.getServiceConnectionState()?.let {
+          connectionState = it
+        }
+      }
+    }
+    lifecycleOwner.lifecycle.addObserver(observer)
+    onDispose {
+      lifecycleOwner.lifecycle.removeObserver(observer)
     }
   }
 
