@@ -154,11 +154,16 @@ private:
       sensor_event_queue_ = ASensorManager_createEventQueue(
           sensor_manager_, looper, ALOOPER_POLL_CALLBACK, nullptr, nullptr);
 
+      constexpr auto sensorSamplesPerSecond = 1;
       ASensorEventQueue_enableSensor(sensor_event_queue_, accelerometer_);
       ASensorEventQueue_setEventRate(sensor_event_queue_, accelerometer_,
-                                     (1000L / 10) * 1000); // 10 Hz sampling rate
+                                     (1000L / sensorSamplesPerSecond) * 1000);
 
       DeviceOrientation last_orientation = current_orientation_.load();
+      DeviceOrientation detected_orientation = last_orientation;
+
+      int orientation_stability_counter = 0;
+      auto last_orientation_change = Time::Now();
 
       while (orientation_monitoring_active_.load()) {
         ASensorEvent event;
@@ -178,19 +183,39 @@ private:
               new_orientation = (y > 0) ? DeviceOrientation::Portrait : DeviceOrientation::UpsideDown;
             }
 
-            if (new_orientation != last_orientation) {
-              current_orientation_ = new_orientation;
-              last_orientation = new_orientation;
+            // Check if orientation detection is stable
+            if (new_orientation != detected_orientation) {
+              detected_orientation = new_orientation;
+              orientation_stability_counter = 0;
+            } else {
+              orientation_stability_counter++;
+            }
 
-              // Update encoder with new orientation
-              ConfigureVideo(config_);
+            // Only update if orientation is stable for multiple readings and enough time has passed
+            constexpr auto stabilityThreshold = 5;
+            constexpr auto minChangeInterval = Time::Unit(5U * 1000U * 1000U);  // 5s
+            if (orientation_stability_counter >= stabilityThreshold &&
+                detected_orientation != last_orientation &&
+                Time::Now() - last_orientation_change > minChangeInterval) {
+
+              current_orientation_ = detected_orientation;
+              last_orientation = detected_orientation;
+              last_orientation_change = Time::Now();
+              orientation_stability_counter = 0;
+
+              // Update encoder with new orientation via dispatch queue to avoid immediate execution
+              DispatchQueue::MainThread().Dispatch([this, new_orientation]() {
+                  VideoConfig updated_config = config_;
+                  updated_config.rotation = static_cast<int>(new_orientation);
+                  ConfigureVideo(updated_config);
+                });
 
               Log::i("Device orientation changed to: %d degrees", static_cast<int>(new_orientation));
             }
           }
         }
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
       }
 
       if (sensor_event_queue_) {
