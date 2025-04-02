@@ -1,4 +1,4 @@
-import React, { createContext, useState, ReactNode, useCallback, useRef } from 'react';
+import React, { createContext, useState, ReactNode, useCallback, useRef, useMemo } from 'react';
 import { ServiceConnectionState, SignalingMessage } from '@/types/signaling';
 
 // Type for peer message listeners map: { peerId: callback[] }
@@ -43,12 +43,13 @@ export const SignalingProvider: React.FC<SignalingProviderProps> = ({ children }
     const peerDisconnectListenersRef = useRef<PeerDisconnectListeners>({});
 
 
-    // Update both state and ref
+    // Update both state and ref - useCallback ensures stable identity
     const setWs = useCallback((newWs: WebSocket | null) => {
         wsRef.current = newWs;
         setWsInternal(newWs);
-    }, []);
+    }, []); // No dependencies needed as setWsInternal is stable
 
+    // useCallback ensures stable identity for functions passed in context
     const connectSignaling = useCallback(() => {
         if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
             console.log("WebSocket already open or connecting.");
@@ -59,7 +60,7 @@ export const SignalingProvider: React.FC<SignalingProviderProps> = ({ children }
         setConnectionState(ServiceConnectionState.Establishing);
         try {
             const newWs = new WebSocket(SIGNALING_SERVER_URL);
-            setWs(newWs); // Store the new instance
+            setWs(newWs); // Store the new instance using the stable setter
             // Event listeners will be attached in the useSignaling hook effect based on 'ws' state change
         } catch (e: any) {
             console.error("WebSocket connection failed immediately:", e);
@@ -67,17 +68,19 @@ export const SignalingProvider: React.FC<SignalingProviderProps> = ({ children }
             setConnectionState(ServiceConnectionState.Failure);
             setWs(null);
         }
-    }, [setWs]); // Include setWs
+    }, [setWs]); // Include the stable setWs callback
 
+    // useCallback ensures stable identity
     const disconnectSignaling = useCallback(() => {
         if (wsRef.current) {
             console.log("Disconnecting WebSocket...");
             setConnectionState(ServiceConnectionState.Disconnected); // Set state *before* closing
             wsRef.current.close(1000, "Client disconnected"); // Normal closure
-            setWs(null); // Clear instance immediately after initiating close
+            setWs(null); // Clear instance immediately after initiating close using stable setter
         }
-    }, [setWs]); // Include setWs
+    }, [setWs]); // Include the stable setWs callback
 
+    // useCallback ensures stable identity
     const sendMessage = useCallback((message: SignalingMessage) => {
         if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
             try {
@@ -94,9 +97,9 @@ export const SignalingProvider: React.FC<SignalingProviderProps> = ({ children }
             // setError("Cannot send message: Connection not open.");
             // Don't set error here, might be transient during connection setup
         }
-    }, []); // No dependencies needed as wsRef is used
+    }, []); // No dependencies needed as wsRef and setError are stable/used via ref/direct state setter
 
-    // Function for useWebRTC to subscribe to messages for a specific peer
+    // useCallback ensures stable identity
     const subscribeToPeerMessages = useCallback((peerId: string, callback: (message: SignalingMessage) => void): (() => void) => {
         console.log(`Subscribing to messages for peer ${peerId}`);
         if (!peerMessageListenersRef.current[peerId]) {
@@ -116,7 +119,7 @@ export const SignalingProvider: React.FC<SignalingProviderProps> = ({ children }
         };
     }, []); // No dependencies, uses ref
 
-    // Function for useWebRTC to subscribe to disconnect events for a specific peer
+    // useCallback ensures stable identity
     const subscribeToPeerDisconnect = useCallback((peerId: string, callback: () => void): (() => void) => {
         console.log(`Subscribing to disconnect for peer ${peerId}`);
         if (!peerDisconnectListenersRef.current[peerId]) {
@@ -135,8 +138,7 @@ export const SignalingProvider: React.FC<SignalingProviderProps> = ({ children }
         };
     }, []);
 
-
-    // Called by useSignaling when a peer message arrives
+    // useCallback ensures stable identity
     const handlePeerMessage = useCallback((message: SignalingMessage) => {
         if ('from' in message && message.from) { // Check if 'from' exists and is truthy
             const targetPeerId = message.from;
@@ -155,7 +157,7 @@ export const SignalingProvider: React.FC<SignalingProviderProps> = ({ children }
         }
     }, []); // No dependencies, uses ref
 
-    // Called by useSignaling when a peer_disconnected system message arrives
+    // useCallback ensures stable identity
     const handlePeerDisconnect = useCallback((disconnectedPeerId: string) => {
         if (disconnectedPeerId && peerDisconnectListenersRef.current[disconnectedPeerId]) {
             console.log(`Dispatching disconnect for ${disconnectedPeerId} to listeners.`);
@@ -176,22 +178,40 @@ export const SignalingProvider: React.FC<SignalingProviderProps> = ({ children }
     }, []);
 
 
+    // Memoize the context value object
+    // *** This must include ALL properties from SignalingContextProps ***
+    const contextValue = useMemo(() => ({
+        ws: ws, // state value
+        setWs, // memoized callback
+        connectionState, // state value
+        setConnectionState, // stable state setter
+        error, // state value
+        setError, // stable state setter
+        connectSignaling, // memoized callback
+        disconnectSignaling, // memoized callback
+        sendMessage, // memoized callback
+        subscribeToPeerMessages, // memoized callback
+        subscribeToPeerDisconnect, // memoized callback
+        handlePeerMessage, // memoized callback
+        handlePeerDisconnect, // memoized callback
+    }), [ // Dependencies: Include all state values and memoized callbacks used in the value object
+        ws,
+        setWs,
+        connectionState,
+        error,
+        connectSignaling,
+        disconnectSignaling,
+        sendMessage,
+        subscribeToPeerMessages,
+        subscribeToPeerDisconnect,
+        handlePeerMessage,
+        handlePeerDisconnect
+        // Note: setConnectionState and setError are stable setters from useState,
+        //       so technically not needed here, but including them is safe.
+    ]);
+
     return (
-        <SignalingContext.Provider value={{
-            ws: ws, // Use state for consumers that need reactivity
-            setWs,
-            connectionState,
-            setConnectionState,
-            error,
-            setError,
-            connectSignaling,
-            disconnectSignaling,
-            sendMessage,
-            subscribeToPeerMessages,
-            subscribeToPeerDisconnect,
-            handlePeerMessage,
-            handlePeerDisconnect,
-        }}>
+        <SignalingContext.Provider value={contextValue}>
             {children}
         </SignalingContext.Provider>
     );
