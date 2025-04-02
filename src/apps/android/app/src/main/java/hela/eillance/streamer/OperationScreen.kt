@@ -49,6 +49,7 @@ fun OperationScreen(streamerService: StreamerService?) {
   var peerConnections by remember { mutableStateOf<Map<String, Map<EventSource, Int>>>(emptyMap()) }
   // Add a ping timestamp map to track when pings are received for each peer
   var peerPingTimestamps by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }
+  var isScreenActive by remember { mutableStateOf(true) }
 
   // Update connection state on screen open
   LaunchedEffect(Unit) {
@@ -61,15 +62,32 @@ fun OperationScreen(streamerService: StreamerService?) {
   val lifecycleOwner = LocalLifecycleOwner.current
   DisposableEffect(lifecycleOwner) {
     val observer = LifecycleEventObserver { _, event ->
-      if (event == Lifecycle.Event.ON_RESUME) {
-        streamerService?.getServiceConnectionState()?.let {
-          connectionState = it
+      when (event) {
+        Lifecycle.Event.ON_RESUME -> {
+          isScreenActive = true
+          streamerService?.getServiceConnectionState()?.let {
+            connectionState = it
+          }
         }
+        Lifecycle.Event.ON_PAUSE -> {
+          isScreenActive = false
+        }
+        else -> {}
       }
     }
     lifecycleOwner.lifecycle.addObserver(observer)
     onDispose {
       lifecycleOwner.lifecycle.removeObserver(observer)
+    }
+  }
+
+  // Periodic status update every 2 seconds when screen is active
+  LaunchedEffect(isScreenActive) {
+    while (isScreenActive) {
+      streamerService?.getServiceConnectionState()?.let {
+        connectionState = it
+      }
+      delay(2000) // 2 seconds interval
     }
   }
 
@@ -181,12 +199,12 @@ fun PeerItemCard(
 
   // ping indicator flash effect
   LaunchedEffect(lastPingTimestamp) {
-      if (lastPingTimestamp != null) {
-        lastProcessedTimestamp = lastPingTimestamp
-      }
-      pingColor = Color.Green
-      delay(333)
-      pingColor = Color.Transparent
+    if (lastPingTimestamp != null) {
+      lastProcessedTimestamp = lastPingTimestamp
+    }
+    pingColor = Color.Green
+    delay(333)
+    pingColor = Color.Transparent
   }
 
   Card(
