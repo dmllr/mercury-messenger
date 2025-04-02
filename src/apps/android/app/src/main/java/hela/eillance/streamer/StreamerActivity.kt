@@ -13,10 +13,19 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
@@ -32,15 +41,17 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
@@ -51,11 +62,17 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import hela.eillance.camera.R
 import hela.eillance.ndkio.ServiceConnectionState
+import hela.eillance.theme.AppIcons
 import hela.eillance.theme.EillanceTheme
+import hela.eillance.theme.extendedColors
 
 class StreamerActivity : ComponentActivity(), ServiceConnection {
 
-  private var streamerService: StreamerService? = null
+  // Initialize ViewModel using the Activity's ViewModels delegate
+  private val viewModel: StreamerViewModel by viewModels {
+    StreamerViewModel.Factory(applicationContext)
+  }
+
   private var permissionsGranted = mutableStateOf(false)
 
   private val requiredPermissions = mutableListOf(
@@ -91,11 +108,9 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
           color = MaterialTheme.colorScheme.background
         ) {
           StreamerApp(
+            viewModel = viewModel,
             permissionsGranted = permissionsGranted.value,
-            onRequestPermissions = { checkAndRequestPermissions() },
-            onStartService = { startStreamingService() },
-            onStopService = { stopStreamingService() },
-            onRestartService = { restartStreamingService() }
+            onRequestPermissions = { checkAndRequestPermissions() }
           )
         }
       }
@@ -107,27 +122,32 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
   @OptIn(ExperimentalMaterial3Api::class)
   @Composable
   fun StreamerApp(
+    viewModel: StreamerViewModel,
     permissionsGranted: Boolean,
-    onRequestPermissions: () -> Unit,
-    onStartService: () -> Unit,
-    onStopService: () -> Unit,
-    onRestartService: () -> Unit
+    onRequestPermissions: () -> Unit
   ) {
     val navController = rememberNavController()
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
     val showBackButton = currentBackStackEntry?.destination?.route != "operation"
     var isUserMenuExpanded by remember { mutableStateOf(false) }
 
+    val connectionState by viewModel.connectionState.collectAsState()
+
     Scaffold(
       topBar = {
         TopAppBar(
-          title = { Text(text = stringResource(id = R.string.app_name)) },
+          title = {
+            Column {
+              Text(text = stringResource(id = R.string.app_name))
+              ConnectionStatusDisplay(connectionState = connectionState)
+            }
+          },
           navigationIcon = {
             if (showBackButton) {
               IconButton(onClick = { navController.popBackStack() }) {
                 Icon(
-                  painter = painterResource(id = R.drawable.ic_status2),
-                  contentDescription = stringResource(id = android.R.string.cancel)
+                  imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                  contentDescription = "Back"
                 )
               }
             }
@@ -136,8 +156,8 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
             Box {
               IconButton(onClick = { isUserMenuExpanded = true }) {
                 Icon(
-                  painter = painterResource(id = R.drawable.ic_status3),
-                  contentDescription = stringResource(id = R.string.toolbar_user_icon)
+                  imageVector = Icons.Default.Settings,
+                  contentDescription = "Settings"
                 )
               }
               UserMenu(
@@ -148,17 +168,18 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
                   isUserMenuExpanded = false
                 },
                 onServiceStart = {
-                  onStartService()
+                  viewModel.startService()
                   isUserMenuExpanded = false
                 },
                 onServiceStop = {
-                  onStopService()
+                  viewModel.stopService()
                   isUserMenuExpanded = false
                 },
                 onRestartService = {
-                  onRestartService()
+                  viewModel.restartService()
                   isUserMenuExpanded = false
-                }
+                },
+                connectionState = connectionState
               )
             }
           }
@@ -170,10 +191,45 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
           PermissionsScreen(onRequestPermissions = onRequestPermissions)
         } else {
           NavigationGraph(
-            navController = navController
+            navController = navController,
+            viewModel = viewModel
           )
         }
       }
+    }
+  }
+
+  @Composable
+  private fun ConnectionStatusDisplay(connectionState: ServiceConnectionState) {
+    val context = LocalContext.current
+    val text = connectionState.getResourceString(context)
+    val tint = when (connectionState) {
+      ServiceConnectionState.Online -> MaterialTheme.extendedColors.success
+      else -> MaterialTheme.extendedColors.warning
+    }
+
+    Row(
+      verticalAlignment = Alignment.CenterVertically,
+      modifier = Modifier.padding(top = 2.dp)
+    ) {
+      // Online/Offline Indicator Icon
+      Icon(
+        imageVector = when (connectionState) {
+          ServiceConnectionState.Online -> AppIcons.Status1Standby
+          ServiceConnectionState.Failure -> AppIcons.Failure
+          else -> AppIcons.Status2
+        },
+        contentDescription = text,
+        tint = tint,
+        modifier = Modifier.size(14.dp)
+      )
+      Spacer(Modifier.width(4.dp))
+      Text(
+        text = text,
+        style = MaterialTheme.typography.bodySmall,
+        color = tint,
+        fontStyle = FontStyle.Italic
+      )
     }
   }
 
@@ -184,7 +240,8 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
     onPreferencesClick: () -> Unit,
     onServiceStart: () -> Unit,
     onServiceStop: () -> Unit,
-    onRestartService: () -> Unit
+    onRestartService: () -> Unit,
+    connectionState: ServiceConnectionState
   ) {
     DropdownMenu(
       expanded = expanded,
@@ -214,8 +271,7 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
 
       DropdownMenuItem(
         text = { Text(stringResource(id = R.string.menu_start_service)) },
-        enabled = streamerService == null
-            || streamerService!!.getServiceConnectionState() != ServiceConnectionState.Online,
+        enabled = connectionState != ServiceConnectionState.Online,
         onClick = onServiceStart,
         leadingIcon = {
           Icon(
@@ -240,10 +296,10 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
 
   @Composable
   private fun NavigationGraph(
-    navController: NavHostController
+    navController: NavHostController,
+    viewModel: StreamerViewModel
   ) {
     val snackbarHostState = remember { SnackbarHostState() }
-    rememberCoroutineScope()
 
     Scaffold(
       snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
@@ -254,11 +310,12 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
         modifier = Modifier.padding(innerPadding)
       ) {
         composable("operation") {
-          OperationScreen(streamerService)
+          OperationScreen(viewModel)
         }
         composable("preferences") {
-          if (streamerService != null) {
-            CapturePreferencesScreen(streamerService!!)
+          val service = viewModel.getService()
+          if (service != null) {
+            CapturePreferencesScreen(service)
           } else {
             Box(modifier = Modifier.fillMaxSize()) {
               Text(
@@ -351,21 +408,11 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
   }
 
   private fun startStreamingService() {
-    if (streamerService != null) {
-      streamerService?.start()
+    // Check if we already have a service reference in the ViewModel
+    if (viewModel.getService() != null) {
+      viewModel.startService()
     } else {
       startStreamingForegroundService()
-    }
-  }
-
-  private fun stopStreamingService() {
-    streamerService?.stop()
-  }
-
-  private fun restartStreamingService() {
-    streamerService?.let { service ->
-      service.stop()
-      service.start()
     }
   }
 
@@ -393,6 +440,8 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
         startStreamingService()
       }
     }
+
+    viewModel.updateConnectionState()
   }
 
   override fun onDestroy() {
@@ -401,22 +450,23 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
   }
 
   private fun unbindCameraService() {
-    if (streamerService != null) {
+    if (viewModel.getService() != null) {
       try {
         unbindService(this)
+        viewModel.setStreamerService(null)
       } catch (_: IllegalArgumentException) {
         Log.e(javaClass.simpleName, "Trying to unbind service that is not registered")
       }
-      streamerService = null
     }
   }
 
   // ServiceConnection implementation
   override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-    streamerService = (service as StreamerService.StreamingServiceBinder).service
+    val streamerService = (service as StreamerService.StreamingServiceBinder).service
+    viewModel.setStreamerService(streamerService)
   }
 
   override fun onServiceDisconnected(name: ComponentName?) {
-    streamerService = null
+    viewModel.setStreamerService(null)
   }
 }
