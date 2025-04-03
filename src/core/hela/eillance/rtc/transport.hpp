@@ -457,8 +457,13 @@ private:
     auto type = itr->get<std::string>();
 
     if (type == "error") {
-      LOGE << "Signaling error received: " << message["error"].get<std::string>();
-      ReportServiceConnectionState(ServiceConnectionState::failure);
+      auto error = message["error"].get<std::string>();
+      LOGE << "Signaling error received: " << error;
+      if (error == "invalid_token") {
+        ReportServiceConnectionState(ServiceConnectionState::invalidToken);
+      } else {
+        ReportServiceConnectionState(ServiceConnectionState::failure);
+      }
     } else if (type == "peer_disconnected") {
       const auto disconnected_peer_id = message["id"].get<std::string>();
       RemovePeer(disconnected_peer_id);

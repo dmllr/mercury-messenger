@@ -329,6 +329,11 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
     val eventSource = EventSource.fromInt(source)
     Log.d("ViewerActivity", "onStatusUpdate: Peer=$peerId, Source=$eventSource, Status=$status")
     viewModel.updatePeerStatus(peerId, eventSource, status)
+
+    // Handle token invalidation
+    if (source == EventSource.System.value && status == ServiceConnectionState.InvalidToken.value) {
+      refreshAuthToken()
+    }
   }
 
   override fun onStreamInfoChange(width: Int, height: Int, rotation: Int) {
@@ -346,4 +351,21 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
     viewModel.updatePeerList(peers)
   }
 
+  private fun refreshAuthToken() {
+    val user = FirebaseAuth.getInstance().currentUser
+    user?.getIdToken(true)?.addOnCompleteListener { task ->
+      if (task.isSuccessful) {
+        val idToken = task.result?.token
+        if (idToken != null) {
+          updateAuthToken(idToken)
+          Log.d("ViewerActivity", "Auth token refreshed successfully")
+        }
+      } else {
+        Log.e("ViewerActivity", "Failed to refresh auth token", task.exception)
+        // Token refresh failed, redirect to launcher for re-authentication
+        startActivity(Intent(this, LauncherActivity::class.java))
+        finish()
+      }
+    }
+  }
 }
