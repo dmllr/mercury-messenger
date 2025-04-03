@@ -101,7 +101,7 @@ fun PeerItem(
   Card(
     modifier = Modifier
       .fillMaxWidth()
-      .height(180.dp)  // Increased height for bigger preview
+      .height(180.dp)
       .padding(horizontal = 16.dp, vertical = 6.dp)
       .clickable { onPeerClicked(peer) },
     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
