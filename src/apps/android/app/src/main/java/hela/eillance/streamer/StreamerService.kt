@@ -29,6 +29,7 @@ import androidx.core.graphics.drawable.DrawableCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.preference.PreferenceManager
 import com.google.firebase.auth.FirebaseAuth
+import hela.eillance.LauncherActivity
 import hela.eillance.Tune
 import hela.eillance.camera.R
 import hela.eillance.ndkio.EventSource
@@ -85,7 +86,9 @@ class StreamerService : Service(), IStreamerNativeBridge {
     if (source == EventSource.System.value) {
       serviceConnectionState = ServiceConnectionState.fromInt(status)
 
-      if (status == ServiceConnectionState.Establishing.value) {
+      if (status == ServiceConnectionState.InvalidToken.value) {
+        refreshAuthToken()
+      } else if (status == ServiceConnectionState.Establishing.value) {
         val deviceName = getDeviceNamePreference()
         configureDeviceName(deviceName)
 
@@ -94,6 +97,30 @@ class StreamerService : Service(), IStreamerNativeBridge {
       }
 
       startForeground()
+    }
+  }
+
+  private fun refreshAuthToken() {
+    val user = FirebaseAuth.getInstance().currentUser
+    user?.getIdToken(true)?.addOnCompleteListener { task ->
+      if (task.isSuccessful) {
+        val idToken = task.result?.token
+        if (idToken != null) {
+          updateAuthToken(idToken)
+          // Start the service again after token refresh
+          start()
+          Log.d("StreamerService", "Auth token refreshed successfully")
+        }
+      } else {
+        Log.e("StreamerService", "Failed to refresh auth token", task.exception)
+        // Launch an intent to redirect to the launcher activity for re-authentication
+        val launcherIntent = Intent(this, LauncherActivity::class.java).apply {
+          addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        }
+        startActivity(launcherIntent)
+        // Stop the service
+        stopSelf()
+      }
     }
   }
 
