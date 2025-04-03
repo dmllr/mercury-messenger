@@ -13,8 +13,12 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.Icons.Filled
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -39,6 +43,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowInsetsCompat
@@ -57,7 +63,9 @@ import hela.eillance.ndkio.Peer
 import hela.eillance.ndkio.Profile
 import hela.eillance.ndkio.ServiceConnectionState
 import hela.eillance.ndkio.interfaces.IViewerNativeBridge
+import hela.eillance.theme.AppIcons
 import hela.eillance.theme.EillanceTheme
+import hela.eillance.theme.extendedColors
 import kotlinx.coroutines.launch
 
 class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
@@ -111,6 +119,40 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
     setContent {
       navController = rememberNavController()
       AppContent(navController, viewModel)
+    }
+  }
+
+  @Composable
+  private fun ConnectionStatusDisplay(connectionState: ServiceConnectionState) {
+    val context = LocalContext.current
+    val text = connectionState.getResourceString(context)
+    val tint = when (connectionState) {
+      ServiceConnectionState.Online -> MaterialTheme.extendedColors.success
+      else -> MaterialTheme.extendedColors.warning
+    }
+
+    Row(
+      verticalAlignment = Alignment.CenterVertically,
+      modifier = Modifier.padding(top = 2.dp)
+    ) {
+      // Online/Offline Indicator Icon
+      Icon(
+        imageVector = when (connectionState) {
+          ServiceConnectionState.Online -> AppIcons.Status1Standby
+          ServiceConnectionState.Failure -> AppIcons.Failure
+          else -> AppIcons.Status2
+        },
+        contentDescription = text,
+        tint = tint,
+        modifier = Modifier.size(14.dp)
+      )
+      Spacer(Modifier.width(4.dp))
+      Text(
+        text = text,
+        style = MaterialTheme.typography.bodySmall,
+        color = tint,
+        fontStyle = FontStyle.Italic
+      )
     }
   }
 
@@ -211,15 +253,21 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
     navController: NavHostController,
     viewModel: ViewerViewModel
   ) {
+    val connectionStatusState = viewModel.connectionStatus.observeAsState(ServiceConnectionState.Unknown.ordinal)
+    val connectionState = ServiceConnectionState.fromInt(connectionStatusState.value)
+
     TopAppBar(
       title = {
-        Text(
-          when (currentRoute) {
-            "peers" -> "Available Devices"
-            "stream" -> viewModel.selectedPeer?.name ?: "Stream"
-            else -> "Surveillance Viewer"
-          }
-        )
+        Column {
+          Text(
+            when (currentRoute) {
+              "peers" -> "Available Devices"
+              "stream" -> viewModel.selectedPeer?.name ?: "Stream"
+              else -> "Surveillance Viewer"
+            }
+          )
+          ConnectionStatusDisplay(connectionState = connectionState)
+        }
       },
       navigationIcon = {
         if (currentRoute != "peers") {
