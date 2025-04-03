@@ -275,13 +275,18 @@ public:
     return peer;
   }
 
+  void SendSystemMessage(Json& message) {
+    message["token"] = auth_token_;
+    WsSendMessage(message);
+  }
+
   void SendPeerMessage(const std::string& peer_id, Json& message) {
     message["token"] = auth_token_;
     message["to"] = peer_id;
     WsSendMessage(message);
   }
 
-  void SendPeerDataChannelMessage(const std::string& peer_id, const Json& message) {
+  void SendPeerDataChannelMessage(const std::string& peer_id, const Json& message) const {
     auto peer = GetPeer(peer_id);
     if (peer && peer->data_channel_) {
       peer->data_channel_->send(message.dump());

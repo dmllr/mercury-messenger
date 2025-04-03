@@ -97,6 +97,15 @@ Java_hela_eillance_viewer_ViewerActivity_updateAuthToken(  // NOLINT(*-identifie
   viewerEngine->UpdateAuthToken(token);
 }
 
+/// @brief JNI function to request a peer list update.
+extern "C" JNIEXPORT void JNICALL
+Java_hela_eillance_viewer_ViewerActivity_requestPeerListUpdate(  // NOLINT(*-identifier-naming)
+    JNIEnv* env, jobject /* thiz */) {
+  if (viewerEngine != nullptr) {
+    viewerEngine->RequestPeerListUpdate();
+  }
+}
+
 /// @brief JNI function to initiate a stream request.
 extern "C" JNIEXPORT void JNICALL
 Java_hela_eillance_viewer_ViewerActivity_sendStreamRequest(  // NOLINT(*-identifier-naming)

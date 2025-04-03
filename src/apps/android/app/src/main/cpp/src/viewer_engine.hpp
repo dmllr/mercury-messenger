@@ -139,6 +139,11 @@ public:
     rtc_viewer_.Terminate();
   }
 
+  /// @brief Requests an updated peer list from the signaling server.
+  void RequestPeerListUpdate() {
+    rtc_viewer_.RequestPeerList();
+  }
+
   void UpdateAuthToken(const std::string& token) {
     rtc_viewer_.UpdateAuthToken(token);
   }

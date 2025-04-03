@@ -16,12 +16,17 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -44,40 +49,60 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import hela.eillance.theme.AppIcons
 import hela.eillance.theme.extendedColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
 fun PeersScreen(
   peers: List<StoredPeer>,
   onPeerClicked: (StoredPeer) -> Unit,
   onRemovePeer: (String) -> Unit,
-  viewModel: ViewerViewModel = viewModel() // ViewModel access might be useful here too
+  onRefreshPeers: () -> Unit,
+  isRefreshing: Boolean,
 ) {
-  if (peers.isEmpty()) {
-    Box(
-      modifier = Modifier.fillMaxSize(),
-      contentAlignment = Alignment.Center
-    ) {
-      Text("No known devices", style = MaterialTheme.typography.bodyLarge)
-    }
-  } else {
-    LazyColumn(
-      modifier = Modifier.fillMaxSize(),
-      contentPadding = PaddingValues(vertical = 8.dp)
-    ) {
-      items(peers, key = { it.id }) { peer ->
-        PeerItem(
-          peer = peer,
-          onPeerClicked = onPeerClicked,
-          onRemoveClicked = { onRemovePeer(peer.id) }, // Pass remove action
-          peerStore = PeerStore(LocalContext.current, rememberCoroutineScope()) // Pass store for image loading
-        )
+  val peerStore = PeerStore(LocalContext.current, rememberCoroutineScope())
+
+  val pullRefreshState = rememberPullRefreshState(
+    refreshing = isRefreshing,
+    onRefresh = onRefreshPeers
+  )
+
+  Box(
+    modifier = Modifier
+      .fillMaxSize()
+      .pullRefresh(pullRefreshState)
+  ) {
+    if (peers.isEmpty() && !isRefreshing) { // Don't show "No known devices" while refreshing
+      Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+      ) {
+        Text("No known devices", style = MaterialTheme.typography.bodyLarge)
+      }
+    } else {
+      LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(vertical = 8.dp)
+      ) {
+        items(peers, key = { it.id }) { peer ->
+          PeerItem(
+            peer = peer,
+            onPeerClicked = onPeerClicked,
+            onRemoveClicked = { onRemovePeer(peer.id) },
+            peerStore = peerStore
+          )
+        }
       }
     }
+
+    PullRefreshIndicator(
+      refreshing = isRefreshing,
+      state = pullRefreshState,
+      modifier = Modifier.align(Alignment.TopCenter),
+    )
   }
 }
 
@@ -132,7 +157,7 @@ fun PeerItem(
             AppIcons.Failure,
             contentDescription = "No preview",
             tint = Color.Gray,
-            modifier = Modifier.size(48.dp)  // Larger icon for empty state
+            modifier = Modifier.size(48.dp)
           )
         }
       }

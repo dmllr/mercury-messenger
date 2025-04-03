@@ -34,6 +34,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,6 +58,7 @@ import hela.eillance.ndkio.Profile
 import hela.eillance.ndkio.ServiceConnectionState
 import hela.eillance.ndkio.interfaces.IViewerNativeBridge
 import hela.eillance.theme.EillanceTheme
+import kotlinx.coroutines.launch
 
 class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
 
@@ -65,28 +67,38 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
     ViewModelProvider.AndroidViewModelFactory.getInstance(application)
   }
 
+  // Track pull-to-refresh
+  private var isRefreshingPeers by mutableStateOf(false)
   // Track fullscreen mode state
   private var isFullscreen by mutableStateOf(false)
 
-    private val backPressedCallback = object : OnBackPressedCallback(true) {
-        override fun handleOnBackPressed() {
-            // First check if we're in fullscreen mode
-            if (isFullscreen) {
-                setFullscreenMode(false)
-            } else {
-                // If not in fullscreen, let the system handle the back press
-                isEnabled = false // Disable this callback temporarily
-                onBackPressedDispatcher.onBackPressed() // Trigger the default back press
-                isEnabled = true
-            }
-        }
+  private val backPressedCallback = object : OnBackPressedCallback(true) {
+    override fun handleOnBackPressed() {
+      // First check if we're in fullscreen mode
+      if (isFullscreen) {
+        setFullscreenMode(false)
+      } else {
+        // If not in fullscreen, let the system handle the back press
+        isEnabled = false // Disable this callback temporarily
+        onBackPressedDispatcher.onBackPressed() // Trigger the default back press
+        isEnabled = true
+      }
     }
+  }
 
   companion object {
     init {
       System.loadLibrary("lib-viewer-service-bridge")
     }
   }
+
+  private external fun initEngine(nativeBridge: IViewerNativeBridge)
+  private external fun initDecoder(surface: Surface)
+  private external fun releaseDecoder()
+  private external fun updateAuthToken(token: String)
+  private external fun requestPeerListUpdate()
+  external fun sendStreamRequest(peerId: String, config: Config)
+  external fun sendConfigurationRequest(peerId: String, config: Config)
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
@@ -105,18 +117,23 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
   @Composable
   fun AppContent(navController: NavHostController, viewModel: ViewerViewModel) {
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
-
-    // Observe the combined list of displayed peers (StoredPeer) from StateFlow
     val displayedPeers by viewModel.displayedPeers.collectAsState()
-
-    // Observe connection status
     val connectionStatusState = viewModel.connectionStatus.observeAsState(ServiceConnectionState.Unknown.ordinal)
     val connectionState = ServiceConnectionState.fromInt(connectionStatusState.value)
+    val scope = rememberCoroutineScope()
+
+    val refreshPeersAction: () -> Unit = {
+      if (!isRefreshingPeers) {
+        scope.launch {
+          isRefreshingPeers = true
+          requestPeerListUpdate()
+        }
+      }
+    }
 
     EillanceTheme {
       Scaffold(
         topBar = {
-          // Only show the TopAppBar when not in fullscreen mode
           if (!isFullscreen) {
             AppTopBar(currentRoute, navController, viewModel)
           }
@@ -144,7 +161,9 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
                     },
                     onRemovePeer = { peerIdToRemove ->
                       viewModel.removePeer(peerIdToRemove)
-                    }
+                    },
+                    isRefreshing = isRefreshingPeers,
+                    onRefreshPeers = refreshPeersAction
                   )
                 }
                 composable("stream") {
@@ -152,8 +171,8 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
                   if (currentSelectedPeer != null) {
                     StreamScreen(
                       peer = currentSelectedPeer,
-                      initDecoder = { surface -> initDecoder(surface) },
-                      releaseDecoder = { releaseDecoder() },
+                      initDecoder = ::initDecoder,
+                      releaseDecoder = ::releaseDecoder,
                       viewModel = viewModel,
                     )
                   } else {
@@ -318,13 +337,6 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
     }
   }
 
-  private external fun initEngine(nativeBridge: IViewerNativeBridge)
-  private external fun initDecoder(surface: Surface)
-  private external fun releaseDecoder()
-  private external fun updateAuthToken(token: String)
-  external fun sendStreamRequest(peerId: String, config: Config)
-  external fun sendConfigurationRequest(peerId: String, config: Config)
-
   override fun onStatusUpdate(peerId: String, source: Int, status: Int) {
     val eventSource = EventSource.fromInt(source)
     Log.d("ViewerActivity", "onStatusUpdate: Peer=$peerId, Source=$eventSource, Status=$status")
@@ -349,6 +361,9 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
   override fun onPeerListUpdate(peers: List<Peer>) {
     Log.d("ViewerActivity", "onPeerListUpdate: Received ${peers.size} peers.")
     viewModel.updatePeerList(peers)
+    if (isRefreshingPeers) {
+      isRefreshingPeers = false
+    }
   }
 
   private fun refreshAuthToken() {
