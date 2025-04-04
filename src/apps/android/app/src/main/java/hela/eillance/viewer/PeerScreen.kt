@@ -26,7 +26,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -54,7 +53,7 @@ import hela.eillance.theme.extendedColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
+@OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun PeersScreen(
   peers: List<StoredPeer>,
@@ -75,25 +74,40 @@ fun PeersScreen(
       .fillMaxSize()
       .pullRefresh(pullRefreshState)
   ) {
-    if (peers.isEmpty() && !isRefreshing) { // Don't show "No known devices" while refreshing
-      Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-      ) {
-        Text("No known devices", style = MaterialTheme.typography.bodyLarge)
-      }
-    } else {
-      LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(vertical = 8.dp)
-      ) {
-        items(peers, key = { it.id }) { peer ->
-          PeerItem(
-            peer = peer,
-            onPeerClicked = onPeerClicked,
-            onRemoveClicked = { onRemovePeer(peer.id) },
-            peerStore = peerStore
+    Column(
+      modifier = Modifier.fillMaxSize()
+    ) {
+      // Section heading - consistent with OperationScreen
+      Text(
+        text = "Known Devices",
+        style = MaterialTheme.typography.titleMedium,
+        modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp)
+      )
+
+      if (peers.isEmpty() && !isRefreshing) {
+        Box(
+          modifier = Modifier.fillMaxSize(),
+          contentAlignment = Alignment.Center
+        ) {
+          Text(
+            text = "No known devices",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
           )
+        }
+      } else {
+        LazyColumn(
+          modifier = Modifier.fillMaxSize(),
+          contentPadding = PaddingValues(vertical = 8.dp)
+        ) {
+          items(peers, key = { it.id }) { peer ->
+            PeerItem(
+              peer = peer,
+              onPeerClicked = onPeerClicked,
+              onRemoveClicked = { onRemovePeer(peer.id) },
+              peerStore = peerStore
+            )
+          }
         }
       }
     }
@@ -115,7 +129,6 @@ fun PeerItem(
 ) {
   var bitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
   var showMenu by remember { mutableStateOf(false) }
-  val context = LocalContext.current
 
   LaunchedEffect(peer.previewImagePath) {
     launch(Dispatchers.IO) {
@@ -168,7 +181,7 @@ fun PeerItem(
           .align(Alignment.BottomCenter)
           .fillMaxWidth()
           .background(Color.Black.copy(alpha = 0.5f))
-          .padding(8.dp)
+          .padding(12.dp)
       ) {
         Row(
           modifier = Modifier.fillMaxWidth(),
@@ -197,7 +210,7 @@ fun PeerItem(
               Spacer(Modifier.width(4.dp))
               Text(
                 text = if (peer.isOnline) "Online" else "Offline",
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.bodyMedium,
                 color = tint,
                 fontStyle = if (!peer.isOnline) FontStyle.Italic else FontStyle.Normal
               )
