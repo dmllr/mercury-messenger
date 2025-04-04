@@ -154,16 +154,17 @@ private:
       sensor_event_queue_ = ASensorManager_createEventQueue(
           sensor_manager_, looper, ALOOPER_POLL_CALLBACK, nullptr, nullptr);
 
-      constexpr auto sensorSamplesPerSecond = 1;
+      constexpr auto sensorSamplesPerSecond = 5;
       ASensorEventQueue_enableSensor(sensor_event_queue_, accelerometer_);
       ASensorEventQueue_setEventRate(sensor_event_queue_, accelerometer_,
                                      (1000L / sensorSamplesPerSecond) * 1000);
 
-      DeviceOrientation last_orientation = current_orientation_.load();
-      DeviceOrientation detected_orientation = last_orientation;
+      auto last_orientation = current_orientation_.load();
+      auto detected_orientation = last_orientation;
 
-      int orientation_stability_counter = 0;
-      auto last_orientation_change = Time::Now();
+      auto orientation_stability_counter = 0;
+      auto last_orientation_change = 0U;
+      auto initial_orientation_stability_counter = 999;
 
       while (orientation_monitoring_active_.load()) {
         ASensorEvent event;
@@ -186,14 +187,15 @@ private:
             // Check if orientation detection is stable
             if (new_orientation != detected_orientation) {
               detected_orientation = new_orientation;
-              orientation_stability_counter = 0;
+              orientation_stability_counter = initial_orientation_stability_counter;
+              initial_orientation_stability_counter = 0;
             } else {
               orientation_stability_counter++;
             }
 
             // Only update if orientation is stable for multiple readings and enough time has passed
-            constexpr auto stabilityThreshold = 5;
-            constexpr auto minChangeInterval = Time::Unit(5U * 1000U * 1000U);  // 5s
+            constexpr auto stabilityThreshold = sensorSamplesPerSecond * 2;
+            constexpr auto minChangeInterval = Time::Unit(2U * 1000U * 1000U);  // 2s
             if (orientation_stability_counter >= stabilityThreshold &&
                 detected_orientation != last_orientation &&
                 Time::Now() - last_orientation_change > minChangeInterval) {
