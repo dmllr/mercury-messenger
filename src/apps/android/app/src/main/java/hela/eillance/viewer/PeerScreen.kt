@@ -220,13 +220,26 @@ fun PeerItem(
               expanded = showMenu,
               onDismissRequest = { showMenu = false }
             ) {
-              DropdownMenuItem(
-                text = { Text("Remove") },
-                onClick = {
-                  onRemoveClicked()
-                  showMenu = false
-                }
-              )
+              if (!peer.isOnline) {
+                DropdownMenuItem(
+                  text = { Text("Remove") },
+                  onClick = {
+                    onRemoveClicked()
+                    showMenu = false
+                  }
+                )
+              } else {
+                DropdownMenuItem(
+                  text = {
+                    Text(
+                      "Cannot remove online devices",
+                      color = Color.Gray
+                    )
+                  },
+                  onClick = { showMenu = false },
+                  enabled = false
+                )
+              }
             }
           }
         }
