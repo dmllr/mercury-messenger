@@ -1,4 +1,3 @@
-// Add these at the top of your useWebRTC.ts file
 import { useState, useEffect, useRef, useCallback, useContext } from 'react';
 import { SignalingContext } from '@/contexts/SignalingContext';
 import { useAuth } from './useAuth';
@@ -12,7 +11,6 @@ import {
 import { Config } from '@/types/config';
 import { Peer } from '@/types/peer';
 
-// ICE Servers configuration (from C++ code)
 const rtcConfiguration: RTCConfiguration = {
     iceServers: [
         { urls: "stun:stun.relay.metered.ca:80" },
@@ -26,29 +24,41 @@ const rtcConfiguration: RTCConfiguration = {
             username: "49880a0f046c8990b1990b35",
             credential: "qZCNW/57EB8GwO3A"
         }
-        // Add more servers if needed
-    ]
+    ],
+    sdpSemantics: 'unified-plan',
+    bundlePolicy: "max-bundle"
 };
 
 export function useWebRTC(peerId: string | null) {
+    const peerConnectionCreated = useRef<boolean>(false);
     const pc = useRef<RTCPeerConnection | null>(null);
     const dataChannel = useRef<RTCDataChannel | null>(null);
     const [stream, setStream] = useState<MediaStream | null>(null);
     const [connectionState, setConnectionState] = useState<RTCPeerConnectionState>('new');
     const [iceConnectionState, setIceConnectionState] = useState<RTCIceConnectionState>('new');
+    const [iceGatheringState, setIceGatheringState] = useState<RTCIceGatheringState>('new');
     const [signalingState, setSignalingState] = useState<RTCSignalingState>('stable');
     const [isDataChannelOpen, setIsDataChannelOpen] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
     const [remoteProfile, setRemoteProfile] = useState<Peer['profile'] | null>(null);
 
-    // New: Add a message queue and processing flag
     const messageQueue = useRef<SignalingMessage[]>([]);
     const isProcessingMessage = useRef<boolean>(false);
+    const pingTimeoutRef = useRef<number | null>(null);
+    const startTimeRef = useRef<number | null>(null);
 
     const { idToken } = useAuth();
     const signaling = useContext(SignalingContext);
 
-    // --- Message Queue Processing ---
+    const getCurrentTimestamp = () => {
+        if (startTimeRef.current === null) {
+            startTimeRef.current = new Date().getTime();
+            return 0;
+        } else {
+            return new Date().getTime() - startTimeRef.current;
+        }
+    };
+
     const processMessageQueue = useCallback(async () => {
         if (isProcessingMessage.current || messageQueue.current.length === 0) {
             return;
@@ -56,9 +66,8 @@ export function useWebRTC(peerId: string | null) {
 
         isProcessingMessage.current = true;
         try {
-            const message = messageQueue.current.shift(); // Get next message
+            const message = messageQueue.current.shift();
             if (message) {
-                // Process message based on type
                 await processSignalingMessage(message);
             }
         } catch (error) {
@@ -67,27 +76,29 @@ export function useWebRTC(peerId: string | null) {
         } finally {
             isProcessingMessage.current = false;
 
-            // Continue processing queue if there are more messages
             if (messageQueue.current.length > 0) {
-                setTimeout(processMessageQueue, 0); // Use setTimeout to avoid deep recursion
+                setTimeout(processMessageQueue, 0);
             }
         }
     }, []);
 
-    // --- Cleanup ---
     const closeConnection = useCallback(() => {
         console.log("Closing WebRTC connection...");
-        // Clear message queue
         messageQueue.current = [];
         isProcessingMessage.current = false;
+        // Reset the connection created flag
+        peerConnectionCreated.current = false;
+
+        if (pingTimeoutRef.current) {
+            clearTimeout(pingTimeoutRef.current);
+            pingTimeoutRef.current = null;
+        }
 
         if (dataChannel.current) {
             try {
-                // Optionally send termination message before closing
                 if (dataChannel.current.readyState === 'open') {
                     const terminationMsg: DataChannelMessage = { type: DataChannelMessageType.TERMINATION };
                     dataChannel.current.send(JSON.stringify(terminationMsg));
-                    console.log("Sent termination message via data channel.");
                 }
                 dataChannel.current.close();
             } catch (e) {
@@ -95,40 +106,61 @@ export function useWebRTC(peerId: string | null) {
             }
             dataChannel.current = null;
         }
-        if (pc.current) {
-            // Remove listeners before closing
-            pc.current.onicecandidate = null;
-            pc.current.ontrack = null;
-            pc.current.onconnectionstatechange = null;
-            pc.current.oniceconnectionstatechange = null;
-            pc.current.onsignalingstatechange = null;
-            pc.current.ondatachannel = null; // Important!
 
-            pc.current.close();
-            pc.current = null;
-            console.log("RTCPeerConnection closed.");
+        if (pc.current) {
+            // Close transceivers
+            if (pc.current.getTransceivers) {
+                pc.current.getTransceivers().forEach(function(transceiver) {
+                    if (transceiver.stop) {
+                        transceiver.stop();
+                    }
+                });
+            }
+
+            // Close local tracks
+            pc.current.getSenders().forEach(function(sender) {
+                const track = sender.track;
+                if (track !== null) {
+                    sender.track.stop();
+                }
+            });
+
+            setTimeout(() => {
+                if (pc.current) {
+                    pc.current.close();
+                    pc.current = null;
+                }
+            }, 500);
         }
+
         setStream(null);
         setConnectionState('closed');
         setIceConnectionState('closed');
+        setIceGatheringState('complete');
         setSignalingState('closed');
         setIsDataChannelOpen(false);
         setError(null);
-        setRemoteProfile(null); // Clear profile on close
-    }, []); // No dependencies needed for cleanup refs
+        setRemoteProfile(null);
+        startTimeRef.current = null;
+    }, []);
 
-    // --- Data Channel Handlers ---
     const handleDataChannelMessage = useCallback((event: MessageEvent) => {
         console.log('Data channel message received:', event.data);
         try {
-            // Handle Ping/Pong if implemented on streamer side (optional)
-            if (typeof event.data === 'string' && event.data.startsWith('Ping')) {
+            if (typeof event.data === 'string' && event.data === "Ping") {
                 console.log("Received Ping, sending Pong...");
-                if (dataChannel.current?.readyState === 'open') {
-                    // Debounce or delay Pong if needed
-                    setTimeout(() => dataChannel.current?.send('Pong'), 100); // Small delay
+                if (pingTimeoutRef.current) {
+                    clearTimeout(pingTimeoutRef.current);
                 }
-                // Could update a 'last ping received' timestamp state here
+
+                pingTimeoutRef.current = window.setTimeout(() => {
+                    if (dataChannel.current?.readyState === 'open') {
+                        const reply = `Pong ${getCurrentTimestamp()}`;
+                        console.log("Sending pong response:", reply);
+                        dataChannel.current.send(reply);
+                    }
+                    pingTimeoutRef.current = null;
+                }, 1000) as unknown as number;
                 return;
             }
 
@@ -140,28 +172,24 @@ export function useWebRTC(peerId: string | null) {
                     break;
                 case DataChannelMessageType.TERMINATION:
                     console.log("Received termination request via data channel.");
-                    closeConnection(); // Close connection gracefully
+                    closeConnection();
                     break;
-                // Add other data channel message types if needed
                 default:
                     console.warn("Unknown data channel message type:", message.type);
             }
         } catch (e) {
             console.error("Failed to parse data channel message:", e);
         }
-    }, [closeConnection]);
+    }, [closeConnection, getCurrentTimestamp]);
 
     const handleDataChannelOpen = useCallback(() => {
         console.log('Data channel is open');
         setIsDataChannelOpen(true);
-        // You can now send messages, e.g., request initial profile or capabilities
-        // sendDataChannelMessage(JSON.stringify({ type: 'request_profile' }));
     }, []);
 
     const handleDataChannelClose = useCallback(() => {
         console.log('Data channel is closed');
         setIsDataChannelOpen(false);
-        // Maybe trigger cleanup or connection check
     }, []);
 
     const setupDataChannel = useCallback((dc: RTCDataChannel) => {
@@ -172,118 +200,116 @@ export function useWebRTC(peerId: string | null) {
         dc.onclose = handleDataChannelClose;
         dc.onerror = (event) => {
             console.error("Data channel error:", event);
-            // Handle error appropriately
         };
     }, [handleDataChannelMessage, handleDataChannelOpen, handleDataChannelClose]);
 
-
-    // --- Peer Connection Handlers ---
-    const handleIceCandidate = useCallback((event: RTCPeerConnectionIceEvent) => {
-        if (event.candidate && idToken && peerId) {
-            console.log("Sending ICE candidate:", event.candidate);
-            const message: SignalingMessage = {
-                type: PeerMessageType.ICE_CANDIDATE,
-                to: peerId,
-                candidate: event.candidate.toJSON(),
-                token: idToken,
-            };
-            signaling?.sendMessage(message);
-        }
-    }, [idToken, peerId, signaling]);
-
-    const handleTrack = useCallback((event: RTCTrackEvent) => {
-        console.log("Track received:", event.track.kind, event.streams);
-        // Usually, the stream is attached here
-        if (event.streams && event.streams[0]) {
-            console.log("Attaching stream:", event.streams[0].id);
-            setStream(event.streams[0]);
-        } else {
-            // Fallback for older browsers might need to construct stream manually
-            const newStream = new MediaStream();
-            newStream.addTrack(event.track);
-            setStream(newStream);
-            console.log("Created new stream for track:", newStream.id);
-        }
-    }, []);
-
-    const handleConnectionStateChange = useCallback(() => {
-        if (pc.current) {
-            console.log("PeerConnection state changed:", pc.current.connectionState);
-            setConnectionState(pc.current.connectionState);
-            if (pc.current.connectionState === 'failed' || pc.current.connectionState === 'disconnected' || pc.current.connectionState === 'closed') {
-                // Consider cleanup or attempting restart
-                // closeConnection(); // Automatically close on failure/disconnect? Or allow retry?
-            }
-            if (pc.current.connectionState === 'failed') {
-                setError("WebRTC connection failed.");
-            }
-        }
-    }, []);
-
-    const handleIceConnectionStateChange = useCallback(() => {
-        if (pc.current) {
-            console.log("ICE Connection state changed:", pc.current.iceConnectionState);
-            setIceConnectionState(pc.current.iceConnectionState);
-            if (pc.current.iceConnectionState === 'failed' || pc.current.iceConnectionState === 'disconnected' || pc.current.iceConnectionState === 'closed') {
-                // Handle ICE failures
-                // setError("ICE connection failed or disconnected.");
-                // closeConnection(); // Maybe close connection on ICE failure
-            }
-        }
-    }, []);
-
-    const handleSignalingStateChange = useCallback(() => {
-        if (pc.current) {
-            console.log("Signaling state changed:", pc.current.signalingState);
-            setSignalingState(pc.current.signalingState);
-
-            // Process queue when signaling state changes to stable
-            if (pc.current.signalingState === 'stable') {
-                setTimeout(processMessageQueue, 0);
-            }
-        }
-    }, [processMessageQueue]);
-
-
-    // --- Create Peer Connection ---
     const createPeerConnection = useCallback(() => {
         console.log("Creating new RTCPeerConnection");
-        closeConnection(); // Ensure any previous connection is closed
+        if (pc.current) {
+            closeConnection();
+        }
 
         try {
             const newPc = new RTCPeerConnection(rtcConfiguration);
-            newPc.onicecandidate = handleIceCandidate;
-            newPc.ontrack = handleTrack;
-            newPc.onconnectionstatechange = handleConnectionStateChange;
-            newPc.oniceconnectionstatechange = handleIceConnectionStateChange; // Add ICE state handler
-            newPc.onsignalingstatechange = handleSignalingStateChange; // Add Signaling state handler
-            // IMPORTANT: Handle incoming data channel from the streamer
-            newPc.ondatachannel = (event) => {
+
+            newPc.addEventListener('icecandidate', (event) => {
+                if (event.candidate && idToken && peerId) {
+                    console.log("Sending ICE candidate:", event.candidate);
+                    const message: SignalingMessage = {
+                        type: PeerMessageType.ICE_CANDIDATE,
+                        to: peerId,
+                        candidate: event.candidate.toJSON(),
+                        token: idToken,
+                    };
+                    signaling?.sendMessage(message);
+                }
+            });
+
+            newPc.addEventListener('track', (event) => {
+                console.log("Track received:", event.track.kind, event.streams);
+                if (event.streams && event.streams[0]) {
+                    console.log("Attaching stream:", event.streams[0].id);
+                    setStream(event.streams[0]);
+                } else {
+                    const newStream = new MediaStream();
+                    newStream.addTrack(event.track);
+                    setStream(newStream);
+                    console.log("Created new stream for track:", newStream.id);
+                }
+            });
+
+            newPc.addEventListener('connectionstatechange', () => {
+                console.log("PeerConnection state changed:", newPc.connectionState);
+                setConnectionState(newPc.connectionState);
+                if (newPc.connectionState === 'failed') {
+                    setError("WebRTC connection failed.");
+                }
+            });
+
+            newPc.addEventListener('iceconnectionstatechange', () => {
+                console.log("ICE Connection state changed:", newPc.iceConnectionState);
+                setIceConnectionState(newPc.iceConnectionState);
+            });
+
+            newPc.addEventListener('icegatheringstatechange', () => {
+                console.log("ICE Gathering state changed:", newPc.iceGatheringState);
+                setIceGatheringState(newPc.iceGatheringState);
+
+                if (newPc.iceGatheringState === 'complete') {
+                    processMessageQueue();
+                }
+            });
+
+            newPc.addEventListener('signalingstatechange', () => {
+                console.log("Signaling state changed:", newPc.signalingState);
+                setSignalingState(newPc.signalingState);
+
+                if (newPc.signalingState === 'stable') {
+                    setTimeout(processMessageQueue, 0);
+                }
+            });
+
+            newPc.addEventListener('datachannel', (event) => {
                 console.log("ondatachannel event received!");
                 setupDataChannel(event.channel);
-            };
-
+            });
 
             pc.current = newPc;
-            setError(null); // Clear previous errors
-            setConnectionState('new'); // Reset state
+            setError(null);
+            setConnectionState('new');
             setIceConnectionState('new');
+            setIceGatheringState('new');
             setSignalingState('stable');
             setIsDataChannelOpen(false);
-            setRemoteProfile(null); // Clear old profile
+            setRemoteProfile(null);
+            startTimeRef.current = null;
 
         } catch (e: any) {
             console.error("Failed to create RTCPeerConnection:", e);
             setError(`Failed to create PeerConnection: ${e.message}`);
             pc.current = null;
         }
-    }, [closeConnection, handleIceCandidate, handleTrack, handleConnectionStateChange, handleIceConnectionStateChange, handleSignalingStateChange, setupDataChannel]);
+    }, [closeConnection, idToken, peerId, signaling, processMessageQueue, setupDataChannel]);
 
-    // --- Process a signaling message (called by queue processor) ---
+    const waitForIceGatheringComplete = useCallback((peerConnection: RTCPeerConnection): Promise<void> => {
+        return new Promise((resolve) => {
+            if (peerConnection.iceGatheringState === 'complete') {
+                resolve();
+            } else {
+                const checkState = () => {
+                    if (peerConnection.iceGatheringState === 'complete') {
+                        peerConnection.removeEventListener('icegatheringstatechange', checkState);
+                        resolve();
+                    }
+                };
+                peerConnection.addEventListener('icegatheringstatechange', checkState);
+            }
+        });
+    }, []);
+
     const processSignalingMessage = useCallback(async (message: SignalingMessage) => {
         if (!pc.current && message.type !== PeerMessageType.OFFER) {
             console.warn("Received signaling message but PeerConnection is not initialized:", message.type);
-            // Ignore candidates/answers if we haven't processed an offer yet
             return;
         }
 
@@ -293,7 +319,6 @@ export function useWebRTC(peerId: string | null) {
                     if (message.sdp && message.from === peerId) {
                         console.log("Processing OFFER from", message.from);
 
-                        // Create PC if it doesn't exist
                         if (!pc.current) {
                             console.warn("Received offer but PC not ready, creating PC first.");
                             createPeerConnection();
@@ -302,7 +327,6 @@ export function useWebRTC(peerId: string | null) {
                             throw new Error("Failed to create PeerConnection before handling offer.");
                         }
 
-                        // Only set remote description if we're in a valid state
                         if (pc.current.signalingState === 'stable' ||
                             pc.current.signalingState === 'have-local-pranswer') {
 
@@ -312,18 +336,20 @@ export function useWebRTC(peerId: string | null) {
                             }));
                             console.log("Remote description (offer) set.");
 
-                            // Create Answer
                             const answer = await pc.current.createAnswer();
                             await pc.current.setLocalDescription(answer);
                             console.log("Local description (answer) set.");
 
-                            // Send Answer back via signaling
+                            // Wait for ICE gathering to complete
+                            await waitForIceGatheringComplete(pc.current);
+                            console.log("ICE gathering completed, sending answer");
+
                             if (idToken && peerId) {
-                                if (answer.sdp) {
+                                if (pc.current.localDescription?.sdp) {
                                     const answerMsg: AnswerMessage = {
                                         type: PeerMessageType.ANSWER,
                                         to: peerId,
-                                        sdp: answer.sdp,
+                                        sdp: pc.current.localDescription.sdp,
                                         token: idToken,
                                     };
                                     signaling?.sendMessage(answerMsg);
@@ -336,7 +362,6 @@ export function useWebRTC(peerId: string | null) {
                             }
                         } else {
                             console.warn(`Cannot set remote offer in current signaling state: ${pc.current.signalingState}`);
-                            // Queue this message again to retry later when state changes
                             messageQueue.current.unshift(message);
                         }
                     }
@@ -345,13 +370,11 @@ export function useWebRTC(peerId: string | null) {
                 case PeerMessageType.ICE_CANDIDATE:
                     if (message.candidate && message.from === peerId && pc.current) {
                         console.log("Processing ICE candidate from", message.from);
-                        // Ensure remote description is set before adding candidates
                         if (pc.current.remoteDescription) {
                             await pc.current.addIceCandidate(new RTCIceCandidate(message.candidate));
                             console.log("Added ICE candidate.");
                         } else {
                             console.warn("Received ICE candidate before remote description was set. Queuing for later.");
-                            // Queue candidate for later processing
                             messageQueue.current.push(message);
                         }
                     }
@@ -369,65 +392,55 @@ export function useWebRTC(peerId: string | null) {
                             console.log("Remote description (answer) set.");
                         } else {
                             console.warn(`Cannot set remote answer in current signaling state: ${pc.current.signalingState}`);
-                            // Queue for later if in wrong state
                             messageQueue.current.push(message);
                         }
                     }
                     break;
 
                 default:
-                    // Ignore messages not relevant to WebRTC setup for this peer
                     break;
             }
         } catch (e: any) {
             console.error("Error processing signaling message:", message.type, e);
             setError(`Error processing ${message.type}: ${e.message}`);
-            // Don't close connection on all errors - specific fatal errors only
             if (e.message.includes("Cannot set local answer when createAnswer has not been called") ||
                 e.message.includes("Cannot create answer in signaling state")) {
                 console.error("Fatal signaling error, closing connection");
                 closeConnection();
             }
         }
-    }, [peerId, createPeerConnection, idToken, signaling, closeConnection]);
+    }, [peerId, createPeerConnection, idToken, signaling, closeConnection, waitForIceGatheringComplete]);
 
-    // --- Handle Incoming Signaling Messages for THIS peer ---
     const handleSignalingMessage = useCallback((message: SignalingMessage) => {
-        // Add message to queue and process when ready
         messageQueue.current.push(message);
 
-        // Attempt to process queue
         if (!isProcessingMessage.current) {
             processMessageQueue();
         }
     }, [processMessageQueue]);
 
-    // --- Subscribe to relevant signaling messages ---
     useEffect(() => {
         if (!signaling || !peerId) return;
 
         const unsubscribe = signaling.subscribeToPeerMessages(peerId, handleSignalingMessage);
         const unsubscribeDisconnect = signaling.subscribeToPeerDisconnect(peerId, () => {
             console.log(`Detected disconnect for peer ${peerId} from signaling.`);
-            closeConnection(); // Close WebRTC if signaling says peer disconnected
+            closeConnection();
         });
 
-        // Cleanup subscription
         return () => {
             unsubscribe();
             unsubscribeDisconnect();
         };
-
     }, [signaling, peerId, handleSignalingMessage, closeConnection]);
 
-
-    // --- Public Functions ---
     const requestStream = useCallback((config: Config) => {
         if (peerId && idToken && signaling) {
-            // Create PC *before* sending stream request, ready for the offer
-            if (!pc.current) {
+            if (!pc.current && !peerConnectionCreated.current) {
+                peerConnectionCreated.current = true;
                 createPeerConnection();
             }
+
             const message: SignalingMessage = {
                 type: PeerMessageType.STREAM_REQUEST,
                 to: peerId,
@@ -440,7 +453,7 @@ export function useWebRTC(peerId: string | null) {
             console.warn("Cannot send stream request: Missing peerId, token, or signaling connection.");
             setError("Cannot send stream request - connection not ready.");
         }
-    }, [peerId, idToken, signaling, createPeerConnection]); // Add createPeerConnection dependency
+    }, [peerId, idToken, signaling]);
 
     const sendDataChannelMessage = useCallback((message: string) => {
         if (dataChannel.current && dataChannel.current.readyState === 'open') {
@@ -457,17 +470,17 @@ export function useWebRTC(peerId: string | null) {
         }
     }, []);
 
-
     return {
         stream,
         connectionState,
-        iceConnectionState, // Expose ICE state
-        signalingState, // Expose Signaling state
-        isDataChannelOpen, // Expose data channel status
+        iceConnectionState,
+        iceGatheringState,
+        signalingState,
+        isDataChannelOpen,
         error,
-        remoteProfile, // Expose the received profile
+        remoteProfile,
         requestStream,
         closeConnection,
-        sendMessage: sendDataChannelMessage, // Expose function to send data channel messages
+        sendMessage: sendDataChannelMessage,
     };
 }

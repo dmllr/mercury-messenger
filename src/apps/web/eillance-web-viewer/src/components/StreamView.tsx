@@ -23,6 +23,7 @@ const RESOLUTION_SEPARATOR = "×";
 function StreamView({ peer, onBack }: StreamViewProps) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+    const streamRequestedRef = useRef<boolean>(false);
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [rotation, setRotation] = useState(0); // Local rotation state
     const [showControls, setShowControls] = useState(true); // Show controls initially
@@ -46,18 +47,23 @@ function StreamView({ peer, onBack }: StreamViewProps) {
 
     // Request stream on mount
     useEffect(() => {
-        // Initial request - might use default config or first available
-        const initialConfig = composeConfiguration();
-        console.log("Requesting stream with initial config:", initialConfig);
-        requestStream(initialConfig);
+        if (peer.id && !streamRequestedRef.current) {
+            streamRequestedRef.current = true;
 
-        // Cleanup on unmount
+            // Initial request - might use default config or first available
+            const initialConfig = composeConfiguration();
+            console.log("Requesting stream with initial config:", initialConfig);
+            requestStream(initialConfig);
+        }
+
+        // Only clean up on component unmount
         return () => {
             console.log("Closing WebRTC connection for peer:", peer.id);
             closeConnection();
+            // Reset state for remount
+            streamRequestedRef.current = false;
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [peer.id, requestStream, closeConnection]); // Re-run if peer changes
+    }, [peer.id]);
 
     // Update local profile when received over data channel
     useEffect(() => {
