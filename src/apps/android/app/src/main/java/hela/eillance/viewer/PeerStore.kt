@@ -27,7 +27,9 @@ data class StoredPeer(
   var name: String,
   var profile: Profile,
   var previewImagePath: String? = null,
-  var isOnline: Boolean = false // defaults to offline
+  var isOnline: Boolean = false,
+  var lastSelectedCameraIndex: Int = 0,
+  var lastSelectedResolutionIndex: Int = 0
 )
 
 // Class to manage storing and retrieving peer data

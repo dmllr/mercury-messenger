@@ -247,4 +247,47 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
     }
+
+    suspend fun PeerStore.updatePeerCameraSelection(peerId: String, cameraIndex: Int) {
+        withContext(Dispatchers.IO) {
+            _storedPeers.update { currentMap ->
+                val peer = currentMap[peerId]
+                if (peer != null && peer.lastSelectedCameraIndex != cameraIndex) {
+                    val newMap = currentMap + (peerId to peer.copy(lastSelectedCameraIndex = cameraIndex))
+                    savePeers()
+                    newMap
+                } else {
+                    currentMap // no change needed
+                }
+            }
+        }
+    }
+
+    suspend fun PeerStore.updatePeerResolutionSelection(peerId: String, resolutionIndex: Int) {
+        withContext(Dispatchers.IO) {
+            _storedPeers.update { currentMap ->
+                val peer = currentMap[peerId]
+                if (peer != null && peer.lastSelectedResolutionIndex != resolutionIndex) {
+                    val newMap = currentMap + (peerId to peer.copy(lastSelectedResolutionIndex = resolutionIndex))
+                    savePeers()
+                    newMap
+                } else {
+                    currentMap // no change needed
+                }
+            }
+        }
+    }
+
+    fun updatePeerCameraSelection(peerId: String, cameraIndex: Int) {
+        viewModelScope.launch {
+            peerStore.updatePeerCameraSelection(peerId, cameraIndex)
+        }
+    }
+
+    fun updatePeerResolutionSelection(peerId: String, resolutionIndex: Int) {
+        viewModelScope.launch {
+            peerStore.updatePeerResolutionSelection(peerId, resolutionIndex)
+        }
+    }
+
 }
