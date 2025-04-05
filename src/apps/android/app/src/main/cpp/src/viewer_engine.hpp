@@ -41,6 +41,7 @@ class ViewerEngine {
   H264Parser h264_parser_{};
 
   EventQueue::SubscriberTypeId configure_subscriber_id_{0};
+  DispatchQueue codec_dispatch_queue_{"Codec", 1};
 
 public:
   ViewerEngine(JavaVM* jvm, JNIEnv* env, jobject instance)
@@ -104,12 +105,11 @@ public:
     });
     rtc_viewer_.SetFrameReceivedCallback([this](const rtc::binary& frame) {
       h264_parser_.ProcessFrame(frame);
-      auto& ctr = DispatchQueue::CodecThread();
-      if (ctr.Size() > 10) {
+      if (codec_dispatch_queue_.Size() > 10) {
         LOGW << "Decoding queue is full, dropping frames.";
-        ctr.RemovePending();
+        codec_dispatch_queue_.RemovePending();
       }
-      DispatchQueue::CodecThread().Dispatch([this, frame]() {
+      codec_dispatch_queue_.Dispatch([this, frame]() {
         HandleInputBuffer(frame);
       });
     });
