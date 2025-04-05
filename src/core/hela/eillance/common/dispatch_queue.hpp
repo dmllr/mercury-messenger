@@ -37,8 +37,8 @@ public:
 
   ~DispatchQueue() {
     {
-      std::unique_lock<std::mutex> lock(lockMutex_);
-      quit_ = true;
+      std::unique_lock<std::mutex> lock(queue_access_mutex_);
+      shutdown_requested_ = true;
     }
     condition_.notify_all();
 
@@ -54,20 +54,15 @@ public:
     return instance;
   }
 
-  static DispatchQueue& CodecThread() {
-    static DispatchQueue instance("Codec", 1);
-    return instance;
-  }
-
   /// Dispatch an operation immediately.
   void Dispatch(const FpT& op) {
-    if (!op) {
+    if (shutdown_requested_ || !op) {
       return;
     }
 
     auto now = std::chrono::steady_clock::now();
     {
-      std::unique_lock<std::mutex> lock(lockMutex_);
+      std::unique_lock<std::mutex> lock(queue_access_mutex_);
       queue_.push(ScheduledTask{now, op});
     }
     condition_.notify_one();
@@ -75,13 +70,13 @@ public:
 
   /// Dispatch an operation immediately.
   void Dispatch(FpT&& op) {
-    if (!op) {
+    if (shutdown_requested_ || !op) {
       return;
     }
 
     auto now = std::chrono::steady_clock::now();
     {
-      std::unique_lock<std::mutex> lock(lockMutex_);
+      std::unique_lock<std::mutex> lock(queue_access_mutex_);
       queue_.push(ScheduledTask{now, std::move(op)});
     }
     condition_.notify_one();
@@ -89,13 +84,13 @@ public:
 
   /// Dispatch an operation to be executed after a delay.
   void DispatchAfter(std::chrono::milliseconds delay, const FpT&& op) {
-    if (!op) {
+    if (shutdown_requested_ || !op) {
       return;
     }
 
     auto scheduled_time = std::chrono::steady_clock::now() + delay;
     {
-      std::unique_lock<std::mutex> lock(lockMutex_);
+      std::unique_lock<std::mutex> lock(queue_access_mutex_);
       queue_.push(ScheduledTask{scheduled_time, op});
     }
     condition_.notify_one();
@@ -108,7 +103,7 @@ public:
 
   /// Remove any pending tasks.
   void RemovePending() {
-    std::unique_lock<std::mutex> lock(lockMutex_);
+    std::unique_lock<std::mutex> lock(queue_access_mutex_);
     queue_ = decltype(queue_){};
   }
 
@@ -120,22 +115,29 @@ public:
 
 private:
   std::string name_;
-  std::mutex lockMutex_;
+  std::mutex queue_access_mutex_;
   std::vector<std::thread> threads_;
   std::priority_queue<ScheduledTask, std::vector<ScheduledTask>, CompareScheduledTask> queue_;
   std::condition_variable condition_;
-  bool quit_ = false;
+  bool shutdown_requested_ = false;
 
   /// Thread handler that waits until tasks are ready to execute.
   void DispatchThreadHandler() {
-    std::unique_lock<std::mutex> lock(lockMutex_);
+    std::unique_lock<std::mutex> lock(queue_access_mutex_, std::defer_lock);
 
-    while (!quit_) {
+    while (!shutdown_requested_) {
+      lock.lock();
+
       // Wait for work if queue is empty
       if (queue_.empty()) {
-        // Wait until a task is added or the queue is shutting down.
-        condition_.wait(lock, [this] { return quit_ || !queue_.empty(); });
-        continue;
+        condition_.wait(lock, [this] {
+          return shutdown_requested_ || !queue_.empty();
+        });
+
+        if (queue_.empty()) {
+          lock.unlock();
+          continue;
+        }
       }
 
       // Check if the task is ready to execute
@@ -145,7 +147,7 @@ private:
       // If task is scheduled for the future, wait until it's time
       if (next_task.executeTime > now) {
         condition_.wait_until(lock, next_task.executeTime, [this, &next_task, &now] {
-          if (quit_) {
+          if (shutdown_requested_) {
             return true;
           }
           if (queue_.empty()) {
@@ -157,6 +159,7 @@ private:
           return queue_.top().executeTime != next_task.executeTime || queue_.top().executeTime <= now;
         });
 
+        lock.unlock();
         continue;
       }
 
@@ -175,11 +178,9 @@ private:
       } catch (...) { // NOLINT(*-empty-catch)
         // Prevent exceptions from killing the thread
       }
-
-      // Re-acquire the lock to continue processing
-      lock.lock();
     }
   }
+
 };
 
 }  // namespace hela::eillance
