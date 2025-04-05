@@ -205,7 +205,6 @@ private:
               last_orientation_change = Time::Now();
               orientation_stability_counter = 0;
 
-              // Update encoder with new orientation via dispatch queue to avoid immediate execution
               DispatchQueue::MainThread().Dispatch([this, new_orientation]() {
                   VideoConfig updated_config = config_;
                   updated_config.rotation = static_cast<int>(new_orientation);
