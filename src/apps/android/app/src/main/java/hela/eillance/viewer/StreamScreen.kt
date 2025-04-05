@@ -31,6 +31,7 @@ import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableFloatStateOf
@@ -80,6 +81,12 @@ fun StreamScreen(
   val streamInfo by viewModel.streamInfo.observeAsState()
   val profile by viewModel.deviceProfile.observeAsState()
 
+  // Get current peer from the displayed peers to access stored preferences
+  val displayedPeers by viewModel.displayedPeers.collectAsState()
+  val storedPeer = remember(displayedPeers, peer.id) {
+    displayedPeers.find { it.id == peer.id }
+  }
+
   var peerConnectionState by remember { mutableStateOf(PeerConnectionState.Unknown) }
   var deviceProfile by remember { mutableStateOf(peer.profile) }
   var statusText by remember { mutableStateOf("") }
@@ -88,14 +95,18 @@ fun StreamScreen(
   // Flag to control status visibility
   var showStatus by remember { mutableStateOf(true) }
 
-  // Camera selection state
+  // Camera selection state - initialize with stored preference if available
   var cameraOptions by remember { mutableStateOf(listOf(defaultCameraLabel)) }
-  var selectedCameraIndex by remember { mutableIntStateOf(0) }
+  var selectedCameraIndex by remember {
+    mutableIntStateOf(storedPeer?.lastSelectedCameraIndex ?: 0)
+  }
   var expandedCamera by remember { mutableStateOf(false) }
 
-  // Resolution selection state
+  // Resolution selection state - initialize with stored preference if available
   var resolutionOptions by remember { mutableStateOf(listOf(defaultResolutionsLabel)) }
-  var selectedResolutionIndex by remember { mutableIntStateOf(0) }
+  var selectedResolutionIndex by remember {
+    mutableIntStateOf(storedPeer?.lastSelectedResolutionIndex ?: 0)
+  }
   var expandedResolution by remember { mutableStateOf(false) }
 
   // Add rotation state (0, 90, 180, 270 degrees)
@@ -125,7 +136,11 @@ fun StreamScreen(
     } else {
       resolutionOptions = listOf(defaultResolutionsLabel)
     }
-    selectedResolutionIndex = 0
+
+    // Only reset resolution index if the stored selection is out of bounds
+    if (storedPeer?.lastSelectedResolutionIndex !in 0 until resolutionOptions.size) {
+      selectedResolutionIndex = 0
+    }
   }
 
   // Create configuration for stream requests
@@ -160,6 +175,15 @@ fun StreamScreen(
     if (peerConnectionState == PeerConnectionState.Connected) {
       (context as? ViewerActivity)?.sendConfigurationRequest(peer.id, composeConfigurationMessage())
     }
+  }
+
+  // Save camera and resolution selection to peer store
+  fun saveCameraSelection(cameraIndex: Int) {
+    viewModel.updatePeerCameraSelection(peer.id, cameraIndex)
+  }
+
+  fun saveResolutionSelection(resolutionIndex: Int) {
+    viewModel.updatePeerResolutionSelection(peer.id, resolutionIndex)
   }
 
   // Calculate transform matrix based on device and video orientations
@@ -315,10 +339,25 @@ fun StreamScreen(
       deviceProfile = it
       updateCameraOptions(it)
 
-      // If there are cameras available, select the first one automatically
+      // If there are cameras available, select the stored camera or first one
       if (it.isNotEmpty()) {
-        selectedCameraIndex = 0
-        updateResolutionOptions(0)
+        // Ensure the stored camera index is valid for this profile
+        selectedCameraIndex = if (storedPeer?.lastSelectedCameraIndex in 0 until it.size) {
+          storedPeer?.lastSelectedCameraIndex ?: 0
+        } else {
+          0
+        }
+        updateResolutionOptions(selectedCameraIndex)
+
+        // Ensure the stored resolution index is valid for the selected camera
+        if (selectedCameraIndex in it.indices) {
+          val resolutions = it[selectedCameraIndex].resolutions
+          selectedResolutionIndex = if (storedPeer?.lastSelectedResolutionIndex in 0 until resolutions.size) {
+            storedPeer?.lastSelectedResolutionIndex ?: 0
+          } else {
+            0
+          }
+        }
       }
     }
   }
@@ -506,6 +545,7 @@ fun StreamScreen(
                   selectedCameraIndex = index
                   expandedCamera = false
                   updateResolutionOptions(index)
+                  saveCameraSelection(index)
                   sendConfigurationRequest()
                 },
                 contentPadding = androidx.compose.material3.MenuDefaults.DropdownMenuItemContentPadding
@@ -543,6 +583,7 @@ fun StreamScreen(
                 onClick = {
                   selectedResolutionIndex = index
                   expandedResolution = false
+                  saveResolutionSelection(index)
                   sendConfigurationRequest()
                 },
                 contentPadding = androidx.compose.material3.MenuDefaults.DropdownMenuItemContentPadding
