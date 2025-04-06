@@ -11,6 +11,7 @@
 
   <string name="internal_error_service_not_available">Oops :(\n\Service is not available.\n\nInternal error. This shouldn\'t have happened.</string>
 
+  <string name="menu_reselect_role">Change device role</string>
   <string name="menu_capture_preferences">Capture preferences</string>
   <string name="menu_stop_service">Stop service</string>
   <string name="menu_start_service">Start service</string>

@@ -31,6 +31,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -51,12 +52,14 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
 import androidx.core.net.toUri
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import hela.eillance.LauncherActivity
 import hela.eillance.camera.R
 import hela.eillance.ndkio.ServiceConnectionState
 import hela.eillance.theme.EillanceTheme
@@ -69,6 +72,7 @@ import hela.eillance.theme.icons.StartService
 import hela.eillance.theme.icons.Status2
 import hela.eillance.theme.icons.StatusStandby
 import hela.eillance.theme.icons.StopService
+import hela.eillance.theme.icons.SwitchRole
 
 class StreamerActivity : ComponentActivity(), ServiceConnection {
 
@@ -114,7 +118,8 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
           StreamerApp(
             viewModel = viewModel,
             permissionsGranted = permissionsGranted.value,
-            onRequestPermissions = { checkAndRequestPermissions() }
+            onRequestPermissions = { checkAndRequestPermissions() },
+            onReselectRole = { launchRoleSelection() }
           )
         }
       }
@@ -128,7 +133,8 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
   fun StreamerApp(
     viewModel: StreamerViewModel,
     permissionsGranted: Boolean,
-    onRequestPermissions: () -> Unit
+    onRequestPermissions: () -> Unit,
+    onReselectRole: () -> Unit
   ) {
     val navController = rememberNavController()
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
@@ -181,6 +187,10 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
                 },
                 onRestartService = {
                   viewModel.restartService()
+                  isUserMenuExpanded = false
+                },
+                onReselectRole = {
+                  onReselectRole()
                   isUserMenuExpanded = false
                 },
                 connectionState = connectionState
@@ -245,12 +255,24 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
     onServiceStart: () -> Unit,
     onServiceStop: () -> Unit,
     onRestartService: () -> Unit,
+    onReselectRole: () -> Unit,
     connectionState: ServiceConnectionState
   ) {
     DropdownMenu(
       expanded = expanded,
       onDismissRequest = onDismissRequest
     ) {
+      DropdownMenuItem(
+        text = { Text(stringResource(id = R.string.menu_reselect_role)) },
+        onClick = onReselectRole,
+        leadingIcon = {
+          Icon(
+            imageVector = AppIcons.SwitchRole,
+            contentDescription = stringResource(id = R.string.menu_reselect_role)
+          )
+        }
+      )
+      HorizontalDivider()
       DropdownMenuItem(
         text = { Text(stringResource(id = R.string.menu_capture_preferences)) },
         onClick = onPreferencesClick,
@@ -261,7 +283,7 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
           )
         }
       )
-
+      HorizontalDivider()
       DropdownMenuItem(
         text = { Text(stringResource(id = R.string.menu_stop_service)) },
         onClick = onServiceStop,
@@ -272,7 +294,6 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
           )
         }
       )
-
       DropdownMenuItem(
         text = { Text(stringResource(id = R.string.menu_start_service)) },
         enabled = connectionState != ServiceConnectionState.Online,
@@ -284,7 +305,6 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
           )
         }
       )
-
       DropdownMenuItem(
         text = { Text(stringResource(id = R.string.menu_restart_service)) },
         onClick = onRestartService,
@@ -405,6 +425,20 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
       data = "package:$packageName".toUri()
     }
     startActivity(intent)
+  }
+
+  private fun launchRoleSelection() {
+    // Clear the role preference
+    getSharedPreferences("app_prefs", MODE_PRIVATE).edit {
+      remove("role")
+      putBoolean("ask_each_time", true)
+    }
+
+    // Launch the LauncherActivity
+    val intent = Intent(this, LauncherActivity::class.java)
+    intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+    startActivity(intent)
+    finish()
   }
 
   private fun startStreamingService() {
