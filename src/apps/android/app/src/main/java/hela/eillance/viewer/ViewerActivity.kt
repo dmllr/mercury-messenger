@@ -23,6 +23,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.Icons.Filled
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -38,15 +41,18 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.content.edit
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.ViewModelProvider
@@ -57,6 +63,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.google.firebase.auth.FirebaseAuth
 import hela.eillance.LauncherActivity
+import hela.eillance.camera.R
 import hela.eillance.ndkio.Config
 import hela.eillance.ndkio.EventSource
 import hela.eillance.ndkio.Peer
@@ -69,6 +76,7 @@ import hela.eillance.theme.icons.AppIcons
 import hela.eillance.theme.icons.Failure
 import hela.eillance.theme.icons.Status2
 import hela.eillance.theme.icons.StatusStandby
+import hela.eillance.theme.icons.SwitchRole
 import kotlinx.coroutines.launch
 
 class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
@@ -160,6 +168,29 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
   }
 
   @Composable
+  private fun UserMenu(
+    expanded: Boolean,
+    onDismissRequest: () -> Unit,
+    onReselectRole: () -> Unit
+  ) {
+    DropdownMenu(
+      expanded = expanded,
+      onDismissRequest = onDismissRequest
+    ) {
+      DropdownMenuItem(
+        text = { Text(stringResource(id = R.string.menu_reselect_role)) },
+        onClick = onReselectRole,
+        leadingIcon = {
+          Icon(
+            imageVector = AppIcons.SwitchRole,
+            contentDescription = stringResource(id = R.string.menu_reselect_role)
+          )
+        }
+      )
+    }
+  }
+
+  @Composable
   fun AppContent(navController: NavHostController, viewModel: ViewerViewModel) {
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
     val displayedPeers by viewModel.displayedPeers.collectAsState()
@@ -180,7 +211,12 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
       Scaffold(
         topBar = {
           if (!isFullscreen) {
-            AppTopBar(currentRoute, navController, viewModel)
+            AppTopBar(
+              currentRoute,
+              navController,
+              viewModel,
+              onReselectRole = { launchRoleSelection() }
+            )
           }
         }
       ) { paddingValues ->
@@ -254,10 +290,12 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
   fun AppTopBar(
     currentRoute: String?,
     navController: NavHostController,
-    viewModel: ViewerViewModel
+    viewModel: ViewerViewModel,
+    onReselectRole: () -> Unit
   ) {
     val connectionStatusState = viewModel.connectionStatus.observeAsState(ServiceConnectionState.Unknown.ordinal)
     val connectionState = ServiceConnectionState.fromInt(connectionStatusState.value)
+    var menuExpanded by remember { mutableStateOf(false) }
 
     TopAppBar(
       title = {
@@ -277,6 +315,24 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
           IconButton(onClick = { navController.popBackStack() }) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
           }
+        }
+      },
+      actions = {
+        Box {
+          IconButton(onClick = { menuExpanded = true }) {
+            Icon(
+              imageVector = Icons.Default.Settings,
+              contentDescription = "Settings"
+            )
+          }
+          UserMenu(
+            expanded = menuExpanded,
+            onDismissRequest = { menuExpanded = false },
+            onReselectRole = {
+              onReselectRole()
+              menuExpanded = false
+            }
+          )
         }
       }
     )
@@ -326,14 +382,18 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
     )
   }
 
-  fun showNetworkErrorScreen() {
-    runOnUiThread {
-      val initializationError =
-        "No internet connection. Please check your connection and try again."
-      setContent {
-        ErrorScreen(initializationError, onRetry = {})
-      }
+  private fun launchRoleSelection() {
+    // Clear the role preference
+    getSharedPreferences("app_prefs", MODE_PRIVATE).edit {
+      remove("role")
+      putBoolean("ask_each_time", true)
     }
+
+    // Launch the LauncherActivity
+    val intent = Intent(this, LauncherActivity::class.java)
+    intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+    startActivity(intent)
+    finish()
   }
 
   // Method to set fullscreen mode
