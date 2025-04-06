@@ -59,9 +59,16 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import hela.eillance.camera.R
 import hela.eillance.ndkio.ServiceConnectionState
-import hela.eillance.theme.AppIcons
 import hela.eillance.theme.EillanceTheme
 import hela.eillance.theme.extendedColors
+import hela.eillance.theme.icons.AppIcons
+import hela.eillance.theme.icons.CapturePreferences
+import hela.eillance.theme.icons.Failure
+import hela.eillance.theme.icons.RestartService
+import hela.eillance.theme.icons.StartService
+import hela.eillance.theme.icons.Status2
+import hela.eillance.theme.icons.StatusStandby
+import hela.eillance.theme.icons.StopService
 
 class StreamerActivity : ComponentActivity(), ServiceConnection {
 

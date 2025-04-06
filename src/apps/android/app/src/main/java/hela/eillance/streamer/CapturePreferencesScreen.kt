@@ -25,7 +25,15 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import hela.eillance.camera.R
 import hela.eillance.ndkio.VideoConfig
-import hela.eillance.theme.AppIcons
+import hela.eillance.theme.icons.AppIcons
+import hela.eillance.theme.icons.Camera
+import hela.eillance.theme.icons.DeviceDisplayName
+import hela.eillance.theme.icons.PrefBitrate
+import hela.eillance.theme.icons.PrefCameraResolution
+import hela.eillance.theme.icons.PrefFrameRate
+import hela.eillance.theme.icons.PrefGroupAudioEncoding
+import hela.eillance.theme.icons.PrefGroupDevice
+import hela.eillance.theme.icons.PrefGroupVideoEncoding
 
 @Composable
 fun CapturePreferencesScreen(streamerService: StreamerService) {
@@ -74,7 +82,7 @@ fun CapturePreferencesScreen(streamerService: StreamerService) {
       // Device Category
       PreferenceCategory(
         title = stringResource(R.string.preference_category_device),
-        icon = AppIcons.PrefDevice
+        icon = AppIcons.PrefGroupDevice
       ) {
         EditTextPreference(
           title = stringResource(R.string.preference_device_name),
@@ -102,7 +110,7 @@ fun CapturePreferencesScreen(streamerService: StreamerService) {
       // Video Capture Category
       PreferenceCategory(
         title = stringResource(R.string.preference_category_video_capture_encoding),
-        icon = AppIcons.PrefVideoEncoding
+        icon = AppIcons.PrefGroupVideoEncoding
       ) {
         // Camera Selection
         ListPreference(
@@ -217,7 +225,7 @@ fun CapturePreferencesScreen(streamerService: StreamerService) {
       // Audio Capture Category
       PreferenceCategory(
         title = stringResource(R.string.preference_category_audio_capture_encoding),
-        icon = AppIcons.PrefAudioEncoding
+        icon = AppIcons.PrefGroupAudioEncoding
       ) {
         // Audio preferences would go here
       }

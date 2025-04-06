@@ -49,8 +49,13 @@ import androidx.compose.ui.unit.dp
 import hela.eillance.camera.R
 import hela.eillance.ndkio.EventSource
 import hela.eillance.ndkio.PeerConnectionState
-import hela.eillance.theme.AppIcons
 import hela.eillance.theme.extendedColors
+import hela.eillance.theme.icons.AppIcons
+import hela.eillance.theme.icons.CameraStream
+import hela.eillance.theme.icons.Refresh
+import hela.eillance.theme.icons.StatusDisconnected
+import hela.eillance.theme.icons.StatusStandby
+import hela.eillance.theme.icons.StatusUnknown
 import kotlinx.coroutines.delay
 
 /**
@@ -203,7 +208,7 @@ fun ConnectionStatusIcon(
       }
       PeerConnectionState.Disconnected, PeerConnectionState.Failed, PeerConnectionState.Closed -> {
         Icon(
-          imageVector = AppIcons.Status1Disconnected,
+          imageVector = AppIcons.StatusDisconnected,
           contentDescription = "Disconnected client",
           tint = MaterialTheme.colorScheme.error,
           modifier = Modifier.size(24.dp)

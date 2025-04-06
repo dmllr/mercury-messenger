@@ -48,8 +48,10 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
-import hela.eillance.theme.AppIcons
 import hela.eillance.theme.extendedColors
+import hela.eillance.theme.icons.AppIcons
+import hela.eillance.theme.icons.Failure
+import hela.eillance.theme.icons.StatusStandby
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
