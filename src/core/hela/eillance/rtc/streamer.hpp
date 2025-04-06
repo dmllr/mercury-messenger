@@ -110,20 +110,27 @@ public:
   }
 
   void ProcessPeerMessage(Json message) final {
-    auto it = message.find("from");
-    if (it == message.end()) {
+    auto from_it = message.find("from");
+    if (from_it == message.end()) {
       return;
     }
-    auto peer_id = it->get<std::string>();
-    it = message.find("type");
-    if (it == message.end()) {
+    auto peer_id = from_it->get<std::string>();
+    from_it = message.find("type");
+    if (from_it == message.end()) {
       return;
     }
-    auto type = it->get<std::string>();
+    auto type = from_it->get<std::string>();
 
     if (type == "stream_request") {
       const auto peer = transport_->CreatePeer(peer_id);
       peer->data_channel_ = CreateDataChannel(peer->peer_connection_, peer_id);
+
+      // Apply audio/video configuration
+      auto config_it = message.find("config");
+      if (config_it != message.end()) {
+        ApplyConfiguration(peer_id, *config_it);
+      }
+
       DispatchQueue::MainThread().Dispatch([this, peer_id, peer]() {
         transport_->AddPeer(peer_id, peer);
       });
@@ -151,14 +158,10 @@ public:
     }
     auto type = itr->get<std::string>();
     if (type == "configuration") {
-      auto config{Config()};
-      auto& video_config = config.video_config;
-      auto& jvc = message["config"]["video"];
-      video_config.cameraId = jvc["cameraId"].get<int>();
-      video_config.width = jvc["width"].get<std::uint32_t>();
-      video_config.height = jvc["height"].get<std::uint32_t>();
-
-      Configure(config);
+      auto config_it = message.find("config");
+      if (config_it != message.end()) {
+        ApplyConfiguration(peer_id, *config_it);
+      }
     } else if (type == "termination") {
       transport_->RemovePeer(peer_id);
     }
@@ -232,6 +235,35 @@ public:
   }
 
 private:
+  void ApplyConfiguration(const std::string& peer_id, const Json& configJson) {
+    auto config{Config()};
+    auto& video_config = config.video_config;
+
+    auto video_it = configJson.find("video");
+    if (video_it != configJson.end() && !video_it->is_null()) {
+      auto& jvc = *video_it;
+
+      if (jvc.contains("cameraId") && !jvc["cameraId"].is_null()) {
+        video_config.cameraId = jvc["cameraId"].get<int>();
+      }
+
+      if (jvc.contains("width") && !jvc["width"].is_null()) {
+        video_config.width = jvc["width"].get<std::uint32_t>();
+      }
+
+      if (jvc.contains("height") && !jvc["height"].is_null()) {
+        video_config.height = jvc["height"].get<std::uint32_t>();
+      }
+
+      LOGD << "Applying video configuration from " << peer_id
+           << " (cameraId: " << video_config.cameraId
+           << ", width: " << video_config.width
+           << ", height: " << video_config.height << ")";
+
+      Configure(config);
+    }
+  }
+
   auto CreateDataChannel(std::shared_ptr<rtc::PeerConnection> pc, const std::string& peer_id) -> std::shared_ptr<rtc::DataChannel> {
     auto data_channel = pc->createDataChannel("command-channel");
     data_channel->onOpen([this, peer_id, wdc = make_weak_ptr(data_channel)]() {
