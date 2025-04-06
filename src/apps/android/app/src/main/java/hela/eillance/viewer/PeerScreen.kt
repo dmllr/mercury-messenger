@@ -202,7 +202,7 @@ fun PeerItem(
               val tint = if (peer.isOnline)
                 MaterialTheme.extendedColors.success else MaterialTheme.extendedColors.offline
               Icon(
-                imageVector = if (peer.isOnline) AppIcons.Status1Standby else AppIcons.Failure,
+                imageVector = if (peer.isOnline) AppIcons.StatusStandby else AppIcons.Failure,
                 contentDescription = if (peer.isOnline) "Online" else "Offline",
                 tint = tint,
                 modifier = Modifier.size(16.dp)

@@ -1,5 +1,14 @@
 package hela.eillance.streamer
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -13,6 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
@@ -31,7 +41,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -116,6 +127,108 @@ fun OperationScreen(
   }
 }
 
+@Composable
+fun ConnectionStatusIcon(
+  connectionState: PeerConnectionState,
+  isReceivingPing: Boolean,
+  modifier: Modifier = Modifier
+) {
+  var pingAnimation by remember { mutableStateOf(false) }
+
+  // Handle ping animation
+  LaunchedEffect(isReceivingPing) {
+    if (isReceivingPing) {
+      pingAnimation = true
+      delay(300)
+      pingAnimation = false
+    }
+  }
+
+  // Rotation animation for connecting state
+  val infiniteTransition = rememberInfiniteTransition(label = "connecting_rotation")
+  val rotation by infiniteTransition.animateFloat(
+    initialValue = 0f,
+    targetValue = 360f,
+    animationSpec = infiniteRepeatable(
+      animation = tween(1000, easing = LinearEasing),
+      repeatMode = RepeatMode.Restart
+    ),
+    label = "rotation_animation"
+  )
+
+  Box(modifier = modifier, contentAlignment = Alignment.Center) {
+    when (connectionState) {
+      PeerConnectionState.Connecting -> {
+        Icon(
+          imageVector = AppIcons.Refresh,
+          contentDescription = "Connecting",
+          tint = MaterialTheme.colorScheme.primary,
+          modifier = Modifier
+            .size(24.dp)
+            .rotate(rotation)
+        )
+      }
+      PeerConnectionState.Connected -> {
+        // Base connected icon
+        Icon(
+          imageVector = AppIcons.CameraStream,
+          contentDescription = "Connected client",
+          tint = if (pingAnimation) MaterialTheme.extendedColors.success else MaterialTheme.colorScheme.primary,
+          modifier = Modifier.size(24.dp)
+        )
+
+        // Ping ripple effect
+        if (pingAnimation) {
+          val animatedSize by animateFloatAsState(
+            targetValue = if (pingAnimation) 40f else 24f,
+            animationSpec = tween(300, easing = FastOutSlowInEasing),
+            label = "ping_ripple"
+          )
+          val animatedAlpha by animateFloatAsState(
+            targetValue = if (pingAnimation) 0f else 1f,
+            animationSpec = tween(300, easing = FastOutSlowInEasing),
+            label = "ping_alpha"
+          )
+
+          Box(
+            modifier = Modifier
+              .size(animatedSize.dp)
+              .alpha(1 - animatedAlpha)
+              .background(
+                color = MaterialTheme.extendedColors.success.copy(alpha = 0.3f),
+                shape = CircleShape
+              )
+          )
+        }
+      }
+      PeerConnectionState.Disconnected, PeerConnectionState.Failed, PeerConnectionState.Closed -> {
+        Icon(
+          imageVector = AppIcons.Status1Disconnected,
+          contentDescription = "Disconnected client",
+          tint = MaterialTheme.colorScheme.error,
+          modifier = Modifier.size(24.dp)
+        )
+      }
+      PeerConnectionState.New -> {
+        Icon(
+          imageVector = AppIcons.StatusStandby,
+          contentDescription = "New connection",
+          tint = MaterialTheme.colorScheme.secondary,
+          modifier = Modifier.size(24.dp)
+        )
+      }
+      else -> {
+        Icon(
+          imageVector = AppIcons.StatusUnknown,
+          contentDescription = "Unknown connection state",
+          tint = MaterialTheme.colorScheme.onSurfaceVariant,
+          modifier = Modifier.size(24.dp)
+        )
+      }
+    }
+  }
+}
+
 /**
  * Card displaying an individual peer connection
  */
@@ -127,16 +240,21 @@ fun PeerItemCard(
   modifier: Modifier = Modifier
 ) {
   val context = LocalContext.current
-  var pingColor by remember { mutableStateOf(Color.Transparent) }
+  var isPinging by remember { mutableStateOf(false) }
   var lastProcessedTimestamp by remember { mutableStateOf(0L) }
+
+  val connectionState = remember(states) {
+    val stateValue = states[EventSource.PeerConnectionState] ?: PeerConnectionState.Unknown.value
+    PeerConnectionState.fromInt(stateValue)
+  }
 
   // ping indicator flash effect
   LaunchedEffect(lastPingTimestamp) {
     if (lastPingTimestamp != null && lastPingTimestamp != lastProcessedTimestamp) {
       lastProcessedTimestamp = lastPingTimestamp
-      pingColor = Color.Green
+      isPinging = true
       delay(333)
-      pingColor = Color.Transparent
+      isPinging = false
     }
   }
 
@@ -150,11 +268,10 @@ fun PeerItemCard(
         .padding(12.dp),
       verticalAlignment = Alignment.CenterVertically
     ) {
-      // Status Icon
-      Icon(
-        imageVector = AppIcons.Status1Standby,
-        contentDescription = "Connected client",
-        tint = MaterialTheme.extendedColors.success,
+      // Dynamic Status Icon based on connection state
+      ConnectionStatusIcon(
+        connectionState = connectionState,
+        isReceivingPing = isPinging,
         modifier = Modifier.size(24.dp)
       )
 
@@ -170,25 +287,11 @@ fun PeerItemCard(
         Spacer(modifier = Modifier.height(4.dp))
 
         // Peer connection state
-        states[EventSource.PeerConnectionState]?.let { stateValue ->
-          Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-              text = PeerConnectionState.fromInt(stateValue).getResourceString(context),
-              style = MaterialTheme.typography.bodyMedium,
-              color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            // Ping indicator
-            if (pingColor != Color.Transparent) {
-              Spacer(modifier = Modifier.width(8.dp))
-              Text(
-                text = stringResource(id = R.string.led),
-                color = pingColor,
-                style = MaterialTheme.typography.bodySmall
-              )
-            }
-          }
-        }
+        Text(
+          text = connectionState.getResourceString(context),
+          style = MaterialTheme.typography.bodyMedium,
+          color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
       }
     }
   }

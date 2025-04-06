@@ -151,6 +151,55 @@ object AppIcons {
       }.build()
     }
 
+  /**
+   * Refresh/Connecting icon - designed to be rotated during animation
+   */
+  val Refresh: ImageVector
+    get() {
+      return ImageVector.Builder(
+        name = "Refresh",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+      ).apply {
+        // Circular arrow path
+        path(
+          fill = SolidColor(Color.Black),
+          pathFillType = PathFillType.NonZero,
+          strokeLineWidth = 2.0f,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+          stroke = SolidColor(Color.Black),
+          strokeLineMiter = 4.0f,
+          fillAlpha = 0.0f,
+        ) {
+          // Circular connecting animation arrow
+          moveTo(20f, 12f)
+          arcTo(8f, 8f, 0f, isMoreThanHalf = false, isPositiveArc = false, 12f, 4f)
+          arcTo(8f, 8f, 0f, isMoreThanHalf = false, isPositiveArc = false, 4f, 12f)
+          arcTo(8f, 8f, 0f, isMoreThanHalf = false, isPositiveArc = false, 12f, 20f)
+          arcTo(8f, 8f, 0f, isMoreThanHalf = false, isPositiveArc = false, 16.5f, 16.5f)
+        }
+
+        // Arrow head
+        path(
+          fill = SolidColor(Color.Black),
+          pathFillType = PathFillType.NonZero,
+          strokeLineWidth = 0.0f,
+          strokeLineCap = StrokeCap.Butt,
+          strokeLineJoin = StrokeJoin.Miter,
+          strokeLineMiter = 4.0f
+        ) {
+          // Arrow tip
+          moveTo(20f, 8f)
+          lineTo(20f, 12f)
+          lineTo(16f, 12f)
+          close()
+        }
+      }.build()
+    }
+
   val CapturePreferences: ImageVector
     get() {
       return ImageVector.Builder(
@@ -977,7 +1026,8 @@ object AppIcons {
         }
       }.build()
     }
-  val Status1Standby: ImageVector
+
+  val StatusStandby: ImageVector
     get() {
       return ImageVector.Builder(
         name = "Status1Standby",
@@ -1000,6 +1050,142 @@ object AppIcons {
           moveTo(12f, 12f)
           curveTo(12f, 12f, 12f, 12f, 12f, 12f)
           curveTo(12f, 12f, 12f, 12f, 12f, 12f)
+          close()
+        }
+      }.build()
+    }
+
+  /**
+   * Status1Disconnected - Disconnected or error status icon
+   */
+  val Status1Disconnected: ImageVector
+    get() {
+      return ImageVector.Builder(
+        name = "Status1Error",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+      ).apply {
+        // Outer circle
+        path(
+          fill = SolidColor(Color.Black),
+          pathFillType = PathFillType.NonZero,
+          strokeLineWidth = 2.0f,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+          stroke = SolidColor(Color.Black),
+          strokeLineMiter = 4.0f,
+          fillAlpha = 0.0f
+        ) {
+          // Outer circle
+          moveTo(12f, 12f)
+          arcTo(10f, 10f, 0f, isMoreThanHalf = true, isPositiveArc = true, 12f, 2f)
+          arcTo(10f, 10f, 0f, isMoreThanHalf = true, isPositiveArc = true, 22f, 12f)
+          arcTo(10f, 10f, 0f, isMoreThanHalf = true, isPositiveArc = true, 12f, 22f)
+          arcTo(10f, 10f, 0f, isMoreThanHalf = true, isPositiveArc = true, 2f, 12f)
+          close()
+        }
+
+        // X mark for error
+        path(
+          fill = SolidColor(Color.Black),
+          pathFillType = PathFillType.NonZero,
+          strokeLineWidth = 2.0f,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+          stroke = SolidColor(Color.Black),
+          strokeLineMiter = 4.0f,
+          fillAlpha = 0.0f
+        ) {
+          // First line of X
+          moveTo(8f, 8f)
+          lineTo(16f, 16f)
+        }
+
+        path(
+          fill = SolidColor(Color.Black),
+          pathFillType = PathFillType.NonZero,
+          strokeLineWidth = 2.0f,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+          stroke = SolidColor(Color.Black),
+          strokeLineMiter = 4.0f,
+          fillAlpha = 0.0f
+        ) {
+          // Second line of X
+          moveTo(16f, 8f)
+          lineTo(8f, 16f)
+        }
+      }.build()
+    }
+
+  /**
+   * StatusUnknown - Unknown status icon with question mark
+   */
+  val StatusUnknown: ImageVector
+    get() {
+      return ImageVector.Builder(
+        name = "Status1Unknown",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+      ).apply {
+        // Outer circle
+        path(
+          fill = SolidColor(Color.Black),
+          pathFillType = PathFillType.NonZero,
+          strokeLineWidth = 2.0f,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+          stroke = SolidColor(Color.Black),
+          strokeLineMiter = 4.0f,
+          fillAlpha = 0.0f
+        ) {
+          // Outer circle
+          moveTo(12f, 12f)
+          arcTo(10f, 10f, 0f, isMoreThanHalf = true, isPositiveArc = true, 12f, 2f)
+          arcTo(10f, 10f, 0f, isMoreThanHalf = true, isPositiveArc = true, 22f, 12f)
+          arcTo(10f, 10f, 0f, isMoreThanHalf = true, isPositiveArc = true, 12f, 22f)
+          arcTo(10f, 10f, 0f, isMoreThanHalf = true, isPositiveArc = true, 2f, 12f)
+          close()
+        }
+
+        // Question mark
+        path(
+          fill = SolidColor(Color.Black),
+          pathFillType = PathFillType.NonZero,
+          strokeLineWidth = 2.0f,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+          stroke = SolidColor(Color.Black),
+          strokeLineMiter = 4.0f,
+          fillAlpha = 0.0f
+        ) {
+          // Question mark hook
+          moveTo(12f, 8f)
+          curveTo(10.9f, 8f, 10f, 8.9f, 10f, 10f)
+          curveTo(10f, 11.1f, 10.4f, 12f, 11f, 12.5f)
+          curveTo(11.6f, 13f, 12f, 13.5f, 12f, 14f)
+          lineTo(12f, 16f)
+        }
+
+        // Question mark dot
+        path(
+          fill = SolidColor(Color.Black),
+          pathFillType = PathFillType.NonZero,
+          strokeLineWidth = 0.0f,
+          strokeLineCap = StrokeCap.Butt,
+          strokeLineJoin = StrokeJoin.Miter,
+          strokeLineMiter = 4.0f
+        ) {
+          // Bottom dot
+          moveTo(12f, 18f)
+          arcTo(1f, 1f, 0f, isMoreThanHalf = true, isPositiveArc = true, 13f, 18f)
+          arcTo(1f, 1f, 0f, isMoreThanHalf = true, isPositiveArc = true, 12f, 17f)
+          arcTo(1f, 1f, 0f, isMoreThanHalf = true, isPositiveArc = true, 11f, 18f)
+          arcTo(1f, 1f, 0f, isMoreThanHalf = true, isPositiveArc = true, 12f, 19f)
           close()
         }
       }.build()
