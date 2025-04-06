@@ -120,6 +120,26 @@ class StreamerViewModel(private val application: Application) : ViewModel() {
   }
 
   /**
+   * Dismisses a peer from the UI
+   */
+  fun dismissPeer(peerId: String) {
+    // Simply remove from active connections and timestamps
+    _peerConnections.update { currentPeers ->
+      val mutablePeers = currentPeers.toMutableMap()
+      mutablePeers.remove(peerId)
+      mutablePeers
+    }
+
+    _peerPingTimestamps.update { currentTimestamps ->
+      val mutableTimestamps = currentTimestamps.toMutableMap()
+      mutableTimestamps.remove(peerId)
+      mutableTimestamps
+    }
+
+    Log.d(TAG, "Peer dismissed: $peerId")
+  }
+
+  /**
    * Processes broadcast events for state updates
    */
   fun processStateUpdateIntent(intent: Intent) {

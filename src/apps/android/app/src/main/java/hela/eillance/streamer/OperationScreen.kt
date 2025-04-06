@@ -9,6 +9,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -24,14 +25,20 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -108,16 +115,41 @@ fun OperationScreen(
         // List of connected clients
         LazyColumn(
           modifier = Modifier.fillMaxSize(),
-          contentPadding = PaddingValues(vertical = 8.dp)
+          contentPadding = PaddingValues(vertical = 8.dp),
+          verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-          items(peerConnections.keys.toList()) { peerId ->
-            PeerItemCard(
+          items(
+            items = peerConnections.keys.toList(),
+            key = { it }
+          ) { peerId ->
+            val states = peerConnections[peerId] ?: emptyMap()
+            val lastPingTimestamp = peerPingTimestamps[peerId]
+
+            val connectionState = remember(states) {
+              val stateValue = states[EventSource.PeerConnectionState] ?: PeerConnectionState.Unknown.value
+              PeerConnectionState.fromInt(stateValue)
+            }
+
+            val isDismissible = connectionState == PeerConnectionState.Disconnected ||
+                connectionState == PeerConnectionState.Failed ||
+                connectionState == PeerConnectionState.Closed
+
+            SwipeToDismissContainer(
               peerId = peerId,
-              states = peerConnections[peerId] ?: emptyMap(),
-              lastPingTimestamp = peerPingTimestamps[peerId],
-              modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 6.dp)
+              isDismissible = isDismissible,
+              onDismiss = { dismissedPeerId ->
+                viewModel.dismissPeer(dismissedPeerId)
+              },
+              content = {
+                PeerItemCard(
+                  peerId = peerId,
+                  states = states,
+                  lastPingTimestamp = lastPingTimestamp,
+                  modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                )
+              }
             )
           }
         }
@@ -128,6 +160,66 @@ fun OperationScreen(
       refreshing = isRefreshing,
       state = pullRefreshState,
       modifier = Modifier.align(Alignment.TopCenter),
+    )
+  }
+}
+
+/**
+ * Swipe-to-dismiss container for peer items
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SwipeToDismissContainer(
+  peerId: String,
+  isDismissible: Boolean,
+  onDismiss: (String) -> Unit,
+  content: @Composable () -> Unit
+) {
+  // Track animation state locally
+  var isVisible by remember { mutableStateOf(true) }
+
+  if (!isDismissible) {
+    content()
+    return
+  }
+
+  val dismissState = rememberSwipeToDismissBoxState(
+    confirmValueChange = { value ->
+      if (value == SwipeToDismissBoxValue.StartToEnd) {
+        // Mark as dismissed locally for immediate feedback
+        isVisible = false
+
+        onDismiss(peerId)
+        true
+      } else {
+        false
+      }
+    }
+  )
+
+  if (isVisible) {
+    SwipeToDismissBox(
+      state = dismissState,
+      backgroundContent = {
+        if (dismissState.currentValue == SwipeToDismissBoxValue.StartToEnd ||
+          dismissState.targetValue == SwipeToDismissBoxValue.StartToEnd) {
+          Row(
+            modifier = Modifier
+              .fillMaxSize()
+              .background(MaterialTheme.colorScheme.errorContainer)
+              .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Icon(
+              imageVector = Icons.Default.Delete,
+              contentDescription = "Delete peer",
+              tint = MaterialTheme.colorScheme.onErrorContainer
+            )
+          }
+        }
+      },
+      enableDismissFromEndToStart = false,
+      content = { content() }
     )
   }
 }
