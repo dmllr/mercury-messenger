@@ -829,7 +829,7 @@ object AppIcons {
       }.build()
     }
 
-  val PrefGroupDevice: ImageVector
+  val PrefDevice: ImageVector
     get() {
       return ImageVector.Builder(
         name = "PrefGroupDevice",
@@ -862,7 +862,7 @@ object AppIcons {
       }.build()
     }
 
-  val PrefGroupVideoEncoding: ImageVector
+  val PrefVideoEncoding: ImageVector
     get() {
       return ImageVector.Builder(
         name = "PrefGroupVideoEncoding",

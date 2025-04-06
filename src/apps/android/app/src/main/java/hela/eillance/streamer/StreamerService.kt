@@ -173,7 +173,7 @@ class StreamerService : Service(), IStreamerNativeBridge {
   private fun startForeground() {
     val channelId = createNotificationChannel()
     val statusIcon = when (serviceConnectionState) {
-      ServiceConnectionState.Online -> Pair(R.drawable.ic_status1_standby, themedColors.success)
+      ServiceConnectionState.Online -> Pair(R.drawable.ic_status_standby, themedColors.success)
       ServiceConnectionState.Establishing -> Pair(R.drawable.ic_status2, themedColors.success)
       else -> Pair(R.drawable.ic_failure, themedColors.warning)
     }
@@ -189,10 +189,10 @@ class StreamerService : Service(), IStreamerNativeBridge {
     )
 
     val notificationBuilder = NotificationCompat.Builder(this, channelId)
-      .setOngoing(true)
       .setLargeIcon(statusIcon.getBitmapFromVectorDrawable())
       .setSmallIcon(R.drawable.ic_camera_stream)
       .setContentTitle(getString(R.string.notification_title))
+      .setOngoing(true)
       .setContentText(serviceConnectionState.getResourceString(this))
       .setPriority(NotificationCompat.PRIORITY_HIGH)
       .setContentIntent(pendingIntent)

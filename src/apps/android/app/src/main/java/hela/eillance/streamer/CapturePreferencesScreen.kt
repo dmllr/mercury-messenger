@@ -19,12 +19,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import hela.eillance.camera.R
 import hela.eillance.ndkio.VideoConfig
+import hela.eillance.theme.AppIcons
 
 @Composable
 fun CapturePreferencesScreen(streamerService: StreamerService) {
@@ -73,11 +74,11 @@ fun CapturePreferencesScreen(streamerService: StreamerService) {
       // Device Category
       PreferenceCategory(
         title = stringResource(R.string.preference_category_device),
-        icon = painterResource(R.drawable.ic_pref_group_device)
+        icon = AppIcons.PrefDevice
       ) {
         EditTextPreference(
           title = stringResource(R.string.preference_device_name),
-          icon = painterResource(R.drawable.ic_device_display_name),
+          icon = AppIcons.DeviceDisplayName,
           value = deviceName,
           summary = deviceName.ifEmpty { stringResource(android.R.string.untitled) },
           onClick = { showDeviceNameDialog = true }
@@ -101,12 +102,12 @@ fun CapturePreferencesScreen(streamerService: StreamerService) {
       // Video Capture Category
       PreferenceCategory(
         title = stringResource(R.string.preference_category_video_capture_encoding),
-        icon = painterResource(R.drawable.ic_pref_group_video_encoding)
+        icon = AppIcons.PrefVideoEncoding
       ) {
         // Camera Selection
         ListPreference(
           title = stringResource(R.string.preference_default_camera),
-          icon = painterResource(R.drawable.ic_pref_default_camera),
+          icon = AppIcons.Camera,
           summary = cameraNames.getOrNull(videoConfig.cameraId)
             ?: stringResource(R.string.preference_default_camera),
           onClick = { showCameraDialog = true }
@@ -137,7 +138,7 @@ fun CapturePreferencesScreen(streamerService: StreamerService) {
         // Camera Resolution
         ListPreference(
           title = stringResource(R.string.preference_camera_resolution),
-          icon = painterResource(R.drawable.ic_pref_camera_resolution),
+          icon = AppIcons.PrefCameraResolution,
           summary = "${videoConfig.width}x${videoConfig.height}",
           onClick = { showResolutionDialog = true }
         )
@@ -166,7 +167,7 @@ fun CapturePreferencesScreen(streamerService: StreamerService) {
         val frameRates = listOf("10", "15", "24", "25", "30", "60")
         ListPreference(
           title = stringResource(R.string.preference_frame_rate),
-          icon = painterResource(R.drawable.ic_pref_frame_rate),
+          icon = AppIcons.PrefFrameRate,
           summary = "${videoConfig.frameRate} fps",
           onClick = { showFrameRateDialog = true }
         )
@@ -191,7 +192,7 @@ fun CapturePreferencesScreen(streamerService: StreamerService) {
         val bitrates = listOf("Auto")
         ListPreference(
           title = stringResource(R.string.preference_bitrate),
-          icon = painterResource(R.drawable.ic_pref_bitrate),
+          icon = AppIcons.PrefBitrate,
           summary = if (videoConfig.bitrate <= 0) "Auto" else "${videoConfig.bitrate} bps",
           onClick = { showBitrateDialog = true }
         )
@@ -216,7 +217,7 @@ fun CapturePreferencesScreen(streamerService: StreamerService) {
       // Audio Capture Category
       PreferenceCategory(
         title = stringResource(R.string.preference_category_audio_capture_encoding),
-        icon = painterResource(R.drawable.ic_pref_group_audio_encoding)
+        icon = AppIcons.PrefAudioEncoding
       ) {
         // Audio preferences would go here
       }
@@ -227,7 +228,7 @@ fun CapturePreferencesScreen(streamerService: StreamerService) {
 @Composable
 fun PreferenceCategory(
   title: String,
-  icon: androidx.compose.ui.graphics.painter.Painter,
+  icon: ImageVector,
   content: @Composable () -> Unit
 ) {
   Column(modifier = Modifier.padding(bottom = 16.dp)) {
@@ -239,13 +240,13 @@ fun PreferenceCategory(
 @Composable
 fun PreferenceCategoryHeader(
   title: String,
-  icon: androidx.compose.ui.graphics.painter.Painter
+  icon: ImageVector
 ) {
   ListItem(
     headlineContent = { Text(text = title) },
     leadingContent = {
       Icon(
-        painter = icon,
+        imageVector = icon,
         contentDescription = title
       )
     }
@@ -255,7 +256,7 @@ fun PreferenceCategoryHeader(
 @Composable
 fun EditTextPreference(
   title: String,
-  icon: androidx.compose.ui.graphics.painter.Painter,
+  icon: ImageVector,
   value: String,
   summary: String,
   onClick: () -> Unit
@@ -265,7 +266,7 @@ fun EditTextPreference(
     supportingContent = { Text(text = summary) },
     leadingContent = {
       Icon(
-        painter = icon,
+        imageVector = icon,
         contentDescription = title
       )
     },
@@ -276,7 +277,7 @@ fun EditTextPreference(
 @Composable
 fun ListPreference(
   title: String,
-  icon: androidx.compose.ui.graphics.painter.Painter,
+  icon: ImageVector,
   summary: String,
   onClick: () -> Unit
 ) {
@@ -285,7 +286,7 @@ fun ListPreference(
     supportingContent = { Text(text = summary) },
     leadingContent = {
       Icon(
-        painter = icon,
+        imageVector = icon,
         contentDescription = title
       )
     },
