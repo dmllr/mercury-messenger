@@ -58,7 +58,8 @@ import hela.eillance.ndkio.PeerStateIce
 import hela.eillance.ndkio.PeerStateIceGathering
 import hela.eillance.ndkio.PeerStateSignaling
 import hela.eillance.ndkio.Profile
-import hela.eillance.theme.AppIcons
+import hela.eillance.theme.icons.AppIcons
+import hela.eillance.theme.icons.SurfaceRotate
 import kotlinx.coroutines.delay
 
 private const val RESOLUTION_SEPARATOR = "×"

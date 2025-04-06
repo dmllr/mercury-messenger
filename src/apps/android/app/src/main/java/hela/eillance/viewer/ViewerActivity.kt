@@ -63,9 +63,12 @@ import hela.eillance.ndkio.Peer
 import hela.eillance.ndkio.Profile
 import hela.eillance.ndkio.ServiceConnectionState
 import hela.eillance.ndkio.interfaces.IViewerNativeBridge
-import hela.eillance.theme.AppIcons
 import hela.eillance.theme.EillanceTheme
 import hela.eillance.theme.extendedColors
+import hela.eillance.theme.icons.AppIcons
+import hela.eillance.theme.icons.Failure
+import hela.eillance.theme.icons.Status2
+import hela.eillance.theme.icons.StatusStandby
 import kotlinx.coroutines.launch
 
 class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
