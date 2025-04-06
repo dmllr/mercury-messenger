@@ -138,7 +138,7 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
       // Online/Offline Indicator Icon
       Icon(
         imageVector = when (connectionState) {
-          ServiceConnectionState.Online -> AppIcons.Status1Standby
+          ServiceConnectionState.Online -> AppIcons.StatusStandby
           ServiceConnectionState.Failure -> AppIcons.Failure
           else -> AppIcons.Status2
         },
