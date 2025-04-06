@@ -47,7 +47,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
@@ -250,7 +249,7 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
         onClick = onPreferencesClick,
         leadingIcon = {
           Icon(
-            painter = painterResource(id = R.drawable.ic_capture_preferences),
+            imageVector = AppIcons.CapturePreferences,
             contentDescription = stringResource(id = R.string.menu_capture_preferences)
           )
         }
@@ -261,7 +260,7 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
         onClick = onServiceStop,
         leadingIcon = {
           Icon(
-            painter = painterResource(id = R.drawable.ic_stop_service),
+            imageVector = AppIcons.StopService,
             contentDescription = stringResource(id = R.string.menu_stop_service)
           )
         }
@@ -273,7 +272,7 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
         onClick = onServiceStart,
         leadingIcon = {
           Icon(
-            painter = painterResource(id = R.drawable.ic_start_service),
+            imageVector = AppIcons.StartService,
             contentDescription = stringResource(id = R.string.menu_start_service)
           )
         }
@@ -284,7 +283,7 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
         onClick = onRestartService,
         leadingIcon = {
           Icon(
-            painter = painterResource(id = R.drawable.ic_restart_service),
+            imageVector = AppIcons.RestartService,
             contentDescription = stringResource(id = R.string.menu_restart_service)
           )
         }
