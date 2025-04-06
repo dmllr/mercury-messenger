@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
 import android.util.Log
 import androidx.core.content.edit
 import hela.eillance.ndkio.Profile
@@ -50,6 +51,10 @@ class PeerStore(
   companion object {
     private const val PEERS_KEY = "stored_peers_map"
     private const val TAG = "PeerStore"
+    private const val MAX_PREVIEW_WIDTH = 800
+    private const val MAX_PREVIEW_HEIGHT = 600
+    private const val MAX_LOADED_WIDTH = 1200
+    private const val MAX_LOADED_HEIGHT = 900
   }
 
   init {
@@ -82,7 +87,6 @@ class PeerStore(
       Log.d(TAG, "Loaded ${offlineMap.size} peers from store.")
     }
   }
-
 
   internal fun savePeers() {
     externalScope.launch(Dispatchers.IO) {
@@ -135,14 +139,56 @@ class PeerStore(
     }
   }
 
+  /**
+   * Resizes a bitmap to fit within the specified dimensions while maintaining aspect ratio.
+   */
+  private fun resizeBitmap(bitmap: Bitmap, maxWidth: Int, maxHeight: Int): Bitmap {
+    val width = bitmap.width
+    val height = bitmap.height
+
+    // If bitmap is already smaller than max dimensions, return original
+    if (width <= maxWidth && height <= maxHeight) {
+      return bitmap
+    }
+
+    // Calculate the scaling factor
+    val scaleFactor = (maxWidth.toFloat() / width).coerceAtMost(maxHeight.toFloat() / height)
+
+    // Create a matrix for the scaling
+    val matrix = Matrix()
+    matrix.postScale(scaleFactor, scaleFactor)
+
+    // Recreate the new bitmap
+    val resizedBitmap = Bitmap.createBitmap(
+      bitmap, 0, 0,
+      width, height, matrix, true
+    )
+
+    // If we created a new bitmap, recycle the original one to free memory
+    if (bitmap != resizedBitmap) {
+      bitmap.recycle()
+    }
+
+    Log.d(TAG, "Resized bitmap from ${width}x${height} to ${resizedBitmap.width}x${resizedBitmap.height}")
+    return resizedBitmap
+  }
 
   suspend fun savePreviewImage(peerId: String, bitmap: Bitmap): String? = withContext(Dispatchers.IO) {
     val file = File(previewDir, "$peerId.png")
     var success = false
+
     try {
+      // Resize the bitmap to save storage space and memory
+      val resizedBitmap = resizeBitmap(bitmap, MAX_PREVIEW_WIDTH, MAX_PREVIEW_HEIGHT)
+
       FileOutputStream(file).use { fos ->
-        bitmap.compress(Bitmap.CompressFormat.PNG, 90, fos)
+        resizedBitmap.compress(Bitmap.CompressFormat.PNG, 90, fos)
         success = true
+      }
+
+      // If resizedBitmap is different from input bitmap, recycle it
+      if (resizedBitmap != bitmap) {
+        resizedBitmap.recycle()
       }
     } catch (e: Exception) {
       Log.e(TAG, "Failed to save preview image for $peerId", e)
@@ -171,7 +217,33 @@ class PeerStore(
   suspend fun loadPreviewBitmap(imagePath: String?): Bitmap? = withContext(Dispatchers.IO) {
     if (imagePath == null) return@withContext null
     try {
-      BitmapFactory.decodeFile(imagePath)
+      // First, decode just the bounds to check the size
+      val options = BitmapFactory.Options().apply {
+        inJustDecodeBounds = true
+      }
+      BitmapFactory.decodeFile(imagePath, options)
+
+      // Calculate the sample size to use
+      var sampleSize = 1
+      if (options.outWidth > MAX_LOADED_WIDTH || options.outHeight > MAX_LOADED_HEIGHT) {
+        val widthRatio = Math.ceil(options.outWidth.toDouble() / MAX_LOADED_WIDTH).toInt()
+        val heightRatio = Math.ceil(options.outHeight.toDouble() / MAX_LOADED_HEIGHT).toInt()
+        sampleSize = Math.max(widthRatio, heightRatio)
+        Log.d(TAG, "Loading image at sample size $sampleSize (from ${options.outWidth}x${options.outHeight})")
+      }
+
+      // Decode with the sample size
+      val decodeOptions = BitmapFactory.Options().apply {
+        inSampleSize = sampleSize
+      }
+      val bitmap = BitmapFactory.decodeFile(imagePath, decodeOptions)
+
+      // If needed, do additional resizing to get exact dimensions
+      if (bitmap != null && (bitmap.width > MAX_LOADED_WIDTH || bitmap.height > MAX_LOADED_HEIGHT)) {
+        return@withContext resizeBitmap(bitmap, MAX_LOADED_WIDTH, MAX_LOADED_HEIGHT)
+      }
+
+      bitmap
     } catch (e: Exception) {
       Log.e(TAG, "Failed to load preview image from $imagePath", e)
       null
