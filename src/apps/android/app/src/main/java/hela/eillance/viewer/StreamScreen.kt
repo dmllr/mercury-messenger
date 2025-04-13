@@ -240,11 +240,8 @@ fun StreamScreen(
     when {
       // Stream portrait, view portrait
       isStreamPortrait && isViewPortrait -> {
-        // first, maintain aspect ratio
-        matrix.postScale(scaleAspectX, scaleAspectY, pivotX, pivotY)
-        // next, fit the view
         val scaleToFit = viewWidth / streamWidth
-        matrix.postScale(scaleToFit, scaleToFit, pivotX, pivotY)
+        matrix.postScale(scaleAspectX * scaleToFit, scaleAspectY * scaleToFit, pivotX, pivotY)
       }
       // Both landscape
       !isStreamPortrait && !isViewPortrait -> {
