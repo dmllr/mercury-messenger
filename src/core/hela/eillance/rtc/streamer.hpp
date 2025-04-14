@@ -255,10 +255,21 @@ private:
         video_config.height = jvc["height"].get<std::uint32_t>();
       }
 
+      if (jvc.contains("bitrate") && !jvc["bitrate"].is_null()) {
+        video_config.bitrate = jvc["bitrate"].get<std::uint32_t>();
+      }
+
+      if (jvc.contains("frameRate") && !jvc["frameRate"].is_null()) {
+        video_config.frameRate = jvc["frameRate"].get<std::uint16_t>();
+      }
+
       LOGD << "Applying video configuration from " << peer_id
            << " (cameraId: " << video_config.cameraId
            << ", width: " << video_config.width
-           << ", height: " << video_config.height << ")";
+           << ", height: " << video_config.height
+           << ", frameRate: " << video_config.frameRate
+           << ", bitrate: " << video_config.bitrate
+           << ")";
 
       Configure(config);
     }
