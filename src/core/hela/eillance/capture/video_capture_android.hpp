@@ -205,10 +205,10 @@ private:
               last_orientation_change = Time::Now();
               orientation_stability_counter = 0;
 
-              DispatchQueue::MainThread().Dispatch([this, new_orientation]() {
-                  VideoConfig updated_config = config_;
-                  updated_config.rotation = static_cast<int>(new_orientation);
-                  ConfigureVideo(updated_config);
+              config_.rotation = static_cast<int>(new_orientation);
+
+              DispatchQueue::MainThread().Dispatch([this]() {
+                  ConfigureVideo(config_);
                 });
 
               Log::i("Device orientation changed to: %d degrees", static_cast<int>(new_orientation));
