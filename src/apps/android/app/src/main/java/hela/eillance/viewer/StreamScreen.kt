@@ -211,59 +211,53 @@ fun StreamScreen(
 
     val view = textureView ?: return matrix
 
-    // Stream details
-    val streamRotation = viewModel.streamRotation + localRotation
-    val isStreamPortrait = streamRotation == 90 || streamRotation == 270
+    val finalRotation = viewModel.streamRotation + localRotation
     var streamWidth = viewModel.streamWidth.toFloat()
     var streamHeight = viewModel.streamHeight.toFloat()
-
-    // View details
-    val isViewPortrait =
-      (context.resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT)
     val viewWidth = view.width.toFloat()
     val viewHeight = view.height.toFloat()
+    val aspectRatio = streamHeight / streamWidth
+    val isStreamPortrait =
+      finalRotation == 90 || finalRotation == 270
+    val isViewPortrait =
+      (context.resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT)
 
-    if (streamWidth == 0f || streamHeight == 0f || viewWidth == 0f || viewHeight == 0f) {
-      return matrix
-    }
-
-    // Center of the view. Perform all operations on this point.
     val pivotX = viewWidth / 2f
     val pivotY = viewHeight / 2f
 
-    matrix.postRotate(streamRotation.toFloat(), pivotX, pivotY)
-
-    // The scale to maintain aspect ratio
-    val scaleAspectX = streamHeight / streamWidth
-    val scaleAspectY = streamWidth / streamHeight
-
+    val newWidth: Float
+    val newHeight: Float
     when {
       // Stream portrait, view portrait
       isStreamPortrait && isViewPortrait -> {
-        val scaleToFit = viewWidth / streamWidth
-        matrix.postScale(scaleAspectX * scaleToFit, scaleAspectY * scaleToFit, pivotX, pivotY)
+        newWidth = (streamWidth / streamHeight) * viewWidth
+        newHeight = (streamWidth / streamHeight) * viewWidth * aspectRatio
       }
       // Both landscape
       !isStreamPortrait && !isViewPortrait -> {
-        // just maintain aspect ratio
-        matrix.postScale(scaleAspectX, 1f, pivotX, pivotY)
+        newWidth = viewHeight / aspectRatio
+        newHeight = viewHeight
       }
       // Stream portrait, view landscape
       isStreamPortrait && !isViewPortrait -> {
-        val scaleToFit = viewHeight / streamWidth
-        matrix.postScale(scaleToFit, scaleToFit, pivotX, pivotY)
+        newWidth = viewHeight
+        newHeight = viewHeight * aspectRatio
       }
       // Stream landscape, view portrait
       else -> { // !isStreamPortrait && isViewPortrait
-        val scaleToFit = viewWidth / streamWidth
-        matrix.postScale(scaleAspectY * scaleToFit, scaleAspectX * scaleToFit, pivotX, pivotY)
+        newWidth = viewWidth
+        newHeight = viewWidth * aspectRatio
       }
     }
 
-    // Apply user scale if greater than 1
+    matrix.setScale(newWidth / viewWidth, newHeight / viewHeight, pivotX, pivotY)
+
+    // Apply user scale
     if (scale > 1f) {
       matrix.postScale(scale, scale, pivotX, pivotY)
     }
+
+    matrix.postRotate(finalRotation.toFloat(), pivotX, pivotY)
 
     return matrix
   }
