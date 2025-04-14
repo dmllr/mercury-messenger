@@ -3,19 +3,22 @@ package hela.eillance.viewer
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
@@ -54,6 +57,8 @@ import hela.eillance.theme.icons.Failure
 import hela.eillance.theme.icons.StatusStandby
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+
+private val GridItemMinWidth = 220.dp
 
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
@@ -98,9 +103,12 @@ fun PeersScreen(
           )
         }
       } else {
-        LazyColumn(
+        LazyVerticalGrid(
+          columns = GridCells.Adaptive(minSize = GridItemMinWidth),
           modifier = Modifier.fillMaxSize(),
-          contentPadding = PaddingValues(vertical = 8.dp)
+          contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+          verticalArrangement = Arrangement.spacedBy(12.dp),
+          horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
           items(peers, key = { it.id }) { peer ->
             PeerItem(
@@ -141,8 +149,7 @@ fun PeerItem(
   Card(
     modifier = Modifier
       .fillMaxWidth()
-      .height(180.dp)
-      .padding(horizontal = 16.dp, vertical = 6.dp)
+      .aspectRatio(16f / 9f)
       .clickable { onPeerClicked(peer) },
     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
   ) {
@@ -194,7 +201,8 @@ fun PeerItem(
             Text(
               text = peer.name,
               style = MaterialTheme.typography.titleMedium,
-              color = Color.White
+              color = Color.White,
+              maxLines = 1 // Prevent text wrapping
             )
             Spacer(Modifier.height(4.dp))
             Row(
