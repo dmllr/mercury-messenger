@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -74,6 +75,7 @@ import hela.eillance.theme.EillanceTheme
 import hela.eillance.theme.extendedColors
 import hela.eillance.theme.icons.AppIcons
 import hela.eillance.theme.icons.Failure
+import hela.eillance.theme.icons.Signout
 import hela.eillance.theme.icons.Status2
 import hela.eillance.theme.icons.StatusStandby
 import hela.eillance.theme.icons.SwitchRole
@@ -171,7 +173,8 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
   private fun UserMenu(
     expanded: Boolean,
     onDismissRequest: () -> Unit,
-    onReselectRole: () -> Unit
+    onReselectRole: () -> Unit,
+    onSignOut: () -> Unit
   ) {
     DropdownMenu(
       expanded = expanded,
@@ -184,6 +187,17 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
           Icon(
             imageVector = AppIcons.SwitchRole,
             contentDescription = stringResource(id = R.string.menu_reselect_role)
+          )
+        }
+      )
+      HorizontalDivider()
+      DropdownMenuItem(
+        text = { Text(stringResource(id = R.string.menu_sign_out)) },
+        onClick = onSignOut,
+        leadingIcon = {
+          Icon(
+            imageVector = AppIcons.Signout,
+            contentDescription = stringResource(id = R.string.menu_sign_out)
           )
         }
       )
@@ -215,7 +229,8 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
               currentRoute,
               navController,
               viewModel,
-              onReselectRole = { launchRoleSelection() }
+              onReselectRole = { launchRoleSelection() },
+              onSignOut = { signOut() }
             )
           }
         }
@@ -291,7 +306,8 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
     currentRoute: String?,
     navController: NavHostController,
     viewModel: ViewerViewModel,
-    onReselectRole: () -> Unit
+    onReselectRole: () -> Unit,
+    onSignOut: () -> Unit
   ) {
     val connectionStatusState = viewModel.connectionStatus.observeAsState(ServiceConnectionState.Unknown.ordinal)
     val connectionState = ServiceConnectionState.fromInt(connectionStatusState.value)
@@ -330,6 +346,10 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
             onDismissRequest = { menuExpanded = false },
             onReselectRole = {
               onReselectRole()
+              menuExpanded = false
+            },
+            onSignOut = {
+              onSignOut()
               menuExpanded = false
             }
           )
@@ -417,6 +437,17 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
       // Remove keep screen on flag
       window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
+  }
+
+  private fun signOut() {
+    FirebaseAuth.getInstance().signOut()
+    updateAuthToken("")
+
+    // Navigate back to launcher
+    val intent = Intent(this, LauncherActivity::class.java)
+    intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+    startActivity(intent)
+    finish()
   }
 
   override fun onResume() {

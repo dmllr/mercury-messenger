@@ -16,6 +16,7 @@
   <string name="menu_stop_service">Stop service</string>
   <string name="menu_start_service">Start service</string>
   <string name="menu_restart_service">Restart service</string>
+  <string name="menu_sign_out">Sign out</string>
 
   <string name="notification_title">Eillance</string>
   <string name="notification_description">Camera stream P2P connection</string>
