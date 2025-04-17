@@ -2,4 +2,8 @@
 <resources>
   <style name="AppTheme" parent="Theme.MaterialComponents.DayNight.NoActionBar">
   </style>
+
+  <style name="FirebaseAuthTheme" parent="AppTheme">
+  </style>
+
 </resources>

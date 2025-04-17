@@ -217,7 +217,12 @@ class LauncherActivity : ComponentActivity() {
         val signInIntent = AuthUI.getInstance()
             .createSignInIntentBuilder()
             .setAvailableProviders(providers)
-            .setLogo(R.drawable.ic_camera)
+            .setLogo(R.drawable.ic_camera_stream)
+            .setTheme(R.style.FirebaseAuthTheme)
+            .setTosAndPrivacyPolicyUrls(
+                "https://edu.eillance.com/legal/terms-and-conditions",
+                "https://edu.eillance.com/legal/privacy-policy"
+            )
             .build()
         signInLauncher.launch(signInIntent)
     }
