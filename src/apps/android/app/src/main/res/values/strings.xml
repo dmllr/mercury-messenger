@@ -1,6 +1,18 @@
 <resources>
   <string name="app_name">Eillance</string>
 
+  <string name="continue_">Continue</string>
+  <string name="retry">Retry</string>
+
+  <string name="launcher_checking_connection">Checking connection…</string>
+  <string name="launcher_no_internet_connection">No internet connection</string>
+  <string name="launcher_authentication_failed">Authentication Failed</string>
+  <string name="launcher_failed_to_sign_in">Failed to sign in. Please try again.</string>
+  <string name="launcher_ask_each_time">Ask each time</string>
+  <string name="launcher_select_device_role">Select your device mode</string>
+  <string name="launcher_role_camera">Camera</string>
+  <string name="launcher_role_viewer">Viewer</string>
+
   <string name="permissions_required">Camera and microphone permissions are required. Tap here to grant the permissions.</string>
   <string name="permissions_required_dialog_title">Permissions Required</string>
   <string name="permissions_required_dialog_text">You have denied necessary permissions. To enable streaming, please allow them in settings.</string>
@@ -51,4 +63,6 @@
   <string name="viewer_StreamScreen_exit_fullscreen">Exit fullscreen mode</string>
   <string name="viewer_StreamScreen_default_camera">Default Camera</string>
   <string name="viewer_StreamScreen_default_resolution">Default Resolution</string>
+  <string name="launcher_role_streamer_description">Use this device to stream video to your network</string>
+  <string name="launcher_role_viewer_description">Use this device to view camera streams from your network</string>
 </resources>

@@ -52,6 +52,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -161,7 +162,7 @@ class LauncherActivity : ComponentActivity() {
                     ) {
                         CircularProgressIndicator()
                         Text(
-                            text = "Checking connection...",
+                            text = stringResource(R.string.launcher_checking_connection),
                             modifier = Modifier.padding(top = 16.dp),
                             color = MaterialTheme.colorScheme.onSurface
                         )
@@ -174,14 +175,14 @@ class LauncherActivity : ComponentActivity() {
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = "No internet connection",
+                            text = stringResource(R.string.launcher_no_internet_connection),
                             color = MaterialTheme.colorScheme.error
                         )
                         Button(
                             onClick = onRetry,
                             modifier = Modifier.padding(top = 48.dp)
                         ) {
-                            Text("Retry")
+                            Text(stringResource(R.string.retry))
                         }
                     }
                 }
@@ -220,9 +221,10 @@ class LauncherActivity : ComponentActivity() {
             .setLogo(R.drawable.ic_camera_stream)
             .setTheme(R.style.FirebaseAuthTheme)
             .setTosAndPrivacyPolicyUrls(
-                "https://edu.eillance.com/legal/terms-and-conditions",
-                "https://edu.eillance.com/legal/privacy-policy"
+                "https://edu.eillance.com/legal/terms-and-conditions/",
+                "https://edu.eillance.com/legal/privacy-policy/"
             )
+            .setAlwaysShowSignInMethodScreen(true) //for the app name on the login screen
             .build()
         signInLauncher.launch(signInIntent)
     }
@@ -253,13 +255,13 @@ class LauncherActivity : ComponentActivity() {
                 // Show auth error dialog
                 isNetworkDialogShowing = true
                 MaterialAlertDialogBuilder(this)
-                    .setTitle("Authentication Failed")
-                    .setMessage("Failed to sign in. Please try again.")
-                    .setPositiveButton("Retry") { _, _ ->
+                    .setTitle(R.string.launcher_authentication_failed)
+                    .setMessage(R.string.launcher_failed_to_sign_in)
+                    .setPositiveButton(R.string.retry) { _, _ ->
                         isNetworkDialogShowing = false
                         launchSignInFlow()
                     }
-                    .setNegativeButton("Cancel") { _, _ ->
+                    .setNegativeButton(android.R.string.cancel) { _, _ ->
                         isNetworkDialogShowing = false
                         finish()
                     }
@@ -342,7 +344,7 @@ fun RoleSelectionScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    painter = painterResource(id = R.drawable.ic_camera),
+                    painter = painterResource(id = R.drawable.ic_camera_stream),
                     contentDescription = "App Logo",
                     modifier = Modifier.size(48.dp),
                     tint = MaterialTheme.colorScheme.onPrimaryContainer
@@ -352,7 +354,7 @@ fun RoleSelectionScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             Text(
-                text = "Eillance",
+                text = stringResource(R.string.app_name),
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
@@ -360,8 +362,8 @@ fun RoleSelectionScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            Text(
-                text = "Select your device mode",
+             Text(
+                text = stringResource(R.string.launcher_select_device_role),
                 fontSize = 16.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -392,7 +394,7 @@ fun RoleSelectionScreen(
                 )
 
                 Text(
-                    text = "Ask each time",
+                    text = stringResource(R.string.launcher_ask_each_time),
                     fontSize = 16.sp,
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.padding(start = 8.dp)
@@ -423,7 +425,7 @@ fun RoleSelectionScreen(
                     )
                 ) {
                     Text(
-                        text = "Continue",
+                        text = stringResource(R.string.continue_),
                         fontSize = 16.sp,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -448,8 +450,8 @@ fun RoleOptionCards(
     ) {
         // Camera role card
         RoleCard(
-            title = "Camera",
-            description = "Use this device to stream video to your network",
+            title = stringResource(R.string.launcher_role_camera),
+            description = stringResource(R.string.launcher_role_streamer_description),
             iconResId = R.drawable.ic_camera,
             isSelected = selectedRole == "camera",
             primaryColor = MaterialTheme.colorScheme.primary,
@@ -459,9 +461,9 @@ fun RoleOptionCards(
 
         // Viewer role card
         RoleCard(
-            title = "Viewer",
-            description = "Use this device to view camera streams from your network",
-            iconResId = R.drawable.ic_camera, // Replace with appropriate icon for viewer
+            title = stringResource(R.string.launcher_role_viewer),
+            description = stringResource(R.string.launcher_role_viewer_description),
+            iconResId = R.drawable.ic_viewer,
             isSelected = selectedRole == "viewer",
             primaryColor = MaterialTheme.colorScheme.tertiary,
             onClick = { onRoleSelected("viewer") },
