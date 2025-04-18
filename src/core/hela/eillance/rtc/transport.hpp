@@ -226,6 +226,7 @@ public:
         ws_->close();
       }
     }
+    ReportServiceConnectionState(ServiceConnectionState::disconnected);
   }
 
   void AddPeer(const std::string& peer_id, const std::shared_ptr<Peer>& peer) {
