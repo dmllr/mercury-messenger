@@ -12,8 +12,7 @@ categories: ['Technology Explained']
 
 # Connecting Your World: How Eillance Creates Secure Video Streams
 
-![Diagram illustrating Peer-to-Peer, STUN, and TURN concepts](/images/articles/p2p-diagram-cover.png)
-*(Image Prompt 1: Generate a simplified network diagram showing two devices (phone icons) trying to connect. Include icons representing NAT/Firewall, a STUN server, and a TURN server, hinting at the different connection paths.)*
+![Diagram illustrating Peer-to-Peer, STUN, and TURN concepts](/img/Network_Connection_Diagram_simple_compose.png)
 
 So, you've turned an old phone into a camera with Eillance and are viewing the stream on another device. It seems simple, but behind the scenes, some clever technology ensures your connection is as direct, private, and efficient as possible. Let's dive into how Eillance makes this happen using peer-to-peer (P2P) connections, drawing inspiration from technologies like WebRTC.
 
@@ -27,7 +26,7 @@ Imagine calling a friend directly on their phone – that's essentially what a *
 *   **Privacy:** Your video stream isn't passing through central servers unnecessarily.
 *   **Efficiency:** It reduces load on central infrastructure.
 
-*(Image Prompt 2: Generate a simple graphic showing two devices (phone/laptop icons) with a direct, encrypted arrow connecting them, labeled "Direct P2P Connection - Fast & Private".)*
+![Direct P2P Connection - Fast & Private](/img/Direct_P2P_Connection.png)
 
 ## The Hurdle: Navigating the Internet's Walls (NAT & Firewalls)
 
@@ -54,7 +53,7 @@ A TURN server acts as a **relay** or middleman. If a direct P2P connection can't
 1.  The camera device sends its encrypted video stream to the TURN server.
 2.  The TURN server forwards that encrypted stream to the viewer device.
 
-*(Image Prompt 3: Generate a simple graphic showing two devices connected via arrows going *through* a central server icon labeled "TURN Relay Server". Emphasize the arrows are still encrypted.)*
+![Encrypted Network Connection](/img/Encrypted_Network_Connection.png)
 
 It's like sending mail via a trusted forwarding service when direct delivery isn't possible. Eillance uses trusted third-party TURN servers (like those from metered.ca) or potentially its own secure servers.
 
