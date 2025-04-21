@@ -12,6 +12,7 @@ import {
 import { Peer, Resolution } from '@/types/peer';
 import { useWebRTC } from '@/hooks/useWebRTC';
 import { Config } from '@/types/config'; // Assuming Config types are defined
+import { DataChannelMessageType } from '@/types/signaling'; // Import DataChannelMessageType
 
 interface StreamViewProps {
     peer: Peer;
@@ -27,6 +28,7 @@ function StreamView({ peer, onBack }: StreamViewProps) {
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [rotation, setRotation] = useState(0); // Local rotation state
     const [showControls, setShowControls] = useState(true); // Show controls initially
+    // Initialize selections based on the initial peer profile
     const [selectedCameraId, setSelectedCameraId] = useState<string | undefined>(peer.profile?.[0]?.id);
     const [selectedResolution, setSelectedResolution] = useState<Resolution | undefined>(peer.profile?.[0]?.resolutions?.[0]);
     const [localProfile, setLocalProfile] = useState<Peer['profile']>(peer.profile || []); // Store profile locally
@@ -43,55 +45,169 @@ function StreamView({ peer, onBack }: StreamViewProps) {
         remoteProfile, // Profile received over data channel
     } = useWebRTC(peer.id);
 
-    // --- Effects ---
+    // Helper to compose configuration based on current selections
+    const composeConfiguration = useCallback((): Config => {
+        const config: Config = { video: {}, audio: {} }; // Initialize with empty objects
+        const selectedCam = localProfile?.find(cam => cam.id === selectedCameraId);
+        if (selectedCam && selectedResolution) {
+            // Find camera index - IMPORTANT: Signaling expects index, not ID
+            const camIndex = localProfile?.findIndex(cam => cam.id === selectedCameraId) ?? 0;
 
-    // Request stream on mount
-    useEffect(() => {
-        if (peer.id && !streamRequestedRef.current) {
-            streamRequestedRef.current = true;
+            config.video = {
+                cameraId: camIndex >= 0 ? camIndex : 0, // Use index
+                width: selectedResolution.width,
+                height: selectedResolution.height,
+                // frameRate and bitrate can be omitted or set to defaults if needed
+                // frameRate: 30,
+                // bitrate: 1000000,
+            };
+        } else {
+            // Send default or empty config if nothing selected
+            // Based on typical streamer implementations, sending { cameraId: 0, width: 0, height: 0 }
+            // might be interpreted as 'stop stream' or 'use default'. Clarify with streamer implementation.
+            // For now, let's send the specific selections if they exist.
+            if (selectedCameraId !== undefined && selectedResolution !== undefined) {
+                // This case might indicate an issue in selection logic, but compose defensively.
+                // Or if a camera/resolution was selected but then disappeared from profile.
+                console.warn("Attempted to compose config with seemingly invalid selections:", { selectedCameraId, selectedResolution });
+                // Fallback to requesting the first available camera/resolution if profile exists
+                const firstCam = localProfile?.[0];
+                if (firstCam) {
+                    config.video = {
+                        cameraId: 0,
+                        width: firstCam.resolutions?.[0]?.width ?? 0,
+                        height: firstCam.resolutions?.[0]?.height ?? 0,
+                    };
+                } else {
+                    // No profile, send minimal video config? Or audio only?
+                    config.video = { cameraId: 0, width: 0, height: 0 };
+                }
+            } else {
+                // This happens when nothing is selected initially or after profile update doesn't match current selections
+                // We might not want to send a config in this specific case, unless we are sure a valid default should be sent.
+                // Let the useEffect below handle the send when valid selections ARE present.
+                // For now, return an empty config if selections are not valid.
+                return { video: {}, audio: {} };
+            }
+        }
+        // Audio config is usually empty for viewer->streamer requests based on C++
+        config.audio = {};
+        return config;
+    }, [selectedCameraId, selectedResolution, localProfile]);
 
-            // Initial request - might use default config or first available
-            const initialConfig = composeConfiguration();
-            console.log("Requesting stream with initial config:", initialConfig);
-            requestStream(initialConfig);
+
+    const sendConfigurationRequest = useCallback(() => {
+        // Only send if data channel is open and we have valid selections
+        if (!isDataChannelOpen || selectedCameraId === undefined || selectedResolution === undefined) {
+            console.warn("Data channel not open or selections incomplete, cannot send configuration.");
+            return;
+        }
+        const config = composeConfiguration();
+        // Avoid sending empty config if selections are valid
+        if (Object.keys(config.video).length === 0) {
+            console.warn("Composed configuration is empty, not sending.");
+            return;
         }
 
-        // Only clean up on component unmount
+        const message = {
+            type: DataChannelMessageType.CONFIGURATION, // Use DataChannelMessageType
+            config: config,
+        };
+        console.log("Sending configuration request:", message);
+        sendDataChannelMessage(JSON.stringify(message));
+    }, [isDataChannelOpen, selectedCameraId, selectedResolution, composeConfiguration, sendDataChannelMessage]); // Dependencies include items used in composeConfiguration and the check
+
+    // --- Effects ---
+
+    // Request stream on mount or peer change
+    useEffect(() => {
+        // Reset selections and profile when peer changes
+        setSelectedCameraId(peer.profile?.[0]?.id);
+        setSelectedResolution(peer.profile?.[0]?.resolutions?.[0]);
+        setLocalProfile(peer.profile || []);
+
+        if (peer.id && !streamRequestedRef.current) {
+            streamRequestedRef.current = true;
+            console.log("Initial stream request for peer:", peer.id);
+            // The initial config will be sent by the useEffect watching selections and data channel state
+            requestStream({video: {}, audio: {}}); // Send an empty config on initial request, streamer might use default
+        }
+
+        // Only clean up on component unmount or when peer.id changes significantly
         return () => {
-            console.log("Closing WebRTC connection for peer:", peer.id);
+            // Use peer.id in dependency array and clean up when it changes
+            console.log("Cleaning up WebRTC connection for peer change or unmount:", peer.id);
             closeConnection();
-            // Reset state for remount
+            // Reset the ref for the next mount/peer change
             streamRequestedRef.current = false;
         };
-    }, [peer.id]);
+    }, [peer.id, requestStream, closeConnection]); // Depend on peer.id, requestStream, closeConnection
+
+    // Effect to send configuration when selections or data channel state changes
+    useEffect(() => {
+        // Send configuration only if data channel is open AND a camera/resolution are selected
+        if (isDataChannelOpen && selectedCameraId !== undefined && selectedResolution !== undefined) {
+            console.log("Selections or Data Channel state changed, sending configuration...");
+            // Add a small delay? Sometimes necessary if state takes a moment to propagate
+            const handler = setTimeout(sendConfigurationRequest, 50); // Add a small delay
+
+            return () => clearTimeout(handler); // Cleanup timeout
+        } else {
+            console.log("Data channel not open or selections incomplete. Not sending config yet.", { isDataChannelOpen, selectedCameraId, selectedResolution });
+        }
+        // Dependencies: selections, data channel state, and the send function
+    }, [selectedCameraId, selectedResolution, isDataChannelOpen, sendConfigurationRequest]);
+
 
     // Update local profile when received over data channel
     useEffect(() => {
         if (remoteProfile && remoteProfile.length > 0) {
             console.log("Received updated profile:", remoteProfile);
             setLocalProfile(remoteProfile);
-            // Reset selections if necessary, or try to maintain them
-            if (!remoteProfile.find(cam => cam.id === selectedCameraId)) {
+
+            // Try to maintain the current selection if the camera still exists
+            const currentCamStillExists = remoteProfile.find(cam => cam.id === selectedCameraId);
+
+            if (!currentCamStillExists) {
+                // If current camera is gone, select the first one in the new profile
                 const firstCam = remoteProfile[0];
                 setSelectedCameraId(firstCam?.id);
                 setSelectedResolution(firstCam?.resolutions?.[0]);
             } else {
-                const currentCam = remoteProfile.find(cam => cam.id === selectedCameraId);
-                if (!currentCam?.resolutions.find(res => res.width === selectedResolution?.width && res.height === selectedResolution?.height)) {
+                // If current camera still exists, check if the current resolution exists for it
+                const currentCam = remoteProfile.find(cam => cam.id === selectedCameraId); // Find it again in the new profile
+                const currentResStillExists = currentCam?.resolutions.find(res =>
+                    res.width === selectedResolution?.width && res.height === selectedResolution?.height
+                );
+                if (!currentResStillExists) {
+                    // If current resolution is gone for the current camera, select the first resolution
                     setSelectedResolution(currentCam?.resolutions?.[0]);
                 }
+                // If both camera and resolution still exist, keep the selection.
             }
+            // The useEffect watching selectedCameraId/selectedResolution will pick up changes here and send the config.
+
+        } else if (remoteProfile && remoteProfile.length === 0) {
+            // Received empty profile, maybe indicate no cameras available
+            console.log("Received empty profile.");
+            setLocalProfile([]);
+            setSelectedCameraId(undefined);
+            setSelectedResolution(undefined);
         }
     }, [remoteProfile, selectedCameraId, selectedResolution]);
 
 
     // Attach stream to video element
     useEffect(() => {
-        if (stream && videoRef.current) {
-            console.log("Attaching stream to video element");
-            videoRef.current.srcObject = stream;
-        } else if (!stream && videoRef.current) {
-            videoRef.current.srcObject = null; // Clear stream if it becomes null
+        if (videoRef.current) {
+            if (stream) {
+                console.log("Attaching stream to video element");
+                videoRef.current.srcObject = stream;
+            } else {
+                // Clear stream if it becomes null (e.g., on connection close)
+                console.log("Stream became null, detaching from video element.");
+                videoRef.current.srcObject = null;
+            }
         }
     }, [stream]);
 
@@ -135,7 +251,7 @@ function StreamView({ peer, onBack }: StreamViewProps) {
     const toggleFullscreen = () => {
         if (!document.fullscreenElement && containerRef.current) {
             containerRef.current.requestFullscreen();
-        } else {
+        } else if (document.fullscreenElement) {
             document.exitFullscreen();
         }
     };
@@ -144,65 +260,25 @@ function StreamView({ peer, onBack }: StreamViewProps) {
         setRotation((prev) => (prev + 90) % 360);
     };
 
-    // Helper to compose configuration based on current selections
-    const composeConfiguration = useCallback((): Config => {
-        const config: Config = { video: {}, audio: {} }; // Initialize with empty objects
-        const selectedCam = localProfile?.find(cam => cam.id === selectedCameraId);
-        if (selectedCam && selectedResolution) {
-            // Find camera index - IMPORTANT: Signaling expects index, not ID
-            const camIndex = localProfile?.findIndex(cam => cam.id === selectedCameraId) ?? 0;
-
-            config.video = {
-                cameraId: camIndex >= 0 ? camIndex : 0, // Use index
-                width: selectedResolution.width,
-                height: selectedResolution.height,
-                // frameRate and bitrate can be omitted or set to defaults if needed
-                // frameRate: 30,
-                // bitrate: 1000000,
-            };
-        } else {
-            // Send default or empty config if nothing selected
-            config.video = { cameraId: 0, width: 0, height: 0 };
-        }
-        // Audio config is usually empty for viewer->streamer requests based on C++
-        config.audio = {};
-        return config;
-    }, [selectedCameraId, selectedResolution, localProfile]);
-
-
-    const sendConfigurationRequest = useCallback(() => {
-        if (!isDataChannelOpen) {
-            console.warn("Data channel not open, cannot send configuration.");
-            // Optionally show feedback to the user
-            return;
-        }
-        const config = composeConfiguration();
-        const message = {
-            type: "configuration",
-            config: config,
-        };
-        console.log("Sending configuration request:", message);
-        sendDataChannelMessage(JSON.stringify(message));
-    }, [isDataChannelOpen, composeConfiguration, sendDataChannelMessage]);
 
     const handleCameraChange = (event: SelectChangeEvent<string>) => {
         const newCamId = event.target.value;
         const newCam = localProfile?.find(cam => cam.id === newCamId);
         setSelectedCameraId(newCamId);
-        setSelectedResolution(newCam?.resolutions?.[0]); // Select first resolution of new camera
-        // Send config update immediately after selection
-        sendConfigurationRequest();
+        // Also update resolution to the first available for the new camera
+        setSelectedResolution(newCam?.resolutions?.[0]);
+        // The useEffect will handle sending the config
     };
 
     const handleResolutionChange = (event: SelectChangeEvent<string>) => {
-        const [widthStr, heightStr] = event.target.value.split(RESOLUTION_SEPARATOR);
+        const value = event.target.value;
+        const [widthStr, heightStr] = value.split(RESOLUTION_SEPARATOR);
         const width = parseInt(widthStr, 10);
         const height = parseInt(heightStr, 10);
         const newRes = localProfile?.find(cam => cam.id === selectedCameraId)
             ?.resolutions.find(res => res.width === width && res.height === height);
         setSelectedResolution(newRes);
-        // Send config update immediately after selection
-        sendConfigurationRequest();
+        // The useEffect will handle sending the config
     };
 
     // --- Rendering Logic ---
@@ -328,7 +404,7 @@ function StreamView({ peer, onBack }: StreamViewProps) {
                     borderBottomRightRadius: 0,
                 }}>
                     {/* Camera Selection */}
-                    <FormControl size="small" sx={{ minWidth: 150, flexGrow: 1 }} disabled={(localProfile?.length ?? 0) <= 1 || !isDataChannelOpen}>
+                    <FormControl size="small" sx={{ minWidth: 150, flexGrow: 1 }} disabled={(localProfile?.length ?? 0) <= 1 || !isDataChannelOpen || connectionState !== 'connected'}> {/* Disable if no cameras, DC not open, or not connected */}
                         <InputLabel id="camera-select-label" sx={{ color: 'rgba(255,255,255,0.7)' }}>Camera</InputLabel>
                         <Select
                             labelId="camera-select-label"
@@ -346,7 +422,7 @@ function StreamView({ peer, onBack }: StreamViewProps) {
                     </FormControl>
 
                     {/* Resolution Selection */}
-                    <FormControl size="small" sx={{ minWidth: 150, flexGrow: 1 }} disabled={!currentCamera || (currentResolutions?.length ?? 0) <= 1 || !isDataChannelOpen}>
+                    <FormControl size="small" sx={{ minWidth: 150, flexGrow: 1 }} disabled={!currentCamera || (currentResolutions?.length ?? 0) <= 1 || !isDataChannelOpen || connectionState !== 'connected'}> {/* Disable if no camera/resolutions, DC not open, or not connected */}
                         <InputLabel id="resolution-select-label" sx={{ color: 'rgba(255,255,255,0.7)' }}>Resolution</InputLabel>
                         <Select
                             labelId="resolution-select-label"

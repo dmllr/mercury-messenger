@@ -25,7 +25,6 @@ const rtcConfiguration: RTCConfiguration = {
             credential: "qZCNW/57EB8GwO3A"
         }
     ],
-    sdpSemantics: 'unified-plan',
     bundlePolicy: "max-bundle"
 };
 
@@ -121,6 +120,7 @@ export function useWebRTC(peerId: string | null) {
             pc.current.getSenders().forEach(function(sender) {
                 const track = sender.track;
                 if (track !== null) {
+                    // @ts-ignore
                     sender.track.stop();
                 }
             });
