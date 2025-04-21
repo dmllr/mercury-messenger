@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Technology Explained on Eillance</title>
+    <link>https://eillance.com/categories/technology-explained/</link>
+    <description>Recent Posts in Technology Explained on Eillance</description>
+    <generator>Hugo 0.143.0</generator>
+    <language>en-GB</language>
+    <managingEditor>mail@eillance.com (Eillance Team)</managingEditor>
+    <webMaster>mail@eillance.com (Eillance Team)</webMaster>
+    <lastBuildDate>Sat, 19 Apr 2025 20:17:57 +0900</lastBuildDate>
+    <atom:link href="https://eillance.com/categories/technology-explained/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>How Eillance Connects Your Devices: The Magic Behind Peer-to-Peer Streaming</title>
+      <link>https://eillance.com/articles/how-peer-to-peer-works/</link>
+      <pubDate>Thu, 16 May 2024 00:00:00 +0000</pubDate>
+      <author>mail@eillance.com (Eillance Team)</author>
+      <guid>https://eillance.com/articles/how-peer-to-peer-works/</guid>
+      <description></description>
+      
+          <enclosure url="/images/articles/p2p-diagram-cover.png" length="0" type="image/jpeg" />
+          
+    </item>
+  </channel>
+</rss>
