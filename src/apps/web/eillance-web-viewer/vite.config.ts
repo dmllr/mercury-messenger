@@ -22,5 +22,7 @@ export default defineConfig({
                 main: path.resolve(__dirname, 'index.html')
             }
         },
-    }
+    },
+    // the base path for deployment
+    base: '/apps/viewer/',
 })
