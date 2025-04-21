@@ -3,6 +3,8 @@
 
   <string name="continue_">Continue</string>
   <string name="retry">Retry</string>
+  <string name="back">Back</string>
+  <string name="settings">Settings</string>
 
   <string name="launcher_checking_connection">Checking connection…</string>
   <string name="launcher_no_internet_connection">No internet connection</string>
@@ -12,6 +14,8 @@
   <string name="launcher_select_device_role">Select your device mode</string>
   <string name="launcher_role_camera">Camera</string>
   <string name="launcher_role_viewer">Viewer</string>
+  <string name="launcher_role_streamer_description">Use this device to stream video to your network</string>
+  <string name="launcher_role_viewer_description">Use this device to view camera streams from your network</string>
 
   <string name="permissions_required">Camera and microphone permissions are required. Tap here to grant the permissions.</string>
   <string name="permissions_required_dialog_title">Permissions Required</string>
@@ -59,10 +63,20 @@
   <string name="fr_operation_status_unknown">Unknown</string>
   <string name="fr_operation_status_waiting">Waiting</string>
 
+  <string name="viewer_title">Eillance Viewer</string>
+  <string name="viewer_connection_failed">Connection failed. Please check your network and try again.</string>
   <string name="viewer_StreamScreen_enter_fullscreen_mode">Enter fullscreen mode</string>
   <string name="viewer_StreamScreen_exit_fullscreen">Exit fullscreen mode</string>
   <string name="viewer_StreamScreen_default_camera">Default Camera</string>
   <string name="viewer_StreamScreen_default_resolution">Default Resolution</string>
-  <string name="launcher_role_streamer_description">Use this device to stream video to your network</string>
-  <string name="launcher_role_viewer_description">Use this device to view camera streams from your network</string>
+  <string name="viewer_StreamScreen_rotate_video">Rotate video</string>
+  <string name="viewer_peers_screen_available_devices">Available Devices</string>
+  <string name="viewer_peers_screen_no_devices_available">No Devices Available</string>
+  <string name="viewer_peers_screen_stream">Stream</string>
+  <string name="viewer_peers_screen_remove_peer">Remove</string>
+  <string name="viewer_peers_screen_more_options">More options</string>
+  <string name="viewer_peers_screen_cant_remove_online_devices">Cannot remove online devices</string>
+
+  <string name="status_online">Online</string>
+  <string name="status_offline">Offline</string>
 </resources>

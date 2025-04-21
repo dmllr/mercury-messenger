@@ -462,7 +462,7 @@ fun StreamScreen(
       ) {
         Icon(
           imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-          contentDescription = "Back",
+          contentDescription = stringResource(R.string.back),
           tint = Color.White
         )
       }
@@ -514,7 +514,7 @@ fun StreamScreen(
             .weight(1f)
         ) {
           TextField(
-            value = cameraOptions.getOrElse(selectedCameraIndex) { "Default Camera" },
+            value = cameraOptions.getOrElse(selectedCameraIndex) { stringResource(R.string.viewer_StreamScreen_default_camera) },
             onValueChange = {},
             readOnly = true,
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedCamera) },
@@ -553,7 +553,7 @@ fun StreamScreen(
             .weight(1f)
         ) {
           TextField(
-            value = resolutionOptions.getOrElse(selectedResolutionIndex) { "Default Resolution" },
+            value = resolutionOptions.getOrElse(selectedResolutionIndex) { stringResource(R.string.viewer_StreamScreen_default_resolution) },
             onValueChange = {},
             readOnly = true,
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedResolution) },
@@ -592,7 +592,7 @@ fun StreamScreen(
         ) {
           Icon(
             imageVector = AppIcons.SurfaceRotate,
-            contentDescription = "Rotate Video",
+            contentDescription = stringResource(R.string.viewer_StreamScreen_rotate_video),
             tint = Color.White
           )
         }

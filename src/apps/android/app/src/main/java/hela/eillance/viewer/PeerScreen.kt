@@ -49,8 +49,10 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
+import hela.eillance.camera.R
 import hela.eillance.theme.extendedColors
 import hela.eillance.theme.icons.AppIcons
 import hela.eillance.theme.icons.Failure
@@ -86,7 +88,7 @@ fun PeersScreen(
     ) {
       // Section heading - consistent with OperationScreen
       Text(
-        text = "Known Devices",
+        text = stringResource(R.string.viewer_peers_screen_available_devices),
         style = MaterialTheme.typography.titleMedium,
         modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp)
       )
@@ -97,7 +99,7 @@ fun PeersScreen(
           contentAlignment = Alignment.Center
         ) {
           Text(
-            text = "No known devices",
+            text = stringResource(R.string.viewer_peers_screen_no_devices_available),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant
           )
@@ -178,7 +180,7 @@ fun PeerItem(
           Icon(
             AppIcons.Failure,
             contentDescription = "No preview",
-            tint = Color.Gray,
+            tint = Color.DarkGray,
             modifier = Modifier.size(48.dp)
           )
         }
@@ -213,14 +215,14 @@ fun PeerItem(
                 MaterialTheme.extendedColors.success else MaterialTheme.extendedColors.offline
               Icon(
                 imageVector = if (peer.isOnline) AppIcons.StatusStandby else AppIcons.Failure,
-                contentDescription = if (peer.isOnline) "Online" else "Offline",
+                contentDescription = if (peer.isOnline) stringResource(R.string.status_online) else stringResource(R.string.status_offline),
                 tint = tint,
                 modifier = Modifier.size(16.dp)
               )
               Spacer(Modifier.width(4.dp))
               Text(
-                text = if (peer.isOnline) "Online" else "Offline",
-                style = MaterialTheme.typography.bodyMedium,
+                text = if (peer.isOnline) stringResource(R.string.status_online) else stringResource(R.string.status_offline),
+                style = MaterialTheme.typography.bodySmall,
                 color = tint,
                 fontStyle = if (!peer.isOnline) FontStyle.Italic else FontStyle.Normal
               )
@@ -235,7 +237,7 @@ fun PeerItem(
             ) {
               Icon(
                 imageVector = Icons.Filled.MoreVert,
-                contentDescription = "More options",
+                contentDescription = stringResource(R.string.viewer_peers_screen_more_options),
                 tint = Color.White
               )
             }
@@ -245,7 +247,7 @@ fun PeerItem(
             ) {
               if (!peer.isOnline) {
                 DropdownMenuItem(
-                  text = { Text("Remove") },
+                  text = { Text(stringResource(R.string.viewer_peers_screen_remove_peer)) },
                   onClick = {
                     onRemoveClicked()
                     showMenu = false
@@ -255,7 +257,7 @@ fun PeerItem(
                 DropdownMenuItem(
                   text = {
                     Text(
-                      "Cannot remove online devices",
+                      stringResource(R.string.viewer_peers_screen_cant_remove_online_devices),
                       color = Color.Gray
                     )
                   },
