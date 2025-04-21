@@ -281,7 +281,7 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
               }
             }
             ServiceConnectionState.Failure -> {
-              ErrorScreen("Connection failed. Please check your network and try again.", onRetry = {
+              ErrorScreen(R.string.viewer_connection_failed, onRetry = {
                 Log.d("ViewerActivity", "Retry button clicked - Re-initializing engine potentially?")
                 // TODO better retry
                 // For now, just restart the activity
@@ -318,9 +318,9 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
         Column {
           Text(
             when (currentRoute) {
-              "peers" -> "Available Devices"
-              "stream" -> viewModel.selectedPeer?.name ?: "Stream"
-              else -> "Surveillance Viewer"
+              "peers" -> stringResource(R.string.viewer_peers_screen_available_devices)
+              "stream" -> viewModel.selectedPeer?.name ?: stringResource(R.string.viewer_peers_screen_stream)
+              else -> stringResource(R.string.viewer_title)
             }
           )
           ConnectionStatusDisplay(connectionState = connectionState)
@@ -329,7 +329,7 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
       navigationIcon = {
         if (currentRoute != "peers") {
           IconButton(onClick = { navController.popBackStack() }) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
           }
         }
       },
@@ -338,7 +338,7 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
           IconButton(onClick = { menuExpanded = true }) {
             Icon(
               imageVector = Icons.Default.Settings,
-              contentDescription = "Settings"
+              contentDescription = stringResource(R.string.settings)
             )
           }
           UserMenu(
@@ -359,7 +359,7 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
   }
 
   @Composable
-  fun ErrorScreen(errorMessage: String, onRetry: () -> Unit) {
+  fun ErrorScreen(errorMessageResource: Int, onRetry: () -> Unit) {
     Box(
       modifier = Modifier
         .fillMaxSize()
@@ -370,7 +370,7 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
         horizontalAlignment = Alignment.CenterHorizontally
       ) {
         Text(
-          text = errorMessage,
+          text = stringResource(errorMessageResource),
           color = Color.Red,
           textAlign = TextAlign.Center,
           modifier = Modifier.padding(bottom = 16.dp)
@@ -383,10 +383,10 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
         ) {
           Icon(
             imageVector = Filled.Refresh,
-            contentDescription = "Retry",
+            contentDescription = stringResource(R.string.retry),
             modifier = Modifier.padding(end = 8.dp)
           )
-          Text("Retry")
+          Text(stringResource(R.string.retry))
         }
       }
     }
