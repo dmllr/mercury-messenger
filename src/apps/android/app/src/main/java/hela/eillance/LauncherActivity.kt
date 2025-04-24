@@ -2,6 +2,7 @@ package hela.eillance
 
 import android.content.Intent
 import android.content.SharedPreferences
+import android.content.res.Configuration
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -51,6 +52,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -315,6 +317,9 @@ fun RoleSelectionScreen(
     var selectedRole by remember { mutableStateOf<String?>(null) }
     var askEachTime by remember { mutableStateOf(initialAskEachTime) }
 
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -326,49 +331,96 @@ fun RoleSelectionScreen(
                     )
                 )
             )
+            .padding(24.dp)
     ) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(24.dp),
+                .fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(48.dp))
+            if (isLandscape) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.Start)
+                ) {
+                    // Logo
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primaryContainer),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_camera_stream),
+                            contentDescription = "App Logo",
+                            modifier = Modifier.size(32.dp),
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
 
-            // Logo and title
-            Box(
-                modifier = Modifier
-                    .size(80.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    painter = painterResource(id = R.drawable.ic_camera_stream),
-                    contentDescription = "App Logo",
-                    modifier = Modifier.size(48.dp),
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                    // App Name and Title Column
+                    Column(
+                        horizontalAlignment = Alignment.Start
+                    ) {
+                        Text(
+                            text = stringResource(R.string.app_name),
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = stringResource(R.string.launcher_select_device_role),
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+
+            } else {
+                // --- Portrait Header (Vertical Column) ---
+                Spacer(modifier = Modifier.height(48.dp))
+
+                // Logo and title
+                Box(
+                    modifier = Modifier
+                        .size(80.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_camera_stream),
+                        contentDescription = "App Logo",
+                        modifier = Modifier.size(48.dp),
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Text(
+                    text = stringResource(R.string.app_name),
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
                 )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = stringResource(R.string.launcher_select_device_role),
+                    fontSize = 16.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(modifier = Modifier.height(48.dp))
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Text(
-                text = stringResource(R.string.app_name),
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-             Text(
-                text = stringResource(R.string.launcher_select_device_role),
-                fontSize = 16.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Spacer(modifier = Modifier.height(48.dp))
 
             // Role options
             RoleOptionCards(
@@ -442,10 +494,12 @@ fun RoleOptionCards(
     selectedRole: String?,
     onRoleSelected: (String) -> Unit
 ) {
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(280.dp),
+            .height((if (isLandscape) 120 else 280).dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // Camera role card
@@ -494,6 +548,9 @@ fun RoleCard(
         label = "borderWidth"
     )
 
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
     Card(
         modifier = modifier
             .fillMaxHeight(),
@@ -507,65 +564,138 @@ fun RoleCard(
         ),
         onClick = onClick
     ) {
-        Column(
-            modifier = Modifier.fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Box(
+        if (isLandscape) {
+            // --- Landscape Layout (Row) ---
+            Row(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(0.3f),
-                contentAlignment = Alignment.Center
+                    .fillMaxSize()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp), // Space between icon/title and description
+                verticalAlignment = Alignment.Top
             ) {
-                Box(
+                // Left Column (Icon + Title)
+                Column(
                     modifier = Modifier
-                        .size(64.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (isSelected) primaryColor
-                            else primaryColor.copy(alpha = 0.33f)
-                        ),
-                    contentAlignment = Alignment.Center
+                        .weight(0.4f)
+                        .fillMaxHeight(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
                 ) {
-                    Icon(
-                        painter = painterResource(id = iconResId),
-                        contentDescription = title,
-                        modifier = Modifier.size(32.dp),
-                        tint = if (isSelected)
-                            MaterialTheme.colorScheme.onPrimary
-                        else MaterialTheme.colorScheme.onSurfaceVariant
+                    // Icon
+                    Box(
+                        modifier = Modifier
+                            .size(56.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (isSelected) primaryColor
+                                else primaryColor.copy(alpha = 0.33f)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            painter = painterResource(id = iconResId),
+                            contentDescription = title,
+                            modifier = Modifier.size(30.dp),
+                            tint = if (isSelected)
+                                MaterialTheme.colorScheme.onPrimary
+                            else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Title
+                    Text(
+                        text = title,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isSelected) primaryColor
+                        else MaterialTheme.colorScheme.onSurface,
+                        textAlign = TextAlign.Center
+                    )
+                }
+
+                // Right Column (Description)
+                Column(
+                    modifier = Modifier
+                        .weight(0.6f)
+                        .fillMaxHeight(),
+                    horizontalAlignment = Alignment.Start
+                ) {
+                    Text(
+                        text = description,
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Start
                     )
                 }
             }
 
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(0.2f),
-                contentAlignment = Alignment.Center
+        } else {
+            // --- Portrait Layout (Original Column) ---
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(
-                    text = title,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (isSelected) primaryColor
-                    else MaterialTheme.colorScheme.onSurface
-                )
-            }
+                // Icon Box
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(0.3f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (isSelected) primaryColor
+                                else primaryColor.copy(alpha = 0.33f)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            painter = painterResource(id = iconResId),
+                            contentDescription = title,
+                            modifier = Modifier.size(32.dp),
+                            tint = if (isSelected)
+                                MaterialTheme.colorScheme.onPrimary
+                            else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
 
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(0.5f)
-                    .padding(horizontal = 16.dp),
-                contentAlignment = Alignment.TopStart
-            ) {
-                Text(
-                    text = description,
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Start
-                )
+                // Title Box
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(0.2f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = title,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isSelected) primaryColor
+                        else MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                // Description Box
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(0.5f)
+                        .padding(horizontal = 16.dp),
+                    contentAlignment = Alignment.TopStart
+                ) {
+                    Text(
+                        text = description,
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Start
+                    )
+                }
             }
         }
     }
