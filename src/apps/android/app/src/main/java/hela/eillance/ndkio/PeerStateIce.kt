@@ -30,7 +30,7 @@ enum class PeerStateIce(val value: Int) {
 
   @Suppress("unused")
   fun getResourceString(context: Context): String {
-    val resourceId = resourceMap[this] ?: R.string.fr_operation_status_unknown
+    val resourceId = resourceMap[this] ?: R.string.state_unknown
     return context.getString(resourceId)
   }
 }
