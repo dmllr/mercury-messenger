@@ -318,8 +318,8 @@ class ViewerActivity : ComponentActivity(), IViewerNativeBridge {
         Column {
           Text(
             when (currentRoute) {
-              "peers" -> stringResource(R.string.viewer_peers_screen_available_devices)
-              "stream" -> viewModel.selectedPeer?.name ?: stringResource(R.string.viewer_peers_screen_stream)
+              "peers" -> stringResource(R.string.viewer_PeersScreen_available_devices)
+              "stream" -> viewModel.selectedPeer?.name ?: stringResource(R.string.viewer_PeersScreen_stream)
               else -> stringResource(R.string.viewer_title)
             }
           )

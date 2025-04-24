@@ -52,16 +52,8 @@
   <string name="preference_bitrate">Bitrate</string>
   <string name="preference_auto">Bitrate</string>
 
-  <string name="fr_operation_communication_status">Communication status</string>
-  <string name="fr_operation_ice_gathering_state">ICE gathering state</string>
-  <string name="fr_operation_ice_connection_state">ICE connection state</string>
-  <string name="fr_operation_signaling_state">Signaling state</string>
-  <string name="fr_operation_ping_state">Ping</string>
-  <string name="fr_operation_connected_clients_title">Connections</string>
-  <string name="fr_operation_no_connected_clients">No viewers connected</string>
-
-  <string name="fr_operation_status_unknown">Unknown</string>
-  <string name="fr_operation_status_waiting">Waiting</string>
+  <string name="streamer_OperationScreen_connected_clients_title">Connections</string>
+  <string name="streamer_OperationScreen_no_connected_clients">No viewers connected</string>
 
   <string name="viewer_title">Eillance Viewer</string>
   <string name="viewer_connection_failed">Connection failed. Please check your network and try again.</string>
@@ -70,12 +62,12 @@
   <string name="viewer_StreamScreen_default_camera">Default Camera</string>
   <string name="viewer_StreamScreen_default_resolution">Default Resolution</string>
   <string name="viewer_StreamScreen_rotate_video">Rotate video</string>
-  <string name="viewer_peers_screen_available_devices">Available Devices</string>
-  <string name="viewer_peers_screen_no_devices_available">No Devices Available</string>
-  <string name="viewer_peers_screen_stream">Stream</string>
-  <string name="viewer_peers_screen_remove_peer">Remove</string>
-  <string name="viewer_peers_screen_more_options">More options</string>
-  <string name="viewer_peers_screen_cant_remove_online_devices">Cannot remove online devices</string>
+  <string name="viewer_PeersScreen_available_devices">Available Devices</string>
+  <string name="viewer_PeersScreen_no_devices_available">No Devices Available</string>
+  <string name="viewer_PeersScreen_stream">Stream</string>
+  <string name="viewer_PeersScreen_remove_peer">Remove</string>
+  <string name="viewer_PeersScreen_more_options">More options</string>
+  <string name="viewer_PeersScreen_cant_remove_online_devices">Cannot remove online devices</string>
 
   <string name="status_online">Online</string>
   <string name="status_offline">Offline</string>

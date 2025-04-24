@@ -94,7 +94,7 @@ fun OperationScreen(
     ) {
       // Connected Clients Section heading
       Text(
-        text = stringResource(id = R.string.fr_operation_connected_clients_title),
+        text = stringResource(id = R.string.streamer_OperationScreen_connected_clients_title),
         style = MaterialTheme.typography.titleMedium,
         modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp)
       )
@@ -106,7 +106,7 @@ fun OperationScreen(
           contentAlignment = Alignment.Center
         ) {
           Text(
-            text = stringResource(id = R.string.fr_operation_no_connected_clients),
+            text = stringResource(id = R.string.streamer_OperationScreen_no_connected_clients),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant
           )

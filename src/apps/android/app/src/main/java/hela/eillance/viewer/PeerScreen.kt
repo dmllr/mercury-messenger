@@ -88,7 +88,7 @@ fun PeersScreen(
     ) {
       // Section heading - consistent with OperationScreen
       Text(
-        text = stringResource(R.string.viewer_peers_screen_available_devices),
+        text = stringResource(R.string.viewer_PeersScreen_available_devices),
         style = MaterialTheme.typography.titleMedium,
         modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp)
       )
@@ -99,7 +99,7 @@ fun PeersScreen(
           contentAlignment = Alignment.Center
         ) {
           Text(
-            text = stringResource(R.string.viewer_peers_screen_no_devices_available),
+            text = stringResource(R.string.viewer_PeersScreen_no_devices_available),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant
           )
@@ -237,7 +237,7 @@ fun PeerItem(
             ) {
               Icon(
                 imageVector = Icons.Filled.MoreVert,
-                contentDescription = stringResource(R.string.viewer_peers_screen_more_options),
+                contentDescription = stringResource(R.string.viewer_PeersScreen_more_options),
                 tint = Color.White
               )
             }
@@ -247,7 +247,7 @@ fun PeerItem(
             ) {
               if (!peer.isOnline) {
                 DropdownMenuItem(
-                  text = { Text(stringResource(R.string.viewer_peers_screen_remove_peer)) },
+                  text = { Text(stringResource(R.string.viewer_PeersScreen_remove_peer)) },
                   onClick = {
                     onRemoveClicked()
                     showMenu = false
@@ -257,7 +257,7 @@ fun PeerItem(
                 DropdownMenuItem(
                   text = {
                     Text(
-                      stringResource(R.string.viewer_peers_screen_cant_remove_online_devices),
+                      stringResource(R.string.viewer_PeersScreen_cant_remove_online_devices),
                       color = Color.Gray
                     )
                   },

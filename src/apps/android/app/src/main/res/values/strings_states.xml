@@ -1,9 +1,5 @@
 <resources>
-  <string name="state_signaling_stable">Stable</string>
-  <string name="state_signaling_have_local_offer">Have Local Offer</string>
-  <string name="state_signaling_have_remote_offer">Have Remote Offer</string>
-  <string name="state_signaling_have_local_pranswer">Have Local Pranswer</string>
-  <string name="state_signaling_have_remote_pranswer">Have Remote Pranswer</string>
+  <string name="state_unknown">Unknown</string>
 
   <string name="service_connection_state_unknown">Unknown</string>
   <string name="service_connection_state_establishing">Establishing</string>
@@ -11,7 +7,12 @@
   <string name="service_connection_state_failure">Failure</string>
   <string name="service_connection_state_disconnected">Disconnected</string>
 
-  <string name="state_service_unknown">Unknown</string>
+  <string name="state_signaling_stable">Stable</string>
+  <string name="state_signaling_have_local_offer">Have Local Offer</string>
+  <string name="state_signaling_have_remote_offer">Have Remote Offer</string>
+  <string name="state_signaling_have_local_pranswer">Have Local Pranswer</string>
+  <string name="state_signaling_have_remote_pranswer">Have Remote Pranswer</string>
+
   <string name="state_service_standby">Standby</string>
   <string name="state_service_setup">Setup</string>
   <string name="state_service_action">Action</string>
