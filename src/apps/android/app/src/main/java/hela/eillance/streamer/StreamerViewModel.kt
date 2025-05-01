@@ -202,6 +202,15 @@ class StreamerViewModel(private val application: Application) : ViewModel() {
   }
 
   /**
+   * Stops and finishes the streaming service
+   */
+  fun terminateService() {
+    Log.d(TAG, "Terminating service")
+    getService()?.terminate()
+    streamerServiceRef = null
+  }
+
+  /**
    * Restarts the streaming service
    */
   fun restartService() {
