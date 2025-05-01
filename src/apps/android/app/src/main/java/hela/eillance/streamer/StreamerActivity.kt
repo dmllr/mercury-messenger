@@ -106,7 +106,7 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
   }
 
   private fun signOut() {
-    viewModel.stopService()
+    viewModel.terminateService()
     FirebaseAuth.getInstance().signOut()
 
     // Navigate back to launcher
@@ -469,6 +469,7 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
     val intent = Intent(this, LauncherActivity::class.java)
     intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
     startActivity(intent)
+    viewModel.getService()?.terminate()
     finish()
   }
 

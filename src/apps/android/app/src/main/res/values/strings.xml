@@ -6,6 +6,8 @@
   <string name="back">Back</string>
   <string name="settings">Settings</string>
 
+  <string name="device_not_supported">Device is not supported. Camera2 device required</string>
+
   <string name="launcher_checking_connection">Checking connection…</string>
   <string name="launcher_no_internet_connection">No internet connection</string>
   <string name="launcher_authentication_failed">Authentication Failed</string>

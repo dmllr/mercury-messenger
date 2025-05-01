@@ -20,6 +20,7 @@ import android.os.Binder
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
+import android.widget.Toast
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.core.app.NotificationCompat
@@ -39,6 +40,7 @@ import hela.eillance.ndkio.interfaces.IStreamerNativeBridge
 import hela.eillance.theme.themedColors
 
 class StreamerService : Service(), IStreamerNativeBridge {
+  private var isOperational = true
   private var serviceConnectionState: ServiceConnectionState = ServiceConnectionState.Unknown
 
   private lateinit var connectivityManager: ConnectivityManager
@@ -55,8 +57,12 @@ class StreamerService : Service(), IStreamerNativeBridge {
     super.onCreate()
     if (!isCamera2Device()) {
       Log.e(javaClass.simpleName, "Found legacy camera device, camera2 device required")
+      Toast.makeText(this, R.string.device_not_supported, Toast.LENGTH_LONG)
+        .show()
+      stopSelf()
       return
     }
+    isOperational = true
     initEngine(this)
     startForeground()
     setupNetworkMonitoring()
@@ -68,7 +74,11 @@ class StreamerService : Service(), IStreamerNativeBridge {
   }
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-    intent?.let { startForeground() }
+    intent?.let {
+      isOperational = true
+      startForeground()
+      start()
+    }
     return START_STICKY
   }
 
@@ -171,6 +181,10 @@ class StreamerService : Service(), IStreamerNativeBridge {
   }
 
   private fun startForeground() {
+    if (!isOperational) {
+      return
+    }
+
     val channelId = createNotificationChannel()
     val statusIcon = when (serviceConnectionState) {
       ServiceConnectionState.Online -> Pair(R.drawable.ic_status_standby, themedColors.success)
@@ -292,6 +306,23 @@ class StreamerService : Service(), IStreamerNativeBridge {
       }
     }
   }
+
+  /**
+   * Stops the native engine and requests the service to shut down gracefully.
+   * This should be the primary method used to stop the service externally (e.g., from UI).
+   */
+  fun terminate() {
+    isOperational = false
+    stop()
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+      stopForeground(STOP_FOREGROUND_REMOVE)
+    } else {
+      @Suppress("DEPRECATION")
+      stopForeground(true)
+    }
+    stopSelf()
+  }
+
 
   private external fun initEngine(nativeBridge: IStreamerNativeBridge)
   private external fun updateAuthToken(token: String)
