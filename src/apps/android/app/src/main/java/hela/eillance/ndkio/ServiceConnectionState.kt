@@ -18,7 +18,7 @@ enum class ServiceConnectionState(val value: Int) {
       Online to R.string.service_connection_state_online,
       Failure to R.string.service_connection_state_failure,
       Disconnected to R.string.service_connection_state_disconnected,
-      InvalidToken to R.string.service_connection_state_failure,
+      InvalidToken to R.string.service_connection_state_invalid_token,
     )
 
     @JvmStatic

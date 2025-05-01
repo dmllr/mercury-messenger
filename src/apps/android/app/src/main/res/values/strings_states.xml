@@ -5,6 +5,7 @@
   <string name="service_connection_state_establishing">Establishing</string>
   <string name="service_connection_state_online">Online</string>
   <string name="service_connection_state_failure">Failure</string>
+  <string name="service_connection_state_invalid_token">Authentication Problem</string>
   <string name="service_connection_state_disconnected">Disconnected</string>
 
   <string name="state_signaling_stable">Stable</string>
