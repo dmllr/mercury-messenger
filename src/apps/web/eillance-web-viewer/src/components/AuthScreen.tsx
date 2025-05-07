@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react'; // Import React
+import React, { useEffect, useState } from 'react';
 import StyledFirebaseAuth from 'react-firebaseui/StyledFirebaseAuth';
 import { EmailAuthProvider, GoogleAuthProvider, PhoneAuthProvider } from 'firebase/auth';
-import { auth } from '@/services/firebaseConfig';
+import { auth } from '@/services/firebaseConfig'; // This should now work
 import { Box, Typography, Paper } from '@mui/material';
 
 // Configure FirebaseUI.
@@ -46,6 +46,6 @@ const AuthScreen: React.FC = React.memo(() => {
             </Paper>
         </Box>
     );
-}); // Close the React.memo wrapper
+});
 
 export default AuthScreen;

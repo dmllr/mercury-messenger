@@ -1,0 +1,7 @@
+RewriteEngine On
+RewriteBase /apps/viewer/
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+# Rewrite to the index.html relative to the RewriteBase
+RewriteRule ^ index.html [L]

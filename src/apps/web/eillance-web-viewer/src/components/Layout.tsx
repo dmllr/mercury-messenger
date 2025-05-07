@@ -1,9 +1,11 @@
 import { useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom'; // Import useLocation
 import { AppBar, Toolbar, Typography, IconButton, Box, Container, Drawer, List, ListItem, ListItemButton, ListItemText, ListItemIcon, Divider } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import LogoutIcon from '@mui/icons-material/Logout';
 import VideocamIcon from '@mui/icons-material/Videocam';
-import SettingsIcon from '@mui/icons-material/Settings'; // Example icon
+// import SettingsIcon from '@mui/icons-material/Settings'; // Removed unused import
+import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
 import { useAuth } from '@/hooks/useAuth';
 import PeerList from './PeerList';
 import StreamView from './StreamView';
@@ -15,46 +17,60 @@ function Layout() {
     const { logout } = useAuth();
     const { selectedPeer, setSelectedPeer } = usePeers();
     const [mobileOpen, setMobileOpen] = useState(false);
+    const navigate = useNavigate();
+    const location = useLocation(); // Get current location
 
     const handleDrawerToggle = () => {
         setMobileOpen(!mobileOpen);
     };
 
-    const handlePeerSelected = (peerId: string | null) => {
-        setSelectedPeer(peerId);
-        // Optionally close drawer on selection if open
+    const handleNavigation = (path: string) => {
+        navigate(path);
         if (mobileOpen) {
             setMobileOpen(false);
         }
     };
 
+    const handlePeerSelected = (peerId: string | null) => {
+        setSelectedPeer(peerId);
+        if (peerId === null) {
+            handleNavigation('/');
+        }
+        if (mobileOpen) {
+            setMobileOpen(false);
+        }
+    };
+
+
     const drawerWidth = 240;
 
     const drawer = (
-        <Box onClick={handleDrawerToggle} sx={{ textAlign: 'center' }}>
+        <Box sx={{ textAlign: 'center' }}>
             <Typography variant="h6" sx={{ my: 2 }}>
                 Eillance Viewer
             </Typography>
             <Divider />
             <List>
-                {/* Navigation Items */}
                 <ListItem disablePadding>
-                    <ListItemButton onClick={() => handlePeerSelected(null)}> {/* Go back to Peer List */}
+                    <ListItemButton onClick={() => handlePeerSelected(null)}>
                         <ListItemIcon><VideocamIcon /></ListItemIcon>
                         <ListItemText primary="Available Devices" />
                     </ListItemButton>
                 </ListItem>
-                {/* Add other navigation items like settings here if needed */}
+                {/* Settings link removed for now to fix unused import error */}
+                <Divider />
                 <ListItem disablePadding>
-                    <ListItemButton>
-                        <ListItemIcon><SettingsIcon /></ListItemIcon>
-                        <ListItemText primary="Settings (TBD)" />
+                    <ListItemButton onClick={() => handleNavigation('/account/delete')}>
+                        <ListItemIcon><DeleteForeverIcon color="error" /></ListItemIcon>
+                        <ListItemText primary="Delete Account" />
                     </ListItemButton>
                 </ListItem>
                 <Divider />
-                {/* Logout */}
                 <ListItem disablePadding>
-                    <ListItemButton onClick={logout}>
+                    <ListItemButton onClick={async () => {
+                        if (mobileOpen) setMobileOpen(false);
+                        await logout();
+                    }}>
                         <ListItemIcon><LogoutIcon /></ListItemIcon>
                         <ListItemText primary="Logout" />
                     </ListItemButton>
@@ -68,7 +84,7 @@ function Layout() {
             <AppBar
                 position="fixed"
                 sx={{
-                    zIndex: (theme) => theme.zIndex.drawer + 1, // Ensure AppBar is above drawer
+                    zIndex: (theme) => theme.zIndex.drawer + 1,
                 }}
             >
                 <Toolbar>
@@ -82,9 +98,10 @@ function Layout() {
                         <MenuIcon />
                     </IconButton>
                     <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
-                        {selectedPeer ? selectedPeer.name : 'Available Devices'}
+                        {selectedPeer ? selectedPeer.name :
+                            location.pathname.includes('/account/delete') ? 'Account Deletion' : 'Available Devices'}
                     </Typography>
-                    <StatusIndicator /> {/* Add Status Indicator */}
+                    <StatusIndicator />
                     <IconButton color="inherit" onClick={logout} aria-label="logout">
                         <LogoutIcon />
                     </IconButton>
@@ -95,7 +112,7 @@ function Layout() {
                 open={mobileOpen}
                 onClose={handleDrawerToggle}
                 ModalProps={{
-                    keepMounted: true, // Better open performance on mobile.
+                    keepMounted: true,
                 }}
                 sx={{
                     '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
@@ -104,30 +121,30 @@ function Layout() {
                 {drawer}
             </Drawer>
 
-            {/* Main Content Area */}
             <Box
                 component="main"
                 sx={{
                     flexGrow: 1,
-                    p: 0, // Remove padding for fullscreen video
-                    width: '100%', // Ensure main content takes full width
-                    mt: ['56px', '64px'], // Adjust margin top for AppBar height (mobile, desktop)
-                    height: 'calc(100vh - 56px)', // Full height minus AppBar
+                    p: 0,
+                    width: '100%',
+                    mt: ['56px', '64px'],
+                    height: 'calc(100vh - 56px)',
                     '@media (min-width:600px)': {
                         height: 'calc(100vh - 64px)',
                     },
-                    overflow: 'hidden', // Prevent scrollbars if video fits exactly
+                    overflow: 'hidden',
+                    display: 'flex',
+                    flexDirection: 'column',
                 }}
             >
-                {/* No Toolbar necessary here if content fills whole area */}
                 {selectedPeer ? (
-                    // Render StreamView taking full space
                     <StreamView peer={selectedPeer} onBack={() => handlePeerSelected(null)} />
                 ) : (
-                    // Render PeerList with padding
-                    <Container maxWidth="md" sx={{py: 3}}>
-                        <PeerList onPeerSelected={(peer) => handlePeerSelected(peer.id)}/>
-                    </Container>
+                    location.pathname === '/' || !location.pathname.startsWith('/account/') ? (
+                        <Container maxWidth="md" sx={{py: 3, flexGrow: 1}}>
+                            <PeerList onPeerSelected={(peer) => handlePeerSelected(peer.id)}/>
+                        </Container>
+                    ) : null
                 )}
             </Box>
         </Box>

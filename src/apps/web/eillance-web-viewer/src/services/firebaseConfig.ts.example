@@ -1,16 +1,32 @@
-// src/services/firebaseConfig.ts.example
-// Example structure for Firebase configuration.
-// Copy this to firebaseConfig.ts and fill in your actual credentials.
-// DO NOT commit your actual credentials. firebaseConfig.ts is in .gitignore.
+// src/services/firebaseConfig.ts
+import { initializeApp, FirebaseApp } from 'firebase/app';
+import { getAuth, Auth } from 'firebase/auth';
+// import { getFirestore, Firestore } from 'firebase/firestore'; // Example if you use Firestore
+// import { getStorage, FirebaseStorage } from 'firebase/storage'; // Example if you use Storage
 
+// --- IMPORTANT ---
+// Paste your Firebase configuration object here.
+// This object should come from your Firebase project settings.
 export const firebaseConfig = {
-  apiKey: "PASTE_YOUR_API_KEY_HERE",
-  authDomain: "PASTE_YOUR_AUTH_DOMAIN_HERE",
-  projectId: "PASTE_YOUR_PROJECT_ID_HERE",
-  storageBucket: "PASTE_YOUR_STORAGE_BUCKET_HERE",
-  messagingSenderId: "PASTE_YOUR_MESSAGING_SENDER_ID_HERE",
-  appId: "PASTE_YOUR_APP_ID_HERE",
-  // measurementId: "PASTE_YOUR_MEASUREMENT_ID_HERE" // Optional
+  apiKey: "YOUR_API_KEY", // Replace with your actual API key
+  authDomain: "YOUR_AUTH_DOMAIN", // Replace with your actual auth domain
+  projectId: "YOUR_PROJECT_ID", // Replace with your actual project ID
+  storageBucket: "YOUR_STORAGE_BUCKET", // Replace with your actual storage bucket
+  messagingSenderId: "YOUR_MESSAGING_SENDER_ID", // Replace with your actual messaging sender ID
+  appId: "YOUR_APP_ID", // Replace with your actual app ID
+  // measurementId: "YOUR_MEASUREMENT_ID" // Optional: Replace if you use Analytics
 };
 
-// Note: The actual initialization code (initializeApp, getAuth) should be in firebaseConfig.ts
+// Initialize Firebase
+const app: FirebaseApp = initializeApp(firebaseConfig);
+
+// Initialize Firebase Authentication and get a reference to the service
+export const auth: Auth = getAuth(app);
+
+// Example: Initialize Firestore (if you use it)
+// export const db: Firestore = getFirestore(app);
+
+// Example: Initialize Firebase Storage (if you use it)
+// export const storage: FirebaseStorage = getStorage(app);
+
+export default app; // Export the initialized app if needed elsewhere
