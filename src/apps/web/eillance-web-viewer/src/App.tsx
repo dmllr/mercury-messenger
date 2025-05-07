@@ -1,97 +1,116 @@
-import { CssBaseline, ThemeProvider } from '@mui/material'; // Import Box
+import { useEffect } from 'react';
+import { Routes, Route, useLocation, useNavigate } from 'react-router-dom';
+import { CssBaseline, ThemeProvider } from '@mui/material';
 import { useAuth } from './hooks/useAuth';
+import { useSignaling } from './hooks/useSignaling';
+import useThemeDetector from './hooks/useThemeDetector';
+import { darkTheme, lightTheme } from './styles/theme';
 import AuthScreen from './components/AuthScreen';
 import Layout from './components/Layout';
-import { darkTheme, lightTheme } from './styles/theme';
-import useThemeDetector from './hooks/useThemeDetector';
-import { useSignaling } from './hooks/useSignaling';
 import LoadingSpinner from './components/LoadingSpinner';
 import ErrorDisplay from './components/ErrorDisplay';
+import DeleteAccountPage from './components/DeleteAccountPage';
+import ProtectedRoute from './components/ProtectedRoute';
 import { ServiceConnectionState } from '@/types';
 
-function App() {
-    const { user, loading: authLoading, idToken } = useAuth(); // Get idToken here too
-    const {
-        connectionState,
-        error: signalingError,
-        connectSignaling,
-    } = useSignaling();
-    const isDarkTheme = useThemeDetector();
-    const theme = isDarkTheme ? darkTheme : lightTheme;
+// This component encapsulates the signaling logic and main Layout
+function AppWithSignalingLayout() {
+    const { user, idToken } = useAuth();
+    const { connectionState, error: signalingError, connectSignaling } = useSignaling();
 
-    // 1. Render Auth Loading Spinner if checking authentication
-    if (authLoading) {
-        return (
-            <ThemeProvider theme={theme}>
-                <CssBaseline />
-                <LoadingSpinner message="Checking authentication..." />
-            </ThemeProvider>
-        );
+    // This ensures that signaling connection attempts only happen when a token is available
+    // and the user is authenticated. ProtectedRoute should handle user presence.
+    if (!user || !idToken) {
+        // This might be hit briefly while idToken is being fetched after login.
+        return <LoadingSpinner message="Preparing application..." />;
     }
 
-    // 2. Render AuthScreen if user is not logged in (and auth check is complete)
-    if (!user) {
-        return (
-            <ThemeProvider theme={theme}>
-                <CssBaseline />
-                <AuthScreen />
-            </ThemeProvider>
-        );
-    }
-
-    // 3. User is logged in, now handle Signaling State
-    // We need a valid token to connect to signaling
-    if (!idToken) {
-        // This state might occur briefly between user login and token retrieval
-        // Or if token retrieval failed in useAuth
-        return (
-            <ThemeProvider theme={theme}>
-                <CssBaseline />
-                <LoadingSpinner message="Retrieving authentication token..." />
-            </ThemeProvider>
-        );
-    }
-
-    // We have user and token, proceed with signaling checks
-    let content;
+    // Signaling state handling from original App.tsx logic
     switch (connectionState) {
         case ServiceConnectionState.Online:
-            content = <Layout />;
-            break;
+            return <Layout />;
         case ServiceConnectionState.Establishing:
-            content = <LoadingSpinner message="Connecting to signaling server..." />;
-            break;
+            return <LoadingSpinner message="Connecting to signaling server..." />;
         case ServiceConnectionState.Failure:
-            content = (
+            return (
                 <ErrorDisplay
                     message={`Signaling connection failed: ${signalingError || 'Unknown error'}.`}
-                    onRetry={connectSignaling} // Retry connection
+                    onRetry={connectSignaling}
                 />
             );
-            break;
         case ServiceConnectionState.Disconnected:
-            // Offer reconnect option
-            content = (
+            return (
                 <ErrorDisplay
                     message="Disconnected from signaling server."
                     onRetry={connectSignaling}
                 />
             );
-            break;
         case ServiceConnectionState.Unknown:
-            // Should transition quickly to Establishing if idToken is present (handled by useSignaling effect)
-            content = <LoadingSpinner message="Initializing signaling connection..." />;
-            break;
+            return <LoadingSpinner message="Initializing signaling connection..." />;
         default:
-            content = <ErrorDisplay message="Invalid signaling state." />;
+            return <ErrorDisplay message="Invalid signaling state." />;
+    }
+}
+
+// This component handles routing logic and initial auth loading/redirects
+function AppRoutes() {
+    const { user, loading: authLoading, idToken } = useAuth();
+    const location = useLocation();
+    const navigate = useNavigate();
+
+    // Effect for post-login redirection
+    useEffect(() => {
+        if (!authLoading && user && location.state?.from) {
+            const from = location.state.from as { pathname: string; search?: string };
+            const targetPath = from.pathname + (from.search || '');
+            console.log(`User authenticated. Redirecting to originally requested path: ${targetPath}`);
+            navigate(targetPath, { replace: true, state: null }); // Clear location state after redirect
+        }
+    }, [authLoading, user, location.state, navigate]);
+
+    if (authLoading) {
+        return <LoadingSpinner message="Checking authentication..." />;
     }
 
-    // Render the main app structure with the determined content
+    // If user is logged in but no idToken yet (brief state, common after login before token is fetched by useAuth)
+    // Only show this if NOT on the auth screen itself to avoid flicker during login process
+    if (user && !idToken && location.pathname !== "/auth/signin") {
+        return <LoadingSpinner message="Retrieving authentication token..." />;
+    }
+
+    return (
+        <Routes>
+            <Route path="/auth/signin" element={<AuthScreen />} />
+            <Route
+                path="/account/delete"
+                element={
+                    <ProtectedRoute>
+                        <DeleteAccountPage />
+                    </ProtectedRoute>
+                }
+            />
+            <Route
+                path="/*" // Catch-all for the main app layout and other pages
+                element={
+                    <ProtectedRoute>
+                        <AppWithSignalingLayout />
+                    </ProtectedRoute>
+                }
+            />
+        </Routes>
+    );
+}
+
+// Main App component with ThemeProvider
+function App() {
+    const isDarkTheme = useThemeDetector();
+    const theme = isDarkTheme ? darkTheme : lightTheme;
+
     return (
         <ThemeProvider theme={theme}>
             <CssBaseline />
-            {/* Render the content determined by signaling state */}
-            {content}
+            {/* BrowserRouter is now in main.tsx */}
+            <AppRoutes />
         </ThemeProvider>
     );
 }
