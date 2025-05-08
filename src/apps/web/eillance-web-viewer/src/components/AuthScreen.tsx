@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import StyledFirebaseAuth from 'react-firebaseui/StyledFirebaseAuth';
-import { EmailAuthProvider, GoogleAuthProvider, PhoneAuthProvider } from 'firebase/auth';
+import { EmailAuthProvider, GoogleAuthProvider } from 'firebase/auth';
 import { auth } from '@/services/firebaseConfig'; // This should now work
 import { Box, Typography, Paper } from '@mui/material';
 
@@ -8,9 +8,8 @@ import { Box, Typography, Paper } from '@mui/material';
 const uiConfig = {
     signInFlow: 'popup',
     signInOptions: [
-        GoogleAuthProvider.PROVIDER_ID,
         EmailAuthProvider.PROVIDER_ID,
-        PhoneAuthProvider.PROVIDER_ID,
+        GoogleAuthProvider.PROVIDER_ID,
     ],
     callbacks: {
         signInSuccessWithAuthResult: () => false,
