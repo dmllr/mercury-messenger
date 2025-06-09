@@ -4,6 +4,10 @@
 #include <string>
 #include <optional>
 #include <unordered_map>
+#include <chrono>
+#include <iomanip>
+#include <sstream>
+#include <iostream>
 
 #include <rtc/websocket.hpp>
 #include <rtc/websocketserver.hpp>
@@ -44,7 +48,8 @@ class SignalingServer {
   };
 
 public:
-  explicit SignalingServer(const rtc::WebSocketServer::Configuration& config) : verifier_(std::make_unique<FirebaseVerifier>()) {
+  explicit SignalingServer(const rtc::WebSocketServer::Configuration& config, bool show_connections = false)
+      : verifier_(std::make_unique<FirebaseVerifier>()), show_connections_(show_connections) {
     server_ = std::make_unique<rtc::WebSocketServer>(config);
     server_->onClient([this](const std::shared_ptr<rtc::WebSocket>& ws) {
       HandleConnection(ws);
@@ -56,6 +61,7 @@ private:
   std::unique_ptr<FirebaseVerifier> verifier_;
   std::unordered_map<UserId, std::unordered_map<PeerId, Peer>> peers_;
   std::mutex peersMutex_;
+  bool show_connections_;
 
   void HandleConnection(const std::shared_ptr<rtc::WebSocket>& ws) {
     LGD << "New connection established";
@@ -128,6 +134,11 @@ private:
       LGD << "Notifying peer disconnection: " << peer_id;
       NotifyPeerDisconnected(user_id, peer_id);
       BroadcastStreamers(user_id);
+    }
+
+    // Show connections status if enabled
+    if (show_connections_) {
+      ShowConnectionsStatus();
     }
   }
 
@@ -244,6 +255,11 @@ private:
 
     LGD << "Broadcasting streamers after publish";
     BroadcastStreamers(user_id);
+
+    // Show connections status if enabled
+    if (show_connections_) {
+      ShowConnectionsStatus();
+    }
   }
 
   void BroadcastStreamers(const UserId& user_id) {
@@ -334,7 +350,7 @@ private:
       }
 
       if (json.contains("profile") && (json["profile"].is_object() || json["profile"].is_array())) {
-        auto element_count = 0UL;
+        auto element_count = 0ULL;
         if (json["profile"].is_array()) {
           element_count = json["profile"].size();
         }
@@ -346,6 +362,31 @@ private:
       // If we can't parse as JSON, return as is
       return message;
     }
+  }
+
+  void ShowConnectionsStatus() {
+    std::lock_guard<std::mutex> lock(peersMutex_);
+
+    if (peers_.empty()) {
+      std::cout << "No active connections" << std::endl;
+      return;
+    }
+
+    // Display connections organized by user
+    for (const auto& [userId, userPeers] : peers_) {
+      std::cout << userId << std::endl;
+
+      if (userPeers.empty()) {
+        std::cout << "  |-- (no peers)" << std::endl;
+      } else {
+        for (const auto& [peerId, peer] : userPeers) {
+          std::string typeStr = (peer.type == PeerType::streamer) ? "streamer" : "viewer";
+          std::cout << "  |-- [" << typeStr << "] " << peer.name << std::endl;
+        }
+      }
+    }
+
+    std::cout << std::endl;
   }
 };
 
@@ -381,6 +422,9 @@ plog::Severity ParseLogLevel(const std::string& level) {
 int main(int argc, char* argv[]) { // NOLINT(*-function-cognitive-complexity), false-positive due to logging
   ArgsParser args(argc, argv);
 
+  // Check if show-connections mode is enabled
+  bool show_connections = args.Has("--show-connections");
+
   // Initialize logging
   static plog::ColorConsoleAppender<plog::TxtFormatter> appender;
 
@@ -389,6 +433,9 @@ int main(int argc, char* argv[]) { // NOLINT(*-function-cognitive-complexity), f
 
   // Default log level is info, but can be overridden by command line
   auto log_level_str = args.Get("--log-level").value_or("info");
+  if (show_connections) {
+    log_level_str = "none";
+  }
   auto log_level = ParseLogLevel(log_level_str);
   plog::init<logInstanceId>(log_level, &appender);
 
@@ -417,16 +464,22 @@ int main(int argc, char* argv[]) { // NOLINT(*-function-cognitive-complexity), f
   // Register signal handler
   std::signal(SIGINT, SignalHandler);
 
-  auto server = SignalingServer(config);
+  auto server = SignalingServer(config, show_connections);
 
-  LGI << "Signaling server running on port " << config.port;
-  LGI << "Log level set to: " << log_level_str;
-  if (config.enableTls) {
-    LGI << "  * connection is secure.";
+  if (!show_connections) {
+    LGI << "Signaling server running on port " << config.port;
+    LGI << "Log level set to: " << log_level_str;
+    if (config.enableTls) {
+      LGI << "  * connection is secure.";
+    } else {
+      LGW << "  * connection is insecure!";
+    }
+    LGI << "Press Ctrl+C to exit";
   } else {
-    LGW << "  * connection is insecure!";
+    // In show-connections mode, display initial status
+    std::cout << "Connection Monitor Mode - Press Ctrl+C to exit" << std::endl;
+    std::cout << "Server running on port " << config.port << std::endl;
   }
-  LGI << "Press Ctrl+C to exit";
 
   // Wait for program termination
   LGD << "Entering wait state";
@@ -437,7 +490,11 @@ int main(int argc, char* argv[]) { // NOLINT(*-function-cognitive-complexity), f
   LGD << "Exit condition triggered";
 
   LGD << "Exiting application";
-  LGI << "Server stopped";
+  if (!show_connections) {
+    LGI << "Server stopped";
+  } else {
+    std::cout << "\nServer stopped" << std::endl;
+  }
 
   return 0;
 }
