@@ -8,6 +8,7 @@
 #include <rtc/websocket.hpp>
 #include <rtc/websocketserver.hpp>
 #include <nlohmann/json.hpp>
+#include <utility>
 #include <plog/Log.h>
 #include <plog/Init.h>
 #include <plog/Appenders/ColorConsoleAppender.h>
@@ -16,12 +17,12 @@
 #include "args_parser.hpp"
 #include "firebase_verifier.hpp"
 
-#define LOG_INSTANCE_ID 454
-#define LGV PLOG_(LOG_INSTANCE_ID, plog::verbose)
-#define LGD PLOG_(LOG_INSTANCE_ID, plog::debug)
-#define LGI PLOG_(LOG_INSTANCE_ID, plog::info)
-#define LGW PLOG_(LOG_INSTANCE_ID, plog::warning)
-#define LGE PLOG_(LOG_INSTANCE_ID, plog::error)
+constexpr auto logInstanceId = 454;
+#define LGV PLOG_(logInstanceId, plog::verbose) // NOLINT(*-pro-type-reinterpret-cast,*-lambda-function-name)
+#define LGD PLOG_(logInstanceId, plog::debug) // NOLINT(*-pro-type-reinterpret-cast,*-lambda-function-name)
+#define LGI PLOG_(logInstanceId, plog::info) // NOLINT(*-pro-type-reinterpret-cast,*-lambda-function-name)
+#define LGW PLOG_(logInstanceId, plog::warning) // NOLINT(*-pro-type-reinterpret-cast,*-lambda-function-name)
+#define LGE PLOG_(logInstanceId, plog::error) // NOLINT(*-pro-type-reinterpret-cast,*-lambda-function-name)
 
 class SignalingServer {
   using Json = nlohmann::json;
@@ -45,7 +46,7 @@ class SignalingServer {
 public:
   explicit SignalingServer(const rtc::WebSocketServer::Configuration& config) : verifier_(std::make_unique<FirebaseVerifier>()) {
     server_ = std::make_unique<rtc::WebSocketServer>(config);
-    server_->onClient([this](std::shared_ptr<rtc::WebSocket> ws) {
+    server_->onClient([this](const std::shared_ptr<rtc::WebSocket>& ws) {
       HandleConnection(ws);
     });
   }
@@ -56,7 +57,7 @@ private:
   std::unordered_map<UserId, std::unordered_map<PeerId, Peer>> peers_;
   std::mutex peersMutex_;
 
-  void HandleConnection(std::shared_ptr<rtc::WebSocket> ws) {
+  void HandleConnection(const std::shared_ptr<rtc::WebSocket>& ws) {
     LGD << "New connection established";
     auto user_id = std::make_shared<std::string>();
     auto peer_id = std::make_shared<std::string>();
@@ -74,7 +75,7 @@ private:
     });
   }
 
-  void HandleMessage(std::shared_ptr<rtc::WebSocket> ws, const std::string& msg,
+  void HandleMessage(const std::shared_ptr<rtc::WebSocket>& ws, const std::string& msg,
                      UserId& user_id, PeerId& peer_id) {
     try {
       LGD << "Received message: length=" << msg.length();
@@ -186,7 +187,7 @@ private:
     }
   }
 
-  bool ValidateMessage(std::shared_ptr<rtc::WebSocket> ws, const Json& msg, UserId& user_id) {
+  bool ValidateMessage(const std::shared_ptr<rtc::WebSocket>& ws, const Json& msg, UserId& user_id) {
     auto token = msg.value("token", "");
     if (token.empty()) {
       SendError(ws, "missing_token", "Token required");
@@ -212,7 +213,7 @@ private:
     return true;
   }
 
-  void HandlePublish(std::shared_ptr<rtc::WebSocket> ws, const Json& msg, const UserId& user_id) {
+  void HandlePublish(const std::shared_ptr<rtc::WebSocket>& ws, const Json& msg, const UserId& user_id) {
     PeerId peer_id = msg["peer_id"];
     LGD << "Handling publish from user_id: " << user_id << ", peer_id: " << peer_id;
     Peer new_peer{
@@ -310,7 +311,7 @@ private:
     }
   }
 
-  static void SendError(std::shared_ptr<rtc::WebSocket> ws, const std::string& error, const std::string& message) {
+  static void SendError(const std::shared_ptr<rtc::WebSocket>& ws, const std::string& error, const std::string& message) {
     LGD << "Sending error response: " << error << " - " << message;
     Json response = {
         {"type", "error"},
@@ -323,9 +324,8 @@ private:
   }
 
   // Helper method to sanitize messages for logging
-  std::string SanitizeMessageForLogging(const std::string& message) {
+  static auto SanitizeMessageForLogging(const std::string& message) -> std::string {
     try {
-      // Make a deep copy of the message
       auto json = Json::parse(message);
 
       // Remove token if present
@@ -333,12 +333,9 @@ private:
         json["token"] = "[REDACTED]";
       }
 
-      // Replace profile with count if it's an object or array
       if (json.contains("profile") && (json["profile"].is_object() || json["profile"].is_array())) {
-        size_t element_count = 0;
-        if (json["profile"].is_object()) {
-          element_count = json["profile"].size();
-        } else if (json["profile"].is_array()) {
+        auto element_count = 0UL;
+        if (json["profile"].is_array()) {
           element_count = json["profile"].size();
         }
         json["profile"] = "[" + std::to_string(element_count) + " elements]";
@@ -371,17 +368,17 @@ void SignalHandler(int signum) {
 }
 
 plog::Severity ParseLogLevel(const std::string& level) {
-  if (level == "none") return plog::none;
-  if (level == "fatal") return plog::fatal;
-  if (level == "error") return plog::error;
-  if (level == "warning") return plog::warning;
-  if (level == "info") return plog::info;
-  if (level == "debug") return plog::debug;
-  if (level == "verbose") return plog::verbose;
+  if (level == "none") { return plog::none; }
+  if (level == "fatal") { return plog::fatal; }
+  if (level == "error") { return plog::error; }
+  if (level == "warning") { return plog::warning; }
+  if (level == "info") { return plog::info; }
+  if (level == "debug") { return plog::debug; }
+  if (level == "verbose") { return plog::verbose; }
   return plog::info; // Default to info
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char* argv[]) { // NOLINT(*-function-cognitive-complexity), false-positive due to logging
   ArgsParser args(argc, argv);
 
   // Initialize logging
@@ -393,7 +390,7 @@ int main(int argc, char* argv[]) {
   // Default log level is info, but can be overridden by command line
   auto log_level_str = args.Get("--log-level").value_or("info");
   auto log_level = ParseLogLevel(log_level_str);
-  plog::init<LOG_INSTANCE_ID>(log_level, &appender);
+  plog::init<logInstanceId>(log_level, &appender);
 
   LGD << "Starting signaling server";
   const auto default_port = uint16_t{8000};
