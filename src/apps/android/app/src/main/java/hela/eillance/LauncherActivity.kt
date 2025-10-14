@@ -4,8 +4,6 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.content.res.Configuration
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -35,15 +33,12 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -59,175 +54,38 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.firebase.ui.auth.AuthUI
-import com.firebase.ui.auth.FirebaseAuthUIActivityResultContract
-import com.firebase.ui.auth.data.model.FirebaseAuthUIAuthenticationResult
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.google.firebase.auth.FirebaseAuth
 import hela.eillance.camera.R
 import hela.eillance.streamer.StreamerActivity
 import hela.eillance.theme.EillanceTheme
-import hela.eillance.utils.NetworkUtil
 import hela.eillance.viewer.ViewerActivity
 
 class LauncherActivity : ComponentActivity() {
-    // Authentication providers
-    private val providers = arrayListOf(
-        AuthUI.IdpConfig.EmailBuilder().build(),
-        AuthUI.IdpConfig.GoogleBuilder().build(),
-    )
 
     private lateinit var sharedPrefs: SharedPreferences
-    private lateinit var networkUtil: NetworkUtil
-
-    // State for network and auth
-    private var isCheckingNetwork by mutableStateOf(true)
-    private var isNetworkAvailable by mutableStateOf(false)
-    private var isNetworkDialogShowing by mutableStateOf(false)
-
-    // Role selection state
-    private var isShowingRoleSelection by mutableStateOf(false)
-
-    private val signInLauncher = registerForActivityResult(
-        FirebaseAuthUIActivityResultContract(),
-    ) { res ->
-        this.onSignInResult(res)
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         sharedPrefs = getSharedPreferences("app_prefs", MODE_PRIVATE)
 
-        // Initialize network utility
-        networkUtil = NetworkUtil(this)
-
         enableEdgeToEdge()
 
         setContent {
             EillanceTheme {
-                val networkState by networkUtil.networkAvailable.observeAsState(initial = false)
-
-                // Update state based on observed network
-                LaunchedEffect(networkState) {
-                    isNetworkAvailable = networkState
-                    isCheckingNetwork = false
-
-                    if (isNetworkAvailable && !isNetworkDialogShowing) {
-                        // Check if user is authenticated when network becomes available
-                        checkAuthAndProceed()
-                    }
-                }
-
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    if (isShowingRoleSelection) {
-                        // Show role selection UI
-                        RoleSelectionScreen(
-                            initialAskEachTime = sharedPrefs.getBoolean("ask_each_time", false),
-                            onCameraSelected = { askEachTime ->
-                                saveRoleAndLaunch("camera", askEachTime)
-                            },
-                            onViewerSelected = { askEachTime ->
-                                saveRoleAndLaunch("viewer", askEachTime)
-                            }
-                        )
-                    } else {
-                        // Show network check UI
-                        LauncherContent(
-                            isCheckingNetwork = isCheckingNetwork,
-                            isNetworkAvailable = isNetworkAvailable,
-                            onRetry = { retryConnection() }
-                        )
-                    }
-                }
-            }
-        }
-
-        // Start network monitoring
-        networkUtil.startMonitoring()
-    }
-
-    @Composable
-    private fun LauncherContent(
-        isCheckingNetwork: Boolean,
-        isNetworkAvailable: Boolean,
-        onRetry: () -> Unit
-    ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            when {
-                isCheckingNetwork -> {
-                    // Show loading
-                    Column(
-                        modifier = Modifier
-                            .align(Alignment.Center),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        CircularProgressIndicator()
-                        Text(
-                            text = stringResource(R.string.launcher_checking_connection),
-                            modifier = Modifier.padding(top = 16.dp),
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                }
-                !isNetworkAvailable -> {
-                    // Show network error
-                    Column(
-                        modifier = Modifier.align(Alignment.Center),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = stringResource(R.string.launcher_no_internet_connection),
-                            color = MaterialTheme.colorScheme.error
-                        )
-                        Button(
-                            onClick = onRetry,
-                            modifier = Modifier.padding(top = 48.dp)
-                        ) {
-                            Text(stringResource(R.string.retry))
+                    RoleSelectionScreen(
+                        initialAskEachTime = sharedPrefs.getBoolean("ask_each_time", false),
+                        onCameraSelected = { askEachTime ->
+                            saveRoleAndLaunch("camera", askEachTime)
+                        },
+                        onViewerSelected = { askEachTime ->
+                            saveRoleAndLaunch("viewer", askEachTime)
                         }
-                    }
+                    )
                 }
-                // Network is available but UI is handled by normal flow
             }
         }
-    }
-
-    private fun retryConnection() {
-        isCheckingNetwork = true
-
-        // Small delay to show checking state
-        val handler = Handler(Looper.getMainLooper())
-        handler.postDelayed({
-            isNetworkAvailable = networkUtil.isNetworkAvailable()
-            isCheckingNetwork = false
-
-            if (isNetworkAvailable) {
-                checkAuthAndProceed()
-            }
-        }, 1000)
-    }
-
-    private fun checkAuthAndProceed() {
-        if (FirebaseAuth.getInstance().currentUser == null) {
-            launchSignInFlow()
-        } else {
-            followSelectedRole()
-        }
-    }
-
-    private fun launchSignInFlow() {
-        val signInIntent = AuthUI.getInstance()
-            .createSignInIntentBuilder()
-            .setAvailableProviders(providers)
-            .setLogo(R.drawable.ic_camera_stream)
-            .setTheme(R.style.FirebaseAuthTheme)
-            .setTosAndPrivacyPolicyUrls(
-                "https://edu.eillance.com/legal/terms-and-conditions/",
-                "https://edu.eillance.com/legal/privacy-policy/"
-            )
-            .setAlwaysShowSignInMethodScreen(true) //for the app name on the login screen
-            .build()
-        signInLauncher.launch(signInIntent)
+        
+        followSelectedRole()
     }
 
     private fun followSelectedRole() {
@@ -235,39 +93,9 @@ class LauncherActivity : ComponentActivity() {
         val savedRole = sharedPrefs.getString("role", null)
 
         if (!savedAskEachTime && savedRole != null) {
-            // If we have a saved role and we're not asking each time, launch directly
             when (savedRole) {
                 "camera" -> startCameraActivity()
                 "viewer" -> startViewerActivity()
-            }
-        } else {
-            // Show role selection UI
-            isShowingRoleSelection = true
-        }
-    }
-
-    private fun onSignInResult(result: FirebaseAuthUIAuthenticationResult?) {
-        if (result?.resultCode == RESULT_OK) {
-            // Successfully signed in
-            followSelectedRole()
-        } else {
-            // Sign in failed - check if network is still available
-            if (networkUtil.isNetworkAvailable()) {
-                // Show auth error dialog
-                isNetworkDialogShowing = true
-                MaterialAlertDialogBuilder(this)
-                    .setTitle(R.string.launcher_authentication_failed)
-                    .setMessage(R.string.launcher_failed_to_sign_in)
-                    .setPositiveButton(R.string.retry) { _, _ ->
-                        isNetworkDialogShowing = false
-                        launchSignInFlow()
-                    }
-                    .setNegativeButton(android.R.string.cancel) { _, _ ->
-                        isNetworkDialogShowing = false
-                        finish()
-                    }
-                    .setOnDismissListener { isNetworkDialogShowing = false }
-                    .show()
             }
         }
     }
@@ -275,12 +103,10 @@ class LauncherActivity : ComponentActivity() {
     private fun saveRoleAndLaunch(role: String, askEachTime: Boolean) {
         with(sharedPrefs.edit()) {
             if (askEachTime) {
-                // If "Ask each time" is checked, don't save a persistent role preference
                 remove("role")
             } else {
                 putString("role", role)
             }
-            // Save the "ask each time" preference
             putBoolean("ask_each_time", askEachTime)
             apply()
         }
@@ -299,11 +125,6 @@ class LauncherActivity : ComponentActivity() {
     private fun startViewerActivity() {
         startActivity(Intent(this, ViewerActivity::class.java))
         finish()
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        networkUtil.stopMonitoring()
     }
 }
 
@@ -345,7 +166,6 @@ fun RoleSelectionScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.Start)
                 ) {
-                    // Logo
                     Box(
                         modifier = Modifier
                             .size(48.dp)
@@ -361,7 +181,6 @@ fun RoleSelectionScreen(
                         )
                     }
 
-                    // App Name and Title Column
                     Column(
                         horizontalAlignment = Alignment.Start
                     ) {
@@ -381,10 +200,7 @@ fun RoleSelectionScreen(
                 Spacer(modifier = Modifier.height(16.dp))
 
             } else {
-                // --- Portrait Header (Vertical Column) ---
                 Spacer(modifier = Modifier.height(48.dp))
-
-                // Logo and title
                 Box(
                     modifier = Modifier
                         .size(80.dp)
@@ -399,29 +215,22 @@ fun RoleSelectionScreen(
                         tint = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                 }
-
                 Spacer(modifier = Modifier.height(24.dp))
-
                 Text(
                     text = stringResource(R.string.app_name),
                     fontSize = 28.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
                 )
-
                 Spacer(modifier = Modifier.height(8.dp))
-
                 Text(
                     text = stringResource(R.string.launcher_select_device_role),
                     fontSize = 16.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-
                 Spacer(modifier = Modifier.height(48.dp))
             }
 
-
-            // Role options
             RoleOptionCards(
                 selectedRole = selectedRole,
                 onRoleSelected = { role ->
@@ -431,7 +240,6 @@ fun RoleSelectionScreen(
 
             Spacer(modifier = Modifier.weight(1f))
 
-            // Ask each time checkbox
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
@@ -443,7 +251,6 @@ fun RoleSelectionScreen(
                         checkedColor = MaterialTheme.colorScheme.primary
                     )
                 )
-
                 Text(
                     text = stringResource(R.string.launcher_ask_each_time),
                     fontSize = 16.sp,
@@ -454,7 +261,6 @@ fun RoleSelectionScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Continue button
             AnimatedVisibility(
                 visible = selectedRole != null,
                 enter = fadeIn(animationSpec = tween(300)),
@@ -501,7 +307,6 @@ fun RoleOptionCards(
             .height((if (isLandscape) 120 else 280).dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Camera role card
         RoleCard(
             title = stringResource(R.string.launcher_role_camera),
             description = stringResource(R.string.launcher_role_streamer_description),
@@ -511,8 +316,6 @@ fun RoleOptionCards(
             onClick = { onRoleSelected("camera") },
             modifier = Modifier.weight(1f)
         )
-
-        // Viewer role card
         RoleCard(
             title = stringResource(R.string.launcher_role_viewer),
             description = stringResource(R.string.launcher_role_viewer_description),
@@ -564,15 +367,13 @@ fun RoleCard(
         onClick = onClick
     ) {
         if (isLandscape) {
-            // --- Landscape Layout (Row) ---
             Row(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp), // Space between icon/title and description
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalAlignment = Alignment.Top
             ) {
-                // Left Column (Icon + Title)
                 Column(
                     modifier = Modifier
                         .weight(0.4f)
@@ -580,7 +381,6 @@ fun RoleCard(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
-                    // Icon
                     Box(
                         modifier = Modifier
                             .size(56.dp)
@@ -600,10 +400,7 @@ fun RoleCard(
                             else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-
                     Spacer(modifier = Modifier.height(8.dp))
-
-                    // Title
                     Text(
                         text = title,
                         fontSize = 18.sp,
@@ -613,8 +410,6 @@ fun RoleCard(
                         textAlign = TextAlign.Center
                     )
                 }
-
-                // Right Column (Description)
                 Column(
                     modifier = Modifier
                         .weight(0.6f)
@@ -631,12 +426,10 @@ fun RoleCard(
             }
 
         } else {
-            // --- Portrait Layout (Original Column) ---
             Column(
                 modifier = Modifier.fillMaxSize(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Icon Box
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -664,7 +457,6 @@ fun RoleCard(
                     }
                 }
 
-                // Title Box
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -680,7 +472,6 @@ fun RoleCard(
                     )
                 }
 
-                // Description Box
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()

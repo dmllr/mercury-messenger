@@ -41,19 +41,12 @@ struct Device {
  */
 class RtcViewer final : public RtcTransportDelegate {
   using Json = nlohmann::json;
-  using Devices = std::vector<Device>;
-  using OnPeerListChangedCallback = std::function<void(const Devices&)>;
   using OnProfileReceivedCallback = std::function<void(const std::string&, const Device::Profile&)>;
   using OnFrameReceivedCallback = std::function<void(const rtc::binary&)>;
 
   /// @brief RTC transport delegate
   std::shared_ptr<RtcTransport> transport_;
 
-  /// @brief Connected publishers
-  Devices devices_;
-
-  /// @brief A callback to be called when a peer list is updated
-  std::shared_ptr<OnPeerListChangedCallback> on_peer_list_changed_{};
   /// @brief A callback to be called when a profile info is received
   std::shared_ptr<OnProfileReceivedCallback> on_profile_received_{};
   /// @brief A callback to be called when a new frame is received
@@ -76,10 +69,6 @@ public:
 
   void SetName(const std::string& name) {
     transport_->SetName(name);
-  }
-
-  void UpdateAuthToken(const std::string& token) {
-    transport_->UpdateAuthToken(token);
   }
 
   void Start() {
@@ -135,27 +124,6 @@ public:
         {"config", ComposeConfig(config)},
     };
     transport_->SendPeerDataChannelMessage(peer_id, request);
-  }
-
-  void RequestPeerList() {
-    if (auto state = transport_->GetServiceConnectionState();
-        state != ServiceConnectionState::online) {
-      LOGE << "Cannot request peer list, not connected or not authenticated";
-      return;
-    }
-
-    // Send a get_streamers request to the signaling server
-    Json message = {
-        {"type", "get_streamers"},
-        {"token", ""}  // Token will be added by the transport
-    };
-
-    transport_->SendSystemMessage(message);
-    LOGD << "Requested peer list update";
-  }
-
-  [[maybe_unused]] void SetPeerChangedCallback(const OnPeerListChangedCallback& callback) {
-    on_peer_list_changed_ = std::make_shared<OnPeerListChangedCallback>(callback);
   }
 
   [[maybe_unused]] void SetProfileReceivedCallback(const OnProfileReceivedCallback& callback) {
@@ -217,11 +185,7 @@ public:
   }
 
   void ProcessSystemMessage(const std::string& type, Json message) final {
-    if (type == "streamers") {
-      UpdatePeerList(message["peers"]);
-    } else {
-      throw std::runtime_error("Unknown message type in Viewer's ProcessSystemMessage: " + type);
-    }
+    throw std::runtime_error("Unknown message type in Viewer's ProcessSystemMessage: " + type);
   }
 
   void ProcessDataChannelMessage(const std::string& peer_id, Json message) {
@@ -295,33 +259,6 @@ public:
   }
 
 private:
-  void UpdatePeerList(const nlohmann::json& json) {
-    // Clear existing peers
-    devices_.clear();
-
-    if (json.is_array()) {
-      // Parse new peers
-      for (const auto &item: json) {
-        Device peer{
-            .id = item.at("id").get<std::string>(),
-            .name = item.at("name").get<std::string>(),
-            .profile = ParseDeviceProfile(item.at("profile"))
-        };
-        devices_.push_back(std::move(peer));
-      }
-    }
-
-    if (on_peer_list_changed_ != nullptr) {
-      (*on_peer_list_changed_)(devices_);
-    }
-
-    // for debugging purposes
-    LOGI << "Updated peer list:";
-    for (const auto& peer: devices_) {
-      LOGI << "  - " << peer.id.c_str() << " (" << peer.name.c_str() << ") with " << peer.profile.size() << " camera entries";
-    }
-  }
-
   static auto ParseDeviceProfile(Json jprofile) -> std::vector<Device::Camera> {
     Device::Profile profile;
     profile.reserve(jprofile.size());

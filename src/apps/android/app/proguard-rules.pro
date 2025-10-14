@@ -25,12 +25,6 @@
     <init>(kotlinx.serialization.internal.SerializationConstructorMarker);
 }
 
-# Keep Firebase classes
--keep class com.google.firebase.** { *; }
-#-keep class com.google.android.gms.** { *; }
-#-keep class com.google.common.** { *; }
--keep class com.firebase.ui.** { *; }
-
 # Keep Compose runtime necessities
 -keepclassmembers class * { @androidx.compose.runtime.Composable <methods>; }
 -keep class androidx.compose.runtime.** { *; }

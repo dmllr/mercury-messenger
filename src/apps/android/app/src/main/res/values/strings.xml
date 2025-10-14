@@ -8,10 +8,6 @@
 
   <string name="device_not_supported">Device is not supported. Camera2 device required</string>
 
-  <string name="launcher_checking_connection">Checking connection…</string>
-  <string name="launcher_no_internet_connection">No internet connection</string>
-  <string name="launcher_authentication_failed">Authentication Failed</string>
-  <string name="launcher_failed_to_sign_in">Failed to sign in. Please try again.</string>
   <string name="launcher_ask_each_time">Ask each time</string>
   <string name="launcher_select_device_role">Select your device mode</string>
   <string name="launcher_role_camera">Camera</string>
@@ -34,7 +30,6 @@
   <string name="menu_stop_service">Stop service</string>
   <string name="menu_start_service">Start service</string>
   <string name="menu_restart_service">Restart service</string>
-  <string name="menu_sign_out">Sign out</string>
 
   <string name="notification_title">Eillance</string>
   <string name="notification_description">Camera stream P2P connection</string>
@@ -64,12 +59,11 @@
   <string name="viewer_StreamScreen_default_camera">Default Camera</string>
   <string name="viewer_StreamScreen_default_resolution">Default Resolution</string>
   <string name="viewer_StreamScreen_rotate_video">Rotate video</string>
-  <string name="viewer_PeersScreen_available_devices">Available Devices</string>
-  <string name="viewer_PeersScreen_no_devices_available">No Devices Available</string>
   <string name="viewer_PeersScreen_stream">Stream</string>
-  <string name="viewer_PeersScreen_remove_peer">Remove</string>
-  <string name="viewer_PeersScreen_more_options">More options</string>
-  <string name="viewer_PeersScreen_cant_remove_online_devices">Cannot remove online devices</string>
+  <string name="viewer_connect_to_streamer">Connect to Streamer</string>
+  <string name="viewer_streamer_id">Streamer ID</string>
+  <string name="viewer_streamer_id_required">Streamer ID cannot be empty</string>
+  <string name="viewer_connect">Connect</string>
 
   <string name="status_online">Online</string>
   <string name="status_offline">Offline</string>

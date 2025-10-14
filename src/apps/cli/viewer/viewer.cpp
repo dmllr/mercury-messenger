@@ -3,25 +3,37 @@
 #include <iomanip>
 #include <sstream>
 #include <iostream>
+#include <string>
+#include <cstdlib>
 
 #include "hela/eillance/rtc/viewer.hpp"
+#include "hela/eillance/utils/string.hpp"
 
-auto main(int /*argc*/, char** /*argv*/) -> int {
+auto main(int argc, char** argv) -> int {
+  using namespace hela::eillance;
+
+  if (argc < 2) {
+      std::cerr << "Usage: " << argv[0] << " <streamer-id> [your-id]" << std::endl;
+      return 1;
+  }
+
+  std::string streamer_id = argv[1];
+  std::string viewer_id;
+
+  if (argc > 2) {
+      viewer_id = argv[2];
+  } else {
+      viewer_id = "Viewer-" + StringUtils::RandomString();
+      std::cout << "No viewer ID provided. Using random ID: " << viewer_id << std::endl;
+  }
+
   int frame_count = 0;
   std::ofstream all_frames_file("_all.h264", std::ios::binary | std::ios::app);
 
-  using namespace hela::eillance;
   auto rtc = RtcViewer();
-  rtc.SetId("CLI::Viewer " + StringUtils::RandomString());
-  rtc.SetName("CLI::Viewer " + StringUtils::RandomString());
-  rtc.Start();
-  rtc.SetPeerChangedCallback([&rtc](const std::vector<Device>& peers){
-    if (peers.empty()) {
-      return;
-    }
-    auto& peer = peers.front();
-    rtc.SendStreamRequest(peer.id, Config{});
-  });
+  rtc.SetId(viewer_id);
+  rtc.SetName(viewer_id);
+
   rtc.SetFrameReceivedCallback([&rtc, &frame_count, &all_frames_file](const rtc::binary& frame) {
     if (frame_count >= 100) {
       rtc.Terminate();
@@ -48,14 +60,16 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
     frame_count++;
   });
 
-  while (true) {
-    char key;
-    std::cout << "Enter to restart" << std::endl;
-    std::cin >> key;
-    std::cin.ignore();
+  rtc.Start();
 
-    rtc.Terminate();
-  }
+  std::cout << "Attempting to connect to streamer: " << streamer_id << std::endl;
+  rtc.SendStreamRequest(streamer_id, Config{});
 
+
+  std::cout << "Viewer '" << viewer_id << "' is running. Press Enter to exit." << std::endl;
+  std::string line;
+  std::getline(std::cin, line);
+
+  rtc.Terminate();
   return 0;
 }
