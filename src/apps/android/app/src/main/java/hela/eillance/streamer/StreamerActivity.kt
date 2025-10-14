@@ -59,7 +59,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.google.firebase.auth.FirebaseAuth
+
 import hela.eillance.LauncherActivity
 import hela.eillance.camera.R
 import hela.eillance.ndkio.ServiceConnectionState
@@ -105,16 +105,7 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
     }
   }
 
-  private fun signOut() {
-    viewModel.terminateService()
-    FirebaseAuth.getInstance().signOut()
-
-    // Navigate back to launcher
-    val intent = Intent(this, LauncherActivity::class.java)
-    intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-    startActivity(intent)
-    finish()
-  }
+  
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
@@ -133,7 +124,7 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
             permissionsGranted = permissionsGranted.value,
             onRequestPermissions = { checkAndRequestPermissions() },
             onReselectRole = { launchRoleSelection() },
-            onSignOut = { signOut() }
+            
           )
         }
       }
@@ -149,7 +140,7 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
     permissionsGranted: Boolean,
     onRequestPermissions: () -> Unit,
     onReselectRole: () -> Unit,
-    onSignOut: () -> Unit
+    onSignOut: () -> Unit = {}
   ) {
     val navController = rememberNavController()
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
@@ -275,7 +266,7 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
     onServiceStop: () -> Unit,
     onRestartService: () -> Unit,
     onReselectRole: () -> Unit,
-    onSignOut: () -> Unit,
+    onSignOut: () -> Unit = {},
     connectionState: ServiceConnectionState
   ) {
     DropdownMenu(
@@ -335,17 +326,7 @@ class StreamerActivity : ComponentActivity(), ServiceConnection {
           )
         }
       )
-      HorizontalDivider()
-      DropdownMenuItem(
-        text = { Text(stringResource(id = R.string.menu_sign_out)) },
-        onClick = onSignOut,
-        leadingIcon = {
-          Icon(
-            imageVector = AppIcons.Signout,
-            contentDescription = stringResource(id = R.string.menu_sign_out)
-          )
-        }
-      )
+
     }
   }
 

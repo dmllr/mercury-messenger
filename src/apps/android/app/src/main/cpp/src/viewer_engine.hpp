@@ -144,10 +144,6 @@ public:
     rtc_viewer_.RequestPeerList();
   }
 
-  void UpdateAuthToken(const std::string& token) {
-    rtc_viewer_.UpdateAuthToken(token);
-  }
-
   void SendStreamRequest(const std::string& peer_id, const Config& config) {
     InitH264Parser();
     rtc_viewer_.SendStreamRequest(peer_id, config);
@@ -217,29 +213,6 @@ private:
     }
 
     AMediaFormat_delete(format);
-  }
-
-  /// @brief Handles output buffers and renders frames to native_window_.
-  void HandleOutputBuffer() {
-    AMediaCodecBufferInfo info;
-    if ((!is_codec_configured_) || (media_codec_ == nullptr)) {
-      return;
-    }
-
-    const auto output_buffer_index = AMediaCodec_dequeueOutputBuffer(media_codec_, &info, 0);
-
-    if (output_buffer_index >= 0) {
-      // Render the buffer to native_window_
-      AMediaCodec_releaseOutputBuffer(media_codec_, output_buffer_index, true);
-    } else if (output_buffer_index == AMEDIACODEC_INFO_OUTPUT_BUFFERS_CHANGED) {
-      LOGI << "Output buffers changed.";
-    } else if (output_buffer_index == AMEDIACODEC_INFO_OUTPUT_FORMAT_CHANGED) {
-      AMediaFormat* new_format = AMediaCodec_getOutputFormat(media_codec_);
-      LOGI << "Output format changed: " << AMediaFormat_toString(new_format);
-      AMediaFormat_delete(new_format);
-    } else if (output_buffer_index == AMEDIACODEC_INFO_TRY_AGAIN_LATER) {
-      // No available output buffer, exit
-    }
   }
 
   /// @brief Sends the parsed frame data to the codec.

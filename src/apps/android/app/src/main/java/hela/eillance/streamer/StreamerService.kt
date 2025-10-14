@@ -29,8 +29,6 @@ import androidx.core.graphics.createBitmap
 import androidx.core.graphics.drawable.DrawableCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.preference.PreferenceManager
-import com.google.firebase.auth.FirebaseAuth
-import hela.eillance.LauncherActivity
 import hela.eillance.Tune
 import hela.eillance.camera.R
 import hela.eillance.ndkio.EventSource
@@ -96,9 +94,7 @@ class StreamerService : Service(), IStreamerNativeBridge {
     if (source == EventSource.System.value) {
       serviceConnectionState = ServiceConnectionState.fromInt(status)
 
-      if (status == ServiceConnectionState.InvalidToken.value) {
-        refreshAuthToken()
-      } else if (status == ServiceConnectionState.Establishing.value) {
+      if (status == ServiceConnectionState.Establishing.value) {
         val deviceName = getDeviceNamePreference()
         configureDeviceName(deviceName)
 
@@ -107,30 +103,6 @@ class StreamerService : Service(), IStreamerNativeBridge {
       }
 
       startForeground()
-    }
-  }
-
-  private fun refreshAuthToken() {
-    val user = FirebaseAuth.getInstance().currentUser
-    user?.getIdToken(true)?.addOnCompleteListener { task ->
-      if (task.isSuccessful) {
-        val idToken = task.result?.token
-        if (idToken != null) {
-          updateAuthToken(idToken)
-          // Start the service again after token refresh
-          start()
-          Log.d("StreamerService", "Auth token refreshed successfully")
-        }
-      } else {
-        Log.e("StreamerService", "Failed to refresh auth token", task.exception)
-        // Launch an intent to redirect to the launcher activity for re-authentication
-        val launcherIntent = Intent(this, LauncherActivity::class.java).apply {
-          addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-        }
-        startActivity(launcherIntent)
-        // Stop the service
-        stopSelf()
-      }
     }
   }
 
@@ -194,7 +166,6 @@ class StreamerService : Service(), IStreamerNativeBridge {
 
     val streamerActivityIntent = Intent(this, StreamerActivity::class.java).apply {
       flags = Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
-      // Or maybe FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_CLEAR_TASK if want to restart it cleanly
     }
 
     val pendingIntent = PendingIntent.getActivity(
@@ -230,14 +201,10 @@ class StreamerService : Service(), IStreamerNativeBridge {
     val id = "surveillance-foreground-service"
     val name = getString(R.string.notification_channel_name)
     val descriptionText = getString(R.string.notification_channel_description)
-
-    // IMPORTANCE_DEFAULT or higher for foreground service
     val importance = NotificationManager.IMPORTANCE_DEFAULT
-
     val channel = NotificationChannel(id, name, importance).apply {
       description = descriptionText
       lockscreenVisibility = Notification.VISIBILITY_PRIVATE
-      // disable sound/vibration if using higher importance
       setSound(null, null)
       enableVibration(false)
     }
@@ -271,7 +238,7 @@ class StreamerService : Service(), IStreamerNativeBridge {
 
       private fun sendNetworkState() {
         if (availableNetworks.isNotEmpty()) {
-          checkAuthAndStart()
+          start()
         } else {
           stop()
         }
@@ -292,40 +259,19 @@ class StreamerService : Service(), IStreamerNativeBridge {
     }
   }
 
-  fun checkAuthAndStart() {
-    val user = FirebaseAuth.getInstance().currentUser
-    user?.getIdToken(true)?.addOnCompleteListener { task ->
-      if (task.isSuccessful) {
-        val idToken = task.result?.token
-        if (idToken != null) {
-          updateAuthToken(idToken)
-          start()
-        }
-      } else {
-        Log.e("FirebaseAuth", "Failed to get ID token", task.exception)
-      }
-    }
-  }
-
-  /**
-   * Stops the native engine and requests the service to shut down gracefully.
-   * This should be the primary method used to stop the service externally (e.g., from UI).
-   */
   fun terminate() {
     isOperational = false
     stop()
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-      stopForeground(STOP_FOREGROUND_REMOVE)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+        stopForeground(STOP_FOREGROUND_REMOVE)
     } else {
-      @Suppress("DEPRECATION")
-      stopForeground(true)
+        @Suppress("DEPRECATION")
+        stopForeground(true)
     }
     stopSelf()
   }
 
-
   private external fun initEngine(nativeBridge: IStreamerNativeBridge)
-  private external fun updateAuthToken(token: String)
   external fun start()
   external fun stop()
   external fun getServiceConnectionState(): ServiceConnectionState

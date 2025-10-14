@@ -16,7 +16,6 @@
 #include "hela/eillance/rtc/transport.hpp"
 #include "hela/eillance/utils/memory.h"
 
-
 namespace hela::eillance {
 
 /**
@@ -68,10 +67,6 @@ public:
 
   void SetName(const std::string& name) {
     transport_->SetName(name);
-  }
-
-  void UpdateAuthToken(const std::string& token) {
-    transport_->UpdateAuthToken(token);
   }
 
   void Start() {
@@ -223,13 +218,6 @@ public:
     return std::make_shared<Peer::Track>(track, sr_reporter);
   }
 
-  Json GetPublishMessage() final {
-    return Json{
-        {"kind", "streamer"},
-        {"profile", GetDeviceProfileAsJson()},
-    };
-  }
-
   void Configure(Config config) {
     av_stream_->Video()->Configure(config);
   }
@@ -242,23 +230,18 @@ private:
     auto video_it = configJson.find("video");
     if (video_it != configJson.end() && !video_it->is_null()) {
       auto& jvc = *video_it;
-
       if (jvc.contains("cameraId") && !jvc["cameraId"].is_null()) {
         video_config.cameraId = jvc["cameraId"].get<int>();
       }
-
       if (jvc.contains("width") && !jvc["width"].is_null()) {
         video_config.width = jvc["width"].get<std::uint32_t>();
       }
-
       if (jvc.contains("height") && !jvc["height"].is_null()) {
         video_config.height = jvc["height"].get<std::uint32_t>();
       }
-
       if (jvc.contains("bitrate") && !jvc["bitrate"].is_null()) {
         video_config.bitrate = jvc["bitrate"].get<std::uint32_t>();
       }
-
       if (jvc.contains("frameRate") && !jvc["frameRate"].is_null()) {
         video_config.frameRate = jvc["frameRate"].get<std::uint16_t>();
       }

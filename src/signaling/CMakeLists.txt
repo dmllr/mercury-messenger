@@ -1,7 +1,6 @@
 project(signaling-server C CXX)
 
 include("../cmake/libdatachannel.cmake")
-include("../cmake/libcpr.cmake")
 
 add_executable(hela-eillance-signaling
   signaling_server.cpp
@@ -14,7 +13,6 @@ target_link_libraries(hela-eillance-signaling PUBLIC
   ssl
   crypto
   nlohmann_json
-  cpr
 )
 
 add_executable(hela-eillance-signaling-tester

@@ -87,16 +87,6 @@ Java_hela_eillance_viewer_ViewerActivity_releaseDecoder(  // NOLINT(*-identifier
   viewerEngine->StopStreaming();
 }
 
-/// @brief JNI function to update a user token.
-extern "C" JNIEXPORT void JNICALL
-Java_hela_eillance_viewer_ViewerActivity_updateAuthToken(  // NOLINT(*-identifier-naming)
-    JNIEnv* env, jobject, jstring jtoken) {
-  const char* chars = env->GetStringUTFChars(jtoken, nullptr);
-  const std::string token(chars);
-  env->ReleaseStringUTFChars(jtoken, chars);
-  viewerEngine->UpdateAuthToken(token);
-}
-
 /// @brief JNI function to request a peer list update.
 extern "C" JNIEXPORT void JNICALL
 Java_hela_eillance_viewer_ViewerActivity_requestPeerListUpdate(  // NOLINT(*-identifier-naming)

@@ -1,274 +1,83 @@
 package hela.eillance.viewer
 
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.material.ExperimentalMaterialApi
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.pullrefresh.PullRefreshIndicator
-import androidx.compose.material.pullrefresh.pullRefresh
-import androidx.compose.material.pullrefresh.rememberPullRefreshState
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.DefaultAlpha
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.painter.BitmapPainter
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import hela.eillance.camera.R
-import hela.eillance.theme.extendedColors
-import hela.eillance.theme.icons.AppIcons
-import hela.eillance.theme.icons.Failure
-import hela.eillance.theme.icons.StatusStandby
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 
-private val GridItemMinWidth = 220.dp
-
-@OptIn(ExperimentalMaterialApi::class)
 @Composable
-fun PeersScreen(
-  peers: List<StoredPeer>,
-  onPeerClicked: (StoredPeer) -> Unit,
-  onRemovePeer: (String) -> Unit,
-  onRefreshPeers: () -> Unit,
-  isRefreshing: Boolean,
+fun ConnectScreen(
+    onConnectClicked: (String) -> Unit,
 ) {
-  val peerStore = PeerStore(LocalContext.current, rememberCoroutineScope())
+    var streamerId by remember { mutableStateOf("") }
+    var showError by remember { mutableStateOf(false) }
 
-  val pullRefreshState = rememberPullRefreshState(
-    refreshing = isRefreshing,
-    onRefresh = onRefreshPeers
-  )
-
-  Box(
-    modifier = Modifier
-      .fillMaxSize()
-      .pullRefresh(pullRefreshState)
-  ) {
     Column(
-      modifier = Modifier.fillMaxSize()
-    ) {
-      // Section heading - consistent with OperationScreen
-      Text(
-        text = stringResource(R.string.viewer_PeersScreen_available_devices),
-        style = MaterialTheme.typography.titleMedium,
-        modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp)
-      )
-
-      if (peers.isEmpty() && !isRefreshing) {
-        Box(
-          modifier = Modifier.fillMaxSize(),
-          contentAlignment = Alignment.Center
-        ) {
-          Text(
-            text = stringResource(R.string.viewer_PeersScreen_no_devices_available),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-          )
-        }
-      } else {
-        LazyVerticalGrid(
-          columns = GridCells.Adaptive(minSize = GridItemMinWidth),
-          modifier = Modifier.fillMaxSize(),
-          contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-          verticalArrangement = Arrangement.spacedBy(12.dp),
-          horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-          items(peers, key = { it.id }) { peer ->
-            PeerItem(
-              peer = peer,
-              onPeerClicked = onPeerClicked,
-              onRemoveClicked = { onRemovePeer(peer.id) },
-              peerStore = peerStore
-            )
-          }
-        }
-      }
-    }
-
-    PullRefreshIndicator(
-      refreshing = isRefreshing,
-      state = pullRefreshState,
-      modifier = Modifier.align(Alignment.TopCenter),
-    )
-  }
-}
-
-@Composable
-fun PeerItem(
-  peer: StoredPeer,
-  onPeerClicked: (StoredPeer) -> Unit,
-  onRemoveClicked: () -> Unit,
-  peerStore: PeerStore
-) {
-  var bitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
-  var showMenu by remember { mutableStateOf(false) }
-
-  LaunchedEffect(peer.previewImagePath) {
-    launch(Dispatchers.IO) {
-      bitmap = peerStore.loadPreviewBitmap(peer.previewImagePath)
-    }
-  }
-
-  Card(
-    modifier = Modifier
-      .fillMaxWidth()
-      .aspectRatio(16f / 9f)
-      .clickable { onPeerClicked(peer) },
-    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-  ) {
-    Box(
-      modifier = Modifier.fillMaxSize()
-    ) {
-      // Preview Image as Background
-      Box(
         modifier = Modifier
-          .fillMaxSize()
-          .background(Color.Gray.copy(alpha = 0.3f)),
-        contentAlignment = Alignment.Center
-      ) {
-        if (bitmap != null) {
-          Image(
-            painter = BitmapPainter(bitmap!!.asImageBitmap()),
-            contentDescription = "${peer.name} preview",
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop,
-            colorFilter = if (!peer.isOnline) {
-              ColorFilter.colorMatrix(androidx.compose.ui.graphics.ColorMatrix().apply { setToSaturation(0f) })
-            } else null,
-            alpha = if (!peer.isOnline) 0.6f else DefaultAlpha
-          )
-        } else {
-          Icon(
-            AppIcons.Failure,
-            contentDescription = "No preview",
-            tint = Color.DarkGray,
-            modifier = Modifier.size(48.dp)
-          )
-        }
-      }
+            .fillMaxSize()
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(
+            text = stringResource(R.string.viewer_connect_to_streamer),
+            style = MaterialTheme.typography.headlineSmall
+        )
 
-      // Semi-transparent bar at the bottom with peer info and controls
-      Box(
-        modifier = Modifier
-          .align(Alignment.BottomCenter)
-          .fillMaxWidth()
-          .background(Color.Black.copy(alpha = 0.5f))
-          .padding(12.dp)
-      ) {
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          verticalAlignment = Alignment.CenterVertically
+        Spacer(modifier = Modifier.height(24.dp))
+
+        OutlinedTextField(
+            value = streamerId,
+            onValueChange = {
+                streamerId = it
+                showError = false
+            },
+            label = { Text(stringResource(R.string.viewer_streamer_id)) },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            isError = showError,
+            supportingText = {
+                if (showError) {
+                    Text(stringResource(R.string.viewer_streamer_id_required))
+                }
+            },
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None)
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Button(
+            onClick = {
+                if (streamerId.isNotBlank()) {
+                    onConnectClicked(streamerId)
+                } else {
+                    showError = true
+                }
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 32.dp)
         ) {
-          // Peer Name and Status
-          Column(modifier = Modifier.weight(1f)) {
-            Text(
-              text = peer.name,
-              style = MaterialTheme.typography.titleMedium,
-              color = Color.White,
-              maxLines = 1 // Prevent text wrapping
-            )
-            Spacer(Modifier.height(4.dp))
-            Row(
-              verticalAlignment = Alignment.CenterVertically
-            ) {
-              // Online/Offline Indicator Icon
-              val tint = if (peer.isOnline)
-                MaterialTheme.extendedColors.success else MaterialTheme.extendedColors.offline
-              Icon(
-                imageVector = if (peer.isOnline) AppIcons.StatusStandby else AppIcons.Failure,
-                contentDescription = if (peer.isOnline) stringResource(R.string.status_online) else stringResource(R.string.status_offline),
-                tint = tint,
-                modifier = Modifier.size(16.dp)
-              )
-              Spacer(Modifier.width(4.dp))
-              Text(
-                text = if (peer.isOnline) stringResource(R.string.status_online) else stringResource(R.string.status_offline),
-                style = MaterialTheme.typography.bodySmall,
-                color = tint,
-                fontStyle = if (!peer.isOnline) FontStyle.Italic else FontStyle.Normal
-              )
-            }
-          }
-
-          // Three dots menu
-          Box {
-            IconButton(
-              onClick = { showMenu = true },
-              modifier = Modifier.size(32.dp)
-            ) {
-              Icon(
-                imageVector = Icons.Filled.MoreVert,
-                contentDescription = stringResource(R.string.viewer_PeersScreen_more_options),
-                tint = Color.White
-              )
-            }
-            DropdownMenu(
-              expanded = showMenu,
-              onDismissRequest = { showMenu = false }
-            ) {
-              if (!peer.isOnline) {
-                DropdownMenuItem(
-                  text = { Text(stringResource(R.string.viewer_PeersScreen_remove_peer)) },
-                  onClick = {
-                    onRemoveClicked()
-                    showMenu = false
-                  }
-                )
-              } else {
-                DropdownMenuItem(
-                  text = {
-                    Text(
-                      stringResource(R.string.viewer_PeersScreen_cant_remove_online_devices),
-                      color = Color.Gray
-                    )
-                  },
-                  onClick = { showMenu = false },
-                  enabled = false
-                )
-              }
-            }
-          }
+            Text(stringResource(R.string.viewer_connect))
         }
-      }
     }
-  }
 }

@@ -50,9 +50,6 @@ public:
         [this](const std::string& peer_id, EventSource sender, int status) {
           SetStatus(peer_id, sender, status);
         });
-    DispatchQueue::MainThread().Dispatch([this]() {
-      rtc_streamer_.Start();
-    });
   }
 
   StreamerEngine(StreamerEngine&&) = delete;
@@ -86,10 +83,6 @@ public:
     DispatchQueue::MainThread().Dispatch([this]() {
       rtc_streamer_.Terminate();
     });
-  }
-
-  void UpdateAuthToken(const std::string& token) {
-    rtc_streamer_.UpdateAuthToken(token);
   }
 
   ServiceConnectionState GetServiceConnectionState() {

@@ -5,9 +5,7 @@
 #include <optional>
 #include <unordered_map>
 #include <chrono>
-#include <iomanip>
-#include <sstream>
-#include <iostream>
+#include <thread>
 
 #include <rtc/websocket.hpp>
 #include <rtc/websocketserver.hpp>
@@ -19,7 +17,6 @@
 #include <plog/Formatters/TxtFormatter.h>
 
 #include "args_parser.hpp"
-#include "firebase_verifier.hpp"
 
 constexpr auto logInstanceId = 454;
 #define LGV PLOG_(logInstanceId, plog::verbose) // NOLINT(*-pro-type-reinterpret-cast,*-lambda-function-name)
@@ -30,382 +27,139 @@ constexpr auto logInstanceId = 454;
 
 class SignalingServer {
   using Json = nlohmann::json;
-  using UserId = std::string;
   using PeerId = std::string;
 
-  enum class PeerType : char {
-    uninitialized,
-    streamer,
-    viewer
-  };
-
   struct Peer {
-    PeerId id;
-    PeerType type{PeerType::uninitialized};
-    std::string name;
     std::shared_ptr<rtc::WebSocket> ws;
-    Json profile;
   };
 
 public:
-  explicit SignalingServer(const rtc::WebSocketServer::Configuration& config, bool show_connections = false)
-      : verifier_(std::make_unique<FirebaseVerifier>()), show_connections_(show_connections) {
+  explicit SignalingServer(const rtc::WebSocketServer::Configuration& config) {
     server_ = std::make_unique<rtc::WebSocketServer>(config);
-    server_->onClient([this](const std::shared_ptr<rtc::WebSocket>& ws) {
-      HandleConnection(ws);
+    server_->onClient([this](const std::shared_ptr<rtc::WebSocket>& wss) {
+      HandleConnection(wss);
     });
   }
 
 private:
   std::unique_ptr<rtc::WebSocketServer> server_;
-  std::unique_ptr<FirebaseVerifier> verifier_;
-  std::unordered_map<UserId, std::unordered_map<PeerId, Peer>> peers_;
+  std::unordered_map<PeerId, Peer> peers_;
   std::mutex peersMutex_;
-  bool show_connections_;
 
-  void HandleConnection(const std::shared_ptr<rtc::WebSocket>& ws) {
+  void HandleConnection(const std::shared_ptr<rtc::WebSocket>& wss) {
     LGD << "New connection established";
-    auto user_id = std::make_shared<std::string>();
-    auto peer_id = std::make_shared<std::string>();
+    auto peer_id = std::make_shared<PeerId>();
 
-    ws->onMessage(nullptr, [this, ws, user_id, peer_id](const std::string& msg) {
-      HandleMessage(ws, msg, *user_id, *peer_id);
+    wss->onMessage(nullptr, [this, wss, peer_id](const std::string& msg) {
+      HandleMessage(wss, msg, *peer_id);
     });
 
-    ws->onOpen([]() {
-      LGD << "WebSocket connection opened";
-    });
-
-    ws->onClosed([this, user_id, peer_id]() {
-      HandleDisconnection(*user_id, *peer_id);
+    wss->onClosed([this, peer_id]() {
+      HandleDisconnection(*peer_id);
     });
   }
 
-  void HandleMessage(const std::shared_ptr<rtc::WebSocket>& ws, const std::string& msg,
-                     UserId& user_id, PeerId& peer_id) {
+  void HandleMessage(const std::shared_ptr<rtc::WebSocket>& wss, const std::string& msg, PeerId& peer_id) {
     try {
-      LGD << "Received message: length=" << msg.length();
-
-      LGV << "<< " << SanitizeMessageForLogging(msg);
-
+      LGV << "<< " << msg;
       auto json = Json::parse(msg);
 
-      if (!ValidateMessage(ws, json, user_id)) {
-        LGD << "Message validation failed";
-        return;
-      }
+      if (peer_id.empty()) {
+        // First message from a client must be for identification (login).
+        if (json.value("type", "") == "login" && json.contains("id")) {
+          peer_id = json["id"].get<PeerId>();
+          if (peer_id.empty()) {
+            SendError(wss, "invalid_id", "Peer ID cannot be empty.");
+            peer_id.clear(); // Ensure it remains empty on failure
+            return;
+          }
 
-      const auto& type = json["type"].get<std::string>();
-      LGD << "Processing message type: " << type;
+          const std::lock_guard<std::mutex> lock(peersMutex_);
 
-      if (type == "publish") {
-        HandlePublish(ws, json, user_id);
-        // Update peer_id when a peer publishes
-        if (json.contains("peer_id")) {
-          peer_id = json["peer_id"];
-          LGD << "Updated peer_id: " << peer_id;
+          if (auto itr = peers_.find(peer_id); itr != peers_.end()) {
+            // A peer with the same ID exists, likely a reconnection.
+            // Close the old connection to allow the new one to take over.
+            LGI << "Peer " << peer_id << " is reconnecting. Closing old connection.";
+            itr->second.ws->close();
+          }
+
+          peers_[peer_id] = {wss};
+          LGI << "Peer registered: " << peer_id;
+        } else {
+          SendError(wss, "login_required", "First message must be of type 'login' with an 'id'.");
+          wss->close();
         }
-      } else if (type == "get_streamers") {
-        SendStreamers(ws, user_id);
       } else {
-        RelayMessage(json, user_id, peer_id);
+        // After identification, all other messages are treated as relay messages.
+        if (!json.contains("to")) {
+          SendError(wss, "missing_recipient", "Message must have a 'to' field for relaying.");
+          return;
+        }
+        auto destination_id = json.value("to", "");
+        if (destination_id.empty()) {
+          SendError(wss, "empty_recipient", "Recipient 'to' field cannot be empty.");
+          return;
+        }
+
+        LGD << "Relaying message from: " << peer_id << " to: " << destination_id;
+
+        std::shared_ptr<rtc::WebSocket> dest_ws;
+        {
+          const std::lock_guard<std::mutex> lock(peersMutex_);
+          auto itr = peers_.find(destination_id);
+          if (itr == peers_.end()) {
+            LGE << "Peer " << destination_id << " not found.";
+            SendError(wss, "peer_not_found", "Peer '" + destination_id + "' not found.");
+            return;
+          }
+          dest_ws = itr->second.ws;
+        }
+
+        json["from"] = peer_id;
+        std::string message_str = json.dump();
+        LGV << ">> to " << destination_id << ": " << message_str;
+
+        if (dest_ws) {
+          dest_ws->send(message_str);
+        }
       }
     } catch (const std::exception& e) {
-      SendError(ws, "invalid_message", e.what());
+      SendError(wss, "invalid_message", e.what());
     }
   }
 
-  void HandleDisconnection(const UserId& user_id, const PeerId& peer_id) {
-    LGD << "WebSocket connection closed for user_id: " << user_id << ", peer_id: " << peer_id;
-    bool is_notification_required = false;
-
-    {
-      std::lock_guard<std::mutex> lock(peersMutex_);
-      if (!user_id.empty() && !peer_id.empty()) {
-        auto ere = peers_[user_id].erase(peer_id);
-        if (ere != 0U) {
-          LGD << "Removed peer: " << peer_id << " for user: " << user_id;
-          is_notification_required = true;
-        }
-      }
-    }
-
-    if (is_notification_required) {
-      LGD << "Notifying peer disconnection: " << peer_id;
-      NotifyPeerDisconnected(user_id, peer_id);
-      BroadcastStreamers(user_id);
-    }
-
-    // Show connections status if enabled
-    if (show_connections_) {
-      ShowConnectionsStatus();
-    }
-  }
-
-  void SendStreamers(const std::shared_ptr<rtc::WebSocket>& ws, const UserId& user_id) {
-    LGD << "Processing get_streamers request for user_id: " << user_id;
-    Json response;
-    response["type"] = "streamers";
-    response["peers"] = Json::array();
-
-    {
-      std::lock_guard<std::mutex> lock(peersMutex_);
-      // Collect all streamers for the user
-      if (peers_.find(user_id) != peers_.end()) {
-        for (const auto& [peerId, peer]: peers_[user_id]) {
-          if (peer.type == PeerType::streamer) {
-            LGD << "Adding streamer: " << peerId << " to response";
-            response["peers"].push_back({
-                {"id", peerId},
-                {"name", peer.name},
-                {"profile", peer.profile}
-            });
-          }
-        }
-      }
-    }
-
-    // Send the response to the requesting rtc::WebSocket
-    LGD << "Sending streamers response with " << response["peers"].size() << " peers";
-    LGV << ">> " << SanitizeMessageForLogging(response.dump());
-    ws->send(response.dump());
-  }
-
-  // NOLINTNEXTLINE(*-easily-swappable-parameters)
-  void RelayMessage(Json& msg, const UserId& user_id, const PeerId& peer_id) {
-    PeerId destination_id{};
-    {
-      std::lock_guard<std::mutex> lock(peersMutex_);
-      destination_id = msg.value("to", "");
-      LGD << "Relaying message from: " << peer_id << " to: " << destination_id;
-
-      if (peers_.find(user_id) == peers_.end() || peers_[user_id].find(destination_id) == peers_[user_id].end()) {
-        LGE << "Peer " << destination_id << " not found for user " << user_id;
-        LGD << "Failed to relay message: destination peer not found";
-        return;
-      }
-    }
-
-    // Forward the message to the destination peer
-    if (!destination_id.empty()) {
-      auto& destination_peer = peers_[user_id][destination_id];
-      msg["from"] = peer_id;
-      LGD << "Forwarding message to destination: " << destination_id;
-
-      std::string message_str = msg.dump();
-      LGV << ">> " << SanitizeMessageForLogging(message_str);
-      destination_peer.ws->send(message_str);
-    }
-  }
-
-  bool ValidateMessage(const std::shared_ptr<rtc::WebSocket>& ws, const Json& msg, UserId& user_id) {
-    auto token = msg.value("token", "");
-    if (token.empty()) {
-      SendError(ws, "missing_token", "Token required");
-      return false;
-    }
-
-    if (user_id.empty()) {
-      auto uid = verifier_->VerifyToken(token);
-      if (!uid) {
-        SendError(ws, "invalid_token", "Token verification failed");
-        return false;
-      }
-      user_id = *uid;
-      LGD << "User authenticated: " << user_id;
-    } else {
-      auto uid = verifier_->VerifyToken(token);
-      if (!uid || *uid != user_id) {
-        SendError(ws, "user_mismatch", "Token user mismatch");
-        return false;
-      }
-      LGD << "User re-authenticated: " << user_id;
-    }
-    return true;
-  }
-
-  void HandlePublish(const std::shared_ptr<rtc::WebSocket>& ws, const Json& msg, const UserId& user_id) {
-    PeerId peer_id = msg["peer_id"];
-    LGD << "Handling publish from user_id: " << user_id << ", peer_id: " << peer_id;
-    Peer new_peer{
-        .id = peer_id,
-        .type = msg["kind"] == "streamer" ? PeerType::streamer : PeerType::viewer,
-        .name = msg["name"],
-        .ws = ws,
-        .profile = msg.value("profile", Json::object())
-    };
-    LGD << "Peer type: " << (new_peer.type == PeerType::streamer ? "streamer" : "viewer");
-
-    {
-      std::lock_guard<std::mutex> lock(peersMutex_);
-      auto& user_peers = peers_[user_id];
-
-      // Remove existing connection if present
-      if (auto existing = user_peers.find(peer_id); existing != user_peers.end()) {
-        if (existing->second.ws != ws) {
-          LGD << "Closing existing connection for peer_id: " << peer_id;
-          existing->second.ws->close();
-          user_peers.erase(existing);
-        }
-      }
-
-      LGD << "Adding new peer to user: " << user_id;
-      user_peers[peer_id] = std::move(new_peer);
-    }
-
-    LGD << "Broadcasting streamers after publish";
-    BroadcastStreamers(user_id);
-
-    // Show connections status if enabled
-    if (show_connections_) {
-      ShowConnectionsStatus();
-    }
-  }
-
-  void BroadcastStreamers(const UserId& user_id) {
-    LGD << "Starting to broadcast streamers for user_id: " << user_id;
-    std::vector<Peer> viewers;
-
-    {
-      std::lock_guard<std::mutex> lock(peersMutex_);
-
-      for (const auto& [id, peer] : peers_[user_id]) {
-        if (peer.type == PeerType::viewer) {
-          viewers.push_back(peer);
-        }
-      }
-    }
-
-    for (const auto& peer : viewers) {
-      LGD << "Broadcasting streamers to the peer " << peer.id;
-      SendStreamers(peer.ws, user_id);
-    }
-  }
-
-  // NOLINTNEXTLINE(*-easily-swappable-parameters)
-  void NotifyPeerDisconnected(const UserId& user_id, const PeerId& disconnected_peer_id) {
-    LGD << "Notifying peer disconnection: user_id=" << user_id << ", peer_id=" << disconnected_peer_id;
-    Json notification = {
-        {"type", "peer_disconnected"},
-        {"id", disconnected_peer_id}
-    };
-    std::vector<std::shared_ptr<rtc::WebSocket>> targets;
-
-    {
-      std::lock_guard<std::mutex> lock(peersMutex_);
-
-      // Determine the type of the disconnected peer
-      auto user_it = peers_.find(user_id);
-      if (user_it == peers_.end()) {
-        LGD << "User not found for notification: " << user_id;
-        return;
-      }
-
-      auto& user_peers = user_it->second;
-      auto peer_it = user_peers.find(disconnected_peer_id);
-      if (peer_it == user_peers.end()) {
-        LGD << "Peer not found for notification: " << disconnected_peer_id;
-        return;
-      }
-
-      auto target_type = (peer_it->second.type == PeerType::streamer) ? PeerType::viewer : PeerType::streamer;
-
-      // Collect WebSockets of peers of the opposite type
-      for (const auto& [id, peer] : user_peers) {
-        if (peer.type == target_type) {
-          targets.push_back(peer.ws);
-        }
-      }
-    }
-
-    LGD << "Sending disconnect notifications to " << targets.size() << " peers";
-    std::string notification_str = notification.dump();
-    LGV << ">> " << notification_str;
-
-    for (const auto& ws : targets) {
-      ws->send(notification_str);
-    }
-  }
-
-  static void SendError(const std::shared_ptr<rtc::WebSocket>& ws, const std::string& error, const std::string& message) {
-    LGD << "Sending error response: " << error << " - " << message;
-    Json response = {
-        {"type", "error"},
-        {"error", error},
-        {"message", message}};
-
-    std::string response_str = response.dump();
-    LGV << ">> " << response_str;
-    ws->send(response_str);
-  }
-
-  // Helper method to sanitize messages for logging
-  static auto SanitizeMessageForLogging(const std::string& message) -> std::string {
-    try {
-      auto json = Json::parse(message);
-
-      // Remove token if present
-      if (json.contains("token")) {
-        json["token"] = "[REDACTED]";
-      }
-
-      if (json.contains("profile") && (json["profile"].is_object() || json["profile"].is_array())) {
-        auto element_count = 0ULL;
-        if (json["profile"].is_array()) {
-          element_count = json["profile"].size();
-        }
-        json["profile"] = "[" + std::to_string(element_count) + " elements]";
-      }
-
-      return json.dump();
-    } catch (const std::exception&) {
-      // If we can't parse as JSON, return as is
-      return message;
-    }
-  }
-
-  void ShowConnectionsStatus() {
-    std::lock_guard<std::mutex> lock(peersMutex_);
-
-    if (peers_.empty()) {
-      std::cout << "No active connections" << std::endl;
+  void HandleDisconnection(const PeerId& peer_id) {
+    if (peer_id.empty()) {
+      LGD << "Unidentified peer disconnected.";
       return;
     }
 
-    // Display connections organized by user
-    for (const auto& [userId, userPeers] : peers_) {
-      std::cout << userId << std::endl;
-
-      if (userPeers.empty()) {
-        std::cout << "  |-- (no peers)" << std::endl;
-      } else {
-        for (const auto& [peerId, peer] : userPeers) {
-          std::string typeStr = (peer.type == PeerType::streamer) ? "streamer" : "viewer";
-          std::cout << "  |-- [" << typeStr << "] " << peer.name << std::endl;
-        }
-      }
+    const std::lock_guard<std::mutex> lock(peersMutex_);
+    if (peers_.erase(peer_id) > 0) {
+      LGI << "Peer disconnected and removed: " << peer_id;
     }
+  }
 
-    std::cout << std::endl;
+  static void SendError(const std::shared_ptr<rtc::WebSocket>& wss, const std::string& error, const std::string& message) {
+    if (!wss || !wss->isOpen()) {
+      return;
+    }
+    LGE << "Sending error: " << error << " - " << message;
+    Json const response = {
+        {"type", "error"},
+        {"error", error},
+        {"message", message}};
+    wss->send(response.dump());
   }
 };
 
 namespace {
 
-std::condition_variable exitCondition;  // NOLINT(*-avoid-non-const-global-variables, *-statically-constructed-objects)
-std::mutex exitMutex;                   // NOLINT(*-avoid-non-const-global-variables, *-statically-constructed-objects)
-bool shouldExit = false;                // NOLINT(*-avoid-non-const-global-variables)
+volatile std::sig_atomic_t signalReceived = 0;  // NOLINT(*-avoid-non-const-global-variables)
 
-} // namespace
-
-// Signal handler function
 void SignalHandler(int signum) {
   LGI << "\nInterrupt signal (" << signum << ") received.\n";
-  {
-    std::lock_guard<std::mutex> lock(exitMutex);
-    shouldExit = true;
-  }
-  exitCondition.notify_all();
+  signalReceived = signum;
 }
 
 plog::Severity ParseLogLevel(const std::string& level) {
@@ -416,85 +170,55 @@ plog::Severity ParseLogLevel(const std::string& level) {
   if (level == "info") { return plog::info; }
   if (level == "debug") { return plog::debug; }
   if (level == "verbose") { return plog::verbose; }
-  return plog::info; // Default to info
+  return plog::info;
 }
 
-int main(int argc, char* argv[]) { // NOLINT(*-function-cognitive-complexity), false-positive due to logging
-  ArgsParser args(argc, argv);
+} // namespace
 
-  // Check if show-connections mode is enabled
-  bool show_connections = args.Has("--show-connections");
+int main(int argc, char* argv[]) {
+  const ArgsParser args(argc, argv);
 
-  // Initialize logging
   static plog::ColorConsoleAppender<plog::TxtFormatter> appender;
-
-  // set default instance (used in deps) to only show warnings and higher
   plog::init(plog::warning, &appender);
-
-  // Default log level is info, but can be overridden by command line
   auto log_level_str = args.Get("--log-level").value_or("info");
-  if (show_connections) {
-    log_level_str = "none";
-  }
   auto log_level = ParseLogLevel(log_level_str);
   plog::init<logInstanceId>(log_level, &appender);
 
   LGD << "Starting signaling server";
-  const auto default_port = uint16_t{8000};
+  constexpr auto default_port = uint16_t{8000};
   auto config = rtc::WebSocketServer::Configuration();
   config.port = default_port;
 
   const auto& port_arg = args.GetInt("--port");
   if (port_arg.has_value()) {
-    config.port = port_arg.value();
+    config.port = static_cast<uint16_t>(port_arg.value());
   }
 
   config.certificatePemFile = args.Get("--ssl-cert");
   config.keyPemFile = args.Get("--ssl-cert-key");
-  if (config.certificatePemFile.has_value()) {
-    LGD << "SSL certificate file: " << *config.certificatePemFile;
-  }
-  if (config.keyPemFile.has_value()) {
-    LGD << "SSL key file: " << *config.keyPemFile;
-  }
   if (config.certificatePemFile.has_value() && config.keyPemFile.has_value()) {
     config.enableTls = true;
   }
 
-  // Register signal handler
   std::signal(SIGINT, SignalHandler);
 
-  auto server = SignalingServer(config, show_connections);
+  auto server = SignalingServer(config);
 
-  if (!show_connections) {
-    LGI << "Signaling server running on port " << config.port;
-    LGI << "Log level set to: " << log_level_str;
-    if (config.enableTls) {
-      LGI << "  * connection is secure.";
-    } else {
-      LGW << "  * connection is insecure!";
-    }
-    LGI << "Press Ctrl+C to exit";
+  LGI << "Signaling server running on port " << config.port;
+  LGI << "Log level set to: " << log_level_str;
+  if (config.enableTls) {
+    LGI << "  * connection is secure.";
   } else {
-    // In show-connections mode, display initial status
-    std::cout << "Connection Monitor Mode - Press Ctrl+C to exit" << std::endl;
-    std::cout << "Server running on port " << config.port << std::endl;
+    LGW << "  * connection is insecure!";
   }
+  LGI << "Press Ctrl+C to exit";
 
-  // Wait for program termination
-  LGD << "Entering wait state";
-  {
-    std::unique_lock<std::mutex> lock(exitMutex);
-    exitCondition.wait(lock, [] { return shouldExit; });
+  while (signalReceived == 0) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
-  LGD << "Exit condition triggered";
 
   LGD << "Exiting application";
-  if (!show_connections) {
-    LGI << "Server stopped";
-  } else {
-    std::cout << "\nServer stopped" << std::endl;
-  }
+  LGI << "Server stopped";
 
   return 0;
 }

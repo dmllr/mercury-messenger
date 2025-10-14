@@ -27,29 +27,22 @@ Java_hela_eillance_streamer_StreamerService_initEngine(  // NOLINT(*-identifier-
     JNIEnv* env, jobject, jobject native_bridge) {
   namespace he = hela::eillance;
   streamerEngine = std::make_unique<he::StreamerEngine>(javaVm, env, native_bridge);
-  streamerEngine->Start();
 }
 
 extern "C" JNIEXPORT void JNICALL
 Java_hela_eillance_streamer_StreamerService_start(  // NOLINT(readability-identifier-naming)
     JNIEnv*, jobject  /*instance*/) {
-  streamerEngine->Start();
+  if (streamerEngine) {
+    streamerEngine->Start();
+  }
 }
 
 extern "C" JNIEXPORT void JNICALL
 Java_hela_eillance_streamer_StreamerService_stop(  // NOLINT(readability-identifier-naming)
     JNIEnv*, jobject  /*instance*/) {
-  streamerEngine->Stop();
-}
-
-/// @brief JNI function to update a user token.
-extern "C" JNIEXPORT void JNICALL
-Java_hela_eillance_streamer_StreamerService_updateAuthToken(  // NOLINT(*-identifier-naming)
-    JNIEnv* env, jobject, jstring jtoken) {
-  const char* chars = env->GetStringUTFChars(jtoken, nullptr);
-  const std::string token(chars);
-  env->ReleaseStringUTFChars(jtoken, chars);
-  streamerEngine->UpdateAuthToken(token);
+  if (streamerEngine) {
+    streamerEngine->Stop();
+  }
 }
 
 extern "C" JNIEXPORT jobject JNICALL

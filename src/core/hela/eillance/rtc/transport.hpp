@@ -36,12 +36,6 @@ public:
   virtual ~RtcTransportDelegate() = default;
 
   /**
-   * @brief Get the publish message for this transport
-   * @return Json object containing the publish message
-   */
-  virtual Json GetPublishMessage() = 0;
-
-  /**
    * @brief Called when a peer is ready
    * @param peer The peer that is ready
    */
@@ -87,8 +81,7 @@ class RtcTransport {
 
   std::string id_{};
   std::string device_name_{id_};
-  std::string auth_token_{};
-  std::atomic<bool> is_published_{false};
+  std::atomic<bool> is_logged_in_{false};
   std::atomic<bool> is_offline_{false};
 
   static constexpr auto minWaitBeforeReconnect = 1U;
@@ -134,26 +127,14 @@ public:
 
   void SetName(const std::string& device_name) {
     device_name_ = device_name;
-    if (is_published_) {
-      DispatchQueue::MainThread().Dispatch([this]() {
-        Publish();
-      });
-    }
   }
 
   void SetId(const std::string& id) {
-    assert(!is_published_);
+    assert(!is_logged_in_);
     id_ = id;
     if (device_name_.empty()) {
       device_name_ = id_;
     }
-  }
-
-  void UpdateAuthToken(const std::string& token) {
-    auth_token_ = token;
-    DispatchQueue::MainThread().Dispatch([this]() {
-      Publish();
-    });
   }
 
   void Start() {
@@ -253,7 +234,7 @@ public:
 
     peer->video_ = delegate_->AddVideo(
         peer->peer_connection_,
-        [this, peer_id, wc = make_weak_ptr(peer)]() {
+        [this, wc = make_weak_ptr(peer)]() {
           DispatchQueue::MainThread().Dispatch([this, wc]() {
             if (auto c = wc.lock()) {
               AddToStream(c, true);
@@ -276,13 +257,7 @@ public:
     return peer;
   }
 
-  void SendSystemMessage(Json& message) {
-    message["token"] = auth_token_;
-    WsSendMessage(message);
-  }
-
   void SendPeerMessage(const std::string& peer_id, Json& message) {
-    message["token"] = auth_token_;
     message["to"] = peer_id;
     WsSendMessage(message);
   }
@@ -305,16 +280,14 @@ private:
     LOGI << "WebSocket connected, signaling ready";
     connection_attempt_ = 0;
     DispatchQueue::MainThread().Dispatch([this]() {
-      if (!auth_token_.empty()) {
-        Publish();
-      }
+        Login();
     });
-
     ReportServiceConnectionState(ServiceConnectionState::online);
   }
 
   void OnWebSocketClosed() {
     LOGE << "WebSocket connection closed";
+    is_logged_in_ = false;
     ReportServiceConnectionState(ServiceConnectionState::failure);
 
     if (is_offline_) {
@@ -364,7 +337,7 @@ private:
   }
 
   void WsSendMessage(const Json& message) {
-    if (!ws_->isOpen()) {
+    if (!ws_ || !ws_->isOpen()) {
       LOGE << "Can't send a WebSocket message, the connection has been closed";
       return;
     }
@@ -377,23 +350,14 @@ private:
     }
   }
 
-  void Publish() {
-    if (auth_token_.empty()) {
-      return;
-    }
-
-    auto message = GetPublishMessage();
-    message["type"] = "publish";
-    message["token"] = auth_token_;
-    message["peer_id"] = id_;
-    message["name"] = device_name_;
+  void Login() {
+    Json message = {
+        {"type", "login"},
+        {"id", id_},
+    };
 
     WsSendMessage(message);
-    is_published_ = true;
-  }
-
-  Json GetPublishMessage() {
-    return delegate_->GetPublishMessage();
+    is_logged_in_ = true;
   }
 
   auto CreatePeerConnection(const std::string& peer_id) -> std::shared_ptr<rtc::PeerConnection> {
@@ -425,7 +389,6 @@ private:
           const auto description = peer_con->localDescription();
           const Json message = {
               {"to", peer_id},
-              {"token", auth_token_},
               {"type", description->typeString()},
               {"sdp", std::string(description.value())}};
           WsSendMessage(message);
@@ -438,7 +401,7 @@ private:
       ReportPeerStateChange(peer_id, EventSource::signalingState, static_cast<int>(state));
     });
 
-    return std::move(peer_connection);
+    return peer_connection;
   }
 
   void AddToStream(const std::shared_ptr<Peer>& peer, bool isAddingVideo) {
@@ -463,16 +426,8 @@ private:
     auto type = itr->get<std::string>();
 
     if (type == "error") {
-      auto error = message["error"].get<std::string>();
-      LOGE << "Signaling error received: " << error;
-      if (error == "invalid_token") {
-        ReportServiceConnectionState(ServiceConnectionState::invalidToken);
-      } else {
-        ReportServiceConnectionState(ServiceConnectionState::failure);
-      }
-    } else if (type == "peer_disconnected") {
-      const auto disconnected_peer_id = message["id"].get<std::string>();
-      RemovePeer(disconnected_peer_id);
+      LOGE << "Signaling error received: " << message.value("error", "unknown");
+      ReportServiceConnectionState(ServiceConnectionState::failure);
     } else {
       delegate_->ProcessSystemMessage(type, message);
     }
@@ -505,13 +460,13 @@ private:
     }
   };
 
-#if 1 // NOLINT(*-avoid-unconditional-preprocessor-if)
+#if 0 // NOLINT(*-avoid-unconditional-preprocessor-if)
   constexpr static auto signalingServerUrl = "wss://app.hela.me:8000";
 #else
 #if ANDROID
-  constexpr static auto signalingServerUrl = "wss://10.0.2.2:8888";
+  constexpr static auto signalingServerUrl = "wss://10.0.2.2:8000";
 #else
-  constexpr static auto signalingServerUrl = "wss://127.0.0.1:8888";
+  constexpr static auto signalingServerUrl = "ws://127.0.0.1:8000";
 #endif
 #endif
 };
