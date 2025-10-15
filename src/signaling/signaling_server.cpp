@@ -63,10 +63,11 @@ private:
     try {
       LGV << "<< " << msg;
       auto json = Json::parse(msg);
+      auto type = json.value("type", "");
 
       if (peer_id.empty()) {
         // First message from a client must be for identification (login).
-        if (json.value("type", "") == "login" && json.contains("id")) {
+        if (type == "login" && json.contains("id")) {
           peer_id = json["id"].get<PeerId>();
           if (peer_id.empty()) {
             SendError(wss, "invalid_id", "Peer ID cannot be empty.");
@@ -77,8 +78,6 @@ private:
           const std::lock_guard<std::mutex> lock(peersMutex_);
 
           if (auto itr = peers_.find(peer_id); itr != peers_.end()) {
-            // A peer with the same ID exists, likely a reconnection.
-            // Close the old connection to allow the new one to take over.
             LGI << "Peer " << peer_id << " is reconnecting. Closing old connection.";
             itr->second.ws->close();
           }

@@ -11,7 +11,6 @@
 #include <nlohmann/json.hpp>
 #include <rtc/peerconnection.hpp>
 #include <utility>
-#include <rtc/rtc.h>
 
 #include "hela/eillance/common/dispatch_queue.hpp"
 #include "hela/eillance/events/event_source.h"
@@ -20,59 +19,24 @@
 #include "hela/eillance/rtc/peer.hpp"
 #include "hela/eillance/rtc/stream.hpp"
 #include "hela/eillance/utils/memory.h"
-#include "hela/eillance/utils/string.hpp"
 
 namespace hela::eillance {
 
-/**
- * @brief Interface for RtcTransport delegate
- *
- * Defines the callback interface that RtcTransport will use to communicate with its owner
- */
 class RtcTransportDelegate {
 public:
   using Json = nlohmann::json;
 
   virtual ~RtcTransportDelegate() = default;
-
-  /**
-   * @brief Called when a peer is ready
-   * @param peer The peer that is ready
-   */
   virtual void OnPeerReady(const std::shared_ptr<Peer>& peer) = 0;
-
-  /**
-   * @brief Process a message from a peer
-   * @param message The message to process
-   */
   virtual void ProcessPeerMessage(Json message) = 0;
-
-  /**
-   * @brief Process a system message
-   * @param type The message type
-   * @param message The message to process
-   */
   virtual void ProcessSystemMessage(const std::string& type, Json message) = 0;
-
-  /**
-   * @brief Add a video track to a peer connection
-   * @param pc The peer connection
-   * @param onOpen Callback to be called when the track is opened
-   * @return The created track
-   */
   virtual std::shared_ptr<Peer::Track> AddVideo(
       const std::shared_ptr<rtc::PeerConnection>& pc,
       const std::function<void(void)>& onOpen) = 0;
-
-  /**
-   * @brief Add an audio track to a peer connection
-   * @param pc The peer connection
-   * @param onOpen Callback to be called when the track is opened
-   * @return The created track
-   */
   virtual std::shared_ptr<Peer::Track> AddAudio(
       const std::shared_ptr<rtc::PeerConnection>& pc,
       const std::function<void(void)>& onOpen) = 0;
+  virtual void OnTrack(const std::string& peer_id, std::shared_ptr<rtc::Track> track) = 0;
 };
 
 class RtcTransport {
@@ -97,15 +61,9 @@ class RtcTransport {
 
   std::unordered_map<std::string, std::shared_ptr<Peer>> peers_;
 
-  // Delegate for callbacks
   RtcTransportDelegate* delegate_{nullptr};
 
 public:
-  /**
-   * @brief Construct an RtcTransport.
-   * @param delegate A non-null pointer to an object implementing the IRtcTransportDelegate interface.
-   *                 The delegate's lifetime must exceed the RtcTransport's lifetime.
-   */
   explicit RtcTransport(RtcTransportDelegate* delegate) : delegate_(delegate) {
     assert(delegate_ != nullptr && "RtcTransport requires a valid delegate");
   }
@@ -264,7 +222,7 @@ public:
 
   void SendPeerDataChannelMessage(const std::string& peer_id, const Json& message) const {
     auto peer = GetPeer(peer_id);
-    if (peer && peer->data_channel_) {
+    if (peer && peer->data_channel_ && peer->data_channel_->isOpen()) {
       peer->data_channel_->send(message.dump());
     }
   }
@@ -399,6 +357,10 @@ private:
     peer_connection->onSignalingStateChange([this, peer_id](rtc::PeerConnection::SignalingState state) {
       LOGI << "Signaling State: " << static_cast<int>(state);
       ReportPeerStateChange(peer_id, EventSource::signalingState, static_cast<int>(state));
+    });
+
+    peer_connection->onTrack([this, peer_id](const std::shared_ptr<rtc::Track>& track) {
+      delegate_->OnTrack(peer_id, track);
     });
 
     return peer_connection;
