@@ -71,11 +71,8 @@ public:
     return std::unique_ptr<Identity>(new Identity(EvpPkeyPtr(pkey_ptr, EVP_PKEY_free)));
   }
 
-  static std::unique_ptr<Identity> LoadFromFile(const std::filesystem::path& path) {
-    if (!std::filesystem::exists(path)) {
-      return nullptr;
-    }
-    BioPtr bio(BIO_new_file(path.string().c_str(), "r"), BIO_free);
+  static std::unique_ptr<Identity> LoadFromMemory(const std::string& pem_data) {
+    BioPtr bio(BIO_new_mem_buf(pem_data.c_str(), -1), BIO_free);
     if (!bio) {
       return nullptr;
     }
@@ -86,13 +83,42 @@ public:
     return std::unique_ptr<Identity>(new Identity(EvpPkeyPtr(pkey_ptr, EVP_PKEY_free)));
   }
 
+  static std::unique_ptr<Identity> LoadFromFile(const std::filesystem::path& path) {
+    if (!std::filesystem::exists(path)) {
+      return nullptr;
+    }
+    std::ifstream file(path, std::ios::binary);
+    if (!file) {
+      return nullptr;
+    }
+    std::string pem_data((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    return LoadFromMemory(pem_data);
+  }
+
+  std::string SaveToMemory() const {
+    BioPtr bio(BIO_new(BIO_s_mem()), BIO_free);
+    if (!bio) {
+      return "";
+    }
+    if (PEM_write_bio_PrivateKey(bio.get(), pkey_.get(), nullptr, nullptr, 0, nullptr, nullptr) <= 0) {
+      return "";
+    }
+    BUF_MEM* buffer_ptr = nullptr;
+    BIO_get_mem_ptr(bio.get(), &buffer_ptr);
+    if (!buffer_ptr || !buffer_ptr->data || buffer_ptr->length == 0) {
+      return "";
+    }
+    return {buffer_ptr->data, buffer_ptr->length};
+  }
+
   bool Save(const std::filesystem::path& path) const {
     std::filesystem::create_directories(path.parent_path());
-    BioPtr bio(BIO_new_file(path.string().c_str(), "w"), BIO_free);
-    if (!bio) {
+    std::ofstream file(path, std::ios::binary);
+    if (!file) {
       return false;
     }
-    return PEM_write_bio_PrivateKey(bio.get(), pkey_.get(), nullptr, nullptr, 0, nullptr, nullptr) > 0;
+    file << SaveToMemory();
+    return file.good();
   }
 
   std::string GetId() const {

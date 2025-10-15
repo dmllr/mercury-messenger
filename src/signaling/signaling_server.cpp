@@ -84,6 +84,18 @@ private:
 
           peers_[peer_id] = {wss};
           LGI << "Peer registered: " << peer_id;
+
+          // Broadcast the online status to all other peers
+          Json const online_notification = {
+              {"type", "peer_online"},
+              {"id", peer_id}
+          };
+          for (const auto& [id, peer] : peers_) {
+              if (id != peer_id && peer.ws && peer.ws->isOpen()) {
+                  peer.ws->send(online_notification.dump());
+              }
+          }
+
         } else {
           SendError(wss, "login_required", "First message must be of type 'login' with an 'id'.");
           wss->close();
@@ -108,7 +120,7 @@ private:
           auto itr = peers_.find(destination_id);
           if (itr == peers_.end()) {
             LGE << "Peer " << destination_id << " not found.";
-            SendError(wss, "peer_not_found", "Peer '" + destination_id + "' not found.");
+            SendError(wss, "peer_not_found", "Peer '" + destination_id + "' not found.", destination_id);
             return;
           }
           dest_ws = itr->second.ws;
@@ -139,16 +151,20 @@ private:
     }
   }
 
-  static void SendError(const std::shared_ptr<rtc::WebSocket>& wss, const std::string& error, const std::string& message) {
-    if (!wss || !wss->isOpen()) {
-      return;
-    }
-    LGE << "Sending error: " << error << " - " << message;
-    Json const response = {
-        {"type", "error"},
-        {"error", error},
-        {"message", message}};
-    wss->send(response.dump());
+  static void SendError(const std::shared_ptr<rtc::WebSocket>& wss, const std::string& error, const std::string& message, const std::optional<PeerId>& for_peer = std::nullopt) {
+      if (!wss || !wss->isOpen()) {
+          return;
+      }
+      LGE << "Sending error: " << error << " - " << message;
+      Json response = {
+          {"type", "error"},
+          {"error", error},
+          {"message", message}};
+
+      if (for_peer) {
+          response["for_peer"] = *for_peer;
+      }
+      wss->send(response.dump());
   }
 };
 
