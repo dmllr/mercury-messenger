@@ -14,12 +14,10 @@
 #include <android/native_window_jni.h>
 #include <media/NdkMediaCodec.h>
 
-#include <rtc/rtc.hpp>
-
 #include "hela/eillance/common/event_queue.hpp"
 #include "hela/eillance/capture/video_config.hpp"
 #include "hela/eillance/logging/logging.h"
-#include "hela/eillance/rtc/viewer.hpp"
+#include "hela/eillance/rtc/client.hpp"
 #include "hela/eillance/utils/h264.hpp"
 #include "hela/eillance/utils/string.hpp"
 
@@ -28,7 +26,7 @@
 
 namespace hela::eillance {
 
-class ViewerEngine {
+class ClientEngine {
   JavaVM* jvm_;
   jobject native_bridge_{nullptr};
   SharedPreferences prefs_;
@@ -37,14 +35,13 @@ class ViewerEngine {
   AMediaCodec* media_codec_{nullptr};
   std::atomic<bool> is_codec_configured_{false};
 
-  RtcViewer rtc_viewer_{};
+  RtcClient rtc_client_{};
   H264Parser h264_parser_{};
 
-  EventQueue::SubscriberTypeId configure_subscriber_id_{0};
   DispatchQueue codec_dispatch_queue_{"Codec", 1};
 
 public:
-  ViewerEngine(JavaVM* jvm, JNIEnv* env, jobject instance)
+  ClientEngine(JavaVM* jvm, JNIEnv* env, jobject instance)
       : jvm_(jvm),
         native_bridge_(env->NewGlobalRef(instance)),
         prefs_(jvm, native_bridge_) {
@@ -62,20 +59,20 @@ public:
       device_name = std::string(model_string);
       prefs_.SetString("device_name", device_name);
     }
-    rtc_viewer_.SetId("V-" + device_id);
-    rtc_viewer_.SetName(device_name);
-    rtc_viewer_.SetStatusCallback(
+    rtc_client_.SetId(device_id);
+    rtc_client_.SetName(device_name);
+    rtc_client_.SetStatusCallback(
         [this](const std::string& peer_id, EventSource sender, int status) {
           SetStatus(peer_id, sender, status);
         });
   }
 
-  ViewerEngine(ViewerEngine&&) = delete;
-  ViewerEngine(const ViewerEngine&) = delete;
-  auto& operator=(ViewerEngine&&) = delete;
-  auto& operator=(const ViewerEngine&) = delete;
+  ClientEngine(ClientEngine&&) = delete;
+  ClientEngine(const ClientEngine&) = delete;
+  auto& operator=(ClientEngine&&) = delete;
+  auto& operator=(const ClientEngine&) = delete;
 
-  ~ViewerEngine() {
+  ~ClientEngine() {
     Terminate();
 
     JNIEnv* env = AttachCurrentThreadIfNeeded();
@@ -92,18 +89,21 @@ public:
   }
 
   void SetTargetSurface(JNIEnv* env, jobject surface) {
+    if (native_window_ != nullptr) {
+      ANativeWindow_release(native_window_);
+    }
     native_window_ = ANativeWindow_fromSurface(env, surface);
   }
 
   void Start() {
-    rtc_viewer_.Start();
-    rtc_viewer_.SetPeerChangedCallback([this](const std::vector<Device>& peers) {
+    rtc_client_.Start();
+    rtc_client_.SetPeerListUpdateCallback([this](const std::vector<Device>& peers) {
       UpdatePeerList(peers);
     });
-    rtc_viewer_.SetProfileReceivedCallback([this](const std::string& peer_id, const Device::Profile& profile) {
+    rtc_client_.SetProfileReceivedCallback([this](const std::string& peer_id, const Device::Profile& profile) {
       UpdateProfile(peer_id, profile);
     });
-    rtc_viewer_.SetFrameReceivedCallback([this](const rtc::binary& frame) {
+    rtc_client_.SetFrameReceivedCallback([this](const rtc::binary& frame) {
       h264_parser_.ProcessFrame(frame);
       if (codec_dispatch_queue_.Size() > 10) {
         LOGW << "Decoding queue is full, dropping frames.";
@@ -113,15 +113,11 @@ public:
         HandleInputBuffer(frame);
       });
     });
-    configure_subscriber_id_ = EventQueue::Instance().Subscribe<VideoConfig>(
-        [this](VideoConfig config) { ConfigureSurfaceResolution(config); });
-    LOGI << "Viewer engine is initialized and ready.";
+    LOGI << "Client engine is initialized and ready.";
   }
 
-  void StopStreaming() {
+  void Stop() {
     is_codec_configured_ = false;
-    EventQueue::Instance().Unsubscribe<VideoConfig>(configure_subscriber_id_);
-    rtc_viewer_.StopStreaming();
     if (media_codec_ != nullptr) {
       AMediaCodec_stop(media_codec_);
       AMediaCodec_delete(media_codec_);
@@ -135,22 +131,23 @@ public:
   }
 
   void Terminate() {
-    StopStreaming();
-    rtc_viewer_.Terminate();
+    Stop();
+    rtc_client_.Terminate();
   }
 
-  /// @brief Requests an updated peer list from the signaling server.
   void RequestPeerListUpdate() {
-    rtc_viewer_.RequestPeerList();
+    rtc_client_.RequestPeerList();
   }
 
-  void SendStreamRequest(const std::string& peer_id, const Config& config) {
+  void Call(const std::string& peer_id) {
     InitH264Parser();
-    rtc_viewer_.SendStreamRequest(peer_id, config);
+    rtc_client_.Call(peer_id);
   }
 
-  void SendConfigurationRequest(const std::string& peer_id, const Config& config) {
-    rtc_viewer_.SendConfigurationRequest(peer_id, config);
+  void ConfigureVideoCapture(const VideoConfig& config) {
+    Config coreConfig;
+    coreConfig.video_config = config;
+    rtc_client_.Configure(coreConfig);
   }
 
 private:
@@ -159,10 +156,8 @@ private:
     const jint res = jvm_->GetEnv((void**)&env, JNI_VERSION_1_6);
     switch (res) {
       case JNI_OK:
-        // the current thread is already attached, return the JNIEnv.
         return env;
       case JNI_EDETACHED:
-        // the current thread is not attached, try to attach.
         if (jvm_->AttachCurrentThread(&env, nullptr) == JNI_OK) {
           return env;
         } else {
@@ -173,7 +168,6 @@ private:
     }
   }
 
-  /// @brief Initializes the codec with @c VideoConfig.
   void ConfigureCodec(const VideoConfig& conf) {
     if (is_codec_configured_) {
       LOGI << "Codec already configured, skipping reconfiguration.";
@@ -186,14 +180,11 @@ private:
       return;
     }
 
-    LOGI << "Configuring decoder with dimensions: " << conf.width << "x" << conf.height
-         << " (rotation: " << conf.rotation << " degrees)";
+    LOGI << "Configuring decoder with dimensions: " << conf.width << "x" << conf.height;
 
-    const auto color_format = 0x7f000789;  // COLOR_FormatSurface
     AMediaFormat_setString(format, AMEDIAFORMAT_KEY_MIME, "video/avc");
     AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_WIDTH, conf.width);
     AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_HEIGHT, conf.height);
-    AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_COLOR_FORMAT, color_format);
 
     media_codec_ = AMediaCodec_createDecoderByType("video/avc");
     if (media_codec_ == nullptr) {
@@ -215,7 +206,6 @@ private:
     AMediaFormat_delete(format);
   }
 
-  /// @brief Sends the parsed frame data to the codec.
   void HandleInputBuffer(const std::vector<std::byte>& frameBuffer) {
     if (!is_codec_configured_) {
       LOGW << "Codec not configured yet, dropping frame.";
@@ -234,49 +224,30 @@ private:
       }
     }
 
-    ProcessAllOutputBuffers();
-  }
-
-  /// @brief Process all available output buffers.
-  void ProcessAllOutputBuffers() {
-    if (!is_codec_configured_ || media_codec_ == nullptr) {
-      return;
-    }
-
     AMediaCodecBufferInfo info;
-    int output_buffer_index;
-
-    // Use a timeout to avoid blocking
-    const int64_t timeoutUs = 5000; // 5ms
-    while ((output_buffer_index = AMediaCodec_dequeueOutputBuffer(media_codec_, &info, timeoutUs)) >= 0) {
+    auto output_buffer_index = AMediaCodec_dequeueOutputBuffer(media_codec_, &info, 0);
+    if (output_buffer_index >= 0) {
       AMediaCodec_releaseOutputBuffer(media_codec_, output_buffer_index, info.size > 0);
     }
   }
 
-  /// @brief Initializes the H.264 parser and sets up callbacks.
   void InitH264Parser() {
     h264_parser_.Reset();
     h264_parser_.SetOnConfigureCallback([this](const VideoConfig conf) {
       LOGI << "Configuration change callback triggered, configuring codec...";
       ConfigureCodec(conf);
-      EventQueue::Instance().Push(conf);
+      ConfigureSurfaceResolution(conf);
     });
   }
 
   void ConfigureSurfaceResolution(VideoConfig config) {
-    if (native_bridge_ == nullptr) {
-      return;
-    }
-
+    if (native_bridge_ == nullptr) return;
     auto* env = AttachCurrentThreadIfNeeded();
-    if (env == nullptr) {
-      return;
-    }
+    if (env == nullptr) return;
 
     jclass callback_class = env->GetObjectClass(native_bridge_);
     jmethodID callback_method = env->GetMethodID(callback_class, "onStreamInfoChange", "(III)V");
     if (callback_method != nullptr) {
-      // NOLINTNEXTLINE(*-vararg)
       env->CallVoidMethod(native_bridge_, callback_method,
                           static_cast<int>(config.width),
                           static_cast<int>(config.height),
@@ -286,23 +257,20 @@ private:
 
   static void SetBridgeProfile(JNIEnv* env, jobject& java_list, const Device::Profile& profile) {
     auto& classref = ClassRefs::Instance();
+    jmethodID add_method = env->GetMethodID(classref.Class("java/util/ArrayList").Class(), "add", "(Ljava/lang/Object;)Z");
 
     for (const auto& camera : profile) {
       jstring cam_id = env->NewStringUTF(camera.id.c_str());
       jstring cam_name = env->NewStringUTF(camera.name.c_str());
-
       jobject res_list = classref.Class("java/util/ArrayList").NewObject(env);
-      jmethodID add_method = env->GetMethodID(classref.Class("java/util/ArrayList").Class(), "add", "(Ljava/lang/Object;)Z");
 
       for (const auto& res : camera.resolutions) {
         jobject jres = classref.Class("hela/eillance/ndkio/Resolution").NewObject(env, res.width, res.height);
-        // NOLINTNEXTLINE(*-vararg)
         env->CallBooleanMethod(res_list, add_method, jres);
         env->DeleteLocalRef(jres);
       }
 
       jobject jcamera = classref.Class("hela/eillance/ndkio/Camera").NewObject(env, cam_id, cam_name, res_list);
-      // NOLINTNEXTLINE(*-vararg)
       env->CallBooleanMethod(java_list, add_method, jcamera);
 
       env->DeleteLocalRef(jcamera);
@@ -313,25 +281,14 @@ private:
   }
 
   void UpdatePeerList(const std::vector<Device>& peers) {
-    if (native_bridge_ == nullptr) {
-      return;
-    }
-
-    JNIEnv* env = nullptr;
-    jvm_->AttachCurrentThread(&env, nullptr);
-    if (env == nullptr) {
-      return;
-    }
+    if (native_bridge_ == nullptr) return;
+    JNIEnv* env = AttachCurrentThreadIfNeeded();
+    if (env == nullptr) return;
 
     auto& classref = ClassRefs::Instance();
-
-    // Look up the callback method.
     jclass callback_cls = env->GetObjectClass(native_bridge_);
     jmethodID callback_method = env->GetMethodID(callback_cls, "onPeerListUpdate", "(Ljava/util/List;)V");
-    if (callback_method == nullptr) {
-      env->DeleteLocalRef(callback_cls);
-      return;
-    }
+    if (callback_method == nullptr) return;
 
     jobject java_list = classref.Class("java/util/ArrayList").NewObject(env);
     jmethodID add_method = env->GetMethodID(classref.Class("java/util/ArrayList").Class(), "add", "(Ljava/lang/Object;)Z");
@@ -340,11 +297,9 @@ private:
       jstring id = env->NewStringUTF(peer.id.c_str());
       jstring name = env->NewStringUTF(peer.name.c_str());
       jobject camera_list = classref.Class("java/util/ArrayList").NewObject(env);
-
       SetBridgeProfile(env, camera_list, peer.profile);
 
       jobject jpeer = classref.Class("hela/eillance/ndkio/Peer").NewObject(env, id, name, camera_list);
-      // NOLINTNEXTLINE(*-vararg)
       env->CallBooleanMethod(java_list, add_method, jpeer);
 
       env->DeleteLocalRef(jpeer);
@@ -353,59 +308,41 @@ private:
       env->DeleteLocalRef(camera_list);
     }
 
-    // NOLINTNEXTLINE(*-vararg)
     env->CallVoidMethod(native_bridge_, callback_method, java_list);
     env->DeleteLocalRef(java_list);
-    env->DeleteLocalRef(callback_cls);
   }
 
   void UpdateProfile(const std::string& peer_id, const Device::Profile& profile) {
-    if (native_bridge_ == nullptr) {
-      return;
-    }
-
-    JNIEnv* env = nullptr;
-    jvm_->AttachCurrentThread(&env, nullptr);
-    if (env == nullptr) {
-      return;
-    }
+    if (native_bridge_ == nullptr) return;
+    JNIEnv* env = AttachCurrentThreadIfNeeded();
+    if (env == nullptr) return;
 
     auto& classref = ClassRefs::Instance();
     jclass callback_cls = env->GetObjectClass(native_bridge_);
     jmethodID callback_method = env->GetMethodID(callback_cls, "onDeviceProfileReceived", "(Ljava/lang/String;Ljava/util/List;)V");
-    if (callback_method == nullptr) {
-      env->DeleteLocalRef(callback_cls);
-      return;
-    }
+    if (callback_method == nullptr) return;
 
     jstring jpeer_id = env->NewStringUTF(peer_id.c_str());
     jobject camera_list = classref.Class("java/util/ArrayList").NewObject(env);
     SetBridgeProfile(env, camera_list, profile);
 
-    // NOLINTNEXTLINE(*-vararg)
     env->CallVoidMethod(native_bridge_, callback_method, jpeer_id, camera_list);
 
     env->DeleteLocalRef(jpeer_id);
     env->DeleteLocalRef(camera_list);
-    env->DeleteLocalRef(callback_cls);
   }
 
   void SetStatus(const std::string& peer_id, EventSource sender, int status) {
     auto* env = AttachCurrentThreadIfNeeded();
-    if (env == nullptr) {
-      return;
-    }
+    if (env == nullptr) return;
 
     jclass callback_class = env->GetObjectClass(native_bridge_);
     jmethodID callback_method = env->GetMethodID(callback_class, "onStatusUpdate", "(Ljava/lang/String;II)V");
     if (callback_method != nullptr) {
       jstring j_peer_id = env->NewStringUTF(peer_id.c_str());
-      // NOLINTNEXTLINE(*-vararg)
       env->CallVoidMethod(native_bridge_, callback_method, j_peer_id, static_cast<int>(sender), status);
       env->DeleteLocalRef(j_peer_id);
     }
   }
-
 };
-
-}  // namespace hela::eillance
+}
