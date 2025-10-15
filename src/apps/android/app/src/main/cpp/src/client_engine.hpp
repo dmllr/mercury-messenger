@@ -22,44 +22,49 @@
 #include "hela/eillance/utils/string.hpp"
 
 #include "class_refs.hpp"
-#include "shared_preferences.hpp"
 
 namespace hela::eillance {
 
 class ClientEngine {
   JavaVM* jvm_;
   jobject native_bridge_{nullptr};
-  SharedPreferences prefs_;
 
   ANativeWindow* native_window_{nullptr};
   AMediaCodec* media_codec_{nullptr};
   std::atomic<bool> is_codec_configured_{false};
 
-  RtcClient rtc_client_{};
+  RtcClient rtc_client_;
   H264Parser h264_parser_{};
 
   DispatchQueue codec_dispatch_queue_{"Codec", 1};
+
+  static auto create_storage_config(JavaVM* jvm, jobject context) -> storage::Config {
+      storage::Config cfg;
+      cfg.platform_config = storage::Config::Android{jvm, context};
+      return cfg;
+  }
 
 public:
   ClientEngine(JavaVM* jvm, JNIEnv* env, jobject instance)
       : jvm_(jvm),
         native_bridge_(env->NewGlobalRef(instance)),
-        prefs_(jvm, native_bridge_) {
+        rtc_client_(create_storage_config(jvm, instance)) {
     EventQueue::Instance();
 
-    auto device_id = prefs_.GetString("device_id", "");
-    if (device_id.empty()) {
-      device_id = StringUtils::RandomString();
-      prefs_.SetString("device_id", device_id);
+    auto storage = rtc_client_.GetStorage();
+    std::string device_name;
+    auto stored_name = storage->Load("device_name");
+    if (stored_name.has_value() && !stored_name->empty()) {
+        device_name.assign(reinterpret_cast<const char*>(stored_name->data()), stored_name->size());
     }
-    auto device_name = prefs_.GetString("device_name", "");
+
     if (device_name.empty()) {
       char model_string[PROP_VALUE_MAX + 1];
       __system_property_get("ro.product.model", model_string);
       device_name = std::string(model_string);
-      prefs_.SetString("device_name", device_name);
+      std::vector<std::byte> name_bytes(device_name.begin(), device_name.end());
+      storage->Save("device_name", name_bytes);
     }
-    rtc_client_.SetId(device_id);
     rtc_client_.SetName(device_name);
     rtc_client_.SetStatusCallback(
         [this](const std::string& peer_id, EventSource sender, int status) {
@@ -136,7 +141,7 @@ public:
   }
 
   void RequestPeerListUpdate() {
-    rtc_client_.RequestPeerList();
+    rtc_client_.RequestPeerListUpdate();
   }
 
   void Call(const std::string& peer_id) {
@@ -345,4 +350,5 @@ private:
     }
   }
 };
-}
+
+} // namespace hela::eillance

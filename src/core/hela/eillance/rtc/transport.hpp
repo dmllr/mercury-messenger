@@ -1,12 +1,12 @@
 #pragma once
 
 #include <atomic>
-#include <cstdint>
 #include <cassert>
+#include <cstdint>
+#include <functional>
 #include <memory>
 #include <thread>
 #include <unordered_map>
-#include <functional>
 
 #include <nlohmann/json.hpp>
 #include <rtc/peerconnection.hpp>
@@ -28,6 +28,8 @@ public:
 
   virtual ~RtcTransportDelegate() = default;
   virtual void OnPeerReady(const std::shared_ptr<Peer>& peer) = 0;
+  virtual void OnPeerOnline(const std::string& peer_id) = 0;
+  virtual void OnSignalingErrorForPeer(const std::string& peer_id, const std::string& error) = 0;
   virtual void ProcessPeerMessage(Json message) = 0;
   virtual void ProcessSystemMessage(const std::string& type, Json message) = 0;
   virtual std::shared_ptr<Peer::Track> AddVideo(
@@ -46,7 +48,7 @@ class RtcTransport {
   std::string id_{};
   std::string device_name_{id_};
   std::atomic<bool> is_logged_in_{false};
-  std::atomic<bool> is_offline_{false};
+  std::atomic<bool> terminate_requested_{false};
 
   static constexpr auto minWaitBeforeReconnect = 1U;
   static constexpr auto maxWaitBeforeReconnect = 10U;
@@ -98,66 +100,21 @@ public:
   void Start() {
     assert(!id_.empty());
     LOGI << "The local ID is: " << id_.data();
-
-    if (ws_ != nullptr && ws_->isOpen()) {
-      LOGW << "The streamer service for ID " << id_.data() << " is started already, skipping...";
-      return;
-    }
-
-    auto ws_config = rtc::WebSocketConfiguration{
-        .disableTlsVerification = true,
-        .pingInterval = std::chrono::milliseconds(1000),
-    };
-
-    ReportServiceConnectionState(ServiceConnectionState::establishing);
-
-    ws_ = std::make_unique<rtc::WebSocket>(ws_config);
-    ws_->onOpen([this]() {
-      OnWebSocketOpen(); });
-    ws_->onClosed([this]() {
-      OnWebSocketClosed(); });
-    ws_->onError([this](const std::string& error) {
-      OnWebSocketError(error); });
-    ws_->onMessage(nullptr, [this](const std::string& data) {
-      OnWebSocketMessage(data); });
-
-    LOGI << "Signaling server URL is " << signalingServerUrl;
-
-    try {
-      ws_->open(signalingServerUrl);
-
-      LOGI << "Waiting for signaling to be connected...";
-      while (!ws_->isOpen()) {
-        if (ws_->isClosed()) {
-          return;
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
-      }
-      connection_attempt_ = 0;
-      is_offline_ = false;
-    } catch (const std::exception& e) {
-      LOGI << "Error: " << e.what();
-      if (ws_->isOpen()) {
-        ws_->close();
-      }
-      ReportServiceConnectionState(ServiceConnectionState::failure);
-    }
+    terminate_requested_ = false;
+    ConnectWebSocket();
   }
 
   void StopStreaming() {
-    is_offline_ = true;
-    for (auto& [peer_id, peer] : peers_) {
-      auto state = static_cast<int>(peer->GetState());
-      LOGI << "Closing peer " << peer_id << " in a " << state << " state.";
-      if ((peer->data_channel_ != nullptr) && peer->data_channel_->isOpen()) {
-        SendTerminationMessage(peer);
-        peer->data_channel_->close();
-      }
-      peer->peer_connection_->close();
+    for (auto& [peer_id, peer]: peers_) {
+        if (peer && peer->peer_connection_) {
+            peer->peer_connection_->close();
+        }
     }
+    peers_.clear();
   }
 
   void Terminate() {
+    terminate_requested_ = true;
     if (ws_ != nullptr) {
       StopStreaming();
       ws_->resetCallbacks();
@@ -189,29 +146,6 @@ public:
 
   auto CreatePeer(const std::string& peer_id) -> std::shared_ptr<Peer> {
     auto peer = std::make_shared<Peer>(CreatePeerConnection(peer_id));
-
-    peer->video_ = delegate_->AddVideo(
-        peer->peer_connection_,
-        [this, wc = make_weak_ptr(peer)]() {
-          DispatchQueue::MainThread().Dispatch([this, wc]() {
-            if (auto c = wc.lock()) {
-              AddToStream(c, true);
-            }
-          });
-          LOGI << "Video from " << id_ << " opened";
-        });
-
-    peer->audio_ = delegate_->AddAudio(
-        peer->peer_connection_,
-        [this, peer_id, wc = make_weak_ptr(peer)]() {
-          DispatchQueue::MainThread().Dispatch([this, wc]() {
-            if (auto c = wc.lock()) {
-              AddToStream(c, false);
-            }
-          });
-          LOGI << "Audio from " << id_ << " opened";
-        });
-
     return peer;
   }
 
@@ -220,10 +154,9 @@ public:
     WsSendMessage(message);
   }
 
-  void SendPeerDataChannelMessage(const std::string& peer_id, const Json& message) const {
-    auto peer = GetPeer(peer_id);
-    if (peer && peer->data_channel_ && peer->data_channel_->isOpen()) {
-      peer->data_channel_->send(message.dump());
+  void SendPeerDataChannelMessage(const std::shared_ptr<rtc::DataChannel>& dc, const Json& message) const {
+    if (dc && dc->isOpen()) {
+      dc->send(message.dump());
     }
   }
 
@@ -233,45 +166,93 @@ public:
     }
   }
 
+  void AddToStream(const std::shared_ptr<Peer>& peer, bool isAddingVideo) {
+    if (peer->GetState() == Peer::State::waiting) {
+      peer->SetState(isAddingVideo ? Peer::State::waitingForAudio : Peer::State::waitingForVideo);
+    } else if ((peer->GetState() == Peer::State::waitingForAudio && !isAddingVideo) ||
+               (peer->GetState() == Peer::State::waitingForVideo && isAddingVideo)) {
+      assert(peer->video_ != nullptr && peer->audio_ != nullptr);
+      peer->SetState(Peer::State::ready);
+    }
+
+    if (peer->GetState() == Peer::State::ready && delegate_) {
+      delegate_->OnPeerReady(peer);
+    }
+  }
+
 private:
+  void ConnectWebSocket() {
+      if (ws_ != nullptr && ws_->isOpen()) {
+          LOGW << "WebSocket is already open, skipping connection attempt.";
+          return;
+      }
+      if (terminate_requested_) {
+          LOGI << "Terminate requested, aborting connection attempt.";
+          return;
+      }
+
+      auto ws_config = rtc::WebSocketConfiguration{
+          .disableTlsVerification = true,
+      };
+
+      ReportServiceConnectionState(ServiceConnectionState::establishing);
+      ws_ = std::make_unique<rtc::WebSocket>(ws_config);
+      ws_->onOpen([this]() { OnWebSocketOpen(); });
+      ws_->onClosed([this]() { OnWebSocketClosed(); });
+      ws_->onError([this](const std::string& error) { OnWebSocketError(error); });
+      ws_->onMessage(nullptr, [this](const std::string& data) { OnWebSocketMessage(data); });
+
+      LOGI << "Connecting to signaling server: " << signalingServerUrl;
+      ws_->open(signalingServerUrl);
+  }
+
+
   void OnWebSocketOpen() {
     LOGI << "WebSocket connected, signaling ready";
     connection_attempt_ = 0;
-    DispatchQueue::MainThread().Dispatch([this]() {
-        Login();
-    });
+    wait_before_reconnect_ = minWaitBeforeReconnect;
     ReportServiceConnectionState(ServiceConnectionState::online);
+    Login();
   }
 
   void OnWebSocketClosed() {
-    LOGE << "WebSocket connection closed";
-    is_logged_in_ = false;
-    ReportServiceConnectionState(ServiceConnectionState::failure);
+      LOGW << "WebSocket connection closed";
+      is_logged_in_ = false;
 
-    if (is_offline_) {
-      return;
-    }
+      for (const auto& peer: peers_ | std::views::values) {
+          if(peer && peer->peer_connection_) {
+              peer->peer_connection_->close();
+          }
+      }
 
-    connection_attempt_++;
-    if (connection_attempt_ <= 1) {
-      wait_before_reconnect_ = 0;
-    } else if (connection_attempt_ > 1 && connection_attempt_ < maxConnectionAttempts) {
-      wait_before_reconnect_ = minWaitBeforeReconnect;
-    } else {
-      wait_before_reconnect_ = maxWaitBeforeReconnect;
-    }
-
-    DispatchQueue::MainThread().Dispatch([this]() {
-      std::this_thread::sleep_for(std::chrono::seconds(wait_before_reconnect_));
-      Start();
-    });
-    LOGI << "Scheduled WebSocket reconnect in " << wait_before_reconnect_ << "s";
+      ReportServiceConnectionState(ServiceConnectionState::disconnected);
+      ScheduleReconnect();
   }
 
   void OnWebSocketError(const std::string& error) {
     LOGE << "WebSocket connection failed: " << error.c_str();
+    is_logged_in_ = false;
     ReportServiceConnectionState(ServiceConnectionState::failure);
+    // onClosed will be called, which will schedule a reconnect
   }
+
+  void ScheduleReconnect() {
+      if (terminate_requested_) {
+          return;
+      }
+
+      connection_attempt_++;
+      LOGI << "Attempting to reconnect in " << wait_before_reconnect_ << "s (attempt " << connection_attempt_ << ")";
+      DispatchQueue::MainThread().DispatchAfter(std::chrono::seconds(wait_before_reconnect_), [this]() {
+          ConnectWebSocket();
+      });
+
+      // Exponential backoff
+      if (connection_attempt_ < maxConnectionAttempts) {
+          wait_before_reconnect_ = std::min(wait_before_reconnect_ * 2, maxWaitBeforeReconnect);
+      }
+  }
+
 
   void OnWebSocketMessage(const std::string& data) {
     const auto message = Json::parse(data);
@@ -309,7 +290,7 @@ private:
   }
 
   void Login() {
-    Json message = {
+    const Json message = {
         {"type", "login"},
         {"id", id_},
     };
@@ -324,12 +305,19 @@ private:
     peer_connection->onStateChange([this, peer_id](rtc::PeerConnection::State state) {
       LOGI << "State: " << static_cast<int>(state);
       ReportPeerStateChange(peer_id, EventSource::peerConnectionState, static_cast<int>(state));
-      if (state == rtc::PeerConnection::State::Disconnected ||
-          state == rtc::PeerConnection::State::Failed ||
-          state == rtc::PeerConnection::State::Closed) {
-        DispatchQueue::MainThread().Dispatch([this, peer_id]() {
-          RemovePeer(peer_id);
-        });
+
+      if (state == rtc::PeerConnection::State::Failed ||
+          state == rtc::PeerConnection::State::Disconnected) {
+        // If connection fails or disconnects, gracefully close it.
+        // The object will be removed when the state transitions to Closed.
+        if (auto peer = GetPeer(peer_id)) {
+            peer->peer_connection_->close();
+        }
+      } else if (state == rtc::PeerConnection::State::Closed) {
+          // Once closed, it's safe to remove and destroy the peer object.
+          DispatchQueue::MainThread().Dispatch([this, peer_id]() {
+              RemovePeer(peer_id);
+          });
       }
     });
 
@@ -366,20 +354,6 @@ private:
     return peer_connection;
   }
 
-  void AddToStream(const std::shared_ptr<Peer>& peer, bool isAddingVideo) {
-    if (peer->GetState() == Peer::State::waiting) {
-      peer->SetState(isAddingVideo ? Peer::State::waitingForAudio : Peer::State::waitingForVideo);
-    } else if ((peer->GetState() == Peer::State::waitingForAudio && !isAddingVideo) || (peer->GetState() == Peer::State::waitingForVideo && isAddingVideo)) {
-      // Audio and video tracks are collected now
-      assert(peer->video_ != nullptr && peer->audio_ != nullptr);
-      peer->SetState(Peer::State::ready);
-    }
-
-    if (peer->GetState() == Peer::State::ready && delegate_) {
-      delegate_->OnPeerReady(peer);
-    }
-  }
-
   void OnSystemMessage(Json message) {
     auto itr = message.find("type");
     if (itr == message.end()) {
@@ -388,15 +362,25 @@ private:
     auto type = itr->get<std::string>();
 
     if (type == "error") {
-      LOGE << "Signaling error received: " << message.value("error", "unknown");
-      ReportServiceConnectionState(ServiceConnectionState::failure);
-    } else {
+        auto error = message.value("error", "unknown");
+        LOGE << "Signaling error received: " << error;
+        if (auto for_peer_it = message.find("for_peer"); for_peer_it != message.end()) {
+            delegate_->OnSignalingErrorForPeer(for_peer_it->get<std::string>(), error);
+        } else {
+            ReportServiceConnectionState(ServiceConnectionState::failure);
+        }
+    } else if (type == "peer_online") {
+        if (auto id_itr = message.find("id"); id_itr != message.end()) {
+            delegate_->OnPeerOnline(id_itr->get<std::string>());
+        }
+    }
+    else {
       delegate_->ProcessSystemMessage(type, message);
     }
   }
 
   static void SendTerminationMessage(const std::shared_ptr<Peer>& peer) {
-    if (!peer->data_channel_->isOpen()) {
+    if (!peer->data_channel_ || !peer->data_channel_->isOpen()) {
       return;
     }
     const Json message = {
@@ -422,7 +406,7 @@ private:
     }
   };
 
-#if 0 // NOLINT(*-avoid-unconditional-preprocessor-if)
+#if 0  // NOLINT(*-avoid-unconditional-preprocessor-if)
   constexpr static auto signalingServerUrl = "wss://app.hela.me:8000";
 #else
 #if ANDROID

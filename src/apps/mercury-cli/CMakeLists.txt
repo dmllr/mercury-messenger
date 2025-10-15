@@ -3,6 +3,14 @@ project(mercury-cli CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+set(root "../../..")
+set(shared_src_path "${root}/src")
+set(shared_cmake_libs_path "${shared_src_path}/cmake")
+
+include("${shared_cmake_libs_path}/setup.cmake")
+include("${shared_cmake_libs_path}/import_remote.cmake")
+include("${shared_cmake_libs_path}/libftxui.cmake")
+
 add_executable(mercury-cli
   mercury.cpp
 )
@@ -12,4 +20,7 @@ target_compile_features(mercury-cli PRIVATE cxx_std_20)
 
 target_link_libraries(mercury-cli PRIVATE
   hela-eillance-core
+  screen
+  dom
+  component
 )
