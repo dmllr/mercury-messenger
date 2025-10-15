@@ -4,6 +4,7 @@
 #include <utility>
 
 #include <rtc/rtc.hpp>
+#include "hela/eillance/crypto/crypto.hpp"
 
 namespace hela::eillance {
 
@@ -39,12 +40,15 @@ struct Peer {
     ready
   };
 
-  explicit Peer(std::shared_ptr<rtc::PeerConnection> pc) : peer_connection_(std::move(pc)) {}
+  explicit Peer(std::shared_ptr<rtc::PeerConnection> pc) : peer_connection_(std::move(pc)) {
+    session_cipher_ = std::make_unique<crypto::SessionCipher>();
+  }
 
   std::shared_ptr<Track> video_;
   std::shared_ptr<Track> audio_;
   std::shared_ptr<rtc::DataChannel> data_channel_;
   std::shared_ptr<rtc::PeerConnection> peer_connection_;
+  std::unique_ptr<crypto::SessionCipher> session_cipher_;
 
   void SetState(State state) {
     const auto lock = std::unique_lock(mutex_);

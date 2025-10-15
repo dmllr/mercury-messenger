@@ -2,7 +2,6 @@
 
 #include <memory>
 #include <utility>
-
 #include <nlohmann/json.hpp>
 #include <rtc/rtc.h>
 
@@ -15,6 +14,8 @@
 #include "hela/eillance/rtc/stream_source.hpp"
 #include "hela/eillance/rtc/transport.hpp"
 #include "hela/eillance/utils/memory.h"
+#include "hela/eillance/crypto/crypto.hpp"
+
 
 namespace hela::eillance {
 
@@ -39,12 +40,14 @@ class RtcClient final : public RtcTransportDelegate {
   using PeerTrack = std::shared_ptr<Peer::Track>;
   using OnFrameReceivedCallback = std::function<void(const rtc::binary&)>;
   using OnProfileReceivedCallback = std::function<void(const std::string&, const Device::Profile&)>;
+  using OnChatMessageReceivedCallback = std::function<void(const std::string&, const std::string&)>;
 
   std::shared_ptr<Stream> av_stream_;
   std::shared_ptr<RtcTransport> transport_;
 
   std::shared_ptr<OnFrameReceivedCallback> on_frame_received_{};
   std::shared_ptr<OnProfileReceivedCallback> on_profile_received_{};
+  std::shared_ptr<OnChatMessageReceivedCallback> on_chat_message_received_{};
 
 public:
   explicit RtcClient() {
@@ -63,15 +66,16 @@ public:
   RtcClient(const RtcClient&) = delete;
   RtcClient& operator=(RtcClient&&) = delete;
   RtcClient& operator=(const RtcClient&) = delete;
-  ~RtcClient() = default;
+  ~RtcClient() override = default;
 
-  void SetId(const std::string& id) { transport_->SetId(id); }
-  void SetName(const std::string& name) { transport_->SetName(name); }
-  void Start() { transport_->Start(); }
-  void Terminate() { transport_->Terminate(); }
-  void SetStatusCallback(const std::function<void(const std::string& peer_id, EventSource, int)>& callback) { transport_->SetStatusCallback(callback); }
+  void SetId(const std::string& id) const { transport_->SetId(id); }
+  void SetName(const std::string& name) const { transport_->SetName(name); }
+  void Start() const { transport_->Start(); }
+  void Terminate() const { transport_->Terminate(); }
+  void SetStatusCallback(const std::function<void(const std::string& peer_id, EventSource, int)>& callback) const { transport_->SetStatusCallback(callback); }
   void SetFrameReceivedCallback(const OnFrameReceivedCallback& callback) { on_frame_received_ = std::make_shared<OnFrameReceivedCallback>(callback); }
   void SetProfileReceivedCallback(const OnProfileReceivedCallback& callback) { on_profile_received_ = std::make_shared<OnProfileReceivedCallback>(callback); }
+  void SetChatMessageReceivedCallback(const OnChatMessageReceivedCallback& callback) { on_chat_message_received_ = std::make_shared<OnChatMessageReceivedCallback>(callback); }
 
   void Call(const std::string& peer_id) {
     const auto peer = transport_->CreatePeer(peer_id);
@@ -79,16 +83,42 @@ public:
     transport_->AddPeer(peer_id, peer);
   }
 
-  void Configure(Config config) {
+  void Hangup(const std::string& peer_id) const {
+    if (const auto peer = transport_->GetPeer(peer_id); peer != nullptr) {
+        Json message = {{"type", "termination"}};
+        transport_->SendPeerDataChannelMessage(peer_id, message);
+        peer->peer_connection_->close();
+        transport_->RemovePeer(peer_id);
+    }
+  }
+
+  void SendChatMessage(const std::string& peer_id, const std::string& message) const {
+      if (const auto peer = transport_->GetPeer(peer_id); peer != nullptr && peer->session_cipher_->IsReady()) {
+          auto encrypted_payload = peer->session_cipher_->Encrypt(message);
+          if (encrypted_payload.empty()) {
+              LOGE << "Failed to encrypt chat message for peer " << peer_id;
+              return;
+          }
+          Json json_message = {
+              {"type", "chat"},
+              {"payload", rtc::binary(encrypted_payload.begin(), encrypted_payload.end())}
+          };
+          transport_->SendPeerDataChannelMessage(peer_id, json_message);
+      } else {
+          LOGW << "Cannot send message: peer " << peer_id << " not ready or session is not secure.";
+      }
+  }
+
+  void Configure(const Config& config) const {
     av_stream_->Video()->Configure(config);
     av_stream_->Audio()->Configure(config);
   }
 
-  void OnPeerReady(const std::shared_ptr<Peer>&) final {
+  void OnPeerReady(const std::shared_ptr<Peer>&) override {
     av_stream_->Start();
   }
 
-  void ProcessPeerMessage(Json message) final {
+  void ProcessPeerMessage(Json message) override {
     auto from_it = message.find("from");
     if (from_it == message.end()) return;
     auto peer_id = from_it->get<std::string>();
@@ -114,11 +144,11 @@ public:
     }
   }
 
-  void ProcessSystemMessage(const std::string& type, Json message) final {
+  void ProcessSystemMessage(const std::string& type, Json /*message*/) override {
     LOGW << "Unhandled system message of type: " << type;
   }
 
-  std::shared_ptr<Peer::Track> AddVideo(const std::shared_ptr<rtc::PeerConnection>& pc, const std::function<void(void)>& onOpen) final {
+  std::shared_ptr<Peer::Track> AddVideo(const std::shared_ptr<rtc::PeerConnection>& pc, const std::function<void(void)>& onOpen) override {
     auto video = rtc::Description::Video("video", rtc::Description::Direction::SendOnly);
     constexpr auto payload_type = 102;
     constexpr auto ssrc = 10001;
@@ -127,7 +157,7 @@ public:
 
     auto track = pc->addTrack(video);
 
-    auto rtpConfig = std::make_shared<rtc::RtpPacketizationConfig>(ssrc, "video-stream", payload_type, rtc::H264RtpPacketizer::defaultClockRate);
+    auto rtpConfig = std::make_shared<rtc::RtpPacketizationConfig>(ssrc, "video-stream", payload_type, rtc::H264RtpPacketizer::ClockRate);
     auto packetizer = std::make_shared<rtc::H264RtpPacketizer>(rtc::NalUnit::Separator::StartSequence, rtpConfig);
     auto srReporter = std::make_shared<rtc::RtcpSrReporter>(rtpConfig);
     packetizer->addToChain(srReporter);
@@ -139,7 +169,7 @@ public:
     return std::make_shared<Peer::Track>(track, srReporter);
   }
 
-  std::shared_ptr<Peer::Track> AddAudio(const std::shared_ptr<rtc::PeerConnection>& pc, const std::function<void(void)>& onOpen) final {
+  std::shared_ptr<Peer::Track> AddAudio(const std::shared_ptr<rtc::PeerConnection>& pc, const std::function<void(void)>& onOpen) override {
     auto audio = rtc::Description::Audio("audio", rtc::Description::Direction::SendOnly);
     constexpr auto payload_type = 111;
     constexpr auto ssrc = 10002;
@@ -159,7 +189,7 @@ public:
     return std::make_shared<Peer::Track>(track, srReporter);
   }
 
-  void OnTrack(const std::string&, std::shared_ptr<rtc::Track> track) final {
+  void OnTrack(const std::string&, std::shared_ptr<rtc::Track> track) override {
     if (track->mid().find("video") != std::string::npos) {
       auto depacketizer = std::make_shared<rtc::H264RtpDepacketizer>();
       track->setMediaHandler(depacketizer);
@@ -170,7 +200,7 @@ public:
   }
 
 private:
-  void SendSampleToPeers(const rtc::binary& sample, Stream::Source::Type type, uint64_t sampleTime) {
+  void SendSampleToPeers(const rtc::binary& sample, Stream::Source::Type type, uint64_t sampleTime) const {
     for (const auto& [id, peer] : transport_->GetPeers()) {
       if (peer->GetState() == Peer::State::ready) {
         auto track = (type == Stream::Source::Type::video) ? peer->video_ : peer->audio_;
@@ -193,10 +223,16 @@ private:
     }
   }
 
-  void ProcessDataChannelMessage(const std::string& peer_id, Json message) {
+  void ProcessDataChannelMessage(const std::string& peer_id, Json message) const {
     const auto itr = message.find("type");
-    if (itr == message.end()) return;
+    if (itr == message.end()) {
+      return;
+    }
     auto type = itr->get<std::string>();
+    const auto peer = transport_->GetPeer(peer_id);
+    if (!peer) {
+      return;
+    };
 
     if (type == "profile") {
       if (on_profile_received_) {
@@ -204,29 +240,68 @@ private:
       }
     } else if (type == "termination") {
       transport_->RemovePeer(peer_id);
+    } else if (type == "key_exchange") {
+        auto pub_key_bytes = message.at("key").get<rtc::binary>();
+        if (peer->session_cipher_->ComputeSharedSecret({pub_key_bytes.begin(), pub_key_bytes.end()})) {
+            LOGI << "Successfully computed shared secret with peer " << peer_id;
+            // If we are the callee, send back our key
+            if (!message.value("is_reply", false)) {
+                auto my_pub_key = peer->session_cipher_->GetPublicKey();
+                Json reply = {
+                    {"type", "key_exchange"},
+                    {"key", rtc::binary(my_pub_key.begin(), my_pub_key.end())},
+                    {"is_reply", true}
+                };
+                transport_->SendPeerDataChannelMessage(peer_id, reply);
+            }
+        } else {
+            LOGE << "Failed to compute shared secret with peer " << peer_id;
+        }
+    } else if (type == "chat") {
+        if (on_chat_message_received_ && peer->session_cipher_->IsReady()) {
+            auto payload = message.at("payload").get<rtc::binary>();
+            auto decrypted_message = peer->session_cipher_->Decrypt({payload.begin(), payload.end()});
+            if (!decrypted_message.empty()) {
+                (*on_chat_message_received_)(peer_id, decrypted_message);
+            } else {
+                LOGW << "Failed to decrypt message from " << peer_id;
+            }
+        }
     }
   }
 
-  void SetupDataChannel(const std::shared_ptr<Peer>& peer, const std::string& peer_id, const std::shared_ptr<rtc::DataChannel>& data_channel) {
+  void SetupDataChannel(const std::shared_ptr<Peer>& peer, const std::string& peer_id, const std::shared_ptr<rtc::DataChannel>& data_channel) const {
     peer->data_channel_ = data_channel;
-    data_channel->onOpen([this, peer_id]() {
-      const Json message = {
+    data_channel->onOpen([this, peer_id, peer]() {
+      // Send device profile
+      const Json profile_message = {
           {"type", "profile"},
           {"profile", GetDeviceProfileAsJson()},
       };
-      transport_->SendPeerDataChannelMessage(peer_id, message);
+      transport_->SendPeerDataChannelMessage(peer_id, profile_message);
+
+      // Initiate key exchange
+      auto my_pub_key = peer->session_cipher_->GetPublicKey();
+      Json key_exchange_message = {
+        {"type", "key_exchange"},
+        {"key", rtc::binary(my_pub_key.begin(), my_pub_key.end())},
+        {"is_reply", false}
+      };
+      transport_->SendPeerDataChannelMessage(peer_id, key_exchange_message);
     });
     data_channel->onMessage(nullptr, [this, peer_id](const std::string& msg) {
-      ProcessDataChannelMessage(peer_id, Json::parse(msg));
+      try {
+        ProcessDataChannelMessage(peer_id, Json::parse(msg));
+      } catch (const Json::parse_error& e) {
+        LOGE << "Failed to parse data channel message: " << e.what();
+      }
     });
   }
 
-  std::shared_ptr<rtc::DataChannel> CreateDataChannel(const std::shared_ptr<rtc::PeerConnection>& pc, const std::string& peer_id) {
+  std::shared_ptr<rtc::DataChannel> CreateDataChannel(const std::shared_ptr<rtc::PeerConnection>& pc, const std::string& peer_id) const {
     auto data_channel = pc->createDataChannel("control");
     auto peer = transport_->GetPeer(peer_id);
     if (!peer) {
-        // This can happen if the peer is created and then quickly disconnected.
-        // To be safe, we create a temporary peer object to hold the datachannel.
         peer = std::make_shared<Peer>(pc);
     }
     SetupDataChannel(peer, peer_id, data_channel);
