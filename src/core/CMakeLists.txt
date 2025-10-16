@@ -7,20 +7,6 @@ if (NOT ANDROID)
   include("../cmake/libffmpeg.cmake")
 endif ()
 
-add_library(hela-eillance-storage STATIC
-  "hela/eillance/storage/persistent_storage.cpp"
-)
-target_include_directories(hela-eillance-storage PUBLIC
-  "${CMAKE_CURRENT_SOURCE_DIR}"
-)
-target_link_libraries(hela-eillance-storage PUBLIC
-  plog
-)
-if(ANDROID)
-  find_library(log-lib log)
-  target_link_libraries(hela-eillance-storage PRIVATE log-lib)
-endif()
-
 
 add_library(hela-eillance-core INTERFACE)
 target_include_directories(hela-eillance-core INTERFACE
@@ -28,7 +14,6 @@ target_include_directories(hela-eillance-core INTERFACE
   "${CMAKE_BINARY_DIR}"
 )
 target_link_libraries(hela-eillance-core INTERFACE
-  hela-eillance-storage
   libminiaudio
   datachannel-static
   opus
@@ -48,3 +33,7 @@ endif ()
 if (NOT WIN32 AND NOT ANDROID)
   target_link_libraries(hela-eillance-core INTERFACE stdc++fs)
 endif ()
+if(ANDROID)
+  find_library(log-lib log)
+  target_link_libraries(hela-eillance-core PRIVATE log-lib)
+endif()

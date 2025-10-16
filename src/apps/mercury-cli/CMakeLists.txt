@@ -20,7 +20,5 @@ target_compile_features(mercury-cli PRIVATE cxx_std_20)
 
 target_link_libraries(mercury-cli PRIVATE
   hela-eillance-core
-  screen
-  dom
-  component
+  libftxui
 )
