@@ -15,7 +15,7 @@ Development Environment used to compile and deploy the Signaling server.
 ### Oneliner
 
 ```shell
-docker run --rm -v ${PWD}:/workspace -v ${HOME}/.ssh:/workspace/.ssh -w /workspace hela-eillance-devenv bash -c "cmake -GNinja -DCMAKE_BUILD_TYPE=Release -B build-deploy && cmake --build build-deploy --target hela-eillance-signaling --config Release && strip build-deploy/bin/hela-eillance-signaling && chmod 400 /workspace/.ssh/vm0.ssh.key && scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i /workspace/.ssh/vm0.ssh.key build-deploy/bin/hela-eillance-signaling ubuntu@vm0.hela.me:/var/app/signaling-server/"
+docker run --rm -v ${PWD}:/workspace -v ${HOME}/.ssh:/workspace/.ssh -w /workspace hela-eillance-devenv bash -c "cmake -GNinja -DCMAKE_BUILD_TYPE=Release -B build-deploy && cmake --build build-deploy --target mercury-server --config Release && strip build-deploy/bin/mercury-server && chmod 400 /workspace/.ssh/vm0.ssh.key && scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i /workspace/.ssh/vm0.ssh.key build-deploy/bin/mercury-server ubuntu@vm0.hela.me:/var/app/signaling-server/"
 ```
 
 ### CMake Configure
@@ -27,13 +27,13 @@ docker run --rm -v ${PWD}:/workspace -w /workspace hela-eillance-devenv bash -c 
 ### Build
 
 ```shell
-docker run --rm -v ${PWD}:/workspace -w /workspace hela-eillance-devenv bash -c "cmake --build build-deploy --target hela-eillance-signaling --config Release && strip build-deploy/bin/hela-eillance-signaling"
+docker run --rm -v ${PWD}:/workspace -w /workspace hela-eillance-devenv bash -c "cmake --build build-deploy --target mercury-server --config Release && strip build-deploy/bin/mercury-server"
 ```
 
 ### Deploy
 
 ```shell
-docker run --rm -v ${PWD}:/workspace -v ${HOME}/.ssh:/workspace/.ssh -w /workspace hela-eillance-devenv bash -c "chmod  400 /workspace/.ssh/vm0.ssh.key && scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i /workspace/.ssh/vm0.ssh.key build-deploy/bin/hela-eillance-signaling ubuntu@vm0.hela.me:/var/app/signaling-server/"
+docker run --rm -v ${PWD}:/workspace -v ${HOME}/.ssh:/workspace/.ssh -w /workspace hela-eillance-devenv bash -c "chmod  400 /workspace/.ssh/vm0.ssh.key && scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i /workspace/.ssh/vm0.ssh.key build-deploy/bin/mercury-server ubuntu@vm0.hela.me:/var/app/signaling-server/"
 ```
 
 ### Server-side configuration
@@ -58,7 +58,7 @@ User ubuntu
    ```
    
    ```shell
-   FIREBASE_API_KEY=... /var/app/signaling-server/hela-eillance-signaling --port=8000 --ssl-cert="/etc/letsencrypt/archive/app.hela.me/fullchain18.pem" --ssl-cert-key="/etc/letsencrypt/archive/app.hela.me/privkey18.pem"
+   FIREBASE_API_KEY=... /var/app/signaling-server/mercury-server --port=8000 --ssl-cert="/etc/letsencrypt/archive/app.hela.me/fullchain18.pem" --ssl-cert-key="/etc/letsencrypt/archive/app.hela.me/privkey18.pem"
    ```
    
    or
