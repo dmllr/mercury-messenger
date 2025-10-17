@@ -97,7 +97,7 @@ public:
   }
 
   /// Get the size of the queue.
-  auto Size() -> std::size_t {
+  [[nodiscard]] auto Size() const -> std::size_t {
     return queue_.size();
   }
 

@@ -13,6 +13,8 @@
 
 #include "hela/eillance/common/dispatch_queue.hpp"
 
+#include <ranges>
+
 namespace hela::eillance {
 
 class EventQueue {
@@ -103,11 +105,11 @@ public:
     }
 
     // Find subscribers for the event type.
-    if (subscribers_.find(type) != subscribers_.end()) {
+    if (subscribers_.contains(type)) {
       auto& subscribers = subscribers_.at(type);
 
       // Dispatch the event to subscribers.
-      for (const auto& [id, callback]: subscribers) {
+      for (const auto& callback: subscribers | std::views::values) {
         callback(contents);
       }
     }

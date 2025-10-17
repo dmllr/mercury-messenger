@@ -81,7 +81,7 @@ public:
     status_callback_ = std::make_shared<StatusCallbackFunction>(callback);
   }
 
-  [[maybe_unused]] auto GetServiceConnectionState() {
+  [[maybe_unused]] auto GetServiceConnectionState() const {
     return service_connection_state_;
   }
 
@@ -105,7 +105,7 @@ public:
   }
 
   void StopStreaming() {
-    for (auto& [peer_id, peer]: peers_) {
+    for (auto& peer: peers_ | std::views::values) {
         if (peer && peer->peer_connection_) {
             peer->peer_connection_->close();
         }
@@ -130,7 +130,7 @@ public:
   }
 
   auto GetPeer(const std::string& peer_id) const -> std::shared_ptr<Peer> {
-    if (auto it = peers_.find(peer_id); it != peers_.end()) {
+    if (const auto it = peers_.find(peer_id); it != peers_.end()) {
       return peers_.at(peer_id);
     }
     return nullptr;
@@ -166,7 +166,7 @@ public:
     }
   }
 
-  void AddToStream(const std::shared_ptr<Peer>& peer, bool isAddingVideo) {
+  void AddToStream(const std::shared_ptr<Peer>& peer, bool isAddingVideo) const {
     if (peer->GetState() == Peer::State::waiting) {
       peer->SetState(isAddingVideo ? Peer::State::waitingForAudio : Peer::State::waitingForVideo);
     } else if ((peer->GetState() == Peer::State::waitingForAudio && !isAddingVideo) ||
@@ -275,7 +275,7 @@ private:
     }
   }
 
-  void WsSendMessage(const Json& message) {
+  void WsSendMessage(const Json& message) const {
     if (!ws_ || !ws_->isOpen()) {
       LOGE << "Can't send a WebSocket message, the connection has been closed";
       return;
@@ -310,7 +310,7 @@ private:
           state == rtc::PeerConnection::State::Disconnected) {
         // If connection fails or disconnects, gracefully close it.
         // The object will be removed when the state transitions to Closed.
-        if (auto peer = GetPeer(peer_id)) {
+        if (const auto peer = GetPeer(peer_id)) {
             peer->peer_connection_->close();
         }
       } else if (state == rtc::PeerConnection::State::Closed) {
@@ -331,7 +331,7 @@ private:
       ReportPeerStateChange(peer_id, EventSource::gatheringState, static_cast<int>(state));
       if (state == rtc::PeerConnection::GatheringState::Complete) {
         // Gathering complete, send answer
-        if (auto peer_con = wpc.lock()) {
+        if (const auto peer_con = wpc.lock()) {
           const auto description = peer_con->localDescription();
           const Json message = {
               {"to", peer_id},
@@ -354,23 +354,23 @@ private:
     return peer_connection;
   }
 
-  void OnSystemMessage(Json message) {
-    auto itr = message.find("type");
+  void OnSystemMessage(Json message) const {
+    const auto itr = message.find("type");
     if (itr == message.end()) {
       return;
     }
     auto type = itr->get<std::string>();
 
     if (type == "error") {
-        auto error = message.value("error", "unknown");
+        const auto error = message.value("error", "unknown");
         LOGE << "Signaling error received: " << error;
-        if (auto for_peer_it = message.find("for_peer"); for_peer_it != message.end()) {
+        if (const auto for_peer_it = message.find("for_peer"); for_peer_it != message.end()) {
             delegate_->OnSignalingErrorForPeer(for_peer_it->get<std::string>(), error);
         } else {
             ReportServiceConnectionState(ServiceConnectionState::failure);
         }
     } else if (type == "peer_online") {
-        if (auto id_itr = message.find("id"); id_itr != message.end()) {
+        if (const auto id_itr = message.find("id"); id_itr != message.end()) {
             delegate_->OnPeerOnline(id_itr->get<std::string>());
         }
     }

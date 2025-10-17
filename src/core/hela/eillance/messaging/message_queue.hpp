@@ -47,17 +47,17 @@ class MessageQueue {
 
   void LoadQueue(const std::string& peer_id) {
     // This function must be called from within a locked context
-    if (queue_map_.count(peer_id) > 0) {
+    if (queue_map_.contains(peer_id)) {
       return;  // Already loaded
     }
 
     auto key = GetStorageKey(peer_id);
     if (storage_->Exists(key)) {
-      auto data_opt = storage_->Load(key);
+      const auto data_opt = storage_->Load(key);
       if (data_opt) {
         try {
           std::string json_str(reinterpret_cast<const char*>(data_opt->data()), data_opt->size());
-          nlohmann::json j = nlohmann::json::parse(json_str);
+          const nlohmann::json j = nlohmann::json::parse(json_str);
           queue_map_[peer_id] = j.get<std::deque<Message>>();
         } catch (const nlohmann::json::parse_error& e) {
           LOGE << "Failed to parse message queue for peer " << peer_id << ": " << e.what();
@@ -69,7 +69,7 @@ class MessageQueue {
 
   void SaveQueue(const std::string& peer_id) {
     // This function must be called from within a locked context
-    auto key = GetStorageKey(peer_id);
+    const auto key = GetStorageKey(peer_id);
     const auto& queue = queue_map_[peer_id];
 
     if (queue.empty()) {
@@ -79,10 +79,10 @@ class MessageQueue {
       return;
     }
 
-    nlohmann::json j = queue;
-    std::string json_str = j.dump();
+    const nlohmann::json j = queue;
+    const std::string json_str = j.dump();
     const auto* char_ptr = reinterpret_cast<const std::byte*>(json_str.data());
-    std::vector<std::byte> data(char_ptr, char_ptr + json_str.size());
+    const std::vector<std::byte> data(char_ptr, char_ptr + json_str.size());
     storage_->Save(key, data);
   }
 
@@ -96,7 +96,7 @@ public:
     LoadQueue(peer_id);
     auto& queue = queue_map_[peer_id];
 
-    Message msg{.id = StringUtils::RandomString(),
+    const Message msg{.id = StringUtils::RandomString(),
                 .peer_id = peer_id,
                 .content = content,
                 .timestamp = Time::Now()};
@@ -107,7 +107,7 @@ public:
   std::vector<Message> GetQueuedMessages(const std::string& peer_id) {
     const std::lock_guard<std::mutex> lock(mutex_);
     LoadQueue(peer_id);
-    if (queue_map_.count(peer_id) == 0) {
+    if (!queue_map_.contains(peer_id)) {
         return {};
     }
     auto& queue = queue_map_[peer_id];
@@ -116,7 +116,7 @@ public:
 
   void Clear(const std::string& peer_id) {
     const std::lock_guard<std::mutex> lock(mutex_);
-    if (queue_map_.count(peer_id) > 0) {
+    if (queue_map_.contains(peer_id)) {
       queue_map_[peer_id].clear();
     }
     SaveQueue(peer_id);

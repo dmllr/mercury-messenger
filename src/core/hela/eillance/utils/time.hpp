@@ -14,8 +14,8 @@ public:
   using Unit = std::uint64_t;
 
   static Unit Now() {
-    auto current_time = DefaultClock::now();
-    auto since_epoch = current_time.time_since_epoch();
+    const auto current_time = DefaultClock::now();
+    const auto since_epoch = current_time.time_since_epoch();
     return std::chrono::duration_cast<std::chrono::microseconds>(since_epoch).count();
   }
 };

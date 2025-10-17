@@ -84,7 +84,7 @@ private:
     // Remove emulation prevention bytes.
     // NOLINTNEXTLINE(*-pro-type-reinterpret-cast)
     const auto* byte_data = reinterpret_cast<const uint8_t*>(sps.data());
-    std::vector<uint8_t> rbsp = RemoveEmulationPreventionBytes(byte_data, sps.size());
+    const std::vector<uint8_t> rbsp = RemoveEmulationPreventionBytes(byte_data, sps.size());
     BitReader br(rbsp.data(), rbsp.size());
 
     const auto nal_header = br.ReadByte();
@@ -128,22 +128,22 @@ private:
       br.ReadBits(1);  // delta_pic_order_always_zero_flag.
       br.ReadSE();     // offset_for_non_ref_pic.
       br.ReadSE();     // offset_for_top_to_bottom_field.
-      auto num_ref_frames_in_pic_order_cnt_cycle = br.ReadUE();
+      const auto num_ref_frames_in_pic_order_cnt_cycle = br.ReadUE();
       for (uint32_t i = 0; i < num_ref_frames_in_pic_order_cnt_cycle; i++) {
         br.ReadSE();  // offset_for_ref_frame[i].
       }
     }
     br.ReadUE();     // max_num_ref_frames.
     br.ReadBits(1);  // gaps_in_frame_num_value_allowed_flag.
-    auto pic_width_in_mbs_minus1 = br.ReadUE();
-    auto pic_height_in_map_units_minus1 = br.ReadUE();
-    auto frame_mbs_only_flag = br.ReadBits(1);
+    const auto pic_width_in_mbs_minus1 = br.ReadUE();
+    const auto pic_height_in_map_units_minus1 = br.ReadUE();
+    const auto frame_mbs_only_flag = br.ReadBits(1);
     if (frame_mbs_only_flag == 0) {
       br.ReadBits(1);  // mb_adaptive_frame_field_flag.
     }
     br.ReadBits(1);  // direct_8x8_inference_flag.
 
-    auto frame_cropping_flag = br.ReadBits(1);
+    const auto frame_cropping_flag = br.ReadBits(1);
     uint32_t frame_crop_left_offset = 0;
     uint32_t frame_crop_right_offset = 0;
     uint32_t frame_crop_top_offset = 0;
@@ -155,8 +155,6 @@ private:
       frame_crop_bottom_offset = br.ReadUE();
     }
 
-    // Check for VUI parameters which might contain rotation information
-    uint32_t rotation = 0;
     auto vui_parameters_present_flag = br.ReadBits(1);
     if (vui_parameters_present_flag != 0U) {
       // VUI parameters parsing
@@ -175,8 +173,8 @@ private:
     }
 
     // Calculate picture dimensions.
-    uint32_t macroblock_width = pic_width_in_mbs_minus1 + 1;
-    uint32_t macroblock_height = pic_height_in_map_units_minus1 + 1;
+    const auto macroblock_width = pic_width_in_mbs_minus1 + 1;
+    const auto macroblock_height = pic_height_in_map_units_minus1 + 1;
     uint32_t frame_height = macroblock_height * 16;
     if (frame_mbs_only_flag == 0) {
       frame_height *= 2;
@@ -219,7 +217,7 @@ private:
   static uint32_t ParseSeiForRotation(const std::vector<std::byte>& sei) {
     // NOLINTNEXTLINE(*-pro-type-reinterpret-cast)
     const auto* byte_data = reinterpret_cast<const uint8_t*>(sei.data());
-    std::vector<uint8_t> rbsp = RemoveEmulationPreventionBytes(byte_data, sei.size());
+    const std::vector<uint8_t> rbsp = RemoveEmulationPreventionBytes(byte_data, sei.size());
 
     // Skip NAL header
     if (rbsp.size() < 2) return 0;
@@ -309,7 +307,7 @@ void H264Parser::ProcessFrame(const rtc::binary& data) {
     }
 
     // The NALU starts immediately after the start code.
-    auto nalu_start = pos + start_code_len;
+    const auto nalu_start = pos + start_code_len;
 
     // Skip if we're at the end of the data
     if (nalu_start >= data.size()) {

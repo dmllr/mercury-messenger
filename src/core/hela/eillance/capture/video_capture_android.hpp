@@ -101,7 +101,7 @@ public:
     return Time::uS / config_.frameRate;
   }
 
-  void Configure(Config config) {
+  void Configure(const Config& config) {
     ConfigureVideo(config.video_config);
   }
 

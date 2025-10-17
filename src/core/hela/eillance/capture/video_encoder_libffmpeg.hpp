@@ -121,22 +121,22 @@ public:
 #endif
   }
 
-  Packet EncodeBuffer(void* frames) {
+  Packet EncodeBuffer(void* frames) const {
     if (codec_context_ == nullptr) {
       return {};
     }
 
     const auto size = codec_context_->width * codec_context_->height;
-    av_frame_->data[0] = reinterpret_cast<std::uint8_t*>(frames);
+    av_frame_->data[0] = static_cast<std::uint8_t*>(frames);
     av_frame_->data[1] = std::next(av_frame_->data[0], size);
     av_frame_->data[2] = std::next(av_frame_->data[1], size / 4);
     av_frame_->pts = Time::Now();
 
-    if (int ret = avcodec_send_frame(codec_context_, av_frame_); ret < 0) {
+    if (const auto ret = avcodec_send_frame(codec_context_, av_frame_); ret < 0) {
       LOGE << "Error encoding frame in avcodec_send_frame.";
       return {};
     }
-    if (int ret = avcodec_receive_packet(codec_context_, packet_); ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+    if (const auto ret = avcodec_receive_packet(codec_context_, packet_); ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
       return {};
     } else if (ret < 0) {
       LOGE << "Error encoding frame in avcodec_receive_packet.";

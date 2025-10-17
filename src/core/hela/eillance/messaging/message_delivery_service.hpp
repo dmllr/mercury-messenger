@@ -59,7 +59,7 @@ public:
           return;
       }
 
-      if (pending_connections_.count(peer_id)) {
+      if (pending_connections_.contains(peer_id)) {
           return;  // Already trying to connect
       }
 
@@ -72,22 +72,22 @@ private:
   void scheduleCheck(int delay_s) {
     if (!is_running_) return;
     dispatch_queue_.DispatchAfter(std::chrono::seconds(delay_s), [this, delay_s]() {
-      checkForQueuedMessages();
+      CheckForQueuedMessages();
       // Exponential backoff
-      int next_delay = std::min(delay_s * 2, MAX_RETRY_DELAY_S);
+      const auto next_delay = std::min(delay_s * 2, MAX_RETRY_DELAY_S);
       scheduleCheck(next_delay);
     });
   }
 
-  void checkForQueuedMessages() {
+  void CheckForQueuedMessages() {
     if (!contact_manager_) {
       return;
     }
-    auto all_contacts = contact_manager_->getContacts();
-    for (const auto& contact: all_contacts) {
-      if (!message_queue_->GetQueuedMessages(contact.peer_id).empty()) {
+    auto all_contacts = contact_manager_->GetContacts();
+    for (const auto& [peer_id, status]: all_contacts) {
+      if (!message_queue_->GetQueuedMessages(peer_id).empty()) {
         // We have messages for this contact, let's try to deliver them.
-        attemptDelivery(contact.peer_id);
+        attemptDelivery(peer_id);
       }
     }
   }

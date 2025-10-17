@@ -46,7 +46,7 @@ public:
     device_config_.capture.channels = AudioConfig::channels;
     device_config_.sampleRate = AudioConfig::sampleRate;
     device_config_.pUserData = this;
-    device_config_.dataCallback = [](ma_device* device, void*, const void* frames, ma_uint32 nb_samples) {
+    device_config_.dataCallback = [](ma_device* device, void*, const void* frames, const ma_uint32 nb_samples) {
       assert(nb_samples == AudioConfig::frameSize);
       auto* self = static_cast<AudioCapture*>(device->pUserData);
       if (self == nullptr) {
@@ -58,11 +58,11 @@ public:
 
       TELEMETRY(
           if (self->fps_counter % (TelemetryInterval * AudioConfig::samplesPerSecond) == 0) {
-            auto elapsed = (Time::Now() - self->last_fps_milestone) / Time::uS;
-            auto fetch_fps = static_cast<double>(self->load_counter) / elapsed;
+            const auto elapsed = (Time::Now() - self->last_fps_milestone) / Time::uS;
+            const auto fetch_fps = static_cast<double>(self->load_counter) / elapsed;
             self->load_counter = 0;
 
-            auto capture_fps = static_cast<double>(self->fps_counter) / elapsed;
+            const auto capture_fps = static_cast<double>(self->fps_counter) / elapsed;
             self->last_fps_milestone = Time::Now();
             self->fps_counter = 0;
 

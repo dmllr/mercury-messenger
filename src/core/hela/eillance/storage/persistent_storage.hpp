@@ -241,7 +241,7 @@ public:
                 if (!file.is_open()) {
                     return std::nullopt;
                 }
-                std::streamsize size = file.tellg();
+                const std::streamsize size = file.tellg();
                 file.seekg(0, std::ios::beg);
 
                 std::vector<std::byte> buffer(size);
@@ -281,16 +281,16 @@ public:
   PersistentStorage(PersistentStorage&&) noexcept = default;
   PersistentStorage& operator=(PersistentStorage&&) noexcept = default;
 
-  auto Save(const std::string& key, const std::vector<std::byte>& value) -> bool {
+  auto Save(const std::string& key, const std::vector<std::byte>& value) const -> bool {
     return pimpl_->Save(key, value);
   }
-  auto Load(const std::string& key) -> std::optional<std::vector<std::byte>> {
+  auto Load(const std::string& key) const -> std::optional<std::vector<std::byte>> {
     return pimpl_->Load(key);
   }
-  auto Exists(const std::string& key) -> bool {
+  auto Exists(const std::string& key) const -> bool {
     return pimpl_->Exists(key);
   }
-  auto Delete(const std::string& key) -> bool {
+  auto Delete(const std::string& key) const -> bool {
     return pimpl_->Delete(key);
   }
 
