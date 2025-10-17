@@ -192,7 +192,7 @@ public:
     sei.push_back(std::byte{0x05});
 
     // Construct the SEI message content
-    std::string rotation_text = "rotation-degrees:" + std::to_string(rotation);
+    const std::string rotation_text = "rotation-degrees:" + std::to_string(rotation);
     std::vector<std::byte> payload;
 
     // UUID for Android's rotation metadata (using a common format)
@@ -202,12 +202,12 @@ public:
         0x90, 0xBD, 0x29, 0xE5, 0x06, 0x8D, 0x4C, 0x85
     };
 
-    for (uint8_t byte : uuid) {
+    for (const uint8_t byte : uuid) {
       payload.push_back(std::byte{byte});
     }
 
     // Add the rotation string
-    for (char c : rotation_text) {
+    for (const char c : rotation_text) {
       payload.push_back(std::byte{static_cast<uint8_t>(c)});
     }
 
@@ -249,7 +249,7 @@ public:
            data[pos+2] == std::byte{0x01})) {
 
         // Get NAL unit type
-        size_t header_offset = (data[pos+2] == std::byte{0x01}) ? 3 : 4;
+        const size_t header_offset = (data[pos+2] == std::byte{0x01}) ? 3 : 4;
         std::byte nal_type = data[pos + header_offset] & std::byte{0x1F};
 
         // If we found SPS (7) or PPS (8), continue to the next NAL

@@ -24,7 +24,7 @@ struct Peer {
           reporter_(std::move(reporter)) {
     }
 
-    auto Send(const rtc::binary& message) {
+    auto Send(const rtc::binary& message) const {
       return track_->send(message);
     }
 

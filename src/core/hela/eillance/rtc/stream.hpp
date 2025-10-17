@@ -74,7 +74,7 @@ public:
 private:
   rtc::synchronized_callback<Source::Type, uint64_t, rtc::binary> sampleHandler_;
 
-  auto UnsafePrepareForSample() -> std::pair<std::shared_ptr<Source>, Source::Type> {
+  auto UnsafePrepareForSample() const -> std::pair<std::shared_ptr<Source>, Source::Type> {
     std::shared_ptr<Source> src;
     Source::Type srct{};
     uint64_t next_time{};
@@ -88,14 +88,14 @@ private:
       next_time = video_->GetSampleTime();
     }
 
-    auto current_time = Time::Now();
+    const auto current_time = Time::Now();
 
     TELEMETRY(
         LOGD << "AT: " << audio_->GetSampleTime() << "\n"
              << "VT: " << video_->GetSampleTime() << "\n"
              << " T: " << ((srct == Source::Type::audio) ? "Audio" : "Video") << "\n";)
     if (next_time > current_time) {
-      auto wait_time = next_time - current_time;
+      const auto wait_time = next_time - current_time;
       std::this_thread::sleep_for(std::chrono::microseconds(wait_time));
     }
     return {src, srct};
@@ -106,7 +106,7 @@ private:
       return;
     }
     auto [ss, sst] = UnsafePrepareForSample();
-    auto sample = ss->GetSample();
+    const auto sample = ss->GetSample();
     sampleHandler_(sst, ss->GetSampleTime(), sample);
     ss->LoadNextSample();
     dispatchQueue_.Dispatch([this]() {
@@ -119,7 +119,7 @@ public:
     sampleHandler_ = std::move(handler);
   }
 
-  auto inline IsRunning() {
+  auto IsRunning() const {
     return isRunning_;
   }
 

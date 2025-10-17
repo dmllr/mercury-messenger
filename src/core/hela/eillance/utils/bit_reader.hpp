@@ -14,7 +14,7 @@ namespace hela::eillance {
 /// @brief A simple bitstream reader for SPS parsing.
 class BitReader {
 public:
-  BitReader(const std::uint8_t* data, std::uint32_t size)
+  BitReader(const std::uint8_t* data, const std::uint32_t size)
       : data_(data), size_(size), byte_offset_(0), bit_offset_(0) {}
 
   // Read a single bit (returns in 'bit').
@@ -32,7 +32,7 @@ public:
   }
 
   // Read n bits and return as an unsigned integer.
-  std::uint32_t ReadBits(std::uint32_t n) {
+  std::uint32_t ReadBits(const std::uint32_t n) {
     assert(n < 8 * sizeof(std::uint32_t));
     std::uint32_t bits = 0;
     for (std::uint32_t i = 0U; i < n; i++) {
@@ -61,7 +61,7 @@ public:
     }
 
     // Read the remaining bits after the leading 0s
-    std::uint32_t rest = ReadBits(zeros);
+    const auto rest = ReadBits(zeros);
 
     // Compute Exp-Golomb value
     return (1U << zeros) - 1 + rest;
@@ -69,7 +69,7 @@ public:
 
   // Read a signed Exp-Golomb coded value.
   std::int32_t ReadSE() {
-    std::uint32_t code_num = ReadUE();
+    const auto code_num = ReadUE();
     return ((code_num & 1U) != 0U)
                ? static_cast<int32_t>((code_num + 1) >> 1U)
                : -static_cast<int32_t>(code_num >> 1U);

@@ -26,13 +26,13 @@ std::vector<std::string> GetContactMenuEntries(const std::vector<hela::eillance:
   for (const auto& contact: contacts) {
     std::string status_str;
     switch (contact.status) {
-      case hela::eillance::identity::ContactStatus::PendingApproval:
+      case hela::eillance::identity::ContactStatus::pendingApproval:
         status_str = " [pending]";
         break;
-      case hela::eillance::identity::ContactStatus::AwaitingApproval:
+      case hela::eillance::identity::ContactStatus::awaitingApproval:
         status_str = " [ACTION REQUIRED]";
         break;
-      case hela::eillance::identity::ContactStatus::Confirmed:
+      case hela::eillance::identity::ContactStatus::confirmed:
         status_str = "";
         break;
     }
@@ -77,8 +77,8 @@ int main(int argc, char** argv) {
   // Redirect logs to a file to prevent interference with the UI.
   auto log_file_path = config_path / "mercury-cli.log";
   std::filesystem::create_directories(log_file_path.parent_path());
-  auto u8_path = log_file_path.u8string();
-  std::string log_file_path_str(reinterpret_cast<const char*>(u8_path.c_str()), u8_path.length());
+  const auto u8_path = log_file_path.u8string();
+  const auto log_file_path_str{std::string{reinterpret_cast<const char*>(u8_path.c_str()), u8_path.length()}};
   static plog::RollingFileAppender<plog::TxtFormatter> file_appender(log_file_path_str.c_str(), 5 * 1024 * 1024, 3);
   Log::Initialize(&file_appender, plog::info);
 
@@ -91,7 +91,7 @@ int main(int argc, char** argv) {
   auto view_model = std::make_unique<hela::eillance::view_model::MercuryViewModel>(rtc_client);
 
   // Connect UI to ViewModel. The ViewModel will notify the UI when to redraw.
-  view_model->setOnStateChangedCallback([&] { screen.Post(ftxui::Event::Custom); });
+  view_model->SetOnStateChangedCallback([&] { screen.Post(ftxui::Event::Custom); });
 
   // --- UI Components ---
   std::vector<std::string> contact_menu_entries;
@@ -101,7 +101,7 @@ int main(int argc, char** argv) {
 
   auto chat_renderer = ftxui::Renderer([&]() -> ftxui::Element {
     // The chat history is fetched from the ViewModel on each render.
-    auto state = view_model->getState();
+    const auto state = view_model->GetState();
     ftxui::Elements elements;
     for (const auto& line: state.chat_history) {
       elements.push_back(ftxui::text(line));
@@ -113,7 +113,7 @@ int main(int argc, char** argv) {
   // The input component only forwards the user input to the ViewModel.
   input_component |= ftxui::CatchEvent([&](const ftxui::Event& event) {
     if (event == ftxui::Event::Return) {
-      if (view_model->processUserInput(input_content)) {
+      if (view_model->ProcessUserInput(input_content)) {
         screen.Exit();
       }
       input_content.clear();
@@ -127,21 +127,21 @@ int main(int argc, char** argv) {
   // The main layout renderer, responsible for drawing the entire screen.
   auto layout = ftxui::Renderer(main_container, [&]() -> ftxui::Element {
     // Fetch the latest state from the ViewModel for rendering.
-    auto state = view_model->getState();
+    const auto state = view_model->GetState();
 
     // Update local UI structures needed by components.
     contact_menu_entries = GetContactMenuEntries(state.contacts);
 
     // Inform the ViewModel of the currently selected item in the UI.
-    view_model->selectContactByIndex(contact_menu_selected);
+    view_model->SelectContactByIndex(contact_menu_selected);
 
-    auto main_view = ftxui::hbox({contact_menu->Render() | ftxui::size(ftxui::WIDTH, ftxui::EQUAL, 40) | ftxui::border,
+    const auto main_view = ftxui::hbox({contact_menu->Render() | ftxui::size(ftxui::WIDTH, ftxui::EQUAL, 40) | ftxui::border,
                                   ftxui::vbox({chat_renderer->Render(),
                                                ftxui::separator(),
                                                input_component->Render() | ftxui::size(ftxui::HEIGHT, ftxui::EQUAL, 1)}) |
                                       ftxui::flex_grow});
 
-    const std::string status_line = " Mercury CLI | Your ID: " + state.my_id + " | Status: " + GetConnectionStatusString(state.connection_state);
+    const auto status_line = " Mercury CLI | Your ID: " + state.my_id + " | Status: " + GetConnectionStatusString(state.connection_state);
     return ftxui::window(ftxui::text(status_line), main_view);
   });
 

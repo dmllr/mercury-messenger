@@ -147,11 +147,11 @@ public:
     return Time::uS / config_.frameRate;
   }
 
-  void Configure(Config config) {
+  static void Configure(const Config& config) {
     ConfigureVideo(config.video_config);
   }
 
-  void ConfigureVideo(VideoConfig config) {
+  static void ConfigureVideo(const VideoConfig& config) {
     TELEMETRY(
         LOGI << "Video capture configuration event triggered: device " << config.cameraId << " " << config.width << "x" << config.height << " " << config.frameRate << "fps";)
     LOGW << "General video capture does not support configuration";
@@ -170,11 +170,11 @@ private:
 
     TELEMETRY(
         if (fps_counter_ % (TelemetryInterval * config_.frameRate) == 0) {
-          auto elapsed = (Time::Now() - last_fps_milestone_) / Time::uS;
-          auto fetch_fps = static_cast<double>(load_counter_) / elapsed;
+          const auto elapsed = (Time::Now() - last_fps_milestone_) / Time::uS;
+          const auto fetch_fps = static_cast<double>(load_counter_) / elapsed;
           load_counter_ = 0;
 
-          auto capture_fps = static_cast<double>(fps_counter_) / elapsed;
+          const auto capture_fps = static_cast<double>(fps_counter_) / elapsed;
           last_fps_milestone_ = Time::Now();
           fps_counter_ = 0;
 

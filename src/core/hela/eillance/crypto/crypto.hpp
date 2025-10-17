@@ -21,8 +21,8 @@ namespace hela::eillance::crypto {
 static std::string ToHex(const std::vector<std::byte>& data) {
   std::stringstream ss;
   ss << std::hex << std::setfill('0');
-  for (std::byte b: data) {
-    ss << std::setw(2) << static_cast<int>(b);
+  for (const auto byte: data) {
+    ss << std::setw(2) << static_cast<int>(byte);
   }
   return ss.str();
 }
@@ -31,8 +31,8 @@ static std::string ToHex(const std::vector<std::byte>& data) {
 static std::vector<std::byte> FromHex(const std::string& hex) {
   std::vector<std::byte> bytes;
   for (unsigned int i = 0; i < hex.length(); i += 2) {
-    std::string byteString = hex.substr(i, 2);
-    auto byte_val = static_cast<unsigned char>(strtol(byteString.c_str(), nullptr, 16));
+    const auto byte_string = hex.substr(i, 2);
+    const auto byte_val = static_cast<unsigned char>(strtol(byte_string.c_str(), nullptr, 16));
     bytes.push_back(std::byte{byte_val});
   }
   return bytes;
@@ -55,6 +55,7 @@ public:
   Identity& operator=(const Identity&) = delete;
   Identity(Identity&&) = default;
   Identity& operator=(Identity&&) = default;
+  ~Identity() = default;
 
   static std::unique_ptr<Identity> CreateNew() {
     const EvpPkeyCtxPtr ctx(EVP_PKEY_CTX_new_id(EVP_PKEY_ED25519, nullptr), EVP_PKEY_CTX_free);
@@ -72,12 +73,12 @@ public:
   }
 
   static std::unique_ptr<Identity> LoadFromMemory(const std::string& pem_data) {
-    BioPtr bio(BIO_new_mem_buf(pem_data.c_str(), -1), BIO_free);
+    const BioPtr bio(BIO_new_mem_buf(pem_data.c_str(), -1), BIO_free);
     if (!bio) {
       return nullptr;
     }
     EVP_PKEY* pkey_ptr = PEM_read_bio_PrivateKey(bio.get(), nullptr, nullptr, nullptr);
-    if (!pkey_ptr) {
+    if (pkey_ptr == nullptr) {
       return nullptr;
     }
     return std::unique_ptr<Identity>(new Identity(EvpPkeyPtr(pkey_ptr, EVP_PKEY_free)));
@@ -91,27 +92,27 @@ public:
     if (!file) {
       return nullptr;
     }
-    std::string pem_data((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    const std::string pem_data((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
     return LoadFromMemory(pem_data);
   }
 
-  std::string SaveToMemory() const {
-    BioPtr bio(BIO_new(BIO_s_mem()), BIO_free);
+  [[nodiscard]] std::string SaveToMemory() const {
+    const BioPtr bio(BIO_new(BIO_s_mem()), BIO_free);
     if (!bio) {
       return "";
     }
     if (PEM_write_bio_PrivateKey(bio.get(), pkey_.get(), nullptr, nullptr, 0, nullptr, nullptr) <= 0) {
       return "";
     }
-    BUF_MEM* buffer_ptr = nullptr;
+    BUF_MEM* buffer_ptr = nullptr; // NOLINT(*-const-correctness)
     BIO_get_mem_ptr(bio.get(), &buffer_ptr);
-    if (!buffer_ptr || !buffer_ptr->data || buffer_ptr->length == 0) {
+    if ((buffer_ptr == nullptr) || (buffer_ptr->data == nullptr) || buffer_ptr->length == 0) {
       return "";
     }
     return {buffer_ptr->data, buffer_ptr->length};
   }
 
-  bool Save(const std::filesystem::path& path) const {
+  [[nodiscard]] bool Save(const std::filesystem::path& path) const {
     std::filesystem::create_directories(path.parent_path());
     std::ofstream file(path, std::ios::binary);
     if (!file) {
@@ -121,7 +122,7 @@ public:
     return file.good();
   }
 
-  std::string GetId() const {
+  [[nodiscard]] std::string GetId() const {
     size_t len = 0;
     if (EVP_PKEY_get_raw_public_key(pkey_.get(), nullptr, &len) <= 0 || len == 0) {
       return "";
@@ -133,8 +134,8 @@ public:
     return ToHex(pub_key);
   }
 
-  std::vector<std::byte> Sign(const std::string& message) const {
-    std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)> ctx(EVP_MD_CTX_new(), EVP_MD_CTX_free);
+  [[nodiscard]] std::vector<std::byte> Sign(const std::string& message) const {
+    const std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)> ctx(EVP_MD_CTX_new(), EVP_MD_CTX_free);
     if (!ctx) {
       return {};
     }
@@ -155,11 +156,11 @@ public:
 
   static bool Verify(const std::string& id, const std::string& message, const std::vector<std::byte>& signature) {
     auto pub_key_bytes = FromHex(id);
-    EvpPkeyPtr pkey(EVP_PKEY_new_raw_public_key(EVP_PKEY_ED25519, nullptr, reinterpret_cast<const unsigned char*>(pub_key_bytes.data()), pub_key_bytes.size()), EVP_PKEY_free);
+    const EvpPkeyPtr pkey(EVP_PKEY_new_raw_public_key(EVP_PKEY_ED25519, nullptr, reinterpret_cast<const unsigned char*>(pub_key_bytes.data()), pub_key_bytes.size()), EVP_PKEY_free);
     if (!pkey) {
       return false;
     }
-    std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)> ctx(EVP_MD_CTX_new(), EVP_MD_CTX_free);
+    const std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)> ctx(EVP_MD_CTX_new(), EVP_MD_CTX_free);
     if (!ctx) {
       return false;
     }
@@ -179,7 +180,7 @@ public:
     GenerateEphemeralKey();
   }
 
-  std::vector<std::byte> GetPublicKey() const {
+  [[nodiscard]] std::vector<std::byte> GetPublicKey() const {
     size_t len = 0;
     if (EVP_PKEY_get_raw_public_key(ephemeral_key_.get(), nullptr, &len) <= 0 || len == 0) {
       return {};
@@ -192,7 +193,7 @@ public:
   }
 
   bool ComputeSharedSecret(const std::vector<std::byte>& peer_public_key_bytes) {
-    EvpPkeyPtr peer_key(EVP_PKEY_new_raw_public_key(EVP_PKEY_X25519, nullptr, reinterpret_cast<const unsigned char*>(peer_public_key_bytes.data()), peer_public_key_bytes.size()), EVP_PKEY_free);
+    const EvpPkeyPtr peer_key(EVP_PKEY_new_raw_public_key(EVP_PKEY_X25519, nullptr, reinterpret_cast<const unsigned char*>(peer_public_key_bytes.data()), peer_public_key_bytes.size()), EVP_PKEY_free);
     if (!peer_key) {
       LOGE << "Failed to create peer public key";
       return false;
@@ -214,7 +215,7 @@ public:
       return false;
     }
 
-    size_t secret_len;
+    size_t secret_len{};
     if (EVP_PKEY_derive(ctx.get(), nullptr, &secret_len) <= 0) {
       LOGE << "Failed to determine shared secret length";
       return false;
@@ -230,12 +231,14 @@ public:
     return true;
   }
 
-  auto IsReady() const -> bool {
+  [[nodiscard]] auto IsReady() const -> bool {
     return !shared_secret_.empty();
   }
 
-  auto Encrypt(const std::string& plaintext) const -> std::vector<std::byte> {
-    if (!IsReady()) return {};
+  [[nodiscard]] auto Encrypt(const std::string& plaintext) const -> std::vector<std::byte> {
+    if (!IsReady()) {
+      return {};
+    }
 
     const EVP_CIPHER* cipher = EVP_aes_256_gcm();
     std::vector<std::byte> ciphertext(plaintext.size() + EVP_CIPHER_block_size(cipher));
@@ -244,7 +247,7 @@ public:
 
     RAND_bytes(reinterpret_cast<unsigned char*>(iv.data()), iv.size());
 
-    EvpCipherCtxPtr ctx(EVP_CIPHER_CTX_new(), EVP_CIPHER_CTX_free);
+    const EvpCipherCtxPtr ctx(EVP_CIPHER_CTX_new(), EVP_CIPHER_CTX_free);
     EVP_EncryptInit_ex(ctx.get(), cipher, nullptr, nullptr, nullptr);
     EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_SET_IVLEN, static_cast<int>(iv.size()), nullptr);
     EVP_EncryptInit_ex(ctx.get(), nullptr, nullptr, reinterpret_cast<const unsigned char*>(shared_secret_.data()), reinterpret_cast<const unsigned char*>(iv.data()));
@@ -256,7 +259,7 @@ public:
     EVP_EncryptFinal_ex(ctx.get(), reinterpret_cast<unsigned char*>(ciphertext.data()) + len, &len);
     ciphertext_len += len;
 
-    EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_GET_TAG, 16, reinterpret_cast<unsigned char*>(tag.data()));
+    EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_GET_TAG, 16, tag.data());
 
     std::vector<std::byte> result;
     result.insert(result.end(), iv.begin(), iv.end());
@@ -266,12 +269,14 @@ public:
     return result;
   }
 
-  auto Decrypt(const std::vector<std::byte>& encrypted_data) const -> std::string {
-    if (!IsReady()) return "";
+  [[nodiscard]] auto Decrypt(const std::vector<std::byte>& encrypted_data) const -> std::string {
+    if (!IsReady()) {
+      return "";
+    }
 
     const EVP_CIPHER* cipher = EVP_aes_256_gcm();
-    int iv_len = EVP_CIPHER_iv_length(cipher);
-    int tag_len = 16;
+    const auto iv_len = EVP_CIPHER_iv_length(cipher);
+    constexpr auto tag_len = 16;
 
     if (encrypted_data.size() < static_cast<size_t>(iv_len + tag_len)) {
       return "";
@@ -280,11 +285,11 @@ public:
     const std::byte* iv = encrypted_data.data();
     const std::byte* tag = encrypted_data.data() + iv_len;
     const std::byte* ciphertext = encrypted_data.data() + iv_len + tag_len;
-    int ciphertext_len = static_cast<int>(encrypted_data.size()) - iv_len - tag_len;
+    const auto ciphertext_len = static_cast<int>(encrypted_data.size()) - iv_len - tag_len;
 
     std::vector<unsigned char> plaintext(ciphertext_len);
 
-    EvpCipherCtxPtr ctx(EVP_CIPHER_CTX_new(), EVP_CIPHER_CTX_free);
+    const EvpCipherCtxPtr ctx(EVP_CIPHER_CTX_new(), EVP_CIPHER_CTX_free);
     EVP_DecryptInit_ex(ctx.get(), cipher, nullptr, nullptr, nullptr);
     EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_SET_IVLEN, iv_len, nullptr);
     EVP_DecryptInit_ex(ctx.get(), nullptr, nullptr, reinterpret_cast<const unsigned char*>(shared_secret_.data()), reinterpret_cast<const unsigned char*>(iv));
@@ -295,13 +300,13 @@ public:
 
     EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_SET_TAG, tag_len, const_cast<unsigned char*>(reinterpret_cast<const unsigned char*>(tag)));
 
-    int ret = EVP_DecryptFinal_ex(ctx.get(), plaintext.data() + len, &len);
+    const auto ret = EVP_DecryptFinal_ex(ctx.get(), plaintext.data() + len, &len);
     if (ret > 0) {
       plaintext_len += len;
       return std::string(reinterpret_cast<char*>(plaintext.data()), plaintext_len);
-    } else {
-      return "";
     }
+
+    return "";
   }
 
 

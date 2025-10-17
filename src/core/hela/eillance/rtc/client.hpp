@@ -88,10 +88,10 @@ public:
           }
         });
 
-    transport_->SetStatusCallback([this](const std::string& peer_id, EventSource source, int state_val) {
+    transport_->SetStatusCallback([this](const std::string& peer_id, const EventSource source, int state_val) {
       if (source == EventSource::peerConnectionState) {
-        auto state = static_cast<rtc::PeerConnection::State>(state_val);
-        if (state == rtc::PeerConnection::State::Disconnected ||
+        if (auto state = static_cast<rtc::PeerConnection::State>(state_val);
+            state == rtc::PeerConnection::State::Disconnected ||
             state == rtc::PeerConnection::State::Failed ||
             state == rtc::PeerConnection::State::Closed) {
           delivery_service_->connectionAttemptFinished(peer_id);
@@ -99,7 +99,7 @@ public:
       }
     });
 
-    av_stream_->OnSample([this, ws = make_weak_ptr(av_stream_)](Stream::Source::Type type, uint64_t sampleTime, const rtc::binary& sample) {
+    av_stream_->OnSample([this, ws = make_weak_ptr(av_stream_)](const Stream::Source::Type type, const uint64_t sampleTime, const rtc::binary& sample) {
       SendSampleToPeers(sample, type, sampleTime);
     });
   }
@@ -147,14 +147,14 @@ public:
   }
 
   void StartVoiceCall(const std::string& peer_id) {
-    auto peer = transport_->GetPeer(peer_id);
+    const auto peer = transport_->GetPeer(peer_id);
     if (!peer) {
       LOGW << "Cannot start voice call, not connected to peer " << peer_id;
       return;
     }
     if (!peer->audio_) {
       peer->audio_ = AddAudio(peer->peer_connection_, [this, wpeer = make_weak_ptr(peer)]() {
-        if (auto p = wpeer.lock()) {
+        if (const auto p = wpeer.lock()) {
           transport_->AddToStream(p, false);
         }
       });
@@ -164,14 +164,14 @@ public:
   }
 
   void StartVideoCall(const std::string& peer_id) {
-    auto peer = transport_->GetPeer(peer_id);
+    const auto peer = transport_->GetPeer(peer_id);
     if (!peer) {
       LOGW << "Cannot start video call, not connected to peer " << peer_id;
       return;
     }
     if (!peer->video_) {
       peer->video_ = AddVideo(peer->peer_connection_, [this, wpeer = make_weak_ptr(peer)]() {
-        if (auto p = wpeer.lock()) {
+        if (const auto p = wpeer.lock()) {
           transport_->AddToStream(p, true);
         }
       });
@@ -182,31 +182,31 @@ public:
 
   // Public methods for contact management
   void AddContact(const std::string& peer_id) const {
-    if (contact_manager_->addContact(peer_id)) {
+    if (contact_manager_->AddContact(peer_id)) {
       LOGI << "Queueing contact request for " << peer_id;
       const Json msg = {{"type", "contact_add_request"}};
       message_queue_->Enqueue(peer_id, msg.dump());
       delivery_service_->attemptDelivery(peer_id);
       if (on_contact_status_changed_) {
-        (*on_contact_status_changed_)(peer_id, identity::ContactStatus::PendingApproval);
+        (*on_contact_status_changed_)(peer_id, identity::ContactStatus::pendingApproval);
       }
     }
   }
 
   void ConfirmContact(const std::string& peer_id) const {
-    if (contact_manager_->confirmContact(peer_id)) {
+    if (contact_manager_->ConfirmContact(peer_id)) {
       LOGI << "Queueing contact confirmation for " << peer_id;
       const Json msg = {{"type", "contact_confirm"}};
       message_queue_->Enqueue(peer_id, msg.dump());
       delivery_service_->attemptDelivery(peer_id);
       if (on_contact_status_changed_) {
-        (*on_contact_status_changed_)(peer_id, identity::ContactStatus::Confirmed);
+        (*on_contact_status_changed_)(peer_id, identity::ContactStatus::confirmed);
       }
     }
   }
 
   auto GetContacts() const -> std::vector<identity::Contact> {
-    return contact_manager_->getContacts();
+    return contact_manager_->GetContacts();
   }
 
   void Hangup(const std::string& peer_id) const {
@@ -243,27 +243,27 @@ public:
 
         // Also, the PeerConnection object created for this attempt is now useless,
         // so we should close and remove it.
-        if (auto peer = transport_->GetPeer(peer_id)) {
+        if (const auto peer = transport_->GetPeer(peer_id)) {
             peer->peer_connection_->close();
         }
     }
   }
 
   void ProcessPeerMessage(Json message) override {
-    auto from_it = message.find("from");
+    const auto from_it = message.find("from");
     if (from_it == message.end()) {
       return;
     }
     auto peer_id = from_it->get<std::string>();
 
-    auto type_it = message.find("type");
+    const auto type_it = message.find("type");
     if (type_it == message.end()) {
       return;
     }
     auto type = type_it->get<std::string>();
 
     if (type == "offer") {
-      if (!contact_manager_->isConfirmedContact(peer_id)) {
+      if (!contact_manager_->IsConfirmedContact(peer_id)) {
         LOGW << "Ignoring offer from non-confirmed contact: " << peer_id;
         return;
       }
@@ -271,7 +271,7 @@ public:
       if (transport_->GetPeer(peer_id)) {
         LOGI << "Received offer for existing peer " << peer_id << ", probably renegotiation.";
       }
-      auto sdp = message["sdp"].get<std::string>();
+      const auto sdp = message["sdp"].get<std::string>();
       const std::shared_ptr<Peer> peer = transport_->CreatePeer(peer_id);
       peer->peer_connection_->onDataChannel([this, peer_id, peer](const std::shared_ptr<rtc::DataChannel>& data_channel) {
         if (data_channel->label() == "data") {
@@ -284,8 +284,8 @@ public:
       transport_->AddPeer(peer_id, peer);
     } else if (type == "answer") {
       if (const auto peer = transport_->GetPeer(peer_id); peer != nullptr) {
-        auto sdp = message["sdp"].get<std::string>();
-        auto answer = rtc::Description(sdp, type);
+        const auto sdp = message["sdp"].get<std::string>();
+        const auto answer = rtc::Description(sdp, type);
         peer->peer_connection_->setRemoteDescription(answer);
       }
     }
@@ -305,10 +305,10 @@ public:
     auto track = pc->addTrack(video);
 
     auto rtp_config = std::make_shared<rtc::RtpPacketizationConfig>(ssrc, "video-stream", payload_type, rtc::H264RtpPacketizer::ClockRate);
-    auto packetizer = std::make_shared<rtc::H264RtpPacketizer>(rtc::NalUnit::Separator::StartSequence, rtp_config);
-    auto sr_reporter = std::make_shared<rtc::RtcpSrReporter>(rtp_config);
+    const auto packetizer = std::make_shared<rtc::H264RtpPacketizer>(rtc::NalUnit::Separator::StartSequence, rtp_config);
+    const auto sr_reporter = std::make_shared<rtc::RtcpSrReporter>(rtp_config);
     packetizer->addToChain(sr_reporter);
-    auto nack_responder = std::make_shared<rtc::RtcpNackResponder>();
+    const auto nack_responder = std::make_shared<rtc::RtcpNackResponder>();
     packetizer->addToChain(nack_responder);
     track->setMediaHandler(packetizer);
     track->onOpen(onOpen);
@@ -325,10 +325,10 @@ public:
     auto track = pc->addTrack(audio);
 
     auto rtp_config = std::make_shared<rtc::RtpPacketizationConfig>(ssrc, "audio-stream", payload_type, rtc::OpusRtpPacketizer::DefaultClockRate);
-    auto packetizer = std::make_shared<rtc::OpusRtpPacketizer>(rtp_config);
-    auto sr_reporter = std::make_shared<rtc::RtcpSrReporter>(rtp_config);
+    const auto packetizer = std::make_shared<rtc::OpusRtpPacketizer>(rtp_config);
+    const auto sr_reporter = std::make_shared<rtc::RtcpSrReporter>(rtp_config);
     packetizer->addToChain(sr_reporter);
-    auto nack_responder = std::make_shared<rtc::RtcpNackResponder>();
+    const auto nack_responder = std::make_shared<rtc::RtcpNackResponder>();
     packetizer->addToChain(nack_responder);
     track->setMediaHandler(packetizer);
     track->onOpen(onOpen);
@@ -336,9 +336,9 @@ public:
     return std::make_shared<Peer::Track>(track, sr_reporter);
   }
 
-  void OnTrack(const std::string&, std::shared_ptr<rtc::Track> track) override {
+  void OnTrack(const std::string&, const std::shared_ptr<rtc::Track> track) override {
     if (track->mid().find("video") != std::string::npos) {
-      auto depacketizer = std::make_shared<rtc::H264RtpDepacketizer>();
+      const auto depacketizer = std::make_shared<rtc::H264RtpDepacketizer>();
       track->setMediaHandler(depacketizer);
       track->onFrame([this](const rtc::binary& data, rtc::FrameInfo) {
         if (on_frame_received_) {
@@ -348,8 +348,8 @@ public:
     }
   }
 
-  void SendChatMessage(const std::string& peer_id, const std::string& message) {
-    if (!contact_manager_->getContact(peer_id)) {
+  void SendChatMessage(const std::string& peer_id, const std::string& message) const {
+    if (!contact_manager_->GetContact(peer_id)) {
         LOGE << "Cannot send message to " << peer_id << ". Not a contact.";
         return;
     }
@@ -359,7 +359,7 @@ public:
       DirectSend(peer, peer_id, message);
     } else {
       LOGI << "Peer " << peer_id << " is offline or not ready. Buffering message.";
-      Json json_msg = {{"type", "chat"}, {"content", message}};
+      const Json json_msg = {{"type", "chat"}, {"content", message}};
       message_queue_->Enqueue(peer_id, json_msg.dump());
       delivery_service_->attemptDelivery(peer_id);
     }
@@ -369,7 +369,7 @@ private:
   void DirectSend(const std::shared_ptr<Peer>& peer, const std::string& peer_id, const std::string& message) const {
     if (!peer || !peer->data_channel_ || !peer->data_channel_->isOpen() || !peer->session_cipher_->IsReady()) {
       LOGE << "Direct send called but peer is not ready. Re-queuing message for " << peer_id;
-      Json json_msg = {{"type", "chat"}, {"content", message}};
+      const Json json_msg = {{"type", "chat"}, {"content", message}};
       message_queue_->Enqueue(peer_id, json_msg.dump());
       return;
     }
@@ -387,15 +387,15 @@ private:
     transport_->SendPeerDataChannelMessage(peer->data_channel_, json_message);
   }
 
-  void SendSampleToPeers(const rtc::binary& sample, Stream::Source::Type type, uint64_t sampleTime) const {
+  void SendSampleToPeers(const rtc::binary& sample, Stream::Source::Type type, const uint64_t sampleTime) const {
     for (const auto& [id, peer]: transport_->GetPeers()) {
       if (peer->GetState() == Peer::State::ready) {
         auto track = (type == Stream::Source::Type::video) ? peer->video_ : peer->audio_;
         if (track) {
-          auto elapsedSeconds = static_cast<double>(sampleTime) / Time::uS;
-          const auto rtpConfig = track->Reporter()->rtpConfig;
-          auto elapsedTimestamp = rtpConfig->secondsToTimestamp(elapsedSeconds);
-          rtpConfig->timestamp = rtpConfig->startTimestamp + elapsedTimestamp;
+          const auto elapsed_seconds = static_cast<double>(sampleTime) / Time::uS;
+          const auto rtp_config = track->Reporter()->rtpConfig;
+          const auto elapsed_timestamp = rtp_config->secondsToTimestamp(elapsed_seconds);
+          rtp_config->timestamp = rtp_config->startTimestamp + elapsed_timestamp;
 
           if (!sample.empty()) {
             track->Send(sample);
@@ -410,7 +410,7 @@ private:
     if (itr == message.end()) {
       return;
     }
-    auto type = itr->get<std::string>();
+    const auto type = itr->get<std::string>();
     const auto peer = transport_->GetPeer(peer_id);
     if (!peer) {
       return;
@@ -439,16 +439,16 @@ private:
         LOGE << "Failed to compute shared secret with peer " << peer_id;
       }
     } else if (type == "contact_add_request") {
-      if (contact_manager_->receiveContactRequest(peer_id)) {
+      if (contact_manager_->ReceiveContactRequest(peer_id)) {
         if (on_contact_request_) {
           (*on_contact_request_)(peer_id);
         }
       }
     } else if (type == "contact_confirm") {
-      if (contact_manager_->markAsConfirmed(peer_id)) {
+      if (contact_manager_->MarkAsConfirmed(peer_id)) {
         LOGI << "Contact " << peer_id << " has confirmed your request.";
         if (on_contact_status_changed_) {
-          (*on_contact_status_changed_)(peer_id, identity::ContactStatus::Confirmed);
+          (*on_contact_status_changed_)(peer_id, identity::ContactStatus::confirmed);
         }
       }
     } else if (type == "chat") {
@@ -466,8 +466,8 @@ private:
     }
   }
 
-  void SendQueuedMessages(const std::string& peer_id) {
-    auto messages = message_queue_->GetQueuedMessages(peer_id);
+  void SendQueuedMessages(const std::string& peer_id) const {
+    const auto messages = message_queue_->GetQueuedMessages(peer_id);
     if (messages.empty()) {
       return;
     }

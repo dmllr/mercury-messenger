@@ -17,9 +17,9 @@ class IdManager {
 
   void LoadOrGenerateIdentity() {
     if (storage_->Exists(IDENTITY_KEY_FILE)) {
-      auto pem_data_opt = storage_->Load(IDENTITY_KEY_FILE);
+      const auto pem_data_opt = storage_->Load(IDENTITY_KEY_FILE);
       if (pem_data_opt) {
-        std::string pem_str(reinterpret_cast<const char*>(pem_data_opt->data()), pem_data_opt->size());
+        const std::string pem_str(reinterpret_cast<const char*>(pem_data_opt->data()), pem_data_opt->size());
         identity_ = crypto::Identity::LoadFromMemory(pem_str);
         if (identity_) {
           LOGI << "Identity loaded successfully. ID: " << identity_->GetId();
@@ -32,10 +32,10 @@ class IdManager {
     LOGI << "No existing identity found. Generating a new one.";
     identity_ = crypto::Identity::CreateNew();
     if (identity_) {
-      auto pem_str = identity_->SaveToMemory();
+      const auto pem_str = identity_->SaveToMemory();
       if (!pem_str.empty()) {
         const auto* char_ptr = reinterpret_cast<const std::byte*>(pem_str.data());
-        std::vector<std::byte> pem_bytes(char_ptr, char_ptr + pem_str.size());
+        const std::vector<std::byte> pem_bytes(char_ptr, char_ptr + pem_str.size());
         storage_->Save(IDENTITY_KEY_FILE, pem_bytes);
         LOGI << "New identity generated and saved. ID: " << identity_->GetId();
       }

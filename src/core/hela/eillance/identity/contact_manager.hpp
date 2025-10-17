@@ -12,17 +12,19 @@
 namespace hela::eillance::identity {
 
 enum class ContactStatus {
-  PendingApproval,   // We sent a request, waiting for them to confirm.
-  AwaitingApproval,  // They sent a request, we need to confirm.
-  Confirmed,
+  pendingApproval,   // We sent a request, waiting for them to confirm.
+  awaitingApproval,  // They sent a request, we need to confirm.
+  confirmed,
 };
 
 // Helper for JSON serialization
-NLOHMANN_JSON_SERIALIZE_ENUM(ContactStatus, {
-                                                {ContactStatus::PendingApproval, "pending_approval"},
-                                                {ContactStatus::AwaitingApproval, "awaiting_approval"},
-                                                {ContactStatus::Confirmed, "confirmed"},
-                                            })
+NLOHMANN_JSON_SERIALIZE_ENUM(  // NOLINT
+  ContactStatus,
+  {
+    {ContactStatus::pendingApproval, "pending_approval"},
+    {ContactStatus::awaitingApproval, "awaiting_approval"},
+    {ContactStatus::confirmed, "confirmed"},
+  })
 
 struct Contact {
   std::string peer_id;
@@ -30,7 +32,7 @@ struct Contact {
 };
 
 class ContactManager {
-  static constexpr auto CONTACTS_FILE = "contacts.json";
+  static constexpr auto contactsFile = "contacts.json";
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::unordered_map<std::string, Contact> contacts_;
   mutable std::mutex mutex_;
@@ -38,87 +40,88 @@ class ContactManager {
 public:
   explicit ContactManager(std::shared_ptr<storage::PersistentStorage> storage)
       : storage_(std::move(storage)) {
-    loadContacts();
+    LoadContacts();
   }
 
   // Initiates adding a new contact.
-  bool addContact(const std::string& peer_id) {
+  bool AddContact(const std::string& peer_id) {
     const std::lock_guard<std::mutex> lock(mutex_);
-    if (contacts_.count(peer_id)) {
+    if (contacts_.contains(peer_id)) {
       LOGW << "Contact " << peer_id << " already exists.";
       return false;
     }
-    contacts_[peer_id] = {peer_id, ContactStatus::PendingApproval};
-    saveContacts();
+    contacts_[peer_id] = {.peer_id=peer_id, .status=ContactStatus::pendingApproval};
+    SaveContacts();
     return true;
   }
 
   // Marks that we have received a request from a peer.
-  bool receiveContactRequest(const std::string& peer_id) {
+  bool ReceiveContactRequest(const std::string& peer_id) {
     const std::lock_guard<std::mutex> lock(mutex_);
-    if (contacts_.count(peer_id) && contacts_[peer_id].status == ContactStatus::Confirmed) {
+    if (contacts_.contains(peer_id) && contacts_[peer_id].status == ContactStatus::confirmed) {
       return false;  // Already confirmed
     }
-    contacts_[peer_id] = {peer_id, ContactStatus::AwaitingApproval};
-    saveContacts();
+    contacts_[peer_id] = {.peer_id=peer_id, .status=ContactStatus::awaitingApproval};
+    SaveContacts();
     return true;
   }
 
   // Confirms a contact that was awaiting our approval.
-  bool confirmContact(const std::string& peer_id) {
+  bool ConfirmContact(const std::string& peer_id) {
     const std::lock_guard<std::mutex> lock(mutex_);
-    if (!contacts_.count(peer_id)) {
+    if (!contacts_.contains(peer_id)) {
       return false;
     }
-    contacts_[peer_id].status = ContactStatus::Confirmed;
-    saveContacts();
+    contacts_[peer_id].status = ContactStatus::confirmed;
+    SaveContacts();
     return true;
   }
 
   // Marks a contact as confirmed after they accepted our request.
-  bool markAsConfirmed(const std::string& peer_id) {
-    return confirmContact(peer_id);
+  bool MarkAsConfirmed(const std::string& peer_id) {
+    return ConfirmContact(peer_id);
   }
 
-  void removeContact(const std::string& peer_id) {
+  void RemoveContact(const std::string& peer_id) {
     const std::lock_guard<std::mutex> lock(mutex_);
     contacts_.erase(peer_id);
-    saveContacts();
+    SaveContacts();
   }
 
-  bool isConfirmedContact(const std::string& peer_id) const {
+  bool IsConfirmedContact(const std::string& peer_id) const {
     const std::lock_guard<std::mutex> lock(mutex_);
-    auto it = contacts_.find(peer_id);
-    return (it != contacts_.end() && it->second.status == ContactStatus::Confirmed);
+    const auto itr = contacts_.find(peer_id);
+    return (itr != contacts_.end() && itr->second.status == ContactStatus::confirmed);
   }
 
-  std::optional<Contact> getContact(const std::string& peer_id) {
+  std::optional<Contact> GetContact(const std::string& peer_id) {
     const std::lock_guard<std::mutex> lock(mutex_);
-    if (contacts_.count(peer_id)) {
+    if (contacts_.contains(peer_id)) {
       return contacts_.at(peer_id);
     }
     return std::nullopt;
   }
 
-  std::vector<Contact> getContacts() const {
+  std::vector<Contact> GetContacts() const {
     const std::lock_guard<std::mutex> lock(mutex_);
     std::vector<Contact> result;
-    for (const auto& pair: contacts_) {
-      result.push_back(pair.second);
+    result.reserve(contacts_.size());
+    for (const auto& val: contacts_ | std::views::values) {
+      result.push_back(val);
     }
     return result;
   }
 
 private:
-  void loadContacts() {
-    if (storage_->Exists(CONTACTS_FILE)) {
-      auto data_opt = storage_->Load(CONTACTS_FILE);
+  void LoadContacts() {
+    if (storage_->Exists(contactsFile)) {
+      const auto data_opt = storage_->Load(contactsFile);
       if (data_opt) {
         try {
-          std::string json_str(reinterpret_cast<const char*>(data_opt->data()), data_opt->size());
-          nlohmann::json j = nlohmann::json::parse(json_str);
+          const std::string json_str(reinterpret_cast<const char*>(data_opt->data()), data_opt->size());
+          const nlohmann::json j = nlohmann::json::parse(json_str);
           for (const auto& item: j) {
-            Contact c = {item["peer_id"], item["status"]};
+            const Contact c = {.peer_id=item["peer_id"], .status=item["status"]};
             contacts_[c.peer_id] = c;
           }
         } catch (const nlohmann::json::parse_error& e) {
@@ -128,15 +131,15 @@ private:
     }
   }
 
-  void saveContacts() {
+  void SaveContacts() const {
     nlohmann::json j = nlohmann::json::array();
-    for (const auto& pair: contacts_) {
-      j.push_back({{"peer_id", pair.second.peer_id}, {"status", pair.second.status}});
+    for (const auto& val: contacts_ | std::views::values) {
+      j.push_back({{"peer_id", val.peer_id}, {"status", val.status}});
     }
-    std::string json_str = j.dump(2);
+    const auto json_str = j.dump(2);
     const auto* char_ptr = reinterpret_cast<const std::byte*>(json_str.data());
-    std::vector<std::byte> data(char_ptr, char_ptr + json_str.size());
-    storage_->Save(CONTACTS_FILE, data);
+    const std::vector<std::byte> data(char_ptr, char_ptr + json_str.size());
+    std::ignore = storage_->Save(contactsFile, data);
   }
 };
 

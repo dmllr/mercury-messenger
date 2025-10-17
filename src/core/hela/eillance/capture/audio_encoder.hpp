@@ -33,14 +33,14 @@ public:
     opus_encoder_ctl(opus_encoder_, OPUS_SET_SIGNAL(OPUS_SIGNAL_VOICE));
   }
 
-  void Revoke() {
+  void Revoke() const {
     opus_encoder_destroy(opus_encoder_);
   }
 
-  Packet EncodeBuffer(const AudioConfig::SampleDataType* pcm_buffer) {
+  Packet EncodeBuffer(const AudioConfig::SampleDataType* pcm_buffer) const {
     auto encoded_buffer{std::array<unsigned char, AudioConfig::encodedFrameSizeBytes>{}};
 
-    auto size = AudioConfig::opusEncodeFunction(
+    const auto size = AudioConfig::opusEncodeFunction(
         opus_encoder_, pcm_buffer, AudioConfig::frameSize,
         encoded_buffer.data(), static_cast<opus_int32>(encoded_buffer.size()));
     if (likely(size > 1)) {

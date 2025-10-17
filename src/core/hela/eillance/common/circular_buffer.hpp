@@ -43,7 +43,7 @@ public:
     assert(!isEmpty() && "CircularBuffer is empty");
     T value = buffer_[head_];
     head_ = (head_ + 1) % Capacity;
-    size_ = std::max(size_ - 1, std::size_t(0));
+    size_ = std::max(size_ - 1, static_cast<std::size_t>(0));
     return value;
   }
 

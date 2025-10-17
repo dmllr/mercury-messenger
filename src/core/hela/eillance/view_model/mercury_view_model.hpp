@@ -41,7 +41,7 @@ public:
       current_state_.my_id = rtc_client_->GetId();
       current_state_.contacts = rtc_client_->GetContacts();
     }
-    setupRtcClientCallbacks();
+    SetupRtcClientCallbacks();
   }
   ~MercuryViewModel() = default;
 
@@ -53,7 +53,7 @@ public:
 
   // Processes user input from the UI.
   // Returns true if the application should exit.
-  auto processUserInput(const std::string& input) -> bool {
+  auto ProcessUserInput(const std::string& input) -> bool {
     if (input.empty()) {
       return false;
     }
@@ -66,15 +66,15 @@ public:
       std::getline(ss >> std::ws, arg);
 
       if (command == "/add") {
-        addSystemMessageToChat("--> Adding contact: " + arg);
+        AddSystemMessageToChat("--> Adding contact: " + arg);
         rtc_client_->AddContact(arg);
       } else if (command == "/accept") {
-        addSystemMessageToChat("--> Accepting contact: " + arg);
+        AddSystemMessageToChat("--> Accepting contact: " + arg);
         rtc_client_->ConfirmContact(arg);
       } else if (command == "/exit") {
         return true;  // Signal exit to the UI.
       } else {
-        addSystemMessageToChat("--> Unknown command: " + command);
+        AddSystemMessageToChat("--> Unknown command: " + command);
       }
     } else {  // Message processing.
       std::optional<std::string> selected_id;
@@ -84,7 +84,7 @@ public:
       }
 
       if (!selected_id) {
-        addSystemMessageToChat("--> Select a contact before sending a message.");
+        AddSystemMessageToChat("--> Select a contact before sending a message.");
       } else {
         {
           const std::lock_guard<std::mutex> lock(state_mutex_);
@@ -93,17 +93,17 @@ public:
           if (history.size() > kMaxChatHistory) {
             history.pop_front();
           }
-          updateChatHistoryForSelectedContact();
+          UpdateChatHistoryForSelectedContact();
         }
         rtc_client_->SendChatMessage(*selected_id, input);
       }
     }
-    notifyStateChanged();
+    NotifyStateChanged();
     return false;
   }
 
   // Informs the ViewModel about the currently selected contact in the UI.
-  void selectContactByIndex(size_t index) {
+  void SelectContactByIndex(size_t index) {
     const std::lock_guard<std::mutex> lock(state_mutex_);
     std::optional<std::string> new_selection;
     if (index < current_state_.contacts.size()) {
@@ -112,23 +112,23 @@ public:
 
     if (current_state_.selected_contact_id != new_selection) {
       current_state_.selected_contact_id = new_selection;
-      updateChatHistoryForSelectedContact();
+      UpdateChatHistoryForSelectedContact();
     }
   }
 
   // Retrieves the current state for UI rendering.
-  [[nodiscard]] auto getState() const -> UIState {
+  [[nodiscard]] auto GetState() const -> UIState {
     const std::lock_guard<std::mutex> lock(state_mutex_);
     return current_state_;
   }
 
   // Sets a callback to be invoked when the UI state changes and a redraw is needed.
-  void setOnStateChangedCallback(std::function<void()> callback) {
+  void SetOnStateChangedCallback(std::function<void()> callback) {
     on_state_changed_callback_ = std::move(callback);
   }
 
 private:
-  void setupRtcClientCallbacks() {
+  void SetupRtcClientCallbacks() {
     rtc_client_->SetChatMessageReceivedCallback([this](const std::string& peer_id, const std::string& message) {
       const std::lock_guard<std::mutex> lock(state_mutex_);
       const std::string display_id = peer_id.length() > 8 ? peer_id.substr(0, 8) + "..." : peer_id;
@@ -138,9 +138,9 @@ private:
         history.pop_front();
       }
       if (current_state_.selected_contact_id && *current_state_.selected_contact_id == peer_id) {
-        updateChatHistoryForSelectedContact();
+        UpdateChatHistoryForSelectedContact();
       }
-      notifyStateChanged();
+      NotifyStateChanged();
     });
 
     rtc_client_->SetContactRequestCallback([this](const std::string& peer_id) {
@@ -150,9 +150,9 @@ private:
       history.push_back("--> Contact request from " + peer_id);
       history.push_back("--> Use '/accept " + peer_id + "' to confirm.");
       if (current_state_.selected_contact_id && *current_state_.selected_contact_id == peer_id) {
-        updateChatHistoryForSelectedContact();
+        UpdateChatHistoryForSelectedContact();
       }
-      notifyStateChanged();
+      NotifyStateChanged();
     });
 
     rtc_client_->SetContactStatusChangedCallback([this](const std::string& peer_id, identity::ContactStatus /*status*/) {
@@ -162,9 +162,9 @@ private:
       auto& history = all_chat_histories_[peer_id];
       history.push_back("--> Contact status for " + display_id + " updated.");
       if (current_state_.selected_contact_id && *current_state_.selected_contact_id == peer_id) {
-        updateChatHistoryForSelectedContact();
+        UpdateChatHistoryForSelectedContact();
       }
-      notifyStateChanged();
+      NotifyStateChanged();
     });
 
     rtc_client_->SetStatusCallback([this](const std::string& /*peer_id*/, EventSource source, int state_val) {
@@ -174,11 +174,11 @@ private:
           const std::lock_guard<std::mutex> lock(state_mutex_);
           current_state_.connection_state = state;
         }
-        notifyStateChanged();
+        NotifyStateChanged();
       }
     });
   }
-  void updateChatHistoryForSelectedContact() {
+  void UpdateChatHistoryForSelectedContact() {
     // This function must be called from within a locked context.
     if (current_state_.selected_contact_id) {
       current_state_.chat_history = all_chat_histories_[*current_state_.selected_contact_id];
@@ -186,7 +186,7 @@ private:
       current_state_.chat_history.clear();
     }
   }
-  void addSystemMessageToChat(const std::string& message) {
+  void AddSystemMessageToChat(const std::string& message) {
     const std::lock_guard<std::mutex> lock(state_mutex_);
     // Add system message only to the currently selected contact's chat history.
     if (current_state_.selected_contact_id) {
@@ -195,10 +195,10 @@ private:
       if (history.size() > kMaxChatHistory) {
         history.pop_front();
       }
-      updateChatHistoryForSelectedContact();
+      UpdateChatHistoryForSelectedContact();
     }
   }
-  void notifyStateChanged() {
+  void NotifyStateChanged() const {
     if (on_state_changed_callback_) {
       on_state_changed_callback_();
     }

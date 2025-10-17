@@ -17,19 +17,19 @@ public:
   Capture& operator=(Capture&&) noexcept = default;
   ~Capture() = default;
 
-  void Configure(Config config) {
+  void Configure(Config config) const {
     self_->Configure(config);
   }
-  void Engage() {
+  void Engage() const {
     self_->Engage();
   }
-  void Revoke() {
+  void Revoke() const {
     self_->Revoke();
   }
-  Packet FetchBuffers() {
+  [[nodiscard]] Packet FetchBuffers() const {
     return self_->FetchBuffers();
   }
-  Time::Unit GetSampleDuration() {
+  [[nodiscard]] Time::Unit GetSampleDuration() const {
     return self_->GetSampleDuration();
   }
 
