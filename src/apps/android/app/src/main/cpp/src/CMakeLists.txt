@@ -9,7 +9,7 @@ target_link_libraries(lib-client-service-bridge
   camera2ndk
   mediandk
   log
-  hela-eillance-core
+  eillance-core
 )
 
 if(NOT CMAKE_BUILD_TYPE STREQUAL "Release")

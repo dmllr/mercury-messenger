@@ -14,16 +14,16 @@
 #include <android/native_window_jni.h>
 #include <media/NdkMediaCodec.h>
 
-#include "hela/eillance/common/event_queue.hpp"
-#include "hela/eillance/capture/video_config.hpp"
-#include "hela/eillance/logging/logging.h"
-#include "hela/eillance/rtc/client.hpp"
-#include "hela/eillance/utils/h264.hpp"
-#include "hela/eillance/utils/string.hpp"
+#include "eillance/common/event_queue.hpp"
+#include "eillance/capture/video_config.hpp"
+#include "eillance/logging/logging.h"
+#include "eillance/rtc/client.hpp"
+#include "eillance/utils/h264.hpp"
+#include "eillance/utils/string.hpp"
 
 #include "class_refs.hpp"
 
-namespace hela::eillance {
+namespace eillance {
 
 class ClientEngine {
   JavaVM* jvm_;
@@ -351,4 +351,4 @@ private:
   }
 };
 
-} // namespace hela::eillance
+} // namespace eillance

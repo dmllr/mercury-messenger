@@ -13,4 +13,5 @@ target_link_libraries(mercury-server PUBLIC
   ssl
   crypto
   nlohmann_json
+  eillance-utils
 )

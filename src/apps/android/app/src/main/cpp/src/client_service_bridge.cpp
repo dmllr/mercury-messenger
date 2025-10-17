@@ -8,13 +8,13 @@
 
 namespace {
 JavaVM* javaVm = nullptr;
-std::unique_ptr<hela::eillance::ClientEngine> clientEngine{};
+std::unique_ptr<eillance::ClientEngine> clientEngine{};
 }  // namespace
 
 extern "C" JNIEXPORT void JNICALL
 Java_hela_eillance_CallService_initEngine(JNIEnv* env, jobject, jobject native_bridge) {
 if (clientEngine == nullptr) {
-clientEngine = std::make_unique<hela::eillance::ClientEngine>(javaVm, env, native_bridge);
+clientEngine = std::make_unique<eillance::ClientEngine>(javaVm, env, native_bridge);
 }
 }
 
@@ -57,7 +57,7 @@ if (clientEngine) clientEngine->Call(peer_id_str);
 extern "C" JNIEXPORT void JNICALL
 Java_hela_eillance_CallService_configureVideoCapture(JNIEnv* env, jobject, jobject videoConfig) {
 if (clientEngine) {
-auto conf = hela::eillance::VideoConfig{};
+auto conf = eillance::VideoConfig{};
 jclass video_config_class = env->GetObjectClass(videoConfig);
 conf.cameraId = env->GetIntField(videoConfig, env->GetFieldID(video_config_class, "cameraId", "I"));
 conf.width = env->GetIntField(videoConfig, env->GetFieldID(video_config_class, "width", "I"));

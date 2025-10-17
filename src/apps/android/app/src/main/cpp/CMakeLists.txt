@@ -13,5 +13,5 @@ find_library(log-lib log)
 include("${shared_cmake_libs_path}/import_remote.cmake")
 
 include("${shared_cmake_libs_path}/libboringssl.cmake")
-add_subdirectory("${shared_src_path}/core" "${CMAKE_CURRENT_BINARY_DIR}/hela-eillance-core")
+add_subdirectory("${shared_src_path}/core" "${CMAKE_CURRENT_BINARY_DIR}/eillance-core")
 add_subdirectory("src")
