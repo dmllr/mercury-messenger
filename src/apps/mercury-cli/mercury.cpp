@@ -11,28 +11,29 @@
 #include "ftxui/component/screen_interactive.hpp"
 #include "ftxui/dom/elements.hpp"
 
-#include "hela/eillance/events/service_connection_state.h"
-#include "hela/eillance/identity/contact_manager.hpp"
-#include "hela/eillance/logging/logging.h"
-#include "hela/eillance/rtc/client.hpp"
-#include "hela/eillance/storage/persistent_storage.hpp"
-#include "hela/eillance/view_model/mercury_view_model.hpp"
+#include "eillance/utils/args_parser.hpp"
+#include "eillance/events/service_connection_state.h"
+#include "eillance/identity/contact_manager.hpp"
+#include "eillance/logging/logging.h"
+#include "eillance/rtc/client.hpp"
+#include "eillance/storage/persistent_storage.hpp"
+#include "eillance/view_model/mercury_view_model.hpp"
 
 namespace {
 
 // Helper function to format contact entries for the ftxui::Menu component.
-std::vector<std::string> GetContactMenuEntries(const std::vector<hela::eillance::identity::Contact>& contacts) {
+std::vector<std::string> GetContactMenuEntries(const std::vector<eillance::identity::Contact>& contacts) {
   std::vector<std::string> entries;
   for (const auto& contact: contacts) {
     std::string status_str;
     switch (contact.status) {
-      case hela::eillance::identity::ContactStatus::pendingApproval:
+      case eillance::identity::ContactStatus::pendingApproval:
         status_str = " [pending]";
         break;
-      case hela::eillance::identity::ContactStatus::awaitingApproval:
+      case eillance::identity::ContactStatus::awaitingApproval:
         status_str = " [ACTION REQUIRED]";
         break;
-      case hela::eillance::identity::ContactStatus::confirmed:
+      case eillance::identity::ContactStatus::confirmed:
         status_str = "";
         break;
     }
@@ -42,12 +43,12 @@ std::vector<std::string> GetContactMenuEntries(const std::vector<hela::eillance:
   return entries;
 }
 
-auto GetConnectionStatusString(hela::eillance::ServiceConnectionState state) -> std::string {
+auto GetConnectionStatusString(eillance::ServiceConnectionState state) -> std::string {
   switch (state) {
-    case hela::eillance::ServiceConnectionState::establishing: return "CONNECTING";
-    case hela::eillance::ServiceConnectionState::online: return "ONLINE";
-    case hela::eillance::ServiceConnectionState::failure: return "CONNECTION FAILED";
-    case hela::eillance::ServiceConnectionState::disconnected: return "OFFLINE";
+    case eillance::ServiceConnectionState::establishing: return "CONNECTING";
+    case eillance::ServiceConnectionState::online: return "ONLINE";
+    case eillance::ServiceConnectionState::failure: return "CONNECTION FAILED";
+    case eillance::ServiceConnectionState::disconnected: return "OFFLINE";
     default: return "UNKNOWN";
   }
 }
@@ -57,10 +58,9 @@ auto GetConnectionStatusString(hela::eillance::ServiceConnectionState state) -> 
 int main(int argc, char** argv) {
   auto screen = ftxui::ScreenInteractive::Fullscreen();
 
-  auto* config_name = "Default";
-  if (argc > 1) {
-    config_name = argv[1];
-  }
+  const ArgsParser args(argc, argv);
+  const std::string config_name_str = args.GetPositional(0).value_or("Default");
+  const char* config_name = config_name_str.c_str();
 
 #ifdef _WIN32
   const char* home_dir_env = getenv("USERPROFILE");
@@ -83,12 +83,12 @@ int main(int argc, char** argv) {
   Log::Initialize(&file_appender, plog::info);
 
   // --- Service Layer (Model) Initialization ---
-  hela::eillance::storage::Config storage_config;
+  eillance::storage::Config storage_config;
   storage_config.platform_config = config_path;
-  auto rtc_client = std::make_shared<hela::eillance::RtcClient>(storage_config);
+  auto rtc_client = std::make_shared<eillance::RtcClient>(storage_config);
 
   // --- ViewModel Initialization ---
-  auto view_model = std::make_unique<hela::eillance::view_model::MercuryViewModel>(rtc_client);
+  auto view_model = std::make_unique<eillance::view_model::MercuryViewModel>(rtc_client);
 
   // Connect UI to ViewModel. The ViewModel will notify the UI when to redraw.
   view_model->SetOnStateChangedCallback([&] { screen.Post(ftxui::Event::Custom); });
