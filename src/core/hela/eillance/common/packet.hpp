@@ -1,11 +1,7 @@
 #pragma once
 
-#include <array>
-#include <cassert>
 #include <cstdint>
 #include <vector>
-
-#include <rtc/common.hpp>
 
 #include "hela/eillance/utils/time.hpp"
 
@@ -13,14 +9,16 @@
 namespace hela::eillance {
 
 class Packet {
-  rtc::binary buffer_{};
+  using Binary = std::vector<std::byte>;
+
+  Binary buffer_{};
   Time::Unit timestamp_{Time::Now()};
 
 public:
   Packet() = default;
 
-  /// construct from rtc::binary pointer and size
-  explicit Packet(rtc::binary&& buffer) : buffer_(std::move(buffer)) {
+  /// construct from Binary pointer and size
+  explicit Packet(Binary&& buffer) : buffer_(std::move(buffer)) {
   }
 
   /// construct from std::byte pointer and size
