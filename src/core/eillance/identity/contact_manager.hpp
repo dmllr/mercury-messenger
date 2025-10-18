@@ -139,7 +139,9 @@ private:
     const auto json_str = j.dump(2);
     const auto* char_ptr = reinterpret_cast<const std::byte*>(json_str.data());
     const std::vector<std::byte> data(char_ptr, char_ptr + json_str.size());
-    std::ignore = storage_->Save(contactsFile, data);
+    if (!storage_->Save(contactsFile, data)) {
+        LOGE << "Failed to save contacts file to persistent storage.";
+    }
   }
 };
 

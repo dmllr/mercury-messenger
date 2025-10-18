@@ -83,7 +83,9 @@ class MessageQueue {
     const std::string json_str = j.dump();
     const auto* char_ptr = reinterpret_cast<const std::byte*>(json_str.data());
     const std::vector<std::byte> data(char_ptr, char_ptr + json_str.size());
-    storage_->Save(key, data);
+    if (!storage_->Save(key, data)) {
+        LOGE << "Failed to save message queue for peer " << peer_id;
+    }
   }
 
 public:

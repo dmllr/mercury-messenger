@@ -18,6 +18,9 @@ class VideoEncoder {
     STOPPED
   };
 
+  // From MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface
+  static constexpr auto kColorFormatSurface = 0x7f000789;
+
   VideoConfig config_;
   bool isSeiInsertRequired{false};
 
@@ -50,7 +53,7 @@ class VideoEncoder {
     AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_BIT_RATE, config_.bitrate);
     AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_FRAME_RATE, config_.frameRate);
     AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_I_FRAME_INTERVAL, 2);
-    AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_COLOR_FORMAT, 0x7f000789);  // COLOR_FormatSurface
+    AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_COLOR_FORMAT, kColorFormatSurface);
 
     auto rc = AMediaCodec_configure(codec, format, nullptr, nullptr, AMEDIACODEC_CONFIGURE_FLAG_ENCODE);
     Log::assert_or_die(AMEDIA_OK == rc, "AMediaCodec_configure failed");

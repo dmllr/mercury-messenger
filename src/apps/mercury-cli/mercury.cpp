@@ -100,9 +100,13 @@ int main(int argc, char** argv) {
   auto contact_menu = ftxui::Menu(&contact_menu_entries, &contact_menu_selected);
 
   auto chat_renderer = ftxui::Renderer([&]() -> ftxui::Element {
-    // The chat history is fetched from the ViewModel on each render.
     const auto state = view_model->GetState();
     ftxui::Elements elements;
+
+    if (state.has_older_messages) {
+        elements.push_back(ftxui::text("--- older messages available (use /history load) ---") | ftxui::dim);
+    }
+
     for (const auto& line: state.chat_history) {
       elements.push_back(ftxui::text(line));
     }

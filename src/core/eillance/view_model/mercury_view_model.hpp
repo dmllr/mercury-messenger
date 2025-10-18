@@ -26,6 +26,7 @@ struct UIState {
   std::vector<identity::Contact> contacts;
   std::optional<std::string> selected_contact_id;
   std::deque<std::string> chat_history;
+  bool has_older_messages = false;
 };
 
 // MercuryViewModel encapsulates the application logic and state management for Mercury clients.
@@ -38,7 +39,6 @@ public:
       const std::lock_guard<std::mutex> lock(state_mutex_);
       current_state_.my_id = rtc_client_->GetId();
       current_state_.contacts = rtc_client_->GetContacts();
-      InitializeChatHistories(current_state_.contacts);
     }
     SetupRtcClientCallbacks();
   }
@@ -75,7 +75,6 @@ public:
             {
                 const std::lock_guard<std::mutex> lock(state_mutex_);
                 for (const auto& contact : current_state_.contacts) {
-                    // Allow partial ID matching from the beginning of the string.
                     if (contact.peer_id.starts_with(arg)) {
                         matches.push_back(contact.peer_id);
                     }
@@ -91,6 +90,12 @@ public:
                 rtc_client_->ConfirmContact(matches[0]);
             }
         }
+      } else if (command == "/history") {
+          if (arg == "load") {
+              LoadOlderMessages();
+          } else {
+              AddSystemMessageToChat("--> Unknown history command. Usage: /history load");
+          }
       } else if (command == "/exit") {
         return true;  // Signal exit to the UI.
       } else {
@@ -110,9 +115,7 @@ public:
           const std::lock_guard<std::mutex> lock(state_mutex_);
           auto& history = all_chat_histories_[*selected_id];
           history.push_back("[you]: " + input);
-          if (history.size() > kMaxChatHistory) {
-            history.pop_front();
-          }
+          total_messages_in_history_[*selected_id]++;
           UpdateChatHistoryForSelectedContact();
         }
         rtc_client_->SendChatMessage(*selected_id, input);
@@ -132,9 +135,9 @@ public:
 
     if (current_state_.selected_contact_id != new_selection) {
       current_state_.selected_contact_id = new_selection;
-
-      EnsureChatHistoryLoaded(*new_selection);
-
+      if (new_selection) {
+          LoadInitialChatHistory(*new_selection);
+      }
       UpdateChatHistoryForSelectedContact();
     }
   }
@@ -151,41 +154,72 @@ public:
   }
 
 private:
-  void InitializeChatHistories(const std::vector<identity::Contact>& contacts) {
-    for (const auto& contact : contacts) {
-      EnsureChatHistoryLoaded(contact.peer_id);
-    }
+  template<typename K, typename V>
+  static V GetValueOrDefault(const std::unordered_map<K, V>& map, const K& key, const V& default_value) {
+      auto it = map.find(key);
+      if (it != map.end()) {
+          return it->second;
+      }
+      return default_value;
   }
 
-  void EnsureChatHistoryLoaded(const std::string& peer_id) {
-    // This must be called from a locked context.
-    if (all_chat_histories_.contains(peer_id)) {
-      return;
-    }
+  void LoadInitialChatHistory(const std::string& peer_id) {
+      // This must be called from a locked context.
+      if (chat_pages_loaded_.contains(peer_id)) {
+          return; // Already loaded.
+      }
 
-    auto history = rtc_client_->GetMessageHistory(peer_id);
-    std::deque<std::string> formatted_history;
-    for (const auto& msg: history) {
+      auto page = rtc_client_->GetMessageHistoryPage(peer_id, 0, kChatPageSize);
+      total_messages_in_history_[peer_id] = page.total_messages;
+      chat_pages_loaded_[peer_id] = 1;
+
+      std::deque<std::string> formatted_history;
+      for (const auto& msg : page.messages) {
+          formatted_history.push_back(FormatMessage(peer_id, msg));
+      }
+      all_chat_histories_[peer_id] = std::move(formatted_history);
+  }
+
+  void LoadOlderMessages() {
+      const std::lock_guard<std::mutex> lock(state_mutex_);
+      if (!current_state_.selected_contact_id) {
+          return;
+      }
+      const auto& peer_id = *current_state_.selected_contact_id;
+      const size_t pages_loaded = GetValueOrDefault(chat_pages_loaded_, peer_id, size_t{0});
+      const size_t total_messages = GetValueOrDefault(total_messages_in_history_, peer_id, size_t{0});
+
+      if (pages_loaded * kChatPageSize >= total_messages) {
+          AddSystemMessageToChat("--> No more messages to load.");
+          return;
+      }
+
+      auto page = rtc_client_->GetMessageHistoryPage(peer_id, pages_loaded, kChatPageSize);
+      for (auto it = page.messages.rbegin(); it != page.messages.rend(); ++it) {
+          all_chat_histories_[peer_id].push_front(FormatMessage(peer_id, *it));
+      }
+      chat_pages_loaded_[peer_id]++;
+      UpdateChatHistoryForSelectedContact();
+      NotifyStateChanged();
+  }
+
+  std::string FormatMessage(const std::string& peer_id, const messaging::HistoryMessage& msg) {
       std::string prefix;
       if (msg.direction == messaging::MessageDirection::Sent) {
-        prefix = "[you]: ";
+          prefix = "[you]: ";
       } else {
-        const std::string display_id = peer_id.length() > 8 ? peer_id.substr(0, 8) + "..." : peer_id;
-        prefix = "[" + display_id + "]: ";
+          const std::string display_id = peer_id.length() > 8 ? peer_id.substr(0, 8) + "..." : peer_id;
+          prefix = "[" + display_id + "]: ";
       }
-      formatted_history.push_back(prefix + msg.content);
-    }
-    all_chat_histories_[peer_id] = std::move(formatted_history);
+      return prefix + msg.content;
   }
+
   void SetupRtcClientCallbacks() {
     rtc_client_->SetChatMessageReceivedCallback([this](const std::string& peer_id, const messaging::HistoryMessage& message) {
       const std::lock_guard<std::mutex> lock(state_mutex_);
-      const std::string display_id = peer_id.length() > 8 ? peer_id.substr(0, 8) + "..." : peer_id;
-      auto& history = all_chat_histories_[peer_id];
-      history.push_back("[" + display_id + "]: " + message.content);
-      if (history.size() > kMaxChatHistory) {
-        history.pop_front();
-      }
+      all_chat_histories_[peer_id].push_back(FormatMessage(peer_id, message));
+      total_messages_in_history_[peer_id]++;
+
       if (current_state_.selected_contact_id && *current_state_.selected_contact_id == peer_id) {
         UpdateChatHistoryForSelectedContact();
       }
@@ -193,12 +227,12 @@ private:
     });
 
     rtc_client_->SetContactRequestCallback([this](const std::string& peer_id) {
-      EnsureChatHistoryLoaded(peer_id);
       const std::lock_guard<std::mutex> lock(state_mutex_);
       current_state_.contacts = rtc_client_->GetContacts();
       auto& history = all_chat_histories_[peer_id];
       history.push_back("--> Contact request from " + peer_id);
       history.push_back("--> Use '/accept " + peer_id.substr(0, 12) + "...' to confirm.");
+      total_messages_in_history_[peer_id] += 2;
       if (current_state_.selected_contact_id && *current_state_.selected_contact_id == peer_id) {
         UpdateChatHistoryForSelectedContact();
       }
@@ -206,12 +240,11 @@ private:
     });
 
     rtc_client_->SetContactStatusChangedCallback([this](const std::string& peer_id, identity::ContactStatus /*status*/) {
-      EnsureChatHistoryLoaded(peer_id);
       const std::lock_guard<std::mutex> lock(state_mutex_);
       current_state_.contacts = rtc_client_->GetContacts();
       const std::string display_id = peer_id.length() > 12 ? peer_id.substr(0, 12) + "..." : peer_id;
-      auto& history = all_chat_histories_[peer_id];
-      history.push_back("--> Contact status for " + display_id + " updated.");
+      all_chat_histories_[peer_id].push_back("--> Contact status for " + display_id + " updated.");
+      total_messages_in_history_[peer_id]++;
       if (current_state_.selected_contact_id && *current_state_.selected_contact_id == peer_id) {
         UpdateChatHistoryForSelectedContact();
       }
@@ -232,20 +265,22 @@ private:
   void UpdateChatHistoryForSelectedContact() {
     // This function must be called from within a locked context.
     if (current_state_.selected_contact_id) {
-      current_state_.chat_history = all_chat_histories_[*current_state_.selected_contact_id];
+        const auto& peer_id = *current_state_.selected_contact_id;
+        current_state_.chat_history = all_chat_histories_[peer_id];
+        const size_t pages_loaded = GetValueOrDefault(chat_pages_loaded_, peer_id, size_t{0});
+        const size_t total_messages = GetValueOrDefault(total_messages_in_history_, peer_id, size_t{0});
+        current_state_.has_older_messages = (pages_loaded * kChatPageSize) < total_messages;
     } else {
       current_state_.chat_history.clear();
+      current_state_.has_older_messages = false;
     }
   }
   void AddSystemMessageToChat(const std::string& message) {
     const std::lock_guard<std::mutex> lock(state_mutex_);
-    // Add system message only to the currently selected contact's chat history.
     if (current_state_.selected_contact_id) {
       auto& history = all_chat_histories_[*current_state_.selected_contact_id];
       history.push_back(message);
-      if (history.size() > kMaxChatHistory) {
-        history.pop_front();
-      }
+      total_messages_in_history_[*current_state_.selected_contact_id]++;
       UpdateChatHistoryForSelectedContact();
     }
   }
@@ -259,8 +294,13 @@ private:
 
   mutable std::mutex state_mutex_;
   UIState current_state_;
+
+  // Per-peer-ID state
   std::unordered_map<std::string, std::deque<std::string>> all_chat_histories_;
-  static constexpr size_t kMaxChatHistory = 50;
+  std::unordered_map<std::string, size_t> chat_pages_loaded_;
+  std::unordered_map<std::string, size_t> total_messages_in_history_;
+
+  static constexpr size_t kChatPageSize = 50;
 
   std::function<void()> on_state_changed_callback_;
 };
