@@ -33,6 +33,11 @@ struct HistoryMessage {
   MessageDirection direction;
 };
 
+struct HistoryPage {
+    std::vector<HistoryMessage> messages;
+    size_t total_messages;
+};
+
 // JSON serialization for HistoryMessage struct
 inline void to_json(nlohmann::json& j, const HistoryMessage& m) {
   j = nlohmann::json{
@@ -96,7 +101,9 @@ class MessageHistory {
     const std::string json_str = j.dump();
     const auto* char_ptr = reinterpret_cast<const std::byte*>(json_str.data());
     const std::vector<std::byte> data(char_ptr, char_ptr + json_str.size());
-    storage_->Save(key, data);
+    if (!storage_->Save(key, data)) {
+        LOGE << "Failed to save message history for peer " << peer_id;
+    }
   }
 
 public:
@@ -117,13 +124,31 @@ public:
     return msg;
   }
 
-  std::deque<HistoryMessage> GetHistory(const std::string& peer_id) {
+  HistoryPage GetHistoryPage(const std::string& peer_id, size_t page_index, size_t page_size) {
     const std::lock_guard<std::mutex> lock(mutex_);
     LoadHistory(peer_id);
+
     if (!history_cache_.contains(peer_id)) {
-      return {};
+        return {{}, 0};
     }
-    return history_cache_.at(peer_id);
+
+    const auto& history = history_cache_.at(peer_id);
+    const size_t total_size = history.size();
+
+    // Pages are indexed from 0, where page 0 is the most recent.
+    // Calculate the start index for the requested page from the end of the deque.
+    const size_t end_offset = page_index * page_size;
+    if (end_offset >= total_size) {
+        return {{}, total_size}; // Page is out of bounds
+    }
+
+    const size_t start_offset = std::min(total_size, (page_index + 1) * page_size);
+
+    const auto start_it = history.end() - start_offset;
+    const auto end_it = history.end() - end_offset;
+
+    std::vector<HistoryMessage> messages_page(start_it, end_it);
+    return {std::move(messages_page), total_size};
   }
 };
 

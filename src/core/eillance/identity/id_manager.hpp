@@ -36,7 +36,9 @@ class IdManager {
       if (!pem_str.empty()) {
         const auto* char_ptr = reinterpret_cast<const std::byte*>(pem_str.data());
         const std::vector<std::byte> pem_bytes(char_ptr, char_ptr + pem_str.size());
-        storage_->Save(IDENTITY_KEY_FILE, pem_bytes);
+        if (!storage_->Save(IDENTITY_KEY_FILE, pem_bytes)) {
+          LOGE << "Failed to save new identity to persistent storage.";
+        }
         LOGI << "New identity generated and saved. ID: " << identity_->GetId();
       }
     }

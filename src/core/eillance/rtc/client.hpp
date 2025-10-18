@@ -116,7 +116,7 @@ public:
   RtcClient& operator=(const RtcClient&) = delete;
   ~RtcClient() override = default;
 
-  [[nodcard]] auto GetId() const -> std::string {
+  [[nodiscard]] auto GetId() const -> std::string {
     return id_manager_->GetId();
   }
 
@@ -408,8 +408,8 @@ public:
       }
   }
 
-  auto GetMessageHistory(const std::string& peer_id) -> std::deque<messaging::HistoryMessage> {
-    return message_history_->GetHistory(peer_id);
+  auto GetMessageHistoryPage(const std::string& peer_id, size_t page_index, size_t page_size) const -> messaging::HistoryPage {
+    return message_history_->GetHistoryPage(peer_id, page_index, page_size);
   }
 
 private:

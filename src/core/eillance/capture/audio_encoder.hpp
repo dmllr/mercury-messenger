@@ -20,6 +20,9 @@ namespace eillance {
 class AudioEncoder {
   OpusEncoder* opus_encoder_;
 
+  // A complexity of 5 (1 to 10) provides a good balance between quality and performance for VOIP.
+  static constexpr auto kOpusComplexity = 5;
+
 public:
   void Engage() {
     // opus
@@ -29,7 +32,7 @@ public:
     assert(opus_encoder_ != nullptr);
 
     opus_encoder_ctl(opus_encoder_, OPUS_SET_BITRATE(AudioConfig::bitrate));
-    opus_encoder_ctl(opus_encoder_, OPUS_SET_COMPLEXITY(5));  // 1 to 10
+    opus_encoder_ctl(opus_encoder_, OPUS_SET_COMPLEXITY(kOpusComplexity));
     opus_encoder_ctl(opus_encoder_, OPUS_SET_SIGNAL(OPUS_SIGNAL_VOICE));
   }
 
