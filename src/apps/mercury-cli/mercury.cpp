@@ -106,7 +106,11 @@ int main(int argc, char** argv) {
     for (const auto& line: state.chat_history) {
       elements.push_back(ftxui::text(line));
     }
-    return ftxui::vbox(std::move(elements)) | ftxui::frame | ftxui::flex_grow;
+    // Add a focusable invisible element at the end to scroll down automatically.
+    if (!elements.empty()) {
+        elements.back() |= ftxui::focus;
+    }
+    return ftxui::vbox(std::move(elements)) | ftxui::yframe;
   });
 
   auto input_component = ftxui::Input(&input_content, "Enter command or message...");
@@ -122,7 +126,7 @@ int main(int argc, char** argv) {
     return false;
   });
 
-  auto main_container = ftxui::Container::Horizontal({contact_menu, input_component});
+  auto main_container = ftxui::Container::Horizontal({contact_menu, chat_renderer, input_component});
 
   // The main layout renderer, responsible for drawing the entire screen.
   auto layout = ftxui::Renderer(main_container, [&]() -> ftxui::Element {
@@ -135,11 +139,14 @@ int main(int argc, char** argv) {
     // Inform the ViewModel of the currently selected item in the UI.
     view_model->SelectContactByIndex(contact_menu_selected);
 
-    const auto main_view = ftxui::hbox({contact_menu->Render() | ftxui::size(ftxui::WIDTH, ftxui::EQUAL, 40) | ftxui::border,
-                                  ftxui::vbox({chat_renderer->Render(),
-                                               ftxui::separator(),
-                                               input_component->Render() | ftxui::size(ftxui::HEIGHT, ftxui::EQUAL, 1)}) |
-                                      ftxui::flex_grow});
+    const auto main_view = ftxui::hbox({
+        contact_menu->Render() | ftxui::size(ftxui::WIDTH, ftxui::EQUAL, 40) | ftxui::border,
+        ftxui::vbox({
+            chat_renderer->Render() | ftxui::flex,
+            ftxui::separator(),
+            input_component->Render()
+        }) | ftxui::flex
+    });
 
     const auto status_line = " Mercury CLI | Your ID: " + state.my_id + " | Status: " + GetConnectionStatusString(state.connection_state);
     return ftxui::window(ftxui::text(status_line), main_view);

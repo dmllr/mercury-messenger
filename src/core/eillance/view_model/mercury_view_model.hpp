@@ -15,6 +15,7 @@
 
 #include "eillance/events/service_connection_state.h"
 #include "eillance/identity/contact_manager.hpp"
+#include "eillance/messaging/message_history.hpp"
 #include "eillance/rtc/client.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 
@@ -40,6 +41,7 @@ public:
       const std::lock_guard<std::mutex> lock(state_mutex_);
       current_state_.my_id = rtc_client_->GetId();
       current_state_.contacts = rtc_client_->GetContacts();
+      InitializeChatHistories(current_state_.contacts);
     }
     SetupRtcClientCallbacks();
   }
@@ -133,6 +135,9 @@ public:
 
     if (current_state_.selected_contact_id != new_selection) {
       current_state_.selected_contact_id = new_selection;
+
+      EnsureChatHistoryLoaded(*new_selection);
+
       UpdateChatHistoryForSelectedContact();
     }
   }
@@ -149,12 +154,38 @@ public:
   }
 
 private:
+  void InitializeChatHistories(const std::vector<identity::Contact>& contacts) {
+    for (const auto& contact : contacts) {
+      EnsureChatHistoryLoaded(contact.peer_id);
+    }
+  }
+
+  void EnsureChatHistoryLoaded(const std::string& peer_id) {
+    // This must be called from a locked context.
+    if (all_chat_histories_.contains(peer_id)) {
+      return;
+    }
+
+    auto history = rtc_client_->GetMessageHistory(peer_id);
+    std::deque<std::string> formatted_history;
+    for (const auto& msg: history) {
+      std::string prefix;
+      if (msg.direction == messaging::MessageDirection::Sent) {
+        prefix = "[you]: ";
+      } else {
+        const std::string display_id = peer_id.length() > 8 ? peer_id.substr(0, 8) + "..." : peer_id;
+        prefix = "[" + display_id + "]: ";
+      }
+      formatted_history.push_back(prefix + msg.content);
+    }
+    all_chat_histories_[peer_id] = std::move(formatted_history);
+  }
   void SetupRtcClientCallbacks() {
-    rtc_client_->SetChatMessageReceivedCallback([this](const std::string& peer_id, const std::string& message) {
+    rtc_client_->SetChatMessageReceivedCallback([this](const std::string& peer_id, const messaging::HistoryMessage& message) {
       const std::lock_guard<std::mutex> lock(state_mutex_);
       const std::string display_id = peer_id.length() > 8 ? peer_id.substr(0, 8) + "..." : peer_id;
       auto& history = all_chat_histories_[peer_id];
-      history.push_back("[" + display_id + "]: " + message);
+      history.push_back("[" + display_id + "]: " + message.content);
       if (history.size() > kMaxChatHistory) {
         history.pop_front();
       }
@@ -165,6 +196,7 @@ private:
     });
 
     rtc_client_->SetContactRequestCallback([this](const std::string& peer_id) {
+      EnsureChatHistoryLoaded(peer_id);
       const std::lock_guard<std::mutex> lock(state_mutex_);
       current_state_.contacts = rtc_client_->GetContacts();
       auto& history = all_chat_histories_[peer_id];
@@ -177,6 +209,7 @@ private:
     });
 
     rtc_client_->SetContactStatusChangedCallback([this](const std::string& peer_id, identity::ContactStatus /*status*/) {
+      EnsureChatHistoryLoaded(peer_id);
       const std::lock_guard<std::mutex> lock(state_mutex_);
       current_state_.contacts = rtc_client_->GetContacts();
       const std::string display_id = peer_id.length() > 12 ? peer_id.substr(0, 12) + "..." : peer_id;
