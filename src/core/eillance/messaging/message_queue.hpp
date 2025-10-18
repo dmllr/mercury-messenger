@@ -24,11 +24,11 @@ struct Message {
 };
 
 // JSON serialization for Message struct
-inline void to_json(nlohmann::json& j, const Message& m) {
+inline void to_json(nlohmann::json& j, const Message& m) { // NOLINT(*-identifier-naming)
     j = nlohmann::json{{"id", m.id}, {"peer_id", m.peer_id}, {"content", m.content}, {"timestamp", m.timestamp}};
 }
 
-inline void from_json(const nlohmann::json& j, Message& m) {
+inline void from_json(const nlohmann::json& j, Message& m) { // NOLINT(*-identifier-naming)
     j.at("id").get_to(m.id);
     j.at("peer_id").get_to(m.peer_id);
     j.at("content").get_to(m.content);
