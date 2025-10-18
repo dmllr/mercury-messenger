@@ -287,7 +287,7 @@ public:
   auto Load(const std::string& key) const -> std::optional<std::vector<std::byte>> {
     return pimpl_->Load(key);
   }
-  auto Exists(const std::string& key) const -> bool {
+  [[nodiscard]] auto Exists(const std::string& key) const -> bool {
     return pimpl_->Exists(key);
   }
   auto Delete(const std::string& key) const -> bool {

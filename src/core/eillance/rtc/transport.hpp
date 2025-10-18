@@ -149,12 +149,11 @@ public:
     return peer;
   }
 
-  void SendPeerMessage(const std::string& peer_id, Json& message) {
-    message["to"] = peer_id;
+  void SendSignalingMessage(const Json& message) const {
     WsSendMessage(message);
   }
 
-  void SendPeerDataChannelMessage(const std::shared_ptr<rtc::DataChannel>& dc, const Json& message) const {
+  void SendPeerDataChannelMessage(const std::shared_ptr<rtc::DataChannel>& dc, const Json& message) {
     if (dc && dc->isOpen()) {
       dc->send(message.dump());
     }
@@ -333,10 +332,10 @@ private:
         // Gathering complete, send answer
         if (const auto peer_con = wpc.lock()) {
           const auto description = peer_con->localDescription();
-          const Json message = {
-              {"to", peer_id},
+          Json message = {
               {"type", description->typeString()},
               {"sdp", std::string(description.value())}};
+          message["to"] = peer_id;
           WsSendMessage(message);
         }
       }

@@ -56,7 +56,7 @@ class MessageQueue {
       const auto data_opt = storage_->Load(key);
       if (data_opt) {
         try {
-          std::string json_str(reinterpret_cast<const char*>(data_opt->data()), data_opt->size());
+          std::string const json_str(reinterpret_cast<const char*>(data_opt->data()), data_opt->size());
           const nlohmann::json j = nlohmann::json::parse(json_str);
           queue_map_[peer_id] = j.get<std::deque<Message>>();
         } catch (const nlohmann::json::parse_error& e) {
