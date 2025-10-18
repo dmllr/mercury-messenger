@@ -16,6 +16,7 @@
 #include "eillance/identity/id_manager.hpp"
 #include "eillance/logging/logging.h"
 #include "eillance/messaging/message_delivery_service.hpp"
+#include "eillance/messaging/message_history.hpp"
 #include "eillance/messaging/message_queue.hpp"
 #include "eillance/rtc/peer.hpp"
 #include "eillance/rtc/stream.hpp"
@@ -47,7 +48,7 @@ class RtcClient final : public RtcTransportDelegate {
   using PeerTrack = std::shared_ptr<Peer::Track>;
   using OnFrameReceivedCallback = std::function<void(const rtc::binary&)>;
   using OnProfileReceivedCallback = std::function<void(const std::string&, const Device::Profile&)>;
-  using OnChatMessageReceivedCallback = std::function<void(const std::string&, const std::string&)>;
+  using OnChatMessageReceivedCallback = std::function<void(const std::string&, const messaging::HistoryMessage&)>;
   using OnContactRequestCallback = std::function<void(const std::string& peer_id)>;
   using OnContactStatusChangedCallback = std::function<void(const std::string& peer_id, identity::ContactStatus status)>;
 
@@ -65,6 +66,7 @@ class RtcClient final : public RtcTransportDelegate {
   std::shared_ptr<identity::ContactManager> contact_manager_;
   std::shared_ptr<messaging::MessageQueue> message_queue_;
   std::unique_ptr<messaging::MessageDeliveryService> delivery_service_;
+  std::unique_ptr<messaging::MessageHistory> message_history_;
 
 public:
   explicit RtcClient(const storage::Config& storage_config) {
@@ -72,6 +74,7 @@ public:
     id_manager_ = std::make_unique<identity::IdManager>(storage_);
     contact_manager_ = std::make_shared<identity::ContactManager>(storage_);
     message_queue_ = std::make_shared<messaging::MessageQueue>(storage_);
+    message_history_ = std::make_unique<messaging::MessageHistory>(storage_);
 
     av_stream_ = std::make_shared<Stream>(
         std::make_shared<StreamSource>(Capture(std::make_unique<VideoCapture>())),
@@ -83,9 +86,12 @@ public:
         message_queue_,
         contact_manager_,
         [this](const std::string& peer_id) {
+          // This handler is called only when a connection needs to be initiated.
           if (!transport_->GetPeer(peer_id)) {
             Connect(peer_id);
           }
+          // If a peer object exists, a connection is already in progress.
+          // Queued messages will be sent when the key exchange completes.
         });
 
     transport_->SetStatusCallback([this](const std::string& peer_id, const EventSource source, int state_val) {
@@ -261,20 +267,43 @@ public:
     auto type = type_it->get<std::string>();
 
     if (type == "offer") {
-      if (transport_->GetPeer(peer_id)) {
-        LOGI << "Received offer for existing peer " << peer_id << ", probably renegotiation.";
-      }
-      const auto sdp = message["sdp"].get<std::string>();
-      const std::shared_ptr<Peer> peer = transport_->CreatePeer(peer_id);
-      peer->peer_connection_->onDataChannel([this, peer_id, peer](const std::shared_ptr<rtc::DataChannel>& data_channel) {
-        if (data_channel->label() == "data") {
-          SetupDataChannel(peer, peer_id, data_channel);
-        } else {
-          LOGW << "Ignoring unexpected data channel with label: " << data_channel->label();
+        std::shared_ptr<Peer> peer = transport_->GetPeer(peer_id);
+
+        if (peer && peer->peer_connection_->signalingState() == rtc::PeerConnection::SignalingState::HaveLocalOffer) {
+            // Glare condition detected. We have a local offer and received a remote offer.
+            // We use lexicographical comparison of IDs as a tie-breaker.
+            const bool am_i_polite = GetId() < peer_id;
+
+            if (am_i_polite) {
+                LOGW << "Glare detected, and our ID is smaller. We will be 'polite', "
+                     << "rolling back our local offer and accepting the remote one.";
+                // To roll back, we destroy the current peer connection and create a new one.
+                transport_->RemovePeer(peer_id);
+                peer = nullptr; // Ensure we fall into the "new peer" logic below.
+            } else {
+                LOGW << "Glare detected, and our ID is larger. We will be 'impolite', "
+                     << "ignoring the remote offer and proceeding with ours.";
+                return; // Ignore the incoming offer.
+            }
         }
-      });
-      peer->peer_connection_->setRemoteDescription(rtc::Description(sdp, rtc::Description::Type::Offer));
-      transport_->AddPeer(peer_id, peer);
+
+        if (!peer) {
+            LOGI << "Received offer for new peer " << peer_id;
+            peer = transport_->CreatePeer(peer_id);
+            peer->peer_connection_->onDataChannel([this, peer_id, wpeer = std::weak_ptr(peer)](
+                                                      const std::shared_ptr<rtc::DataChannel>& data_channel) {
+                if (auto p = wpeer.lock()) {
+                    if (data_channel->label() == "data") {
+                        SetupDataChannel(p, peer_id, data_channel);
+                    } else {
+                        LOGW << "Ignoring unexpected data channel with label: " << data_channel->label();
+                    }
+                }
+            });
+            transport_->AddPeer(peer_id, peer);
+        }
+        const auto sdp = message["sdp"].get<std::string>();
+        peer->peer_connection_->setRemoteDescription(rtc::Description(sdp, rtc::Description::Type::Offer));
     } else if (type == "answer") {
       if (const auto peer = transport_->GetPeer(peer_id); peer != nullptr) {
         const auto sdp = message["sdp"].get<std::string>();
@@ -354,43 +383,51 @@ public:
     }
   }
 
-  void SendChatMessage(const std::string& peer_id, const std::string& message) const {
-    if (!contact_manager_->GetContact(peer_id)) {
-        LOGE << "Cannot send message to " << peer_id << ". Not a contact.";
-        return;
-    }
+  void SendChatMessage(const std::string& peer_id, const std::string& message) {
+      if (!contact_manager_->GetContact(peer_id)) {
+          LOGE << "Cannot send message to %s. Not a contact.", peer_id.c_str();
+          return;
+      }
 
-    const auto peer = transport_->GetPeer(peer_id);
-    if (peer && peer->data_channel_ && peer->data_channel_->isOpen() && peer->session_cipher_->IsReady()) {
-      DirectSend(peer, peer_id, message);
-    } else {
-      LOGI << "Peer " << peer_id << " is offline or not ready. Buffering message.";
+      message_history_->AddMessage(peer_id, message, messaging::MessageDirection::Sent);
+
+      const auto peer = transport_->GetPeer(peer_id);
+      if (peer && peer->data_channel_ && peer->data_channel_->isOpen() && peer->session_cipher_->IsReady()) {
+          if (DirectSend(peer, peer_id, message)) {
+              LOGI << "Sent direct message to " << peer_id;
+              return; // Success
+          }
+      }
+
+      // If we reach here, direct send failed or was not possible.
+      LOGI << "Peer " << peer_id << " is offline or not ready, or send failed. Buffering message.";
       const Json json_msg = {{"type", "chat"}, {"content", message}};
       message_queue_->Enqueue(peer_id, json_msg.dump());
-      delivery_service_->attemptDelivery(peer_id);
-    }
+      if (!peer) {
+        delivery_service_->attemptDelivery(peer_id);
+      }
+  }
+
+  auto GetMessageHistory(const std::string& peer_id) -> std::deque<messaging::HistoryMessage> {
+    return message_history_->GetHistory(peer_id);
   }
 
 private:
-  void DirectSend(const std::shared_ptr<Peer>& peer, const std::string& peer_id, const std::string& message) const {
+  auto DirectSend(const std::shared_ptr<Peer>& peer, const std::string& peer_id, const std::string& message) const -> bool {
     if (!peer || !peer->data_channel_ || !peer->data_channel_->isOpen() || !peer->session_cipher_->IsReady()) {
-      LOGE << "Direct send called but peer is not ready. Re-queuing message for " << peer_id;
-      const Json json_msg = {{"type", "chat"}, {"content", message}};
-      message_queue_->Enqueue(peer_id, json_msg.dump());
-      return;
+      return false;
     }
 
     auto encrypted_payload = peer->session_cipher_->Encrypt(message);
     if (encrypted_payload.empty()) {
-      LOGE << "Failed to encrypt chat message for peer " << peer_id << ". Re-queuing.";
-      const Json json_msg = {{"type", "chat"}, {"content", message}};
-      message_queue_->Enqueue(peer_id, json_msg.dump());
-      return;
+      LOGE << "Failed to encrypt chat message for peer " << peer_id;
+      return false;
     }
     const Json json_message = {
         {"type", "chat"},
         {"payload", rtc::binary(encrypted_payload.begin(), encrypted_payload.end())}};
     transport_->SendPeerDataChannelMessage(peer->data_channel_, json_message);
+    return true;
   }
 
   void SendSampleToPeers(const rtc::binary& sample, Stream::Source::Type type, const uint64_t sampleTime) const {
@@ -440,6 +477,7 @@ private:
               {"is_reply", true}};
           transport_->SendPeerDataChannelMessage(peer->data_channel_, reply);
         }
+        // Key exchange is complete, now we can send queued messages.
         SendQueuedMessages(peer_id);
       } else {
         LOGE << "Failed to compute shared secret with peer " << peer_id;
@@ -449,7 +487,8 @@ private:
         auto payload = message.at("payload").get<rtc::binary>();
         auto decrypted_message = peer->session_cipher_->Decrypt({payload.begin(), payload.end()});
         if (!decrypted_message.empty()) {
-          (*on_chat_message_received_)(peer_id, decrypted_message);
+          const auto history_message = message_history_->AddMessage(peer_id, decrypted_message, messaging::MessageDirection::Received);
+          (*on_chat_message_received_)(peer_id, history_message);
         } else {
           LOGW << "Failed to decrypt message from " << peer_id;
         }
@@ -479,10 +518,12 @@ private:
 
         if (type == "chat") {
           if (peer->session_cipher_->IsReady()) {
-            DirectSend(peer, peer_id, message.value("content", ""));
+            if (!DirectSend(peer, peer_id, message.value("content", ""))) {
+              LOGW << "Failed to send queued chat message to " << peer_id << ". It will remain in queue.";
+              return;  // Abort and retry later
+            }
           } else {
             LOGW << "Session cipher not ready for chat message to " << peer_id << ". Message will remain in queue.";
-            // Don't clear the queue if we can't send everything.
             return;
           }
         } else {
@@ -501,12 +542,8 @@ private:
     data_channel->onOpen([this, peer_id, peer]() {
       LOGI << "Data channel with " << peer_id << " opened.";
       delivery_service_->connectionAttemptFinished(peer_id);
-      const Json profile_message = {
-          {"type", "profile"},
-          {"profile", GetDeviceProfileAsJson()},
-      };
-      transport_->SendPeerDataChannelMessage(peer->data_channel_, profile_message);
 
+      // Initiate the key exchange
       auto my_pub_key = peer->session_cipher_->GetPublicKey();
       const Json key_exchange_message = {
           {"type", "key_exchange"},

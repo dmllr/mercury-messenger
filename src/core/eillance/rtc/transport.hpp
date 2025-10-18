@@ -6,6 +6,7 @@
 #include <functional>
 #include <memory>
 #include <thread>
+#include <mutex>
 #include <unordered_map>
 
 #include <nlohmann/json.hpp>
@@ -62,6 +63,7 @@ class RtcTransport {
   std::shared_ptr<StatusCallbackFunction> status_callback_{};
 
   std::unordered_map<std::string, std::shared_ptr<Peer>> peers_;
+  mutable std::mutex peers_mutex_;
 
   RtcTransportDelegate* delegate_{nullptr};
 
@@ -105,42 +107,43 @@ public:
   }
 
   void StopStreaming() {
-    for (auto& peer: peers_ | std::views::values) {
-        if (peer && peer->peer_connection_) {
-            peer->peer_connection_->close();
-        }
+    std::unordered_map<std::string, std::shared_ptr<Peer>> peersToDestroy;
+    {
+      std::lock_guard<std::mutex> lock(peers_mutex_);
+      peersToDestroy.swap(peers_);
     }
-    peers_.clear();
   }
 
   void Terminate() {
     terminate_requested_ = true;
     if (ws_ != nullptr) {
       StopStreaming();
-      ws_->resetCallbacks();
       if (ws_->isOpen()) {
         ws_->close();
       }
+      ws_->resetCallbacks();
     }
     ReportServiceConnectionState(ServiceConnectionState::disconnected);
   }
 
   void AddPeer(const std::string& peer_id, const std::shared_ptr<Peer>& peer) {
+    std::lock_guard<std::mutex> lock(peers_mutex_);
     peers_.emplace(std::string(peer_id), peer);
   }
 
   auto GetPeer(const std::string& peer_id) const -> std::shared_ptr<Peer> {
-    if (const auto it = peers_.find(peer_id); it != peers_.end()) {
-      return peers_.at(peer_id);
-    }
-    return nullptr;
+    std::lock_guard<std::mutex> lock(peers_mutex_);
+    const auto it = peers_.find(peer_id);
+    return (it != peers_.end()) ? it->second : nullptr;
   }
 
   auto GetPeers() const {
+    std::lock_guard<std::mutex> lock(peers_mutex_);
     return peers_;
   }
 
   void RemovePeer(const std::string& peer_id) {
+    std::lock_guard<std::mutex> lock(peers_mutex_);
     peers_.erase(peer_id);
   }
 
@@ -210,7 +213,6 @@ private:
     LOGI << "WebSocket connected, signaling ready";
     connection_attempt_ = 0;
     wait_before_reconnect_ = minWaitBeforeReconnect;
-    ReportServiceConnectionState(ServiceConnectionState::online);
     Login();
   }
 
@@ -218,7 +220,15 @@ private:
       LOGW << "WebSocket connection closed";
       is_logged_in_ = false;
 
-      for (const auto& peer: peers_ | std::views::values) {
+      std::vector<std::shared_ptr<Peer>> peers_to_close;
+      {
+        std::lock_guard<std::mutex> lock(peers_mutex_);
+        for(const auto& [id, peer] : peers_) {
+          peers_to_close.push_back(peer);
+        }
+      }
+
+      for (const auto& peer : peers_to_close) {
           if(peer && peer->peer_connection_) {
               peer->peer_connection_->close();
           }
@@ -296,24 +306,33 @@ private:
 
     WsSendMessage(message);
     is_logged_in_ = true;
+    ReportServiceConnectionState(ServiceConnectionState::online);
   }
 
   auto CreatePeerConnection(const std::string& peer_id) -> std::shared_ptr<rtc::PeerConnection> {
     auto peer_connection = std::make_shared<rtc::PeerConnection>(RtcConfiguration::Config());
 
     peer_connection->onStateChange([this, peer_id](rtc::PeerConnection::State state) {
-      LOGI << "State: " << static_cast<int>(state);
+      std::string stateStr = "unknown";
+      switch(state) {
+          case rtc::PeerConnection::State::New: stateStr = "New"; break;
+          case rtc::PeerConnection::State::Connecting: stateStr = "Connecting"; break;
+          case rtc::PeerConnection::State::Connected: stateStr = "Connected"; break;
+          case rtc::PeerConnection::State::Disconnected: stateStr = "Disconnected"; break;
+          case rtc::PeerConnection::State::Failed: stateStr = "Failed"; break;
+          case rtc::PeerConnection::State::Closed: stateStr = "Closed"; break;
+      }
+      LOGI << "Peer " << peer_id << " state changed to " << stateStr << " (" << static_cast<int>(state) << ")";
       ReportPeerStateChange(peer_id, EventSource::peerConnectionState, static_cast<int>(state));
 
       if (state == rtc::PeerConnection::State::Failed ||
           state == rtc::PeerConnection::State::Disconnected) {
-        // If connection fails or disconnects, gracefully close it.
-        // The object will be removed when the state transitions to Closed.
         if (const auto peer = GetPeer(peer_id)) {
+            LOGI << "Closing failed/disconnected peer connection for " << peer_id;
             peer->peer_connection_->close();
         }
       } else if (state == rtc::PeerConnection::State::Closed) {
-          // Once closed, it's safe to remove and destroy the peer object.
+          LOGI << "Peer connection for " << peer_id << " is closed. Removing from transport.";
           DispatchQueue::MainThread().Dispatch([this, peer_id]() {
               RemovePeer(peer_id);
           });
