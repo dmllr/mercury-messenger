@@ -1,7 +1,6 @@
 #pragma once
 
 #include <algorithm>
-#include <atomic>
 #include <deque>
 #include <functional>
 #include <memory>
@@ -9,7 +8,6 @@
 #include <optional>
 #include <sstream>
 #include <string>
-#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -17,7 +15,6 @@
 #include "eillance/identity/contact_manager.hpp"
 #include "eillance/messaging/message_history.hpp"
 #include "eillance/rtc/client.hpp"
-#include "eillance/storage/persistent_storage.hpp"
 
 namespace eillance::view_model {
 
