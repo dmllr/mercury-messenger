@@ -69,8 +69,29 @@ public:
         AddSystemMessageToChat("--> Adding contact: " + arg);
         rtc_client_->AddContact(arg);
       } else if (command == "/accept") {
-        AddSystemMessageToChat("--> Accepting contact: " + arg);
-        rtc_client_->ConfirmContact(arg);
+        if (arg.empty()) {
+            AddSystemMessageToChat("--> Usage: /accept <contact_id>");
+        } else {
+            std::vector<std::string> matches;
+            {
+                const std::lock_guard<std::mutex> lock(state_mutex_);
+                for (const auto& contact : current_state_.contacts) {
+                    // Allow partial ID matching from the beginning of the string.
+                    if (contact.peer_id.starts_with(arg)) {
+                        matches.push_back(contact.peer_id);
+                    }
+                }
+            }
+
+            if (matches.empty()) {
+                AddSystemMessageToChat("--> Contact not found for ID starting with: " + arg);
+            } else if (matches.size() > 1) {
+                AddSystemMessageToChat("--> Ambiguous ID. Multiple contacts start with: " + arg);
+            } else {
+                AddSystemMessageToChat("--> Accepting contact: " + matches[0]);
+                rtc_client_->ConfirmContact(matches[0]);
+            }
+        }
       } else if (command == "/exit") {
         return true;  // Signal exit to the UI.
       } else {
@@ -148,7 +169,7 @@ private:
       current_state_.contacts = rtc_client_->GetContacts();
       auto& history = all_chat_histories_[peer_id];
       history.push_back("--> Contact request from " + peer_id);
-      history.push_back("--> Use '/accept " + peer_id + "' to confirm.");
+      history.push_back("--> Use '/accept " + peer_id.substr(0, 12) + "...' to confirm.");
       if (current_state_.selected_contact_id && *current_state_.selected_contact_id == peer_id) {
         UpdateChatHistoryForSelectedContact();
       }

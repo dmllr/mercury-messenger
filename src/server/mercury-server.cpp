@@ -48,6 +48,8 @@ private:
   std::mutex peersMutex_;
   std::unordered_map<PeerId, std::unordered_set<PeerId>> interested_peers_;
   std::mutex interestedPeersMutex_;
+  std::unordered_map<PeerId, std::vector<std::string>> offline_service_messages_;
+  std::mutex service_messages_mutex_;
 
   void HandleConnection(const std::shared_ptr<rtc::WebSocket>& wss) {
     LGD << "New connection established";
@@ -87,6 +89,18 @@ private:
             peers_[peer_id] = {wss};
             LGI << "Peer registered: " << peer_id;
           }
+
+          {
+            const std::lock_guard<std::mutex> lock(service_messages_mutex_);
+            if (auto it = offline_service_messages_.find(peer_id); it != offline_service_messages_.end()) {
+              LGI << "Delivering " << it->second.size() << " queued service message(s) to " << peer_id;
+              for (const auto& queued_msg : it->second) {
+                wss->send(queued_msg);
+              }
+              offline_service_messages_.erase(it);
+            }
+          }
+
 
           std::unordered_set<PeerId> parties_to_notify;
           {
@@ -131,13 +145,21 @@ private:
           const std::lock_guard<std::mutex> lock(peersMutex_);
           auto itr = peers_.find(destination_id);
           if (itr == peers_.end() || !itr->second.ws || !itr->second.ws->isOpen()) {
-            LGE << "Peer " << destination_id << " not found or not connected.";
-            SendError(wss, "peer_not_found", "Peer '" + destination_id + "' not found.", destination_id);
+            LGE << "Peer " << destination_id << " not found or not connected.";            
+            const bool is_service_message = (type == "contact_add_request" || type == "contact_confirm");
+            if (is_service_message) {
+                const std::lock_guard<std::mutex> service_lock(service_messages_mutex_);
+                LGI << "Queueing service message of type '" << type << "' for offline peer " << destination_id;
+                json["from"] = peer_id;
+                offline_service_messages_[destination_id].push_back(json.dump());
+            } else {
+                SendError(wss, "peer_not_found", "Peer '" + destination_id + "' not found.", destination_id);
 
-            const std::lock_guard<std::mutex> interest_lock(interestedPeersMutex_);
-            LGI << "Peer " << peer_id << " registered interest in offline peer " << destination_id;
-            interested_peers_[destination_id].insert(peer_id);
-            return;
+                const std::lock_guard<std::mutex> interest_lock(interestedPeersMutex_);
+                LGI << "Peer " << peer_id << " registered interest in offline peer " << destination_id;
+                interested_peers_[destination_id].insert(peer_id);
+            }
+            return;            
           }
 
           json["from"] = peer_id;

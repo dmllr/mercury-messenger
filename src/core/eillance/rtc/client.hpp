@@ -110,7 +110,7 @@ public:
   RtcClient& operator=(const RtcClient&) = delete;
   ~RtcClient() override = default;
 
-  [[nodiscard]] auto GetId() const -> std::string {
+  [[nodcard]] auto GetId() const -> std::string {
     return id_manager_->GetId();
   }
 
@@ -184,9 +184,8 @@ public:
   void AddContact(const std::string& peer_id) const {
     if (contact_manager_->AddContact(peer_id)) {
       LOGI << "Queueing contact request for " << peer_id;
-      const Json msg = {{"type", "contact_add_request"}};
-      message_queue_->Enqueue(peer_id, msg.dump());
-      delivery_service_->attemptDelivery(peer_id);
+      const Json msg = {{"type", "contact_add_request"}, {"to", peer_id}};
+      transport_->SendSignalingMessage(msg);
       if (on_contact_status_changed_) {
         (*on_contact_status_changed_)(peer_id, identity::ContactStatus::pendingApproval);
       }
@@ -195,10 +194,9 @@ public:
 
   void ConfirmContact(const std::string& peer_id) const {
     if (contact_manager_->ConfirmContact(peer_id)) {
-      LOGI << "Queueing contact confirmation for " << peer_id;
-      const Json msg = {{"type", "contact_confirm"}};
-      message_queue_->Enqueue(peer_id, msg.dump());
-      delivery_service_->attemptDelivery(peer_id);
+      LOGI << "Sending contact confirmation for " << peer_id;
+      const Json msg = {{"type", "contact_confirm"}, {"to", peer_id}};
+      transport_->SendSignalingMessage(msg);
       if (on_contact_status_changed_) {
         (*on_contact_status_changed_)(peer_id, identity::ContactStatus::confirmed);
       }
@@ -263,11 +261,6 @@ public:
     auto type = type_it->get<std::string>();
 
     if (type == "offer") {
-      if (!contact_manager_->IsConfirmedContact(peer_id)) {
-        LOGW << "Ignoring offer from non-confirmed contact: " << peer_id;
-        return;
-      }
-
       if (transport_->GetPeer(peer_id)) {
         LOGI << "Received offer for existing peer " << peer_id << ", probably renegotiation.";
       }
@@ -287,6 +280,19 @@ public:
         const auto sdp = message["sdp"].get<std::string>();
         const auto answer = rtc::Description(sdp, type);
         peer->peer_connection_->setRemoteDescription(answer);
+      }
+    } else if (type == "contact_add_request") {
+      if (contact_manager_->ReceiveContactRequest(peer_id)) {
+        if (on_contact_request_) {
+          (*on_contact_request_)(peer_id);
+        }
+      }
+    } else if (type == "contact_confirm") {
+      if (contact_manager_->MarkAsConfirmed(peer_id)) {
+        LOGI << "Contact " << peer_id << " has confirmed your request.";
+        if (on_contact_status_changed_) {
+          (*on_contact_status_changed_)(peer_id, identity::ContactStatus::confirmed);
+        }
       }
     }
   }
@@ -437,19 +443,6 @@ private:
         SendQueuedMessages(peer_id);
       } else {
         LOGE << "Failed to compute shared secret with peer " << peer_id;
-      }
-    } else if (type == "contact_add_request") {
-      if (contact_manager_->ReceiveContactRequest(peer_id)) {
-        if (on_contact_request_) {
-          (*on_contact_request_)(peer_id);
-        }
-      }
-    } else if (type == "contact_confirm") {
-      if (contact_manager_->MarkAsConfirmed(peer_id)) {
-        LOGI << "Contact " << peer_id << " has confirmed your request.";
-        if (on_contact_status_changed_) {
-          (*on_contact_status_changed_)(peer_id, identity::ContactStatus::confirmed);
-        }
       }
     } else if (type == "chat") {
       if (on_chat_message_received_ && peer->session_cipher_->IsReady()) {
