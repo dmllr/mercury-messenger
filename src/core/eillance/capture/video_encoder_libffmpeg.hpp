@@ -1,7 +1,5 @@
 #pragma once
 
-#include <cstdint>
-#include <string>
 #include <utility>
 #include <vector>
 
@@ -15,7 +13,6 @@ extern "C" {
 #include "libavutil/imgutils.h"
 #include "libavutil/opt.h"
 #include "libavutil/pixfmt.h"
-#include "libavutil/time.h"
 }
 #ifdef _WIN32
 #undef CLSCTX_ALL
@@ -24,7 +21,6 @@ extern "C" {
 
 #include "eillance/utils/packet.hpp"
 #include "eillance/utils/time.hpp"
-#include "eillance/capture/video_config.hpp"
 #include "eillance/logging/logging.h"
 
 namespace eillance {

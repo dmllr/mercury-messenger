@@ -1,14 +1,11 @@
 #pragma once
 
-#include <chrono>
 #include <cstdint>
 #include <utility>
 #include <vector>
 
-#include "eillance/utils/time.hpp"
 #include "eillance/capture/capture.hpp"
 #include "eillance/capture/config.hpp"
-#include "eillance/logging/logging.h"
 #include "eillance/rtc/stream.hpp"
 
 namespace eillance {

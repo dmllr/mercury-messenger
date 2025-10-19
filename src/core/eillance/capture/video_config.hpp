@@ -1,7 +1,5 @@
 #pragma once
 
-#include "eillance/utils/time.hpp"
-
 namespace eillance {
 
 struct VideoConfigDefaults {

@@ -1,19 +1,11 @@
 #pragma once
 
-#include <chrono>
-#include <cstddef>
 #include <cstdint>
-#include <limits>
-#include <stdexcept>
-#include <string>
-#include <vector>
 
 #include <opus.h>
 
 #include "eillance/utils/packet.hpp"
-#include "eillance/utils/time.hpp"
 #include "eillance/capture/audio_config.hpp"
-#include "eillance/logging/logging.h"
 
 namespace eillance {
 

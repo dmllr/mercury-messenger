@@ -19,12 +19,12 @@ enum class ContactStatus {
 
 // Helper for JSON serialization
 NLOHMANN_JSON_SERIALIZE_ENUM(  // NOLINT
-  ContactStatus,
-  {
-    {ContactStatus::pendingApproval, "pending_approval"},
-    {ContactStatus::awaitingApproval, "awaiting_approval"},
-    {ContactStatus::confirmed, "confirmed"},
-  })
+    ContactStatus,
+    {
+      {ContactStatus::pendingApproval, "pending_approval"},
+      {ContactStatus::awaitingApproval, "awaiting_approval"},
+      {ContactStatus::confirmed, "confirmed"},
+    })
 
 struct Contact {
   std::string peer_id;
@@ -51,8 +51,7 @@ public:
       return false;
     }
     contacts_[peer_id] = {.peer_id=peer_id, .status=ContactStatus::pendingApproval};
-    SaveContacts();
-    return true;
+    return SaveContacts();
   }
 
   // Marks that we have received a request from a peer.
@@ -62,8 +61,7 @@ public:
       return false;  // Already confirmed
     }
     contacts_[peer_id] = {.peer_id=peer_id, .status=ContactStatus::awaitingApproval};
-    SaveContacts();
-    return true;
+    return SaveContacts();
   }
 
   // Confirms a contact that was awaiting our approval.
@@ -73,8 +71,7 @@ public:
       return false;
     }
     contacts_[peer_id].status = ContactStatus::confirmed;
-    SaveContacts();
-    return true;
+    return SaveContacts();
   }
 
   // Marks a contact as confirmed after they accepted our request.
@@ -131,7 +128,7 @@ private:
     }
   }
 
-  void SaveContacts() const {
+  bool SaveContacts() const {
     nlohmann::json j = nlohmann::json::array();
     for (const auto& val: contacts_ | std::views::values) {
       j.push_back({{"peer_id", val.peer_id}, {"status", val.status}});
@@ -140,8 +137,10 @@ private:
     const auto* char_ptr = reinterpret_cast<const std::byte*>(json_str.data());
     const std::vector<std::byte> data(char_ptr, char_ptr + json_str.size());
     if (!storage_->Save(contactsFile, data)) {
-        LOGE << "Failed to save contacts file to persistent storage.";
+      LOGE << "Failed to save contacts file to persistent storage.";
+      return false;
     }
+    return true;
   }
 };
 

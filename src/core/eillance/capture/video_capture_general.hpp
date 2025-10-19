@@ -3,16 +3,11 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <limits>
 #include <stdexcept>
-#include <string>
-#include <utility>
-#include <vector>
 
 #include <opencv2/core/mat.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/videoio.hpp>
-#include <rtc/common.hpp>
 
 #include "eillance/utils/dispatch_queue.hpp"
 #include "eillance/utils/packet.hpp"

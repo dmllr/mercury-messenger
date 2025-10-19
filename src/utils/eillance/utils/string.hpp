@@ -1,10 +1,9 @@
 #pragma once
 
 #include <cstdlib>
-#include <ctime>
 #include <string>
 
-#include "time.hpp"
+#include "eillance/utils/time.hpp"
 
 class StringUtils {
 public:
