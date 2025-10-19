@@ -1,5 +1,6 @@
 #pragma once
 
+#include <filesystem>
 #include <memory>
 #include <utility>
 
@@ -49,6 +50,7 @@ class RtcClient final : public RtcTransportDelegate {
   using OnChatMessageReceivedCallback = std::function<void(const std::string&, const messaging::HistoryMessage&)>;
   using OnContactRequestCallback = std::function<void(const std::string& peer_id)>;
   using OnContactStatusChangedCallback = std::function<void(const std::string& peer_id, identity::ContactStatus status)>;
+  using OnPeerListUpdateCallback = std::function<void(const std::vector<Device>&)>;
 
   std::shared_ptr<Stream> av_stream_;
   std::shared_ptr<RtcTransport> transport_;
@@ -58,6 +60,7 @@ class RtcClient final : public RtcTransportDelegate {
   std::shared_ptr<OnChatMessageReceivedCallback> on_chat_message_received_{};
   std::shared_ptr<OnContactRequestCallback> on_contact_request_{};
   std::shared_ptr<OnContactStatusChangedCallback> on_contact_status_changed_{};
+  std::shared_ptr<OnPeerListUpdateCallback> on_peer_list_update_{};
 
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::unique_ptr<identity::IdManager> id_manager_;
@@ -65,6 +68,9 @@ class RtcClient final : public RtcTransportDelegate {
   std::shared_ptr<messaging::MessageQueue> message_queue_;
   std::unique_ptr<messaging::MessageDeliveryService> delivery_service_;
   std::unique_ptr<messaging::MessageHistory> message_history_;
+
+  std::unordered_map<std::string, Device> online_peers_;
+  mutable std::mutex online_peers_mutex_;
 
 public:
   explicit RtcClient(std::shared_ptr<storage::PersistentStorage> storage, Capture video_capture) {
@@ -138,6 +144,15 @@ public:
   void SetChatMessageReceivedCallback(const OnChatMessageReceivedCallback& callback) { on_chat_message_received_ = std::make_shared<OnChatMessageReceivedCallback>(callback); }
   void SetContactRequestCallback(const OnContactRequestCallback& callback) { on_contact_request_ = std::make_shared<OnContactRequestCallback>(callback); }
   void SetContactStatusChangedCallback(const OnContactStatusChangedCallback& callback) { on_contact_status_changed_ = std::make_shared<OnContactStatusChangedCallback>(callback); }
+  void SetPeerListUpdateCallback(const OnPeerListUpdateCallback& callback) { on_peer_list_update_ = std::make_shared<OnPeerListUpdateCallback>(callback); }
+
+  void RequestPeerListUpdate() {
+    UpdateAndNotifyPeerList();
+  }
+
+  void Call(const std::string& peer_id) {
+    Connect(peer_id);
+  }
 
   void Connect(const std::string& peer_id) {
     if (transport_->GetPeer(peer_id)) {
@@ -230,24 +245,40 @@ public:
   void OnPeerReady(const std::shared_ptr<Peer>&) override {}
 
   void OnPeerOnline(const std::string& peer_id) override {
-      LOGI << "Peer " << peer_id << " is online. Checking for queued messages.";
-      if (!message_queue_->GetQueuedMessages(peer_id).empty()) {
-          delivery_service_->attemptDelivery(peer_id);
-      }
+    LOGI << "Peer " << peer_id << " is online. Adding to list.";
+    {
+      std::lock_guard<std::mutex> lock(online_peers_mutex_);
+      online_peers_[peer_id].id = peer_id;
+      online_peers_[peer_id].name = peer_id; // Use ID as placeholder for name
+    }
+    UpdateAndNotifyPeerList();
+
+    if (!message_queue_->GetQueuedMessages(peer_id).empty()) {
+      delivery_service_->attemptDelivery(peer_id);
+    }
+  }
+
+  void OnPeerOffline(const std::string& peer_id) override {
+    LOGI << "Peer " << peer_id << " is offline. Removing from list.";
+    {
+      std::lock_guard<std::mutex> lock(online_peers_mutex_);
+      online_peers_.erase(peer_id);
+    }
+    UpdateAndNotifyPeerList();
   }
 
   void OnSignalingErrorForPeer(const std::string& peer_id, const std::string& error) override {
     if (error == "peer_not_found") {
-        LOGW << "Connection attempt failed for peer " << peer_id << " because they are not online. Will retry when they appear.";
-        // This is a critical step: we immediately mark the connection attempt as "finished"
-        // so that the delivery service can try again when it receives an OnPeerOnline event.
-        delivery_service_->connectionAttemptFinished(peer_id);
+      LOGW << "Connection attempt failed for peer " << peer_id << " because they are not online. Will retry when they appear.";
+      // This is a critical step: we immediately mark the connection attempt as "finished"
+      // so that the delivery service can try again when it receives an OnPeerOnline event.
+      delivery_service_->connectionAttemptFinished(peer_id);
 
-        // Also, the PeerConnection object created for this attempt is now useless,
-        // so we should close and remove it.
-        if (const auto peer = transport_->GetPeer(peer_id)) {
-            peer->peer_connection_->close();
-        }
+      // Also, the PeerConnection object created for this attempt is now useless,
+      // so we should close and remove it.
+      if (const auto peer = transport_->GetPeer(peer_id)) {
+        peer->peer_connection_->close();
+      }
     }
   }
 
@@ -265,43 +296,43 @@ public:
     auto type = type_it->get<std::string>();
 
     if (type == "offer") {
-        std::shared_ptr<Peer> peer = transport_->GetPeer(peer_id);
+      std::shared_ptr<Peer> peer = transport_->GetPeer(peer_id);
 
-        if (peer && peer->peer_connection_->signalingState() == rtc::PeerConnection::SignalingState::HaveLocalOffer) {
-            // Glare condition detected. We have a local offer and received a remote offer.
-            // We use lexicographical comparison of IDs as a tie-breaker.
-            const bool am_i_polite = GetId() < peer_id;
+      if (peer && peer->peer_connection_->signalingState() == rtc::PeerConnection::SignalingState::HaveLocalOffer) {
+        // Glare condition detected. We have a local offer and received a remote offer.
+        // We use lexicographical comparison of IDs as a tie-breaker.
+        const bool am_i_polite = GetId() < peer_id;
 
-            if (am_i_polite) {
-                LOGW << "Glare detected, and our ID is smaller. We will be 'polite', "
-                     << "rolling back our local offer and accepting the remote one.";
-                // To roll back, we destroy the current peer connection and create a new one.
-                transport_->RemovePeer(peer_id);
-                peer = nullptr; // Ensure we fall into the "new peer" logic below.
+        if (am_i_polite) {
+          LOGW << "Glare detected, and our ID is smaller. We will be 'polite', "
+               << "rolling back our local offer and accepting the remote one.";
+          // To roll back, we destroy the current peer connection and create a new one.
+          transport_->RemovePeer(peer_id);
+          peer = nullptr; // Ensure we fall into the "new peer" logic below.
+        } else {
+          LOGW << "Glare detected, and our ID is larger. We will be 'impolite', "
+               << "ignoring the remote offer and proceeding with ours.";
+          return; // Ignore the incoming offer.
+        }
+      }
+
+      if (!peer) {
+        LOGI << "Received offer for new peer " << peer_id;
+        peer = transport_->CreatePeer(peer_id);
+        peer->peer_connection_->onDataChannel([this, peer_id, wpeer = std::weak_ptr(peer)](
+            const std::shared_ptr<rtc::DataChannel>& data_channel) {
+          if (auto p = wpeer.lock()) {
+            if (data_channel->label() == "data") {
+              SetupDataChannel(p, peer_id, data_channel);
             } else {
-                LOGW << "Glare detected, and our ID is larger. We will be 'impolite', "
-                     << "ignoring the remote offer and proceeding with ours.";
-                return; // Ignore the incoming offer.
+              LOGW << "Ignoring unexpected data channel with label: " << data_channel->label();
             }
-        }
-
-        if (!peer) {
-            LOGI << "Received offer for new peer " << peer_id;
-            peer = transport_->CreatePeer(peer_id);
-            peer->peer_connection_->onDataChannel([this, peer_id, wpeer = std::weak_ptr(peer)](
-                                                      const std::shared_ptr<rtc::DataChannel>& data_channel) {
-                if (auto p = wpeer.lock()) {
-                    if (data_channel->label() == "data") {
-                        SetupDataChannel(p, peer_id, data_channel);
-                    } else {
-                        LOGW << "Ignoring unexpected data channel with label: " << data_channel->label();
-                    }
-                }
-            });
-            transport_->AddPeer(peer_id, peer);
-        }
-        const auto sdp = message["sdp"].get<std::string>();
-        peer->peer_connection_->setRemoteDescription(rtc::Description(sdp, rtc::Description::Type::Offer));
+          }
+        });
+        transport_->AddPeer(peer_id, peer);
+      }
+      const auto sdp = message["sdp"].get<std::string>();
+      peer->peer_connection_->setRemoteDescription(rtc::Description(sdp, rtc::Description::Type::Offer));
     } else if (type == "answer") {
       if (const auto peer = transport_->GetPeer(peer_id); peer != nullptr) {
         const auto sdp = message["sdp"].get<std::string>();
@@ -324,7 +355,18 @@ public:
     }
   }
 
-  void ProcessSystemMessage(const std::string& type, Json /*message*/) override {
+  void ProcessSystemMessage(const std::string& type, Json message) override {
+    if (type == "peers" && on_peer_list_update_) {
+      std::vector<Device> peers;
+      for (const auto& peer_json : message.at("peers")) {
+        Device d;
+        d.id = peer_json.at("id").get<std::string>();
+        d.name = peer_json.value("name", d.id);
+        peers.push_back(d);
+      }
+      (*on_peer_list_update_)(peers);
+      return;
+    }
     LOGW << "Unhandled system message of type: " << type;
   }
 
@@ -382,28 +424,28 @@ public:
   }
 
   void SendChatMessage(const std::string& peer_id, const std::string& message) {
-      if (!contact_manager_->GetContact(peer_id)) {
-          LOGE << "Cannot send message to %s. Not a contact.", peer_id.c_str();
-          return;
-      }
+    if (!contact_manager_->GetContact(peer_id)) {
+      LOGE << "Cannot send message to %s. Not a contact.", peer_id.c_str();
+      return;
+    }
 
-      message_history_->AddMessage(peer_id, message, messaging::MessageDirection::Sent);
+    message_history_->AddMessage(peer_id, message, messaging::MessageDirection::Sent);
 
-      const auto peer = transport_->GetPeer(peer_id);
-      if (peer && peer->data_channel_ && peer->data_channel_->isOpen() && peer->session_cipher_->IsReady()) {
-          if (DirectSend(peer, peer_id, message)) {
-              LOGI << "Sent direct message to " << peer_id;
-              return; // Success
-          }
+    const auto peer = transport_->GetPeer(peer_id);
+    if (peer && peer->data_channel_ && peer->data_channel_->isOpen() && peer->session_cipher_->IsReady()) {
+      if (DirectSend(peer, peer_id, message)) {
+        LOGI << "Sent direct message to " << peer_id;
+        return; // Success
       }
+    }
 
-      // If we reach here, direct send failed or was not possible.
-      LOGI << "Peer " << peer_id << " is offline or not ready, or send failed. Buffering message.";
-      const Json json_msg = {{"type", "chat"}, {"content", message}};
-      message_queue_->Enqueue(peer_id, json_msg.dump());
-      if (!peer) {
-        delivery_service_->attemptDelivery(peer_id);
-      }
+    // If we reach here, direct send failed or was not possible.
+    LOGI << "Peer " << peer_id << " is offline or not ready, or send failed. Buffering message.";
+    const Json json_msg = {{"type", "chat"}, {"content", message}};
+    message_queue_->Enqueue(peer_id, json_msg.dump());
+    if (!peer) {
+      delivery_service_->attemptDelivery(peer_id);
+    }
   }
 
   auto GetMessageHistoryPage(const std::string& peer_id, size_t page_index, size_t page_size) const -> messaging::HistoryPage {
@@ -411,6 +453,19 @@ public:
   }
 
 private:
+  void UpdateAndNotifyPeerList() {
+    if (on_peer_list_update_) {
+      std::vector<Device> peer_list;
+      {
+        std::lock_guard<std::mutex> lock(online_peers_mutex_);
+        for (const auto& pair : online_peers_) {
+          peer_list.push_back(pair.second);
+        }
+      }
+      (*on_peer_list_update_)(peer_list);
+    }
+  }
+
   auto DirectSend(const std::shared_ptr<Peer>& peer, const std::string& peer_id, const std::string& message) const -> bool {
     if (!peer || !peer->data_channel_ || !peer->data_channel_->isOpen() || !peer->session_cipher_->IsReady()) {
       return false;
@@ -458,8 +513,19 @@ private:
     };
 
     if (type == "profile") {
+      Device::Profile profile = ParseDeviceProfile(message.at("profile"));
+      {
+        std::lock_guard<std::mutex> lock(online_peers_mutex_);
+        online_peers_[peer_id].id = peer_id;
+        online_peers_[peer_id].profile = profile;
+        if (message.contains("name")) {
+          online_peers_[peer_id].name = message.at("name").get<std::string>();
+        }
+      }
+      UpdateAndNotifyPeerList();
+
       if (on_profile_received_) {
-        (*on_profile_received_)(peer_id, ParseDeviceProfile(message.at("profile")));
+        (*on_profile_received_)(peer_id, profile);
       }
     } else if (type == "termination") {
       transport_->RemovePeer(peer_id);
