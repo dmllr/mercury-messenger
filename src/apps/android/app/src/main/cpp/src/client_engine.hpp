@@ -14,10 +14,10 @@
 #include <android/native_window_jni.h>
 #include <media/NdkMediaCodec.h>
 
-#include "eillance/common/event_queue.hpp"
 #include "eillance/capture/video_config.hpp"
 #include "eillance/logging/logging.h"
 #include "eillance/rtc/client.hpp"
+#include "eillance/utils/event_queue.hpp"
 #include "eillance/utils/h264.hpp"
 #include "eillance/utils/string.hpp"
 
