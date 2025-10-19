@@ -8,6 +8,7 @@
 
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/crypto/crypto.hpp"
+#include "class_refs.hpp"
 
 namespace eillance::storage {
 
@@ -55,7 +56,7 @@ public:
         JNIEnv* env = AttachCurrentThreadIfNeeded();
         if (env == nullptr) return false;
 
-        jclass preference_manager_class = env->FindClass("androidx/preference/PreferenceManager");
+        jclass preference_manager_class = ClassRefs::Instance().Class("androidx/preference/PreferenceManager").Class();
         jmethodID get_default_shared_pref_method = env->GetStaticMethodID(preference_manager_class, "getDefaultSharedPreferences", "(Landroid/content/Context;)Landroid/content/SharedPreferences;");
         if (get_default_shared_pref_method == nullptr) return false;
 
@@ -88,7 +89,7 @@ public:
         JNIEnv* env = AttachCurrentThreadIfNeeded();
         if (env == nullptr) return std::nullopt;
 
-        jclass preference_manager_class = env->FindClass("androidx/preference/PreferenceManager");
+        jclass preference_manager_class = ClassRefs::Instance().Class("androidx/preference/PreferenceManager").Class();
         jmethodID get_default_shared_pref_method = env->GetStaticMethodID(preference_manager_class, "getDefaultSharedPreferences", "(Landroid/content/Context;)Landroid/content/SharedPreferences;");
         if (get_default_shared_pref_method == nullptr) return std::nullopt;
 
@@ -123,7 +124,7 @@ public:
         JNIEnv* env = AttachCurrentThreadIfNeeded();
         if (env == nullptr) return false;
 
-        jclass preference_manager_class = env->FindClass("androidx/preference/PreferenceManager");
+        jclass preference_manager_class = ClassRefs::Instance().Class("androidx/preference/PreferenceManager").Class();
         jmethodID get_default_shared_pref_method = env->GetStaticMethodID(preference_manager_class, "getDefaultSharedPreferences", "(Landroid/content/Context;)Landroid/content/SharedPreferences;");
         if (get_default_shared_pref_method == nullptr) return false;
 
@@ -144,7 +145,7 @@ public:
         JNIEnv* env = AttachCurrentThreadIfNeeded();
         if (env == nullptr) return false;
 
-        jclass preference_manager_class = env->FindClass("androidx/preference/PreferenceManager");
+        jclass preference_manager_class = ClassRefs::Instance().Class("androidx/preference/PreferenceManager").Class();
         jmethodID get_default_shared_pref_method = env->GetStaticMethodID(preference_manager_class, "getDefaultSharedPreferences", "(Landroid/content/Context;)Landroid/content/SharedPreferences;");
         if (get_default_shared_pref_method == nullptr) return false;
 

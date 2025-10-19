@@ -153,6 +153,10 @@ public:
     rtc_client_.Call(peer_id);
   }
 
+  void AddContact(const std::string& peer_id) {
+    rtc_client_.AddContact(peer_id);
+  }
+
   void ConfigureVideoCapture(const VideoConfig& config) {
     Config coreConfig;
     coreConfig.video_config = config;

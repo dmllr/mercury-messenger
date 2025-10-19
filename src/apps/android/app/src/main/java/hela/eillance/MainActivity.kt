@@ -6,8 +6,10 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -23,8 +25,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import hela.eillance.theme.EillanceTheme
-import hela.eillance.ui.call.CallScreen
-import hela.eillance.ui.peers.PeerListScreen
 
 class MainActivity : ComponentActivity() {
 
@@ -48,6 +48,8 @@ class MainActivity : ComponentActivity() {
     registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
       if (permissions.values.all { it }) {
         startAndBindService()
+      } else {
+        Toast.makeText(this, "Camera and microphone permissions are required to make calls.", Toast.LENGTH_LONG).show()
       }
     }
 
@@ -69,11 +71,11 @@ class MainActivity : ComponentActivity() {
             composable("peers") {
               PeerListScreen(
                 peers = peerList,
+                viewModel = viewModel,
                 onPeerClick = { peerId ->
-                  viewModel.call(peerId)
+                  callService?.call(peerId)
                   navController.navigate("call/$peerId")
-                },
-                onRefresh = { viewModel.refreshPeerList() }
+                }
               )
             }
             composable("call/{peerId}") { backStackEntry ->
@@ -81,7 +83,6 @@ class MainActivity : ComponentActivity() {
               if (peerId != null) {
                 CallScreen(
                   peerId = peerId,
-                  viewModel = viewModel,
                   onHangup = {
                     navController.popBackStack()
                   },
@@ -97,17 +98,28 @@ class MainActivity : ComponentActivity() {
   }
 
   private fun checkPermissionsAndStart() {
-    val requiredPermissions = arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
-    if (requiredPermissions.all { ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED }) {
+    val requiredPermissions = mutableListOf(
+      Manifest.permission.CAMERA,
+      Manifest.permission.RECORD_AUDIO
+    )
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+      requiredPermissions.add(Manifest.permission.POST_NOTIFICATIONS)
+    }
+
+    val allGranted = requiredPermissions.all {
+      ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
+    }
+
+    if (allGranted) {
       startAndBindService()
     } else {
-      requestPermissionLauncher.launch(requiredPermissions)
+      requestPermissionLauncher.launch(requiredPermissions.toTypedArray())
     }
   }
 
   private fun startAndBindService() {
     Intent(this, CallService::class.java).also { intent ->
-      startService(intent)
+      startForegroundService(intent)
       bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
     }
   }

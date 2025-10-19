@@ -18,6 +18,7 @@ import hela.eillance.ndkio.Peer
 import hela.eillance.ndkio.Profile
 import hela.eillance.ndkio.VideoConfig
 import hela.eillance.ndkio.interfaces.IClientNativeBridge
+import java.io.Serializable
 
 class CallService : Service(), IClientNativeBridge {
 
@@ -33,7 +34,7 @@ class CallService : Service(), IClientNativeBridge {
     super.onCreate()
     initEngine(this)
     start()
-    startForeground()
+    startForegroundService()
   }
 
   override fun onDestroy() {
@@ -41,7 +42,7 @@ class CallService : Service(), IClientNativeBridge {
     super.onDestroy()
   }
 
-  private fun startForeground() {
+  private fun startForegroundService() {
     val channelId = createNotificationChannel()
     val notificationIntent = Intent(this, MainActivity::class.java)
     val pendingIntent = PendingIntent.getActivity(this, 0, notificationIntent,
@@ -92,17 +93,25 @@ class CallService : Service(), IClientNativeBridge {
   }
 
   override fun onDeviceProfileReceived(peerId: String, profile: Profile) {
+    // This can be used to update a specific peer's details if needed
   }
 
   override fun onPeerListUpdate(peers: List<Peer>) {
-    val peerIds = peers.map { it.id }.toTypedArray()
-    val peerNames = peers.map { it.name }.toTypedArray()
     val intent = Intent(ACTION_PEER_LIST_UPDATE).apply {
-      putExtra(EXTRA_PEER_IDS, peerIds)
-      putExtra(EXTRA_PEER_NAMES, peerNames)
+      // Peer is not serializable by default, so we wrap it or extract primitives
+      val serializablePeers = ArrayList<HashMap<String, Serializable>>()
+      peers.forEach { peer ->
+        val map = hashMapOf<String, Serializable>()
+        map["id"] = peer.id
+        map["name"] = peer.name
+        // Skipping profile for simplicity in broadcast
+        serializablePeers.add(map)
+      }
+      putExtra(EXTRA_PEERS, serializablePeers)
     }
     LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
   }
+
 
   private external fun initEngine(nativeBridge: IClientNativeBridge)
   private external fun start()
@@ -111,13 +120,13 @@ class CallService : Service(), IClientNativeBridge {
   external fun releaseDecoder()
   external fun requestPeerListUpdate()
   external fun call(peerId: String)
+  external fun addContact(peerId: String)
   external fun configureVideoCapture(config: VideoConfig)
 
   companion object {
     private const val SERVICE_ID = 101
     const val ACTION_PEER_LIST_UPDATE = "action_peer_list_update"
-    const val EXTRA_PEER_IDS = "extra_peer_ids"
-    const val EXTRA_PEER_NAMES = "extra_peer_names"
+    const val EXTRA_PEERS = "extra_peers"
 
     const val ACTION_STREAM_INFO = "action_stream_info"
     const val EXTRA_STREAM_WIDTH = "extra_stream_width"
