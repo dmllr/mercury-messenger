@@ -5,11 +5,12 @@ add_library(lib-client-service-bridge SHARED
 )
 target_compile_features(lib-client-service-bridge PUBLIC cxx_std_20)
 target_link_libraries(lib-client-service-bridge
+  eillance-utils
+  eillance-core
   android
   camera2ndk
   mediandk
   log
-  eillance-core
 )
 
 if(NOT CMAKE_BUILD_TYPE STREQUAL "Release")
