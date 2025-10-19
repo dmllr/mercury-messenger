@@ -58,14 +58,15 @@ public:
     std::string device_name;
     auto stored_name = storage->Load("device_name");
     if (stored_name.has_value() && !stored_name->empty()) {
-        device_name.assign(reinterpret_cast<const char*>(stored_name->data()), stored_name->size());
+      device_name.assign(reinterpret_cast<const char*>(stored_name->data()), stored_name->size());
     }
 
     if (device_name.empty()) {
       char model_string[PROP_VALUE_MAX + 1];
       __system_property_get("ro.product.model", model_string);
       device_name = std::string(model_string);
-      std::vector<std::byte> name_bytes(device_name.begin(), device_name.end());
+      const auto* data_ptr = reinterpret_cast<const std::byte*>(device_name.data());
+      std::vector<std::byte> name_bytes(data_ptr, data_ptr + device_name.size());
       storage->Save("device_name", name_bytes);
     }
     rtc_client_.SetName(device_name);

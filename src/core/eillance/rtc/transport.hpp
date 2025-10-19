@@ -30,6 +30,7 @@ public:
   virtual ~RtcTransportDelegate() = default;
   virtual void OnPeerReady(const std::shared_ptr<Peer>& peer) = 0;
   virtual void OnPeerOnline(const std::string& peer_id) = 0;
+  virtual void OnPeerOffline(const std::string& peer_id) = 0;
   virtual void OnSignalingErrorForPeer(const std::string& peer_id, const std::string& error) = 0;
   virtual void ProcessPeerMessage(Json message) = 0;
   virtual void ProcessSystemMessage(const std::string& type, Json message) = 0;
@@ -184,28 +185,28 @@ public:
 
 private:
   void ConnectWebSocket() {
-      if (ws_ != nullptr && ws_->isOpen()) {
-          LOGW << "WebSocket is already open, skipping connection attempt.";
-          return;
-      }
-      if (terminate_requested_) {
-          LOGI << "Terminate requested, aborting connection attempt.";
-          return;
-      }
+    if (ws_ != nullptr && ws_->isOpen()) {
+      LOGW << "WebSocket is already open, skipping connection attempt.";
+      return;
+    }
+    if (terminate_requested_) {
+      LOGI << "Terminate requested, aborting connection attempt.";
+      return;
+    }
 
-      auto ws_config = rtc::WebSocketConfiguration{
-          .disableTlsVerification = true,
-      };
+    auto ws_config = rtc::WebSocketConfiguration{
+        .disableTlsVerification = true,
+    };
 
-      ReportServiceConnectionState(ServiceConnectionState::establishing);
-      ws_ = std::make_unique<rtc::WebSocket>(ws_config);
-      ws_->onOpen([this]() { OnWebSocketOpen(); });
-      ws_->onClosed([this]() { OnWebSocketClosed(); });
-      ws_->onError([this](const std::string& error) { OnWebSocketError(error); });
-      ws_->onMessage(nullptr, [this](const std::string& data) { OnWebSocketMessage(data); });
+    ReportServiceConnectionState(ServiceConnectionState::establishing);
+    ws_ = std::make_unique<rtc::WebSocket>(ws_config);
+    ws_->onOpen([this]() { OnWebSocketOpen(); });
+    ws_->onClosed([this]() { OnWebSocketClosed(); });
+    ws_->onError([this](const std::string& error) { OnWebSocketError(error); });
+    ws_->onMessage(nullptr, [this](const std::string& data) { OnWebSocketMessage(data); });
 
-      LOGI << "Connecting to signaling server: " << signalingServerUrl;
-      ws_->open(signalingServerUrl);
+    LOGI << "Connecting to signaling server: " << signalingServerUrl;
+    ws_->open(signalingServerUrl);
   }
 
 
@@ -217,25 +218,25 @@ private:
   }
 
   void OnWebSocketClosed() {
-      LOGW << "WebSocket connection closed";
-      is_logged_in_ = false;
+    LOGW << "WebSocket connection closed";
+    is_logged_in_ = false;
 
-      std::vector<std::shared_ptr<Peer>> peers_to_close;
-      {
-        std::lock_guard<std::mutex> lock(peers_mutex_);
-        for(const auto& [id, peer] : peers_) {
-          peers_to_close.push_back(peer);
-        }
+    std::vector<std::shared_ptr<Peer>> peers_to_close;
+    {
+      std::lock_guard<std::mutex> lock(peers_mutex_);
+      for(const auto& [id, peer] : peers_) {
+        peers_to_close.push_back(peer);
       }
+    }
 
-      for (const auto& peer : peers_to_close) {
-          if(peer && peer->peer_connection_) {
-              peer->peer_connection_->close();
-          }
+    for (const auto& peer : peers_to_close) {
+      if(peer && peer->peer_connection_) {
+        peer->peer_connection_->close();
       }
+    }
 
-      ReportServiceConnectionState(ServiceConnectionState::disconnected);
-      ScheduleReconnect();
+    ReportServiceConnectionState(ServiceConnectionState::disconnected);
+    ScheduleReconnect();
   }
 
   void OnWebSocketError(const std::string& error) {
@@ -246,20 +247,20 @@ private:
   }
 
   void ScheduleReconnect() {
-      if (terminate_requested_) {
-          return;
-      }
+    if (terminate_requested_) {
+      return;
+    }
 
-      connection_attempt_++;
-      LOGI << "Attempting to reconnect in " << wait_before_reconnect_ << "s (attempt " << connection_attempt_ << ")";
-      DispatchQueue::MainThread().DispatchAfter(std::chrono::seconds(wait_before_reconnect_), [this]() {
-          ConnectWebSocket();
-      });
+    connection_attempt_++;
+    LOGI << "Attempting to reconnect in " << wait_before_reconnect_ << "s (attempt " << connection_attempt_ << ")";
+    DispatchQueue::MainThread().DispatchAfter(std::chrono::seconds(wait_before_reconnect_), [this]() {
+      ConnectWebSocket();
+    });
 
-      // Exponential backoff
-      if (connection_attempt_ < maxConnectionAttempts) {
-          wait_before_reconnect_ = std::min(wait_before_reconnect_ * 2, maxWaitBeforeReconnect);
-      }
+    // Exponential backoff
+    if (connection_attempt_ < maxConnectionAttempts) {
+      wait_before_reconnect_ = std::min(wait_before_reconnect_ * 2, maxWaitBeforeReconnect);
+    }
   }
 
 
@@ -315,12 +316,12 @@ private:
     peer_connection->onStateChange([this, peer_id](rtc::PeerConnection::State state) {
       std::string stateStr = "unknown";
       switch(state) {
-          case rtc::PeerConnection::State::New: stateStr = "New"; break;
-          case rtc::PeerConnection::State::Connecting: stateStr = "Connecting"; break;
-          case rtc::PeerConnection::State::Connected: stateStr = "Connected"; break;
-          case rtc::PeerConnection::State::Disconnected: stateStr = "Disconnected"; break;
-          case rtc::PeerConnection::State::Failed: stateStr = "Failed"; break;
-          case rtc::PeerConnection::State::Closed: stateStr = "Closed"; break;
+        case rtc::PeerConnection::State::New: stateStr = "New"; break;
+        case rtc::PeerConnection::State::Connecting: stateStr = "Connecting"; break;
+        case rtc::PeerConnection::State::Connected: stateStr = "Connected"; break;
+        case rtc::PeerConnection::State::Disconnected: stateStr = "Disconnected"; break;
+        case rtc::PeerConnection::State::Failed: stateStr = "Failed"; break;
+        case rtc::PeerConnection::State::Closed: stateStr = "Closed"; break;
       }
       LOGI << "Peer " << peer_id << " state changed to " << stateStr << " (" << static_cast<int>(state) << ")";
       ReportPeerStateChange(peer_id, EventSource::peerConnectionState, static_cast<int>(state));
@@ -328,14 +329,17 @@ private:
       if (state == rtc::PeerConnection::State::Failed ||
           state == rtc::PeerConnection::State::Disconnected) {
         if (const auto peer = GetPeer(peer_id)) {
-            LOGI << "Closing failed/disconnected peer connection for " << peer_id;
-            peer->peer_connection_->close();
+          LOGI << "Closing failed/disconnected peer connection for " << peer_id;
+          peer->peer_connection_->close();
         }
       } else if (state == rtc::PeerConnection::State::Closed) {
-          LOGI << "Peer connection for " << peer_id << " is closed. Removing from transport.";
-          DispatchQueue::MainThread().Dispatch([this, peer_id]() {
-              RemovePeer(peer_id);
-          });
+        LOGI << "Peer connection for " << peer_id << " is closed. Removing from transport.";
+        DispatchQueue::MainThread().Dispatch([this, peer_id]() {
+          RemovePeer(peer_id);
+          if (delegate_) {
+            delegate_->OnPeerOffline(peer_id);
+          }
+        });
       }
     });
 
@@ -380,17 +384,17 @@ private:
     auto type = itr->get<std::string>();
 
     if (type == "error") {
-        const auto error = message.value("error", "unknown");
-        LOGE << "Signaling error received: " << error;
-        if (const auto for_peer_it = message.find("for_peer"); for_peer_it != message.end()) {
-            delegate_->OnSignalingErrorForPeer(for_peer_it->get<std::string>(), error);
-        } else {
-            ReportServiceConnectionState(ServiceConnectionState::failure);
-        }
+      const auto error = message.value("error", "unknown");
+      LOGE << "Signaling error received: " << error;
+      if (const auto for_peer_it = message.find("for_peer"); for_peer_it != message.end()) {
+        delegate_->OnSignalingErrorForPeer(for_peer_it->get<std::string>(), error);
+      } else {
+        ReportServiceConnectionState(ServiceConnectionState::failure);
+      }
     } else if (type == "peer_online") {
-        if (const auto id_itr = message.find("id"); id_itr != message.end()) {
-            delegate_->OnPeerOnline(id_itr->get<std::string>());
-        }
+      if (const auto id_itr = message.find("id"); id_itr != message.end()) {
+        delegate_->OnPeerOnline(id_itr->get<std::string>());
+      }
     }
     else {
       delegate_->ProcessSystemMessage(type, message);
