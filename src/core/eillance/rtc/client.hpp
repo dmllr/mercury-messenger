@@ -1,6 +1,5 @@
 #pragma once
 
-#include <filesystem>
 #include <memory>
 #include <utility>
 
@@ -9,9 +8,8 @@
 
 #include "eillance/utils/memory.h"
 #include "eillance/capture/audio_capture.hpp"
-#include "eillance/capture/video_capture.hpp"
+#include "eillance/capture/capture.hpp"
 #include "eillance/crypto/crypto.hpp"
-#include "eillance/device/camera_utils.hpp"
 #include "eillance/identity/contact_manager.hpp"
 #include "eillance/identity/id_manager.hpp"
 #include "eillance/logging/logging.h"
@@ -69,15 +67,15 @@ class RtcClient final : public RtcTransportDelegate {
   std::unique_ptr<messaging::MessageHistory> message_history_;
 
 public:
-  explicit RtcClient(const storage::Config& storage_config) {
-    storage_ = std::make_shared<storage::PersistentStorage>(storage_config);
+  explicit RtcClient(std::shared_ptr<storage::PersistentStorage> storage, Capture video_capture) {
+    storage_ = std::move(storage);
     id_manager_ = std::make_unique<identity::IdManager>(storage_);
     contact_manager_ = std::make_shared<identity::ContactManager>(storage_);
     message_queue_ = std::make_shared<messaging::MessageQueue>(storage_);
     message_history_ = std::make_unique<messaging::MessageHistory>(storage_);
 
     av_stream_ = std::make_shared<Stream>(
-        std::make_shared<StreamSource>(Capture(std::make_unique<VideoCapture>())),
+        std::make_shared<StreamSource>(std::move(video_capture)),
         std::make_shared<StreamSource>(Capture(std::make_unique<AudioCapture>())));
 
     transport_ = std::make_shared<RtcTransport>(this);
