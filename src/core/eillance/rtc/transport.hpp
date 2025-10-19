@@ -428,7 +428,7 @@ private:
   constexpr static auto signalingServerUrl = "wss://app.hela.me:8000";
 #else
 #if ANDROID
-  constexpr static auto signalingServerUrl = "wss://10.0.2.2:8000";
+  constexpr static auto signalingServerUrl = "ws://10.0.2.2:8000";
 #else
   constexpr static auto signalingServerUrl = "ws://127.0.0.1:8000";
 #endif
