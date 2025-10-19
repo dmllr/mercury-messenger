@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import java.io.Serializable
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
   private var callService: CallService? = null
@@ -22,14 +23,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
   private val _streamInfo = MutableStateFlow<Triple<Int, Int, Int>?>(null)
   val streamInfo: StateFlow<Triple<Int, Int, Int>?> = _streamInfo.asStateFlow()
 
+  private val _showAddContactDialog = MutableStateFlow(false)
+  val showAddContactDialog: StateFlow<Boolean> = _showAddContactDialog.asStateFlow()
+
+
   private val broadcastReceiver = object : BroadcastReceiver() {
     override fun onReceive(context: Context?, intent: Intent?) {
       when (intent?.action) {
         CallService.ACTION_PEER_LIST_UPDATE -> {
-          val ids = intent.getStringArrayExtra(CallService.EXTRA_PEER_IDS) ?: emptyArray()
-          val names = intent.getStringArrayExtra(CallService.EXTRA_PEER_NAMES) ?: emptyArray()
+          val serializablePeers = intent.getSerializableExtra(CallService.EXTRA_PEERS) as? ArrayList<HashMap<String, Serializable>>
           _peerList.update {
-            ids.zip(names).map { (id, name) -> Peer(id, name, emptyList()) }
+            serializablePeers?.map { map ->
+              Peer(
+                id = map["id"] as String,
+                name = map["name"] as String,
+                profile = emptyList() // Profile data not passed via broadcast for simplicity
+              )
+            } ?: emptyList()
           }
         }
         CallService.ACTION_STREAM_INFO -> {
@@ -60,9 +70,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     callService?.requestPeerListUpdate()
   }
 
-  fun call(peerId: String) {
-    callService?.call(peerId)
+  fun onAddContactClicked() {
+    _showAddContactDialog.value = true
   }
+
+  fun onAddContactDialogDismiss() {
+    _showAddContactDialog.value = false
+  }
+
+  fun addContact(peerId: String) {
+    callService?.addContact(peerId)
+    onAddContactDialogDismiss()
+  }
+
 
   override fun onCleared() {
     LocalBroadcastManager.getInstance(getApplication()).unregisterReceiver(broadcastReceiver)
