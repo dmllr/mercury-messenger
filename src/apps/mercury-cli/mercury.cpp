@@ -18,6 +18,10 @@
 #include "eillance/rtc/client.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/view_model/mercury_view_model.hpp"
+#include "eillance/capture/capture.hpp"
+
+#include "cli_persistent_storage.hpp"
+#include "video_capture_cli.hpp"
 
 namespace {
 
@@ -83,9 +87,10 @@ int main(int argc, char** argv) {
   Log::Initialize(&file_appender, plog::info);
 
   // --- Service Layer (Model) Initialization ---
-  eillance::storage::Config storage_config;
-  storage_config.platform_config = config_path;
-  auto rtc_client = std::make_shared<eillance::RtcClient>(storage_config);
+  auto storage_impl = std::make_unique<eillance::storage::CliPersistentStorageImpl>(config_path);
+  auto storage = std::make_shared<eillance::storage::PersistentStorage>(std::move(storage_impl));
+  auto video_capture = eillance::Capture(std::make_unique<eillance::VideoCaptureCli>());
+  auto rtc_client = std::make_shared<eillance::RtcClient>(storage, std::move(video_capture));
 
   // --- ViewModel Initialization ---
   auto view_model = std::make_unique<eillance::view_model::MercuryViewModel>(rtc_client);

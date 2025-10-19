@@ -20,8 +20,12 @@
 #include "eillance/utils/event_queue.hpp"
 #include "eillance/utils/h264.hpp"
 #include "eillance/utils/string.hpp"
+#include "eillance/capture/capture.hpp"
+#include "eillance/storage/persistent_storage.hpp"
 
 #include "class_refs.hpp"
+#include "android_persistent_storage.hpp"
+#include "capture/video_capture_android.hpp"
 
 namespace eillance {
 
@@ -38,17 +42,16 @@ class ClientEngine {
 
   DispatchQueue codec_dispatch_queue_{"Codec", 1};
 
-  static auto create_storage_config(JavaVM* jvm, jobject context) -> storage::Config {
-      storage::Config cfg;
-      cfg.platform_config = storage::Config::Android{jvm, context};
-      return cfg;
-  }
-
 public:
   ClientEngine(JavaVM* jvm, JNIEnv* env, jobject instance)
       : jvm_(jvm),
         native_bridge_(env->NewGlobalRef(instance)),
-        rtc_client_(create_storage_config(jvm, instance)) {
+        rtc_client_(
+            std::make_shared<storage::PersistentStorage>(
+                std::make_unique<storage::AndroidPersistentStorageImpl>(jvm, instance)
+            ),
+            Capture(std::make_unique<VideoCaptureAndroid>())
+        ) {
     EventQueue::Instance();
 
     auto storage = rtc_client_.GetStorage();

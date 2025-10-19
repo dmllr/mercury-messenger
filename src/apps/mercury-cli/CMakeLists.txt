@@ -10,6 +10,8 @@ set(shared_cmake_libs_path "${shared_src_path}/cmake")
 include("${shared_cmake_libs_path}/setup.cmake")
 include("${shared_cmake_libs_path}/import_remote.cmake")
 include("${shared_cmake_libs_path}/libftxui.cmake")
+include("${shared_cmake_libs_path}/libopencv.cmake")
+include("${shared_cmake_libs_path}/libffmpeg.cmake")
 
 add_executable(mercury-cli
   mercury.cpp
@@ -22,4 +24,6 @@ target_link_libraries(mercury-cli PRIVATE
   eillance-core
   eillance-utils
   libftxui
+  libopencv
+  libffmpeg
 )
