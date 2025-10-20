@@ -83,6 +83,8 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     return JNI_ERR;
   }
 
+  Log::InitializeDefault(plog::info);
+
   try {
     auto& classref = ClassRefs::Instance();
     classref.RegisterClass(env, "androidx/preference/PreferenceManager");
