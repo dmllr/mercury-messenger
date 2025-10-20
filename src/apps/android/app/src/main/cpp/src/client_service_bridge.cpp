@@ -32,6 +32,11 @@ Java_hela_eillance_CallService_terminate(JNIEnv*, jobject) {
 }
 
 extern "C" JNIEXPORT void JNICALL
+Java_hela_eillance_CallService_refreshState(JNIEnv*, jobject) {
+    if (clientEngine && clientEngine->ViewModel()) clientEngine->ViewModel()->RefreshState();
+}
+
+extern "C" JNIEXPORT void JNICALL
 Java_hela_eillance_CallService_initDecoder(JNIEnv* env, jobject, jobject surface) {
   if (clientEngine) clientEngine->SetTargetSurface(env, surface);
 }
@@ -39,11 +44,6 @@ Java_hela_eillance_CallService_initDecoder(JNIEnv* env, jobject, jobject surface
 extern "C" JNIEXPORT void JNICALL
 Java_hela_eillance_CallService_releaseDecoder(JNIEnv*, jobject) {
   if (clientEngine) clientEngine->Stop();
-}
-
-extern "C" JNIEXPORT void JNICALL
-Java_hela_eillance_CallService_requestPeerListUpdate(JNIEnv*, jobject) {
-  if (clientEngine) clientEngine->RequestPeerListUpdate();
 }
 
 extern "C" JNIEXPORT void JNICALL
@@ -59,7 +59,36 @@ Java_hela_eillance_CallService_addContact(JNIEnv* env, jobject, jstring peer_id)
   const char* chars = env->GetStringUTFChars(peer_id, nullptr);
   const std::string peer_id_str(chars);
   env->ReleaseStringUTFChars(peer_id, chars);
-  if (clientEngine) clientEngine->AddContact(peer_id_str);
+  if (clientEngine && clientEngine->ViewModel()) clientEngine->ViewModel()->AddContact(peer_id_str);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_hela_eillance_CallService_acceptContact(JNIEnv* env, jobject, jstring peer_id) {
+    const char* chars = env->GetStringUTFChars(peer_id, nullptr);
+    const std::string peer_id_str(chars);
+    env->ReleaseStringUTFChars(peer_id, chars);
+    if (clientEngine && clientEngine->ViewModel()) clientEngine->ViewModel()->AcceptContact(peer_id_str);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_hela_eillance_CallService_selectContact(JNIEnv* env, jobject, jstring peer_id) {
+    const char* chars = env->GetStringUTFChars(peer_id, nullptr);
+    const std::string peer_id_str(chars);
+    env->ReleaseStringUTFChars(peer_id, chars);
+    if (clientEngine && clientEngine->ViewModel()) clientEngine->ViewModel()->SelectContact(peer_id_str);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_hela_eillance_CallService_sendMessage(JNIEnv* env, jobject, jstring message) {
+    const char* chars = env->GetStringUTFChars(message, nullptr);
+    const std::string message_str(chars);
+    env->ReleaseStringUTFChars(message, chars);
+    if (clientEngine && clientEngine->ViewModel()) clientEngine->ViewModel()->SendMessage(message_str);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_hela_eillance_CallService_loadOlderMessages(JNIEnv* , jobject) {
+    if (clientEngine && clientEngine->ViewModel()) clientEngine->ViewModel()->LoadOlderMessages();
 }
 
 extern "C" JNIEXPORT void JNICALL
