@@ -7,6 +7,8 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <set>
+#include <algorithm>
 
 #include <nlohmann/json.hpp>
 
@@ -33,12 +35,7 @@ struct HistoryMessage {
   MessageDirection direction;
 };
 
-struct HistoryPage {
-    std::vector<HistoryMessage> messages;
-    size_t total_messages;
-};
-
-// JSON serialization for HistoryMessage struct
+// JSON serialization for HistoryMessage struct (MUST be defined before it's used by other types)
 inline void to_json(nlohmann::json& j, const HistoryMessage& m) {
   j = nlohmann::json{
       {"content", m.content},
@@ -50,6 +47,37 @@ inline void from_json(const nlohmann::json& j, HistoryMessage& m) {
   j.at("content").get_to(m.content);
   j.at("timestamp").get_to(m.timestamp);
   j.at("direction").get_to(m.direction);
+}
+
+struct ChatSummary {
+    std::string peer_id;
+    HistoryMessage last_message;
+    uint32_t unread_count = 0;
+};
+
+inline void to_json(nlohmann::json& j, const ChatSummary& s) {
+    j["peer_id"] = s.peer_id;
+    j["last_message"] = s.last_message;
+    j["unread_count"] = s.unread_count;
+}
+
+struct HistoryPage {
+    std::vector<HistoryMessage> messages;
+    size_t total_messages;
+};
+
+// Provide serialization for the deque of HistoryMessage
+inline void to_json(nlohmann::json& j, const std::deque<HistoryMessage>& deq) {
+    j = nlohmann::json::array();
+    for(const auto& msg : deq) {
+        j.push_back(msg);
+    }
+}
+
+inline void from_json(const nlohmann::json& j, std::deque<HistoryMessage>& deq) {
+    for (const auto& item : j) {
+        deq.push_back(item.get<HistoryMessage>());
+    }
 }
 
 
@@ -149,6 +177,29 @@ public:
 
     std::vector<HistoryMessage> messages_page(start_it, end_it);
     return {std::move(messages_page), total_size};
+  }
+
+  std::vector<ChatSummary> GetChatSummaries(const std::vector<std::string>& peer_ids) {
+    const std::lock_guard<std::mutex> lock(mutex_);
+    std::vector<ChatSummary> summaries;
+
+    for (const auto& peer_id : peer_ids) {
+        LoadHistory(peer_id);
+        if (history_cache_.contains(peer_id) && !history_cache_.at(peer_id).empty()) {
+            summaries.push_back({
+                .peer_id = peer_id,
+                .last_message = history_cache_.at(peer_id).back(),
+                .unread_count = 0 // Unread count logic to be implemented
+            });
+        }
+    }
+
+    // Sort by timestamp of the last message, descending
+    std::ranges::sort(summaries, [](const auto& a, const auto& b) {
+        return a.last_message.timestamp > b.last_message.timestamp;
+    });
+
+    return summaries;
   }
 };
 

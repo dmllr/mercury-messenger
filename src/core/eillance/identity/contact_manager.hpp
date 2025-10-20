@@ -31,6 +31,13 @@ struct Contact {
   ContactStatus status;
 };
 
+// Helper for JSON serialization
+inline void to_json(nlohmann::json& j, const Contact& c) {
+    j = nlohmann::json{
+        {"peer_id", c.peer_id},
+        {"status", c.status}};
+}
+
 class ContactManager {
   static constexpr auto contactsFile = "contacts.json";
   std::shared_ptr<storage::PersistentStorage> storage_;

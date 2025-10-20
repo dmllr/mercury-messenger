@@ -15,6 +15,7 @@
 #include "eillance/events/service_connection_state.h"
 #include "eillance/identity/contact_manager.hpp"
 #include "eillance/logging/logging.h"
+#include "eillance/messaging/message_history.hpp"
 #include "eillance/rtc/client.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/view_model/mercury_view_model.hpp"
@@ -112,8 +113,21 @@ int main(int argc, char** argv) {
         elements.push_back(ftxui::text("--- older messages available (use /history load) ---") | ftxui::dim);
     }
 
-    for (const auto& line: state.chat_history) {
-      elements.push_back(ftxui::text(line));
+    for (const auto& msg: state.chat_history) {
+      std::string prefix;
+      if (msg.direction == eillance::messaging::MessageDirection::Sent) {
+          prefix = "[you]: ";
+      } else {
+          // System messages might not have a peer_id context, so we handle that gracefully.
+          if(state.selected_contact_id.has_value()) {
+              const auto& peer_id = state.selected_contact_id.value();
+              const std::string display_id = peer_id.length() > 8 ? peer_id.substr(0, 8) + "..." : peer_id;
+              prefix = "[" + display_id + "]: ";
+          } else {
+              prefix = "[system]: ";
+          }
+      }
+      elements.push_back(ftxui::text(prefix + msg.content));
     }
     // Add a focusable invisible element at the end to scroll down automatically.
     if (!elements.empty()) {
@@ -126,7 +140,7 @@ int main(int argc, char** argv) {
   // The input component only forwards the user input to the ViewModel.
   input_component |= ftxui::CatchEvent([&](const ftxui::Event& event) {
     if (event == ftxui::Event::Return) {
-      if (view_model->ProcessUserInput(input_content)) {
+      if (view_model->ProcessCliInput(input_content)) {
         screen.Exit();
       }
       input_content.clear();

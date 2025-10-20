@@ -13,6 +13,7 @@
 #include <android/native_window.h>
 #include <android/native_window_jni.h>
 #include <media/NdkMediaCodec.h>
+#include <nlohmann/json.hpp>
 
 #include "eillance/capture/video_config.hpp"
 #include "eillance/logging/logging.h"
@@ -22,10 +23,12 @@
 #include "eillance/utils/string.hpp"
 #include "eillance/capture/capture.hpp"
 #include "eillance/storage/persistent_storage.hpp"
+#include "eillance/view_model/mercury_view_model.hpp"
 
 #include "class_refs.hpp"
 #include "android_persistent_storage.hpp"
 #include "capture/video_capture_android.hpp"
+
 
 namespace eillance {
 
@@ -37,7 +40,9 @@ class ClientEngine {
   AMediaCodec* media_codec_{nullptr};
   std::atomic<bool> is_codec_configured_{false};
 
-  RtcClient rtc_client_;
+  std::shared_ptr<RtcClient> rtc_client_;
+  std::unique_ptr<view_model::MercuryViewModel> view_model_;
+
   H264Parser h264_parser_{};
 
   DispatchQueue codec_dispatch_queue_{"Codec", 1};
@@ -45,16 +50,21 @@ class ClientEngine {
 public:
   ClientEngine(JavaVM* jvm, JNIEnv* env, jobject instance)
       : jvm_(jvm),
-        native_bridge_(env->NewGlobalRef(instance)),
-        rtc_client_(
-            std::make_shared<storage::PersistentStorage>(
-                std::make_unique<storage::AndroidPersistentStorageImpl>(jvm, instance)
-            ),
-            Capture(std::make_unique<VideoCaptureAndroid>())
-        ) {
+        native_bridge_(env->NewGlobalRef(instance))
+        {
+    auto storage = std::make_shared<storage::PersistentStorage>(
+        std::make_unique<storage::AndroidPersistentStorageImpl>(jvm, instance)
+    );
+    auto video_capture = Capture(std::make_unique<VideoCaptureAndroid>());
+    rtc_client_ = std::make_shared<RtcClient>(storage, std::move(video_capture));
+    view_model_ = std::make_unique<view_model::MercuryViewModel>(rtc_client_);
+
+    view_model_->SetOnStateChangedCallback([this]() {
+        UpdateState();
+    });
+
     EventQueue::Instance();
 
-    auto storage = rtc_client_.GetStorage();
     std::string device_name;
     auto stored_name = storage->Load("device_name");
     if (stored_name.has_value() && !stored_name->empty()) {
@@ -69,11 +79,7 @@ public:
       std::vector<std::byte> name_bytes(data_ptr, data_ptr + device_name.size());
       storage->Save("device_name", name_bytes);
     }
-    rtc_client_.SetName(device_name);
-    rtc_client_.SetStatusCallback(
-        [this](const std::string& peer_id, EventSource sender, int status) {
-          SetStatus(peer_id, sender, status);
-        });
+    rtc_client_->SetName(device_name);
   }
 
   ClientEngine(ClientEngine&&) = delete;
@@ -97,6 +103,10 @@ public:
     }
   }
 
+  auto ViewModel() -> view_model::MercuryViewModel* {
+      return view_model_.get();
+  }
+
   void SetTargetSurface(JNIEnv* env, jobject surface) {
     if (native_window_ != nullptr) {
       ANativeWindow_release(native_window_);
@@ -105,14 +115,8 @@ public:
   }
 
   void Start() {
-    rtc_client_.Start();
-    rtc_client_.SetPeerListUpdateCallback([this](const std::vector<Device>& peers) {
-      UpdatePeerList(peers);
-    });
-    rtc_client_.SetProfileReceivedCallback([this](const std::string& peer_id, const Device::Profile& profile) {
-      UpdateProfile(peer_id, profile);
-    });
-    rtc_client_.SetFrameReceivedCallback([this](const rtc::binary& frame) {
+    rtc_client_->Start();
+    rtc_client_->SetFrameReceivedCallback([this](const rtc::binary& frame) {
       h264_parser_.ProcessFrame(frame);
       if (codec_dispatch_queue_.Size() > 10) {
         LOGW << "Decoding queue is full, dropping frames.";
@@ -141,26 +145,18 @@ public:
 
   void Terminate() {
     Stop();
-    rtc_client_.Terminate();
-  }
-
-  void RequestPeerListUpdate() {
-    rtc_client_.RequestPeerListUpdate();
+    rtc_client_->Terminate();
   }
 
   void Call(const std::string& peer_id) {
     InitH264Parser();
-    rtc_client_.Call(peer_id);
-  }
-
-  void AddContact(const std::string& peer_id) {
-    rtc_client_.AddContact(peer_id);
+    rtc_client_->Call(peer_id);
   }
 
   void ConfigureVideoCapture(const VideoConfig& config) {
     Config coreConfig;
     coreConfig.video_config = config;
-    rtc_client_.Configure(coreConfig);
+    rtc_client_->Configure(coreConfig);
   }
 
 private:
@@ -249,112 +245,22 @@ private:
     h264_parser_.SetOnConfigureCallback([this](const VideoConfig conf) {
       LOGI << "Configuration change callback triggered, configuring codec...";
       ConfigureCodec(conf);
-      ConfigureSurfaceResolution(conf);
     });
   }
 
-  void ConfigureSurfaceResolution(VideoConfig config) {
+  void UpdateState() {
     if (native_bridge_ == nullptr) return;
     auto* env = AttachCurrentThreadIfNeeded();
     if (env == nullptr) return;
 
     jclass callback_class = env->GetObjectClass(native_bridge_);
-    jmethodID callback_method = env->GetMethodID(callback_class, "onStreamInfoChange", "(III)V");
+    jmethodID callback_method = env->GetMethodID(callback_class, "onStateUpdate", "(Ljava/lang/String;)V");
     if (callback_method != nullptr) {
-      env->CallVoidMethod(native_bridge_, callback_method,
-                          static_cast<int>(config.width),
-                          static_cast<int>(config.height),
-                          static_cast<int>(config.rotation));
-    }
-  }
-
-  static void SetBridgeProfile(JNIEnv* env, jobject& java_list, const Device::Profile& profile) {
-    auto& classref = ClassRefs::Instance();
-    jmethodID add_method = env->GetMethodID(classref.Class("java/util/ArrayList").Class(), "add", "(Ljava/lang/Object;)Z");
-
-    for (const auto& camera : profile) {
-      jstring cam_id = env->NewStringUTF(camera.id.c_str());
-      jstring cam_name = env->NewStringUTF(camera.name.c_str());
-      jobject res_list = classref.Class("java/util/ArrayList").NewObject(env);
-
-      for (const auto& res : camera.resolutions) {
-        jobject jres = classref.Class("hela/eillance/ndkio/Resolution").NewObject(env, res.width, res.height);
-        env->CallBooleanMethod(res_list, add_method, jres);
-        env->DeleteLocalRef(jres);
-      }
-
-      jobject jcamera = classref.Class("hela/eillance/ndkio/Camera").NewObject(env, cam_id, cam_name, res_list);
-      env->CallBooleanMethod(java_list, add_method, jcamera);
-
-      env->DeleteLocalRef(jcamera);
-      env->DeleteLocalRef(cam_id);
-      env->DeleteLocalRef(cam_name);
-      env->DeleteLocalRef(res_list);
-    }
-  }
-
-  void UpdatePeerList(const std::vector<Device>& peers) {
-    if (native_bridge_ == nullptr) return;
-    JNIEnv* env = AttachCurrentThreadIfNeeded();
-    if (env == nullptr) return;
-
-    auto& classref = ClassRefs::Instance();
-    jclass callback_cls = env->GetObjectClass(native_bridge_);
-    jmethodID callback_method = env->GetMethodID(callback_cls, "onPeerListUpdate", "(Ljava/util/List;)V");
-    if (callback_method == nullptr) return;
-
-    jobject java_list = classref.Class("java/util/ArrayList").NewObject(env);
-    jmethodID add_method = env->GetMethodID(classref.Class("java/util/ArrayList").Class(), "add", "(Ljava/lang/Object;)Z");
-
-    for (const auto& peer : peers) {
-      jstring id = env->NewStringUTF(peer.id.c_str());
-      jstring name = env->NewStringUTF(peer.name.c_str());
-      jobject camera_list = classref.Class("java/util/ArrayList").NewObject(env);
-      SetBridgeProfile(env, camera_list, peer.profile);
-
-      jobject jpeer = classref.Class("hela/eillance/ndkio/Peer").NewObject(env, id, name, camera_list);
-      env->CallBooleanMethod(java_list, add_method, jpeer);
-
-      env->DeleteLocalRef(jpeer);
-      env->DeleteLocalRef(id);
-      env->DeleteLocalRef(name);
-      env->DeleteLocalRef(camera_list);
-    }
-
-    env->CallVoidMethod(native_bridge_, callback_method, java_list);
-    env->DeleteLocalRef(java_list);
-  }
-
-  void UpdateProfile(const std::string& peer_id, const Device::Profile& profile) {
-    if (native_bridge_ == nullptr) return;
-    JNIEnv* env = AttachCurrentThreadIfNeeded();
-    if (env == nullptr) return;
-
-    auto& classref = ClassRefs::Instance();
-    jclass callback_cls = env->GetObjectClass(native_bridge_);
-    jmethodID callback_method = env->GetMethodID(callback_cls, "onDeviceProfileReceived", "(Ljava/lang/String;Ljava/util/List;)V");
-    if (callback_method == nullptr) return;
-
-    jstring jpeer_id = env->NewStringUTF(peer_id.c_str());
-    jobject camera_list = classref.Class("java/util/ArrayList").NewObject(env);
-    SetBridgeProfile(env, camera_list, profile);
-
-    env->CallVoidMethod(native_bridge_, callback_method, jpeer_id, camera_list);
-
-    env->DeleteLocalRef(jpeer_id);
-    env->DeleteLocalRef(camera_list);
-  }
-
-  void SetStatus(const std::string& peer_id, EventSource sender, int status) {
-    auto* env = AttachCurrentThreadIfNeeded();
-    if (env == nullptr) return;
-
-    jclass callback_class = env->GetObjectClass(native_bridge_);
-    jmethodID callback_method = env->GetMethodID(callback_class, "onStatusUpdate", "(Ljava/lang/String;II)V");
-    if (callback_method != nullptr) {
-      jstring j_peer_id = env->NewStringUTF(peer_id.c_str());
-      env->CallVoidMethod(native_bridge_, callback_method, j_peer_id, static_cast<int>(sender), status);
-      env->DeleteLocalRef(j_peer_id);
+      nlohmann::json state_json = view_model_->GetState();
+      std::string state_str = state_json.dump();
+      jstring j_state_str = env->NewStringUTF(state_str.c_str());
+      env->CallVoidMethod(native_bridge_, callback_method, j_state_str);
+      env->DeleteLocalRef(j_state_str);
     }
   }
 };

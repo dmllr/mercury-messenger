@@ -14,6 +14,7 @@
 #include "eillance/identity/contact_manager.hpp"
 #include "eillance/identity/id_manager.hpp"
 #include "eillance/logging/logging.h"
+#include "eillance/messaging/call_history.hpp"
 #include "eillance/messaging/message_delivery_service.hpp"
 #include "eillance/messaging/message_history.hpp"
 #include "eillance/messaging/message_queue.hpp"
@@ -68,6 +69,7 @@ class RtcClient final : public RtcTransportDelegate {
   std::shared_ptr<messaging::MessageQueue> message_queue_;
   std::unique_ptr<messaging::MessageDeliveryService> delivery_service_;
   std::unique_ptr<messaging::MessageHistory> message_history_;
+  std::unique_ptr<messaging::CallHistory> call_history_;
 
   std::unordered_map<std::string, Device> online_peers_;
   mutable std::mutex online_peers_mutex_;
@@ -79,6 +81,7 @@ public:
     contact_manager_ = std::make_shared<identity::ContactManager>(storage_);
     message_queue_ = std::make_shared<messaging::MessageQueue>(storage_);
     message_history_ = std::make_unique<messaging::MessageHistory>(storage_);
+    call_history_ = std::make_unique<messaging::CallHistory>(storage_);
 
     av_stream_ = std::make_shared<Stream>(
         std::make_shared<StreamSource>(std::move(video_capture)),
@@ -152,6 +155,7 @@ public:
 
   void Call(const std::string& peer_id) {
     Connect(peer_id);
+    call_history_->AddRecord({.peer_id = peer_id, .timestamp = Time::Now(), .direction = messaging::CallDirection::Outgoing, .status = messaging::CallStatus::Answered}); // Placeholder status
   }
 
   void Connect(const std::string& peer_id) {
@@ -233,6 +237,14 @@ public:
     return contact_manager_->GetContacts();
   }
 
+  auto GetChatSummaries(const std::vector<std::string>& peer_ids) const -> std::vector<messaging::ChatSummary> {
+    return message_history_->GetChatSummaries(peer_ids);
+  }
+
+  auto GetCallHistory() const -> std::vector<messaging::CallRecord> {
+      return call_history_->GetHistory();
+  }
+
   void Hangup(const std::string& peer_id) const {
     if (const auto peer = transport_->GetPeer(peer_id); peer != nullptr) {
       if (peer->data_channel_ && peer->data_channel_->isOpen()) {
@@ -303,6 +315,7 @@ public:
     auto type = type_it->get<std::string>();
 
     if (type == "offer") {
+      call_history_->AddRecord({.peer_id = peer_id, .timestamp = Time::Now(), .direction = messaging::CallDirection::Incoming, .status = messaging::CallStatus::Answered}); // Placeholder
       std::shared_ptr<Peer> peer = transport_->GetPeer(peer_id);
 
       if (peer && peer->peer_connection_->signalingState() == rtc::PeerConnection::SignalingState::HaveLocalOffer) {

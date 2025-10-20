@@ -17,13 +17,8 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.rememberNavController
 import hela.eillance.theme.EillanceTheme
 
 class MainActivity : ComponentActivity() {
@@ -49,7 +44,7 @@ class MainActivity : ComponentActivity() {
       if (permissions.values.all { it }) {
         startAndBindService()
       } else {
-        Toast.makeText(this, "Camera and microphone permissions are required to make calls.", Toast.LENGTH_LONG).show()
+        Toast.makeText(this, "Permissions are required for this app to function.", Toast.LENGTH_LONG).show()
       }
     }
 
@@ -64,34 +59,7 @@ class MainActivity : ComponentActivity() {
           modifier = Modifier.fillMaxSize(),
           color = MaterialTheme.colorScheme.background
         ) {
-          val navController = rememberNavController()
-          val peerList by viewModel.peerList.collectAsState()
-
-          NavHost(navController = navController, startDestination = "peers") {
-            composable("peers") {
-              PeerListScreen(
-                peers = peerList,
-                viewModel = viewModel,
-                onPeerClick = { peerId ->
-                  callService?.call(peerId)
-                  navController.navigate("call/$peerId")
-                }
-              )
-            }
-            composable("call/{peerId}") { backStackEntry ->
-              val peerId = backStackEntry.arguments?.getString("peerId")
-              if (peerId != null) {
-                CallScreen(
-                  peerId = peerId,
-                  onHangup = {
-                    navController.popBackStack()
-                  },
-                  initDecoder = { surface -> callService?.initDecoder(surface) },
-                  releaseDecoder = { callService?.releaseDecoder() }
-                )
-              }
-            }
-          }
+          MercuryApp(viewModel = viewModel)
         }
       }
     }
@@ -119,7 +87,11 @@ class MainActivity : ComponentActivity() {
 
   private fun startAndBindService() {
     Intent(this, CallService::class.java).also { intent ->
-      startForegroundService(intent)
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        startForegroundService(intent)
+      } else {
+        startService(intent)
+      }
       bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
     }
   }
