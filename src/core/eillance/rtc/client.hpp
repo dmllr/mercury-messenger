@@ -201,6 +201,13 @@ public:
 
   // Public methods for contact management
   void AddContact(const std::string& peer_id) const {
+    // If a contact has already sent us a request, `/add` should act as an acceptance.
+    const auto existing_contact = contact_manager_->GetContact(peer_id);
+    if (existing_contact && existing_contact->status == identity::ContactStatus::awaitingApproval) {
+      ConfirmContact(peer_id);
+      return;
+    }
+
     if (contact_manager_->AddContact(peer_id)) {
       LOGI << "Queueing contact request for " << peer_id;
       const Json msg = {{"type", "contact_add_request"}, {"to", peer_id}};

@@ -67,16 +67,27 @@ public:
   // Confirms a contact that was awaiting our approval.
   bool ConfirmContact(const std::string& peer_id) {
     const std::lock_guard<std::mutex> lock(mutex_);
-    if (!contacts_.contains(peer_id)) {
+    auto it = contacts_.find(peer_id);
+    if (it == contacts_.end() || it->second.status != ContactStatus::awaitingApproval) {
+      LOGW << "Cannot confirm contact " << peer_id << "; not found or not awaiting approval.";
       return false;
     }
-    contacts_[peer_id].status = ContactStatus::confirmed;
+    it->second.status = ContactStatus::confirmed;
     return SaveContacts();
   }
 
   // Marks a contact as confirmed after they accepted our request.
   bool MarkAsConfirmed(const std::string& peer_id) {
-    return ConfirmContact(peer_id);
+    const std::lock_guard<std::mutex> lock(mutex_);
+    auto it = contacts_.find(peer_id);
+    if (it != contacts_.end() && it->second.status == ContactStatus::confirmed) {
+      return false;  // Already confirmed, no state change.
+    }
+    // If we receive a confirmation, we trust it and set the contact to confirmed,
+    // regardless of its previous state. This makes the protocol robust against
+    // state inconsistencies (e.g., after an app restart).
+    contacts_[peer_id] = {.peer_id = peer_id, .status = ContactStatus::confirmed};
+    return SaveContacts();
   }
 
   void RemoveContact(const std::string& peer_id) {
