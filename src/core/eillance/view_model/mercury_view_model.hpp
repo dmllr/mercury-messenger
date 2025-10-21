@@ -54,9 +54,9 @@ public:
       const std::lock_guard<std::mutex> lock(state_mutex_);
       current_state_.my_id = rtc_client_->GetId();
       UpdateContacts();
-      UpdateChats();
-      UpdateCalls();
     }
+    UpdateChats();
+    UpdateCalls();
     SetupRtcClientCallbacks();
   }
   ~MercuryViewModel() = default;
@@ -140,22 +140,22 @@ inline void MercuryViewModel::DeselectContact() {
 
 inline void MercuryViewModel::SendMessage(const std::string& content) {
   std::optional<std::string> selected_id;
+
+  // Perform quick, optimistic state updates within a short-lived lock.
   {
     const std::lock_guard<std::mutex> lock(state_mutex_);
     selected_id = current_state_.selected_contact_id;
-  }
 
-  if (!selected_id) {
-    LOGW << "SendMessage called with no selected contact.";
-    return;
-  }
+    if (!selected_id) {
+      LOGW << "SendMessage called with no selected contact.";
+      return;
+    }
 
-  // Optimistically add the message to the local UI state immediately for responsiveness.
-  {
-    const std::lock_guard<std::mutex> lock(state_mutex_);
     current_state_.chat_history.push_back({.content = content, .timestamp = Time::Now(), .direction = messaging::MessageDirection::Sent});
-    UpdateChats();
   }
+
+  // Update chat summaries, which can be slow, outside the lock.
+  UpdateChats();
   NotifyStateChanged();
 
   // Dispatch the actual sending logic to a background thread to avoid blocking the main thread.
@@ -204,9 +204,9 @@ inline void MercuryViewModel::RefreshState() {
       const std::lock_guard<std::mutex> lock(state_mutex_);
       current_state_.my_id = rtc_client_->GetId();
       UpdateContacts();
-      UpdateChats();
-      UpdateCalls();
     }
+    UpdateChats();
+    UpdateCalls();
     NotifyStateChanged();
   });
 }
@@ -296,19 +296,23 @@ inline void MercuryViewModel::LoadInitialChatHistory(const std::string& peer_id)
 
 inline void MercuryViewModel::SetupRtcClientCallbacks() {
   rtc_client_->SetChatMessageReceivedCallback([this](const std::string& peer_id, const messaging::HistoryMessage& message) {
-    const std::lock_guard<std::mutex> lock(state_mutex_);
-    if (current_state_.selected_contact_id && *current_state_.selected_contact_id == peer_id) {
-      current_state_.chat_history.push_back(message);
+    {
+      const std::lock_guard<std::mutex> lock(state_mutex_);
+      if (current_state_.selected_contact_id && *current_state_.selected_contact_id == peer_id) {
+        current_state_.chat_history.push_back(message);
+      }
     }
     UpdateChats();
     NotifyStateChanged();
   });
 
   rtc_client_->SetContactRequestCallback([this](const std::string& peer_id) {
-    const std::lock_guard<std::mutex> lock(state_mutex_);
-    UpdateContacts();
-    if (current_state_.selected_contact_id && *current_state_.selected_contact_id == peer_id) {
-      AddSystemMessageToChat("--> Contact request received. Use '/accept' to confirm.");
+    {
+        const std::lock_guard<std::mutex> lock(state_mutex_);
+        UpdateContacts();
+        if (current_state_.selected_contact_id && *current_state_.selected_contact_id == peer_id) {
+          AddSystemMessageToChat("--> Contact request received. Use '/accept' to confirm.");
+        }
     }
     NotifyStateChanged();
   });
@@ -360,17 +364,31 @@ inline void MercuryViewModel::UpdateContacts() {
 }
 
 inline void MercuryViewModel::UpdateChats() {
-  // Must be called from a locked context
   std::vector<std::string> contact_ids;
-  for(const auto& contact : current_state_.contacts) {
-    contact_ids.push_back(contact.peer_id);
+  {
+    const std::lock_guard<std::mutex> lock(state_mutex_);
+    contact_ids.reserve(current_state_.contacts.size());
+    for (const auto& contact : current_state_.contacts) {
+      contact_ids.push_back(contact.peer_id);
+    }
   }
-  current_state_.chats = rtc_client_->GetChatSummaries(contact_ids);
+
+  // Get summaries outside the lock to avoid holding it during I/O.
+  auto new_chats = rtc_client_->GetChatSummaries(contact_ids);
+
+  {
+    const std::lock_guard<std::mutex> lock(state_mutex_);
+    current_state_.chats = std::move(new_chats);
+  }
 }
 
 inline void MercuryViewModel::UpdateCalls() {
-  // Must be called from a locked context
-  current_state_.calls = rtc_client_->GetCallHistory();
+  // Get history outside the lock to avoid holding it during I/O.
+  auto new_calls = rtc_client_->GetCallHistory();
+  {
+    const std::lock_guard<std::mutex> lock(state_mutex_);
+    current_state_.calls = std::move(new_calls);
+  }
 }
 
 }  // namespace eillance::view_model
