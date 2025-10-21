@@ -288,8 +288,6 @@ inline void MercuryViewModel::SetOnStateChangedCallback(std::function<void()> ca
 
 inline void MercuryViewModel::LoadInitialChatHistory(const std::string& peer_id) {
   // This must be called from a locked context.
-  if (chat_pages_loaded_.contains(peer_id)) return;
-
   auto page = rtc_client_->GetMessageHistoryPage(peer_id, 0, kChatPageSize);
   current_state_.chat_history.assign(page.messages.begin(), page.messages.end());
   chat_pages_loaded_[peer_id] = 1;
