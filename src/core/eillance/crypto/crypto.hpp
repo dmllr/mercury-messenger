@@ -11,29 +11,44 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "eillance/logging/logging.h"
 
 namespace eillance::crypto {
 
+namespace {
+constexpr int hex_char_to_int(char c) {
+  if (c >= '0' && c <= '9') return c - '0';
+  if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+  if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+  return -1;
+}
+}
+
 /// @brief Convert binary data to a hex string
-static std::string ToHex(const std::vector<std::byte>& data) {
-  std::stringstream ss;
-  ss << std::hex << std::setfill('0');
-  for (const auto byte: data) {
-    ss << std::setw(2) << static_cast<int>(byte);
+[[nodiscard]] static constexpr std::string ToHex(const std::vector<std::byte>& data) {
+  constexpr char hex_map[] = "0123456789abcdef";
+  std::string hex_str(data.size() * 2, ' ');
+  for (size_t i = 0; i < data.size(); ++i) {
+    hex_str[2 * i] = hex_map[(static_cast<unsigned char>(data[i]) & 0xF0) >> 4];
+    hex_str[2 * i + 1] = hex_map[static_cast<unsigned char>(data[i]) & 0x0F];
   }
-  return ss.str();
+  return hex_str;
 }
 
 /// @brief Convert a hex string to binary data
-static std::vector<std::byte> FromHex(const std::string& hex) {
-  std::vector<std::byte> bytes;
-  for (unsigned int i = 0; i < hex.length(); i += 2) {
-    const auto byte_string = hex.substr(i, 2);
-    const auto byte_val = static_cast<unsigned char>(strtol(byte_string.c_str(), nullptr, 16));
-    bytes.push_back(std::byte{byte_val});
+[[nodiscard]] static constexpr std::vector<std::byte> FromHex(std::string_view hex) {
+  if (hex.length() % 2 != 0) {
+    return {};
+  }
+  std::vector<std::byte> bytes(hex.length() / 2);
+  for (size_t i = 0; i < hex.length(); i += 2) {
+    const int high = hex_char_to_int(hex[i]);
+    const int low = hex_char_to_int(hex[i + 1]);
+    if (high == -1 || low == -1) return {};
+    bytes[i / 2] = static_cast<std::byte>((static_cast<unsigned char>(high) << 4) | static_cast<unsigned char>(low));
   }
   return bytes;
 }

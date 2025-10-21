@@ -6,6 +6,7 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <string_view>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -41,8 +42,8 @@ class MessageQueue {
   std::unordered_map<std::string, std::deque<Message>> queue_map_;
   mutable std::mutex mutex_;
 
-  static std::string GetStorageKey(const std::string& peer_id) {
-    return "messages_" + peer_id;
+  static constexpr std::string GetStorageKey(std::string_view peer_id) {
+    return std::string("messages_") + std::string(peer_id);
   }
 
   void LoadQueue(const std::string& peer_id) {

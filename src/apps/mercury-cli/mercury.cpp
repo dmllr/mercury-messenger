@@ -2,6 +2,7 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -48,7 +49,7 @@ std::vector<std::string> GetContactMenuEntries(const std::vector<eillance::ident
   return entries;
 }
 
-auto GetConnectionStatusString(eillance::ServiceConnectionState state) -> std::string {
+constexpr auto GetConnectionStatusString(eillance::ServiceConnectionState state) -> std::string_view {
   switch (state) {
     case eillance::ServiceConnectionState::establishing: return "CONNECTING";
     case eillance::ServiceConnectionState::online: return "ONLINE";
@@ -171,7 +172,7 @@ int main(int argc, char** argv) {
         }) | ftxui::flex
     });
 
-    const auto status_line = " Mercury CLI | Your ID: " + state.my_id + " | Status: " + GetConnectionStatusString(state.connection_state);
+    const auto status_line = " Mercury CLI | Your ID: " + state.my_id + " | Status: " + std::string(GetConnectionStatusString(state.connection_state));
     return ftxui::window(ftxui::text(status_line), main_view);
   });
 

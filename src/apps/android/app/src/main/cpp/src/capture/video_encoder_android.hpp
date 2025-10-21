@@ -1,5 +1,6 @@
 #pragma once
 
+#include <string_view>
 #include <cstdint>
 #include <string>
 #include <utility>
@@ -179,7 +180,7 @@ public:
     return Packet{encoded_data};
   }
 
-  static std::vector<std::byte> CreateRotationSei(int rotation) {
+  static constexpr std::vector<std::byte> CreateRotationSei(int rotation) {
     std::vector<std::byte> sei;
 
     // Start code
@@ -195,7 +196,14 @@ public:
     sei.push_back(std::byte{0x05});
 
     // Construct the SEI message content
-    const std::string rotation_text = "rotation-degrees:" + std::to_string(rotation);
+    std::string_view rotation_str_part;
+    switch (rotation) {
+        case 90: rotation_str_part = "90"; break;
+        case 180: rotation_str_part = "180"; break;
+        case 270: rotation_str_part = "270"; break;
+        default: rotation_str_part = "0"; break;
+    }
+    const std::string rotation_text = std::string("rotation-degrees:") + std::string(rotation_str_part);
     std::vector<std::byte> payload;
 
     // UUID for Android's rotation metadata (using a common format)

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <utility>
 #include <vector>
 
@@ -38,9 +39,9 @@ class VideoEncoder {
 #endif
 
   // List of preferred codecs in priority order
-  const std::vector<AVCodecID> preferred_codecs = {
+  static constexpr std::array<AVCodecID, 1> preferred_codecs = {
       AV_CODEC_ID_H264,    // try H.264 codec first
-  };
+  }; 
 
   bool SetupCodecContext(const AVCodec* codec, int width, int height, int framerate) {
     codec_context_ = avcodec_alloc_context3(codec);
