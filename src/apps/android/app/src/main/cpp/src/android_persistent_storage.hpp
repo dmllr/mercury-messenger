@@ -10,6 +10,8 @@
 #include "eillance/crypto/crypto.hpp"
 #include "class_refs.hpp"
 
+#include <cassert>
+
 namespace eillance::storage {
 
 // Android SharedPreferences-based implementation of the storage interface.
@@ -67,6 +69,7 @@ public:
         jmethodID edit_method = env->GetMethodID(shared_pref_class, "edit", "()Landroid/content/SharedPreferences$Editor;");
         jobject editor = env->CallObjectMethod(shared_preferences, edit_method);
 
+        bool result = false;
         if (editor != nullptr) {
             jclass editor_class = env->GetObjectClass(editor);
             jmethodID put_string_method = env->GetMethodID(editor_class, "putString", "(Ljava/lang/String;Ljava/lang/String;)Landroid/content/SharedPreferences$Editor;");
@@ -74,15 +77,17 @@ public:
             jstring j_value = env->NewStringUTF(hex_value.c_str());
             env->CallObjectMethod(editor, put_string_method, j_key, j_value);
 
-            jmethodID apply_method = env->GetMethodID(editor_class, "apply", "()V");
-            env->CallVoidMethod(editor, apply_method);
+            jmethodID commit_method = env->GetMethodID(editor_class, "commit", "()Z");
+            assert(commit_method != nullptr);
+            jboolean success = env->CallBooleanMethod(editor, commit_method);
+            result = (success == JNI_TRUE);
 
             env->DeleteLocalRef(j_key);
             env->DeleteLocalRef(j_value);
             env->DeleteLocalRef(editor);
         }
         env->DeleteLocalRef(shared_preferences);
-        return true;
+        return result;
     }
 
     auto Load(const std::string& key) -> std::optional<std::vector<std::byte>> override {
@@ -156,20 +161,24 @@ public:
         jmethodID edit_method = env->GetMethodID(shared_pref_class, "edit", "()Landroid/content/SharedPreferences$Editor;");
         jobject editor = env->CallObjectMethod(shared_preferences, edit_method);
 
+        bool result = false;
         if (editor != nullptr) {
             jclass editor_class = env->GetObjectClass(editor);
             jmethodID remove_method = env->GetMethodID(editor_class, "remove", "(Ljava/lang/String;)Landroid/content/SharedPreferences$Editor;");
             jstring j_key = env->NewStringUTF(key.c_str());
             env->CallObjectMethod(editor, remove_method, j_key);
 
-            jmethodID apply_method = env->GetMethodID(editor_class, "apply", "()V");
-            env->CallVoidMethod(editor, apply_method);
+            jmethodID commit_method = env->GetMethodID(editor_class, "commit", "()Z");
+            if (commit_method != nullptr) {
+                jboolean success = env->CallBooleanMethod(editor, commit_method);
+                result = (success == JNI_TRUE);
+            }
 
             env->DeleteLocalRef(j_key);
             env->DeleteLocalRef(editor);
         }
         env->DeleteLocalRef(shared_preferences);
-        return true;
+        return result;
     }
 };
 

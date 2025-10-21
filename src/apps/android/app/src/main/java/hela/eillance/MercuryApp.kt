@@ -83,7 +83,7 @@ fun MercuryApp(viewModel: MainViewModel) {
                 )
             }
             composable(Screen.Profile.route) {
-                ProfileScreen(myId = uiState.my_id)
+                ProfileScreen(myId = uiState.myId)
             }
             composable(Route.Chat.route) {
                 ChatScreen(

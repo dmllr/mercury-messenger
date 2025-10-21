@@ -30,13 +30,13 @@ fun ChatScreen(
     onLoadOlder: () -> Unit,
     onBack: () -> Unit,
 ) {
-    val peerId = uiState.selected_contact_id ?: "Unknown"
+    val peerId = uiState.selectedContactId ?: "Unknown"
     val listState = rememberLazyListState()
 
     // Scroll to bottom when a new message arrives
-    LaunchedEffect(uiState.chat_history.size) {
-        if (uiState.chat_history.isNotEmpty()) {
-            listState.animateScrollToItem(uiState.chat_history.size - 1)
+    LaunchedEffect(uiState.chatHistory.size) {
+        if (uiState.chatHistory.isNotEmpty()) {
+            listState.animateScrollToItem(uiState.chatHistory.size - 1)
         }
     }
 
@@ -64,7 +64,7 @@ fun ChatScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             contentPadding = PaddingValues(vertical = 8.dp)
         ) {
-            if (uiState.has_older_messages) {
+            if (uiState.hasOlderMessages) {
                 item {
                     Button(
                         onClick = onLoadOlder,
@@ -74,7 +74,7 @@ fun ChatScreen(
                     }
                 }
             }
-            items(uiState.chat_history) { message ->
+            items(uiState.chatHistory) { message ->
                 MessageBubble(message = message)
             }
         }

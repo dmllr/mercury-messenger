@@ -35,8 +35,8 @@ fun ChatsScreen(
             }
         } else {
             LazyColumn(modifier = Modifier.padding(padding)) {
-                items(chats, key = { it.peer_id }) { chat ->
-                    ChatItem(chat = chat, onClick = { onChatClick(chat.peer_id) })
+                items(chats, key = { it.peerId }) { chat ->
+                    ChatItem(chat = chat, onClick = { onChatClick(chat.peerId) })
                     Divider()
                 }
             }
@@ -47,22 +47,22 @@ fun ChatsScreen(
 @Composable
 fun ChatItem(chat: ChatSummary, onClick: () -> Unit) {
     val formattedTime = SimpleDateFormat("h:mm a", Locale.getDefault())
-        .format(Date(chat.last_message.timestamp / 1000)) // Assuming timestamp is in microseconds
+        .format(Date(chat.lastMessage.timestamp / 1000)) // Assuming timestamp is in microseconds
 
     ListItem(
         modifier = Modifier.clickable(onClick = onClick),
         headlineContent = {
             Text(
-                text = chat.peer_id,
+                text = chat.peerId,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 fontWeight = FontWeight.Bold
             )
         },
         supportingContent = {
-            val prefix = if (chat.last_message.direction == MessageDirection.Sent) "You: " else ""
+            val prefix = if (chat.lastMessage.direction == MessageDirection.Sent) "You: " else ""
             Text(
-                text = "$prefix${chat.last_message.content}",
+                text = "$prefix${chat.lastMessage.content}",
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )

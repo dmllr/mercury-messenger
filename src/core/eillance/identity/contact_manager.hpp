@@ -33,9 +33,9 @@ struct Contact {
 
 // Helper for JSON serialization
 inline void to_json(nlohmann::json& j, const Contact& c) {
-    j = nlohmann::json{
-        {"peer_id", c.peer_id},
-        {"status", c.status}};
+  j = nlohmann::json{
+      {"peer_id", c.peer_id},
+      {"status", c.status}};
 }
 
 class ContactManager {
@@ -53,12 +53,24 @@ public:
   // Initiates adding a new contact.
   bool AddContact(const std::string& peer_id) {
     const std::lock_guard<std::mutex> lock(mutex_);
-    if (contacts_.contains(peer_id)) {
+    auto it = contacts_.find(peer_id);
+    if (it != contacts_.end()) {
+      // If the contact exists and is pending, we allow the "add" operation
+      // to succeed so the caller can re-send the request.
+      if (it->second.status == ContactStatus::pendingApproval) {
+        return true;
+      }
       LOGW << "Contact " << peer_id << " already exists.";
       return false;
     }
     contacts_[peer_id] = {.peer_id=peer_id, .status=ContactStatus::pendingApproval};
-    return SaveContacts();
+
+    // Save to persistent storage. The UI update is triggered by the caller
+    // regardless of the save result, making it feel responsive.
+    if (!SaveContacts()) {
+      LOGE << "Failed to persist new contact " << peer_id << ". It will be lost on restart.";
+    }
+    return true;
   }
 
   // Marks that we have received a request from a peer.

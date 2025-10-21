@@ -198,6 +198,7 @@ inline void MercuryViewModel::RefreshState() {
     dispatch_queue_.Dispatch([this] {
         {
             const std::lock_guard<std::mutex> lock(state_mutex_);
+            current_state_.my_id = rtc_client_->GetId();
             UpdateContacts();
             UpdateChats();
             UpdateCalls();

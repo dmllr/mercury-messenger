@@ -1,6 +1,7 @@
 package hela.eillance
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import hela.eillance.ndkio.AppState
@@ -29,7 +30,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     val newState = json.decodeFromString<AppState>(jsonState)
                     _uiState.update { newState }
                 } catch (e: Exception) {
-                    // Log error
+                    Log.e("MainViewModel", "Failed to decode AppState from JSON", e)
                 }
             }
         }
