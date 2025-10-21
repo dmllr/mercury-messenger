@@ -8,7 +8,6 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.os.Binder
-import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -71,12 +70,10 @@ class CallService : Service(), IClientNativeBridge {
   private fun createNotificationChannel(): String {
     val channelId = "call_service_channel"
     val channelName = "Call Service"
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-      val chan = NotificationChannel(channelId, channelName, NotificationManager.IMPORTANCE_NONE)
-      chan.lockscreenVisibility = Notification.VISIBILITY_PRIVATE
-      val service = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-      service.createNotificationChannel(chan)
-    }
+    val chan = NotificationChannel(channelId, channelName, NotificationManager.IMPORTANCE_NONE)
+    chan.lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+    val service = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    service.createNotificationChannel(chan)
     return channelId
   }
 
