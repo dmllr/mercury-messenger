@@ -32,7 +32,7 @@ public:
 
   /// @brief Callback type for handling input buffer.
   /// The frame buffer contains a series of NAL units where each NALU is preceded by a
-  /// 4ΓÇæbyte bigΓÇæendian size header.
+  /// 4╬ô├ç├ªbyte big╬ô├ç├ªendian size header.
   /// @param frameBuffer The frame buffer containing a series of NAL units.
   /// @return True on success, false otherwise.
   using InputBufferCallback = std::function<void(const std::vector<std::byte>& frameBuffer)>;
@@ -56,6 +56,12 @@ private:
   VideoConfig current_config_ = {.width = 0, .height = 0, .rotation = 0};
 
   std::unique_ptr<ConfigureCallback> on_configure_{};
+
+  static constexpr auto nal_type_mask = std::byte{0x1F};
+  static constexpr auto nal_type_sps = std::byte{0x07};
+  static constexpr auto nal_type_pps = std::byte{0x08};
+  static constexpr auto nal_type_sei = std::byte{0x06};
+
 
   /// @brief Removes H.264 emulation prevention bytes from a given byte array.
   /// @param data Pointer to the input data.
@@ -336,7 +342,6 @@ void H264Parser::ProcessFrame(const rtc::binary& data) {
         std::next(data.begin(), next_start));
 
     // Determine the NAL unit type.
-    constexpr auto nal_type_mask = std::byte{0x1F};
     // If the NALU is empty, skip it.
     if (nalu.empty()) {
       pos = next_start;
@@ -345,9 +350,6 @@ void H264Parser::ProcessFrame(const rtc::binary& data) {
 
     const std::byte nal_header = nalu[0];
     const std::byte nal_unit_type = nal_header & nal_type_mask;
-    constexpr auto nal_type_sps = std::byte{0x07};
-    constexpr auto nal_type_pps = std::byte{0x08};
-    constexpr auto nal_type_sei = std::byte{0x06};
 
     LOGD << "Found NAL unit type: " << static_cast<int>(nal_unit_type) << " size: " << nalu.size();
 

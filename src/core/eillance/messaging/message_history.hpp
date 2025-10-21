@@ -9,6 +9,7 @@
 #include <vector>
 #include <set>
 #include <algorithm>
+#include <string_view>
 
 #include <nlohmann/json.hpp>
 
@@ -87,8 +88,8 @@ class MessageHistory {
   std::unordered_map<std::string, std::deque<HistoryMessage>> history_cache_;
   mutable std::mutex mutex_;
 
-  static std::string GetStorageKey(const std::string& peer_id) {
-    return "history_" + peer_id;
+  static constexpr std::string GetStorageKey(std::string_view peer_id) {
+    return std::string("history_") + std::string(peer_id);
   }
 
   void LoadHistory(const std::string& peer_id) {

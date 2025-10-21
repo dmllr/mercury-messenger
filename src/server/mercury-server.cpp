@@ -4,6 +4,7 @@
 #include <string>
 #include <optional>
 #include <unordered_map>
+#include <string_view>
 #include <unordered_set>
 #include <chrono>
 #include <thread>
@@ -224,7 +225,7 @@ void SignalHandler(int signum) {
   signalReceived = signum;
 }
 
-plog::Severity ParseLogLevel(const std::string& level) {
+constexpr plog::Severity ParseLogLevel(std::string_view level) {
   if (level == "none") { return plog::none; }
   if (level == "fatal") { return plog::fatal; }
   if (level == "error") { return plog::error; }

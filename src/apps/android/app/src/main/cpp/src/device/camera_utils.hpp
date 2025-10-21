@@ -1,16 +1,17 @@
 #pragma once
 
+#include <array>
 #include <cinttypes>
 #include <string>
+#include <type_traits>
 #include <typeinfo>
 #include <utility>
 #include <vector>
 
-#include <nlohmann/json.hpp>
-
 #include <camera/NdkCameraError.h>
 #include <camera/NdkCameraManager.h>
 #include <media/NdkImage.h>
+#include <nlohmann/json.hpp>
 
 #include "eillance/logging/logging.h"
 
@@ -19,7 +20,7 @@ namespace eillance {
 
 inline auto GetAvailableCameras() -> std::vector<std::pair<std::string, std::string>> {
   ACameraManager* cameraManager = ACameraManager_create();
-  if (!cameraManager) {
+  if (cameraManager == nullptr) {
     LOGE << "Failed to create camera manager";
     return {};
   }
@@ -58,7 +59,7 @@ inline auto GetAvailableCameras() -> std::vector<std::pair<std::string, std::str
 
 inline auto GetSupportedResolutions(const std::string& cameraId) -> std::vector<std::pair<int32_t, int32_t>> {
   ACameraManager* camera_manager = ACameraManager_create();
-  if (!camera_manager) {
+  if (camera_manager == nullptr) {
     LOGE << "Failed to create camera manager";
     return {};
   }
@@ -114,51 +115,53 @@ inline auto GetDeviceProfileAsJson() -> nlohmann::json {
   return cameras_json;
 }
 
-template<typename T>
-const char* GetPairStr(T key, const std::vector<std::pair<T, const char*>>& store) {
-  for (auto it = store.begin(); it != store.end(); ++it) {
-    if (it->first == key) {
-      return it->second;
+template<typename T, std::size_t N>
+constexpr const char* GetPairStr(T key, const std::array<std::pair<T, const char*>, N>& store) {
+  for (const auto& pair : store) {
+    if (pair.first == key) {
+      return pair.second;
     }
   }
-  Log::w("(%#08x) : UNKNOWN TAG for %s", key, typeid(store[0].first).name());
+  if (!std::is_constant_evaluated()) {
+    Log::w("(%#08x) : UNKNOWN TAG for %s", key, typeid(store[0].first).name());
+  }
   return "UNKNOWN";
 }
 
 using ErrorPair = std::pair<camera_status_t, const char*>;
-static const std::vector<ErrorPair> cameraErrorInfo{
-    std::make_pair(ACAMERA_OK, "ACAMERA_OK"),
-    std::make_pair(ACAMERA_ERROR_UNKNOWN, "ACAMERA_ERROR_UNKNOWN"),
-    std::make_pair(ACAMERA_ERROR_INVALID_PARAMETER, "ACAMERA_ERROR_INVALID_PARAMETER"),
-    std::make_pair(ACAMERA_ERROR_CAMERA_DISCONNECTED, "ACAMERA_ERROR_CAMERA_DISCONNECTED"),
-    std::make_pair(ACAMERA_ERROR_NOT_ENOUGH_MEMORY, "ACAMERA_ERROR_NOT_ENOUGH_MEMORY"),
-    std::make_pair(ACAMERA_ERROR_METADATA_NOT_FOUND, "ACAMERA_ERROR_METADATA_NOT_FOUND"),
-    std::make_pair(ACAMERA_ERROR_CAMERA_DEVICE, "ACAMERA_ERROR_CAMERA_DEVICE"),
-    std::make_pair(ACAMERA_ERROR_CAMERA_SERVICE, "ACAMERA_ERROR_CAMERA_SERVICE"),
-    std::make_pair(ACAMERA_ERROR_SESSION_CLOSED, "ACAMERA_ERROR_SESSION_CLOSED"),
-    std::make_pair(ACAMERA_ERROR_INVALID_OPERATION, "ACAMERA_ERROR_INVALID_OPERATION"),
-    std::make_pair(ACAMERA_ERROR_STREAM_CONFIGURE_FAIL, "ACAMERA_ERROR_STREAM_CONFIGURE_FAIL"),
-    std::make_pair(ACAMERA_ERROR_CAMERA_IN_USE, "ACAMERA_ERROR_CAMERA_IN_USE"),
-    std::make_pair(ACAMERA_ERROR_MAX_CAMERA_IN_USE, "ACAMERA_ERROR_MAX_CAMERA_IN_USE"),
-    std::make_pair(ACAMERA_ERROR_CAMERA_DISABLED, "ACAMERA_ERROR_CAMERA_DISABLED"),
-    std::make_pair(ACAMERA_ERROR_PERMISSION_DENIED, "ACAMERA_ERROR_PERMISSION_DENIED"),
-};
+static constexpr std::array<ErrorPair, 15> cameraErrorInfo{{
+   {ACAMERA_OK, "ACAMERA_OK"},
+   {ACAMERA_ERROR_UNKNOWN, "ACAMERA_ERROR_UNKNOWN"},
+   {ACAMERA_ERROR_INVALID_PARAMETER, "ACAMERA_ERROR_INVALID_PARAMETER"},
+   {ACAMERA_ERROR_CAMERA_DISCONNECTED, "ACAMERA_ERROR_CAMERA_DISCONNECTED"},
+   {ACAMERA_ERROR_NOT_ENOUGH_MEMORY, "ACAMERA_ERROR_NOT_ENOUGH_MEMORY"},
+   {ACAMERA_ERROR_METADATA_NOT_FOUND, "ACAMERA_ERROR_METADATA_NOT_FOUND"},
+   {ACAMERA_ERROR_CAMERA_DEVICE, "ACAMERA_ERROR_CAMERA_DEVICE"},
+   {ACAMERA_ERROR_CAMERA_SERVICE, "ACAMERA_ERROR_CAMERA_SERVICE"},
+   {ACAMERA_ERROR_SESSION_CLOSED, "ACAMERA_ERROR_SESSION_CLOSED"},
+   {ACAMERA_ERROR_INVALID_OPERATION, "ACAMERA_ERROR_INVALID_OPERATION"},
+   {ACAMERA_ERROR_STREAM_CONFIGURE_FAIL, "ACAMERA_ERROR_STREAM_CONFIGURE_FAIL"},
+   {ACAMERA_ERROR_CAMERA_IN_USE, "ACAMERA_ERROR_CAMERA_IN_USE"},
+   {ACAMERA_ERROR_MAX_CAMERA_IN_USE, "ACAMERA_ERROR_MAX_CAMERA_IN_USE"},
+   {ACAMERA_ERROR_CAMERA_DISABLED, "ACAMERA_ERROR_CAMERA_DISABLED"},
+   {ACAMERA_ERROR_PERMISSION_DENIED, "ACAMERA_ERROR_PERMISSION_DENIED"},
+}};
 
 using DevErrorPair = std::pair<int, const char*>;
-static const std::vector<DevErrorPair> cameraDeviceErrorInfo{
-    std::make_pair(ERROR_CAMERA_IN_USE, "ERROR_CAMERA_IN_USE"),
-    std::make_pair(ERROR_MAX_CAMERAS_IN_USE, "ERROR_MAX_CAMERAS_IN_USE"),
-    std::make_pair(ERROR_CAMERA_DISABLED, "ERROR_CAMERA_DISABLED"),
-    std::make_pair(ERROR_CAMERA_DEVICE, "ERROR_CAMERA_DEVICE"),
-    std::make_pair(ERROR_CAMERA_SERVICE, "ERROR_CAMERA_SERVICE"),
-};
+static constexpr std::array<DevErrorPair, 5> cameraDeviceErrorInfo{{
+   {ERROR_CAMERA_IN_USE, "ERROR_CAMERA_IN_USE"},
+   {ERROR_MAX_CAMERAS_IN_USE, "ERROR_MAX_CAMERAS_IN_USE"},
+   {ERROR_CAMERA_DISABLED, "ERROR_CAMERA_DISABLED"},
+   {ERROR_CAMERA_DEVICE, "ERROR_CAMERA_DEVICE"},
+   {ERROR_CAMERA_SERVICE, "ERROR_CAMERA_SERVICE"},
+}};
 
-inline const char* GetErrorStr(camera_status_t err) {
-  return GetPairStr<camera_status_t>(err, cameraErrorInfo);
+constexpr const char* GetErrorStr(camera_status_t err) {
+  return GetPairStr<camera_status_t, 15>(err, cameraErrorInfo);
 }
 
-inline const char* GetCameraDeviceErrorStr(int err) {
-  return GetPairStr<int>(err, cameraDeviceErrorInfo);
+constexpr const char* GetCameraDeviceErrorStr(int err) {
+  return GetPairStr<int, 5>(err, cameraDeviceErrorInfo);
 }
 
 }  // namespace eillance
