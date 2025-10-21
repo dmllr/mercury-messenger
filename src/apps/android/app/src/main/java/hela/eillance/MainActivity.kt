@@ -87,11 +87,7 @@ class MainActivity : ComponentActivity() {
 
   private fun startAndBindService() {
     Intent(this, CallService::class.java).also { intent ->
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        startForegroundService(intent)
-      } else {
-        startService(intent)
-      }
+      startForegroundService(intent)
       bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
     }
   }
