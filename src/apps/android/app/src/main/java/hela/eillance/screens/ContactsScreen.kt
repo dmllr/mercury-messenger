@@ -54,11 +54,12 @@ fun ContactsScreen(
             }
         } else {
             LazyColumn(modifier = Modifier.padding(padding)) {
-                items(contacts, key = { it.peer_id }) { contact ->
+                items(contacts, key = { it.peerId }) { contact ->
                     ContactListItem(
                         contact = contact,
-                        onClick = { onContactClick(contact.peer_id) },
-                        onAccept = { viewModel.acceptContact(contact.peer_id) }
+                        onClick = { onContactClick(contact.peerId) },
+                        onAccept = { viewModel.acceptContact(contact.peerId) },
+                        onResend = { viewModel.addContact(contact.peerId) }
                     )
                     Divider()
                 }
@@ -68,11 +69,11 @@ fun ContactsScreen(
 }
 
 @Composable
-fun ContactListItem(contact: Contact, onClick: () -> Unit, onAccept: () -> Unit) {
+fun ContactListItem(contact: Contact, onClick: () -> Unit, onAccept: () -> Unit, onResend: () -> Unit) {
     ListItem(
         headlineContent = {
             Text(
-                text = contact.peer_id,
+                text = contact.peerId,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -87,10 +88,18 @@ fun ContactListItem(contact: Contact, onClick: () -> Unit, onAccept: () -> Unit)
             )
         },
         trailingContent = {
-            if (contact.status == ContactStatus.awaitingApproval) {
-                Button(onClick = onAccept) {
-                    Text("Accept")
+            when (contact.status) {
+                ContactStatus.awaitingApproval -> {
+                    Button(onClick = onAccept) {
+                        Text("Accept")
+                    }
                 }
+                ContactStatus.pendingApproval -> {
+                    TextButton(onClick = onResend) {
+                        Text("Resend")
+                    }
+                }
+                else -> {}
             }
         },
         modifier = Modifier.clickable(onClick = onClick)

@@ -63,9 +63,9 @@ fun CallHistoryItem(call: CallRecord) {
     val formattedTime = SimpleDateFormat("MMM d, h:mm a", Locale.getDefault())
         .format(Date(call.timestamp / 1000))
 
-    val durationText = if (call.status == CallStatus.Answered && call.duration_seconds > 0) {
-        val minutes = TimeUnit.SECONDS.toMinutes(call.duration_seconds.toLong())
-        val seconds = call.duration_seconds - TimeUnit.MINUTES.toSeconds(minutes)
+    val durationText = if (call.status == CallStatus.Answered && call.durationSeconds > 0) {
+        val minutes = TimeUnit.SECONDS.toMinutes(call.durationSeconds.toLong())
+        val seconds = call.durationSeconds - TimeUnit.MINUTES.toSeconds(minutes)
         "($minutes min, $seconds sec)"
     } else {
         "(${call.status.name})"
@@ -74,7 +74,7 @@ fun CallHistoryItem(call: CallRecord) {
     ListItem(
         headlineContent = {
             Text(
-                text = call.peer_id,
+                text = call.peerId,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
