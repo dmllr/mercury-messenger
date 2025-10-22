@@ -102,6 +102,47 @@ Java_hela_eillance_CallService_loadOlderMessages(JNIEnv* , jobject) {
 }
 
 extern "C" JNIEXPORT void JNICALL
+Java_hela_eillance_CallService_markMessagesAsRead(JNIEnv* env, jobject, jlongArray message_ids) {
+    if (clientEngine && clientEngine->ViewModel()) {
+        if (message_ids == nullptr) {
+            LOGW << "markMessagesAsRead called with a null message_ids array.";
+            return;
+        }
+
+        if (auto state = clientEngine->ViewModel()->GetState();
+            !state.selected_contact_id) {
+          return;
+        }
+
+        std::vector<std::uint64_t> ids;
+        jsize count = env->GetArrayLength(message_ids);
+        if (count == 0) {
+            return; // Nothing to do
+        }
+        ids.reserve(count);
+
+        jlong* elements = env->GetLongArrayElements(message_ids, nullptr);
+        if (elements != nullptr) {
+            for (jsize i = 0; i < count; i++) {
+                ids.push_back(static_cast<std::uint64_t>(elements[i]));
+            }
+            env->ReleaseLongArrayElements(message_ids, elements, JNI_ABORT);
+        } else {
+            // Error handling for GetLongArrayElements failure
+            if (env->ExceptionCheck()) {
+                LOGE << "Failed to get long array elements. JNI exception occurred.";
+                env->ExceptionDescribe();
+                env->ExceptionClear();
+            } else {
+                LOGE << "GetLongArrayElements returned null without a pending exception.";
+            }
+            return;
+        }
+        clientEngine->ViewModel()->MarkMessagesAsRead(ids);
+    }
+}
+
+extern "C" JNIEXPORT void JNICALL
 Java_hela_eillance_CallService_configureVideoCapture(JNIEnv* env, jobject, jobject videoConfig) {
   if (clientEngine) {
     auto conf = eillance::VideoConfig{};

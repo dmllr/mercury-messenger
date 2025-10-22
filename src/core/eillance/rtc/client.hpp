@@ -50,6 +50,7 @@ class RtcClient final : public RtcTransportDelegate {
   using OnChatMessageReceivedCallback = std::function<void(const std::string&, const messaging::HistoryEntryRecord&)>;
   using OnContactRequestCallback = std::function<void(const std::string& peer_id)>;
   using OnContactStatusChangedCallback = std::function<void(const std::string& peer_id, identity::ContactStatus status)>;
+  using OnMessageStatusChangedCallback = std::function<void(const std::string& peer_id, std::uint64_t message_id, messaging::MessageStatus status)>;
   using OnPeerListUpdateCallback = std::function<void(const std::vector<Device>&)>;
 
   std::shared_ptr<Stream> av_stream_;
@@ -60,6 +61,7 @@ class RtcClient final : public RtcTransportDelegate {
   std::shared_ptr<OnChatMessageReceivedCallback> on_chat_message_received_{};
   std::shared_ptr<OnContactRequestCallback> on_contact_request_{};
   std::shared_ptr<OnContactStatusChangedCallback> on_contact_status_changed_{};
+  std::shared_ptr<OnMessageStatusChangedCallback> on_message_status_changed_{};
   std::shared_ptr<OnPeerListUpdateCallback> on_peer_list_update_{};
 
   std::shared_ptr<storage::PersistentStorage> storage_;
@@ -73,8 +75,8 @@ class RtcClient final : public RtcTransportDelegate {
   mutable std::mutex online_peers_mutex_;
 
 public:
-  explicit RtcClient(std::shared_ptr<storage::PersistentStorage> storage, Capture video_capture) {
-    storage_ = std::move(storage);
+  explicit RtcClient(std::shared_ptr<storage::PersistentStorage> storage, Capture video_capture)
+      : storage_(std::move(storage)) {
     id_manager_ = std::make_unique<identity::IdManager>(storage_);
     contact_manager_ = std::make_shared<identity::ContactManager>(storage_);
     message_queue_ = std::make_shared<messaging::MessageQueue>(storage_);
@@ -109,8 +111,8 @@ public:
       }
     });
 
-    av_stream_->OnSample([this, ws = make_weak_ptr(av_stream_)](const Stream::Source::Type type, const uint64_t sampleTime, const rtc::binary& sample) {
-      SendSampleToPeers(sample, type, sampleTime);
+    av_stream_->OnSample([this, ws = make_weak_ptr(av_stream_)](const Stream::Source::Type type, std::uint64_t sample_time, const rtc::binary& sample) {
+      SendSampleToPeers(sample, type, sample_time);
     });
   }
 
@@ -144,6 +146,7 @@ public:
   void SetChatMessageReceivedCallback(const OnChatMessageReceivedCallback& callback) { on_chat_message_received_ = std::make_shared<OnChatMessageReceivedCallback>(callback); }
   void SetContactRequestCallback(const OnContactRequestCallback& callback) { on_contact_request_ = std::make_shared<OnContactRequestCallback>(callback); }
   void SetContactStatusChangedCallback(const OnContactStatusChangedCallback& callback) { on_contact_status_changed_ = std::make_shared<OnContactStatusChangedCallback>(callback); }
+  void SetMessageStatusChangedCallback(const OnMessageStatusChangedCallback& callback) { on_message_status_changed_ = std::make_shared<OnMessageStatusChangedCallback>(callback); }
   void SetPeerListUpdateCallback(const OnPeerListUpdateCallback& callback) { on_peer_list_update_ = std::make_shared<OnPeerListUpdateCallback>(callback); }
 
   void RequestPeerListUpdate() {
@@ -152,6 +155,11 @@ public:
 
   void Call(const std::string& peer_id) {
     Connect(peer_id);
+    message_history_->SetStatusChangedCallback([this](const std::string& p_id, std::uint64_t msg_id, messaging::MessageStatus status) {
+      if (on_message_status_changed_) {
+        (*on_message_status_changed_)(p_id, msg_id, status);
+      }
+    });
   }
 
   void Connect(const std::string& peer_id) {
@@ -438,29 +446,47 @@ public:
     }
   }
 
-  void SendChatMessage(const std::string& peer_id, const std::string& message) {
+  auto SendChatMessage(const std::string& peer_id, const std::string& message) const -> messaging::HistoryEntryRecord {
     if (!contact_manager_->GetContact(peer_id)) {
-      LOGE << "Cannot send message to %s. Not a contact.", peer_id.c_str();
-      return;
+      LOGE << "Cannot send message to " << peer_id.c_str() << ". Not a contact.";
+      return {};
     }
 
-    message_history_->AddTextEntry(peer_id, message, messaging::MessageDirection::sent);
+    auto entry = message_history_->AddTextEntry(peer_id, message, messaging::MessageDirection::sent);
 
     const auto peer = transport_->GetPeer(peer_id);
     if (peer && peer->data_channel_ && peer->data_channel_->isOpen() && peer->session_cipher_->IsReady()) {
-      if (DirectSend(peer, peer_id, message)) {
+      if (DirectSend(peer, peer_id, message, entry.id)) {
         LOGI << "Sent direct message to " << peer_id;
-        return; // Success
+        message_history_->UpdateMessageStatus(peer_id, entry.id, messaging::MessageStatus::Sent);
+        entry.status = messaging::MessageStatus::Sent;
+        return entry; // Success
       }
     }
 
     // If we reach here, direct send failed or was not possible.
     LOGI << "Peer " << peer_id << " is offline or not ready, or send failed. Buffering message.";
-    const Json json_msg = {{"type", "chat"}, {"content", message}};
+    const Json json_msg = {
+      {"type", "chat"},
+      {"content", message},
+      {"message_id", entry.id},
+    };
     message_queue_->Enqueue(peer_id, json_msg.dump());
     if (!peer) {
       delivery_service_->attemptDelivery(peer_id);
     }
+    return entry;
+  }
+
+  void MarkMessagesAsRead(const std::string& peer_id, const std::vector<std::uint64_t>& message_ids) const {
+      const auto peer = transport_->GetPeer(peer_id);
+      if (peer && peer->data_channel_ && peer->data_channel_->isOpen()) {
+          const Json msg = {
+            {"type", "message_read"},
+            {"message_ids", message_ids},
+          };
+          transport_->SendPeerDataChannelMessage(peer->data_channel_, msg);
+      }
   }
 
   auto GetMessageHistoryPage(const std::string& peer_id, size_t page_index, size_t page_size) const -> messaging::HistoryPage {
@@ -468,7 +494,7 @@ public:
   }
 
 private:
-  void UpdateAndNotifyPeerList() {
+  void UpdateAndNotifyPeerList() const {
     if (on_peer_list_update_) {
       std::vector<Device> peer_list;
       {
@@ -481,7 +507,7 @@ private:
     }
   }
 
-  auto DirectSend(const std::shared_ptr<Peer>& peer, const std::string& peer_id, const std::string& message) const -> bool {
+  auto DirectSend(const std::shared_ptr<Peer>& peer, const std::string& peer_id, const std::string& message, std::uint64_t message_id) const -> bool {
     if (!peer || !peer->data_channel_ || !peer->data_channel_->isOpen() || !peer->session_cipher_->IsReady()) {
       return false;
     }
@@ -493,17 +519,18 @@ private:
     }
     const Json json_message = {
         {"type", "chat"},
+        {"message_id", message_id},
         {"payload", rtc::binary(encrypted_payload.begin(), encrypted_payload.end())}};
     transport_->SendPeerDataChannelMessage(peer->data_channel_, json_message);
     return true;
   }
 
-  void SendSampleToPeers(const rtc::binary& sample, Stream::Source::Type type, const uint64_t sampleTime) const {
+  void SendSampleToPeers(const rtc::binary& sample, Stream::Source::Type type, std::uint64_t sample_time) const {
     for (const auto& [id, peer]: transport_->GetPeers()) {
       if (peer->GetState() == Peer::State::ready) {
         auto track = (type == Stream::Source::Type::video) ? peer->video_ : peer->audio_;
         if (track) {
-          const auto elapsed_seconds = static_cast<double>(sampleTime) / Time::uS;
+          const auto elapsed_seconds = static_cast<double>(sample_time) / Time::uS;
           const auto rtp_config = track->Reporter()->rtpConfig;
           const auto elapsed_timestamp = rtp_config->secondsToTimestamp(elapsed_seconds);
           rtp_config->timestamp = rtp_config->startTimestamp + elapsed_timestamp;
@@ -528,9 +555,9 @@ private:
     };
 
     if (type == "profile") {
-      Device::Profile profile = ParseDeviceProfile(message.at("profile"));
+      const auto profile = ParseDeviceProfile(message.at("profile"));
       {
-        std::lock_guard<std::mutex> lock(online_peers_mutex_);
+        const std::lock_guard<std::mutex> lock(online_peers_mutex_);
         online_peers_[peer_id].id = peer_id;
         online_peers_[peer_id].profile = profile;
         if (message.contains("name")) {
@@ -566,12 +593,38 @@ private:
         auto payload = message.at("payload").get<rtc::binary>();
         auto decrypted_message = peer->session_cipher_->Decrypt({payload.begin(), payload.end()});
         if (!decrypted_message.empty()) {
-          const auto history_entry = message_history_->AddTextEntry(peer_id, decrypted_message, messaging::MessageDirection::received);
+          auto message_id = message.at("message_id").get<std::uint64_t>();
+          const Json receipt = {{"type", "message_receipt"}, {"status", "delivered"}, {"message_id", message_id}};
+          transport_->SendPeerDataChannelMessage(peer->data_channel_, receipt);
+
+          auto history_entry = message_history_->AddTextEntry(peer_id, decrypted_message, messaging::MessageDirection::received);
           (*on_chat_message_received_)(peer_id, history_entry);
         } else {
           LOGW << "Failed to decrypt message from " << peer_id;
         }
       }
+    } else if (type == "message_receipt") {
+        auto message_id = message.at("message_id").get<std::uint64_t>();
+        auto status_str = message.at("status").get<std::string>();
+        auto status = messaging::MessageStatus::Sent;
+        if (status_str == "delivered") {
+            status = messaging::MessageStatus::Delivered;
+        } else if (status_str == "read") {
+            status = messaging::MessageStatus::Read;
+        }
+        message_history_->UpdateMessageStatus(peer_id, message_id, status);
+    } else if (type == "message_read") {
+        auto message_ids = message.at("message_ids").get<std::vector<std::uint64_t>>();
+        for(const auto& msg_id : message_ids) {
+            // We don't update our own history; the sender will be notified via receipt.
+            // This is just for sending the receipt back.
+            const Json receipt = {
+              {"type", "message_receipt"},
+              {"status", "read"},
+              {"message_id", msg_id},
+            };
+            transport_->SendPeerDataChannelMessage(peer->data_channel_, receipt);
+        }
     } else {
       throw std::runtime_error("Unknown message type in ProcessDataChannelMessage");
     }
@@ -597,10 +650,11 @@ private:
 
         if (type == "chat") {
           if (peer->session_cipher_->IsReady()) {
-            if (!DirectSend(peer, peer_id, message.value("content", ""))) {
+            if (!DirectSend(peer, peer_id, message.value("content", ""), message.value("message_id", 0ULL))) {
               LOGW << "Failed to send queued chat message to " << peer_id << ". It will remain in queue.";
               return;  // Abort and retry later
             }
+            message_history_->UpdateMessageStatus(peer_id, message.value("message_id", 0ULL), messaging::MessageStatus::Sent);
           } else {
             LOGW << "Session cipher not ready for chat message to " << peer_id << ". Message will remain in queue.";
             return;
@@ -658,6 +712,7 @@ private:
     }
     return profile;
   }
+
 };
 
 }  // namespace eillance

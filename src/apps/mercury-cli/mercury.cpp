@@ -2,6 +2,7 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <chrono>
 #include <string_view>
 #include <thread>
 #include <vector>
@@ -19,6 +20,7 @@
 #include "eillance/messaging/history.hpp"
 #include "eillance/rtc/client.hpp"
 #include "eillance/storage/persistent_storage.hpp"
+#include "eillance/utils/time.hpp"
 #include "eillance/view_model/mercury_view_model.hpp"
 #include "eillance/capture/capture.hpp"
 
@@ -57,6 +59,55 @@ constexpr auto GetConnectionStatusString(eillance::ServiceConnectionState state)
     case eillance::ServiceConnectionState::disconnected: return "OFFLINE";
     default: return "UNKNOWN";
   }
+}
+
+// Helper function to format timestamps according to the specified rules.
+std::string FormatTimestamp(Time::Unit ts_us) {
+    using namespace std::chrono;
+    const auto message_tp = system_clock::time_point(microseconds(ts_us));
+    const auto now_tp = system_clock::now();
+
+    const time_t message_time_t = system_clock::to_time_t(message_tp);
+    const time_t now_time_t = system_clock::to_time_t(now_tp);
+
+#ifdef _WIN32
+    tm message_tm{}, now_tm{};
+    localtime_s(&message_tm, &message_time_t);
+    localtime_s(&now_tm, &now_time_t);
+#else
+    tm message_tm{}, now_tm{};
+    localtime_r(&message_time_t, &message_tm);
+    localtime_r(&now_time_t, &now_tm);
+#endif
+
+    char buffer[64];
+
+    if (message_tm.tm_year == now_tm.tm_year && message_tm.tm_yday == now_tm.tm_yday) {
+        strftime(buffer, sizeof(buffer), "%H:%M", &message_tm);
+        return std::string(buffer);
+    }
+
+    time_t yesterday_time_t = now_time_t - 86400;
+#ifdef _WIN32
+    tm yesterday_tm{};
+    localtime_s(&yesterday_tm, &yesterday_time_t);
+#else
+    tm yesterday_tm{};
+    localtime_r(&yesterday_time_t, &yesterday_tm);
+#endif
+
+    if (message_tm.tm_year == yesterday_tm.tm_year && message_tm.tm_yday == yesterday_tm.tm_yday) {
+        strftime(buffer, sizeof(buffer), "Yesterday, %H:%M", &message_tm);
+        return std::string(buffer);
+    }
+
+    if (message_tm.tm_year == now_tm.tm_year) {
+        strftime(buffer, sizeof(buffer), "%b %d, %H:%M", &message_tm);
+        return std::string(buffer);
+    }
+
+    strftime(buffer, sizeof(buffer), "%Y, %b %d, %H:%M", &message_tm);
+    return std::string(buffer);
 }
 
 }  // namespace
@@ -117,10 +168,11 @@ int main(int argc, char** argv) {
     for (const auto& entry: state.interaction_history) {
         std::string prefix;
         std::string content;
-        switch(entry.kind) {
+        switch (entry.kind) {
             case eillance::messaging::HistoryEntryKind::TextMessage:
-            case eillance::messaging::HistoryEntryKind::SystemMessage:
-                if (entry.direction == eillance::messaging::MessageDirection::sent) {
+            case eillance::messaging::HistoryEntryKind::SystemMessage: {
+            std::string suffix;
+            if (entry.direction == eillance::messaging::MessageDirection::sent) {
                     prefix = "[you]: ";
                 } else {
                     if(state.selected_contact_id.has_value()) {
@@ -131,9 +183,21 @@ int main(int argc, char** argv) {
                         prefix = "[system]: ";
                     }
                 }
+                if (entry.direction == eillance::messaging::MessageDirection::sent) {
+                    switch(entry.status) {
+                        case eillance::messaging::MessageStatus::Sending: suffix = " (sending...)"; break;
+                        case eillance::messaging::MessageStatus::Sent: suffix = " (sent)"; break;
+                        case eillance::messaging::MessageStatus::Delivered: suffix = " (delivered)"; break;
+                        case eillance::messaging::MessageStatus::Read: suffix = " (read)"; break;
+                        default: break;
+                    }
+                }
                 content = std::get<eillance::messaging::MessageEntry>(entry.data).content;
-                elements.push_back(ftxui::text(prefix + content));
+                auto timestamp_str = FormatTimestamp(entry.timestamp);
+                elements.push_back(ftxui::text(prefix + content + suffix));
+                elements.push_back(ftxui::text("  └─ " + timestamp_str) | ftxui::dim);
                 break;
+            }
             case eillance::messaging::HistoryEntryKind::VoiceCall:
             case eillance::messaging::HistoryEntryKind::VideoCall: {
                 prefix = "[system]: ";

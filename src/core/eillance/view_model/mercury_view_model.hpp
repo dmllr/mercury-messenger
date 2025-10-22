@@ -8,6 +8,7 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <atomic>
 #include <unordered_map>
 #include <vector>
 
@@ -72,6 +73,7 @@ public:
   void AcceptContact(const std::string& peer_id) const;
   void LoadOlderMessages();
   void RefreshState();
+  void MarkMessagesAsRead(const std::vector<std::uint64_t>& message_ids);
 
   // --- CLI Specific ---
   auto ProcessCliInput(const std::string& input) -> bool;
@@ -91,6 +93,7 @@ private:
   void UpdateChats();
   void LoadInitialChatHistory(const std::string& peer_id);
 
+  static inline std::atomic<std::uint64_t> next_system_message_id_{10000000000000000000ULL};
   std::shared_ptr<RtcClient> rtc_client_;
 
   mutable std::mutex state_mutex_;
@@ -141,18 +144,22 @@ inline void MercuryViewModel::SendMessage(const std::string& content) {
   {
     const std::lock_guard<std::mutex> lock(state_mutex_);
     selected_id = current_state_.selected_contact_id;
-
     if (!selected_id) {
       LOGW << "SendMessage called with no selected contact.";
       return;
     }
+  }
 
-    current_state_.interaction_history.push_back({
-        .kind = messaging::HistoryEntryKind::TextMessage,
-        .timestamp = Time::Now(),
-        .direction = messaging::MessageDirection::sent,
-        .data = messaging::MessageEntry{content}
-    });
+  // This is a single atomic operation that adds to history and queues for sending.
+  // It should be fast enough as it only involves a file write at most.
+  auto entry = rtc_client_->SendChatMessage(*selected_id, content);
+
+  {
+    const std::lock_guard<std::mutex> lock(state_mutex_);
+    // Verify that the selection has not changed before adding to the history
+    if (current_state_.selected_contact_id == selected_id) {
+      current_state_.interaction_history.push_back(entry);
+    }
   }
 
   // Update chat summaries, which can be slow, outside the lock.
@@ -160,9 +167,6 @@ inline void MercuryViewModel::SendMessage(const std::string& content) {
   NotifyStateChanged();
 
   // Dispatch the actual sending logic to a background thread to avoid blocking the main thread.
-  dispatch_queue_.Dispatch([this, peer_id = *selected_id, content] {
-    rtc_client_->SendChatMessage(peer_id, content);
-  });
 }
 
 inline void MercuryViewModel::StartVoiceCall() {
@@ -237,6 +241,20 @@ inline void MercuryViewModel::RefreshState() {
     UpdateChats();
     NotifyStateChanged();
   });
+}
+
+inline void MercuryViewModel::MarkMessagesAsRead(const std::vector<std::uint64_t>& message_ids) {
+    dispatch_queue_.Dispatch([this, message_ids] {
+        std::optional<std::string> peer_id;
+        {
+            const std::lock_guard<std::mutex> lock(state_mutex_);
+            peer_id = current_state_.selected_contact_id;
+        }
+        if (peer_id && !message_ids.empty()) {
+            LOGI << "Marking " << message_ids.size() << " messages as read for peer " << *peer_id;
+            rtc_client_->MarkMessagesAsRead(*peer_id, message_ids);
+        }
+    });
 }
 
 inline auto MercuryViewModel::ProcessCliInput(const std::string& input) -> bool {
@@ -359,6 +377,23 @@ inline void MercuryViewModel::SetupRtcClientCallbacks() {
     }
   });
 
+  rtc_client_->SetMessageStatusChangedCallback(
+      [this](const std::string& peer_id, const std::uint64_t message_id,
+             const messaging::MessageStatus status) {
+        {
+          const std::lock_guard<std::mutex> lock(state_mutex_);
+          if (current_state_.selected_contact_id && *current_state_.selected_contact_id == peer_id) {
+            for (auto& entry : current_state_.interaction_history) {
+              if (entry.id == message_id) {
+                entry.status = status;
+                break;
+              }
+            }
+          }
+        }
+        NotifyStateChanged();
+      });
+
   // Callbacks for call history would be added here
 }
 
@@ -378,6 +413,7 @@ inline void MercuryViewModel::UpdateChatHistoryForSelectedContact() {
 inline void MercuryViewModel::AddSystemMessageToChat(const std::string& message) {
   const std::lock_guard<std::mutex> lock(state_mutex_);
   current_state_.interaction_history.push_back({
+      .id = next_system_message_id_++,
       .kind = messaging::HistoryEntryKind::SystemMessage,
       .timestamp = Time::Now(),
       .direction = messaging::MessageDirection::received,
@@ -407,9 +443,8 @@ inline void MercuryViewModel::UpdateChats() {
   }
 
   // Get summaries outside the lock to avoid holding it during I/O.
-  auto new_chats = rtc_client_->GetChatSummaries(contact_ids);
-
   {
+    auto new_chats = rtc_client_->GetChatSummaries(contact_ids);
     const std::lock_guard<std::mutex> lock(state_mutex_);
     current_state_.chats = std::move(new_chats);
   }

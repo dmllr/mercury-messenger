@@ -41,15 +41,15 @@ public:
     return sample_.buffer();
   }
 
-  void Stop() final {
+  void Stop() final { // NOLINT
     capture_.Revoke();
   }
 
-  auto GetSampleTime() -> uint64_t final {
+  auto GetSampleTime() -> std::uint64_t final {
     return sample_.timestamp();
   }
 
-  auto GetSampleDuration() -> uint64_t final {
+  auto GetSampleDuration() -> std::uint64_t final {
     return capture_.GetSampleDuration();
   }
 };
