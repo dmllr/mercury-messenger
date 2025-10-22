@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -20,12 +21,16 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.CallMade
 import androidx.compose.material.icons.automirrored.filled.CallMissed
 import androidx.compose.material.icons.automirrored.filled.CallReceived
+import androidx.compose.material.icons.filled.Done
+import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -45,9 +50,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.core.os.ConfigurationCompat
 import hela.eillance.MainViewModel
 import hela.eillance.ndkio.AppState
 import hela.eillance.ndkio.CallDirection
@@ -55,6 +64,12 @@ import hela.eillance.ndkio.CallStatus
 import hela.eillance.ndkio.HistoryEntry
 import hela.eillance.ndkio.HistoryEntryKind
 import hela.eillance.ndkio.MessageDirection
+import hela.eillance.ndkio.MessageStatus
+import java.time.Instant
+import java.time.ZoneId
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -74,6 +89,15 @@ fun InteractionScreen(
     LaunchedEffect(historyItems.size) {
         if (historyItems.isNotEmpty()) {
             listState.animateScrollToItem(historyItems.size - 1)
+        }
+    }
+
+    LaunchedEffect(uiState.interactionHistory) {
+        val unreadMessageIds = uiState.interactionHistory
+            .filter { it.kind == HistoryEntryKind.TextMessage && it.direction == MessageDirection.Received && it.status != MessageStatus.Read }
+            .map { it.id }
+        if (unreadMessageIds.isNotEmpty()) {
+            viewModel.MarkMessagesAsRead(unreadMessageIds)
         }
     }
 
@@ -123,7 +147,7 @@ fun InteractionScreen(
                     }
                 }
             }
-            items(historyItems, key = { it.timestamp }) { item ->
+            items(historyItems, key = { it.id }) { item ->
                 when (item.kind) {
                     HistoryEntryKind.TextMessage -> MessageBubble(item)
                     HistoryEntryKind.VoiceCall, HistoryEntryKind.VideoCall -> CallLogBubble(item)
@@ -148,8 +172,8 @@ fun MessageBubble(entry: HistoryEntry) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(
-                start = if (isFromMe) 64.dp else 8.dp,
-                end = if (isFromMe) 8.dp else 64.dp
+                start = if (isFromMe) 48.dp else 8.dp,
+                end = if (isFromMe) 8.dp else 48.dp
             ),
         contentAlignment = alignment
     ) {
@@ -170,6 +194,34 @@ fun MessageBubble(entry: HistoryEntry) {
                 color = colors.second,
                 style = MaterialTheme.typography.bodyLarge
             )
+            Row(
+                modifier = Modifier.padding(top = 4.dp, end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = formatTimestamp(entry.timestamp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                )
+                if (isFromMe) {
+                    Spacer(Modifier.width(4.dp))
+                    Icon(
+                        imageVector = when(entry.status) {
+                            MessageStatus.Read -> Icons.Filled.DoneAll
+                            MessageStatus.Delivered -> Icons.Filled.DoneAll
+                            MessageStatus.Sent -> Icons.Filled.Done
+                            else -> Icons.Filled.Schedule // Sending or None
+                        },
+                        contentDescription = "Message status: ${entry.status}",
+                        modifier = Modifier.padding(start = 4.dp),
+                        tint = if (entry.status == MessageStatus.Read) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                        }
+                    )
+                }
+            }
         }
     }
 }
@@ -189,8 +241,7 @@ fun CallLogBubble(entry: HistoryEntry) {
         null -> Triple(Icons.Default.Call, MaterialTheme.colorScheme.onSurfaceVariant, "Call") // Fallback
     }
 
-    val formattedTime = SimpleDateFormat("MMM d, h:mm a", Locale.getDefault())
-        .format(Date(entry.timestamp / 1000))
+    val formattedTime = formatTimestamp(entry.timestamp)
 
     val duration = entry.durationSeconds ?: 0
     val durationText = if (entry.callStatus == CallStatus.Answered && duration > 0) {
@@ -228,6 +279,33 @@ fun SystemMessageBubble(entry: HistoryEntry) {
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+    }
+}
+
+@Composable
+fun formatTimestamp(timestamp: Long): String {
+    val context = LocalContext.current
+    val locale = ConfigurationCompat.getLocales(context.resources.configuration)[0] ?: Locale.getDefault()
+
+    val messageTime = Instant.ofEpochMilli(timestamp / 1000).atZone(ZoneId.systemDefault())
+    val now = ZonedDateTime.now(ZoneId.systemDefault())
+
+    val isToday = messageTime.toLocalDate().isEqual(now.toLocalDate())
+    val isYesterday = messageTime.toLocalDate().isEqual(now.toLocalDate().minusDays(1))
+
+    return when {
+        isToday -> {
+            messageTime.format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(locale))
+        }
+        isYesterday -> {
+            "Yesterday, " + messageTime.format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(locale))
+        }
+        messageTime.year == now.year -> {
+            messageTime.format(DateTimeFormatter.ofPattern("MMM d, HH:mm", locale))
+        }
+        else -> {
+            messageTime.format(DateTimeFormatter.ofLocalizedDateTime(FormatStyle.SHORT, FormatStyle.SHORT).withLocale(locale))
+        }
     }
 }
 

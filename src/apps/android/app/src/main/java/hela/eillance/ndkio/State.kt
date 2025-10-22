@@ -27,6 +27,15 @@ enum class CallStatus {
 }
 
 @Serializable
+enum class MessageStatus {
+    @SerialName("none") None,
+    @SerialName("sending") Sending,
+    @SerialName("sent") Sent,
+    @SerialName("delivered") Delivered,
+    @SerialName("read") Read,
+}
+
+@Serializable
 enum class HistoryEntryKind {
     @SerialName("text_message") TextMessage,
     @SerialName("voice_call") VoiceCall,
@@ -36,6 +45,7 @@ enum class HistoryEntryKind {
 
 @Serializable
 data class HistoryEntry(
+    val id: Long,
     val kind: HistoryEntryKind,
     val timestamp: Long,
     val content: String? = null,
@@ -43,6 +53,7 @@ data class HistoryEntry(
     @SerialName("duration_seconds") val durationSeconds: Int? = null,
     @SerialName("call_direction") val callDirection: CallDirection? = null,
     @SerialName("call_status") val callStatus: CallStatus? = null,
+    val status: MessageStatus = MessageStatus.None
 )
 
 @Serializable

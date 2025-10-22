@@ -4,9 +4,11 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <ranges>
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <atomic>
 #include <variant>
 #include <string_view>
 
@@ -14,6 +16,7 @@
 
 #include "eillance/logging/logging.h"
 #include "eillance/storage/persistent_storage.hpp"
+#include "eillance/utils/string.hpp"
 #include "eillance/utils/time.hpp"
 
 namespace eillance::messaging {
@@ -41,6 +44,18 @@ NLOHMANN_JSON_SERIALIZE_ENUM(CallStatus, { // NOLINT
     {CallStatus::Missed, "missed"},
     {CallStatus::Rejected, "rejected"},
     {CallStatus::Busy, "busy"},
+})
+
+enum class MessageStatus : std::uint8_t {
+    None, // Not applicable, or for received messages
+    Sending,
+    Sent,
+    Delivered,
+    Read
+};
+
+NLOHMANN_JSON_SERIALIZE_ENUM(MessageStatus, { // NOLINT
+    {MessageStatus::None, "none"}, {MessageStatus::Sending, "sending"}, {MessageStatus::Sent, "sent"}, {MessageStatus::Delivered, "delivered"}, {MessageStatus::Read, "read"},
 })
 
 enum class HistoryEntryKind {
@@ -73,17 +88,21 @@ struct CallEntry {
 using HistoryEntryData = std::variant<MessageEntry, CallEntry>;
 
 struct HistoryEntryRecord {
+  std::uint64_t id;
   HistoryEntryKind kind;
   Time::Unit timestamp;
   MessageDirection direction;
+  MessageStatus status = MessageStatus::None;
   HistoryEntryData data;
 };
 
 
 inline void to_json(nlohmann::json& j, const HistoryEntryRecord& e) { // NOLINT(*-swappable-parameters)
+  j["id"] = e.id;
   j["kind"] = e.kind;
   j["timestamp"] = e.timestamp;
   j["direction"] = e.direction;
+  j["status"] = e.status;
 
   std::visit([&j](auto&& arg) {
       using T = std::decay_t<decltype(arg)>;
@@ -98,9 +117,11 @@ inline void to_json(nlohmann::json& j, const HistoryEntryRecord& e) { // NOLINT(
 }
 
 inline void from_json(const nlohmann::json& j, HistoryEntryRecord& e) {
+  j.at("id").get_to(e.id);
   j.at("kind").get_to(e.kind);
   j.at("timestamp").get_to(e.timestamp);
   e.direction = j.value("direction", MessageDirection::received);
+  e.status = j.value("status", MessageStatus::None);
   switch (e.kind) {
     case HistoryEntryKind::TextMessage:
     case HistoryEntryKind::SystemMessage:
@@ -147,9 +168,11 @@ class MessageHistory {
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::unordered_map<std::string, std::deque<HistoryEntryRecord>> history_cache_;
   mutable std::mutex mutex_;
+  std::atomic<std::uint64_t> next_id_{1};
+  std::function<void(const std::string& peer_id, std::uint64_t message_id, MessageStatus status)> on_status_changed_;
 
   static constexpr std::string GetStorageKey(std::string_view peer_id) {
-    return std::string("history_v2_") + std::string(peer_id);
+    return std::string("history_") + std::string(peer_id);
   }
 
   void LoadHistory(const std::string& peer_id) {
@@ -165,6 +188,20 @@ class MessageHistory {
           const std::string json_str(reinterpret_cast<const char*>(data_opt->data()), data_opt->size());
           const nlohmann::json j = nlohmann::json::parse(json_str);
           history_cache_[peer_id] = j.get<std::deque<HistoryEntryRecord>>();
+          if (!history_cache_.at(peer_id).empty()) { // NOLINT(*-pro-type-vararg)
+            std::uint64_t max_id = 0;
+            for (const auto& entry : history_cache_.at(peer_id)) {
+                if (entry.id > max_id) {
+                    max_id = entry.id;
+                }
+            }
+            std::uint64_t current_next_id = next_id_.load();
+            while (max_id >= current_next_id) {
+                if (next_id_.compare_exchange_weak(current_next_id, max_id + 1)) {
+                    break;
+                }
+            }
+          }
         } catch (const nlohmann::json::parse_error& e) {
           LOGE << "Failed to parse message history for peer " << peer_id << ": " << e.what();
           storage_->Delete(key);
@@ -203,10 +240,12 @@ public:
     auto& history = history_cache_[peer_id];
 
     const HistoryEntryRecord entry{
+        .id = next_id_.fetch_add(1),
         .kind = HistoryEntryKind::TextMessage,
         .timestamp = Time::Now(),
         .direction = direction,
-        .data = MessageEntry{content}
+        .status = (direction == MessageDirection::sent) ? MessageStatus::Sending : MessageStatus::None,
+        .data = MessageEntry{content},
     };
 
     history.push_back(entry);
@@ -220,12 +259,43 @@ public:
       auto& history = history_cache_[peer_id];
 
       history.push_back({
+          .id = next_id_.fetch_add(1),
           .kind = kind,
           .timestamp = Time::Now(),
           .direction = (direction == CallDirection::Incoming) ? MessageDirection::received : MessageDirection::sent, // NOLINT(*-branch-clone)
           .data = CallEntry{duration, direction, status}
       });
       SaveHistory(peer_id);
+  }
+
+  void SetStatusChangedCallback(
+    std::function<void(const std::string&, std::uint64_t, MessageStatus)> cb) {
+      const std::lock_guard<std::mutex> lock(mutex_);
+      on_status_changed_ = std::move(cb);
+  }
+
+  void UpdateMessageStatus(const std::string& peer_id, std::uint64_t message_id,
+                           MessageStatus new_status) {
+    {
+      const std::lock_guard<std::mutex> lock(mutex_);
+      LoadHistory(peer_id);
+      if (!history_cache_.contains(peer_id)) {
+        return;
+      }
+      for (auto& history = history_cache_.at(peer_id);
+           auto& entry : std::ranges::reverse_view(history)) {
+        if (entry.id == message_id) {
+          if (entry.status != new_status) {
+            entry.status = new_status;
+            SaveHistory(peer_id);
+            if (on_status_changed_) {
+              on_status_changed_(peer_id, message_id, new_status);
+            }
+          }
+          return;
+        }
+      }
+    }
   }
 
   HistoryPage GetHistoryPage(const std::string& peer_id, size_t page_index, size_t page_size) {

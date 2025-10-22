@@ -78,6 +78,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         callService?.loadOlderMessages()
     }
 
+    fun MarkMessagesAsRead(messageIds: List<Long>) {
+        callService?.markMessagesAsRead(messageIds.toLongArray())
+    }
+
     override fun onCleared() {
         callService?.setJsonStateCallback(null)
         super.onCleared()

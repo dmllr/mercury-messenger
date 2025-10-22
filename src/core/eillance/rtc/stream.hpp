@@ -38,8 +38,8 @@ public:
     virtual void Stop() = 0;
     virtual void LoadNextSample() = 0;
 
-    virtual auto GetSampleTime() -> uint64_t = 0;
-    virtual auto GetSampleDuration() -> uint64_t = 0;
+    virtual auto GetSampleTime() -> std::uint64_t = 0;
+    virtual auto GetSampleDuration() -> std::uint64_t = 0;
     virtual auto GetSample() -> rtc::binary = 0;
 
   protected:
@@ -72,12 +72,12 @@ public:
   }
 
 private:
-  rtc::synchronized_callback<Source::Type, uint64_t, rtc::binary> sampleHandler_;
+  rtc::synchronized_callback<Source::Type, std::uint64_t, rtc::binary> sampleHandler_;
 
   auto UnsafePrepareForSample() const -> std::pair<std::shared_ptr<Source>, Source::Type> {
     std::shared_ptr<Source> src;
     Source::Type srct{};
-    uint64_t next_time{};
+    std::uint64_t next_time{};
     if (audio_->GetSampleTime() < video_->GetSampleTime()) {
       src = audio_;
       srct = Source::Type::audio;
@@ -115,7 +115,7 @@ private:
   }
 
 public:
-  void OnSample(std::function<void(Source::Type, uint64_t, rtc::binary)> handler) {
+  void OnSample(std::function<void(Source::Type, std::uint64_t, rtc::binary)> handler) {
     sampleHandler_ = std::move(handler);
   }
 
