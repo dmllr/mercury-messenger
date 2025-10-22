@@ -71,5 +71,6 @@ data class AppState(
     val calls: List<CallRecord> = emptyList(),
     @SerialName("selected_contact_id") val selectedContactId: String? = null,
     @SerialName("chat_history") val chatHistory: List<HistoryMessage> = emptyList(),
+    @SerialName("selected_contact_calls") val selectedContactCalls: List<CallRecord> = emptyList(),
     @SerialName("has_older_messages") val hasOlderMessages: Boolean = false
 )
