@@ -16,7 +16,6 @@
 
 #include "eillance/logging/logging.h"
 #include "eillance/storage/persistent_storage.hpp"
-#include "eillance/utils/string.hpp"
 #include "eillance/utils/time.hpp"
 
 namespace eillance::messaging {
