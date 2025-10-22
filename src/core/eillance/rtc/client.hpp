@@ -363,7 +363,14 @@ public:
         peer->peer_connection_->setRemoteDescription(answer);
       }
     } else if (type == "contact_add_request") {
-      if (contact_manager_->ReceiveContactRequest(peer_id)) {
+      // If we already have this peer as a confirmed contact, it means they missed
+      // our confirmation. Let's send it again to help them get in sync.
+      if (contact_manager_->IsConfirmedContact(peer_id)) {
+        LOGI << "Received contact request from already confirmed peer " << peer_id
+             << ". Resending confirmation.";
+        const Json msg = {{"type", "contact_confirm"}, {"to", peer_id}};
+        transport_->SendSignalingMessage(msg);
+      } else if (contact_manager_->ReceiveContactRequest(peer_id)) {
         if (on_contact_request_) {
           (*on_contact_request_)(peer_id);
         }
