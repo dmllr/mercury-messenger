@@ -13,20 +13,6 @@ enum class MessageDirection {
 }
 
 @Serializable
-data class HistoryMessage(
-    val content: String,
-    val timestamp: Long,
-    val direction: MessageDirection
-)
-
-@Serializable
-data class ChatSummary(
-    @SerialName("peer_id") val peerId: String,
-    @SerialName("last_message") val lastMessage: HistoryMessage,
-    @SerialName("unread_count") val unreadCount: Int
-)
-
-@Serializable
 enum class CallDirection {
     @SerialName("outgoing") Outgoing,
     @SerialName("incoming") Incoming
@@ -41,12 +27,29 @@ enum class CallStatus {
 }
 
 @Serializable
-data class CallRecord(
-    @SerialName("peer_id") val peerId: String,
+enum class HistoryEntryKind {
+    @SerialName("text_message") TextMessage,
+    @SerialName("voice_call") VoiceCall,
+    @SerialName("video_call") VideoCall,
+    @SerialName("system_message") SystemMessage
+}
+
+@Serializable
+data class HistoryEntry(
+    val kind: HistoryEntryKind,
     val timestamp: Long,
-    @SerialName("duration_seconds") val durationSeconds: Int,
-    val direction: CallDirection,
-    val status: CallStatus
+    val content: String? = null,
+    val direction: MessageDirection,
+    @SerialName("duration_seconds") val durationSeconds: Int? = null,
+    @SerialName("call_direction") val callDirection: CallDirection? = null,
+    @SerialName("call_status") val callStatus: CallStatus? = null,
+)
+
+@Serializable
+data class ChatSummary(
+    @SerialName("peer_id") val peerId: String,
+    @SerialName("last_message") val lastMessage: HistoryEntry,
+    @SerialName("unread_count") val unreadCount: Int
 )
 
 @Serializable
@@ -68,9 +71,7 @@ data class AppState(
     @SerialName("connection_state") val connectionState: Int = 0, // Maps to ServiceConnectionState
     val contacts: List<Contact> = emptyList(),
     val chats: List<ChatSummary> = emptyList(),
-    val calls: List<CallRecord> = emptyList(),
     @SerialName("selected_contact_id") val selectedContactId: String? = null,
-    @SerialName("chat_history") val chatHistory: List<HistoryMessage> = emptyList(),
-    @SerialName("selected_contact_calls") val selectedContactCalls: List<CallRecord> = emptyList(),
+    @SerialName("interaction_history") val interactionHistory: List<HistoryEntry> = emptyList(),
     @SerialName("has_older_messages") val hasOlderMessages: Boolean = false
 )
