@@ -88,17 +88,17 @@ Java_hela_eillance_CallService_sendMessage(JNIEnv* env, jobject, jstring message
 
 extern "C" JNIEXPORT void JNICALL
 Java_hela_eillance_CallService_startVoiceCall(JNIEnv*, jobject) {
-  if (clientEngine && clientEngine->ViewModel()) clientEngine->ViewModel()->StartVoiceCall();
+    if (clientEngine && clientEngine->ViewModel()) clientEngine->ViewModel()->StartVoiceCall();
 }
 
 extern "C" JNIEXPORT void JNICALL
 Java_hela_eillance_CallService_startVideoCall(JNIEnv*, jobject) {
-  if (clientEngine && clientEngine->ViewModel()) clientEngine->ViewModel()->StartVideoCall();
+    if (clientEngine && clientEngine->ViewModel()) clientEngine->ViewModel()->StartVideoCall();
 }
 
 extern "C" JNIEXPORT void JNICALL
 Java_hela_eillance_CallService_loadOlderMessages(JNIEnv* , jobject) {
-  if (clientEngine && clientEngine->ViewModel()) clientEngine->ViewModel()->LoadOlderMessages();
+    if (clientEngine && clientEngine->ViewModel()) clientEngine->ViewModel()->LoadOlderMessages();
 }
 
 extern "C" JNIEXPORT void JNICALL

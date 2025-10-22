@@ -16,7 +16,7 @@
 #include "eillance/events/service_connection_state.h"
 #include "eillance/identity/contact_manager.hpp"
 #include "eillance/logging/logging.h"
-#include "eillance/messaging/message_history.hpp"
+#include "eillance/messaging/history.hpp"
 #include "eillance/rtc/client.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/view_model/mercury_view_model.hpp"
@@ -114,21 +114,39 @@ int main(int argc, char** argv) {
         elements.push_back(ftxui::text("--- older messages available (use /history load) ---") | ftxui::dim);
     }
 
-    for (const auto& msg: state.chat_history) {
-      std::string prefix;
-      if (msg.direction == eillance::messaging::MessageDirection::Sent) {
-          prefix = "[you]: ";
-      } else {
-          // System messages might not have a peer_id context, so we handle that gracefully.
-          if(state.selected_contact_id.has_value()) {
-              const auto& peer_id = state.selected_contact_id.value();
-              const std::string display_id = peer_id.length() > 8 ? peer_id.substr(0, 8) + "..." : peer_id;
-              prefix = "[" + display_id + "]: ";
-          } else {
-              prefix = "[system]: ";
-          }
-      }
-      elements.push_back(ftxui::text(prefix + msg.content));
+    for (const auto& entry: state.interaction_history) {
+        std::string prefix;
+        std::string content;
+        switch(entry.kind) {
+            case eillance::messaging::HistoryEntryKind::TextMessage:
+            case eillance::messaging::HistoryEntryKind::SystemMessage:
+                if (entry.direction == eillance::messaging::MessageDirection::sent) {
+                    prefix = "[you]: ";
+                } else {
+                    if(state.selected_contact_id.has_value()) {
+                        const auto& peer_id = state.selected_contact_id.value();
+                        const std::string display_id = peer_id.length() > 8 ? peer_id.substr(0, 8) + "..." : peer_id;
+                        prefix = "[" + display_id + "]: ";
+                    } else {
+                        prefix = "[system]: ";
+                    }
+                }
+                content = std::get<eillance::messaging::MessageEntry>(entry.data).content;
+                elements.push_back(ftxui::text(prefix + content));
+                break;
+            case eillance::messaging::HistoryEntryKind::VoiceCall:
+            case eillance::messaging::HistoryEntryKind::VideoCall: {
+                prefix = "[system]: ";
+                const auto& call_data = std::get<eillance::messaging::CallEntry>(entry.data);
+                content = "--- " +
+                          std::string(entry.kind == eillance::messaging::HistoryEntryKind::VoiceCall ? "Voice" : "Video") +
+                          " Call " +
+                          (call_data.call_direction == eillance::messaging::CallDirection::Incoming ? "from" : "to") +
+                          std::string(" peer ---");
+                elements.push_back(ftxui::text(prefix + content) | ftxui::dim);
+                break;
+            }
+        }
     }
     // Add a focusable invisible element at the end to scroll down automatically.
     if (!elements.empty()) {

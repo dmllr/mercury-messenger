@@ -51,24 +51,14 @@ import androidx.compose.ui.unit.dp
 import hela.eillance.MainViewModel
 import hela.eillance.ndkio.AppState
 import hela.eillance.ndkio.CallDirection
-import hela.eillance.ndkio.CallRecord
 import hela.eillance.ndkio.CallStatus
-import hela.eillance.ndkio.HistoryMessage
+import hela.eillance.ndkio.HistoryEntry
+import hela.eillance.ndkio.HistoryEntryKind
 import hela.eillance.ndkio.MessageDirection
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
-
-sealed interface InteractionHistoryItem {
-    val timestamp: Long
-    data class MessageItem(val message: HistoryMessage) : InteractionHistoryItem {
-        override val timestamp: Long get() = message.timestamp
-    }
-    data class CallItem(val call: CallRecord) : InteractionHistoryItem {
-        override val timestamp: Long get() = call.timestamp
-    }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -79,12 +69,7 @@ fun InteractionScreen(
 ) {
     val peerId = uiState.selectedContactId ?: "Unknown"
     val listState = rememberLazyListState()
-
-    val historyItems = remember(uiState.chatHistory, uiState.selectedContactCalls) {
-        val messages = uiState.chatHistory.map { InteractionHistoryItem.MessageItem(it) }
-        val calls = uiState.selectedContactCalls.map { InteractionHistoryItem.CallItem(it) }
-        (messages + calls).sortedBy { it.timestamp }
-    }
+    val historyItems = uiState.interactionHistory
 
     LaunchedEffect(historyItems.size) {
         if (historyItems.isNotEmpty()) {
@@ -139,9 +124,10 @@ fun InteractionScreen(
                 }
             }
             items(historyItems, key = { it.timestamp }) { item ->
-                when (item) {
-                    is InteractionHistoryItem.MessageItem -> MessageBubble(message = item.message)
-                    is InteractionHistoryItem.CallItem -> CallLogBubble(call = item.call)
+                when (item.kind) {
+                    HistoryEntryKind.TextMessage -> MessageBubble(item)
+                    HistoryEntryKind.VoiceCall, HistoryEntryKind.VideoCall -> CallLogBubble(item)
+                    HistoryEntryKind.SystemMessage -> SystemMessageBubble(item)
                 }
             }
         }
@@ -149,8 +135,8 @@ fun InteractionScreen(
 }
 
 @Composable
-fun MessageBubble(message: HistoryMessage) {
-    val isFromMe = message.direction == MessageDirection.Sent
+fun MessageBubble(entry: HistoryEntry) {
+    val isFromMe = entry.direction == MessageDirection.Sent
     val alignment = if (isFromMe) Alignment.CenterEnd else Alignment.CenterStart
     val colors = if (isFromMe) {
         MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.onPrimaryContainer
@@ -169,7 +155,7 @@ fun MessageBubble(message: HistoryMessage) {
     ) {
         Column(horizontalAlignment = if (isFromMe) Alignment.End else Alignment.Start) {
             Text(
-                text = message.content,
+                text = entry.content ?: "",
                 modifier = Modifier
                     .clip(
                         RoundedCornerShape(
@@ -189,25 +175,27 @@ fun MessageBubble(message: HistoryMessage) {
 }
 
 @Composable
-fun CallLogBubble(call: CallRecord) {
-    val (icon, color, text) = when (call.direction) {
-        CallDirection.Outgoing -> when (call.status) {
-            CallStatus.Answered -> Triple(Icons.AutoMirrored.Filled.CallMade, MaterialTheme.colorScheme.primary, "Outgoing call")
-            else -> Triple(Icons.AutoMirrored.Filled.CallMade, Color.Red, "Unanswered outgoing call")
+fun CallLogBubble(entry: HistoryEntry) {
+    val (icon, color, text) = when (entry.callDirection) {
+        CallDirection.Outgoing -> when (entry.callStatus) {
+            CallStatus.Answered -> Triple(Icons.AutoMirrored.Filled.CallMade, MaterialTheme.colorScheme.primary, if(entry.kind == HistoryEntryKind.VideoCall) "Outgoing video call" else "Outgoing call")
+            else -> Triple(Icons.AutoMirrored.Filled.CallMade, Color.Red, if(entry.kind == HistoryEntryKind.VideoCall) "Unanswered video call" else "Unanswered call")
         }
-        CallDirection.Incoming -> when (call.status) {
-            CallStatus.Answered -> Triple(Icons.AutoMirrored.Filled.CallReceived, MaterialTheme.colorScheme.primary, "Incoming call")
+        CallDirection.Incoming -> when (entry.callStatus) {
+            CallStatus.Answered -> Triple(Icons.AutoMirrored.Filled.CallReceived, MaterialTheme.colorScheme.primary, if(entry.kind == HistoryEntryKind.VideoCall) "Incoming video call" else "Incoming call")
             CallStatus.Missed -> Triple(Icons.AutoMirrored.Filled.CallMissed, Color.Red, "Missed call")
             else -> Triple(Icons.AutoMirrored.Filled.CallReceived, Color.Red, "Rejected call")
         }
+        null -> Triple(Icons.Default.Call, MaterialTheme.colorScheme.onSurfaceVariant, "Call") // Fallback
     }
 
     val formattedTime = SimpleDateFormat("MMM d, h:mm a", Locale.getDefault())
-        .format(Date(call.timestamp / 1000))
+        .format(Date(entry.timestamp / 1000))
 
-    val durationText = if (call.status == CallStatus.Answered && call.durationSeconds > 0) {
-        val minutes = TimeUnit.SECONDS.toMinutes(call.durationSeconds.toLong())
-        val seconds = call.durationSeconds - TimeUnit.MINUTES.toSeconds(minutes)
+    val duration = entry.durationSeconds ?: 0
+    val durationText = if (entry.callStatus == CallStatus.Answered && duration > 0) {
+        val minutes = TimeUnit.SECONDS.toMinutes(duration.toLong())
+        val seconds = duration - TimeUnit.MINUTES.toSeconds(minutes)
         ", $minutes min $seconds sec"
     } else ""
 
@@ -221,6 +209,22 @@ fun CallLogBubble(call: CallRecord) {
         Icon(imageVector = icon, contentDescription = text, tint = color, modifier = Modifier.padding(end = 8.dp))
         Text(
             text = "$text - $formattedTime$durationText",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+fun SystemMessageBubble(entry: HistoryEntry) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.Center
+    ) {
+        Text(
+            text = entry.content ?: "",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )

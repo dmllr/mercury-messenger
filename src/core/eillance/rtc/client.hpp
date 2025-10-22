@@ -7,22 +7,21 @@
 #include <nlohmann/json.hpp>
 #include <rtc/rtc.h>
 
-#include "eillance/utils/memory.h"
 #include "eillance/capture/audio_capture.hpp"
 #include "eillance/capture/capture.hpp"
 #include "eillance/crypto/crypto.hpp"
 #include "eillance/identity/contact_manager.hpp"
 #include "eillance/identity/id_manager.hpp"
 #include "eillance/logging/logging.h"
-#include "eillance/messaging/call_history.hpp"
-#include "eillance/messaging/message_delivery_service.hpp"
-#include "eillance/messaging/message_history.hpp"
+#include "eillance/messaging/delivery_service.hpp"
+#include "eillance/messaging/history.hpp"
 #include "eillance/messaging/message_queue.hpp"
 #include "eillance/rtc/peer.hpp"
 #include "eillance/rtc/stream.hpp"
 #include "eillance/rtc/stream_source.hpp"
 #include "eillance/rtc/transport.hpp"
 #include "eillance/storage/persistent_storage.hpp"
+#include "eillance/utils/memory.h"
 
 
 namespace eillance {
@@ -48,7 +47,7 @@ class RtcClient final : public RtcTransportDelegate {
   using PeerTrack = std::shared_ptr<Peer::Track>;
   using OnFrameReceivedCallback = std::function<void(const rtc::binary&)>;
   using OnProfileReceivedCallback = std::function<void(const std::string&, const Device::Profile&)>;
-  using OnChatMessageReceivedCallback = std::function<void(const std::string&, const messaging::HistoryMessage&)>;
+  using OnChatMessageReceivedCallback = std::function<void(const std::string&, const messaging::HistoryEntryRecord&)>;
   using OnContactRequestCallback = std::function<void(const std::string& peer_id)>;
   using OnContactStatusChangedCallback = std::function<void(const std::string& peer_id, identity::ContactStatus status)>;
   using OnPeerListUpdateCallback = std::function<void(const std::vector<Device>&)>;
@@ -69,7 +68,6 @@ class RtcClient final : public RtcTransportDelegate {
   std::shared_ptr<messaging::MessageQueue> message_queue_;
   std::unique_ptr<messaging::MessageDeliveryService> delivery_service_;
   std::unique_ptr<messaging::MessageHistory> message_history_;
-  std::unique_ptr<messaging::CallHistory> call_history_;
 
   std::unordered_map<std::string, Device> online_peers_;
   mutable std::mutex online_peers_mutex_;
@@ -81,7 +79,6 @@ public:
     contact_manager_ = std::make_shared<identity::ContactManager>(storage_);
     message_queue_ = std::make_shared<messaging::MessageQueue>(storage_);
     message_history_ = std::make_unique<messaging::MessageHistory>(storage_);
-    call_history_ = std::make_unique<messaging::CallHistory>(storage_);
 
     av_stream_ = std::make_shared<Stream>(
         std::make_shared<StreamSource>(std::move(video_capture)),
@@ -155,7 +152,6 @@ public:
 
   void Call(const std::string& peer_id) {
     Connect(peer_id);
-    call_history_->AddRecord({.peer_id = peer_id, .timestamp = Time::Now(), .direction = messaging::CallDirection::Outgoing, .status = messaging::CallStatus::Answered}); // Placeholder status
   }
 
   void Connect(const std::string& peer_id) {
@@ -183,6 +179,7 @@ public:
       });
       peer->peer_connection_->setLocalDescription();
     }
+    message_history_->AddCallEntry(peer_id, messaging::HistoryEntryKind::VoiceCall, messaging::CallDirection::Outgoing, messaging::CallStatus::Answered); // Placeholder status
     av_stream_->Start();
   }
 
@@ -200,6 +197,7 @@ public:
       });
       peer->peer_connection_->setLocalDescription();
     }
+    message_history_->AddCallEntry(peer_id, messaging::HistoryEntryKind::VideoCall, messaging::CallDirection::Outgoing, messaging::CallStatus::Answered); // Placeholder status
     av_stream_->Start();
   }
 
@@ -239,10 +237,6 @@ public:
 
   auto GetChatSummaries(const std::vector<std::string>& peer_ids) const -> std::vector<messaging::ChatSummary> {
     return message_history_->GetChatSummaries(peer_ids);
-  }
-
-  auto GetCallHistory() const -> std::vector<messaging::CallRecord> {
-      return call_history_->GetHistory();
   }
 
   void Hangup(const std::string& peer_id) const {
@@ -315,7 +309,8 @@ public:
     auto type = type_it->get<std::string>();
 
     if (type == "offer") {
-      call_history_->AddRecord({.peer_id = peer_id, .timestamp = Time::Now(), .direction = messaging::CallDirection::Incoming, .status = messaging::CallStatus::Answered}); // Placeholder
+      // For now, we assume an offer implies a voice call, this can be refined by inspecting the SDP.
+      message_history_->AddCallEntry(peer_id, messaging::HistoryEntryKind::VoiceCall, messaging::CallDirection::Incoming, messaging::CallStatus::Answered); // Placeholder
       std::shared_ptr<Peer> peer = transport_->GetPeer(peer_id);
 
       if (peer && peer->peer_connection_->signalingState() == rtc::PeerConnection::SignalingState::HaveLocalOffer) {
@@ -449,7 +444,7 @@ public:
       return;
     }
 
-    message_history_->AddMessage(peer_id, message, messaging::MessageDirection::Sent);
+    message_history_->AddTextEntry(peer_id, message, messaging::MessageDirection::sent);
 
     const auto peer = transport_->GetPeer(peer_id);
     if (peer && peer->data_channel_ && peer->data_channel_->isOpen() && peer->session_cipher_->IsReady()) {
@@ -571,8 +566,8 @@ private:
         auto payload = message.at("payload").get<rtc::binary>();
         auto decrypted_message = peer->session_cipher_->Decrypt({payload.begin(), payload.end()});
         if (!decrypted_message.empty()) {
-          const auto history_message = message_history_->AddMessage(peer_id, decrypted_message, messaging::MessageDirection::Received);
-          (*on_chat_message_received_)(peer_id, history_message);
+          const auto history_entry = message_history_->AddTextEntry(peer_id, decrypted_message, messaging::MessageDirection::received);
+          (*on_chat_message_received_)(peer_id, history_entry);
         } else {
           LOGW << "Failed to decrypt message from " << peer_id;
         }
