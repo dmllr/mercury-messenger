@@ -20,7 +20,6 @@
 #include "eillance/rtc/client.hpp"
 #include "eillance/utils/event_queue.hpp"
 #include "eillance/utils/h264.hpp"
-#include "eillance/utils/string.hpp"
 #include "eillance/capture/capture.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/view_model/mercury_view_model.hpp"

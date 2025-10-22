@@ -18,7 +18,6 @@ add_executable(h-e-tests
   test-dispatch-queue.cpp
   test-event-queue.cpp
   test-h264-utils.cpp
-  test-string-utils.cpp
 )
 target_link_libraries(h-e-tests GTest::gtest_main hela-eillance-core)
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/../files" DESTINATION "${CMAKE_BINARY_DIR}/bin")
