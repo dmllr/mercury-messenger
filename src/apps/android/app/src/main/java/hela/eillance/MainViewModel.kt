@@ -66,6 +66,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun startVoiceCall() {
+        callService?.startVoiceCall()
+    }
+
+    fun startVideoCall() {
+        callService?.startVideoCall()
+    }
+
     fun loadOlderMessages() {
         callService?.loadOlderMessages()
     }

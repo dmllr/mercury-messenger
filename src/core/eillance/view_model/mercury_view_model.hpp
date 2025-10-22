@@ -30,6 +30,7 @@ struct UIState {
   std::vector<messaging::CallRecord> calls;
   std::optional<std::string> selected_contact_id;
   std::deque<messaging::HistoryMessage> chat_history;
+  std::vector<messaging::CallRecord> selected_contact_calls;
   bool has_older_messages = false;
 };
 
@@ -41,6 +42,7 @@ inline void to_json(nlohmann::json& j, const UIState& s) {
   j["calls"] = s.calls;
   j["selected_contact_id"] = s.selected_contact_id;
   j["chat_history"] = s.chat_history;
+  j["selected_contact_calls"] = s.selected_contact_calls;
   j["has_older_messages"] = s.has_older_messages;
 }
 
@@ -70,6 +72,8 @@ public:
   void SelectContact(const std::string& peer_id);
   void DeselectContact();
   void SendMessage(const std::string& content);
+  void StartVoiceCall();
+  void StartVideoCall();
   void AddContact(const std::string& peer_id) const;
   void AcceptContact(const std::string& peer_id) const;
   void LoadOlderMessages();
@@ -119,7 +123,13 @@ inline void MercuryViewModel::SelectContact(const std::string& peer_id) {
       if (selection_changed) {
         current_state_.selected_contact_id = peer_id;
         LoadInitialChatHistory(peer_id);
-        UpdateChatHistoryForSelectedContact();
+
+        current_state_.selected_contact_calls.clear();
+        for(const auto& call : current_state_.calls) {
+            if (call.peer_id == peer_id) {
+                current_state_.selected_contact_calls.push_back(call);
+            }
+        }
       }
     }
     if (selection_changed) {
@@ -133,6 +143,7 @@ inline void MercuryViewModel::DeselectContact() {
   if (current_state_.selected_contact_id.has_value()) {
     current_state_.selected_contact_id.reset();
     current_state_.chat_history.clear();
+    current_state_.selected_contact_calls.clear();
     current_state_.has_older_messages = false;
     NotifyStateChanged();
   }
@@ -162,6 +173,34 @@ inline void MercuryViewModel::SendMessage(const std::string& content) {
   dispatch_queue_.Dispatch([this, peer_id = *selected_id, content] {
     rtc_client_->SendChatMessage(peer_id, content);
   });
+}
+
+inline void MercuryViewModel::StartVoiceCall() {
+    dispatch_queue_.Dispatch([this] {
+        std::optional<std::string> peer_id;
+        {
+            const std::lock_guard<std::mutex> lock(state_mutex_);
+            peer_id = current_state_.selected_contact_id;
+        }
+        if (peer_id) {
+            rtc_client_->StartVoiceCall(*peer_id);
+            RefreshState();
+        }
+    });
+}
+
+inline void MercuryViewModel::StartVideoCall() {
+    dispatch_queue_.Dispatch([this] {
+        std::optional<std::string> peer_id;
+        {
+            const std::lock_guard<std::mutex> lock(state_mutex_);
+            peer_id = current_state_.selected_contact_id;
+        }
+        if (peer_id) {
+            rtc_client_->StartVideoCall(*peer_id);
+            RefreshState();
+        }
+    });
 }
 
 inline void MercuryViewModel::AddContact(const std::string& peer_id) const {
@@ -388,6 +427,14 @@ inline void MercuryViewModel::UpdateCalls() {
   {
     const std::lock_guard<std::mutex> lock(state_mutex_);
     current_state_.calls = std::move(new_calls);
+    if (current_state_.selected_contact_id) {
+        current_state_.selected_contact_calls.clear();
+        for(const auto& call : current_state_.calls) {
+            if (call.peer_id == *current_state_.selected_contact_id) {
+                current_state_.selected_contact_calls.push_back(call);
+            }
+        }
+    }
   }
 }
 

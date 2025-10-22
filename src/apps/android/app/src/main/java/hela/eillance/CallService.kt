@@ -39,12 +39,12 @@ class CallService : Service(), IClientNativeBridge {
   }
 
   fun setJsonStateCallback(callback: ((String) -> Unit)?) {
-      onJsonStateUpdate = callback
+    onJsonStateUpdate = callback
   }
 
   // This is the new single callback from C++
   override fun onStateUpdate(jsonState: String) {
-      onJsonStateUpdate?.invoke(jsonState)
+    onJsonStateUpdate?.invoke(jsonState)
   }
 
   private fun startForegroundService() {
@@ -88,6 +88,8 @@ class CallService : Service(), IClientNativeBridge {
   external fun acceptContact(peerId: String)
   external fun selectContact(peerId: String)
   external fun sendMessage(message: String)
+  external fun startVoiceCall()
+  external fun startVideoCall()
   external fun loadOlderMessages()
   external fun configureVideoCapture(config: VideoConfig)
 
