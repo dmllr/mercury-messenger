@@ -471,7 +471,7 @@ public:
       {"content", message},
       {"message_id", entry.id},
     };
-    message_queue_->Enqueue(peer_id, json_msg.dump());
+    message_queue_->Enqueue(peer_id, entry.id, json_msg.dump());
     if (!peer) {
       delivery_service_->attemptDelivery(peer_id);
     }
