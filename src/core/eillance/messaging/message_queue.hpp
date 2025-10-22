@@ -11,7 +11,6 @@
 
 #include <nlohmann/json.hpp>
 
-#include "eillance/utils/string.hpp"
 #include "eillance/utils/time.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 
