@@ -18,7 +18,7 @@
 namespace eillance::messaging {
 
 struct Message {
-  std::string id;
+  std::uint64_t id;
   std::string peer_id;
   std::string content;
   Time::Unit timestamp;
@@ -93,15 +93,16 @@ public:
       : storage_(std::move(storage)) {
   }
 
-  void Enqueue(const std::string& peer_id, const std::string& content) {
+  void Enqueue(const std::string& peer_id, const std::uint64_t message_id, const std::string& content) {
     const std::lock_guard<std::mutex> lock(mutex_);
     LoadQueue(peer_id);
     auto& queue = queue_map_[peer_id];
 
-    const Message msg{.id = StringUtils::RandomString(),
-                .peer_id = peer_id,
-                .content = content,
-                .timestamp = Time::Now()};
+    const Message msg{
+      .id = message_id,
+      .peer_id = peer_id,
+      .content = content,
+      .timestamp = Time::Now()};
     queue.push_back(msg);
     SaveQueue(peer_id);
   }
