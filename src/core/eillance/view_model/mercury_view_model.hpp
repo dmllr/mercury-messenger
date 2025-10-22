@@ -414,7 +414,7 @@ inline void MercuryViewModel::AddSystemMessageToChat(const std::string& message)
   const std::lock_guard<std::mutex> lock(state_mutex_);
   current_state_.interaction_history.push_back({
       .id = next_system_message_id_++,
-      .kind = messaging::HistoryEntryKind::SystemMessage,
+      .kind = messaging::HistoryEntryKind::systemMessage,
       .timestamp = Time::Now(),
       .direction = messaging::MessageDirection::received,
       .data = messaging::MessageEntry{message}
