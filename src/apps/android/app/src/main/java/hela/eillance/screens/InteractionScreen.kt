@@ -1,5 +1,7 @@
 package hela.eillance.screens
 
+import android.view.SurfaceHolder
+import android.view.SurfaceView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,8 +12,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -21,16 +23,20 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.CallMade
 import androidx.compose.material.icons.automirrored.filled.CallMissed
 import androidx.compose.material.icons.automirrored.filled.CallReceived
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.DoneAll
-import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -52,10 +58,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.os.ConfigurationCompat
 import hela.eillance.MainViewModel
 import hela.eillance.ndkio.AppState
@@ -70,9 +75,6 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -84,6 +86,13 @@ fun InteractionScreen(
 ) {
     val peerId = uiState.selectedContactId ?: "Unknown"
     val listState = rememberLazyListState()
+    val isInCall = uiState.callState.isInCall && uiState.callState.peerId == peerId
+
+    if (isInCall) {
+        CallScreen(viewModel = viewModel, uiState = uiState)
+        return
+    }
+
     val historyItems = uiState.interactionHistory
 
     LaunchedEffect(historyItems.size) {
@@ -127,32 +136,45 @@ fun InteractionScreen(
             MessageInput(onSendMessage = viewModel::sendMessage)
         }
     ) { padding ->
-        LazyColumn(
-            state = listState,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = PaddingValues(vertical = 8.dp)
-        ) {
-            if (uiState.hasOlderMessages) {
-                item {
-                    Button(
-                        onClick = viewModel::loadOlderMessages,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 8.dp)
-                    ) {
-                        Text("Load Older Messages")
-                    }
+        ChatHistory(
+            modifier = Modifier.padding(padding),
+            uiState = uiState,
+            listState = listState,
+            viewModel = viewModel
+        )
+    }
+}
+
+@Composable
+fun ChatHistory(
+    modifier: Modifier = Modifier,
+    uiState: AppState,
+    listState: androidx.compose.foundation.lazy.LazyListState,
+    viewModel: MainViewModel
+) {
+    LazyColumn(
+        state = listState,
+        modifier = modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = PaddingValues(vertical = 8.dp)
+    ) {
+        if (uiState.hasOlderMessages) {
+            item {
+                Button(
+                    onClick = viewModel::loadOlderMessages,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp)
+                ) {
+                    Text("Load Older Messages")
                 }
             }
-            items(historyItems, key = { it.id }) { item ->
-                when (item.kind) {
-                    HistoryEntryKind.TextMessage -> MessageBubble(item)
-                    HistoryEntryKind.VoiceCall, HistoryEntryKind.VideoCall -> CallLogBubble(item)
-                    HistoryEntryKind.SystemMessage -> SystemMessageBubble(item)
-                }
+        }
+        items(uiState.interactionHistory, key = { it.id }) { item ->
+            when (item.kind) {
+                HistoryEntryKind.TextMessage -> MessageBubble(item)
+                HistoryEntryKind.VoiceCall, HistoryEntryKind.VideoCall -> CallLogBubble(item)
+                HistoryEntryKind.SystemMessage -> SystemMessageBubble(item)
             }
         }
     }
@@ -285,7 +307,8 @@ fun SystemMessageBubble(entry: HistoryEntry) {
 @Composable
 fun formatTimestamp(timestamp: Long): String {
     val context = LocalContext.current
-    val locale = ConfigurationCompat.getLocales(context.resources.configuration)[0] ?: Locale.getDefault()
+    val locale = ConfigurationCompat.getLocales(context.resources.configuration)[0]
+                 ?: java.util.Locale.getDefault()
 
     val messageTime = Instant.ofEpochMilli(timestamp / 1000).atZone(ZoneId.systemDefault())
     val now = ZonedDateTime.now(ZoneId.systemDefault())
@@ -294,9 +317,7 @@ fun formatTimestamp(timestamp: Long): String {
     val isYesterday = messageTime.toLocalDate().isEqual(now.toLocalDate().minusDays(1))
 
     return when {
-        isToday -> {
-            messageTime.format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(locale))
-        }
+        isToday -> messageTime.format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(locale))
         isYesterday -> {
             "Yesterday, " + messageTime.format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(locale))
         }
@@ -308,7 +329,6 @@ fun formatTimestamp(timestamp: Long): String {
         }
     }
 }
-
 
 @Composable
 fun MessageInput(onSendMessage: (String) -> Unit) {
@@ -342,7 +362,97 @@ fun MessageInput(onSendMessage: (String) -> Unit) {
                 },
                 enabled = text.text.isNotBlank()
             ) {
-                Icon(Icons.Default.Send, contentDescription = "Send Message")
+                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send Message")
+            }
+        }
+    }
+}
+
+@Composable
+fun CallScreen(viewModel: MainViewModel, uiState: AppState) {
+    val callState = uiState.callState
+    val isVideoCall = callState.callType == HistoryEntryKind.VideoCall
+
+    Box(modifier = Modifier
+        .fillMaxSize()
+        .background(Color.Black)) {
+
+        if (isVideoCall) {
+            // Remote video view
+            AndroidView(
+                factory = { context ->
+                    SurfaceView(context).apply {
+                        holder.addCallback(object : SurfaceHolder.Callback {
+                            override fun surfaceCreated(holder: SurfaceHolder) {
+                                viewModel.setRemoteVideoSurface(holder.surface)
+                            }
+                            override fun surfaceChanged(holder: SurfaceHolder, f: Int, w: Int, h: Int) {}
+                            override fun surfaceDestroyed(holder: SurfaceHolder) {
+                                viewModel.clearRemoteVideoSurface()
+                            }
+                        })
+                    }
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            // Peer info at the top
+            Column(
+                modifier = Modifier.padding(top = 48.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = callState.peerId,
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.padding(4.dp))
+                Text(
+                    text = "Calling...", // TODO: Add call timer
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Color.White.copy(alpha = 0.7f)
+                )
+            }
+
+            // Controls at the bottom
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 48.dp, start = 24.dp, end = 24.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Mute button
+                IconButton(onClick = { /* TODO */ }) {
+                    Icon(Icons.Default.Mic, contentDescription = "Mute", tint = Color.White, modifier = Modifier.size(32.dp))
+                }
+
+                // Hangup button
+                FloatingActionButton(
+                    onClick = { viewModel.hangup() },
+                    containerColor = MaterialTheme.colorScheme.error,
+                    elevation = FloatingActionButtonDefaults.elevation(0.dp)
+                ) {
+                    Icon(
+                        Icons.Default.CallEnd,
+                        contentDescription = "Hang Up",
+                        tint = Color.White,
+                        modifier = Modifier.size(36.dp)
+                    )
+                }
+
+                // Speaker button
+                IconButton(onClick = { /* TODO */ }) {
+                    Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = "Speaker", tint = Color.White, modifier = Modifier.size(32.dp))
+                }
             }
         }
     }

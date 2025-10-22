@@ -73,7 +73,17 @@ enum class ContactStatus {
 @Serializable
 data class Contact(
     @SerialName("peer_id") val peerId: String,
-    val status: ContactStatus
+    val status: ContactStatus,
+    @SerialName("connection_state") val connectionState: Int = 0,
+)
+
+@Serializable
+data class CallState(
+    @SerialName("is_in_call") val isInCall: Boolean = false,
+    @SerialName("is_ringing") val isRinging: Boolean = false,
+    @SerialName("call_direction") val callDirection: CallDirection = CallDirection.Outgoing,
+    @SerialName("peer_id") val peerId: String = "",
+    @SerialName("call_type") val callType: HistoryEntryKind = HistoryEntryKind.VoiceCall
 )
 
 @Serializable
@@ -84,5 +94,6 @@ data class AppState(
     val chats: List<ChatSummary> = emptyList(),
     @SerialName("selected_contact_id") val selectedContactId: String? = null,
     @SerialName("interaction_history") val interactionHistory: List<HistoryEntry> = emptyList(),
-    @SerialName("has_older_messages") val hasOlderMessages: Boolean = false
+    @SerialName("has_older_messages") val hasOlderMessages: Boolean = false,
+    @SerialName("call_state") val callState: CallState = CallState()
 )

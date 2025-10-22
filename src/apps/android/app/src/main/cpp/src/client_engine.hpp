@@ -50,7 +50,7 @@ public:
   ClientEngine(JavaVM* jvm, JNIEnv* env, jobject instance)
       : jvm_(jvm),
         native_bridge_(env->NewGlobalRef(instance))
-        {
+  {
     auto storage = std::make_shared<storage::PersistentStorage>(
         std::make_unique<storage::AndroidPersistentStorageImpl>(jvm, instance)
     );
@@ -59,7 +59,7 @@ public:
     view_model_ = std::make_unique<view_model::MercuryViewModel>(rtc_client_);
 
     view_model_->SetOnStateChangedCallback([this]() {
-        UpdateState();
+      UpdateState();
     });
 
     EventQueue::Instance();
@@ -103,7 +103,7 @@ public:
   }
 
   auto ViewModel() -> view_model::MercuryViewModel* {
-      return view_model_.get();
+    return view_model_.get();
   }
 
   void SetTargetSurface(JNIEnv* env, jobject surface) {
@@ -111,6 +111,7 @@ public:
       ANativeWindow_release(native_window_);
     }
     native_window_ = ANativeWindow_fromSurface(env, surface);
+    InitH264Parser();
   }
 
   void Start() {
@@ -148,8 +149,13 @@ public:
   }
 
   void Call(const std::string& peer_id) {
-    InitH264Parser();
     rtc_client_->Call(peer_id);
+  }
+
+  void Hangup() {
+    if (view_model_) {
+      view_model_->Hangup();
+    }
   }
 
   void ConfigureVideoCapture(const VideoConfig& config) {

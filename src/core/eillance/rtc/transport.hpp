@@ -143,6 +143,15 @@ public:
     return peers_;
   }
 
+  auto GetPeerConnectionState(const std::string& peer_id) const -> rtc::PeerConnection::State {
+    std::lock_guard<std::mutex> lock(peers_mutex_);
+    const auto it = peers_.find(peer_id);
+    if (it != peers_.end() && it->second && it->second->peer_connection_) {
+      return it->second->peer_connection_->state();
+    }
+    return rtc::PeerConnection::State::Disconnected;
+  }
+
   void RemovePeer(const std::string& peer_id) {
     std::lock_guard<std::mutex> lock(peers_mutex_);
     peers_.erase(peer_id);
@@ -165,7 +174,7 @@ public:
 
   void ReportPeerStateChange(const std::string& peer_id, const EventSource source, int state) const {
     if (status_callback_) {
-      (*status_callback_)(peer_id, source, state);
+      (*status_callback_)(peer_id, source, static_cast<int>(state));
     }
   }
 
@@ -343,25 +352,33 @@ private:
       }
     });
 
+    peer_connection->onLocalDescription([this, peer_id](const rtc::Description& description) {
+      Json message = {
+          {"type", description.typeString()},
+          {"sdp", std::string(description)}
+      };
+      message["to"] = peer_id;
+      WsSendMessage(message);
+    });
+
+    peer_connection->onLocalCandidate([this, peer_id](const rtc::Candidate& candidate) {
+      Json message = {
+          {"type", "candidate"},
+          {"candidate", std::string(candidate)},
+          {"sdpMid", candidate.mid()}
+      };
+      message["to"] = peer_id;
+      WsSendMessage(message);
+    });
+
     peer_connection->onIceStateChange([this, peer_id](rtc::PeerConnection::IceState state) {
       LOGI << "ICE State: " << static_cast<int>(state);
       ReportPeerStateChange(peer_id, EventSource::iceState, static_cast<int>(state));
     });
 
-    peer_connection->onGatheringStateChange([this, wpc = make_weak_ptr(peer_connection), peer_id](rtc::PeerConnection::GatheringState state) {
+    peer_connection->onGatheringStateChange([this, peer_id](rtc::PeerConnection::GatheringState state) {
       LOGI << "Gathering State: " << static_cast<int>(state);
       ReportPeerStateChange(peer_id, EventSource::gatheringState, static_cast<int>(state));
-      if (state == rtc::PeerConnection::GatheringState::Complete) {
-        // Gathering complete, send answer
-        if (const auto peer_con = wpc.lock()) {
-          const auto description = peer_con->localDescription();
-          Json message = {
-              {"type", description->typeString()},
-              {"sdp", std::string(description.value())}};
-          message["to"] = peer_id;
-          WsSendMessage(message);
-        }
-      }
     });
 
     peer_connection->onSignalingStateChange([this, peer_id](rtc::PeerConnection::SignalingState state) {

@@ -2,6 +2,7 @@
 
 #include <string_view>
 #include <cstdint>
+#include <mutex>
 #include <string>
 #include <utility>
 #include <vector>
@@ -28,6 +29,7 @@ class VideoEncoderAndroid {
   AMediaCodec* codec{nullptr};
   ANativeWindow* surface{nullptr};
   CodecStatus status{UNKNOWN};
+  std::mutex encoder_mutex_;
 
   AMediaCodecBufferInfo info{};
   uint8_t* buffer{};
@@ -35,8 +37,8 @@ class VideoEncoderAndroid {
 
   void configureCodec() {
     if (codec != nullptr) {
-      auto rc = AMediaCodec_stop(codec);
-      Log::assert_soft(AMEDIA_OK == rc, "AMediaCodec_stop failed");
+      AMediaCodec_stop(codec);
+      AMediaCodec_delete(codec);
       codec = nullptr;
     }
 
@@ -85,10 +87,12 @@ class VideoEncoderAndroid {
 
 public:
   ANativeWindow* Surface() {
+    const std::lock_guard<std::mutex> lock(encoder_mutex_);
     return surface;
   }
 
   void Engage(VideoConfig config) {
+    const std::lock_guard<std::mutex> lock(encoder_mutex_);
     if (status == STARTED)
       return;
 
@@ -98,12 +102,13 @@ public:
   }
 
   void Revoke() {
+    const std::lock_guard<std::mutex> lock(encoder_mutex_);
     if (status == STOPPED)
       return;
 
     if (codec != nullptr) {
-      auto rc = AMediaCodec_stop(codec);
-      Log::assert_soft(AMEDIA_OK == rc, "AMediaCodec_stop failed");
+      AMediaCodec_stop(codec);
+      AMediaCodec_delete(codec);
       codec = nullptr;
     }
     if (surface != nullptr) {
@@ -114,15 +119,15 @@ public:
   }
 
   void UpdateConfig(VideoConfig new_config) {
+    const std::lock_guard<std::mutex> lock(encoder_mutex_);
     config_ = new_config;
     if (status == STARTED) {
-      auto rc = AMediaCodec_flush(codec);
-      Log::assert_soft(AMEDIA_OK == rc, "AMediaCodec_flush failed");
       configureCodec();
     }
   }
 
   Packet EncodeBuffer() {
+    const std::lock_guard<std::mutex> lock(encoder_mutex_);
     if (unlikely(codec == nullptr || surface == nullptr)) {
       return {};
     }

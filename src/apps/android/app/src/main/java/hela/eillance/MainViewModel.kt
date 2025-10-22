@@ -1,6 +1,7 @@
 package hela.eillance
 
 import android.app.Application
+import android.view.Surface
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -72,6 +73,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun startVideoCall() {
         callService?.startVideoCall()
+    }
+
+    fun hangup() {
+        callService?.hangup()
+    }
+
+    fun acceptCall() {
+        callService?.acceptCall()
+    }
+
+    fun rejectCall() {
+        callService?.rejectCall()
+    }
+
+    fun setRemoteVideoSurface(surface: Surface) {
+        callService?.initDecoder(surface)
+    }
+
+    fun clearRemoteVideoSurface() {
+        callService?.releaseDecoder()
     }
 
     fun loadOlderMessages() {
