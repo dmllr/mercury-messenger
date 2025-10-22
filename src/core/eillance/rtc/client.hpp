@@ -187,7 +187,7 @@ public:
       });
       peer->peer_connection_->setLocalDescription();
     }
-    message_history_->AddCallEntry(peer_id, messaging::HistoryEntryKind::VoiceCall, messaging::CallDirection::Outgoing, messaging::CallStatus::Answered); // Placeholder status
+    message_history_->AddCallEntry(peer_id, messaging::HistoryEntryKind::voiceCall, messaging::CallDirection::outgoing, messaging::CallStatus::answered); // Placeholder status
     av_stream_->Start();
   }
 
@@ -205,7 +205,7 @@ public:
       });
       peer->peer_connection_->setLocalDescription();
     }
-    message_history_->AddCallEntry(peer_id, messaging::HistoryEntryKind::VideoCall, messaging::CallDirection::Outgoing, messaging::CallStatus::Answered); // Placeholder status
+    message_history_->AddCallEntry(peer_id, messaging::HistoryEntryKind::videoCall, messaging::CallDirection::outgoing, messaging::CallStatus::answered); // Placeholder status
     av_stream_->Start();
   }
 
@@ -318,7 +318,7 @@ public:
 
     if (type == "offer") {
       // For now, we assume an offer implies a voice call, this can be refined by inspecting the SDP.
-      message_history_->AddCallEntry(peer_id, messaging::HistoryEntryKind::VoiceCall, messaging::CallDirection::Incoming, messaging::CallStatus::Answered); // Placeholder
+      message_history_->AddCallEntry(peer_id, messaging::HistoryEntryKind::voiceCall, messaging::CallDirection::incoming, messaging::CallStatus::answered); // Placeholder
       std::shared_ptr<Peer> peer = transport_->GetPeer(peer_id);
 
       if (peer && peer->peer_connection_->signalingState() == rtc::PeerConnection::SignalingState::HaveLocalOffer) {
@@ -458,8 +458,8 @@ public:
     if (peer && peer->data_channel_ && peer->data_channel_->isOpen() && peer->session_cipher_->IsReady()) {
       if (DirectSend(peer, peer_id, message, entry.id)) {
         LOGI << "Sent direct message to " << peer_id;
-        message_history_->UpdateMessageStatus(peer_id, entry.id, messaging::MessageStatus::Sent);
-        entry.status = messaging::MessageStatus::Sent;
+        message_history_->UpdateMessageStatus(peer_id, entry.id, messaging::MessageStatus::sent);
+        entry.status = messaging::MessageStatus::sent;
         return entry; // Success
       }
     }
@@ -606,11 +606,11 @@ private:
     } else if (type == "message_receipt") {
         auto message_id = message.at("message_id").get<std::uint64_t>();
         auto status_str = message.at("status").get<std::string>();
-        auto status = messaging::MessageStatus::Sent;
+        auto status = messaging::MessageStatus::sent;
         if (status_str == "delivered") {
-            status = messaging::MessageStatus::Delivered;
+            status = messaging::MessageStatus::delivered;
         } else if (status_str == "read") {
-            status = messaging::MessageStatus::Read;
+            status = messaging::MessageStatus::read;
         }
         message_history_->UpdateMessageStatus(peer_id, message_id, status);
     } else if (type == "message_read") {
@@ -654,7 +654,7 @@ private:
               LOGW << "Failed to send queued chat message to " << peer_id << ". It will remain in queue.";
               return;  // Abort and retry later
             }
-            message_history_->UpdateMessageStatus(peer_id, message.value("message_id", 0ULL), messaging::MessageStatus::Sent);
+            message_history_->UpdateMessageStatus(peer_id, message.value("message_id", 0ULL), messaging::MessageStatus::sent);
           } else {
             LOGW << "Session cipher not ready for chat message to " << peer_id << ". Message will remain in queue.";
             return;

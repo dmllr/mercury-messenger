@@ -169,8 +169,8 @@ int main(int argc, char** argv) {
         std::string prefix;
         std::string content;
         switch (entry.kind) {
-            case eillance::messaging::HistoryEntryKind::TextMessage:
-            case eillance::messaging::HistoryEntryKind::SystemMessage: {
+            case eillance::messaging::HistoryEntryKind::textMessage:
+            case eillance::messaging::HistoryEntryKind::systemMessage: {
             std::string suffix;
             if (entry.direction == eillance::messaging::MessageDirection::sent) {
                     prefix = "[you]: ";
@@ -185,10 +185,10 @@ int main(int argc, char** argv) {
                 }
                 if (entry.direction == eillance::messaging::MessageDirection::sent) {
                     switch(entry.status) {
-                        case eillance::messaging::MessageStatus::Sending: suffix = " (sending...)"; break;
-                        case eillance::messaging::MessageStatus::Sent: suffix = " (sent)"; break;
-                        case eillance::messaging::MessageStatus::Delivered: suffix = " (delivered)"; break;
-                        case eillance::messaging::MessageStatus::Read: suffix = " (read)"; break;
+                        case eillance::messaging::MessageStatus::sending: suffix = " (sending...)"; break;
+                        case eillance::messaging::MessageStatus::sent: suffix = " (sent)"; break;
+                        case eillance::messaging::MessageStatus::delivered: suffix = " (delivered)"; break;
+                        case eillance::messaging::MessageStatus::read: suffix = " (read)"; break;
                         default: break;
                     }
                 }
@@ -198,14 +198,14 @@ int main(int argc, char** argv) {
                 elements.push_back(ftxui::text("  └─ " + timestamp_str) | ftxui::dim);
                 break;
             }
-            case eillance::messaging::HistoryEntryKind::VoiceCall:
-            case eillance::messaging::HistoryEntryKind::VideoCall: {
+            case eillance::messaging::HistoryEntryKind::voiceCall:
+            case eillance::messaging::HistoryEntryKind::videoCall: {
                 prefix = "[system]: ";
                 const auto& call_data = std::get<eillance::messaging::CallEntry>(entry.data);
                 content = "--- " +
-                          std::string(entry.kind == eillance::messaging::HistoryEntryKind::VoiceCall ? "Voice" : "Video") +
+                          std::string(entry.kind == eillance::messaging::HistoryEntryKind::voiceCall ? "Voice" : "Video") +
                           " Call " +
-                          (call_data.call_direction == eillance::messaging::CallDirection::Incoming ? "from" : "to") +
+                          (call_data.call_direction == eillance::messaging::CallDirection::incoming ? "from" : "to") +
                           std::string(" peer ---");
                 elements.push_back(ftxui::text(prefix + content) | ftxui::dim);
                 break;

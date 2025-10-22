@@ -26,62 +26,62 @@ enum class MessageDirection : std::uint8_t {
 };
 
 enum class CallDirection : std::uint8_t {
-  Outgoing,
-  Incoming,
+  outgoing,
+  incoming,
 };
 
 enum class CallStatus : std::uint8_t {
-  Answered,
-  Missed,
-  Rejected,
-  Busy,
+  answered,
+  missed,
+  rejected,
+  busy,
 };
 
 enum class MessageStatus : std::uint8_t {
-  None,  // Not applicable, or for received messages
-  Sending,
-  Sent,
-  Delivered,
-  Read
+  none,
+  sending,
+  sent,
+  delivered,
+  read
 };
 
-enum class HistoryEntryKind {
-  TextMessage,
-  VoiceCall,
-  VideoCall,
-  SystemMessage
+enum class HistoryEntryKind : std::uint8_t {
+  textMessage,
+  voiceCall,
+  videoCall,
+  systemMessage
 };
 
-NLOHMANN_JSON_SERIALIZE_ENUM(MessageDirection, {
+NLOHMANN_JSON_SERIALIZE_ENUM(MessageDirection, {  // NOLINT
   {MessageDirection::sent, "sent"},
   {MessageDirection::received, "received"},
 })
 
-NLOHMANN_JSON_SERIALIZE_ENUM(CallDirection, {
-  {CallDirection::Outgoing, "outgoing"},
-  {CallDirection::Incoming, "incoming"},
+NLOHMANN_JSON_SERIALIZE_ENUM(CallDirection, {  // NOLINT
+  {CallDirection::outgoing, "outgoing"},
+  {CallDirection::incoming, "incoming"},
 })
 
-NLOHMANN_JSON_SERIALIZE_ENUM(CallStatus, {
-  {CallStatus::Answered, "answered"},
-  {CallStatus::Missed, "missed"},
-  {CallStatus::Rejected, "rejected"},
-  {CallStatus::Busy, "busy"},
+NLOHMANN_JSON_SERIALIZE_ENUM(CallStatus, {  // NOLINT
+  {CallStatus::answered, "answered"},
+  {CallStatus::missed, "missed"},
+  {CallStatus::rejected, "rejected"},
+  {CallStatus::busy, "busy"},
 })
 
-NLOHMANN_JSON_SERIALIZE_ENUM(MessageStatus, {
-  {MessageStatus::None, "none"},
-  {MessageStatus::Sending, "sending"},
-  {MessageStatus::Sent, "sent"},
-  {MessageStatus::Delivered, "delivered"},
-  {MessageStatus::Read, "read"},
+NLOHMANN_JSON_SERIALIZE_ENUM(MessageStatus, {  // NOLINT
+  {MessageStatus::none, "none"},
+  {MessageStatus::sending, "sending"},
+  {MessageStatus::sent, "sent"},
+  {MessageStatus::delivered, "delivered"},
+  {MessageStatus::read, "read"},
 })
 
-NLOHMANN_JSON_SERIALIZE_ENUM(HistoryEntryKind, {
-  {HistoryEntryKind::TextMessage, "text_message"},
-  {HistoryEntryKind::VoiceCall, "voice_call"},
-  {HistoryEntryKind::VideoCall, "video_call"},
-  {HistoryEntryKind::SystemMessage, "system_message"},
+NLOHMANN_JSON_SERIALIZE_ENUM(HistoryEntryKind, {  // NOLINT
+  {HistoryEntryKind::textMessage, "text_message"},
+  {HistoryEntryKind::voiceCall, "voice_call"},
+  {HistoryEntryKind::videoCall, "video_call"},
+  {HistoryEntryKind::systemMessage, "system_message"},
 })
 
 // Data specific to a text or system message.
@@ -104,11 +104,11 @@ struct HistoryEntryRecord {
   HistoryEntryKind kind;
   Time::Unit timestamp;
   MessageDirection direction;
-  MessageStatus status = MessageStatus::None;
+  MessageStatus status = MessageStatus::none;
   HistoryEntryData data;
 };
 
-inline void to_json(nlohmann::json& j, const HistoryEntryRecord& e) {  // NOLINT(*-swappable-parameters)
+inline void to_json(nlohmann::json& j, const HistoryEntryRecord& e) {  // NOLINT(*-identifier-naming)
   j["id"] = e.id;
   j["kind"] = e.kind;
   j["timestamp"] = e.timestamp;
@@ -127,19 +127,19 @@ inline void to_json(nlohmann::json& j, const HistoryEntryRecord& e) {  // NOLINT
   }, e.data);
 }
 
-inline void from_json(const nlohmann::json& j, HistoryEntryRecord& e) {
+inline void from_json(const nlohmann::json& j, HistoryEntryRecord& e) {  // NOLINT(*-identifier-naming)
   j.at("id").get_to(e.id);
   j.at("kind").get_to(e.kind);
   j.at("timestamp").get_to(e.timestamp);
   e.direction = j.value("direction", MessageDirection::received);
-  e.status = j.value("status", MessageStatus::None);
+  e.status = j.value("status", MessageStatus::none);
   switch (e.kind) {
-    case HistoryEntryKind::TextMessage:
-    case HistoryEntryKind::SystemMessage:
+    case HistoryEntryKind::textMessage:
+    case HistoryEntryKind::systemMessage:
       e.data = MessageEntry{j.at("content").get<std::string>()};
       break;
-    case HistoryEntryKind::VoiceCall:
-    case HistoryEntryKind::VideoCall:
+    case HistoryEntryKind::voiceCall:
+    case HistoryEntryKind::videoCall:
       e.data = CallEntry{j.value("duration_seconds", 0U), j.at("call_direction").get<CallDirection>(), j.at("call_status").get<CallStatus>()};
       break;
   }
@@ -182,7 +182,7 @@ class MessageHistory {
   std::atomic<std::uint64_t> next_id_{1};
   std::function<void(const std::string& peer_id, std::uint64_t message_id, MessageStatus status)> on_status_changed_;
 
-  static constexpr std::string GetStorageKey(std::string_view peer_id) {
+  static constexpr std::string GetStorageKey(const std::string_view peer_id) {
     return std::string("history_") + std::string(peer_id);
   }
 
@@ -251,10 +251,10 @@ public:
 
     const HistoryEntryRecord entry{
         .id = next_id_.fetch_add(1),
-        .kind = HistoryEntryKind::TextMessage,
+        .kind = HistoryEntryKind::textMessage,
         .timestamp = Time::Now(),
         .direction = direction,
-        .status = (direction == MessageDirection::sent) ? MessageStatus::Sending : MessageStatus::None,
+        .status = (direction == MessageDirection::sent) ? MessageStatus::sending : MessageStatus::none,
         .data = MessageEntry{content},
     };
 
@@ -263,7 +263,12 @@ public:
     return entry;
   }
 
-  void AddCallEntry(const std::string& peer_id, HistoryEntryKind kind, CallDirection direction, CallStatus status, uint32_t duration = 0) {
+  void AddCallEntry(
+      const std::string& peer_id,
+      const HistoryEntryKind kind,
+      const CallDirection direction,
+      const CallStatus status,
+      uint32_t duration = 0) {
     const std::lock_guard lock(mutex_);
     LoadHistory(peer_id);
     auto& history = history_cache_[peer_id];
@@ -272,8 +277,8 @@ public:
       .id = next_id_.fetch_add(1),
       .kind = kind,
       .timestamp = Time::Now(),
-      .direction = (direction == CallDirection::Incoming) ? MessageDirection::received : MessageDirection::sent,  // NOLINT(*-branch-clone)
-      .data = CallEntry{duration, direction, status}});
+      .direction = (direction == CallDirection::incoming) ? MessageDirection::received : MessageDirection::sent,  // NOLINT(*-branch-clone)
+      .data = CallEntry{.duration_seconds=duration, .call_direction=direction, .call_status=status}});
     SaveHistory(peer_id);
   }
 
@@ -283,8 +288,8 @@ public:
     on_status_changed_ = std::move(cb);
   }
 
-  void UpdateMessageStatus(const std::string& peer_id, std::uint64_t message_id,
-                           MessageStatus new_status) {
+  void UpdateMessageStatus(const std::string& peer_id, const std::uint64_t message_id,
+                           const MessageStatus new_status) {
     {
       const std::lock_guard lock(mutex_);
       LoadHistory(peer_id);
@@ -307,12 +312,12 @@ public:
     }
   }
 
-  HistoryPage GetHistoryPage(const std::string& peer_id, size_t page_index, size_t page_size) {
+  HistoryPage GetHistoryPage(const std::string& peer_id, const size_t page_index, const size_t page_size) {
     const std::lock_guard lock(mutex_);
     LoadHistory(peer_id);
 
     if (!history_cache_.contains(peer_id)) {
-      return {{}, 0};
+      return {.messages={}, .total_messages=0};
     }
 
     const auto& history = history_cache_.at(peer_id);
@@ -320,7 +325,7 @@ public:
 
     const size_t end_offset = page_index * page_size;
     if (end_offset >= total_size) {
-      return {{}, total_size};
+      return {.messages={}, .total_messages=total_size};
     }
 
     const size_t start_offset = std::min(total_size, (page_index + 1) * page_size);
@@ -329,7 +334,7 @@ public:
     const auto end_it = history.end() - end_offset;
 
     std::vector messages_page(start_it, end_it);
-    return {std::move(messages_page), total_size};
+    return {.messages=std::move(messages_page), .total_messages=total_size};
   }
 
   std::vector<ChatSummary> GetChatSummaries(const std::vector<std::string>& peer_ids) {
@@ -347,8 +352,8 @@ public:
       }
     }
 
-    std::ranges::sort(summaries, [](const auto& a, const auto& b) {
-      return a.last_message.timestamp > b.last_message.timestamp;
+    std::ranges::sort(summaries, [](const auto& left, const auto& right) {
+      return left.last_message.timestamp > right.last_message.timestamp;
     });
 
     return summaries;
