@@ -2,6 +2,7 @@ package hela.eillance.screens
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -36,6 +37,7 @@ import hela.eillance.MainViewModel
 import hela.eillance.ndkio.AppState
 import hela.eillance.ndkio.Contact
 import hela.eillance.ndkio.ContactStatus
+import hela.eillance.ndkio.PeerConnectionState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -107,6 +109,14 @@ fun ContactListItem(contact: Contact, onClick: () -> Unit, onAccept: () -> Unit,
         ContactStatus.awaitingApproval -> MaterialTheme.colorScheme.tertiary
     }
 
+    val connectionStatus = PeerConnectionState.fromInt(contact.connectionState)
+    val (connectionText, connectionColor) = when (connectionStatus) {
+        PeerConnectionState.Connecting -> "Connecting..." to MaterialTheme.colorScheme.secondary
+        PeerConnectionState.Connected -> "Connected" to MaterialTheme.colorScheme.primary
+        PeerConnectionState.Failed -> "Failed" to MaterialTheme.colorScheme.error
+        else -> "" to Color.Transparent
+    }
+
     ListItem(
         headlineContent = {
             Text(
@@ -118,7 +128,12 @@ fun ContactListItem(contact: Contact, onClick: () -> Unit, onAccept: () -> Unit,
             )
         },
         supportingContent = {
-            Text(text = statusText, color = statusColor, style = MaterialTheme.typography.bodyMedium)
+            Column {
+                Text(text = statusText, color = statusColor, style = MaterialTheme.typography.bodyMedium)
+                if (connectionText.isNotEmpty()) {
+                    Text(text = connectionText, color = connectionColor, style = MaterialTheme.typography.bodySmall)
+                }
+            }
         },
         trailingContent = {
             when (contact.status) {

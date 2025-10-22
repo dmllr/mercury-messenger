@@ -30,7 +30,7 @@
 namespace {
 
 // Helper function to format contact entries for the ftxui::Menu component.
-std::vector<std::string> GetContactMenuEntries(const std::vector<eillance::identity::Contact>& contacts) {
+std::vector<std::string> GetContactMenuEntries(const std::vector<eillance::view_model::UIState::ViewContact>& contacts) {
   std::vector<std::string> entries;
   for (const auto& contact: contacts) {
     std::string status_str;
@@ -45,8 +45,17 @@ std::vector<std::string> GetContactMenuEntries(const std::vector<eillance::ident
         status_str = "";
         break;
     }
+
+    std::string conn_status_str;
+    switch (contact.connection_state) {
+        case rtc::PeerConnection::State::Connecting: conn_status_str = " (Connecting)"; break;
+        case rtc::PeerConnection::State::Connected: conn_status_str = " (Connected)"; break;
+        case rtc::PeerConnection::State::Failed: conn_status_str = " (Failed)"; break;
+        default: break;
+    }
+
     const std::string display_id = contact.peer_id.length() > 12 ? contact.peer_id.substr(0, 12) + "..." : contact.peer_id;
-    entries.push_back(display_id + status_str);
+    entries.push_back(display_id + status_str + conn_status_str);
   }
   return entries;
 }
@@ -195,19 +204,26 @@ int main(int argc, char** argv) {
                 content = std::get<eillance::messaging::MessageEntry>(entry.data).content;
                 auto timestamp_str = FormatTimestamp(entry.timestamp);
                 elements.push_back(ftxui::text(prefix + content + suffix));
-                elements.push_back(ftxui::text("  └─ " + timestamp_str) | ftxui::dim);
+                elements.push_back(ftxui::text("  ΓööΓöÇ " + timestamp_str) | ftxui::dim);
                 break;
             }
             case eillance::messaging::HistoryEntryKind::voiceCall:
             case eillance::messaging::HistoryEntryKind::videoCall: {
                 prefix = "[system]: ";
-                const auto& call_data = std::get<eillance::messaging::CallEntry>(entry.data);
-                content = "--- " +
-                          std::string(entry.kind == eillance::messaging::HistoryEntryKind::voiceCall ? "Voice" : "Video") +
-                          " Call " +
-                          (call_data.call_direction == eillance::messaging::CallDirection::incoming ? "from" : "to") +
-                          std::string(" peer ---");
+                const auto& call_data = std::get<eillance::messaging::CallEntry>(entry.data); // NOLINT
+                std::string call_type_str = (entry.kind == eillance::messaging::HistoryEntryKind::voiceCall ? "Voice" : "Video");
+                std::string direction_str = (call_data.call_direction == eillance::messaging::CallDirection::incoming ? "Incoming" : "Outgoing");
+                std::string status_str;
+                switch (call_data.call_status) {
+                    case eillance::messaging::CallStatus::answered: status_str = "Answered"; break;
+                    case eillance::messaging::CallStatus::missed: status_str = "Missed"; break;
+                    case eillance::messaging::CallStatus::rejected: status_str = "Rejected"; break;
+                    case eillance::messaging::CallStatus::busy: status_str = "Busy"; break;
+                }
+                content = "--- " + direction_str + " " + call_type_str + " Call (" + status_str + ") ---";
+                auto timestamp_str = FormatTimestamp(entry.timestamp);
                 elements.push_back(ftxui::text(prefix + content) | ftxui::dim);
+                elements.push_back(ftxui::text("  ΓööΓöÇ " + timestamp_str) | ftxui::dim);
                 break;
             }
         }

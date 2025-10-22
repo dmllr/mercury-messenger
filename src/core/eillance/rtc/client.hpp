@@ -52,6 +52,9 @@ class RtcClient final : public RtcTransportDelegate {
   using OnContactStatusChangedCallback = std::function<void(const std::string& peer_id, identity::ContactStatus status)>;
   using OnMessageStatusChangedCallback = std::function<void(const std::string& peer_id, std::uint64_t message_id, messaging::MessageStatus status)>;
   using OnPeerListUpdateCallback = std::function<void(const std::vector<Device>&)>;
+  using StatusCallbackFunction = std::function<void(const std::string& peer_id, EventSource, int)>;
+  using OnIncomingCallCallback = std::function<void(const std::string& peer_id, messaging::HistoryEntryKind call_type)>;
+
 
   std::shared_ptr<Stream> av_stream_;
   std::shared_ptr<RtcTransport> transport_;
@@ -63,6 +66,8 @@ class RtcClient final : public RtcTransportDelegate {
   std::shared_ptr<OnContactStatusChangedCallback> on_contact_status_changed_{};
   std::shared_ptr<OnMessageStatusChangedCallback> on_message_status_changed_{};
   std::shared_ptr<OnPeerListUpdateCallback> on_peer_list_update_{};
+  std::shared_ptr<StatusCallbackFunction> status_callback_{};
+  std::shared_ptr<OnIncomingCallCallback> on_incoming_call_{};
 
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::unique_ptr<identity::IdManager> id_manager_;
@@ -73,6 +78,10 @@ class RtcClient final : public RtcTransportDelegate {
 
   std::unordered_map<std::string, Device> online_peers_;
   mutable std::mutex online_peers_mutex_;
+
+  enum class PendingCallType { None, Voice, Video };
+  std::unordered_map<std::string, PendingCallType> pending_calls_;
+  std::mutex pending_calls_mutex_;
 
 public:
   explicit RtcClient(std::shared_ptr<storage::PersistentStorage> storage, Capture video_capture)
@@ -102,12 +111,33 @@ public:
 
     transport_->SetStatusCallback([this](const std::string& peer_id, const EventSource source, int state_val) {
       if (source == EventSource::peerConnectionState) {
-        if (auto state = static_cast<rtc::PeerConnection::State>(state_val);
-            state == rtc::PeerConnection::State::Disconnected ||
-            state == rtc::PeerConnection::State::Failed ||
-            state == rtc::PeerConnection::State::Closed) {
+        const auto state = static_cast<rtc::PeerConnection::State>(state_val);
+        if (state == rtc::PeerConnection::State::Connected) {
+          PendingCallType call_type;
+          {
+            std::lock_guard<std::mutex> lock(pending_calls_mutex_);
+            if (auto it = pending_calls_.find(peer_id); it != pending_calls_.end()) {
+              call_type = it->second;
+              pending_calls_.erase(it);
+            } else {
+              call_type = PendingCallType::None;
+            }
+          }
+          if (call_type == PendingCallType::Voice) {
+            ActuallyStartVoiceCall(peer_id);
+          } else if (call_type == PendingCallType::Video) {
+            ActuallyStartVideoCall(peer_id);
+          }
+        } else if (state == rtc::PeerConnection::State::Failed || state == rtc::PeerConnection::State::Closed || state == rtc::PeerConnection::State::Disconnected) {
+          {
+            std::lock_guard<std::mutex> lock(pending_calls_mutex_);
+            pending_calls_.erase(peer_id);
+          }
           delivery_service_->connectionAttemptFinished(peer_id);
         }
+      }
+      if (status_callback_) {
+        (*status_callback_)(peer_id, source, state_val);
       }
     });
 
@@ -140,7 +170,7 @@ public:
     delivery_service_->stop();
     transport_->Terminate();
   }
-  void SetStatusCallback(const std::function<void(const std::string& peer_id, EventSource, int)>& callback) const { transport_->SetStatusCallback(callback); }
+  void SetStatusCallback(const StatusCallbackFunction& callback) { status_callback_ = std::make_shared<StatusCallbackFunction>(callback); }
   void SetFrameReceivedCallback(const OnFrameReceivedCallback& callback) { on_frame_received_ = std::make_shared<OnFrameReceivedCallback>(callback); }
   void SetProfileReceivedCallback(const OnProfileReceivedCallback& callback) { on_profile_received_ = std::make_shared<OnProfileReceivedCallback>(callback); }
   void SetChatMessageReceivedCallback(const OnChatMessageReceivedCallback& callback) { on_chat_message_received_ = std::make_shared<OnChatMessageReceivedCallback>(callback); }
@@ -148,6 +178,7 @@ public:
   void SetContactStatusChangedCallback(const OnContactStatusChangedCallback& callback) { on_contact_status_changed_ = std::make_shared<OnContactStatusChangedCallback>(callback); }
   void SetMessageStatusChangedCallback(const OnMessageStatusChangedCallback& callback) { on_message_status_changed_ = std::make_shared<OnMessageStatusChangedCallback>(callback); }
   void SetPeerListUpdateCallback(const OnPeerListUpdateCallback& callback) { on_peer_list_update_ = std::make_shared<OnPeerListUpdateCallback>(callback); }
+  void SetIncomingCallCallback(const OnIncomingCallCallback& callback) { on_incoming_call_ = std::make_shared<OnIncomingCallCallback>(callback); }
 
   void RequestPeerListUpdate() {
     UpdateAndNotifyPeerList();
@@ -174,39 +205,57 @@ public:
   }
 
   void StartVoiceCall(const std::string& peer_id) {
-    const auto peer = transport_->GetPeer(peer_id);
-    if (!peer) {
-      LOGW << "Cannot start voice call, not connected to peer " << peer_id;
-      return;
+    if (transport_->GetPeerConnectionState(peer_id) == rtc::PeerConnection::State::Connected) {
+      LOGI << "Peer " << peer_id << " is already connected. Starting voice call.";
+      ActuallyStartVoiceCall(peer_id);
+    } else {
+      LOGI << "Peer " << peer_id << " is not connected. Queuing voice call and initiating connection.";
+      {
+        std::lock_guard<std::mutex> lock(pending_calls_mutex_);
+        pending_calls_[peer_id] = PendingCallType::Voice;
+      }
+      Connect(peer_id);
     }
-    if (!peer->audio_) {
-      peer->audio_ = AddAudio(peer->peer_connection_, [this, wpeer = make_weak_ptr(peer)]() {
-        if (const auto p = wpeer.lock()) {
-          transport_->AddToStream(p, false);
-        }
-      });
-      peer->peer_connection_->setLocalDescription();
-    }
-    message_history_->AddCallEntry(peer_id, messaging::HistoryEntryKind::voiceCall, messaging::CallDirection::outgoing, messaging::CallStatus::answered); // Placeholder status
-    av_stream_->Start();
   }
 
   void StartVideoCall(const std::string& peer_id) {
-    const auto peer = transport_->GetPeer(peer_id);
+    if (transport_->GetPeerConnectionState(peer_id) == rtc::PeerConnection::State::Connected) {
+      LOGI << "Peer " << peer_id << " is already connected. Starting video call.";
+      ActuallyStartVideoCall(peer_id);
+    } else {
+      LOGI << "Peer " << peer_id << " is not connected. Queuing video call and initiating connection.";
+      {
+        std::lock_guard<std::mutex> lock(pending_calls_mutex_);
+        pending_calls_[peer_id] = PendingCallType::Video;
+      }
+      Connect(peer_id);
+    }
+  }
+
+  void AcceptCall(const std::string& peer_id) {
+    auto peer = transport_->GetPeer(peer_id);
     if (!peer) {
-      LOGW << "Cannot start video call, not connected to peer " << peer_id;
+      LOGW << "Cannot accept call from " << peer_id << ", no peer connection found.";
       return;
+    }
+    // For now, we assume we always answer with audio and video if they were offered.
+    // A more advanced implementation might check the remote description.
+    if (!peer->audio_) {
+      peer->audio_ = AddAudio(peer->peer_connection_, [this, wpeer = make_weak_ptr(peer)]() {
+        if (const auto p = wpeer.lock()) { transport_->AddToStream(p, false); }
+      });
     }
     if (!peer->video_) {
       peer->video_ = AddVideo(peer->peer_connection_, [this, wpeer = make_weak_ptr(peer)]() {
-        if (const auto p = wpeer.lock()) {
-          transport_->AddToStream(p, true);
-        }
+        if (const auto p = wpeer.lock()) { transport_->AddToStream(p, true); }
       });
-      peer->peer_connection_->setLocalDescription();
     }
-    message_history_->AddCallEntry(peer_id, messaging::HistoryEntryKind::videoCall, messaging::CallDirection::outgoing, messaging::CallStatus::answered); // Placeholder status
+    peer->peer_connection_->setLocalDescription(); // This will generate an answer with our media
     av_stream_->Start();
+  }
+
+  void RejectCall(const std::string& peer_id) {
+    Hangup(peer_id);
   }
 
   // Public methods for contact management
@@ -237,6 +286,10 @@ public:
         (*on_contact_status_changed_)(peer_id, identity::ContactStatus::confirmed);
       }
     }
+  }
+
+  auto GetPeerConnectionState(const std::string& peer_id) const -> rtc::PeerConnection::State {
+    return transport_->GetPeerConnectionState(peer_id);
   }
 
   auto GetContacts() const -> std::vector<identity::Contact> {
@@ -362,6 +415,12 @@ public:
         const auto answer = rtc::Description(sdp, type);
         peer->peer_connection_->setRemoteDescription(answer);
       }
+    } else if (type == "candidate") {
+      if (const auto peer = transport_->GetPeer(peer_id); peer != nullptr) {
+        const auto candidate = message["candidate"].get<std::string>();
+        const auto mid = message["sdpMid"].get<std::string>();
+        peer->peer_connection_->addRemoteCandidate(rtc::Candidate(candidate, mid));
+      }
     } else if (type == "contact_add_request") {
       // If we already have this peer as a confirmed contact, it means they missed
       // our confirmation. Let's send it again to help them get in sync.
@@ -401,7 +460,7 @@ public:
   }
 
   auto AddVideo(const std::shared_ptr<rtc::PeerConnection>& pc, const std::function<void(void)>& onOpen) -> std::shared_ptr<Peer::Track> override {
-    auto video = rtc::Description::Video("video", rtc::Description::Direction::SendOnly);
+    auto video = rtc::Description::Video("video", rtc::Description::Direction::SendRecv);
     constexpr auto payload_type = 102;
     constexpr auto ssrc = 10001;
     video.addH264Codec(payload_type);
@@ -422,7 +481,7 @@ public:
   }
 
   auto AddAudio(const std::shared_ptr<rtc::PeerConnection>& pc, const std::function<void(void)>& onOpen) -> std::shared_ptr<Peer::Track> override {
-    auto audio = rtc::Description::Audio("audio", rtc::Description::Direction::SendOnly);
+    auto audio = rtc::Description::Audio("audio", rtc::Description::Direction::SendRecv);
     constexpr auto payload_type = 111;
     constexpr auto ssrc = 10002;
     audio.addOpusCodec(payload_type);
@@ -441,8 +500,16 @@ public:
     return std::make_shared<Peer::Track>(track, sr_reporter);
   }
 
-  void OnTrack(const std::string&, const std::shared_ptr<rtc::Track> track) override {
+  void OnTrack(const std::string& peer_id, const std::shared_ptr<rtc::Track> track) override {
+    auto peer = transport_->GetPeer(peer_id);
+    if (!peer) {
+      return;
+    }
+
+    messaging::HistoryEntryKind call_type = messaging::HistoryEntryKind::voiceCall;
+
     if (track->mid().find("video") != std::string::npos) {
+      call_type = messaging::HistoryEntryKind::videoCall;
       const auto depacketizer = std::make_shared<rtc::H264RtpDepacketizer>();
       track->setMediaHandler(depacketizer);
       track->onFrame([this](const rtc::binary& data, rtc::FrameInfo) {
@@ -450,6 +517,11 @@ public:
           (*on_frame_received_)(data);
         }
       });
+    }
+
+    bool already_notified = peer->incoming_call_notified_.exchange(true);
+    if (!already_notified && on_incoming_call_) {
+      (*on_incoming_call_)(peer_id, call_type);
     }
   }
 
@@ -474,9 +546,9 @@ public:
     // If we reach here, direct send failed or was not possible.
     LOGI << "Peer " << peer_id << " is offline or not ready, or send failed. Buffering message.";
     const Json json_msg = {
-      {"type", "chat"},
-      {"content", message},
-      {"message_id", entry.id},
+        {"type", "chat"},
+        {"content", message},
+        {"message_id", entry.id},
     };
     message_queue_->Enqueue(peer_id, entry.id, json_msg.dump());
     if (!peer) {
@@ -486,14 +558,14 @@ public:
   }
 
   void MarkMessagesAsRead(const std::string& peer_id, const std::vector<std::uint64_t>& message_ids) const {
-      const auto peer = transport_->GetPeer(peer_id);
-      if (peer && peer->data_channel_ && peer->data_channel_->isOpen()) {
-          const Json msg = {
-            {"type", "message_read"},
-            {"message_ids", message_ids},
-          };
-          transport_->SendPeerDataChannelMessage(peer->data_channel_, msg);
-      }
+    const auto peer = transport_->GetPeer(peer_id);
+    if (peer && peer->data_channel_ && peer->data_channel_->isOpen()) {
+      const Json msg = {
+          {"type", "message_read"},
+          {"message_ids", message_ids},
+      };
+      transport_->SendPeerDataChannelMessage(peer->data_channel_, msg);
+    }
   }
 
   auto GetMessageHistoryPage(const std::string& peer_id, size_t page_index, size_t page_size) const -> messaging::HistoryPage {
@@ -501,6 +573,42 @@ public:
   }
 
 private:
+  void ActuallyStartVoiceCall(const std::string& peer_id) {
+    const auto peer = transport_->GetPeer(peer_id);
+    if (!peer) {
+      LOGW << "Cannot start voice call, peer object not found for " << peer_id;
+      return;
+    }
+    if (!peer->audio_) {
+      peer->audio_ = AddAudio(peer->peer_connection_, [this, wpeer = make_weak_ptr(peer)]() {
+        if (const auto p = wpeer.lock()) {
+          transport_->AddToStream(p, false);
+        }
+      });
+      peer->peer_connection_->setLocalDescription();
+    }
+    message_history_->AddCallEntry(peer_id, messaging::HistoryEntryKind::voiceCall, messaging::CallDirection::outgoing, messaging::CallStatus::answered); // Placeholder status
+    av_stream_->Start();
+  }
+
+  void ActuallyStartVideoCall(const std::string& peer_id) {
+    const auto peer = transport_->GetPeer(peer_id);
+    if (!peer) {
+      LOGW << "Cannot start video call, peer object not found for " << peer_id;
+      return;
+    }
+    if (!peer->video_) {
+      peer->video_ = AddVideo(peer->peer_connection_, [this, wpeer = make_weak_ptr(peer)]() {
+        if (const auto p = wpeer.lock()) {
+          transport_->AddToStream(p, true);
+        }
+      });
+      peer->peer_connection_->setLocalDescription();
+    }
+    message_history_->AddCallEntry(peer_id, messaging::HistoryEntryKind::videoCall, messaging::CallDirection::outgoing, messaging::CallStatus::answered); // Placeholder status
+    av_stream_->Start();
+  }
+
   void UpdateAndNotifyPeerList() const {
     if (on_peer_list_update_) {
       std::vector<Device> peer_list;
@@ -611,27 +719,27 @@ private:
         }
       }
     } else if (type == "message_receipt") {
-        auto message_id = message.at("message_id").get<std::uint64_t>();
-        auto status_str = message.at("status").get<std::string>();
-        auto status = messaging::MessageStatus::sent;
-        if (status_str == "delivered") {
-            status = messaging::MessageStatus::delivered;
-        } else if (status_str == "read") {
-            status = messaging::MessageStatus::read;
-        }
-        message_history_->UpdateMessageStatus(peer_id, message_id, status);
+      auto message_id = message.at("message_id").get<std::uint64_t>();
+      auto status_str = message.at("status").get<std::string>();
+      auto status = messaging::MessageStatus::sent;
+      if (status_str == "delivered") {
+        status = messaging::MessageStatus::delivered;
+      } else if (status_str == "read") {
+        status = messaging::MessageStatus::read;
+      }
+      message_history_->UpdateMessageStatus(peer_id, message_id, status);
     } else if (type == "message_read") {
-        auto message_ids = message.at("message_ids").get<std::vector<std::uint64_t>>();
-        for(const auto& msg_id : message_ids) {
-            // We don't update our own history; the sender will be notified via receipt.
-            // This is just for sending the receipt back.
-            const Json receipt = {
-              {"type", "message_receipt"},
-              {"status", "read"},
-              {"message_id", msg_id},
-            };
-            transport_->SendPeerDataChannelMessage(peer->data_channel_, receipt);
-        }
+      auto message_ids = message.at("message_ids").get<std::vector<std::uint64_t>>();
+      for(const auto& msg_id : message_ids) {
+        // We don't update our own history; the sender will be notified via receipt.
+        // This is just for sending the receipt back.
+        const Json receipt = {
+            {"type", "message_receipt"},
+            {"status", "read"},
+            {"message_id", msg_id},
+        };
+        transport_->SendPeerDataChannelMessage(peer->data_channel_, receipt);
+      }
     } else {
       throw std::runtime_error("Unknown message type in ProcessDataChannelMessage");
     }
