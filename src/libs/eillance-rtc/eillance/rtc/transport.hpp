@@ -223,6 +223,7 @@ public:
     });
 
     peer_connection->onLocalDescription([this, peer_id, context](const rtc::Description& description) {
+      LOGD << "Local SDP (" << description.typeString() << ") for " << peer_id << " context " << context << ":\n" << std::string(description);
       Json message = {
           {"type", description.typeString()},
           {"sdp", std::string(description)},

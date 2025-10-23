@@ -190,24 +190,41 @@ public:
 
   void AcceptCall(const std::string& peer_id) {
     auto peer = transport_->GetPeer(peer_id);
-    if (!peer || !peer->media_peer_connection_) {
-      LOGW << "Cannot accept call from " << peer_id << ", no media peer connection found.";
+    if (!peer || !peer->pending_offer_sdp) {
+      LOGW << "Cannot accept call from " << peer_id << ", no pending offer found.";
       return;
     }
-    // For now, we assume we always answer with audio and video if they were offered.
-    // A more advanced implementation might check the remote description.
+
+    // Create a new peer connection for media, add tracks, and then set descriptions.
+    peer->media_peer_connection_ = transport_->CreatePeerConnection(peer_id, "media");
     av_stream_->Start();
-    if (!peer->audio_) {
-      peer->audio_ = AddAudio(peer->media_peer_connection_, [this, wpeer = make_weak_ptr(peer)]() {
-        if (const auto p = wpeer.lock()) { transport_->AddToStream(p, false); }
-      });
-    }
-    if (!peer->video_) {
+
+    peer->audio_ = AddAudio(peer->media_peer_connection_, [this, wpeer = make_weak_ptr(peer)]() {
+      if (const auto p = wpeer.lock()) { transport_->AddToStream(p, false); }
+    });
+
+    if (peer->pending_offer_sdp->find("m=video") != std::string::npos) {
       peer->video_ = AddVideo(peer->media_peer_connection_, [this, wpeer = make_weak_ptr(peer)]() {
         if (const auto p = wpeer.lock()) { transport_->AddToStream(p, true); }
       });
     }
-    peer->media_peer_connection_->setLocalDescription(); // This will generate an answer with our media
+
+    LOGI << "Accepting call from " << peer_id << ". Setting remote description.";
+    peer->media_peer_connection_->setRemoteDescription(rtc::Description(*peer->pending_offer_sdp, "offer"));
+    peer->pending_offer_sdp.reset();
+
+    // Now, apply any buffered candidates
+    if (!peer->pending_candidates.empty()) {
+      LOGI << "Applying " << peer->pending_candidates.size() << " buffered ICE candidates for " << peer_id;
+      for (const auto& candidate : peer->pending_candidates) {
+        peer->media_peer_connection_->addRemoteCandidate(candidate);
+      }
+      peer->pending_candidates.clear();
+    }
+
+    // Explicitly generate the answer after everything is set up
+    LOGI << "Generating SDP answer for " << peer_id;
+    peer->media_peer_connection_->setLocalDescription();
   }
 
   void RejectCall(const std::string& peer_id) {
@@ -258,17 +275,23 @@ public:
 
   void Hangup(const std::string& peer_id) const {
     if (const auto peer = transport_->GetPeer(peer_id); peer != nullptr) {
-        if (peer->media_peer_connection_) {
-            LOGI << "Closing media peer connection for " << peer_id;
-            peer->media_peer_connection_->close();
-            peer->media_peer_connection_ = nullptr;
-            peer->audio_ = nullptr;
-            peer->video_ = nullptr;
-            av_stream_->Stop();
-        } else {
-            LOGW << "Hangup called for " << peer_id << ", but no media connection was found.";
-        }
-        // The data connection is intentionally left open.
+      if (peer->pending_offer_sdp) {
+        peer->pending_offer_sdp.reset();
+      }
+      if (!peer->pending_candidates.empty()) {
+        peer->pending_candidates.clear();
+      }
+
+      if (peer->media_peer_connection_) {
+        LOGI << "Closing media peer connection for " << peer_id;
+        peer->media_peer_connection_->close();
+        peer->media_peer_connection_ = nullptr;
+        peer->audio_ = nullptr;
+        peer->video_ = nullptr;
+        av_stream_->Stop();
+      } else {
+        LOGW << "Hangup called for " << peer_id << ", but no media connection was found.";
+      }
     }
   }
 
@@ -333,31 +356,41 @@ public:
     const auto context = message.value("context", "data");
 
     if (context == "media") {
-        std::shared_ptr<Peer> peer = transport_->GetPeer(peer_id);
-        if (!peer) {
-            LOGI << "Received media message for unknown peer " << peer_id << ". Creating peer object.";
-            Connect(peer_id); // create the data peer first
-            peer = transport_->GetPeer(peer_id);
-        }
+      auto peer = transport_->GetPeer(peer_id);
+      if (!peer) {
+        LOGI << "Received media message for unknown peer " << peer_id << ". Creating peer object first.";
+        Connect(peer_id);
+        peer = transport_->GetPeer(peer_id);
+      }
 
-        if (!peer->media_peer_connection_) {
-            LOGI << "Creating media peer connection for " << peer_id << " to handle incoming message.";
-            peer->media_peer_connection_ = transport_->CreatePeerConnection(peer_id, "media");
+      if (type == "offer") {
+        LOGD << "Received media offer from " << peer_id << ". Storing it and notifying UI.";
+        peer->pending_offer_sdp = message["sdp"].get<std::string>();
+        if (on_incoming_call_) {
+          auto call_type = (peer->pending_offer_sdp->find("m=video") != std::string::npos)
+                           ? messaging::HistoryEntryKind::videoCall
+                           : messaging::HistoryEntryKind::voiceCall;
+          (*on_incoming_call_)(peer_id, call_type);
         }
+      } else if (type == "candidate") {
+        const auto candidate_str = message["candidate"].get<std::string>();
+        const auto mid = message["sdpMid"].get<std::string>();
+        rtc::Candidate candidate(candidate_str, mid);
 
-        if (type == "offer") {
-            const auto sdp = message["sdp"].get<std::string>();
-            peer->media_peer_connection_->setRemoteDescription(rtc::Description(sdp, rtc::Description::Type::Offer));
-        } else if (type == "answer") {
-            const auto sdp = message["sdp"].get<std::string>();
-            const auto answer = rtc::Description(sdp, type);
-            peer->media_peer_connection_->setRemoteDescription(answer);
-        } else if (type == "candidate") {
-            const auto candidate = message["candidate"].get<std::string>();
-            const auto mid = message["sdpMid"].get<std::string>();
-            peer->media_peer_connection_->addRemoteCandidate(rtc::Candidate(candidate, mid));
+        if (peer->media_peer_connection_) {
+          peer->media_peer_connection_->addRemoteCandidate(candidate);
+        } else {
+          LOGD << "Buffering ICE candidate for " << peer_id;
+          peer->pending_candidates.push_back(candidate);
         }
-        return;
+      } else if (peer->media_peer_connection_ && type == "answer") {
+        const auto sdp = message["sdp"].get<std::string>();
+        LOGD << "Remote SDP (" << type << ") for " << peer_id << " context " << context << ":\n" << sdp;
+        peer->media_peer_connection_->setRemoteDescription(rtc::Description(sdp, type));
+      } else {
+        LOGW << "Received media message of type '" << type << "' for " << peer_id << " in an unexpected state.";
+      }
+      return;
     }
 
     // Default to data channel logic
@@ -377,10 +410,12 @@ public:
       });
       transport_->AddPeer(peer_id, peer);
       const auto sdp = message["sdp"].get<std::string>();
+      LOGD << "Remote SDP (" << type << ") for " << peer_id << " context " << context << ":\n" << sdp;
       peer->data_peer_connection_->setRemoteDescription(rtc::Description(sdp, rtc::Description::Type::Offer));
     } else if (type == "answer") {
       if (const auto peer = transport_->GetPeer(peer_id); peer != nullptr) {
         const auto sdp = message["sdp"].get<std::string>();
+        LOGD << "Remote SDP (" << type << ") for " << peer_id << " context " << context << ":\n" << sdp;
         const auto answer = rtc::Description(sdp, type);
         peer->data_peer_connection_->setRemoteDescription(answer);
       }
@@ -474,6 +509,7 @@ public:
     if (!peer) {
       return;
     }
+    LOGI << "OnTrack callback triggered for peer " << peer_id << " with mid: " << track->mid();
 
     messaging::HistoryEntryKind call_type = messaging::HistoryEntryKind::voiceCall;
 
@@ -481,7 +517,8 @@ public:
       call_type = messaging::HistoryEntryKind::videoCall;
       const auto depacketizer = std::make_shared<rtc::H264RtpDepacketizer>();
       track->setMediaHandler(depacketizer);
-      track->onFrame([this](const rtc::binary& data, rtc::FrameInfo) {
+      track->onFrame([this, peer_id](const rtc::binary& data, rtc::FrameInfo) {
+        LOGD << "Received H264 frame from " << peer_id << " with size: " << data.size();
         if (on_frame_received_) {
           (*on_frame_received_)(data);
         }
@@ -552,9 +589,9 @@ private:
     }
 
     if (peer->media_peer_connection_) {
-        LOGW << "Media connection already exists for peer " << peer_id << ", cannot start a new call.";
-        av_stream_->Stop(); // We started it optimistically
-        return;
+      LOGW << "Media connection already exists for peer " << peer_id << ", cannot start a new call.";
+      av_stream_->Stop(); // We started it optimistically
+      return;
     }
     peer->media_peer_connection_ = transport_->CreatePeerConnection(peer_id, "media");
 
@@ -562,12 +599,12 @@ private:
     message_history_->AddCallEntry(peer_id, history_kind, messaging::CallDirection::outgoing, messaging::CallStatus::answered);
 
     peer->audio_ = AddAudio(peer->media_peer_connection_, [this, wpeer = make_weak_ptr(peer)]() {
-        if (const auto p = wpeer.lock()) { transport_->AddToStream(p, false); }
+      if (const auto p = wpeer.lock()) { transport_->AddToStream(p, false); }
     });
     if (is_video) {
-        peer->video_ = AddVideo(peer->media_peer_connection_, [this, wpeer = make_weak_ptr(peer)]() {
-            if (const auto p = wpeer.lock()) { transport_->AddToStream(p, true); }
-        });
+      peer->video_ = AddVideo(peer->media_peer_connection_, [this, wpeer = make_weak_ptr(peer)]() {
+        if (const auto p = wpeer.lock()) { transport_->AddToStream(p, true); }
+      });
     }
     peer->media_peer_connection_->setLocalDescription();
   }

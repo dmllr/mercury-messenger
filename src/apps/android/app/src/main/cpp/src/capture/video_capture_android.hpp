@@ -105,13 +105,20 @@ public:
     ConfigureVideo(config.video_config);
   }
 
-  void ConfigureVideo(VideoConfig config) {
+  void ConfigureVideo(VideoConfig new_config) {
     TELEMETRY(
-        LOGI << "Video capture configuration event triggered: device " << config.cameraId << " " << config.width << "x" << config.height << " " << config.frameRate << "fps";)
+        LOGI << "Video capture configuration event triggered: device " << new_config.cameraId << " " << new_config.width << "x" << new_config.height << " " << new_config.frameRate << "fps";)
     const auto lock = std::lock_guard<std::mutex>(capture_mutex_);
-    config_ = config;
 
-    // Ensure default values are set
+    // Determine if a full restart of the camera pipeline is needed.
+    // This is only required if the camera ID or resolution changes.
+    const bool restart_needed = (camera_manager_ != nullptr) &&
+                                (config_.cameraId != new_config.cameraId ||
+                                 config_.width    != new_config.width    ||
+                                 config_.height   != new_config.height);
+
+    // Update the configuration with the new values.
+    config_ = new_config;
     if (config_.width == 0 || config_.height == 0) {
       config_.width = VideoConfigDefaults::width;
       config_.height = VideoConfigDefaults::height;
@@ -122,12 +129,15 @@ public:
     if (config_.bitrate == 0) {
       config_.bitrate = static_cast<int>(VideoConfigDefaults::commonBitrateMultiplier * config_.width * config_.height * config_.frameRate);
     }
-
     config_.rotation = static_cast<int>(current_orientation_.load());
 
+    // Inform the encoder of the new configuration. It will decide internally
+    // if it needs to reconfigure itself.
     encoder_.UpdateConfig(config_);
 
-    if (camera_manager_ != nullptr) {
+    // Only perform the costly and dangerous restart if absolutely necessary.
+    if (restart_needed) {
+      LOGI << "Reconfiguring video capture pipeline due to parameter change.";
       FreeNativeCameraResources();
       RenewCaptureSession();
     }
@@ -205,11 +215,13 @@ private:
               last_orientation_change = Time::Now();
               orientation_stability_counter = 0;
 
-              config_.rotation = static_cast<int>(new_orientation);
+              // Create a copy of the current config, update rotation, and dispatch.
+              VideoConfig updated_config = config_;
+              updated_config.rotation = static_cast<int>(new_orientation);
 
-              DispatchQueue::MainThread().Dispatch([this]() {
-                  ConfigureVideo(config_);
-                });
+              DispatchQueue::MainThread().Dispatch([this, updated_config]() {
+                ConfigureVideo(updated_config);
+              });
 
               Log::i("Device orientation changed to: %d degrees", static_cast<int>(new_orientation));
             }
@@ -240,17 +252,18 @@ private:
   }
 
   void OpenCamera() {
-    FreeNativeCameraResources();
+    // This function must be called with the capture_mutex_ held.
+    // FreeNativeCameraResources is now expected to be called before this.
 
     ACameraIdList* camera_id_list = nullptr;
     auto status = ACameraManager_getCameraIdList(camera_manager_, &camera_id_list);
     if (status != ACAMERA_OK) {
       Log::e("Failed to get camera ID list");
-      ACameraManager_delete(camera_manager_);
-      return;
+      return; // camera_manager_ is handled by caller
     }
     if (camera_id_list->numCameras <= 0) {
       Log::e("No camera available");
+      ACameraManager_deleteCameraIdList(camera_id_list);
       return;
     }
 
@@ -264,8 +277,6 @@ private:
     status = ACameraManager_openCamera(camera_manager_, camera_id, GetDeviceListener(), &cameraDevice_);
     if (status != ACAMERA_OK) {
       Log::e("ACameraManager_openCamera call failed with code: %#x, %s", status, GetErrorStr(status));
-      ACameraManager_deleteCameraIdList(camera_id_list);
-      return;
     }
 
     ACameraManager_deleteCameraIdList(camera_id_list);
@@ -273,38 +284,49 @@ private:
   }
 
   void RenewCaptureSession() {
+    // This function must be called with the capture_mutex_ held.
     OpenCamera();
-
-    auto status = ACaptureSessionOutputContainer_create(&output_container_);
-    Log::assert_or_die(status == ACAMERA_OK, "ACaptureSessionOutputContainer_create call failed with code: %#x, %s", status, GetErrorStr(status));
+    if (!cameraDevice_) {
+      LOGE << "Failed to open camera, aborting capture session renewal.";
+      return;
+    }
 
     auto* native_window = encoder_.Surface();
+    if (!native_window) {
+      LOGE << "Encoder surface is not available, aborting capture session renewal.";
+      return;
+    }
     ANativeWindow_acquire(native_window);
 
+    auto status = ACaptureSessionOutputContainer_create(&output_container_);
+    Log::assert_or_die(status == ACAMERA_OK, "ACaptureSessionOutputContainer_create failed: %s", GetErrorStr(status));
+
     status = ACaptureSessionOutput_create(native_window, &session_output_);
-    Log::assert_or_die(status == ACAMERA_OK, "renewCaptureSession failed with code: %#x, %s ", status, GetErrorStr(status));
+    Log::assert_or_die(status == ACAMERA_OK, "ACaptureSessionOutput_create failed: %s", GetErrorStr(status));
 
     status = ACaptureSessionOutputContainer_add(output_container_, session_output_);
-    Log::assert_or_die(status == ACAMERA_OK, "renewCaptureSession failed with code: %#x, %s ", status, GetErrorStr(status));
+    Log::assert_or_die(status == ACAMERA_OK, "ACaptureSessionOutputContainer_add failed: %s", GetErrorStr(status));
 
     status = ACameraOutputTarget_create(native_window, &target_);
-    Log::assert_or_die(status == ACAMERA_OK, "renewCaptureSession failed with code: %#x, %s ", status, GetErrorStr(status));
+    Log::assert_or_die(status == ACAMERA_OK, "ACameraOutputTarget_create failed: %s", GetErrorStr(status));
 
     status = ACameraDevice_createCaptureRequest(cameraDevice_, TEMPLATE_RECORD, &capture_request_);
-    Log::assert_or_die(status == ACAMERA_OK, "renewCaptureSession failed with code: %#x, %s ", status, GetErrorStr(status));
+    Log::assert_or_die(status == ACAMERA_OK, "ACameraDevice_createCaptureRequest failed: %s", GetErrorStr(status));
 
     status = ACaptureRequest_addTarget(capture_request_, target_);
-    Log::assert_or_die(status == ACAMERA_OK, "renewCaptureSession failed with code: %#x, %s ", status, GetErrorStr(status));
+    Log::assert_or_die(status == ACAMERA_OK, "ACaptureRequest_addTarget failed: %s", GetErrorStr(status));
 
     status = ACameraDevice_createCaptureSession(
         cameraDevice_,
         output_container_,
         GetSessionListener(),
         &capture_session_);
-    Log::assert_or_die(status == ACAMERA_OK, "ACameraDevice_createCaptureSession failed with status: %#x, %s", status, GetErrorStr(status));
+    Log::assert_or_die(status == ACAMERA_OK, "ACameraDevice_createCaptureSession failed: %s", GetErrorStr(status));
 
     status = ACameraCaptureSession_setRepeatingRequest(capture_session_, nullptr, 1, &capture_request_, nullptr);
-    Log::assert_or_die(status == ACAMERA_OK, "Failed to set repeating request with status: %#x, %s", status, GetErrorStr(status));
+    Log::assert_or_die(status == ACAMERA_OK, "ACameraCaptureSession_setRepeatingRequest failed: %s", GetErrorStr(status));
+
+    ANativeWindow_release(native_window); // Release the reference we acquired
   }
 
   ACameraDevice_stateCallbacks* GetDeviceListener() {
@@ -354,6 +376,19 @@ private:
   }
 
   void FreeNativeCameraResources() {
+    // This function must be called with the capture_mutex_ held.
+    if (capture_session_ != nullptr) {
+      ACameraCaptureSession_stopRepeating(capture_session_);
+      // According to NDK docs, ACameraCaptureSession_close is synchronous and waits for busy captures to complete.
+      ACameraCaptureSession_close(capture_session_);
+      capture_session_ = nullptr;
+    }
+
+    if (cameraDevice_ != nullptr) {
+      ACameraDevice_close(cameraDevice_);
+      cameraDevice_ = nullptr;
+    }
+
     if (output_container_ != nullptr) {
       ACaptureSessionOutputContainer_free(output_container_);
       output_container_ = nullptr;
@@ -370,11 +405,6 @@ private:
       ACaptureRequest_free(capture_request_);
       capture_request_ = nullptr;
     }
-    if (cameraDevice_ != nullptr) {
-      ACameraDevice_close(cameraDevice_);
-      cameraDevice_ = nullptr;
-    }
-    capture_session_ = nullptr;
   }
 };
 

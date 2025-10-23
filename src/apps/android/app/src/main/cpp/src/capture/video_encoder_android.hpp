@@ -120,9 +120,20 @@ public:
 
   void UpdateConfig(VideoConfig new_config) {
     const std::lock_guard<std::mutex> lock(encoder_mutex_);
+
+    const bool needs_reconfiguration = (config_.width != new_config.width ||
+                                        config_.height != new_config.height ||
+                                        config_.bitrate != new_config.bitrate ||
+                                        config_.frameRate != new_config.frameRate);
+
     config_ = new_config;
-    if (status == STARTED) {
+
+    if (status == STARTED && needs_reconfiguration) {
+      LOGI << "Encoder parameters changed, performing full reconfiguration.";
       configureCodec();
+    } else {
+      LOGI << "Encoder config updated. New rotation is %d. Full reconfiguration not required.", config_.rotation;
+      isSeiInsertRequired = true; // Ensure we send new rotation metadata
     }
   }
 
@@ -203,10 +214,10 @@ public:
     // Construct the SEI message content
     std::string_view rotation_str_part;
     switch (rotation) {
-        case 90: rotation_str_part = "90"; break;
-        case 180: rotation_str_part = "180"; break;
-        case 270: rotation_str_part = "270"; break;
-        default: rotation_str_part = "0"; break;
+      case 90: rotation_str_part = "90"; break;
+      case 180: rotation_str_part = "180"; break;
+      case 270: rotation_str_part = "270"; break;
+      default: rotation_str_part = "0"; break;
     }
     const std::string rotation_text = std::string("rotation-degrees:") + std::string(rotation_str_part);
     std::vector<std::byte> payload;
