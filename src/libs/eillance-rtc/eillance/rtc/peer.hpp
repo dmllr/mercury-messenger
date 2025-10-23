@@ -3,6 +3,8 @@
 #include <shared_mutex>
 #include <utility>
 #include <atomic>
+#include <optional>
+#include <vector>
 
 #include "eillance/crypto/crypto.hpp"
 #include <rtc/rtc.hpp>
@@ -52,6 +54,8 @@ struct Peer {
   std::shared_ptr<rtc::PeerConnection> media_peer_connection_{nullptr};
   std::unique_ptr<crypto::SessionCipher> session_cipher_;
   std::atomic<bool> incoming_call_notified_{false};
+  std::optional<std::string> pending_offer_sdp;
+  std::vector<rtc::Candidate> pending_candidates;
 
   void SetState(State state) {
     const auto lock = std::unique_lock(mutex_);

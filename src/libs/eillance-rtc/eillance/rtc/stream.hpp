@@ -90,10 +90,6 @@ private:
 
     const auto current_time = Time::Now();
 
-    TELEMETRY(
-        LOGD << "AT: " << audio_->GetSampleTime() << "\n"
-             << "VT: " << video_->GetSampleTime() << "\n"
-             << " T: " << ((srct == Source::Type::audio) ? "Audio" : "Video") << "\n";)
     if (next_time > current_time) {
       const auto wait_time = next_time - current_time;
       std::this_thread::sleep_for(std::chrono::microseconds(wait_time));

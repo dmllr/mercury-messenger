@@ -179,7 +179,7 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     return JNI_ERR;
   }
 
-  Log::InitializeDefault(plog::info);
+  Log::InitializeDefault(plog::debug);
 
   try {
     auto& classref = ClassRefs::Instance();
