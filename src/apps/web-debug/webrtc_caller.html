@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Mercury WebRTC Caller</title>
+    <style>
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background-color: #f0f0f0; }
+        .container { display: flex; gap: 20px; margin-top: 20px; }
+        video { border: 1px solid black; width: 480px; height: 360px; background-color: #333; }
+        .controls, .logs { border: 1px solid #ccc; padding: 15px; border-radius: 8px; background-color: #fff; width: 480px; }
+        .controls div { margin-bottom: 10px; }
+        label { display: inline-block; width: 150px; }
+        input { width: 300px; }
+        button { margin-right: 10px; padding: 8px 12px; }
+        #log { height: 300px; overflow-y: scroll; border: 1px solid #eee; padding: 5px; font-family: monospace; font-size: 12px; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+<h1>Mercury WebRTC Caller (Web -> Android)</h1>
+<p>Open developer console (F12) and <strong>chrome://webrtc-internals</strong> for detailed diagnostics.</p>
+
+<div class="container">
+    <div>
+        <h3>Local Video</h3>
+        <video id="localVideo" autoplay muted playsinline></video>
+    </div>
+    <div>
+        <h3>Remote Video</h3>
+        <video id="remoteVideo" autoplay playsinline></video>
+    </div>
+</div>
+
+<div class="container">
+    <div class="controls">
+        <h3>Configuration & Actions</h3>
+        <div>
+            <label for="signalingUrl">Signaling Server:</label>
+            <input type="text" id="signalingUrl" value="ws://127.0.0.1:8000">
+        </div>
+        <div>
+            <label for="myId">My Peer ID:</label>
+            <input type="text" id="myId" value="web-client-caller-01">
+        </div>
+        <div>
+            <label for="peerId">Remote Peer ID:</label>
+            <input type="text" id="peerId" placeholder="Enter Android client's ID here">
+        </div>
+        <div>
+            <button id="connectButton">1. Connect to Server</button>
+            <button id="callButton" disabled>2. Call Peer</button>
+            <button id="hangupButton" disabled>Hang Up</button>
+        </div>
+    </div>
+    <div class="logs">
+        <h3>Logs</h3>
+        <div id="log"></div>
+    </div>
+</div>
+
+<script>
+    const signalingUrlInput = document.getElementById('signalingUrl');
+    const myIdInput = document.getElementById('myId');
+    const peerIdInput = document.getElementById('peerId');
+    const connectButton = document.getElementById('connectButton');
+    const callButton = document.getElementById('callButton');
+    const hangupButton = document.getElementById('hangupButton');
+    const localVideo = document.getElementById('localVideo');
+    const remoteVideo = document.getElementById('remoteVideo');
+    const logDiv = document.getElementById('log');
+
+    let ws;
+    let pc;
+    let localStream;
+    let myId;
+    let peerId;
+
+    // Full STUN/TURN configuration from your C++ code
+    const configuration = {
+        iceServers: [
+            { urls: 'stun:stun.relay.metered.ca:80' },
+            {
+                urls: 'turn:a.relay.metered.ca:80',
+                username: '49880a0f046c8990b1990b35',
+                credential: 'qZCNW/57EB8GwO3A'
+            },
+            {
+                urls: 'turn:a.relay.metered.ca:443',
+                username: '49880a0f046c8990b1990b35',
+                credential: 'qZCNW/57EB8GwO3A'
+            }
+        ]
+    };
+
+    function log(message) {
+        console.log(message);
+        logDiv.innerHTML += `[${new Date().toLocaleTimeString()}] ${message}\n`;
+        logDiv.scrollTop = logDiv.scrollHeight;
+    }
+
+    async function startLocalMedia() {
+        try {
+            log('Requesting local media...');
+            localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            localVideo.srcObject = localStream;
+            log('Local media stream obtained.');
+        } catch (e) {
+            log(`Error getting user media: ${e.name}`);
+            alert(`Could not access camera and microphone: ${e.name}`);
+        }
+    }
+
+    connectButton.onclick = () => {
+        myId = myIdInput.value;
+        if (!myId) {
+            alert('Please enter a Peer ID for this client.');
+            return;
+        }
+
+        const url = signalingUrlInput.value;
+        log(`Connecting to signaling server at ${url}...`);
+        ws = new WebSocket(url);
+
+        ws.onopen = () => {
+            log('WebSocket connection established.');
+            const loginMsg = { type: 'login', id: myId };
+            ws.send(JSON.stringify(loginMsg));
+            log(`Sent login as: ${myId}`);
+            connectButton.disabled = true;
+            callButton.disabled = false;
+        };
+
+        ws.onmessage = (event) => {
+            const message = JSON.parse(event.data);
+            log(`<< Received message: ${message.type}`);
+            console.log(message);
+
+            switch (message.type) {
+                case 'answer':
+                    handleAnswer(message);
+                    break;
+                case 'candidate':
+                    handleCandidate(message);
+                    break;
+                case 'error':
+                    log(`Signaling error: ${message.message}`);
+                    break;
+                default:
+                    log(`Unknown/unhandled message type: ${message.type}`);
+                    break;
+            }
+        };
+
+        ws.onclose = () => {
+            log('WebSocket connection closed.');
+            connectButton.disabled = false;
+            callButton.disabled = true;
+            hangupButton.disabled = true;
+        };
+
+        ws.onerror = (error) => {
+            log('WebSocket error. See console for details.');
+            console.error(error);
+        };
+    };
+
+    callButton.onclick = async () => {
+        peerId = peerIdInput.value;
+        if (!peerId) {
+            alert('Please enter the Remote Peer ID to call.');
+            return;
+        }
+
+        log(`Starting call to ${peerId}...`);
+        callButton.disabled = true;
+        hangupButton.disabled = false;
+
+        createPeerConnection();
+
+        localStream.getTracks().forEach(track => {
+            pc.addTrack(track, localStream);
+            log(`Added local ${track.kind} track.`);
+        });
+
+        try {
+            log('Creating SDP offer...');
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+
+            log('Sending offer to peer.');
+            const offerMsg = { to: peerId, type: 'offer', sdp: offer.sdp };
+            ws.send(JSON.stringify(offerMsg));
+        } catch (e) {
+            log(`Error creating offer: ${e}`);
+        }
+    };
+
+    hangupButton.onclick = () => {
+        log('Hanging up.');
+        if (pc) {
+            pc.close();
+            pc = null;
+        }
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            // Optionally send a termination message if your server/client handles it
+            ws.close();
+        }
+        callButton.disabled = false;
+        hangupButton.disabled = true;
+        remoteVideo.srcObject = null;
+    };
+
+
+    function createPeerConnection() {
+        log('Creating RTCPeerConnection...');
+        pc = new RTCPeerConnection(configuration);
+
+        pc.onicecandidate = event => {
+            if (event.candidate) {
+                log('Generated ICE candidate, sending to peer.');
+                const candidateMsg = {
+                    to: peerId,
+                    type: 'candidate',
+                    candidate: event.candidate.candidate,
+                    sdpMid: event.candidate.sdpMid,
+                };
+                ws.send(JSON.stringify(candidateMsg));
+            } else {
+                log('All ICE candidates have been sent.');
+            }
+        };
+
+        pc.ontrack = event => {
+            log(`** Received remote ${event.track.kind} track! **`);
+            if (remoteVideo.srcObject !== event.streams[0]) {
+                remoteVideo.srcObject = event.streams[0];
+                log('Attached remote stream to video element.');
+            }
+        };
+
+        pc.onconnectionstatechange = () => log(`Connection state change: <strong>${pc.connectionState}</strong>`);
+        pc.oniceconnectionstatechange = () => log(`ICE connection state change: <strong>${pc.iceConnectionState}</strong>`);
+    }
+
+    async function handleAnswer(answerMsg) {
+        log('Received answer from peer.');
+        try {
+            await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: answerMsg.sdp }));
+            log('Remote description (answer) set.');
+        } catch (e) {
+            log(`Error setting remote description: ${e}`);
+        }
+    }
+
+    async function handleCandidate(candidateMsg) {
+        log('Received ICE candidate from peer.');
+        try {
+            if(candidateMsg.candidate) {
+                const candidate = new RTCIceCandidate({
+                    candidate: candidateMsg.candidate,
+                    sdpMid: candidateMsg.sdpMid,
+                });
+                await pc.addIceCandidate(candidate);
+                log('Added remote ICE candidate.');
+            }
+        } catch (e) {
+            log(`Error adding received ICE candidate: ${e}`);
+        }
+    }
+
+    window.onload = startLocalMedia;
+</script>
+</body>
+</html>
