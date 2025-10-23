@@ -1,6 +1,5 @@
 #pragma once
 
-#include <filesystem>
 #include <memory>
 #include <utility>
 
@@ -79,10 +78,6 @@ class RtcClient final : public RtcTransportDelegate {
   std::unordered_map<std::string, Device> online_peers_;
   mutable std::mutex online_peers_mutex_;
 
-  enum class PendingCallType { None, Voice, Video };
-  std::unordered_map<std::string, PendingCallType> pending_calls_;
-  std::mutex pending_calls_mutex_;
-
 public:
   explicit RtcClient(std::shared_ptr<storage::PersistentStorage> storage, Capture video_capture)
       : storage_(std::move(storage)) {
@@ -112,27 +107,9 @@ public:
     transport_->SetStatusCallback([this](const std::string& peer_id, const EventSource source, int state_val) {
       if (source == EventSource::peerConnectionState) {
         const auto state = static_cast<rtc::PeerConnection::State>(state_val);
-        if (state == rtc::PeerConnection::State::Connected) {
-          PendingCallType call_type;
-          {
-            std::lock_guard<std::mutex> lock(pending_calls_mutex_);
-            if (auto it = pending_calls_.find(peer_id); it != pending_calls_.end()) {
-              call_type = it->second;
-              pending_calls_.erase(it);
-            } else {
-              call_type = PendingCallType::None;
-            }
-          }
-          if (call_type == PendingCallType::Voice) {
-            ActuallyStartVoiceCall(peer_id);
-          } else if (call_type == PendingCallType::Video) {
-            ActuallyStartVideoCall(peer_id);
-          }
-        } else if (state == rtc::PeerConnection::State::Failed || state == rtc::PeerConnection::State::Closed || state == rtc::PeerConnection::State::Disconnected) {
-          {
-            std::lock_guard<std::mutex> lock(pending_calls_mutex_);
-            pending_calls_.erase(peer_id);
-          }
+        if (state == rtc::PeerConnection::State::Failed || state == rtc::PeerConnection::State::Closed ||
+            state == rtc::PeerConnection::State::Disconnected) {
+          // This could be for either data or media. The delivery service only cares about the data channel.
           delivery_service_->connectionAttemptFinished(peer_id);
         }
       }
@@ -198,60 +175,39 @@ public:
       LOGW << "Already connected or connecting to peer " << peer_id;
       return;
     }
-    const auto peer = transport_->CreatePeer(peer_id);
-    peer->data_channel_ = CreateDataChannel(peer, peer_id, "data");
+    const auto peer = std::make_shared<Peer>(transport_->CreatePeerConnection(peer_id, "data"));
+    peer->data_channel_ = CreateDataChannel(peer, peer_id);
     transport_->AddPeer(peer_id, peer);
-    peer->peer_connection_->setLocalDescription();
   }
 
   void StartVoiceCall(const std::string& peer_id) {
-    if (transport_->GetPeerConnectionState(peer_id) == rtc::PeerConnection::State::Connected) {
-      LOGI << "Peer " << peer_id << " is already connected. Starting voice call.";
-      ActuallyStartVoiceCall(peer_id);
-    } else {
-      LOGI << "Peer " << peer_id << " is not connected. Queuing voice call and initiating connection.";
-      {
-        std::lock_guard<std::mutex> lock(pending_calls_mutex_);
-        pending_calls_[peer_id] = PendingCallType::Voice;
-      }
-      Connect(peer_id);
-    }
+    StartMediaCall(peer_id, false);
   }
 
   void StartVideoCall(const std::string& peer_id) {
-    if (transport_->GetPeerConnectionState(peer_id) == rtc::PeerConnection::State::Connected) {
-      LOGI << "Peer " << peer_id << " is already connected. Starting video call.";
-      ActuallyStartVideoCall(peer_id);
-    } else {
-      LOGI << "Peer " << peer_id << " is not connected. Queuing video call and initiating connection.";
-      {
-        std::lock_guard<std::mutex> lock(pending_calls_mutex_);
-        pending_calls_[peer_id] = PendingCallType::Video;
-      }
-      Connect(peer_id);
-    }
+    StartMediaCall(peer_id, true);
   }
 
   void AcceptCall(const std::string& peer_id) {
     auto peer = transport_->GetPeer(peer_id);
-    if (!peer) {
-      LOGW << "Cannot accept call from " << peer_id << ", no peer connection found.";
+    if (!peer || !peer->media_peer_connection_) {
+      LOGW << "Cannot accept call from " << peer_id << ", no media peer connection found.";
       return;
     }
     // For now, we assume we always answer with audio and video if they were offered.
     // A more advanced implementation might check the remote description.
+    av_stream_->Start();
     if (!peer->audio_) {
-      peer->audio_ = AddAudio(peer->peer_connection_, [this, wpeer = make_weak_ptr(peer)]() {
+      peer->audio_ = AddAudio(peer->media_peer_connection_, [this, wpeer = make_weak_ptr(peer)]() {
         if (const auto p = wpeer.lock()) { transport_->AddToStream(p, false); }
       });
     }
     if (!peer->video_) {
-      peer->video_ = AddVideo(peer->peer_connection_, [this, wpeer = make_weak_ptr(peer)]() {
+      peer->video_ = AddVideo(peer->media_peer_connection_, [this, wpeer = make_weak_ptr(peer)]() {
         if (const auto p = wpeer.lock()) { transport_->AddToStream(p, true); }
       });
     }
-    peer->peer_connection_->setLocalDescription(); // This will generate an answer with our media
-    av_stream_->Start();
+    peer->media_peer_connection_->setLocalDescription(); // This will generate an answer with our media
   }
 
   void RejectCall(const std::string& peer_id) {
@@ -302,12 +258,17 @@ public:
 
   void Hangup(const std::string& peer_id) const {
     if (const auto peer = transport_->GetPeer(peer_id); peer != nullptr) {
-      if (peer->data_channel_ && peer->data_channel_->isOpen()) {
-        const Json message = {{"type", "termination"}};
-        transport_->SendPeerDataChannelMessage(peer->data_channel_, message);
-      }
-      peer->peer_connection_->close();
-      transport_->RemovePeer(peer_id);
+        if (peer->media_peer_connection_) {
+            LOGI << "Closing media peer connection for " << peer_id;
+            peer->media_peer_connection_->close();
+            peer->media_peer_connection_ = nullptr;
+            peer->audio_ = nullptr;
+            peer->video_ = nullptr;
+            av_stream_->Stop();
+        } else {
+            LOGW << "Hangup called for " << peer_id << ", but no media connection was found.";
+        }
+        // The data connection is intentionally left open.
     }
   }
 
@@ -351,7 +312,7 @@ public:
       // Also, the PeerConnection object created for this attempt is now useless,
       // so we should close and remove it.
       if (const auto peer = transport_->GetPeer(peer_id)) {
-        peer->peer_connection_->close();
+        peer->data_peer_connection_->close();
       }
     }
   }
@@ -369,57 +330,65 @@ public:
     }
     auto type = type_it->get<std::string>();
 
-    if (type == "offer") {
-      // For now, we assume an offer implies a voice call, this can be refined by inspecting the SDP.
-      message_history_->AddCallEntry(peer_id, messaging::HistoryEntryKind::voiceCall, messaging::CallDirection::incoming, messaging::CallStatus::answered); // Placeholder
-      std::shared_ptr<Peer> peer = transport_->GetPeer(peer_id);
+    const auto context = message.value("context", "data");
 
-      if (peer && peer->peer_connection_->signalingState() == rtc::PeerConnection::SignalingState::HaveLocalOffer) {
-        // Glare condition detected. We have a local offer and received a remote offer.
-        // We use lexicographical comparison of IDs as a tie-breaker.
-        const bool am_i_polite = GetId() < peer_id;
-
-        if (am_i_polite) {
-          LOGW << "Glare detected, and our ID is smaller. We will be 'polite', "
-               << "rolling back our local offer and accepting the remote one.";
-          // To roll back, we destroy the current peer connection and create a new one.
-          transport_->RemovePeer(peer_id);
-          peer = nullptr; // Ensure we fall into the "new peer" logic below.
-        } else {
-          LOGW << "Glare detected, and our ID is larger. We will be 'impolite', "
-               << "ignoring the remote offer and proceeding with ours.";
-          return; // Ignore the incoming offer.
+    if (context == "media") {
+        std::shared_ptr<Peer> peer = transport_->GetPeer(peer_id);
+        if (!peer) {
+            LOGI << "Received media message for unknown peer " << peer_id << ". Creating peer object.";
+            Connect(peer_id); // create the data peer first
+            peer = transport_->GetPeer(peer_id);
         }
+
+        if (!peer->media_peer_connection_) {
+            LOGI << "Creating media peer connection for " << peer_id << " to handle incoming message.";
+            peer->media_peer_connection_ = transport_->CreatePeerConnection(peer_id, "media");
+        }
+
+        if (type == "offer") {
+            const auto sdp = message["sdp"].get<std::string>();
+            peer->media_peer_connection_->setRemoteDescription(rtc::Description(sdp, rtc::Description::Type::Offer));
+        } else if (type == "answer") {
+            const auto sdp = message["sdp"].get<std::string>();
+            const auto answer = rtc::Description(sdp, type);
+            peer->media_peer_connection_->setRemoteDescription(answer);
+        } else if (type == "candidate") {
+            const auto candidate = message["candidate"].get<std::string>();
+            const auto mid = message["sdpMid"].get<std::string>();
+            peer->media_peer_connection_->addRemoteCandidate(rtc::Candidate(candidate, mid));
+        }
+        return;
+    }
+
+    // Default to data channel logic
+    if (type == "offer") {
+      std::shared_ptr<Peer> peer = transport_->GetPeer(peer_id);
+      if (peer) {
+        LOGW << "Glare detected on data channel for peer " << peer_id << ". Ignoring subsequent offer.";
+        return;
       }
 
-      if (!peer) {
-        LOGI << "Received offer for new peer " << peer_id;
-        peer = transport_->CreatePeer(peer_id);
-        peer->peer_connection_->onDataChannel([this, peer_id, wpeer = std::weak_ptr(peer)](
-            const std::shared_ptr<rtc::DataChannel>& data_channel) {
-          if (auto p = wpeer.lock()) {
-            if (data_channel->label() == "data") {
-              SetupDataChannel(p, peer_id, data_channel);
-            } else {
-              LOGW << "Ignoring unexpected data channel with label: " << data_channel->label();
-            }
-          }
-        });
-        transport_->AddPeer(peer_id, peer);
-      }
+      peer = std::make_shared<Peer>(transport_->CreatePeerConnection(peer_id, "data"));
+      peer->data_peer_connection_->onDataChannel([this, peer_id, wpeer = std::weak_ptr(peer)](
+          const std::shared_ptr<rtc::DataChannel>& data_channel) {
+        if (auto p = wpeer.lock()) {
+          SetupDataChannel(p, peer_id, data_channel);
+        }
+      });
+      transport_->AddPeer(peer_id, peer);
       const auto sdp = message["sdp"].get<std::string>();
-      peer->peer_connection_->setRemoteDescription(rtc::Description(sdp, rtc::Description::Type::Offer));
+      peer->data_peer_connection_->setRemoteDescription(rtc::Description(sdp, rtc::Description::Type::Offer));
     } else if (type == "answer") {
       if (const auto peer = transport_->GetPeer(peer_id); peer != nullptr) {
         const auto sdp = message["sdp"].get<std::string>();
         const auto answer = rtc::Description(sdp, type);
-        peer->peer_connection_->setRemoteDescription(answer);
+        peer->data_peer_connection_->setRemoteDescription(answer);
       }
     } else if (type == "candidate") {
       if (const auto peer = transport_->GetPeer(peer_id); peer != nullptr) {
         const auto candidate = message["candidate"].get<std::string>();
         const auto mid = message["sdpMid"].get<std::string>();
-        peer->peer_connection_->addRemoteCandidate(rtc::Candidate(candidate, mid));
+        peer->data_peer_connection_->addRemoteCandidate(rtc::Candidate(candidate, mid));
       }
     } else if (type == "contact_add_request") {
       // If we already have this peer as a confirmed contact, it means they missed
@@ -573,40 +542,34 @@ public:
   }
 
 private:
-  void ActuallyStartVoiceCall(const std::string& peer_id) {
-    const auto peer = transport_->GetPeer(peer_id);
-    if (!peer) {
-      LOGW << "Cannot start voice call, peer object not found for " << peer_id;
-      return;
-    }
-    if (!peer->audio_) {
-      peer->audio_ = AddAudio(peer->peer_connection_, [this, wpeer = make_weak_ptr(peer)]() {
-        if (const auto p = wpeer.lock()) {
-          transport_->AddToStream(p, false);
-        }
-      });
-      peer->peer_connection_->setLocalDescription();
-    }
-    message_history_->AddCallEntry(peer_id, messaging::HistoryEntryKind::voiceCall, messaging::CallDirection::outgoing, messaging::CallStatus::answered); // Placeholder status
+  void StartMediaCall(const std::string& peer_id, bool is_video) {
     av_stream_->Start();
-  }
+    auto peer = transport_->GetPeer(peer_id);
+    if (!peer) {
+      LOGI << "Peer " << peer_id << " not found for call. Creating new peer object.";
+      Connect(peer_id); // This creates the peer object with the data connection.
+      peer = transport_->GetPeer(peer_id);
+    }
 
-  void ActuallyStartVideoCall(const std::string& peer_id) {
-    const auto peer = transport_->GetPeer(peer_id);
-    if (!peer) {
-      LOGW << "Cannot start video call, peer object not found for " << peer_id;
-      return;
+    if (peer->media_peer_connection_) {
+        LOGW << "Media connection already exists for peer " << peer_id << ", cannot start a new call.";
+        av_stream_->Stop(); // We started it optimistically
+        return;
     }
-    if (!peer->video_) {
-      peer->video_ = AddVideo(peer->peer_connection_, [this, wpeer = make_weak_ptr(peer)]() {
-        if (const auto p = wpeer.lock()) {
-          transport_->AddToStream(p, true);
-        }
-      });
-      peer->peer_connection_->setLocalDescription();
+    peer->media_peer_connection_ = transport_->CreatePeerConnection(peer_id, "media");
+
+    const auto history_kind = is_video ? messaging::HistoryEntryKind::videoCall : messaging::HistoryEntryKind::voiceCall;
+    message_history_->AddCallEntry(peer_id, history_kind, messaging::CallDirection::outgoing, messaging::CallStatus::answered);
+
+    peer->audio_ = AddAudio(peer->media_peer_connection_, [this, wpeer = make_weak_ptr(peer)]() {
+        if (const auto p = wpeer.lock()) { transport_->AddToStream(p, false); }
+    });
+    if (is_video) {
+        peer->video_ = AddVideo(peer->media_peer_connection_, [this, wpeer = make_weak_ptr(peer)]() {
+            if (const auto p = wpeer.lock()) { transport_->AddToStream(p, true); }
+        });
     }
-    message_history_->AddCallEntry(peer_id, messaging::HistoryEntryKind::videoCall, messaging::CallDirection::outgoing, messaging::CallStatus::answered); // Placeholder status
-    av_stream_->Start();
+    peer->media_peer_connection_->setLocalDescription();
   }
 
   void UpdateAndNotifyPeerList() const {
@@ -808,9 +771,9 @@ private:
     });
   }
 
-  auto CreateDataChannel(const std::shared_ptr<Peer>& peer, const std::string& peer_id, const std::string& label) -> std::shared_ptr<rtc::DataChannel> {
-    auto data_channel = peer->peer_connection_->createDataChannel(label);
-    SetupDataChannel(peer, peer_id, data_channel);
+  auto CreateDataChannel(const std::shared_ptr<Peer>& peer, const std::string& peer_id) -> std::shared_ptr<rtc::DataChannel> {
+    auto data_channel = peer->data_peer_connection_->createDataChannel("data");
+    SetupDataChannel(peer, peer_id, data_channel); // Sets up callbacks
     return data_channel;
   }
 

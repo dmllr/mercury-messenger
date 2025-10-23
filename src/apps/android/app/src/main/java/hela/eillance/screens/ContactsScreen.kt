@@ -32,7 +32,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import hela.eillance.MainViewModel
 import hela.eillance.ndkio.AppState
 import hela.eillance.ndkio.Contact
@@ -152,7 +151,7 @@ fun ContactListItem(contact: Contact, onClick: () -> Unit, onAccept: () -> Unit,
         },
         modifier = Modifier.clickable(
             // Only allow clicking confirmed contacts to open the interaction screen
-            enabled = contact.status == ContactStatus.confirmed,
+            enabled = true,//contact.status == ContactStatus.confirmed,
             onClick = onClick
         ),
         colors = ListItemDefaults.colors(containerColor = Color.Transparent)

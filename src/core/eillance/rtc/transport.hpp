@@ -146,8 +146,8 @@ public:
   auto GetPeerConnectionState(const std::string& peer_id) const -> rtc::PeerConnection::State {
     std::lock_guard<std::mutex> lock(peers_mutex_);
     const auto it = peers_.find(peer_id);
-    if (it != peers_.end() && it->second && it->second->peer_connection_) {
-      return it->second->peer_connection_->state();
+    if (it != peers_.end() && it->second && it->second->data_peer_connection_) {
+      return it->second->data_peer_connection_->state();
     }
     return rtc::PeerConnection::State::Disconnected;
   }
@@ -155,11 +155,6 @@ public:
   void RemovePeer(const std::string& peer_id) {
     std::lock_guard<std::mutex> lock(peers_mutex_);
     peers_.erase(peer_id);
-  }
-
-  auto CreatePeer(const std::string& peer_id) -> std::shared_ptr<Peer> {
-    auto peer = std::make_shared<Peer>(CreatePeerConnection(peer_id));
-    return peer;
   }
 
   void SendSignalingMessage(const Json& message) const {
@@ -190,6 +185,84 @@ public:
     if (peer->GetState() == Peer::State::ready && delegate_) {
       delegate_->OnPeerReady(peer);
     }
+  }
+
+  auto CreatePeerConnection(const std::string& peer_id, const std::string& context) -> std::shared_ptr<rtc::PeerConnection> {
+    auto peer_connection = std::make_shared<rtc::PeerConnection>(RtcConfiguration::Config());
+
+    peer_connection->onStateChange([this, peer_id, context](rtc::PeerConnection::State state) {
+      std::string stateStr = "unknown";
+      switch(state) {
+        case rtc::PeerConnection::State::New: stateStr = "New"; break;
+        case rtc::PeerConnection::State::Connecting: stateStr = "Connecting";break;
+        case rtc::PeerConnection::State::Connected: stateStr = "Connected";break;
+        case rtc::PeerConnection::State::Disconnected: stateStr = "Disconnected";break;
+        case rtc::PeerConnection::State::Failed: stateStr = "Failed";break;
+        case rtc::PeerConnection::State::Closed: stateStr = "Closed";break;
+      }
+      LOGI << "Peer " << peer_id << " (" << context << ") state changed to " << stateStr << " (" << static_cast<int>(state) << ")";
+      ReportPeerStateChange(peer_id, EventSource::peerConnectionState, static_cast<int>(state));
+
+      if (state == rtc::PeerConnection::State::Failed ||
+          state == rtc::PeerConnection::State::Disconnected) {
+        if (const auto peer = GetPeer(peer_id)) {
+          LOGI << "Closing failed/disconnected " << context << " peer connection for " << peer_id;
+          // Only close the specific connection, not the whole peer object
+          if (context == "media" && peer->media_peer_connection_) peer->media_peer_connection_->close();
+          // Data channel connection closure is handled by the main reconnect logic
+        }
+      } else if (state == rtc::PeerConnection::State::Closed) {
+        LOGI << "Peer connection for " << peer_id << " is closed. Removing from transport.";
+        DispatchQueue::MainThread().Dispatch([this, peer_id]() {
+          RemovePeer(peer_id);
+          if (delegate_) {
+            delegate_->OnPeerOffline(peer_id);
+          }
+        });
+      }
+    });
+
+    peer_connection->onLocalDescription([this, peer_id, context](const rtc::Description& description) {
+      Json message = {
+          {"type", description.typeString()},
+          {"sdp", std::string(description)},
+          {"context", context}
+      };
+      message["to"] = peer_id;
+      WsSendMessage(message);
+    });
+
+    peer_connection->onLocalCandidate([this, peer_id, context](const rtc::Candidate& candidate) {
+      Json message = {
+          {"type", "candidate"},
+          {"candidate", std::string(candidate)},
+          {"sdpMid", candidate.mid()},
+          {"context", context}
+      };
+      message["to"] = peer_id;
+      WsSendMessage(message);
+    });
+
+    peer_connection->onIceStateChange([this, peer_id](rtc::PeerConnection::IceState state) {
+      LOGI << "ICE State: " << static_cast<int>(state);
+      ReportPeerStateChange(peer_id, EventSource::iceState, static_cast<int>(state));
+    });
+
+    peer_connection->onGatheringStateChange([this, peer_id](rtc::PeerConnection::GatheringState state) {
+      LOGI << "Gathering State: " << static_cast<int>(state);
+      ReportPeerStateChange(peer_id, EventSource::gatheringState, static_cast<int>(state));
+    });
+
+    peer_connection->onSignalingStateChange([this, peer_id](rtc::PeerConnection::SignalingState state) {
+      LOGI << "Signaling State: " << static_cast<int>(state);
+      ReportPeerStateChange(peer_id, EventSource::signalingState, static_cast<int>(state));
+    });
+
+    peer_connection->onTrack([this, peer_id](const std::shared_ptr<rtc::Track>& track) {
+      delegate_->OnTrack(peer_id, track);
+    });
+
+    return peer_connection;
   }
 
 private:
@@ -239,8 +312,8 @@ private:
     }
 
     for (const auto& peer : peers_to_close) {
-      if(peer && peer->peer_connection_) {
-        peer->peer_connection_->close();
+      if(peer && peer->data_peer_connection_) {
+        peer->data_peer_connection_->close();
       }
     }
 
@@ -317,80 +390,6 @@ private:
     WsSendMessage(message);
     is_logged_in_ = true;
     ReportServiceConnectionState(ServiceConnectionState::online);
-  }
-
-  auto CreatePeerConnection(const std::string& peer_id) -> std::shared_ptr<rtc::PeerConnection> {
-    auto peer_connection = std::make_shared<rtc::PeerConnection>(RtcConfiguration::Config());
-
-    peer_connection->onStateChange([this, peer_id](rtc::PeerConnection::State state) {
-      std::string stateStr = "unknown";
-      switch(state) {
-        case rtc::PeerConnection::State::New: stateStr = "New"; break;
-        case rtc::PeerConnection::State::Connecting: stateStr = "Connecting"; break;
-        case rtc::PeerConnection::State::Connected: stateStr = "Connected"; break;
-        case rtc::PeerConnection::State::Disconnected: stateStr = "Disconnected"; break;
-        case rtc::PeerConnection::State::Failed: stateStr = "Failed"; break;
-        case rtc::PeerConnection::State::Closed: stateStr = "Closed"; break;
-      }
-      LOGI << "Peer " << peer_id << " state changed to " << stateStr << " (" << static_cast<int>(state) << ")";
-      ReportPeerStateChange(peer_id, EventSource::peerConnectionState, static_cast<int>(state));
-
-      if (state == rtc::PeerConnection::State::Failed ||
-          state == rtc::PeerConnection::State::Disconnected) {
-        if (const auto peer = GetPeer(peer_id)) {
-          LOGI << "Closing failed/disconnected peer connection for " << peer_id;
-          peer->peer_connection_->close();
-        }
-      } else if (state == rtc::PeerConnection::State::Closed) {
-        LOGI << "Peer connection for " << peer_id << " is closed. Removing from transport.";
-        DispatchQueue::MainThread().Dispatch([this, peer_id]() {
-          RemovePeer(peer_id);
-          if (delegate_) {
-            delegate_->OnPeerOffline(peer_id);
-          }
-        });
-      }
-    });
-
-    peer_connection->onLocalDescription([this, peer_id](const rtc::Description& description) {
-      Json message = {
-          {"type", description.typeString()},
-          {"sdp", std::string(description)}
-      };
-      message["to"] = peer_id;
-      WsSendMessage(message);
-    });
-
-    peer_connection->onLocalCandidate([this, peer_id](const rtc::Candidate& candidate) {
-      Json message = {
-          {"type", "candidate"},
-          {"candidate", std::string(candidate)},
-          {"sdpMid", candidate.mid()}
-      };
-      message["to"] = peer_id;
-      WsSendMessage(message);
-    });
-
-    peer_connection->onIceStateChange([this, peer_id](rtc::PeerConnection::IceState state) {
-      LOGI << "ICE State: " << static_cast<int>(state);
-      ReportPeerStateChange(peer_id, EventSource::iceState, static_cast<int>(state));
-    });
-
-    peer_connection->onGatheringStateChange([this, peer_id](rtc::PeerConnection::GatheringState state) {
-      LOGI << "Gathering State: " << static_cast<int>(state);
-      ReportPeerStateChange(peer_id, EventSource::gatheringState, static_cast<int>(state));
-    });
-
-    peer_connection->onSignalingStateChange([this, peer_id](rtc::PeerConnection::SignalingState state) {
-      LOGI << "Signaling State: " << static_cast<int>(state);
-      ReportPeerStateChange(peer_id, EventSource::signalingState, static_cast<int>(state));
-    });
-
-    peer_connection->onTrack([this, peer_id](const std::shared_ptr<rtc::Track>& track) {
-      delegate_->OnTrack(peer_id, track);
-    });
-
-    return peer_connection;
   }
 
   void OnSystemMessage(Json message) const {

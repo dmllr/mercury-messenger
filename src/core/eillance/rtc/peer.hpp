@@ -41,14 +41,15 @@ struct Peer {
     ready
   };
 
-  explicit Peer(std::shared_ptr<rtc::PeerConnection> pc) : peer_connection_(std::move(pc)) {
+  explicit Peer(std::shared_ptr<rtc::PeerConnection> pc) : data_peer_connection_(std::move(pc)) {
     session_cipher_ = std::make_unique<crypto::SessionCipher>();
   }
 
   std::shared_ptr<Track> video_;
   std::shared_ptr<Track> audio_;
   std::shared_ptr<rtc::DataChannel> data_channel_;
-  std::shared_ptr<rtc::PeerConnection> peer_connection_;
+  std::shared_ptr<rtc::PeerConnection> data_peer_connection_;
+  std::shared_ptr<rtc::PeerConnection> media_peer_connection_{nullptr};
   std::unique_ptr<crypto::SessionCipher> session_cipher_;
   std::atomic<bool> incoming_call_notified_{false};
 
