@@ -1,6 +1,10 @@
 project(signaling-server C CXX)
 
-include("../cmake/libdatachannel.cmake")
+set(root "../..")
+set(shared_src_path "${root}/src")
+set(shared_cmake_libs_path "${shared_src_path}/cmake")
+
+include("${shared_cmake_libs_path}/libdatachannel.cmake") # For plog
 
 add_executable(mercury-server
   mercury-server.cpp

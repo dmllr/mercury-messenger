@@ -38,6 +38,11 @@ inline void to_json(nlohmann::json& j, const Contact& c) {
       {"status", c.status}};
 }
 
+inline void from_json(const nlohmann::json& j, Contact& c) {
+    j.at("peer_id").get_to(c.peer_id);
+    j.at("status").get_to(c.status);
+}
+
 class ContactManager {
   static constexpr auto contactsFile = "contacts.json";
   std::shared_ptr<storage::PersistentStorage> storage_;
