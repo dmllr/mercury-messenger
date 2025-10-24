@@ -11,11 +11,10 @@
 namespace eillance {
 
 class StreamSource final : public Stream::Source {
-private:
   Capture capture_;
 
   Packet sample_{};
-  rtc::binary encoded_data_{};
+  std::vector<std::byte> encoded_data_{};
 
 public:
   ~StreamSource() = default;
@@ -25,31 +24,31 @@ public:
   StreamSource& operator=(StreamSource&&) = delete;
   StreamSource& operator=(const StreamSource&) = delete;
 
-  void Configure(Config config) final {
+  void Configure(Config config) override {
     capture_.Configure(config);
   }
 
-  void Start() final {
+  void Start() override {
     capture_.Engage();
   }
 
-  void LoadNextSample() final {
+  void LoadNextSample() override {
     sample_ = capture_.FetchBuffers();
   }
 
-  auto GetSample() -> rtc::binary final {
+  auto GetSample() -> std::vector<std::byte> override {
     return sample_.buffer();
   }
 
-  void Stop() final { // NOLINT
+  void Stop() override {
     capture_.Revoke();
   }
 
-  auto GetSampleTime() -> std::uint64_t final {
+  auto GetSampleTime() -> std::uint64_t override {
     return sample_.timestamp();
   }
 
-  auto GetSampleDuration() -> std::uint64_t final {
+  auto GetSampleDuration() -> std::uint64_t override {
     return capture_.GetSampleDuration();
   }
 };

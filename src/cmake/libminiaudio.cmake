@@ -1,3 +1,7 @@
+if (TARGET libminiaudio)
+  return()
+endif()
+
 import_remote("https://github.com/mackron/miniaudio.git" TAG "0.11.21" DST "${CMAKE_SOURCE_DIR}/_imported" NO_CMAKE ALIAS libminiaudio)
 
 add_library(libminiaudio INTERFACE

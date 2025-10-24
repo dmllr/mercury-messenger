@@ -3,7 +3,6 @@
 #include <chrono>
 #include <cstdint>
 #include <functional>
-#include <string>
 #include <thread>
 #include <utility>
 
@@ -11,15 +10,16 @@
 
 #include "eillance/utils/dispatch_queue.hpp"
 #include "eillance/capture/config.hpp"
-#include "eillance/logging/logging.h"
-#include "eillance/logging/telemetry.h"
-#include "eillance/rtc/peer.hpp"
-
+#include "eillance/transport/peer.hpp"
+#include "eillance/utils/time.hpp"
 
 namespace eillance {
 
 class Stream : std::enable_shared_from_this<Stream> {
 public:
+  // Using alias to avoid redundant namespace qualification
+  using Peer = eillance::transport::Peer;
+
   class Source {
   public:
     Source() = default;
@@ -40,7 +40,7 @@ public:
 
     virtual auto GetSampleTime() -> std::uint64_t = 0;
     virtual auto GetSampleDuration() -> std::uint64_t = 0;
-    virtual auto GetSample() -> rtc::binary = 0;
+    virtual auto GetSample() -> std::vector<std::byte> = 0;
 
   protected:
     ~Source() = default;
@@ -72,7 +72,7 @@ public:
   }
 
 private:
-  rtc::synchronized_callback<Source::Type, std::uint64_t, rtc::binary> sampleHandler_;
+  rtc::synchronized_callback<Source::Type, std::uint64_t, std::vector<std::byte>> sampleHandler_;
 
   auto UnsafePrepareForSample() const -> std::pair<std::shared_ptr<Source>, Source::Type> {
     std::shared_ptr<Source> src;
@@ -111,7 +111,7 @@ private:
   }
 
 public:
-  void OnSample(std::function<void(Source::Type, std::uint64_t, rtc::binary)> handler) {
+  void OnSample(std::function<void(Source::Type, std::uint64_t, std::vector<std::byte>)> handler) {
     sampleHandler_ = std::move(handler);
   }
 

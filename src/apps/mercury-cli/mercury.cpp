@@ -18,7 +18,8 @@
 #include "eillance/identity/contact_manager.hpp"
 #include "eillance/logging/logging.h"
 #include "eillance/messaging/history.hpp"
-#include "eillance/rtc/client.hpp"
+#include "eillance/client/client.hpp"
+#include "eillance/rtc/transport.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/utils/time.hpp"
 #include "eillance/view_model/mercury_view_model.hpp"
@@ -48,9 +49,9 @@ std::vector<std::string> GetContactMenuEntries(const std::vector<eillance::view_
 
     std::string conn_status_str;
     switch (contact.connection_state) {
-        case rtc::PeerConnection::State::Connecting: conn_status_str = " (Connecting)"; break;
-        case rtc::PeerConnection::State::Connected: conn_status_str = " (Connected)"; break;
-        case rtc::PeerConnection::State::Failed: conn_status_str = " (Failed)"; break;
+        case ::rtc::PeerConnection::State::Connecting: conn_status_str = " (Connecting)"; break;
+        case ::rtc::PeerConnection::State::Connected: conn_status_str = " (Connected)"; break;
+        case ::rtc::PeerConnection::State::Failed: conn_status_str = " (Failed)"; break;
         default: break;
     }
 
@@ -140,7 +141,6 @@ int main(int argc, char** argv) {
   auto config_path = std::filesystem::path(home_dir_env) / ".mercury" / config_name;
 
   // --- Logging Initialization ---
-  // Redirect logs to a file to prevent interference with the UI.
   auto log_file_path = config_path / "mercury-cli.log";
   std::filesystem::create_directories(log_file_path.parent_path());
   const auto u8_path = log_file_path.u8string();
@@ -152,12 +152,15 @@ int main(int argc, char** argv) {
   auto storage_impl = std::make_unique<eillance::storage::CliPersistentStorageImpl>(config_path);
   auto storage = std::make_shared<eillance::storage::PersistentStorage>(std::move(storage_impl));
   auto video_capture = eillance::Capture(std::make_unique<eillance::VideoCaptureCli>());
-  auto rtc_client = std::make_shared<eillance::RtcClient>(storage, std::move(video_capture));
+
+  // --- Dependency Injection ---
+  auto rtc_transport_impl = std::make_unique<eillance::rtc::RtcTransport>();
+  auto transport = std::make_shared<eillance::transport::Transport>(std::move(rtc_transport_impl));
+  auto client = std::make_shared<eillance::Client>(storage, std::move(video_capture), transport);
 
   // --- ViewModel Initialization ---
-  auto view_model = std::make_unique<eillance::view_model::MercuryViewModel>(rtc_client);
+  auto view_model = std::make_unique<eillance::view_model::MercuryViewModel>(client);
 
-  // Connect UI to ViewModel. The ViewModel will notify the UI when to redraw.
   view_model->SetOnStateChangedCallback([&] { screen.Post(ftxui::Event::Custom); });
 
   // --- UI Components ---
@@ -204,7 +207,7 @@ int main(int argc, char** argv) {
                 content = std::get<eillance::messaging::MessageEntry>(entry.data).content;
                 auto timestamp_str = FormatTimestamp(entry.timestamp);
                 elements.push_back(ftxui::text(prefix + content + suffix));
-                elements.push_back(ftxui::text("  ΓööΓöÇ " + timestamp_str) | ftxui::dim);
+                elements.push_back(ftxui::text("  · " + timestamp_str) | ftxui::dim);
                 break;
             }
             case eillance::messaging::HistoryEntryKind::voiceCall:
@@ -223,7 +226,7 @@ int main(int argc, char** argv) {
                 content = "--- " + direction_str + " " + call_type_str + " Call (" + status_str + ") ---";
                 auto timestamp_str = FormatTimestamp(entry.timestamp);
                 elements.push_back(ftxui::text(prefix + content) | ftxui::dim);
-                elements.push_back(ftxui::text("  ΓööΓöÇ " + timestamp_str) | ftxui::dim);
+                elements.push_back(ftxui::text("  · " + timestamp_str) | ftxui::dim);
                 break;
             }
         }
@@ -274,14 +277,12 @@ int main(int argc, char** argv) {
     return ftxui::window(ftxui::text(status_line), main_view);
   });
 
-  // Start the service layer's background processes and the UI event loop.
-  std::thread rtc_thread([&] { rtc_client->Start(); });
+  std::thread client_thread([&] { client->start(); });
   screen.Loop(layout);
 
-  // Cleanly shut down the service layer.
-  rtc_client->Terminate();
-  if (rtc_thread.joinable()) {
-    rtc_thread.join();
+  client->terminate();
+  if (client_thread.joinable()) {
+    client_thread.join();
   }
 
   return 0;

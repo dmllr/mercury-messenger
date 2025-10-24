@@ -40,7 +40,7 @@ public:
   /// @brief Process an incoming H.264 buffer that may contain multiple NAL units.
   /// The input data is expected to contain one or more start codes
   /// (either 0x00000001 or 0x000001) that separate NAL units.
-  void ProcessFrame(const rtc::binary& data);
+  void ProcessFrame(const std::vector<std::byte>& data);
 
   /// @brief Resets the internal state of the parser preparing for a new stream.
   void Reset() {
@@ -293,7 +293,7 @@ private:
   }
 };
 
-void H264Parser::ProcessFrame(const rtc::binary& data) {
+void H264Parser::ProcessFrame(const std::vector<std::byte>& data) {
   std::uint32_t pos = 0;
   bool config_updated = false;
 
@@ -335,7 +335,7 @@ void H264Parser::ProcessFrame(const rtc::binary& data) {
     }
 
     // Extract this NALU (without its start code).
-    rtc::binary nalu;
+    std::vector<std::byte> nalu;
     nalu.insert(
         nalu.end(),
         std::next(data.begin(), nalu_start),

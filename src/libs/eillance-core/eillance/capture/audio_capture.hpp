@@ -14,7 +14,6 @@
 #include "eillance/capture/config.hpp"
 #include "eillance/logging/logging.h"
 #include "eillance/logging/telemetry.h"
-#include "eillance/rtc/stream.hpp"
 #include "eillance/utils/packet.hpp"
 
 namespace eillance {

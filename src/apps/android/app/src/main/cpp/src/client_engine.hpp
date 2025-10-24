@@ -6,8 +6,6 @@
 #include <atomic>
 #include <string>
 #include <vector>
-#include <cstring>
-#include <cstdint>
 #include <cstddef>
 
 #include <android/native_window.h>
@@ -17,7 +15,8 @@
 
 #include "eillance/capture/video_config.hpp"
 #include "eillance/logging/logging.h"
-#include "eillance/rtc/client.hpp"
+#include "eillance/client/client.hpp"
+#include "eillance/rtc/transport.hpp"
 #include "eillance/utils/event_queue.hpp"
 #include "eillance/utils/h264.hpp"
 #include "eillance/capture/capture.hpp"
@@ -39,7 +38,7 @@ class ClientEngine {
   AMediaCodec* media_codec_{nullptr};
   std::atomic<bool> is_codec_configured_{false};
 
-  std::shared_ptr<RtcClient> rtc_client_;
+  std::shared_ptr<Client> client_;
   std::unique_ptr<view_model::MercuryViewModel> view_model_;
 
   H264Parser h264_parser_{};
@@ -55,8 +54,12 @@ public:
         std::make_unique<storage::AndroidPersistentStorageImpl>(jvm, instance)
     );
     auto video_capture = Capture(std::make_unique<VideoCaptureAndroid>());
-    rtc_client_ = std::make_shared<RtcClient>(storage, std::move(video_capture));
-    view_model_ = std::make_unique<view_model::MercuryViewModel>(rtc_client_);
+
+    auto rtc_transport_impl = std::make_unique<rtc::RtcTransport>();
+    auto transport = std::make_shared<transport::Transport>(std::move(rtc_transport_impl));
+    client_ = std::make_shared<Client>(storage, std::move(video_capture), transport);
+
+    view_model_ = std::make_unique<view_model::MercuryViewModel>(client_);
 
     view_model_->SetOnStateChangedCallback([this]() {
       UpdateState();
@@ -78,7 +81,7 @@ public:
       std::vector<std::byte> name_bytes(data_ptr, data_ptr + device_name.size());
       storage->Save("device_name", name_bytes);
     }
-    rtc_client_->SetName(device_name);
+    client_->setName(device_name);
   }
 
   ClientEngine(ClientEngine&&) = delete;
@@ -115,8 +118,8 @@ public:
   }
 
   void Start() {
-    rtc_client_->Start();
-    rtc_client_->SetFrameReceivedCallback([this](const rtc::binary& frame) {
+    client_->start();
+    client_->setFrameReceivedCallback([this](const std::vector<std::byte>& frame) {
       h264_parser_.ProcessFrame(frame);
       if (codec_dispatch_queue_.Size() > 10) {
         LOGW << "Decoding queue is full, dropping frames.";
@@ -145,23 +148,23 @@ public:
 
   void Terminate() {
     Stop();
-    rtc_client_->Terminate();
+    client_->terminate();
   }
 
-  void Call(const std::string& peer_id) {
-    rtc_client_->Call(peer_id);
+  void Call(const std::string& peer_id) const {
+    client_->call(peer_id);
   }
 
-  void Hangup() {
+  void Hangup() const {
     if (view_model_) {
       view_model_->Hangup();
     }
   }
 
-  void ConfigureVideoCapture(const VideoConfig& config) {
+  void ConfigureVideoCapture(const VideoConfig& config) const {
     Config coreConfig;
     coreConfig.video_config = config;
-    rtc_client_->Configure(coreConfig);
+    client_->configure(coreConfig);
   }
 
 private:
@@ -254,14 +257,13 @@ private:
     AMediaCodecBufferInfo info;
     auto output_buffer_index = AMediaCodec_dequeueOutputBuffer(media_codec_, &info, 0);
     if (output_buffer_index >= 0) {
-      // Render the buffer to the surface
       AMediaCodec_releaseOutputBuffer(media_codec_, output_buffer_index, info.size > 0);
     } else if (output_buffer_index == AMEDIACODEC_INFO_OUTPUT_FORMAT_CHANGED) {
       AMediaFormat* format = AMediaCodec_getOutputFormat(media_codec_);
       LOGI << "Decoder output format changed: " << AMediaFormat_toString(format);
       AMediaFormat_delete(format);
     } else if (output_buffer_index == AMEDIACODEC_INFO_TRY_AGAIN_LATER) {
-      // Normal case, no output available yet
+      // No output available yet
     } else {
       LOGW << "AMediaCodec_dequeueOutputBuffer returned unexpected index: " << output_buffer_index;
     }

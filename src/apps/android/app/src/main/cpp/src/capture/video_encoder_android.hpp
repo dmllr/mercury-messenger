@@ -4,7 +4,6 @@
 #include <cstdint>
 #include <mutex>
 #include <string>
-#include <utility>
 #include <vector>
 
 #include "eillance/utils/packet.hpp"
@@ -33,7 +32,7 @@ class VideoEncoderAndroid {
 
   AMediaCodecBufferInfo info{};
   uint8_t* buffer{};
-  rtc::binary encoded_data{};
+  std::vector<std::byte> encoded_data{};
 
   void configureCodec() {
     if (codec != nullptr) {
@@ -256,7 +255,7 @@ public:
     return sei;
   }
 
-  void InsertRotationSei(rtc::binary& data, int rotation) {
+  void InsertRotationSei(std::vector<std::byte>& data, int rotation) {
     // Create SEI NAL unit with rotation metadata
     auto sei = CreateRotationSei(rotation);
 

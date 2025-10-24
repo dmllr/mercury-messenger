@@ -9,7 +9,7 @@
 #include "eillance/crypto/crypto.hpp"
 #include <rtc/rtc.hpp>
 
-namespace eillance {
+namespace eillance::transport {
 
 struct Peer {
   class Track {
@@ -27,7 +27,7 @@ struct Peer {
           reporter_(std::move(reporter)) {
     }
 
-    auto Send(const rtc::binary& message) const {
+    auto Send(const std::vector<std::byte>& message) const {
       return track_->send(message);
     }
 
@@ -73,4 +73,4 @@ private:
   std::string id_;
 };
 
-}  // namespace eillance
+}  // namespace eillance::transport
