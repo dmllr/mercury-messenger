@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 #include <atomic>
+#include <thread>
+#include <cmath>
 
 #include <camera/NdkCameraCaptureSession.h>
 #include <camera/NdkCameraDevice.h>
@@ -13,8 +15,6 @@
 #include <media/NdkMediaCodec.h>
 #include <media/NdkMediaFormat.h>
 #include <android/sensor.h>
-
-#include <rtc/common.hpp>
 
 #include "eillance/utils/time.hpp"
 #include "eillance/capture/config.hpp"

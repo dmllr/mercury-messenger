@@ -1,19 +1,16 @@
 #pragma once
 
-#include "transport_delegate.hpp"
-
-
 #include <functional>
 #include <memory>
 #include <string>
 #include <unordered_map>
 
 #include <nlohmann/json.hpp>
-#include <rtc/datachannel.hpp>
-#include <rtc/peerconnection.hpp>
 
 #include "eillance/events/event_source.h"
-#include "eillance/transport/peer.hpp"
+#include "eillance/transport/peer_connection_state.h"
+#include "eillance/transport/track.hpp"
+#include "eillance/transport/transport_delegate.hpp"
 
 namespace eillance::transport {
 
@@ -46,12 +43,20 @@ public:
   void addPeer(const std::string& peer_id, const std::shared_ptr<Peer>& peer) const { self_->addPeer(peer_id, peer); }
   auto getPeer(const std::string& peer_id) const -> std::shared_ptr<Peer> { return self_->getPeer(peer_id); }
   auto getPeers() const -> std::unordered_map<std::string, std::shared_ptr<Peer>> { return self_->getPeers(); }
-  auto getPeerConnectionState(const std::string& peer_id) const -> ::rtc::PeerConnection::State { return self_->getPeerConnectionState(peer_id); }
+  auto getPeerConnectionState(const std::string& peer_id) const -> eillance::transport::PeerConnectionState { return self_->getPeerConnectionState(peer_id); }
+  void createDataPeerConnection(const std::string& peer_id) const { self_->createDataPeerConnection(peer_id); }
+  void createMediaPeerConnection(const std::string& peer_id) const { self_->createMediaPeerConnection(peer_id); }
+  void createDataChannel(const std::string& peer_id, std::function<void(const std::string&)> on_message) const { self_->createDataChannel(peer_id, on_message); }
+  void closePeerConnection(const std::string& peer_id, const std::string& context) const { self_->closePeerConnection(peer_id, context); }
+  void setLocalDescription(const std::string& peer_id, const std::string& context) const { self_->setLocalDescription(peer_id, context); }
+  void setRemoteDescription(const std::string& peer_id, const std::string& context, const std::string& sdp, const std::string& type) const { self_->setRemoteDescription(peer_id, context, sdp, type); }
+  void addRemoteCandidate(const std::string& peer_id, const std::string& context, const std::string& candidate, const std::string& mid) const { self_->addRemoteCandidate(peer_id, context, candidate, mid); }
   void removePeer(const std::string& peer_id) const { self_->removePeer(peer_id); }
   void sendSignalingMessage(const Json& message) const { self_->sendSignalingMessage(message); }
-  void sendPeerDataChannelMessage(const std::shared_ptr<::rtc::DataChannel>& dc, const Json& message) const { self_->sendPeerDataChannelMessage(dc, message); }
+  void sendPeerDataChannelMessage(const std::string& peer_id, const Json& message) const { self_->sendPeerDataChannelMessage(peer_id, message); }
   void addToStream(const std::shared_ptr<Peer>& peer, bool isAddingVideo) const { self_->addToStream(peer, isAddingVideo); }
-  auto createPeerConnection(const std::string& peer_id, const std::string& context) const -> std::shared_ptr<::rtc::PeerConnection> { return self_->createPeerConnection(peer_id, context); }
+  auto addVideo(const std::string& peer_id, const std::function<void(void)>& on_open) const -> std::shared_ptr<ITrack> { return self_->addVideo(peer_id, on_open); }
+  auto addAudio(const std::string& peer_id, const std::function<void(void)>& on_open) const -> std::shared_ptr<ITrack> { return self_->addAudio(peer_id, on_open); }
 
   struct TransportInterface {
     TransportInterface() = default;
@@ -70,12 +75,20 @@ public:
     virtual void addPeer(const std::string& peer_id, const std::shared_ptr<Peer>& peer) = 0;
     virtual auto getPeer(const std::string& peer_id) const -> std::shared_ptr<Peer> = 0;
     virtual auto getPeers() const -> std::unordered_map<std::string, std::shared_ptr<Peer>> = 0;
-    virtual auto getPeerConnectionState(const std::string& peer_id) const -> ::rtc::PeerConnection::State = 0;
+    virtual auto getPeerConnectionState(const std::string& peer_id) const -> eillance::transport::PeerConnectionState = 0;
+    virtual void createDataPeerConnection(const std::string& peer_id) = 0;
+    virtual void createMediaPeerConnection(const std::string& peer_id) = 0;
+    virtual void createDataChannel(const std::string& peer_id, std::function<void(const std::string&)> on_message) = 0;
+    virtual void closePeerConnection(const std::string& peer_id, const std::string& context) = 0;
+    virtual void setLocalDescription(const std::string& peer_id, const std::string& context) = 0;
+    virtual void setRemoteDescription(const std::string& peer_id, const std::string& context, const std::string& sdp, const std::string& type) = 0;
+    virtual void addRemoteCandidate(const std::string& peer_id, const std::string& context, const std::string& candidate, const std::string& mid) = 0;
     virtual void removePeer(const std::string& peer_id) = 0;
     virtual void sendSignalingMessage(const Json& message) const = 0;
-    virtual void sendPeerDataChannelMessage(const std::shared_ptr<::rtc::DataChannel>& dc, const Json& message) const = 0;
+    virtual void sendPeerDataChannelMessage(const std::string& peer_id, const Json& message) const = 0;
     virtual void addToStream(const std::shared_ptr<Peer>& peer, bool isAddingVideo) const = 0;
-    virtual auto createPeerConnection(const std::string& peer_id, const std::string& context) -> std::shared_ptr<::rtc::PeerConnection> = 0;
+    virtual auto addVideo(const std::string& peer_id, const std::function<void(void)>& on_open) -> std::shared_ptr<ITrack> = 0;
+    virtual auto addAudio(const std::string& peer_id, const std::function<void(void)>& on_open) -> std::shared_ptr<ITrack> = 0;
   };
 
   template<typename T>
@@ -95,12 +108,20 @@ public:
     void addPeer(const std::string& peer_id, const std::shared_ptr<Peer>& peer) override { transport_->addPeer(peer_id, peer); }
     auto getPeer(const std::string& peer_id) const -> std::shared_ptr<Peer> override { return transport_->getPeer(peer_id); }
     auto getPeers() const -> std::unordered_map<std::string, std::shared_ptr<Peer>> override { return transport_->getPeers(); }
-    auto getPeerConnectionState(const std::string& peer_id) const -> ::rtc::PeerConnection::State override { return transport_->getPeerConnectionState(peer_id); }
+    auto getPeerConnectionState(const std::string& peer_id) const -> eillance::transport::PeerConnectionState override { return transport_->getPeerConnectionState(peer_id); }
+    void createDataPeerConnection(const std::string& peer_id) override { transport_->createDataPeerConnection(peer_id); }
+    void createMediaPeerConnection(const std::string& peer_id) override { transport_->createMediaPeerConnection(peer_id); }
+    void createDataChannel(const std::string& peer_id, std::function<void(const std::string&)> on_message) override { transport_->createDataChannel(peer_id, on_message); }
+    void closePeerConnection(const std::string& peer_id, const std::string& context) override { transport_->closePeerConnection(peer_id, context); }
+    void setLocalDescription(const std::string& peer_id, const std::string& context) override { transport_->setLocalDescription(peer_id, context); }
+    void setRemoteDescription(const std::string& peer_id, const std::string& context, const std::string& sdp, const std::string& type) override { transport_->setRemoteDescription(peer_id, context, sdp, type); }
+    void addRemoteCandidate(const std::string& peer_id, const std::string& context, const std::string& candidate, const std::string& mid) override { transport_->addRemoteCandidate(peer_id, context, candidate, mid); }
     void removePeer(const std::string& peer_id) override { transport_->removePeer(peer_id); }
     void sendSignalingMessage(const Json& message) const override { transport_->sendSignalingMessage(message); }
-    void sendPeerDataChannelMessage(const std::shared_ptr<::rtc::DataChannel>& dc, const Json& message) const override { transport_->sendPeerDataChannelMessage(dc, message); }
+    void sendPeerDataChannelMessage(const std::string& peer_id, const Json& message) const override { transport_->sendPeerDataChannelMessage(peer_id, message); }
     void addToStream(const std::shared_ptr<Peer>& peer, bool isAddingVideo) const override { transport_->addToStream(peer, isAddingVideo); }
-    auto createPeerConnection(const std::string& peer_id, const std::string& context) -> std::shared_ptr<::rtc::PeerConnection> override { return transport_->createPeerConnection(peer_id, context); }
+    auto addVideo(const std::string& peer_id, const std::function<void(void)>& on_open) -> std::shared_ptr<ITrack> override { return transport_->addVideo(peer_id, on_open); }
+    auto addAudio(const std::string& peer_id, const std::function<void(void)>& on_open) -> std::shared_ptr<ITrack> override { return transport_->addAudio(peer_id, on_open); }
   };
 
 private:

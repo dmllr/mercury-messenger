@@ -8,10 +8,9 @@ set(NO_TESTS ON CACHE INTERNAL "" FORCE)
 set(NO_EXAMPLES ON CACHE INTERNAL "" FORCE)
 set(WARNINGS_AS_ERRORS OFF CACHE INTERNAL "" FORCE)
 
-# for libdatachannel -> plog
-set(PLOG_BUILD_TESTS OFF CACHE INTERNAL "" FORCE)
-set(PLOG_BUILD_SAMPLES OFF CACHE INTERNAL "" FORCE)
-set(PLOG_INSTALL OFF CACHE INTERNAL "" FORCE)
+# for libdatachannel -> plog, we manage plog independently
+include("${CMAKE_CURRENT_LIST_DIR}/libplog.cmake")
+set(USE_SYSTEM_PLOG ON CACHE INTERNAL "" FORCE)
 
 # for libdatachannel -> json
 set(JSON_BuildTests OFF CACHE INTERNAL "" FORCE)

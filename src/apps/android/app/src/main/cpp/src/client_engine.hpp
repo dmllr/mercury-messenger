@@ -16,7 +16,6 @@
 #include "eillance/capture/video_config.hpp"
 #include "eillance/logging/logging.h"
 #include "eillance/client/client.hpp"
-#include "eillance/rtc/transport.hpp"
 #include "eillance/utils/event_queue.hpp"
 #include "eillance/utils/h264.hpp"
 #include "eillance/capture/capture.hpp"
@@ -26,6 +25,7 @@
 #include "class_refs.hpp"
 #include "android_persistent_storage.hpp"
 #include "capture/video_capture_android.hpp"
+#include "transport/transport_android.hpp"
 
 
 namespace eillance {
@@ -55,7 +55,7 @@ public:
     );
     auto video_capture = Capture(std::make_unique<VideoCaptureAndroid>());
 
-    auto rtc_transport_impl = std::make_unique<rtc::RtcTransport>();
+    auto rtc_transport_impl = std::make_unique<transport::AndroidRtcTransport>(jvm, instance);
     auto transport = std::make_shared<transport::Transport>(std::move(rtc_transport_impl));
     client_ = std::make_shared<Client>(storage, std::move(video_capture), transport);
 

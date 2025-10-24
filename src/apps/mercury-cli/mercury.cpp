@@ -18,8 +18,10 @@
 #include "eillance/identity/contact_manager.hpp"
 #include "eillance/logging/logging.h"
 #include "eillance/messaging/history.hpp"
+#include "eillance/transport/peer_connection_state.h"
 #include "eillance/client/client.hpp"
 #include "eillance/rtc/transport.hpp"
+#include "eillance/transport/peer_connection_state.h"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/utils/time.hpp"
 #include "eillance/view_model/mercury_view_model.hpp"
@@ -49,9 +51,9 @@ std::vector<std::string> GetContactMenuEntries(const std::vector<eillance::view_
 
     std::string conn_status_str;
     switch (contact.connection_state) {
-        case ::rtc::PeerConnection::State::Connecting: conn_status_str = " (Connecting)"; break;
-        case ::rtc::PeerConnection::State::Connected: conn_status_str = " (Connected)"; break;
-        case ::rtc::PeerConnection::State::Failed: conn_status_str = " (Failed)"; break;
+        case eillance::transport::PeerConnectionState::Connecting: conn_status_str = " (Connecting)"; break;
+        case eillance::transport::PeerConnectionState::Connected: conn_status_str = " (Connected)"; break;
+        case eillance::transport::PeerConnectionState::Failed: conn_status_str = " (Failed)"; break;
         default: break;
     }
 
@@ -207,7 +209,7 @@ int main(int argc, char** argv) {
                 content = std::get<eillance::messaging::MessageEntry>(entry.data).content;
                 auto timestamp_str = FormatTimestamp(entry.timestamp);
                 elements.push_back(ftxui::text(prefix + content + suffix));
-                elements.push_back(ftxui::text("  · " + timestamp_str) | ftxui::dim);
+                elements.push_back(ftxui::text("  ┬╖ " + timestamp_str) | ftxui::dim);
                 break;
             }
             case eillance::messaging::HistoryEntryKind::voiceCall:
@@ -226,7 +228,7 @@ int main(int argc, char** argv) {
                 content = "--- " + direction_str + " " + call_type_str + " Call (" + status_str + ") ---";
                 auto timestamp_str = FormatTimestamp(entry.timestamp);
                 elements.push_back(ftxui::text(prefix + content) | ftxui::dim);
-                elements.push_back(ftxui::text("  · " + timestamp_str) | ftxui::dim);
+                elements.push_back(ftxui::text("  ┬╖ " + timestamp_str) | ftxui::dim);
                 break;
             }
         }
