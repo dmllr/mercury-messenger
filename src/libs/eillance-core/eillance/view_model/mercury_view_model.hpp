@@ -12,26 +12,26 @@
 #include <unordered_map>
 #include <vector>
 
+#include <rtc/peerconnection.hpp>
+
+#include "eillance/client/client.hpp"
 #include "eillance/events/service_connection_state.h"
 #include "eillance/identity/contact_manager.hpp"
 #include "eillance/messaging/history.hpp"
+#include "eillance/transport/peer.hpp"
 #include "eillance/utils/dispatch_queue.hpp"
-#include "eillance/rtc/peer.hpp"
-#include "eillance/rtc/client.hpp"
 
 namespace eillance::view_model {
 
-NLOHMANN_JSON_SERIALIZE_ENUM(rtc::PeerConnection::State, { // NOLINT
-  {rtc::PeerConnection::State::New, 0},
-  {rtc::PeerConnection::State::Connecting, 1},
-  {rtc::PeerConnection::State::Connected, 2},
-  {rtc::PeerConnection::State::Disconnected, 3},
-  {rtc::PeerConnection::State::Failed, 4},
-  {rtc::PeerConnection::State::Closed, 5},
+NLOHMANN_JSON_SERIALIZE_ENUM(::rtc::PeerConnection::State, {  // NOLINT
+  {::rtc::PeerConnection::State::New, 0},
+  {::rtc::PeerConnection::State::Connecting, 1},
+  {::rtc::PeerConnection::State::Connected, 2},
+  {::rtc::PeerConnection::State::Disconnected, 3},
+  {::rtc::PeerConnection::State::Failed, 4},
+  {::rtc::PeerConnection::State::Closed, 5},
 })
 
-// UIState holds all the data required for any UI to render its current state.
-// It is designed to be immutable once obtained by the UI to ensure thread safety.
 struct UIState {
   struct CallState {
     bool is_in_call = false;
@@ -44,7 +44,7 @@ struct UIState {
   struct ViewContact {
     std::string peer_id;
     identity::ContactStatus status;
-    rtc::PeerConnection::State connection_state = rtc::PeerConnection::State::Disconnected;
+    ::rtc::PeerConnection::State connection_state = ::rtc::PeerConnection::State::Disconnected;
   };
 
   std::string my_id;
@@ -57,7 +57,7 @@ struct UIState {
   CallState call_state;
 };
 
-inline void to_json(nlohmann::json& j, const UIState::ViewContact& c) { // NOLINT
+inline void to_json(nlohmann::json& j, const UIState::ViewContact& c) {
   j = nlohmann::json{
       {"peer_id", c.peer_id},
       {"status", c.status},
@@ -80,19 +80,17 @@ inline void to_json(nlohmann::json& j, const UIState& s) {
   j["call_state"]["call_type"] = s.call_state.call_type;
 }
 
-// MercuryViewModel encapsulates the application logic and state management for Mercury clients.
-// It interacts with the RtcClient and provides a clean interface for any UI (CLI, GUI).
 class MercuryViewModel {
 public:
-  explicit MercuryViewModel(std::shared_ptr<RtcClient> rtc_client)
-      : rtc_client_(std::move(rtc_client)) {
+  explicit MercuryViewModel(std::shared_ptr<Client> client)
+      : client_(std::move(client)) {
     {
       const std::lock_guard<std::mutex> lock(state_mutex_);
-      current_state_.my_id = rtc_client_->GetId();
+      current_state_.my_id = client_->getId();
       UpdateContacts();
     }
     UpdateChats();
-    SetupRtcClientCallbacks();
+    SetupClientCallbacks();
   }
   ~MercuryViewModel() = default;
 
@@ -101,7 +99,6 @@ public:
   MercuryViewModel(MercuryViewModel&&) = delete;
   MercuryViewModel& operator=(MercuryViewModel&&) = delete;
 
-  // --- UI Actions ---
   void SelectContact(const std::string& peer_id);
   void DeselectContact();
   void SendMessage(const std::string& content);
@@ -115,18 +112,13 @@ public:
   void LoadOlderMessages();
   void RefreshState();
   void MarkMessagesAsRead(const std::vector<std::uint64_t>& message_ids);
-
-  // --- CLI Specific ---
   auto ProcessCliInput(const std::string& input) -> bool;
   void SelectContactByIndex(size_t index);
-
-
-  // --- State Access ---
   [[nodiscard]] auto GetState() const -> UIState;
   void SetOnStateChangedCallback(std::function<void()> callback);
 
 private:
-  void SetupRtcClientCallbacks();
+  void SetupClientCallbacks();
   void UpdateChatHistoryForSelectedContact();
   void AddSystemMessageToChat(const std::string& message);
   void NotifyStateChanged() const;
@@ -135,12 +127,11 @@ private:
   void LoadInitialChatHistory(const std::string& peer_id);
 
   static inline std::atomic<std::uint64_t> next_system_message_id_{10000000000000000000ULL};
-  std::shared_ptr<RtcClient> rtc_client_;
+  std::shared_ptr<Client> client_;
 
   mutable std::mutex state_mutex_;
   UIState current_state_;
 
-  // Per-peer-ID state
   std::unordered_map<std::string, size_t> chat_pages_loaded_;
   DispatchQueue dispatch_queue_{"ViewModel", 1};
 
@@ -149,10 +140,8 @@ private:
   std::function<void()> on_state_changed_callback_;
 };
 
-// --- Implementation ---
-
 inline void MercuryViewModel::SelectContact(const std::string& peer_id) {
-  rtc_client_->Connect(peer_id);
+  client_->connect(peer_id);
   dispatch_queue_.Dispatch([this, peer_id] {
     bool selection_changed{false};
     {
@@ -181,8 +170,6 @@ inline void MercuryViewModel::DeselectContact() {
 
 inline void MercuryViewModel::SendMessage(const std::string& content) {
   std::optional<std::string> selected_id;
-
-  // Perform quick, optimistic state updates within a short-lived lock.
   {
     const std::lock_guard<std::mutex> lock(state_mutex_);
     selected_id = current_state_.selected_contact_id;
@@ -192,23 +179,17 @@ inline void MercuryViewModel::SendMessage(const std::string& content) {
     }
   }
 
-  // This is a single atomic operation that adds to history and queues for sending.
-  // It should be fast enough as it only involves a file write at most.
-  auto entry = rtc_client_->SendChatMessage(*selected_id, content);
+  auto entry = client_->sendChatMessage(*selected_id, content);
 
   {
     const std::lock_guard<std::mutex> lock(state_mutex_);
-    // Verify that the selection has not changed before adding to the history
     if (current_state_.selected_contact_id == selected_id) {
       current_state_.interaction_history.push_back(entry);
     }
   }
 
-  // Update chat summaries, which can be slow, outside the lock.
   UpdateChats();
   NotifyStateChanged();
-
-  // Dispatch the actual sending logic to a background thread to avoid blocking the main thread.
 }
 
 inline void MercuryViewModel::StartVoiceCall() {
@@ -223,7 +204,7 @@ inline void MercuryViewModel::StartVoiceCall() {
         const std::lock_guard<std::mutex> lock(state_mutex_);
         current_state_.call_state = {.is_in_call = true, .is_ringing = false, .call_direction = messaging::CallDirection::outgoing, .peer_id = *peer_id, .call_type = messaging::HistoryEntryKind::voiceCall};
       }
-      rtc_client_->StartVoiceCall(*peer_id);
+      client_->startVoiceCall(*peer_id);
       UpdateChats();
       NotifyStateChanged();
     }
@@ -242,7 +223,7 @@ inline void MercuryViewModel::StartVideoCall() {
         const std::lock_guard<std::mutex> lock(state_mutex_);
         current_state_.call_state = {.is_in_call = true, .is_ringing = false, .call_direction = messaging::CallDirection::outgoing, .peer_id = *peer_id, .call_type = messaging::HistoryEntryKind::videoCall};
       }
-      rtc_client_->StartVideoCall(*peer_id);
+      client_->startVideoCall(*peer_id);
       UpdateChats();
       NotifyStateChanged();
     }
@@ -259,7 +240,7 @@ inline void MercuryViewModel::Hangup() {
       current_state_.call_state = {};
     }
     if (!peer_id_to_hangup.empty()) {
-      rtc_client_->Hangup(peer_id_to_hangup);
+      client_->hangup(peer_id_to_hangup);
     }
     NotifyStateChanged();
   });
@@ -276,7 +257,7 @@ inline void MercuryViewModel::AcceptCall() {
       current_state_.call_state.is_ringing = false;
     }
     if (!peer_id.empty()) {
-      rtc_client_->AcceptCall(peer_id);
+      client_->acceptCall(peer_id);
     }
     NotifyStateChanged();
   });
@@ -292,18 +273,18 @@ inline void MercuryViewModel::RejectCall() {
       current_state_.call_state = {};
     }
     if (!peer_id.empty()) {
-      rtc_client_->RejectCall(peer_id);
+      client_->rejectCall(peer_id);
     }
     NotifyStateChanged();
   });
 }
 
 inline void MercuryViewModel::AddContact(const std::string& peer_id) const {
-  rtc_client_->AddContact(peer_id);
+  client_->addContact(peer_id);
 }
 
 inline void MercuryViewModel::AcceptContact(const std::string& peer_id) const {
-  rtc_client_->ConfirmContact(peer_id);
+  client_->confirmContact(peer_id);
 }
 
 inline void MercuryViewModel::LoadOlderMessages() {
@@ -317,7 +298,7 @@ inline void MercuryViewModel::LoadOlderMessages() {
       const auto& peer_id = *current_state_.selected_contact_id;
       const size_t pages_loaded = chat_pages_loaded_[peer_id];
 
-      auto page = rtc_client_->GetMessageHistoryPage(peer_id, pages_loaded, kChatPageSize);
+      auto page = client_->getMessageHistoryPage(peer_id, pages_loaded, kChatPageSize);
       if (page.messages.empty()) {
         current_state_.has_older_messages = false;
       } else {
@@ -336,7 +317,7 @@ inline void MercuryViewModel::RefreshState() {
   dispatch_queue_.Dispatch([this] {
     {
       const std::lock_guard<std::mutex> lock(state_mutex_);
-      current_state_.my_id = rtc_client_->GetId();
+      current_state_.my_id = client_->getId();
       UpdateContacts();
     }
     UpdateChats();
@@ -353,7 +334,7 @@ inline void MercuryViewModel::MarkMessagesAsRead(const std::vector<std::uint64_t
     }
     if (peer_id && !message_ids.empty()) {
       LOGI << "Marking " << message_ids.size() << " messages as read for peer " << *peer_id;
-      rtc_client_->MarkMessagesAsRead(*peer_id, message_ids);
+      client_->markMessagesAsRead(*peer_id, message_ids);
     }
   });
 }
@@ -386,11 +367,9 @@ inline auto MercuryViewModel::ProcessCliInput(const std::string& input) -> bool 
         }
         if (matches.empty()) {
           AddSystemMessageToChat("--> Contact not found for ID starting with: " + arg);
-        }
-        else if (matches.size() > 1) {
+        } else if (matches.size() > 1) {
           AddSystemMessageToChat("--> Ambiguous ID. Multiple contacts start with: " + arg);
-        }
-        else {
+        } else {
           AddSystemMessageToChat("--> Accepting contact: " + matches[0]);
           AcceptContact(matches[0]);
         }
@@ -434,15 +413,14 @@ inline void MercuryViewModel::SetOnStateChangedCallback(std::function<void()> ca
 }
 
 inline void MercuryViewModel::LoadInitialChatHistory(const std::string& peer_id) {
-  // This must be called from a locked context.
-  auto page = rtc_client_->GetMessageHistoryPage(peer_id, 0, kChatPageSize);
+  auto page = client_->getMessageHistoryPage(peer_id, 0, kChatPageSize);
   current_state_.interaction_history.assign(page.messages.begin(), page.messages.end());
   chat_pages_loaded_[peer_id] = 1;
   current_state_.has_older_messages = (kChatPageSize < page.total_messages);
 }
 
-inline void MercuryViewModel::SetupRtcClientCallbacks() {
-  rtc_client_->SetChatMessageReceivedCallback([this](const std::string& peer_id, const messaging::HistoryEntryRecord& message) {
+inline void MercuryViewModel::SetupClientCallbacks() {
+  client_->setChatMessageReceivedCallback([this](const std::string& peer_id, const messaging::HistoryEntryRecord& message) {
     {
       const std::lock_guard<std::mutex> lock(state_mutex_);
       if (current_state_.selected_contact_id && *current_state_.selected_contact_id == peer_id) {
@@ -453,7 +431,7 @@ inline void MercuryViewModel::SetupRtcClientCallbacks() {
     NotifyStateChanged();
   });
 
-  rtc_client_->SetContactRequestCallback([this](const std::string& peer_id) {
+  client_->setContactRequestCallback([this](const std::string& peer_id) {
     {
       const std::lock_guard<std::mutex> lock(state_mutex_);
       UpdateContacts();
@@ -464,18 +442,18 @@ inline void MercuryViewModel::SetupRtcClientCallbacks() {
     NotifyStateChanged();
   });
 
-  rtc_client_->SetContactStatusChangedCallback([this](const std::string& /*peer_id*/, identity::ContactStatus /*status*/) {
+  client_->setContactStatusChangedCallback([this](const std::string&, identity::ContactStatus) {
     RefreshState();
   });
 
-  rtc_client_->SetStatusCallback([this](const std::string& peer_id, EventSource source, int state_val) {
+  client_->setStatusCallback([this](const std::string& peer_id, EventSource source, int state_val) {
     bool state_changed = false;
     if (source == EventSource::system) {
       const std::lock_guard<std::mutex> lock(state_mutex_);
       current_state_.connection_state = static_cast<ServiceConnectionState>(state_val);
       state_changed = true;
     } else if (source == EventSource::peerConnectionState) {
-      const auto state = static_cast<rtc::PeerConnection::State>(state_val);
+      const auto state = static_cast<::rtc::PeerConnection::State>(state_val);
       const std::lock_guard<std::mutex> lock(state_mutex_);
       for (auto& contact : current_state_.contacts) {
         if (contact.peer_id == peer_id) {
@@ -486,9 +464,9 @@ inline void MercuryViewModel::SetupRtcClientCallbacks() {
           break;
         }
       }
-      if (state == rtc::PeerConnection::State::Closed ||
-          state == rtc::PeerConnection::State::Disconnected ||
-          state == rtc::PeerConnection::State::Failed) {
+      if (state == ::rtc::PeerConnection::State::Closed ||
+          state == ::rtc::PeerConnection::State::Disconnected ||
+          state == ::rtc::PeerConnection::State::Failed) {
         if ((current_state_.call_state.is_in_call || current_state_.call_state.is_ringing) && current_state_.call_state.peer_id == peer_id) {
           current_state_.call_state = {};
           state_changed = true;
@@ -500,12 +478,10 @@ inline void MercuryViewModel::SetupRtcClientCallbacks() {
     }
   });
 
-  rtc_client_->SetIncomingCallCallback([this](const std::string& peer_id, messaging::HistoryEntryKind call_type) {
+  client_->setIncomingCallCallback([this](const std::string& peer_id, messaging::HistoryEntryKind call_type) {
     {
       const std::lock_guard<std::mutex> lock(state_mutex_);
-      // Don't interrupt an ongoing call.
       if (current_state_.call_state.is_in_call || current_state_.call_state.is_ringing) {
-        // TODO: Send a "busy" signal back to the caller.
         return;
       }
       current_state_.call_state.is_ringing = true;
@@ -516,7 +492,7 @@ inline void MercuryViewModel::SetupRtcClientCallbacks() {
     NotifyStateChanged();
   });
 
-  rtc_client_->SetMessageStatusChangedCallback(
+  client_->setMessageStatusChangedCallback(
       [this](const std::string& peer_id, const std::uint64_t message_id,
              const messaging::MessageStatus status) {
         {
@@ -532,12 +508,9 @@ inline void MercuryViewModel::SetupRtcClientCallbacks() {
         }
         NotifyStateChanged();
       });
-
-  // Callbacks for call history would be added here
 }
 
 inline void MercuryViewModel::UpdateChatHistoryForSelectedContact() {
-  // This must be called from within a locked context.
   if (current_state_.selected_contact_id) {
     const auto& peer_id = *current_state_.selected_contact_id;
     if (!chat_pages_loaded_.contains(peer_id)) {
@@ -567,14 +540,13 @@ inline void MercuryViewModel::NotifyStateChanged() const {
 }
 
 inline void MercuryViewModel::UpdateContacts() {
-  // Must be called from a locked context
-  auto contacts_from_manager = rtc_client_->GetContacts();
+  auto contacts_from_manager = client_->getContacts();
   current_state_.contacts.clear();
   for (const auto& c : contacts_from_manager) {
     current_state_.contacts.push_back({
-                                          .peer_id = c.peer_id,
-                                          .status = c.status,
-                                          .connection_state = rtc_client_->GetPeerConnectionState(c.peer_id)
+                                          c.peer_id,
+                                          c.status,
+                                          client_->getPeerConnectionState(c.peer_id)
                                       });
   }
 }
@@ -588,13 +560,11 @@ inline void MercuryViewModel::UpdateChats() {
       contact_ids.push_back(contact.peer_id);
     }
   }
-
-  // Get summaries outside the lock to avoid holding it during I/O.
   {
-    auto new_chats = rtc_client_->GetChatSummaries(contact_ids);
+    auto new_chats = client_->getChatSummaries(contact_ids);
     const std::lock_guard<std::mutex> lock(state_mutex_);
     current_state_.chats = std::move(new_chats);
   }
 }
 
-}  // namespace eillance::view_model
+} // namespace eillance::view_model

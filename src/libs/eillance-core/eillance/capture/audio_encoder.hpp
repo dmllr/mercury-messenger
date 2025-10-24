@@ -6,6 +6,7 @@
 
 #include "eillance/utils/packet.hpp"
 #include "eillance/capture/audio_config.hpp"
+#include "eillance/utils/likely.h"
 
 namespace eillance {
 

@@ -13,6 +13,7 @@ include("${shared_cmake_libs_path}/libminiaudio.cmake")
 include("${shared_cmake_libs_path}/libjson.cmake")
 
 add_library(eillance-rtc INTERFACE)
+target_compile_features(eillance-rtc INTERFACE cxx_std_20)
 target_include_directories(eillance-rtc INTERFACE
   "${CMAKE_CURRENT_SOURCE_DIR}"
 )
