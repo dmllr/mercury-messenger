@@ -5,7 +5,7 @@ set(shared_src_path "${root}/src")
 set(shared_cmake_libs_path "${shared_src_path}/cmake")
 
 include("${shared_cmake_libs_path}/libboringssl.cmake")
-include("${shared_cmake_libs_path}/libdatachannel.cmake") # For plog & rtc headers
+include("${shared_cmake_libs_path}/libplog.cmake")
 include("${shared_cmake_libs_path}/libjson.cmake")
 include("${shared_cmake_libs_path}/libminiaudio.cmake")
 include("${shared_cmake_libs_path}/libopus.cmake")

@@ -2,9 +2,10 @@
 
 #include <memory>
 #include <string>
+#include <vector>
+#include <cstddef>
 
 #include <nlohmann/json.hpp>
-#include <rtc/track.hpp>
 
 #include "eillance/transport/peer.hpp"
 
@@ -21,7 +22,7 @@ public:
   virtual void onSignalingErrorForPeer(const std::string& peer_id, const std::string& error) = 0;
   virtual void processPeerMessage(Json message) = 0;
   virtual void processSystemMessage(const std::string& type, Json message) = 0;
-  virtual void onTrack(const std::string& peer_id, std::shared_ptr<rtc::Track> track) = 0;
+  virtual void onFrameReceived(const std::string& peer_id, const std::vector<std::byte>& frame) = 0;
 };
 
 } // namespace eillance::transport

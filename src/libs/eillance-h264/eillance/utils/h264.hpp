@@ -1,394 +1,187 @@
 #pragma once
 
-#include <array>
 #include <vector>
-#include <cstdint>
-#include <cstddef>
-#include <cstring>
 #include <functional>
+#include <optional>
 #include <string>
-#include <cassert>
-#include <concepts>
+#include <cstddef>
 
-#include <rtc/rtc.hpp>
 #include "eillance/capture/video_config.hpp"
 #include "eillance/logging/logging.h"
-#include "eillance/utils/bit_reader.hpp"
 
 namespace eillance {
 
-/// @brief H.264 NAL unit parser.
-/// @details This class provides a platform-agnostic H.264 NAL unit parser that
-/// can process incoming frames that may contain multiple NAL units in a
-/// single input buffer. It extracts SPS/PPS information (from separate
-/// NALUs) to trigger codec configuration and then reassembles non-SPS/PPS
-/// NALUs into a frame buffer.
+// A self-contained H.264 NAL unit parser, focused on finding and parsing the
+// Sequence Parameter Set (SPS) to extract video dimensions.
 class H264Parser {
 public:
-  /// @brief Callback type for codec configuration.
-  /// @param sps Sequence Parameter Set (SPS) data.
-  /// @param pps Picture Parameter Set (PPS) data.
-  using ConfigureCallback = std::function<void(const VideoConfig& conf)>;
-
-  /// @brief Callback type for handling input buffer.
-  /// The frame buffer contains a series of NAL units where each NALU is preceded by a
-  /// 4╬ô├ç├ªbyte big╬ô├ç├ªendian size header.
-  /// @param frameBuffer The frame buffer containing a series of NAL units.
-  /// @return True on success, false otherwise.
-  using InputBufferCallback = std::function<void(const std::vector<std::byte>& frameBuffer)>;
-
-  /// @brief Process an incoming H.264 buffer that may contain multiple NAL units.
-  /// The input data is expected to contain one or more start codes
-  /// (either 0x00000001 or 0x000001) that separate NAL units.
-  void ProcessFrame(const std::vector<std::byte>& data);
-
-  /// @brief Resets the internal state of the parser preparing for a new stream.
-  void Reset() {
-    current_config_ = {.width = 0, .height = 0, .rotation = 0};
-    on_configure_ = {};
+  void SetOnConfigureCallback(std::function<void(VideoConfig)> callback) {
+    on_configure_callback_ = std::move(callback);
   }
 
-  [[maybe_unused]] void SetOnConfigureCallback(const ConfigureCallback& callback) {
-    on_configure_ = std::make_unique<ConfigureCallback>(callback);
+  void Reset() {
+    is_configured_ = false;
+  }
+
+  // Processes a raw H.264 frame, which may contain one or more NAL units.
+  void ProcessFrame(const std::vector<std::byte>& frame) {
+    if (is_configured_ || !on_configure_callback_) {
+      return;
+    }
+
+    size_t offset = 0;
+    while (offset < frame.size()) {
+      auto start_code_pos = FindNalStart(frame, offset);
+      if (start_code_pos == std::string::npos) {
+        break; // No more NAL units found in the frame.
+      }
+
+      // Find the end of the current NAL unit.
+      auto next_start_code_pos = FindNalStart(frame, start_code_pos + 3);
+      auto nal_unit_end = (next_start_code_pos == std::string::npos) ? frame.size() : next_start_code_pos;
+
+      // Determine start code length (3 or 4 bytes).
+      size_t start_code_len = (start_code_pos > 0 && frame[start_code_pos - 1] == std::byte{0}) ? 4 : 3;
+      size_t nal_header_pos = start_code_pos + start_code_len;
+
+      if (nal_header_pos < nal_unit_end) {
+        // The NAL unit type is in the lower 5 bits of the header byte.
+        uint8_t nal_type = static_cast<uint8_t>(frame[nal_header_pos]) & 0x1F;
+
+        if (nal_type == 7) { // NAL unit type 7 is SPS.
+          // The actual SPS data for parsing excludes the NAL header byte.
+          std::vector<uint8_t> sps_payload;
+          sps_payload.reserve(nal_unit_end - (nal_header_pos + 1));
+          for(size_t i = nal_header_pos + 1; i < nal_unit_end; ++i) {
+            sps_payload.push_back(static_cast<uint8_t>(frame[i]));
+          }
+
+          ParseSPS(sps_payload);
+          // Once configured, we can stop parsing subsequent frames.
+          if(is_configured_) return;
+        }
+      }
+      offset = nal_unit_end;
+    }
   }
 
 private:
-  VideoConfig current_config_ = {.width = 0, .height = 0, .rotation = 0};
-
-  std::unique_ptr<ConfigureCallback> on_configure_{};
-
-  static constexpr auto nal_type_mask = std::byte{0x1F};
-  static constexpr auto nal_type_sps = std::byte{0x07};
-  static constexpr auto nal_type_pps = std::byte{0x08};
-  static constexpr auto nal_type_sei = std::byte{0x06};
-
-
-  /// @brief Removes H.264 emulation prevention bytes from a given byte array.
-  /// @param data Pointer to the input data.
-  /// @param size Number of bytes in the input.
-  /// @return A vector of bytes with the emulation prevention bytes removed.
-  static std::vector<uint8_t> RemoveEmulationPreventionBytes(const uint8_t* data, std::size_t size) {
-    std::vector<uint8_t> rbsp;
-    for (std::size_t i = 0; i < size; i++) {
-      // Look ahead for the sequence 0x00 0x00 0x03.
-      if (i + 2 < size && data[i] == 0x00 && data[i + 1] == 0x00 && data[i + 2] == 0x03) {
-        rbsp.push_back(0x00);
-        rbsp.push_back(0x00);
-        i += 2;  // Skip the 0x03.
-      } else {
-        rbsp.push_back(data[i]);
+  // Finds the position of the next NAL unit start code (0x000001).
+  static size_t FindNalStart(const std::vector<std::byte>& data, size_t offset) {
+    for (size_t i = offset; i + 2 < data.size(); ++i) {
+      if (data[i] == std::byte{0} && data[i+1] == std::byte{0} && data[i+2] == std::byte{1}) {
+        // Check for 4-byte start code (0x00000001) vs 3-byte (0x000001)
+        return (i > 0 && data[i-1] == std::byte{0}) ? i - 1 : i;
       }
     }
-    return rbsp;
+    return std::string::npos;
   }
 
-  /// @brief Parses an SPS (Sequence Parameter Set) to extract the frame width and height.
-  /// @param data Pointer to the SPS data (after start code).
-  /// @param size Size of the SPS data.
-  /// @return VideoConfig containing the frame width and height.
-  static auto ParseSps(const std::vector<std::byte>& sps) -> VideoConfig {
-    // Remove emulation prevention bytes.
-    // NOLINTNEXTLINE(*-pro-type-reinterpret-cast)
-    const auto* byte_data = reinterpret_cast<const uint8_t*>(sps.data());
-    const std::vector<uint8_t> rbsp = RemoveEmulationPreventionBytes(byte_data, sps.size());
-    BitReader br(rbsp.data(), rbsp.size());
+  // A simple bitstream reader to handle exponential-Golomb decoding.
+  struct BitReader {
+    const std::vector<uint8_t>& data;
+    size_t bit_pos = 0;
 
-    const auto nal_header = br.ReadByte();
-    assert(nal_header == 0x67);
+    uint32_t read_bits(int n) {
+      uint32_t val = 0;
+      for (int i = 0; i < n; ++i) {
+        size_t current_bit = bit_pos + i;
+        size_t byte_idx = current_bit / 8;
+        size_t bit_idx = 7 - (current_bit % 8);
+        if (byte_idx < data.size()) {
+          val = (val << 1) | ((data[byte_idx] >> bit_idx) & 1);
+        }
+      }
+      bit_pos += n;
+      return val;
+    }
 
-    // Parse the SPS according to H.264 Annex A.
-    const auto profile_idc = br.ReadByte();
-    br.ReadByte();  // constraint_set flags and reserved_zero bits.
-    [[maybe_unused]] const auto level_idc = br.ReadByte();
-    [[maybe_unused]] const auto seq_parameter_set_id = br.ReadUE();
+    uint32_t read_ue() { // Unsigned Exponential-Golomb
+      int leading_zeros = 0;
+      while (bit_pos < data.size() * 8 && read_bits(1) == 0) {
+        leading_zeros++;
+      }
+      if (leading_zeros > 31) return 0;
+      return (1 << leading_zeros) - 1 + read_bits(leading_zeros);
+    }
+  };
 
-    // Default chroma_format_idc for baseline.
-    uint32_t chroma_format_idc = 1;
+  // This is a simplified SPS parser that extracts just enough information
+  // to determine video resolution. It is not a complete implementation.
+  void ParseSPS(const std::vector<uint8_t>& sps) {
+    if (sps.empty()) return;
+
+    BitReader reader{sps};
+
+    uint8_t profile_idc = reader.read_bits(8);
+    reader.read_bits(16); // Skip constraint flags and level_idc
+    reader.read_ue();     // Skip seq_parameter_set_id
+
     if (profile_idc == 100 || profile_idc == 110 || profile_idc == 122 || profile_idc == 244 ||
         profile_idc == 44 || profile_idc == 83 || profile_idc == 86 || profile_idc == 118 ||
-        profile_idc == 128 || profile_idc == 138 || profile_idc == 139 || profile_idc == 134) {
-      chroma_format_idc = br.ReadUE();
-      if (chroma_format_idc == 3) {
-        br.ReadBits(1);  // separate_colour_plane_flag.
-      }
-      br.ReadUE();     // bit_depth_luma_minus8.
-      br.ReadUE();     // bit_depth_chroma_minus8.
-      br.ReadBits(1);  // qpprime_y_zero_transform_bypass_flag.
-      const auto seq_scaling_matrix_present_flag = br.ReadBits(1);
-      if (seq_scaling_matrix_present_flag != 0U) {
-        const auto scaling_list_count = (chroma_format_idc != 3) ? 8 : 12;
-        for (int i = 0; i < scaling_list_count; i++) {
-          const auto seq_scaling_list_present_flag = br.ReadBits(1);
-          if (seq_scaling_list_present_flag != 0U) {
-            // skip the scaling list details.
+        profile_idc == 128 || profile_idc == 138) {
+      auto chroma_format_idc = reader.read_ue();
+      if (chroma_format_idc == 3) reader.read_bits(1); // separate_colour_plane_flag
+      reader.read_ue(); // bit_depth_luma_minus8
+      reader.read_ue(); // bit_depth_chroma_minus8
+      reader.read_bits(1); // qpprime_y_zero_transform_bypass_flag
+      if (reader.read_bits(1)) { // seq_scaling_matrix_present_flag
+        // This is a complex part of the spec; skipping it is usually fine for getting resolution.
+        int limit = (chroma_format_idc != 3) ? 8 : 12;
+        for (int i = 0; i < limit; i++) {
+          if (reader.read_bits(1)) { // seq_scaling_list_present_flag[i]
+            int size = (i < 6) ? 16 : 64;
+            for (int j = 0; j < size; j++) reader.read_ue(); // Scaling list delta
           }
         }
       }
     }
 
-    br.ReadUE();  // log2_max_frame_num_minus4.
-    auto pic_order_cnt_type = br.ReadUE();
+    reader.read_ue(); // log2_max_frame_num_minus4
+    auto pic_order_cnt_type = reader.read_ue();
     if (pic_order_cnt_type == 0) {
-      br.ReadUE();  // log2_max_pic_order_cnt_lsb_minus4.
+      reader.read_ue(); // log2_max_pic_order_cnt_lsb_minus4
     } else if (pic_order_cnt_type == 1) {
-      br.ReadBits(1);  // delta_pic_order_always_zero_flag.
-      br.ReadSE();     // offset_for_non_ref_pic.
-      br.ReadSE();     // offset_for_top_to_bottom_field.
-      const auto num_ref_frames_in_pic_order_cnt_cycle = br.ReadUE();
-      for (uint32_t i = 0; i < num_ref_frames_in_pic_order_cnt_cycle; i++) {
-        br.ReadSE();  // offset_for_ref_frame[i].
-      }
+      reader.read_bits(1); // delta_pic_order_always_zero_flag
+      reader.read_ue(); // offset_for_non_ref_pic
+      reader.read_ue(); // offset_for_top_to_bottom_field
+      auto num_ref_frames = reader.read_ue();
+      for (uint32_t i = 0; i < num_ref_frames; i++) reader.read_ue();
     }
-    br.ReadUE();     // max_num_ref_frames.
-    br.ReadBits(1);  // gaps_in_frame_num_value_allowed_flag.
-    const auto pic_width_in_mbs_minus1 = br.ReadUE();
-    const auto pic_height_in_map_units_minus1 = br.ReadUE();
-    const auto frame_mbs_only_flag = br.ReadBits(1);
-    if (frame_mbs_only_flag == 0) {
-      br.ReadBits(1);  // mb_adaptive_frame_field_flag.
-    }
-    br.ReadBits(1);  // direct_8x8_inference_flag.
+    reader.read_ue(); // max_num_ref_frames
+    reader.read_bits(1); // gaps_in_frame_num_value_allowed_flag
 
-    const auto frame_cropping_flag = br.ReadBits(1);
-    uint32_t frame_crop_left_offset = 0;
-    uint32_t frame_crop_right_offset = 0;
-    uint32_t frame_crop_top_offset = 0;
-    uint32_t frame_crop_bottom_offset = 0;
-    if (frame_cropping_flag != 0U) {
-      frame_crop_left_offset = br.ReadUE();
-      frame_crop_right_offset = br.ReadUE();
-      frame_crop_top_offset = br.ReadUE();
-      frame_crop_bottom_offset = br.ReadUE();
+    auto pic_width_in_mbs_minus1 = reader.read_ue();
+    auto pic_height_in_map_units_minus1 = reader.read_ue();
+    auto frame_mbs_only_flag = reader.read_bits(1);
+
+    uint32_t width = (pic_width_in_mbs_minus1 + 1) * 16;
+    uint32_t height = (2 - frame_mbs_only_flag) * (pic_height_in_map_units_minus1 + 1) * 16;
+
+    if (reader.read_bits(1)) { // frame_cropping_flag
+      auto crop_left = reader.read_ue();
+      auto crop_right = reader.read_ue();
+      auto crop_top = reader.read_ue();
+      auto crop_bottom = reader.read_ue();
+      // These are chroma units, multiply by 2 for luma.
+      width -= (crop_left + crop_right) * 2;
+      height -= (crop_top + crop_bottom) * 2 * (2 - frame_mbs_only_flag);
     }
 
-    auto vui_parameters_present_flag = br.ReadBits(1);
-    if (vui_parameters_present_flag != 0U) {
-      // VUI parameters parsing
-      auto aspect_ratio_info_present_flag = br.ReadBits(1);
-      if (aspect_ratio_info_present_flag != 0U) {
-        // Skip aspect ratio info
-        auto aspect_ratio_idc = br.ReadByte();
-        if (aspect_ratio_idc == 255) {  // Extended_SAR
-          br.ReadBits(16);  // sar_width
-          br.ReadBits(16);  // sar_height
-        }
-      }
-
-      // Skip other VUI parameters until we get to the SEI message parsing
-      // ... (other VUI parameter parsing)
+    if (width > 0 && height > 0) {
+      LOGI << "H264Parser: Decoded SPS. Resolution: " << width << "x" << height;
+      VideoConfig conf;
+      conf.width = width;
+      conf.height = height;
+      on_configure_callback_(conf);
+      is_configured_ = true;
+    } else {
+      LOGE << "H264Parser: Failed to decode a valid resolution from SPS.";
     }
-
-    // Calculate picture dimensions.
-    const auto macroblock_width = pic_width_in_mbs_minus1 + 1;
-    const auto macroblock_height = pic_height_in_map_units_minus1 + 1;
-    uint32_t frame_height = macroblock_height * 16;
-    if (frame_mbs_only_flag == 0) {
-      frame_height *= 2;
-    }
-    uint32_t width_pixels = macroblock_width * 16;
-    uint32_t height_pixels = frame_height;
-
-    // Determine crop unit sizes based on chroma_format_idc.
-    uint32_t crop_unit_x = 0;
-    uint32_t crop_unit_y = 0;
-    if (chroma_format_idc == 0) {
-      crop_unit_x = 1;
-      crop_unit_y = 2 - frame_mbs_only_flag;
-    } else if (chroma_format_idc == 1) {
-      crop_unit_x = 2;
-      crop_unit_y = 2 * (2 - frame_mbs_only_flag);
-    } else if (chroma_format_idc == 2) {
-      crop_unit_x = 2;
-      crop_unit_y = 2 - frame_mbs_only_flag;
-    } else {  // chroma_format_idc == 3.
-      crop_unit_x = 1;
-      crop_unit_y = 2 - frame_mbs_only_flag;
-    }
-
-    if (frame_cropping_flag != 0U) {
-      width_pixels -= (frame_crop_left_offset + frame_crop_right_offset) * crop_unit_x;
-      height_pixels -= (frame_crop_top_offset + frame_crop_bottom_offset) * crop_unit_y;
-    }
-
-    auto conf = VideoConfig();
-    conf.width = width_pixels;
-    conf.height = height_pixels;
-    // Note: rotation will be set from SEI parsing
-    return conf;
   }
 
-  /// @brief Parse SEI (Supplemental Enhancement Information) message for rotation metadata
-  /// @param sei SEI message data
-  /// @return Rotation angle in degrees (0, 90, 180, or 270)
-  static uint32_t ParseSeiForRotation(const std::vector<std::byte>& sei) {
-    // NOLINTNEXTLINE(*-pro-type-reinterpret-cast)
-    const auto* byte_data = reinterpret_cast<const uint8_t*>(sei.data());
-    const std::vector<uint8_t> rbsp = RemoveEmulationPreventionBytes(byte_data, sei.size());
-
-    // Skip NAL header
-    if (rbsp.size() < 2) return 0;
-
-    size_t pos = 1; // Skip the NAL header byte
-
-    // Parse SEI payload type
-    uint32_t payload_type = 0;
-    while (pos < rbsp.size() && rbsp[pos] == 0xFF) {
-      payload_type += 0xFF;
-      pos++;
-    }
-    if (pos < rbsp.size()) {
-      payload_type += rbsp[pos++];
-    }
-
-    // Parse SEI payload size
-    uint32_t payload_size = 0;
-    while (pos < rbsp.size() && rbsp[pos] == 0xFF) {
-      payload_size += 0xFF;
-      pos++;
-    }
-    if (pos < rbsp.size()) {
-      payload_size += rbsp[pos++];
-    }
-
-    // Check if we have a user data unregistered SEI message (payload_type == 5)
-    if (payload_type == 5 && pos + payload_size <= rbsp.size()) {
-      // Log the first few bytes to help with debugging
-      std::string payload_hex;
-      for (size_t i = 0; i < std::min(payload_size, 32u); i++) {
-        char hex[8];
-        snprintf(hex, sizeof(hex), "%02x ", rbsp[pos + i]);
-        payload_hex += hex;
-      }
-      // Search for UUID (first 16 bytes)
-      if (payload_size >= 16) {
-        // Skip UUID (16 bytes)
-        pos += 16;
-
-        // Convert remaining payload to string for easier parsing
-        std::string payload_str;
-        for (size_t i = pos; i < pos + payload_size - 16 && i < rbsp.size(); i++) {
-          payload_str += static_cast<char>(rbsp[i]);
-        }
-
-        // Look for rotation marker
-        size_t rotation_pos = payload_str.find("rotation-degrees:");
-        if (rotation_pos != std::string::npos) {
-          rotation_pos += 17; // Skip "rotation-degrees:"
-
-          // Parse the rotation value
-          if (rotation_pos < payload_str.length()) {
-            if (payload_str.substr(rotation_pos, 2) == "90") {
-              return 90;
-            } else if (payload_str.substr(rotation_pos, 3) == "180") {
-              return 180;
-            } else if (payload_str.substr(rotation_pos, 3) == "270") {
-              return 270;
-            }
-          }
-        }
-      }
-    }
-
-    return 0; // Default: no rotation
-  }
+  std::function<void(VideoConfig)> on_configure_callback_;
+  bool is_configured_ = false;
 };
 
-void H264Parser::ProcessFrame(const std::vector<std::byte>& data) {
-  std::uint32_t pos = 0;
-  bool config_updated = false;
-
-  while (pos < data.size()) {
-    // Detect a start code (either 00 00 00 01 or 00 00 01).
-    std::uint32_t start_code_len = 0;
-    if (pos + 4 <= data.size() &&
-        std::memcmp(std::next(data.data(), pos), "\x00\x00\x00\x01", 4) == 0) {
-      start_code_len = 4;
-    } else if (pos + 3 <= data.size() &&
-               std::memcmp(std::next(data.data(), pos), "\x00\x00\x01", 3) == 0) {
-      start_code_len = 3;
-    } else {
-      // If no valid start code is found at this position, advance one byte.
-      pos++;
-      continue;
-    }
-
-    // The NALU starts immediately after the start code.
-    const auto nalu_start = pos + start_code_len;
-
-    // Skip if we're at the end of the data
-    if (nalu_start >= data.size()) {
-      break;
-    }
-
-    // Find the next start code.
-    auto next_start = nalu_start;
-    while (next_start < data.size()) {
-      if (next_start + 3 <= data.size() &&
-          std::memcmp(std::next(data.data(), next_start), "\x00\x00\x01", 3) == 0) {
-        break;
-      }
-      if (next_start + 4 <= data.size() &&
-          std::memcmp(std::next(data.data(), next_start), "\x00\x00\x00\x01", 4) == 0) {
-        break;
-      }
-      ++next_start;
-    }
-
-    // Extract this NALU (without its start code).
-    std::vector<std::byte> nalu;
-    nalu.insert(
-        nalu.end(),
-        std::next(data.begin(), nalu_start),
-        std::next(data.begin(), next_start));
-
-    // Determine the NAL unit type.
-    // If the NALU is empty, skip it.
-    if (nalu.empty()) {
-      pos = next_start;
-      continue;
-    }
-
-    const std::byte nal_header = nalu[0];
-    const std::byte nal_unit_type = nal_header & nal_type_mask;
-
-    LOGD << "Found NAL unit type: " << static_cast<int>(nal_unit_type) << " size: " << nalu.size();
-
-    if (nal_unit_type == nal_type_sps) {
-      // Process SPS: update stored SPS and extract resolution.
-      const std::vector<std::byte>& new_sps = nalu;
-      auto config = ParseSps(new_sps);
-
-      // Preserve rotation if we already have it
-      config.rotation = current_config_.rotation;
-
-      if (config != current_config_) {
-        current_config_.width = config.width;
-        current_config_.height = config.height;
-        config_updated = true;
-        LOGI << "Updated config from SPS: " << config.width << "x" << config.height;
-      }
-    } else if (nal_unit_type == nal_type_sei) {
-      // Process SEI: look for rotation information
-      LOGI << "Processing SEI NAL unit";
-      const std::vector<std::byte>& sei_data = nalu;
-      uint32_t rotation = ParseSeiForRotation(sei_data);
-
-      if (rotation != current_config_.rotation) {
-        current_config_.rotation = rotation;
-        config_updated = true;
-        LOGI << "Updated rotation from SEI: " << rotation << " degrees";
-      }
-    }
-
-    pos = next_start;
-  }
-
-  // If either SPS or SEI updates changed our configuration, notify via callback
-  if (config_updated && on_configure_ != nullptr) {
-    LOGI << "Configuration changed, notifying: " << current_config_.width << "x"
-         << current_config_.height << " rotation: " << current_config_.rotation;
-    (*on_configure_)(current_config_);
-  }
-}
-
-}  // namespace eillance
+} // namespace eillance

@@ -5,8 +5,7 @@
 #include <functional>
 #include <thread>
 #include <utility>
-
-#include <rtc/rtc.hpp>
+#include <mutex>
 
 #include "eillance/utils/dispatch_queue.hpp"
 #include "eillance/capture/config.hpp"
@@ -72,8 +71,9 @@ public:
   }
 
 private:
-  rtc::synchronized_callback<Source::Type, std::uint64_t, std::vector<std::byte>> sampleHandler_;
-
+  std::function<void(Source::Type, std::uint64_t, const std::vector<std::byte>&)> sampleHandlerFunc_;
+  std::mutex sampleHandlerMutex_;
+  
   auto UnsafePrepareForSample() const -> std::pair<std::shared_ptr<Source>, Source::Type> {
     std::shared_ptr<Source> src;
     Source::Type srct{};
@@ -103,7 +103,16 @@ private:
     }
     auto [ss, sst] = UnsafePrepareForSample();
     const auto sample = ss->GetSample();
-    sampleHandler_(sst, ss->GetSampleTime(), sample);
+    
+    std::function<void(Source::Type, std::uint64_t, const std::vector<std::byte>&)> handler;
+    {
+      std::lock_guard<std::mutex> lock(sampleHandlerMutex_);
+      handler = sampleHandlerFunc_;
+    }
+    if (handler) {
+      handler(sst, ss->GetSampleTime(), sample);
+    }
+
     ss->LoadNextSample();
     dispatchQueue_.Dispatch([this]() {
       this->SendSample();
@@ -111,8 +120,9 @@ private:
   }
 
 public:
-  void OnSample(std::function<void(Source::Type, std::uint64_t, std::vector<std::byte>)> handler) {
-    sampleHandler_ = std::move(handler);
+  void OnSample(std::function<void(Source::Type, std::uint64_t, const std::vector<std::byte>&)> handler) {
+    std::lock_guard<std::mutex> lock(sampleHandlerMutex_);
+    sampleHandlerFunc_ = std::move(handler);
   }
 
   auto IsRunning() const {

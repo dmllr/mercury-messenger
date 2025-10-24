@@ -12,24 +12,22 @@
 #include <unordered_map>
 #include <vector>
 
-#include <rtc/peerconnection.hpp>
-
 #include "eillance/client/client.hpp"
 #include "eillance/events/service_connection_state.h"
+#include "eillance/transport/peer_connection_state.h"
 #include "eillance/identity/contact_manager.hpp"
 #include "eillance/messaging/history.hpp"
 #include "eillance/transport/peer.hpp"
 #include "eillance/utils/dispatch_queue.hpp"
 
 namespace eillance::view_model {
-
-NLOHMANN_JSON_SERIALIZE_ENUM(::rtc::PeerConnection::State, {  // NOLINT
-  {::rtc::PeerConnection::State::New, 0},
-  {::rtc::PeerConnection::State::Connecting, 1},
-  {::rtc::PeerConnection::State::Connected, 2},
-  {::rtc::PeerConnection::State::Disconnected, 3},
-  {::rtc::PeerConnection::State::Failed, 4},
-  {::rtc::PeerConnection::State::Closed, 5},
+NLOHMANN_JSON_SERIALIZE_ENUM(eillance::transport::PeerConnectionState, {  // NOLINT
+  {eillance::transport::PeerConnectionState::New, 0},
+  {eillance::transport::PeerConnectionState::Connecting, 1},
+  {eillance::transport::PeerConnectionState::Connected, 2},
+  {eillance::transport::PeerConnectionState::Disconnected, 3},
+  {eillance::transport::PeerConnectionState::Failed, 4},
+  {eillance::transport::PeerConnectionState::Closed, 5},
 })
 
 struct UIState {
@@ -44,7 +42,7 @@ struct UIState {
   struct ViewContact {
     std::string peer_id;
     identity::ContactStatus status;
-    ::rtc::PeerConnection::State connection_state = ::rtc::PeerConnection::State::Disconnected;
+    eillance::transport::PeerConnectionState connection_state = eillance::transport::PeerConnectionState::Disconnected;
   };
 
   std::string my_id;
@@ -453,7 +451,7 @@ inline void MercuryViewModel::SetupClientCallbacks() {
       current_state_.connection_state = static_cast<ServiceConnectionState>(state_val);
       state_changed = true;
     } else if (source == EventSource::peerConnectionState) {
-      const auto state = static_cast<::rtc::PeerConnection::State>(state_val);
+      const auto state = static_cast<eillance::transport::PeerConnectionState>(state_val);
       const std::lock_guard<std::mutex> lock(state_mutex_);
       for (auto& contact : current_state_.contacts) {
         if (contact.peer_id == peer_id) {
@@ -464,9 +462,9 @@ inline void MercuryViewModel::SetupClientCallbacks() {
           break;
         }
       }
-      if (state == ::rtc::PeerConnection::State::Closed ||
-          state == ::rtc::PeerConnection::State::Disconnected ||
-          state == ::rtc::PeerConnection::State::Failed) {
+      if (state == eillance::transport::PeerConnectionState::Closed ||
+          state == eillance::transport::PeerConnectionState::Disconnected ||
+          state == eillance::transport::PeerConnectionState::Failed) {
         if ((current_state_.call_state.is_in_call || current_state_.call_state.is_ringing) && current_state_.call_state.peer_id == peer_id) {
           current_state_.call_state = {};
           state_changed = true;

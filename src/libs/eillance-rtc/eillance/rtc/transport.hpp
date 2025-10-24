@@ -17,6 +17,7 @@
 #include "eillance/transport/transport_delegate.hpp"
 #include "eillance/events/event_source.h"
 #include "eillance/events/service_connection_state.h"
+#include "eillance/transport/peer_connection_state.h"
 #include "eillance/logging/logging.h"
 #include "eillance/transport/peer.hpp"
 #include "eillance/utils/dispatch_queue.hpp"
@@ -24,7 +25,47 @@
 
 namespace eillance::rtc {
 
-class RtcTransport {
+class RtcTrack : public transport::ITrack {
+    std::shared_ptr<::rtc::Track> track_;
+    std::shared_ptr<::rtc::RtcpSrReporter> reporter_;
+    std::shared_ptr<::rtc::RtpPacketizationConfig> rtp_config_;
+
+public:
+    RtcTrack(std::shared_ptr<::rtc::Track> track,
+             std::shared_ptr<::rtc::RtcpSrReporter> reporter,
+             std::shared_ptr<::rtc::RtpPacketizationConfig> rtp_config)
+        : track_(std::move(track)), reporter_(std::move(reporter)), rtp_config_(std::move(rtp_config)) {}
+
+    void SendSample(const std::vector<std::byte>& sample, uint64_t sample_time) override {
+        const auto elapsed_seconds = static_cast<double>(sample_time) / Time::uS;
+        const auto elapsed_timestamp = rtp_config_->secondsToTimestamp(elapsed_seconds);
+        rtp_config_->timestamp = rtp_config_->startTimestamp + elapsed_timestamp;
+        if (!sample.empty()) {
+            track_->send(sample);
+        }
+    }
+
+    auto getTrack() const { return track_; }
+};
+
+} // namespace eillance::rtc
+
+namespace eillance::rtc {
+namespace {
+    eillance::transport::PeerConnectionState toEillanceState(::rtc::PeerConnection::State state) {
+        switch (state) {
+            case ::rtc::PeerConnection::State::New: return eillance::transport::PeerConnectionState::New;
+            case ::rtc::PeerConnection::State::Connecting: return eillance::transport::PeerConnectionState::Connecting;
+            case ::rtc::PeerConnection::State::Connected: return eillance::transport::PeerConnectionState::Connected;
+            case ::rtc::PeerConnection::State::Disconnected: return eillance::transport::PeerConnectionState::Disconnected;
+            case ::rtc::PeerConnection::State::Failed: return eillance::transport::PeerConnectionState::Failed;
+            case ::rtc::PeerConnection::State::Closed: return eillance::transport::PeerConnectionState::Closed;
+        }
+        return eillance::transport::PeerConnectionState::Closed; // Should not happen
+    }
+}
+
+class RtcTransport final : public transport::Transport::TransportInterface {
 public:
   using Json = nlohmann::json;
   using Peer = transport::Peer; // Alias for convenience
@@ -35,13 +76,13 @@ public:
   RtcTransport(const RtcTransport&) = delete;
   auto operator=(RtcTransport&&) -> RtcTransport& = delete;
   auto operator=(const RtcTransport&) -> RtcTransport& = delete;
-  ~RtcTransport() = default;
+  ~RtcTransport() override = default;
 
-  void setDelegate(eillance::transport::TransportDelegate* delegate) {
+  void setDelegate(eillance::transport::TransportDelegate* delegate) override {
     delegate_ = delegate;
   }
 
-  void setStatusCallback(const StatusCallbackFunction& callback) {
+  void setStatusCallback(const StatusCallbackFunction& callback) override {
     status_callback_ = std::make_shared<StatusCallbackFunction>(callback);
   }
 
@@ -49,11 +90,11 @@ public:
     return service_connection_state_;
   }
 
-  void setName(const std::string& device_name) {
+  void setName(const std::string& device_name) override {
     device_name_ = device_name;
   }
 
-  void setId(const std::string& id) {
+  void setId(const std::string& id) override {
     assert(!is_logged_in_);
     id_ = id;
     if (device_name_.empty()) {
@@ -61,7 +102,7 @@ public:
     }
   }
 
-  void start() {
+  void start() override {
     assert(delegate_ != nullptr && "RtcTransport delegate must be set before starting");
     assert(!id_.empty());
     LOGI << "The local ID is: " << id_.data();
@@ -69,7 +110,7 @@ public:
     connectWebSocket();
   }
 
-  void terminate() {
+  void terminate() override {
     terminate_requested_ = true;
     if (ws_ != nullptr) {
       if (ws_->isOpen()) {
@@ -80,47 +121,52 @@ public:
     reportServiceConnectionState(ServiceConnectionState::disconnected);
   }
 
-  void addPeer(const std::string& peer_id, const std::shared_ptr<Peer>& peer) {
+  void addPeer(const std::string& peer_id, const std::shared_ptr<Peer>& peer) override {
     std::lock_guard<std::mutex> lock(peers_mutex_);
     peers_.emplace(std::string(peer_id), peer);
   }
 
-  auto getPeer(const std::string& peer_id) const -> std::shared_ptr<Peer> {
+  auto getPeer(const std::string& peer_id) const -> std::shared_ptr<Peer> override {
     std::lock_guard<std::mutex> lock(peers_mutex_);
     const auto it = peers_.find(peer_id);
     return (it != peers_.end()) ? it->second : nullptr;
   }
 
-  auto getPeers() const -> std::unordered_map<std::string, std::shared_ptr<Peer>> {
+  auto getPeers() const -> std::unordered_map<std::string, std::shared_ptr<Peer>> override {
     std::lock_guard<std::mutex> lock(peers_mutex_);
     return peers_;
   }
 
-  auto getPeerConnectionState(const std::string& peer_id) const -> ::rtc::PeerConnection::State {
+  auto getPeerConnectionState(const std::string& peer_id) const -> eillance::transport::PeerConnectionState override {
     std::lock_guard<std::mutex> lock(peers_mutex_);
     const auto it = peers_.find(peer_id);
     if (it != peers_.end() && it->second && it->second->data_peer_connection_) {
-      return it->second->data_peer_connection_->state();
+      return toEillanceState(std::static_pointer_cast<::rtc::PeerConnection>(it->second->data_peer_connection_)->state());
     }
-    return ::rtc::PeerConnection::State::Disconnected;
+    return eillance::transport::PeerConnectionState::Disconnected;
   }
 
-  void removePeer(const std::string& peer_id) {
+  void removePeer(const std::string& peer_id) override {
     std::lock_guard<std::mutex> lock(peers_mutex_);
     peers_.erase(peer_id);
   }
 
-  void sendSignalingMessage(const Json& message) const {
+  void sendSignalingMessage(const Json& message) const override {
     wsSendMessage(message);
   }
 
-  void sendPeerDataChannelMessage(const std::shared_ptr<::rtc::DataChannel>& dc, const Json& message) {
+  void sendPeerDataChannelMessage(const std::string& peer_id, const Json& message) const override {
+    std::lock_guard<std::mutex> lock(peers_mutex_);
+    auto it = peers_.find(peer_id);
+    if (it == peers_.end() || !it->second->data_channel_) return;
+
+    auto dc = std::static_pointer_cast<::rtc::DataChannel>(it->second->data_channel_);
     if (dc && dc->isOpen()) {
       dc->send(message.dump());
     }
   }
 
-  void addToStream(const std::shared_ptr<Peer>& peer, bool isAddingVideo) const {
+  void addToStream(const std::shared_ptr<Peer>& peer, bool isAddingVideo) const override {
     if (peer->GetState() == Peer::State::waiting) {
       peer->SetState(isAddingVideo ? Peer::State::waitingForAudio : Peer::State::waitingForVideo);
     } else if ((peer->GetState() == Peer::State::waitingForAudio && !isAddingVideo) ||
@@ -134,7 +180,7 @@ public:
     }
   }
 
-  auto createPeerConnection(const std::string& peer_id, const std::string& context) -> std::shared_ptr<::rtc::PeerConnection> {
+  void createPeerConnection(const std::string& peer_id, const std::string& context) {
     auto peer_connection = std::make_shared<::rtc::PeerConnection>(RtcConfiguration::config());
 
     peer_connection->onStateChange([this, peer_id, context](::rtc::PeerConnection::State state) {
@@ -148,13 +194,13 @@ public:
         case ::rtc::PeerConnection::State::Closed: stateStr = "Closed"; break;
       }
       LOGI << "Peer " << peer_id << " (" << context << ") state changed to " << stateStr << " (" << static_cast<int>(state) << ")";
-      reportPeerStateChange(peer_id, EventSource::peerConnectionState, static_cast<int>(state));
+      reportPeerStateChange(peer_id, EventSource::peerConnectionState, static_cast<int>(toEillanceState(state)));
 
       if (state == ::rtc::PeerConnection::State::Failed ||
           state == ::rtc::PeerConnection::State::Disconnected) {
-        if (const auto peer = getPeer(peer_id)) {
+        if (auto peer = getPeer(peer_id)) {
           LOGI << "Closing failed/disconnected " << context << " peer connection for " << peer_id;
-          if (context == "media" && peer->media_peer_connection_) peer->media_peer_connection_->close();
+          if (context == "media" && peer->has_media_peer_connection_) closePeerConnection(peer_id, "media");
         }
       } else if (state == ::rtc::PeerConnection::State::Closed) {
         LOGI << "Peer connection for " << peer_id << " is closed. Removing from transport.";
@@ -202,12 +248,83 @@ public:
     });
 
     peer_connection->onTrack([this, peer_id](const std::shared_ptr<::rtc::Track>& track) {
-      assert(delegate_);
-      delegate_->onTrack(peer_id, track);
+        assert(delegate_);
+        if (track->mid().find("video") != std::string::npos) {
+            track->onMessage([this, peer_id](::rtc::message_variant var){
+                if (std::holds_alternative<::rtc::binary>(var)) {
+                    delegate_->onFrameReceived(peer_id, std::get<::rtc::binary>(var));
+                }
+            });
+        }
     });
 
-    return peer_connection;
+    auto peer = getPeer(peer_id);
+    if (!peer) {
+        peer = std::make_shared<Peer>(peer_id);
+        addPeer(peer_id, peer);
+    }
+
+    if (context == "data") {
+        peer->data_peer_connection_ = peer_connection;
+    } else {
+        peer->media_peer_connection_ = peer_connection;
+    }
   }
+
+    void createDataPeerConnection(const std::string& peer_id) override { createPeerConnection(peer_id, "data"); }
+    void createMediaPeerConnection(const std::string& peer_id) override { createPeerConnection(peer_id, "media"); }
+
+    void createDataChannel(const std::string& peer_id, std::function<void(const std::string&)> on_message) override {
+        auto peer = getPeer(peer_id);
+        if (!peer || !peer->data_peer_connection_) return;
+        auto pc = std::static_pointer_cast<::rtc::PeerConnection>(peer->data_peer_connection_);
+        auto dc = pc->createDataChannel("data");
+
+        dc->onOpen([this, peer_id, peer]() {
+            LOGI << "Data channel with " << peer_id << " opened.";
+            peer->data_channel_is_open_ = true;
+            auto my_pub_key = peer->session_cipher_->GetPublicKey();
+            const Json key_exchange_message = {
+                {"type", "key_exchange"},
+                {"key", std::vector<std::byte>(my_pub_key.begin(), my_pub_key.end())},
+                {"is_reply", false}};
+            sendPeerDataChannelMessage(peer_id, key_exchange_message);
+        });
+        dc->onMessage(nullptr, [on_message](const std::string& msg){
+            on_message(msg);
+        });
+        peer->data_channel_ = dc;
+    }
+
+    void closePeerConnection(const std::string& peer_id, const std::string& context) override {
+        auto peer = getPeer(peer_id);
+        if (!peer) return;
+        auto pc = (context == "data") ? std::static_pointer_cast<::rtc::PeerConnection>(peer->data_peer_connection_)
+                                      : std::static_pointer_cast<::rtc::PeerConnection>(peer->media_peer_connection_);
+        if(pc) pc->close();
+    }
+
+    void setLocalDescription(const std::string& peer_id, const std::string& context) override {
+        auto peer = getPeer(peer_id);
+        if (!peer) return;
+        auto pc = (context == "data") ? std::static_pointer_cast<::rtc::PeerConnection>(peer->data_peer_connection_)
+                                      : std::static_pointer_cast<::rtc::PeerConnection>(peer->media_peer_connection_);
+        if(pc) pc->setLocalDescription();
+    }
+    void setRemoteDescription(const std::string& peer_id, const std::string& context, const std::string& sdp, const std::string& type) override {
+        auto peer = getPeer(peer_id);
+        if (!peer) return;
+        auto pc = (context == "data") ? std::static_pointer_cast<::rtc::PeerConnection>(peer->data_peer_connection_)
+                                      : std::static_pointer_cast<::rtc::PeerConnection>(peer->media_peer_connection_);
+        if(pc) pc->setRemoteDescription(::rtc::Description(sdp, type));
+    }
+    void addRemoteCandidate(const std::string& peer_id, const std::string& context, const std::string& candidate, const std::string& mid) override {
+        auto peer = getPeer(peer_id);
+        if (!peer) return;
+        auto pc = (context == "data") ? std::static_pointer_cast<::rtc::PeerConnection>(peer->data_peer_connection_)
+                                      : std::static_pointer_cast<::rtc::PeerConnection>(peer->media_peer_connection_);
+        if(pc) pc->addRemoteCandidate(::rtc::Candidate(candidate, mid));
+    }
 
 private:
   void connectWebSocket() {
@@ -249,7 +366,7 @@ private:
     auto peers_to_close = getPeers();
     for (const auto& [id, peer] : peers_to_close) {
       if (peer && peer->data_peer_connection_) {
-        peer->data_peer_connection_->close();
+        std::static_pointer_cast<::rtc::PeerConnection>(peer->data_peer_connection_)->close();
       }
     }
 
@@ -355,6 +472,50 @@ private:
     }
   }
 
+public:
+  auto addVideo(const std::string& peer_id, const std::function<void(void)>& on_open) -> std::shared_ptr<transport::ITrack> override {
+    auto peer = getPeer(peer_id);
+    if (!peer || !peer->media_peer_connection_) return nullptr;
+    auto pc = std::static_pointer_cast<::rtc::PeerConnection>(peer->media_peer_connection_);
+
+    auto video = ::rtc::Description::Video("video", ::rtc::Description::Direction::SendRecv);
+    constexpr auto payload_type = 102;
+    constexpr auto ssrc = 10001;
+    video.addH264Codec(payload_type);
+    video.addSSRC(ssrc, "video-stream", "stream1", "video-label");
+    auto track = pc->addTrack(video);
+    auto rtp_config = std::make_shared<::rtc::RtpPacketizationConfig>(ssrc, "video-stream", payload_type, ::rtc::H264RtpPacketizer::ClockRate);
+    const auto packetizer = std::make_shared<::rtc::H264RtpPacketizer>(::rtc::NalUnit::Separator::StartSequence, rtp_config);
+    const auto sr_reporter = std::make_shared<::rtc::RtcpSrReporter>(rtp_config);
+    packetizer->addToChain(sr_reporter);
+    const auto nack_responder = std::make_shared<::rtc::RtcpNackResponder>();
+    packetizer->addToChain(nack_responder);
+    track->setMediaHandler(packetizer);
+    track->onOpen(on_open);
+    return std::make_shared<RtcTrack>(track, sr_reporter, rtp_config);
+  }
+
+  auto addAudio(const std::string& peer_id, const std::function<void(void)>& on_open) -> std::shared_ptr<transport::ITrack> override {
+      auto peer = getPeer(peer_id);
+      if (!peer || !peer->media_peer_connection_) return nullptr;
+      auto pc = std::static_pointer_cast<::rtc::PeerConnection>(peer->media_peer_connection_);
+
+      auto audio = ::rtc::Description::Audio("audio", ::rtc::Description::Direction::SendRecv);
+      constexpr auto payload_type = 111;
+      constexpr auto ssrc = 10002;
+      audio.addOpusCodec(payload_type);
+      audio.addSSRC(ssrc, "audio-stream", "stream1", "audio-label");
+      auto track = pc->addTrack(audio);
+      auto rtp_config = std::make_shared<::rtc::RtpPacketizationConfig>(ssrc, "audio-stream", payload_type, ::rtc::OpusRtpPacketizer::DefaultClockRate);
+      const auto packetizer = std::make_shared<::rtc::OpusRtpPacketizer>(rtp_config);
+      const auto sr_reporter = std::make_shared<::rtc::RtcpSrReporter>(rtp_config);
+      packetizer->addToChain(sr_reporter);
+      track->setMediaHandler(packetizer);
+      track->onOpen(on_open);
+      return std::make_shared<RtcTrack>(track, sr_reporter, rtp_config);
+  }
+
+private:
   std::string id_{};
   std::string device_name_{id_};
   std::atomic<bool> is_logged_in_{false};

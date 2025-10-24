@@ -15,6 +15,7 @@ import androidx.core.app.NotificationCompat
 import hela.eillance.camera.R
 import hela.eillance.ndkio.AppState
 import hela.eillance.ndkio.VideoConfig
+import hela.eillance.webrtc.WebRtcTransport
 import hela.eillance.ndkio.interfaces.IClientNativeBridge
 import kotlinx.serialization.json.Json
 
@@ -28,12 +29,14 @@ class CallService : Service(), IClientNativeBridge {
   private var onJsonStateUpdate: ((String) -> Unit)? = null
   private val json = Json { ignoreUnknownKeys = true }
   private var wakeLock: PowerManager.WakeLock? = null
+  private var webRtcTransport: WebRtcTransport? = null
 
   // --- Service Lifecycle ---
   override fun onBind(intent: Intent?): IBinder = binder
 
   override fun onCreate() {
     super.onCreate()
+    webRtcTransport = WebRtcTransport(this)
     initEngine(this)
     start()
     startForegroundService()
@@ -48,6 +51,7 @@ class CallService : Service(), IClientNativeBridge {
 
   override fun onDestroy() {
     terminate()
+    webRtcTransport?.terminate()
     releaseWakeLock()
     super.onDestroy()
   }
