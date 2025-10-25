@@ -18,6 +18,7 @@ import hela.eillance.ndkio.VideoConfig
 import hela.eillance.ndkio.interfaces.IClientNativeBridge
 import hela.eillance.webrtc.WebRtcTransport
 import kotlinx.serialization.json.Json
+import org.webrtc.VideoSink
 
 class CallService : Service(), IClientNativeBridge {
 
@@ -29,14 +30,19 @@ class CallService : Service(), IClientNativeBridge {
   private var onJsonStateUpdate: ((String) -> Unit)? = null
   private val json = Json { ignoreUnknownKeys = true }
   private var wakeLock: PowerManager.WakeLock? = null
-  private var webRtcTransport: WebRtcTransport? = null
+  private var webRtcTransport: WebRtcTransport? = null // This will be set by the native code
+
+  // --- Public API for ViewModel ---
+  fun startLocalMedia() = webRtcTransport?.startLocalMedia()
+  fun stopLocalMedia() = webRtcTransport?.stopLocalMedia()
+  fun setLocalVideoSink(sink: VideoSink) = webRtcTransport?.setLocalSink(sink)
+  fun setRemoteVideoSink(peerId: String, sink: VideoSink) = webRtcTransport?.setRemoteSink(peerId, sink)
 
   // --- Service Lifecycle ---
   override fun onBind(intent: Intent?): IBinder = binder
 
   override fun onCreate() {
     super.onCreate()
-    webRtcTransport = WebRtcTransport(this, 0L) // Pass a dummy pointer for now
     initEngine(this)
     start()
     startForegroundService()
@@ -51,13 +57,17 @@ class CallService : Service(), IClientNativeBridge {
 
   override fun onDestroy() {
     terminate()
-    webRtcTransport?.terminate()
     releaseWakeLock()
     super.onDestroy()
   }
 
   fun setJsonStateCallback(callback: ((String) -> Unit)?) {
     onJsonStateUpdate = callback
+  }
+
+  // Called from C++ during initialization
+  fun setWebRtcTransport(transport: WebRtcTransport) {
+    webRtcTransport = transport
   }
 
   // This is the new single callback from C++
@@ -144,8 +154,6 @@ class CallService : Service(), IClientNativeBridge {
   private external fun start()
   private external fun terminate()
   external fun refreshState()
-  external fun initDecoder(surface: android.view.Surface)
-  external fun releaseDecoder()
   external fun call(peerId: String)
   external fun addContact(peerId: String)
   external fun acceptContact(peerId: String)

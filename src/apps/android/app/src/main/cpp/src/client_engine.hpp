@@ -8,16 +8,11 @@
 #include <vector>
 #include <cstddef>
 
-#include <android/native_window.h>
-#include <android/native_window_jni.h>
-#include <media/NdkMediaCodec.h>
 #include <nlohmann/json.hpp>
 
 #include "eillance/capture/video_config.hpp"
 #include "eillance/logging/logging.h"
 #include "eillance/client/client.hpp"
-#include "eillance/utils/event_queue.hpp"
-#include "eillance/utils/h264.hpp"
 #include "eillance/capture/capture.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/view_model/mercury_view_model.hpp"
@@ -34,16 +29,8 @@ class ClientEngine {
   JavaVM* jvm_;
   jobject native_bridge_{nullptr};
 
-  ANativeWindow* native_window_{nullptr};
-  AMediaCodec* media_codec_{nullptr};
-  std::atomic<bool> is_codec_configured_{false};
-
   std::shared_ptr<Client> client_;
   std::unique_ptr<view_model::MercuryViewModel> view_model_;
-
-  H264Parser h264_parser_{};
-
-  DispatchQueue codec_dispatch_queue_{"Codec", 1};
 
 public:
   ClientEngine(JavaVM* jvm, JNIEnv* env, jobject instance)
@@ -64,8 +51,6 @@ public:
     view_model_->SetOnStateChangedCallback([this]() {
       UpdateState();
     });
-
-    EventQueue::Instance();
 
     std::string device_name;
     auto stored_name = storage->Load("device_name");
@@ -109,42 +94,12 @@ public:
     return view_model_.get();
   }
 
-  void SetTargetSurface(JNIEnv* env, jobject surface) {
-    if (native_window_ != nullptr) {
-      ANativeWindow_release(native_window_);
-    }
-    native_window_ = ANativeWindow_fromSurface(env, surface);
-    InitH264Parser();
-  }
-
   void Start() {
     client_->start();
-    client_->setFrameReceivedCallback([this](const std::vector<std::byte>& frame) {
-      h264_parser_.ProcessFrame(frame);
-      if (codec_dispatch_queue_.Size() > 10) {
-        LOGW << "Decoding queue is full, dropping frames.";
-        codec_dispatch_queue_.RemovePending();
-      }
-      codec_dispatch_queue_.Dispatch([this, frame]() {
-        HandleInputBuffer(frame);
-      });
-    });
     LOGI << "Client engine is initialized and ready.";
   }
 
-  void Stop() {
-    is_codec_configured_ = false;
-    if (media_codec_ != nullptr) {
-      AMediaCodec_stop(media_codec_);
-      AMediaCodec_delete(media_codec_);
-      media_codec_ = nullptr;
-    }
-    if (native_window_ != nullptr) {
-      ANativeWindow_release(native_window_);
-      native_window_ = nullptr;
-    }
-    LOGI << "Decoder resources released.";
-  }
+  void Stop() {}
 
   void Terminate() {
     Stop();
@@ -183,98 +138,6 @@ private:
       default:
         return nullptr;
     }
-  }
-
-  void ConfigureCodec(const VideoConfig& conf) {
-    if (is_codec_configured_) {
-      LOGI << "Codec already configured, skipping reconfiguration.";
-      return;
-    }
-
-    AMediaFormat* format = AMediaFormat_new();
-    if (format == nullptr) {
-      LOGE << "Failed to create AMediaFormat.";
-      return;
-    }
-
-    LOGI << "Configuring decoder with dimensions: " << conf.width << "x" << conf.height;
-
-    AMediaFormat_setString(format, AMEDIAFORMAT_KEY_MIME, "video/avc");
-    AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_WIDTH, conf.width);
-    AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_HEIGHT, conf.height);
-
-    media_codec_ = AMediaCodec_createDecoderByType("video/avc");
-    if (media_codec_ == nullptr) {
-      LOGE << "Failed to create AMediaCodec.";
-      AMediaFormat_delete(format);
-      return;
-    }
-
-    media_status_t status = AMediaCodec_configure(media_codec_, format, native_window_, nullptr, 0);
-    if (status != AMEDIA_OK) {
-      LOGE << "AMediaCodec configuration failed with status: " << status;
-      AMediaCodec_delete(media_codec_);
-      media_codec_ = nullptr;
-    } else {
-      AMediaCodec_start(media_codec_);
-      is_codec_configured_ = true;
-      LOGI << "MediaCodec successfully configured and started.";
-    }
-
-    AMediaFormat_delete(format);
-  }
-
-  void HandleInputBuffer(const std::vector<std::byte>& frameBuffer) {
-    LOGD << "HandleInputBuffer: Received frame of size " << frameBuffer.size();
-    if (!is_codec_configured_) {
-      LOGW << "Codec not configured yet, dropping frame.";
-      return;
-    }
-    if (media_codec_ == nullptr) {
-      LOGE << "HandleInputBuffer: media_codec_ is null, dropping frame.";
-      return;
-    }
-
-    constexpr auto timeout = 5000ULL;
-    auto buf_index = AMediaCodec_dequeueInputBuffer(media_codec_, timeout);
-    if (buf_index >= 0) {
-      size_t buf_size = 0;
-      auto *buf = AMediaCodec_getInputBuffer(media_codec_, buf_index, &buf_size);
-      if (buf != nullptr) {
-        const auto copy_size = std::min(frameBuffer.size(), buf_size);
-        std::memcpy(buf, frameBuffer.data(), copy_size);
-        media_status_t status = AMediaCodec_queueInputBuffer(media_codec_, buf_index, 0, copy_size, 0, 0);
-        if (status != AMEDIA_OK) {
-          LOGE << "Failed to queue input buffer, status: " << status;
-        }
-      } else {
-        LOGE << "AMediaCodec_getInputBuffer returned null buffer";
-      }
-    } else {
-      LOGW << "AMediaCodec_dequeueInputBuffer failed with index: " << buf_index;
-    }
-
-    AMediaCodecBufferInfo info;
-    auto output_buffer_index = AMediaCodec_dequeueOutputBuffer(media_codec_, &info, 0);
-    if (output_buffer_index >= 0) {
-      AMediaCodec_releaseOutputBuffer(media_codec_, output_buffer_index, info.size > 0);
-    } else if (output_buffer_index == AMEDIACODEC_INFO_OUTPUT_FORMAT_CHANGED) {
-      AMediaFormat* format = AMediaCodec_getOutputFormat(media_codec_);
-      LOGI << "Decoder output format changed: " << AMediaFormat_toString(format);
-      AMediaFormat_delete(format);
-    } else if (output_buffer_index == AMEDIACODEC_INFO_TRY_AGAIN_LATER) {
-      // No output available yet
-    } else {
-      LOGW << "AMediaCodec_dequeueOutputBuffer returned unexpected index: " << output_buffer_index;
-    }
-  }
-
-  void InitH264Parser() {
-    h264_parser_.Reset();
-    h264_parser_.SetOnConfigureCallback([this](const VideoConfig conf) {
-      LOGI << "H264Parser::OnConfigureCallback triggered, configuring codec...";
-      ConfigureCodec(conf);
-    });
   }
 
   void UpdateState() {

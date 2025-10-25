@@ -14,6 +14,13 @@
 
 namespace eillance::transport {
 
+class AndroidRtcTrack final : public ITrack {
+public:
+    void SendSample(const std::vector<std::byte>& sample, uint64_t sample_time) override {
+        // No-op on Android, media is handled by the platform's WebRTC stack
+    }
+};
+
 class AndroidRtcTransport final : public Transport::TransportInterface {
   JavaVM* jvm_;
   jobject transport_java_ref_{nullptr};
@@ -38,6 +45,13 @@ public:
 
     jobject transport_local_ref = env->NewObject(transportClass, constructor, context, reinterpret_cast<jlong>(this));
     transport_java_ref_ = env->NewGlobalRef(transport_local_ref);
+
+    // Pass the created WebRtcTransport object back to the CallService
+    jclass callServiceClass = env->GetObjectClass(context);
+    jmethodID setTransportMethod = env->GetMethodID(callServiceClass, "setWebRtcTransport", "(Lhela/eillance/webrtc/WebRtcTransport;)V");
+    if (setTransportMethod) {
+        env->CallVoidMethod(context, setTransportMethod, transport_java_ref_);
+    }
   }
 
   ~AndroidRtcTransport() override {
@@ -192,8 +206,31 @@ public:
     env->DeleteLocalRef(j_mid);
   }
 
-  auto addVideo(const std::string& peer_id, const std::function<void(void)>& on_open) -> std::shared_ptr<ITrack> override { return nullptr; }
-  auto addAudio(const std::string& peer_id, const std::function<void(void)>& on_open) -> std::shared_ptr<ITrack> override { return nullptr; }
+  auto addVideo(const std::string& peer_id, const std::function<void(void)>& on_open) -> std::shared_ptr<ITrack> override {
+      JNIEnv* env = Attach();
+      if (!env || !transport_java_ref_) return nullptr;
+      jclass cls = env->GetObjectClass(transport_java_ref_);
+      jmethodID mid = env->GetMethodID(cls, "addVideoTrack", "(Ljava/lang/String;)V");
+      if (!mid) return nullptr;
+
+      jstring j_peer_id = env->NewStringUTF(peer_id.c_str());
+      env->CallVoidMethod(transport_java_ref_, mid, j_peer_id);
+      env->DeleteLocalRef(j_peer_id);
+      return std::make_shared<AndroidRtcTrack>();
+  }
+  auto addAudio(const std::string& peer_id, const std::function<void(void)>& on_open) -> std::shared_ptr<ITrack> override {
+      JNIEnv* env = Attach();
+      if (!env || !transport_java_ref_) return nullptr;
+      jclass cls = env->GetObjectClass(transport_java_ref_);
+      jmethodID mid = env->GetMethodID(cls, "addAudioTrack", "(Ljava/lang/String;)V");
+      if (!mid) return nullptr;
+
+      jstring j_peer_id = env->NewStringUTF(peer_id.c_str());
+      env->CallVoidMethod(transport_java_ref_, mid, j_peer_id);
+      env->DeleteLocalRef(j_peer_id);
+
+      return std::make_shared<AndroidRtcTrack>();
+  }
 
 private:
   void createPeerConnection(const std::string& peer_id, const std::string& context) {

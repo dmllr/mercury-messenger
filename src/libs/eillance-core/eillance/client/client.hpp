@@ -250,6 +250,7 @@ inline void Client::connect(const std::string& peer_id) {
   setupDataChannel(peer, peer_id);
   transport_->createDataPeerConnection(peer_id);
   transport_->createDataChannel(peer_id);
+  transport_->createOffer(peer_id, "data");
 }
 inline void Client::startVoiceCall(const std::string& peer_id) {
   startMediaCall(peer_id, false);
@@ -263,19 +264,23 @@ inline void Client::acceptCall(const std::string& peer_id) {
     LOGW << "Cannot accept call from " << peer_id << ", no pending offer found.";
     return;
   }
+  const bool is_video_call = peer->pending_offer_sdp->find("m=video") != std::string::npos;
+
   transport_->createMediaPeerConnection(peer_id);
   av_stream_->Start();
+
+  transport_->setRemoteDescription(peer_id, "media", *peer->pending_offer_sdp, "offer");
+  peer->pending_offer_sdp.reset();
+
   peer->audio_ = transport_->addAudio(peer_id, [this, wpeer = make_weak_ptr(peer)]() {
     if (const auto p = wpeer.lock()) { transport_->addToStream(p, false); }
   });
-  if (peer->pending_offer_sdp->find("m=video") != std::string::npos) {
+  if (is_video_call) {
     peer->video_ = transport_->addVideo(peer_id, [this, wpeer = make_weak_ptr(peer)]() {
       if (const auto p = wpeer.lock()) { transport_->addToStream(p, true); }
     });
   }
-  LOGI << "Accepting call from " << peer_id << ". Setting remote description.";
-  transport_->setRemoteDescription(peer_id, "media", *peer->pending_offer_sdp, "offer");
-  peer->pending_offer_sdp.reset();
+
   if (!peer->pending_candidates.empty()) {
     LOGI << "Applying " << peer->pending_candidates.size() << " buffered ICE candidates for " << peer_id;
     for (const auto& candidate : peer->pending_candidates) {
@@ -401,8 +406,8 @@ inline void Client::processPeerMessage(Json message) {
       LOGD << "Received media offer from " << peer_id << ". Storing it and notifying UI.";
       peer->pending_offer_sdp = message["sdp"].get<std::string>();
       auto call_type = (peer->pending_offer_sdp->find("m=video") != std::string::npos)
-                         ? messaging::HistoryEntryKind::videoCall
-                         : messaging::HistoryEntryKind::voiceCall;
+                       ? messaging::HistoryEntryKind::videoCall
+                       : messaging::HistoryEntryKind::voiceCall;
       (*on_incoming_call_)(peer_id, call_type);
     } else if (type == "candidate") {
       const auto candidate_str = message["candidate"].get<std::string>();
