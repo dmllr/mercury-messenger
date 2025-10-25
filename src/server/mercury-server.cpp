@@ -147,10 +147,10 @@ private:
           auto itr = peers_.find(destination_id);
           if (itr == peers_.end() || !itr->second.ws || !itr->second.ws->isOpen()) {
             LGE << "Peer " << destination_id << " not found or not connected.";            
-            const bool is_service_message = (type == "contact_add_request" || type == "contact_confirm");
-            if (is_service_message) {
+            const bool is_queueable_message = (type == "offer" || type == "answer" || type == "candidate" || type == "contact_add_request" || type == "contact_confirm");
+            if (is_queueable_message) {
                 const std::lock_guard<std::mutex> service_lock(service_messages_mutex_);
-                LGI << "Queueing service message of type '" << type << "' for offline peer " << destination_id;
+                LGI << "Queueing P2P setup message of type '" << type << "' for offline peer " << destination_id;
                 json["from"] = peer_id;
                 offline_service_messages_[destination_id].push_back(json.dump());
             } else {
@@ -160,7 +160,7 @@ private:
                 LGI << "Peer " << peer_id << " registered interest in offline peer " << destination_id;
                 interested_peers_[destination_id].insert(peer_id);
             }
-            return;            
+            return;
           }
 
           json["from"] = peer_id;
@@ -180,14 +180,27 @@ private:
       return;
     }
 
+    bool was_removed = false;
     {
       const std::lock_guard<std::mutex> lock(peersMutex_);
       auto it = peers_.find(peer_id);
       if (it != peers_.end() && it->second.ws.get() == wss_ptr) {
         peers_.erase(it);
         LGI << "Peer disconnected and removed: " << peer_id;
+        was_removed = true;
       } else {
         LGI << "Stale connection for peer " << peer_id << " closed.";
+      }
+    }
+
+    if (was_removed) {
+      Json offline_notification{{"type", "peer_offline"}, {"id", peer_id}};
+      const auto notification_str = offline_notification.dump();
+      const std::lock_guard<std::mutex> lock(peersMutex_);
+      for (const auto& [other_peer_id, other_peer] : peers_) {
+        if (other_peer.ws && other_peer.ws->isOpen()) {
+          other_peer.ws->send(notification_str);
+        }
       }
     }
 

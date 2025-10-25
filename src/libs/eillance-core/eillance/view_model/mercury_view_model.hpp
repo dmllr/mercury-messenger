@@ -139,7 +139,14 @@ private:
 };
 
 inline void MercuryViewModel::SelectContact(const std::string& peer_id) {
-  client_->connect(peer_id);
+  const auto state = client_->getPeerConnectionState(peer_id);
+  if (state == eillance::transport::PeerConnectionState::Disconnected ||
+      state == eillance::transport::PeerConnectionState::Failed ||
+      state == eillance::transport::PeerConnectionState::Closed ||
+      state == eillance::transport::PeerConnectionState::New) {
+    client_->connect(peer_id);
+  }
+
   dispatch_queue_.Dispatch([this, peer_id] {
     bool selection_changed{false};
     {

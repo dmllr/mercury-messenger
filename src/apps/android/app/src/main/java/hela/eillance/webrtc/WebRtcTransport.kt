@@ -10,9 +10,9 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
-import org.json.JSONArray
 import org.json.JSONObject
 import org.webrtc.AudioTrack
+import org.webrtc.DataChannel
 import org.webrtc.DefaultVideoDecoderFactory
 import org.webrtc.DefaultVideoEncoderFactory
 import org.webrtc.EglBase
@@ -23,17 +23,20 @@ import org.webrtc.PeerConnection
 import org.webrtc.PeerConnection.RTCConfiguration
 import org.webrtc.PeerConnectionFactory
 import org.webrtc.RtpReceiver
+import org.webrtc.SdpObserver
 import org.webrtc.SessionDescription
 import org.webrtc.VideoTrack
+import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentHashMap
 
-class WebRtcTransport(context: Context, private val nativePointer: Long = 0L) {
+class WebRtcTransport(context: Context, private val nativePointer: Long) {
     private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val signalingClient = SignalingClient()
     private val eglBase: EglBase = EglBase.create()
 
     private val peerConnectionFactory: PeerConnectionFactory
     private val peers = ConcurrentHashMap<String, PeerConnection>()
+    private val dataChannels = ConcurrentHashMap<String, DataChannel>()
     private var isObservingMessages = false
 
     private external fun nativeOnPeerMessage(nativePointer: Long, message: String)
@@ -41,6 +44,9 @@ class WebRtcTransport(context: Context, private val nativePointer: Long = 0L) {
     private external fun nativeOnPeerOnline(nativePointer: Long, peerId: String)
     private external fun nativeOnPeerOffline(nativePointer: Long, peerId: String)
     private external fun nativeOnSignalingError(nativePointer: Long, peerId: String, error: String)
+    private external fun nativeOnDataChannelMessage(nativePointer: Long, peerId: String, message: String)
+    private external fun nativeOnDataChannelOpen(nativePointer: Long, peerId: String)
+
 
     init {
         PeerConnectionFactory.initialize(
@@ -54,15 +60,16 @@ class WebRtcTransport(context: Context, private val nativePointer: Long = 0L) {
             .createPeerConnectionFactory()
     }
 
-    fun connect() {
+    fun connect(peerId: String) {
         observeSignaling()
-        signalingClient.connect()
+        signalingClient.connect(peerId)
     }
 
     fun terminate() {
         signalingClient.disconnect()
         peers.values.forEach { it.close() }
         peers.clear()
+        dataChannels.clear()
         peerConnectionFactory.dispose()
         eglBase.release()
         coroutineScope.cancel()
@@ -86,16 +93,23 @@ class WebRtcTransport(context: Context, private val nativePointer: Long = 0L) {
         }
 
         val observer = object : PeerConnection.Observer {
-            override fun onSignalingChange(p0: PeerConnection.SignalingState?) {}
-            override fun onIceConnectionChange(p0: PeerConnection.IceConnectionState?) {}
+            override fun onSignalingChange(newState: PeerConnection.SignalingState?) {
+                Log.i(TAG, "onSignalingChange for peer $peerId ($context): $newState")
+            }
+            override fun onIceConnectionChange(newState: PeerConnection.IceConnectionState?) {
+                Log.i(TAG, "onIceConnectionChange for peer $peerId ($context): $newState")
+            }
             override fun onIceConnectionReceivingChange(p0: Boolean) {}
-            override fun onIceGatheringChange(p0: PeerConnection.IceGatheringState?) {}
-            override fun onIceCandidate(candidate: IceCandidate) {
+            override fun onIceGatheringChange(newState: PeerConnection.IceGatheringState?) {
+                Log.i(TAG, "onIceGatheringChange for peer $peerId ($context): $newState")
+            }
+            override fun onIceCandidate(candidate: IceCandidate?) {
+                if (candidate == null) return
                 val candidateJson = JSONObject().apply {
                     put("type", "candidate")
                     put("to", peerId)
                     put("context", context)
-                    put("sdp", candidate.sdp)
+                    put("candidate", candidate.sdp)
                     put("sdpMLineIndex", candidate.sdpMLineIndex)
                     put("sdpMid", candidate.sdpMid)
                 }
@@ -104,17 +118,48 @@ class WebRtcTransport(context: Context, private val nativePointer: Long = 0L) {
 
             override fun onIceCandidatesRemoved(p0: Array<out IceCandidate>?) {}
             override fun onAddStream(stream: MediaStream?) {
+                Log.i(TAG, "onAddStream for peer $peerId ($context)")
                 stream?.videoTracks?.firstOrNull()?.let {
-                    // onTrack("video", it)
+// onTrack("video", it)
                 }
                 stream?.audioTracks?.firstOrNull()?.let {
-                    // onTrack("audio", it)
+// onTrack("audio", it)
                 }
             }
 
             override fun onRemoveStream(p0: MediaStream?) {}
-            override fun onDataChannel(p0: org.webrtc.DataChannel?) {}
-            override fun onRenegotiationNeeded() {}
+            override fun onDataChannel(dc: DataChannel?) {
+                dc ?: return
+                Log.d(TAG, "onDataChannel received for label: ${dc.label()} from $peerId")
+                dataChannels[peerId] = dc
+                val dataChannelObserver = object : DataChannel.Observer {
+                    override fun onBufferedAmountChange(p0: Long) {}
+                    override fun onStateChange() {
+                        Log.d(TAG, "Incoming data channel state for $peerId changed to: ${dc.state()}")
+                        if (dc.state() == DataChannel.State.OPEN) {
+                            nativeOnDataChannelOpen(nativePointer, peerId)
+                        }
+                    }
+                    override fun onMessage(buffer: DataChannel.Buffer?) {
+                        buffer ?: return
+                        val data = ByteArray(buffer.data.remaining())
+                        buffer.data.get(data)
+                        nativeOnDataChannelMessage(nativePointer, peerId, String(data))
+                    }
+                }
+                dc.registerObserver(dataChannelObserver)
+            }
+            override fun onRenegotiationNeeded() {
+                Log.i(TAG, "onRenegotiationNeeded for peer: $peerId, context: $context")
+                peers[peerId]?.let { pc ->
+                    if (pc.signalingState() == PeerConnection.SignalingState.STABLE) {
+                        Log.i(TAG, "Signaling state is stable, creating offer for $peerId")
+                        createOffer(peerId, context)
+                    } else {
+                        Log.w(TAG, "Renegotiation needed for $peerId but signaling state is ${pc.signalingState()}, suppressing offer creation.")
+                    }
+                }
+            }
             override fun onAddTrack(rtpReceiver: RtpReceiver, mediaStreams: Array<out MediaStream>) {
                 rtpReceiver.track()?.let { track ->
                     when (track) {
@@ -125,6 +170,103 @@ class WebRtcTransport(context: Context, private val nativePointer: Long = 0L) {
             }
         }
         peers[peerId] = peerConnectionFactory.createPeerConnection(rtcConfig, observer) ?: return
+    }
+
+    fun createDataChannel(peerId: String) {
+        val pc = peers[peerId] ?: return
+        Log.d(TAG, "Creating data channel for peer: $peerId")
+        val dc = pc.createDataChannel("data", DataChannel.Init())
+        dataChannels[peerId] = dc
+        val dataChannelObserver = object : DataChannel.Observer {
+            override fun onBufferedAmountChange(p0: Long) {}
+            override fun onStateChange() {
+                Log.d(TAG, "Outgoing data channel state for $peerId changed to: ${dc.state()}")
+                if (dc.state() == DataChannel.State.OPEN) {
+                    nativeOnDataChannelOpen(nativePointer, peerId)
+                }
+            }
+            override fun onMessage(buffer: DataChannel.Buffer?) {
+                buffer ?: return
+                val data = ByteArray(buffer.data.remaining())
+                buffer.data.get(data)
+                nativeOnDataChannelMessage(nativePointer, peerId, String(data))
+            }
+        }
+        dc.registerObserver(dataChannelObserver)
+    }
+
+    fun sendDataChannelMessage(peerId: String, message: String) {
+        val dc = dataChannels[peerId]
+        if (dc == null) {
+            Log.e(TAG, "DataChannel for peer $peerId not found.")
+            return
+        }
+        if (dc.state() == DataChannel.State.OPEN) {
+            val buffer = ByteBuffer.wrap(message.toByteArray())
+            dc.send(DataChannel.Buffer(buffer, false))
+        } else {
+            Log.w(TAG, "Attempted to send message on non-open DataChannel for peer $peerId. State: ${dc.state()}")
+        }
+    }
+
+    fun createOffer(peerId: String, context: String) {
+        val pc = peers[peerId] ?: return
+        val sdpObserver = object : SdpObserver {
+            override fun onCreateSuccess(sdp: SessionDescription?) { if (sdp != null) pc.setLocalDescription(this, sdp) }
+            override fun onSetSuccess() {
+                pc.localDescription?.let { localSdp ->
+                    val message = JSONObject().apply {
+                        put("type", localSdp.type.canonicalForm())
+                        put("sdp", localSdp.description)
+                        put("to", peerId)
+                        put("context", context)
+                    }
+                    sendSignalingMessage(message.toString())
+                }
+            }
+            override fun onCreateFailure(s: String?) { Log.e(TAG, "createOffer failed: $s") }
+            override fun onSetFailure(s: String?) { Log.e(TAG, "setLocalDescription failed: $s") }
+        }
+        pc.createOffer(sdpObserver, MediaConstraints())
+    }
+
+    fun createAnswer(peerId: String, context: String) {
+        val pc = peers[peerId] ?: return
+        val sdpObserver = object : SdpObserver {
+            override fun onCreateSuccess(sdp: SessionDescription?) { if (sdp != null) pc.setLocalDescription(this, sdp) }
+            override fun onSetSuccess() {
+                pc.localDescription?.let { localSdp ->
+                    val message = JSONObject().apply {
+                        put("type", localSdp.type.canonicalForm())
+                        put("sdp", localSdp.description)
+                        put("to", peerId)
+                        put("context", context)
+                    }
+                    sendSignalingMessage(message.toString())
+                }
+            }
+            override fun onCreateFailure(s: String?) { Log.e(TAG, "createAnswer failed: $s") }
+            override fun onSetFailure(s: String?) { Log.e(TAG, "setLocalDescription failed: $s") }
+        }
+        pc.createAnswer(sdpObserver, MediaConstraints())
+    }
+
+    fun setRemoteDescription(peerId: String, context: String, sdp: String, type: String) {
+        val pc = peers[peerId] ?: return
+        val sdpObserver = object : SdpObserver {
+            override fun onCreateSuccess(sdp: SessionDescription?) {}
+            override fun onSetSuccess() {}
+            override fun onCreateFailure(s: String?) {}
+            override fun onSetFailure(s: String?) { Log.e(TAG, "Failed to set remote description: $s") }
+        }
+        val sdpType = SessionDescription.Type.fromCanonicalForm(type)
+        pc.setRemoteDescription(sdpObserver, SessionDescription(sdpType, sdp))
+    }
+
+    fun addRemoteCandidate(peerId: String, context: String, candidateSdp: String, mid: String) {
+        val pc = peers[peerId] ?: return
+        val candidate = IceCandidate(mid, -1, candidateSdp)
+        pc.addIceCandidate(candidate)
     }
 
     fun sendSignalingMessage(message: String) {

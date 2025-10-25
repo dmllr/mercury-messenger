@@ -46,9 +46,10 @@ public:
   auto getPeerConnectionState(const std::string& peer_id) const -> eillance::transport::PeerConnectionState { return self_->getPeerConnectionState(peer_id); }
   void createDataPeerConnection(const std::string& peer_id) const { self_->createDataPeerConnection(peer_id); }
   void createMediaPeerConnection(const std::string& peer_id) const { self_->createMediaPeerConnection(peer_id); }
-  void createDataChannel(const std::string& peer_id, std::function<void(const std::string&)> on_message) const { self_->createDataChannel(peer_id, on_message); }
+  void createDataChannel(const std::string& peer_id) const { self_->createDataChannel(peer_id); }
   void closePeerConnection(const std::string& peer_id, const std::string& context) const { self_->closePeerConnection(peer_id, context); }
-  void setLocalDescription(const std::string& peer_id, const std::string& context) const { self_->setLocalDescription(peer_id, context); }
+  void createOffer(const std::string& peer_id, const std::string& context) const { self_->createOffer(peer_id, context); }
+  void createAnswer(const std::string& peer_id, const std::string& context) const { self_->createAnswer(peer_id, context); }
   void setRemoteDescription(const std::string& peer_id, const std::string& context, const std::string& sdp, const std::string& type) const { self_->setRemoteDescription(peer_id, context, sdp, type); }
   void addRemoteCandidate(const std::string& peer_id, const std::string& context, const std::string& candidate, const std::string& mid) const { self_->addRemoteCandidate(peer_id, context, candidate, mid); }
   void removePeer(const std::string& peer_id) const { self_->removePeer(peer_id); }
@@ -78,9 +79,10 @@ public:
     virtual auto getPeerConnectionState(const std::string& peer_id) const -> eillance::transport::PeerConnectionState = 0;
     virtual void createDataPeerConnection(const std::string& peer_id) = 0;
     virtual void createMediaPeerConnection(const std::string& peer_id) = 0;
-    virtual void createDataChannel(const std::string& peer_id, std::function<void(const std::string&)> on_message) = 0;
+    virtual void createDataChannel(const std::string& peer_id) = 0;
     virtual void closePeerConnection(const std::string& peer_id, const std::string& context) = 0;
-    virtual void setLocalDescription(const std::string& peer_id, const std::string& context) = 0;
+    virtual void createOffer(const std::string& peer_id, const std::string& context) = 0;
+    virtual void createAnswer(const std::string& peer_id, const std::string& context) = 0;
     virtual void setRemoteDescription(const std::string& peer_id, const std::string& context, const std::string& sdp, const std::string& type) = 0;
     virtual void addRemoteCandidate(const std::string& peer_id, const std::string& context, const std::string& candidate, const std::string& mid) = 0;
     virtual void removePeer(const std::string& peer_id) = 0;
@@ -111,9 +113,10 @@ public:
     auto getPeerConnectionState(const std::string& peer_id) const -> eillance::transport::PeerConnectionState override { return transport_->getPeerConnectionState(peer_id); }
     void createDataPeerConnection(const std::string& peer_id) override { transport_->createDataPeerConnection(peer_id); }
     void createMediaPeerConnection(const std::string& peer_id) override { transport_->createMediaPeerConnection(peer_id); }
-    void createDataChannel(const std::string& peer_id, std::function<void(const std::string&)> on_message) override { transport_->createDataChannel(peer_id, on_message); }
+    void createDataChannel(const std::string& peer_id) override { transport_->createDataChannel(peer_id); }
     void closePeerConnection(const std::string& peer_id, const std::string& context) override { transport_->closePeerConnection(peer_id, context); }
-    void setLocalDescription(const std::string& peer_id, const std::string& context) override { transport_->setLocalDescription(peer_id, context); }
+    void createOffer(const std::string& peer_id, const std::string& context) override { transport_->createOffer(peer_id, context); }
+    void createAnswer(const std::string& peer_id, const std::string& context) override { transport_->createAnswer(peer_id, context); }
     void setRemoteDescription(const std::string& peer_id, const std::string& context, const std::string& sdp, const std::string& type) override { transport_->setRemoteDescription(peer_id, context, sdp, type); }
     void addRemoteCandidate(const std::string& peer_id, const std::string& context, const std::string& candidate, const std::string& mid) override { transport_->addRemoteCandidate(peer_id, context, candidate, mid); }
     void removePeer(const std::string& peer_id) override { transport_->removePeer(peer_id); }
