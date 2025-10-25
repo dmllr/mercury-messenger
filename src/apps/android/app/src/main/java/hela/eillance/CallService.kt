@@ -15,8 +15,8 @@ import androidx.core.app.NotificationCompat
 import hela.eillance.camera.R
 import hela.eillance.ndkio.AppState
 import hela.eillance.ndkio.VideoConfig
-import hela.eillance.webrtc.WebRtcTransport
 import hela.eillance.ndkio.interfaces.IClientNativeBridge
+import hela.eillance.webrtc.WebRtcTransport
 import kotlinx.serialization.json.Json
 
 class CallService : Service(), IClientNativeBridge {
@@ -36,7 +36,7 @@ class CallService : Service(), IClientNativeBridge {
 
   override fun onCreate() {
     super.onCreate()
-    webRtcTransport = WebRtcTransport(this)
+    webRtcTransport = WebRtcTransport(this, 0L) // Pass a dummy pointer for now
     initEngine(this)
     start()
     startForegroundService()

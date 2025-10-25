@@ -3,10 +3,13 @@
 #include <jni.h>
 #include <memory>
 #include <string>
+#include <mutex>
+#include <unordered_map>
 
 #include <nlohmann/json.hpp>
 #include "eillance/transport/transport.hpp"
 #include "eillance/logging/logging.h"
+#include "eillance/transport/peer.hpp"
 #include "../utils/jni_utils.hpp"
 
 namespace eillance::transport {
@@ -15,8 +18,11 @@ class AndroidRtcTransport final : public Transport::TransportInterface {
   JavaVM* jvm_;
   jobject transport_java_ref_{nullptr};
   TransportDelegate* delegate_{nullptr};
+  std::string id_;
 
-  // This helper must be const to be callable from other const methods.
+  std::unordered_map<std::string, std::shared_ptr<Peer>> peers_;
+  mutable std::mutex peers_mutex_;
+
   auto Attach() const -> JNIEnv* { return eillance::jni::AttachCurrentThreadIfNeeded(jvm_); }
 
 public:
@@ -41,100 +47,151 @@ public:
     }
   }
 
-  // --- Implementation of Transport::TransportInterface ---
-
   void setDelegate(TransportDelegate* delegate) override { delegate_ = delegate; }
   TransportDelegate* delegate() { return delegate_; }
 
-  void setStatusCallback(const Transport::StatusCallbackFunction& callback) override {
-    // Status is managed by the Kotlin layer and propagated through the ViewModel.
-  }
-
-  void setName(const std::string& device_name) override {
-    // Not needed for the Android implementation.
-  }
-
-  void setId(const std::string& id) override {
-    // Not needed for the Android implementation.
-  }
+  void setStatusCallback(const Transport::StatusCallbackFunction& callback) override {}
+  void setName(const std::string& device_name) override {}
+  void setId(const std::string& id) override { id_ = id; }
 
   void start() override {
     JNIEnv* env = Attach();
     if (!env || !transport_java_ref_) return;
-
     jclass transportClass = env->GetObjectClass(transport_java_ref_);
-    jmethodID startMethod = env->GetMethodID(transportClass, "connect", "()V");
-    env->CallVoidMethod(transport_java_ref_, startMethod);
+    jmethodID startMethod = env->GetMethodID(transportClass, "connect", "(Ljava/lang/String;)V");
+    jstring j_id = env->NewStringUTF(id_.c_str());
+    env->CallVoidMethod(transport_java_ref_, startMethod, j_id);
+    env->DeleteLocalRef(j_id);
   }
 
   void terminate() override {
     JNIEnv* env = Attach();
     if (!env || !transport_java_ref_) return;
-
     jclass transportClass = env->GetObjectClass(transport_java_ref_);
     jmethodID terminateMethod = env->GetMethodID(transportClass, "terminate", "()V");
     env->CallVoidMethod(transport_java_ref_, terminateMethod);
   }
 
   void addPeer(const std::string& peer_id, const std::shared_ptr<Peer>& peer) override {
-    // Peer management is handled by the Kotlin implementation.
+    std::lock_guard<std::mutex> lock(peers_mutex_);
+    peers_.emplace(peer_id, peer);
   }
-
   auto getPeer(const std::string& peer_id) const -> std::shared_ptr<Peer> override {
-    return nullptr; // Peer objects are not stored on the C++ side for Android.
+    std::lock_guard<std::mutex> lock(peers_mutex_);
+    const auto it = peers_.find(peer_id);
+    return (it != peers_.end()) ? it->second : nullptr;
+  }
+  auto getPeers() const -> std::unordered_map<std::string, std::shared_ptr<Peer>> override {
+    std::lock_guard<std::mutex> lock(peers_mutex_);
+    return peers_;
+  }
+  void removePeer(const std::string& peer_id) override {
+    std::lock_guard<std::mutex> lock(peers_mutex_);
+    peers_.erase(peer_id);
   }
 
-  auto getPeers() const -> std::unordered_map<std::string, std::shared_ptr<Peer>> override {
-    return {};
-  }
 
   auto getPeerConnectionState(const std::string& peer_id) const -> eillance::transport::PeerConnectionState override {
     JNIEnv* env = Attach();
     if (!env || !transport_java_ref_) return eillance::transport::PeerConnectionState::Closed;
-
     jclass transportClass = env->GetObjectClass(transport_java_ref_);
-    jmethodID getPeerConnectionStateMethod = env->GetMethodID(transportClass, "getPeerConnectionState", "(Ljava/lang/String;)I");
+    jmethodID method = env->GetMethodID(transportClass, "getPeerConnectionState", "(Ljava/lang/String;)I");
     jstring j_peer_id = env->NewStringUTF(peer_id.c_str());
-    jint state_val = env->CallIntMethod(transport_java_ref_, getPeerConnectionStateMethod, j_peer_id);
+    jint state_val = env->CallIntMethod(transport_java_ref_, method, j_peer_id);
     env->DeleteLocalRef(j_peer_id);
     return static_cast<eillance::transport::PeerConnectionState>(state_val);
-  }
-
-  void removePeer(const std::string& peer_id) override {
-    // Peer management is handled by the Kotlin implementation.
   }
 
   void sendSignalingMessage(const Transport::Json& message) const override {
     JNIEnv* env = Attach();
     if (!env || !transport_java_ref_) return;
     jclass transportClass = env->GetObjectClass(transport_java_ref_);
-    jmethodID sendMethod = env->GetMethodID(transportClass, "sendSignalingMessage", "(Ljava/lang/String;)V");
-
+    jmethodID method = env->GetMethodID(transportClass, "sendSignalingMessage", "(Ljava/lang/String;)V");
     std::string msg_str = message.dump();
     jstring j_msg = env->NewStringUTF(msg_str.c_str());
-    env->CallVoidMethod(transport_java_ref_, sendMethod, j_msg);
+    env->CallVoidMethod(transport_java_ref_, method, j_msg);
     env->DeleteLocalRef(j_msg);
   }
 
   void sendPeerDataChannelMessage(const std::string& peer_id, const Transport::Json& message) const override {
-    // Direct data channel messages from C++ are not used in the Android impl.
+    JNIEnv* env = Attach();
+    if (!env || !transport_java_ref_) return;
+    jclass transportClass = env->GetObjectClass(transport_java_ref_);
+    jmethodID method = env->GetMethodID(transportClass, "sendDataChannelMessage", "(Ljava/lang/String;Ljava/lang/String;)V");
+    if (!method) {
+      LOGE << "Failed to find method sendDataChannelMessage";
+      return;
+    }
+    std::string msg_str = message.dump();
+    jstring j_peer_id = env->NewStringUTF(peer_id.c_str());
+    jstring j_msg = env->NewStringUTF(msg_str.c_str());
+    env->CallVoidMethod(transport_java_ref_, method, j_peer_id, j_msg);
+    env->DeleteLocalRef(j_peer_id);
+    env->DeleteLocalRef(j_msg);
   }
 
   void addToStream(const std::shared_ptr<Peer>& peer, bool isAddingVideo) const override {}
-
-  void createDataPeerConnection(const std::string& peer_id) override {
-    createPeerConnection(peer_id, "data");
-  }
-
-  void createMediaPeerConnection(const std::string& peer_id) override {
-    createPeerConnection(peer_id, "media");
-  }
-
-  void createDataChannel(const std::string& peer_id, std::function<void(const std::string&)> on_message) override {}
+  void createDataPeerConnection(const std::string& peer_id) override { createPeerConnection(peer_id, "data"); }
+  void createMediaPeerConnection(const std::string& peer_id) override { createPeerConnection(peer_id, "media"); }
+  void createDataChannel(const std::string& peer_id) override;
   void closePeerConnection(const std::string& peer_id, const std::string& context) override {}
-  void setLocalDescription(const std::string& peer_id, const std::string& context) override {}
-  void setRemoteDescription(const std::string& peer_id, const std::string& context, const std::string& sdp, const std::string& type) override {}
-  void addRemoteCandidate(const std::string& peer_id, const std::string& context, const std::string& candidate, const std::string& mid) override {}
+
+  void createOffer(const std::string& peer_id, const std::string& context) override {
+    JNIEnv* env = Attach();
+    if (!env || !transport_java_ref_) return;
+    jclass cls = env->GetObjectClass(transport_java_ref_);
+    jmethodID mid = env->GetMethodID(cls, "createOffer", "(Ljava/lang/String;Ljava/lang/String;)V");
+    jstring j_peer_id = env->NewStringUTF(peer_id.c_str());
+    jstring j_context = env->NewStringUTF(context.c_str());
+    env->CallVoidMethod(transport_java_ref_, mid, j_peer_id, j_context);
+    env->DeleteLocalRef(j_peer_id);
+    env->DeleteLocalRef(j_context);
+  }
+
+  void createAnswer(const std::string& peer_id, const std::string& context) override {
+    JNIEnv* env = Attach();
+    if (!env || !transport_java_ref_) return;
+    jclass cls = env->GetObjectClass(transport_java_ref_);
+    jmethodID mid = env->GetMethodID(cls, "createAnswer", "(Ljava/lang/String;Ljava/lang/String;)V");
+    jstring j_peer_id = env->NewStringUTF(peer_id.c_str());
+    jstring j_context = env->NewStringUTF(context.c_str());
+    env->CallVoidMethod(transport_java_ref_, mid, j_peer_id, j_context);
+    env->DeleteLocalRef(j_peer_id);
+    env->DeleteLocalRef(j_context);
+  }
+
+  void setRemoteDescription(const std::string& peer_id, const std::string& context, const std::string& sdp, const std::string& type) override {
+    JNIEnv* env = Attach();
+    if (!env || !transport_java_ref_) return;
+    jclass cls = env->GetObjectClass(transport_java_ref_);
+    jmethodID mid = env->GetMethodID(cls, "setRemoteDescription", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
+    jstring j_peer_id = env->NewStringUTF(peer_id.c_str());
+    jstring j_context = env->NewStringUTF(context.c_str());
+    jstring j_sdp = env->NewStringUTF(sdp.c_str());
+    jstring j_type = env->NewStringUTF(type.c_str());
+    env->CallVoidMethod(transport_java_ref_, mid, j_peer_id, j_context, j_sdp, j_type);
+    env->DeleteLocalRef(j_peer_id);
+    env->DeleteLocalRef(j_context);
+    env->DeleteLocalRef(j_sdp);
+    env->DeleteLocalRef(j_type);
+  }
+
+  void addRemoteCandidate(const std::string& peer_id, const std::string& context, const std::string& candidate, const std::string& mid) override {
+    JNIEnv* env = Attach();
+    if (!env || !transport_java_ref_) return;
+    jclass cls = env->GetObjectClass(transport_java_ref_);
+    jmethodID method_id = env->GetMethodID(cls, "addRemoteCandidate", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
+    jstring j_peer_id = env->NewStringUTF(peer_id.c_str());
+    jstring j_context = env->NewStringUTF(context.c_str());
+    jstring j_candidate = env->NewStringUTF(candidate.c_str());
+    jstring j_mid = env->NewStringUTF(mid.c_str());
+    env->CallVoidMethod(transport_java_ref_, method_id, j_peer_id, j_context, j_candidate, j_mid);
+    env->DeleteLocalRef(j_peer_id);
+    env->DeleteLocalRef(j_context);
+    env->DeleteLocalRef(j_candidate);
+    env->DeleteLocalRef(j_mid);
+  }
+
   auto addVideo(const std::string& peer_id, const std::function<void(void)>& on_open) -> std::shared_ptr<ITrack> override { return nullptr; }
   auto addAudio(const std::string& peer_id, const std::function<void(void)>& on_open) -> std::shared_ptr<ITrack> override { return nullptr; }
 
@@ -152,6 +209,21 @@ private:
     env->DeleteLocalRef(j_context);
   }
 };
+
+inline void AndroidRtcTransport::createDataChannel(const std::string& peer_id) {
+  JNIEnv* env = Attach();
+  if (!env || !transport_java_ref_) return;
+  jclass transportClass = env->GetObjectClass(transport_java_ref_);
+  jmethodID createDcMethod = env->GetMethodID(transportClass, "createDataChannel", "(Ljava/lang/String;)V");
+  if (!createDcMethod) {
+    LOGE << "Failed to find method createDataChannel";
+    return;
+  }
+  jstring j_peer_id = env->NewStringUTF(peer_id.c_str());
+  env->CallVoidMethod(transport_java_ref_, createDcMethod, j_peer_id);
+  env->DeleteLocalRef(j_peer_id);
+}
+
 
 } // namespace eillance::transport
 
@@ -218,5 +290,49 @@ Java_hela_eillance_webrtc_WebRtcTransport_nativeOnSignalingError(JNIEnv *env, jo
     transport->delegate()->onSignalingErrorForPeer(peer_id_chars, error_chars);
     env->ReleaseStringUTFChars(peer_id, peer_id_chars);
     env->ReleaseStringUTFChars(error, error_chars);
+  }
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_hela_eillance_webrtc_WebRtcTransport_nativeOnDataChannelMessage(JNIEnv* env, jobject, jlong native_ptr, jstring j_peer_id, jstring j_message) {
+  auto* transport = reinterpret_cast<eillance::transport::AndroidRtcTransport*>(native_ptr);
+  if (transport) {
+    const char* peer_id_chars = env->GetStringUTFChars(j_peer_id, nullptr);
+    const char* message_chars = env->GetStringUTFChars(j_message, nullptr);
+    std::string peer_id_str(peer_id_chars);
+    std::string message_str(message_chars);
+
+    auto peer = transport->getPeer(peer_id_str);
+    if (peer && peer->on_data_channel_message_) {
+      peer->on_data_channel_message_(message_str);
+    } else {
+      LOGW << "Received DC message for peer " << peer_id_str << " but no handler or peer found.";
+    }
+
+    env->ReleaseStringUTFChars(j_peer_id, peer_id_chars);
+    env->ReleaseStringUTFChars(j_message, message_chars);
+  }
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_hela_eillance_webrtc_WebRtcTransport_nativeOnDataChannelOpen(JNIEnv* env, jobject, jlong native_ptr, jstring j_peer_id) {
+  auto* transport = reinterpret_cast<eillance::transport::AndroidRtcTransport*>(native_ptr);
+  if (transport) {
+    const char* peer_id_chars = env->GetStringUTFChars(j_peer_id, nullptr);
+    std::string peer_id_str(peer_id_chars);
+    auto peer = transport->getPeer(peer_id_str);
+
+    if (peer) {
+      LOGI << "Data channel with " << peer_id_str << " opened.";
+      peer->data_channel_is_open_ = true;
+      auto my_pub_key = peer->session_cipher_->GetPublicKey();
+      const nlohmann::json key_exchange_message = {
+          {"type", "key_exchange"},
+          {"key", std::vector<std::byte>(my_pub_key.begin(), my_pub_key.end())},
+          {"is_reply", false}};
+      transport->sendPeerDataChannelMessage(peer_id_str, key_exchange_message);
+    }
+
+    env->ReleaseStringUTFChars(j_peer_id, peer_id_chars);
   }
 }

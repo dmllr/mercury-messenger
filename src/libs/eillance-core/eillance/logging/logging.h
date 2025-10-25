@@ -18,7 +18,7 @@
 
 struct Log {
   static constexpr auto tag = "eillance";
-  static constexpr auto log_level = plog::info;
+  static constexpr auto log_level = plog::verbose;
 
   /**
    * @brief Initializes the logging system with a custom appender.

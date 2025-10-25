@@ -39,7 +39,7 @@ class SignalingClient {
     private val _messages = MutableSharedFlow<SignalingMessage>()
     val messages: SharedFlow<SignalingMessage> = _messages
 
-    fun connect() {
+    fun connect(peerId: String) {
         Log.i(TAG, "Connect called. Starting connection manager coroutine.")
         clientScope.launch {
             var currentBackoffMs = INITIAL_BACKOFF_MS
@@ -55,6 +55,11 @@ class SignalingClient {
                             webSocket = ws
                             isConnected.set(true)
                             currentBackoffMs = INITIAL_BACKOFF_MS // Reset backoff on success.
+                            val loginMessage = JSONObject().apply {
+                                put("type", "login")
+                                put("id", peerId)
+                            }
+                            send(loginMessage)
                         }
 
                         override fun onMessage(ws: WebSocket, text: String) {
