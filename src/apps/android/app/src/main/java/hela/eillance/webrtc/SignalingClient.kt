@@ -63,6 +63,7 @@ class SignalingClient {
                         }
 
                         override fun onMessage(ws: WebSocket, text: String) {
+                            Log.d(TAG, "Received: $text")
                             try {
                                 val json = JSONObject(text)
                                 val signalingMessage = when {
@@ -124,7 +125,9 @@ class SignalingClient {
     }
 
     fun send(message: JSONObject) {
-        if (webSocket?.send(message.toString()) == false) {
+        val messageString = message.toString()
+        Log.d(TAG, "Sending: $messageString")
+        if (webSocket?.send(messageString) == false) {
             Log.e(TAG, "Failed to send message: WebSocket is not open or queue is full.")
         }
     }

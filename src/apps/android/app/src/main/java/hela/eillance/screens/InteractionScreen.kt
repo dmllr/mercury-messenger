@@ -1,7 +1,5 @@
 package hela.eillance.screens
 
-import android.view.SurfaceHolder
-import android.view.SurfaceView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -9,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -47,6 +46,7 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -70,6 +70,8 @@ import hela.eillance.ndkio.HistoryEntry
 import hela.eillance.ndkio.HistoryEntryKind
 import hela.eillance.ndkio.MessageDirection
 import hela.eillance.ndkio.MessageStatus
+import hela.eillance.webrtc.WebRtcTransport
+import org.webrtc.SurfaceViewRenderer
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -371,29 +373,35 @@ fun MessageInput(onSendMessage: (String) -> Unit) {
 @Composable
 fun CallScreen(viewModel: MainViewModel, uiState: AppState) {
     val callState = uiState.callState
+    val context = LocalContext.current
     val isVideoCall = callState.callType == HistoryEntryKind.VideoCall
+    val eglBaseContext = remember { WebRtcTransport.eglBase.eglBaseContext }
+
+    DisposableEffect(Unit) {
+        // Media is now started automatically by the transport or ViewModel before we get here.
+        // The cleanup will be called when the composable is removed from the composition
+        // (e.g., call ends and we navigate away).
+        onDispose {
+            viewModel.stopCallMedia()
+        }
+    }
 
     Box(modifier = Modifier
         .fillMaxSize()
         .background(Color.Black)) {
 
         if (isVideoCall) {
-            // Remote video view
+            // Remote video view (fullscreen)
             AndroidView(
                 factory = { context ->
-                    SurfaceView(context).apply {
-                        holder.addCallback(object : SurfaceHolder.Callback {
-                            override fun surfaceCreated(holder: SurfaceHolder) {
-                                viewModel.setRemoteVideoSurface(holder.surface)
-                            }
-                            override fun surfaceChanged(holder: SurfaceHolder, f: Int, w: Int, h: Int) {}
-                            override fun surfaceDestroyed(holder: SurfaceHolder) {
-                                viewModel.clearRemoteVideoSurface()
-                            }
-                        })
+                    SurfaceViewRenderer(context).apply {
+                        init(eglBaseContext, null)
                     }
                 },
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize(),
+                update = { surfaceViewRenderer ->
+                    viewModel.setRemoteVideoSink(callState.peerId, surfaceViewRenderer)
+                }
             )
         }
 
@@ -420,6 +428,29 @@ fun CallScreen(viewModel: MainViewModel, uiState: AppState) {
                     style = MaterialTheme.typography.bodyLarge,
                     color = Color.White.copy(alpha = 0.7f)
                 )
+            }
+            
+            // Local video preview (PiP)
+            if (isVideoCall) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    contentAlignment = Alignment.TopEnd
+                ) {
+                    AndroidView(
+                        factory = { context ->
+                            SurfaceViewRenderer(context).apply {
+                                init(eglBaseContext, null)
+                                setMirror(true)
+                            }
+                        },
+                        modifier = Modifier.width(120.dp).aspectRatio(0.75f).clip(RoundedCornerShape(16.dp)),
+                        update = { surfaceViewRenderer ->
+                           viewModel.setLocalVideoSink(surfaceViewRenderer)
+                        }
+                    )
+                }
             }
 
             // Controls at the bottom

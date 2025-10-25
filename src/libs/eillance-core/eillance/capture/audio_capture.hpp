@@ -1,5 +1,30 @@
 #pragma once
 
+#ifdef __ANDROID__
+
+// Dummy implementation for Android, as WebRTC will handle audio capture.
+#include "eillance/utils/time.hpp"
+#include "eillance/utils/packet.hpp"
+#include "eillance/capture/config.hpp"
+#include "eillance/capture/audio_config.hpp"
+
+namespace eillance {
+class AudioCapture {
+public:
+  AudioCapture() = default;
+  void Configure(Config) {}
+  void Engage() {}
+  void Revoke() {}
+  Packet FetchBuffers() { return {}; }
+  static Time::Unit GetSampleDuration() {
+    return AudioConfig::sampleDuration * Time::uS;
+  }
+};
+
+}  // namespace eillance
+
+#else
+
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -119,3 +144,5 @@ public:
 };
 
 }  // namespace eillance
+
+#endif

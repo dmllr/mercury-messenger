@@ -37,16 +37,6 @@ Java_hela_eillance_CallService_refreshState(JNIEnv*, jobject) {
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_hela_eillance_CallService_initDecoder(JNIEnv* env, jobject, jobject surface) {
-  if (clientEngine) clientEngine->SetTargetSurface(env, surface);
-}
-
-extern "C" JNIEXPORT void JNICALL
-Java_hela_eillance_CallService_releaseDecoder(JNIEnv*, jobject) {
-  if (clientEngine) clientEngine->Stop();
-}
-
-extern "C" JNIEXPORT void JNICALL
 Java_hela_eillance_CallService_call(JNIEnv* env, jobject, jstring peer_id) {
   const char* chars = env->GetStringUTFChars(peer_id, nullptr);
   const std::string peer_id_str(chars);

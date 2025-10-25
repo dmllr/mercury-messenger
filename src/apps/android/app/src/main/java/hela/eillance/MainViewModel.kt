@@ -1,11 +1,11 @@
 package hela.eillance
 
 import android.app.Application
-import android.view.Surface
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import hela.eillance.ndkio.AppState
+import org.webrtc.VideoSink
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -87,12 +87,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         callService?.rejectCall()
     }
 
-    fun setRemoteVideoSurface(surface: Surface) {
-        callService?.initDecoder(surface)
+    fun startCallMedia() {
+        callService?.startLocalMedia()
     }
 
-    fun clearRemoteVideoSurface() {
-        callService?.releaseDecoder()
+    fun stopCallMedia() {
+        callService?.stopLocalMedia()
     }
 
     fun loadOlderMessages() {
@@ -101,6 +101,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun MarkMessagesAsRead(messageIds: List<Long>) {
         callService?.markMessagesAsRead(messageIds.toLongArray())
+    }
+
+    fun setLocalVideoSink(sink: VideoSink) {
+        callService?.setLocalVideoSink(sink)
+    }
+
+    fun setRemoteVideoSink(peerId: String, sink: VideoSink) {
+        callService?.setRemoteVideoSink(peerId, sink)
     }
 
     override fun onCleared() {
