@@ -21,7 +21,6 @@
 #include "eillance/transport/peer_connection_state.h"
 #include "eillance/client/client.hpp"
 #include "eillance/rtc/transport.hpp"
-#include "eillance/transport/peer_connection_state.h"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/utils/time.hpp"
 #include "eillance/view_model/mercury_view_model.hpp"
@@ -29,6 +28,7 @@
 
 #include "cli_persistent_storage.hpp"
 #include "video_capture_cli.hpp"
+#include "audio_capture_cli.hpp"
 
 namespace {
 
@@ -153,12 +153,15 @@ int main(int argc, char** argv) {
   // --- Service Layer (Model) Initialization ---
   auto storage_impl = std::make_unique<eillance::storage::CliPersistentStorageImpl>(config_path);
   auto storage = std::make_shared<eillance::storage::PersistentStorage>(std::move(storage_impl));
-  auto video_capture = eillance::Capture(std::make_unique<eillance::VideoCaptureCli>());
 
   // --- Dependency Injection ---
   auto rtc_transport_impl = std::make_unique<eillance::rtc::RtcTransport>();
   auto transport = std::make_shared<eillance::transport::Transport>(std::move(rtc_transport_impl));
-  auto client = std::make_shared<eillance::Client>(storage, std::move(video_capture), transport);
+  auto client = std::make_shared<eillance::Client>(storage, transport);
+
+  // --- Setter Injection for Platform-Specific Implementations ---
+  client->SetVideoCapture(std::make_unique<eillance::VideoCaptureCli>());
+  client->SetAudioCapture(std::make_unique<eillance::AudioCaptureCli>());
 
   // --- ViewModel Initialization ---
   auto view_model = std::make_unique<eillance::view_model::MercuryViewModel>(client);
@@ -209,7 +212,7 @@ int main(int argc, char** argv) {
                 content = std::get<eillance::messaging::MessageEntry>(entry.data).content;
                 auto timestamp_str = FormatTimestamp(entry.timestamp);
                 elements.push_back(ftxui::text(prefix + content + suffix));
-                elements.push_back(ftxui::text("  ┬╖ " + timestamp_str) | ftxui::dim);
+                elements.push_back(ftxui::text("  Γö¼Γòû " + timestamp_str) | ftxui::dim);
                 break;
             }
             case eillance::messaging::HistoryEntryKind::voiceCall:
@@ -228,7 +231,7 @@ int main(int argc, char** argv) {
                 content = "--- " + direction_str + " " + call_type_str + " Call (" + status_str + ") ---";
                 auto timestamp_str = FormatTimestamp(entry.timestamp);
                 elements.push_back(ftxui::text(prefix + content) | ftxui::dim);
-                elements.push_back(ftxui::text("  ┬╖ " + timestamp_str) | ftxui::dim);
+                elements.push_back(ftxui::text("  Γö¼Γòû " + timestamp_str) | ftxui::dim);
                 break;
             }
         }

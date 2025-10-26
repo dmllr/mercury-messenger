@@ -12,6 +12,8 @@ include("${shared_cmake_libs_path}/import_remote.cmake")
 include("${shared_cmake_libs_path}/libftxui.cmake")
 include("${shared_cmake_libs_path}/libopencv.cmake")
 include("${shared_cmake_libs_path}/libffmpeg.cmake")
+include("${shared_cmake_libs_path}/libminiaudio.cmake")
+include("${shared_cmake_libs_path}/libopus.cmake")
 
 add_executable(mercury-cli
   mercury.cpp
@@ -26,4 +28,6 @@ target_link_libraries(mercury-cli PRIVATE
   libftxui
   libopencv
   libffmpeg
+  libminiaudio
+  opus
 )

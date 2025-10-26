@@ -5,7 +5,6 @@
 
 #include <nlohmann/json.hpp>
 
-#include "eillance/capture/audio_capture.hpp"
 #include "eillance/capture/capture.hpp"
 #include "eillance/crypto/crypto.hpp"
 #include "eillance/identity/contact_manager.hpp"
@@ -57,7 +56,7 @@ public:
   using OnIncomingCallCallback = std::function<void(const std::string& peer_id, messaging::HistoryEntryKind call_type)>;
   using OnCallTerminatedCallback = std::function<void(const std::string& peer_id)>;
 
-  explicit Client(std::shared_ptr<storage::PersistentStorage> storage, Capture video_capture, std::shared_ptr<transport::Transport> transport);
+  explicit Client(std::shared_ptr<storage::PersistentStorage> storage, std::shared_ptr<transport::Transport> transport);
 
   Client(Client&&) = delete;
   Client(const Client&) = delete;
@@ -65,14 +64,22 @@ public:
   Client& operator=(const Client&) = delete;
   ~Client() override = default;
 
+  // Setter injection for platform-specific capture implementations
+  template<typename T>
+  [[maybe_unused]] void SetVideoCapture(std::unique_ptr<T> impl);
+  template<typename T>
+  [[maybe_unused]] void SetAudioCapture(std::unique_ptr<T> impl);
+
   [[nodiscard]] auto getId() const -> std::string;
   auto getStorage() const -> std::shared_ptr<storage::PersistentStorage>;
   void setName(const std::string& name) const;
   void start() const;
   void terminate() const;
   void setStatusCallback(const StatusCallbackFunction& callback);
-  void setFrameReceivedCallback(const OnFrameReceivedCallback& callback);
-  void setProfileReceivedCallback(const OnProfileReceivedCallback& callback);
+
+  [[maybe_unused]] void setFrameReceivedCallback(const OnFrameReceivedCallback& callback);
+
+  [[maybe_unused]] void setProfileReceivedCallback(const OnProfileReceivedCallback& callback);
   void setChatMessageReceivedCallback(const OnChatMessageReceivedCallback& callback);
   void setContactRequestCallback(const OnContactRequestCallback& callback);
   void setContactStatusChangedCallback(const OnContactStatusChangedCallback& callback);
@@ -80,7 +87,6 @@ public:
   void setPeerListUpdateCallback(const OnPeerListUpdateCallback& callback);
   void setIncomingCallCallback(const OnIncomingCallCallback& callback);
   void setOnCallTerminatedCallback(const OnCallTerminatedCallback& callback);
-  void requestPeerListUpdate() const;
   void call(const std::string& peer_id);
   void connect(const std::string& peer_id);
   void startVoiceCall(const std::string& peer_id);
@@ -108,6 +114,7 @@ public:
   void onFrameReceived(const std::string& peer_id, const std::vector<std::byte>& frame) override;
 
 private:
+  void InitializeAVStream();
   void startMediaCall(const std::string& peer_id, bool is_video);
   void updateAndNotifyPeerList() const;
   auto directSend(const std::shared_ptr<Peer>& peer, const std::string& peer_id, const std::string& message, std::uint64_t message_id) const -> bool;
@@ -119,6 +126,9 @@ private:
 
   std::shared_ptr<Stream> av_stream_;
   std::shared_ptr<transport::Transport> transport_;
+
+  std::unique_ptr<Capture> video_capture_;
+  std::unique_ptr<Capture> audio_capture_;
 
   std::shared_ptr<OnFrameReceivedCallback> on_frame_received_{};
   std::shared_ptr<OnProfileReceivedCallback> on_profile_received_{};
@@ -145,7 +155,7 @@ private:
 
 // --- Implementation ---
 
-inline Client::Client(std::shared_ptr<storage::PersistentStorage> storage, Capture video_capture, std::shared_ptr<transport::Transport> transport)
+inline Client::Client(std::shared_ptr<storage::PersistentStorage> storage, std::shared_ptr<transport::Transport> transport)
     : storage_(std::move(storage)),
       transport_(std::move(transport)) {
 
@@ -155,10 +165,6 @@ inline Client::Client(std::shared_ptr<storage::PersistentStorage> storage, Captu
   contact_manager_ = std::make_shared<identity::ContactManager>(storage_);
   message_queue_ = std::make_shared<messaging::MessageQueue>(storage_);
   message_history_ = std::make_unique<messaging::MessageHistory>(storage_);
-
-  av_stream_ = std::make_shared<Stream>(
-      std::make_shared<StreamSource>(std::move(video_capture)),
-      std::make_shared<StreamSource>(Capture(std::make_unique<AudioCapture>())));
 
   delivery_service_ = std::make_unique<messaging::MessageDeliveryService>(
       message_queue_,
@@ -181,8 +187,33 @@ inline Client::Client(std::shared_ptr<storage::PersistentStorage> storage, Captu
       (*status_callback_)(peer_id, source, state_val);
     }
   });
+}
 
-  av_stream_->OnSample([this, ws = make_weak_ptr(av_stream_)](const Stream::Source::Type type, std::uint64_t sample_time, const std::vector<std::byte>& sample) {
+template<typename T>
+[[maybe_unused]] inline void Client::SetVideoCapture(std::unique_ptr<T> impl) {
+  video_capture_ = std::make_unique<Capture>(std::move(impl));
+  if (audio_capture_) {
+    InitializeAVStream();
+  }
+}
+
+template<typename T>
+[[maybe_unused]] inline void Client::SetAudioCapture(std::unique_ptr<T> impl) {
+  audio_capture_ = std::make_unique<Capture>(std::move(impl));
+  if (video_capture_) {
+    InitializeAVStream();
+  }
+}
+
+inline void Client::InitializeAVStream() {
+  if (!video_capture_ || !audio_capture_) {
+    return;
+  }
+  av_stream_ = std::make_shared<Stream>(
+      std::make_shared<StreamSource>(std::move(*video_capture_)),
+      std::make_shared<StreamSource>(std::move(*audio_capture_))
+  );
+  av_stream_->OnSample([this](Stream::Source::Type type, uint64_t sample_time, const std::vector<std::byte>& sample) {
     sendSampleToPeers(sample, type, sample_time);
   });
 }
@@ -208,10 +239,12 @@ inline void Client::terminate() const {
 inline void Client::setStatusCallback(const StatusCallbackFunction& callback) {
   status_callback_ = std::make_shared<StatusCallbackFunction>(callback);
 }
-inline void Client::setFrameReceivedCallback(const OnFrameReceivedCallback& callback) {
+
+[[maybe_unused]] inline void Client::setFrameReceivedCallback(const OnFrameReceivedCallback& callback) {
   on_frame_received_ = std::make_shared<OnFrameReceivedCallback>(callback);
 }
-inline void Client::setProfileReceivedCallback(const OnProfileReceivedCallback& callback) {
+
+[[maybe_unused]] inline void Client::setProfileReceivedCallback(const OnProfileReceivedCallback& callback) {
   on_profile_received_ = std::make_shared<OnProfileReceivedCallback>(callback);
 }
 inline void Client::setChatMessageReceivedCallback(const OnChatMessageReceivedCallback& callback) {
@@ -234,9 +267,6 @@ inline void Client::setIncomingCallCallback(const OnIncomingCallCallback& callba
 }
 inline void Client::setOnCallTerminatedCallback(const OnCallTerminatedCallback& callback) {
   on_call_terminated_ = std::make_shared<OnCallTerminatedCallback>(callback);
-}
-inline void Client::requestPeerListUpdate() const {
-  updateAndNotifyPeerList();
 }
 inline void Client::call(const std::string& peer_id) {
   connect(peer_id);
@@ -265,6 +295,12 @@ inline void Client::startVideoCall(const std::string& peer_id) {
   startMediaCall(peer_id, true);
 }
 inline void Client::acceptCall(const std::string& peer_id) {
+  // On platforms with custom capture (like CLI), start the media stream.
+  // On Android, this block is skipped.
+  if (av_stream_) {
+    av_stream_->Start();
+  }
+
   auto peer = transport_->getPeer(peer_id);
   if (!peer || !peer->pending_offer_sdp) {
     LOGW << "Cannot accept call from " << peer_id << ", no pending offer found.";
@@ -274,7 +310,6 @@ inline void Client::acceptCall(const std::string& peer_id) {
 
   transport_->createMediaPeerConnection(peer_id);
   peer->has_media_peer_connection_ = true;
-  av_stream_->Start();
 
   peer->audio_ = transport_->addAudio(peer_id, [this, wpeer = make_weak_ptr(peer)]() {
     if (const auto p = wpeer.lock()) { transport_->addToStream(p, false); }
@@ -354,7 +389,10 @@ inline void Client::hangup(const std::string& peer_id) const {
       peer->has_media_peer_connection_ = false;
       peer->audio_ = nullptr;
       peer->video_ = nullptr;
-      av_stream_->Stop();
+      // On platforms with custom capture (like CLI), stop the media stream.
+      if (av_stream_) {
+        av_stream_->Stop();
+      }
     }
 
     // If the call was active in any state, notify the other peer.
@@ -368,8 +406,10 @@ inline void Client::hangup(const std::string& peer_id) const {
   }
 }
 inline void Client::configure(const Config& config) const {
-  av_stream_->Video()->Configure(config);
-  av_stream_->Audio()->Configure(config);
+  if(av_stream_) {
+    av_stream_->Video()->Configure(config);
+    av_stream_->Audio()->Configure(config);
+  }
 }
 inline void Client::onPeerReady(const std::shared_ptr<Peer>&) {}
 inline void Client::onPeerOnline(const std::string& peer_id) {
@@ -418,7 +458,7 @@ inline void Client::processPeerMessage(Json message) {
     LOGI << "Received hangup signal from " << peer_id;
     hangup(peer_id);
     if (on_call_terminated_) {
-        (*on_call_terminated_)(peer_id);
+      (*on_call_terminated_)(peer_id);
     }
     return;
   }
@@ -569,7 +609,12 @@ inline auto Client::getMessageHistoryPage(const std::string& peer_id, size_t pag
   return message_history_->GetHistoryPage(peer_id, page_index, page_size);
 }
 inline void Client::startMediaCall(const std::string& peer_id, bool is_video) {
-  av_stream_->Start();
+  // On platforms with custom capture (like CLI), start the media stream.
+  // On Android, this block is skipped.
+  if (av_stream_) {
+    av_stream_->Start();
+  }
+
   auto peer = transport_->getPeer(peer_id);
   if (!peer) {
     LOGI << "Peer " << peer_id << " not found for call. Creating new peer object.";
@@ -578,7 +623,7 @@ inline void Client::startMediaCall(const std::string& peer_id, bool is_video) {
   }
   if (peer->has_media_peer_connection_) {
     LOGW << "Media connection already exists for peer " << peer_id << ", cannot start a new call.";
-    av_stream_->Stop();
+    if (av_stream_) av_stream_->Stop();
     return;
   }
   transport_->createMediaPeerConnection(peer_id);

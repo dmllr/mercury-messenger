@@ -19,7 +19,6 @@
 
 #include "class_refs.hpp"
 #include "android_persistent_storage.hpp"
-#include "capture/video_capture_android.hpp"
 #include "transport/transport_android.hpp"
 
 
@@ -40,11 +39,10 @@ public:
     auto storage = std::make_shared<storage::PersistentStorage>(
         std::make_unique<storage::AndroidPersistentStorageImpl>(jvm, instance)
     );
-    auto video_capture = Capture(std::make_unique<VideoCaptureAndroid>());
 
     auto rtc_transport_impl = std::make_unique<transport::AndroidRtcTransport>(jvm, instance);
     auto transport = std::make_shared<transport::Transport>(std::move(rtc_transport_impl));
-    client_ = std::make_shared<Client>(storage, std::move(video_capture), transport);
+    client_ = std::make_shared<Client>(storage, transport);
 
     view_model_ = std::make_unique<view_model::MercuryViewModel>(client_);
 

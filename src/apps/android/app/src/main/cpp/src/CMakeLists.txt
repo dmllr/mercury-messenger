@@ -7,8 +7,6 @@ target_compile_features(lib-client-service-bridge PUBLIC cxx_std_20)
 target_link_libraries(lib-client-service-bridge
   eillance-utils
   eillance-core
-  eillance-rtc
-  eillance-h264
   android
   camera2ndk
   mediandk
