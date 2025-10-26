@@ -51,17 +51,30 @@ class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
 
+    handleIntent(intent)
     checkPermissionsAndStart()
 
     setContent {
       EillanceTheme {
         Surface(
           modifier = Modifier.fillMaxSize(),
-          color = MaterialTheme.colorScheme.background
+          color = MaterialTheme.colorScheme.background,
         ) {
           MercuryApp(viewModel = viewModel)
         }
       }
+    }
+  }
+
+  override fun onNewIntent(intent: Intent) {
+    super.onNewIntent(intent)
+    setIntent(intent)
+    handleIntent(intent)
+  }
+
+  private fun handleIntent(intent: Intent?) {
+    intent?.getStringExtra(CallService.EXTRA_PEER_ID)?.let { peerId ->
+      viewModel.navigateToPeer(peerId)
     }
   }
 

@@ -92,12 +92,12 @@ Java_hela_eillance_CallService_hangup(JNIEnv*, jobject) {
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_hela_eillance_CallService_acceptCall(JNIEnv*, jobject) {
+Java_hela_eillance_CallService_nativeAcceptCall(JNIEnv*, jobject) {
   if (clientEngine && clientEngine->ViewModel()) clientEngine->ViewModel()->AcceptCall();
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_hela_eillance_CallService_rejectCall(JNIEnv*, jobject) {
+Java_hela_eillance_CallService_nativeRejectCall(JNIEnv*, jobject) {
   if (clientEngine && clientEngine->ViewModel()) clientEngine->ViewModel()->RejectCall();
 }
 
