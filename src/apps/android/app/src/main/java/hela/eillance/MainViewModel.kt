@@ -5,12 +5,12 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import hela.eillance.ndkio.AppState
-import org.webrtc.VideoSink
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
+import org.webrtc.VideoSink
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var callService: CallService? = null
@@ -103,11 +103,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         callService?.markMessagesAsRead(messageIds.toLongArray())
     }
 
-    fun setLocalVideoSink(sink: VideoSink) {
+    fun setLocalVideoSink(sink: VideoSink?) {
         callService?.setLocalVideoSink(sink)
     }
 
-    fun setRemoteVideoSink(peerId: String, sink: VideoSink) {
+    fun setRemoteVideoSink(peerId: String, sink: VideoSink?) {
         callService?.setRemoteVideoSink(peerId, sink)
     }
 

@@ -175,16 +175,9 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
             }
             override fun onRenegotiationNeeded() {
                 Log.i(TAG, "onRenegotiationNeeded for peer: $peerId, context: $context")
-                // This event fires when a change requires negotiation, like adding a track.
-                // The typical response is to create a new offer. We should only do this
-                // if the signaling state is stable to avoid conflicting with an ongoing exchange.
-                val pc = peers[peerId]
-                if (pc?.signalingState() == PeerConnection.SignalingState.STABLE) {
-                    Log.d(TAG, "Signaling state is STABLE, creating offer due to renegotiation.")
-                    createOffer(peerId, context)
-                } else {
-                    Log.w(TAG, "onRenegotiationNeeded was called, but signaling state is ${pc?.signalingState()}. Suppressing offer creation to avoid glare.")
-                }
+                // The C++ layer is responsible for initiating offer/answer exchanges.
+                // Automatically creating an offer here can lead to glare, especially on the callee's side.
+                // If renegotiation is needed, the C++ client logic should call createOffer explicitly.
             }
             override fun onAddTrack(rtpReceiver: RtpReceiver, mediaStreams: Array<out MediaStream>) {
                 rtpReceiver.track()?.let { track ->
@@ -282,6 +275,11 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
         // Fix for race condition: Ensure local tracks are represented by senders before creating an answer.
         // This is necessary because the JNI calls from C++ to add tracks are asynchronous.
         if (context == "media") {
+            if (localVideoTrack == null || localAudioTrack == null) {
+                // This is the responder's path, start media now if not already started.
+                Log.d(TAG, "Local media not started. Starting it now before creating answer.")
+                startLocalMedia()
+            }
             if (localAudioTrack != null && pc.senders.none { it.track()?.kind() == "audio" }) {
                 Log.d(TAG, "Audio track not found in senders, adding it now before creating answer.")
                 pc.addTrack(localAudioTrack, listOf(MEDIA_STREAM_ID))
@@ -421,27 +419,29 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
         Log.i(TAG, "Local media stopped.")
     }
 
-    fun setLocalSink(sink: VideoSink) {
-        Log.d(TAG, "Setting local video sink.")
+    fun setLocalSink(sink: VideoSink?) {
+        Log.d(TAG, "Setting local video sink to: ${if (sink != null) "a sink" else "null"}")
         localSink?.let { localVideoTrack?.removeSink(it) }
         localSink = sink
-        localVideoTrack?.addSink(sink)
+        localSink?.let { localVideoTrack?.addSink(it) }
     }
 
-    fun setRemoteSink(peerId: String, sink: VideoSink) {
-        Log.d(TAG, "Setting remote video sink for peer $peerId.")
+    fun setRemoteSink(peerId: String, sink: VideoSink?) {
+        Log.d(TAG, "Setting remote video sink for peer $peerId to: ${if (sink != null) "a sink" else "null"}")
 
-        // Remove from old sink if it exists, to prevent memory leaks.
         remoteSinks[peerId]?.let { oldSink ->
             Log.d(TAG, "Removing remote track from old sink for peer $peerId.")
             remoteVideoTracks[peerId]?.removeSink(oldSink)
         }
 
-        remoteSinks[peerId] = sink
-        // If the track has already arrived, attach it to the new sink now.
-        remoteVideoTracks[peerId]?.let { track ->
-            Log.d(TAG, "Track was ready, adding remote track to new sink for peer $peerId.")
-            track.addSink(sink)
+        if (sink == null) {
+            remoteSinks.remove(peerId)
+        } else {
+            remoteSinks[peerId] = sink
+            remoteVideoTracks[peerId]?.let { track ->
+                Log.d(TAG, "Track was ready, adding remote track to new sink for peer $peerId.")
+                track.addSink(sink)
+            }
         }
     }
 
