@@ -75,6 +75,7 @@ data class Contact(
     @SerialName("peer_id") val peerId: String,
     val status: ContactStatus,
     @SerialName("connection_state") val connectionState: Int = 0,
+    @SerialName("unread_count") val unreadCount: Int = 0,
 )
 
 @Serializable

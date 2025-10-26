@@ -344,10 +344,17 @@ public:
     for (const auto& peer_id: peer_ids) {
       LoadHistory(peer_id);
       if (history_cache_.contains(peer_id) && !history_cache_.at(peer_id).empty()) {
+        uint32_t unread_count = 0;
+        const auto& history = history_cache_.at(peer_id);
+        for (const auto& entry : history) {
+            if (entry.direction == MessageDirection::received && entry.status != MessageStatus::read && entry.kind == HistoryEntryKind::textMessage) {
+                unread_count++;
+            }
+        }
         summaries.push_back({
             .peer_id = peer_id,
             .last_message = history_cache_.at(peer_id).back(),
-            .unread_count = 0  // Unread count logic to be implemented
+            .unread_count = unread_count
         });
       }
     }

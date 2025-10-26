@@ -43,6 +43,7 @@ struct UIState {
     std::string peer_id;
     identity::ContactStatus status;
     eillance::transport::PeerConnectionState connection_state = eillance::transport::PeerConnectionState::Disconnected;
+    uint32_t unread_count = 0;
   };
 
   std::string my_id;
@@ -59,7 +60,8 @@ inline void to_json(nlohmann::json& j, const UIState::ViewContact& c) {
   j = nlohmann::json{
       {"peer_id", c.peer_id},
       {"status", c.status},
-      {"connection_state", c.connection_state}
+      {"connection_state", c.connection_state},
+      {"unread_count", c.unread_count},
   };
 }
 
@@ -581,9 +583,23 @@ inline void MercuryViewModel::UpdateChats() {
       contact_ids.push_back(contact.peer_id);
     }
   }
+  auto new_chats = client_->getChatSummaries(contact_ids);
   {
-    auto new_chats = client_->getChatSummaries(contact_ids);
     const std::lock_guard<std::mutex> lock(state_mutex_);
+
+    std::unordered_map<std::string, uint32_t> unread_counts;
+    for (const auto& chat : new_chats) {
+        unread_counts[chat.peer_id] = chat.unread_count;
+    }
+
+    for (auto& contact : current_state_.contacts) {
+        if (unread_counts.contains(contact.peer_id)) {
+            contact.unread_count = unread_counts.at(contact.peer_id);
+        } else {
+            contact.unread_count = 0;
+        }
+    }
+
     current_state_.chats = std::move(new_chats);
   }
 }

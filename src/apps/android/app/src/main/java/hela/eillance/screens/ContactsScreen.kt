@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.Badge
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DividerDefaults
@@ -146,7 +147,11 @@ fun ContactListItem(contact: Contact, onClick: () -> Unit, onAccept: () -> Unit,
                         Text("Resend")
                     }
                 }
-                else -> {}
+                else -> {
+                    if (contact.unreadCount > 0) {
+                        Badge { Text(contact.unreadCount.toString()) }
+                    }
+                }
             }
         },
         modifier = Modifier.clickable(
