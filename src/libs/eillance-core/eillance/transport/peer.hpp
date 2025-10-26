@@ -28,8 +28,8 @@ struct Peer {
   std::shared_ptr<void> data_peer_connection_;
   std::shared_ptr<void> media_peer_connection_;
   std::shared_ptr<void> data_channel_;
-  bool data_channel_is_open_{false};
-  bool has_media_peer_connection_{false};
+  std::atomic<bool> data_channel_is_open_{false};
+  std::atomic<bool> has_media_peer_connection_{false};
   std::unique_ptr<crypto::SessionCipher> session_cipher_;
   std::function<void(const std::string&)> on_data_channel_message_;
   std::atomic<bool> incoming_call_notified_{false};

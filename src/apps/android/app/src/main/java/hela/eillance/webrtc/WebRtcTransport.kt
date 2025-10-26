@@ -61,8 +61,6 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
 
     private external fun nativeOnPeerMessage(nativePointer: Long, message: String)
     private external fun nativeOnSystemMessage(nativePointer: Long, type: String, message: String)
-    private external fun nativeOnPeerOnline(nativePointer: Long, peerId: String)
-    private external fun nativeOnPeerOffline(nativePointer: Long, peerId: String)
     private external fun nativeOnSignalingError(nativePointer: Long, peerId: String, error: String)
     private external fun nativeOnDataChannelMessage(nativePointer: Long, peerId: String, message: String)
     private external fun nativeOnDataChannelOpen(nativePointer: Long, peerId: String)
@@ -490,9 +488,9 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
     }
 
     fun getPeerConnectionState(peerId: String): Int {
-      // The "data" connection is the primary indicator of peer connectivity for the contact list.
-      val state = getPeerConnection(peerId, "data")?.connectionState()
-      return when (state) {
+        // The "data" connection is the primary indicator of peer connectivity for the contact list.
+        val state = getPeerConnection(peerId, "data")?.connectionState()
+        return when (state) {
             PeerConnection.PeerConnectionState.NEW -> PeerConnectionState.New.ordinal
             PeerConnection.PeerConnectionState.CONNECTING -> PeerConnectionState.Connecting.ordinal
             PeerConnection.PeerConnectionState.CONNECTED -> PeerConnectionState.Connected.ordinal
@@ -516,8 +514,6 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
                 when (message) {
                     is SignalingMessage.PeerMessage -> nativeOnPeerMessage(nativePointer, message.message.toString())
                     is SignalingMessage.Error -> nativeOnSignalingError(nativePointer, message.forPeer ?: "", message.error)
-                    is SignalingMessage.PeerOnline -> nativeOnPeerOnline(nativePointer, message.peerId)
-                    is SignalingMessage.PeerOffline -> nativeOnPeerOffline(nativePointer, message.peerId)
                     is SignalingMessage.SystemMessage -> nativeOnSystemMessage(nativePointer, message.type, message.payload.toString())
                 }
             }

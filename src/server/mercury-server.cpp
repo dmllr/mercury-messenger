@@ -47,10 +47,6 @@ private:
   std::unique_ptr<rtc::WebSocketServer> server_;
   std::unordered_map<PeerId, Peer> peers_;
   std::mutex peersMutex_;
-  std::unordered_map<PeerId, std::unordered_set<PeerId>> interested_peers_;
-  std::mutex interestedPeersMutex_;
-  std::unordered_map<PeerId, std::vector<std::string>> offline_service_messages_;
-  std::mutex service_messages_mutex_;
 
   void HandleConnection(const std::shared_ptr<rtc::WebSocket>& wss) {
     LGD << "New connection established";
@@ -90,41 +86,6 @@ private:
             peers_[peer_id] = {wss};
             LGI << "Peer registered: " << peer_id;
           }
-
-          {
-            const std::lock_guard<std::mutex> lock(service_messages_mutex_);
-            if (auto it = offline_service_messages_.find(peer_id); it != offline_service_messages_.end()) {
-              LGI << "Delivering " << it->second.size() << " queued service message(s) to " << peer_id;
-              for (const auto& queued_msg : it->second) {
-                wss->send(queued_msg);
-              }
-              offline_service_messages_.erase(it);
-            }
-          }
-
-
-          std::unordered_set<PeerId> parties_to_notify;
-          {
-            const std::lock_guard<std::mutex> lock(interestedPeersMutex_);
-            if (auto it = interested_peers_.find(peer_id); it != interested_peers_.end()) {
-              parties_to_notify = std::move(it->second);
-              interested_peers_.erase(it);
-            }
-          }
-
-          if (!parties_to_notify.empty()) {
-            LGI << "Notifying " << parties_to_notify.size() << " peer(s) that " << peer_id << " is now online.";
-            Json const online_notification = {{"type", "peer_online"}, {"id", peer_id}};
-            const std::lock_guard<std::mutex> lock(peersMutex_);
-            for (const auto& party_id : parties_to_notify) {
-              if (auto party_it = peers_.find(party_id); party_it != peers_.end()) {
-                if (auto& party_ws = party_it->second.ws; party_ws && party_ws->isOpen()) {
-                  party_ws->send(online_notification.dump());
-                }
-              }
-            }
-          }
-
         } else {
           SendError(wss, "login_required", "First message must be of type 'login' with an 'id'.");
           wss->close();
@@ -146,20 +107,8 @@ private:
           const std::lock_guard<std::mutex> lock(peersMutex_);
           auto itr = peers_.find(destination_id);
           if (itr == peers_.end() || !itr->second.ws || !itr->second.ws->isOpen()) {
-            LGE << "Peer " << destination_id << " not found or not connected.";            
-            const bool is_queueable_message = (type == "offer" || type == "answer" || type == "candidate" || type == "contact_add_request" || type == "contact_confirm");
-            if (is_queueable_message) {
-                const std::lock_guard<std::mutex> service_lock(service_messages_mutex_);
-                LGI << "Queueing P2P setup message of type '" << type << "' for offline peer " << destination_id;
-                json["from"] = peer_id;
-                offline_service_messages_[destination_id].push_back(json.dump());
-            } else {
-                SendError(wss, "peer_not_found", "Peer '" + destination_id + "' not found.", destination_id);
-
-                const std::lock_guard<std::mutex> interest_lock(interestedPeersMutex_);
-                LGI << "Peer " << peer_id << " registered interest in offline peer " << destination_id;
-                interested_peers_[destination_id].insert(peer_id);
-            }
+            LGE << "Peer " << destination_id << " not found or not connected.";
+            SendError(wss, "peer_not_found", "Peer '" + destination_id + "' not found.", destination_id);
             return;
           }
 
@@ -180,34 +129,14 @@ private:
       return;
     }
 
-    bool was_removed = false;
     {
       const std::lock_guard<std::mutex> lock(peersMutex_);
       auto it = peers_.find(peer_id);
       if (it != peers_.end() && it->second.ws.get() == wss_ptr) {
         peers_.erase(it);
         LGI << "Peer disconnected and removed: " << peer_id;
-        was_removed = true;
       } else {
         LGI << "Stale connection for peer " << peer_id << " closed.";
-      }
-    }
-
-    if (was_removed) {
-      Json offline_notification{{"type", "peer_offline"}, {"id", peer_id}};
-      const auto notification_str = offline_notification.dump();
-      const std::lock_guard<std::mutex> lock(peersMutex_);
-      for (const auto& [other_peer_id, other_peer] : peers_) {
-        if (other_peer.ws && other_peer.ws->isOpen()) {
-          other_peer.ws->send(notification_str);
-        }
-      }
-    }
-
-    {
-      const std::lock_guard<std::mutex> lock(interestedPeersMutex_);
-      for (auto& [offline_peer, interested_set] : interested_peers_) {
-        interested_set.erase(peer_id);
       }
     }
   }

@@ -106,8 +106,6 @@ public:
 
   // TransportDelegate implementation
   void onPeerReady(const std::shared_ptr<Peer>& peer) override;
-  void onPeerOnline(const std::string& peer_id) override;
-  void onPeerOffline(const std::string& peer_id) override;
   void onSignalingErrorForPeer(const std::string& peer_id, const std::string& error) override;
   void processPeerMessage(Json message) override;
   void processSystemMessage(const std::string& type, Json message) override;
@@ -178,8 +176,12 @@ inline Client::Client(std::shared_ptr<storage::PersistentStorage> storage, std::
   transport_->setStatusCallback([this](const std::string& peer_id, const EventSource source, int state_val) {
     if (source == EventSource::peerConnectionState) {
       const auto state = static_cast<eillance::transport::PeerConnectionState>(state_val);
-      if (state == eillance::transport::PeerConnectionState::Failed || state == eillance::transport::PeerConnectionState::Closed ||
+      if (state == eillance::transport::PeerConnectionState::Failed ||
+          state == eillance::transport::PeerConnectionState::Closed ||
           state == eillance::transport::PeerConnectionState::Disconnected) {
+        // The peer connection is no longer viable. Removing the peer object from the transport layer
+        // ensures that a new connection attempt by the MessageDeliveryService will start from a clean state.
+        transport_->removePeer(peer_id);
         delivery_service_->connectionAttemptFinished(peer_id);
       }
     }
@@ -412,26 +414,6 @@ inline void Client::configure(const Config& config) const {
   }
 }
 inline void Client::onPeerReady(const std::shared_ptr<Peer>&) {}
-inline void Client::onPeerOnline(const std::string& peer_id) {
-  LOGI << "Peer " << peer_id << " is online. Adding to list.";
-  {
-    std::lock_guard<std::mutex> lock(online_peers_mutex_);
-    online_peers_[peer_id].id = peer_id;
-    online_peers_[peer_id].name = peer_id;
-  }
-  updateAndNotifyPeerList();
-  if (!message_queue_->GetQueuedMessages(peer_id).empty()) {
-    delivery_service_->attemptDelivery(peer_id);
-  }
-}
-inline void Client::onPeerOffline(const std::string& peer_id) {
-  LOGI << "Peer " << peer_id << " is offline. Removing from list.";
-  {
-    std::lock_guard<std::mutex> lock(online_peers_mutex_);
-    online_peers_.erase(peer_id);
-  }
-  updateAndNotifyPeerList();
-}
 inline void Client::onSignalingErrorForPeer(const std::string& peer_id, const std::string& error) {
   if (error == "peer_not_found") {
     LOGW << "Connection attempt failed for peer " << peer_id << " because they are not online. Will retry when they appear.";
@@ -501,27 +483,27 @@ inline void Client::processPeerMessage(Json message) {
     auto peer = transport_->getPeer(peer_id);
     if (peer) { // Glare condition
       if (getId() > peer_id) { // This peer is "polite"
-        LOGW << "Glare detected, polite peer yielding. Recreating peer connection to handle incoming offer from " << peer_id;
-        transport_->closePeerConnection(peer_id, "data"); // Close the old PC
-        setupDataChannel(peer, peer_id); // Re-assign the callback to the existing peer
+        LOGW << "Glare detected, polite peer yielding. Resetting connection to handle incoming offer from " << peer_id;
+        transport_->closePeerConnection(peer_id, "data");
+        transport_->removePeer(peer_id);
+        // After removing, the 'peer' pointer is stale. Set to null to fall through to new connection logic.
+        peer = nullptr;
+      } else { // This peer is "impolite"
+        LOGW << "Glare detected, and we are the 'impolite' peer. Ignoring incoming offer from " << peer_id;
+        return; // Let our outgoing offer attempt proceed.
+      }
+    }
+
+    // This block is now executed for new connections OR after a polite glare-handling reset.
+    if (!peer) {
+        peer = std::make_shared<Peer>(peer_id);
+        transport_->addPeer(peer_id, peer);
+        setupDataChannel(peer, peer_id); // Set callback before creating the PC
         transport_->createDataPeerConnection(peer_id);
         const auto sdp = message["sdp"].get<std::string>();
         transport_->setRemoteDescription(peer_id, "data", sdp, "offer");
         transport_->createAnswer(peer_id, "data");
-      } else { // This peer is "impolite"
-        LOGW << "Glare detected, and we are the 'impolite' peer. Ignoring incoming offer from " << peer_id;
-      }
-      return;
     }
-
-    // No glare: This is a new incoming connection offer.
-    peer = std::make_shared<Peer>(peer_id);
-    transport_->addPeer(peer_id, peer);
-    setupDataChannel(peer, peer_id); // Set callback before creating the PC
-    transport_->createDataPeerConnection(peer_id);
-    const auto sdp = message["sdp"].get<std::string>();
-    transport_->setRemoteDescription(peer_id, "data", sdp, "offer");
-    transport_->createAnswer(peer_id, "data");
   } else if (type == "answer") {
     const auto sdp = message["sdp"].get<std::string>();
     transport_->setRemoteDescription(peer_id, "data", sdp, "answer");
@@ -590,9 +572,7 @@ inline auto Client::sendChatMessage(const std::string& peer_id, const std::strin
       {"message_id", entry.id},
   };
   message_queue_->Enqueue(peer_id, entry.id, json_msg.dump());
-  if (!peer) {
-    delivery_service_->attemptDelivery(peer_id);
-  }
+  delivery_service_->attemptDelivery(peer_id);
   return entry;
 }
 inline void Client::markMessagesAsRead(const std::string& peer_id, const std::vector<std::uint64_t>& message_ids) const {

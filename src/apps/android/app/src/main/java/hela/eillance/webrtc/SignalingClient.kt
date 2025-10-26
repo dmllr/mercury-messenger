@@ -26,8 +26,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 sealed class SignalingMessage {
     data class PeerMessage(val message: JSONObject) : SignalingMessage()
     data class Error(val error: String, val forPeer: String?) : SignalingMessage()
-    data class PeerOnline(val peerId: String) : SignalingMessage()
-    data class PeerOffline(val peerId: String) : SignalingMessage()
     data class SystemMessage(val type: String, val payload: JSONObject) : SignalingMessage()
 }
 
@@ -72,8 +70,6 @@ class SignalingClient {
                                         val forPeer = json.optString("for_peer", null)
                                         SignalingMessage.Error(json.getString("error"), forPeer)
                                     }
-                                    json.getString("type") == "peer_online" -> SignalingMessage.PeerOnline(json.getString("id"))
-                                    json.getString("type") == "peer_offline" -> SignalingMessage.PeerOffline(json.getString("id"))
                                     else -> SignalingMessage.SystemMessage(json.getString("type"), json)
                                 }
                                 clientScope.launch { _messages.emit(signalingMessage) }

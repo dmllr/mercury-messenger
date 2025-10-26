@@ -53,19 +53,19 @@ public:
 
   // Called by RtcClient when queuing a new message to an offline peer
   void attemptDelivery(const std::string& peer_id) {
-      const std::lock_guard<std::mutex> lock(mutex_);
-      // Do not initiate connection if there are no messages to send.
-      if (message_queue_->GetQueuedMessages(peer_id).empty()) {
-          return;
-      }
+    const std::lock_guard<std::mutex> lock(mutex_);
+    // Do not initiate connection if there are no messages to send.
+    if (message_queue_->GetQueuedMessages(peer_id).empty()) {
+      return;
+    }
 
-      if (pending_connections_.contains(peer_id)) {
-          return;  // Already trying to connect
-      }
+    if (pending_connections_.contains(peer_id)) {
+      return;  // Already trying to connect
+    }
 
-      LOGI << "Queued messages found for " << peer_id << ". Requesting connection.";
-      pending_connections_.insert(peer_id);
-      connection_handler_(peer_id);
+    LOGI << "Queued messages found for " << peer_id << ". Requesting connection.";
+    pending_connections_.insert(peer_id);
+    connection_handler_(peer_id);
   }
 
 private:
