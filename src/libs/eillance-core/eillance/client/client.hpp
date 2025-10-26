@@ -269,9 +269,6 @@ inline void Client::acceptCall(const std::string& peer_id) {
   transport_->createMediaPeerConnection(peer_id);
   av_stream_->Start();
 
-  transport_->setRemoteDescription(peer_id, "media", *peer->pending_offer_sdp, "offer");
-  peer->pending_offer_sdp.reset();
-
   peer->audio_ = transport_->addAudio(peer_id, [this, wpeer = make_weak_ptr(peer)]() {
     if (const auto p = wpeer.lock()) { transport_->addToStream(p, false); }
   });
@@ -280,6 +277,9 @@ inline void Client::acceptCall(const std::string& peer_id) {
       if (const auto p = wpeer.lock()) { transport_->addToStream(p, true); }
     });
   }
+
+  transport_->setRemoteDescription(peer_id, "media", *peer->pending_offer_sdp, "offer");
+  peer->pending_offer_sdp.reset();
 
   if (!peer->pending_candidates.empty()) {
     LOGI << "Applying " << peer->pending_candidates.size() << " buffered ICE candidates for " << peer_id;

@@ -310,7 +310,7 @@ fun SystemMessageBubble(entry: HistoryEntry) {
 fun formatTimestamp(timestamp: Long): String {
     val context = LocalContext.current
     val locale = ConfigurationCompat.getLocales(context.resources.configuration)[0]
-                 ?: java.util.Locale.getDefault()
+        ?: java.util.Locale.getDefault()
 
     val messageTime = Instant.ofEpochMilli(timestamp / 1000).atZone(ZoneId.systemDefault())
     val now = ZonedDateTime.now(ZoneId.systemDefault())
@@ -393,14 +393,18 @@ fun CallScreen(viewModel: MainViewModel, uiState: AppState) {
         if (isVideoCall) {
             // Remote video view (fullscreen)
             AndroidView(
-                factory = { context ->
-                    SurfaceViewRenderer(context).apply {
+                factory = {
+                    SurfaceViewRenderer(it).apply {
                         init(eglBaseContext, null)
                     }
                 },
                 modifier = Modifier.fillMaxSize(),
                 update = { surfaceViewRenderer ->
                     viewModel.setRemoteVideoSink(callState.peerId, surfaceViewRenderer)
+                },
+                onRelease = { surfaceViewRenderer ->
+                    viewModel.setRemoteVideoSink(callState.peerId, null)
+                    surfaceViewRenderer.release()
                 }
             )
         }
@@ -429,7 +433,7 @@ fun CallScreen(viewModel: MainViewModel, uiState: AppState) {
                     color = Color.White.copy(alpha = 0.7f)
                 )
             }
-            
+
             // Local video preview (PiP)
             if (isVideoCall) {
                 Box(
@@ -439,15 +443,22 @@ fun CallScreen(viewModel: MainViewModel, uiState: AppState) {
                     contentAlignment = Alignment.TopEnd
                 ) {
                     AndroidView(
-                        factory = { context ->
-                            SurfaceViewRenderer(context).apply {
+                        factory = {
+                            SurfaceViewRenderer(it).apply {
                                 init(eglBaseContext, null)
                                 setMirror(true)
                             }
                         },
-                        modifier = Modifier.width(120.dp).aspectRatio(0.75f).clip(RoundedCornerShape(16.dp)),
+                        modifier = Modifier
+                            .width(120.dp)
+                            .aspectRatio(0.75f)
+                            .clip(RoundedCornerShape(16.dp)),
                         update = { surfaceViewRenderer ->
-                           viewModel.setLocalVideoSink(surfaceViewRenderer)
+                            viewModel.setLocalVideoSink(surfaceViewRenderer)
+                        },
+                        onRelease = { surfaceViewRenderer ->
+                            viewModel.setLocalVideoSink(null)
+                            surfaceViewRenderer.release()
                         }
                     )
                 }

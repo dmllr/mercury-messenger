@@ -35,8 +35,8 @@ class CallService : Service(), IClientNativeBridge {
   // --- Public API for ViewModel ---
   fun startLocalMedia() = webRtcTransport?.startLocalMedia()
   fun stopLocalMedia() = webRtcTransport?.stopLocalMedia()
-  fun setLocalVideoSink(sink: VideoSink) = webRtcTransport?.setLocalSink(sink)
-  fun setRemoteVideoSink(peerId: String, sink: VideoSink) = webRtcTransport?.setRemoteSink(peerId, sink)
+  fun setLocalVideoSink(sink: VideoSink?) = webRtcTransport?.setLocalSink(sink)
+  fun setRemoteVideoSink(peerId: String, sink: VideoSink?) = webRtcTransport?.setRemoteSink(peerId, sink)
 
   // --- Service Lifecycle ---
   override fun onBind(intent: Intent?): IBinder = binder
