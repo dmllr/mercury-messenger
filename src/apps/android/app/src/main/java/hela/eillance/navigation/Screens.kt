@@ -14,4 +14,7 @@ sealed class Route(val route: String) {
     object Interaction : Route("interaction/{peerId}") {
         fun createRoute(peerId: String) = "interaction/$peerId"
     }
+    object Call : Route("call/{peerId}") {
+        fun createRoute(peerId: String) = "call/$peerId"
+    }
 }

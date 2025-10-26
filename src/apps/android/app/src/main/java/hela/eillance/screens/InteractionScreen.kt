@@ -7,11 +7,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -23,19 +21,14 @@ import androidx.compose.material.icons.automirrored.filled.CallMade
 import androidx.compose.material.icons.automirrored.filled.CallMissed
 import androidx.compose.material.icons.automirrored.filled.CallReceived
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.DoneAll
-import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -46,7 +39,6 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -60,7 +52,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.os.ConfigurationCompat
 import hela.eillance.MainViewModel
 import hela.eillance.ndkio.AppState
@@ -70,8 +61,6 @@ import hela.eillance.ndkio.HistoryEntry
 import hela.eillance.ndkio.HistoryEntryKind
 import hela.eillance.ndkio.MessageDirection
 import hela.eillance.ndkio.MessageStatus
-import hela.eillance.webrtc.WebRtcTransport
-import org.webrtc.SurfaceViewRenderer
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -85,14 +74,17 @@ fun InteractionScreen(
     viewModel: MainViewModel,
     uiState: AppState,
     onBack: () -> Unit,
+    onNavigateToCall: (String) -> Unit
 ) {
     val peerId = uiState.selectedContactId ?: "Unknown"
     val listState = rememberLazyListState()
     val isInCall = uiState.callState.isInCall && uiState.callState.peerId == peerId
 
-    if (isInCall) {
-        CallScreen(viewModel = viewModel, uiState = uiState)
-        return
+    // This effect handles navigation to the call screen when a call starts.
+    LaunchedEffect(isInCall) {
+        if (isInCall) {
+            onNavigateToCall(peerId)
+        }
     }
 
     val historyItems = uiState.interactionHistory
@@ -365,136 +357,6 @@ fun MessageInput(onSendMessage: (String) -> Unit) {
                 enabled = text.text.isNotBlank()
             ) {
                 Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send Message")
-            }
-        }
-    }
-}
-
-@Composable
-fun CallScreen(viewModel: MainViewModel, uiState: AppState) {
-    val callState = uiState.callState
-    val context = LocalContext.current
-    val isVideoCall = callState.callType == HistoryEntryKind.VideoCall
-    val eglBaseContext = remember { WebRtcTransport.eglBase.eglBaseContext }
-
-    DisposableEffect(Unit) {
-        // Media is now started automatically by the transport or ViewModel before we get here.
-        // The cleanup will be called when the composable is removed from the composition
-        // (e.g., call ends and we navigate away).
-        onDispose {
-            viewModel.stopCallMedia()
-        }
-    }
-
-    Box(modifier = Modifier
-        .fillMaxSize()
-        .background(Color.Black)) {
-
-        if (isVideoCall) {
-            // Remote video view (fullscreen)
-            AndroidView(
-                factory = {
-                    SurfaceViewRenderer(it).apply {
-                        init(eglBaseContext, null)
-                    }
-                },
-                modifier = Modifier.fillMaxSize(),
-                update = { surfaceViewRenderer ->
-                    viewModel.setRemoteVideoSink(callState.peerId, surfaceViewRenderer)
-                },
-                onRelease = { surfaceViewRenderer ->
-                    viewModel.setRemoteVideoSink(callState.peerId, null)
-                    surfaceViewRenderer.release()
-                }
-            )
-        }
-
-        Column(
-            modifier = Modifier.fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            // Peer info at the top
-            Column(
-                modifier = Modifier.padding(top = 48.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = callState.peerId,
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = Color.White,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.padding(4.dp))
-                Text(
-                    text = "Calling...", // TODO: Add call timer
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = Color.White.copy(alpha = 0.7f)
-                )
-            }
-
-            // Local video preview (PiP)
-            if (isVideoCall) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    contentAlignment = Alignment.TopEnd
-                ) {
-                    AndroidView(
-                        factory = {
-                            SurfaceViewRenderer(it).apply {
-                                init(eglBaseContext, null)
-                                setMirror(true)
-                            }
-                        },
-                        modifier = Modifier
-                            .width(120.dp)
-                            .aspectRatio(0.75f)
-                            .clip(RoundedCornerShape(16.dp)),
-                        update = { surfaceViewRenderer ->
-                            viewModel.setLocalVideoSink(surfaceViewRenderer)
-                        },
-                        onRelease = { surfaceViewRenderer ->
-                            viewModel.setLocalVideoSink(null)
-                            surfaceViewRenderer.release()
-                        }
-                    )
-                }
-            }
-
-            // Controls at the bottom
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 48.dp, start = 24.dp, end = 24.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Mute button
-                IconButton(onClick = { /* TODO */ }) {
-                    Icon(Icons.Default.Mic, contentDescription = "Mute", tint = Color.White, modifier = Modifier.size(32.dp))
-                }
-
-                // Hangup button
-                FloatingActionButton(
-                    onClick = { viewModel.hangup() },
-                    containerColor = MaterialTheme.colorScheme.error,
-                    elevation = FloatingActionButtonDefaults.elevation(0.dp)
-                ) {
-                    Icon(
-                        Icons.Default.CallEnd,
-                        contentDescription = "Hang Up",
-                        tint = Color.White,
-                        modifier = Modifier.size(36.dp)
-                    )
-                }
-
-                // Speaker button
-                IconButton(onClick = { /* TODO */ }) {
-                    Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = "Speaker", tint = Color.White, modifier = Modifier.size(32.dp))
-                }
             }
         }
     }

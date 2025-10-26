@@ -28,6 +28,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import hela.eillance.navigation.Route
 import hela.eillance.navigation.Screen
+import hela.eillance.screens.CallScreen
 import hela.eillance.screens.ContactsScreen
 import hela.eillance.screens.InteractionScreen
 import hela.eillance.screens.ProfileScreen
@@ -86,7 +87,17 @@ fun MercuryApp(viewModel: MainViewModel) {
                 InteractionScreen(
                     viewModel = viewModel,
                     uiState = uiState,
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    onNavigateToCall = { peerId ->
+                        navController.navigate(Route.Call.createRoute(peerId))
+                    }
+                )
+            }
+            composable(Route.Call.route) {
+                CallScreen(
+                    viewModel = viewModel,
+                    uiState = uiState,
+                    onNavigateBack = { navController.popBackStack() }
                 )
             }
         }
