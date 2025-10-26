@@ -517,10 +517,6 @@ private:
       } else {
         reportServiceConnectionState(ServiceConnectionState::failure);
       }
-    } else if (type == "peer_online") {
-      if (const auto id_itr = message.find("id"); id_itr != message.end()) {
-        delegate_->onPeerOnline(id_itr->get<std::string>());
-      }
     } else {
       delegate_->processSystemMessage(type, message);
     }

@@ -330,26 +330,6 @@ Java_hela_eillance_webrtc_WebRtcTransport_nativeOnSystemMessage(JNIEnv* env, job
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_hela_eillance_webrtc_WebRtcTransport_nativeOnPeerOnline(JNIEnv* env, jobject, jlong native_ptr, jstring peer_id) {
-  auto* transport = reinterpret_cast<eillance::transport::AndroidRtcTransport*>(native_ptr);
-  if (transport && transport->delegate()) {
-    const char* peer_id_chars = env->GetStringUTFChars(peer_id, nullptr);
-    transport->delegate()->onPeerOnline(peer_id_chars);
-    env->ReleaseStringUTFChars(peer_id, peer_id_chars);
-  }
-}
-
-extern "C" JNIEXPORT void JNICALL
-Java_hela_eillance_webrtc_WebRtcTransport_nativeOnPeerOffline(JNIEnv* env, jobject, jlong native_ptr, jstring peer_id) {
-  auto* transport = reinterpret_cast<eillance::transport::AndroidRtcTransport*>(native_ptr);
-  if (transport && transport->delegate()) {
-    const char* peer_id_chars = env->GetStringUTFChars(peer_id, nullptr);
-    transport->delegate()->onPeerOffline(peer_id_chars);
-    env->ReleaseStringUTFChars(peer_id, peer_id_chars);
-  }
-}
-
-extern "C" JNIEXPORT void JNICALL
 Java_hela_eillance_webrtc_WebRtcTransport_nativeOnSignalingError(JNIEnv *env, jobject, jlong native_ptr, jstring peer_id, jstring error) {
   auto* transport = reinterpret_cast<eillance::transport::AndroidRtcTransport*>(native_ptr);
   if (transport && transport->delegate()) {
