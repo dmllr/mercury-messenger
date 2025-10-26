@@ -55,6 +55,7 @@ public:
   using OnPeerListUpdateCallback = std::function<void(const std::vector<Device>&)>;
   using StatusCallbackFunction = transport::Transport::StatusCallbackFunction;
   using OnIncomingCallCallback = std::function<void(const std::string& peer_id, messaging::HistoryEntryKind call_type)>;
+  using OnCallTerminatedCallback = std::function<void(const std::string& peer_id)>;
 
   explicit Client(std::shared_ptr<storage::PersistentStorage> storage, Capture video_capture, std::shared_ptr<transport::Transport> transport);
 
@@ -78,6 +79,7 @@ public:
   void setMessageStatusChangedCallback(const OnMessageStatusChangedCallback& callback);
   void setPeerListUpdateCallback(const OnPeerListUpdateCallback& callback);
   void setIncomingCallCallback(const OnIncomingCallCallback& callback);
+  void setOnCallTerminatedCallback(const OnCallTerminatedCallback& callback);
   void requestPeerListUpdate() const;
   void call(const std::string& peer_id);
   void connect(const std::string& peer_id);
@@ -127,6 +129,7 @@ private:
   std::shared_ptr<OnPeerListUpdateCallback> on_peer_list_update_{};
   std::shared_ptr<StatusCallbackFunction> status_callback_{};
   std::shared_ptr<OnIncomingCallCallback> on_incoming_call_{};
+  std::shared_ptr<OnCallTerminatedCallback> on_call_terminated_{};
 
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::unique_ptr<identity::IdManager> id_manager_;
@@ -228,6 +231,9 @@ inline void Client::setPeerListUpdateCallback(const OnPeerListUpdateCallback& ca
 }
 inline void Client::setIncomingCallCallback(const OnIncomingCallCallback& callback) {
   on_incoming_call_ = std::make_shared<OnIncomingCallCallback>(callback);
+}
+inline void Client::setOnCallTerminatedCallback(const OnCallTerminatedCallback& callback) {
+  on_call_terminated_ = std::make_shared<OnCallTerminatedCallback>(callback);
 }
 inline void Client::requestPeerListUpdate() const {
   updateAndNotifyPeerList();
@@ -331,12 +337,17 @@ inline auto Client::getChatSummaries(const std::vector<std::string>& peer_ids) c
 }
 inline void Client::hangup(const std::string& peer_id) const {
   if (const auto peer = transport_->getPeer(peer_id); peer != nullptr) {
-    if (peer->pending_offer_sdp) {
-      peer->pending_offer_sdp.reset();
-    }
+    // A call is considered active if we have a pending offer OR an established media connection.
+    const bool call_was_active = peer->pending_offer_sdp.has_value() || peer->has_media_peer_connection_;
+
+    // Clean up local state related to pending calls.
+    peer->pending_offer_sdp.reset();
     if (!peer->pending_candidates.empty()) {
       peer->pending_candidates.clear();
     }
+
+    // If a media connection exists, close it. This will trigger the onStateChange callback
+    // which is the primary mechanism for updating the UI that the call has ended.
     if (peer->has_media_peer_connection_) {
       LOGI << "Closing media peer connection for " << peer_id;
       transport_->closePeerConnection(peer_id, "media");
@@ -344,12 +355,15 @@ inline void Client::hangup(const std::string& peer_id) const {
       peer->audio_ = nullptr;
       peer->video_ = nullptr;
       av_stream_->Stop();
+    }
 
+    // If the call was active in any state, notify the other peer.
+    if (call_was_active) {
       LOGI << "Sending hangup signal to " << peer_id;
       const Json msg = {{"type", "hangup"}, {"to", peer_id}};
       transport_->sendSignalingMessage(msg);
     } else {
-      LOGW << "Hangup called for " << peer_id << ", but no media connection was found.";
+      LOGW << "Hangup called for " << peer_id << ", but no active call state (ringing or connected) was found.";
     }
   }
 }
@@ -403,6 +417,9 @@ inline void Client::processPeerMessage(Json message) {
   if (type == "hangup") {
     LOGI << "Received hangup signal from " << peer_id;
     hangup(peer_id);
+    if (on_call_terminated_) {
+        (*on_call_terminated_)(peer_id);
+    }
     return;
   }
 

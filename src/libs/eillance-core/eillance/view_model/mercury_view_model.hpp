@@ -497,6 +497,22 @@ inline void MercuryViewModel::SetupClientCallbacks() {
     NotifyStateChanged();
   });
 
+  client_->setOnCallTerminatedCallback([this](const std::string& peer_id) {
+    dispatch_queue_.Dispatch([this, peer_id] {
+        bool state_changed = false;
+        {
+            const std::lock_guard<std::mutex> lock(state_mutex_);
+            if ((current_state_.call_state.is_in_call || current_state_.call_state.is_ringing) && current_state_.call_state.peer_id == peer_id) {
+                current_state_.call_state = {}; // Reset the call state
+                state_changed = true;
+            }
+        }
+        if (state_changed) {
+            NotifyStateChanged();
+        }
+    });
+  });
+
   client_->setMessageStatusChangedCallback(
       [this](const std::string& peer_id, const std::uint64_t message_id,
              const messaging::MessageStatus status) {
