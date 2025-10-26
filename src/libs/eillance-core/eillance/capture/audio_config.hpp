@@ -1,15 +1,12 @@
 #pragma once
 
-#include <miniaudio.h>
-#include <opus.h>
+#include <cstdint>
 
 namespace eillance {
 
 struct AudioConfig {
   // This audio config assumes a sample duration to be 10ms.
   using SampleDataType = std::int16_t;
-  static constexpr auto maSampleFormat = ma_format_s16;
-  static constexpr auto opusEncodeFunction = opus_encode;
   static constexpr auto channels = 2U;
   static constexpr auto sampleDuration = 10ULL;  // milliseconds
   static constexpr auto samplesPerSecond = 1000ULL / sampleDuration;
