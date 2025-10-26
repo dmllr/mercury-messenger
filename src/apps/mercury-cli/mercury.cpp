@@ -57,8 +57,13 @@ std::vector<std::string> GetContactMenuEntries(const std::vector<eillance::view_
         default: break;
     }
 
+    std::string unread_count_str;
+    if (contact.unread_count > 0) {
+        unread_count_str = " [" + std::to_string(contact.unread_count) + "]";
+    }
+
     const std::string display_id = contact.peer_id.length() > 12 ? contact.peer_id.substr(0, 12) + "..." : contact.peer_id;
-    entries.push_back(display_id + status_str + conn_status_str);
+    entries.push_back(display_id + status_str + conn_status_str + unread_count_str);
   }
   return entries;
 }
