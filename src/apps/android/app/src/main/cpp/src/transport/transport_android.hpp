@@ -16,15 +16,16 @@ namespace eillance::transport {
 
 class AndroidRtcTrack final : public ITrack {
 public:
-    void SendSample(const std::vector<std::byte>& sample, uint64_t sample_time) override {
-        // No-op on Android, media is handled by the platform's WebRTC stack
-    }
+  void SendSample(const std::vector<std::byte>& sample, uint64_t sample_time) override {
+    // No-op on Android, media is handled by the platform's WebRTC stack
+  }
 };
 
 class AndroidRtcTransport final : public Transport::TransportInterface {
   JavaVM* jvm_;
   jobject transport_java_ref_{nullptr};
   TransportDelegate* delegate_{nullptr};
+  std::shared_ptr<Transport::StatusCallbackFunction> status_callback_{};
   std::string id_;
 
   std::unordered_map<std::string, std::shared_ptr<Peer>> peers_;
@@ -50,7 +51,7 @@ public:
     jclass callServiceClass = env->GetObjectClass(context);
     jmethodID setTransportMethod = env->GetMethodID(callServiceClass, "setWebRtcTransport", "(Lhela/eillance/webrtc/WebRtcTransport;)V");
     if (setTransportMethod) {
-        env->CallVoidMethod(context, setTransportMethod, transport_java_ref_);
+      env->CallVoidMethod(context, setTransportMethod, transport_java_ref_);
     }
   }
 
@@ -64,7 +65,14 @@ public:
   void setDelegate(TransportDelegate* delegate) override { delegate_ = delegate; }
   TransportDelegate* delegate() { return delegate_; }
 
-  void setStatusCallback(const Transport::StatusCallbackFunction& callback) override {}
+  void setStatusCallback(const Transport::StatusCallbackFunction& callback) override {
+    status_callback_ = std::make_shared<Transport::StatusCallbackFunction>(callback);
+  }
+  void reportStateChange(const std::string& peer_id, EventSource source, int state) {
+    if (status_callback_) {
+      (*status_callback_)(peer_id, source, state);
+    }
+  }
   void setName(const std::string& device_name) override {}
   void setId(const std::string& id) override { id_ = id; }
 
@@ -148,7 +156,19 @@ public:
   void createDataPeerConnection(const std::string& peer_id) override { createPeerConnection(peer_id, "data"); }
   void createMediaPeerConnection(const std::string& peer_id) override { createPeerConnection(peer_id, "media"); }
   void createDataChannel(const std::string& peer_id) override;
-  void closePeerConnection(const std::string& peer_id, const std::string& context) override {}
+  void closePeerConnection(const std::string& peer_id, const std::string& context) override {
+    JNIEnv* env = Attach();
+    if (!env || !transport_java_ref_) return;
+    jclass transportClass = env->GetObjectClass(transport_java_ref_);
+    jmethodID closePcMethod = env->GetMethodID(transportClass, "closePeerConnection", "(Ljava/lang/String;Ljava/lang/String;)V");
+    if (!closePcMethod) {
+      LOGE << "Failed to find method closePeerConnection";
+      return;
+    }
+    jstring j_peer_id = env->NewStringUTF(peer_id.c_str());
+    jstring j_context = env->NewStringUTF(context.c_str());
+    env->CallVoidMethod(transport_java_ref_, closePcMethod, j_peer_id, j_context);
+  }
 
   void createOffer(const std::string& peer_id, const std::string& context) override {
     JNIEnv* env = Attach();
@@ -207,29 +227,29 @@ public:
   }
 
   auto addVideo(const std::string& peer_id, const std::function<void(void)>& on_open) -> std::shared_ptr<ITrack> override {
-      JNIEnv* env = Attach();
-      if (!env || !transport_java_ref_) return nullptr;
-      jclass cls = env->GetObjectClass(transport_java_ref_);
-      jmethodID mid = env->GetMethodID(cls, "addVideoTrack", "(Ljava/lang/String;)V");
-      if (!mid) return nullptr;
+    JNIEnv* env = Attach();
+    if (!env || !transport_java_ref_) return nullptr;
+    jclass cls = env->GetObjectClass(transport_java_ref_);
+    jmethodID mid = env->GetMethodID(cls, "addVideoTrack", "(Ljava/lang/String;)V");
+    if (!mid) return nullptr;
 
-      jstring j_peer_id = env->NewStringUTF(peer_id.c_str());
-      env->CallVoidMethod(transport_java_ref_, mid, j_peer_id);
-      env->DeleteLocalRef(j_peer_id);
-      return std::make_shared<AndroidRtcTrack>();
+    jstring j_peer_id = env->NewStringUTF(peer_id.c_str());
+    env->CallVoidMethod(transport_java_ref_, mid, j_peer_id);
+    env->DeleteLocalRef(j_peer_id);
+    return std::make_shared<AndroidRtcTrack>();
   }
   auto addAudio(const std::string& peer_id, const std::function<void(void)>& on_open) -> std::shared_ptr<ITrack> override {
-      JNIEnv* env = Attach();
-      if (!env || !transport_java_ref_) return nullptr;
-      jclass cls = env->GetObjectClass(transport_java_ref_);
-      jmethodID mid = env->GetMethodID(cls, "addAudioTrack", "(Ljava/lang/String;)V");
-      if (!mid) return nullptr;
+    JNIEnv* env = Attach();
+    if (!env || !transport_java_ref_) return nullptr;
+    jclass cls = env->GetObjectClass(transport_java_ref_);
+    jmethodID mid = env->GetMethodID(cls, "addAudioTrack", "(Ljava/lang/String;)V");
+    if (!mid) return nullptr;
 
-      jstring j_peer_id = env->NewStringUTF(peer_id.c_str());
-      env->CallVoidMethod(transport_java_ref_, mid, j_peer_id);
-      env->DeleteLocalRef(j_peer_id);
+    jstring j_peer_id = env->NewStringUTF(peer_id.c_str());
+    env->CallVoidMethod(transport_java_ref_, mid, j_peer_id);
+    env->DeleteLocalRef(j_peer_id);
 
-      return std::make_shared<AndroidRtcTrack>();
+    return std::make_shared<AndroidRtcTrack>();
   }
 
 private:
@@ -265,6 +285,17 @@ inline void AndroidRtcTransport::createDataChannel(const std::string& peer_id) {
 } // namespace eillance::transport
 
 // --- JNI Callbacks ---
+
+extern "C" JNIEXPORT void JNICALL
+Java_hela_eillance_webrtc_WebRtcTransport_nativeOnPeerConnectionStateChange(JNIEnv* env, jobject, jlong native_ptr, jstring j_peer_id, jint state) {
+  auto* transport = reinterpret_cast<eillance::transport::AndroidRtcTransport*>(native_ptr);
+  if (transport) {
+    const char* peer_id_chars = env->GetStringUTFChars(j_peer_id, nullptr);
+    std::string peer_id_str(peer_id_chars);
+    transport->reportStateChange(peer_id_str, eillance::EventSource::peerConnectionState, state);
+    env->ReleaseStringUTFChars(j_peer_id, peer_id_chars);
+  }
+}
 
 extern "C" JNIEXPORT void JNICALL
 Java_hela_eillance_webrtc_WebRtcTransport_nativeOnPeerMessage(JNIEnv* env, jobject, jlong native_ptr, jstring message) {

@@ -267,6 +267,7 @@ inline void Client::acceptCall(const std::string& peer_id) {
   const bool is_video_call = peer->pending_offer_sdp->find("m=video") != std::string::npos;
 
   transport_->createMediaPeerConnection(peer_id);
+  peer->has_media_peer_connection_ = true;
   av_stream_->Start();
 
   peer->audio_ = transport_->addAudio(peer_id, [this, wpeer = make_weak_ptr(peer)]() {
@@ -343,6 +344,10 @@ inline void Client::hangup(const std::string& peer_id) const {
       peer->audio_ = nullptr;
       peer->video_ = nullptr;
       av_stream_->Stop();
+
+      LOGI << "Sending hangup signal to " << peer_id;
+      const Json msg = {{"type", "hangup"}, {"to", peer_id}};
+      transport_->sendSignalingMessage(msg);
     } else {
       LOGW << "Hangup called for " << peer_id << ", but no media connection was found.";
     }
@@ -394,6 +399,12 @@ inline void Client::processPeerMessage(Json message) {
   }
   auto type = type_it->get<std::string>();
   const auto context = message.value("context", "data");
+
+  if (type == "hangup") {
+    LOGI << "Received hangup signal from " << peer_id;
+    hangup(peer_id);
+    return;
+  }
 
   if (context == "media") {
     auto peer = transport_->getPeer(peer_id);
