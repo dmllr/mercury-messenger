@@ -42,7 +42,7 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
     private val eglBase: EglBase = WebRtcTransport.eglBase
 
     private val peerConnectionFactory: PeerConnectionFactory
-    private val peers = ConcurrentHashMap<String, PeerConnection>()
+    private val peerConnections = ConcurrentHashMap<String, ConcurrentHashMap<String, PeerConnection>>()
     private val dataChannels = ConcurrentHashMap<String, DataChannel>()
 
     // Local media resources
@@ -66,6 +66,7 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
     private external fun nativeOnSignalingError(nativePointer: Long, peerId: String, error: String)
     private external fun nativeOnDataChannelMessage(nativePointer: Long, peerId: String, message: String)
     private external fun nativeOnDataChannelOpen(nativePointer: Long, peerId: String)
+    private external fun nativeOnPeerConnectionStateChange(nativePointer: Long, peerId: String, state: Int)
 
 
     init {
@@ -89,8 +90,12 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
     fun terminate() {
         signalingClient.disconnect()
         stopLocalMedia()
-        peers.values.forEach { it.close() }
-        peers.clear()
+        peerConnections.values.forEach { contextMap ->
+            contextMap.values.forEach { pc ->
+                pc.close()
+            }
+        }
+        peerConnections.clear()
         dataChannels.clear()
         peerConnectionFactory.dispose()
         // Do not release the singleton EGL base here, it's application-scoped.
@@ -118,9 +123,23 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
         val observer = object : PeerConnection.Observer {
             override fun onSignalingChange(newState: PeerConnection.SignalingState?) {
                 Log.i(TAG, "onSignalingChange for peer $peerId ($context): $newState")
+                if (newState == PeerConnection.SignalingState.CLOSED) {
+                    nativeOnPeerConnectionStateChange(nativePointer, peerId, PeerConnectionState.Closed.value)
+                }
             }
             override fun onIceConnectionChange(newState: PeerConnection.IceConnectionState?) {
                 Log.i(TAG, "onIceConnectionChange for peer $peerId ($context): $newState")
+                val stateInt = when(newState) {
+                    PeerConnection.IceConnectionState.NEW -> PeerConnectionState.New.value
+                    PeerConnection.IceConnectionState.CHECKING -> PeerConnectionState.Connecting.value
+                    PeerConnection.IceConnectionState.CONNECTED -> PeerConnectionState.Connected.value
+                    PeerConnection.IceConnectionState.COMPLETED -> PeerConnectionState.Connected.value // Treat COMPLETED as CONNECTED
+                    PeerConnection.IceConnectionState.DISCONNECTED -> PeerConnectionState.Disconnected.value
+                    PeerConnection.IceConnectionState.FAILED -> PeerConnectionState.Failed.value
+                    PeerConnection.IceConnectionState.CLOSED -> PeerConnectionState.Closed.value
+                    null -> PeerConnectionState.Closed.value
+                }
+                nativeOnPeerConnectionStateChange(nativePointer, peerId, stateInt)
             }
             override fun onIceConnectionReceivingChange(p0: Boolean) {}
             override fun onIceGatheringChange(newState: PeerConnection.IceGatheringState?) {
@@ -200,11 +219,32 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
             }
         }
         Log.i(TAG, "Creating PeerConnection for peer $peerId, context: $context")
-        peers[peerId] = peerConnectionFactory.createPeerConnection(rtcConfig, observer) ?: return
+        val peerContextMap = peerConnections.getOrPut(peerId) { ConcurrentHashMap() }
+        val pc = peerConnectionFactory.createPeerConnection(rtcConfig, observer) ?: return
+        peerContextMap[context] = pc
+    }
+
+    fun closePeerConnection(peerId: String, context: String) {
+        Log.i(TAG, "Closing peer connection for peer $peerId ($context)")
+        val pc = peerConnections[peerId]?.remove(context)
+        pc?.close()
+
+        // If this was the last connection for the peer, clean up the top-level map entry
+        if (peerConnections[peerId]?.isEmpty() == true) {
+            peerConnections.remove(peerId)
+        }
+
+        // Clean up associated resources
+        if (context == "media") {
+            remoteVideoTracks.remove(peerId)?.dispose()
+            remoteSinks.remove(peerId) // Sinks don't need disposal, just detachment
+        } else if (context == "data") {
+            dataChannels.remove(peerId)?.dispose()
+        }
     }
 
     fun createDataChannel(peerId: String) {
-        val pc = peers[peerId] ?: return
+        val pc = getPeerConnection(peerId, "data") ?: return
         Log.d(TAG, "Creating data channel for peer: $peerId")
         val dc = pc.createDataChannel("data", DataChannel.Init())
         dataChannels[peerId] = dc
@@ -243,7 +283,7 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
     }
 
     fun createOffer(peerId: String, context: String) {
-        val pc = peers[peerId] ?: return
+        val pc = getPeerConnection(peerId, context) ?: return
         Log.d(TAG, "Creating offer for peer $peerId ($context)")
         val sdpObserver = object : SdpObserver {
             override fun onCreateSuccess(sdp: SessionDescription?) {
@@ -269,7 +309,7 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
     }
 
     fun createAnswer(peerId: String, context: String) {
-        val pc = peers[peerId] ?: return
+        val pc = getPeerConnection(peerId, context) ?: return
         Log.d(TAG, "Creating answer for peer $peerId ($context)")
 
         // Fix for race condition: Ensure local tracks are represented by senders before creating an answer.
@@ -280,11 +320,11 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
                 Log.d(TAG, "Local media not started. Starting it now before creating answer.")
                 startLocalMedia()
             }
-            if (localAudioTrack != null && pc.senders.none { it.track()?.kind() == "audio" }) {
+            if (localAudioTrack != null && pc.senders.none { it.track()?.id() == AUDIO_TRACK_ID }) {
                 Log.d(TAG, "Audio track not found in senders, adding it now before creating answer.")
                 pc.addTrack(localAudioTrack, listOf(MEDIA_STREAM_ID))
             }
-            if (localVideoTrack != null && pc.senders.none { it.track()?.kind() == "video" }) {
+            if (localVideoTrack != null && pc.senders.none { it.track()?.id() == VIDEO_TRACK_ID }) {
                 Log.d(TAG, "Video track not found in senders, adding it now before creating answer.")
                 pc.addTrack(localVideoTrack, listOf(MEDIA_STREAM_ID))
             }
@@ -319,7 +359,7 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
 
     fun setRemoteDescription(peerId: String, context: String, sdp: String, type: String) {
         Log.i(TAG, "Setting remote description for peer $peerId ($context), type: $type")
-        val pc = peers[peerId] ?: run { Log.e(TAG, "PeerConnection for $peerId not found for setRemoteDescription"); return }
+        val pc = getPeerConnection(peerId, context) ?: run { Log.e(TAG, "PeerConnection for $peerId ($context) not found for setRemoteDescription"); return }
         val sdpObserver = object : SdpObserver {
             override fun onCreateSuccess(sdp: SessionDescription?) {}
             override fun onSetSuccess() {
@@ -335,13 +375,13 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
     fun addRemoteCandidate(peerId: String, context: String, candidateSdp: String, mid: String) {
         val candidate = IceCandidate(mid, -1, candidateSdp)
         Log.d(TAG, "Adding remote ICE candidate for peer $peerId ($context): $candidateSdp")
-        val pc = peers[peerId]
+        val pc = getPeerConnection(peerId, context)
         if (pc == null) { Log.e(TAG, "PeerConnection for $peerId not found, cannot add remote candidate."); return }
         pc.addIceCandidate(candidate)
     }
 
     fun addVideoTrack(peerId: String) {
-        val pc = peers[peerId] ?: return
+        val pc = getPeerConnection(peerId, "media") ?: return
         if (localVideoTrack == null) startLocalMedia()
         localVideoTrack?.let {
             pc.addTrack(it, listOf(MEDIA_STREAM_ID))
@@ -350,7 +390,7 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
     }
 
     fun addAudioTrack(peerId: String) {
-        val pc = peers[peerId] ?: return
+        val pc = getPeerConnection(peerId, "media") ?: return
         if (localAudioTrack == null) startLocalMedia()
         localAudioTrack?.let {
             pc.addTrack(it, listOf(MEDIA_STREAM_ID))
@@ -450,8 +490,9 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
     }
 
     fun getPeerConnectionState(peerId: String): Int {
-        val state = peers[peerId]?.connectionState()
-        return when (state) {
+      // The "data" connection is the primary indicator of peer connectivity for the contact list.
+      val state = getPeerConnection(peerId, "data")?.connectionState()
+      return when (state) {
             PeerConnection.PeerConnectionState.NEW -> PeerConnectionState.New.ordinal
             PeerConnection.PeerConnectionState.CONNECTING -> PeerConnectionState.Connecting.ordinal
             PeerConnection.PeerConnectionState.CONNECTED -> PeerConnectionState.Connected.ordinal
@@ -460,6 +501,10 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
             PeerConnection.PeerConnectionState.CLOSED -> PeerConnectionState.Closed.ordinal
             else -> PeerConnectionState.Closed.ordinal
         }
+    }
+
+    private fun getPeerConnection(peerId: String, context: String): PeerConnection? {
+        return peerConnections[peerId]?.get(context)
     }
 
     private fun observeSignaling() {
