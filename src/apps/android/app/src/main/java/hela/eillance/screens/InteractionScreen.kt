@@ -73,12 +73,18 @@ import java.util.concurrent.TimeUnit
 fun InteractionScreen(
     viewModel: MainViewModel,
     uiState: AppState,
+    peerId: String,
     onBack: () -> Unit,
     onNavigateToCall: (String) -> Unit
 ) {
-    val peerId = uiState.selectedContactId ?: "Unknown"
+    // This effect ensures the ViewModel's state is aligned with the screen we are on.
+    // It's crucial for when we land here from an incoming call notification.
+    LaunchedEffect(peerId) {
+        viewModel.selectContact(peerId)
+    }
+
     val listState = rememberLazyListState()
-    val isInCall = uiState.callState.isInCall && uiState.callState.peerId == peerId
+    val isInCall = uiState.callState.isInCall && uiState.callState.peerId == peerId // Use the peerId from the route
 
     // This effect handles navigation to the call screen when a call starts.
     LaunchedEffect(isInCall) {

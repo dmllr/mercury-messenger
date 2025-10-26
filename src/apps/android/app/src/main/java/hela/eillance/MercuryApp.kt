@@ -83,10 +83,13 @@ fun MercuryApp(viewModel: MainViewModel) {
                     onBack = { navController.popBackStack() }
                 )
             }
-            composable(Route.Interaction.route) {
+            composable(Route.Interaction.route) { backStackEntry ->
+                val peerId = backStackEntry.arguments?.getString("peerId")
+                    ?: return@composable // Or show an error screen
                 InteractionScreen(
                     viewModel = viewModel,
                     uiState = uiState,
+                    peerId = peerId,
                     onBack = { navController.popBackStack() },
                     onNavigateToCall = { peerId ->
                         navController.navigate(Route.Call.createRoute(peerId))
