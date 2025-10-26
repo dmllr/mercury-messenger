@@ -21,6 +21,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _showAddContactDialog = MutableStateFlow(false)
     val showAddContactDialog = _showAddContactDialog.asStateFlow()
 
+    private val _navigateToPeerId = MutableStateFlow<String?>(null)
+    val navigateToPeerId = _navigateToPeerId.asStateFlow()
+
+    private var pendingNavigationPeerId: String? = null
+
+
     private val json = Json { ignoreUnknownKeys = true }
 
     fun setService(service: CallService?) {
@@ -36,6 +42,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         callService?.refreshState()
+        // When the service connects, process any pending navigation request.
+        pendingNavigationPeerId?.let { peerIdToNavigate ->
+            pendingNavigationPeerId = null // Clear before calling to avoid re-entry
+            navigateToPeer(peerIdToNavigate)
+        }
     }
 
     // --- UI Event Handlers ---
@@ -109,6 +120,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setRemoteVideoSink(peerId: String, sink: VideoSink?) {
         callService?.setRemoteVideoSink(peerId, sink)
+    }
+
+    fun navigateToPeer(peerId: String) {
+        if (callService == null) {
+            pendingNavigationPeerId = peerId
+        } else {
+            // Always select the contact before navigating to ensure the
+            // backend state is correct when the UI destination is reached.
+            selectContact(peerId)
+            _navigateToPeerId.value = peerId
+        }
+    }
+
+    fun onNavigationHandled() {
+        _navigateToPeerId.value = null
     }
 
     override fun onCleared() {

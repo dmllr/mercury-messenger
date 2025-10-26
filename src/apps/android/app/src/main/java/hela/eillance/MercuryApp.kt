@@ -17,6 +17,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -37,6 +38,20 @@ import hela.eillance.screens.ProfileScreen
 fun MercuryApp(viewModel: MainViewModel) {
     val navController = rememberNavController()
     val uiState by viewModel.uiState.collectAsState()
+    val navigateToPeerId by viewModel.navigateToPeerId.collectAsState()
+
+    LaunchedEffect(navigateToPeerId) {
+        navigateToPeerId?.let { peerId ->
+            // Ensure we are not on the call screen when navigating to a chat
+            if (!uiState.callState.isInCall && !uiState.callState.isRinging) {
+                navController.navigate(Route.Interaction.createRoute(peerId)) {
+                    // This is key: If we are already on the target screen, don't create a new instance.
+                    launchSingleTop = true
+                }
+            }
+            viewModel.onNavigationHandled()
+        }
+    }
 
     if (viewModel.showAddContactDialog.collectAsState().value) {
         AddContactDialog(
@@ -69,8 +84,7 @@ fun MercuryApp(viewModel: MainViewModel) {
                     viewModel = viewModel,
                     uiState = uiState,
                     onContactClick = { peerId ->
-                        viewModel.selectContact(peerId)
-                        navController.navigate(Route.Interaction.createRoute(peerId))
+                        viewModel.navigateToPeer(peerId)
                     },
                     onNavigateToProfile = {
                         navController.navigate(Screen.Profile.route)
@@ -91,8 +105,8 @@ fun MercuryApp(viewModel: MainViewModel) {
                     uiState = uiState,
                     peerId = peerId,
                     onBack = { navController.popBackStack() },
-                    onNavigateToCall = { peerId ->
-                        navController.navigate(Route.Call.createRoute(peerId))
+                    onNavigateToCall = {
+                        navController.navigate(Route.Call.createRoute(it))
                     }
                 )
             }
