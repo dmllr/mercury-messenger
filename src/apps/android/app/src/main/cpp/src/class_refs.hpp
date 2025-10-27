@@ -20,6 +20,16 @@ public:
   /// Get the default constructor.
   [[nodiscard]] [[maybe_unused]] jmethodID Ctor() const { return ctor_; }
 
+  /// Cache a method ID.
+  void AddMethod(const std::string& method_name, jmethodID method_id) { methods_[method_name] = method_id; }
+
+  /// Get a cached method ID.
+  [[nodiscard]] jmethodID GetMethod(const std::string& method_name) const {
+    auto it = methods_.find(method_name);
+    if (it == methods_.end()) { throw std::runtime_error("Method not registered: " + method_name); }
+    return it->second;
+  }
+
   /// Create a new object using the cached constructor.
   template <typename... Args>
   [[nodiscard]] [[maybe_unused]] jobject NewObject(JNIEnv* env, Args... args) const {
@@ -30,6 +40,7 @@ public:
 private:
   jclass class_;
   jmethodID ctor_;
+  std::unordered_map<std::string, jmethodID> methods_;
 };
 
 /// Singleton that stores global references to Java classes and their methods.
@@ -57,7 +68,9 @@ public:
   void RegisterClass(JNIEnv* env, const std::string& class_name) {
     if (classes_.find(class_name) == classes_.end()) {
       jclass local_cls = env->FindClass(class_name.c_str());
-      if (local_cls == nullptr) { throw std::runtime_error("Failed to find class: " + class_name); }
+      if (local_cls == nullptr) {
+        throw std::runtime_error("Failed to find class: " + class_name);
+      }
       // NOLINTNEXTLINE(*-readability-casting, *-pro-type-static-cast-downcast)
       auto* global_cls = static_cast<jclass>(env->NewGlobalRef(local_cls));
       classes_.emplace(class_name, ClassHolder(global_cls));
@@ -71,14 +84,29 @@ public:
     RegisterClass(env, class_name);
     jclass cls = classes_.at(class_name).Class();
     jmethodID ctor = env->GetMethodID(cls, "<init>", ctor_sig.c_str());
-    if (ctor == nullptr) { throw std::runtime_error("Failed to get constructor for: " + class_name); }
+    if (ctor == nullptr) {
+      throw std::runtime_error("Failed to get constructor for: " + class_name);
+    }
     classes_.at(class_name).SetCtor(ctor);
+  }
+
+  /// Registers a method for a given class with the given name and signature.
+  void RegisterMethod(JNIEnv* env, const std::string& class_name, const std::string& method_name, const std::string& method_sig) {
+    RegisterClass(env, class_name);
+    jclass cls = classes_.at(class_name).Class();
+    jmethodID mid = env->GetMethodID(cls, method_name.c_str(), method_sig.c_str());
+    if (mid == nullptr) {
+      throw std::runtime_error("Failed to get method '" + method_name + "' for class: " + class_name);
+    }
+    classes_.at(class_name).AddMethod(method_name, mid);
   }
 
   /// Retrieve the ClassHolder for a given class.
   auto Class(const std::string& class_name) -> ClassHolder& {
     auto itr = classes_.find(class_name);
-    if (itr == classes_.end()) { throw std::runtime_error("Class not registered: " + class_name); }
+    if (itr == classes_.end()) {
+      throw std::runtime_error("Class not registered: " + class_name);
+    }
     return itr->second;
   }
 };

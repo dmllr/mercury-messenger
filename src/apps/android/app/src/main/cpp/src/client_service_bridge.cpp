@@ -157,11 +157,39 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
   try {
     auto& classref = ClassRefs::Instance();
     classref.RegisterClass(env, "androidx/preference/PreferenceManager");
+
+    // Register CallService and its methods
+    const std::string call_service_class = "hela/eillance/CallService";
+    classref.RegisterClass(env, call_service_class);
+    classref.RegisterMethod(env, call_service_class, "setWebRtcTransport", "(Lhela/eillance/webrtc/WebRtcTransport;)V");
+
+    // Register WebRtcTransport and its methods
+    const std::string webrtc_transport_class = "hela/eillance/webrtc/WebRtcTransport";
+    classref.RegisterClass(env, webrtc_transport_class);
+    classref.RegisterCtor(env, webrtc_transport_class, "(Landroid/content/Context;J)V");
+    classref.RegisterMethod(env, webrtc_transport_class, "connect", "(Ljava/lang/String;Ljava/lang/String;)V");
+    classref.RegisterMethod(env, webrtc_transport_class, "terminate", "()V");
+    classref.RegisterMethod(env, webrtc_transport_class, "reconnect", "(Ljava/lang/String;)V");
+    classref.RegisterMethod(env, webrtc_transport_class, "getPeerConnectionState", "(Ljava/lang/String;)I");
+    classref.RegisterMethod(env, webrtc_transport_class, "sendSignalingMessage", "(Ljava/lang/String;)V");
+    classref.RegisterMethod(env, webrtc_transport_class, "sendDataChannelMessage", "(Ljava/lang/String;Ljava/lang/String;)V");
+    classref.RegisterMethod(env, webrtc_transport_class, "closePeerConnection", "(Ljava/lang/String;Ljava/lang/String;)V");
+    classref.RegisterMethod(env, webrtc_transport_class, "createOffer", "(Ljava/lang/String;Ljava/lang/String;)V");
+    classref.RegisterMethod(env, webrtc_transport_class, "createAnswer", "(Ljava/lang/String;Ljava/lang/String;)V");
+    classref.RegisterMethod(env, webrtc_transport_class, "setRemoteDescription", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
+    classref.RegisterMethod(env, webrtc_transport_class, "addRemoteCandidate", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
+    classref.RegisterMethod(env, webrtc_transport_class, "addVideoTrack", "(Ljava/lang/String;)V");
+    classref.RegisterMethod(env, webrtc_transport_class, "addAudioTrack", "(Ljava/lang/String;)V");
+    classref.RegisterMethod(env, webrtc_transport_class, "createPeerConnection", "(Ljava/lang/String;Ljava/lang/String;)V");
+    classref.RegisterMethod(env, webrtc_transport_class, "createDataChannel", "(Ljava/lang/String;)V");
+
+    // Register other ctors
     classref.RegisterCtor(env, "java/util/ArrayList", "()V");
     classref.RegisterCtor(env, "hela/eillance/ndkio/Peer", "(Ljava/lang/String;Ljava/lang/String;Ljava/util/List;)V");
     classref.RegisterCtor(env, "hela/eillance/ndkio/Camera", "(Ljava/lang/String;Ljava/lang/String;Ljava/util/List;)V");
     classref.RegisterCtor(env, "hela/eillance/ndkio/Resolution", "(II)V");
   } catch (const std::exception& e) {
+    LOGE << "JNI_OnLoad failed: " << e.what();
     return JNI_ERR;
   }
 
