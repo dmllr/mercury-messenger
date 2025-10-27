@@ -85,6 +85,15 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_nativeRejectCal
   if (client_engine && client_engine->ViewModel()) { client_engine->ViewModel()->RejectCall(); }
 }
 
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_nativeUpdateSignalingUrl(JNIEnv* env, jobject /*instance*/, jstring url) {
+  if (client_engine && client_engine->ViewModel()) {
+    const char* chars = env->GetStringUTFChars(url, nullptr);
+    const std::string url_str(chars);
+    env->ReleaseStringUTFChars(url, chars);
+    client_engine->ViewModel()->UpdateSignalingUrl(url_str);
+  }
+}
+
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_loadOlderMessages(JNIEnv* /*env*/, jobject /*instance*/) {
   if (client_engine && client_engine->ViewModel()) { client_engine->ViewModel()->LoadOlderMessages(); }

@@ -1,21 +1,17 @@
 package hela.eillance
 
 import android.app.Application
-import android.content.Context
-import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import hela.eillance.ndkio.AppState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import org.webrtc.VideoSink
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var callService: CallService? = null
-    private val sharedPrefs = application.getSharedPreferences("mercury_settings", Context.MODE_PRIVATE)
 
     private val _uiState = MutableStateFlow(AppState())
     val uiState = _uiState.asStateFlow()
@@ -34,21 +30,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    init {
-        loadSettings()
-    }
-
     fun setService(service: CallService?) {
         callService = service
         callService?.setJsonStateCallback { jsonState ->
-            viewModelScope.launch {
-                try {
-                    val newState = json.decodeFromString<AppState>(jsonState)
-                    _uiState.update { newState }
-                } catch (e: Exception) {
-                    Log.e("MainViewModel", "Failed to decode AppState from JSON", e)
-                }
-            }
+            val newState = json.decodeFromString<AppState>(jsonState)
+            _uiState.value = newState
+            _signalingUrl.value = newState.signalingServerUrl ?: ""
         }
         callService?.refreshState()
         // When the service connects, process any pending navigation request.
@@ -59,25 +46,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // --- Settings ---
-    private fun loadSettings() {
-        _signalingUrl.value = sharedPrefs.getString("signaling_server_url", "") ?: ""
-    }
-
     fun onSignalingUrlChange(newUrl: String) {
         _signalingUrl.value = newUrl
     }
 
     fun saveSettings() {
-        viewModelScope.launch {
-            val newUrl = _signalingUrl.value
-            with(sharedPrefs.edit()) {
-                putString("signaling_server_url", newUrl)
-                apply()
-            }
-            callService?.reconnectSignaling(newUrl)
-        }
+        callService?.updateSignalingUrl(_signalingUrl.value)
     }
-
 
     // --- UI Event Handlers ---
 

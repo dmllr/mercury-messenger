@@ -57,9 +57,8 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
     private val remoteSinks = ConcurrentHashMap<String, VideoSink>()
     private val remoteVideoTracks = ConcurrentHashMap<String, VideoTrack>()
 
-    private var signalingUrl: String
-
     private var localPeerId: String? = null
+    private var currentSignalingUrl: String = ""
 
     private var isObservingMessages = false
 
@@ -82,13 +81,11 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
             .setVideoEncoderFactory(videoEncoderFactory)
             .setVideoDecoderFactory(videoDecoderFactory)
             .createPeerConnectionFactory()
-
-        val sharedPrefs = context.getSharedPreferences("mercury_settings", Context.MODE_PRIVATE)
-        signalingUrl = sharedPrefs.getString("signaling_server_url", "") ?: ""
     }
 
-    fun connect(peerId: String) {
+    fun connect(peerId: String, signalingUrl: String) {
         this.localPeerId = peerId
+        this.currentSignalingUrl = signalingUrl
         observeSignaling()
         signalingClient.connect(peerId, signalingUrl)
     }
@@ -500,7 +497,7 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
             localPeerId?.let { peerId ->
                 Log.i(TAG, "Reconnecting signaling client to new URL: $newUrl")
                 // Update the URL for subsequent automatic reconnections
-                this@WebRtcTransport.signalingUrl = newUrl
+                this@WebRtcTransport.currentSignalingUrl = newUrl
 
                 // Disconnect and cancel old client
                 signalingClient.disconnect()

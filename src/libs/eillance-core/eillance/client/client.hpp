@@ -6,6 +6,7 @@
 #include <nlohmann/json.hpp>
 
 #include "eillance/capture/capture.hpp"
+#include "eillance/client/settings_manager.hpp"
 #include "eillance/crypto/crypto.hpp"
 #include "eillance/identity/contact_manager.hpp"
 #include "eillance/identity/id_manager.hpp"
@@ -72,6 +73,7 @@ public:
 
   [[nodiscard]] auto getId() const -> std::string;
   auto getStorage() const -> std::shared_ptr<storage::PersistentStorage>;
+  auto getSettingsManager() const -> SettingsManager*;
   void setName(const std::string& name) const;
   void start() const;
   void terminate() const;
@@ -101,6 +103,7 @@ public:
   void hangup(const std::string& peer_id) const;
   void configure(const Config& config) const;
   auto sendChatMessage(const std::string& peer_id, const std::string& message) const -> messaging::HistoryEntryRecord;
+  void UpdateSignalingUrl(const std::string& url);
   void markMessagesAsRead(const std::string& peer_id, const std::vector<std::uint64_t>& message_ids) const;
   auto getMessageHistoryPage(const std::string& peer_id, size_t page_index, size_t page_size) const -> messaging::HistoryPage;
 
@@ -146,6 +149,7 @@ private:
   std::unique_ptr<messaging::MessageDeliveryService> delivery_service_;
   std::unique_ptr<messaging::MessageHistory> message_history_;
 
+  std::unique_ptr<SettingsManager> settings_manager_;
   std::unordered_map<std::string, Device> online_peers_;
   mutable std::mutex online_peers_mutex_;
 };
@@ -157,6 +161,7 @@ inline Client::Client(std::shared_ptr<storage::PersistentStorage> storage, std::
   transport_->setDelegate(this);
 
   id_manager_ = std::make_unique<identity::IdManager>(storage_);
+  settings_manager_ = std::make_unique<SettingsManager>(storage_);
   contact_manager_ = std::make_shared<identity::ContactManager>(storage_);
   message_queue_ = std::make_shared<messaging::MessageQueue>(storage_);
   message_history_ = std::make_unique<messaging::MessageHistory>(storage_);
@@ -199,8 +204,13 @@ inline void Client::InitializeAVStream() {
 
 inline auto Client::getId() const -> std::string { return id_manager_->GetId(); }
 inline auto Client::getStorage() const -> std::shared_ptr<storage::PersistentStorage> { return storage_; }
+inline auto Client::getSettingsManager() const -> SettingsManager* { return settings_manager_.get(); }
 inline void Client::setName(const std::string& name) const { transport_->setName(name); }
 inline void Client::start() const {
+  if (auto url = settings_manager_->GetSignalingServerUrl()) {
+    transport_->setSignalingUrl(*url);
+  }
+
   transport_->setId(id_manager_->GetId());
   delivery_service_->start();
   transport_->start();
@@ -484,6 +494,11 @@ inline auto Client::sendChatMessage(const std::string& peer_id, const std::strin
   message_queue_->Enqueue(peer_id, entry.id, json_msg.dump());
   delivery_service_->attemptDelivery(peer_id);
   return entry;
+}
+inline void Client::UpdateSignalingUrl(const std::string& url) {
+  settings_manager_->SetSignalingServerUrl(url);
+  transport_->setSignalingUrl(url);
+  transport_->reconnect();
 }
 inline void Client::markMessagesAsRead(const std::string& peer_id, const std::vector<std::uint64_t>& message_ids) const {
   const auto peer = transport_->getPeer(peer_id);
