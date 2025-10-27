@@ -283,7 +283,7 @@ public:
 
   auto AddAudio(const std::string& peer_id, const std::function<void(void)>& /*on_open*/) -> std::shared_ptr<ITrack> override {
     JNIEnv* env = Attach();
-    if (!env || (transport_java_ref_ == nullptr)) { 
+    if (!env || (transport_java_ref_ == nullptr)) {
       return nullptr;
     }
     auto* cls = env->GetObjectClass(transport_java_ref_);
