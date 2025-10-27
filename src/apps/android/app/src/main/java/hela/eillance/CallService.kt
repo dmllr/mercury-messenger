@@ -221,7 +221,7 @@ class CallService : Service(), IClientNativeBridge {
   }
 
   private fun createNotificationChannels() {
-    val foregroundChannel = NotificationChannel(FOREGROUND_CHANNEL_ID, "Foreground Service", NotificationManager.IMPORTANCE_LOW)
+    val foregroundChannel = NotificationChannel(FOREGROUND_CHANNEL_ID, "Foreground Service", NotificationManager.IMPORTANCE_MIN)
     val callsChannel = NotificationChannel(CALLS_CHANNEL_ID, "Incoming Calls", NotificationManager.IMPORTANCE_HIGH).apply {
       description = "Notifications for incoming voice and video calls"
     }
