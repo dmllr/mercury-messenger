@@ -20,15 +20,14 @@
 #include "eillance/messaging/history.hpp"
 #include "eillance/transport/peer_connection_state.h"
 #include "eillance/client/client.hpp"
-#include "eillance/rtc/transport.hpp"
+#include "eillance/rtc/transport_impl_libdatachannel.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/utils/time.hpp"
 #include "eillance/view_model/mercury_view_model.hpp"
-#include "eillance/capture/capture.hpp"
 
 #include "cli_persistent_storage.hpp"
-#include "video_capture_cli.hpp"
-#include "audio_capture_cli.hpp"
+#include "eillance/capture/audio_capture.hpp"
+#include "eillance/capture/video_capture.hpp"
 
 namespace {
 
@@ -217,7 +216,7 @@ int main(int argc, char** argv) {
                 content = std::get<eillance::messaging::MessageEntry>(entry.data).content;
                 auto timestamp_str = FormatTimestamp(entry.timestamp);
                 elements.push_back(ftxui::text(prefix + content + suffix));
-                elements.push_back(ftxui::text("  Γö¼Γòû " + timestamp_str) | ftxui::dim);
+                elements.push_back(ftxui::text("  Î“Ã¶Â¼Î“Ã²Ã» " + timestamp_str) | ftxui::dim);
                 break;
             }
             case eillance::messaging::HistoryEntryKind::voiceCall:
@@ -236,7 +235,7 @@ int main(int argc, char** argv) {
                 content = "--- " + direction_str + " " + call_type_str + " Call (" + status_str + ") ---";
                 auto timestamp_str = FormatTimestamp(entry.timestamp);
                 elements.push_back(ftxui::text(prefix + content) | ftxui::dim);
-                elements.push_back(ftxui::text("  Γö¼Γòû " + timestamp_str) | ftxui::dim);
+                elements.push_back(ftxui::text("  Î“Ã¶Â¼Î“Ã²Ã» " + timestamp_str) | ftxui::dim);
                 break;
             }
         }
@@ -297,3 +296,4 @@ int main(int argc, char** argv) {
 
   return 0;
 }
+

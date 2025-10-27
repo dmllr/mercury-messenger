@@ -599,12 +599,12 @@ private:
   class RtcConfiguration {
   public:
     static auto config() -> ::rtc::Configuration& {
-      static ::rtc::Configuration rtc_config = createRtcConfiguration();
+      static ::rtc::Configuration rtc_config = CreateRtcConfiguration();
       return rtc_config;
     }
 
   private:
-    static auto createRtcConfiguration() -> ::rtc::Configuration {
+    static auto CreateRtcConfiguration() -> ::rtc::Configuration {
       ::rtc::Configuration config;
       config.iceServers.emplace_back("stun:stun.relay.metered.ca:80");
       config.iceServers.emplace_back("turn:49880a0f046c8990b1990b35:qZCNW/57EB8GwO3A@a.relay.metered.ca:80");
