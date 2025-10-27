@@ -2,11 +2,13 @@
 
 #include <algorithm>
 #include <charconv>
-#include <iostream>
 #include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
+
+namespace eillance {
+namespace utils {
 
 struct ArgsParser final {
   ArgsParser(int& argc, char** argv) {
@@ -64,3 +66,6 @@ private:
   std::vector<std::string> tokens_;
   std::unordered_map<std::string, std::string> key_value_map_;
 };
+
+}
+}

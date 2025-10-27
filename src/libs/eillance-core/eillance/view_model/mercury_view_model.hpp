@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstddef>
 #include <deque>
 #include <functional>
 #include <memory>
@@ -364,6 +365,20 @@ inline auto MercuryViewModel::ProcessCliInput(const std::string& input) -> bool 
           AddSystemMessageToChat("--> Accepting contact: " + matches[0]);
           AcceptContact(matches[0]);
         }
+      }
+    } else if (command == "/set") {
+      std::string key;
+      std::string value;
+      std::stringstream arg_ss(arg);
+      arg_ss >> key;
+      std::getline(arg_ss >> std::ws, value);
+      if (key == "signaling-url") {
+        const auto* char_ptr = reinterpret_cast<const std::byte*>(value.data());
+        client_->getStorage()->Save("signaling_server_url", {char_ptr, char_ptr + value.size()});
+        AddSystemMessageToChat("--> Signaling server URL set to: " + value);
+        AddSystemMessageToChat("--> Please restart the application for the change to take effect.");
+      } else {
+        AddSystemMessageToChat("--> Unknown setting: " + key);
       }
     } else if (command == "/history" && arg == "load") {
       LoadOlderMessages();

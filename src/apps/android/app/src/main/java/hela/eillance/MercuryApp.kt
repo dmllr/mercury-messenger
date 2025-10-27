@@ -33,6 +33,7 @@ import hela.eillance.screens.CallScreen
 import hela.eillance.screens.ContactsScreen
 import hela.eillance.screens.InteractionScreen
 import hela.eillance.screens.ProfileScreen
+import hela.eillance.screens.SettingsScreen
 
 @Composable
 fun MercuryApp(viewModel: MainViewModel) {
@@ -94,7 +95,8 @@ fun MercuryApp(viewModel: MainViewModel) {
             composable(Screen.Profile.route) {
                 ProfileScreen(
                     myId = uiState.myId,
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    onNavigateToSettings = { navController.navigate(Screen.Settings.route) }
                 )
             }
             composable(Route.Interaction.route) { backStackEntry ->
@@ -115,6 +117,12 @@ fun MercuryApp(viewModel: MainViewModel) {
                     viewModel = viewModel,
                     uiState = uiState,
                     onNavigateBack = { navController.popBackStack() }
+                )
+            }
+            composable(Screen.Settings.route) {
+                SettingsScreen(
+                    viewModel = viewModel,
+                    onBack = { navController.popBackStack() }
                 )
             }
         }
