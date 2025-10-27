@@ -22,8 +22,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-// custom colors here
-@Immutable // Good practice for theme objects
+@Immutable
 data class ExtendedColors(
     val success: Color,
     val warning: Color,
@@ -42,10 +41,8 @@ val DarkExtendedColors = ExtendedColors(
     offline = Color.White.copy(alpha = 0.5f),
 )
 
-// CompositionLocal to hold the ExtendedColors instance
 val LocalExtendedColors = staticCompositionLocalOf {
     // Provide a default (e.g., light theme)
-    // This default should ideally not be used if the theme is set up correctly.
     LightExtendedColors
 }
 
@@ -74,8 +71,6 @@ val Typography = Typography(
 @Composable
 fun EillanceTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    // Note: Dynamic color won't apply to your *custom* colors by default.
-    // You'd need more complex logic to derive custom colors from the dynamic scheme if desired.
     dynamicColor: Boolean = true,
     content: @Composable () -> Unit
 ) {
@@ -91,7 +86,7 @@ fun EillanceTheme(
     // Select the correct set of custom colors based on the theme
     val extendedColors = if (darkTheme) DarkExtendedColors else LightExtendedColors
 
-    // Provide the standard MaterialTheme AND your custom colors
+    // Provide the standard MaterialTheme with custom colors
     CompositionLocalProvider(LocalExtendedColors provides extendedColors) {
         MaterialTheme(
             colorScheme = colorScheme,
@@ -101,7 +96,6 @@ fun EillanceTheme(
     }
 }
 
-// an extension property for easier access
 @Suppress("unused")
 val MaterialTheme.extendedColors: ExtendedColors
     @Composable
