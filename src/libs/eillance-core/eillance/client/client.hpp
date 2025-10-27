@@ -60,14 +60,14 @@ public:
 
   Client(Client&&) = delete;
   Client(const Client&) = delete;
-  Client& operator=(Client&&) = delete;
-  Client& operator=(const Client&) = delete;
+  auto operator=(Client&&) -> Client& = delete;
+  auto operator=(const Client&) -> Client& = delete;
   ~Client() override = default;
 
   // Setter injection for platform-specific capture implementations
-  template<typename T>
+  template <typename T>
   [[maybe_unused]] void SetVideoCapture(std::unique_ptr<T> impl);
-  template<typename T>
+  template <typename T>
   [[maybe_unused]] void SetAudioCapture(std::unique_ptr<T> impl);
 
   [[nodiscard]] auto getId() const -> std::string;
@@ -153,10 +153,7 @@ private:
 
 // --- Implementation ---
 
-inline Client::Client(std::shared_ptr<storage::PersistentStorage> storage, std::shared_ptr<transport::Transport> transport)
-    : storage_(std::move(storage)),
-      transport_(std::move(transport)) {
-
+inline Client::Client(std::shared_ptr<storage::PersistentStorage> storage, std::shared_ptr<transport::Transport> transport) : storage_(std::move(storage)), transport_(std::move(transport)) {
   transport_->setDelegate(this);
 
   id_manager_ = std::make_unique<identity::IdManager>(storage_);
@@ -164,70 +161,45 @@ inline Client::Client(std::shared_ptr<storage::PersistentStorage> storage, std::
   message_queue_ = std::make_shared<messaging::MessageQueue>(storage_);
   message_history_ = std::make_unique<messaging::MessageHistory>(storage_);
 
-  delivery_service_ = std::make_unique<messaging::MessageDeliveryService>(
-      message_queue_,
-      contact_manager_,
-      [this](const std::string& peer_id) {
-        if (!transport_->getPeer(peer_id)) {
-          connect(peer_id);
-        }
-      });
+  delivery_service_ = std::make_unique<messaging::MessageDeliveryService>(message_queue_, contact_manager_, [this](const std::string& peer_id) {
+    if (!transport_->getPeer(peer_id)) { connect(peer_id); }
+  });
 
   transport_->setStatusCallback([this](const std::string& peer_id, const EventSource source, int state_val) {
     if (source == EventSource::peerConnectionState) {
       const auto state = static_cast<eillance::transport::PeerConnectionState>(state_val);
-      if (state == eillance::transport::PeerConnectionState::Failed ||
-          state == eillance::transport::PeerConnectionState::Closed ||
-          state == eillance::transport::PeerConnectionState::Disconnected) {
+      if (state == eillance::transport::PeerConnectionState::Failed || state == eillance::transport::PeerConnectionState::Closed || state == eillance::transport::PeerConnectionState::Disconnected) {
         // The peer connection is no longer viable. Removing the peer object from the transport layer
         // ensures that a new connection attempt by the MessageDeliveryService will start from a clean state.
         transport_->removePeer(peer_id);
         delivery_service_->connectionAttemptFinished(peer_id);
       }
     }
-    if (status_callback_) {
-      (*status_callback_)(peer_id, source, state_val);
-    }
+    if (status_callback_) { (*status_callback_)(peer_id, source, state_val); }
   });
 }
 
-template<typename T>
+template <typename T>
 [[maybe_unused]] inline void Client::SetVideoCapture(std::unique_ptr<T> impl) {
   video_capture_ = std::make_unique<Capture>(std::move(impl));
-  if (audio_capture_) {
-    InitializeAVStream();
-  }
+  if (audio_capture_) { InitializeAVStream(); }
 }
 
-template<typename T>
+template <typename T>
 [[maybe_unused]] inline void Client::SetAudioCapture(std::unique_ptr<T> impl) {
   audio_capture_ = std::make_unique<Capture>(std::move(impl));
-  if (video_capture_) {
-    InitializeAVStream();
-  }
+  if (video_capture_) { InitializeAVStream(); }
 }
 
 inline void Client::InitializeAVStream() {
-  if (!video_capture_ || !audio_capture_) {
-    return;
-  }
-  av_stream_ = std::make_shared<Stream>(
-      std::make_shared<StreamSource>(std::move(*video_capture_)),
-      std::make_shared<StreamSource>(std::move(*audio_capture_)));
-  av_stream_->OnSample([this](Stream::Source::Type type, uint64_t sample_time, const std::vector<std::byte>& sample) {
-    sendSampleToPeers(sample, type, sample_time);
-  });
+  if (!video_capture_ || !audio_capture_) { return; }
+  av_stream_ = std::make_shared<Stream>(std::make_shared<StreamSource>(std::move(*video_capture_)), std::make_shared<StreamSource>(std::move(*audio_capture_)));
+  av_stream_->OnSample([this](Stream::Source::Type type, uint64_t sample_time, const std::vector<std::byte>& sample) { sendSampleToPeers(sample, type, sample_time); });
 }
 
-inline auto Client::getId() const -> std::string {
-  return id_manager_->GetId();
-}
-inline auto Client::getStorage() const -> std::shared_ptr<storage::PersistentStorage> {
-  return storage_;
-}
-inline void Client::setName(const std::string& name) const {
-  transport_->setName(name);
-}
+inline auto Client::getId() const -> std::string { return id_manager_->GetId(); }
+inline auto Client::getStorage() const -> std::shared_ptr<storage::PersistentStorage> { return storage_; }
+inline void Client::setName(const std::string& name) const { transport_->setName(name); }
 inline void Client::start() const {
   transport_->setId(id_manager_->GetId());
   delivery_service_->start();
@@ -237,44 +209,22 @@ inline void Client::terminate() const {
   delivery_service_->stop();
   transport_->terminate();
 }
-inline void Client::setStatusCallback(const StatusCallbackFunction& callback) {
-  status_callback_ = std::make_shared<StatusCallbackFunction>(callback);
-}
+inline void Client::setStatusCallback(const StatusCallbackFunction& callback) { status_callback_ = std::make_shared<StatusCallbackFunction>(callback); }
 
-[[maybe_unused]] inline void Client::setFrameReceivedCallback(const OnFrameReceivedCallback& callback) {
-  on_frame_received_ = std::make_shared<OnFrameReceivedCallback>(callback);
-}
+[[maybe_unused]] inline void Client::setFrameReceivedCallback(const OnFrameReceivedCallback& callback) { on_frame_received_ = std::make_shared<OnFrameReceivedCallback>(callback); }
 
-[[maybe_unused]] inline void Client::setProfileReceivedCallback(const OnProfileReceivedCallback& callback) {
-  on_profile_received_ = std::make_shared<OnProfileReceivedCallback>(callback);
-}
-inline void Client::setChatMessageReceivedCallback(const OnChatMessageReceivedCallback& callback) {
-  on_chat_message_received_ = std::make_shared<OnChatMessageReceivedCallback>(callback);
-}
-inline void Client::setContactRequestCallback(const OnContactRequestCallback& callback) {
-  on_contact_request_ = std::make_shared<OnContactRequestCallback>(callback);
-}
-inline void Client::setContactStatusChangedCallback(const OnContactStatusChangedCallback& callback) {
-  on_contact_status_changed_ = std::make_shared<OnContactStatusChangedCallback>(callback);
-}
-inline void Client::setMessageStatusChangedCallback(const OnMessageStatusChangedCallback& callback) {
-  on_message_status_changed_ = std::make_shared<OnMessageStatusChangedCallback>(callback);
-}
-inline void Client::setPeerListUpdateCallback(const OnPeerListUpdateCallback& callback) {
-  on_peer_list_update_ = std::make_shared<OnPeerListUpdateCallback>(callback);
-}
-inline void Client::setIncomingCallCallback(const OnIncomingCallCallback& callback) {
-  on_incoming_call_ = std::make_shared<OnIncomingCallCallback>(callback);
-}
-inline void Client::setOnCallTerminatedCallback(const OnCallTerminatedCallback& callback) {
-  on_call_terminated_ = std::make_shared<OnCallTerminatedCallback>(callback);
-}
+[[maybe_unused]] inline void Client::setProfileReceivedCallback(const OnProfileReceivedCallback& callback) { on_profile_received_ = std::make_shared<OnProfileReceivedCallback>(callback); }
+inline void Client::setChatMessageReceivedCallback(const OnChatMessageReceivedCallback& callback) { on_chat_message_received_ = std::make_shared<OnChatMessageReceivedCallback>(callback); }
+inline void Client::setContactRequestCallback(const OnContactRequestCallback& callback) { on_contact_request_ = std::make_shared<OnContactRequestCallback>(callback); }
+inline void Client::setContactStatusChangedCallback(const OnContactStatusChangedCallback& callback) { on_contact_status_changed_ = std::make_shared<OnContactStatusChangedCallback>(callback); }
+inline void Client::setMessageStatusChangedCallback(const OnMessageStatusChangedCallback& callback) { on_message_status_changed_ = std::make_shared<OnMessageStatusChangedCallback>(callback); }
+inline void Client::setPeerListUpdateCallback(const OnPeerListUpdateCallback& callback) { on_peer_list_update_ = std::make_shared<OnPeerListUpdateCallback>(callback); }
+inline void Client::setIncomingCallCallback(const OnIncomingCallCallback& callback) { on_incoming_call_ = std::make_shared<OnIncomingCallCallback>(callback); }
+inline void Client::setOnCallTerminatedCallback(const OnCallTerminatedCallback& callback) { on_call_terminated_ = std::make_shared<OnCallTerminatedCallback>(callback); }
 inline void Client::call(const std::string& peer_id) {
   connect(peer_id);
   message_history_->SetStatusChangedCallback([this](const std::string& p_id, std::uint64_t msg_id, messaging::MessageStatus status) {
-    if (on_message_status_changed_) {
-      (*on_message_status_changed_)(p_id, msg_id, status);
-    }
+    if (on_message_status_changed_) { (*on_message_status_changed_)(p_id, msg_id, status); }
   });
 }
 inline void Client::connect(const std::string& peer_id) {
@@ -289,18 +239,12 @@ inline void Client::connect(const std::string& peer_id) {
   transport_->createDataChannel(peer_id);
   transport_->createOffer(peer_id, "data");
 }
-inline void Client::startVoiceCall(const std::string& peer_id) {
-  startMediaCall(peer_id, false);
-}
-inline void Client::startVideoCall(const std::string& peer_id) {
-  startMediaCall(peer_id, true);
-}
+inline void Client::startVoiceCall(const std::string& peer_id) { startMediaCall(peer_id, false); }
+inline void Client::startVideoCall(const std::string& peer_id) { startMediaCall(peer_id, true); }
 inline void Client::acceptCall(const std::string& peer_id) {
   // On platforms with custom capture (like CLI), start the media stream.
   // On Android, this block is skipped.
-  if (av_stream_) {
-    av_stream_->Start();
-  }
+  if (av_stream_) { av_stream_->Start(); }
 
   auto peer = transport_->getPeer(peer_id);
   if (!peer || !peer->pending_offer_sdp) {
@@ -326,7 +270,7 @@ inline void Client::acceptCall(const std::string& peer_id) {
 
   if (!peer->pending_candidates.empty()) {
     LOGI << "Applying " << peer->pending_candidates.size() << " buffered ICE candidates for " << peer_id;
-    for (const auto& candidate: peer->pending_candidates) {
+    for (const auto& candidate : peer->pending_candidates) {
       transport_->addRemoteCandidate(peer_id, "media", candidate.sdp, candidate.mid);
     }
     peer->pending_candidates.clear();
@@ -334,9 +278,7 @@ inline void Client::acceptCall(const std::string& peer_id) {
   LOGI << "Generating SDP answer for " << peer_id;
   transport_->createAnswer(peer_id, "media");
 }
-inline void Client::rejectCall(const std::string& peer_id) const {
-  hangup(peer_id);
-}
+inline void Client::rejectCall(const std::string& peer_id) const { hangup(peer_id); }
 inline void Client::addContact(const std::string& peer_id) const {
   const auto existing_contact = contact_manager_->GetContact(peer_id);
   if (existing_contact && existing_contact->status == identity::ContactStatus::awaitingApproval) {
@@ -347,9 +289,7 @@ inline void Client::addContact(const std::string& peer_id) const {
     LOGI << "Queueing contact request for " << peer_id;
     const Json msg = {{"type", "contact_add_request"}, {"to", peer_id}};
     transport_->sendSignalingMessage(msg);
-    if (on_contact_status_changed_) {
-      (*on_contact_status_changed_)(peer_id, identity::ContactStatus::pendingApproval);
-    }
+    if (on_contact_status_changed_) { (*on_contact_status_changed_)(peer_id, identity::ContactStatus::pendingApproval); }
   }
 }
 inline void Client::confirmContact(const std::string& peer_id) const {
@@ -357,20 +297,12 @@ inline void Client::confirmContact(const std::string& peer_id) const {
     LOGI << "Sending contact confirmation for " << peer_id;
     const Json msg = {{"type", "contact_confirm"}, {"to", peer_id}};
     transport_->sendSignalingMessage(msg);
-    if (on_contact_status_changed_) {
-      (*on_contact_status_changed_)(peer_id, identity::ContactStatus::confirmed);
-    }
+    if (on_contact_status_changed_) { (*on_contact_status_changed_)(peer_id, identity::ContactStatus::confirmed); }
   }
 }
-inline auto Client::getPeerConnectionState(const std::string& peer_id) const -> eillance::transport::PeerConnectionState {
-  return transport_->getPeerConnectionState(peer_id);
-}
-inline auto Client::getContacts() const -> std::vector<identity::Contact> {
-  return contact_manager_->GetContacts();
-}
-inline auto Client::getChatSummaries(const std::vector<std::string>& peer_ids) const -> std::vector<messaging::ChatSummary> {
-  return message_history_->GetChatSummaries(peer_ids);
-}
+inline auto Client::getPeerConnectionState(const std::string& peer_id) const -> eillance::transport::PeerConnectionState { return transport_->getPeerConnectionState(peer_id); }
+inline auto Client::getContacts() const -> std::vector<identity::Contact> { return contact_manager_->GetContacts(); }
+inline auto Client::getChatSummaries(const std::vector<std::string>& peer_ids) const -> std::vector<messaging::ChatSummary> { return message_history_->GetChatSummaries(peer_ids); }
 inline void Client::hangup(const std::string& peer_id) const {
   if (const auto peer = transport_->getPeer(peer_id); peer != nullptr) {
     // A call is considered active if we have a pending offer OR an established media connection.
@@ -378,9 +310,7 @@ inline void Client::hangup(const std::string& peer_id) const {
 
     // Clean up local state related to pending calls.
     peer->pending_offer_sdp.reset();
-    if (!peer->pending_candidates.empty()) {
-      peer->pending_candidates.clear();
-    }
+    if (!peer->pending_candidates.empty()) { peer->pending_candidates.clear(); }
 
     // If a media connection exists, close it. This will trigger the onStateChange callback
     // which is the primary mechanism for updating the UI that the call has ended.
@@ -391,9 +321,7 @@ inline void Client::hangup(const std::string& peer_id) const {
       peer->audio_ = nullptr;
       peer->video_ = nullptr;
       // On platforms with custom capture (like CLI), stop the media stream.
-      if (av_stream_) {
-        av_stream_->Stop();
-      }
+      if (av_stream_) { av_stream_->Stop(); }
     }
 
     // If the call was active in any state, notify the other peer.
@@ -417,30 +345,22 @@ inline void Client::onSignalingErrorForPeer(const std::string& peer_id, const st
   if (error == "peer_not_found") {
     LOGW << "Connection attempt failed for peer " << peer_id << " because they are not online. Will retry when they appear.";
     delivery_service_->connectionAttemptFinished(peer_id);
-    if (transport_->getPeer(peer_id)) {
-      transport_->closePeerConnection(peer_id, "data");
-    }
+    if (transport_->getPeer(peer_id)) { transport_->closePeerConnection(peer_id, "data"); }
   }
 }
 inline void Client::processPeerMessage(Json message) {
   const auto from_it = message.find("from");
-  if (from_it == message.end()) {
-    return;
-  }
+  if (from_it == message.end()) { return; }
   auto peer_id = from_it->get<std::string>();
   const auto type_it = message.find("type");
-  if (type_it == message.end()) {
-    return;
-  }
+  if (type_it == message.end()) { return; }
   auto type = type_it->get<std::string>();
   const auto context = message.value("context", "data");
 
   if (type == "hangup") {
     LOGI << "Received hangup signal from " << peer_id;
     hangup(peer_id);
-    if (on_call_terminated_) {
-      (*on_call_terminated_)(peer_id);
-    }
+    if (on_call_terminated_) { (*on_call_terminated_)(peer_id); }
     return;
   }
 
@@ -454,9 +374,7 @@ inline void Client::processPeerMessage(Json message) {
     if (type == "offer") {
       LOGD << "Received media offer from " << peer_id << ". Storing it and notifying UI.";
       peer->pending_offer_sdp = message["sdp"].get<std::string>();
-      auto call_type = (peer->pending_offer_sdp->find("m=video") != std::string::npos)
-                           ? messaging::HistoryEntryKind::videoCall
-                           : messaging::HistoryEntryKind::voiceCall;
+      auto call_type = (peer->pending_offer_sdp->find("m=video") != std::string::npos) ? messaging::HistoryEntryKind::videoCall : messaging::HistoryEntryKind::voiceCall;
       (*on_incoming_call_)(peer_id, call_type);
     } else if (type == "candidate") {
       const auto candidate_str = message["candidate"].get<std::string>();
@@ -469,8 +387,7 @@ inline void Client::processPeerMessage(Json message) {
       }
     } else if (peer->has_media_peer_connection_ && type == "answer") {
       const auto sdp = message["sdp"].get<std::string>();
-      LOGD << "Remote SDP (" << type << ") for " << peer_id << " context " << context << ":\n"
-           << sdp;
+      LOGD << "Remote SDP (" << type << ") for " << peer_id << " context " << context << ":\n" << sdp;
       transport_->setRemoteDescription(peer_id, "media", sdp, type);
     } else {
       LOGW << "Received media message of type '" << type << "' for " << peer_id << " in an unexpected state.";
@@ -513,28 +430,23 @@ inline void Client::processPeerMessage(Json message) {
     transport_->addRemoteCandidate(peer_id, "data", candidate, mid);
   } else if (type == "contact_add_request") {
     if (contact_manager_->IsConfirmedContact(peer_id)) {
-      LOGI << "Received contact request from already confirmed peer " << peer_id
-           << ". Resending confirmation.";
+      LOGI << "Received contact request from already confirmed peer " << peer_id << ". Resending confirmation.";
       const Json msg = {{"type", "contact_confirm"}, {"to", peer_id}};
       transport_->sendSignalingMessage(msg);
     } else if (contact_manager_->ReceiveContactRequest(peer_id)) {
-      if (on_contact_request_) {
-        (*on_contact_request_)(peer_id);
-      }
+      if (on_contact_request_) { (*on_contact_request_)(peer_id); }
     }
   } else if (type == "contact_confirm") {
     if (contact_manager_->MarkAsConfirmed(peer_id)) {
       LOGI << "Contact " << peer_id << " has confirmed your request.";
-      if (on_contact_status_changed_) {
-        (*on_contact_status_changed_)(peer_id, identity::ContactStatus::confirmed);
-      }
+      if (on_contact_status_changed_) { (*on_contact_status_changed_)(peer_id, identity::ContactStatus::confirmed); }
     }
   }
 }
 inline void Client::processSystemMessage(const std::string& type, Json message) {
   if (type == "peers" && on_peer_list_update_) {
     std::vector<Device> peers;
-    for (const auto& peer_json: message.at("peers")) {
+    for (const auto& peer_json : message.at("peers")) {
       Device d;
       d.id = peer_json.at("id").get<std::string>();
       d.name = peer_json.value("name", d.id);
@@ -545,10 +457,8 @@ inline void Client::processSystemMessage(const std::string& type, Json message) 
   }
   LOGW << "Unhandled system message of type: " << type;
 }
-inline void Client::onFrameReceived(const std::string& peer_id, const std::vector<std::byte>& frame) {
-  if (on_frame_received_) {
-    (*on_frame_received_)(frame);
-  }
+inline void Client::onFrameReceived(const std::string& /*peer_id*/, const std::vector<std::byte>& frame) {
+  if (on_frame_received_) { (*on_frame_received_)(frame); }
 }
 inline auto Client::sendChatMessage(const std::string& peer_id, const std::string& message) const -> messaging::HistoryEntryRecord {
   if (!contact_manager_->GetContact(peer_id)) {
@@ -585,15 +495,11 @@ inline void Client::markMessagesAsRead(const std::string& peer_id, const std::ve
     transport_->sendPeerDataChannelMessage(peer_id, msg);
   }
 }
-inline auto Client::getMessageHistoryPage(const std::string& peer_id, size_t page_index, size_t page_size) const -> messaging::HistoryPage {
-  return message_history_->GetHistoryPage(peer_id, page_index, page_size);
-}
+inline auto Client::getMessageHistoryPage(const std::string& peer_id, size_t page_index, size_t page_size) const -> messaging::HistoryPage { return message_history_->GetHistoryPage(peer_id, page_index, page_size); }
 inline void Client::startMediaCall(const std::string& peer_id, bool is_video) {
   // On platforms with custom capture (like CLI), start the media stream.
   // On Android, this block is skipped.
-  if (av_stream_) {
-    av_stream_->Start();
-  }
+  if (av_stream_) { av_stream_->Start(); }
 
   auto peer = transport_->getPeer(peer_id);
   if (!peer) {
@@ -603,7 +509,7 @@ inline void Client::startMediaCall(const std::string& peer_id, bool is_video) {
   }
   if (peer->has_media_peer_connection_) {
     LOGW << "Media connection already exists for peer " << peer_id << ", cannot start a new call.";
-    if (av_stream_) av_stream_->Stop();
+    if (av_stream_) { av_stream_->Stop(); }
     return;
   }
   transport_->createMediaPeerConnection(peer_id);
@@ -624,8 +530,8 @@ inline void Client::updateAndNotifyPeerList() const {
   if (on_peer_list_update_) {
     std::vector<Device> peer_list;
     {
-      std::lock_guard<std::mutex> lock(online_peers_mutex_);
-      for (const auto& pair: online_peers_) {
+      const std::lock_guard<std::mutex> lock(online_peers_mutex_);
+      for (const auto& pair : online_peers_) {
         peer_list.push_back(pair.second);
       }
     }
@@ -633,55 +539,40 @@ inline void Client::updateAndNotifyPeerList() const {
   }
 }
 inline auto Client::directSend(const std::shared_ptr<Peer>& peer, const std::string& peer_id, const std::string& message, std::uint64_t message_id) const -> bool {
-  if (!peer || !peer->data_channel_is_open_ || !peer->session_cipher_->IsReady()) {
-    return false;
-  }
+  if (!peer || !peer->data_channel_is_open_ || !peer->session_cipher_->IsReady()) { return false; }
   auto encrypted_payload = peer->session_cipher_->Encrypt(message);
   if (encrypted_payload.empty()) {
     LOGE << "Failed to encrypt chat message for peer " << peer_id;
     return false;
   }
-  const Json json_message = {
-      {"type", "chat"},
-      {"message_id", message_id},
-      {"payload", std::vector<std::byte>(encrypted_payload.begin(), encrypted_payload.end())}};
+  const Json json_message = {{"type", "chat"}, {"message_id", message_id}, {"payload", std::vector<std::byte>(encrypted_payload.begin(), encrypted_payload.end())}};
   transport_->sendPeerDataChannelMessage(peer_id, json_message);
   return true;
 }
 inline void Client::sendSampleToPeers(const std::vector<std::byte>& sample, Stream::Source::Type type, std::uint64_t sample_time) const {
-  for (const auto& [id, peer]: transport_->getPeers()) {
+  for (const auto& [id, peer] : transport_->getPeers()) {
     if (peer->GetState() == Peer::State::ready) {
       auto track = (type == Stream::Source::Type::video) ? peer->video_ : peer->audio_;
-      if (track) {
-        track->SendSample(sample, sample_time);
-      }
+      if (track) { track->SendSample(sample, sample_time); }
     }
   }
 }
 inline void Client::processDataChannelMessage(const std::string& peer_id, const Json& message) {
   const auto itr = message.find("type");
-  if (itr == message.end()) {
-    return;
-  }
+  if (itr == message.end()) { return; }
   const auto type = itr->get<std::string>();
   const auto peer = transport_->getPeer(peer_id);
-  if (!peer) {
-    return;
-  };
+  if (!peer) { return; };
   if (type == "profile") {
     const auto profile = parseDeviceProfile(message.at("profile"));
     {
       const std::lock_guard<std::mutex> lock(online_peers_mutex_);
       online_peers_[peer_id].id = peer_id;
       online_peers_[peer_id].profile = profile;
-      if (message.contains("name")) {
-        online_peers_[peer_id].name = message.at("name").get<std::string>();
-      }
+      if (message.contains("name")) { online_peers_[peer_id].name = message.at("name").get<std::string>(); }
     }
     updateAndNotifyPeerList();
-    if (on_profile_received_) {
-      (*on_profile_received_)(peer_id, profile);
-    }
+    if (on_profile_received_) { (*on_profile_received_)(peer_id, profile); }
   } else if (type == "termination") {
     transport_->removePeer(peer_id);
   } else if (type == "key_exchange") {
@@ -690,10 +581,7 @@ inline void Client::processDataChannelMessage(const std::string& peer_id, const 
       LOGI << "Successfully computed shared secret with peer " << peer_id;
       if (!message.value("is_reply", false)) {
         auto my_pub_key = peer->session_cipher_->GetPublicKey();
-        const Json reply = {
-            {"type", "key_exchange"},
-            {"key", std::vector<std::byte>(my_pub_key.begin(), my_pub_key.end())},
-            {"is_reply", true}};
+        const Json reply = {{"type", "key_exchange"}, {"key", std::vector<std::byte>(my_pub_key.begin(), my_pub_key.end())}, {"is_reply", true}};
         transport_->sendPeerDataChannelMessage(peer_id, reply);
       }
       sendQueuedMessages(peer_id);
@@ -726,7 +614,7 @@ inline void Client::processDataChannelMessage(const std::string& peer_id, const 
     message_history_->UpdateMessageStatus(peer_id, message_id, status);
   } else if (type == "message_read") {
     auto message_ids = message.at("message_ids").get<std::vector<std::uint64_t>>();
-    for (const auto& msg_id: message_ids) {
+    for (const auto& msg_id : message_ids) {
       const Json receipt = {
           {"type", "message_receipt"},
           {"status", "read"},
@@ -740,16 +628,14 @@ inline void Client::processDataChannelMessage(const std::string& peer_id, const 
 }
 inline void Client::sendQueuedMessages(const std::string& peer_id) const {
   const auto messages = message_queue_->GetQueuedMessages(peer_id);
-  if (messages.empty()) {
-    return;
-  }
+  if (messages.empty()) { return; }
   const auto peer = transport_->getPeer(peer_id);
   if (!peer || !peer->data_channel_is_open_) {
     LOGW << "sendQueuedMessages called but peer " << peer_id << " channel not ready. Messages will remain queued.";
     return;
   }
   LOGI << "Sending " << messages.size() << " queued messages to " << peer_id;
-  for (const auto& msg: messages) {
+  for (const auto& msg : messages) {
     try {
       Json const message = Json::parse(msg.content);
       const auto type = message.value("type", "");
@@ -774,17 +660,15 @@ inline void Client::sendQueuedMessages(const std::string& peer_id) const {
   message_queue_->Clear(peer_id);
 }
 inline void Client::setupDataChannel(const std::shared_ptr<Peer>& peer, const std::string& peer_id) {
-  peer->on_data_channel_message_ = [this, peer_id, peer](const std::string& msg) {
-    processDataChannelMessage(peer_id, nlohmann::json::parse(msg));
-  };
+  peer->on_data_channel_message_ = [this, peer_id, peer](const std::string& msg) { processDataChannelMessage(peer_id, nlohmann::json::parse(msg)); };
 }
 inline auto Client::parseDeviceProfile(const Json& jprofile) -> Device::Profile {
   Device::Profile profile;
-  for (const auto& cam_item: jprofile) {
+  for (const auto& cam_item : jprofile) {
     Device::Camera camera;
     camera.id = cam_item.at("id").get<std::string>();
     camera.name = cam_item.at("name").get<std::string>();
-    for (const auto& res_item: cam_item.at("resolutions")) {
+    for (const auto& res_item : cam_item.at("resolutions")) {
       camera.resolutions.push_back({res_item.at("width").get<uint16_t>(), res_item.at("height").get<uint16_t>()});
     }
     profile.push_back(camera);

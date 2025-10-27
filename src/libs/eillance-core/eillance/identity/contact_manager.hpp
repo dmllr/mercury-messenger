@@ -1,18 +1,20 @@
 #pragma once
 
 #include <memory>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
+#include <nlohmann/json.hpp>
+
 #include "eillance/logging/logging.h"
 #include "eillance/storage/persistent_storage.hpp"
-#include <nlohmann/json.hpp>
 
 namespace eillance::identity {
 
 enum class ContactStatus {
-  pendingApproval,   // We sent a request, waiting for them to confirm.
+  pendingApproval,  // We sent a request, waiting for them to confirm.
   awaitingApproval,  // They sent a request, we need to confirm.
   confirmed,
 };
@@ -33,9 +35,7 @@ struct Contact {
 
 // Helper for JSON serialization
 inline void to_json(nlohmann::json& j, const Contact& c) {
-  j = nlohmann::json{
-      {"peer_id", c.peer_id},
-      {"status", c.status}};
+  j = nlohmann::json{{"peer_id", c.peer_id}, {"status", c.status}};
 }
 
 inline void from_json(const nlohmann::json& j, Contact& c) {
@@ -44,27 +44,22 @@ inline void from_json(const nlohmann::json& j, Contact& c) {
 }
 
 class ContactManager {
-  static constexpr auto contactsFile = "contacts.json";
+  static constexpr auto contacts_file = "contacts.json";
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::unordered_map<std::string, Contact> contacts_;
   mutable std::mutex mutex_;
 
 public:
-  explicit ContactManager(std::shared_ptr<storage::PersistentStorage> storage)
-      : storage_(std::move(storage)) {
-    LoadContacts();
-  }
+  explicit ContactManager(std::shared_ptr<storage::PersistentStorage> storage) : storage_(std::move(storage)) { LoadContacts(); }
 
   // Initiates adding a new contact.
-  bool AddContact(const std::string& peer_id) {
+  auto AddContact(const std::string& peer_id) -> bool {
     const std::lock_guard<std::mutex> lock(mutex_);
-    auto it = contacts_.find(peer_id);
+    const auto it = contacts_.find(peer_id);
     if (it != contacts_.end()) {
       // If the contact exists and is pending, we allow the "add" operation
       // to succeed so the caller can re-send the request.
-      if (it->second.status == ContactStatus::pendingApproval) {
-        return true;
-      }
+      if (it->second.status == ContactStatus::pendingApproval) { return true; }
       LOGW << "Contact " << peer_id << " already exists.";
       return false;
     }
@@ -72,14 +67,12 @@ public:
 
     // Save to persistent storage. The UI update is triggered by the caller
     // regardless of the save result, making it feel responsive.
-    if (!SaveContacts()) {
-      LOGE << "Failed to persist new contact " << peer_id << ". It will be lost on restart.";
-    }
+    if (!SaveContacts()) { LOGE << "Failed to persist new contact " << peer_id << ". It will be lost on restart."; }
     return true;
   }
 
   // Marks that we have received a request from a peer.
-  bool ReceiveContactRequest(const std::string& peer_id) {
+  auto ReceiveContactRequest(const std::string& peer_id) -> bool {
     const std::lock_guard<std::mutex> lock(mutex_);
     if (contacts_.contains(peer_id) && contacts_[peer_id].status == ContactStatus::confirmed) {
       return false;  // Already confirmed
@@ -89,9 +82,9 @@ public:
   }
 
   // Confirms a contact that was awaiting our approval.
-  bool ConfirmContact(const std::string& peer_id) {
+  auto ConfirmContact(const std::string& peer_id) -> bool {
     const std::lock_guard<std::mutex> lock(mutex_);
-    auto it = contacts_.find(peer_id);
+    const auto it = contacts_.find(peer_id);
     if (it == contacts_.end() || it->second.status != ContactStatus::awaitingApproval) {
       LOGW << "Cannot confirm contact " << peer_id << "; not found or not awaiting approval.";
       return false;
@@ -101,9 +94,9 @@ public:
   }
 
   // Marks a contact as confirmed after they accepted our request.
-  bool MarkAsConfirmed(const std::string& peer_id) {
+  auto MarkAsConfirmed(const std::string& peer_id) -> bool {
     const std::lock_guard<std::mutex> lock(mutex_);
-    auto it = contacts_.find(peer_id);
+    const auto it = contacts_.find(peer_id);
     if (it != contacts_.end() && it->second.status == ContactStatus::confirmed) {
       return false;  // Already confirmed, no state change.
     }
@@ -120,25 +113,23 @@ public:
     SaveContacts();
   }
 
-  bool IsConfirmedContact(const std::string& peer_id) const {
+  auto IsConfirmedContact(const std::string& peer_id) const -> bool {
     const std::lock_guard<std::mutex> lock(mutex_);
     const auto itr = contacts_.find(peer_id);
     return (itr != contacts_.end() && itr->second.status == ContactStatus::confirmed);
   }
 
-  std::optional<Contact> GetContact(const std::string& peer_id) {
+  auto GetContact(const std::string& peer_id) -> std::optional<Contact> {
     const std::lock_guard<std::mutex> lock(mutex_);
-    if (contacts_.contains(peer_id)) {
-      return contacts_.at(peer_id);
-    }
+    if (contacts_.contains(peer_id)) { return contacts_.at(peer_id); }
     return std::nullopt;
   }
 
-  std::vector<Contact> GetContacts() const {
+  auto GetContacts() const -> std::vector<Contact> {
     const std::lock_guard<std::mutex> lock(mutex_);
     std::vector<Contact> result;
     result.reserve(contacts_.size());
-    for (const auto& val: contacts_ | std::views::values) {
+    for (const auto& val : contacts_ | std::views::values) {
       result.push_back(val);
     }
     return result;
@@ -146,13 +137,13 @@ public:
 
 private:
   void LoadContacts() {
-    if (storage_->Exists(contactsFile)) {
-      const auto data_opt = storage_->Load(contactsFile);
+    if (storage_->Exists(contacts_file)) {
+      const auto data_opt = storage_->Load(contacts_file);
       if (data_opt) {
         try {
           const std::string json_str(reinterpret_cast<const char*>(data_opt->data()), data_opt->size());
           const nlohmann::json j = nlohmann::json::parse(json_str);
-          for (const auto& item: j) {
+          for (const auto& item : j) {
             const Contact c = {.peer_id = item["peer_id"], .status = item["status"]};
             contacts_[c.peer_id] = c;
           }
@@ -163,15 +154,15 @@ private:
     }
   }
 
-  bool SaveContacts() const {
+  auto SaveContacts() const -> bool {
     nlohmann::json j = nlohmann::json::array();
-    for (const auto& val: contacts_ | std::views::values) {
+    for (const auto& val : contacts_ | std::views::values) {
       j.push_back({{"peer_id", val.peer_id}, {"status", val.status}});
     }
     const auto json_str = j.dump(2);
     const auto* char_ptr = reinterpret_cast<const std::byte*>(json_str.data());
     const std::vector<std::byte> data(char_ptr, char_ptr + json_str.size());
-    if (!storage_->Save(contactsFile, data)) {
+    if (!storage_->Save(contacts_file, data)) {
       LOGE << "Failed to save contacts file to persistent storage.";
       return false;
     }

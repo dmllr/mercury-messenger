@@ -28,21 +28,18 @@ private:
   VideoConfig config_{};
   VideoEncoderCli encoder_{};
 
-  TELEMETRY(
-      Time::Unit last_fps_milestone_{};
-      std::uint32_t fps_counter_{};
-      std::uint32_t load_counter_{};)
+  TELEMETRY(Time::Unit last_fps_milestone_{}; std::uint32_t fps_counter_{}; std::uint32_t load_counter_{};)
 
   std::atomic_bool capture_is_running_{false};
   DispatchQueue dispatch_queue_{"Capture", 1};
 
   struct CrossPlatformProperties {
 #if defined __ANDROID__
-    static constexpr auto openCVCameraCapabilities = cv::CAP_ANDROID;
+    static constexpr auto open_cv_camera_capabilities = cv::CAP_ANDROID;
 #elif defined _WIN32
-    static constexpr auto openCVCameraCapabilities = cv::CAP_DSHOW;
+    static constexpr auto open_cv_camera_capabilities = cv::CAP_DSHOW;
 #else
-    static constexpr auto openCVCameraCapabilities = cv::CAP_ANY;
+    static constexpr auto open_cv_camera_capabilities = cv::CAP_ANY;
 #endif
   };
 
@@ -50,25 +47,19 @@ public:
   VideoCaptureCli() = default;
   VideoCaptureCli(VideoCaptureCli&&) = delete;
   VideoCaptureCli(const VideoCaptureCli&) = delete;
-  VideoCaptureCli& operator=(VideoCaptureCli&&) = delete;
-  VideoCaptureCli& operator=(const VideoCaptureCli&) = delete;
+  auto operator=(VideoCaptureCli&&) -> VideoCaptureCli& = delete;
+  auto operator=(const VideoCaptureCli&) -> VideoCaptureCli& = delete;
 
-  ~VideoCaptureCli() {
-    Revoke();
-  }
+  ~VideoCaptureCli() { Revoke(); }
 
   void Engage() {
-    if (capture_is_running_) {
-      return;
-    }
+    if (capture_is_running_) { return; }
     capture_is_running_ = true;
 
-    if (cap_.isOpened()) {
-      cap_.release();
-    }
+    if (cap_.isOpened()) { cap_.release(); }
 
     // open the default camera
-    cap_.open(0, CrossPlatformProperties::openCVCameraCapabilities);
+    cap_.open(0, CrossPlatformProperties::open_cv_camera_capabilities);
 
     if (!cap_.isOpened()) {
       LOGE << "Can't open the capture device. The video source has not been started.";
@@ -96,9 +87,7 @@ public:
     const auto actual_width = static_cast<int>(cap_.get(cv::CAP_PROP_FRAME_WIDTH));
     const auto actual_height = static_cast<int>(cap_.get(cv::CAP_PROP_FRAME_HEIGHT));
     auto actual_fps = static_cast<int>(cap_.get(cv::CAP_PROP_FPS));
-    if (actual_fps <= 0) {
-      actual_fps = config_.frameRate;
-    }
+    if (actual_fps <= 0) { actual_fps = config_.frame_rate; }
 
     LOGI << "Capture resolution set to: " << actual_width << "x" << actual_height;
 
@@ -111,9 +100,7 @@ public:
 
   auto FetchBuffers() -> Packet {
     CaptureFrame();
-    if (cv_frame_.empty()) {
-      return {};
-    }
+    if (cv_frame_.empty()) { return {}; }
 #if defined __ANDROID__
     auto frame = cv_frame_;
     cv::cvtColor(frame, frame, cv::COLOR_BGR2YUV_YV12);
@@ -122,59 +109,48 @@ public:
     cv::cvtColor(cv_frame_, nv12_frame_, cv::COLOR_BGR2YUV_I420);
 #endif
 
-    TELEMETRY(
-        load_counter_++;)
+    TELEMETRY(load_counter_++;)
 
     return encoder_.EncodeBuffer(nv12_frame_.data);
   }
 
   void Revoke() {
-    if (!capture_is_running_) {
-      return;
-    }
+    if (!capture_is_running_) { return; }
     capture_is_running_ = false;
     dispatch_queue_.RemovePending();
     encoder_.Revoke();
     cap_.release();
   }
 
-  auto GetSampleDuration() const -> Time::Unit {
-    return Time::uS / config_.frameRate;
-  }
+  auto GetSampleDuration() const -> Time::Unit { return Time::uS / config_.frame_rate; }
 
-  void Configure(const Config& config) {
-    ConfigureVideo(config.video_config);
-  }
+  void Configure(const Config& config) { ConfigureVideo(config.video_config); }
 
   void ConfigureVideo(const VideoConfig& config) {
-    TELEMETRY(
-        LOGI << "Video capture configuration event triggered: device " << config.cameraId << " " << config.width << "x" << config.height << " " << config.frameRate << "fps";)
+    TELEMETRY(LOGI << "Video capture configuration event triggered: device " << config.camera_id << " " << config.width << "x" << config.height << " " << config.frame_rate << "fps";)
     LOGW << "General video capture does not support configuration";
   }
 
 private:
   void CaptureFrame() {
-    if (!capture_is_running_) {
-      return;
-    }
+    if (!capture_is_running_) { return; }
     cap_ >> cv_frame_;
     if (cv_frame_.empty()) {
       LOGE << "Unexpected end of stream.";
       return;
     }
 
-    TELEMETRY(
-        if (fps_counter_ % (TelemetryInterval * config_.frameRate) == 0) {
-          const auto elapsed = (Time::Now() - last_fps_milestone_) / Time::uS;
-          const auto fetch_fps = static_cast<double>(load_counter_) / elapsed;
-          load_counter_ = 0;
+    TELEMETRY(if (fps_counter_ % (telemetry_interval * config_.frame_rate) == 0) {
+      const auto elapsed = (Time::Now() - last_fps_milestone_) / Time::uS;
+      const auto fetch_fps = static_cast<double>(load_counter_) / elapsed;
+      load_counter_ = 0;
 
-          const auto capture_fps = static_cast<double>(fps_counter_) / elapsed;
-          last_fps_milestone_ = Time::Now();
-          fps_counter_ = 0;
+      const auto capture_fps = static_cast<double>(fps_counter_) / elapsed;
+      last_fps_milestone_ = Time::Now();
+      fps_counter_ = 0;
 
-          LOGI << "Video capture rate FPS: " << std::setprecision(2) << std::fixed << capture_fps << ", RTC request rate FPS:" << fetch_fps;
-        } fps_counter_++;)
+      LOGI << "Video capture rate FPS: " << std::setprecision(2) << std::fixed << capture_fps << ", RTC request rate FPS:" << fetch_fps;
+    } fps_counter_++;)
 
     // due to OpenCV issue, camera frames should be captured as soon as possible,
     // otherwise a framerate will be significantly lowered
@@ -191,18 +167,10 @@ private:
     input.copyTo(output);
 
     // Input V color channel (in YV12 V is above U).
-    cv::Mat in_v = cv::Mat(
-        cv::Size(width / 2, height / 2),
-        CV_8UC1,
-        std::next(input.data, stride * height),
-        stride / 2);
+    cv::Mat in_v = cv::Mat(cv::Size(width / 2, height / 2), CV_8UC1, std::next(input.data, stride * height), stride / 2);
 
-    //Input V color channel (in YV12 U is below V).
-    cv::Mat in_u = cv::Mat(
-        cv::Size(width / 2, height / 2),
-        CV_8UC1,
-        std::next(input.data, stride * height + (stride / 2) * (height / 2)),
-        stride / 2);
+    // Input V color channel (in YV12 U is below V).
+    cv::Mat in_u = cv::Mat(cv::Size(width / 2, height / 2), CV_8UC1, std::next(input.data, stride * height + (stride / 2) * (height / 2)), stride / 2);
 
     for (int row = 0; row < height / 2; row++) {
       for (int col = 0; col < width / 2; col++) {

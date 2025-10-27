@@ -6,7 +6,7 @@
 #ifdef HE_TELEMETRY_ENABLED
 namespace eillance {
 
-static constexpr auto TelemetryInterval = 5;  // s
+static constexpr auto telemetry_interval = 5;  // s
 
 }
 

@@ -21,17 +21,16 @@ public:
 
   struct TransportInterface;
 
-  template<typename T>
+  template <typename T>
   class TransportModel;
 
-  template<typename T>
-  explicit Transport(std::unique_ptr<T> impl)
-      : self_(new TransportModel<T>(std::move(impl))) {}
+  template <typename T>
+  explicit Transport(std::unique_ptr<T> impl) : self_(new TransportModel<T>(std::move(impl))) {}
 
   Transport(const Transport&) = delete;
   Transport(Transport&&) noexcept = default;
-  Transport& operator=(const Transport&) = delete;
-  Transport& operator=(Transport&&) noexcept = default;
+  auto operator=(const Transport&) -> Transport& = delete;
+  auto operator=(Transport&&) noexcept -> Transport& = default;
   ~Transport() = default;
 
   void setDelegate(transport::TransportDelegate* delegate) const { self_->setDelegate(delegate); }
@@ -63,8 +62,8 @@ public:
     TransportInterface() = default;
     TransportInterface(const TransportInterface&) = delete;
     TransportInterface(TransportInterface&&) noexcept = delete;
-    TransportInterface& operator=(const TransportInterface&) = delete;
-    TransportInterface& operator=(TransportInterface&&) noexcept = delete;
+    auto operator=(const TransportInterface&) -> TransportInterface& = delete;
+    auto operator=(TransportInterface&&) noexcept -> TransportInterface& = delete;
     virtual ~TransportInterface() = default;
 
     // --- Core Lifecycle & Delegates ---
@@ -105,13 +104,12 @@ public:
     virtual auto addAudio(const std::string& peer_id, const std::function<void(void)>& on_open) -> std::shared_ptr<ITrack> = 0;  // Used by Android (returns a stub)
   };
 
-  template<typename T>
+  template <typename T>
   class TransportModel final : public TransportInterface {
     std::unique_ptr<T> transport_;
 
   public:
-    explicit TransportModel(std::unique_ptr<T> impl)
-        : transport_(std::move(impl)) {}
+    explicit TransportModel(std::unique_ptr<T> impl) : transport_(std::move(impl)) {}
 
     void setDelegate(transport::TransportDelegate* delegate) override { transport_->setDelegate(delegate); }
     void setStatusCallback(const StatusCallbackFunction& callback) override { transport_->setStatusCallback(callback); }

@@ -40,15 +40,11 @@ class MessageQueue {
   std::unordered_map<std::string, std::deque<Message>> queue_map_;
   mutable std::mutex mutex_;
 
-  static constexpr std::string GetStorageKey(std::string_view peer_id) {
-    return std::string("messages_") + std::string(peer_id);
-  }
+  static constexpr auto GetStorageKey(std::string_view peer_id) -> std::string { return std::string("messages_") + std::string(peer_id); }
 
   void LoadQueue(const std::string& peer_id) {
     // This function must be called from within a locked context
-    if (queue_map_.contains(peer_id)) {
-      return;  // Already loaded
-    }
+    if (queue_map_.contains(peer_id)) { return; }  // Already loaded
 
     auto key = GetStorageKey(peer_id);
     if (storage_->Exists(key)) {
@@ -72,9 +68,7 @@ class MessageQueue {
     const auto& queue = queue_map_[peer_id];
 
     if (queue.empty()) {
-      if (storage_->Exists(key)) {
-        storage_->Delete(key);
-      }
+      if (storage_->Exists(key)) { storage_->Delete(key); }
       return;
     }
 
@@ -82,45 +76,33 @@ class MessageQueue {
     const std::string json_str = j.dump();
     const auto* char_ptr = reinterpret_cast<const std::byte*>(json_str.data());
     const std::vector<std::byte> data(char_ptr, char_ptr + json_str.size());
-    if (!storage_->Save(key, data)) {
-      LOGE << "Failed to save message queue for peer " << peer_id;
-    }
+    if (!storage_->Save(key, data)) { LOGE << "Failed to save message queue for peer " << peer_id; }
   }
 
 public:
-  explicit MessageQueue(std::shared_ptr<storage::PersistentStorage> storage)
-      : storage_(std::move(storage)) {
-  }
+  explicit MessageQueue(std::shared_ptr<storage::PersistentStorage> storage) : storage_(std::move(storage)) {}
 
   void Enqueue(const std::string& peer_id, const std::uint64_t message_id, const std::string& content) {
     const std::lock_guard<std::mutex> lock(mutex_);
     LoadQueue(peer_id);
     auto& queue = queue_map_[peer_id];
 
-    const Message msg{
-        .id = message_id,
-        .peer_id = peer_id,
-        .content = content,
-        .timestamp = Time::Now()};
+    const Message msg{.id = message_id, .peer_id = peer_id, .content = content, .timestamp = Time::Now()};
     queue.push_back(msg);
     SaveQueue(peer_id);
   }
 
-  std::vector<Message> GetQueuedMessages(const std::string& peer_id) {
+  auto GetQueuedMessages(const std::string& peer_id) -> std::vector<Message> {
     const std::lock_guard<std::mutex> lock(mutex_);
     LoadQueue(peer_id);
-    if (!queue_map_.contains(peer_id)) {
-      return {};
-    }
+    if (!queue_map_.contains(peer_id)) { return {}; }
     auto& queue = queue_map_[peer_id];
     return {queue.begin(), queue.end()};
   }
 
   void Clear(const std::string& peer_id) {
     const std::lock_guard<std::mutex> lock(mutex_);
-    if (queue_map_.contains(peer_id)) {
-      queue_map_[peer_id].clear();
-    }
+    if (queue_map_.contains(peer_id)) { queue_map_[peer_id].clear(); }
     SaveQueue(peer_id);
   }
 };

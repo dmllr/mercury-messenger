@@ -52,8 +52,6 @@ private:
   std::string id_;
 };
 
-inline Peer::Peer(const std::string& id) : id_(id) {
-  session_cipher_ = std::make_unique<crypto::SessionCipher>();
-}
+inline Peer::Peer(const std::string& id) : id_(id) { session_cipher_ = std::make_unique<crypto::SessionCipher>(); }
 
 }  // namespace eillance::transport

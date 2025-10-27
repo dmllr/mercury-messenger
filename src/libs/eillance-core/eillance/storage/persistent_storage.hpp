@@ -30,22 +30,14 @@ public:
 
   ~PersistentStorage() = default;
   PersistentStorage(const PersistentStorage&) = delete;
-  PersistentStorage& operator=(const PersistentStorage&) = delete;
+  auto operator=(const PersistentStorage&) -> PersistentStorage& = delete;
   PersistentStorage(PersistentStorage&&) noexcept = default;
-  PersistentStorage& operator=(PersistentStorage&&) noexcept = default;
+  auto operator=(PersistentStorage&&) noexcept -> PersistentStorage& = default;
 
-  auto Save(const std::string& key, const std::vector<std::byte>& value) const -> bool {
-    return pimpl_->Save(key, value);
-  }
-  auto Load(const std::string& key) const -> std::optional<std::vector<std::byte>> {
-    return pimpl_->Load(key);
-  }
-  [[nodiscard]] auto Exists(const std::string& key) const -> bool {
-    return pimpl_->Exists(key);
-  }
-  auto Delete(const std::string& key) const -> bool {
-    return pimpl_->Delete(key);
-  }
+  auto Save(const std::string& key, const std::vector<std::byte>& value) const -> bool { return pimpl_->Save(key, value); }
+  auto Load(const std::string& key) const -> std::optional<std::vector<std::byte>> { return pimpl_->Load(key); }
+  [[nodiscard]] auto Exists(const std::string& key) const -> bool { return pimpl_->Exists(key); }
+  auto Delete(const std::string& key) const -> bool { return pimpl_->Delete(key); }
 
 private:
   std::unique_ptr<PersistentStorageImpl> pimpl_;

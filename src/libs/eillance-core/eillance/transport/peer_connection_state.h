@@ -4,15 +4,13 @@
 
 namespace eillance::transport {
 
-// clang-format off
 enum class PeerConnectionState : std::uint8_t {
-  New,
+  NewConnection,
   Connecting,
   Connected,
   Disconnected,
   Failed,
   Closed,
 };
-// clang-format on
 
 }  // namespace eillance::transport
