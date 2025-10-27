@@ -18,39 +18,25 @@ class StreamSource final : public Stream::Source {
 
 public:
   ~StreamSource() = default;
-  explicit StreamSource(Capture capture) : capture_(std::move(capture)) {};
+  explicit StreamSource(Capture capture) : capture_(std::move(capture)){};
   StreamSource(StreamSource&&) = delete;
   StreamSource(const StreamSource&) = delete;
-  StreamSource& operator=(StreamSource&&) = delete;
-  StreamSource& operator=(const StreamSource&) = delete;
+  auto operator=(StreamSource&&) -> StreamSource& = delete;
+  auto operator=(const StreamSource&) -> StreamSource& = delete;
 
-  void Configure(Config config) override {
-    capture_.Configure(config);
-  }
+  void Configure(Config config) override { capture_.Configure(config); }
 
-  void Start() override {
-    capture_.Engage();
-  }
+  void Start() override { capture_.Engage(); }
 
-  void LoadNextSample() override {
-    sample_ = capture_.FetchBuffers();
-  }
+  void LoadNextSample() override { sample_ = capture_.FetchBuffers(); }
 
-  auto GetSample() -> std::vector<std::byte> override {
-    return sample_.buffer();
-  }
+  auto GetSample() -> std::vector<std::byte> override { return sample_.buffer(); }
 
-  void Stop() override {
-    capture_.Revoke();
-  }
+  void Stop() override { capture_.Revoke(); }
 
-  auto GetSampleTime() -> std::uint64_t override {
-    return sample_.timestamp();
-  }
+  auto GetSampleTime() -> std::uint64_t override { return sample_.timestamp(); }
 
-  auto GetSampleDuration() -> std::uint64_t override {
-    return capture_.GetSampleDuration();
-  }
+  auto GetSampleDuration() -> std::uint64_t override { return capture_.GetSampleDuration(); }
 };
 
 }  // namespace eillance

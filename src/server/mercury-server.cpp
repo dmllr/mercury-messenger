@@ -1,31 +1,31 @@
+#include <chrono>
 #include <csignal>
 #include <memory>
 #include <mutex>
-#include <string>
 #include <optional>
-#include <unordered_map>
+#include <string>
 #include <string_view>
-#include <unordered_set>
-#include <chrono>
 #include <thread>
-
-#include <rtc/websocket.hpp>
-#include <rtc/websocketserver.hpp>
-#include <nlohmann/json.hpp>
+#include <unordered_map>
+#include <unordered_set>
 #include <utility>
-#include <plog/Log.h>
-#include <plog/Init.h>
+
+#include <nlohmann/json.hpp>
 #include <plog/Appenders/ColorConsoleAppender.h>
 #include <plog/Formatters/TxtFormatter.h>
+#include <plog/Init.h>
+#include <plog/Log.h>
+#include <rtc/websocket.hpp>
+#include <rtc/websocketserver.hpp>
 
 #include "eillance/utils/args_parser.hpp"
 
 constexpr auto logInstanceId = 454;
-#define LGV PLOG_(logInstanceId, plog::verbose) // NOLINT(*-pro-type-reinterpret-cast,*-lambda-function-name)
-#define LGD PLOG_(logInstanceId, plog::debug) // NOLINT(*-pro-type-reinterpret-cast,*-lambda-function-name)
-#define LGI PLOG_(logInstanceId, plog::info) // NOLINT(*-pro-type-reinterpret-cast,*-lambda-function-name)
-#define LGW PLOG_(logInstanceId, plog::warning) // NOLINT(*-pro-type-reinterpret-cast,*-lambda-function-name)
-#define LGE PLOG_(logInstanceId, plog::error) // NOLINT(*-pro-type-reinterpret-cast,*-lambda-function-name)
+#define LGV PLOG_(logInstanceId, plog::verbose)  // NOLINT(*-pro-type-reinterpret-cast,*-lambda-function-name)
+#define LGD PLOG_(logInstanceId, plog::debug)    // NOLINT(*-pro-type-reinterpret-cast,*-lambda-function-name)
+#define LGI PLOG_(logInstanceId, plog::info)     // NOLINT(*-pro-type-reinterpret-cast,*-lambda-function-name)
+#define LGW PLOG_(logInstanceId, plog::warning)  // NOLINT(*-pro-type-reinterpret-cast,*-lambda-function-name)
+#define LGE PLOG_(logInstanceId, plog::error)    // NOLINT(*-pro-type-reinterpret-cast,*-lambda-function-name)
 
 class SignalingServer {
   using Json = nlohmann::json;
@@ -38,28 +38,22 @@ class SignalingServer {
 public:
   explicit SignalingServer(const rtc::WebSocketServer::Configuration& config) {
     server_ = std::make_unique<rtc::WebSocketServer>(config);
-    server_->onClient([this](const std::shared_ptr<rtc::WebSocket>& wss) {
-      HandleConnection(wss);
-    });
+    server_->onClient([this](const std::shared_ptr<rtc::WebSocket>& wss) { HandleConnection(wss); });
   }
 
 private:
   std::unique_ptr<rtc::WebSocketServer> server_;
   std::unordered_map<PeerId, Peer> peers_;
-  std::mutex peersMutex_;
+  std::mutex peers_mutex_;
 
   void HandleConnection(const std::shared_ptr<rtc::WebSocket>& wss) {
     LGD << "New connection established";
     auto peer_id = std::make_shared<PeerId>();
     rtc::WebSocket* wss_ptr = wss.get();
 
-    wss->onMessage(nullptr, [this, wss, peer_id](const std::string& msg) {
-      HandleMessage(wss, msg, *peer_id);
-    });
+    wss->onMessage(nullptr, [this, wss, peer_id](const std::string& msg) { HandleMessage(wss, msg, *peer_id); });
 
-    wss->onClosed([this, peer_id, wss_ptr]() {
-      HandleDisconnection(*peer_id, wss_ptr);
-    });
+    wss->onClosed([this, peer_id, wss_ptr]() { HandleDisconnection(*peer_id, wss_ptr); });
   }
 
   void HandleMessage(const std::shared_ptr<rtc::WebSocket>& wss, const std::string& msg, PeerId& peer_id) {
@@ -78,7 +72,7 @@ private:
           }
 
           {
-            const std::lock_guard<std::mutex> lock(peersMutex_);
+            const std::lock_guard<std::mutex> lock(peers_mutex_);
             if (auto itr = peers_.find(peer_id); itr != peers_.end()) {
               LGI << "Peer " << peer_id << " is reconnecting. Closing old connection.";
               itr->second.ws->close();
@@ -104,7 +98,7 @@ private:
         LGD << "Relaying message from: " << peer_id << " to: " << destination_id;
 
         {
-          const std::lock_guard<std::mutex> lock(peersMutex_);
+          const std::lock_guard<std::mutex> lock(peers_mutex_);
           auto itr = peers_.find(destination_id);
           if (itr == peers_.end() || !itr->second.ws || !itr->second.ws->isOpen()) {
             LGE << "Peer " << destination_id << " not found or not connected.";
@@ -130,7 +124,7 @@ private:
     }
 
     {
-      const std::lock_guard<std::mutex> lock(peersMutex_);
+      const std::lock_guard<std::mutex> lock(peers_mutex_);
       auto it = peers_.find(peer_id);
       if (it != peers_.end() && it->second.ws.get() == wss_ptr) {
         peers_.erase(it);
@@ -142,19 +136,12 @@ private:
   }
 
   static void SendError(const std::shared_ptr<rtc::WebSocket>& wss, const std::string& error, const std::string& message, const std::optional<PeerId>& for_peer = std::nullopt) {
-      if (!wss || !wss->isOpen()) {
-          return;
-      }
-      LGE << "Sending error: " << error << " - " << message;
-      Json response = {
-          {"type", "error"},
-          {"error", error},
-          {"message", message}};
+    if (!wss || !wss->isOpen()) { return; }
+    LGE << "Sending error: " << error << " - " << message;
+    Json response = {{"type", "error"}, {"error", error}, {"message", message}};
 
-      if (for_peer) {
-          response["for_peer"] = *for_peer;
-      }
-      wss->send(response.dump());
+    if (for_peer) { response["for_peer"] = *for_peer; }
+    wss->send(response.dump());
   }
 };
 
@@ -167,7 +154,7 @@ void SignalHandler(int signum) {
   signalReceived = signum;
 }
 
-constexpr plog::Severity ParseLogLevel(std::string_view level) {
+constexpr auto ParseLogLevel(std::string_view level) -> plog::Severity {
   if (level == "none") { return plog::none; }
   if (level == "fatal") { return plog::fatal; }
   if (level == "error") { return plog::error; }
@@ -178,9 +165,9 @@ constexpr plog::Severity ParseLogLevel(std::string_view level) {
   return plog::info;
 }
 
-} // namespace
+}  // namespace
 
-int main(int argc, char* argv[]) {
+auto main(int argc, char* argv[]) -> int {
   const ArgsParser args(argc, argv);
 
   static plog::ColorConsoleAppender<plog::TxtFormatter> appender;
@@ -195,15 +182,11 @@ int main(int argc, char* argv[]) {
   config.port = default_port;
 
   const auto& port_arg = args.GetInt("--port");
-  if (port_arg.has_value()) {
-    config.port = static_cast<uint16_t>(port_arg.value());
-  }
+  if (port_arg.has_value()) { config.port = static_cast<uint16_t>(port_arg.value()); }
 
   config.certificatePemFile = args.Get("--ssl-cert");
   config.keyPemFile = args.Get("--ssl-cert-key");
-  if (config.certificatePemFile.has_value() && config.keyPemFile.has_value()) {
-    config.enableTls = true;
-  }
+  if (config.certificatePemFile.has_value() && config.keyPemFile.has_value()) { config.enableTls = true; }
 
   std::signal(SIGINT, SignalHandler);
 

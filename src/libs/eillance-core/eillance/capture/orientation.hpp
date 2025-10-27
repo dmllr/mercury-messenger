@@ -3,10 +3,10 @@
 namespace eillance {
 
 enum class DeviceOrientation {
-  LandscapeToLeft = 0,
-  Portrait = 90,
-  LandscapeToRight = 180,
-  UpsideDown = 270
+  landscapeToLeft = 0,
+  portrait = 90,
+  landscapeToRight = 180,
+  upsideDown = 270
 };
 
 }  // namespace eillance

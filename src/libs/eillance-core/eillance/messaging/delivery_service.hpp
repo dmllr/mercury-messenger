@@ -26,18 +26,15 @@ class MessageDeliveryService {
   std::unordered_set<std::string> pending_connections_;
   std::mutex mutex_;
 
-  static constexpr int INITIAL_RETRY_DELAY_S = 5;
-  static constexpr int MAX_RETRY_DELAY_S = 60;
+  static constexpr int initial_retry_delay_s = 5;
+  static constexpr int max_retry_delay_s = 60;
 
 public:
-  MessageDeliveryService(std::shared_ptr<MessageQueue> queue,
-                         std::shared_ptr<identity::ContactManager> contacts,
-                         ConnectionRequestHandler handler)
-      : message_queue_(std::move(queue)), contact_manager_(std::move(contacts)), connection_handler_(std::move(handler)) {}
+  MessageDeliveryService(std::shared_ptr<MessageQueue> queue, std::shared_ptr<identity::ContactManager> contacts, ConnectionRequestHandler handler) : message_queue_(std::move(queue)), contact_manager_(std::move(contacts)), connection_handler_(std::move(handler)) {}
 
   void start() {
     is_running_ = true;
-    scheduleCheck(INITIAL_RETRY_DELAY_S);
+    scheduleCheck(initial_retry_delay_s);
   }
 
   void stop() {
@@ -55,13 +52,9 @@ public:
   void attemptDelivery(const std::string& peer_id) {
     const std::lock_guard<std::mutex> lock(mutex_);
     // Do not initiate connection if there are no messages to send.
-    if (message_queue_->GetQueuedMessages(peer_id).empty()) {
-      return;
-    }
+    if (message_queue_->GetQueuedMessages(peer_id).empty()) { return; }
 
-    if (pending_connections_.contains(peer_id)) {
-      return;  // Already trying to connect
-    }
+    if (pending_connections_.contains(peer_id)) { return; }  // Already trying to connect
 
     LOGI << "Queued messages found for " << peer_id << ". Requesting connection.";
     pending_connections_.insert(peer_id);
@@ -70,21 +63,19 @@ public:
 
 private:
   void scheduleCheck(int delay_s) {
-    if (!is_running_) return;
+    if (!is_running_) { return; }
     dispatch_queue_.DispatchAfter(std::chrono::seconds(delay_s), [this, delay_s]() {
       CheckForQueuedMessages();
       // Exponential backoff
-      const auto next_delay = std::min(delay_s * 2, MAX_RETRY_DELAY_S);
+      const auto next_delay = std::min(delay_s * 2, max_retry_delay_s);
       scheduleCheck(next_delay);
     });
   }
 
   void CheckForQueuedMessages() {
-    if (!contact_manager_) {
-      return;
-    }
+    if (!contact_manager_) { return; }
     auto all_contacts = contact_manager_->GetContacts();
-    for (const auto& [peer_id, status]: all_contacts) {
+    for (const auto& [peer_id, status] : all_contacts) {
       if (!message_queue_->GetQueuedMessages(peer_id).empty()) {
         // We have messages for this contact, let's try to deliver them.
         attemptDelivery(peer_id);

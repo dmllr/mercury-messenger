@@ -2,18 +2,17 @@
 
 #include <string>
 
-#include "eillance/utils/likely.h"
-
-#include <plog/Appenders/IAppender.h>
-#include <plog/Formatters/FuncMessageFormatter.h>
-#include <plog/Formatters/TxtFormatter.h>
-#include <plog/Init.h>
-#include <plog/Log.h>
 #ifdef ANDROID
 #include <plog/Appenders/AndroidAppender.h>
 #else
 #include <plog/Appenders/ColorConsoleAppender.h>
 #endif
+#include <plog/Appenders/IAppender.h>
+#include <plog/Formatters/FuncMessageFormatter.h>
+#include <plog/Formatters/TxtFormatter.h>
+#include <plog/Init.h>
+#include <plog/Log.h>
+#include "eillance/utils/likely.h"
 
 
 struct Log {
@@ -29,9 +28,7 @@ struct Log {
    * @param appender A pointer to the plog appender instance to be used for logging.
    * @param severity The minimum severity level to log.
    */
-  static void Initialize(plog::IAppender* appender, plog::Severity severity = log_level) {
-    plog::init(severity, appender);
-  }
+  static void Initialize(plog::IAppender* appender, plog::Severity severity = log_level) { plog::init(severity, appender); }
 
   /**
    * @brief Initializes the logging system with the default platform-specific appender.
@@ -60,32 +57,32 @@ struct Log {
     va_end(ap);
   }
 
-  template<typename... T>
+  template <typename... T>
   static void i(std::string_view fmt, T... p) {
     log_print(ANDROID_LOG_INFO, fmt.data(), p...);
   }
 
-  template<typename... T>
+  template <typename... T>
   static void d(std::string_view fmt, T... p) {
     log_print(ANDROID_LOG_DEBUG, fmt.data(), p...);
   }
 
-  template<typename... T>
+  template <typename... T>
   static void w(std::string_view fmt, T... p) {
     log_print(ANDROID_LOG_WARN, fmt.data(), p...);
   }
 
-  template<typename... T>
+  template <typename... T>
   static void e(std::string_view fmt, T... p) {
     log_print(ANDROID_LOG_ERROR, fmt.data(), p...);
   }
 
-  template<typename... T>
+  template <typename... T>
   static void v(std::string_view fmt, T... p) {
     log_print(ANDROID_LOG_VERBOSE, fmt.data(), p...);
   }
 
-  template<typename... T>
+  template <typename... T>
   static void assert_or_die(bool cond, std::string_view fmt, T... p) {
     if (unlikely(!cond)) {
       log_print(ANDROID_LOG_FATAL, fmt.data(), p...);
@@ -93,10 +90,9 @@ struct Log {
     }
   }
 
-  template<typename... T>
+  template <typename... T>
   static void assert_soft(bool cond, std::string_view fmt, T... p) {
-    if (unlikely(!cond))
-      log_print(ANDROID_LOG_ERROR, fmt.data(), p...);
+    if (unlikely(!cond)) { log_print(ANDROID_LOG_ERROR, fmt.data(), p...); }
   }
 #endif
 };

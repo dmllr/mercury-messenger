@@ -33,9 +33,9 @@ class VideoEncoderCli {
   std::vector<uint8_t> converted_frame_buffer_;
 
 #if defined __ANDROID__
-  static constexpr auto codecDestPixelFormat = AV_PIX_FMT_NV12;
+  static constexpr auto codec_dest_pixel_format = AV_PIX_FMT_NV12;
 #else
-  static constexpr auto codecDestPixelFormat = AV_PIX_FMT_YUV420P;
+  static constexpr auto codec_dest_pixel_format = AV_PIX_FMT_YUV420P;
 #endif
 
   // List of preferred codecs in priority order
@@ -43,11 +43,9 @@ class VideoEncoderCli {
       AV_CODEC_ID_H264,  // try H.264 codec first
   };
 
-  bool SetupCodecContext(const AVCodec* codec, int width, int height, int framerate) {
+  auto SetupCodecContext(const AVCodec* codec, int width, int height, int framerate) -> bool {
     codec_context_ = avcodec_alloc_context3(codec);
-    if (codec_context_ == nullptr) {
-      return false;
-    }
+    if (codec_context_ == nullptr) { return false; }
 
     codec_context_->width = width;
     codec_context_->height = height;
@@ -56,7 +54,7 @@ class VideoEncoderCli {
     codec_context_->thread_count = 4;  // Using 4 threads for efficient CPU usage
     codec_context_->gop_size = 50;     // Larger GOP size for reduced CPU load
     codec_context_->max_b_frames = 0;  // No B-frames for lower latency
-    codec_context_->pix_fmt = codecDestPixelFormat;
+    codec_context_->pix_fmt = codec_dest_pixel_format;
 
 #ifdef _WIN32
     // Disable hardware encoding on Windows if needed
@@ -67,14 +65,11 @@ class VideoEncoderCli {
 
   void AllocateFrame(int width, int height) {
     av_frame_ = av_frame_alloc();
-    if (av_frame_ == nullptr) {
-      throw std::runtime_error("Failed to allocate frame");
-    }
+    if (av_frame_ == nullptr) { throw std::runtime_error("Failed to allocate frame"); }
 
     const auto num_bytes = av_image_get_buffer_size(codec_context_->pix_fmt, width, height, 1);
     converted_frame_buffer_.resize(num_bytes);
-    av_image_fill_arrays(av_frame_->data, av_frame_->linesize, converted_frame_buffer_.data(),
-                         codec_context_->pix_fmt, width, height, 1);
+    av_image_fill_arrays(av_frame_->data, av_frame_->linesize, converted_frame_buffer_.data(), codec_context_->pix_fmt, width, height, 1);
 
     av_frame_->width = width;
     av_frame_->height = height;
@@ -89,7 +84,7 @@ public:
     CoUninitialize();
 #endif
     const AVCodec* codec = nullptr;
-    for (const auto& codec_id: preferred_codecs) {
+    for (const auto& codec_id : preferred_codecs) {
       codec = avcodec_find_encoder(codec_id);
       if (codec && SetupCodecContext(codec, width, height, framerate)) {
         LOGD << "Using codec: [" << codec->id << "] " << codec->name << " | " << codec->long_name;
@@ -100,9 +95,7 @@ public:
     // Fallback to software encoder if hardware encoders fail
     if (codec_context_ == nullptr) {
       codec = avcodec_find_encoder(AV_CODEC_ID_H264);
-      if (!SetupCodecContext(codec, width, height, framerate)) {
-        throw std::runtime_error("Failed to initialize any encoder.");
-      }
+      if (!SetupCodecContext(codec, width, height, framerate)) { throw std::runtime_error("Failed to initialize any encoder."); }
       LOGD << "Falling back to software codec: [" << codec->id << "] " << codec->name;
     }
 
@@ -118,10 +111,8 @@ public:
 #endif
   }
 
-  Packet EncodeBuffer(void* frames) const {
-    if (codec_context_ == nullptr) {
-      return {};
-    }
+  auto EncodeBuffer(void* frames) const -> Packet {
+    if (codec_context_ == nullptr) { return {}; }
 
     const auto size = codec_context_->width * codec_context_->height;
     av_frame_->data[0] = static_cast<std::uint8_t*>(frames);

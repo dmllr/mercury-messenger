@@ -1,23 +1,22 @@
 #pragma once
 
-#include <jni.h>
 #include <sys/system_properties.h>
 
 #include <atomic>
 #include <cstddef>
+#include <jni.h>
 #include <string>
 #include <vector>
 
 #include <nlohmann/json.hpp>
 
+#include "android_persistent_storage.hpp"
+#include "class_refs.hpp"
 #include "eillance/capture/video_config.hpp"
 #include "eillance/client/client.hpp"
 #include "eillance/logging/logging.h"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/view_model/mercury_view_model.hpp"
-
-#include "android_persistent_storage.hpp"
-#include "class_refs.hpp"
 #include "transport/transport_impl_libwebrtc.hpp"
 
 
@@ -31,11 +30,8 @@ class ClientEngine {
   std::unique_ptr<view_model::MercuryViewModel> view_model_;
 
 public:
-  ClientEngine(JavaVM* jvm, JNIEnv* env, jobject instance)
-      : jvm_(jvm),
-        native_bridge_(env->NewGlobalRef(instance)) {
-    auto storage = std::make_shared<storage::PersistentStorage>(
-        std::make_unique<storage::AndroidPersistentStorageImpl>(jvm, instance));
+  ClientEngine(JavaVM* jvm, JNIEnv* env, jobject instance) : jvm_(jvm), native_bridge_(env->NewGlobalRef(instance)) {
+    auto storage = std::make_shared<storage::PersistentStorage>(std::make_unique<storage::AndroidPersistentStorageImpl>(jvm, instance));
 
     auto rtc_transport_impl = std::make_unique<transport::AndroidRtcTransport>(jvm, instance);
     auto transport = std::make_shared<transport::Transport>(std::move(rtc_transport_impl));
@@ -43,15 +39,11 @@ public:
 
     view_model_ = std::make_unique<view_model::MercuryViewModel>(client_);
 
-    view_model_->SetOnStateChangedCallback([this]() {
-      UpdateState();
-    });
+    view_model_->SetOnStateChangedCallback([this]() { UpdateState(); });
 
     std::string device_name;
     auto stored_name = storage->Load("device_name");
-    if (stored_name.has_value() && !stored_name->empty()) {
-      device_name.assign(reinterpret_cast<const char*>(stored_name->data()), stored_name->size());
-    }
+    if (stored_name.has_value() && !stored_name->empty()) { device_name.assign(reinterpret_cast<const char*>(stored_name->data()), stored_name->size()); }
 
     if (device_name.empty()) {
       char model_string[PROP_VALUE_MAX + 1];
@@ -66,8 +58,8 @@ public:
 
   ClientEngine(ClientEngine&&) = delete;
   ClientEngine(const ClientEngine&) = delete;
-  auto& operator=(ClientEngine&&) = delete;
-  auto& operator=(const ClientEngine&) = delete;
+  auto operator=(ClientEngine&&) -> ClientEngine& = delete;
+  auto operator=(const ClientEngine&) -> ClientEngine& = delete;
 
   ~ClientEngine() {
     Terminate();
@@ -85,9 +77,7 @@ public:
     }
   }
 
-  auto ViewModel() -> view_model::MercuryViewModel* {
-    return view_model_.get();
-  }
+  auto ViewModel() -> view_model::MercuryViewModel* { return view_model_.get(); }
 
   void Start() {
     client_->start();
@@ -101,44 +91,39 @@ public:
     client_->terminate();
   }
 
-  void Call(const std::string& peer_id) const {
-    client_->call(peer_id);
-  }
+  void Call(const std::string& peer_id) const { client_->call(peer_id); }
 
   void Hangup() const {
-    if (view_model_) {
-      view_model_->Hangup();
-    }
+    if (view_model_) { view_model_->Hangup(); }
   }
 
   void ConfigureVideoCapture(const VideoConfig& config) const {
-    Config coreConfig;
-    coreConfig.video_config = config;
-    client_->configure(coreConfig);
+    Config core_config;
+    core_config.video_config = config;
+    client_->configure(core_config);
   }
 
 private:
-  JNIEnv* AttachCurrentThreadIfNeeded() {
+  auto AttachCurrentThreadIfNeeded() -> JNIEnv* {
     JNIEnv* env{};
-    const jint res = jvm_->GetEnv((void**)&env, JNI_VERSION_1_6);
+    const jint res = jvm_->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6);
     switch (res) {
       case JNI_OK:
         return env;
       case JNI_EDETACHED:
         if (jvm_->AttachCurrentThread(&env, nullptr) == JNI_OK) {
           return env;
-        } else {
-          return nullptr;
         }
+        return nullptr;
       default:
         return nullptr;
     }
   }
 
   void UpdateState() {
-    if (native_bridge_ == nullptr) return;
+    if (native_bridge_ == nullptr) { return; }
     auto* env = AttachCurrentThreadIfNeeded();
-    if (env == nullptr) return;
+    if (env == nullptr) { return; }
 
     jclass callback_class = env->GetObjectClass(native_bridge_);
     jmethodID callback_method = env->GetMethodID(callback_class, "onStateUpdate", "(Ljava/lang/String;)V");

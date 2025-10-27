@@ -170,13 +170,13 @@ struct HistoryPage {
 
 inline void to_json(nlohmann::json& j, const std::deque<HistoryEntryRecord>& deq) {
   j = nlohmann::json::array();
-  for (const auto& msg: deq) {
+  for (const auto& msg : deq) {
     j.push_back(msg);
   }
 }
 
 inline void from_json(const nlohmann::json& j, std::deque<HistoryEntryRecord>& deq) {
-  for (const auto& item: j) {
+  for (const auto& item : j) {
     deq.push_back(item.get<HistoryEntryRecord>());
   }
 }
@@ -188,14 +188,10 @@ class MessageHistory {
   std::atomic<std::uint64_t> next_id_{1};
   std::function<void(const std::string& peer_id, std::uint64_t message_id, MessageStatus status)> on_status_changed_;
 
-  static constexpr std::string GetStorageKey(const std::string_view peer_id) {
-    return std::string("history_") + std::string(peer_id);
-  }
+  static constexpr auto GetStorageKey(const std::string_view peer_id) -> std::string { return std::string("history_") + std::string(peer_id); }
 
   void LoadHistory(const std::string& peer_id) {
-    if (history_cache_.contains(peer_id)) {
-      return;
-    }
+    if (history_cache_.contains(peer_id)) { return; }
 
     if (const auto key = GetStorageKey(peer_id); storage_->Exists(key)) {
       const auto data_opt = storage_->Load(key);
@@ -206,16 +202,12 @@ class MessageHistory {
           history_cache_[peer_id] = j.get<std::deque<HistoryEntryRecord>>();
           if (!history_cache_.at(peer_id).empty()) {  // NOLINT(*-pro-type-vararg)
             std::uint64_t max_id = 0;
-            for (const auto& entry: history_cache_.at(peer_id)) {
-              if (entry.id > max_id) {
-                max_id = entry.id;
-              }
+            for (const auto& entry : history_cache_.at(peer_id)) {
+              if (entry.id > max_id) { max_id = entry.id; }
             }
             std::uint64_t current_next_id = next_id_.load();
             while (max_id >= current_next_id) {
-              if (next_id_.compare_exchange_weak(current_next_id, max_id + 1)) {
-                break;
-              }
+              if (next_id_.compare_exchange_weak(current_next_id, max_id + 1)) { break; }
             }
           }
         } catch (const nlohmann::json::parse_error& e) {
@@ -231,9 +223,7 @@ class MessageHistory {
     const auto& history = history_cache_[peer_id];
 
     if (history.empty()) {
-      if (storage_->Exists(key)) {
-        storage_->Delete(key);
-      }
+      if (storage_->Exists(key)) { storage_->Delete(key); }
       return;
     }
 
@@ -241,16 +231,13 @@ class MessageHistory {
     const std::string json_str = j.dump();
     const auto* char_ptr = reinterpret_cast<const std::byte*>(json_str.data());
     const std::vector<std::byte> data(char_ptr, char_ptr + json_str.size());
-    if (!storage_->Save(key, data)) {
-      LOGE << "Failed to save message history for peer " << peer_id;
-    }
+    if (!storage_->Save(key, data)) { LOGE << "Failed to save message history for peer " << peer_id; }
   }
 
 public:
-  explicit MessageHistory(std::shared_ptr<storage::PersistentStorage> storage)
-      : storage_(std::move(storage)) {}
+  explicit MessageHistory(std::shared_ptr<storage::PersistentStorage> storage) : storage_(std::move(storage)) {}
 
-  HistoryEntryRecord AddTextEntry(const std::string& peer_id, const std::string& content, MessageDirection direction) {
+  auto AddTextEntry(const std::string& peer_id, const std::string& content, MessageDirection direction) -> HistoryEntryRecord {
     const std::lock_guard lock(mutex_);
     LoadHistory(peer_id);
     auto& history = history_cache_[peer_id];
@@ -269,47 +256,31 @@ public:
     return entry;
   }
 
-  void AddCallEntry(
-      const std::string& peer_id,
-      const HistoryEntryKind kind,
-      const CallDirection direction,
-      const CallStatus status,
-      uint32_t duration = 0) {
+  void AddCallEntry(const std::string& peer_id, const HistoryEntryKind kind, const CallDirection direction, const CallStatus status, uint32_t duration = 0) {
     const std::lock_guard lock(mutex_);
     LoadHistory(peer_id);
     auto& history = history_cache_[peer_id];
 
-    history.push_back({.id = next_id_.fetch_add(1),
-                       .kind = kind,
-                       .timestamp = Time::Now(),
-                       .direction = (direction == CallDirection::incoming) ? MessageDirection::received : MessageDirection::sent,  // NOLINT(*-branch-clone)
-                       .data = CallEntry{.duration_seconds = duration, .call_direction = direction, .call_status = status}});
+    history.push_back({.id = next_id_.fetch_add(1), .kind = kind, .timestamp = Time::Now(), .direction = (direction == CallDirection::incoming) ? MessageDirection::received : MessageDirection::sent, .data = CallEntry{.duration_seconds = duration, .call_direction = direction, .call_status = status}});  // NOLINT(*-branch-clone)
     SaveHistory(peer_id);
   }
 
-  void SetStatusChangedCallback(
-      std::function<void(const std::string&, std::uint64_t, MessageStatus)> cb) {
+  void SetStatusChangedCallback(std::function<void(const std::string&, std::uint64_t, MessageStatus)> cb) {
     const std::lock_guard lock(mutex_);
     on_status_changed_ = std::move(cb);
   }
 
-  void UpdateMessageStatus(const std::string& peer_id, const std::uint64_t message_id,
-                           const MessageStatus new_status) {
+  void UpdateMessageStatus(const std::string& peer_id, const std::uint64_t message_id, const MessageStatus new_status) {
     {
       const std::lock_guard lock(mutex_);
       LoadHistory(peer_id);
-      if (!history_cache_.contains(peer_id)) {
-        return;
-      }
-      for (auto& history = history_cache_.at(peer_id);
-           auto& entry: std::ranges::reverse_view(history)) {
+      if (!history_cache_.contains(peer_id)) { return; }
+      for (auto& history = history_cache_.at(peer_id); auto& entry : std::ranges::reverse_view(history)) {
         if (entry.id == message_id) {
           if (entry.status != new_status) {
             entry.status = new_status;
             SaveHistory(peer_id);
-            if (on_status_changed_) {
-              on_status_changed_(peer_id, message_id, new_status);
-            }
+            if (on_status_changed_) { on_status_changed_(peer_id, message_id, new_status); }
           }
           return;
         }
@@ -317,21 +288,17 @@ public:
     }
   }
 
-  HistoryPage GetHistoryPage(const std::string& peer_id, const size_t page_index, const size_t page_size) {
+  auto GetHistoryPage(const std::string& peer_id, const size_t page_index, const size_t page_size) -> HistoryPage {
     const std::lock_guard lock(mutex_);
     LoadHistory(peer_id);
 
-    if (!history_cache_.contains(peer_id)) {
-      return {.messages = {}, .total_messages = 0};
-    }
+    if (!history_cache_.contains(peer_id)) { return {.messages = {}, .total_messages = 0}; }
 
     const auto& history = history_cache_.at(peer_id);
     const size_t total_size = history.size();
 
     const size_t end_offset = page_index * page_size;
-    if (end_offset >= total_size) {
-      return {.messages = {}, .total_messages = total_size};
-    }
+    if (end_offset >= total_size) { return {.messages = {}, .total_messages = total_size}; }
 
     const size_t start_offset = std::min(total_size, (page_index + 1) * page_size);
 
@@ -342,29 +309,23 @@ public:
     return {.messages = std::move(messages_page), .total_messages = total_size};
   }
 
-  std::vector<ChatSummary> GetChatSummaries(const std::vector<std::string>& peer_ids) {
+  auto GetChatSummaries(const std::vector<std::string>& peer_ids) -> std::vector<ChatSummary> {
     const std::lock_guard lock(mutex_);
     std::vector<ChatSummary> summaries;
 
-    for (const auto& peer_id: peer_ids) {
+    for (const auto& peer_id : peer_ids) {
       LoadHistory(peer_id);
       if (history_cache_.contains(peer_id) && !history_cache_.at(peer_id).empty()) {
         uint32_t unread_count = 0;
         const auto& history = history_cache_.at(peer_id);
-        for (const auto& entry: history) {
-          if (entry.direction == MessageDirection::received && entry.status != MessageStatus::read && entry.kind == HistoryEntryKind::textMessage) {
-            unread_count++;
-          }
+        for (const auto& entry : history) {
+          if (entry.direction == MessageDirection::received && entry.status != MessageStatus::read && entry.kind == HistoryEntryKind::textMessage) { unread_count++; }
         }
-        summaries.push_back({.peer_id = peer_id,
-                             .last_message = history_cache_.at(peer_id).back(),
-                             .unread_count = unread_count});
+        summaries.push_back({.peer_id = peer_id, .last_message = history_cache_.at(peer_id).back(), .unread_count = unread_count});
       }
     }
 
-    std::ranges::sort(summaries, [](const auto& left, const auto& right) {
-      return left.last_message.timestamp > right.last_message.timestamp;
-    });
+    std::ranges::sort(summaries, [](const auto& left, const auto& right) { return left.last_message.timestamp > right.last_message.timestamp; });
 
     return summaries;
   }

@@ -24,8 +24,8 @@ public:
     Source() = default;
     Source(Source&&) = delete;
     Source(const Source&) = delete;
-    Source& operator=(Source&&) = delete;
-    Source& operator=(const Source&) = delete;
+    auto operator=(Source&&) -> Source& = delete;
+    auto operator=(const Source&) -> Source& = delete;
 
     enum class Type : std::uint8_t {
       audio,
@@ -46,10 +46,10 @@ public:
   };
 
 private:
-  DispatchQueue dispatchQueue_ = DispatchQueue("StreamQueue", 1);
+  DispatchQueue dispatch_queue_ = DispatchQueue("StreamQueue", 1);
   std::shared_ptr<Source> audio_;
   std::shared_ptr<Source> video_;
-  bool isRunning_ = false;
+  bool is_running_ = false;
 
 public:
   Stream(std::shared_ptr<Source> video, std::shared_ptr<Source> audio) : audio_(std::move(audio)), video_(std::move(video)) {}
@@ -58,21 +58,15 @@ public:
   auto operator=(const Stream&) -> Stream& = delete;
   auto operator=(Stream&&) -> Stream& = delete;
 
-  auto Audio() {
-    return audio_;
-  }
+  auto Audio() { return audio_; }
 
-  auto Video() {
-    return video_;
-  }
+  auto Video() { return video_; }
 
-  ~Stream() {
-    Stop();
-  }
+  ~Stream() { Stop(); }
 
 private:
-  std::function<void(Source::Type, std::uint64_t, const std::vector<std::byte>&)> sampleHandlerFunc_;
-  std::mutex sampleHandlerMutex_;
+  std::function<void(Source::Type, std::uint64_t, const std::vector<std::byte>&)> sample_handler_func_;
+  std::mutex sample_handler_mutex_;
 
   auto UnsafePrepareForSample() const -> std::pair<std::shared_ptr<Source>, Source::Type> {
     std::shared_ptr<Source> src;
@@ -98,55 +92,41 @@ private:
   }
 
   void SendSample() {
-    if (!isRunning_) {
-      return;
-    }
+    if (!is_running_) { return; }
     auto [ss, sst] = UnsafePrepareForSample();
     const auto sample = ss->GetSample();
 
     std::function<void(Source::Type, std::uint64_t, const std::vector<std::byte>&)> handler;
     {
-      std::lock_guard<std::mutex> lock(sampleHandlerMutex_);
-      handler = sampleHandlerFunc_;
+      std::lock_guard<std::mutex> lock(sample_handler_mutex_);
+      handler = sample_handler_func_;
     }
-    if (handler) {
-      handler(sst, ss->GetSampleTime(), sample);
-    }
+    if (handler) { handler(sst, ss->GetSampleTime(), sample); }
 
     ss->LoadNextSample();
-    dispatchQueue_.Dispatch([this]() {
-      this->SendSample();
-    });
+    dispatch_queue_.Dispatch([this]() { this->SendSample(); });
   }
 
 public:
   void OnSample(std::function<void(Source::Type, std::uint64_t, const std::vector<std::byte>&)> handler) {
-    std::lock_guard<std::mutex> lock(sampleHandlerMutex_);
-    sampleHandlerFunc_ = std::move(handler);
+    std::lock_guard<std::mutex> lock(sample_handler_mutex_);
+    sample_handler_func_ = std::move(handler);
   }
 
-  auto IsRunning() const {
-    return isRunning_;
-  }
+  auto IsRunning() const { return is_running_; }
 
   void Start() {
-    if (isRunning_) {
-      return;
-    }
-    isRunning_ = true;
+    if (is_running_) { return; }
+    is_running_ = true;
     video_->Start();
     audio_->Start();
-    dispatchQueue_.Dispatch([this]() {
-      this->SendSample();
-    });
+    dispatch_queue_.Dispatch([this]() { this->SendSample(); });
   }
 
   void Stop() {
-    if (!isRunning_) {
-      return;
-    }
-    isRunning_ = false;
-    dispatchQueue_.RemovePending();
+    if (!is_running_) { return; }
+    is_running_ = false;
+    dispatch_queue_.RemovePending();
     audio_->Stop();
     video_->Stop();
   }

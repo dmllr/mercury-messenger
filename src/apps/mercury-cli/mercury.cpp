@@ -1,8 +1,8 @@
+#include <chrono>
 #include <filesystem>
 #include <iostream>
 #include <memory>
 #include <string>
-#include <chrono>
 #include <string_view>
 #include <thread>
 #include <vector>
@@ -13,28 +13,27 @@
 #include "ftxui/component/screen_interactive.hpp"
 #include "ftxui/dom/elements.hpp"
 
-#include "eillance/utils/args_parser.hpp"
+#include "cli_persistent_storage.hpp"
+#include "eillance/capture/audio_capture.hpp"
+#include "eillance/capture/video_capture.hpp"
+#include "eillance/client/client.hpp"
 #include "eillance/events/service_connection_state.h"
 #include "eillance/identity/contact_manager.hpp"
 #include "eillance/logging/logging.h"
 #include "eillance/messaging/history.hpp"
-#include "eillance/transport/peer_connection_state.h"
-#include "eillance/client/client.hpp"
 #include "eillance/rtc/transport_impl_libdatachannel.hpp"
 #include "eillance/storage/persistent_storage.hpp"
+#include "eillance/transport/peer_connection_state.h"
+#include "eillance/utils/args_parser.hpp"
 #include "eillance/utils/time.hpp"
 #include "eillance/view_model/mercury_view_model.hpp"
-
-#include "cli_persistent_storage.hpp"
-#include "eillance/capture/audio_capture.hpp"
-#include "eillance/capture/video_capture.hpp"
 
 namespace {
 
 // Helper function to format contact entries for the ftxui::Menu component.
 std::vector<std::string> GetContactMenuEntries(const std::vector<eillance::view_model::UIState::ViewContact>& contacts) {
   std::vector<std::string> entries;
-  for (const auto& contact: contacts) {
+  for (const auto& contact : contacts) {
     std::string status_str;
     switch (contact.status) {
       case eillance::identity::ContactStatus::pendingApproval:
@@ -50,18 +49,24 @@ std::vector<std::string> GetContactMenuEntries(const std::vector<eillance::view_
 
     std::string conn_status_str;
     switch (contact.connection_state) {
-        case eillance::transport::PeerConnectionState::Connecting: conn_status_str = " (Connecting)"; break;
-        case eillance::transport::PeerConnectionState::Connected: conn_status_str = " (Connected)"; break;
-        case eillance::transport::PeerConnectionState::Failed: conn_status_str = " (Failed)"; break;
-        default: break;
+      case eillance::transport::PeerConnectionState::Connecting:
+        conn_status_str = " (Connecting)";
+        break;
+      case eillance::transport::PeerConnectionState::Connected:
+        conn_status_str = " (Connected)";
+        break;
+      case eillance::transport::PeerConnectionState::Failed:
+        conn_status_str = " (Failed)";
+        break;
+      default:
+        break;
     }
 
     std::string unread_count_str;
-    if (contact.unread_count > 0) {
-        unread_count_str = " [" + std::to_string(contact.unread_count) + "]";
-    }
+    if (contact.unread_count > 0) { unread_count_str = " [" + std::to_string(contact.unread_count) + "]"; }
 
-    const std::string display_id = contact.peer_id.length() > 12 ? contact.peer_id.substr(0, 12) + "..." : contact.peer_id;
+    constexpr auto max_id_display_length = 12;
+    const std::string display_id = contact.peer_id.length() > max_id_display_length ? contact.peer_id.substr(0, max_id_display_length) + "..." : contact.peer_id;
     entries.push_back(display_id + status_str + conn_status_str + unread_count_str);
   }
   return entries;
@@ -69,61 +74,70 @@ std::vector<std::string> GetContactMenuEntries(const std::vector<eillance::view_
 
 constexpr auto GetConnectionStatusString(eillance::ServiceConnectionState state) -> std::string_view {
   switch (state) {
-    case eillance::ServiceConnectionState::establishing: return "CONNECTING";
-    case eillance::ServiceConnectionState::online: return "ONLINE";
-    case eillance::ServiceConnectionState::failure: return "CONNECTION FAILED";
-    case eillance::ServiceConnectionState::disconnected: return "OFFLINE";
-    default: return "UNKNOWN";
+    case eillance::ServiceConnectionState::establishing:
+      return "CONNECTING";
+    case eillance::ServiceConnectionState::online:
+      return "ONLINE";
+    case eillance::ServiceConnectionState::failure:
+      return "CONNECTION FAILED";
+    case eillance::ServiceConnectionState::disconnected:
+      return "OFFLINE";
+    default:
+      return "UNKNOWN";
   }
 }
 
 // Helper function to format timestamps according to the specified rules.
 std::string FormatTimestamp(Time::Unit ts_us) {
-    using namespace std::chrono;
-    const auto message_tp = system_clock::time_point(microseconds(ts_us));
-    const auto now_tp = system_clock::now();
+  using namespace std::chrono;
+  const auto message_tp = system_clock::time_point(microseconds(ts_us));
+  const auto now_tp = system_clock::now();
 
-    const time_t message_time_t = system_clock::to_time_t(message_tp);
-    const time_t now_time_t = system_clock::to_time_t(now_tp);
+  const time_t message_time_t = system_clock::to_time_t(message_tp);
+  const time_t now_time_t = system_clock::to_time_t(now_tp);
 
 #ifdef _WIN32
-    tm message_tm{}, now_tm{};
-    localtime_s(&message_tm, &message_time_t);
-    localtime_s(&now_tm, &now_time_t);
+  tm message_tm{};
+  tm now_tm{};
+  localtime_s(&message_tm, &message_time_t);
+  localtime_s(&now_tm, &now_time_t);
 #else
-    tm message_tm{}, now_tm{};
-    localtime_r(&message_time_t, &message_tm);
-    localtime_r(&now_time_t, &now_tm);
+  tm message_tm{};
+  tm now_tm{};
+  localtime_r(&message_time_t, &message_tm);
+  localtime_r(&now_time_t, &now_tm);
 #endif
 
-    char buffer[64];
+  constexpr auto buffer_size = 64;
+  char buffer[buffer_size];
 
-    if (message_tm.tm_year == now_tm.tm_year && message_tm.tm_yday == now_tm.tm_yday) {
-        strftime(buffer, sizeof(buffer), "%H:%M", &message_tm);
-        return std::string(buffer);
-    }
-
-    time_t yesterday_time_t = now_time_t - 86400;
-#ifdef _WIN32
-    tm yesterday_tm{};
-    localtime_s(&yesterday_tm, &yesterday_time_t);
-#else
-    tm yesterday_tm{};
-    localtime_r(&yesterday_time_t, &yesterday_tm);
-#endif
-
-    if (message_tm.tm_year == yesterday_tm.tm_year && message_tm.tm_yday == yesterday_tm.tm_yday) {
-        strftime(buffer, sizeof(buffer), "Yesterday, %H:%M", &message_tm);
-        return std::string(buffer);
-    }
-
-    if (message_tm.tm_year == now_tm.tm_year) {
-        strftime(buffer, sizeof(buffer), "%b %d, %H:%M", &message_tm);
-        return std::string(buffer);
-    }
-
-    strftime(buffer, sizeof(buffer), "%Y, %b %d, %H:%M", &message_tm);
+  if (message_tm.tm_year == now_tm.tm_year && message_tm.tm_yday == now_tm.tm_yday) {
+    strftime(buffer, sizeof(buffer), "%H:%M", &message_tm);
     return std::string(buffer);
+  }
+
+  constexpr auto seconds_in_day = 86400;
+  time_t yesterday_time_t = now_time_t - seconds_in_day;
+#ifdef _WIN32
+  tm yesterday_tm{};
+  localtime_s(&yesterday_tm, &yesterday_time_t);
+#else
+  tm yesterday_tm{};
+  localtime_r(&yesterday_time_t, &yesterday_tm);
+#endif
+
+  if (message_tm.tm_year == yesterday_tm.tm_year && message_tm.tm_yday == yesterday_tm.tm_yday) {
+    strftime(buffer, sizeof(buffer), "Yesterday, %H:%M", &message_tm);
+    return std::string(buffer);
+  }
+
+  if (message_tm.tm_year == now_tm.tm_year) {
+    strftime(buffer, sizeof(buffer), "%b %d, %H:%M", &message_tm);
+    return std::string(buffer);
+  }
+
+  strftime(buffer, sizeof(buffer), "%Y, %b %d, %H:%M", &message_tm);
+  return std::string(buffer);
 }
 
 }  // namespace
@@ -151,7 +165,9 @@ int main(int argc, char** argv) {
   std::filesystem::create_directories(log_file_path.parent_path());
   const auto u8_path = log_file_path.u8string();
   const auto log_file_path_str{std::string{reinterpret_cast<const char*>(u8_path.c_str()), u8_path.length()}};
-  static plog::RollingFileAppender<plog::TxtFormatter> file_appender(log_file_path_str.c_str(), 5 * 1024 * 1024, 3);
+  constexpr auto max_log_size_bytes = 5 * 1024 * 1024;
+  constexpr auto max_log_files = 3;
+  static plog::RollingFileAppender<plog::TxtFormatter> file_appender(log_file_path_str.c_str(), max_log_size_bytes, max_log_files);
   Log::Initialize(&file_appender, plog::info);
 
   // --- Service Layer (Model) Initialization ---
@@ -182,68 +198,82 @@ int main(int argc, char** argv) {
     const auto state = view_model->GetState();
     ftxui::Elements elements;
 
-    if (state.has_older_messages) {
-        elements.push_back(ftxui::text("--- older messages available (use /history load) ---") | ftxui::dim);
-    }
+    if (state.has_older_messages) { elements.push_back(ftxui::text("--- older messages available (use /history load) ---") | ftxui::dim); }
 
-    for (const auto& entry: state.interaction_history) {
-        std::string prefix;
-        std::string content;
-        switch (entry.kind) {
-            case eillance::messaging::HistoryEntryKind::textMessage:
-            case eillance::messaging::HistoryEntryKind::systemMessage: {
-            std::string suffix;
-            if (entry.direction == eillance::messaging::MessageDirection::sent) {
-                    prefix = "[you]: ";
-                } else {
-                    if(state.selected_contact_id.has_value()) {
-                        const auto& peer_id = state.selected_contact_id.value();
-                        const std::string display_id = peer_id.length() > 8 ? peer_id.substr(0, 8) + "..." : peer_id;
-                        prefix = "[" + display_id + "]: ";
-                    } else {
-                        prefix = "[system]: ";
-                    }
-                }
-                if (entry.direction == eillance::messaging::MessageDirection::sent) {
-                    switch(entry.status) {
-                        case eillance::messaging::MessageStatus::sending: suffix = " (sending...)"; break;
-                        case eillance::messaging::MessageStatus::sent: suffix = " (sent)"; break;
-                        case eillance::messaging::MessageStatus::delivered: suffix = " (delivered)"; break;
-                        case eillance::messaging::MessageStatus::read: suffix = " (read)"; break;
-                        default: break;
-                    }
-                }
-                content = std::get<eillance::messaging::MessageEntry>(entry.data).content;
-                auto timestamp_str = FormatTimestamp(entry.timestamp);
-                elements.push_back(ftxui::text(prefix + content + suffix));
-                elements.push_back(ftxui::text("  Î“Ã¶Â¼Î“Ã²Ã» " + timestamp_str) | ftxui::dim);
+    for (const auto& entry : state.interaction_history) {
+      std::string prefix;
+      std::string content;
+      switch (entry.kind) {
+        case eillance::messaging::HistoryEntryKind::textMessage:
+        case eillance::messaging::HistoryEntryKind::systemMessage: {
+          std::string suffix;
+          if (entry.direction == eillance::messaging::MessageDirection::sent) {
+            prefix = "[you]: ";
+          } else {
+            if (state.selected_contact_id.has_value()) {
+              const auto& peer_id = state.selected_contact_id.value();
+              constexpr auto max_display_id_len = 8;
+              const std::string display_id = peer_id.length() > max_display_id_len ? peer_id.substr(0, max_display_id_len) + "..." : peer_id;
+              prefix = "[" + display_id + "]: ";
+            } else {
+              prefix = "[system]: ";
+            }
+          }
+          if (entry.direction == eillance::messaging::MessageDirection::sent) {
+            switch (entry.status) {
+              case eillance::messaging::MessageStatus::sending:
+                suffix = " (sending...)";
+                break;
+              case eillance::messaging::MessageStatus::sent:
+                suffix = " (sent)";
+                break;
+              case eillance::messaging::MessageStatus::delivered:
+                suffix = " (delivered)";
+                break;
+              case eillance::messaging::MessageStatus::read:
+                suffix = " (read)";
+                break;
+              default:
                 break;
             }
-            case eillance::messaging::HistoryEntryKind::voiceCall:
-            case eillance::messaging::HistoryEntryKind::videoCall: {
-                prefix = "[system]: ";
-                const auto& call_data = std::get<eillance::messaging::CallEntry>(entry.data); // NOLINT
-                std::string call_type_str = (entry.kind == eillance::messaging::HistoryEntryKind::voiceCall ? "Voice" : "Video");
-                std::string direction_str = (call_data.call_direction == eillance::messaging::CallDirection::incoming ? "Incoming" : "Outgoing");
-                std::string status_str;
-                switch (call_data.call_status) {
-                    case eillance::messaging::CallStatus::answered: status_str = "Answered"; break;
-                    case eillance::messaging::CallStatus::missed: status_str = "Missed"; break;
-                    case eillance::messaging::CallStatus::rejected: status_str = "Rejected"; break;
-                    case eillance::messaging::CallStatus::busy: status_str = "Busy"; break;
-                }
-                content = "--- " + direction_str + " " + call_type_str + " Call (" + status_str + ") ---";
-                auto timestamp_str = FormatTimestamp(entry.timestamp);
-                elements.push_back(ftxui::text(prefix + content) | ftxui::dim);
-                elements.push_back(ftxui::text("  Î“Ã¶Â¼Î“Ã²Ã» " + timestamp_str) | ftxui::dim);
-                break;
-            }
+          }
+          content = std::get<eillance::messaging::MessageEntry>(entry.data).content;
+          auto timestamp_str = FormatTimestamp(entry.timestamp);
+          elements.push_back(ftxui::text(prefix + content + suffix));
+          elements.push_back(ftxui::text("  └─> " + timestamp_str) | ftxui::dim);
+          break;
         }
+        case eillance::messaging::HistoryEntryKind::voiceCall:
+        case eillance::messaging::HistoryEntryKind::videoCall: {
+          prefix = "[system]: ";
+          const auto& call_data = std::get<eillance::messaging::CallEntry>(entry.data);  // NOLINT
+          std::string call_type_str = (entry.kind == eillance::messaging::HistoryEntryKind::voiceCall ? "Voice" : "Video");
+          std::string direction_str = (call_data.call_direction == eillance::messaging::CallDirection::incoming ? "Incoming" : "Outgoing");
+          std::string status_str;
+          switch (call_data.call_status) {
+            case eillance::messaging::CallStatus::answered:
+              status_str = "Answered";
+              break;
+            case eillance::messaging::CallStatus::missed:
+              status_str = "Missed";
+              break;
+            case eillance::messaging::CallStatus::rejected:
+              status_str = "Rejected";
+              break;
+            case eillance::messaging::CallStatus::busy:
+              status_str = "Busy";
+              break;
+          }
+          content = "--- " + direction_str + " " + call_type_str + " Call (" + status_str + ") ---";
+          auto timestamp_str = FormatTimestamp(entry.timestamp);
+          elements.push_back(ftxui::text(prefix + content) | ftxui::dim);
+          elements.push_back(ftxui::text("  └─> " + timestamp_str) | ftxui::dim);
+          break;
+        }
+      }
     }
     // Add a focusable invisible element at the end to scroll down automatically.
-    if (!elements.empty()) {
-        elements.back() |= ftxui::focus;
-    }
+    if (!elements.empty()) { elements.back() |= ftxui::focus; }
     return ftxui::vbox(std::move(elements)) | ftxui::yframe;
   });
 
@@ -251,9 +281,7 @@ int main(int argc, char** argv) {
   // The input component only forwards the user input to the ViewModel.
   input_component |= ftxui::CatchEvent([&](const ftxui::Event& event) {
     if (event == ftxui::Event::Return) {
-      if (view_model->ProcessCliInput(input_content)) {
-        screen.Exit();
-      }
+      if (view_model->ProcessCliInput(input_content)) { screen.Exit(); }
       input_content.clear();
       return true;
     }
@@ -273,14 +301,8 @@ int main(int argc, char** argv) {
     // Inform the ViewModel of the currently selected item in the UI.
     view_model->SelectContactByIndex(contact_menu_selected);
 
-    const auto main_view = ftxui::hbox({
-        contact_menu->Render() | ftxui::size(ftxui::WIDTH, ftxui::EQUAL, 40) | ftxui::border,
-        ftxui::vbox({
-            chat_renderer->Render() | ftxui::flex,
-            ftxui::separator(),
-            input_component->Render()
-        }) | ftxui::flex
-    });
+    constexpr auto contact_list_width = 40;
+    const auto main_view = ftxui::hbox({contact_menu->Render() | ftxui::size(ftxui::WIDTH, ftxui::EQUAL, contact_list_width) | ftxui::border, ftxui::vbox({chat_renderer->Render() | ftxui::flex, ftxui::separator(), input_component->Render()}) | ftxui::flex});
 
     const auto status_line = " Mercury CLI | Your ID: " + state.my_id + " | Status: " + std::string(GetConnectionStatusString(state.connection_state));
     return ftxui::window(ftxui::text(status_line), main_view);
@@ -290,10 +312,7 @@ int main(int argc, char** argv) {
   screen.Loop(layout);
 
   client->terminate();
-  if (client_thread.joinable()) {
-    client_thread.join();
-  }
+  if (client_thread.joinable()) { client_thread.join(); }
 
   return 0;
 }
-

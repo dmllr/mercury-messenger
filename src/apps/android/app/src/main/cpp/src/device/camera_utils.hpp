@@ -1,17 +1,16 @@
 #pragma once
 
 #include <array>
+#include <camera/NdkCameraError.h>
+#include <camera/NdkCameraManager.h>
 #include <cinttypes>
+#include <media/NdkImage.h>
+#include <nlohmann/json.hpp>
 #include <string>
 #include <type_traits>
 #include <typeinfo>
 #include <utility>
 #include <vector>
-
-#include <camera/NdkCameraError.h>
-#include <camera/NdkCameraManager.h>
-#include <media/NdkImage.h>
-#include <nlohmann/json.hpp>
 
 #include "eillance/logging/logging.h"
 
@@ -19,25 +18,25 @@
 namespace eillance {
 
 inline auto GetAvailableCameras() -> std::vector<std::pair<std::string, std::string>> {
-  ACameraManager* cameraManager = ACameraManager_create();
-  if (cameraManager == nullptr) {
+  ACameraManager* camera_manager = ACameraManager_create();
+  if (camera_manager == nullptr) {
     LOGE << "Failed to create camera manager";
     return {};
   }
 
-  ACameraIdList* cameraIdList = nullptr;
-  if (ACameraManager_getCameraIdList(cameraManager, &cameraIdList) != ACAMERA_OK) {
+  ACameraIdList* camera_id_list = nullptr;
+  if (ACameraManager_getCameraIdList(camera_manager, &camera_id_list) != ACAMERA_OK) {
     LOGE << "Failed to get camera ID list";
-    ACameraManager_delete(cameraManager);
+    ACameraManager_delete(camera_manager);
     return {};
   }
 
   std::vector<std::pair<std::string, std::string>> cameras;
-  for (int i = 0; i < cameraIdList->numCameras; ++i) {
-    const char* camera_id = cameraIdList->cameraIds[i];
+  for (int i = 0; i < camera_id_list->numCameras; ++i) {
+    const char* camera_id = camera_id_list->cameraIds[i];
 
     ACameraMetadata* metadata = nullptr;
-    if (ACameraManager_getCameraCharacteristics(cameraManager, camera_id, &metadata) != ACAMERA_OK) {
+    if (ACameraManager_getCameraCharacteristics(camera_manager, camera_id, &metadata) != ACAMERA_OK) {
       LOGE << "Failed to get camera characteristics for camera ID: " << camera_id;
       continue;
     }
@@ -51,13 +50,13 @@ inline auto GetAvailableCameras() -> std::vector<std::pair<std::string, std::str
     ACameraMetadata_free(metadata);
   }
 
-  ACameraManager_deleteCameraIdList(cameraIdList);
-  ACameraManager_delete(cameraManager);
+  ACameraManager_deleteCameraIdList(camera_id_list);
+  ACameraManager_delete(camera_manager);
 
   return cameras;
 }
 
-inline auto GetSupportedResolutions(const std::string& cameraId) -> std::vector<std::pair<int32_t, int32_t>> {
+inline auto GetSupportedResolutions(const std::string& camera_id) -> std::vector<std::pair<int32_t, int32_t>> {
   ACameraManager* camera_manager = ACameraManager_create();
   if (camera_manager == nullptr) {
     LOGE << "Failed to create camera manager";
@@ -65,8 +64,8 @@ inline auto GetSupportedResolutions(const std::string& cameraId) -> std::vector<
   }
 
   ACameraMetadata* metadata = nullptr;
-  if (ACameraManager_getCameraCharacteristics(camera_manager, cameraId.c_str(), &metadata) != ACAMERA_OK) {
-    LOGE << "Failed to get camera characteristics for camera ID: " << cameraId.c_str();
+  if (ACameraManager_getCameraCharacteristics(camera_manager, camera_id.c_str(), &metadata) != ACAMERA_OK) {
+    LOGE << "Failed to get camera characteristics for camera ID: " << camera_id.c_str();
     ACameraManager_delete(camera_manager);
     return {};
   }
@@ -75,9 +74,7 @@ inline auto GetSupportedResolutions(const std::string& cameraId) -> std::vector<
   std::vector<std::pair<int32_t, int32_t>> resolutions;
   if (ACameraMetadata_getConstEntry(metadata, ACAMERA_SCALER_AVAILABLE_STREAM_CONFIGURATIONS, &entry) == ACAMERA_OK) {
     for (uint32_t i = 0; i < entry.count; i += 4) {
-      if (entry.data.i32[i + 3] == ACAMERA_SCALER_AVAILABLE_STREAM_CONFIGURATIONS_OUTPUT) {
-        resolutions.emplace_back(entry.data.i32[i + 1], entry.data.i32[i + 2]);
-      }
+      if (entry.data.i32[i + 3] == ACAMERA_SCALER_AVAILABLE_STREAM_CONFIGURATIONS_OUTPUT) { resolutions.emplace_back(entry.data.i32[i + 1], entry.data.i32[i + 2]); }
     }
   }
 
@@ -92,7 +89,7 @@ inline auto GetDeviceProfileAsJson() -> nlohmann::json {
   auto cameras = GetAvailableCameras();
   auto cameras_json = Json::array();
 
-  for (const auto& camera: cameras) {
+  for (const auto& camera : cameras) {
     Json camera_json{};
     camera_json["id"] = camera.first;
     camera_json["name"] = camera.second;
@@ -104,7 +101,7 @@ inline auto GetDeviceProfileAsJson() -> nlohmann::json {
     resolutions.erase(last, resolutions.end());
 
     Json resolutions_json = Json::array();
-    for (const auto& res: resolutions) {
+    for (const auto& res : resolutions) {
       resolutions_json.push_back({{"width", res.first}, {"height", res.second}});
     }
 
@@ -115,21 +112,17 @@ inline auto GetDeviceProfileAsJson() -> nlohmann::json {
   return cameras_json;
 }
 
-template<typename T, std::size_t N>
-constexpr const char* GetPairStr(T key, const std::array<std::pair<T, const char*>, N>& store) {
-  for (const auto& pair: store) {
-    if (pair.first == key) {
-      return pair.second;
-    }
+template <typename T, std::size_t N>
+constexpr auto GetPairStr(T key, const std::array<std::pair<T, const char*>, N>& store) -> const char* {
+  for (const auto& pair : store) {
+    if (pair.first == key) { return pair.second; }
   }
-  if (!std::is_constant_evaluated()) {
-    Log::w("(%#08x) : UNKNOWN TAG for %s", key, typeid(store[0].first).name());
-  }
+  if (!std::is_constant_evaluated()) { Log::w("(%#08x) : UNKNOWN TAG for %s", key, typeid(store[0].first).name()); }
   return "UNKNOWN";
 }
 
 using ErrorPair = std::pair<camera_status_t, const char*>;
-static constexpr std::array<ErrorPair, 15> cameraErrorInfo{{
+static constexpr std::array<ErrorPair, 15> camera_error_info{{
     {ACAMERA_OK, "ACAMERA_OK"},
     {ACAMERA_ERROR_UNKNOWN, "ACAMERA_ERROR_UNKNOWN"},
     {ACAMERA_ERROR_INVALID_PARAMETER, "ACAMERA_ERROR_INVALID_PARAMETER"},
@@ -148,7 +141,7 @@ static constexpr std::array<ErrorPair, 15> cameraErrorInfo{{
 }};
 
 using DevErrorPair = std::pair<int, const char*>;
-static constexpr std::array<DevErrorPair, 5> cameraDeviceErrorInfo{{
+static constexpr std::array<DevErrorPair, 5> camera_device_error_info{{
     {ERROR_CAMERA_IN_USE, "ERROR_CAMERA_IN_USE"},
     {ERROR_MAX_CAMERAS_IN_USE, "ERROR_MAX_CAMERAS_IN_USE"},
     {ERROR_CAMERA_DISABLED, "ERROR_CAMERA_DISABLED"},
@@ -156,12 +149,12 @@ static constexpr std::array<DevErrorPair, 5> cameraDeviceErrorInfo{{
     {ERROR_CAMERA_SERVICE, "ERROR_CAMERA_SERVICE"},
 }};
 
-constexpr const char* GetErrorStr(camera_status_t err) {
-  return GetPairStr<camera_status_t, 15>(err, cameraErrorInfo);
+constexpr auto GetErrorStr(camera_status_t err) -> const char* {
+  return GetPairStr<camera_status_t, std::size(camera_error_info)>(err, camera_error_info);
 }
 
-constexpr const char* GetCameraDeviceErrorStr(int err) {
-  return GetPairStr<int, 5>(err, cameraDeviceErrorInfo);
+constexpr auto GetCameraDeviceErrorStr(int err) -> const char* {
+  return GetPairStr<int, std::size(camera_device_error_info)>(err, camera_device_error_info);
 }
 
 }  // namespace eillance
