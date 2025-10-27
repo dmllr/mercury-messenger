@@ -2,15 +2,15 @@
 
 #include <jni.h>
 #include <memory>
-#include <string>
 #include <mutex>
+#include <string>
 #include <unordered_map>
 
-#include <nlohmann/json.hpp>
-#include "eillance/transport/transport.hpp"
+#include "../utils/jni_utils.hpp"
 #include "eillance/logging/logging.h"
 #include "eillance/transport/peer.hpp"
-#include "../utils/jni_utils.hpp"
+#include "eillance/transport/transport.hpp"
+#include <nlohmann/json.hpp>
 
 namespace eillance::transport {
 
@@ -282,7 +282,7 @@ inline void AndroidRtcTransport::createDataChannel(const std::string& peer_id) {
 }
 
 
-} // namespace eillance::transport
+}  // namespace eillance::transport
 
 // --- JNI Callbacks ---
 
@@ -330,7 +330,7 @@ Java_hela_eillance_webrtc_WebRtcTransport_nativeOnSystemMessage(JNIEnv* env, job
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_hela_eillance_webrtc_WebRtcTransport_nativeOnSignalingError(JNIEnv *env, jobject, jlong native_ptr, jstring peer_id, jstring error) {
+Java_hela_eillance_webrtc_WebRtcTransport_nativeOnSignalingError(JNIEnv* env, jobject, jlong native_ptr, jstring peer_id, jstring error) {
   auto* transport = reinterpret_cast<eillance::transport::AndroidRtcTransport*>(native_ptr);
   if (transport && transport->delegate()) {
     const char* peer_id_chars = env->GetStringUTFChars(peer_id, nullptr);

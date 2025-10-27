@@ -20,9 +20,9 @@ extern "C" {
 #include <combaseapi.h>
 #endif
 
+#include "eillance/logging/logging.h"
 #include "eillance/utils/packet.hpp"
 #include "eillance/utils/time.hpp"
-#include "eillance/logging/logging.h"
 
 namespace eillance {
 
@@ -40,8 +40,8 @@ class VideoEncoderCli {
 
   // List of preferred codecs in priority order
   static constexpr std::array<AVCodecID, 1> preferred_codecs = {
-      AV_CODEC_ID_H264,    // try H.264 codec first
-  }; 
+      AV_CODEC_ID_H264,  // try H.264 codec first
+  };
 
   bool SetupCodecContext(const AVCodec* codec, int width, int height, int framerate) {
     codec_context_ = avcodec_alloc_context3(codec);
@@ -53,9 +53,9 @@ class VideoEncoderCli {
     codec_context_->height = height;
     codec_context_->time_base = AVRational{1, framerate};
     codec_context_->framerate = AVRational{framerate, 1};
-    codec_context_->thread_count = 4; // Using 4 threads for efficient CPU usage
-    codec_context_->gop_size = 50;    // Larger GOP size for reduced CPU load
-    codec_context_->max_b_frames = 0; // No B-frames for lower latency
+    codec_context_->thread_count = 4;  // Using 4 threads for efficient CPU usage
+    codec_context_->gop_size = 50;     // Larger GOP size for reduced CPU load
+    codec_context_->max_b_frames = 0;  // No B-frames for lower latency
     codec_context_->pix_fmt = codecDestPixelFormat;
 
 #ifdef _WIN32
@@ -89,7 +89,7 @@ public:
     CoUninitialize();
 #endif
     const AVCodec* codec = nullptr;
-    for (const auto& codec_id : preferred_codecs) {
+    for (const auto& codec_id: preferred_codecs) {
       codec = avcodec_find_encoder(codec_id);
       if (codec && SetupCodecContext(codec, width, height, framerate)) {
         LOGD << "Using codec: [" << codec->id << "] " << codec->name << " | " << codec->long_name;

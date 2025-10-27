@@ -25,7 +25,7 @@ constexpr int hex_char_to_int(char c) {
   if (c >= 'A' && c <= 'F') return c - 'A' + 10;
   return -1;
 }
-}
+}  // namespace
 
 /// @brief Convert binary data to a hex string
 [[nodiscard]] static constexpr std::string ToHex(const std::vector<std::byte>& data) {
@@ -119,7 +119,7 @@ public:
     if (PEM_write_bio_PrivateKey(bio.get(), pkey_.get(), nullptr, nullptr, 0, nullptr, nullptr) <= 0) {
       return "";
     }
-    BUF_MEM* buffer_ptr = nullptr; // NOLINT(*-const-correctness)
+    BUF_MEM* buffer_ptr = nullptr;  // NOLINT(*-const-correctness)
     BIO_get_mem_ptr(bio.get(), &buffer_ptr);
     if ((buffer_ptr == nullptr) || (buffer_ptr->data == nullptr) || buffer_ptr->length == 0) {
       return "";

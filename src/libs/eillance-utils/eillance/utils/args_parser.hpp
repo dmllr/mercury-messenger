@@ -1,17 +1,17 @@
 #pragma once
 
-#include <string>
-#include <vector>
-#include <unordered_map>
-#include <optional>
 #include <algorithm>
 #include <charconv>
 #include <iostream>
+#include <optional>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 struct ArgsParser final {
-  ArgsParser(int &argc, char **argv) {
+  ArgsParser(int& argc, char** argv) {
     for (int i = 1; i < argc; ++i) {
-      std::string token(argv[i]); // NOLINT(*-pro-bounds-pointer-arithmetic)
+      std::string token(argv[i]);  // NOLINT(*-pro-bounds-pointer-arithmetic)
       auto pos = token.find('=');
       if (pos != std::string::npos) {
         std::string key = token.substr(0, pos);
@@ -23,13 +23,13 @@ struct ArgsParser final {
     }
   }
 
-  [[nodiscard]] std::optional<std::string> Get(const std::string &option) const {
+  [[nodiscard]] std::optional<std::string> Get(const std::string& option) const {
     auto it = key_value_map_.find(option);
     if (it != key_value_map_.end()) {
       return it->second;
     }
     auto itr = std::find(tokens_.begin(), tokens_.end(), option);
-    if (itr != tokens_.end() && ++itr != tokens_.end()) { // NOLINT(*-inc-dec-in-conditions)
+    if (itr != tokens_.end() && ++itr != tokens_.end()) {  // NOLINT(*-inc-dec-in-conditions)
       return *itr;
     }
     return std::nullopt;
@@ -42,7 +42,7 @@ struct ArgsParser final {
     return std::nullopt;
   }
 
-  [[nodiscard]] std::optional<int> GetInt(const std::string &option) const {
+  [[nodiscard]] std::optional<int> GetInt(const std::string& option) const {
     auto str_val = Get(option);
     if (!str_val) return std::nullopt;
 
@@ -56,9 +56,8 @@ struct ArgsParser final {
     return std::nullopt;
   }
 
-  [[nodiscard]] bool Has(const std::string &option) const {
-    return key_value_map_.contains(option)
-           || std::find(tokens_.begin(), tokens_.end(), option) != tokens_.end();
+  [[nodiscard]] bool Has(const std::string& option) const {
+    return key_value_map_.contains(option) || std::find(tokens_.begin(), tokens_.end(), option) != tokens_.end();
   }
 
 private:

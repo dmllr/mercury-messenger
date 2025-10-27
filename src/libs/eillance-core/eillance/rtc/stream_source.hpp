@@ -18,7 +18,7 @@ class StreamSource final : public Stream::Source {
 
 public:
   ~StreamSource() = default;
-  explicit StreamSource(Capture capture) : capture_(std::move(capture)){};
+  explicit StreamSource(Capture capture) : capture_(std::move(capture)) {};
   StreamSource(StreamSource&&) = delete;
   StreamSource(const StreamSource&) = delete;
   StreamSource& operator=(StreamSource&&) = delete;

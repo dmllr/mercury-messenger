@@ -19,7 +19,7 @@ It operates without traditional registration; users are identified solely via an
 
 Project Mercury is built around a strict separation of concerns where the **Core** module acts as the sole engine of the application.
 
-End applications (Android, CLI, etc.) are designed to be extremely thin wrappers—they are the user interface and platform liaison, handling device-specific concerns (like rendering, input events, and permissions). All core business logic, state management, cryptography, and network orchestration must reside exclusively within the Core module.
+End applications (Android, CLI, etc.) are designed to be extremely thin wrappers - they are the user interface and platform liaison, handling device-specific concerns (like rendering, input events, and permissions). All core business logic, state management, cryptography, and network orchestration must reside exclusively within the Core module.
 
 ### Component Breakdown
 

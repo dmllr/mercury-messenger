@@ -20,4 +20,4 @@ inline auto AttachCurrentThreadIfNeeded(JavaVM* jvm) -> JNIEnv* {
   }
 }
 
-} // namespace eillance::jni
+}  // namespace eillance::jni

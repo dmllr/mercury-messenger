@@ -16,11 +16,11 @@
 #include "eillance/rtc/stream.hpp"
 #include "eillance/rtc/stream_source.hpp"
 #include "eillance/storage/persistent_storage.hpp"
+#include "eillance/transport/candidate.hpp"
+#include "eillance/transport/peer.hpp"
+#include "eillance/transport/peer_connection_state.h"
 #include "eillance/transport/transport.hpp"
 #include "eillance/transport/transport_delegate.hpp"
-#include "eillance/transport/peer_connection_state.h"
-#include "eillance/transport/peer.hpp"
-#include "eillance/transport/candidate.hpp"
 #include "eillance/utils/memory.h"
 
 namespace eillance {
@@ -213,8 +213,7 @@ inline void Client::InitializeAVStream() {
   }
   av_stream_ = std::make_shared<Stream>(
       std::make_shared<StreamSource>(std::move(*video_capture_)),
-      std::make_shared<StreamSource>(std::move(*audio_capture_))
-  );
+      std::make_shared<StreamSource>(std::move(*audio_capture_)));
   av_stream_->OnSample([this](Stream::Source::Type type, uint64_t sample_time, const std::vector<std::byte>& sample) {
     sendSampleToPeers(sample, type, sample_time);
   });
@@ -327,7 +326,7 @@ inline void Client::acceptCall(const std::string& peer_id) {
 
   if (!peer->pending_candidates.empty()) {
     LOGI << "Applying " << peer->pending_candidates.size() << " buffered ICE candidates for " << peer_id;
-    for (const auto& candidate : peer->pending_candidates) {
+    for (const auto& candidate: peer->pending_candidates) {
       transport_->addRemoteCandidate(peer_id, "media", candidate.sdp, candidate.mid);
     }
     peer->pending_candidates.clear();
@@ -408,7 +407,7 @@ inline void Client::hangup(const std::string& peer_id) const {
   }
 }
 inline void Client::configure(const Config& config) const {
-  if(av_stream_) {
+  if (av_stream_) {
     av_stream_->Video()->Configure(config);
     av_stream_->Audio()->Configure(config);
   }
@@ -450,14 +449,14 @@ inline void Client::processPeerMessage(Json message) {
     if (!peer) {
       LOGI << "Received media message for unknown peer " << peer_id << ". Creating peer object first.";
       peer = std::make_shared<Peer>(peer_id);
-      transport_->addPeer(peer_id, peer); // NOLINT
+      transport_->addPeer(peer_id, peer);  // NOLINT
     }
     if (type == "offer") {
       LOGD << "Received media offer from " << peer_id << ". Storing it and notifying UI.";
       peer->pending_offer_sdp = message["sdp"].get<std::string>();
       auto call_type = (peer->pending_offer_sdp->find("m=video") != std::string::npos)
-                       ? messaging::HistoryEntryKind::videoCall
-                       : messaging::HistoryEntryKind::voiceCall;
+                           ? messaging::HistoryEntryKind::videoCall
+                           : messaging::HistoryEntryKind::voiceCall;
       (*on_incoming_call_)(peer_id, call_type);
     } else if (type == "candidate") {
       const auto candidate_str = message["candidate"].get<std::string>();
@@ -470,7 +469,8 @@ inline void Client::processPeerMessage(Json message) {
       }
     } else if (peer->has_media_peer_connection_ && type == "answer") {
       const auto sdp = message["sdp"].get<std::string>();
-      LOGD << "Remote SDP (" << type << ") for " << peer_id << " context " << context << ":\n" << sdp;
+      LOGD << "Remote SDP (" << type << ") for " << peer_id << " context " << context << ":\n"
+           << sdp;
       transport_->setRemoteDescription(peer_id, "media", sdp, type);
     } else {
       LOGW << "Received media message of type '" << type << "' for " << peer_id << " in an unexpected state.";
@@ -481,28 +481,28 @@ inline void Client::processPeerMessage(Json message) {
   // Handle data channel signaling
   if (type == "offer") {
     auto peer = transport_->getPeer(peer_id);
-    if (peer) { // Glare condition
-      if (getId() > peer_id) { // This peer is "polite"
+    if (peer) {                 // Glare condition
+      if (getId() > peer_id) {  // This peer is "polite"
         LOGW << "Glare detected, polite peer yielding. Resetting connection to handle incoming offer from " << peer_id;
         transport_->closePeerConnection(peer_id, "data");
         transport_->removePeer(peer_id);
         // After removing, the 'peer' pointer is stale. Set to null to fall through to new connection logic.
         peer = nullptr;
-      } else { // This peer is "impolite"
+      } else {  // This peer is "impolite"
         LOGW << "Glare detected, and we are the 'impolite' peer. Ignoring incoming offer from " << peer_id;
-        return; // Let our outgoing offer attempt proceed.
+        return;  // Let our outgoing offer attempt proceed.
       }
     }
 
     // This block is now executed for new connections OR after a polite glare-handling reset.
     if (!peer) {
-        peer = std::make_shared<Peer>(peer_id);
-        transport_->addPeer(peer_id, peer);
-        setupDataChannel(peer, peer_id); // Set callback before creating the PC
-        transport_->createDataPeerConnection(peer_id);
-        const auto sdp = message["sdp"].get<std::string>();
-        transport_->setRemoteDescription(peer_id, "data", sdp, "offer");
-        transport_->createAnswer(peer_id, "data");
+      peer = std::make_shared<Peer>(peer_id);
+      transport_->addPeer(peer_id, peer);
+      setupDataChannel(peer, peer_id);  // Set callback before creating the PC
+      transport_->createDataPeerConnection(peer_id);
+      const auto sdp = message["sdp"].get<std::string>();
+      transport_->setRemoteDescription(peer_id, "data", sdp, "offer");
+      transport_->createAnswer(peer_id, "data");
     }
   } else if (type == "answer") {
     const auto sdp = message["sdp"].get<std::string>();
@@ -534,7 +534,7 @@ inline void Client::processPeerMessage(Json message) {
 inline void Client::processSystemMessage(const std::string& type, Json message) {
   if (type == "peers" && on_peer_list_update_) {
     std::vector<Device> peers;
-    for (const auto& peer_json : message.at("peers")) {
+    for (const auto& peer_json: message.at("peers")) {
       Device d;
       d.id = peer_json.at("id").get<std::string>();
       d.name = peer_json.value("name", d.id);
@@ -562,7 +562,7 @@ inline auto Client::sendChatMessage(const std::string& peer_id, const std::strin
       LOGI << "Sent direct message to " << peer_id;
       message_history_->UpdateMessageStatus(peer_id, entry.id, messaging::MessageStatus::sent);
       entry.status = messaging::MessageStatus::sent;
-      return entry; // Success
+      return entry;  // Success
     }
   }
   LOGI << "Peer " << peer_id << " is offline or not ready, or send failed. Buffering message.";
@@ -625,7 +625,7 @@ inline void Client::updateAndNotifyPeerList() const {
     std::vector<Device> peer_list;
     {
       std::lock_guard<std::mutex> lock(online_peers_mutex_);
-      for (const auto& pair : online_peers_) {
+      for (const auto& pair: online_peers_) {
         peer_list.push_back(pair.second);
       }
     }
@@ -649,7 +649,7 @@ inline auto Client::directSend(const std::shared_ptr<Peer>& peer, const std::str
   return true;
 }
 inline void Client::sendSampleToPeers(const std::vector<std::byte>& sample, Stream::Source::Type type, std::uint64_t sample_time) const {
-  for (const auto& [id, peer] : transport_->getPeers()) {
+  for (const auto& [id, peer]: transport_->getPeers()) {
     if (peer->GetState() == Peer::State::ready) {
       auto track = (type == Stream::Source::Type::video) ? peer->video_ : peer->audio_;
       if (track) {
@@ -726,7 +726,7 @@ inline void Client::processDataChannelMessage(const std::string& peer_id, const 
     message_history_->UpdateMessageStatus(peer_id, message_id, status);
   } else if (type == "message_read") {
     auto message_ids = message.at("message_ids").get<std::vector<std::uint64_t>>();
-    for (const auto& msg_id : message_ids) {
+    for (const auto& msg_id: message_ids) {
       const Json receipt = {
           {"type", "message_receipt"},
           {"status", "read"},
@@ -749,7 +749,7 @@ inline void Client::sendQueuedMessages(const std::string& peer_id) const {
     return;
   }
   LOGI << "Sending " << messages.size() << " queued messages to " << peer_id;
-  for (const auto& msg : messages) {
+  for (const auto& msg: messages) {
     try {
       Json const message = Json::parse(msg.content);
       const auto type = message.value("type", "");
@@ -774,17 +774,17 @@ inline void Client::sendQueuedMessages(const std::string& peer_id) const {
   message_queue_->Clear(peer_id);
 }
 inline void Client::setupDataChannel(const std::shared_ptr<Peer>& peer, const std::string& peer_id) {
-  peer->on_data_channel_message_ = [this, peer_id, peer](const std::string& msg){
+  peer->on_data_channel_message_ = [this, peer_id, peer](const std::string& msg) {
     processDataChannelMessage(peer_id, nlohmann::json::parse(msg));
   };
 }
 inline auto Client::parseDeviceProfile(const Json& jprofile) -> Device::Profile {
   Device::Profile profile;
-  for (const auto& cam_item : jprofile) {
+  for (const auto& cam_item: jprofile) {
     Device::Camera camera;
     camera.id = cam_item.at("id").get<std::string>();
     camera.name = cam_item.at("name").get<std::string>();
-    for (const auto& res_item : cam_item.at("resolutions")) {
+    for (const auto& res_item: cam_item.at("resolutions")) {
       camera.resolutions.push_back({res_item.at("width").get<uint16_t>(), res_item.at("height").get<uint16_t>()});
     }
     profile.push_back(camera);
@@ -792,4 +792,4 @@ inline auto Client::parseDeviceProfile(const Json& jprofile) -> Device::Profile 
   return profile;
 }
 
-} // namespace eillance
+}  // namespace eillance

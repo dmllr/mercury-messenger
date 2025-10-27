@@ -52,37 +52,42 @@ enum class HistoryEntryKind : std::uint8_t {
   systemMessage
 };
 
-NLOHMANN_JSON_SERIALIZE_ENUM(MessageDirection, {  // NOLINT
-  {MessageDirection::sent, "sent"},
-  {MessageDirection::received, "received"},
-})
+NLOHMANN_JSON_SERIALIZE_ENUM(MessageDirection, {
+                                                   // NOLINT
+                                                   {MessageDirection::sent, "sent"},
+                                                   {MessageDirection::received, "received"},
+                                               })
 
-NLOHMANN_JSON_SERIALIZE_ENUM(CallDirection, {  // NOLINT
-  {CallDirection::outgoing, "outgoing"},
-  {CallDirection::incoming, "incoming"},
-})
+NLOHMANN_JSON_SERIALIZE_ENUM(CallDirection, {
+                                                // NOLINT
+                                                {CallDirection::outgoing, "outgoing"},
+                                                {CallDirection::incoming, "incoming"},
+                                            })
 
-NLOHMANN_JSON_SERIALIZE_ENUM(CallStatus, {  // NOLINT
-  {CallStatus::answered, "answered"},
-  {CallStatus::missed, "missed"},
-  {CallStatus::rejected, "rejected"},
-  {CallStatus::busy, "busy"},
-})
+NLOHMANN_JSON_SERIALIZE_ENUM(CallStatus, {
+                                             // NOLINT
+                                             {CallStatus::answered, "answered"},
+                                             {CallStatus::missed, "missed"},
+                                             {CallStatus::rejected, "rejected"},
+                                             {CallStatus::busy, "busy"},
+                                         })
 
-NLOHMANN_JSON_SERIALIZE_ENUM(MessageStatus, {  // NOLINT
-  {MessageStatus::none, "none"},
-  {MessageStatus::sending, "sending"},
-  {MessageStatus::sent, "sent"},
-  {MessageStatus::delivered, "delivered"},
-  {MessageStatus::read, "read"},
-})
+NLOHMANN_JSON_SERIALIZE_ENUM(MessageStatus, {
+                                                // NOLINT
+                                                {MessageStatus::none, "none"},
+                                                {MessageStatus::sending, "sending"},
+                                                {MessageStatus::sent, "sent"},
+                                                {MessageStatus::delivered, "delivered"},
+                                                {MessageStatus::read, "read"},
+                                            })
 
-NLOHMANN_JSON_SERIALIZE_ENUM(HistoryEntryKind, {  // NOLINT
-  {HistoryEntryKind::textMessage, "text_message"},
-  {HistoryEntryKind::voiceCall, "voice_call"},
-  {HistoryEntryKind::videoCall, "video_call"},
-  {HistoryEntryKind::systemMessage, "system_message"},
-})
+NLOHMANN_JSON_SERIALIZE_ENUM(HistoryEntryKind, {
+                                                   // NOLINT
+                                                   {HistoryEntryKind::textMessage, "text_message"},
+                                                   {HistoryEntryKind::voiceCall, "voice_call"},
+                                                   {HistoryEntryKind::videoCall, "video_call"},
+                                                   {HistoryEntryKind::systemMessage, "system_message"},
+                                               })
 
 // Data specific to a text or system message.
 struct MessageEntry {
@@ -124,7 +129,8 @@ inline void to_json(nlohmann::json& j, const HistoryEntryRecord& e) {  // NOLINT
       j["call_direction"] = arg.call_direction;
       j["call_status"] = arg.call_status;
     }
-  }, e.data);
+  },
+             e.data);
 }
 
 inline void from_json(const nlohmann::json& j, HistoryEntryRecord& e) {  // NOLINT(*-identifier-naming)
@@ -273,12 +279,11 @@ public:
     LoadHistory(peer_id);
     auto& history = history_cache_[peer_id];
 
-    history.push_back({
-      .id = next_id_.fetch_add(1),
-      .kind = kind,
-      .timestamp = Time::Now(),
-      .direction = (direction == CallDirection::incoming) ? MessageDirection::received : MessageDirection::sent,  // NOLINT(*-branch-clone)
-      .data = CallEntry{.duration_seconds=duration, .call_direction=direction, .call_status=status}});
+    history.push_back({.id = next_id_.fetch_add(1),
+                       .kind = kind,
+                       .timestamp = Time::Now(),
+                       .direction = (direction == CallDirection::incoming) ? MessageDirection::received : MessageDirection::sent,  // NOLINT(*-branch-clone)
+                       .data = CallEntry{.duration_seconds = duration, .call_direction = direction, .call_status = status}});
     SaveHistory(peer_id);
   }
 
@@ -317,7 +322,7 @@ public:
     LoadHistory(peer_id);
 
     if (!history_cache_.contains(peer_id)) {
-      return {.messages={}, .total_messages=0};
+      return {.messages = {}, .total_messages = 0};
     }
 
     const auto& history = history_cache_.at(peer_id);
@@ -325,7 +330,7 @@ public:
 
     const size_t end_offset = page_index * page_size;
     if (end_offset >= total_size) {
-      return {.messages={}, .total_messages=total_size};
+      return {.messages = {}, .total_messages = total_size};
     }
 
     const size_t start_offset = std::min(total_size, (page_index + 1) * page_size);
@@ -334,7 +339,7 @@ public:
     const auto end_it = history.end() - end_offset;
 
     std::vector messages_page(start_it, end_it);
-    return {.messages=std::move(messages_page), .total_messages=total_size};
+    return {.messages = std::move(messages_page), .total_messages = total_size};
   }
 
   std::vector<ChatSummary> GetChatSummaries(const std::vector<std::string>& peer_ids) {
@@ -346,16 +351,14 @@ public:
       if (history_cache_.contains(peer_id) && !history_cache_.at(peer_id).empty()) {
         uint32_t unread_count = 0;
         const auto& history = history_cache_.at(peer_id);
-        for (const auto& entry : history) {
-            if (entry.direction == MessageDirection::received && entry.status != MessageStatus::read && entry.kind == HistoryEntryKind::textMessage) {
-                unread_count++;
-            }
+        for (const auto& entry: history) {
+          if (entry.direction == MessageDirection::received && entry.status != MessageStatus::read && entry.kind == HistoryEntryKind::textMessage) {
+            unread_count++;
+          }
         }
-        summaries.push_back({
-            .peer_id = peer_id,
-            .last_message = history_cache_.at(peer_id).back(),
-            .unread_count = unread_count
-        });
+        summaries.push_back({.peer_id = peer_id,
+                             .last_message = history_cache_.at(peer_id).back(),
+                             .unread_count = unread_count});
       }
     }
 

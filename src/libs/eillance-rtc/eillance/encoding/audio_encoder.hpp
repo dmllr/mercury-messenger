@@ -4,9 +4,9 @@
 
 #include <opus.h>
 
-#include "eillance/utils/packet.hpp"
 #include "eillance/capture/audio_config.hpp"
 #include "eillance/utils/likely.h"
+#include "eillance/utils/packet.hpp"
 
 namespace eillance {
 
@@ -33,7 +33,7 @@ public:
   }
 
   void Revoke() const {
-    if(opus_encoder_) opus_encoder_destroy(opus_encoder_);
+    if (opus_encoder_) opus_encoder_destroy(opus_encoder_);
   }
 
   Packet EncodeBuffer(const AudioConfig::SampleDataType* pcm_buffer) const {

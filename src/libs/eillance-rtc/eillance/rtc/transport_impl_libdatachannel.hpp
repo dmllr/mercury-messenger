@@ -5,21 +5,21 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
-#include <thread>
 #include <mutex>
+#include <thread>
 #include <unordered_map>
 
 #include <nlohmann/json.hpp>
 #include <rtc/rtc.hpp>
 #include <utility>
 
-#include "eillance/transport/transport.hpp"
-#include "eillance/transport/transport_delegate.hpp"
 #include "eillance/events/event_source.h"
 #include "eillance/events/service_connection_state.h"
-#include "eillance/transport/peer_connection_state.h"
 #include "eillance/logging/logging.h"
 #include "eillance/transport/peer.hpp"
+#include "eillance/transport/peer_connection_state.h"
+#include "eillance/transport/transport.hpp"
+#include "eillance/transport/transport_delegate.hpp"
 #include "eillance/utils/dispatch_queue.hpp"
 #include "eillance/utils/memory.h"
 
@@ -48,27 +48,33 @@ public:
   auto getTrack() const { return track_; }
 };
 
-} // namespace eillance::rtc
+}  // namespace eillance::rtc
 
 namespace eillance::rtc {
 namespace {
 eillance::transport::PeerConnectionState toEillanceState(::rtc::PeerConnection::State state) {
   switch (state) {
-    case ::rtc::PeerConnection::State::New: return eillance::transport::PeerConnectionState::New;
-    case ::rtc::PeerConnection::State::Connecting: return eillance::transport::PeerConnectionState::Connecting;
-    case ::rtc::PeerConnection::State::Connected: return eillance::transport::PeerConnectionState::Connected;
-    case ::rtc::PeerConnection::State::Disconnected: return eillance::transport::PeerConnectionState::Disconnected;
-    case ::rtc::PeerConnection::State::Failed: return eillance::transport::PeerConnectionState::Failed;
-    case ::rtc::PeerConnection::State::Closed: return eillance::transport::PeerConnectionState::Closed;
+    case ::rtc::PeerConnection::State::New:
+      return eillance::transport::PeerConnectionState::New;
+    case ::rtc::PeerConnection::State::Connecting:
+      return eillance::transport::PeerConnectionState::Connecting;
+    case ::rtc::PeerConnection::State::Connected:
+      return eillance::transport::PeerConnectionState::Connected;
+    case ::rtc::PeerConnection::State::Disconnected:
+      return eillance::transport::PeerConnectionState::Disconnected;
+    case ::rtc::PeerConnection::State::Failed:
+      return eillance::transport::PeerConnectionState::Failed;
+    case ::rtc::PeerConnection::State::Closed:
+      return eillance::transport::PeerConnectionState::Closed;
   }
-  return eillance::transport::PeerConnectionState::Closed; // Should not happen
+  return eillance::transport::PeerConnectionState::Closed;  // Should not happen
 }
-}
+}  // namespace
 
 class RtcTransport final : public transport::Transport::TransportInterface {
 public:
   using Json = nlohmann::json;
-  using Peer = transport::Peer; // Alias for convenience
+  using Peer = transport::Peer;  // Alias for convenience
   using StatusCallbackFunction = eillance::transport::Transport::StatusCallbackFunction;
 
   RtcTransport() = default;
@@ -186,12 +192,24 @@ public:
     peer_connection->onStateChange([this, peer_id, context, pc_sptr = peer_connection](::rtc::PeerConnection::State state) {
       std::string stateStr = "unknown";
       switch (state) {
-        case ::rtc::PeerConnection::State::New: stateStr = "New"; break;
-        case ::rtc::PeerConnection::State::Connecting: stateStr = "Connecting"; break;
-        case ::rtc::PeerConnection::State::Connected: stateStr = "Connected"; break;
-        case ::rtc::PeerConnection::State::Disconnected: stateStr = "Disconnected"; break;
-        case ::rtc::PeerConnection::State::Failed: stateStr = "Failed"; break;
-        case ::rtc::PeerConnection::State::Closed: stateStr = "Closed"; break;
+        case ::rtc::PeerConnection::State::New:
+          stateStr = "New";
+          break;
+        case ::rtc::PeerConnection::State::Connecting:
+          stateStr = "Connecting";
+          break;
+        case ::rtc::PeerConnection::State::Connected:
+          stateStr = "Connected";
+          break;
+        case ::rtc::PeerConnection::State::Disconnected:
+          stateStr = "Disconnected";
+          break;
+        case ::rtc::PeerConnection::State::Failed:
+          stateStr = "Failed";
+          break;
+        case ::rtc::PeerConnection::State::Closed:
+          stateStr = "Closed";
+          break;
       }
       LOGI << "Peer " << peer_id << " (" << context << ") state changed to " << stateStr << " (" << static_cast<int>(state) << ")";
       reportPeerStateChange(peer_id, EventSource::peerConnectionState, static_cast<int>(toEillanceState(state)));
@@ -205,17 +223,17 @@ public:
       } else if (state == ::rtc::PeerConnection::State::Closed) {
         auto current_peer = getPeer(peer_id);
         if (current_peer) {
-            auto current_pc = (context == "data")
-                              ? std::static_pointer_cast<::rtc::PeerConnection>(current_peer->data_peer_connection_)
-                              : std::static_pointer_cast<::rtc::PeerConnection>(current_peer->media_peer_connection_);
+          auto current_pc = (context == "data")
+                                ? std::static_pointer_cast<::rtc::PeerConnection>(current_peer->data_peer_connection_)
+                                : std::static_pointer_cast<::rtc::PeerConnection>(current_peer->media_peer_connection_);
 
-            if (current_pc == pc_sptr) {
-                LOGI << "Active peer connection for " << peer_id << " (" << context << ") closed. Client layer is responsible for removal.";
-            } else {
-                LOGI << "Ignoring 'Closed' event from stale peer connection for " << peer_id << " (" << context << ").";
-            }
+          if (current_pc == pc_sptr) {
+            LOGI << "Active peer connection for " << peer_id << " (" << context << ") closed. Client layer is responsible for removal.";
+          } else {
+            LOGI << "Ignoring 'Closed' event from stale peer connection for " << peer_id << " (" << context << ").";
+          }
         } else {
-            LOGI << "Ignoring 'Closed' event for already removed peer " << peer_id << " (" << context << ").";
+          LOGI << "Ignoring 'Closed' event for already removed peer " << peer_id << " (" << context << ").";
         }
       }
     });
@@ -257,7 +275,7 @@ public:
     peer_connection->onTrack([this, peer_id](const std::shared_ptr<::rtc::Track>& track) {
       assert(delegate_);
       if (track->mid().find("video") != std::string::npos) {
-        track->onMessage([this, peer_id](::rtc::message_variant var){
+        track->onMessage([this, peer_id](::rtc::message_variant var) {
           if (std::holds_alternative<::rtc::binary>(var)) {
             delegate_->onFrameReceived(peer_id, std::get<::rtc::binary>(var));
           }
@@ -322,9 +340,9 @@ public:
     });
 
     if (peer->on_data_channel_message_) {
-        dc->onMessage(nullptr, [cb = peer->on_data_channel_message_](const std::string& msg){
-          cb(msg);
-        });
+      dc->onMessage(nullptr, [cb = peer->on_data_channel_message_](const std::string& msg) {
+        cb(msg);
+      });
     }
 
     peer->data_channel_ = dc;
@@ -335,7 +353,7 @@ public:
     if (!peer) return;
     auto pc = (context == "data") ? std::static_pointer_cast<::rtc::PeerConnection>(peer->data_peer_connection_)
                                   : std::static_pointer_cast<::rtc::PeerConnection>(peer->media_peer_connection_);
-    if(pc) pc->close();
+    if (pc) pc->close();
   }
 
   void createOffer(const std::string& peer_id, const std::string& context) override {
@@ -343,7 +361,7 @@ public:
     if (!peer) return;
     auto pc = (context == "data") ? std::static_pointer_cast<::rtc::PeerConnection>(peer->data_peer_connection_)
                                   : std::static_pointer_cast<::rtc::PeerConnection>(peer->media_peer_connection_);
-    if(pc) pc->setLocalDescription();
+    if (pc) pc->setLocalDescription();
   }
 
   void createAnswer(const std::string& peer_id, const std::string& context) override {
@@ -351,7 +369,7 @@ public:
     if (!peer) return;
     auto pc = (context == "data") ? std::static_pointer_cast<::rtc::PeerConnection>(peer->data_peer_connection_)
                                   : std::static_pointer_cast<::rtc::PeerConnection>(peer->media_peer_connection_);
-    if(pc) pc->setLocalDescription(::rtc::Description::Type::Answer);
+    if (pc) pc->setLocalDescription(::rtc::Description::Type::Answer);
   }
 
   void setRemoteDescription(const std::string& peer_id, const std::string& context, const std::string& sdp, const std::string& type) override {
@@ -359,14 +377,14 @@ public:
     if (!peer) return;
     auto pc = (context == "data") ? std::static_pointer_cast<::rtc::PeerConnection>(peer->data_peer_connection_)
                                   : std::static_pointer_cast<::rtc::PeerConnection>(peer->media_peer_connection_);
-    if(pc) pc->setRemoteDescription(::rtc::Description(sdp, type));
+    if (pc) pc->setRemoteDescription(::rtc::Description(sdp, type));
   }
   void addRemoteCandidate(const std::string& peer_id, const std::string& context, const std::string& candidate, const std::string& mid) override {
     auto peer = getPeer(peer_id);
     if (!peer) return;
     auto pc = (context == "data") ? std::static_pointer_cast<::rtc::PeerConnection>(peer->data_peer_connection_)
                                   : std::static_pointer_cast<::rtc::PeerConnection>(peer->media_peer_connection_);
-    if(pc) pc->addRemoteCandidate(::rtc::Candidate(candidate, mid));
+    if (pc) pc->addRemoteCandidate(::rtc::Candidate(candidate, mid));
   }
 
 private:
@@ -405,7 +423,7 @@ private:
     const std::lock_guard<std::mutex> lock(message_queue_mutex_);
     if (!message_queue_.empty()) {
       LOGI << "Flushing " << message_queue_.size() << " queued signaling messages.";
-      for (const auto& msg : message_queue_) {
+      for (const auto& msg: message_queue_) {
         ws_->send(msg);
       }
       message_queue_.clear();
@@ -422,7 +440,7 @@ private:
     }
 
     auto peers_to_close = getPeers();
-    for (const auto& [id, peer] : peers_to_close) {
+    for (const auto& [id, peer]: peers_to_close) {
       if (peer && peer->data_peer_connection_) {
         std::static_pointer_cast<::rtc::PeerConnection>(peer->data_peer_connection_)->close();
       }
@@ -613,7 +631,7 @@ private:
     }
   };
 
-#if 0 // NOLINT(*-avoid-unconditional-preprocessor-if)
+#if 0  // NOLINT(*-avoid-unconditional-preprocessor-if)
   constexpr static auto signalingServerUrl = "wss://app.hela.me:8000";
 #else
 #if ANDROID
@@ -624,4 +642,4 @@ private:
 #endif
 };
 
-} // namespace eillance::rtc
+}  // namespace eillance::rtc

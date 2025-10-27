@@ -21,9 +21,9 @@ enum class ContactStatus {
 NLOHMANN_JSON_SERIALIZE_ENUM(  // NOLINT
     ContactStatus,
     {
-      {ContactStatus::pendingApproval, "pending_approval"},
-      {ContactStatus::awaitingApproval, "awaiting_approval"},
-      {ContactStatus::confirmed, "confirmed"},
+        {ContactStatus::pendingApproval, "pending_approval"},
+        {ContactStatus::awaitingApproval, "awaiting_approval"},
+        {ContactStatus::confirmed, "confirmed"},
     })
 
 struct Contact {
@@ -39,8 +39,8 @@ inline void to_json(nlohmann::json& j, const Contact& c) {
 }
 
 inline void from_json(const nlohmann::json& j, Contact& c) {
-    j.at("peer_id").get_to(c.peer_id);
-    j.at("status").get_to(c.status);
+  j.at("peer_id").get_to(c.peer_id);
+  j.at("status").get_to(c.status);
 }
 
 class ContactManager {
@@ -68,7 +68,7 @@ public:
       LOGW << "Contact " << peer_id << " already exists.";
       return false;
     }
-    contacts_[peer_id] = {.peer_id=peer_id, .status=ContactStatus::pendingApproval};
+    contacts_[peer_id] = {.peer_id = peer_id, .status = ContactStatus::pendingApproval};
 
     // Save to persistent storage. The UI update is triggered by the caller
     // regardless of the save result, making it feel responsive.
@@ -84,7 +84,7 @@ public:
     if (contacts_.contains(peer_id) && contacts_[peer_id].status == ContactStatus::confirmed) {
       return false;  // Already confirmed
     }
-    contacts_[peer_id] = {.peer_id=peer_id, .status=ContactStatus::awaitingApproval};
+    contacts_[peer_id] = {.peer_id = peer_id, .status = ContactStatus::awaitingApproval};
     return SaveContacts();
   }
 
@@ -153,7 +153,7 @@ private:
           const std::string json_str(reinterpret_cast<const char*>(data_opt->data()), data_opt->size());
           const nlohmann::json j = nlohmann::json::parse(json_str);
           for (const auto& item: j) {
-            const Contact c = {.peer_id=item["peer_id"], .status=item["status"]};
+            const Contact c = {.peer_id = item["peer_id"], .status = item["status"]};
             contacts_[c.peer_id] = c;
           }
         } catch (const nlohmann::json::parse_error& e) {
