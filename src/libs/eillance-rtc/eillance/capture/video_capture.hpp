@@ -9,14 +9,14 @@
 #include <opencv2/imgproc.hpp>
 #include <opencv2/videoio.hpp>
 
-#include "eillance/utils/dispatch_queue.hpp"
-#include "eillance/utils/packet.hpp"
-#include "eillance/utils/time.hpp"
 #include "eillance/capture/video_config.hpp"
+#include "eillance/encoding/video_encoder.hpp"
 #include "eillance/logging/logging.h"
 #include "eillance/logging/telemetry.h"
 #include "eillance/rtc/stream.hpp"
-#include "video_encoder_cli.hpp"
+#include "eillance/utils/dispatch_queue.hpp"
+#include "eillance/utils/packet.hpp"
+#include "eillance/utils/time.hpp"
 
 namespace eillance {
 
@@ -214,3 +214,4 @@ private:
 };
 
 }  // namespace eillance
+

@@ -13,13 +13,12 @@
 #include "eillance/capture/video_config.hpp"
 #include "eillance/logging/logging.h"
 #include "eillance/client/client.hpp"
-#include "eillance/capture/capture.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/view_model/mercury_view_model.hpp"
 
 #include "class_refs.hpp"
 #include "android_persistent_storage.hpp"
-#include "transport/transport_android.hpp"
+#include "transport/transport_impl_libwebrtc.hpp"
 
 
 namespace eillance {

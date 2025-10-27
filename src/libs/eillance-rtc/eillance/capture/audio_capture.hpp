@@ -7,14 +7,14 @@
 
 #include <miniaudio.h>
 
-#include "eillance/utils/circular_buffer.hpp"
-#include "eillance/utils/time.hpp"
 #include "eillance/capture/audio_config.hpp"
 #include "eillance/capture/config.hpp"
+#include "eillance/encoding/audio_encoder.hpp"
 #include "eillance/logging/logging.h"
 #include "eillance/logging/telemetry.h"
+#include "eillance/utils/circular_buffer.hpp"
 #include "eillance/utils/packet.hpp"
-#include "audio_encoder_cli.hpp"
+#include "eillance/utils/time.hpp"
 
 namespace eillance {
 
@@ -113,3 +113,4 @@ public:
 };
 
 }  // namespace eillance
+
