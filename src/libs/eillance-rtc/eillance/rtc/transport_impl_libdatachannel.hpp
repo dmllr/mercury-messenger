@@ -6,6 +6,8 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
+#include <string>
 #include <thread>
 #include <unordered_map>
 #include <utility>
@@ -71,7 +73,15 @@ public:
   using Peer = transport::Peer;  // Alias for convenience
   using StatusCallbackFunction = eillance::transport::Transport::StatusCallbackFunction;
 
-  RtcTransport() = default;
+  explicit RtcTransport(std::optional<std::string> signaling_url = std::nullopt) {
+#if ANDROID
+    constexpr auto default_url = "ws://10.0.2.2:8000";
+#else
+    constexpr auto default_url = "ws://127.0.0.1:8000";
+#endif
+    signaling_server_url_ = signaling_url.value_or(default_url);
+    if (signaling_url.has_value()) { LOGI << "Using custom signaling server URL: " << signaling_server_url_; }
+  }
   RtcTransport(RtcTransport&&) = delete;
   RtcTransport(const RtcTransport&) = delete;
   auto operator=(RtcTransport&&) -> RtcTransport& = delete;
@@ -357,8 +367,8 @@ private:
     ws_->onError([this](const std::string& error) { onWebSocketError(error); });
     ws_->onMessage(nullptr, [this](const std::string& data) { onWebSocketMessage(data); });
 
-    LOGI << "Connecting to signaling server: " << signalingServerUrl;
-    ws_->open(signalingServerUrl);
+    LOGI << "Connecting to signaling server: " << signaling_server_url_;
+    ws_->open(signaling_server_url_);
   }
 
   void onWebSocketOpen() {
@@ -543,6 +553,7 @@ private:
   mutable std::mutex peers_mutex_;
 
   eillance::transport::TransportDelegate* delegate_{nullptr};
+  std::string signaling_server_url_;
 
   class RtcConfiguration {
   public:
@@ -560,16 +571,6 @@ private:
       return config;
     }
   };
-
-#if 0  // NOLINT(*-avoid-unconditional-preprocessor-if)
-  constexpr static auto signalingServerUrl = "wss://app.hela.me:8000";
-#else
-#if ANDROID
-  constexpr static auto signalingServerUrl = "ws://10.0.2.2:8000";
-#else
-  constexpr static auto signalingServerUrl = "ws://127.0.0.1:8000";
-#endif
-#endif
 };
 
 }  // namespace eillance::rtc

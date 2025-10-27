@@ -40,6 +40,9 @@ class CallService : Service(), IClientNativeBridge {
   fun stopLocalMedia() = webRtcTransport?.stopLocalMedia()
   fun setLocalVideoSink(sink: VideoSink?) = webRtcTransport?.setLocalSink(sink)
   fun setRemoteVideoSink(peerId: String, sink: VideoSink?) = webRtcTransport?.setRemoteSink(peerId, sink)
+  fun reconnectSignaling(newUrl: String) {
+    webRtcTransport?.reconnect(newUrl)
+  }
 
   // --- Service Lifecycle ---
   override fun onBind(intent: Intent?): IBinder = binder

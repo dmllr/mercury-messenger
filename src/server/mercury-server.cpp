@@ -168,7 +168,7 @@ constexpr auto ParseLogLevel(std::string_view level) -> plog::Severity {
 }  // namespace
 
 auto main(int argc, char* argv[]) -> int {
-  const ArgsParser args(argc, argv);
+  const eillance::utils::ArgsParser args(argc, argv);
 
   static plog::ColorConsoleAppender<plog::TxtFormatter> appender;
   plog::init(plog::warning, &appender);

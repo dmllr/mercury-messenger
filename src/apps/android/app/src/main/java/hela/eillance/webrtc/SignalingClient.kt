@@ -37,7 +37,7 @@ class SignalingClient {
     private val _messages = MutableSharedFlow<SignalingMessage>()
     val messages: SharedFlow<SignalingMessage> = _messages
 
-    fun connect(peerId: String) {
+    fun connect(peerId: String, signalingUrl: String) {
         Log.i(TAG, "Connect called. Starting connection manager coroutine.")
         clientScope.launch {
             var currentBackoffMs = INITIAL_BACKOFF_MS
@@ -103,7 +103,9 @@ class SignalingClient {
                         .pingInterval(20, TimeUnit.SECONDS)
                         .build()
 
-                    val request = Request.Builder().url(SIGNALING_URL).build()
+                    val urlToConnect = if (signalingUrl.isBlank()) DEFAULT_SIGNALING_URL else signalingUrl
+                    Log.i(TAG, "Connecting to: $urlToConnect")
+                    val request = Request.Builder().url(urlToConnect).build()
                     client.newWebSocket(request, listener)
                 }
 
@@ -149,7 +151,7 @@ class SignalingClient {
 
     companion object {
         private const val TAG = "SignalingClient"
-        private const val SIGNALING_URL = "ws://10.0.2.2:8000"
+        const val DEFAULT_SIGNALING_URL = "ws://10.0.2.2:8000"
         private const val NORMAL_CLOSURE_STATUS = 1000
 
         private const val INITIAL_BACKOFF_MS = 2000L

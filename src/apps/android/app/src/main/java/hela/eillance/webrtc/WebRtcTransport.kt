@@ -38,8 +38,8 @@ import java.util.concurrent.ConcurrentHashMap
 
 class WebRtcTransport(private val context: Context, private val nativePointer: Long) {
     private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val signalingClient = SignalingClient()
     private val eglBase: EglBase = WebRtcTransport.eglBase
+    private var signalingClient = SignalingClient()
 
     private val peerConnectionFactory: PeerConnectionFactory
     private val peerConnections = ConcurrentHashMap<String, ConcurrentHashMap<String, PeerConnection>>()
@@ -56,6 +56,10 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
     private var localSink: VideoSink? = null
     private val remoteSinks = ConcurrentHashMap<String, VideoSink>()
     private val remoteVideoTracks = ConcurrentHashMap<String, VideoTrack>()
+
+    private var signalingUrl: String
+
+    private var localPeerId: String? = null
 
     private var isObservingMessages = false
 
@@ -78,11 +82,15 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
             .setVideoEncoderFactory(videoEncoderFactory)
             .setVideoDecoderFactory(videoDecoderFactory)
             .createPeerConnectionFactory()
+
+        val sharedPrefs = context.getSharedPreferences("mercury_settings", Context.MODE_PRIVATE)
+        signalingUrl = sharedPrefs.getString("signaling_server_url", "") ?: ""
     }
 
     fun connect(peerId: String) {
+        this.localPeerId = peerId
         observeSignaling()
-        signalingClient.connect(peerId)
+        signalingClient.connect(peerId, signalingUrl)
     }
 
     fun terminate() {
@@ -485,6 +493,27 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
 
     fun sendSignalingMessage(message: String) {
         signalingClient.send(JSONObject(message))
+    }
+
+    fun reconnect(newUrl: String) {
+        coroutineScope.launch {
+            localPeerId?.let { peerId ->
+                Log.i(TAG, "Reconnecting signaling client to new URL: $newUrl")
+                // Update the URL for subsequent automatic reconnections
+                this@WebRtcTransport.signalingUrl = newUrl
+
+                // Disconnect and cancel old client
+                signalingClient.disconnect()
+
+                // Create and setup new client
+                signalingClient = SignalingClient()
+                isObservingMessages = false // Allow observeSignaling to run again
+                observeSignaling()
+
+                // Connect with new URL
+                signalingClient.connect(peerId, newUrl)
+            } ?: Log.w(TAG, "Cannot reconnect, local peer ID is not set.")
+        }
     }
 
     fun getPeerConnectionState(peerId: String): Int {

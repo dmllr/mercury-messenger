@@ -2,6 +2,7 @@
 #include <filesystem>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -145,7 +146,7 @@ std::string FormatTimestamp(Time::Unit ts_us) {
 int main(int argc, char** argv) {
   auto screen = ftxui::ScreenInteractive::Fullscreen();
 
-  const ArgsParser args(argc, argv);
+  const eillance::utils::ArgsParser args(argc, argv);
   const std::string config_name_str = args.GetPositional(0).value_or("Default");
   const char* config_name = config_name_str.c_str();
 
@@ -174,8 +175,18 @@ int main(int argc, char** argv) {
   auto storage_impl = std::make_unique<eillance::storage::CliPersistentStorageImpl>(config_path);
   auto storage = std::make_shared<eillance::storage::PersistentStorage>(std::move(storage_impl));
 
+  // --- Load Configuration ---
+  std::optional<std::string> signaling_url;
+  if (auto stored_url_bytes = storage->Load("signaling_server_url")) {
+    signaling_url = std::string(reinterpret_cast<const char*>(stored_url_bytes->data()), stored_url_bytes->size());
+  }
+  if (auto cli_url = args.Get("--signaling-url")) {
+    LOGI << "Using signaling URL from command line argument.";
+    signaling_url = cli_url;
+  }
+
   // --- Dependency Injection ---
-  auto rtc_transport_impl = std::make_unique<eillance::rtc::RtcTransport>();
+  auto rtc_transport_impl = std::make_unique<eillance::rtc::RtcTransport>(signaling_url);
   auto transport = std::make_shared<eillance::transport::Transport>(std::move(rtc_transport_impl));
   auto client = std::make_shared<eillance::Client>(storage, transport);
 
@@ -240,7 +251,7 @@ int main(int argc, char** argv) {
           content = std::get<eillance::messaging::MessageEntry>(entry.data).content;
           auto timestamp_str = FormatTimestamp(entry.timestamp);
           elements.push_back(ftxui::text(prefix + content + suffix));
-          elements.push_back(ftxui::text("  └─> " + timestamp_str) | ftxui::dim);
+          elements.push_back(ftxui::text("  ΓööΓöÇ> " + timestamp_str) | ftxui::dim);
           break;
         }
         case eillance::messaging::HistoryEntryKind::voiceCall:
@@ -267,7 +278,7 @@ int main(int argc, char** argv) {
           content = "--- " + direction_str + " " + call_type_str + " Call (" + status_str + ") ---";
           auto timestamp_str = FormatTimestamp(entry.timestamp);
           elements.push_back(ftxui::text(prefix + content) | ftxui::dim);
-          elements.push_back(ftxui::text("  └─> " + timestamp_str) | ftxui::dim);
+          elements.push_back(ftxui::text("  ΓööΓöÇ> " + timestamp_str) | ftxui::dim);
           break;
         }
       }

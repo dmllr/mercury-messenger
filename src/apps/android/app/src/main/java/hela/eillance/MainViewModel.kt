@@ -1,6 +1,7 @@
 package hela.eillance
 
 import android.app.Application
+import android.content.Context
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -14,6 +15,7 @@ import org.webrtc.VideoSink
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var callService: CallService? = null
+    private val sharedPrefs = application.getSharedPreferences("mercury_settings", Context.MODE_PRIVATE)
 
     private val _uiState = MutableStateFlow(AppState())
     val uiState = _uiState.asStateFlow()
@@ -26,8 +28,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private var pendingNavigationPeerId: String? = null
 
+    private val _signalingUrl = MutableStateFlow("")
+    val signalingUrl = _signalingUrl.asStateFlow()
+
 
     private val json = Json { ignoreUnknownKeys = true }
+
+    init {
+        loadSettings()
+    }
 
     fun setService(service: CallService?) {
         callService = service
@@ -48,6 +57,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             navigateToPeer(peerIdToNavigate)
         }
     }
+
+    // --- Settings ---
+    private fun loadSettings() {
+        _signalingUrl.value = sharedPrefs.getString("signaling_server_url", "") ?: ""
+    }
+
+    fun onSignalingUrlChange(newUrl: String) {
+        _signalingUrl.value = newUrl
+    }
+
+    fun saveSettings() {
+        viewModelScope.launch {
+            val newUrl = _signalingUrl.value
+            with(sharedPrefs.edit()) {
+                putString("signaling_server_url", newUrl)
+                apply()
+            }
+            callService?.reconnectSignaling(newUrl)
+        }
+    }
+
 
     // --- UI Event Handlers ---
 
