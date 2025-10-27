@@ -40,8 +40,9 @@ class CallService : Service(), IClientNativeBridge {
   fun stopLocalMedia() = webRtcTransport?.stopLocalMedia()
   fun setLocalVideoSink(sink: VideoSink?) = webRtcTransport?.setLocalSink(sink)
   fun setRemoteVideoSink(peerId: String, sink: VideoSink?) = webRtcTransport?.setRemoteSink(peerId, sink)
-  fun reconnectSignaling(newUrl: String) {
-    webRtcTransport?.reconnect(newUrl)
+  fun updateSignalingUrl(newUrl: String) {
+    // This call updates the URL in the core and triggers a reconnect.
+    nativeUpdateSignalingUrl(newUrl)
   }
 
   // --- Service Lifecycle ---
@@ -281,6 +282,7 @@ class CallService : Service(), IClientNativeBridge {
   external fun configureVideoCapture(config: VideoConfig)
   external fun hangup()
   // Native implementations for wrapped methods
+  private external fun nativeUpdateSignalingUrl(url: String)
   private external fun nativeAcceptCall()
   private external fun nativeRejectCall()
 

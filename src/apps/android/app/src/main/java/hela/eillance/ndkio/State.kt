@@ -96,5 +96,6 @@ data class AppState(
     @SerialName("selected_contact_id") val selectedContactId: String? = null,
     @SerialName("interaction_history") val interactionHistory: List<HistoryEntry> = emptyList(),
     @SerialName("has_older_messages") val hasOlderMessages: Boolean = false,
-    @SerialName("call_state") val callState: CallState = CallState()
+    @SerialName("call_state") val callState: CallState = CallState(),
+    @SerialName("signaling_server_url") val signalingServerUrl: String? = null
 )

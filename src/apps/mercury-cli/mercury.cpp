@@ -175,24 +175,19 @@ int main(int argc, char** argv) {
   auto storage_impl = std::make_unique<eillance::storage::CliPersistentStorageImpl>(config_path);
   auto storage = std::make_shared<eillance::storage::PersistentStorage>(std::move(storage_impl));
 
-  // --- Load Configuration ---
-  std::optional<std::string> signaling_url;
-  if (auto stored_url_bytes = storage->Load("signaling_server_url")) {
-    signaling_url = std::string(reinterpret_cast<const char*>(stored_url_bytes->data()), stored_url_bytes->size());
-  }
-  if (auto cli_url = args.Get("--signaling-url")) {
-    LOGI << "Using signaling URL from command line argument.";
-    signaling_url = cli_url;
-  }
-
-  // --- Dependency Injection ---
-  auto rtc_transport_impl = std::make_unique<eillance::rtc::RtcTransport>(signaling_url);
+  // --- Dependency Injection & Client Initialization ---
+  auto rtc_transport_impl = std::make_unique<eillance::rtc::RtcTransport>();
   auto transport = std::make_shared<eillance::transport::Transport>(std::move(rtc_transport_impl));
   auto client = std::make_shared<eillance::Client>(storage, transport);
 
   // --- Setter Injection for Platform-Specific Implementations ---
   client->SetVideoCapture(std::make_unique<eillance::VideoCaptureCli>());
   client->SetAudioCapture(std::make_unique<eillance::AudioCaptureCli>());
+
+  // Handle command-line override for signaling URL before starting the client
+  if (auto cli_url = args.Get("--signaling-url")) {
+    client->UpdateSignalingUrl(*cli_url);
+  }
 
   // --- ViewModel Initialization ---
   auto view_model = std::make_unique<eillance::view_model::MercuryViewModel>(client);

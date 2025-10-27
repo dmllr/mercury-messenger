@@ -56,6 +56,7 @@ struct UIState {
   std::deque<messaging::HistoryEntryRecord> interaction_history;
   bool has_older_messages = false;
   CallState call_state;
+  std::optional<std::string> signaling_server_url;
 };
 
 //NOLINTNEXTLINE(readability-identifier-naming)
@@ -82,6 +83,7 @@ inline void to_json(nlohmann::json& json, const UIState& s) {
   json["call_state"]["call_direction"] = s.call_state.call_direction;
   json["call_state"]["peer_id"] = s.call_state.peer_id;
   json["call_state"]["call_type"] = s.call_state.call_type;
+  json["signaling_server_url"] = s.signaling_server_url;
 }
 
 class MercuryViewModel {
@@ -90,6 +92,7 @@ public:
     {
       const std::lock_guard<std::mutex> lock(state_mutex_);
       current_state_.my_id = client_->getId();
+      current_state_.signaling_server_url = client_->getSettingsManager()->GetSignalingServerUrl();
       UpdateContacts();
     }
     UpdateChats();
@@ -111,6 +114,7 @@ public:
   void AcceptCall();
   void RejectCall();
   void AddContact(const std::string& peer_id) const;
+  void UpdateSignalingUrl(const std::string& url);
   void AcceptContact(const std::string& peer_id) const;
   void LoadOlderMessages();
   void RefreshState();
@@ -281,6 +285,8 @@ inline void MercuryViewModel::RejectCall() {
 
 inline void MercuryViewModel::AddContact(const std::string& peer_id) const { client_->addContact(peer_id); }
 
+inline void MercuryViewModel::UpdateSignalingUrl(const std::string& url) { client_->UpdateSignalingUrl(url); }
+
 inline void MercuryViewModel::AcceptContact(const std::string& peer_id) const { client_->confirmContact(peer_id); }
 
 inline void MercuryViewModel::LoadOlderMessages() {
@@ -312,6 +318,7 @@ inline void MercuryViewModel::RefreshState() {
     {
       const std::lock_guard<std::mutex> lock(state_mutex_);
       current_state_.my_id = client_->getId();
+      current_state_.signaling_server_url = client_->getSettingsManager()->GetSignalingServerUrl();
       UpdateContacts();
     }
     UpdateChats();
@@ -372,11 +379,9 @@ inline auto MercuryViewModel::ProcessCliInput(const std::string& input) -> bool 
       std::stringstream arg_ss(arg);
       arg_ss >> key;
       std::getline(arg_ss >> std::ws, value);
-      if (key == "signaling-url") {
-        const auto* char_ptr = reinterpret_cast<const std::byte*>(value.data());
-        client_->getStorage()->Save("signaling_server_url", {char_ptr, char_ptr + value.size()});
-        AddSystemMessageToChat("--> Signaling server URL set to: " + value);
-        AddSystemMessageToChat("--> Please restart the application for the change to take effect.");
+      if (key == "signaling_server_url") {
+        UpdateSignalingUrl(value);
+        AddSystemMessageToChat("--> Signaling server URL updated. Reconnecting...");
       } else {
         AddSystemMessageToChat("--> Unknown setting: " + key);
       }
@@ -447,6 +452,9 @@ inline void MercuryViewModel::SetupClientCallbacks() {
     if (source == EventSource::system) {
       const std::lock_guard<std::mutex> lock(state_mutex_);
       current_state_.connection_state = static_cast<ServiceConnectionState>(state_val);
+      if (current_state_.connection_state == ServiceConnectionState::online) {
+        current_state_.signaling_server_url = client_->getSettingsManager()->GetSignalingServerUrl();
+      }
       state_changed = true;
     } else if (source == EventSource::peerConnectionState) {
       const auto state = static_cast<eillance::transport::PeerConnectionState>(state_val);

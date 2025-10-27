@@ -75,7 +75,7 @@ fun SettingsScreen(viewModel: MainViewModel, onBack: () -> Unit) {
             Button(
                 onClick = {
                     viewModel.saveSettings()
-                    Toast.makeText(context, "Signaling server updated.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Settings Saved", Toast.LENGTH_SHORT).show()
                 },
                 modifier = Modifier.align(Alignment.End)
             ) {
