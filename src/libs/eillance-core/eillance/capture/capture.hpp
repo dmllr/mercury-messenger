@@ -2,8 +2,8 @@
 
 #include <memory>
 
-#include "eillance/utils/packet.hpp"
 #include "eillance/capture/config.hpp"
+#include "eillance/utils/packet.hpp"
 
 namespace eillance {
 

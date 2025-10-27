@@ -5,14 +5,14 @@
 #include <mutex>
 #include <optional>
 #include <string>
-#include <unordered_map>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 #include <nlohmann/json.hpp>
 
-#include "eillance/utils/time.hpp"
 #include "eillance/storage/persistent_storage.hpp"
+#include "eillance/utils/time.hpp"
 
 namespace eillance::messaging {
 
@@ -24,11 +24,11 @@ struct Message {
 };
 
 // JSON serialization for Message struct
-inline void to_json(nlohmann::json& j, const Message& m) { // NOLINT(*-identifier-naming)
+inline void to_json(nlohmann::json& j, const Message& m) {  // NOLINT(*-identifier-naming)
   j = nlohmann::json{{"id", m.id}, {"peer_id", m.peer_id}, {"content", m.content}, {"timestamp", m.timestamp}};
 }
 
-inline void from_json(const nlohmann::json& j, Message& m) { // NOLINT(*-identifier-naming)
+inline void from_json(const nlohmann::json& j, Message& m) {  // NOLINT(*-identifier-naming)
   j.at("id").get_to(m.id);
   j.at("peer_id").get_to(m.peer_id);
   j.at("content").get_to(m.content);
@@ -83,7 +83,7 @@ class MessageQueue {
     const auto* char_ptr = reinterpret_cast<const std::byte*>(json_str.data());
     const std::vector<std::byte> data(char_ptr, char_ptr + json_str.size());
     if (!storage_->Save(key, data)) {
-        LOGE << "Failed to save message queue for peer " << peer_id;
+      LOGE << "Failed to save message queue for peer " << peer_id;
     }
   }
 
@@ -98,10 +98,10 @@ public:
     auto& queue = queue_map_[peer_id];
 
     const Message msg{
-      .id = message_id,
-      .peer_id = peer_id,
-      .content = content,
-      .timestamp = Time::Now()};
+        .id = message_id,
+        .peer_id = peer_id,
+        .content = content,
+        .timestamp = Time::Now()};
     queue.push_back(msg);
     SaveQueue(peer_id);
   }
@@ -110,7 +110,7 @@ public:
     const std::lock_guard<std::mutex> lock(mutex_);
     LoadQueue(peer_id);
     if (!queue_map_.contains(peer_id)) {
-        return {};
+      return {};
     }
     auto& queue = queue_map_[peer_id];
     return {queue.begin(), queue.end()};

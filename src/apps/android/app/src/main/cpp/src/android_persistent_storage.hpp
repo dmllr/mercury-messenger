@@ -1,14 +1,14 @@
 #pragma once
 
+#include <cstddef>
 #include <jni.h>
+#include <optional>
 #include <string>
 #include <vector>
-#include <optional>
-#include <cstddef>
 
-#include "eillance/storage/persistent_storage.hpp"
-#include "eillance/crypto/crypto.hpp"
 #include "class_refs.hpp"
+#include "eillance/crypto/crypto.hpp"
+#include "eillance/storage/persistent_storage.hpp"
 
 #include <cassert>
 
@@ -37,7 +37,7 @@ class AndroidPersistentStorageImpl final : public PersistentStorageImpl {
 
 public:
   AndroidPersistentStorageImpl(JavaVM* jvm, jobject context) : jvm_(jvm) {
-    if(jvm == nullptr || context == nullptr) return;
+    if (jvm == nullptr || context == nullptr) return;
     JNIEnv* env = AttachCurrentThreadIfNeeded();
     if (env) {
       context_ = env->NewGlobalRef(context);
@@ -181,4 +181,4 @@ public:
   }
 };
 
-} // namespace eillance::storage
+}  // namespace eillance::storage

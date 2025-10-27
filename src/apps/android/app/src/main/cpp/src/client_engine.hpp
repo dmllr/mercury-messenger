@@ -4,20 +4,20 @@
 #include <sys/system_properties.h>
 
 #include <atomic>
+#include <cstddef>
 #include <string>
 #include <vector>
-#include <cstddef>
 
 #include <nlohmann/json.hpp>
 
 #include "eillance/capture/video_config.hpp"
-#include "eillance/logging/logging.h"
 #include "eillance/client/client.hpp"
+#include "eillance/logging/logging.h"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/view_model/mercury_view_model.hpp"
 
-#include "class_refs.hpp"
 #include "android_persistent_storage.hpp"
+#include "class_refs.hpp"
 #include "transport/transport_impl_libwebrtc.hpp"
 
 
@@ -33,11 +33,9 @@ class ClientEngine {
 public:
   ClientEngine(JavaVM* jvm, JNIEnv* env, jobject instance)
       : jvm_(jvm),
-        native_bridge_(env->NewGlobalRef(instance))
-  {
+        native_bridge_(env->NewGlobalRef(instance)) {
     auto storage = std::make_shared<storage::PersistentStorage>(
-        std::make_unique<storage::AndroidPersistentStorageImpl>(jvm, instance)
-    );
+        std::make_unique<storage::AndroidPersistentStorageImpl>(jvm, instance));
 
     auto rtc_transport_impl = std::make_unique<transport::AndroidRtcTransport>(jvm, instance);
     auto transport = std::make_shared<transport::Transport>(std::move(rtc_transport_impl));
@@ -154,4 +152,4 @@ private:
   }
 };
 
-} // namespace eillance
+}  // namespace eillance

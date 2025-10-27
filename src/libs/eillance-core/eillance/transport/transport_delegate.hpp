@@ -1,9 +1,9 @@
 #pragma once
 
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <vector>
-#include <cstddef>
 
 #include <nlohmann/json.hpp>
 
@@ -23,4 +23,4 @@ public:
   virtual void onFrameReceived(const std::string& peer_id, const std::vector<std::byte>& frame) = 0;
 };
 
-} // namespace eillance::transport
+}  // namespace eillance::transport

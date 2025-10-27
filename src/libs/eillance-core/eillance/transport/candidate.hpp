@@ -9,4 +9,4 @@ struct Candidate {
   std::string mid;
 };
 
-} // namespace eillance::transport
+}  // namespace eillance::transport

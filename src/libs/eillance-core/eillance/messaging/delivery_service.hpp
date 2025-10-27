@@ -6,10 +6,10 @@
 #include <string>
 #include <unordered_set>
 
-#include "eillance/utils/dispatch_queue.hpp"
 #include "eillance/identity/contact_manager.hpp"
 #include "eillance/logging/logging.h"
 #include "eillance/messaging/message_queue.hpp"
+#include "eillance/utils/dispatch_queue.hpp"
 
 namespace eillance::messaging {
 

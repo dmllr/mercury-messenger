@@ -68,41 +68,41 @@ public:
     virtual ~TransportInterface() = default;
 
     // --- Core Lifecycle & Delegates ---
-    virtual void setDelegate(transport::TransportDelegate* delegate) = 0; // Used by Android
-    virtual void setStatusCallback(const StatusCallbackFunction& callback) = 0; // Used by Android
-    virtual void setName(const std::string& device_name) = 0; // Not used by Android (name is set in ClientEngine)
-    virtual void setId(const std::string& id) = 0; // Used by Android
-    virtual void start() = 0; // Used by Android
-    virtual void terminate() = 0; // Used by Android
+    virtual void setDelegate(transport::TransportDelegate* delegate) = 0;        // Used by Android
+    virtual void setStatusCallback(const StatusCallbackFunction& callback) = 0;  // Used by Android
+    virtual void setName(const std::string& device_name) = 0;                    // Not used by Android (name is set in ClientEngine)
+    virtual void setId(const std::string& id) = 0;                               // Used by Android
+    virtual void start() = 0;                                                    // Used by Android
+    virtual void terminate() = 0;                                                // Used by Android
 
     // --- Peer Management ---
-    virtual void addPeer(const std::string& peer_id, const std::shared_ptr<Peer>& peer) = 0; // Used by Android
-    virtual auto getPeer(const std::string& peer_id) const -> std::shared_ptr<Peer> = 0; // Used by Android
-    virtual auto getPeers() const -> std::unordered_map<std::string, std::shared_ptr<Peer>> = 0; // Used by Android
-    virtual void removePeer(const std::string& peer_id) = 0; // Used by Android
-    virtual auto getPeerConnectionState(const std::string& peer_id) const -> eillance::transport::PeerConnectionState = 0; // Used by Android
+    virtual void addPeer(const std::string& peer_id, const std::shared_ptr<Peer>& peer) = 0;                                // Used by Android
+    virtual auto getPeer(const std::string& peer_id) const -> std::shared_ptr<Peer> = 0;                                    // Used by Android
+    virtual auto getPeers() const -> std::unordered_map<std::string, std::shared_ptr<Peer>> = 0;                            // Used by Android
+    virtual void removePeer(const std::string& peer_id) = 0;                                                                // Used by Android
+    virtual auto getPeerConnectionState(const std::string& peer_id) const -> eillance::transport::PeerConnectionState = 0;  // Used by Android
 
     // --- Peer Connection Signaling ---
-    virtual void createDataPeerConnection(const std::string& peer_id) = 0; // Used by Android
-    virtual void createMediaPeerConnection(const std::string& peer_id) = 0; // Used by Android
-    virtual void closePeerConnection(const std::string& peer_id, const std::string& context) = 0; // Used by Android
-    virtual void createOffer(const std::string& peer_id, const std::string& context) = 0; // Used by Android
-    virtual void createAnswer(const std::string& peer_id, const std::string& context) = 0; // Used by Android
-    virtual void setRemoteDescription(const std::string& peer_id, const std::string& context, const std::string& sdp, const std::string& type) = 0; // Used by Android
-    virtual void addRemoteCandidate(const std::string& peer_id, const std::string& context, const std::string& candidate, const std::string& mid) = 0; // Used by Android
+    virtual void createDataPeerConnection(const std::string& peer_id) = 0;                                                                              // Used by Android
+    virtual void createMediaPeerConnection(const std::string& peer_id) = 0;                                                                             // Used by Android
+    virtual void closePeerConnection(const std::string& peer_id, const std::string& context) = 0;                                                       // Used by Android
+    virtual void createOffer(const std::string& peer_id, const std::string& context) = 0;                                                               // Used by Android
+    virtual void createAnswer(const std::string& peer_id, const std::string& context) = 0;                                                              // Used by Android
+    virtual void setRemoteDescription(const std::string& peer_id, const std::string& context, const std::string& sdp, const std::string& type) = 0;     // Used by Android
+    virtual void addRemoteCandidate(const std::string& peer_id, const std::string& context, const std::string& candidate, const std::string& mid) = 0;  // Used by Android
 
     // --- Data Channel Communication ---
-    virtual void createDataChannel(const std::string& peer_id) = 0; // Used by Android
-    virtual void sendPeerDataChannelMessage(const std::string& peer_id, const Json& message) const = 0; // Used by Android
+    virtual void createDataChannel(const std::string& peer_id) = 0;                                      // Used by Android
+    virtual void sendPeerDataChannelMessage(const std::string& peer_id, const Json& message) const = 0;  // Used by Android
 
     // --- Signaling Server Communication ---
-    virtual void sendSignalingMessage(const Json& message) const = 0; // Used by Android
+    virtual void sendSignalingMessage(const Json& message) const = 0;  // Used by Android
 
     // --- Manual Media Stream/Track Management ---
     // These methods are specific to the CLI's custom media handling and are NOT USED by the Android implementation.
-    virtual void addToStream(const std::shared_ptr<Peer>& peer, bool isAddingVideo) const = 0; // NOT used by Android
-    virtual auto addVideo(const std::string& peer_id, const std::function<void(void)>& on_open) -> std::shared_ptr<ITrack> = 0; // Used by Android (returns a stub)
-    virtual auto addAudio(const std::string& peer_id, const std::function<void(void)>& on_open) -> std::shared_ptr<ITrack> = 0; // Used by Android (returns a stub)
+    virtual void addToStream(const std::shared_ptr<Peer>& peer, bool isAddingVideo) const = 0;                                   // NOT used by Android
+    virtual auto addVideo(const std::string& peer_id, const std::function<void(void)>& on_open) -> std::shared_ptr<ITrack> = 0;  // Used by Android (returns a stub)
+    virtual auto addAudio(const std::string& peer_id, const std::function<void(void)>& on_open) -> std::shared_ptr<ITrack> = 0;  // Used by Android (returns a stub)
   };
 
   template<typename T>
@@ -143,4 +143,4 @@ private:
   std::unique_ptr<TransportInterface> self_;
 };
 
-} // namespace eillance::transport
+}  // namespace eillance::transport

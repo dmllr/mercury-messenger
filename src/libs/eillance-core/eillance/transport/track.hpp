@@ -1,9 +1,9 @@
 #pragma once
 
-#include <vector>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <vector>
 
 namespace eillance::transport {
 
@@ -13,4 +13,4 @@ public:
   virtual void SendSample(const std::vector<std::byte>& sample, uint64_t sample_time) = 0;
 };
 
-} // namespace eillance::transport
+}  // namespace eillance::transport

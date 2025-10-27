@@ -1,9 +1,9 @@
 #pragma once
 
 #include <jni.h>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
-#include <stdexcept>
 
 /// Helper class that holds a global reference to a Java class and caches its methods.
 class ClassHolder {
@@ -91,5 +91,4 @@ public:
     }
     return itr->second;
   }
-
 };

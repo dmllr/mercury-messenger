@@ -3,13 +3,13 @@
 #include <chrono>
 #include <cstdint>
 #include <functional>
+#include <mutex>
 #include <thread>
 #include <utility>
-#include <mutex>
 
-#include "eillance/utils/dispatch_queue.hpp"
 #include "eillance/capture/config.hpp"
 #include "eillance/transport/peer.hpp"
+#include "eillance/utils/dispatch_queue.hpp"
 #include "eillance/utils/time.hpp"
 
 namespace eillance {
@@ -73,7 +73,7 @@ public:
 private:
   std::function<void(Source::Type, std::uint64_t, const std::vector<std::byte>&)> sampleHandlerFunc_;
   std::mutex sampleHandlerMutex_;
-  
+
   auto UnsafePrepareForSample() const -> std::pair<std::shared_ptr<Source>, Source::Type> {
     std::shared_ptr<Source> src;
     Source::Type srct{};
@@ -103,7 +103,7 @@ private:
     }
     auto [ss, sst] = UnsafePrepareForSample();
     const auto sample = ss->GetSample();
-    
+
     std::function<void(Source::Type, std::uint64_t, const std::vector<std::byte>&)> handler;
     {
       std::lock_guard<std::mutex> lock(sampleHandlerMutex_);

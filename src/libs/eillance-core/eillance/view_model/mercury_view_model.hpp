@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <atomic>
 #include <deque>
 #include <functional>
 #include <memory>
@@ -8,27 +9,27 @@
 #include <optional>
 #include <sstream>
 #include <string>
-#include <atomic>
 #include <unordered_map>
 #include <vector>
 
 #include "eillance/client/client.hpp"
 #include "eillance/events/service_connection_state.h"
-#include "eillance/transport/peer_connection_state.h"
 #include "eillance/identity/contact_manager.hpp"
 #include "eillance/messaging/history.hpp"
 #include "eillance/transport/peer.hpp"
+#include "eillance/transport/peer_connection_state.h"
 #include "eillance/utils/dispatch_queue.hpp"
 
 namespace eillance::view_model {
-NLOHMANN_JSON_SERIALIZE_ENUM(eillance::transport::PeerConnectionState, {  // NOLINT
-  {eillance::transport::PeerConnectionState::New, 0},
-  {eillance::transport::PeerConnectionState::Connecting, 1},
-  {eillance::transport::PeerConnectionState::Connected, 2},
-  {eillance::transport::PeerConnectionState::Disconnected, 3},
-  {eillance::transport::PeerConnectionState::Failed, 4},
-  {eillance::transport::PeerConnectionState::Closed, 5},
-})
+NLOHMANN_JSON_SERIALIZE_ENUM(eillance::transport::PeerConnectionState, {
+                                                                           // NOLINT
+                                                                           {eillance::transport::PeerConnectionState::New, 0},
+                                                                           {eillance::transport::PeerConnectionState::Connecting, 1},
+                                                                           {eillance::transport::PeerConnectionState::Connected, 2},
+                                                                           {eillance::transport::PeerConnectionState::Disconnected, 3},
+                                                                           {eillance::transport::PeerConnectionState::Failed, 4},
+                                                                           {eillance::transport::PeerConnectionState::Closed, 5},
+                                                                       })
 
 struct UIState {
   struct CallState {
@@ -368,7 +369,7 @@ inline auto MercuryViewModel::ProcessCliInput(const std::string& input) -> bool 
         std::vector<std::string> matches;
         {
           const std::lock_guard<std::mutex> lock(state_mutex_);
-          for (const auto& contact : current_state_.contacts) {
+          for (const auto& contact: current_state_.contacts) {
             if (contact.peer_id.starts_with(arg)) matches.push_back(contact.peer_id);
           }
         }
@@ -462,7 +463,7 @@ inline void MercuryViewModel::SetupClientCallbacks() {
     } else if (source == EventSource::peerConnectionState) {
       const auto state = static_cast<eillance::transport::PeerConnectionState>(state_val);
       const std::lock_guard<std::mutex> lock(state_mutex_);
-      for (auto& contact : current_state_.contacts) {
+      for (auto& contact: current_state_.contacts) {
         if (contact.peer_id == peer_id) {
           if (contact.connection_state != state) {
             contact.connection_state = state;
@@ -501,17 +502,17 @@ inline void MercuryViewModel::SetupClientCallbacks() {
 
   client_->setOnCallTerminatedCallback([this](const std::string& peer_id) {
     dispatch_queue_.Dispatch([this, peer_id] {
-        bool state_changed = false;
-        {
-            const std::lock_guard<std::mutex> lock(state_mutex_);
-            if ((current_state_.call_state.is_in_call || current_state_.call_state.is_ringing) && current_state_.call_state.peer_id == peer_id) {
-                current_state_.call_state = {}; // Reset the call state
-                state_changed = true;
-            }
+      bool state_changed = false;
+      {
+        const std::lock_guard<std::mutex> lock(state_mutex_);
+        if ((current_state_.call_state.is_in_call || current_state_.call_state.is_ringing) && current_state_.call_state.peer_id == peer_id) {
+          current_state_.call_state = {};  // Reset the call state
+          state_changed = true;
         }
-        if (state_changed) {
-            NotifyStateChanged();
-        }
+      }
+      if (state_changed) {
+        NotifyStateChanged();
+      }
     });
   });
 
@@ -521,7 +522,7 @@ inline void MercuryViewModel::SetupClientCallbacks() {
         {
           const std::lock_guard<std::mutex> lock(state_mutex_);
           if (current_state_.selected_contact_id && *current_state_.selected_contact_id == peer_id) {
-            for (auto& entry : current_state_.interaction_history) {
+            for (auto& entry: current_state_.interaction_history) {
               if (entry.id == message_id) {
                 entry.status = status;
                 break;
@@ -547,13 +548,11 @@ inline void MercuryViewModel::UpdateChatHistoryForSelectedContact() {
 
 inline void MercuryViewModel::AddSystemMessageToChat(const std::string& message) {
   const std::lock_guard<std::mutex> lock(state_mutex_);
-  current_state_.interaction_history.push_back({
-                                                   .id = next_system_message_id_++,
-                                                   .kind = messaging::HistoryEntryKind::systemMessage,
-                                                   .timestamp = Time::Now(),
-                                                   .direction = messaging::MessageDirection::received,
-                                                   .data = messaging::MessageEntry{message}
-                                               });
+  current_state_.interaction_history.push_back({.id = next_system_message_id_++,
+                                                .kind = messaging::HistoryEntryKind::systemMessage,
+                                                .timestamp = Time::Now(),
+                                                .direction = messaging::MessageDirection::received,
+                                                .data = messaging::MessageEntry{message}});
 }
 
 inline void MercuryViewModel::NotifyStateChanged() const {
@@ -565,12 +564,10 @@ inline void MercuryViewModel::NotifyStateChanged() const {
 inline void MercuryViewModel::UpdateContacts() {
   auto contacts_from_manager = client_->getContacts();
   current_state_.contacts.clear();
-  for (const auto& c : contacts_from_manager) {
-    current_state_.contacts.push_back({
-                                          c.peer_id,
-                                          c.status,
-                                          client_->getPeerConnectionState(c.peer_id)
-                                      });
+  for (const auto& c: contacts_from_manager) {
+    current_state_.contacts.push_back({c.peer_id,
+                                       c.status,
+                                       client_->getPeerConnectionState(c.peer_id)});
   }
 }
 
@@ -579,7 +576,7 @@ inline void MercuryViewModel::UpdateChats() {
   {
     const std::lock_guard<std::mutex> lock(state_mutex_);
     contact_ids.reserve(current_state_.contacts.size());
-    for (const auto& contact : current_state_.contacts) {
+    for (const auto& contact: current_state_.contacts) {
       contact_ids.push_back(contact.peer_id);
     }
   }
@@ -588,20 +585,20 @@ inline void MercuryViewModel::UpdateChats() {
     const std::lock_guard<std::mutex> lock(state_mutex_);
 
     std::unordered_map<std::string, uint32_t> unread_counts;
-    for (const auto& chat : new_chats) {
-        unread_counts[chat.peer_id] = chat.unread_count;
+    for (const auto& chat: new_chats) {
+      unread_counts[chat.peer_id] = chat.unread_count;
     }
 
-    for (auto& contact : current_state_.contacts) {
-        if (unread_counts.contains(contact.peer_id)) {
-            contact.unread_count = unread_counts.at(contact.peer_id);
-        } else {
-            contact.unread_count = 0;
-        }
+    for (auto& contact: current_state_.contacts) {
+      if (unread_counts.contains(contact.peer_id)) {
+        contact.unread_count = unread_counts.at(contact.peer_id);
+      } else {
+        contact.unread_count = 0;
+      }
     }
 
     current_state_.chats = std::move(new_chats);
   }
 }
 
-} // namespace eillance::view_model
+}  // namespace eillance::view_model

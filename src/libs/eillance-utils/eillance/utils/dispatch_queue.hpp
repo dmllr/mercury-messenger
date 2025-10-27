@@ -30,7 +30,7 @@ class DispatchQueue {
 public:
   explicit DispatchQueue(std::string name, std::size_t threadCount)
       : name_(std::move(name)), threads_(threadCount) {
-    for (auto& thread : threads_) {
+    for (auto& thread: threads_) {
       thread = std::thread(&DispatchQueue::DispatchThreadHandler, this);
     }
   }
@@ -42,7 +42,7 @@ public:
     }
     condition_.notify_all();
 
-    for (auto& thread : threads_) {
+    for (auto& thread: threads_) {
       if (thread.joinable()) {
         thread.join();
       }
@@ -175,12 +175,11 @@ private:
         if (task) {
           task();
         }
-      } catch (...) { // NOLINT(*-empty-catch)
+      } catch (...) {  // NOLINT(*-empty-catch)
         // Prevent exceptions from killing the thread
       }
     }
   }
-
 };
 
 }  // namespace eillance
