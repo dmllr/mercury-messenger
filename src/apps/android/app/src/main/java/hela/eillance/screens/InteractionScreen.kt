@@ -97,7 +97,7 @@ fun InteractionScreen(
 
     LaunchedEffect(historyItems.size) {
         if (historyItems.isNotEmpty()) {
-            listState.animateScrollToItem(historyItems.size - 1)
+            listState.animateScrollToItem(0)
         }
     }
 
@@ -156,8 +156,10 @@ fun ChatHistory(
         state = listState,
         modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(8.dp),
-        contentPadding = PaddingValues(vertical = 8.dp)
+        contentPadding = PaddingValues(vertical = 8.dp),
+        reverseLayout = true
     ) {
+        // This block is placed last to appear at the top of the reversed list.
         if (uiState.hasOlderMessages) {
             item {
                 Button(
@@ -170,7 +172,9 @@ fun ChatHistory(
                 }
             }
         }
-        items(uiState.interactionHistory, key = { it.id }) { item ->
+        // The history is reversed so the newest messages appear first in the list,
+        // which places them at the bottom of the reversed layout.
+        items(uiState.interactionHistory.reversed(), key = { it.id }) { item ->
             when (item.kind) {
                 HistoryEntryKind.TextMessage -> MessageBubble(item)
                 HistoryEntryKind.VoiceCall, HistoryEntryKind.VideoCall -> CallLogBubble(item)
