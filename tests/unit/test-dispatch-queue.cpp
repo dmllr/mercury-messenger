@@ -1,184 +1,345 @@
-#pragma once
+#include "eillance/utils/dispatch_queue.hpp"
 
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
-#include <functional>
+#include <gtest/gtest.h>
 #include <mutex>
-#include <queue>
-#include <string>
-#include <thread>
 #include <vector>
 
-namespace hela::eillance {
+namespace eillance {
 
-class DispatchQueue {
-  using FpT = std::function<void()>;
-
-  // Structure to hold a scheduled task
-  struct ScheduledTask {
-    std::chrono::steady_clock::time_point executeTime;
-    FpT task;
-  };
-
-  // Comparator for the priority queue (earliest executeTime has highest priority)
-  struct CompareScheduledTask {
-    bool operator()(const ScheduledTask& a, const ScheduledTask& b) const {
-      return a.executeTime > b.executeTime;
-    }
-  };
-
-public:
-  explicit DispatchQueue(std::string name, std::size_t threadCount)
-      : name_(std::move(name)), threads_(threadCount) {
-    for (auto& thread : threads_) {
-      thread = std::thread(&DispatchQueue::DispatchThreadHandler, this);
-    }
+class DispatchQueueTest : public ::testing::Test {
+protected:
+  void SetUp() override {
+    // Give time for any previous tests to clean up
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
   }
 
-  ~DispatchQueue() {
-    {
-      std::unique_lock<std::mutex> lock(lockMutex_);
-      quit_ = true;
-    }
-    condition_.notify_all();
-
-    for (auto& thread : threads_) {
-      if (thread.joinable()) {
-        thread.join();
-      }
-    }
+  void TearDown() override {
+    // Give time for any pending operations to complete
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
   }
 
-  static DispatchQueue& MainThread() {
-    static DispatchQueue instance("Main", 1);
-    return instance;
-  }
+  // Improved helper to wait for a condition with timeout
+  template <typename F>
+  bool WaitFor(F condition, std::chrono::milliseconds timeout) {
+    auto start = std::chrono::steady_clock::now();
 
-  /// Dispatch an operation immediately.
-  void Dispatch(const FpT& op) {
-    if (!op) return;
+    // Continue checking until timeout
+    while (true) {
+      // Check if condition is met
+      if (condition()) {
+        // Add a small delay after condition is met to ensure any in-progress
+        // tasks have time to complete their state updates
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
-    auto now = std::chrono::steady_clock::now();
-    {
-      std::unique_lock<std::mutex> lock(lockMutex_);
-      queue_.push(ScheduledTask{now, op});
-    }
-    condition_.notify_one();
-  }
-
-  /// Dispatch an operation immediately.
-  void Dispatch(FpT&& op) {
-    if (!op) return;
-
-    auto now = std::chrono::steady_clock::now();
-    {
-      std::unique_lock<std::mutex> lock(lockMutex_);
-      queue_.push(ScheduledTask{now, std::move(op)});
-    }
-    condition_.notify_one();
-  }
-
-  /// Dispatch an operation to be executed after a delay.
-  void DispatchAfter(std::chrono::milliseconds delay, const FpT& op) {
-    if (!op) return;
-
-    auto scheduled_time = std::chrono::steady_clock::now() + delay;
-    {
-      std::unique_lock<std::mutex> lock(lockMutex_);
-      queue_.push(ScheduledTask{scheduled_time, op});
-    }
-    condition_.notify_one();
-  }
-
-  /// Dispatch an operation to be executed after a delay.
-  void DispatchAfter(std::chrono::milliseconds delay, FpT&& op) {
-    if (!op) return;
-
-    auto scheduled_time = std::chrono::steady_clock::now() + delay;
-    {
-      std::unique_lock<std::mutex> lock(lockMutex_);
-      queue_.push(ScheduledTask{scheduled_time, std::move(op)});
-    }
-    condition_.notify_one();
-  }
-
-  /// Remove any pending tasks.
-  void RemovePending() {
-    std::unique_lock<std::mutex> lock(lockMutex_);
-    decltype(queue_) empty_queue;
-    std::swap(queue_, empty_queue);
-  }
-
-  /// Delete copy and move constructors/assignments.
-  DispatchQueue(const DispatchQueue& rhs) = delete;
-  auto operator=(const DispatchQueue& rhs) -> DispatchQueue& = delete;
-  DispatchQueue(DispatchQueue&& rhs) = delete;
-  auto operator=(DispatchQueue&& rhs) -> DispatchQueue& = delete;
-
-private:
-  std::string name_;
-  std::mutex lockMutex_;
-  std::vector<std::thread> threads_;
-  std::priority_queue<ScheduledTask, std::vector<ScheduledTask>, CompareScheduledTask> queue_;
-  std::condition_variable condition_;
-  bool quit_ = false;
-
-  void DispatchThreadHandler() {
-    std::unique_lock<std::mutex> lock(lockMutex_);
-
-    while (!quit_) {
-      // Wait for work if queue is empty
-      if (queue_.empty()) {
-        // When transitioning to waiting state, make sure previous task state is visible
-        // This is the key fix for the test: ensure task_running flag is visible
-        lock.unlock();
-        // This ensures that any updates from previous tasks are fully visible
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        lock.lock();
-
-        condition_.wait(lock, [this] { return quit_ || !queue_.empty(); });
-        continue;  // Recheck conditions after wake-up
+        // Check condition one more time to ensure it's still true
+        return condition();
       }
 
-      // Check if the task is ready to execute
+      // Check for timeout
       auto now = std::chrono::steady_clock::now();
-      const auto& next_task = queue_.top();
-
-      // If task is scheduled for the future, wait until it's time
-      if (next_task.executeTime > now) {
-        auto status = condition_.wait_until(lock, next_task.executeTime, [this, &next_task, &now] {
-          if (quit_) return true;
-          if (queue_.empty()) return false;
-
-          // Check if the top task has changed or is now due
-          now = std::chrono::steady_clock::now();
-          return queue_.top().executeTime != next_task.executeTime ||
-                 queue_.top().executeTime <= now;
-        });
-
-        continue;  // Recheck conditions after wake-up
+      if (now - start > timeout) {
+        return false;
       }
 
-      // Extract the task (making a copy)
-      auto task = queue_.top().task;
-      queue_.pop();
-
-      // Release the lock before executing the task
-      lock.unlock();
-
-      // Execute the task (with exception handling)
-      try {
-        if (task) {
-          task();
-        }
-      } catch (...) {
-        // Prevent exceptions from killing the thread
-      }
-
-      // Re-acquire the lock to continue processing
-      lock.lock();
+      // Sleep a bit before checking again
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
   }
 };
 
-}  // namespace hela::eillance
+TEST_F(DispatchQueueTest, DispatchAndExecute) {
+  DispatchQueue queue("TestQueue", 1);
+
+  std::atomic<int> counter{0};
+  queue.Dispatch([&counter]() { counter++; });
+
+  EXPECT_TRUE(WaitFor([&]() { return counter == 1; }, std::chrono::milliseconds(100)));
+}
+
+TEST_F(DispatchQueueTest, DispatchAndMove) {
+  DispatchQueue queue("TestQueue", 1);
+
+  std::atomic<int> counter{0};
+  queue.Dispatch(std::move([&counter]() { counter++; }));
+
+  EXPECT_TRUE(WaitFor([&]() { return counter == 1; }, std::chrono::milliseconds(100)));
+}
+
+TEST_F(DispatchQueueTest, RemovePending) {
+  DispatchQueue queue("TestQueue", 1);
+
+  std::atomic<int> counter{0};
+
+  // Add a short delay to ensure the task gets queued but not executed immediately
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+  // Dispatch with slight delay to ensure it's still in the queue when we remove
+  queue.DispatchAfter(std::chrono::milliseconds(50), [&counter]() { counter++; });
+
+  // Remove the pending operation before it executes
+  queue.RemovePending();
+
+  // Wait to ensure the operation had time to execute if it wasn't removed
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+  EXPECT_EQ(counter, 0);
+}
+
+TEST_F(DispatchQueueTest, MainThread) {
+  std::atomic<int> counter{0};
+  DispatchQueue::MainThread().Dispatch([&counter]() { counter++; });
+
+  EXPECT_TRUE(WaitFor([&]() { return counter == 1; }, std::chrono::milliseconds(100)));
+}
+
+TEST_F(DispatchQueueTest, MultipleThreads) {
+  const size_t numThreads = 4;
+  DispatchQueue queue("MultiThreadQueue", numThreads);
+
+  std::atomic<int> counter{0};
+  const int numTasks = 100;
+
+  for (int i = 0; i < numTasks; i++) {
+    queue.Dispatch([&counter]() {
+      counter++;
+      // Add a small sleep to increase thread contention
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    });
+  }
+
+  EXPECT_TRUE(WaitFor([&]() { return counter == numTasks; }, std::chrono::milliseconds(1000)));
+}
+
+TEST_F(DispatchQueueTest, ScheduledExecution) {
+  DispatchQueue queue("ScheduledQueue", 1);
+
+  std::atomic<int> counter{0};
+  auto start = std::chrono::steady_clock::now();
+
+  // Schedule task with delay
+  const auto delay = std::chrono::milliseconds(100);
+  queue.DispatchAfter(delay, [&counter]() { counter++; });
+
+  // Wait for task execution
+  EXPECT_TRUE(WaitFor([&]() { return counter == 1; }, std::chrono::milliseconds(200)));
+
+  auto elapsed = std::chrono::steady_clock::now() - start;
+  // Check if the execution happened after the delay (with some tolerance)
+  EXPECT_GE(elapsed, delay - std::chrono::milliseconds(10));
+}
+
+TEST_F(DispatchQueueTest, PriorityOrdering) {
+  DispatchQueue queue("PriorityQueue", 1);
+
+  std::mutex mutex;
+  std::vector<int> execution_order;
+
+  // Schedule tasks in reverse priority order
+  for (int i = 5; i >= 1; i--) {
+    queue.DispatchAfter(std::chrono::milliseconds(i * 20), [i, &mutex, &execution_order]() {
+      std::lock_guard<std::mutex> lock(mutex);
+      execution_order.push_back(i);
+    });
+  }
+
+  // Wait for all tasks to complete
+  std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+  // Verify execution order
+  std::vector<int> expected_order = {1, 2, 3, 4, 5};
+  EXPECT_EQ(execution_order, expected_order);
+}
+
+TEST_F(DispatchQueueTest, TasksExecutedOnce) {
+  DispatchQueue queue("OnceQueue", 1);
+
+  std::atomic<int> counter{0};
+  std::atomic<bool> task_running{false};
+
+  // Create a task that runs for a while
+  auto task = [&]() {
+    if (task_running.exchange(true)) {
+      // Task is already running, this is a duplicate execution
+      FAIL() << "Task executed more than once concurrently";
+    }
+
+    counter++;
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    task_running = false;
+  };
+
+  // Dispatch the task multiple times
+  for (int i = 0; i < 10; i++) {
+    queue.Dispatch(task);
+  }
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(50 * 10 + 300));
+  EXPECT_TRUE(WaitFor([&counter]() { return counter == 10; }, std::chrono::milliseconds(1000)));
+  EXPECT_FALSE(task_running);
+}
+
+TEST_F(DispatchQueueTest, ExceptionsHandling) {
+  DispatchQueue queue("ExceptionQueue", 1);
+
+  std::atomic<int> counter{0};
+
+  // Task that throws an exception
+  queue.Dispatch([&counter]() {
+    counter++;
+    throw std::runtime_error("Test exception");
+  });
+
+  // Task that should still execute after the exception
+  queue.Dispatch([&counter]() {
+    counter++;
+  });
+
+  // Wait for both tasks to complete
+  EXPECT_TRUE(WaitFor([&]() { return counter == 2; }, std::chrono::milliseconds(100)));
+}
+
+TEST_F(DispatchQueueTest, MultipleDelayedTasks) {
+  DispatchQueue queue("DelayedQueue", 1);
+
+  std::atomic<int> counter{0};
+  const int numTasks = 20;
+  auto start = std::chrono::steady_clock::now();
+
+  // Dispatch tasks with various delays
+  for (int i = 0; i < numTasks; i++) {
+    // Random delays between 10-50ms, but out of order
+    auto delay = std::chrono::milliseconds((i * 17) % 40 + 10);
+    queue.DispatchAfter(delay, [&counter, i, delay]() {
+      counter++;
+    });
+  }
+
+  // Wait for all tasks to complete
+  EXPECT_TRUE(WaitFor([&]() { return counter == numTasks; }, std::chrono::milliseconds(500)));
+}
+
+TEST_F(DispatchQueueTest, ConcurrentModification) {
+  DispatchQueue queue("ConcurrentQueue", 2);
+
+  std::atomic<int> counter{0};
+  std::atomic<int> tasks_added{0};
+
+  // Initial task that adds more tasks
+  queue.Dispatch([&]() {
+    for (int i = 0; i < 10; i++) {
+      queue.Dispatch([&]() {
+        counter++;
+        tasks_added++;
+      });
+    }
+  });
+
+  // At the same time, dispatch additional tasks directly
+  for (int i = 0; i < 10; i++) {
+    queue.Dispatch([&]() {
+      counter++;
+    });
+  }
+
+  // Wait for both directly added and dynamically added tasks
+  EXPECT_TRUE(WaitFor([&]() { return counter == 20 && tasks_added == 10; }, std::chrono::milliseconds(500)));
+}
+
+TEST_F(DispatchQueueTest, DestructorCleanup) {
+  std::atomic<int> counter{0};
+
+  {
+    // Create a queue that will be destroyed
+    DispatchQueue queue("DestructorQueue", 1);
+
+    // Add a task with a delay longer than the queue's lifetime
+    queue.DispatchAfter(std::chrono::milliseconds(500), [&counter]() {
+      counter++;
+    });
+
+    // Queue will be destroyed here
+  }
+
+  // Task should not execute after queue destruction
+  std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+  EXPECT_EQ(counter, 0);
+}
+
+TEST_F(DispatchQueueTest, HighConcurrencyStress) {
+  const size_t numThreads = 8;
+  DispatchQueue queue("StressQueue", numThreads);
+
+  std::atomic<int> counter{0};
+  const int numTasks = 1000;
+
+  for (int i = 0; i < numTasks; i++) {
+    queue.Dispatch([&counter]() {
+      counter++;
+      // Simulate varied workloads
+      if (counter % 10 == 0) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      }
+    });
+  }
+
+  EXPECT_TRUE(WaitFor([&]() { return counter == numTasks; }, std::chrono::milliseconds(5000)));
+}
+
+TEST_F(DispatchQueueTest, EmptyFunctionHandling) {
+  DispatchQueue queue("EmptyQueue", 1);
+
+  // Dispatch an empty function (should not crash)
+  queue.Dispatch(std::function<void()>());
+
+  // Wait to ensure no crashes occur
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+  // Test passed if no crash occurred
+  SUCCEED();
+}
+
+TEST_F(DispatchQueueTest, NestedDispatch) {
+  DispatchQueue queue("NestedQueue", 1);
+
+  std::atomic<int> counter{0};
+  std::mutex orderMutex;
+  std::vector<int> executionOrder;
+
+  queue.Dispatch([&]() {
+    {
+      std::lock_guard<std::mutex> lock(orderMutex);
+      executionOrder.push_back(1);
+    }
+    counter++;
+
+    // Nested dispatch
+    queue.Dispatch([&]() {
+      {
+        std::lock_guard<std::mutex> lock(orderMutex);
+        executionOrder.push_back(2);
+      }
+      counter++;
+
+      // Double-nested dispatch
+      queue.Dispatch([&]() {
+        {
+          std::lock_guard<std::mutex> lock(orderMutex);
+          executionOrder.push_back(3);
+        }
+        counter++;
+      });
+    });
+  });
+
+  // Wait for all nested dispatches to complete
+  EXPECT_TRUE(WaitFor([&counter]() { return counter == 3; }, std::chrono::milliseconds(500)));
+
+  // Verify execution order
+  std::vector<int> expected = {1, 2, 3};
+  EXPECT_EQ(executionOrder, expected);
+}
+
+}  // namespace eillance

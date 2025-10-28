@@ -1,35 +1,34 @@
-#include "hela/eillance/utils/h264.hpp"
-
-#include "rtc/rtc.hpp"
+#include "eillance/utils/h264.hpp"
 
 #include <gtest/gtest.h>
 
-#include <fstream>
-#include <vector>
-#include <string>
-#include <stdexcept>
-#include <sstream>
 #include <algorithm>
+#include <cstddef>
+#include <fstream>
+#include <sstream>
+#include <stdexcept>
+#include <string>
+#include <vector>
 
 namespace {
 
-// Helper: Read the entire file into an rtc::binary.
-rtc::binary LoadFile(const std::string &filepath) {
+// Helper: Read the entire file into a vector of bytes.
+std::vector<std::byte> LoadFile(const std::string& filepath) {
   std::ifstream file(filepath, std::ios::binary);
   if (!file) {
     std::ostringstream err;
     err << "Cannot open file: " << filepath;
     throw std::runtime_error(err.str());
   }
-  std::vector<char> buffer((std::istreambuf_iterator<char>(file)),
-                           std::istreambuf_iterator<char>());
-  rtc::binary binary_buffer(buffer.size());
-  std::transform(buffer.begin(), buffer.end(), binary_buffer.begin(),
-                 [](char c) { return std::byte{static_cast<unsigned char>(c)}; });
+  std::vector<char> buffer((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+  std::vector<std::byte> binary_buffer(buffer.size());
+  std::transform(buffer.begin(), buffer.end(), binary_buffer.begin(), [](char c) {
+    return std::byte{static_cast<unsigned char>(c)};
+  });
   return binary_buffer;
 }
 
-} // namespace
+}  // namespace
 
 // Test fixture for H264Parser tests.
 // NOLINTBEGIN(*-non-private-member-variables-in-classes)
@@ -43,24 +42,19 @@ protected:
   std::string callbackLog_;
 
   // Helper: append a message to the callback log.
-  void log(const std::string &message) {
-    callbackLog_ += message + "\n";
-  }
+  void log(const std::string& message) { callbackLog_ += message + "\n"; }
 
   // Dummy SPS and PPS data.
   // These are minimal examples (starting with a valid start code) so that ParseSps() runs.
-  const rtc::binary dummy_sps = {
-      std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x01},
-      std::byte{0x67}, // SPS NAL header (nal type 7)
-      std::byte{0x42}, std::byte{0x00}, std::byte{0x1F}, std::byte{0xAC}, std::byte{0x56},
-      std::byte{0x80}, std::byte{0x50}, std::byte{0x05}, std::byte{0xB9}
-  };
+  const std::vector<std::byte> dummy_sps = {std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x01},
+                                            std::byte{0x67},  // SPS NAL header (nal type 7)
+                                            std::byte{0x42}, std::byte{0x00}, std::byte{0x1F}, std::byte{0xAC},
+                                            std::byte{0x56}, std::byte{0x80}, std::byte{0x50}, std::byte{0x05},
+                                            std::byte{0xB9}};
 
-  const rtc::binary dummy_pps = {
-      std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x01},
-      std::byte{0x68}, // PPS NAL header (nal type 8)
-      std::byte{0xCE}, std::byte{0x06}, std::byte{0xE2}
-  };
+  const std::vector<std::byte> dummy_pps = {std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x01},
+                                            std::byte{0x68},  // PPS NAL header (nal type 8)
+                                            std::byte{0xCE}, std::byte{0x06}, std::byte{0xE2}};
 };
 // NOLINTEND(*-non-private-member-variables-in-classes)
 
@@ -69,12 +63,10 @@ protected:
 // multiple NALUs should trigger input/output callbacks.
 //
 TEST_F(H264ParserTest, FirstFrameLeadsToConfiguration) {
-  hela::eillance::H264Parser parser;
+  eillance::H264Parser parser;
 
   // Set callbacks that log their invocation.
-  parser.SetOnConfigureCallback(
-      [&](
-          const hela::eillance::VideoConfig& conf) {
+  parser.SetOnConfigureCallback([&](const eillance::VideoConfig& conf) {
     log("onConfigure");
     ASSERT_EQ(conf.width, 1280);
     ASSERT_EQ(conf.height, 720);
@@ -92,10 +84,10 @@ TEST_F(H264ParserTest, FirstFrameLeadsToConfiguration) {
 // should not trigger input/output callbacks.
 //
 TEST_F(H264ParserTest, PBFramesDoNotTriggerConfigure) {
-  hela::eillance::H264Parser parser;
+  eillance::H264Parser parser;
 
   // Set callbacks that log their invocation.
-  parser.SetOnConfigureCallback([&](const hela::eillance::VideoConfig&) {
+  parser.SetOnConfigureCallback([&](const eillance::VideoConfig&) {
     log("onConfigure");
   });
 
@@ -114,13 +106,13 @@ TEST_F(H264ParserTest, PBFramesDoNotTriggerConfigure) {
 // This test also validates that the parser correctly handles multiple NALUs
 // within a single input buffer.
 //
-TEST_F(H264ParserTest, ConfiguredFrameProcessing) { // NOLINT(*-function-cognitive-complexity)
-  hela::eillance::H264Parser parser;
+TEST_F(H264ParserTest, ConfiguredFrameProcessing) {  // NOLINT(*-function-cognitive-complexity)
+  eillance::H264Parser parser;
 
   // Set up counters to check callback invocations.
   int configure_count = 0;
 
-  parser.SetOnConfigureCallback([&](const hela::eillance::VideoConfig&) {
+  parser.SetOnConfigureCallback([&](const eillance::VideoConfig&) {
     log("onConfigure");
     ++configure_count;
   });
@@ -134,7 +126,7 @@ TEST_F(H264ParserTest, ConfiguredFrameProcessing) { // NOLINT(*-function-cogniti
   parser.ProcessFrame(LoadFile(frame002_path));
   parser.ProcessFrame(LoadFile(frame003_path));
 
-  // Non-SPS/PPS frames (I, P, or B) should trigger the input and output callbacks.
+  // Non-SPS/PPS frames (I, P, or B) should not trigger the configure callback again.
   EXPECT_EQ(configure_count, 1);
   EXPECT_NE(callbackLog_.find("onConfigure"), std::string::npos);
 }
@@ -143,15 +135,15 @@ TEST_F(H264ParserTest, ConfiguredFrameProcessing) { // NOLINT(*-function-cogniti
 // Processing invalid data (with no valid start code) should result in no callbacks.
 //
 TEST_F(H264ParserTest, NoActionOnInvalidStartCode) {
-  hela::eillance::H264Parser parser;
+  eillance::H264Parser parser;
 
   // Set callbacks to record any invocation.
-  parser.SetOnConfigureCallback([&](const hela::eillance::VideoConfig&) {
+  parser.SetOnConfigureCallback([&](const eillance::VideoConfig&) {
     log("onConfigure");
   });
 
   // Create a binary buffer that does not contain a valid H.264 start code.
-  rtc::binary invalid_data = { std::byte{0xFF}, std::byte{0xFF}, std::byte{0xFF} }; // NOLINT(*-magic-numbers)
+  std::vector<std::byte> invalid_data = {std::byte{0xFF}, std::byte{0xFF}, std::byte{0xFF}};  // NOLINT(*-magic-numbers)
   parser.ProcessFrame(invalid_data);
 
   EXPECT_EQ(callbackLog_.find("onConfigure"), std::string::npos);

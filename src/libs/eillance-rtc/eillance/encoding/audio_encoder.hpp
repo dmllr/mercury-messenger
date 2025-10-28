@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cassert>
 #include <cstdint>
 
 #include <opus.h>
@@ -43,7 +44,7 @@ public:
     const auto size = opus_encode_function(opus_encoder_, pcm_buffer, AudioConfig::frame_size, encoded_buffer.data(), static_cast<opus_int32>(encoded_buffer.size()));
     if (likely(size > 1)) {
       // 1-byte packets should not be transmitted
-      return Packet{encoded_buffer.data(), static_cast<uint32_t>(size)};
+      return Packet{encoded_buffer.data(), static_cast<std::uint32_t>(size)};
     }
     return {};
   }
