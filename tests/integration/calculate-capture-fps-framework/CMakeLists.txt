@@ -5,7 +5,7 @@ set_property(TARGET calculate-capture-fps-framework PROPERTY CXX_STANDARD 17)
 target_compile_features(calculate-capture-fps-framework PRIVATE cxx_std_17)
 target_compile_definitions(calculate-capture-fps-framework PUBLIC "-DBUILD_ZLIB=OFF")
 target_link_libraries(calculate-capture-fps-framework PRIVATE
-  hela-eillance-core
+  eillance-core
 )
 target_include_directories(calculate-capture-fps-framework
   PRIVATE

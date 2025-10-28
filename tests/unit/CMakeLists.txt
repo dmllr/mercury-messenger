@@ -19,7 +19,7 @@ add_executable(h-e-tests
   test-event-queue.cpp
   test-h264-utils.cpp
 )
-target_link_libraries(h-e-tests GTest::gtest_main hela-eillance-core)
+target_link_libraries(h-e-tests GTest::gtest_main eillance-core eillance-rtc eillance-h264)
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/../files" DESTINATION "${CMAKE_BINARY_DIR}/bin")
 
 include(GoogleTest)

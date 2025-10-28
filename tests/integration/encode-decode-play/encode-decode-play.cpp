@@ -3,24 +3,22 @@
 #include <iostream>
 #include <vector>
 
-#include "hela/eillance/capture/audio_config.hpp"
-#include "hela/eillance/capture/audio_encoder.hpp"
+#include "eillance/capture/audio_config.hpp"
+#include "eillance/encoding/audio_encoder.hpp"
 
-using AudioConfig = hela::eillance::AudioConfig;
+using AudioConfig = eillance::AudioConfig;
 
 std::vector<std::vector<std::byte>> opusData;
 int frame = 0;
 
 // Callback function for handling captured audio data
 void OnSendFramesToOpus(ma_device* pDevice, void*, const void* pInput, ma_uint32 frameCount) {
-  auto* encoder = static_cast<hela::eillance::AudioEncoder*>(pDevice->pUserData);
+  auto* encoder = static_cast<eillance::AudioEncoderCli*>(pDevice->pUserData);
 
   std::cout << "FC " << frameCount << ". ";
 
   // Encode the input PCM data to Opus
-  unsigned char opus_frame[4096];
-
-  auto encoded_packet = encoder->EncodeBuffer(static_cast<const hela::eillance::AudioConfig::SampleDataType*>(pInput));
+  auto encoded_packet = encoder->EncodeBuffer(static_cast<const eillance::AudioConfig::SampleDataType*>(pInput));
   std::cout << "Opus  encoded to " << encoded_packet.size() << std::endl;
 
   // Store the encoded Opus data
@@ -36,7 +34,7 @@ void OnReceiveFramesFromOpus(ma_device* pDevice, void* pOutput, const void*, ma_
   }
 
   // Decode the input Opus data to PCM
-  const auto pcm_length = opus_decode(decoder, reinterpret_cast<const unsigned char*>(opusData[frame].data()), frameCount, static_cast<opus_int16*>(pOutput), AudioConfig ::frameSize, 0);
+  const auto pcm_length = opus_decode(decoder, reinterpret_cast<const unsigned char*>(opusData[frame].data()), frameCount, static_cast<opus_int16*>(pOutput), AudioConfig::frame_size, 0);
   if (pcm_length < 0) {
     std::cerr << "Error decoding from Opus" << std::endl;
     return;
@@ -47,10 +45,10 @@ void OnReceiveFramesFromOpus(ma_device* pDevice, void* pOutput, const void*, ma_
 int main() {
   // Initialize Opus encoder and decoder
   int error{0};
-  auto encoder = hela::eillance::AudioEncoder{};
+  auto encoder = eillance::AudioEncoderCli{};
   encoder.Engage();
 
-  OpusDecoder* decoder = opus_decoder_create(AudioConfig ::sampleRate, AudioConfig ::channels, &error);
+  OpusDecoder* decoder = opus_decoder_create(AudioConfig::sample_rate, AudioConfig::channels, &error);
   if (error != OPUS_OK) {
     std::cerr << "Error initializing Opus decoder: " << opus_strerror(error) << std::endl;
     encoder.Revoke();
@@ -71,9 +69,9 @@ int main() {
   }
 
   capture_device_config = ma_device_config_init(ma_device_type_capture);
-  capture_device_config.capture.format = AudioConfig::maSampleFormat;
-  capture_device_config.capture.channels = AudioConfig ::channels;
-  capture_device_config.sampleRate = AudioConfig ::sampleRate;
+  capture_device_config.capture.format = ma_format_s16;
+  capture_device_config.capture.channels = AudioConfig::channels;
+  capture_device_config.sampleRate = AudioConfig::sample_rate;
   capture_device_config.dataCallback = OnSendFramesToOpus;
   capture_device_config.pUserData = &encoder;
 
@@ -91,9 +89,9 @@ int main() {
   ma_device playback_device;
 
   playback_device_config = ma_device_config_init(ma_device_type_playback);
-  playback_device_config.playback.format = AudioConfig::maSampleFormat;
-  playback_device_config.playback.channels = AudioConfig ::channels;
-  playback_device_config.sampleRate = AudioConfig ::sampleRate;
+  playback_device_config.playback.format = ma_format_s16;
+  playback_device_config.playback.channels = AudioConfig::channels;
+  playback_device_config.sampleRate = AudioConfig::sample_rate;
   playback_device_config.dataCallback = OnReceiveFramesFromOpus;
   playback_device_config.pUserData = decoder;
 

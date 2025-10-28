@@ -2,10 +2,10 @@
 #include <iostream>
 #include <chrono>
 
-#include "hela/eillance/rtc/streamer.hpp"
+#include "eillance/capture/video_capture.hpp"
 
 int main(int /*argc*/, char** /*argv*/) {
-  hela::eillance::VideoCapture cap;
+  eillance::VideoCaptureCli cap;
   cap.Engage();
 
   std::atomic_int frames_captured = 0;
