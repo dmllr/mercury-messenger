@@ -41,8 +41,8 @@ public:
       auto nal_unit_end = (next_start_code_pos == std::string::npos) ? frame.size() : next_start_code_pos;
 
       // Determine start code length (3 or 4 bytes).
-      size_t start_code_len = (start_code_pos > 0 && frame[start_code_pos - 1] == std::byte{0}) ? 4 : 3;
-      size_t nal_header_pos = start_code_pos + start_code_len;
+      const size_t start_code_len = (frame[start_code_pos + 2] == std::byte{0}) ? 4 : 3;
+      const size_t nal_header_pos = start_code_pos + start_code_len;
 
       if (nal_header_pos < nal_unit_end) {
         // The NAL unit type is in the lower 5 bits of the header byte.
@@ -117,10 +117,12 @@ private:
     reader.read_bits(16);  // Skip constraint flags and level_idc
     reader.read_ue();      // Skip seq_parameter_set_id
 
-    if (profile_idc == 100 || profile_idc == 110 || profile_idc == 122 || profile_idc == 244 ||
-        profile_idc == 44 || profile_idc == 83 || profile_idc == 86 || profile_idc == 118 ||
-        profile_idc == 128 || profile_idc == 138) {
-      auto chroma_format_idc = reader.read_ue();
+    uint32_t chroma_format_idc = 1;  // Default for many profiles.
+    if (profile_idc == 100 || profile_idc == 110 || profile_idc == 122
+      || profile_idc == 244 || profile_idc == 44 || profile_idc == 83
+      || profile_idc == 86 || profile_idc == 118 || profile_idc == 128
+      || profile_idc == 138) {
+      chroma_format_idc = reader.read_ue();
       if (chroma_format_idc == 3) reader.read_bits(1);  // separate_colour_plane_flag
       reader.read_ue();                                 // bit_depth_luma_minus8
       reader.read_ue();                                 // bit_depth_chroma_minus8
@@ -155,6 +157,11 @@ private:
     auto pic_height_in_map_units_minus1 = reader.read_ue();
     auto frame_mbs_only_flag = reader.read_bits(1);
 
+    if (frame_mbs_only_flag == 0) {
+      reader.read_bits(1);  // mb_adaptive_frame_field_flag
+    }
+    reader.read_bits(1);  // direct_8x8_inference_flag
+
     uint32_t width = (pic_width_in_mbs_minus1 + 1) * 16;
     uint32_t height = (2 - frame_mbs_only_flag) * (pic_height_in_map_units_minus1 + 1) * 16;
 
@@ -163,9 +170,18 @@ private:
       auto crop_right = reader.read_ue();
       auto crop_top = reader.read_ue();
       auto crop_bottom = reader.read_ue();
-      // These are chroma units, multiply by 2 for luma.
-      width -= (crop_left + crop_right) * 2;
-      height -= (crop_top + crop_bottom) * 2 * (2 - frame_mbs_only_flag);
+
+      uint32_t crop_unit_x = 1;
+      uint32_t crop_unit_y = (2 - frame_mbs_only_flag);
+      if (chroma_format_idc == 1) {  // 4:2:0
+        crop_unit_x = 2;
+        crop_unit_y *= 2;
+      } else if (chroma_format_idc == 2) {  // 4:2:2
+        crop_unit_x = 2;
+      }
+
+      width -= (crop_left + crop_right) * crop_unit_x;
+      height -= (crop_top + crop_bottom) * crop_unit_y;
     }
 
     if (width > 0 && height > 0) {
