@@ -18,6 +18,15 @@ add_executable(h-e-tests
   test-dispatch-queue.cpp
   test-event-queue.cpp
   test-h264-utils.cpp
+  test-args-parser.cpp
+  test-circular-buffer.cpp
+  test-contact-manager.cpp
+  test-crypto.cpp
+  test-id-manager.cpp
+  test-message-history.cpp
+  test-message-queue.cpp
+  test-packet.cpp
+  test-settings-manager.cpp
 )
 target_link_libraries(h-e-tests GTest::gtest_main eillance-core eillance-rtc eillance-h264)
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/../files" DESTINATION "${CMAKE_BINARY_DIR}/bin")

@@ -109,9 +109,25 @@ private:
   // This is a simplified SPS parser that extracts just enough information
   // to determine video resolution. It is not a complete implementation.
   void ParseSPS(const std::vector<uint8_t>& sps) {
-    if (sps.empty()) return;
+    if (sps.empty()) {
+      return;
+    }
 
-    BitReader reader{sps};
+    // Remove emulation prevention bytes (0x03) from the NAL unit.
+    // H.264 streams insert 0x03 after 0x0000 to prevent accidental start codes.
+    std::vector<uint8_t> sps_rbsp;  // Raw Byte Sequence Payload
+    sps_rbsp.reserve(sps.size());
+    for (size_t i = 0; i < sps.size();) {
+      if (i + 2 < sps.size() && sps[i] == 0x00 && sps[i + 1] == 0x00 && sps[i + 2] == 0x03) {
+        sps_rbsp.push_back(sps[i++]);
+        sps_rbsp.push_back(sps[i++]);
+        i++;  // Skip the emulation prevention byte 0x03.
+      } else {
+        sps_rbsp.push_back(sps[i++]);
+      }
+    }
+
+    BitReader reader{sps_rbsp};
 
     uint8_t profile_idc = reader.read_bits(8);
     reader.read_bits(16);  // Skip constraint flags and level_idc

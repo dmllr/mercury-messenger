@@ -11,6 +11,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "eillance/logging/logging.h"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/utils/time.hpp"
 
@@ -76,7 +77,9 @@ class MessageQueue {
     const std::string json_str = j.dump();
     const auto* char_ptr = reinterpret_cast<const std::byte*>(json_str.data());
     const std::vector<std::byte> data(char_ptr, char_ptr + json_str.size());
-    if (!storage_->Save(key, data)) { LOGE << "Failed to save message queue for peer " << peer_id; }
+    if (!storage_->Save(key, data)) {
+      LOGE << "Failed to save message queue for peer " << peer_id;
+    }
   }
 
 public:
