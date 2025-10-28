@@ -53,6 +53,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.input.TextFieldValue
@@ -340,8 +341,7 @@ fun SystemMessageBubble(entry: HistoryEntry) {
 
 @Composable
 fun formatTimestamp(timestamp: Long): String {
-    val context = LocalContext.current
-    val locale = ConfigurationCompat.getLocales(context.resources.configuration)[0]
+    val locale = ConfigurationCompat.getLocales(LocalConfiguration.current)[0]
         ?: java.util.Locale.getDefault()
 
     val messageTime = Instant.ofEpochMilli(timestamp / 1000).atZone(ZoneId.systemDefault())
