@@ -7,8 +7,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -43,12 +47,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -67,6 +73,7 @@ import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -77,29 +84,50 @@ fun ConversationScreen(
     onBack: () -> Unit,
     onNavigateToCall: (String) -> Unit
 ) {
-    // This effect ensures the ViewModel's state is aligned with the screen we are on.
-    // It's crucial for when we land here from an incoming call notification.
     LaunchedEffect(peerId) {
         viewModel.selectContact(peerId)
     }
 
     val listState = rememberLazyListState()
-    val isInCall = uiState.callState.isInCall && uiState.callState.peerId == peerId // Use the peerId from the route
+    val coroutineScope = rememberCoroutineScope()
+    val historyItems = uiState.interactionHistory
+    val isInCall = uiState.callState.isInCall && uiState.callState.peerId == peerId
 
-    // This effect handles navigation to the call screen when a call starts.
     LaunchedEffect(isInCall) {
         if (isInCall) {
             onNavigateToCall(peerId)
         }
     }
 
-    val historyItems = uiState.interactionHistory
-
+    // Effect for auto-scrolling when a new message arrives
     LaunchedEffect(historyItems.size) {
-        if (historyItems.isNotEmpty()) {
-            listState.animateScrollToItem(0)
+        val lastIndex = historyItems.lastIndex
+        if (lastIndex < 0) return@LaunchedEffect
+
+        val layoutInfo = listState.layoutInfo
+        val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()
+
+        val isScrolledNearBottom = lastVisibleItem == null ||
+                lastVisibleItem.index >= layoutInfo.totalItemsCount - 2
+
+        if (isScrolledNearBottom) {
+            coroutineScope.launch {
+                listState.animateScrollToItem(lastIndex)
+            }
         }
     }
+
+    // Effect for auto-scrolling when the keyboard appears.
+    val imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
+    LaunchedEffect(imeBottom) {
+        val lastIndex = historyItems.lastIndex
+        if (imeBottom > 0 && lastIndex >= 0) {
+            coroutineScope.launch {
+                listState.animateScrollToItem(lastIndex)
+            }
+        }
+    }
+
 
     LaunchedEffect(uiState.interactionHistory) {
         val unreadMessageIds = uiState.interactionHistory
@@ -131,17 +159,23 @@ fun ConversationScreen(
                     }
                 }
             )
-        },
-        bottomBar = {
-            MessageInput(onSendMessage = viewModel::sendMessage)
         }
     ) { padding ->
-        ChatHistory(
-            modifier = Modifier.padding(padding),
-            uiState = uiState,
-            listState = listState,
-            viewModel = viewModel
-        )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .navigationBarsPadding()
+                .imePadding()
+        ) {
+            ChatHistory(
+                modifier = Modifier.weight(1f),
+                uiState = uiState,
+                listState = listState,
+                viewModel = viewModel
+            )
+            MessageInput(onSendMessage = viewModel::sendMessage)
+        }
     }
 }
 
@@ -156,10 +190,8 @@ fun ChatHistory(
         state = listState,
         modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(8.dp),
-        contentPadding = PaddingValues(vertical = 8.dp),
-        reverseLayout = true
+        contentPadding = PaddingValues(vertical = 8.dp)
     ) {
-        // This block is placed last to appear at the top of the reversed list.
         if (uiState.hasOlderMessages) {
             item {
                 Button(
@@ -172,9 +204,7 @@ fun ChatHistory(
                 }
             }
         }
-        // The history is reversed so the newest messages appear first in the list,
-        // which places them at the bottom of the reversed layout.
-        items(uiState.interactionHistory.reversed(), key = { it.id }) { item ->
+        items(uiState.interactionHistory, key = { it.id }) { item ->
             when (item.kind) {
                 HistoryEntryKind.TextMessage -> MessageBubble(item)
                 HistoryEntryKind.VoiceCall, HistoryEntryKind.VideoCall -> CallLogBubble(item)
@@ -236,7 +266,7 @@ fun MessageBubble(entry: HistoryEntry) {
                             MessageStatus.Read -> Icons.Filled.DoneAll
                             MessageStatus.Delivered -> Icons.Filled.DoneAll
                             MessageStatus.Sent -> Icons.Filled.Done
-                            else -> Icons.Filled.Schedule // Sending or None
+                            else -> Icons.Filled.Schedule
                         },
                         contentDescription = "Message status: ${entry.status}",
                         modifier = Modifier.padding(start = 4.dp),
@@ -264,7 +294,7 @@ fun CallLogBubble(entry: HistoryEntry) {
             CallStatus.Missed -> Triple(Icons.AutoMirrored.Filled.CallMissed, Color.Red, "Missed call")
             else -> Triple(Icons.AutoMirrored.Filled.CallReceived, Color.Red, "Rejected call")
         }
-        null -> Triple(Icons.Default.Call, MaterialTheme.colorScheme.onSurfaceVariant, "Call") // Fallback
+        null -> Triple(Icons.Default.Call, MaterialTheme.colorScheme.onSurfaceVariant, "Call")
     }
 
     val formattedTime = formatTimestamp(entry.timestamp)
