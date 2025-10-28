@@ -31,7 +31,7 @@ import hela.eillance.navigation.Route
 import hela.eillance.navigation.Screen
 import hela.eillance.screens.CallScreen
 import hela.eillance.screens.ContactsScreen
-import hela.eillance.screens.InteractionScreen
+import hela.eillance.screens.ConversationScreen
 import hela.eillance.screens.ProfileScreen
 import hela.eillance.screens.SettingsScreen
 
@@ -102,7 +102,7 @@ fun MercuryApp(viewModel: MainViewModel) {
             composable(Route.Interaction.route) { backStackEntry ->
                 val peerId = backStackEntry.arguments?.getString("peerId")
                     ?: return@composable // Or show an error screen
-                InteractionScreen(
+                ConversationScreen(
                     viewModel = viewModel,
                     uiState = uiState,
                     peerId = peerId,
