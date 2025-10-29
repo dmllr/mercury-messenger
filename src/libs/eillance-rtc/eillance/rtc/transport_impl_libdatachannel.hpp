@@ -73,13 +73,7 @@ public:
   using Peer = transport::Peer;  // Alias for convenience
   using StatusCallbackFunction = eillance::transport::Transport::StatusCallbackFunction;
 
-  RtcTransport() {
-#if ANDROID
-    signaling_server_url_ = "ws://10.0.2.2:8000";
-#else
-    signaling_server_url_ = "ws://127.0.0.1:8000";
-#endif
-  }
+  RtcTransport() = default;
   RtcTransport(RtcTransport&&) = delete;
   RtcTransport(const RtcTransport&) = delete;
   auto operator=(RtcTransport&&) -> RtcTransport& = delete;
@@ -373,6 +367,14 @@ private:
     ws_->onClosed([this]() { onWebSocketClosed(); });
     ws_->onError([this](const std::string& error) { OnWebSocketError(error); });
     ws_->onMessage(nullptr, [this](const std::string& data) { OnWebSocketMessage(data); });
+
+    if (signaling_server_url_.empty()) {
+#if ANDROID
+      signaling_server_url_ = "ws://10.0.2.2:8000";
+#else
+      signaling_server_url_ = "ws://127.0.0.1:8000";
+#endif
+    }
 
     LOGI << "Connecting to signaling server: " << signaling_server_url_;
     ws_->open(signaling_server_url_);
