@@ -26,7 +26,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import hela.eillance.MainViewModel
-import hela.eillance.webrtc.SignalingClient
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -61,13 +60,13 @@ fun SettingsScreen(viewModel: MainViewModel, onBack: () -> Unit) {
                 value = signalingUrl,
                 onValueChange = viewModel::onSignalingUrlChange,
                 label = { Text("Custom Server URL") },
-                placeholder = { Text(SignalingClient.DEFAULT_SIGNALING_URL) },
+                placeholder = { Text("wss://example.com:8000") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                "Leave empty to use the default server. The app must be restarted for changes to take effect.",
+                "Leave empty to use the default server. Reconnects automatically on save.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -75,7 +74,7 @@ fun SettingsScreen(viewModel: MainViewModel, onBack: () -> Unit) {
             Button(
                 onClick = {
                     viewModel.saveSettings()
-                    Toast.makeText(context, "Settings Saved", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Settings Saved. Reconnecting...", Toast.LENGTH_SHORT).show()
                 },
                 modifier = Modifier.align(Alignment.End)
             ) {
