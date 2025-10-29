@@ -51,15 +51,19 @@ fun SettingsScreen(viewModel: MainViewModel, onBack: () -> Unit) {
                 .padding(padding)
                 .padding(16.dp)
         ) {
+            // Group Title
             Text(
-                "Signaling Server",
-                style = MaterialTheme.typography.titleMedium
+                "Connection settings",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(bottom = 8.dp)
             )
-            Spacer(modifier = Modifier.height(8.dp))
+
+            // Setting Item: Custom Server URL
             OutlinedTextField(
                 value = signalingUrl,
                 onValueChange = viewModel::onSignalingUrlChange,
-                label = { Text("Custom Server URL") },
+                label = { Text("Custom server URL") },
                 placeholder = { Text("wss://example.com:8000") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
@@ -70,7 +74,11 @@ fun SettingsScreen(viewModel: MainViewModel, onBack: () -> Unit) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Spacer(modifier = Modifier.height(16.dp))
+
+            // This spacer pushes the save button to the bottom if the content is short.
+            Spacer(modifier = Modifier.weight(1f))
+
+            // Action Button
             Button(
                 onClick = {
                     viewModel.saveSettings()

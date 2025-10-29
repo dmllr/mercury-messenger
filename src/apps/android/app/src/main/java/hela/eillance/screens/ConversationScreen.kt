@@ -1,6 +1,9 @@
 package hela.eillance.screens
 
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,9 +14,11 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -30,6 +35,7 @@ import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.SignalCellularAlt
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -63,11 +69,14 @@ import androidx.core.os.ConfigurationCompat
 import hela.eillance.MainViewModel
 import hela.eillance.ndkio.AppState
 import hela.eillance.ndkio.CallDirection
+import hela.eillance.ndkio.Contact
 import hela.eillance.ndkio.CallStatus
 import hela.eillance.ndkio.HistoryEntry
 import hela.eillance.ndkio.HistoryEntryKind
 import hela.eillance.ndkio.MessageDirection
 import hela.eillance.ndkio.MessageStatus
+import hela.eillance.ndkio.PeerConnectionState
+import hela.eillance.theme.extendedColors
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -169,6 +178,11 @@ fun ConversationScreen(
                 .navigationBarsPadding()
                 .imePadding()
         ) {
+            val contact = uiState.contacts.find { it.peerId == peerId }
+            contact?.let {
+                ConnectionStatusBar(contact = it)
+            }
+
             ChatHistory(
                 modifier = Modifier.weight(1f),
                 uiState = uiState,
@@ -179,6 +193,64 @@ fun ConversationScreen(
         }
     }
 }
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun ConnectionStatusBar(contact: Contact) {
+    var isExpanded by remember { mutableStateOf(false) }
+    val connectionState = PeerConnectionState.fromInt(contact.connectionState)
+    val context = LocalContext.current
+
+    val (statusText, statusColor) = when (connectionState) {
+        PeerConnectionState.Connected -> "Connected" to MaterialTheme.extendedColors.success
+        PeerConnectionState.Connecting -> "Connecting..." to MaterialTheme.colorScheme.secondary
+        PeerConnectionState.Failed -> "Connection Failed" to MaterialTheme.colorScheme.error
+        else -> "Offline" to MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+    }
+
+    val height by animateDpAsState(
+        targetValue = if (isExpanded) 64.dp else 24.dp,
+        label = "statusBarHeight"
+    )
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(height)
+            .combinedClickable(
+                onClick = {},
+                onLongClick = { isExpanded = !isExpanded }
+            ),
+        color = MaterialTheme.colorScheme.surfaceContainer
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            if (!isExpanded) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(modifier = Modifier
+                        .size(10.dp)
+                        .background(statusColor, RoundedCornerShape(2.dp)))
+                    Spacer(Modifier.width(8.dp))
+                    Text(statusText, style = MaterialTheme.typography.labelMedium)
+                }
+            } else {
+                Column(verticalArrangement = Arrangement.Center) {
+                    Text("Connection Details", style = MaterialTheme.typography.titleSmall)
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Status: ${connectionState.getResourceString(context)}",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+        }
+    }
+}
+
 
 @Composable
 fun ChatHistory(
