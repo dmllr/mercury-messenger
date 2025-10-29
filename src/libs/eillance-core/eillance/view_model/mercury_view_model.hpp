@@ -15,8 +15,8 @@
 
 #include "eillance/client/client.hpp"
 #include "eillance/events/service_connection_state.h"
-#include "eillance/identity/contact_manager.hpp"
 #include "eillance/messaging/history.hpp"
+#include "eillance/storage/persistent_storage.hpp"
 #include "eillance/transport/peer.hpp"
 #include "eillance/transport/peer_connection_state.h"
 #include "eillance/utils/dispatch_queue.hpp"
@@ -67,6 +67,14 @@ inline void to_json(nlohmann::json& json, const UIState::ViewContact& c) {
       {"connection_state", c.connection_state},
       {"unread_count", c.unread_count},
   };
+}
+
+//NOLINTNEXTLINE(readability-identifier-naming)
+inline void to_json(nlohmann::json& j, const std::deque<messaging::HistoryEntryRecord>& deq) {
+  j = nlohmann::json::array();
+  for (const auto& msg : deq) {
+    j.push_back(msg);
+  }
 }
 
 //NOLINTNEXTLINE(readability-identifier-naming)
@@ -545,7 +553,7 @@ inline void MercuryViewModel::UpdateContacts() {
   auto contacts_from_manager = client_->getContacts();
   current_state_.contacts.clear();
   for (const auto& c : contacts_from_manager) {
-    current_state_.contacts.push_back({c.peer_id, c.status, client_->getPeerConnectionState(c.peer_id)});
+    current_state_.contacts.push_back({c.peer_id, c.status, client_->getPeerConnectionState(c.peer_id), 0});
   }
 }
 

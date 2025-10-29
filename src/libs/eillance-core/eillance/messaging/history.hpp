@@ -1,15 +1,13 @@
 #pragma once
 
 #include <atomic>
-#include <deque>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <ranges>
 #include <string>
 #include <string_view>
-#include <unordered_map>
-#include <variant>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -20,314 +18,52 @@
 
 namespace eillance::messaging {
 
-enum class MessageDirection : std::uint8_t {
-  sent,
-  received
-};
-
-enum class CallDirection : std::uint8_t {
-  outgoing,
-  incoming,
-};
-
-enum class CallStatus : std::uint8_t {
-  answered,
-  missed,
-  rejected,
-  busy,
-};
-
-enum class MessageStatus : std::uint8_t {
-  none,
-  sending,
-  sent,
-  delivered,
-  read
-};
-
-enum class HistoryEntryKind : std::uint8_t {
-  textMessage,
-  voiceCall,
-  videoCall,
-  systemMessage
-};
-
-NLOHMANN_JSON_SERIALIZE_ENUM(MessageDirection, {
-                                                   // NOLINT
-                                                   {MessageDirection::sent, "sent"},
-                                                   {MessageDirection::received, "received"},
-                                               })
-
-NLOHMANN_JSON_SERIALIZE_ENUM(CallDirection, {
-                                                // NOLINT
-                                                {CallDirection::outgoing, "outgoing"},
-                                                {CallDirection::incoming, "incoming"},
-                                            })
-
-NLOHMANN_JSON_SERIALIZE_ENUM(CallStatus, {
-                                             // NOLINT
-                                             {CallStatus::answered, "answered"},
-                                             {CallStatus::missed, "missed"},
-                                             {CallStatus::rejected, "rejected"},
-                                             {CallStatus::busy, "busy"},
-                                         })
-
-NLOHMANN_JSON_SERIALIZE_ENUM(MessageStatus, {
-                                                // NOLINT
-                                                {MessageStatus::none, "none"},
-                                                {MessageStatus::sending, "sending"},
-                                                {MessageStatus::sent, "sent"},
-                                                {MessageStatus::delivered, "delivered"},
-                                                {MessageStatus::read, "read"},
-                                            })
-
-NLOHMANN_JSON_SERIALIZE_ENUM(HistoryEntryKind, {
-                                                   // NOLINT
-                                                   {HistoryEntryKind::textMessage, "text_message"},
-                                                   {HistoryEntryKind::voiceCall, "voice_call"},
-                                                   {HistoryEntryKind::videoCall, "video_call"},
-                                                   {HistoryEntryKind::systemMessage, "system_message"},
-                                               })
-
-// Data specific to a text or system message.
-struct MessageEntry {
-  std::string content;
-};
-
-// Data specific to a voice or video call record.
-struct CallEntry {
-  uint32_t duration_seconds = 0;
-  CallDirection call_direction;
-  CallStatus call_status;
-};
-
-// A variant to hold the data for any kind of history entry.
-using HistoryEntryData = std::variant<MessageEntry, CallEntry>;
-
-struct HistoryEntryRecord {
-  std::uint64_t id;
-  HistoryEntryKind kind;
-  Time::Unit timestamp;
-  MessageDirection direction;
-  MessageStatus status = MessageStatus::none;
-  HistoryEntryData data;
-};
-
-inline void to_json(nlohmann::json& j, const HistoryEntryRecord& e) {  // NOLINT(*-identifier-naming)
-  j["id"] = e.id;
-  j["kind"] = e.kind;
-  j["timestamp"] = e.timestamp;
-  j["direction"] = e.direction;
-  j["status"] = e.status;
-
-  std::visit([&j](auto&& arg) {
-    using T = std::decay_t<decltype(arg)>;
-    if constexpr (std::is_same_v<T, MessageEntry>) {
-      j["content"] = arg.content;
-    } else if constexpr (std::is_same_v<T, CallEntry>) {
-      j["duration_seconds"] = arg.duration_seconds;
-      j["call_direction"] = arg.call_direction;
-      j["call_status"] = arg.call_status;
-    }
-  },
-             e.data);
-}
-
-inline void from_json(const nlohmann::json& j, HistoryEntryRecord& e) {  // NOLINT(*-identifier-naming)
-  j.at("id").get_to(e.id);
-  j.at("kind").get_to(e.kind);
-  j.at("timestamp").get_to(e.timestamp);
-  e.direction = j.value("direction", MessageDirection::received);
-  e.status = j.value("status", MessageStatus::none);
-  switch (e.kind) {
-    case HistoryEntryKind::textMessage:
-    case HistoryEntryKind::systemMessage:
-      e.data = MessageEntry{j.at("content").get<std::string>()};
-      break;
-    case HistoryEntryKind::voiceCall:
-    case HistoryEntryKind::videoCall:
-      e.data = CallEntry{j.value("duration_seconds", 0U), j.at("call_direction").get<CallDirection>(), j.at("call_status").get<CallStatus>()};
-      break;
-  }
-}
-
-struct ChatSummary {
-  std::string peer_id;
-  HistoryEntryRecord last_message;
-  uint32_t unread_count = 0;
-};
-
-inline void to_json(nlohmann::json& j, const ChatSummary& s) {
-  j["peer_id"] = s.peer_id;
-  j["last_message"] = s.last_message;
-  j["unread_count"] = s.unread_count;
-}
-
-struct HistoryPage {
-  std::vector<HistoryEntryRecord> messages;
-  size_t total_messages;
-};
-
-inline void to_json(nlohmann::json& j, const std::deque<HistoryEntryRecord>& deq) {
-  j = nlohmann::json::array();
-  for (const auto& msg : deq) {
-    j.push_back(msg);
-  }
-}
-
-inline void from_json(const nlohmann::json& j, std::deque<HistoryEntryRecord>& deq) {
-  for (const auto& item : j) {
-    deq.push_back(item.get<HistoryEntryRecord>());
-  }
-}
-
 class MessageHistory {
   std::shared_ptr<storage::PersistentStorage> storage_;
-  std::unordered_map<std::string, std::deque<HistoryEntryRecord>> history_cache_;
-  mutable std::mutex mutex_;
-  std::atomic<std::uint64_t> next_id_{1};
   std::function<void(const std::string& peer_id, std::uint64_t message_id, MessageStatus status)> on_status_changed_;
-
-  static constexpr auto GetStorageKey(const std::string_view peer_id) -> std::string { return std::string("history_") + std::string(peer_id); }
-
-  void LoadHistory(const std::string& peer_id) {
-    if (history_cache_.contains(peer_id)) { return; }
-
-    if (const auto key = GetStorageKey(peer_id); storage_->Exists(key)) {
-      const auto data_opt = storage_->Load(key);
-      if (data_opt) {
-        try {
-          const std::string json_str(reinterpret_cast<const char*>(data_opt->data()), data_opt->size());
-          const nlohmann::json j = nlohmann::json::parse(json_str);
-          history_cache_[peer_id] = j.get<std::deque<HistoryEntryRecord>>();
-          if (!history_cache_.at(peer_id).empty()) {  // NOLINT(*-pro-type-vararg)
-            std::uint64_t max_id = 0;
-            for (const auto& entry : history_cache_.at(peer_id)) {
-              if (entry.id > max_id) { max_id = entry.id; }
-            }
-            std::uint64_t current_next_id = next_id_.load();
-            while (max_id >= current_next_id) {
-              if (next_id_.compare_exchange_weak(current_next_id, max_id + 1)) { break; }
-            }
-          }
-        } catch (const nlohmann::json::parse_error& e) {
-          LOGE << "Failed to parse message history for peer " << peer_id << ": " << e.what();
-          storage_->Delete(key);
-        }
-      }
-    }
-  }
-
-  void SaveHistory(const std::string& peer_id) {
-    const auto key = GetStorageKey(peer_id);
-    const auto& history = history_cache_[peer_id];
-
-    if (history.empty()) {
-      if (storage_->Exists(key)) { storage_->Delete(key); }
-      return;
-    }
-
-    const nlohmann::json j = history;
-    const std::string json_str = j.dump();
-    const auto* char_ptr = reinterpret_cast<const std::byte*>(json_str.data());
-    const std::vector<std::byte> data(char_ptr, char_ptr + json_str.size());
-    if (!storage_->Save(key, data)) { LOGE << "Failed to save message history for peer " << peer_id; }
-  }
 
 public:
   explicit MessageHistory(std::shared_ptr<storage::PersistentStorage> storage) : storage_(std::move(storage)) {}
 
   auto AddTextEntry(const std::string& peer_id, const std::string& content, MessageDirection direction) -> HistoryEntryRecord {
-    const std::lock_guard lock(mutex_);
-    LoadHistory(peer_id);
-    auto& history = history_cache_[peer_id];
-
     const HistoryEntryRecord entry{
-        .id = next_id_.fetch_add(1),
+        .id = 0,  // DB will assign ID
         .kind = HistoryEntryKind::textMessage,
         .timestamp = Time::Now(),
         .direction = direction,
         .status = (direction == MessageDirection::sent) ? MessageStatus::sending : MessageStatus::none,
         .data = MessageEntry{content},
+        .peer_id_for_db = peer_id,
     };
-
-    history.push_back(entry);
-    SaveHistory(peer_id);
-    return entry;
+    return storage_->AddHistoryEntry(entry);
   }
 
   void AddCallEntry(const std::string& peer_id, const HistoryEntryKind kind, const CallDirection direction, const CallStatus status, uint32_t duration = 0) {
-    const std::lock_guard lock(mutex_);
-    LoadHistory(peer_id);
-    auto& history = history_cache_[peer_id];
-
-    history.push_back({.id = next_id_.fetch_add(1), .kind = kind, .timestamp = Time::Now(), .direction = (direction == CallDirection::incoming) ? MessageDirection::received : MessageDirection::sent, .data = CallEntry{.duration_seconds = duration, .call_direction = direction, .call_status = status}});  // NOLINT(*-branch-clone)
-    SaveHistory(peer_id);
+    storage_->AddHistoryEntry({.id = 0, .kind = kind, .timestamp = Time::Now(), .direction = (direction == CallDirection::incoming) ? MessageDirection::received : MessageDirection::sent, .data = CallEntry{.duration_seconds = duration, .call_direction = direction, .call_status = status}, .peer_id_for_db = peer_id});  // NOLINT(*-branch-clone)
   }
 
   void SetStatusChangedCallback(std::function<void(const std::string&, std::uint64_t, MessageStatus)> cb) {
-    const std::lock_guard lock(mutex_);
     on_status_changed_ = std::move(cb);
   }
 
   void UpdateMessageStatus(const std::string& peer_id, const std::uint64_t message_id, const MessageStatus new_status) {
-    {
-      const std::lock_guard lock(mutex_);
-      LoadHistory(peer_id);
-      if (!history_cache_.contains(peer_id)) { return; }
-      for (auto& history = history_cache_.at(peer_id); auto& entry : std::ranges::reverse_view(history)) {
-        if (entry.id == message_id) {
-          if (entry.status != new_status) {
-            entry.status = new_status;
-            SaveHistory(peer_id);
-            if (on_status_changed_) { on_status_changed_(peer_id, message_id, new_status); }
-          }
-          return;
-        }
-      }
+    storage_->UpdateMessageStatus(peer_id, message_id, new_status);
+    if (on_status_changed_) { on_status_changed_(peer_id, message_id, new_status); }
+  }
+
+  void MarkMessagesAsRead(const std::string& peer_id, const std::vector<uint64_t>& message_ids) {
+    storage_->UpdateMessageStatuses(peer_id, message_ids, MessageStatus::read);
+    for (const auto message_id : message_ids) {
+      if (on_status_changed_) { on_status_changed_(peer_id, message_id, MessageStatus::read); }
     }
   }
 
   auto GetHistoryPage(const std::string& peer_id, const size_t page_index, const size_t page_size) -> HistoryPage {
-    const std::lock_guard lock(mutex_);
-    LoadHistory(peer_id);
-
-    if (!history_cache_.contains(peer_id)) { return {.messages = {}, .total_messages = 0}; }
-
-    const auto& history = history_cache_.at(peer_id);
-    const size_t total_size = history.size();
-
-    const size_t end_offset = page_index * page_size;
-    if (end_offset >= total_size) { return {.messages = {}, .total_messages = total_size}; }
-
-    const size_t start_offset = std::min(total_size, (page_index + 1) * page_size);
-
-    const auto start_it = history.end() - start_offset;
-    const auto end_it = history.end() - end_offset;
-
-    std::vector messages_page(start_it, end_it);
-    return {.messages = std::move(messages_page), .total_messages = total_size};
+    return storage_->GetHistoryPage(peer_id, page_index, page_size);
   }
 
   auto GetChatSummaries(const std::vector<std::string>& peer_ids) -> std::vector<ChatSummary> {
-    const std::lock_guard lock(mutex_);
-    std::vector<ChatSummary> summaries;
-
-    for (const auto& peer_id : peer_ids) {
-      LoadHistory(peer_id);
-      if (history_cache_.contains(peer_id) && !history_cache_.at(peer_id).empty()) {
-        uint32_t unread_count = 0;
-        const auto& history = history_cache_.at(peer_id);
-        for (const auto& entry : history) {
-          if (entry.direction == MessageDirection::received && entry.status != MessageStatus::read && entry.kind == HistoryEntryKind::textMessage) { unread_count++; }
-        }
-        summaries.push_back({.peer_id = peer_id, .last_message = history_cache_.at(peer_id).back(), .unread_count = unread_count});
-      }
-    }
-
-    std::ranges::sort(summaries, [](const auto& left, const auto& right) { return left.last_message.timestamp > right.last_message.timestamp; });
-
-    return summaries;
+    return storage_->GetChatSummaries(peer_ids);
   }
 };
 

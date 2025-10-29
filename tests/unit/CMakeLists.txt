@@ -24,9 +24,9 @@ add_executable(h-e-tests
   test-crypto.cpp
   test-id-manager.cpp
   test-message-history.cpp
-  test-message-queue.cpp
   test-packet.cpp
   test-settings-manager.cpp
+  test-sqlite-storage.cpp
 )
 target_link_libraries(h-e-tests GTest::gtest_main eillance-core eillance-rtc eillance-h264)
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/../files" DESTINATION "${CMAKE_BINARY_DIR}/bin")

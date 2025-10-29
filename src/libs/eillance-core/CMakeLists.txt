@@ -7,7 +7,7 @@ set(shared_cmake_libs_path "${shared_src_path}/cmake")
 include("${shared_cmake_libs_path}/libboringssl.cmake")
 include("${shared_cmake_libs_path}/libplog.cmake")
 include("${shared_cmake_libs_path}/libjson.cmake")
-
+include("${shared_cmake_libs_path}/libsqlite.cmake")
 
 target_include_directories(eillance-core INTERFACE
   "${CMAKE_CURRENT_SOURCE_DIR}"
@@ -17,6 +17,8 @@ target_link_libraries(eillance-core INTERFACE
   eillance-utils
   plog
   nlohmann_json
+  sqlite_orm
+  SQLite3
   ssl
   crypto
 )

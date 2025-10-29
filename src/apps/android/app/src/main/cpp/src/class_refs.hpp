@@ -101,6 +101,17 @@ public:
     classes_.at(class_name).AddMethod(method_name, mid);
   }
 
+  /// Registers a static method for a given class with the given name and signature.
+  void RegisterStaticMethod(JNIEnv* env, const std::string& class_name, const std::string& method_name, const std::string& method_sig) {
+    RegisterClass(env, class_name);
+    jclass cls = classes_.at(class_name).Class();
+    jmethodID mid = env->GetStaticMethodID(cls, method_name.c_str(), method_sig.c_str());
+    if (mid == nullptr) {
+      throw std::runtime_error("Failed to get static method '" + method_name + "' for class: " + class_name);
+    }
+    classes_.at(class_name).AddMethod(method_name, mid);
+  }
+
   /// Retrieve the ClassHolder for a given class.
   auto Class(const std::string& class_name) -> ClassHolder& {
     auto itr = classes_.find(class_name);

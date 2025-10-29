@@ -10,12 +10,12 @@
 
 #include <nlohmann/json.hpp>
 
-#include "android_persistent_storage.hpp"
 #include "class_refs.hpp"
 #include "eillance/capture/video_config.hpp"
 #include "eillance/client/client.hpp"
 #include "eillance/logging/logging.h"
 #include "eillance/storage/persistent_storage.hpp"
+#include "eillance/storage/sqlite_storage.hpp"
 #include "eillance/view_model/mercury_view_model.hpp"
 #include "transport/transport_impl_libwebrtc.hpp"
 
@@ -30,10 +30,22 @@ class ClientEngine {
   std::unique_ptr<view_model::MercuryViewModel> view_model_;
 
 public:
-  ClientEngine(JavaVM* jvm, JNIEnv* env, jobject instance) : jvm_(jvm), native_bridge_(env->NewGlobalRef(instance)) {
-    auto storage = std::make_shared<storage::PersistentStorage>(std::make_unique<storage::AndroidPersistentStorageImpl>(jvm, instance));
+  ClientEngine(JavaVM* jvm, JNIEnv* env, jobject context, jobject native_bridge) : jvm_(jvm), native_bridge_(env->NewGlobalRef(native_bridge)) {
+    // Get the app's private files directory for the database
+    jclass context_class = ClassRefs::Instance().Class("android/content/Context").Class();
+    jmethodID get_files_dir_method = env->GetMethodID(context_class, "getFilesDir", "()Ljava/io/File;");
+    jobject file_object = env->CallObjectMethod(context, get_files_dir_method);
 
-    auto rtc_transport_impl = std::make_unique<transport::AndroidRtcTransport>(jvm, instance);
+    jclass file_class = ClassRefs::Instance().Class("java/io/File").Class();
+    jmethodID get_path_method = env->GetMethodID(file_class, "getPath", "()Ljava/lang/String;");
+    auto path_jstring = (jstring)env->CallObjectMethod(file_object, get_path_method);
+    const char* path_chars = env->GetStringUTFChars(path_jstring, nullptr);
+    std::filesystem::path db_path = std::filesystem::path(path_chars) / "mercury.db";
+    env->ReleaseStringUTFChars(path_jstring, path_chars);
+
+    auto storage = std::make_shared<storage::PersistentStorage>(std::make_unique<storage::SQLiteStorage>(db_path));
+
+    auto rtc_transport_impl = std::make_unique<transport::AndroidRtcTransport>(jvm, context);
     auto transport = std::make_shared<transport::Transport>(std::move(rtc_transport_impl));
     client_ = std::make_shared<Client>(storage, transport);
 
@@ -42,16 +54,14 @@ public:
     view_model_->SetOnStateChangedCallback([this]() { UpdateState(); });
 
     std::string device_name;
-    auto stored_name = storage->Load("device_name");
-    if (stored_name.has_value() && !stored_name->empty()) { device_name.assign(reinterpret_cast<const char*>(stored_name->data()), stored_name->size()); }
+    auto stored_name = storage->GetSetting("device_name");
+    if (stored_name) { device_name = *stored_name; }
 
     if (device_name.empty()) {
       char model_string[PROP_VALUE_MAX + 1];
       __system_property_get("ro.product.model", model_string);
       device_name = std::string(model_string);
-      const auto* data_ptr = reinterpret_cast<const std::byte*>(device_name.data());
-      std::vector<std::byte> name_bytes(data_ptr, data_ptr + device_name.size());
-      storage->Save("device_name", name_bytes);
+      storage->SetSetting("device_name", device_name);
     }
     client_->setName(device_name);
   }
