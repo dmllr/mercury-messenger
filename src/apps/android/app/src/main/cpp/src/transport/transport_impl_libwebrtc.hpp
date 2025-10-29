@@ -9,6 +9,7 @@
 #include <nlohmann/json.hpp>
 
 #include "../utils/jni_utils.hpp"
+#include "eillance/crypto/crypto.hpp"
 #include "eillance/logging/logging.h"
 #include "eillance/transport/peer.hpp"
 #include "eillance/transport/transport.hpp"
@@ -79,6 +80,7 @@ public:
   }
   void SetName(const std::string& /*device_name*/) override {}
   void SetId(const std::string& id) override { id_ = id; }
+  auto GetId() const -> const std::string& { return id_; }
   void SetSignalingUrl(const std::string& url) override { signaling_url_ = url; }
 
   void Start() override {
@@ -363,16 +365,36 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcTransport_nati
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcTransport_nativeOnSystemMessage(JNIEnv* env, jobject, jlong native_ptr, jstring type, jstring message) {
   auto* transport = reinterpret_cast<eillance::transport::AndroidRtcTransport*>(native_ptr);
   if ((transport != nullptr) && (transport->Delegate() != nullptr)) {
+    // Convert jstring to std::string for type
     const char* type_chars = env->GetStringUTFChars(type, nullptr);
+    const std::string type_str(type_chars);
+    env->ReleaseStringUTFChars(type, type_chars);
+
+    // Convert jstring to std::string for message
     const char* msg_chars = env->GetStringUTFChars(message, nullptr);
+    const std::string msg_str(msg_chars);
+    env->ReleaseStringUTFChars(message, msg_chars);
+
     try {
-      const auto json_msg = nlohmann::json::parse(msg_chars);
-      transport->Delegate()->processSystemMessage(type_chars, json_msg);
+      const auto json_msg = nlohmann::json::parse(msg_str);
+
+      if (type_str == "auth_challenge") {
+        const auto challenge = json_msg.value("challenge", "");
+        if (!challenge.empty()) {
+          const auto signature_bytes = transport->Delegate()->Sign(challenge);
+          const auto signature_hex = eillance::crypto::ToHex(signature_bytes);
+          const nlohmann::json response = {{"type", "auth_response"}, {"id", transport->GetId()}, {"signature", signature_hex}};
+          transport->SendSignalingMessage(response);
+        }
+      } else if (type_str == "login_success") {
+        transport->Delegate()->onLoginSuccess();
+        transport->ReportStateChange("", eillance::EventSource::system, static_cast<int>(eillance::ServiceConnectionState::online));
+      } else {
+        transport->Delegate()->processSystemMessage(type_str, json_msg);
+      }
     } catch (const std::exception& e) {
       LOGE << "Failed to parse system message: " << e.what();
     }
-    env->ReleaseStringUTFChars(type, type_chars);
-    env->ReleaseStringUTFChars(message, msg_chars);
   }
 }
 
