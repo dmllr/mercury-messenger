@@ -8,6 +8,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <unordered_map>
 #include <utility>
@@ -15,6 +16,7 @@
 #include <nlohmann/json.hpp>
 #include <rtc/rtc.hpp>
 
+#include "eillance/crypto/crypto.hpp"
 #include "eillance/events/event_source.h"
 #include "eillance/events/service_connection_state.h"
 #include "eillance/logging/logging.h"
@@ -434,7 +436,7 @@ private:
   void OnWebSocketMessage(const std::string& data) {
     assert(delegate_);
     const auto message = Json::parse(data);
-    auto itr = message.find("from");
+    const auto itr = message.find("from");
     if (itr == message.end()) {
       DispatchQueue::MainThread().Dispatch([this, message]() { OnSystemMessage(message); });
     } else {
@@ -466,24 +468,40 @@ private:
         {"type", "login"},
         {"id", id_},
     };
-
     WsSendMessage(message);
-    is_logged_in_ = true;
-    ReportServiceConnectionState(ServiceConnectionState::online);
   }
 
-  void OnSystemMessage(Json message) const {
+  void OnSystemMessage(const Json& message) {
     assert(delegate_);
     const auto itr = message.find("type");
     if (itr == message.end()) { return; }
-    auto type = itr->get<std::string>();
+    const auto type = itr->get<std::string>();
 
-    if (type == "error") {
+    if (type == "auth_challenge") {
+      const auto challenge = message.value("challenge", "");
+      if (challenge.empty()) {
+        LOGE << "Received auth_challenge without a challenge string.";
+        return;
+      }
+      const auto signature_bytes = delegate_->Sign(challenge);
+      const auto signature_hex = crypto::ToHex(signature_bytes);
+      const Json response = {{"type", "auth_response"}, {"id", id_}, {"signature", signature_hex}};
+      WsSendMessage(response);
+    } else if (type == "login_success") {
+      LOGI << "Successfully logged into signaling server.";
+      is_logged_in_ = true;
+      ReportServiceConnectionState(ServiceConnectionState::online);
+      delegate_->onLoginSuccess();
+    } else if (type == "error") {
       const auto error = message.value("error", "unknown");
       LOGE << "Signaling error received: " << error;
       if (const auto for_peer_it = message.find("for_peer"); for_peer_it != message.end()) {
         delegate_->onSignalingErrorForPeer(for_peer_it->get<std::string>(), error);
       } else {
+        if (error == "auth_failed") {
+          LOGE << "Authentication failed. Terminating connection.";
+          Terminate();
+        }
         ReportServiceConnectionState(ServiceConnectionState::failure);
       }
     } else {

@@ -12,6 +12,8 @@ find_library(log-lib log)
 
 include("${shared_cmake_libs_path}/import_remote.cmake")
 
+add_subdirectory("${shared_src_path}/libs/eillance-logging" "${CMAKE_CURRENT_BINARY_DIR}/eillance-logging")
 add_subdirectory("${shared_src_path}/libs/eillance-utils" "${CMAKE_CURRENT_BINARY_DIR}/eillance-utils")
+add_subdirectory("${shared_src_path}/libs/eillance-crypto" "${CMAKE_CURRENT_BINARY_DIR}/eillance-crypto")
 add_subdirectory("${shared_src_path}/libs/eillance-core" "${CMAKE_CURRENT_BINARY_DIR}/eillance-core")
 add_subdirectory("src")

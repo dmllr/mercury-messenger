@@ -108,11 +108,12 @@ public:
 
   // TransportDelegate implementation
   void onPeerReady(const std::shared_ptr<Peer>& peer) override;
-  void onSignalingErrorForPeer(const std::string& peer_id, const std::string& error) override;
+  void onSignalingErrorForPeer(const std::string& peer_id, const std::string& error) override;  
+  auto Sign(const std::string& message) -> std::vector<std::byte> override;
+  void onLoginSuccess() override;
   void processPeerMessage(Json message) override;
   void processSystemMessage(const std::string& type, Json message) override;
   void onFrameReceived(const std::string& peer_id, const std::vector<std::byte>& frame) override;
-
 private:
   void InitializeAVStream();
   void startMediaCall(const std::string& peer_id, bool is_video);
@@ -209,7 +210,6 @@ inline void Client::start() const {
   }
 
   transport_->setId(id_manager_->GetId());
-  delivery_service_->start();
   transport_->start();
 }
 inline void Client::terminate() const {
@@ -348,6 +348,11 @@ inline void Client::configure(const Config& config) const {
   }
 }
 inline void Client::onPeerReady(const std::shared_ptr<Peer>&) {}
+inline auto Client::Sign(const std::string& message) -> std::vector<std::byte> {
+  return id_manager_->Sign(message);
+}
+inline void Client::onLoginSuccess() { delivery_service_->start(); }
+
 inline void Client::onSignalingErrorForPeer(const std::string& peer_id, const std::string& error) {
   if (error == "peer_not_found") {
     LOGW << "Connection attempt failed for peer " << peer_id << " because they are not online. Will retry when they appear.";

@@ -41,6 +41,11 @@ public:
   auto GetIdentity() const -> crypto::Identity* { return identity_.get(); }
 
   auto GetId() const -> std::string { return identity_ ? identity_->GetId() : ""; }
+
+  auto Sign(const std::string& message) const -> std::vector<std::byte> {
+    if (!identity_) { return {}; }
+    return identity_->Sign(message);
+  }
 };
 
 }  // namespace eillance::identity

@@ -9,6 +9,8 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <openssl/rand.h>
+#include "eillance/crypto/crypto.hpp"
 
 #include <nlohmann/json.hpp>
 #include <plog/Appenders/ColorConsoleAppender.h>
@@ -28,60 +30,106 @@ constexpr auto logInstanceId = 454;
 #define LGE PLOG_(logInstanceId, plog::error)    // NOLINT(*-pro-type-reinterpret-cast,*-lambda-function-name)
 
 class SignalingServer {
+public:
   using Json = nlohmann::json;
   using PeerId = std::string;
 
-  struct Peer {
-    std::shared_ptr<rtc::WebSocket> ws;
-  };
-
-public:
   explicit SignalingServer(const rtc::WebSocketServer::Configuration& config) {
     server_ = std::make_unique<rtc::WebSocketServer>(config);
     server_->onClient([this](const std::shared_ptr<rtc::WebSocket>& wss) { HandleConnection(wss); });
   }
 
 private:
+  struct Peer {
+    std::shared_ptr<rtc::WebSocket> ws;
+  };
+
   std::unique_ptr<rtc::WebSocketServer> server_;
-  std::unordered_map<PeerId, Peer> peers_;
+  std::unordered_map<PeerId, Peer> peers_;  // Authenticated peers
+  std::unordered_map<rtc::WebSocket*, std::string> challenges_;
   std::mutex peers_mutex_;
+
+  // Generates a cryptographically secure random string to be used as a challenge.
+  static auto GenerateChallenge() -> std::string {
+    std::vector<std::byte> buffer(32);
+    if (RAND_bytes(reinterpret_cast<unsigned char*>(buffer.data()), static_cast<int>(buffer.size())) != 1) { throw std::runtime_error("Failed to generate random bytes for challenge."); }
+    return eillance::crypto::ToHex(buffer);
+  }
 
   void HandleConnection(const std::shared_ptr<rtc::WebSocket>& wss) {
     LGD << "New connection established";
     auto peer_id = std::make_shared<PeerId>();
-    rtc::WebSocket* wss_ptr = wss.get();
 
     wss->onMessage(nullptr, [this, wss, peer_id](const std::string& msg) { HandleMessage(wss, msg, *peer_id); });
 
-    wss->onClosed([this, peer_id, wss_ptr]() { HandleDisconnection(*peer_id, wss_ptr); });
+    wss->onClosed([this, wss, peer_id]() { HandleDisconnection(wss.get(), *peer_id); });
   }
 
   void HandleMessage(const std::shared_ptr<rtc::WebSocket>& wss, const std::string& msg, PeerId& peer_id) {
     try {
       LGV << "<< " << msg;
-      auto json = Json::parse(msg);
-      auto type = json.value("type", "");
+      const auto json = Json::parse(msg);
+      const auto type = json.value("type", "");
 
       if (peer_id.empty()) {
         if (type == "login" && json.contains("id")) {
-          peer_id = json["id"].get<PeerId>();
-          if (peer_id.empty()) {
+          const PeerId temp_id = json["id"].get<PeerId>();
+          if (temp_id.empty()) {
             SendError(wss, "invalid_id", "Peer ID cannot be empty.");
-            peer_id.clear();
             return;
           }
 
+          const std::string challenge = GenerateChallenge();
           {
             const std::lock_guard<std::mutex> lock(peers_mutex_);
-            if (auto itr = peers_.find(peer_id); itr != peers_.end()) {
-              LGI << "Peer " << peer_id << " is reconnecting. Closing old connection.";
-              itr->second.ws->close();
+            challenges_[wss.get()] = challenge;
+          }
+
+          const Json response = {{"type", "auth_challenge"}, {"challenge", challenge}};
+          wss->send(response.dump());
+
+        } else if (type == "auth_response" && json.contains("signature") && json.contains("id")) {
+          const PeerId claimed_id = json["id"].get<PeerId>();
+          std::string challenge;
+          {
+            const std::lock_guard<std::mutex> lock(peers_mutex_);
+            const auto it = challenges_.find(wss.get());
+            if (it == challenges_.end()) {
+              SendError(wss, "unexpected_auth_response", "No pending challenge for this connection.");
+              wss->close();
+              return;
             }
-            peers_[peer_id] = {wss};
-            LGI << "Peer registered: " << peer_id;
+            challenge = it->second;
+          }
+
+          const auto signature_hex = json["signature"].get<std::string>();
+          const auto signature_bytes = eillance::crypto::FromHex(signature_hex);
+
+          if (eillance::crypto::Identity::Verify(claimed_id, challenge, signature_bytes)) {
+            LGI << "Peer authenticated: " << claimed_id;
+            peer_id = claimed_id;
+
+            {
+              const std::lock_guard<std::mutex> lock(peers_mutex_);
+              challenges_.erase(wss.get());
+
+              if (auto itr = peers_.find(peer_id); itr != peers_.end()) {
+                LGI << "Peer " << peer_id << " is reconnecting. Closing old connection.";
+                itr->second.ws->close();
+              }
+              peers_[peer_id] = {wss};
+            }
+
+            const Json success_msg = {{"type", "login_success"}};
+            wss->send(success_msg.dump());
+
+          } else {
+            LGE << "Authentication failed for peer " << claimed_id;
+            SendError(wss, "auth_failed", "Signature verification failed.");
+            wss->close();
           }
         } else {
-          SendError(wss, "login_required", "First message must be of type 'login' with an 'id'.");
+          SendError(wss, "login_or_auth_required", "Connection not authenticated.");
           wss->close();
         }
       } else {
@@ -89,26 +137,27 @@ private:
           SendError(wss, "missing_recipient", "Message must have a 'to' field for relaying.");
           return;
         }
-        auto destination_id = json.value("to", "");
+        const auto destination_id = json.value("to", "");
         if (destination_id.empty()) {
           SendError(wss, "empty_recipient", "Recipient 'to' field cannot be empty.");
           return;
         }
 
-        LGD << "Relaying message from: " << peer_id << " to: " << destination_id;
+        LGD << "Relaying message from: " << peer_id << " to: " << destination_id.c_str();
 
         {
           const std::lock_guard<std::mutex> lock(peers_mutex_);
-          auto itr = peers_.find(destination_id);
+          const auto itr = peers_.find(destination_id);
           if (itr == peers_.end() || !itr->second.ws || !itr->second.ws->isOpen()) {
-            LGE << "Peer " << destination_id << " not found or not connected.";
-            SendError(wss, "peer_not_found", "Peer '" + destination_id + "' not found.", destination_id);
+            LGE << "Peer " << destination_id.c_str() << " not found or not connected.";
+            SendError(wss, "peer_not_found", "Peer '" + std::string(destination_id) + "' not found.", destination_id);
             return;
           }
 
-          json["from"] = peer_id;
-          std::string message_str = json.dump();
-          LGV << ">> to " << destination_id << ": " << message_str;
+          auto relayed_json = json;
+          relayed_json["from"] = peer_id;
+          const std::string message_str = relayed_json.dump();
+          LGV << ">> to " << destination_id.c_str() << ": " << message_str;
           itr->second.ws->send(message_str);
         }
       }
@@ -117,16 +166,14 @@ private:
     }
   }
 
-  void HandleDisconnection(const PeerId& peer_id, rtc::WebSocket* wss_ptr) {
+  void HandleDisconnection(rtc::WebSocket* wss, const PeerId& peer_id) {
+    const std::lock_guard<std::mutex> lock(peers_mutex_);
     if (peer_id.empty()) {
-      LGD << "Unidentified peer disconnected.";
-      return;
-    }
-
-    {
-      const std::lock_guard<std::mutex> lock(peers_mutex_);
-      auto it = peers_.find(peer_id);
-      if (it != peers_.end() && it->second.ws.get() == wss_ptr) {
+      LGD << "Unauthenticated peer disconnected.";
+      challenges_.erase(wss);
+    } else {
+      const auto it = peers_.find(peer_id);
+      if (it != peers_.end() && it->second.ws.get() == wss) {
         peers_.erase(it);
         LGI << "Peer disconnected and removed: " << peer_id;
       } else {
