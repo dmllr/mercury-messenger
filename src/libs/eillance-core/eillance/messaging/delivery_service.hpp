@@ -8,7 +8,8 @@
 
 #include "eillance/identity/contact_manager.hpp"
 #include "eillance/logging/logging.h"
-#include "eillance/messaging/message_queue.hpp"
+#include "eillance/messaging/history.hpp"
+#include "eillance/storage/persistent_storage.hpp"
 #include "eillance/utils/dispatch_queue.hpp"
 
 namespace eillance::messaging {
@@ -16,7 +17,7 @@ namespace eillance::messaging {
 class MessageDeliveryService {
   using ConnectionRequestHandler = std::function<void(const std::string&)>;
 
-  std::shared_ptr<MessageQueue> message_queue_;
+  std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<identity::ContactManager> contact_manager_;
   ConnectionRequestHandler connection_handler_;
   DispatchQueue dispatch_queue_{"DeliveryService", 1};
@@ -30,7 +31,7 @@ class MessageDeliveryService {
   static constexpr int max_retry_delay_s = 60;
 
 public:
-  MessageDeliveryService(std::shared_ptr<MessageQueue> queue, std::shared_ptr<identity::ContactManager> contacts, ConnectionRequestHandler handler) : message_queue_(std::move(queue)), contact_manager_(std::move(contacts)), connection_handler_(std::move(handler)) {}
+  MessageDeliveryService(std::shared_ptr<storage::PersistentStorage> storage, std::shared_ptr<identity::ContactManager> contacts, ConnectionRequestHandler handler) : storage_(std::move(storage)), contact_manager_(std::move(contacts)), connection_handler_(std::move(handler)) {}
 
   void start() {
     is_running_ = true;
@@ -52,7 +53,7 @@ public:
   void attemptDelivery(const std::string& peer_id) {
     const std::lock_guard<std::mutex> lock(mutex_);
     // Do not initiate connection if there are no messages to send.
-    if (message_queue_->GetQueuedMessages(peer_id).empty()) { return; }
+    if (storage_->GetMessagesWithStatus(peer_id, MessageStatus::sending).empty()) { return; }
 
     if (pending_connections_.contains(peer_id)) { return; }  // Already trying to connect
 
@@ -74,9 +75,10 @@ private:
 
   void CheckForQueuedMessages() {
     if (!contact_manager_) { return; }
-    auto all_contacts = contact_manager_->GetContacts();
+    const auto all_contacts = contact_manager_->GetContacts();
     for (const auto& [peer_id, status] : all_contacts) {
-      if (!message_queue_->GetQueuedMessages(peer_id).empty()) {
+      // Check if there are any messages marked as 'sending' for this contact.
+      if (!storage_->GetMessagesWithStatus(peer_id, MessageStatus::sending).empty()) {
         // We have messages for this contact, let's try to deliver them.
         attemptDelivery(peer_id);
       }

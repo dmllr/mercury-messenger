@@ -13,7 +13,6 @@
 #include "eillance/logging/logging.h"
 #include "eillance/messaging/delivery_service.hpp"
 #include "eillance/messaging/history.hpp"
-#include "eillance/messaging/message_queue.hpp"
 #include "eillance/rtc/stream.hpp"
 #include "eillance/rtc/stream_source.hpp"
 #include "eillance/storage/persistent_storage.hpp"
@@ -145,7 +144,6 @@ private:
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::unique_ptr<identity::IdManager> id_manager_;
   std::shared_ptr<identity::ContactManager> contact_manager_;
-  std::shared_ptr<messaging::MessageQueue> message_queue_;
   std::unique_ptr<messaging::MessageDeliveryService> delivery_service_;
   std::unique_ptr<messaging::MessageHistory> message_history_;
 
@@ -163,10 +161,9 @@ inline Client::Client(std::shared_ptr<storage::PersistentStorage> storage, std::
   id_manager_ = std::make_unique<identity::IdManager>(storage_);
   settings_manager_ = std::make_unique<SettingsManager>(storage_);
   contact_manager_ = std::make_shared<identity::ContactManager>(storage_);
-  message_queue_ = std::make_shared<messaging::MessageQueue>(storage_);
   message_history_ = std::make_unique<messaging::MessageHistory>(storage_);
 
-  delivery_service_ = std::make_unique<messaging::MessageDeliveryService>(message_queue_, contact_manager_, [this](const std::string& peer_id) {
+  delivery_service_ = std::make_unique<messaging::MessageDeliveryService>(storage_, contact_manager_, [this](const std::string& peer_id) {
     if (!transport_->getPeer(peer_id)) { connect(peer_id); }
   });
 
@@ -476,22 +473,20 @@ inline auto Client::sendChatMessage(const std::string& peer_id, const std::strin
     return {};
   }
   auto entry = message_history_->AddTextEntry(peer_id, message, messaging::MessageDirection::sent);
-  const auto peer = transport_->getPeer(peer_id);
-  if (peer && peer->data_channel_is_open_ && peer->session_cipher_->IsReady()) {
-    if (directSend(peer, peer_id, message, entry.id)) {
-      LOGI << "Sent direct message to " << peer_id;
-      message_history_->UpdateMessageStatus(peer_id, entry.id, messaging::MessageStatus::sent);
-      entry.status = messaging::MessageStatus::sent;
-      return entry;  // Success
-    }
+
+  bool sent_directly = false;
+  if (const auto peer = transport_->getPeer(peer_id); peer && peer->data_channel_is_open_ && peer->session_cipher_->IsReady()) {
+    if (directSend(peer, peer_id, message, entry.id)) { sent_directly = true; }
   }
-  LOGI << "Peer " << peer_id << " is offline or not ready, or send failed. Buffering message.";
-  const Json json_msg = {
-      {"type", "chat"},
-      {"content", message},
-      {"message_id", entry.id},
-  };
-  message_queue_->Enqueue(peer_id, entry.id, json_msg.dump());
+
+  if (sent_directly) {
+    LOGI << "Sent direct message to " << peer_id;
+    message_history_->UpdateMessageStatus(peer_id, entry.id, messaging::MessageStatus::sent);
+    entry.status = messaging::MessageStatus::sent;
+  } else {
+    LOGI << "Peer " << peer_id << " is offline or not ready. Message queued.";
+  }
+
   delivery_service_->attemptDelivery(peer_id);
   return entry;
 }
@@ -502,6 +497,7 @@ inline void Client::UpdateSignalingUrl(const std::string& url) {
 }
 inline void Client::markMessagesAsRead(const std::string& peer_id, const std::vector<std::uint64_t>& message_ids) const {
   const auto peer = transport_->getPeer(peer_id);
+  message_history_->MarkMessagesAsRead(peer_id, message_ids);
   if (peer && peer->data_channel_is_open_) {
     const Json msg = {
         {"type", "message_read"},
@@ -642,37 +638,23 @@ inline void Client::processDataChannelMessage(const std::string& peer_id, const 
   }
 }
 inline void Client::sendQueuedMessages(const std::string& peer_id) const {
-  const auto messages = message_queue_->GetQueuedMessages(peer_id);
+  const auto messages = storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::sending);
   if (messages.empty()) { return; }
   const auto peer = transport_->getPeer(peer_id);
   if (!peer || !peer->data_channel_is_open_) {
     LOGW << "sendQueuedMessages called but peer " << peer_id << " channel not ready. Messages will remain queued.";
     return;
   }
-  LOGI << "Sending " << messages.size() << " queued messages to " << peer_id;
-  for (const auto& msg : messages) {
-    try {
-      Json const message = Json::parse(msg.content);
-      const auto type = message.value("type", "");
-      if (type == "chat") {
-        if (peer->session_cipher_->IsReady()) {
-          if (!directSend(peer, peer_id, message.value("content", ""), message.value("message_id", 0ULL))) {
-            LOGW << "Failed to send queued chat message to " << peer_id << ". It will remain in queue.";
-            return;
-          }
-          message_history_->UpdateMessageStatus(peer_id, message.value("message_id", 0ULL), messaging::MessageStatus::sent);
-        } else {
-          LOGW << "Session cipher not ready for chat message to " << peer_id << ". Message will remain in queue.";
-          return;
-        }
-      } else {
-        transport_->sendPeerDataChannelMessage(peer_id, message);
-      }
-    } catch (const nlohmann::json::parse_error& e) {
-      LOGE << "Failed to parse queued message: " << e.what() << ". Content: " << msg.content;
-    }
+  if (!peer->session_cipher_->IsReady()) {
+    LOGW << "Session cipher not ready for " << peer_id << ". Messages will remain queued.";
+    return;
   }
-  message_queue_->Clear(peer_id);
+
+  LOGI << "Sending " << messages.size() << " queued message(s) to " << peer_id;
+  for (const auto& entry : messages) {
+    const auto& message_content = std::get<messaging::MessageEntry>(entry.data).content;
+    if (directSend(peer, peer_id, message_content, entry.id)) { message_history_->UpdateMessageStatus(peer_id, entry.id, messaging::MessageStatus::sent); }
+  }
 }
 inline void Client::setupDataChannel(const std::shared_ptr<Peer>& peer, const std::string& peer_id) {
   peer->on_data_channel_message_ = [this, peer_id, peer](const std::string& msg) { processDataChannelMessage(peer_id, nlohmann::json::parse(msg)); };

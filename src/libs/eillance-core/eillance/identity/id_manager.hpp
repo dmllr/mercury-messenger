@@ -16,29 +16,22 @@ class IdManager {
   std::shared_ptr<storage::PersistentStorage> storage_;
 
   void LoadOrGenerateIdentity() {
-    if (storage_->Exists(identity_key_file)) {
-      const auto pem_data_opt = storage_->Load(identity_key_file);
-      if (pem_data_opt) {
-        const std::string pem_str(reinterpret_cast<const char*>(pem_data_opt->data()), pem_data_opt->size());
-        identity_ = crypto::Identity::LoadFromMemory(pem_str);
-        if (identity_) {
-          LOGI << "Identity loaded successfully. ID: " << identity_->GetId();
-          return;
-        }
-        LOGE << "Failed to load identity from storage, will generate a new one.";
+    const auto pem_data_opt = storage_->GetSetting(identity_key_file);
+    if (pem_data_opt) {
+      identity_ = crypto::Identity::LoadFromMemory(*pem_data_opt);
+      if (identity_) {
+        LOGI << "Identity loaded successfully. ID: " << identity_->GetId();
+        return;
       }
+      LOGE << "Failed to load identity from storage, will generate a new one.";
     }
 
     LOGI << "No existing identity found. Generating a new one.";
     identity_ = crypto::Identity::CreateNew();
     if (identity_) {
       const auto pem_str = identity_->SaveToMemory();
-      if (!pem_str.empty()) {
-        const auto* char_ptr = reinterpret_cast<const std::byte*>(pem_str.data());
-        const std::vector<std::byte> pem_bytes(char_ptr, char_ptr + pem_str.size());
-        if (!storage_->Save(identity_key_file, pem_bytes)) { LOGE << "Failed to save new identity to persistent storage."; }
-        LOGI << "New identity generated and saved. ID: " << identity_->GetId();
-      }
+      storage_->SetSetting(identity_key_file, pem_str);
+      LOGI << "New identity generated and saved. ID: " << identity_->GetId();
     }
   }
 

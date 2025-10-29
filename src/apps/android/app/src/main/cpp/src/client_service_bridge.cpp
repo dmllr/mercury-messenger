@@ -11,8 +11,11 @@ JavaVM* java_vm = nullptr;
 std::unique_ptr<eillance::ClientEngine> client_engine{};
 }  // namespace
 
-extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_initEngine(JNIEnv* env, jobject, jobject native_bridge) {
-  if (client_engine == nullptr) { client_engine = std::make_unique<eillance::ClientEngine>(java_vm, env, native_bridge); }
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_initEngine(JNIEnv* env, jobject instance, jobject native_bridge) {
+  // The 'instance' here is the CallService, which is a Context.
+  if (client_engine == nullptr) {
+    client_engine = std::make_unique<eillance::ClientEngine>(java_vm, env, instance, native_bridge);
+  }
 }
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_start(JNIEnv* /*env*/, jobject /*instance*/) {
@@ -156,7 +159,8 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
 
   try {
     auto& classref = ClassRefs::Instance();
-    classref.RegisterClass(env, "androidx/preference/PreferenceManager");
+    classref.RegisterClass(env, "android/content/Context");
+    classref.RegisterClass(env, "java/io/File");
 
     // Register CallService and its methods
     const std::string call_service_class = "hela/eillance/CallService";

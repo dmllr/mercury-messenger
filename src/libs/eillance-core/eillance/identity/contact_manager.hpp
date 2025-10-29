@@ -13,38 +13,7 @@
 
 namespace eillance::identity {
 
-enum class ContactStatus {
-  pendingApproval,  // We sent a request, waiting for them to confirm.
-  awaitingApproval,  // They sent a request, we need to confirm.
-  confirmed,
-};
-
-// Helper for JSON serialization
-NLOHMANN_JSON_SERIALIZE_ENUM(  // NOLINT
-    ContactStatus,
-    {
-        {ContactStatus::pendingApproval, "pending_approval"},
-        {ContactStatus::awaitingApproval, "awaiting_approval"},
-        {ContactStatus::confirmed, "confirmed"},
-    })
-
-struct Contact {
-  std::string peer_id;
-  ContactStatus status;
-};
-
-// Helper for JSON serialization
-inline void to_json(nlohmann::json& j, const Contact& c) {
-  j = nlohmann::json{{"peer_id", c.peer_id}, {"status", c.status}};
-}
-
-inline void from_json(const nlohmann::json& j, Contact& c) {
-  j.at("peer_id").get_to(c.peer_id);
-  j.at("status").get_to(c.status);
-}
-
 class ContactManager {
-  static constexpr auto contacts_file = "contacts.json";
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::unordered_map<std::string, Contact> contacts_;
   mutable std::mutex mutex_;
@@ -65,9 +34,7 @@ public:
     }
     contacts_[peer_id] = {.peer_id = peer_id, .status = ContactStatus::pendingApproval};
 
-    // Save to persistent storage. The UI update is triggered by the caller
-    // regardless of the save result, making it feel responsive.
-    if (!SaveContacts()) { LOGE << "Failed to persist new contact " << peer_id << ". It will be lost on restart."; }
+    storage_->UpdateContact(contacts_[peer_id]);
     return true;
   }
 
@@ -78,7 +45,8 @@ public:
       return false;  // Already confirmed
     }
     contacts_[peer_id] = {.peer_id = peer_id, .status = ContactStatus::awaitingApproval};
-    return SaveContacts();
+    storage_->UpdateContact(contacts_[peer_id]);
+    return true;
   }
 
   // Confirms a contact that was awaiting our approval.
@@ -90,7 +58,8 @@ public:
       return false;
     }
     it->second.status = ContactStatus::confirmed;
-    return SaveContacts();
+    storage_->UpdateContact(it->second);
+    return true;
   }
 
   // Marks a contact as confirmed after they accepted our request.
@@ -104,13 +73,14 @@ public:
     // regardless of its previous state. This makes the protocol robust against
     // state inconsistencies (e.g., after an app restart).
     contacts_[peer_id] = {.peer_id = peer_id, .status = ContactStatus::confirmed};
-    return SaveContacts();
+    storage_->UpdateContact(contacts_[peer_id]);
+    return true;
   }
 
   void RemoveContact(const std::string& peer_id) {
     const std::lock_guard<std::mutex> lock(mutex_);
     contacts_.erase(peer_id);
-    SaveContacts();
+    storage_->RemoveContact(peer_id);
   }
 
   auto IsConfirmedContact(const std::string& peer_id) const -> bool {
@@ -137,36 +107,10 @@ public:
 
 private:
   void LoadContacts() {
-    if (storage_->Exists(contacts_file)) {
-      const auto data_opt = storage_->Load(contacts_file);
-      if (data_opt) {
-        try {
-          const std::string json_str(reinterpret_cast<const char*>(data_opt->data()), data_opt->size());
-          const nlohmann::json j = nlohmann::json::parse(json_str);
-          for (const auto& item : j) {
-            const Contact c = {.peer_id = item["peer_id"], .status = item["status"]};
-            contacts_[c.peer_id] = c;
-          }
-        } catch (const nlohmann::json::parse_error& e) {
-          LOGE << "Failed to parse contacts file: " << e.what();
-        }
-      }
+    const auto contacts_from_db = storage_->GetContacts();
+    for (const auto& contact : contacts_from_db) {
+      contacts_[contact.peer_id] = contact;
     }
-  }
-
-  auto SaveContacts() const -> bool {
-    nlohmann::json j = nlohmann::json::array();
-    for (const auto& val : contacts_ | std::views::values) {
-      j.push_back({{"peer_id", val.peer_id}, {"status", val.status}});
-    }
-    const auto json_str = j.dump(2);
-    const auto* char_ptr = reinterpret_cast<const std::byte*>(json_str.data());
-    const std::vector<std::byte> data(char_ptr, char_ptr + json_str.size());
-    if (!storage_->Save(contacts_file, data)) {
-      LOGE << "Failed to save contacts file to persistent storage.";
-      return false;
-    }
-    return true;
   }
 };
 

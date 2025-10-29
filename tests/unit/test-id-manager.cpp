@@ -19,19 +19,17 @@ protected:
 
 TEST_F(IdManagerTest, GeneratesNewIdentityWhenNoneExists) {
   // Initially, storage is empty.
-  ASSERT_FALSE(mock_storage_impl_->Exists("identity.key"));
+  ASSERT_FALSE(storage_->GetSetting("identity.key").has_value());
 
   identity::IdManager id_manager(storage_);
   auto id = id_manager.GetId();
 
   EXPECT_FALSE(id.empty());
-  EXPECT_TRUE(mock_storage_impl_->Exists("identity.key"));
+  auto pem_data_opt = storage_->GetSetting("identity.key");
+  ASSERT_TRUE(pem_data_opt.has_value());
 
   // Verify the saved data can be loaded as an identity
-  auto saved_data = mock_storage_impl_->Load("identity.key");
-  ASSERT_TRUE(saved_data.has_value());
-  std::string pem_str(reinterpret_cast<const char*>(saved_data->data()), saved_data->size());
-  auto loaded_identity = crypto::Identity::LoadFromMemory(pem_str);
+  auto loaded_identity = crypto::Identity::LoadFromMemory(*pem_data_opt);
   ASSERT_NE(loaded_identity, nullptr);
   EXPECT_EQ(loaded_identity->GetId(), id);
 }
@@ -41,10 +39,7 @@ TEST_F(IdManagerTest, LoadsExistingIdentity) {
   auto identity = crypto::Identity::CreateNew();
   auto expected_id = identity->GetId();
   auto pem_data_str = identity->SaveToMemory();
-  std::vector<std::byte> pem_data(reinterpret_cast<const std::byte*>(pem_data_str.data()), reinterpret_cast<const std::byte*>(pem_data_str.data()) + pem_data_str.size());
-  mock_storage_impl_->Save("identity.key", pem_data);
-
-  ASSERT_TRUE(mock_storage_impl_->Exists("identity.key"));
+  storage_->SetSetting("identity.key", pem_data_str);
 
   identity::IdManager id_manager(storage_);
   auto loaded_id = id_manager.GetId();

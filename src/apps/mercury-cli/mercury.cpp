@@ -14,7 +14,6 @@
 #include "ftxui/component/screen_interactive.hpp"
 #include "ftxui/dom/elements.hpp"
 
-#include "cli_persistent_storage.hpp"
 #include "eillance/capture/audio_capture.hpp"
 #include "eillance/capture/video_capture.hpp"
 #include "eillance/client/client.hpp"
@@ -24,6 +23,7 @@
 #include "eillance/messaging/history.hpp"
 #include "eillance/rtc/transport_impl_libdatachannel.hpp"
 #include "eillance/storage/persistent_storage.hpp"
+#include "eillance/storage/sqlite_storage.hpp"
 #include "eillance/transport/peer_connection_state.h"
 #include "eillance/utils/args_parser.hpp"
 #include "eillance/utils/time.hpp"
@@ -172,7 +172,7 @@ int main(int argc, char** argv) {
   Log::Initialize(&file_appender, plog::info);
 
   // --- Service Layer (Model) Initialization ---
-  auto storage_impl = std::make_unique<eillance::storage::CliPersistentStorageImpl>(config_path);
+  auto storage_impl = std::make_unique<eillance::storage::SQLiteStorage>(config_path / "mercury.db");
   auto storage = std::make_shared<eillance::storage::PersistentStorage>(std::move(storage_impl));
 
   // --- Dependency Injection & Client Initialization ---

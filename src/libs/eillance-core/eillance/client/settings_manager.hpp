@@ -19,24 +19,12 @@ public:
   // Sets and persists the custom signaling server URL.
   void SetSignalingServerUrl(const std::string& url) {
     signaling_server_url_ = url;
-    Save();
+    storage_->SetSetting(kSignalingServerUrlKey, url);
   }
 
 private:
   void Load() {
-    if (auto data = storage_->Load(kSignalingServerUrlKey)) {
-      signaling_server_url_ = std::string(reinterpret_cast<const char*>(data->data()), data->size());
-    }
-  }
-
-  void Save() const {
-    if (signaling_server_url_) {
-      const auto& url = *signaling_server_url_;
-      const std::vector<std::byte> data(reinterpret_cast<const std::byte*>(url.data()), reinterpret_cast<const std::byte*>(url.data()) + url.size());
-      storage_->Save(kSignalingServerUrlKey, data);
-    } else {
-      storage_->Delete(kSignalingServerUrlKey);
-    }
+    signaling_server_url_ = storage_->GetSetting(kSignalingServerUrlKey);
   }
 
   static constexpr auto kSignalingServerUrlKey = "signaling_server_url";
