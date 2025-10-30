@@ -113,7 +113,7 @@ public:
 
   // TransportDelegate implementation
   void onPeerReady(const std::shared_ptr<Peer>& peer) override;
-  void onSignalingErrorForPeer(const std::string& peer_id, const std::string& error) override;  
+  void onSignalingErrorForPeer(const std::string& peer_id, const std::string& error) override;
   auto Sign(const std::string& message) -> std::vector<std::byte> override;
   void onLoginSuccess() override;
   void processPeerMessage(Json message) override;
@@ -125,7 +125,7 @@ private:
   void updateAndNotifyPeerList() const;
   void sendSampleToPeers(const std::vector<std::byte>& sample, Stream::Source::Type type, std::uint64_t sample_time) const;
   void processDataChannelMessage(const std::string& peer_id, const Json& message);
-  void sendQueuedMessages(const std::string& peer_id) const;
+  void sendQueuedMessages(const std::string& peer_id);
   void setupDataChannel(const std::shared_ptr<Peer>& peer, const std::string& peer_id);
   static auto parseDeviceProfile(const Json& jprofile) -> Device::Profile;
 
@@ -170,7 +170,11 @@ inline Client::Client(std::shared_ptr<storage::PersistentStorage> storage, std::
   message_history_ = std::make_unique<messaging::MessageHistory>(storage_);
 
   delivery_service_ = std::make_unique<messaging::MessageDeliveryService>(storage_, contact_manager_, [this](const std::string& peer_id) {
-    if (!transport_->getPeer(peer_id)) { connect(peer_id); }
+    if (auto peer = transport_->getPeer(peer_id); peer && peer->data_channel_is_open_ && peer->session_cipher_->IsReady()) {
+      sendQueuedMessages(peer_id);
+    } else if (!peer) {
+      connect(peer_id);
+    }
   });
 
   transport_->setStatusCallback([this](const std::string& peer_id, const EventSource source, int state_val) {
@@ -529,7 +533,7 @@ inline void Client::updateMyProfile(const std::optional<std::string>& name, cons
   if (photo) { settings_manager_->SetMyPhotoBase64(*photo); }
 
   Json profile_update_msg;
-  profile_update_msg["action"] = "profile_info";
+  profile_update_msg["action"] = "profile_update";
   profile_update_msg["display_name"] = settings_manager_->GetMyDisplayName().value_or("");
   profile_update_msg["bio"] = settings_manager_->GetMyBio().value_or("");
   if (photo) { profile_update_msg["photo"] = *photo; }
@@ -702,7 +706,8 @@ inline void Client::processDataChannelMessage(const std::string& peer_id, const 
     throw std::runtime_error("Unknown message type in ProcessDataChannelMessage");
   }
 }
-inline void Client::sendQueuedMessages(const std::string& peer_id) const {
+inline void Client::sendQueuedMessages(const std::string& peer_id) {
+  delivery_service_->connectionAttemptFinished(peer_id);
   const auto messages = storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::sending);
   if (messages.empty()) { return; }
   const auto peer = transport_->getPeer(peer_id);
@@ -738,8 +743,8 @@ inline void Client::sendQueuedMessages(const std::string& peer_id) const {
           const Json msg = {{"type", "contact_confirm"}, {"to", peer_id}};
           transport_->sendSignalingMessage(msg);
           sent = true;
-        } else if (action == "profile_info" && peer->data_channel_is_open_) {
-          content_json["type"] = "profile_info";
+        } else if ((action == "profile_info" || action == "profile_update") && peer->data_channel_is_open_) {
+          content_json["type"] = action;
           transport_->sendPeerDataChannelMessage(peer_id, content_json);
           sent = true;
         }
