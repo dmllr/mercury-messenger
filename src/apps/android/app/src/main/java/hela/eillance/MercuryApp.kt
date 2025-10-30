@@ -30,6 +30,7 @@ import androidx.navigation.compose.rememberNavController
 import hela.eillance.navigation.Route
 import hela.eillance.navigation.Screen
 import hela.eillance.screens.CallScreen
+import hela.eillance.screens.ContactProfileDialog
 import hela.eillance.screens.ContactsScreen
 import hela.eillance.screens.ConversationScreen
 import hela.eillance.screens.ProfileScreen
@@ -40,6 +41,7 @@ fun MercuryApp(viewModel: MainViewModel) {
     val navController = rememberNavController()
     val uiState by viewModel.uiState.collectAsState()
     val navigateToPeerId by viewModel.navigateToPeerId.collectAsState()
+    val peerIdForProfileDialog by viewModel.showContactProfileDialog.collectAsState()
 
     LaunchedEffect(navigateToPeerId) {
         navigateToPeerId?.let { peerId ->
@@ -59,6 +61,18 @@ fun MercuryApp(viewModel: MainViewModel) {
             onDismissRequest = { viewModel.onAddContactDialogDismiss() },
             onConfirm = { peerId -> viewModel.addContact(peerId) }
         )
+    }
+
+    peerIdForProfileDialog?.let { peerId ->
+        val contact = uiState.contacts.find { it.peerId == peerId }
+        contact?.let {
+            ContactProfileDialog(
+                contact = it,
+                onDismissRequest = { viewModel.onContactProfileDialogDismiss() },
+                onOverrideSave = { newName -> viewModel.setContactDisplayNameOverride(peerId, newName) },
+                onOverrideReset = { viewModel.resetContactDisplayNameOverride(peerId) }
+            )
+        }
     }
 
     // New: Global handler for incoming call
@@ -89,12 +103,14 @@ fun MercuryApp(viewModel: MainViewModel) {
                     },
                     onNavigateToProfile = {
                         navController.navigate(Screen.Profile.route)
-                    }
+                    },
+                    onShowContactProfile = viewModel::onShowContactProfile
                 )
             }
             composable(Screen.Profile.route) {
                 ProfileScreen(
-                    myId = uiState.myId,
+                    viewModel = viewModel,
+                    uiState = uiState,
                     onBack = { navController.popBackStack() },
                     onNavigateToSettings = { navController.navigate(Screen.Settings.route) }
                 )

@@ -54,6 +54,7 @@ public:
   using OnPeerListUpdateCallback = std::function<void(const std::vector<Device>&)>;
   using StatusCallbackFunction = transport::Transport::StatusCallbackFunction;
   using OnIncomingCallCallback = std::function<void(const std::string& peer_id, messaging::HistoryEntryKind call_type)>;
+  using OnContactProfileUpdatedCallback = std::function<void(const std::string& peer_id)>;
   using OnCallTerminatedCallback = std::function<void(const std::string& peer_id)>;
 
   explicit Client(std::shared_ptr<storage::PersistentStorage> storage, std::shared_ptr<transport::Transport> transport);
@@ -88,6 +89,7 @@ public:
   void setPeerListUpdateCallback(const OnPeerListUpdateCallback& callback);
   void setIncomingCallCallback(const OnIncomingCallCallback& callback);
   void setOnCallTerminatedCallback(const OnCallTerminatedCallback& callback);
+  void setOnContactProfileUpdatedCallback(const OnContactProfileUpdatedCallback& callback);
   void call(const std::string& peer_id);
   void connect(const std::string& peer_id);
   void startVoiceCall(const std::string& peer_id);
@@ -105,6 +107,9 @@ public:
   void UpdateSignalingUrl(const std::string& url);
   void markMessagesAsRead(const std::string& peer_id, const std::vector<std::uint64_t>& message_ids) const;
   auto getMessageHistoryPage(const std::string& peer_id, size_t page_index, size_t page_size) const -> messaging::HistoryPage;
+  void updateMyProfile(const std::optional<std::string>& name, const std::optional<std::string>& bio, const std::optional<std::string>& photo);
+  void setContactDisplayNameOverride(const std::string& peer_id, const std::string& override_name);
+  void resetContactDisplayNameOverride(const std::string& peer_id);
 
   // TransportDelegate implementation
   void onPeerReady(const std::shared_ptr<Peer>& peer) override;
@@ -141,6 +146,7 @@ private:
   std::shared_ptr<StatusCallbackFunction> status_callback_{};
   std::shared_ptr<OnIncomingCallCallback> on_incoming_call_{};
   std::shared_ptr<OnCallTerminatedCallback> on_call_terminated_{};
+  std::shared_ptr<OnContactProfileUpdatedCallback> on_contact_profile_updated_{};
 
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::unique_ptr<identity::IdManager> id_manager_;
@@ -228,6 +234,7 @@ inline void Client::setMessageStatusChangedCallback(const OnMessageStatusChanged
 inline void Client::setPeerListUpdateCallback(const OnPeerListUpdateCallback& callback) { on_peer_list_update_ = std::make_shared<OnPeerListUpdateCallback>(callback); }
 inline void Client::setIncomingCallCallback(const OnIncomingCallCallback& callback) { on_incoming_call_ = std::make_shared<OnIncomingCallCallback>(callback); }
 inline void Client::setOnCallTerminatedCallback(const OnCallTerminatedCallback& callback) { on_call_terminated_ = std::make_shared<OnCallTerminatedCallback>(callback); }
+inline void Client::setOnContactProfileUpdatedCallback(const OnContactProfileUpdatedCallback& callback) { on_contact_profile_updated_ = std::make_shared<OnContactProfileUpdatedCallback>(callback); }
 inline void Client::call(const std::string& peer_id) {
   connect(peer_id);
   message_history_->SetStatusChangedCallback([this](const std::string& p_id, std::uint64_t msg_id, messaging::MessageStatus status) {
@@ -512,6 +519,37 @@ inline void Client::markMessagesAsRead(const std::string& peer_id, const std::ve
   }
 }
 inline auto Client::getMessageHistoryPage(const std::string& peer_id, size_t page_index, size_t page_size) const -> messaging::HistoryPage { return message_history_->GetHistoryPage(peer_id, page_index, page_size); }
+inline void Client::updateMyProfile(const std::optional<std::string>& name, const std::optional<std::string>& bio, const std::optional<std::string>& photo) {
+  if (name) { settings_manager_->SetMyDisplayName(*name); }
+  if (bio) { settings_manager_->SetMyBio(*bio); }
+  if (photo) { settings_manager_->SetMyPhotoBase64(*photo); }
+
+  Json profile_update_msg;
+  profile_update_msg["type"] = "profile_update";
+  profile_update_msg["display_name"] = settings_manager_->GetMyDisplayName().value_or("");
+  profile_update_msg["bio"] = settings_manager_->GetMyBio().value_or("");
+  // Only send the photo if it's explicitly part of this update, to save bandwidth.
+  if (photo) { profile_update_msg["photo"] = *photo; }
+
+  // Broadcast to all connected peers
+  for (const auto& [peer_id, peer] : transport_->getPeers()) {
+    if (peer && peer->data_channel_is_open_) { transport_->sendPeerDataChannelMessage(peer_id, profile_update_msg); }
+  }
+}
+
+inline void Client::setContactDisplayNameOverride(const std::string& peer_id, const std::string& override_name) {
+  contact_manager_->SetDisplayNameOverride(peer_id, override_name);
+  if (on_contact_profile_updated_) { (*on_contact_profile_updated_)(peer_id); }
+}
+
+inline void Client::resetContactDisplayNameOverride(const std::string& peer_id) {
+  contact_manager_->ResetDisplayNameOverride(peer_id);
+  if (auto peer = transport_->getPeer(peer_id); peer && peer->data_channel_is_open_) {
+    const Json request = {{"type", "profile_request"}};
+    transport_->sendPeerDataChannelMessage(peer_id, request);
+  }
+  if (on_contact_profile_updated_) { (*on_contact_profile_updated_)(peer_id); }
+}
 inline void Client::startMediaCall(const std::string& peer_id, bool is_video) {
   // On platforms with custom capture (like CLI), start the media stream.
   // On Android, this block is skipped.
@@ -638,6 +676,34 @@ inline void Client::processDataChannelMessage(const std::string& peer_id, const 
       };
       transport_->sendPeerDataChannelMessage(peer_id, receipt);
     }
+  } else if (type == "profile_info" || type == "profile_update") {
+    const auto display_name = message.value("display_name", "");
+    const auto bio = message.value("bio", "");
+    std::optional<std::string> photo;
+    if (message.contains("photo") && !message["photo"].is_null()) { photo = message["photo"].get<std::string>(); }
+
+    contact_manager_->UpdateContactProfile(peer_id, display_name, bio, photo);
+
+    if (type == "profile_update") {
+      message_history_->AddTextEntry(peer_id, "Contact updated their profile.", messaging::MessageDirection::received, messaging::HistoryEntryKind::systemMessage);
+    }
+
+    if (on_contact_profile_updated_) { (*on_contact_profile_updated_)(peer_id); }
+
+  } else if (type == "profile_request") {
+    Json profile_msg;
+    profile_msg["type"] = "profile_info";
+    profile_msg["display_name"] = settings_manager_->GetMyDisplayName().value_or("");
+    profile_msg["bio"] = settings_manager_->GetMyBio().value_or("");
+
+    // It's important to always send the full photo on a request, not just on update.
+    auto my_photo = settings_manager_->GetMyPhotoBase64();
+    if (my_photo && !my_photo->empty()) {
+      profile_msg["photo"] = *my_photo;
+    } else {
+      profile_msg["photo"] = nullptr;
+    }
+    transport_->sendPeerDataChannelMessage(peer_id, profile_msg);
   } else {
     throw std::runtime_error("Unknown message type in ProcessDataChannelMessage");
   }
@@ -663,6 +729,21 @@ inline void Client::sendQueuedMessages(const std::string& peer_id) const {
 }
 inline void Client::setupDataChannel(const std::shared_ptr<Peer>& peer, const std::string& peer_id) {
   peer->on_data_channel_message_ = [this, peer_id, peer](const std::string& msg) { processDataChannelMessage(peer_id, nlohmann::json::parse(msg)); };
+
+  // When the data channel opens, send our profile information.
+  peer->on_data_channel_open_ = [this, peer_id]() {
+    Json profile_msg;
+    profile_msg["type"] = "profile_info";
+    profile_msg["display_name"] = settings_manager_->GetMyDisplayName().value_or("");
+    profile_msg["bio"] = settings_manager_->GetMyBio().value_or("");
+    auto my_photo = settings_manager_->GetMyPhotoBase64();
+    if (my_photo && !my_photo->empty()) {
+      profile_msg["photo"] = *my_photo;
+    } else {
+      profile_msg["photo"] = nullptr;
+    }
+    transport_->sendPeerDataChannelMessage(peer_id, profile_msg);
+  };
 }
 inline auto Client::parseDeviceProfile(const Json& jprofile) -> Device::Profile {
   Device::Profile profile;

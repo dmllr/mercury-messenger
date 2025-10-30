@@ -262,12 +262,12 @@ public:
       peer_connection->onDataChannel([this, peer_id](std::shared_ptr<::rtc::DataChannel> dc) {
         LOGI << "Data channel received from " << peer_id;
         auto peer = GetPeer(peer_id);
-        if (!peer) { return; }
+        if (!peer) {
+          LOGE << "Peer object not found for incoming data channel from " << peer_id;
+          return;
+        }
 
-        dc->onOpen([peer, peer_id]() {
-          LOGI << "Incoming data channel with " << peer_id << " opened.";
-          peer->data_channel_is_open_ = true;
-        });
+        dc->onOpen([peer, peer_id]() { peer->data_channel_is_open_ = true; });
 
         if (peer->on_data_channel_message_) {
           dc->onMessage(nullptr, [cb = peer->on_data_channel_message_](const std::string& msg) { cb(msg); });
@@ -301,12 +301,14 @@ public:
 
     auto dc = pc->createDataChannel("data");
 
-    dc->onOpen([this, peer_id, peer]() {
+    dc->onOpen([this, peer_id, wpeer = make_weak_ptr(peer)]() {
+      auto peer = wpeer.lock();
+      if (!peer) { return; }
       LOGI << "Data channel with " << peer_id << " opened.";
       peer->data_channel_is_open_ = true;
-      auto my_pub_key = peer->session_cipher_->GetPublicKey();
-      const Json key_exchange_message = {{"type", "key_exchange"}, {"key", std::vector<std::byte>(my_pub_key.begin(), my_pub_key.end())}, {"is_reply", false}};
-      SendPeerDataChannelMessage(peer_id, key_exchange_message);
+      if (peer->on_data_channel_open_) {
+        peer->on_data_channel_open_();
+      }
     });
 
     if (peer->on_data_channel_message_) { dc->onMessage(nullptr, [cb = peer->on_data_channel_message_](const std::string& msg) { cb(msg); }); }

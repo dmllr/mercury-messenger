@@ -73,6 +73,9 @@ enum class ContactStatus {
 @Serializable
 data class Contact(
     @SerialName("peer_id") val peerId: String,
+    val name: String, // Resolved display name (override or original)
+    val bio: String? = null,
+    val photo: String? = null, // base64
     val status: ContactStatus,
     @SerialName("connection_state") val connectionState: Int = 0,
     @SerialName("unread_count") val unreadCount: Int = 0,
@@ -90,6 +93,9 @@ data class CallState(
 @Serializable
 data class AppState(
     @SerialName("my_id") val myId: String = "",
+    val myDisplayName: String? = null,
+    val myBio: String? = null,
+    val myPhoto: String? = null, // base64
     @SerialName("connection_state") val connectionState: Int = 0, // Maps to ServiceConnectionState
     val contacts: List<Contact> = emptyList(),
     val chats: List<ChatSummary> = emptyList(),

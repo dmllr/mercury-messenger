@@ -1,17 +1,22 @@
 package hela.eillance.screens
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Badge
 import androidx.compose.material3.Button
@@ -33,11 +38,14 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import coil.compose.rememberAsyncImagePainter
 import hela.eillance.MainViewModel
 import hela.eillance.ndkio.AppState
 import hela.eillance.ndkio.Contact
@@ -53,6 +61,7 @@ fun ContactsScreen(
     uiState: AppState,
     onContactClick: (String) -> Unit,
     onNavigateToProfile: () -> Unit,
+    onShowContactProfile: (String) -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -112,7 +121,8 @@ fun ContactsScreen(
                         contact = contact,
                         onClick = { onContactClick(contact.peerId) },
                         onAccept = { viewModel.acceptContact(contact.peerId) },
-                        onResend = { viewModel.addContact(contact.peerId) }
+                        onResend = { viewModel.addContact(contact.peerId) },
+                        onShowProfile = { onShowContactProfile(contact.peerId) }
                     )
                     HorizontalDivider(color = DividerDefaults.color.copy(alpha = 0.5f))
                 }
@@ -122,7 +132,13 @@ fun ContactsScreen(
 }
 
 @Composable
-fun ContactListItem(contact: Contact, onClick: () -> Unit, onAccept: () -> Unit, onResend: () -> Unit) {
+fun ContactListItem(
+    contact: Contact,
+    onClick: () -> Unit,
+    onAccept: () -> Unit,
+    onResend: () -> Unit,
+    onShowProfile: () -> Unit
+) {
     val statusText = when (contact.status) {
         ContactStatus.confirmed -> "Confirmed"
         ContactStatus.pendingApproval -> "Request sent"
@@ -143,9 +159,37 @@ fun ContactListItem(contact: Contact, onClick: () -> Unit, onAccept: () -> Unit,
     }
 
     ListItem(
+        leadingContent = {
+            val painter = rememberAsyncImagePainter(
+                model = "data:image/png;base64," + contact.photo,
+                onError = {
+                    // You can log the error if needed
+                }
+            )
+            if (contact.photo != null) {
+                Image(
+                    painter = painter,
+                    contentDescription = "Profile Photo",
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Default.Person,
+                    contentDescription = "Default Profile Icon",
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.secondaryContainer)
+                        .padding(8.dp)
+                )
+            }
+        },
         headlineContent = {
             Text(
-                text = contact.peerId,
+                text = contact.name,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.bodyLarge,
@@ -154,8 +198,12 @@ fun ContactListItem(contact: Contact, onClick: () -> Unit, onAccept: () -> Unit,
         },
         supportingContent = {
             Column {
-                Text(text = statusText, color = statusColor, style = MaterialTheme.typography.bodyMedium)
-                if (connectionText.isNotEmpty()) {
+                Text(
+                    text = contact.peerId,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.alpha(0.7f)
+                )
+                if (connectionText.isNotEmpty() && contact.status == ContactStatus.confirmed) {
                     Text(text = connectionText, color = connectionColor, style = MaterialTheme.typography.bodySmall)
                 }
             }
@@ -163,27 +211,27 @@ fun ContactListItem(contact: Contact, onClick: () -> Unit, onAccept: () -> Unit,
         trailingContent = {
             when (contact.status) {
                 ContactStatus.awaitingApproval -> {
-                    Button(onClick = onAccept) {
-                        Text("Accept")
+                    Row {
+                        Button(onClick = onAccept) { Text("Accept") }
                     }
                 }
                 ContactStatus.pendingApproval -> {
-                    TextButton(onClick = onResend) {
-                        Text("Resend")
-                    }
+                    TextButton(onClick = onResend) { Text("Resend") }
                 }
                 else -> {
-                    if (contact.unreadCount > 0) {
-                        Badge { Text(contact.unreadCount.toString()) }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (contact.unreadCount > 0) {
+                            Badge { Text(contact.unreadCount.toString()) }
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        IconButton(onClick = onShowProfile) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "Contact options")
+                        }
                     }
                 }
             }
         },
-        modifier = Modifier.clickable(
-            // Only allow clicking confirmed contacts to open the interaction screen
-            enabled = true,//contact.status == ContactStatus.confirmed,
-            onClick = onClick
-        ),
+        modifier = Modifier.clickable(enabled = contact.status == ContactStatus.confirmed, onClick = onClick),
         colors = ListItemDefaults.colors(containerColor = Color.Transparent)
     )
 }

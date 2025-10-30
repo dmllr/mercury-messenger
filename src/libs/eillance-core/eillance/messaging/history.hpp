@@ -25,10 +25,10 @@ class MessageHistory {
 public:
   explicit MessageHistory(std::shared_ptr<storage::PersistentStorage> storage) : storage_(std::move(storage)) {}
 
-  auto AddTextEntry(const std::string& peer_id, const std::string& content, MessageDirection direction) -> HistoryEntryRecord {
+  auto AddTextEntry(const std::string& peer_id, const std::string& content, MessageDirection direction, HistoryEntryKind kind = HistoryEntryKind::textMessage) -> HistoryEntryRecord {
     const HistoryEntryRecord entry{
         .id = 0,  // DB will assign ID
-        .kind = HistoryEntryKind::textMessage,
+        .kind = kind,
         .timestamp = Time::Now(),
         .direction = direction,
         .status = (direction == MessageDirection::sent) ? MessageStatus::sending : MessageStatus::none,
