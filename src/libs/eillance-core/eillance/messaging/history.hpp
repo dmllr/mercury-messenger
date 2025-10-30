@@ -46,6 +46,10 @@ public:
     on_status_changed_ = std::move(cb);
   }
 
+  void UpdateHistoryEntry(const HistoryEntryRecord& entry) {
+    storage_->UpdateHistoryEntry(entry);
+  }
+
   void UpdateMessageStatus(const std::string& peer_id, const std::uint64_t message_id, const MessageStatus new_status) {
     storage_->UpdateMessageStatus(peer_id, message_id, new_status);
     if (on_status_changed_) { on_status_changed_(peer_id, message_id, new_status); }
