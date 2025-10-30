@@ -53,8 +53,12 @@ class CallService : Service(), IClientNativeBridge {
   override fun onCreate() {
     super.onCreate()
     createNotificationChannels()
-    initEngine(this)
-    start()
+    // The native engine initialization involves disk I/O and network setup,
+    // which can be slow and must not block the main thread.
+    Thread {
+      initEngine(this)
+      start()
+    }.start()
     startForegroundService()
   }
 
@@ -318,9 +322,5 @@ class CallService : Service(), IClientNativeBridge {
     private const val ACTION_REJECT_CALL = "hela.eillance.ACTION_REJECT_CALL"
 
     const val EXTRA_PEER_ID = "hela.eillance.EXTRA_PEER_ID"
-
-    init {
-      System.loadLibrary("lib-client-service-bridge")
-    }
   }
 }
