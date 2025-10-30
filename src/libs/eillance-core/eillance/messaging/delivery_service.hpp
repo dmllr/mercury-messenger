@@ -25,7 +25,7 @@ class MessageDeliveryService {
 
   // Track peers for which we are actively trying to connect to avoid duplicate requests.
   std::unordered_set<std::string> pending_connections_;
-  std::mutex mutex_;
+  std::recursive_mutex mutex_;
 
   static constexpr int initial_retry_delay_s = 5;
   static constexpr int max_retry_delay_s = 60;
@@ -60,13 +60,13 @@ public:
 
   // Called by Client when a connection attempt is finished (succeeded or failed)
   void connectionAttemptFinished(const std::string& peer_id) {
-    const std::lock_guard<std::mutex> lock(mutex_);
+    const std::lock_guard<std::recursive_mutex> lock(mutex_);
     pending_connections_.erase(peer_id);
   }
 
   // Called by Client when queuing a new message or action
   void attemptDelivery(const std::string& peer_id) {
-    const std::lock_guard<std::mutex> lock(mutex_);
+    const std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (pending_connections_.contains(peer_id)) { return; }  // Already trying to connect
 
     LOGI << "Delivery requested for " << peer_id << ". Requesting connection.";
