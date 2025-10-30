@@ -43,21 +43,18 @@ public:
     dispatch_queue_.RemovePending();
   }
 
-  // Called by RtcClient when a connection attempt is finished (succeeded or failed)
+  // Called by Client when a connection attempt is finished (succeeded or failed)
   void connectionAttemptFinished(const std::string& peer_id) {
     const std::lock_guard<std::mutex> lock(mutex_);
     pending_connections_.erase(peer_id);
   }
 
-  // Called by RtcClient when queuing a new message to an offline peer
+  // Called by Client when queuing a new message or action
   void attemptDelivery(const std::string& peer_id) {
     const std::lock_guard<std::mutex> lock(mutex_);
-    // Do not initiate connection if there are no messages to send.
-    if (storage_->GetMessagesWithStatus(peer_id, MessageStatus::sending).empty()) { return; }
-
     if (pending_connections_.contains(peer_id)) { return; }  // Already trying to connect
 
-    LOGI << "Queued messages found for " << peer_id << ". Requesting connection.";
+    LOGI << "Delivery requested for " << peer_id << ". Requesting connection.";
     pending_connections_.insert(peer_id);
     connection_handler_(peer_id);
   }
