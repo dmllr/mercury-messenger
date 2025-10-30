@@ -15,6 +15,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.Person
 import hela.eillance.camera.R
 import hela.eillance.ndkio.AppState
+import hela.eillance.ndkio.ServiceConnectionState
 import hela.eillance.ndkio.VideoConfig
 import hela.eillance.ndkio.interfaces.IClientNativeBridge
 import hela.eillance.webrtc.WebRtcTransport
@@ -96,8 +97,8 @@ class CallService : Service(), IClientNativeBridge {
       checkForIncomingCall(previousState, newState)
       checkForNewMessages(previousState, newState)
 
-      // Update the persistent foreground service notification
-      updateForegroundServiceNotification(newState.callState.isInCall, newState.callState.peerId)
+      val connectionState = ServiceConnectionState.fromInt(newState.connectionState)
+      updateForegroundServiceNotification(newState.callState.isInCall, newState.callState.peerId, connectionState)
 
       previousState = newState
     } catch (e: Exception) {
@@ -134,7 +135,7 @@ class CallService : Service(), IClientNativeBridge {
   }
 
   private fun startForegroundService() {
-    val notification = buildForegroundServiceNotification(false, null)
+    val notification = buildForegroundServiceNotification(false, null, ServiceConnectionState.Unknown)
     try {
       startForeground(FOREGROUND_SERVICE_NOTIFICATION_ID, notification)
     } catch (e: Exception) {
@@ -142,9 +143,9 @@ class CallService : Service(), IClientNativeBridge {
     }
   }
 
-  private fun updateForegroundServiceNotification(inCall: Boolean, peerId: String?) {
+  private fun updateForegroundServiceNotification(inCall: Boolean, peerId: String?, connectionState: ServiceConnectionState) {
     if (inCall) acquireWakeLock() else releaseWakeLock()
-    val notification = buildForegroundServiceNotification(inCall, peerId)
+    val notification = buildForegroundServiceNotification(inCall, peerId, connectionState)
     notificationManager.notify(FOREGROUND_SERVICE_NOTIFICATION_ID, notification)
   }
 
@@ -204,7 +205,7 @@ class CallService : Service(), IClientNativeBridge {
     notificationManager.notify(MESSAGE_NOTIFICATION_ID_BASE + peerId.hashCode(), builder.build())
   }
 
-  private fun buildForegroundServiceNotification(inCall: Boolean, peerId: String?): Notification {
+  private fun buildForegroundServiceNotification(inCall: Boolean, peerId: String?, connectionState: ServiceConnectionState): Notification {
     val notificationIntent = Intent(this, MainActivity::class.java)
     val pendingIntent = PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
@@ -219,7 +220,15 @@ class CallService : Service(), IClientNativeBridge {
       builder.setContentText("In call with ${peerId ?: "Unknown"}")
         .addAction(0, "Hang Up", hangupPendingIntent)
     } else {
-      builder.setContentText("Ready for connections")
+      val contentText = when (connectionState) {
+        ServiceConnectionState.Online -> "Ready for connections"
+        ServiceConnectionState.Establishing -> "Connecting..."
+        ServiceConnectionState.Failure -> "Connection failed"
+        ServiceConnectionState.Disconnected -> "Offline"
+        ServiceConnectionState.InvalidToken -> "Authentication error"
+        else -> "Initializing..."
+      }
+      builder.setContentText(contentText)
     }
     return builder.build()
   }

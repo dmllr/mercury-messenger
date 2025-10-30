@@ -61,6 +61,7 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
     private var currentSignalingUrl: String = ""
 
     private var isObservingMessages = false
+    private var isObservingSignalingState = false
 
     private external fun nativeOnPeerMessage(nativePointer: Long, message: String)
     private external fun nativeOnSystemMessage(nativePointer: Long, type: String, message: String)
@@ -68,6 +69,7 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
     private external fun nativeOnDataChannelMessage(nativePointer: Long, peerId: String, message: String)
     private external fun nativeOnDataChannelOpen(nativePointer: Long, peerId: String)
     private external fun nativeOnPeerConnectionStateChange(nativePointer: Long, peerId: String, state: Int)
+    private external fun nativeOnSignalingConnectionStateChange(nativePointer: Long, state: Int)
 
 
     init {
@@ -86,7 +88,8 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
     fun connect(peerId: String, signalingUrl: String) {
         this.localPeerId = peerId
         this.currentSignalingUrl = signalingUrl
-        observeSignaling()
+        observeSignalingMessages()
+        observeSignalingState()
         signalingClient.connect(peerId, signalingUrl)
     }
 
@@ -505,7 +508,9 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
                 // Create and setup new client
                 signalingClient = SignalingClient()
                 isObservingMessages = false // Allow observeSignaling to run again
-                observeSignaling()
+                isObservingSignalingState = false
+                observeSignalingMessages()
+                observeSignalingState()
 
                 // Connect with new URL
                 signalingClient.connect(peerId, newUrl)
@@ -531,7 +536,7 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
         return peerConnections[peerId]?.get(context)
     }
 
-    private fun observeSignaling() {
+    private fun observeSignalingMessages() {
         if (isObservingMessages) return
         isObservingMessages = true
 
@@ -542,6 +547,18 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
                     is SignalingMessage.Error -> nativeOnSignalingError(nativePointer, message.forPeer ?: "", message.error)
                     is SignalingMessage.SystemMessage -> nativeOnSystemMessage(nativePointer, message.type, message.payload.toString())
                 }
+            }
+        }.launchIn(coroutineScope)
+    }
+
+    private fun observeSignalingState() {
+        if (isObservingSignalingState) return
+        isObservingSignalingState = true
+
+        signalingClient.state.onEach { state ->
+            coroutineScope.launch {
+                Log.d(TAG, "Signaling client state changed: $state")
+                nativeOnSignalingConnectionStateChange(nativePointer, state.ordinal)
             }
         }.launchIn(coroutineScope)
     }
