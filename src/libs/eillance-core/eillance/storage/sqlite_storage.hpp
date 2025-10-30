@@ -218,6 +218,12 @@ public:
     return entry;
   }
 
+  void UpdateHistoryEntry(const messaging::HistoryEntryRecord& entry) override {
+    using namespace sqlite_orm;
+    const std::lock_guard lock(mutex_);
+    storage_->update(db::FromDomainHistoryEntry(entry, entry.peer_id_for_db));
+  }
+
   void UpdateMessageStatus(const std::string& peer_id, uint64_t message_id, messaging::MessageStatus new_status) override {
     using namespace sqlite_orm;
     const std::lock_guard lock(mutex_);

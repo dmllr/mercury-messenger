@@ -173,6 +173,7 @@ public:
 
   // --- History ---
   virtual auto AddHistoryEntry(messaging::HistoryEntryRecord entry) -> messaging::HistoryEntryRecord = 0;
+  virtual void UpdateHistoryEntry(const messaging::HistoryEntryRecord& entry) = 0;
   virtual void UpdateMessageStatus(const std::string& peer_id, uint64_t message_id, messaging::MessageStatus new_status) = 0;
   virtual void UpdateMessageStatuses(const std::string& peer_id, const std::vector<uint64_t>& message_ids, messaging::MessageStatus new_status) = 0;
   virtual auto GetHistoryPage(const std::string& peer_id, size_t page_index, size_t page_size) -> messaging::HistoryPage = 0;
@@ -210,6 +211,7 @@ public:
 
   // --- History ---
   auto AddHistoryEntry(messaging::HistoryEntryRecord entry) const { return pimpl_->AddHistoryEntry(std::move(entry)); }
+  void UpdateHistoryEntry(const messaging::HistoryEntryRecord& entry) const { pimpl_->UpdateHistoryEntry(entry); }
   void UpdateMessageStatus(const std::string& peer_id, uint64_t message_id, messaging::MessageStatus new_status) const { pimpl_->UpdateMessageStatus(peer_id, message_id, new_status); }
   void UpdateMessageStatuses(const std::string& peer_id, const std::vector<uint64_t>& message_ids, messaging::MessageStatus new_status) const { pimpl_->UpdateMessageStatuses(peer_id, message_ids, new_status); }
   auto GetHistoryPage(const std::string& peer_id, size_t page_index, size_t page_size) const { return pimpl_->GetHistoryPage(peer_id, page_index, page_size); }
