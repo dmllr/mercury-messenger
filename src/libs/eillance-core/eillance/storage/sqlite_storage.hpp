@@ -49,7 +49,8 @@ inline auto CreateStorage(const std::string& path) {
   return make_storage(path,
                       make_table("settings", make_column("key", &Setting::key, primary_key()), make_column("value", &Setting::value)),
                       make_table("contacts", make_column("peer_id", &Contact::peer_id, primary_key()), make_column("status", &Contact::status)),
-                      make_table("history", make_column("id", &HistoryEntry::id, primary_key().autoincrement()), make_column("peer_id", &HistoryEntry::peer_id), make_column("kind", &HistoryEntry::kind), make_column("timestamp", &HistoryEntry::timestamp), make_column("direction", &HistoryEntry::direction), make_column("status", &HistoryEntry::status), make_column("content", &HistoryEntry::content), make_column("duration_seconds", &HistoryEntry::duration_seconds), make_column("call_direction", &HistoryEntry::call_direction), make_column("call_status", &HistoryEntry::call_status)));
+                      make_table("history", make_column("id", &HistoryEntry::id, primary_key().autoincrement()), make_column("peer_id", &HistoryEntry::peer_id), make_column("kind", &HistoryEntry::kind), make_column("timestamp", &HistoryEntry::timestamp), make_column("direction", &HistoryEntry::direction), make_column("status", &HistoryEntry::status), make_column("content", &HistoryEntry::content), make_column("duration_seconds", &HistoryEntry::duration_seconds), make_column("call_direction", &HistoryEntry::call_direction), make_column("call_status", &HistoryEntry::call_status)),
+                      make_index("idx_history_peer_timestamp", &HistoryEntry::peer_id, &HistoryEntry::timestamp));
 }
 
 // Type alias for the storage object.
