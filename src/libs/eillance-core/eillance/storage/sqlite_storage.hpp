@@ -27,6 +27,10 @@ struct Setting {
 struct Contact {
   std::string peer_id;
   int status;  // Corresponds to identity::ContactStatus
+  std::optional<std::string> display_name;
+  std::optional<std::string> display_name_override;
+  std::optional<std::string> bio;
+  std::optional<std::string> photo_base64;
 };
 
 // Database model for a history entry (message or call).
@@ -48,7 +52,13 @@ inline auto CreateStorage(const std::string& path) {
   using namespace sqlite_orm;
   return make_storage(path,
                       make_table("settings", make_column("key", &Setting::key, primary_key()), make_column("value", &Setting::value)),
-                      make_table("contacts", make_column("peer_id", &Contact::peer_id, primary_key()), make_column("status", &Contact::status)),
+                      make_table("contacts",
+                                 make_column("peer_id", &Contact::peer_id, primary_key()),
+                                 make_column("status", &Contact::status),
+                                 make_column("display_name", &Contact::display_name),
+                                 make_column("display_name_override", &Contact::display_name_override),
+                                 make_column("bio", &Contact::bio),
+                                 make_column("photo_base64", &Contact::photo_base64)),
                       make_table("history", make_column("id", &HistoryEntry::id, primary_key().autoincrement()), make_column("peer_id", &HistoryEntry::peer_id), make_column("kind", &HistoryEntry::kind), make_column("timestamp", &HistoryEntry::timestamp), make_column("direction", &HistoryEntry::direction), make_column("status", &HistoryEntry::status), make_column("content", &HistoryEntry::content), make_column("duration_seconds", &HistoryEntry::duration_seconds), make_column("call_direction", &HistoryEntry::call_direction), make_column("call_status", &HistoryEntry::call_status)),
                       make_index("idx_history_peer_timestamp", &HistoryEntry::peer_id, &HistoryEntry::timestamp));
 }
@@ -59,11 +69,23 @@ using Storage = decltype(CreateStorage(""));
 // --- Conversion functions between domain models and database models ---
 
 inline auto ToDomainContact(const db::Contact& db_contact) -> identity::Contact {
-  return {.peer_id = db_contact.peer_id, .status = static_cast<identity::ContactStatus>(db_contact.status)};
+  return {
+      .peer_id = db_contact.peer_id,
+      .status = static_cast<identity::ContactStatus>(db_contact.status),
+      .display_name = db_contact.display_name,
+      .display_name_override = db_contact.display_name_override,
+      .bio = db_contact.bio,
+      .photo_base64 = db_contact.photo_base64};
 }
 
 inline auto FromDomainContact(const identity::Contact& contact) -> db::Contact {
-  return {.peer_id = contact.peer_id, .status = static_cast<int>(contact.status)};
+  return {
+      .peer_id = contact.peer_id,
+      .status = static_cast<int>(contact.status),
+      .display_name = contact.display_name,
+      .display_name_override = contact.display_name_override,
+      .bio = contact.bio,
+      .photo_base64 = contact.photo_base64};
 }
 
 inline auto ToDomainHistoryEntry(const db::HistoryEntry& db_entry) -> messaging::HistoryEntryRecord {

@@ -67,8 +67,7 @@ std::vector<std::string> GetContactMenuEntries(const std::vector<eillance::view_
     if (contact.unread_count > 0) { unread_count_str = " [" + std::to_string(contact.unread_count) + "]"; }
 
     constexpr auto max_id_display_length = 12;
-    const std::string display_id = contact.peer_id.length() > max_id_display_length ? contact.peer_id.substr(0, max_id_display_length) + "..." : contact.peer_id;
-    entries.push_back(display_id + status_str + conn_status_str + unread_count_str);
+    entries.push_back(contact.display_name + status_str + conn_status_str + unread_count_str);
   }
   return entries;
 }
@@ -217,9 +216,8 @@ int main(int argc, char** argv) {
             prefix = "[you]: ";
           } else {
             if (state.selected_contact_id.has_value()) {
-              const auto& peer_id = state.selected_contact_id.value();
-              constexpr auto max_display_id_len = 8;
-              const std::string display_id = peer_id.length() > max_display_id_len ? peer_id.substr(0, max_display_id_len) + "..." : peer_id;
+              const auto it = std::ranges::find_if(state.contacts, [&](const auto& c){ return c.peer_id == *state.selected_contact_id; });
+              const std::string display_id = (it != state.contacts.end()) ? it->display_name : *state.selected_contact_id;
               prefix = "[" + display_id + "]: ";
             } else {
               prefix = "[system]: ";
@@ -309,8 +307,9 @@ int main(int argc, char** argv) {
 
     constexpr auto contact_list_width = 40;
     const auto main_view = ftxui::hbox({contact_menu->Render() | ftxui::size(ftxui::WIDTH, ftxui::EQUAL, contact_list_width) | ftxui::border, ftxui::vbox({chat_renderer->Render() | ftxui::flex, ftxui::separator(), input_component->Render()}) | ftxui::flex});
-
-    const auto status_line = " Mercury CLI | Your ID: " + state.my_id + " | Status: " + std::string(GetConnectionStatusString(state.connection_state));
+    
+    const std::string my_name = state.my_display_name ? " (" + *state.my_display_name + ")" : "";
+    const auto status_line = " Mercury CLI | Your ID: " + state.my_id + my_name + " | Status: " + std::string(GetConnectionStatusString(state.connection_state));
     return ftxui::window(ftxui::text(status_line), main_view);
   });
 

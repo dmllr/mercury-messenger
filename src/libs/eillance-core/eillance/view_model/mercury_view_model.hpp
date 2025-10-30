@@ -43,12 +43,18 @@ struct UIState {
 
   struct ViewContact {
     std::string peer_id;
+    std::string display_name;
+    std::optional<std::string> bio;
+    std::optional<std::string> photo; // base64
     identity::ContactStatus status;
     eillance::transport::PeerConnectionState connection_state = eillance::transport::PeerConnectionState::Disconnected;
     uint32_t unread_count = 0;
   };
 
   std::string my_id;
+  std::optional<std::string> my_display_name;
+  std::optional<std::string> my_bio;
+  std::optional<std::string> my_photo; // base64
   ServiceConnectionState connection_state = ServiceConnectionState::unknown;
   std::vector<ViewContact> contacts;
   std::vector<messaging::ChatSummary> chats;
@@ -63,6 +69,9 @@ struct UIState {
 inline void to_json(nlohmann::json& json, const UIState::ViewContact& c) {
   json = nlohmann::json{
       {"peer_id", c.peer_id},
+      {"name", c.display_name}, // Mapped to 'name' for Kotlin consistency
+      {"bio", c.bio},
+      {"photo", c.photo},
       {"status", c.status},
       {"connection_state", c.connection_state},
       {"unread_count", c.unread_count},
@@ -80,6 +89,9 @@ inline void to_json(nlohmann::json& j, const std::deque<messaging::HistoryEntryR
 //NOLINTNEXTLINE(readability-identifier-naming)
 inline void to_json(nlohmann::json& json, const UIState& s) {
   json["my_id"] = s.my_id;
+  json["myDisplayName"] = s.my_display_name;
+  json["myBio"] = s.my_bio;
+  json["myPhoto"] = s.my_photo;
   json["connection_state"] = static_cast<int>(s.connection_state);
   json["contacts"] = s.contacts;
   json["chats"] = s.chats;
@@ -100,6 +112,7 @@ public:
     {
       const std::lock_guard<std::mutex> lock(state_mutex_);
       current_state_.my_id = client_->getId();
+      UpdateMyProfileFromSettings();
       current_state_.signaling_server_url = client_->getSettingsManager()->GetSignalingServerUrl();
       UpdateContacts();
     }
@@ -124,6 +137,9 @@ public:
   void AddContact(const std::string& peer_id) const;
   void UpdateSignalingUrl(const std::string& url);
   void AcceptContact(const std::string& peer_id) const;
+  void UpdateMyProfile(const std::optional<std::string>& name, const std::optional<std::string>& bio, const std::optional<std::string>& photo);
+  void SetContactDisplayNameOverride(const std::string& peer_id, const std::string& name);
+  void ResetContactDisplayNameOverride(const std::string& peer_id);
   void LoadOlderMessages();
   void RefreshState();
   void MarkMessagesAsRead(const std::vector<std::uint64_t>& message_ids);
@@ -138,6 +154,7 @@ private:
   void AddSystemMessageToChat(const std::string& message);
   void NotifyStateChanged() const;
   void UpdateContacts();
+  void UpdateMyProfileFromSettings();
   void UpdateChats();
   void LoadInitialChatHistory(const std::string& peer_id);
 
@@ -297,6 +314,27 @@ inline void MercuryViewModel::UpdateSignalingUrl(const std::string& url) { clien
 
 inline void MercuryViewModel::AcceptContact(const std::string& peer_id) const { client_->confirmContact(peer_id); }
 
+inline void MercuryViewModel::UpdateMyProfile(const std::optional<std::string>& name, const std::optional<std::string>& bio, const std::optional<std::string>& photo) {
+  client_->updateMyProfile(name, bio, photo);
+  dispatch_queue_.Dispatch([this]() {
+    {
+      const std::lock_guard<std::mutex> lock(state_mutex_);
+      UpdateMyProfileFromSettings();
+    }
+    NotifyStateChanged();
+  });
+}
+
+inline void MercuryViewModel::SetContactDisplayNameOverride(const std::string& peer_id, const std::string& name) {
+  client_->setContactDisplayNameOverride(peer_id, name);
+  RefreshState(); // Easiest way to update the view model's contact list
+}
+
+inline void MercuryViewModel::ResetContactDisplayNameOverride(const std::string& peer_id) {
+  client_->resetContactDisplayNameOverride(peer_id);
+  RefreshState();
+}
+
 inline void MercuryViewModel::LoadOlderMessages() {
   dispatch_queue_.Dispatch([this] {
     {
@@ -326,6 +364,7 @@ inline void MercuryViewModel::RefreshState() {
     {
       const std::lock_guard<std::mutex> lock(state_mutex_);
       current_state_.my_id = client_->getId();
+      UpdateMyProfileFromSettings();
       current_state_.signaling_server_url = client_->getSettingsManager()->GetSignalingServerUrl();
       UpdateContacts();
     }
@@ -387,7 +426,10 @@ inline auto MercuryViewModel::ProcessCliInput(const std::string& input) -> bool 
       std::stringstream arg_ss(arg);
       arg_ss >> key;
       std::getline(arg_ss >> std::ws, value);
-      if (key == "signaling_server_url") {
+      if (key == "name") {
+        UpdateMyProfile(value, std::nullopt, std::nullopt);
+        AddSystemMessageToChat("--> Display name updated.");
+      } else if (key == "signaling_server_url") {
         UpdateSignalingUrl(value);
         AddSystemMessageToChat("--> Signaling server URL updated. Reconnecting...");
       } else {
@@ -449,6 +491,14 @@ inline void MercuryViewModel::SetupClientCallbacks() {
       const std::lock_guard<std::mutex> lock(state_mutex_);
       UpdateContacts();
       if (current_state_.selected_contact_id && *current_state_.selected_contact_id == peer_id) { AddSystemMessageToChat("--> Contact request received. Use '/accept' to confirm."); }
+    }
+    NotifyStateChanged();
+  });
+
+  client_->setOnContactProfileUpdatedCallback([this](const std::string& peer_id) {
+    {
+        const std::lock_guard<std::mutex> lock(state_mutex_);
+        UpdateContacts();
     }
     NotifyStateChanged();
   });
@@ -553,8 +603,16 @@ inline void MercuryViewModel::UpdateContacts() {
   auto contacts_from_manager = client_->getContacts();
   current_state_.contacts.clear();
   for (const auto& c : contacts_from_manager) {
-    current_state_.contacts.push_back({c.peer_id, c.status, client_->getPeerConnectionState(c.peer_id), 0});
+    const std::string display_name = c.display_name_override.value_or(c.display_name.value_or(c.peer_id));
+    current_state_.contacts.push_back({.peer_id = c.peer_id, .display_name = display_name, .bio = c.bio, .photo = c.photo_base64, .status = c.status, .connection_state = client_->getPeerConnectionState(c.peer_id), .unread_count = 0});
   }
+}
+
+inline void MercuryViewModel::UpdateMyProfileFromSettings() {
+  auto* settings = client_->getSettingsManager();
+  current_state_.my_display_name = settings->GetMyDisplayName();
+  current_state_.my_bio = settings->GetMyBio();
+  current_state_.my_photo = settings->GetMyPhotoBase64();
 }
 
 inline void MercuryViewModel::UpdateChats() {

@@ -276,6 +276,11 @@ class CallService : Service(), IClientNativeBridge {
     nativeRejectCall()
   }
 
+  // --- Public wrappers for profile methods ---
+  fun updateMyProfile(name: String?, bio: String?, photo: String?) = nativeUpdateMyProfile(name, bio, photo)
+  fun setContactDisplayNameOverride(peerId: String, name: String) = nativeSetContactDisplayNameOverride(peerId, name)
+  fun resetContactDisplayNameOverride(peerId: String) = nativeResetContactDisplayNameOverride(peerId)
+
   private external fun initEngine(nativeBridge: IClientNativeBridge)
   private external fun start()
   private external fun terminate()
@@ -294,6 +299,10 @@ class CallService : Service(), IClientNativeBridge {
   private external fun nativeUpdateSignalingUrl(url: String)
   private external fun nativeAcceptCall()
   private external fun nativeRejectCall()
+  private external fun nativeUpdateMyProfile(name: String?, bio: String?, photo_base64: String?)
+  private external fun nativeSetContactDisplayNameOverride(peerId: String, name: String)
+  private external fun nativeResetContactDisplayNameOverride(peerId: String)
+
 
   companion object {
     private const val FOREGROUND_SERVICE_NOTIFICATION_ID = 101

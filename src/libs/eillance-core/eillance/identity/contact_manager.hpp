@@ -105,6 +105,47 @@ public:
     return result;
   }
 
+  void UpdateContactProfile(const std::string& peer_id, const std::optional<std::string>& name, const std::optional<std::string>& bio, const std::optional<std::string>& photo) {
+    const std::lock_guard<std::mutex> lock(mutex_);
+    const auto it = contacts_.find(peer_id);
+    if (it == contacts_.end()) {
+      LOGW << "Cannot update profile for non-existent contact: " << peer_id;
+      return;
+    }
+    if (name) { it->second.display_name = name; }
+    if (bio) { it->second.bio = bio; }
+    if (photo) { it->second.photo_base64 = photo; }
+    storage_->UpdateContact(it->second);
+  }
+
+  void SetDisplayNameOverride(const std::string& peer_id, const std::string& override_name) {
+    const std::lock_guard<std::mutex> lock(mutex_);
+    const auto it = contacts_.find(peer_id);
+    if (it == contacts_.end()) {
+      LOGW << "Cannot set name override for non-existent contact: " << peer_id;
+      return;
+    }
+    std::string final_name = override_name;
+    if (final_name.length() > 64) {
+      final_name = final_name.substr(0, 64);
+    }
+    it->second.display_name_override = final_name;
+    storage_->UpdateContact(it->second);
+  }
+
+  void ResetDisplayNameOverride(const std::string& peer_id) {
+    const std::lock_guard<std::mutex> lock(mutex_);
+    const auto it = contacts_.find(peer_id);
+    if (it == contacts_.end()) {
+      LOGW << "Cannot reset name override for non-existent contact: " << peer_id;
+      return;
+    }
+    if (it->second.display_name_override) {
+      it->second.display_name_override.reset();
+      storage_->UpdateContact(it->second);
+    }
+  }
+
 private:
   void LoadContacts() {
     const auto contacts_from_db = storage_->GetContacts();

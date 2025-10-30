@@ -97,6 +97,42 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_nativeUpdateSig
   }
 }
 
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_nativeUpdateMyProfile(JNIEnv* env, jobject /*instance*/, jstring name, jstring bio, jstring photo_base64) {
+  if (client_engine && client_engine->ViewModel()) {
+    const char* c_name_chars = (name != nullptr) ? env->GetStringUTFChars(name, nullptr) : nullptr;
+    const char* c_bio_chars = (bio != nullptr) ? env->GetStringUTFChars(bio, nullptr) : nullptr;
+    const char* c_photo_chars = (photo_base64 != nullptr) ? env->GetStringUTFChars(photo_base64, nullptr) : nullptr;
+
+    const auto c_name = (c_name_chars) ? std::optional<std::string>(c_name_chars) : std::nullopt;
+    const auto c_bio = (c_bio_chars) ? std::optional<std::string>(c_bio_chars) : std::nullopt;
+    const auto c_photo = (c_photo_chars) ? std::optional<std::string>(c_photo_chars) : std::nullopt;
+
+    client_engine->ViewModel()->UpdateMyProfile(c_name, c_bio, c_photo);
+
+    if (c_name_chars) { env->ReleaseStringUTFChars(name, c_name_chars); }
+    if (c_bio_chars) { env->ReleaseStringUTFChars(bio, c_bio_chars); }
+    if (c_photo_chars) { env->ReleaseStringUTFChars(photo_base64, c_photo_chars); }
+  }
+}
+
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_nativeSetContactDisplayNameOverride(JNIEnv* env, jobject /*instance*/, jstring peer_id, jstring name) {
+  if (client_engine && client_engine->ViewModel()) {
+    const char* peer_id_chars = env->GetStringUTFChars(peer_id, nullptr);
+    const char* name_chars = env->GetStringUTFChars(name, nullptr);
+    client_engine->ViewModel()->SetContactDisplayNameOverride(peer_id_chars, name_chars);
+    env->ReleaseStringUTFChars(peer_id, peer_id_chars);
+    env->ReleaseStringUTFChars(name, name_chars);
+  }
+}
+
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_nativeResetContactDisplayNameOverride(JNIEnv* env, jobject /*instance*/, jstring peer_id) {
+  if (client_engine && client_engine->ViewModel()) {
+    const char* peer_id_chars = env->GetStringUTFChars(peer_id, nullptr);
+    client_engine->ViewModel()->ResetContactDisplayNameOverride(peer_id_chars);
+    env->ReleaseStringUTFChars(peer_id, peer_id_chars);
+  }
+}
+
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_loadOlderMessages(JNIEnv* /*env*/, jobject /*instance*/) {
   if (client_engine && client_engine->ViewModel()) { client_engine->ViewModel()->LoadOlderMessages(); }

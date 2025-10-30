@@ -29,6 +29,10 @@ NLOHMANN_JSON_SERIALIZE_ENUM(  // NOLINT
 struct Contact {
   std::string peer_id;
   ContactStatus status;
+  std::optional<std::string> display_name;
+  std::optional<std::string> display_name_override;
+  std::optional<std::string> bio;
+  std::optional<std::string> photo_base64;
 };
 
 // Helper for JSON serialization
@@ -36,10 +40,16 @@ inline void to_json(nlohmann::json& j, const Contact& c) {
   j = nlohmann::json{{"peer_id", c.peer_id}, {"status", c.status}};
 }
 
-inline void from_json(const nlohmann::json& j, Contact& c) {
+inline void from_json(const nlohmann::json& j, Contact& c) {  // NOLINT(*-swappable-parameters)
   j.at("peer_id").get_to(c.peer_id);
   j.at("status").get_to(c.status);
 }
+
+struct ProfileInfo {
+    std::string display_name;
+    std::string bio;
+    std::string photo_base64;
+};
 }  // namespace eillance::identity
 
 namespace eillance::messaging {

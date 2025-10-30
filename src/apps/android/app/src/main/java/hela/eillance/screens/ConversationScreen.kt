@@ -151,7 +151,8 @@ fun ConversationScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(peerId, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                title = { Text(uiState.contacts.find { it.peerId == peerId }?.name ?: peerId,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -163,9 +164,6 @@ fun ConversationScreen(
                     }
                     IconButton(onClick = { viewModel.startVideoCall() }) {
                         Icon(Icons.Default.Videocam, contentDescription = "Video Call")
-                    }
-                    IconButton(onClick = { /* TODO: Navigate to contact profile */ }) {
-                        Icon(Icons.Default.Person, contentDescription = "Contact Profile")
                     }
                 }
             )

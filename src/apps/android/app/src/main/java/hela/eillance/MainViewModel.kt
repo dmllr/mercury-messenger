@@ -2,11 +2,9 @@ package hela.eillance
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.viewModelScope
 import hela.eillance.ndkio.AppState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import org.webrtc.VideoSink
 
@@ -18,6 +16,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _showAddContactDialog = MutableStateFlow(false)
     val showAddContactDialog = _showAddContactDialog.asStateFlow()
+
+    private val _showContactProfileDialog = MutableStateFlow<String?>(null)
+    val showContactProfileDialog = _showContactProfileDialog.asStateFlow()
 
     private val _navigateToPeerId = MutableStateFlow<String?>(null)
     val navigateToPeerId = _navigateToPeerId.asStateFlow()
@@ -58,6 +59,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun onAddContactClicked() {
         _showAddContactDialog.value = true
+    }
+
+    fun onShowContactProfile(peerId: String) {
+        _showContactProfileDialog.value = peerId
+    }
+
+    fun onContactProfileDialogDismiss() {
+        _showContactProfileDialog.value = null
     }
 
     fun onAddContactDialogDismiss() {
@@ -140,6 +149,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun onNavigationHandled() {
         _navigateToPeerId.value = null
+    }
+
+    // --- Profile Management ---
+
+    fun updateMyProfile(name: String, bio: String, photoBase64: String?) {
+        callService?.updateMyProfile(name, bio, photoBase64)
+    }
+
+    fun setContactDisplayNameOverride(peerId: String, name: String) {
+        callService?.setContactDisplayNameOverride(peerId, name)
+    }
+
+    fun resetContactDisplayNameOverride(peerId: String) {
+        callService?.resetContactDisplayNameOverride(peerId)
     }
 
     override fun onCleared() {
