@@ -348,6 +348,28 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcTransport_nati
   }
 }
 
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcTransport_nativeOnSignalingConnectionStateChange(JNIEnv* /*env*/, jobject, jlong native_ptr, jint state) {
+  auto* transport = reinterpret_cast<eillance::transport::AndroidRtcTransport*>(native_ptr);
+  if (transport != nullptr) {
+    auto service_state = eillance::ServiceConnectionState::unknown;
+    switch (state) {
+      case 0:  // CONNECTING
+      case 1:  // OPEN
+        service_state = eillance::ServiceConnectionState::establishing;
+        break;
+      case 2:  // CLOSED
+        service_state = eillance::ServiceConnectionState::disconnected;
+        break;
+      case 3:  // FAILED
+        service_state = eillance::ServiceConnectionState::failure;
+        break;
+      default:
+        break;
+    }
+    if (service_state != eillance::ServiceConnectionState::unknown) { transport->ReportStateChange("", eillance::EventSource::system, static_cast<int>(service_state)); }
+  }
+}
+
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcTransport_nativeOnPeerMessage(JNIEnv* env, jobject, jlong native_ptr, jstring message) {
   auto* transport = reinterpret_cast<eillance::transport::AndroidRtcTransport*>(native_ptr);
   if ((transport != nullptr) && (transport->Delegate() != nullptr)) {

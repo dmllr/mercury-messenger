@@ -30,6 +30,13 @@ sealed class SignalingMessage {
 }
 
 class SignalingClient {
+    enum class State {
+        CONNECTING,
+        OPEN,
+        CLOSED,
+        FAILED
+    }
+
     private val clientScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var webSocket: WebSocket? = null
     private val isConnected = AtomicBoolean(false)
@@ -37,22 +44,28 @@ class SignalingClient {
     private val _messages = MutableSharedFlow<SignalingMessage>()
     val messages: SharedFlow<SignalingMessage> = _messages
 
+    private val _state = MutableSharedFlow<State>(replay = 1)
+    val state: SharedFlow<State> = _state
+
     fun connect(peerId: String, signalingUrl: String) {
         Log.i(TAG, "Connect called. Starting connection manager coroutine.")
         clientScope.launch {
             var currentBackoffMs = INITIAL_BACKOFF_MS
+            _state.tryEmit(State.CONNECTING)
             while (isActive) {
                 // This signal will complete when the current websocket session is over.
                 val sessionClosedSignal = CompletableDeferred<Unit>()
 
                 if (!isConnected.get()) {
                     Log.i(TAG, "Attempting to connect to signaling server...")
+                    _state.tryEmit(State.CONNECTING)
                     val listener = object : WebSocketListener() {
                         override fun onOpen(ws: WebSocket, response: Response) {
                             Log.i(TAG, "Signaling connection opened.")
                             webSocket = ws
                             isConnected.set(true)
                             currentBackoffMs = INITIAL_BACKOFF_MS // Reset backoff on success.
+                            _state.tryEmit(State.OPEN)
                             val loginMessage = JSONObject().apply {
                                 put("type", "login")
                                 put("id", peerId)
@@ -86,6 +99,7 @@ class SignalingClient {
                             Log.i(TAG, "Signaling connection closed.")
                             isConnected.set(false)
                             webSocket = null
+                            _state.tryEmit(State.CLOSED)
                             sessionClosedSignal.complete(Unit)
                         }
 
@@ -93,6 +107,7 @@ class SignalingClient {
                             logError(t) // Use the refined logging function.
                             isConnected.set(false)
                             webSocket = null
+                            _state.tryEmit(State.FAILED)
                             sessionClosedSignal.complete(Unit)
                         }
                     }
@@ -136,6 +151,7 @@ class SignalingClient {
         webSocket?.close(NORMAL_CLOSURE_STATUS, "Client disconnected")
         webSocket = null
         isConnected.set(false)
+        _state.tryEmit(State.CLOSED)
     }
 
     private fun logError(t: Throwable) {
