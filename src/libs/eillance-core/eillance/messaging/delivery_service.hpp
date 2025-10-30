@@ -34,12 +34,27 @@ public:
   MessageDeliveryService(std::shared_ptr<storage::PersistentStorage> storage, std::shared_ptr<identity::ContactManager> contacts, ConnectionRequestHandler handler) : storage_(std::move(storage)), contact_manager_(std::move(contacts)), connection_handler_(std::move(handler)) {}
 
   void start() {
-    is_running_ = true;
-    scheduleCheck(initial_retry_delay_s);
+    // Set to true and check if it was already true.
+    if (is_running_.exchange(true)) {
+      // It was already running. This call is likely from a reconnect.
+      // Just trigger an immediate check. The existing loop will continue.
+      dispatch_queue_.Dispatch([this] { CheckForQueuedMessages(); });
+      return;
+    }
+
+    // It was not running. We have now started it.
+    // Perform an immediate check, then start the recurring schedule.
+    dispatch_queue_.Dispatch([this] {
+      CheckForQueuedMessages();
+      scheduleCheck(initial_retry_delay_s);
+    });
   }
 
   void stop() {
-    is_running_ = false;
+    // Atomically set to false and check if it was already false.
+    if (!is_running_.exchange(false)) {
+      return;  // Already stopped.
+    }
     dispatch_queue_.RemovePending();
   }
 
