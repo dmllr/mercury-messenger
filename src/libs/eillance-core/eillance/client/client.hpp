@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <utility>
+#include <chrono>
 
 #include <nlohmann/json.hpp>
 
@@ -571,7 +572,7 @@ inline void Client::updateMyProfile(const std::optional<std::string>& name, cons
       if (existing_update) {
         // If a pending update exists, just update its content and timestamp.
         existing_update->data = messaging::MessageEntry{profile_update_msg.dump()};
-        existing_update->timestamp = Time::Now();
+        existing_update->timestamp = static_cast<Time::Unit>(std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count());
         existing_update->peer_id_for_db = contact.peer_id;  // Required for storage layer
         message_history_->UpdateHistoryEntry(*existing_update);
       } else {

@@ -12,6 +12,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <chrono>
 
 #include "eillance/client/client.hpp"
 #include "eillance/events/service_connection_state.h"
@@ -592,7 +593,7 @@ inline void MercuryViewModel::UpdateChatHistoryForSelectedContact() {
 
 inline void MercuryViewModel::AddSystemMessageToChat(const std::string& message) {
   const std::lock_guard<std::mutex> lock(state_mutex_);
-  current_state_.interaction_history.push_back({.id = nextSystemMessageId++, .kind = messaging::HistoryEntryKind::systemMessage, .timestamp = Time::Now(), .direction = messaging::MessageDirection::received, .data = messaging::MessageEntry{message}});
+  current_state_.interaction_history.push_back({.id = nextSystemMessageId++, .kind = messaging::HistoryEntryKind::systemMessage, .timestamp = static_cast<Time::Unit>(std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count()), .direction = messaging::MessageDirection::received, .data = messaging::MessageEntry{message}});
 }
 
 inline void MercuryViewModel::NotifyStateChanged() const {

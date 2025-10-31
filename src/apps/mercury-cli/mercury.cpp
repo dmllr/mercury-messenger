@@ -88,9 +88,9 @@ constexpr auto GetConnectionStatusString(eillance::ServiceConnectionState state)
 }
 
 // Helper function to format timestamps according to the specified rules.
-std::string FormatTimestamp(Time::Unit ts_us) {
+std::string FormatTimestamp(Time::Unit ts_seconds) {
   using namespace std::chrono;
-  const auto message_tp = system_clock::time_point(microseconds(ts_us));
+  const auto message_tp = system_clock::time_point(seconds(ts_seconds));
   const auto now_tp = system_clock::now();
 
   const time_t message_time_t = system_clock::to_time_t(message_tp);
@@ -244,7 +244,7 @@ int main(int argc, char** argv) {
           content = std::get<eillance::messaging::MessageEntry>(entry.data).content;
           auto timestamp_str = FormatTimestamp(entry.timestamp);
           elements.push_back(ftxui::text(prefix + content + suffix));
-          elements.push_back(ftxui::text("  ΓööΓöÇ> " + timestamp_str) | ftxui::dim);
+          elements.push_back(ftxui::text("  → " + timestamp_str) | ftxui::dim);
           break;
         }
         case eillance::messaging::HistoryEntryKind::voiceCall:
@@ -271,7 +271,7 @@ int main(int argc, char** argv) {
           content = "--- " + direction_str + " " + call_type_str + " Call (" + status_str + ") ---";
           auto timestamp_str = FormatTimestamp(entry.timestamp);
           elements.push_back(ftxui::text(prefix + content) | ftxui::dim);
-          elements.push_back(ftxui::text("  ΓööΓöÇ> " + timestamp_str) | ftxui::dim);
+          elements.push_back(ftxui::text("  → " + timestamp_str) | ftxui::dim);
           break;
         }
       }
@@ -307,7 +307,7 @@ int main(int argc, char** argv) {
 
     constexpr auto contact_list_width = 40;
     const auto main_view = ftxui::hbox({contact_menu->Render() | ftxui::size(ftxui::WIDTH, ftxui::EQUAL, contact_list_width) | ftxui::border, ftxui::vbox({chat_renderer->Render() | ftxui::flex, ftxui::separator(), input_component->Render()}) | ftxui::flex});
-    
+
     const std::string my_name = state.my_display_name ? " (" + *state.my_display_name + ")" : "";
     const auto status_line = " Mercury CLI | Your ID: " + state.my_id + my_name + " | Status: " + std::string(GetConnectionStatusString(state.connection_state));
     return ftxui::window(ftxui::text(status_line), main_view);

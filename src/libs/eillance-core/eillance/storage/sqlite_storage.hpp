@@ -42,7 +42,7 @@ struct HistoryEntry {
   int direction;     // Corresponds to messaging::MessageDirection
   int status;        // Corresponds to messaging::MessageStatus
   std::string content;
-  int duration_seconds = 0;
+  uint32_t duration_seconds = 0;
   int call_direction = 0;
   int call_status = 0;
 };
@@ -104,7 +104,7 @@ inline auto ToDomainHistoryEntry(const db::HistoryEntry& db_entry) -> messaging:
       break;
     case messaging::HistoryEntryKind::voiceCall:
     case messaging::HistoryEntryKind::videoCall:
-      record.data = messaging::CallEntry{.duration_seconds = static_cast<uint32_t>(db_entry.duration_seconds), .call_direction = static_cast<messaging::CallDirection>(db_entry.call_direction), .call_status = static_cast<messaging::CallStatus>(db_entry.call_status)};
+      record.data = messaging::CallEntry{.duration_seconds = db_entry.duration_seconds, .call_direction = static_cast<messaging::CallDirection>(db_entry.call_direction), .call_status = static_cast<messaging::CallStatus>(db_entry.call_status)};
       break;
   }
   return record;
