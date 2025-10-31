@@ -26,7 +26,7 @@ constexpr auto hex_char_to_int(char c) -> int {
 }  // namespace
 
 /// @brief Convert binary data to a hex string
-[[nodiscard]] static constexpr auto ToHex(const std::vector<std::byte>& data) -> std::string {
+[[nodiscard]] static auto ToHex(const std::vector<std::byte>& data) -> std::string {
   constexpr char hex_map[] = "0123456789abcdef";
   std::string hex_str(data.size() * 2, ' ');
   for (size_t i = 0; i < data.size(); ++i) {
@@ -37,7 +37,7 @@ constexpr auto hex_char_to_int(char c) -> int {
 }
 
 /// @brief Convert a hex string to binary data
-[[nodiscard]] static constexpr auto FromHex(std::string_view hex) -> std::vector<std::byte> {
+[[nodiscard]] static auto FromHex(std::string_view hex) -> std::vector<std::byte> {
   if (hex.length() % 2 != 0) { return {}; }
   std::vector<std::byte> bytes(hex.length() / 2);
   for (size_t i = 0; i < hex.length(); i += 2) {
