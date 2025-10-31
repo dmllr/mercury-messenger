@@ -21,7 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -95,9 +95,13 @@ fun ConversationScreen(
         viewModel.selectContact(peerId)
     }
 
-    val listState = remember(peerId) { LazyListState() }
+    val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
     val historyItems = uiState.interactionHistory
+    val historySize = historyItems.size
+    var previousHistorySize by remember(peerId) { mutableStateOf(historySize) }
+    val imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
+
     val isInCall = uiState.callState.isInCall && uiState.callState.peerId == peerId
 
     LaunchedEffect(isInCall) {
@@ -106,14 +110,30 @@ fun ConversationScreen(
         }
     }
 
-    // Effect for auto-scrolling when the keyboard appears.
-    val imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
-    LaunchedEffect(imeBottom) {
-        if (imeBottom > 0 && historyItems.isNotEmpty()) {
+    // Effect for auto-scrolling when the keyboard appears or a new message arrives.
+    LaunchedEffect(historySize, imeBottom) {
+        val isKeyboardOpen = imeBottom > 0
+        val newMessagesArrived = historySize > previousHistorySize
+
+        if (newMessagesArrived) {
+            val newMessage = historyItems.last()
+            val isUserAtBottom = listState.firstVisibleItemIndex <= 1
+
+            // Always scroll to the new message if the user sent it. If a message was
+            // received, only scroll if the user was already near the bottom.
+            if (newMessage.direction == MessageDirection.Sent || isUserAtBottom) {
+                coroutineScope.launch {
+                    listState.animateScrollToItem(0)
+                }
+            }
+        } else if (isKeyboardOpen && listState.firstVisibleItemIndex > 0) {
+            // If the keyboard opens, scroll to the bottom to keep the input field visible.
             coroutineScope.launch {
-                listState.animateScrollToItem(historyItems.lastIndex)
+                listState.animateScrollToItem(0)
             }
         }
+
+        previousHistorySize = historySize
     }
 
 
