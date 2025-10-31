@@ -10,11 +10,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -58,7 +56,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -97,10 +94,8 @@ fun ConversationScreen(
 
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
-    val historyItems = uiState.interactionHistory
-    val historySize = historyItems.size
-    var previousHistorySize by remember(peerId) { mutableStateOf(historySize) }
-    val imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
+    val history = uiState.interactionHistory
+    var previousHistory by remember(peerId) { mutableStateOf(history) }
 
     val isInCall = uiState.callState.isInCall && uiState.callState.peerId == peerId
 
@@ -110,30 +105,15 @@ fun ConversationScreen(
         }
     }
 
-    // Effect for auto-scrolling when the keyboard appears or a new message arrives.
-    LaunchedEffect(historySize, imeBottom) {
-        val isKeyboardOpen = imeBottom > 0
-        val newMessagesArrived = historySize > previousHistorySize
-
-        if (newMessagesArrived) {
-            val newMessage = historyItems.last()
-            val isUserAtBottom = listState.firstVisibleItemIndex <= 1
-
-            // Always scroll to the new message if the user sent it. If a message was
-            // received, only scroll if the user was already near the bottom.
-            if (newMessage.direction == MessageDirection.Sent || isUserAtBottom) {
-                coroutineScope.launch {
-                    listState.animateScrollToItem(0)
-                }
-            }
-        } else if (isKeyboardOpen && listState.firstVisibleItemIndex > 0) {
-            // If the keyboard opens, scroll to the bottom to keep the input field visible.
+    // This effect handles auto-scrolling when new messages are added.
+    LaunchedEffect(history) {
+        // We only scroll if the list has actually grown, not just on recomposition.
+        if (history.size > previousHistory.size) {
             coroutineScope.launch {
                 listState.animateScrollToItem(0)
             }
         }
-
-        previousHistorySize = historySize
+        previousHistory = history
     }
 
 
