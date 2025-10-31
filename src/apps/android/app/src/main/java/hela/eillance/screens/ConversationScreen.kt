@@ -1,8 +1,8 @@
 package hela.eillance.screens
 
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.foundation.background
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,16 +13,15 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -33,9 +32,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.DoneAll
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.SignalCellularAlt
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -69,21 +66,21 @@ import androidx.core.os.ConfigurationCompat
 import hela.eillance.MainViewModel
 import hela.eillance.ndkio.AppState
 import hela.eillance.ndkio.CallDirection
-import hela.eillance.ndkio.Contact
 import hela.eillance.ndkio.CallStatus
+import hela.eillance.ndkio.Contact
 import hela.eillance.ndkio.HistoryEntry
 import hela.eillance.ndkio.HistoryEntryKind
 import hela.eillance.ndkio.MessageDirection
 import hela.eillance.ndkio.MessageStatus
 import hela.eillance.ndkio.PeerConnectionState
 import hela.eillance.theme.extendedColors
+import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.concurrent.TimeUnit
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -98,7 +95,7 @@ fun ConversationScreen(
         viewModel.selectContact(peerId)
     }
 
-    val listState = rememberLazyListState()
+    val listState = remember(peerId) { LazyListState() }
     val coroutineScope = rememberCoroutineScope()
     val historyItems = uiState.interactionHistory
     val isInCall = uiState.callState.isInCall && uiState.callState.peerId == peerId
@@ -109,31 +106,12 @@ fun ConversationScreen(
         }
     }
 
-    // Effect for auto-scrolling when a new message arrives
-    LaunchedEffect(historyItems.size) {
-        val lastIndex = historyItems.lastIndex
-        if (lastIndex < 0) return@LaunchedEffect
-
-        val layoutInfo = listState.layoutInfo
-        val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()
-
-        val isScrolledNearBottom = lastVisibleItem == null ||
-                lastVisibleItem.index >= layoutInfo.totalItemsCount - 2
-
-        if (isScrolledNearBottom) {
-            coroutineScope.launch {
-                listState.animateScrollToItem(lastIndex)
-            }
-        }
-    }
-
     // Effect for auto-scrolling when the keyboard appears.
     val imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
     LaunchedEffect(imeBottom) {
-        val lastIndex = historyItems.lastIndex
-        if (imeBottom > 0 && lastIndex >= 0) {
+        if (imeBottom > 0 && historyItems.isNotEmpty()) {
             coroutineScope.launch {
-                listState.animateScrollToItem(lastIndex)
+                listState.animateScrollToItem(historyItems.lastIndex)
             }
         }
     }
@@ -261,8 +239,25 @@ fun ChatHistory(
         state = listState,
         modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(8.dp),
-        contentPadding = PaddingValues(vertical = 8.dp)
+        contentPadding = PaddingValues(vertical = 8.dp),
+        reverseLayout = true
     ) {
+        // The `items` block is defined first, so its contents will be rendered from the bottom up.
+        // The "Load Older" button is defined last, so it appears at the top of the scrollable area.
+
+        val history = uiState.interactionHistory
+        items(
+            count = history.size,
+            key = { index -> history[history.lastIndex - index].id }
+        ) { index ->
+            val item = history[history.lastIndex - index]
+            when (item.kind) {
+                HistoryEntryKind.TextMessage -> MessageBubble(item)
+                HistoryEntryKind.VoiceCall, HistoryEntryKind.VideoCall -> CallLogBubble(item)
+                HistoryEntryKind.SystemMessage -> SystemMessageBubble(item)
+            }
+        }
+
         if (uiState.hasOlderMessages) {
             item {
                 Button(
@@ -273,13 +268,6 @@ fun ChatHistory(
                 ) {
                     Text("Load Older Messages")
                 }
-            }
-        }
-        items(uiState.interactionHistory, key = { it.id }) { item ->
-            when (item.kind) {
-                HistoryEntryKind.TextMessage -> MessageBubble(item)
-                HistoryEntryKind.VoiceCall, HistoryEntryKind.VideoCall -> CallLogBubble(item)
-                HistoryEntryKind.SystemMessage -> SystemMessageBubble(item)
             }
         }
     }
