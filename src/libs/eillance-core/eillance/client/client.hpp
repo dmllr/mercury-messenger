@@ -170,6 +170,11 @@ inline Client::Client(std::shared_ptr<storage::PersistentStorage> storage, std::
   contact_manager_ = std::make_shared<identity::ContactManager>(storage_);
   message_history_ = std::make_unique<messaging::MessageHistory>(storage_);
 
+  // Register the status changed callback here to ensure it's always active.
+  message_history_->SetStatusChangedCallback([this](const std::string& p_id, std::uint64_t msg_id, messaging::MessageStatus status) {
+    if (on_message_status_changed_) { (*on_message_status_changed_)(p_id, msg_id, status); }
+  });
+
   delivery_service_ = std::make_unique<messaging::MessageDeliveryService>(storage_, contact_manager_, [this](const std::string& peer_id) {
     if (auto peer = transport_->getPeer(peer_id); peer && peer->data_channel_is_open_ && peer->session_cipher_->IsReady()) {
       sendQueuedMessages(peer_id);
@@ -239,12 +244,7 @@ inline void Client::setPeerListUpdateCallback(const OnPeerListUpdateCallback& ca
 inline void Client::setIncomingCallCallback(const OnIncomingCallCallback& callback) { on_incoming_call_ = std::make_shared<OnIncomingCallCallback>(callback); }
 inline void Client::setOnCallTerminatedCallback(const OnCallTerminatedCallback& callback) { on_call_terminated_ = std::make_shared<OnCallTerminatedCallback>(callback); }
 inline void Client::setOnContactProfileUpdatedCallback(const OnContactProfileUpdatedCallback& callback) { on_contact_profile_updated_ = std::make_shared<OnContactProfileUpdatedCallback>(callback); }
-inline void Client::call(const std::string& peer_id) {
-  connect(peer_id);
-  message_history_->SetStatusChangedCallback([this](const std::string& p_id, std::uint64_t msg_id, messaging::MessageStatus status) {
-    if (on_message_status_changed_) { (*on_message_status_changed_)(p_id, msg_id, status); }
-  });
-}
+inline void Client::call(const std::string& peer_id) { connect(peer_id); }
 inline void Client::connect(const std::string& peer_id) {
   if (transport_->getPeer(peer_id)) {
     LOGW << "Already connected or connecting to peer " << peer_id;
@@ -733,14 +733,9 @@ inline void Client::processDataChannelMessage(const std::string& peer_id, const 
     }
     message_history_->UpdateMessageStatus(peer_id, message_id, status);
   } else if (type == "message_read") {
-    auto message_ids = message.at("message_ids").get<std::vector<std::uint64_t>>();
-    for (const auto& msg_id : message_ids) {
-      const Json receipt = {
-          {"type", "message_receipt"},
-          {"status", "read"},
-          {"message_id", msg_id},
-      };
-      transport_->sendPeerDataChannelMessage(peer_id, receipt);
+    const auto message_ids = message.at("message_ids").get<std::vector<std::uint64_t>>();
+    for (const auto msg_id : message_ids) {
+      message_history_->UpdateMessageStatus(peer_id, msg_id, messaging::MessageStatus::read);
     }
   } else if (type == "profile_info") {
     const auto display_name = message.value("display_name", "");
