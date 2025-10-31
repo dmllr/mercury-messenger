@@ -114,7 +114,7 @@ class CallService : Service(), IClientNativeBridge {
     val wasRinging = oldState?.callState?.isRinging ?: false
     val isRinging = newState.callState.isRinging
 
-    if (!wasRinging && isRinging) {
+    if (!wasRinging && isRinging && !MercuryApplication.isAppInForeground) {
       showIncomingCallNotification(newState.callState.peerId)
     } else if (wasRinging && !isRinging) {
       notificationManager.cancel(INCOMING_CALL_NOTIFICATION_ID)
@@ -131,7 +131,7 @@ class CallService : Service(), IClientNativeBridge {
 
       if (lastMessage.direction == hela.eillance.ndkio.MessageDirection.Received) {
         val oldLastMessageId = oldChat?.lastMessage?.id ?: -1
-        if (lastMessage.id > oldLastMessageId) {
+        if (lastMessage.id > oldLastMessageId && !MercuryApplication.isAppInForeground) {
           showNewMessageNotification(newChat.peerId, lastMessage.content ?: "New message")
         }
       }

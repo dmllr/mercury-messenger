@@ -7,4 +7,8 @@ class MercuryApplication : Application() {
     super.onCreate()
     System.loadLibrary("lib-client-service-bridge")
   }
+
+  companion object {
+    var isAppInForeground: Boolean = false
+  }
 }
