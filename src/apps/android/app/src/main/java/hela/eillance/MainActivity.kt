@@ -1,6 +1,7 @@
 package hela.eillance
 
 import android.Manifest
+import android.app.NotificationManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -64,6 +65,19 @@ class MainActivity : ComponentActivity() {
         }
       }
     }
+  }
+
+  override fun onStart() {
+    super.onStart()
+    MercuryApplication.isAppInForeground = true
+    // Clear all notifications when the app is opened
+    val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    notificationManager.cancelAll()
+  }
+
+  override fun onStop() {
+    super.onStop()
+    MercuryApplication.isAppInForeground = false
   }
 
   override fun onNewIntent(intent: Intent) {
