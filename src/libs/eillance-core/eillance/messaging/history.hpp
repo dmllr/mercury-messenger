@@ -22,9 +22,10 @@ public:
     const HistoryEntryRecord entry{
         .id = 0,  // DB will assign ID
         .kind = kind,
-        .timestamp = static_cast<Time::Unit>(std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count()),
+        .timestamp = static_cast<Time::Unit>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count()),
         .direction = direction,
         .status = (direction == MessageDirection::sent) ? MessageStatus::sending : MessageStatus::none,
+        .is_truncated = false,
         .data = MessageEntry{content},
         .peer_id_for_db = peer_id,
     };
@@ -32,7 +33,7 @@ public:
   }
 
   void AddCallEntry(const std::string& peer_id, const HistoryEntryKind kind, const CallDirection direction, const CallStatus status, uint32_t duration = 0) {
-    storage_->AddHistoryEntry({.id = 0, .kind = kind, .timestamp = static_cast<Time::Unit>(std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count()), .direction = (direction == CallDirection::incoming) ? MessageDirection::received : MessageDirection::sent, .data = CallEntry{.duration_seconds = duration, .call_direction = direction, .call_status = status}, .peer_id_for_db = peer_id});  // NOLINT(*-branch-clone)
+    storage_->AddHistoryEntry({.id = 0, .kind = kind, .timestamp = static_cast<Time::Unit>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count()), .direction = (direction == CallDirection::incoming) ? MessageDirection::received : MessageDirection::sent, .data = CallEntry{.duration_seconds = duration, .call_direction = direction, .call_status = status}, .peer_id_for_db = peer_id});  // NOLINT(*-branch-clone)
   }
 
   void SetStatusChangedCallback(std::function<void(const std::string&, std::uint64_t, MessageStatus)> cb) {
@@ -57,6 +58,10 @@ public:
 
   auto GetHistoryPage(const std::string& peer_id, const size_t page_index, const size_t page_size) -> HistoryPage {
     return storage_->GetHistoryPage(peer_id, page_index, page_size);
+  }
+
+  auto GetFullMessageContent(std::uint64_t message_id) -> std::optional<std::string> {
+    return storage_->GetFullMessageContent(message_id);
   }
 
   auto GetChatSummaries(const std::vector<std::string>& peer_ids) -> std::vector<ChatSummary> {

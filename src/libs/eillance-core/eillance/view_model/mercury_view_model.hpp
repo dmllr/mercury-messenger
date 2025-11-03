@@ -142,6 +142,7 @@ public:
   void SetContactDisplayNameOverride(const std::string& peer_id, const std::string& name);
   void ResetContactDisplayNameOverride(const std::string& peer_id);
   void LoadOlderMessages();
+  void LoadFullMessage(uint64_t message_id);
   void RefreshState();
   void MarkMessagesAsRead(const std::vector<std::uint64_t>& message_ids);
   auto ProcessCliInput(const std::string& input) -> bool;
@@ -360,6 +361,36 @@ inline void MercuryViewModel::LoadOlderMessages() {
   });
 }
 
+inline void MercuryViewModel::LoadFullMessage(uint64_t message_id) {
+    dispatch_queue_.Dispatch([this, message_id] {
+        auto full_content = client_->getFullMessageContent(message_id);
+        if (!full_content) {
+            LOGW << "Could not load full content for message ID: " << message_id;
+            return;
+        }
+
+        bool updated = false;
+        {
+            const std::lock_guard<std::mutex> lock(state_mutex_);
+            if (current_state_.selected_contact_id) {
+                for (auto& entry : current_state_.interaction_history) {
+                    if (entry.id == message_id) {
+                        if (std::holds_alternative<messaging::MessageEntry>(entry.data)) {
+                            auto& msg_entry = std::get<messaging::MessageEntry>(entry.data);
+                            msg_entry.content = *full_content;
+                            entry.is_truncated = false;
+                            updated = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (updated) { NotifyStateChanged(); }
+    });
+}
+
 inline void MercuryViewModel::RefreshState() {
   dispatch_queue_.Dispatch([this] {
     {
@@ -438,6 +469,15 @@ inline auto MercuryViewModel::ProcessCliInput(const std::string& input) -> bool 
       }
     } else if (command == "/history" && arg == "load") {
       LoadOlderMessages();
+    } else if (command == "/load") {
+        try {
+            if (arg.empty()) { throw std::invalid_argument("Message ID required."); }
+            const uint64_t id = std::stoull(arg);
+            LoadFullMessage(id);
+            AddSystemMessageToChat("--> Loading full content for message " + arg);
+        } catch (const std::exception& e) {
+            AddSystemMessageToChat(std::string("--> Invalid usage. Use /load <message_id>. Error: ") + e.what());
+        }
     } else if (command == "/exit") {
       return true;
     } else {
@@ -593,7 +633,7 @@ inline void MercuryViewModel::UpdateChatHistoryForSelectedContact() {
 
 inline void MercuryViewModel::AddSystemMessageToChat(const std::string& message) {
   const std::lock_guard<std::mutex> lock(state_mutex_);
-  current_state_.interaction_history.push_back({.id = nextSystemMessageId++, .kind = messaging::HistoryEntryKind::systemMessage, .timestamp = static_cast<Time::Unit>(std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count()), .direction = messaging::MessageDirection::received, .data = messaging::MessageEntry{message}});
+  current_state_.interaction_history.push_back({.id = nextSystemMessageId++, .kind = messaging::HistoryEntryKind::systemMessage, .timestamp = static_cast<Time::Unit>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count()), .direction = messaging::MessageDirection::received, .is_truncated = false, .data = messaging::MessageEntry{message}});
 }
 
 inline void MercuryViewModel::NotifyStateChanged() const {

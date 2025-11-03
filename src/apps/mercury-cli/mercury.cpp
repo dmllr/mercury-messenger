@@ -242,6 +242,9 @@ int main(int argc, char** argv) {
             }
           }
           content = std::get<eillance::messaging::MessageEntry>(entry.data).content;
+          if (entry.is_truncated) {
+            content += "... [truncated, ID: " + std::to_string(entry.id) + " - use /load " + std::to_string(entry.id) + "]";
+          }
           auto timestamp_str = FormatTimestamp(entry.timestamp);
           elements.push_back(ftxui::text(prefix + content + suffix));
           elements.push_back(ftxui::text("  → " + timestamp_str) | ftxui::dim);

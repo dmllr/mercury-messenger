@@ -53,7 +53,8 @@ data class HistoryEntry(
     @SerialName("duration_seconds") val durationSeconds: Int? = null,
     @SerialName("call_direction") val callDirection: CallDirection? = null,
     @SerialName("call_status") val callStatus: CallStatus? = null,
-    val status: MessageStatus = MessageStatus.None
+    val status: MessageStatus = MessageStatus.None,
+    @SerialName("is_truncated") val isTruncated: Boolean = false,
 )
 
 @Serializable

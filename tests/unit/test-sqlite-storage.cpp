@@ -273,3 +273,50 @@ TEST_F(SQLiteStorageTest, ChatSummaries) {
     EXPECT_EQ(summaries[1].last_message.kind, messaging::HistoryEntryKind::voiceCall);
     EXPECT_EQ(summaries[1].unread_count, 0); // The one text message is read, and calls don't count as unread.
 }
+
+TEST_F(SQLiteStorageTest, UpdateHistoryEntry) {
+    std::string peer1 = "peer1";
+    auto entry = storage_->AddHistoryEntry({
+        .kind = messaging::HistoryEntryKind::textMessage,
+        .timestamp = Time::Now(),
+        .direction = messaging::MessageDirection::sent,
+        .status = messaging::MessageStatus::sending,
+        .data = messaging::MessageEntry{"Initial content"},
+        .peer_id_for_db = peer1
+    });
+
+    entry.status = messaging::MessageStatus::read;
+    entry.data = messaging::MessageEntry{"Updated content"};
+    storage_->UpdateHistoryEntry(entry);
+
+    auto page = storage_->GetHistoryPage(peer1, 0, 1);
+    ASSERT_EQ(page.messages.size(), 1);
+    EXPECT_EQ(page.messages[0].id, entry.id);
+    EXPECT_EQ(page.messages[0].status, messaging::MessageStatus::read);
+    EXPECT_EQ(std::get<messaging::MessageEntry>(page.messages[0].data).content, "Updated content");
+}
+
+TEST_F(SQLiteStorageTest, LargeMessages) {
+    std::string peer1 = "peer1";
+    std::string long_message(3000, 'a');
+
+    auto entry = storage_->AddHistoryEntry({
+        .kind = messaging::HistoryEntryKind::textMessage,
+        .timestamp = Time::Now(),
+        .direction = messaging::MessageDirection::sent,
+        .status = messaging::MessageStatus::sending,
+        .data = messaging::MessageEntry{long_message},
+        .peer_id_for_db = peer1
+    });
+
+    EXPECT_TRUE(entry.is_truncated);
+
+    auto page = storage_->GetHistoryPage(peer1, 0, 1);
+    ASSERT_EQ(page.messages.size(), 1);
+    EXPECT_TRUE(page.messages[0].is_truncated);
+    EXPECT_LT(std::get<messaging::MessageEntry>(page.messages[0].data).content.length(), long_message.length());
+
+    auto full_content = storage_->GetFullMessageContent(entry.id);
+    ASSERT_TRUE(full_content.has_value());
+    EXPECT_EQ(*full_content, long_message);
+}

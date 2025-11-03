@@ -296,6 +296,7 @@ class CallService : Service(), IClientNativeBridge {
   external fun startVoiceCall()
   external fun startVideoCall()
   external fun loadOlderMessages()
+  external fun loadFullMessage(messageId: Long)
   external fun markMessagesAsRead(messageIds: LongArray)
   external fun configureVideoCapture(config: VideoConfig)
   external fun hangup()
