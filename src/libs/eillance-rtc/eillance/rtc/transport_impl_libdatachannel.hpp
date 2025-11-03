@@ -373,10 +373,11 @@ private:
     ws_->onMessage(nullptr, [this](const std::string& data) { OnWebSocketMessage(data); });
 
     if (signaling_server_url_.empty()) {
-#if ANDROID
-      signaling_server_url_ = "ws://10.0.2.2:8000";
-#else
+
+#if SERVER_DEBUG
       signaling_server_url_ = "ws://127.0.0.1:8000";
+#else
+      signaling_server_url_ = "wss://app.hela.me:8000";
 #endif
     }
 

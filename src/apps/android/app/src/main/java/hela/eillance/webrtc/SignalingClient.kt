@@ -167,7 +167,8 @@ class SignalingClient {
 
     companion object {
         private const val TAG = "SignalingClient"
-        const val DEFAULT_SIGNALING_URL = "ws://10.0.2.2:8000"
+        const val DEFAULT_SIGNALING_URL = "wss://app.hela.me:8000"
+        // const val DEFAULT_SIGNALING_URL = "ws://10.0.2.2:8000"
         private const val NORMAL_CLOSURE_STATUS = 1000
 
         private const val INITIAL_BACKOFF_MS = 2000L
