@@ -31,18 +31,3 @@ endif()
 set(SQLite3_FOUND TRUE)
 set(SQLite3_INCLUDE_DIR ${sqlite3_source_SOURCE_DIR} CACHE PATH "Path to downloaded SQLite3 headers" FORCE)
 set(SQLite3_LIBRARY SQLite3 CACHE STRING "SQLite3 library target" FORCE)
-
-
-set(SQLITE_ORM_ENABLE_CXX_17 ON CACHE BOOL "Enable C++20" FORCE)
-import_remote("https://github.com/fnc12/sqlite_orm.git"
-  TAG "v1.9.1"
-  DST "${CMAKE_SOURCE_DIR}/_imported"
-  PATCH "${CMAKE_CURRENT_LIST_DIR}/patches/libsqliteorm.patch"
-  ALIAS sqliteorm)
-
-# Suppress warnings from the third-party sqlite_orm library.
-get_target_property(SQLITE_ORM_INCLUDES sqlite_orm INTERFACE_INCLUDE_DIRECTORIES)
-if(SQLITE_ORM_INCLUDES)
-  set_target_properties(sqlite_orm PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "")
-  target_include_directories(sqlite_orm SYSTEM INTERFACE ${SQLITE_ORM_INCLUDES})
-endif()

@@ -16,9 +16,9 @@ target_link_libraries(eillance-core INTERFACE
   eillance-utils
   eillance-logging
   eillance-crypto
+  eillance-storage-sqlite
   plog
   nlohmann_json
-  sqlite_orm
   SQLite3
 )
 
