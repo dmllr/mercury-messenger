@@ -21,6 +21,7 @@ class MockPersistentStorageImpl final : public PersistentStorageImpl {
   std::unordered_map<std::string, std::string> settings_;
   std::unordered_map<std::string, identity::Contact> contacts_;
   std::unordered_map<std::string, std::vector<messaging::HistoryEntryRecord>> history_;
+  std::unordered_map<uint64_t, std::string> large_messages_;
   std::atomic<uint64_t> next_history_id_{1};
 
 public:
@@ -85,8 +86,32 @@ public:
   auto AddHistoryEntry(messaging::HistoryEntryRecord entry) -> messaging::HistoryEntryRecord override {
     const std::lock_guard lock(mutex_);
     entry.id = next_history_id_++;
+
+    constexpr size_t kMaxInlineContentSize = 2048;
+    if (auto* msg_entry = std::get_if<messaging::MessageEntry>(&entry.data)) {
+        if (msg_entry->content.length() > kMaxInlineContentSize) {
+            large_messages_[entry.id] = msg_entry->content;
+            msg_entry->content = msg_entry->content.substr(0, kMaxInlineContentSize);
+            entry.is_truncated = true;
+        } else {
+            entry.is_truncated = false;
+        }
+    }
+
     history_[entry.peer_id_for_db].push_back(entry);
     return entry;
+  }
+
+  void UpdateHistoryEntry(const messaging::HistoryEntryRecord& entry) override {
+    const std::lock_guard lock(mutex_);
+    for (auto& [peer_id, history_vec] : history_) {
+        for (auto& existing_entry : history_vec) {
+            if (existing_entry.id == entry.id) {
+                existing_entry = entry;
+                return;
+            }
+        }
+    }
   }
 
   void UpdateMessageStatus(const std::string& peer_id, uint64_t message_id, messaging::MessageStatus new_status) override {
@@ -137,6 +162,14 @@ public:
         page.total_messages = 0;
     }
     return page;
+  }
+
+  auto GetFullMessageContent(std::uint64_t message_id) -> std::optional<std::string> override {
+    const std::lock_guard lock(mutex_);
+    if (auto it = large_messages_.find(message_id); it != large_messages_.end()) {
+        return it->second;
+    }
+    return std::nullopt;
   }
 
   auto GetChatSummaries(const std::vector<std::string>& peer_ids) -> std::vector<messaging::ChatSummary> override {

@@ -138,6 +138,10 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_loadOlderMessag
   if (client_engine && client_engine->ViewModel()) { client_engine->ViewModel()->LoadOlderMessages(); }
 }
 
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_loadFullMessage(JNIEnv* /*env*/, jobject /*instance*/, jlong message_id) {
+  if (client_engine && client_engine->ViewModel()) { client_engine->ViewModel()->LoadFullMessage(static_cast<std::uint64_t>(message_id)); }
+}
+
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_markMessagesAsRead(JNIEnv* env, jobject /*instance*/, jlongArray message_ids) {
   if (client_engine && client_engine->ViewModel()) {
     if (message_ids == nullptr) {

@@ -108,6 +108,7 @@ public:
   void UpdateSignalingUrl(const std::string& url);
   void markMessagesAsRead(const std::string& peer_id, const std::vector<std::uint64_t>& message_ids) const;
   auto getMessageHistoryPage(const std::string& peer_id, size_t page_index, size_t page_size) const -> messaging::HistoryPage;
+  auto getFullMessageContent(uint64_t message_id) const -> std::optional<std::string>;
   void updateMyProfile(const std::optional<std::string>& name, const std::optional<std::string>& bio, const std::optional<std::string>& photo);
   void setContactDisplayNameOverride(const std::string& peer_id, const std::string& override_name);
   void resetContactDisplayNameOverride(const std::string& peer_id);
@@ -539,6 +540,7 @@ inline void Client::markMessagesAsRead(const std::string& peer_id, const std::ve
   }
 }
 inline auto Client::getMessageHistoryPage(const std::string& peer_id, size_t page_index, size_t page_size) const -> messaging::HistoryPage { return message_history_->GetHistoryPage(peer_id, page_index, page_size); }
+inline auto Client::getFullMessageContent(uint64_t message_id) const -> std::optional<std::string> { return message_history_->GetFullMessageContent(message_id); }
 inline void Client::updateMyProfile(const std::optional<std::string>& name, const std::optional<std::string>& bio, const std::optional<std::string>& photo) {
   if (name) { settings_manager_->SetMyDisplayName(*name); }
   if (bio) { settings_manager_->SetMyBio(*bio); }

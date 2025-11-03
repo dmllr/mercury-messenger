@@ -8,6 +8,7 @@
 #include <string_view>
 #include <vector>
 #include <sqlite3.h>
+#include <unordered_map>
 
 #include "eillance/crypto/crypto.hpp"
 #include "eillance/logging/logging.h"
@@ -17,7 +18,8 @@
 namespace eillance::storage {
 namespace {
 
-constexpr int kCurrentDbVersion = 1;
+constexpr size_t kMaxInlineContentSize = 2048;
+constexpr int kCurrentDbVersion = 3;
 
 class SQLiteStatement {
   sqlite3_stmt *stmt_ = nullptr;
@@ -208,36 +210,57 @@ public:
   }
 
   // --- History ---
-  auto
-  AddHistoryEntry(messaging::HistoryEntryRecord entry) -> messaging::HistoryEntryRecord override {
+  auto AddHistoryEntry(messaging::HistoryEntryRecord entry) -> messaging::HistoryEntryRecord override {
     const std::lock_guard lock(mutex_);
     const SQLiteStatement stmt(db_,
-                               "INSERT INTO history (peer_id, kind, timestamp, direction, status, content, duration_seconds, call_direction, call_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);");
+                                "INSERT INTO history (peer_id, kind, timestamp, direction, status, is_truncated, content, duration_seconds, call_direction, call_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);");
+
     bind_text(stmt.get(), 1, entry.peer_id_for_db);
     sqlite3_bind_int(stmt.get(), 2, static_cast<int>(entry.kind));
     sqlite3_bind_int64(stmt.get(), 3, entry.timestamp);
     sqlite3_bind_int(stmt.get(), 4, static_cast<int>(entry.direction));
     sqlite3_bind_int(stmt.get(), 5, static_cast<int>(entry.status));
 
-    std::visit([&](auto &&arg) {
-      using T = std::decay_t<decltype(arg)>;
-      if constexpr (std::is_same_v<T, messaging::MessageEntry>) {
-        bind_text(stmt.get(), 6, arg.content);
-        sqlite3_bind_int(stmt.get(), 7, 0);
+    std::optional<std::string> full_content_for_storage;
+
+    if (auto* msg_entry = std::get_if<messaging::MessageEntry>(&entry.data)) {
+        if (msg_entry->content.length() > kMaxInlineContentSize) {
+            entry.is_truncated = true;
+            full_content_for_storage = msg_entry->content;
+            msg_entry->content = full_content_for_storage->substr(0, kMaxInlineContentSize);
+        } else {
+            entry.is_truncated = false;
+        }
+        sqlite3_bind_int(stmt.get(), 6, entry.is_truncated);
+        bind_text(stmt.get(), 7, msg_entry->content);
         sqlite3_bind_int(stmt.get(), 8, 0);
         sqlite3_bind_int(stmt.get(), 9, 0);
-      } else if constexpr (std::is_same_v<T, messaging::CallEntry>) {
-        sqlite3_bind_null(stmt.get(), 6);
-        sqlite3_bind_int(stmt.get(), 7, arg.duration_seconds);
-        sqlite3_bind_int(stmt.get(), 8, static_cast<int>(arg.call_direction));
-        sqlite3_bind_int(stmt.get(), 9, static_cast<int>(arg.call_status));
-      }
-    }, entry.data);
+        sqlite3_bind_int(stmt.get(), 10, 0);
+    } else if (const auto* call_entry = std::get_if<messaging::CallEntry>(&entry.data)) {
+        entry.is_truncated = false;
+        sqlite3_bind_int(stmt.get(), 6, 0); // is_truncated = false
+        sqlite3_bind_null(stmt.get(), 7);
+        sqlite3_bind_int(stmt.get(), 8, call_entry->duration_seconds);
+        sqlite3_bind_int(stmt.get(), 9, static_cast<int>(call_entry->call_direction));
+        sqlite3_bind_int(stmt.get(), 10, static_cast<int>(call_entry->call_status));
+    }
 
     if (sqlite3_step(stmt.get()) != SQLITE_DONE) {
       LOGE << "Failed to insert history entry: " << sqlite3_errmsg(db_);
+      return {}; // Return empty record on failure
     }
+
     entry.id = sqlite3_last_insert_rowid(db_);
+
+    if (full_content_for_storage) {
+        const SQLiteStatement large_msg_stmt(db_, "INSERT INTO large_messages (history_id, full_content) VALUES (?, ?);");
+        sqlite3_bind_int64(large_msg_stmt.get(), 1, entry.id);
+        bind_text(large_msg_stmt.get(), 2, *full_content_for_storage);
+        if (sqlite3_step(large_msg_stmt.get()) != SQLITE_DONE) {
+            LOGE << "Failed to insert large message content: " << sqlite3_errmsg(db_);
+        }
+    }
+
     return entry;
   }
 
@@ -310,7 +333,7 @@ public:
     }
 
     const SQLiteStatement stmt(db_,
-                               "SELECT id, kind, timestamp, direction, status, content, duration_seconds, call_direction, call_status FROM history WHERE peer_id = ? ORDER BY timestamp DESC LIMIT ? OFFSET ?;");
+                               "SELECT id, kind, timestamp, direction, status, is_truncated, content, duration_seconds, call_direction, call_status FROM history WHERE peer_id = ? ORDER BY timestamp DESC LIMIT ? OFFSET ?;");
     bind_text(stmt.get(), 1, peer_id);
     sqlite3_bind_int64(stmt.get(), 2, page_size);
     sqlite3_bind_int64(stmt.get(), 3, page_index * page_size);
@@ -322,45 +345,59 @@ public:
     return page;
   }
 
-  auto GetChatSummaries(
-      const std::vector<std::string> &peer_ids) -> std::vector<messaging::ChatSummary> override {
-    if (peer_ids.empty()) {
-      return {};
-    }
-    const std::lock_guard lock(mutex_);
-    std::vector<messaging::ChatSummary> summaries;
-
-    nlohmann::json peer_ids_json = peer_ids;
-
-    const std::string query =
-        "SELECT h.*, (SELECT count(*) FROM history WHERE peer_id = h.peer_id AND direction = ? AND status != ? AND kind = ?) as unread_count "
-        "FROM history h INNER JOIN (SELECT peer_id, max(timestamp) as max_ts FROM history WHERE peer_id IN (SELECT value FROM json_each(?)) "
-        "GROUP BY peer_id) AS latest ON h.peer_id = latest.peer_id AND h.timestamp = latest.max_ts";
-
-    const SQLiteStatement stmt(db_, query);
-
-    int bind_idx = 1;
-    sqlite3_bind_int(stmt.get(), bind_idx++,
-                     static_cast<int>(messaging::MessageDirection::received));
-    sqlite3_bind_int(stmt.get(), bind_idx++, static_cast<int>(messaging::MessageStatus::read));
-    sqlite3_bind_int(stmt.get(), bind_idx++,
-                     static_cast<int>(messaging::HistoryEntryKind::textMessage));
-    bind_text(stmt.get(), bind_idx++, peer_ids_json.dump());
-
-    while (sqlite3_step(stmt.get()) == SQLITE_ROW) {
-      summaries.push_back({
-                              .peer_id = column_string(stmt.get(),
-                                                       1), // peer_id is the second column in history table
-                              .last_message = ParseHistoryEntry(stmt.get()),
-                              .unread_count = static_cast<uint32_t>(sqlite3_column_int(stmt.get(),
-                                                                                       10)) // unread_count is the 11th column (index 10)
-                          });
+    auto GetFullMessageContent(std::uint64_t message_id) -> std::optional<std::string> override {
+        const std::lock_guard lock(mutex_);
+        const SQLiteStatement stmt(db_, "SELECT full_content FROM large_messages WHERE history_id = ?;");
+        sqlite3_bind_int64(stmt.get(), 1, message_id);
+        if (sqlite3_step(stmt.get()) == SQLITE_ROW) {
+            return column_string(stmt.get(), 0);
+        }
+        return std::nullopt;
     }
 
-    std::ranges::sort(summaries, [](const auto &a, const auto &b) {
-      return a.last_message.timestamp > b.last_message.timestamp;
-    });
-    return summaries;
+  auto GetChatSummaries(const std::vector<std::string> &peer_ids) -> std::vector<messaging::ChatSummary> override {
+      if (peer_ids.empty()) {
+          return {};
+      }
+      const std::lock_guard lock(mutex_);
+      std::vector<messaging::ChatSummary> summaries;
+
+      for (const auto& peer_id : peer_ids) {
+          messaging::ChatSummary summary;
+          summary.peer_id = peer_id;
+          summary.unread_count = 0;
+
+          // Query 1: Get unread count
+          {
+              const SQLiteStatement unread_stmt(db_, "SELECT COUNT(*) FROM history WHERE peer_id = ? AND direction = ? AND status != ? AND kind = ?;");
+
+              int bind_idx = 1;
+              bind_text(unread_stmt.get(), bind_idx++, peer_id);
+              sqlite3_bind_int(unread_stmt.get(), bind_idx++, static_cast<int>(messaging::MessageDirection::received));
+              sqlite3_bind_int(unread_stmt.get(), bind_idx++, static_cast<int>(messaging::MessageStatus::read));
+              sqlite3_bind_int(unread_stmt.get(), bind_idx++, static_cast<int>(messaging::HistoryEntryKind::textMessage));
+
+              if (sqlite3_step(unread_stmt.get()) == SQLITE_ROW) {
+                  summary.unread_count = sqlite3_column_int(unread_stmt.get(), 0);
+              }
+          }
+
+          // Query 2: Get last message
+          {
+              const SQLiteStatement last_msg_stmt(db_, "SELECT id, kind, timestamp, direction, status, is_truncated, content, duration_seconds, call_direction, call_status FROM history WHERE peer_id = ? ORDER BY timestamp DESC LIMIT 1;");
+              bind_text(last_msg_stmt.get(), 1, peer_id);
+
+              if (sqlite3_step(last_msg_stmt.get()) == SQLITE_ROW) {
+                  summary.last_message = ParseHistoryEntry(last_msg_stmt.get());
+                  summaries.push_back(summary);
+              }
+          }
+      }
+
+      std::ranges::sort(summaries, [](const auto &a, const auto &b) {
+        return a.last_message.timestamp > b.last_message.timestamp;
+      });
+      return summaries;
   }
 
   auto GetMessagesWithStatus(const std::string &peer_id,
@@ -368,7 +405,7 @@ public:
     const std::lock_guard lock(mutex_);
     std::vector<messaging::HistoryEntryRecord> records;
     const SQLiteStatement stmt(db_,
-                               "SELECT id, kind, timestamp, direction, status, content, duration_seconds, call_direction, call_status FROM history WHERE peer_id = ? AND status = ?;");
+                               "SELECT id, kind, timestamp, direction, status, is_truncated, content, duration_seconds, call_direction, call_status FROM history WHERE peer_id = ? AND status = ?;");
     bind_text(stmt.get(), 1, peer_id);
     sqlite3_bind_int(stmt.get(), 2, static_cast<int>(status));
 
@@ -389,7 +426,12 @@ private:
     if (user_version < 1) {
       MigrateToV1();
     }
-    // Add future migrations here in an if (user_version < 2) block
+    if (user_version < 2) {
+      MigrateToV2();
+    }
+    if (user_version < 3) {
+      MigrateToV3();
+    }
 
     if (user_version != kCurrentDbVersion) {
       std::string set_version_sql =
@@ -408,12 +450,10 @@ private:
     LOGI << "Database version is 0, migrating to version 1...";
     const char *schema = R"SQL(
             BEGIN TRANSACTION;
-
             CREATE TABLE IF NOT EXISTS settings (
                 key   TEXT PRIMARY KEY NOT NULL,
                 value TEXT
             );
-
             CREATE TABLE IF NOT EXISTS contacts (
                 peer_id               TEXT PRIMARY KEY NOT NULL,
                 status                INTEGER NOT NULL,
@@ -422,7 +462,6 @@ private:
                 bio                   TEXT,
                 photo_base64          TEXT
             );
-
             CREATE TABLE IF NOT EXISTS history (
                 id               INTEGER PRIMARY KEY AUTOINCREMENT,
                 peer_id          TEXT NOT NULL,
@@ -435,9 +474,7 @@ private:
                 call_direction   INTEGER,
                 call_status      INTEGER
             );
-
             CREATE INDEX IF NOT EXISTS idx_history_peer_timestamp ON history (peer_id, timestamp);
-
             COMMIT;
         )SQL";
 
@@ -451,6 +488,78 @@ private:
     LOGI << "Migration to V1 successful.";
   }
 
+  void MigrateToV2() {
+    LOGI << "Database version is 1, migrating to version 2...";
+    const char *schema = R"SQL(
+            BEGIN TRANSACTION;
+            ALTER TABLE history ADD COLUMN is_truncated INTEGER NOT NULL DEFAULT 0;
+            CREATE TABLE large_messages (
+                history_id   INTEGER PRIMARY KEY NOT NULL,
+                full_content TEXT,
+                FOREIGN KEY(history_id) REFERENCES history(id) ON DELETE CASCADE
+            );
+            COMMIT;
+        )SQL";
+    char *err_msg = nullptr;
+    if (sqlite3_exec(db_, schema, nullptr, nullptr, &err_msg) != SQLITE_OK) {
+      std::string error = "Failed to execute migration to V2: ";
+      error += err_msg;
+      sqlite3_free(err_msg);
+      throw std::runtime_error(error);
+    }
+    LOGI << "Migration to V2 successful.";
+  }
+
+  void MigrateToV3() {
+    LOGI << "Database version is 2, migrating to version 3...";
+    if (sqlite3_exec(db_, "BEGIN TRANSACTION;", nullptr, nullptr, nullptr) != SQLITE_OK) {
+        throw std::runtime_error("Failed to begin V3 migration transaction.");
+    }
+
+    try {
+        const std::string select_sql = "SELECT id, content FROM history WHERE kind IN (?, ?) AND LENGTH(content) > ? AND is_truncated = 0;";
+        SQLiteStatement select_stmt(db_, select_sql);
+        sqlite3_bind_int(select_stmt.get(), 1, static_cast<int>(messaging::HistoryEntryKind::textMessage));
+        sqlite3_bind_int(select_stmt.get(), 2, static_cast<int>(messaging::HistoryEntryKind::systemMessage));
+        sqlite3_bind_int(select_stmt.get(), 3, kMaxInlineContentSize);
+
+        SQLiteStatement insert_stmt(db_, "INSERT INTO large_messages (history_id, full_content) VALUES (?, ?);");
+        SQLiteStatement update_stmt(db_, "UPDATE history SET content = ?, is_truncated = 1 WHERE id = ?;");
+
+        while (sqlite3_step(select_stmt.get()) == SQLITE_ROW) {
+            const int64_t id = sqlite3_column_int64(select_stmt.get(), 0);
+            const std::string full_content = column_string(select_stmt.get(), 1);
+            const std::string preview = full_content.substr(0, kMaxInlineContentSize);
+
+            // Insert full content into large_messages
+            sqlite3_reset(insert_stmt.get());
+            sqlite3_bind_int64(insert_stmt.get(), 1, id);
+            bind_text(insert_stmt.get(), 2, full_content);
+            if (sqlite3_step(insert_stmt.get()) != SQLITE_DONE) {
+                throw std::runtime_error("Failed to insert into large_messages during V3 migration.");
+            }
+
+            // Update history with truncated content
+            sqlite3_reset(update_stmt.get());
+            bind_text(update_stmt.get(), 1, preview);
+            sqlite3_bind_int64(update_stmt.get(), 2, id);
+            if (sqlite3_step(update_stmt.get()) != SQLITE_DONE) {
+                throw std::runtime_error("Failed to update history during V3 migration.");
+            }
+        }
+    } catch (const std::exception& e) {
+        sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+        LOGE << "Migration to V3 failed: " << e.what();
+        throw;
+    }
+
+    if (sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, nullptr) != SQLITE_OK) {
+        throw std::runtime_error("Failed to commit V3 migration transaction.");
+    }
+    LOGI << "Migration to V3 successful.";
+}
+
+
   static auto ParseHistoryEntry(sqlite3_stmt *stmt) -> messaging::HistoryEntryRecord {
     messaging::HistoryEntryRecord record{
         .id = static_cast<uint64_t>(sqlite3_column_int64(stmt, 0)),
@@ -458,21 +567,22 @@ private:
         .timestamp = static_cast<uint64_t>(sqlite3_column_int64(stmt, 2)),
         .direction = static_cast<messaging::MessageDirection>(sqlite3_column_int(stmt, 3)),
         .status = static_cast<messaging::MessageStatus>(sqlite3_column_int(stmt, 4)),
+        .is_truncated = (sqlite3_column_int(stmt, 5) == 1),
     };
 
     switch (record.kind) {
       case messaging::HistoryEntryKind::textMessage:
       case messaging::HistoryEntryKind::systemMessage:
         record.data = messaging::MessageEntry{
-            .content = column_string(stmt, 5)
+            .content = column_string(stmt, 6)
         };
         break;
       case messaging::HistoryEntryKind::voiceCall:
       case messaging::HistoryEntryKind::videoCall:
         record.data = messaging::CallEntry{
-            .duration_seconds = static_cast<uint32_t>(sqlite3_column_int(stmt, 6)),
-            .call_direction = static_cast<messaging::CallDirection>(sqlite3_column_int(stmt, 7)),
-            .call_status = static_cast<messaging::CallStatus>(sqlite3_column_int(stmt, 8))
+            .duration_seconds = static_cast<uint32_t>(sqlite3_column_int(stmt, 7)),
+            .call_direction = static_cast<messaging::CallDirection>(sqlite3_column_int(stmt, 8)),
+            .call_status = static_cast<messaging::CallStatus>(sqlite3_column_int(stmt, 9))
         };
         break;
     }

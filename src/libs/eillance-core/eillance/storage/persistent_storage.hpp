@@ -86,6 +86,7 @@ struct HistoryEntryRecord {
   Time::Unit timestamp;
   MessageDirection direction;
   MessageStatus status = MessageStatus::none;
+  bool is_truncated = false;
   HistoryEntryData data;
 
   // Transient field for passing peer_id to the database layer upon creation.
@@ -104,6 +105,7 @@ inline void to_json(nlohmann::json& j, const HistoryEntryRecord& e) {  // NOLINT
   j["timestamp"] = e.timestamp;
   j["direction"] = e.direction;
   j["status"] = e.status;
+  j["is_truncated"] = e.is_truncated;
 
   std::visit(
       [&j](auto&& arg) {
@@ -125,6 +127,7 @@ inline void from_json(const nlohmann::json& j, HistoryEntryRecord& e) {  // NOLI
   j.at("timestamp").get_to(e.timestamp);
   e.direction = j.value("direction", MessageDirection::received);
   e.status = j.value("status", MessageStatus::none);
+  e.is_truncated = j.value("is_truncated", false);
   switch (e.kind) {
     case HistoryEntryKind::textMessage:
     case HistoryEntryKind::systemMessage:
@@ -177,6 +180,7 @@ public:
   virtual void UpdateMessageStatus(const std::string& peer_id, uint64_t message_id, messaging::MessageStatus new_status) = 0;
   virtual void UpdateMessageStatuses(const std::string& peer_id, const std::vector<uint64_t>& message_ids, messaging::MessageStatus new_status) = 0;
   virtual auto GetHistoryPage(const std::string& peer_id, size_t page_index, size_t page_size) -> messaging::HistoryPage = 0;
+  virtual auto GetFullMessageContent(std::uint64_t message_id) -> std::optional<std::string> = 0;
   virtual auto GetChatSummaries(const std::vector<std::string>& peer_ids) -> std::vector<messaging::ChatSummary> = 0;
   virtual auto GetMessagesWithStatus(const std::string& peer_id, messaging::MessageStatus status) -> std::vector<messaging::HistoryEntryRecord> = 0;
 };
@@ -215,6 +219,7 @@ public:
   void UpdateMessageStatus(const std::string& peer_id, uint64_t message_id, messaging::MessageStatus new_status) const { pimpl_->UpdateMessageStatus(peer_id, message_id, new_status); }
   void UpdateMessageStatuses(const std::string& peer_id, const std::vector<uint64_t>& message_ids, messaging::MessageStatus new_status) const { pimpl_->UpdateMessageStatuses(peer_id, message_ids, new_status); }
   auto GetHistoryPage(const std::string& peer_id, size_t page_index, size_t page_size) const { return pimpl_->GetHistoryPage(peer_id, page_index, page_size); }
+  auto GetFullMessageContent(std::uint64_t message_id) const { return pimpl_->GetFullMessageContent(message_id); }
   auto GetChatSummaries(const std::vector<std::string>& peer_ids) const { return pimpl_->GetChatSummaries(peer_ids); }
   auto GetMessagesWithStatus(const std::string& peer_id, messaging::MessageStatus status) const { return pimpl_->GetMessagesWithStatus(peer_id, status); }
 

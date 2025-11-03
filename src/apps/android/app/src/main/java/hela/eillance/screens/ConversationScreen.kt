@@ -40,6 +40,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
@@ -252,7 +253,7 @@ fun ChatHistory(
         ) { index ->
             val item = history[history.lastIndex - index]
             when (item.kind) {
-                HistoryEntryKind.TextMessage -> MessageBubble(item)
+                HistoryEntryKind.TextMessage -> MessageBubble(item, onShowMore = { viewModel.loadFullMessage(it) })
                 HistoryEntryKind.VoiceCall, HistoryEntryKind.VideoCall -> CallLogBubble(item)
                 HistoryEntryKind.SystemMessage -> SystemMessageBubble(item)
             }
@@ -274,7 +275,7 @@ fun ChatHistory(
 }
 
 @Composable
-fun MessageBubble(entry: HistoryEntry) {
+fun MessageBubble(entry: HistoryEntry, onShowMore: (Long) -> Unit) {
     val isFromMe = entry.direction == MessageDirection.Sent
     val alignment = if (isFromMe) Alignment.CenterEnd else Alignment.CenterStart
     val colors = if (isFromMe) {
@@ -292,23 +293,33 @@ fun MessageBubble(entry: HistoryEntry) {
             ),
         contentAlignment = alignment
     ) {
-        Column(horizontalAlignment = if (isFromMe) Alignment.End else Alignment.Start) {
+        Column(
+            modifier = Modifier
+                .clip(
+                    RoundedCornerShape(
+                        topStart = 16.dp,
+                        topEnd = 16.dp,
+                        bottomStart = if (isFromMe) 16.dp else 0.dp,
+                        bottomEnd = if (isFromMe) 0.dp else 16.dp
+                    )
+                )
+                .background(colors.first)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalAlignment = if (isFromMe) Alignment.End else Alignment.Start
+        ) {
             Text(
                 text = entry.content ?: "",
-                modifier = Modifier
-                    .clip(
-                        RoundedCornerShape(
-                            topStart = 16.dp,
-                            topEnd = 16.dp,
-                            bottomStart = if (isFromMe) 16.dp else 0.dp,
-                            bottomEnd = if (isFromMe) 0.dp else 16.dp
-                        )
-                    )
-                    .background(colors.first)
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
                 color = colors.second,
                 style = MaterialTheme.typography.bodyLarge
             )
+            if (entry.isTruncated) {
+                TextButton(
+                    onClick = { onShowMore(entry.id) },
+                    contentPadding = PaddingValues(top = 8.dp, bottom = 0.dp)
+                ) {
+                    Text("Show more")
+                }
+            }
             Row(
                 modifier = Modifier.padding(top = 4.dp, end = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
