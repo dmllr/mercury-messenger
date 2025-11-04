@@ -190,6 +190,18 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_configureVideoC
   }
 }
 
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_nativeDebugEraseAllHistory(JNIEnv* /*env*/, jobject /*instance*/) {
+  if (client_engine && client_engine->ViewModel()) { client_engine->ViewModel()->DebugEraseAllHistory(); }
+}
+
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_nativeDebugEraseAllContacts(JNIEnv* /*env*/, jobject /*instance*/) {
+  if (client_engine && client_engine->ViewModel()) { client_engine->ViewModel()->DebugEraseAllContacts(); }
+}
+
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_nativeDebugRevokeAllApprovals(JNIEnv* /*env*/, jobject /*instance*/) {
+  if (client_engine && client_engine->ViewModel()) { client_engine->ViewModel()->DebugRevokeAllApprovals(); }
+}
+
 jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
   java_vm = vm;
   JNIEnv* env = nullptr;

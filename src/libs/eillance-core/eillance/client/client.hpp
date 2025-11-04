@@ -1,6 +1,9 @@
 #pragma once
 
 #include <memory>
+#include <optional>
+#include <string>
+#include <vector>
 #include <utility>
 #include <chrono>
 
@@ -112,6 +115,11 @@ public:
   void updateMyProfile(const std::optional<std::string>& name, const std::optional<std::string>& bio, const std::optional<std::string>& photo);
   void setContactDisplayNameOverride(const std::string& peer_id, const std::string& override_name);
   void resetContactDisplayNameOverride(const std::string& peer_id);
+
+  // Debug methods
+  void DebugEraseAllHistory();
+  void DebugEraseAllContacts();
+  void DebugRevokeAllApprovals();
 
   // TransportDelegate implementation
   void onPeerReady(const std::shared_ptr<Peer>& peer) override;
@@ -598,6 +606,21 @@ inline void Client::resetContactDisplayNameOverride(const std::string& peer_id) 
   }
   if (on_contact_profile_updated_) { (*on_contact_profile_updated_)(peer_id); }
 }
+
+inline void Client::DebugEraseAllHistory() {
+  storage_->DebugClearAllHistory();
+}
+
+inline void Client::DebugEraseAllContacts() {
+  storage_->DebugClearAllContacts();
+  // Also clear history as it's tied to contacts
+  storage_->DebugClearAllHistory();
+}
+
+inline void Client::DebugRevokeAllApprovals() {
+  storage_->DebugRevokeAllContactApprovals();
+}
+
 inline void Client::startMediaCall(const std::string& peer_id, bool is_video) {
   // On platforms with custom capture (like CLI), start the media stream.
   // On Android, this block is skipped.

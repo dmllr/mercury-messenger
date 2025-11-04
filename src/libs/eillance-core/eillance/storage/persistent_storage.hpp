@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
- #include <variant>
+#include <variant>
 #include "eillance/utils/time.hpp"
 #include <nlohmann/json.hpp>
 
@@ -183,6 +183,11 @@ public:
   virtual auto GetFullMessageContent(std::uint64_t message_id) -> std::optional<std::string> = 0;
   virtual auto GetChatSummaries(const std::vector<std::string>& peer_ids) -> std::vector<messaging::ChatSummary> = 0;
   virtual auto GetMessagesWithStatus(const std::string& peer_id, messaging::MessageStatus status) -> std::vector<messaging::HistoryEntryRecord> = 0;
+
+  // --- Debug ---
+  virtual void DebugClearAllHistory() = 0;
+  virtual void DebugClearAllContacts() = 0;
+  virtual void DebugRevokeAllContactApprovals() = 0;
 };
 
 
@@ -222,6 +227,11 @@ public:
   auto GetFullMessageContent(std::uint64_t message_id) const { return pimpl_->GetFullMessageContent(message_id); }
   auto GetChatSummaries(const std::vector<std::string>& peer_ids) const { return pimpl_->GetChatSummaries(peer_ids); }
   auto GetMessagesWithStatus(const std::string& peer_id, messaging::MessageStatus status) const { return pimpl_->GetMessagesWithStatus(peer_id, status); }
+
+  // --- Debug ---
+  void DebugClearAllHistory() const { pimpl_->DebugClearAllHistory(); }
+  void DebugClearAllContacts() const { pimpl_->DebugClearAllContacts(); }
+  void DebugRevokeAllContactApprovals() const { pimpl_->DebugRevokeAllContactApprovals(); }
 
 private:
   std::unique_ptr<PersistentStorageImpl> pimpl_;

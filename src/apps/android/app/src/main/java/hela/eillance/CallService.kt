@@ -285,6 +285,11 @@ class CallService : Service(), IClientNativeBridge {
   fun setContactDisplayNameOverride(peerId: String, name: String) = nativeSetContactDisplayNameOverride(peerId, name)
   fun resetContactDisplayNameOverride(peerId: String) = nativeResetContactDisplayNameOverride(peerId)
 
+  // --- Debug Methods ---
+  fun debugEraseAllHistory() = nativeDebugEraseAllHistory()
+  fun debugEraseAllContacts() = nativeDebugEraseAllContacts()
+  fun debugRevokeAllApprovals() = nativeDebugRevokeAllApprovals()
+
   private external fun initEngine(nativeBridge: IClientNativeBridge)
   private external fun start()
   private external fun terminate()
@@ -307,6 +312,11 @@ class CallService : Service(), IClientNativeBridge {
   private external fun nativeUpdateMyProfile(name: String?, bio: String?, photo_base64: String?)
   private external fun nativeSetContactDisplayNameOverride(peerId: String, name: String)
   private external fun nativeResetContactDisplayNameOverride(peerId: String)
+
+  // --- Native Debug Methods ---
+  private external fun nativeDebugEraseAllHistory()
+  private external fun nativeDebugEraseAllContacts()
+  private external fun nativeDebugRevokeAllApprovals()
 
 
   companion object {

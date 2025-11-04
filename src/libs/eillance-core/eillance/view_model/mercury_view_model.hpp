@@ -147,6 +147,9 @@ public:
   void MarkMessagesAsRead(const std::vector<std::uint64_t>& message_ids);
   void AddSystemMessageToChat(const std::string& message);
   void SelectContactByIndex(size_t index);
+  void DebugEraseAllHistory();
+  void DebugEraseAllContacts();
+  void DebugRevokeAllApprovals();
   [[nodiscard]] auto GetState() const -> UIState;
   void SetOnStateChangedCallback(std::function<void()> callback);
 
@@ -435,6 +438,21 @@ inline void MercuryViewModel::SelectContactByIndex(size_t index) {
   } else {
     DeselectContact();
   }
+}
+
+inline void MercuryViewModel::DebugEraseAllHistory() {
+    client_->DebugEraseAllHistory();
+    RefreshState();
+}
+
+inline void MercuryViewModel::DebugEraseAllContacts() {
+    client_->DebugEraseAllContacts();
+    RefreshState();
+}
+
+inline void MercuryViewModel::DebugRevokeAllApprovals() {
+    client_->DebugRevokeAllApprovals();
+    RefreshState();
 }
 
 inline auto MercuryViewModel::GetState() const -> UIState {
