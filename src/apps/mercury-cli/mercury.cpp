@@ -3,6 +3,7 @@
 #include <iostream>
 #include <memory>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -286,7 +287,70 @@ int main(int argc, char** argv) {
   // The input component only forwards the user input to the ViewModel.
   input_component |= ftxui::CatchEvent([&](const ftxui::Event& event) {
     if (event == ftxui::Event::Return) {
-      if (view_model->ProcessCliInput(input_content)) { screen.Exit(); }
+      if (!input_content.empty()) {
+        if (input_content.starts_with('/')) {
+          std::stringstream ss(input_content);
+          std::string command;
+          std::string arg;
+          ss >> command;
+          std::getline(ss >> std::ws, arg);
+
+          if (command == "/add") {
+            view_model->AddSystemMessageToChat("--> Adding contact: " + arg);
+            view_model->AddContact(arg);
+          } else if (command == "/accept") {
+            if (arg.empty()) {
+              view_model->AddSystemMessageToChat("--> Usage: /accept <contact_id>");
+            } else {
+              std::vector<std::string> matches;
+              const auto state = view_model->GetState();
+              for (const auto& contact : state.contacts) {
+                if (contact.peer_id.starts_with(arg)) { matches.push_back(contact.peer_id); }
+              }
+              if (matches.empty()) {
+                view_model->AddSystemMessageToChat("--> Contact not found for ID starting with: " + arg);
+              } else if (matches.size() > 1) {
+                view_model->AddSystemMessageToChat("--> Ambiguous ID. Multiple contacts start with: " + arg);
+              } else {
+                view_model->AddSystemMessageToChat("--> Accepting contact: " + matches[0]);
+                view_model->AcceptContact(matches[0]);
+              }
+            }
+          } else if (command == "/set") {
+            std::string key;
+            std::string value;
+            std::stringstream arg_ss(arg);
+            arg_ss >> key;
+            std::getline(arg_ss >> std::ws, value);
+            if (key == "name") {
+              view_model->UpdateMyProfile(value, std::nullopt, std::nullopt);
+              view_model->AddSystemMessageToChat("--> Display name updated.");
+            } else if (key == "signaling_server_url") {
+              view_model->UpdateSignalingUrl(value);
+              view_model->AddSystemMessageToChat("--> Signaling server URL updated. Reconnecting...");
+            } else {
+              view_model->AddSystemMessageToChat("--> Unknown setting: " + key);
+            }
+          } else if (command == "/history" && arg == "load") {
+            view_model->LoadOlderMessages();
+          } else if (command == "/load") {
+            try {
+              if (arg.empty()) { throw std::invalid_argument("Message ID required."); }
+              const uint64_t id = std::stoull(arg);
+              view_model->LoadFullMessage(id);
+              view_model->AddSystemMessageToChat("--> Loading full content for message " + arg);
+            } catch (const std::exception& e) {
+              view_model->AddSystemMessageToChat(std::string("--> Invalid usage. Use /load <message_id>. Error: ") + e.what());
+            }
+          } else if (command == "/exit") {
+            screen.Exit();
+          } else {
+            view_model->AddSystemMessageToChat("--> Unknown command: " + command);
+          }
+        } else {
+          view_model->SendMessage(input_content);
+        }
+      }
       input_content.clear();
       return true;
     }
