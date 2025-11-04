@@ -169,6 +169,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         callService?.resetContactDisplayNameOverride(peerId)
     }
 
+    // --- Debug Methods ---
+    fun debugEraseAllHistory() {
+        callService?.debugEraseAllHistory()
+    }
+    fun debugEraseAllContacts() {
+        callService?.debugEraseAllContacts()
+    }
+    fun debugRevokeAllApprovals() {
+        callService?.debugRevokeAllApprovals()
+    }
+
     override fun onCleared() {
         callService?.setJsonStateCallback(null)
         super.onCleared()
