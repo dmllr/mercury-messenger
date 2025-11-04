@@ -698,15 +698,49 @@ inline void Client::processDataChannelMessage(const std::string& peer_id, const 
         const auto content_json = Json::parse(decrypted_message);
         const auto action = content_json.value("action", "");
         if (action == "profile_update") {
-             // Extract profile data and update contact
+            // Extract new profile data from the message
             const auto display_name = content_json.value("display_name", "");
             const auto bio = content_json.value("bio", "");
             std::optional<std::string> photo;
             if (content_json.contains("photo") && !content_json["photo"].is_null()) {
                 photo = content_json["photo"].get<std::string>();
             }
+
+            // Before updating, get the old profile to create a diff for the history.
+            auto old_contact_opt = contact_manager_->GetContact(peer_id);
+
+            bool has_changed = true;  // Assume change unless proven otherwise
+            if (old_contact_opt) {
+              const bool name_changed = old_contact_opt->display_name != display_name;
+              const bool bio_changed = old_contact_opt->bio != bio;
+              const bool photo_changed = old_contact_opt->photo_base64 != photo;
+              if (!name_changed && !bio_changed && !photo_changed) {
+                has_changed = false;
+              }
+            }
+
+            if (has_changed) {
+              Json diff_json;
+              diff_json["action"] = "profile_update_diff";
+
+              // Capture new state
+              diff_json["new"]["display_name"] = display_name;
+              diff_json["new"]["bio"] = bio;
+              diff_json["new"]["photo"] = photo;
+
+              // Capture old state if it exists
+              if (old_contact_opt) {
+                diff_json["old"]["display_name"] = old_contact_opt->display_name;
+                diff_json["old"]["bio"] = old_contact_opt->bio;
+                diff_json["old"]["photo"] = old_contact_opt->photo_base64;
+              } else {
+                diff_json["old"] = nullptr;
+              }
+              message_history_->AddTextEntry(peer_id, diff_json.dump(), messaging::MessageDirection::received, messaging::HistoryEntryKind::systemMessage);
+            }
+
+            // Now, update the contact profile in the contact manager
             contact_manager_->UpdateContactProfile(peer_id, display_name, bio, photo);
-            message_history_->AddTextEntry(peer_id, "Contact updated their profile.", messaging::MessageDirection::received, messaging::HistoryEntryKind::systemMessage);
             if (on_contact_profile_updated_) { (*on_contact_profile_updated_)(peer_id); }
         }
     } else if (on_chat_message_received_) {
