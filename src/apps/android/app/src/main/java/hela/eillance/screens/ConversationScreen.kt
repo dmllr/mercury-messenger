@@ -3,6 +3,7 @@ package hela.eillance.screens
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -73,6 +74,8 @@ import hela.eillance.ndkio.MessageStatus
 import hela.eillance.ndkio.PeerConnectionState
 import hela.eillance.theme.extendedColors
 import kotlinx.coroutines.launch
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -100,6 +103,9 @@ fun ConversationScreen(
 
     val isInCall = uiState.callState.isInCall && uiState.callState.peerId == peerId
 
+    var systemMessageToShowDetails by remember { mutableStateOf<HistoryEntry?>(null) }
+    var tappedTruncatedMessageId by remember { mutableStateOf<Long?>(null) }
+
     LaunchedEffect(isInCall) {
         if (isInCall) {
             onNavigateToCall(peerId)
@@ -125,6 +131,26 @@ fun ConversationScreen(
         if (unreadMessageIds.isNotEmpty()) {
             viewModel.MarkMessagesAsRead(unreadMessageIds)
         }
+    }
+
+    // This effect watches for when a tapped truncated message has been loaded.
+    // When it's loaded (no longer truncated), it triggers the details dialog.
+    val loadedMessage = if (tappedTruncatedMessageId != null) {
+        uiState.interactionHistory.find { it.id == tappedTruncatedMessageId && !it.isTruncated }
+    } else {
+        null
+    }
+
+    LaunchedEffect(loadedMessage) {
+        if (loadedMessage != null) {
+            systemMessageToShowDetails = loadedMessage
+            tappedTruncatedMessageId = null // Reset the trigger
+        }
+    }
+
+    // Display the dialog when its state is set
+    systemMessageToShowDetails?.let { entry ->
+        SystemMessageDetailsDialog(entry = entry, onDismiss = { systemMessageToShowDetails = null })
     }
 
     Scaffold(
@@ -164,7 +190,17 @@ fun ConversationScreen(
                 modifier = Modifier.weight(1f),
                 uiState = uiState,
                 listState = listState,
-                viewModel = viewModel
+                viewModel = viewModel,
+                onSystemMessageClick = { clickedEntry ->
+                    // If the message content is truncated, first trigger a load.
+                    // The LaunchedEffect above will handle showing the dialog once loaded.
+                    if (clickedEntry.isTruncated) {
+                        tappedTruncatedMessageId = clickedEntry.id
+                        viewModel.loadFullMessage(clickedEntry.id)
+                    } else {
+                        systemMessageToShowDetails = clickedEntry
+                    }
+                }
             )
             MessageInput(onSendMessage = viewModel::sendMessage)
         }
@@ -234,7 +270,8 @@ fun ChatHistory(
     modifier: Modifier = Modifier,
     uiState: AppState,
     listState: androidx.compose.foundation.lazy.LazyListState,
-    viewModel: MainViewModel
+    viewModel: MainViewModel,
+    onSystemMessageClick: (HistoryEntry) -> Unit
 ) {
     LazyColumn(
         state = listState,
@@ -253,9 +290,9 @@ fun ChatHistory(
         ) { index ->
             val item = history[history.lastIndex - index]
             when (item.kind) {
-                HistoryEntryKind.TextMessage -> MessageBubble(item, onShowMore = { viewModel.loadFullMessage(it) })
+                HistoryEntryKind.TextMessage -> MessageBubble(item, onShowMore = viewModel::loadFullMessage)
                 HistoryEntryKind.VoiceCall, HistoryEntryKind.VideoCall -> CallLogBubble(item)
-                HistoryEntryKind.SystemMessage -> SystemMessageBubble(item)
+                HistoryEntryKind.SystemMessage -> SystemMessageBubble(item, onClick = onSystemMessageClick)
             }
         }
 
@@ -393,20 +430,61 @@ fun CallLogBubble(entry: HistoryEntry) {
 }
 
 @Composable
-fun SystemMessageBubble(entry: HistoryEntry) {
+fun SystemMessageBubble(entry: HistoryEntry, onClick: (HistoryEntry) -> Unit) {
+    // This JSON parser is lenient and will ignore fields it doesn't recognize.
+    val json = Json { ignoreUnknownKeys = true }
+
+    // Attempt to parse the content as a structured system message.
+    val parsedAction = remember(entry.content) {
+        entry.content?.let {
+            try {
+                json.decodeFromString<JsonAction>(it)
+            } catch (e: Exception) {
+                null
+            }
+        }
+    }
+
+    val (displayText, isClickable) = when (parsedAction?.action) {
+        "profile_update_diff" -> "Profile was updated." to true
+        "contact_request_received" -> "You received a contact request." to false
+        "contact_request" -> "You sent a contact request." to false
+        "contact_confirm" -> "Contact request accepted." to false
+        else -> entry.content.orEmpty() to false // Fallback to raw content
+    }
+
+    if (displayText.isBlank()) return
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
+            .padding(vertical = 8.dp)
+            .clip(MaterialTheme.shapes.small)
+            .clickable(enabled = isClickable) { onClick(entry) }
+            .padding(horizontal = 16.dp),
         horizontalArrangement = Arrangement.Center
     ) {
-        Text(
-            text = entry.content ?: "",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainer)
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+        ) {
+            Text(
+                text = displayText,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
+
+/**
+ * A simple data class for parsing only the 'action' field from a JSON string
+ * to determine how to render a system message.
+ */
+@Serializable
+private data class JsonAction(val action: String)
 
 @Composable
 fun formatTimestamp(timestamp: Long): String {
