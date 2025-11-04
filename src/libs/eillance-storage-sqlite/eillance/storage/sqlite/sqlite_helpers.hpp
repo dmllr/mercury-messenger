@@ -1,0 +1,77 @@
+#pragma once
+
+#include <optional>
+#include <sqlite3.h>
+#include <stdexcept>
+#include <string>
+
+#include "eillance/logging/logging.h"
+
+namespace eillance::storage::sqlite_helpers {
+
+class SQLiteStatement {
+  sqlite3_stmt* stmt_ = nullptr;
+
+public:
+  explicit SQLiteStatement(sqlite3* db, const std::string& query) {
+    if (sqlite3_prepare_v2(db, query.c_str(), -1, &stmt_, nullptr) != SQLITE_OK) {
+      LOGE << "SQLite prepare failed: " << sqlite3_errmsg(db);
+      throw std::runtime_error("SQLite prepare failed");
+    }
+  }
+
+  ~SQLiteStatement() {
+    if (stmt_) {
+      sqlite3_finalize(stmt_);
+    }
+  }
+
+  SQLiteStatement(const SQLiteStatement&) = delete;
+
+  auto operator=(const SQLiteStatement&) -> SQLiteStatement& = delete;
+
+  SQLiteStatement(SQLiteStatement&& other) noexcept : stmt_(other.stmt_) {
+    other.stmt_ = nullptr;
+  }
+
+  auto operator=(SQLiteStatement&& other) noexcept -> SQLiteStatement& {
+    if (this != &other) {
+      if (stmt_) {
+        sqlite3_finalize(stmt_);
+      }
+      stmt_ = other.stmt_;
+      other.stmt_ = nullptr;
+    }
+    return *this;
+  }
+
+  auto get() const -> sqlite3_stmt* { return stmt_; }
+};
+
+inline void bind_text(sqlite3_stmt* stmt, const int idx, const std::string& val) {
+  sqlite3_bind_text(stmt, idx, val.c_str(), -1, SQLITE_TRANSIENT);
+}
+
+inline void bind_optional_text(sqlite3_stmt* stmt, const int idx,
+                               const std::optional<std::string>& val) {
+  if (val) {
+    sqlite3_bind_text(stmt, idx, val->c_str(), -1, SQLITE_TRANSIENT);
+  } else {
+    sqlite3_bind_null(stmt, idx);
+  }
+}
+
+inline auto column_string(sqlite3_stmt* stmt, const int idx) -> std::string {
+  const auto* text = reinterpret_cast<const char*>(sqlite3_column_text(stmt, idx));
+  return text ? std::string(text) : "";
+}
+
+inline auto column_optional_string(sqlite3_stmt* stmt, const int idx)
+    -> std::optional<std::string> {
+  if (sqlite3_column_type(stmt, idx) == SQLITE_NULL) {
+    return std::nullopt;
+  }
+  return column_string(stmt, idx);
+}
+
+}  // namespace eillance::storage::sqlite_helpers
