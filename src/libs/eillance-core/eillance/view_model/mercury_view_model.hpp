@@ -650,7 +650,7 @@ inline void MercuryViewModel::UpdateContacts() {
 }
 
 inline void MercuryViewModel::UpdateMyProfileFromSettings() {
-  auto* settings = client_->getSettingsManager();
+  const auto* settings = client_->getSettingsManager();
   current_state_.my_display_name = settings->GetMyDisplayName();
   current_state_.my_bio = settings->GetMyBio();
   current_state_.my_photo = settings->GetMyPhotoBase64();
@@ -665,8 +665,8 @@ inline void MercuryViewModel::UpdateChats() {
       contact_ids.push_back(contact.peer_id);
     }
   }
-  auto new_chats = client_->getChatSummaries(contact_ids);
   {
+    auto new_chats = client_->getChatSummaries(contact_ids);
     const std::lock_guard<std::mutex> lock(state_mutex_);
 
     std::unordered_map<std::string, uint32_t> unread_counts;
