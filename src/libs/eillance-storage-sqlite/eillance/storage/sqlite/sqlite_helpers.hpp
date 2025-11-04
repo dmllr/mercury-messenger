@@ -7,7 +7,7 @@
 
 #include "eillance/logging/logging.h"
 
-namespace eillance::storage::sqlite_helpers {
+namespace eillance::storage {
 
 class SQLiteStatement {
   sqlite3_stmt* stmt_ = nullptr;
@@ -21,7 +21,7 @@ public:
   }
 
   ~SQLiteStatement() {
-    if (stmt_) {
+    if (stmt_ != nullptr) {
       sqlite3_finalize(stmt_);
     }
   }
@@ -36,7 +36,7 @@ public:
 
   auto operator=(SQLiteStatement&& other) noexcept -> SQLiteStatement& {
     if (this != &other) {
-      if (stmt_) {
+      if (stmt_ != nullptr) {
         sqlite3_finalize(stmt_);
       }
       stmt_ = other.stmt_;
@@ -45,14 +45,16 @@ public:
     return *this;
   }
 
-  auto get() const -> sqlite3_stmt* { return stmt_; }
+  [[nodiscard]] auto Get() const -> sqlite3_stmt* {
+    return stmt_;
+  }
 };
 
-inline void bind_text(sqlite3_stmt* stmt, const int idx, const std::string& val) {
+inline void BindText(sqlite3_stmt* stmt, const int idx, const std::string& val) {
   sqlite3_bind_text(stmt, idx, val.c_str(), -1, SQLITE_TRANSIENT);
 }
 
-inline void bind_optional_text(sqlite3_stmt* stmt, const int idx,
+inline void BindOptionalText(sqlite3_stmt* stmt, const int idx,
                                const std::optional<std::string>& val) {
   if (val) {
     sqlite3_bind_text(stmt, idx, val->c_str(), -1, SQLITE_TRANSIENT);
@@ -61,17 +63,17 @@ inline void bind_optional_text(sqlite3_stmt* stmt, const int idx,
   }
 }
 
-inline auto column_string(sqlite3_stmt* stmt, const int idx) -> std::string {
+inline auto ColumnString(sqlite3_stmt* stmt, const int idx) -> std::string {
   const auto* text = reinterpret_cast<const char*>(sqlite3_column_text(stmt, idx));
   return text ? std::string(text) : "";
 }
 
-inline auto column_optional_string(sqlite3_stmt* stmt, const int idx)
+inline auto ColumnOptionalString(sqlite3_stmt* stmt, const int idx)
     -> std::optional<std::string> {
   if (sqlite3_column_type(stmt, idx) == SQLITE_NULL) {
     return std::nullopt;
   }
-  return column_string(stmt, idx);
+  return ColumnString(stmt, idx);
 }
 
-}  // namespace eillance::storage::sqlite_helpers
+}  // namespace eillance::storage
