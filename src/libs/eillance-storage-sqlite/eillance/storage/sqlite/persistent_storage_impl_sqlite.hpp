@@ -12,9 +12,7 @@
 #include "eillance/crypto/crypto.hpp"
 #include "eillance/logging/logging.h"
 #include "eillance/storage/persistent_storage.hpp"
-#include "eillance/storage/sqlite/migrations/0001_initial_schema.hpp"
-#include "eillance/storage/sqlite/migrations/0002_add_large_messages.hpp"
-#include "eillance/storage/sqlite/migrations/0003_populate_large_messages.hpp"
+#include "eillance/storage/sqlite/migrations.hpp"
 #include "eillance/storage/sqlite/sqlite_helpers.hpp"
 
 #include <nlohmann/json.hpp>
