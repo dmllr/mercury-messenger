@@ -5,7 +5,7 @@
 
 #include <gtest/gtest.h>
 
-#include "eillance/storage/sqlite_storage.hpp"
+#include "eillance/storage/sqlite/persistent_storage_impl_sqlite.hpp"
 
 // Use the eillance namespace for convenience in the test file.
 using namespace eillance;

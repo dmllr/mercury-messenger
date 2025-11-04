@@ -15,7 +15,7 @@
 #include "eillance/client/client.hpp"
 #include "eillance/logging/logging.h"
 #include "eillance/storage/persistent_storage.hpp"
-#include "eillance/storage/sqlite_storage.hpp"
+#include "eillance/storage/sqlite/persistent_storage_impl_sqlite.hpp"
 #include "eillance/view_model/mercury_view_model.hpp"
 #include "transport/transport_impl_libwebrtc.hpp"
 
