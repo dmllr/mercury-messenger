@@ -145,7 +145,7 @@ public:
   void LoadFullMessage(uint64_t message_id);
   void RefreshState();
   void MarkMessagesAsRead(const std::vector<std::uint64_t>& message_ids);
-  auto ProcessCliInput(const std::string& input) -> bool;
+  void AddSystemMessageToChat(const std::string& message);
   void SelectContactByIndex(size_t index);
   [[nodiscard]] auto GetState() const -> UIState;
   void SetOnStateChangedCallback(std::function<void()> callback);
@@ -153,7 +153,6 @@ public:
 private:
   void SetupClientCallbacks();
   void UpdateChatHistoryForSelectedContact();
-  void AddSystemMessageToChat(const std::string& message);
   void NotifyStateChanged() const;
   void UpdateContacts();
   void UpdateMyProfileFromSettings();
@@ -419,75 +418,10 @@ inline void MercuryViewModel::MarkMessagesAsRead(const std::vector<std::uint64_t
   });
 }
 
-inline auto MercuryViewModel::ProcessCliInput(const std::string& input) -> bool {
-  if (input.empty()) { return false; }
-
-  if (input.starts_with('/')) {
-    std::stringstream ss(input);
-    std::string command;
-    std::string arg;
-    ss >> command;
-    std::getline(ss >> std::ws, arg);
-
-    if (command == "/add") {
-      AddSystemMessageToChat("--> Adding contact: " + arg);
-      AddContact(arg);
-    } else if (command == "/accept") {
-      if (arg.empty()) {
-        AddSystemMessageToChat("--> Usage: /accept <contact_id>");
-      } else {
-        std::vector<std::string> matches;
-        {
-          const std::lock_guard<std::mutex> lock(state_mutex_);
-          for (const auto& contact : current_state_.contacts) {
-            if (contact.peer_id.starts_with(arg)) { matches.push_back(contact.peer_id); }
-          }
-        }
-        if (matches.empty()) {
-          AddSystemMessageToChat("--> Contact not found for ID starting with: " + arg);
-        } else if (matches.size() > 1) {
-          AddSystemMessageToChat("--> Ambiguous ID. Multiple contacts start with: " + arg);
-        } else {
-          AddSystemMessageToChat("--> Accepting contact: " + matches[0]);
-          AcceptContact(matches[0]);
-        }
-      }
-    } else if (command == "/set") {
-      std::string key;
-      std::string value;
-      std::stringstream arg_ss(arg);
-      arg_ss >> key;
-      std::getline(arg_ss >> std::ws, value);
-      if (key == "name") {
-        UpdateMyProfile(value, std::nullopt, std::nullopt);
-        AddSystemMessageToChat("--> Display name updated.");
-      } else if (key == "signaling_server_url") {
-        UpdateSignalingUrl(value);
-        AddSystemMessageToChat("--> Signaling server URL updated. Reconnecting...");
-      } else {
-        AddSystemMessageToChat("--> Unknown setting: " + key);
-      }
-    } else if (command == "/history" && arg == "load") {
-      LoadOlderMessages();
-    } else if (command == "/load") {
-        try {
-            if (arg.empty()) { throw std::invalid_argument("Message ID required."); }
-            const uint64_t id = std::stoull(arg);
-            LoadFullMessage(id);
-            AddSystemMessageToChat("--> Loading full content for message " + arg);
-        } catch (const std::exception& e) {
-            AddSystemMessageToChat(std::string("--> Invalid usage. Use /load <message_id>. Error: ") + e.what());
-        }
-    } else if (command == "/exit") {
-      return true;
-    } else {
-      AddSystemMessageToChat("--> Unknown command: " + command);
-    }
-  } else {
-    SendMessage(input);
-  }
+inline void MercuryViewModel::AddSystemMessageToChat(const std::string& message) {
+  const std::lock_guard<std::mutex> lock(state_mutex_);
+  current_state_.interaction_history.push_back({.id = nextSystemMessageId++, .kind = messaging::HistoryEntryKind::systemMessage, .timestamp = static_cast<Time::Unit>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count()), .direction = messaging::MessageDirection::received, .is_truncated = false, .data = messaging::MessageEntry{message}});
   NotifyStateChanged();
-  return false;
 }
 
 inline void MercuryViewModel::SelectContactByIndex(size_t index) {
@@ -629,11 +563,6 @@ inline void MercuryViewModel::UpdateChatHistoryForSelectedContact() {
     current_state_.interaction_history.clear();
     current_state_.has_older_messages = false;
   }
-}
-
-inline void MercuryViewModel::AddSystemMessageToChat(const std::string& message) {
-  const std::lock_guard<std::mutex> lock(state_mutex_);
-  current_state_.interaction_history.push_back({.id = nextSystemMessageId++, .kind = messaging::HistoryEntryKind::systemMessage, .timestamp = static_cast<Time::Unit>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count()), .direction = messaging::MessageDirection::received, .is_truncated = false, .data = messaging::MessageEntry{message}});
 }
 
 inline void MercuryViewModel::NotifyStateChanged() const {
