@@ -28,19 +28,19 @@ inline void migrate_to_v3(sqlite3* db, const size_t max_inline_content_size) {
           AND LENGTH(content) > ?
           AND is_truncated = 0;
       )SQL";
-    sqlite_helpers::SQLiteStatement select_stmt(db, select_sql);
-    sqlite3_bind_int(select_stmt.get(), 1, static_cast<int>(messaging::HistoryEntryKind::textMessage));
-    sqlite3_bind_int(select_stmt.get(), 2,
+    const SQLiteStatement select_stmt(db, select_sql);
+    sqlite3_bind_int(select_stmt.Get(), 1, static_cast<int>(messaging::HistoryEntryKind::textMessage));
+    sqlite3_bind_int(select_stmt.Get(), 2,
                      static_cast<int>(messaging::HistoryEntryKind::systemMessage));
-    sqlite3_bind_int(select_stmt.get(), 3, static_cast<int>(max_inline_content_size));
+    sqlite3_bind_int(select_stmt.Get(), 3, static_cast<int>(max_inline_content_size));
 
-    sqlite_helpers::SQLiteStatement insert_stmt(db, R"SQL(
+    const SQLiteStatement insert_stmt(db, R"SQL(
         INSERT INTO large_messages
           (history_id, full_content)
         VALUES
           (?, ?);
       )SQL");
-    sqlite_helpers::SQLiteStatement update_stmt(db, R"SQL(
+    const SQLiteStatement update_stmt(db, R"SQL(
         UPDATE
           history
         SET
@@ -50,24 +50,24 @@ inline void migrate_to_v3(sqlite3* db, const size_t max_inline_content_size) {
           id = ?;
       )SQL");
 
-    while (sqlite3_step(select_stmt.get()) == SQLITE_ROW) {
-      const int64_t id = sqlite3_column_int64(select_stmt.get(), 0);
-      const std::string full_content = sqlite_helpers::column_string(select_stmt.get(), 1);
+    while (sqlite3_step(select_stmt.Get()) == SQLITE_ROW) {
+      const int64_t id = sqlite3_column_int64(select_stmt.Get(), 0);
+      const std::string full_content = ColumnString(select_stmt.Get(), 1);
       const std::string preview = full_content.substr(0, max_inline_content_size);
 
       // Insert full content into large_messages
-      sqlite3_reset(insert_stmt.get());
-      sqlite3_bind_int64(insert_stmt.get(), 1, id);
-      sqlite_helpers::bind_text(insert_stmt.get(), 2, full_content);
-      if (sqlite3_step(insert_stmt.get()) != SQLITE_DONE) {
+      sqlite3_reset(insert_stmt.Get());
+      sqlite3_bind_int64(insert_stmt.Get(), 1, id);
+      BindText(insert_stmt.Get(), 2, full_content);
+      if (sqlite3_step(insert_stmt.Get()) != SQLITE_DONE) {
         throw std::runtime_error("Failed to insert into large_messages during V3 migration.");
       }
 
       // Update history with truncated content
-      sqlite3_reset(update_stmt.get());
-      sqlite_helpers::bind_text(update_stmt.get(), 1, preview);
-      sqlite3_bind_int64(update_stmt.get(), 2, id);
-      if (sqlite3_step(update_stmt.get()) != SQLITE_DONE) {
+      sqlite3_reset(update_stmt.Get());
+      BindText(update_stmt.Get(), 1, preview);
+      sqlite3_bind_int64(update_stmt.Get(), 2, id);
+      if (sqlite3_step(update_stmt.Get()) != SQLITE_DONE) {
         throw std::runtime_error("Failed to update history during V3 migration.");
       }
     }
