@@ -135,9 +135,9 @@ public:
   void Hangup();
   void AcceptCall();
   void RejectCall();
-  void AddContact(const std::string& peer_id) const;
+  void AddContact(const std::string& peer_id);
   void UpdateSignalingUrl(const std::string& url);
-  void AcceptContact(const std::string& peer_id) const;
+  void AcceptContact(const std::string& peer_id);
   void UpdateMyProfile(const std::optional<std::string>& name, const std::optional<std::string>& bio, const std::optional<std::string>& photo);
   void SetContactDisplayNameOverride(const std::string& peer_id, const std::string& name);
   void ResetContactDisplayNameOverride(const std::string& peer_id);
@@ -179,9 +179,9 @@ private:
 inline void MercuryViewModel::SelectContact(const std::string& peer_id) {
   const auto state = client_->getPeerConnectionState(peer_id);
   if (state == transport::PeerConnectionState::Disconnected
-    || state == transport::PeerConnectionState::Failed
-    || state == transport::PeerConnectionState::Closed
-    || state == transport::PeerConnectionState::NewConnection) {
+      || state == transport::PeerConnectionState::Failed
+      || state == transport::PeerConnectionState::Closed
+      || state == transport::PeerConnectionState::NewConnection) {
     client_->connect(peer_id);
   }
 
@@ -200,35 +200,47 @@ inline void MercuryViewModel::SelectContact(const std::string& peer_id) {
 }
 
 inline void MercuryViewModel::DeselectContact() {
-  const std::lock_guard<std::mutex> lock(state_mutex_);
-  if (current_state_.selected_contact_id.has_value()) {
-    current_state_.selected_contact_id.reset();
-    current_state_.interaction_history.clear();
-    current_state_.has_older_messages = false;
-    NotifyStateChanged();
-  }
+  dispatch_queue_.Dispatch([this] {
+    bool changed = false;
+    {
+      const std::lock_guard<std::mutex> lock(state_mutex_);
+      if (current_state_.selected_contact_id.has_value()) {
+        current_state_.selected_contact_id.reset();
+        current_state_.interaction_history.clear();
+        current_state_.has_older_messages = false;
+        changed = true;
+      }
+    }
+    if (changed) {
+      NotifyStateChanged();
+    }
+  });
 }
 
 inline void MercuryViewModel::SendMessage(const std::string& content) {
-  std::optional<std::string> selected_id;
-  {
-    const std::lock_guard<std::mutex> lock(state_mutex_);
-    selected_id = current_state_.selected_contact_id;
-    if (!selected_id) {
-      LOGW << "SendMessage called with no selected contact.";
-      return;
+  dispatch_queue_.Dispatch([this, content] {
+    std::optional<std::string> selected_id;
+    {
+      const std::lock_guard<std::mutex> lock(state_mutex_);
+      selected_id = current_state_.selected_contact_id;
+      if (!selected_id) {
+        LOGW << "SendMessage called with no selected contact.";
+        return;
+      }
     }
-  }
 
-  auto entry = client_->sendChatMessage(*selected_id, content);
+    auto entry = client_->sendChatMessage(*selected_id, content);
 
-  {
-    const std::lock_guard<std::mutex> lock(state_mutex_);
-    if (current_state_.selected_contact_id == selected_id) { current_state_.interaction_history.push_back(entry); }
-  }
+    {
+      const std::lock_guard<std::mutex> lock(state_mutex_);
+      if (current_state_.selected_contact_id == selected_id) {
+        current_state_.interaction_history.push_back(entry);
+      }
+    }
 
-  UpdateChats();
-  NotifyStateChanged();
+    UpdateChats();
+    NotifyStateChanged();
+  });
 }
 
 inline void MercuryViewModel::StartVoiceCall() {
@@ -312,15 +324,21 @@ inline void MercuryViewModel::RejectCall() {
   });
 }
 
-inline void MercuryViewModel::AddContact(const std::string& peer_id) const { client_->addContact(peer_id); }
+inline void MercuryViewModel::AddContact(const std::string& peer_id) {
+  dispatch_queue_.Dispatch([this, peer_id] { client_->addContact(peer_id); });
+}
 
-inline void MercuryViewModel::UpdateSignalingUrl(const std::string& url) { client_->UpdateSignalingUrl(url); }
+inline void MercuryViewModel::UpdateSignalingUrl(const std::string& url) {
+  dispatch_queue_.Dispatch([this, url] { client_->UpdateSignalingUrl(url); });
+}
 
-inline void MercuryViewModel::AcceptContact(const std::string& peer_id) const { client_->confirmContact(peer_id); }
+inline void MercuryViewModel::AcceptContact(const std::string& peer_id) {
+  dispatch_queue_.Dispatch([this, peer_id] { client_->confirmContact(peer_id); });
+}
 
 inline void MercuryViewModel::UpdateMyProfile(const std::optional<std::string>& name, const std::optional<std::string>& bio, const std::optional<std::string>& photo) {
-  client_->updateMyProfile(name, bio, photo);
-  dispatch_queue_.Dispatch([this]() {
+  dispatch_queue_.Dispatch([this, name, bio, photo] {
+    client_->updateMyProfile(name, bio, photo);
     {
       const std::lock_guard<std::mutex> lock(state_mutex_);
       UpdateMyProfileFromSettings();
@@ -330,13 +348,17 @@ inline void MercuryViewModel::UpdateMyProfile(const std::optional<std::string>& 
 }
 
 inline void MercuryViewModel::SetContactDisplayNameOverride(const std::string& peer_id, const std::string& name) {
-  client_->setContactDisplayNameOverride(peer_id, name);
-  RefreshState(); // Easiest way to update the view model's contact list
+  dispatch_queue_.Dispatch([this, peer_id, name] {
+    client_->setContactDisplayNameOverride(peer_id, name);
+    RefreshState(); // Easiest way to update the view model's contact list
+  });
 }
 
 inline void MercuryViewModel::ResetContactDisplayNameOverride(const std::string& peer_id) {
-  client_->resetContactDisplayNameOverride(peer_id);
-  RefreshState();
+  dispatch_queue_.Dispatch([this, peer_id] {
+    client_->resetContactDisplayNameOverride(peer_id);
+    RefreshState();
+  });
 }
 
 inline void MercuryViewModel::LoadOlderMessages() {
@@ -364,33 +386,33 @@ inline void MercuryViewModel::LoadOlderMessages() {
 }
 
 inline void MercuryViewModel::LoadFullMessage(uint64_t message_id) {
-    dispatch_queue_.Dispatch([this, message_id] {
-        auto full_content = client_->getFullMessageContent(message_id);
-        if (!full_content) {
-            LOGW << "Could not load full content for message ID: " << message_id;
-            return;
-        }
+  dispatch_queue_.Dispatch([this, message_id] {
+    auto full_content = client_->getFullMessageContent(message_id);
+    if (!full_content) {
+      LOGW << "Could not load full content for message ID: " << message_id;
+      return;
+    }
 
-        bool updated = false;
-        {
-            const std::lock_guard<std::mutex> lock(state_mutex_);
-            if (current_state_.selected_contact_id) {
-                for (auto& entry : current_state_.interaction_history) {
-                    if (entry.id == message_id) {
-                        if (std::holds_alternative<messaging::MessageEntry>(entry.data)) {
-                            auto& msg_entry = std::get<messaging::MessageEntry>(entry.data);
-                            msg_entry.content = *full_content;
-                            entry.is_truncated = false;
-                            updated = true;
-                            break;
-                        }
-                    }
-                }
+    bool updated = false;
+    {
+      const std::lock_guard<std::mutex> lock(state_mutex_);
+      if (current_state_.selected_contact_id) {
+        for (auto& entry : current_state_.interaction_history) {
+          if (entry.id == message_id) {
+            if (std::holds_alternative<messaging::MessageEntry>(entry.data)) {
+              auto& msg_entry = std::get<messaging::MessageEntry>(entry.data);
+              msg_entry.content = *full_content;
+              entry.is_truncated = false;
+              updated = true;
+              break;
             }
+          }
         }
+      }
+    }
 
-        if (updated) { NotifyStateChanged(); }
-    });
+    if (updated) { NotifyStateChanged(); }
+  });
 }
 
 inline void MercuryViewModel::RefreshState() {
@@ -441,18 +463,24 @@ inline void MercuryViewModel::SelectContactByIndex(size_t index) {
 }
 
 inline void MercuryViewModel::DebugEraseAllHistory() {
+  dispatch_queue_.Dispatch([this] {
     client_->DebugEraseAllHistory();
     RefreshState();
+  });
 }
 
 inline void MercuryViewModel::DebugEraseAllContacts() {
+  dispatch_queue_.Dispatch([this] {
     client_->DebugEraseAllContacts();
     RefreshState();
+  });
 }
 
 inline void MercuryViewModel::DebugRevokeAllApprovals() {
+  dispatch_queue_.Dispatch([this] {
     client_->DebugRevokeAllApprovals();
     RefreshState();
+  });
 }
 
 inline auto MercuryViewModel::GetState() const -> UIState {
@@ -470,77 +498,103 @@ inline void MercuryViewModel::LoadInitialChatHistory(const std::string& peer_id)
 }
 
 inline void MercuryViewModel::SetupClientCallbacks() {
-  client_->setChatMessageReceivedCallback([this](const std::string& peer_id, const messaging::HistoryEntryRecord& message) {
-    {
-      const std::lock_guard<std::mutex> lock(state_mutex_);
-      if (current_state_.selected_contact_id && *current_state_.selected_contact_id == peer_id) { current_state_.interaction_history.push_back(message); }
-    }
-    UpdateChats();
-    NotifyStateChanged();
+  client_->setChatMessageReceivedCallback([this](const std::string& peer_id,
+                                                 const messaging::HistoryEntryRecord& message) {
+    dispatch_queue_.Dispatch([this, peer_id, message] {
+      {
+        const std::lock_guard<std::mutex> lock(state_mutex_);
+        if (current_state_.selected_contact_id && *current_state_.selected_contact_id == peer_id) {
+          current_state_.interaction_history.push_back(message);
+        }
+      }
+      UpdateChats();
+      NotifyStateChanged();
+    });
   });
 
   client_->setContactRequestCallback([this](const std::string& peer_id) {
-    {
-      const std::lock_guard<std::mutex> lock(state_mutex_);
-      UpdateContacts();
-      if (current_state_.selected_contact_id && *current_state_.selected_contact_id == peer_id) { AddSystemMessageToChat("--> Contact request received. Use '/accept' to confirm."); }
-    }
-    NotifyStateChanged();
-  });
-
-  client_->setOnContactProfileUpdatedCallback([this](const std::string& peer_id) {
-    {
+    dispatch_queue_.Dispatch([this, peer_id] {
+      {
         const std::lock_guard<std::mutex> lock(state_mutex_);
         UpdateContacts();
-    }
-    NotifyStateChanged();
+        if (current_state_.selected_contact_id &&
+            *current_state_.selected_contact_id == peer_id) {
+          AddSystemMessageToChat("--> Contact request received. Use '/accept' to confirm.");
+        }
+      }
+      NotifyStateChanged();
+    });
   });
 
-  client_->setContactStatusChangedCallback([this](const std::string&, identity::ContactStatus) { RefreshState(); });
+  client_->setOnContactProfileUpdatedCallback([this](const std::string& /*peer_id*/) {
+    dispatch_queue_.Dispatch([this] {
+      {
+        const std::lock_guard<std::mutex> lock(state_mutex_);
+        UpdateContacts();
+      }
+      NotifyStateChanged();
+    });
+  });
+
+  client_->setContactStatusChangedCallback(
+      [this](const std::string& /*peer_id*/, identity::ContactStatus /*status*/) { RefreshState(); });
 
   client_->setStatusCallback([this](const std::string& peer_id, EventSource source, int state_val) {
-    bool state_changed = false;
-    if (source == EventSource::system) {
-      const std::lock_guard<std::mutex> lock(state_mutex_);
-      current_state_.connection_state = static_cast<ServiceConnectionState>(state_val);
-      if (current_state_.connection_state == ServiceConnectionState::online) {
-        current_state_.signaling_server_url = client_->getSettingsManager()->GetSignalingServerUrl();
-      }
-      state_changed = true;
-    } else if (source == EventSource::peerConnectionState) {
-      const auto state = static_cast<eillance::transport::PeerConnectionState>(state_val);
-      const std::lock_guard<std::mutex> lock(state_mutex_);
-      for (auto& contact : current_state_.contacts) {
-        if (contact.peer_id == peer_id) {
-          if (contact.connection_state != state) {
-            contact.connection_state = state;
+    dispatch_queue_.Dispatch([this, peer_id, source, state_val] {
+      bool state_changed = false;
+      {
+        const std::lock_guard<std::mutex> lock(state_mutex_);
+        if (source == EventSource::system) {
+          auto new_state = static_cast<ServiceConnectionState>(state_val);
+          if (current_state_.connection_state != new_state) {
+            current_state_.connection_state = new_state;
+            if (current_state_.connection_state == ServiceConnectionState::online) {
+              current_state_.signaling_server_url =
+                  client_->getSettingsManager()->GetSignalingServerUrl();
+            }
             state_changed = true;
           }
-          break;
+        } else if (source == EventSource::peerConnectionState) {
+          const auto state = static_cast<eillance::transport::PeerConnectionState>(state_val);
+          for (auto& contact : current_state_.contacts) {
+            if (contact.peer_id == peer_id) {
+              if (contact.connection_state != state) {
+                contact.connection_state = state;
+                state_changed = true;
+              }
+              break;
+            }
+          }
+          if (state == transport::PeerConnectionState::Closed ||
+              state == transport::PeerConnectionState::Disconnected ||
+              state == transport::PeerConnectionState::Failed) {
+            if ((current_state_.call_state.is_in_call || current_state_.call_state.is_ringing) &&
+                current_state_.call_state.peer_id == peer_id) {
+              current_state_.call_state = {};
+              state_changed = true;
+            }
+          }
         }
       }
-      if (state == transport::PeerConnectionState::Closed
-          || state == transport::PeerConnectionState::Disconnected
-          || state == transport::PeerConnectionState::Failed) {
-        if ((current_state_.call_state.is_in_call || current_state_.call_state.is_ringing) && current_state_.call_state.peer_id == peer_id) {
-          current_state_.call_state = {};
-          state_changed = true;
-        }
-      }
-    }
-    if (state_changed) { NotifyStateChanged(); }
+      if (state_changed) { NotifyStateChanged(); }
+    });
   });
 
   client_->setIncomingCallCallback([this](const std::string& peer_id, messaging::HistoryEntryKind call_type) {
-    {
-      const std::lock_guard<std::mutex> lock(state_mutex_);
-      if (current_state_.call_state.is_in_call || current_state_.call_state.is_ringing) { return; }
-      current_state_.call_state.is_ringing = true;
-      current_state_.call_state.peer_id = peer_id;
-      current_state_.call_state.call_type = call_type;
-      current_state_.call_state.call_direction = messaging::CallDirection::incoming;
-    }
-    NotifyStateChanged();
+    dispatch_queue_.Dispatch([this, peer_id, call_type] {
+      bool state_changed = false;
+      {
+        const std::lock_guard<std::mutex> lock(state_mutex_);
+        if (!current_state_.call_state.is_in_call && !current_state_.call_state.is_ringing) {
+          current_state_.call_state.is_ringing = true;
+          current_state_.call_state.peer_id = peer_id;
+          current_state_.call_state.call_type = call_type;
+          current_state_.call_state.call_direction = messaging::CallDirection::incoming;
+          state_changed = true;
+        }
+      }
+      if (state_changed) { NotifyStateChanged(); }
+    });
   });
 
   client_->setOnCallTerminatedCallback([this](const std::string& peer_id) {
@@ -548,7 +602,8 @@ inline void MercuryViewModel::SetupClientCallbacks() {
       bool state_changed = false;
       {
         const std::lock_guard<std::mutex> lock(state_mutex_);
-        if ((current_state_.call_state.is_in_call || current_state_.call_state.is_ringing) && current_state_.call_state.peer_id == peer_id) {
+        if ((current_state_.call_state.is_in_call || current_state_.call_state.is_ringing) &&
+            current_state_.call_state.peer_id == peer_id) {
           current_state_.call_state = {};  // Reset the call state
           state_changed = true;
         }
@@ -557,20 +612,29 @@ inline void MercuryViewModel::SetupClientCallbacks() {
     });
   });
 
-  client_->setMessageStatusChangedCallback([this](const std::string& peer_id, const std::uint64_t message_id, const messaging::MessageStatus status) {
-    {
-      const std::lock_guard<std::mutex> lock(state_mutex_);
-      if (current_state_.selected_contact_id && *current_state_.selected_contact_id == peer_id) {
-        for (auto& entry : current_state_.interaction_history) {
-          if (entry.id == message_id) {
-            entry.status = status;
-            break;
+  client_->setMessageStatusChangedCallback(
+      [this](const std::string& peer_id, const std::uint64_t message_id,
+             const messaging::MessageStatus status) {
+        dispatch_queue_.Dispatch([this, peer_id, message_id, status] {
+          bool changed = false;
+          {
+            const std::lock_guard<std::mutex> lock(state_mutex_);
+            if (current_state_.selected_contact_id &&
+                *current_state_.selected_contact_id == peer_id) {
+              for (auto& entry : current_state_.interaction_history) {
+                if (entry.id == message_id) {
+                  if (entry.status != status) {
+                    entry.status = status;
+                    changed = true;
+                  }
+                  break;
+                }
+              }
+            }
           }
-        }
-      }
-    }
-    NotifyStateChanged();
-  });
+          if (changed) { NotifyStateChanged(); }
+        });
+      });
 }
 
 inline void MercuryViewModel::UpdateChatHistoryForSelectedContact() {

@@ -712,60 +712,60 @@ inline void Client::processDataChannelMessage(const std::string& peer_id, const 
     bool is_system = message.value("is_system", false);
 
     if (is_system) {
-        auto payload = message.at("payload").get<std::vector<std::byte>>();
-        auto decrypted_message = peer->session_cipher_->Decrypt({payload.begin(), payload.end()});
-        if (decrypted_message.empty()) {
-          LOGW << "Failed to decrypt system message from " << peer_id;
-          return;
+      auto payload = message.at("payload").get<std::vector<std::byte>>();
+      auto decrypted_message = peer->session_cipher_->Decrypt({payload.begin(), payload.end()});
+      if (decrypted_message.empty()) {
+        LOGW << "Failed to decrypt system message from " << peer_id;
+        return;
+      }
+      const auto content_json = Json::parse(decrypted_message);
+      const auto action = content_json.value("action", "");
+      if (action == "profile_update") {
+        // Extract new profile data from the message
+        const auto display_name = content_json.value("display_name", "");
+        const auto bio = content_json.value("bio", "");
+        std::optional<std::string> photo;
+        if (content_json.contains("photo") && !content_json["photo"].is_null()) {
+          photo = content_json["photo"].get<std::string>();
         }
-        const auto content_json = Json::parse(decrypted_message);
-        const auto action = content_json.value("action", "");
-        if (action == "profile_update") {
-            // Extract new profile data from the message
-            const auto display_name = content_json.value("display_name", "");
-            const auto bio = content_json.value("bio", "");
-            std::optional<std::string> photo;
-            if (content_json.contains("photo") && !content_json["photo"].is_null()) {
-                photo = content_json["photo"].get<std::string>();
-            }
 
-            // Before updating, get the old profile to create a diff for the history.
-            auto old_contact_opt = contact_manager_->GetContact(peer_id);
+        // Before updating, get the old profile to create a diff for the history.
+        auto old_contact_opt = contact_manager_->GetContact(peer_id);
 
-            bool has_changed = true;  // Assume change unless proven otherwise
-            if (old_contact_opt) {
-              const bool name_changed = old_contact_opt->display_name != display_name;
-              const bool bio_changed = old_contact_opt->bio != bio;
-              const bool photo_changed = old_contact_opt->photo_base64 != photo;
-              if (!name_changed && !bio_changed && !photo_changed) {
-                has_changed = false;
-              }
-            }
-
-            if (has_changed) {
-              Json diff_json;
-              diff_json["action"] = "profile_update_diff";
-
-              // Capture new state
-              diff_json["new"]["display_name"] = display_name;
-              diff_json["new"]["bio"] = bio;
-              diff_json["new"]["photo"] = photo;
-
-              // Capture old state if it exists
-              if (old_contact_opt) {
-                diff_json["old"]["display_name"] = old_contact_opt->display_name;
-                diff_json["old"]["bio"] = old_contact_opt->bio;
-                diff_json["old"]["photo"] = old_contact_opt->photo_base64;
-              } else {
-                diff_json["old"] = nullptr;
-              }
-              message_history_->AddTextEntry(peer_id, diff_json.dump(), messaging::MessageDirection::received, messaging::HistoryEntryKind::systemMessage);
-            }
-
-            // Now, update the contact profile in the contact manager
-            contact_manager_->UpdateContactProfile(peer_id, display_name, bio, photo);
-            if (on_contact_profile_updated_) { (*on_contact_profile_updated_)(peer_id); }
+        bool has_changed = true;  // Assume change unless proven otherwise
+        if (old_contact_opt) {
+          const bool name_changed = old_contact_opt->display_name != display_name;
+          const bool bio_changed = old_contact_opt->bio != bio;
+          const bool photo_changed = old_contact_opt->photo_base64 != photo;
+          if (!name_changed && !bio_changed && !photo_changed) {
+            has_changed = false;
+          }
         }
+
+        if (has_changed) {
+          Json diff_json;
+          diff_json["action"] = "profile_update_diff";
+
+          // Capture new state
+          diff_json["new"]["display_name"] = display_name;
+          diff_json["new"]["bio"] = bio;
+          diff_json["new"]["photo"] = photo;
+
+          // Capture old state if it exists
+          if (old_contact_opt) {
+            diff_json["old"]["display_name"] = old_contact_opt->display_name;
+            diff_json["old"]["bio"] = old_contact_opt->bio;
+            diff_json["old"]["photo"] = old_contact_opt->photo_base64;
+          } else {
+            diff_json["old"] = nullptr;
+          }
+          message_history_->AddTextEntry(peer_id, diff_json.dump(), messaging::MessageDirection::received, messaging::HistoryEntryKind::systemMessage);
+        }
+
+        // Now, update the contact profile in the contact manager
+        contact_manager_->UpdateContactProfile(peer_id, display_name, bio, photo);
+        if (on_contact_profile_updated_) { (*on_contact_profile_updated_)(peer_id); }
+      }
     } else if (on_chat_message_received_) {
       auto payload = message.at("payload").get<std::vector<std::byte>>();
       auto decrypted_message = peer->session_cipher_->Decrypt({payload.begin(), payload.end()});
@@ -833,37 +833,57 @@ inline void Client::sendQueuedMessages(const std::string& peer_id) {
   LOGI << "Processing " << messages.size() << " queued message(s) for " << peer_id;
   for (const auto& entry : messages) {
     bool sent = false;
-    switch (entry.kind) {
-      case messaging::HistoryEntryKind::textMessage: {
-        if (peer->data_channel_is_open_ && peer->session_cipher_->IsReady()) {
-          const auto& message_content = std::get<messaging::MessageEntry>(entry.data).content;
-          auto encrypted_payload = peer->session_cipher_->Encrypt(message_content);
-          if (encrypted_payload.empty()) {
-            LOGE << "Failed to encrypt chat message for peer " << peer_id;
+    switch (entry.kind) {  // NOLINT(*-multi-way-paths-covered)
+      case messaging::HistoryEntryKind::textMessage:
+        [[fallthrough]];
+      case messaging::HistoryEntryKind::systemMessage: {
+        if (!std::holds_alternative<messaging::MessageEntry>(entry.data)) {
+          LOGW << "Skipping message " << entry.id << " with unexpected data type for its kind.";
+          continue;
+        }
+
+        std::string content_to_send;
+        const auto& msg_entry = std::get<messaging::MessageEntry>(entry.data);
+        if (entry.is_truncated) {
+          auto full_content = message_history_->GetFullMessageContent(entry.id);
+          if (full_content) {
+            content_to_send = *full_content;
+          } else {
+            LOGE << "Failed to retrieve full content for truncated message " << entry.id
+                 << ", skipping.";
             continue;
           }
-          const Json json_message = {
-              {"type", "chat"},
-              {"message_id", entry.id},
-              {"is_system", false},
-              {"payload", std::vector<std::byte>(encrypted_payload.begin(), encrypted_payload.end())}
-          };
-          transport_->sendPeerDataChannelMessage(peer_id, json_message);
-          sent = true;
+        } else {
+          content_to_send = msg_entry.content;
         }
-        break;
-      }
-      case messaging::HistoryEntryKind::systemMessage: {
-        const auto& content_str = std::get<messaging::MessageEntry>(entry.data).content;
-        Json content_json = Json::parse(content_str);
-        std::string action = content_json.value("action", "");
-        if (action == "contact_request" || action == "contact_confirm") {
-            const Json msg = {{"type", action == "contact_request" ? "contact_add_request" : "contact_confirm"}, {"to", peer_id}};
-            transport_->sendSignalingMessage(msg);
+
+        if (entry.kind == messaging::HistoryEntryKind::textMessage) {
+          if (peer->data_channel_is_open_ && peer->session_cipher_->IsReady()) {
+            auto encrypted_payload = peer->session_cipher_->Encrypt(content_to_send);
+            if (encrypted_payload.empty()) {
+              LOGE << "Failed to encrypt chat message for peer " << peer_id;
+              continue;
+            }
+            const Json json_message = {{"type", "chat"},
+                                       {"message_id", entry.id},
+                                       {"is_system", false},
+                                       {"payload", std::vector<std::byte>(encrypted_payload.begin(),
+                                                                          encrypted_payload.end())}};
+            transport_->sendPeerDataChannelMessage(peer_id, json_message);
             sent = true;
-        } else if (action == "profile_update") {
-            if (peer->data_channel_is_open_ && peer->session_cipher_->IsReady()) {
-                auto encrypted_payload = peer->session_cipher_->Encrypt(content_str);
+          }
+        } else {  // systemMessage
+          try {
+            Json content_json = Json::parse(content_to_send);
+            std::string action = content_json.value("action", "");
+            if (action == "contact_request" || action == "contact_confirm") {
+              const Json msg = {{"type", action == "contact_request" ? "contact_add_request" : "contact_confirm"},
+                                {"to", peer_id}};
+              transport_->sendSignalingMessage(msg);
+              sent = true;
+            } else if (action == "profile_update") {
+              if (peer->data_channel_is_open_ && peer->session_cipher_->IsReady()) {
+                auto encrypted_payload = peer->session_cipher_->Encrypt(content_to_send);
                 if (encrypted_payload.empty()) {
                   LOGE << "Failed to encrypt profile update message for peer " << peer_id;
                   continue;
@@ -871,11 +891,15 @@ inline void Client::sendQueuedMessages(const std::string& peer_id) {
                 const Json json_message = {{"type", "chat"},
                                            {"message_id", entry.id},
                                            {"is_system", true},
-                                           {"payload", std::vector<std::byte>(encrypted_payload.begin(), encrypted_payload.end())}};
-
+                                           {"payload", std::vector<std::byte>(encrypted_payload.begin(),
+                                                                              encrypted_payload.end())}};
                 transport_->sendPeerDataChannelMessage(peer_id, json_message);
                 sent = true;
+              }
             }
+          } catch (const Json::parse_error& e) {
+            LOGE << "Failed to parse system message content for id " << entry.id << ": " << e.what();
+          }
         }
         break;
       }
