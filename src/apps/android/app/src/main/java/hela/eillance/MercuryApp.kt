@@ -11,15 +11,21 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CallEnd
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -27,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import hela.eillance.ndkio.Contact
 import hela.eillance.navigation.Route
 import hela.eillance.navigation.Screen
 import hela.eillance.screens.CallScreen
@@ -42,6 +49,7 @@ fun MercuryApp(viewModel: MainViewModel) {
     val uiState by viewModel.uiState.collectAsState()
     val navigateToPeerId by viewModel.navigateToPeerId.collectAsState()
     val peerIdForProfileDialog by viewModel.showContactProfileDialog.collectAsState()
+    var contactToRemove by remember { mutableStateOf<Contact?>(null) }
 
     LaunchedEffect(navigateToPeerId) {
         navigateToPeerId?.let { peerId ->
@@ -63,14 +71,35 @@ fun MercuryApp(viewModel: MainViewModel) {
         )
     }
 
+    contactToRemove?.let { contact ->
+        AlertDialog(
+            onDismissRequest = { contactToRemove = null },
+            title = { Text("Remove Contact?") },
+            text = { Text("Are you sure you want to remove ${contact.name}? All conversation history will be permanently deleted.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.removeContact(contact.peerId)
+                        contactToRemove = null
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Remove")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { contactToRemove = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     peerIdForProfileDialog?.let { peerId ->
         val contact = uiState.contacts.find { it.peerId == peerId }
         contact?.let {
             ContactProfileDialog(
-                contact = it,
-                onDismissRequest = { viewModel.onContactProfileDialogDismiss() },
-                onOverrideSave = { newName -> viewModel.setContactDisplayNameOverride(peerId, newName) },
-                onOverrideReset = { viewModel.resetContactDisplayNameOverride(peerId) }
+                contact = it, onDismissRequest = { viewModel.onContactProfileDialogDismiss() }, onOverrideSave = { newName -> viewModel.setContactDisplayNameOverride(peerId, newName) }, onOverrideReset = { viewModel.resetContactDisplayNameOverride(peerId) }, onRemoveRequest = { contactToRemove = it }
             )
         }
     }

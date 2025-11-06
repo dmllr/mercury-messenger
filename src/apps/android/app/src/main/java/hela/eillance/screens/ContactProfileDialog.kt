@@ -21,7 +21,8 @@ fun ContactProfileDialog(
     contact: Contact,
     onDismissRequest: () -> Unit,
     onOverrideSave: (String) -> Unit,
-    onOverrideReset: () -> Unit
+    onOverrideReset: () -> Unit,
+    onRemoveRequest: () -> Unit
 ) {
     var overrideName by remember { mutableStateOf("") }
 
@@ -103,6 +104,21 @@ fun ContactProfileDialog(
                     ) {
                         Text("Save Alias")
                     }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                HorizontalDivider()
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Button(
+                    onClick = {
+                        onRemoveRequest()
+                        onDismissRequest()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Remove Contact")
                 }
             }
         }

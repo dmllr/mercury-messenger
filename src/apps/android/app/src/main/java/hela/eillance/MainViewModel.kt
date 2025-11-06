@@ -78,6 +78,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         onAddContactDialogDismiss()
     }
 
+    fun removeContact(peerId: String) {
+        callService?.removeContact(peerId)
+        if (_showContactProfileDialog.value == peerId) {
+            _showContactProfileDialog.value = null
+        }
+    }
+
     fun acceptContact(peerId: String) {
         callService?.acceptContact(peerId)
     }

@@ -303,6 +303,7 @@ class CallService : Service(), IClientNativeBridge {
   external fun refreshState()
   external fun addContact(peerId: String)
   external fun acceptContact(peerId: String)
+  external fun removeContact(peerId: String)
   external fun selectContact(peerId: String)
   external fun sendMessage(message: String)
   external fun startVoiceCall()

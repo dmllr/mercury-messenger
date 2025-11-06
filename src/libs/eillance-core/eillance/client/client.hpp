@@ -103,6 +103,7 @@ public:
   void rejectCall(const std::string& peer_id) const;
   void addContact(const std::string& peer_id) const;
   void confirmContact(const std::string& peer_id) const;
+  void removeContact(const std::string& peer_id);
   auto getPeerConnectionState(const std::string& peer_id) const -> eillance::transport::PeerConnectionState;
   auto getContacts() const -> std::vector<identity::Contact>;
   auto getChatSummaries(const std::vector<std::string>& peer_ids) const -> std::vector<messaging::ChatSummary>;
@@ -374,6 +375,16 @@ inline void Client::addContact(const std::string& peer_id) const {
     message_history_->AddTextEntry(peer_id, content.dump(), messaging::MessageDirection::sent, messaging::HistoryEntryKind::systemMessage);
     if (on_contact_status_changed_) { (*on_contact_status_changed_)(peer_id, identity::ContactStatus::pendingApproval); }
     delivery_service_->attemptDelivery(peer_id);
+  }
+}
+
+inline void Client::removeContact(const std::string& peer_id) {
+  contact_manager_->RemoveContact(peer_id);
+  // Close any active connections and remove the peer object.
+  if (auto peer = transport_->getPeer(peer_id)) {
+      transport_->closePeerConnection(peer_id, "data");
+      transport_->closePeerConnection(peer_id, "media");
+      transport_->removePeer(peer_id);
   }
 }
 
