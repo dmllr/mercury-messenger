@@ -30,6 +30,15 @@ public:
     return it->second;
   }
 
+  /// Cache a field ID.
+  void AddField(const std::string& field_name, jfieldID field_id) { fields_[field_name] = field_id; }
+
+  /// Get a cached field ID.
+  [[nodiscard]] jfieldID GetField(const std::string& field_name) const {
+    auto it = fields_.find(field_name);
+    if (it == fields_.end()) { throw std::runtime_error("Field not registered: " + field_name); }
+    return it->second;
+  }
   /// Create a new object using the cached constructor.
   template <typename... Args>
   [[nodiscard]] [[maybe_unused]] jobject NewObject(JNIEnv* env, Args... args) const {
@@ -40,6 +49,7 @@ public:
 private:
   jclass class_;
   jmethodID ctor_;
+  std::unordered_map<std::string, jfieldID> fields_;
   std::unordered_map<std::string, jmethodID> methods_;
 };
 
@@ -110,6 +120,17 @@ public:
       throw std::runtime_error("Failed to get static method '" + method_name + "' for class: " + class_name);
     }
     classes_.at(class_name).AddMethod(method_name, mid);
+  }
+
+  /// Registers a field for a given class with the given name and signature.
+  void RegisterField(JNIEnv* env, const std::string& class_name, const std::string& field_name, const std::string& field_sig) {
+    RegisterClass(env, class_name);
+    jclass cls = classes_.at(class_name).Class();
+    jfieldID fid = env->GetFieldID(cls, field_name.c_str(), field_sig.c_str());
+    if (fid == nullptr) {
+      throw std::runtime_error("Failed to get field '" + field_name + "' for class: " + class_name);
+    }
+    classes_.at(class_name).AddField(field_name, fid);
   }
 
   /// Retrieve the ClassHolder for a given class.

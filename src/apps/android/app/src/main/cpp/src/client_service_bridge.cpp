@@ -179,13 +179,13 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_markMessagesAsR
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_configureVideoCapture(JNIEnv* env, jobject /*instance*/, jobject video_config) {
   if (client_engine) {
+    auto& video_config_holder = ClassRefs::Instance().Class("hela/eillance/ndkio/VideoConfig");
     auto conf = eillance::VideoConfig{};
-    jclass video_config_class = env->GetObjectClass(video_config);
-    conf.camera_id = env->GetIntField(video_config, env->GetFieldID(video_config_class, "cameraId", "I"));
-    conf.width = env->GetIntField(video_config, env->GetFieldID(video_config_class, "width", "I"));
-    conf.height = env->GetIntField(video_config, env->GetFieldID(video_config_class, "height", "I"));
-    conf.frame_rate = env->GetIntField(video_config, env->GetFieldID(video_config_class, "frameRate", "I"));
-    conf.bitrate = env->GetIntField(video_config, env->GetFieldID(video_config_class, "bitrate", "I"));
+    conf.camera_id = env->GetIntField(video_config, video_config_holder.GetField("cameraId"));
+    conf.width = env->GetIntField(video_config, video_config_holder.GetField("width"));
+    conf.height = env->GetIntField(video_config, video_config_holder.GetField("height"));
+    conf.frame_rate = env->GetIntField(video_config, video_config_holder.GetField("frameRate"));
+    conf.bitrate = env->GetIntField(video_config, video_config_holder.GetField("bitrate"));
     client_engine->ConfigureVideoCapture(conf);
   }
 }
@@ -212,12 +212,15 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
   try {
     auto& classref = ClassRefs::Instance();
     classref.RegisterClass(env, "android/content/Context");
+    classref.RegisterMethod(env, "android/content/Context", "getFilesDir", "()Ljava/io/File;");
     classref.RegisterClass(env, "java/io/File");
+    classref.RegisterMethod(env, "java/io/File", "getPath", "()Ljava/lang/String;");
 
     // Register CallService and its methods
     const std::string call_service_class = "hela/eillance/CallService";
     classref.RegisterClass(env, call_service_class);
     classref.RegisterMethod(env, call_service_class, "setWebRtcTransport", "(Lhela/eillance/webrtc/WebRtcTransport;)V");
+    classref.RegisterMethod(env, call_service_class, "onStateUpdate", "(Ljava/lang/String;)V");
 
     // Register WebRtcTransport and its methods
     const std::string webrtc_transport_class = "hela/eillance/webrtc/WebRtcTransport";
@@ -245,6 +248,15 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     classref.RegisterCtor(env, "hela/eillance/ndkio/Peer", "(Ljava/lang/String;Ljava/lang/String;Ljava/util/List;)V");
     classref.RegisterCtor(env, "hela/eillance/ndkio/Camera", "(Ljava/lang/String;Ljava/lang/String;Ljava/util/List;)V");
     classref.RegisterCtor(env, "hela/eillance/ndkio/Resolution", "(II)V");
+
+    // Register VideoConfig and its fields
+    const std::string video_config_class = "hela/eillance/ndkio/VideoConfig";
+    classref.RegisterClass(env, video_config_class);
+    classref.RegisterField(env, video_config_class, "cameraId", "I");
+    classref.RegisterField(env, video_config_class, "width", "I");
+    classref.RegisterField(env, video_config_class, "height", "I");
+    classref.RegisterField(env, video_config_class, "frameRate", "I");
+    classref.RegisterField(env, video_config_class, "bitrate", "I");
   } catch (const std::exception& e) {
     LOGE << "JNI_OnLoad failed: " << e.what();
     return JNI_ERR;
