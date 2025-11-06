@@ -14,7 +14,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import coil.compose.rememberAsyncImagePainter
 import hela.eillance.ndkio.Contact
 
 @Composable
@@ -37,10 +36,10 @@ fun ContactProfileDialog(
                 modifier = Modifier.padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                val painter = rememberAsyncImagePainter(model = "data:image/png;base64," + contact.photo)
-                if (contact.photo != null) {
+                val imageBitmap = rememberImageBitmapFromBase64(contact.photo)
+                if (imageBitmap != null) {
                     Image(
-                        painter = painter,
+                        bitmap = imageBitmap,
                         contentDescription = "Profile Photo",
                         modifier = Modifier
                             .size(120.dp)

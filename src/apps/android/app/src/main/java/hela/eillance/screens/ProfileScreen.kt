@@ -3,6 +3,7 @@ package hela.eillance.screens
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Base64
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -54,6 +55,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -73,6 +76,24 @@ private enum class DebugAction {
     ERASE_HISTORY,
     ERASE_CONTACTS,
     REVOKE_APPROVALS
+}
+
+@Composable
+internal fun rememberImageBitmapFromBase64(base64: String?): ImageBitmap? {
+    return remember(base64) {
+        if (base64.isNullOrBlank()) {
+            null
+        } else {
+            try {
+                val decodedBytes = Base64.decode(base64, Base64.NO_WRAP)
+                BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)?.asImageBitmap()
+            } catch (e: IllegalArgumentException) {
+                // Handle invalid Base64 string
+                Log.e("ImageBitmap", "Failed to decode base64 string", e)
+                null
+            }
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -154,16 +175,11 @@ private fun ProfileHeader(uiState: AppState) {
                 .background(MaterialTheme.colorScheme.surfaceVariant),
             contentAlignment = Alignment.Center
         ) {
-            val photoModel = if (uiState.myPhoto != null) {
-                "data:image/jpeg;base64,${uiState.myPhoto}"
-            } else {
-                null
-            }
-            val painter = rememberAsyncImagePainter(model = photoModel)
+            val imageBitmap = rememberImageBitmapFromBase64(uiState.myPhoto)
 
-            if (photoModel != null) {
+            if (imageBitmap != null) {
                 Image(
-                    painter = painter,
+                    bitmap = imageBitmap,
                     contentDescription = "Profile Photo",
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
@@ -310,7 +326,7 @@ private fun ProfileEditDialog(
                 val outputStream = ByteArrayOutputStream()
                 resizedBitmap.compress(Bitmap.CompressFormat.JPEG, 80, outputStream)
                 val byteArray = outputStream.toByteArray()
-                photoBase64 = Base64.encodeToString(byteArray, Base64.DEFAULT)
+                photoBase64 = Base64.encodeToString(byteArray, Base64.NO_WRAP)
             } catch (e: Exception) {
                 e.printStackTrace()
                 scope.launch { snackbarHostState.showSnackbar("Failed to load image.") }
@@ -338,10 +354,10 @@ private fun ProfileEditDialog(
                         .clickable { imagePickerLauncher.launch("image/*") },
                     contentAlignment = Alignment.Center
                 ) {
-                    if (photoBase64 != null) {
-                        val painter = rememberAsyncImagePainter(model = "data:image/jpeg;base64,$photoBase64")
+                    val imageBitmap = rememberImageBitmapFromBase64(photoBase64)
+                    if (imageBitmap != null) {
                         Image(
-                            painter = painter,
+                            bitmap = imageBitmap,
                             contentDescription = "Profile Photo",
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop

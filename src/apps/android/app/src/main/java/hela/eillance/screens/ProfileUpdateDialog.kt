@@ -34,7 +34,6 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import coil.compose.rememberAsyncImagePainter
 import hela.eillance.ndkio.HistoryEntry
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -164,10 +163,10 @@ private fun ProfilePhoto(photoBase64: String?, modifier: Modifier = Modifier) {
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape),
         contentAlignment = Alignment.Center
     ) {
-        if (photoBase64 != null) {
-            val painter = rememberAsyncImagePainter(model = "data:image/jpeg;base64,$photoBase64")
+        val imageBitmap = rememberImageBitmapFromBase64(photoBase64)
+        if (imageBitmap != null) {
             Image(
-                painter = painter,
+                bitmap = imageBitmap,
                 contentDescription = "Profile Photo",
                 modifier = Modifier.matchParentSize(),
                 contentScale = ContentScale.Crop
