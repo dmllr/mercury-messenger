@@ -22,8 +22,10 @@ TEST(CryptoTest, HexConversionCaseInsensitive) {
 }
 
 TEST(CryptoTest, IdentityLifecycle) {
-  auto identity1 = Identity::CreateNew();
+  std::string mnemonic;
+  auto identity1 = Identity::CreateNew(mnemonic);
   ASSERT_NE(identity1, nullptr);
+  EXPECT_FALSE(mnemonic.empty());
 
   std::string id1 = identity1->GetId();
   EXPECT_FALSE(id1.empty());
@@ -39,7 +41,8 @@ TEST(CryptoTest, IdentityLifecycle) {
 }
 
 TEST(CryptoTest, SignAndVerify) {
-  auto identity = Identity::CreateNew();
+  std::string mnemonic;
+  auto identity = Identity::CreateNew(mnemonic);
   ASSERT_NE(identity, nullptr);
   std::string id = identity->GetId();
 
@@ -51,7 +54,8 @@ TEST(CryptoTest, SignAndVerify) {
 }
 
 TEST(CryptoTest, VerificationFailsWithWrongMessage) {
-  auto identity = Identity::CreateNew();
+  std::string mnemonic;
+  auto identity = Identity::CreateNew(mnemonic);
   ASSERT_NE(identity, nullptr);
   std::string id = identity->GetId();
 
@@ -63,8 +67,9 @@ TEST(CryptoTest, VerificationFailsWithWrongMessage) {
 }
 
 TEST(CryptoTest, VerificationFailsWithWrongId) {
-  auto identity1 = Identity::CreateNew();
-  auto identity2 = Identity::CreateNew();
+  std::string mnemonic1, mnemonic2;
+  auto identity1 = Identity::CreateNew(mnemonic1);
+  auto identity2 = Identity::CreateNew(mnemonic2);
   ASSERT_NE(identity1, nullptr);
   ASSERT_NE(identity2, nullptr);
 
@@ -76,7 +81,8 @@ TEST(CryptoTest, VerificationFailsWithWrongId) {
 }
 
 TEST(CryptoTest, VerificationFailsWithWrongSignature) {
-  auto identity = Identity::CreateNew();
+  std::string mnemonic;
+  auto identity = Identity::CreateNew(mnemonic);
   ASSERT_NE(identity, nullptr);
   std::string id = identity->GetId();
 

@@ -25,6 +25,11 @@ class MockPersistentStorageImpl final : public PersistentStorageImpl {
   std::atomic<uint64_t> next_history_id_{1};
 
 public:
+  // --- Path ---
+  auto GetPath() const -> std::string override {
+    return "mock_db_path";
+  }
+
   // --- Settings ---
   auto GetSetting(std::string_view key) -> std::optional<std::string> override {
     const std::lock_guard lock(mutex_);
@@ -216,6 +221,27 @@ public:
          }
      }
     return records;
+  }
+
+  // --- Debug ---
+  void DebugClearAllHistory() override {
+      const std::lock_guard lock(mutex_);
+      history_.clear();
+      large_messages_.clear();
+  }
+
+  void DebugClearAllContacts() override {
+      const std::lock_guard lock(mutex_);
+      contacts_.clear();
+  }
+
+  void DebugRevokeAllContactApprovals() override {
+      const std::lock_guard lock(mutex_);
+      for (auto& [id, contact] : contacts_) {
+          if (contact.status == identity::ContactStatus::confirmed) {
+              contact.status = identity::ContactStatus::pendingApproval;
+          }
+      }
   }
 };
 

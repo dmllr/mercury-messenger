@@ -17,26 +17,33 @@ protected:
   std::shared_ptr<storage::PersistentStorage> storage_;
 };
 
-TEST_F(IdManagerTest, GeneratesNewIdentityWhenNoneExists) {
-  // Initially, storage is empty.
-  ASSERT_FALSE(storage_->GetSetting("identity.key").has_value());
-
+TEST_F(IdManagerTest, NoIdentityExistsInitially) {
   identity::IdManager id_manager(storage_);
-  auto id = id_manager.GetId();
-
-  EXPECT_FALSE(id.empty());
-  auto pem_data_opt = storage_->GetSetting("identity.key");
-  ASSERT_TRUE(pem_data_opt.has_value());
-
-  // Verify the saved data can be loaded as an identity
-  auto loaded_identity = crypto::Identity::LoadFromMemory(*pem_data_opt);
-  ASSERT_NE(loaded_identity, nullptr);
-  EXPECT_EQ(loaded_identity->GetId(), id);
+  EXPECT_FALSE(id_manager.IdentityExists());
+  EXPECT_TRUE(id_manager.GetId().empty());
 }
+
+TEST_F(IdManagerTest, GenerateNewIdentity) {
+  // Initially, storage is empty.
+  identity::IdManager id_manager(storage_);
+  ASSERT_FALSE(id_manager.IdentityExists());
+
+  std::string mnemonic = id_manager.GenerateNewIdentity();
+  EXPECT_FALSE(mnemonic.empty());
+  EXPECT_TRUE(id_manager.IdentityExists());
+  EXPECT_FALSE(id_manager.GetId().empty());
+
+  // A new manager should load the created identity
+  identity::IdManager new_id_manager(storage_);
+  EXPECT_TRUE(new_id_manager.IdentityExists());
+  EXPECT_EQ(new_id_manager.GetId(), id_manager.GetId());
+}
+
 
 TEST_F(IdManagerTest, LoadsExistingIdentity) {
   // Create an identity and save it to mock storage.
-  auto identity = crypto::Identity::CreateNew();
+  std::string mnemonic;
+  auto identity = crypto::Identity::CreateNew(mnemonic);
   auto expected_id = identity->GetId();
   auto pem_data_str = identity->SaveToMemory();
   storage_->SetSetting("identity.key", pem_data_str);
@@ -45,4 +52,5 @@ TEST_F(IdManagerTest, LoadsExistingIdentity) {
   auto loaded_id = id_manager.GetId();
 
   EXPECT_EQ(loaded_id, expected_id);
+  EXPECT_TRUE(id_manager.IdentityExists());
 }
