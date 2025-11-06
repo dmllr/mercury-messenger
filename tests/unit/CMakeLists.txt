@@ -13,8 +13,10 @@ FetchContent_MakeAvailable(googletest)
 enable_testing()
 
 add_executable(h-e-tests
+  test-backup-manager.cpp
   test-audio-encoder.cpp
   test-bit-reader.cpp
+  test-delivery-service.cpp
   test-dispatch-queue.cpp
   test-event-queue.cpp
   test-h264-utils.cpp
