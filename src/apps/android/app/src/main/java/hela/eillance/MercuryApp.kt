@@ -152,9 +152,8 @@ fun MercuryApp(viewModel: MainViewModel) {
                     uiState = uiState,
                     peerId = peerId,
                     onBack = { navController.popBackStack() },
-                    onNavigateToCall = {
-                        navController.navigate(Route.Call.createRoute(it))
-                    }
+                    onNavigateToCall = { navController.navigate(Route.Call.createRoute(it)) },
+                    onShowContactProfile = viewModel::onShowContactProfile
                 )
             }
             composable(Route.Call.route) {
