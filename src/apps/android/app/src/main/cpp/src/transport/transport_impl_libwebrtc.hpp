@@ -8,6 +8,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "../class_refs.hpp"
 #include "../utils/jni_utils.hpp"
 #include "eillance/crypto/crypto.hpp"
 #include "eillance/logging/logging.h"
@@ -43,25 +44,15 @@ public:
       return;
     }
 
-    jclass transport_class = env->FindClass("hela/eillance/webrtc/WebRtcTransport");
-    if (transport_class == nullptr) {
-      return;
-    }
-
-    jmethodID constructor = env->GetMethodID(transport_class, "<init>", "(Landroid/content/Context;J)V");
-    if (constructor == nullptr) {
-      return;
-    }
-
-    jobject transport_local_ref = env->NewObject(transport_class, constructor, context, reinterpret_cast<jlong>(this));
+    auto& transport_class_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcTransport");
+    jobject transport_local_ref = transport_class_holder.NewObject(env, context, reinterpret_cast<jlong>(this));
     transport_java_ref_ = env->NewGlobalRef(transport_local_ref);
+    env->DeleteLocalRef(transport_local_ref);
 
     // Pass the created WebRtcTransport object back to the CallService
-    jclass call_service_class = env->GetObjectClass(context);
-    jmethodID set_transport_method = env->GetMethodID(call_service_class, "setWebRtcTransport", "(Lhela/eillance/webrtc/WebRtcTransport;)V");
-    if (set_transport_method != nullptr) {
-      env->CallVoidMethod(context, set_transport_method, transport_java_ref_);
-    }
+    auto& call_service_holder = ClassRefs::Instance().Class("hela/eillance/CallService");
+    jmethodID set_transport_method = call_service_holder.GetMethod("setWebRtcTransport");
+    env->CallVoidMethod(context, set_transport_method, transport_java_ref_);
   }
 
   ~AndroidRtcTransport() override {
@@ -88,8 +79,8 @@ public:
     if ((env == nullptr) || (transport_java_ref_ == nullptr)) {
       return;
     }
-    jclass transport_class = env->GetObjectClass(transport_java_ref_);
-    jmethodID start_method = env->GetMethodID(transport_class, "connect", "(Ljava/lang/String;Ljava/lang/String;)V");
+    auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcTransport");
+    jmethodID start_method = transport_holder.GetMethod("connect");
     auto j_id = env->NewStringUTF(id_.c_str());
     auto j_url = env->NewStringUTF(signaling_url_.c_str());
     env->CallVoidMethod(transport_java_ref_, start_method, j_id, j_url);
@@ -102,8 +93,8 @@ public:
     if ((env == nullptr) || (transport_java_ref_ == nullptr)) {
       return;
     }
-    jclass transport_class = env->GetObjectClass(transport_java_ref_);
-    jmethodID terminate_method = env->GetMethodID(transport_class, "terminate", "()V");
+    auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcTransport");
+    jmethodID terminate_method = transport_holder.GetMethod("terminate");
     env->CallVoidMethod(transport_java_ref_, terminate_method);
   }
 
@@ -112,8 +103,8 @@ public:
     if ((env == nullptr) || (transport_java_ref_ == nullptr)) {
       return;
     }
-    jclass transport_class = env->GetObjectClass(transport_java_ref_);
-    jmethodID reconnect_method = env->GetMethodID(transport_class, "reconnect", "(Ljava/lang/String;)V");
+    auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcTransport");
+    jmethodID reconnect_method = transport_holder.GetMethod("reconnect");
     auto j_url = env->NewStringUTF(signaling_url_.c_str());
     env->CallVoidMethod(transport_java_ref_, reconnect_method, j_url);
     env->DeleteLocalRef(j_url);
@@ -142,8 +133,8 @@ public:
     if ((env == nullptr) || (transport_java_ref_ == nullptr)) {
       return eillance::transport::PeerConnectionState::Closed;
     }
-    auto transport_class = env->GetObjectClass(transport_java_ref_);
-    auto method = env->GetMethodID(transport_class, "getPeerConnectionState", "(Ljava/lang/String;)I");
+    auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcTransport");
+    auto method = transport_holder.GetMethod("getPeerConnectionState");
     auto* j_peer_id = env->NewStringUTF(peer_id.c_str());
     auto state_val = env->CallIntMethod(transport_java_ref_, method, j_peer_id);
     env->DeleteLocalRef(j_peer_id);
@@ -155,8 +146,8 @@ public:
     if ((env == nullptr) || (transport_java_ref_ == nullptr)) {
       return;
     }
-    auto transport_class = env->GetObjectClass(transport_java_ref_);
-    auto method = env->GetMethodID(transport_class, "sendSignalingMessage", "(Ljava/lang/String;)V");
+    auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcTransport");
+    auto method = transport_holder.GetMethod("sendSignalingMessage");
     const auto msg_str = message.dump();
     auto j_msg = env->NewStringUTF(msg_str.c_str());
     env->CallVoidMethod(transport_java_ref_, method, j_msg);
@@ -168,12 +159,8 @@ public:
     if ((env == nullptr) || (transport_java_ref_ == nullptr)) {
       return;
     }
-    auto transport_class = env->GetObjectClass(transport_java_ref_);
-    auto method = env->GetMethodID(transport_class, "sendDataChannelMessage", "(Ljava/lang/String;Ljava/lang/String;)V");
-    if (method == nullptr) {
-      LOGE << "Failed to find method sendDataChannelMessage";
-      return;
-    }
+    auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcTransport");
+    auto method = transport_holder.GetMethod("sendDataChannelMessage");
     const auto msg_str = message.dump();
     auto* j_peer_id = env->NewStringUTF(peer_id.c_str());
     auto j_msg = env->NewStringUTF(msg_str.c_str());
@@ -191,12 +178,8 @@ public:
     if ((env == nullptr) || (transport_java_ref_ == nullptr)) {
       return;
     }
-    jclass transport_class = env->GetObjectClass(transport_java_ref_);
-    jmethodID close_pc_method = env->GetMethodID(transport_class, "closePeerConnection", "(Ljava/lang/String;Ljava/lang/String;)V");
-    if (!close_pc_method) {
-      LOGE << "Failed to find method closePeerConnection";
-      return;
-    }
+    auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcTransport");
+    jmethodID close_pc_method = transport_holder.GetMethod("closePeerConnection");
     auto* j_peer_id = env->NewStringUTF(peer_id.c_str());
     auto j_context = env->NewStringUTF(context.c_str());
     env->CallVoidMethod(transport_java_ref_, close_pc_method, j_peer_id, j_context);
@@ -207,8 +190,8 @@ public:
     if ((env == nullptr) || (transport_java_ref_ == nullptr)) {
       return;
     }
-    auto* cls = env->GetObjectClass(transport_java_ref_);
-    auto* mid = env->GetMethodID(cls, "createOffer", "(Ljava/lang/String;Ljava/lang/String;)V");
+    auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcTransport");
+    auto* mid = transport_holder.GetMethod("createOffer");
     auto* j_peer_id = env->NewStringUTF(peer_id.c_str());
     auto j_context = env->NewStringUTF(context.c_str());
     env->CallVoidMethod(transport_java_ref_, mid, j_peer_id, j_context);
@@ -221,8 +204,8 @@ public:
     if ((env == nullptr) || (transport_java_ref_ == nullptr)) {
       return;
     }
-    auto* cls = env->GetObjectClass(transport_java_ref_);
-    auto* mid = env->GetMethodID(cls, "createAnswer", "(Ljava/lang/String;Ljava/lang/String;)V");
+    auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcTransport");
+    auto* mid = transport_holder.GetMethod("createAnswer");
     auto* j_peer_id = env->NewStringUTF(peer_id.c_str());
     auto j_context = env->NewStringUTF(context.c_str());
     env->CallVoidMethod(transport_java_ref_, mid, j_peer_id, j_context);
@@ -235,8 +218,8 @@ public:
     if ((env == nullptr) || (transport_java_ref_ == nullptr)) {
       return;
     }
-    auto* cls = env->GetObjectClass(transport_java_ref_);
-    auto* mid = env->GetMethodID(cls, "setRemoteDescription", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
+    auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcTransport");
+    auto* mid = transport_holder.GetMethod("setRemoteDescription");
     auto* j_peer_id = env->NewStringUTF(peer_id.c_str());
     auto* j_context = env->NewStringUTF(context.c_str());
     auto* j_sdp = env->NewStringUTF(sdp.c_str());
@@ -253,8 +236,8 @@ public:
     if ((env == nullptr) || (transport_java_ref_ == nullptr)) {
       return;
     }
-    auto* cls = env->GetObjectClass(transport_java_ref_);
-    auto* method_id = env->GetMethodID(cls, "addRemoteCandidate", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
+    auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcTransport");
+    auto* method_id = transport_holder.GetMethod("addRemoteCandidate");
     auto* j_peer_id = env->NewStringUTF(peer_id.c_str());
     auto* j_context = env->NewStringUTF(context.c_str());
     auto* j_candidate = env->NewStringUTF(candidate.c_str());
@@ -271,12 +254,8 @@ public:
     if (!env || (transport_java_ref_ == nullptr)) {
       return nullptr;
     }
-    auto* cls = env->GetObjectClass(transport_java_ref_);
-    auto* mid = env->GetMethodID(cls, "addVideoTrack", "(Ljava/lang/String;)V");
-    if (!mid) {
-      return nullptr;
-    }
-
+    auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcTransport");
+    auto* mid = transport_holder.GetMethod("addVideoTrack");
     auto* j_peer_id = env->NewStringUTF(peer_id.c_str());
     env->CallVoidMethod(transport_java_ref_, mid, j_peer_id);
     env->DeleteLocalRef(j_peer_id);
@@ -288,10 +267,8 @@ public:
     if (!env || (transport_java_ref_ == nullptr)) {
       return nullptr;
     }
-    auto* cls = env->GetObjectClass(transport_java_ref_);
-    auto* mid = env->GetMethodID(cls, "addAudioTrack", "(Ljava/lang/String;)V");
-    if (!mid) { return nullptr; }
-
+    auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcTransport");
+    auto* mid = transport_holder.GetMethod("addAudioTrack");
     auto* j_peer_id = env->NewStringUTF(peer_id.c_str());
     env->CallVoidMethod(transport_java_ref_, mid, j_peer_id);
     env->DeleteLocalRef(j_peer_id);
@@ -306,9 +283,8 @@ private:
     if ((env == nullptr) || (transport_java_ref_ == nullptr)) {
       return;
     }
-    jclass transport_class = env->GetObjectClass(transport_java_ref_);
-    jmethodID create_pc_method = env->GetMethodID(transport_class, "createPeerConnection", "(Ljava/lang/String;Ljava/lang/String;)V");
-
+    auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcTransport");
+    jmethodID create_pc_method = transport_holder.GetMethod("createPeerConnection");
     auto* j_peer_id = env->NewStringUTF(peer_id.c_str());
     auto* j_context = env->NewStringUTF(context.c_str());
     env->CallVoidMethod(transport_java_ref_, create_pc_method, j_peer_id, j_context);
@@ -322,12 +298,8 @@ inline void AndroidRtcTransport::CreateDataChannel(const std::string& peer_id) {
   if ((env == nullptr) || (transport_java_ref_ == nullptr)) {
     return;
   }
-  auto transport_class = env->GetObjectClass(transport_java_ref_);
-  auto create_dc_method = env->GetMethodID(transport_class, "createDataChannel", "(Ljava/lang/String;)V");
-  if (create_dc_method == nullptr) {
-    LOGE << "Failed to find method createDataChannel";
-    return;
-  }
+  auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcTransport");
+  auto create_dc_method = transport_holder.GetMethod("createDataChannel");
   auto* j_peer_id = env->NewStringUTF(peer_id.c_str());
   env->CallVoidMethod(transport_java_ref_, create_dc_method, j_peer_id);
   env->DeleteLocalRef(j_peer_id);

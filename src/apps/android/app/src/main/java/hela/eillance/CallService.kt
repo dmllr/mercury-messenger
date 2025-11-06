@@ -92,6 +92,7 @@ class CallService : Service(), IClientNativeBridge {
   }
 
   // Called from C++ during initialization
+  @Suppress("unused")
   fun setWebRtcTransport(transport: WebRtcTransport) {
     webRtcTransport = transport
   }

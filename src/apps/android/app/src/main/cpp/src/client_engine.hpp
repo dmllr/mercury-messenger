@@ -31,13 +31,12 @@ class ClientEngine {
 
 public:
   ClientEngine(JavaVM* jvm, JNIEnv* env, jobject context, jobject native_bridge) : jvm_(jvm), native_bridge_(env->NewGlobalRef(native_bridge)) {
+    auto& class_refs = ClassRefs::Instance();
     // Get the app's private files directory for the database
-    jclass context_class = ClassRefs::Instance().Class("android/content/Context").Class();
-    jmethodID get_files_dir_method = env->GetMethodID(context_class, "getFilesDir", "()Ljava/io/File;");
+    jmethodID get_files_dir_method = class_refs.Class("android/content/Context").GetMethod("getFilesDir");
     jobject file_object = env->CallObjectMethod(context, get_files_dir_method);
 
-    jclass file_class = ClassRefs::Instance().Class("java/io/File").Class();
-    jmethodID get_path_method = env->GetMethodID(file_class, "getPath", "()Ljava/lang/String;");
+    jmethodID get_path_method = class_refs.Class("java/io/File").GetMethod("getPath");
     auto path_jstring = (jstring)env->CallObjectMethod(file_object, get_path_method);
     const char* path_chars = env->GetStringUTFChars(path_jstring, nullptr);
     std::filesystem::path db_path = std::filesystem::path(path_chars) / "mercury.db";
@@ -135,8 +134,8 @@ private:
     auto* env = AttachCurrentThreadIfNeeded();
     if (env == nullptr) { return; }
 
-    jclass callback_class = env->GetObjectClass(native_bridge_);
-    jmethodID callback_method = env->GetMethodID(callback_class, "onStateUpdate", "(Ljava/lang/String;)V");
+    auto& callback_class_holder = ClassRefs::Instance().Class("hela/eillance/CallService");
+    jmethodID callback_method = callback_class_holder.GetMethod("onStateUpdate");
     if (callback_method != nullptr) {
       nlohmann::json state_json = view_model_->GetState();
       std::string state_str = state_json.dump();
