@@ -94,6 +94,7 @@ data class CallState(
 @Serializable
 data class AppState(
     @SerialName("my_id") val myId: String = "",
+    @SerialName("identity_exists") val identityExists: Boolean = true,
     val myDisplayName: String? = null,
     val myBio: String? = null,
     val myPhoto: String? = null, // base64

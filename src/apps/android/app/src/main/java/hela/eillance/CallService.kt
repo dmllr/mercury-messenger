@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Binder
 import android.os.IBinder
 import android.os.PowerManager
@@ -26,6 +27,8 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import org.webrtc.VideoSink
+import java.io.File
+import java.io.FileOutputStream
 
 class CallService : Service(), IClientNativeBridge {
 
@@ -62,7 +65,9 @@ class CallService : Service(), IClientNativeBridge {
     // Native engine initialization is slow and must not block the main thread.
     serviceScope.launch {
       initEngine(this@CallService)
-      start()
+      if (identityExists()) {
+        start()
+      }
     }
     startForegroundService()
   }
@@ -297,9 +302,53 @@ class CallService : Service(), IClientNativeBridge {
   fun debugEraseAllContacts() = nativeDebugEraseAllContacts()
   fun debugRevokeAllApprovals() = nativeDebugRevokeAllApprovals()
 
+  // --- Backup & Restore ---
+  fun createBackup(path: String, password: String): Boolean {
+    return nativeCreateBackup(path, password)
+  }
+
+  fun restoreBackup(uri: Uri, password: String): Boolean {
+    // JNI needs a file path, but SAF gives a Uri. We must copy it to a temporary file.
+    return try {
+      val inputStream = contentResolver.openInputStream(uri) ?: return false
+      val tempFile = File(cacheDir, "restore_temp.mcr")
+      val outputStream = FileOutputStream(tempFile)
+      inputStream.copyTo(outputStream)
+      inputStream.close()
+      outputStream.close()
+
+      val success = nativeRestoreBackup(tempFile.absolutePath, password)
+      tempFile.delete() // Clean up the temporary file
+      success
+    } catch (e: Exception) {
+      Log.e("CallService", "Error during backup restore", e)
+      false
+    }
+  }
+
+  fun generateNewIdentity(): String {
+    val mnemonic = nativeGenerateNewIdentity()
+    // After generating, the client needs to be (re)started to connect to signaling
+    if (mnemonic.isNotEmpty()) {
+      start()
+    }
+    return mnemonic
+  }
+
+  fun restoreIdentity(mnemonic: String): Boolean {
+    val success = nativeRestoreIdentity(mnemonic)
+    if (success) {
+      start()
+    }
+    return success
+  }
+
+  fun getMnemonic(): String? = nativeGetMnemonic()
+
   private external fun initEngine(nativeBridge: IClientNativeBridge)
-  private external fun start()
+  external fun start()
   private external fun terminate()
+  external fun identityExists(): Boolean
   external fun refreshState()
   external fun addContact(peerId: String)
   external fun acceptContact(peerId: String)
@@ -320,6 +369,13 @@ class CallService : Service(), IClientNativeBridge {
   private external fun nativeUpdateMyProfile(name: String?, bio: String?, photo_base64: String?)
   private external fun nativeSetContactDisplayNameOverride(peerId: String, name: String)
   private external fun nativeResetContactDisplayNameOverride(peerId: String)
+
+  private external fun nativeGetMnemonic(): String?
+  // --- Native Backup & Restore ---
+  private external fun nativeCreateBackup(path: String, password: String): Boolean
+  private external fun nativeRestoreBackup(path: String, password: String): Boolean
+  private external fun nativeGenerateNewIdentity(): String
+  private external fun nativeRestoreIdentity(mnemonic: String): Boolean
 
   // --- Native Debug Methods ---
   private external fun nativeDebugEraseAllHistory()

@@ -1,6 +1,7 @@
 package hela.eillance
 
 import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import hela.eillance.ndkio.AppState
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -9,186 +10,215 @@ import kotlinx.serialization.json.Json
 import org.webrtc.VideoSink
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
-    private var callService: CallService? = null
+  private var callService: CallService? = null
 
-    private val _uiState = MutableStateFlow(AppState())
-    val uiState = _uiState.asStateFlow()
+  private val _uiState = MutableStateFlow(AppState())
+  val uiState = _uiState.asStateFlow() // Exposes the current state to the UI
 
-    private val _showAddContactDialog = MutableStateFlow(false)
-    val showAddContactDialog = _showAddContactDialog.asStateFlow()
+  private val _showAddContactDialog = MutableStateFlow(false)
+  val showAddContactDialog = _showAddContactDialog.asStateFlow()
 
-    private val _showContactProfileDialog = MutableStateFlow<String?>(null)
-    val showContactProfileDialog = _showContactProfileDialog.asStateFlow()
+  private val _showContactProfileDialog = MutableStateFlow<String?>(null)
+  val showContactProfileDialog = _showContactProfileDialog.asStateFlow()
 
-    private val _navigateToPeerId = MutableStateFlow<String?>(null)
-    val navigateToPeerId = _navigateToPeerId.asStateFlow()
+  private val _navigateToPeerId = MutableStateFlow<String?>(null)
+  val navigateToPeerId = _navigateToPeerId.asStateFlow()
 
-    private var pendingNavigationPeerId: String? = null
+  private val _identitySetupComplete = MutableStateFlow(false)
+  val identitySetupComplete = _identitySetupComplete.asStateFlow()
 
-    private val _signalingUrl = MutableStateFlow("")
-    val signalingUrl = _signalingUrl.asStateFlow()
+  private var pendingNavigationPeerId: String? = null
+
+  private val _signalingUrl = MutableStateFlow("")
+  val signalingUrl = _signalingUrl.asStateFlow()
 
 
-    private val json = Json { ignoreUnknownKeys = true }
+  private val json = Json { ignoreUnknownKeys = true }
 
-    fun setService(service: CallService?) {
-        callService = service
-        callService?.setJsonStateCallback { jsonState ->
-            val newState = json.decodeFromString<AppState>(jsonState)
-            _uiState.value = newState
-            _signalingUrl.value = newState.signalingServerUrl ?: ""
-        }
-        callService?.refreshState()
-        // When the service connects, process any pending navigation request.
-        pendingNavigationPeerId?.let { peerIdToNavigate ->
-            pendingNavigationPeerId = null // Clear before calling to avoid re-entry
-            navigateToPeer(peerIdToNavigate)
-        }
+  fun setService(service: CallService?) {
+    callService = service
+    callService?.setJsonStateCallback { jsonState ->
+      val newState = json.decodeFromString<AppState>(jsonState)
+      _uiState.value = newState
+      if (newState.identityExists) _identitySetupComplete.value = true
+      _signalingUrl.value = newState.signalingServerUrl ?: ""
     }
-
-    // --- Settings ---
-    fun onSignalingUrlChange(newUrl: String) {
-        _signalingUrl.value = newUrl
+    callService?.refreshState()
+    // When the service connects, process any pending navigation request.
+    pendingNavigationPeerId?.let { peerIdToNavigate ->
+      pendingNavigationPeerId = null // Clear before calling to avoid re-entry
+      navigateToPeer(peerIdToNavigate)
     }
+  }
 
-    fun saveSettings() {
-        callService?.updateSignalingUrl(_signalingUrl.value)
-    }
+  fun generateNewIdentity(): String {
+    return callService?.generateNewIdentity() ?: ""
+  }
 
-    // --- UI Event Handlers ---
+  fun restoreIdentity(mnemonic: String): Boolean {
+    return callService?.restoreIdentity(mnemonic) ?: false
+  }
 
-    fun onAddContactClicked() {
-        _showAddContactDialog.value = true
-    }
+  fun getMnemonic(): String? {
+    return callService?.getMnemonic()
+  }
 
-    fun onShowContactProfile(peerId: String) {
-        _showContactProfileDialog.value = peerId
-    }
+  fun createBackup(path: String, password: String): Boolean {
+    return callService?.createBackup(path, password) ?: false
+  }
 
-    fun onContactProfileDialogDismiss() {
-        _showContactProfileDialog.value = null
-    }
+  fun restoreBackup(uri: Uri, password: String): Boolean {
+    return callService?.restoreBackup(uri, password) ?: false
+  }
 
-    fun onAddContactDialogDismiss() {
-        _showAddContactDialog.value = false
-    }
+  fun finishIdentitySetup() {
+    _identitySetupComplete.value = true
+    callService?.refreshState()
+  }
 
-    fun addContact(peerId: String) {
-        callService?.addContact(peerId)
-        onAddContactDialogDismiss()
-    }
+  // --- Settings ---
+  fun onSignalingUrlChange(newUrl: String) {
+    _signalingUrl.value = newUrl
+  }
 
-    fun removeContact(peerId: String) {
-        callService?.removeContact(peerId)
-        if (_showContactProfileDialog.value == peerId) {
-            _showContactProfileDialog.value = null
-        }
-    }
+  fun saveSettings() {
+    callService?.updateSignalingUrl(_signalingUrl.value)
+  }
 
-    fun acceptContact(peerId: String) {
-        callService?.acceptContact(peerId)
-    }
+  // --- UI Event Handlers ---
 
-    fun selectContact(peerId: String) {
-        callService?.selectContact(peerId)
-    }
+  fun onAddContactClicked() {
+    _showAddContactDialog.value = true
+  }
 
-    fun sendMessage(message: String) {
-        if (message.isNotBlank()) {
-            callService?.sendMessage(message)
-        }
-    }
+  fun onShowContactProfile(peerId: String) {
+    _showContactProfileDialog.value = peerId
+  }
 
-    fun startVoiceCall() {
-        callService?.startVoiceCall()
-    }
+  fun onContactProfileDialogDismiss() {
+    _showContactProfileDialog.value = null
+  }
 
-    fun startVideoCall() {
-        callService?.startVideoCall()
-    }
+  fun onAddContactDialogDismiss() {
+    _showAddContactDialog.value = false
+  }
 
-    fun hangup() {
-        callService?.hangup()
-    }
+  fun addContact(peerId: String) {
+    callService?.addContact(peerId)
+    onAddContactDialogDismiss()
+  }
 
-    fun acceptCall() {
-        callService?.acceptCall()
+  fun removeContact(peerId: String) {
+    callService?.removeContact(peerId)
+    if (_showContactProfileDialog.value == peerId) {
+      _showContactProfileDialog.value = null
     }
+  }
 
-    fun rejectCall() {
-        callService?.rejectCall()
-    }
+  fun acceptContact(peerId: String) {
+    callService?.acceptContact(peerId)
+  }
 
-    fun startCallMedia() {
-        callService?.startLocalMedia()
-    }
+  fun selectContact(peerId: String) {
+    callService?.selectContact(peerId)
+  }
 
-    fun stopCallMedia() {
-        callService?.stopLocalMedia()
+  fun sendMessage(message: String) {
+    if (message.isNotBlank()) {
+      callService?.sendMessage(message)
     }
+  }
 
-    fun loadOlderMessages() {
-        callService?.loadOlderMessages()
-    }
+  fun startVoiceCall() {
+    callService?.startVoiceCall()
+  }
 
-    fun loadFullMessage(messageId: Long) {
-        callService?.loadFullMessage(messageId)
-    }
+  fun startVideoCall() {
+    callService?.startVideoCall()
+  }
 
-    fun MarkMessagesAsRead(messageIds: List<Long>) {
-        callService?.markMessagesAsRead(messageIds.toLongArray())
-    }
+  fun hangup() {
+    callService?.hangup()
+  }
 
-    fun setLocalVideoSink(sink: VideoSink?) {
-        callService?.setLocalVideoSink(sink)
-    }
+  fun acceptCall() {
+    callService?.acceptCall()
+  }
 
-    fun setRemoteVideoSink(peerId: String, sink: VideoSink?) {
-        callService?.setRemoteVideoSink(peerId, sink)
-    }
+  fun rejectCall() {
+    callService?.rejectCall()
+  }
 
-    fun navigateToPeer(peerId: String) {
-        if (callService == null) {
-            pendingNavigationPeerId = peerId
-        } else {
-            // Always select the contact before navigating to ensure the
-            // backend state is correct when the UI destination is reached.
-            selectContact(peerId)
-            _navigateToPeerId.value = peerId
-        }
-    }
+  fun startCallMedia() {
+    callService?.startLocalMedia()
+  }
 
-    fun onNavigationHandled() {
-        _navigateToPeerId.value = null
-    }
+  fun stopCallMedia() {
+    callService?.stopLocalMedia()
+  }
 
-    // --- Profile Management ---
+  fun loadOlderMessages() {
+    callService?.loadOlderMessages()
+  }
 
-    fun updateMyProfile(name: String, bio: String, photoBase64: String?) {
-        callService?.updateMyProfile(name, bio, photoBase64)
-    }
+  fun loadFullMessage(messageId: Long) {
+    callService?.loadFullMessage(messageId)
+  }
 
-    fun setContactDisplayNameOverride(peerId: String, name: String) {
-        callService?.setContactDisplayNameOverride(peerId, name)
-    }
+  fun MarkMessagesAsRead(messageIds: List<Long>) {
+    callService?.markMessagesAsRead(messageIds.toLongArray())
+  }
 
-    fun resetContactDisplayNameOverride(peerId: String) {
-        callService?.resetContactDisplayNameOverride(peerId)
-    }
+  fun setLocalVideoSink(sink: VideoSink?) {
+    callService?.setLocalVideoSink(sink)
+  }
 
-    // --- Debug Methods ---
-    fun debugEraseAllHistory() {
-        callService?.debugEraseAllHistory()
-    }
-    fun debugEraseAllContacts() {
-        callService?.debugEraseAllContacts()
-    }
-    fun debugRevokeAllApprovals() {
-        callService?.debugRevokeAllApprovals()
-    }
+  fun setRemoteVideoSink(peerId: String, sink: VideoSink?) {
+    callService?.setRemoteVideoSink(peerId, sink)
+  }
 
-    override fun onCleared() {
-        callService?.setJsonStateCallback(null)
-        super.onCleared()
+  fun navigateToPeer(peerId: String) {
+    if (callService == null) {
+      pendingNavigationPeerId = peerId
+    } else {
+      // Always select the contact before navigating to ensure the
+      // backend state is correct when the UI destination is reached.
+      selectContact(peerId)
+      _navigateToPeerId.value = peerId
     }
+  }
+
+  fun onNavigationHandled() {
+    _navigateToPeerId.value = null
+  }
+
+  // --- Profile Management ---
+
+  fun updateMyProfile(name: String, bio: String, photoBase64: String?) {
+    callService?.updateMyProfile(name, bio, photoBase64)
+  }
+
+  fun setContactDisplayNameOverride(peerId: String, name: String) {
+    callService?.setContactDisplayNameOverride(peerId, name)
+  }
+
+  fun resetContactDisplayNameOverride(peerId: String) {
+    callService?.resetContactDisplayNameOverride(peerId)
+  }
+
+  // --- Debug Methods ---
+  fun debugEraseAllHistory() {
+    callService?.debugEraseAllHistory()
+  }
+  fun debugEraseAllContacts() {
+    callService?.debugEraseAllContacts()
+  }
+  fun debugRevokeAllApprovals() {
+    callService?.debugRevokeAllApprovals()
+  }
+
+  override fun onCleared() {
+    callService?.setJsonStateCallback(null)
+    super.onCleared()
+  }
 }

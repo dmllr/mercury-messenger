@@ -1,5 +1,6 @@
 #include <chrono>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <memory>
 #include <optional>
@@ -174,6 +175,7 @@ int main(int argc, char** argv) {
   auto storage = std::make_shared<eillance::storage::PersistentStorage>(std::move(storage_impl));
 
   // --- Dependency Injection & Client Initialization ---
+  auto db_path = (config_path / "mercury.db").string();
   auto rtc_transport_impl = std::make_unique<eillance::rtc::RtcTransport>();
   auto transport = std::make_shared<eillance::transport::Transport>(std::move(rtc_transport_impl));
   auto client = std::make_shared<eillance::Client>(storage, transport);
@@ -181,6 +183,59 @@ int main(int argc, char** argv) {
   // --- Setter Injection for Platform-Specific Implementations ---
   client->SetVideoCapture(std::make_unique<eillance::VideoCaptureCli>());
   client->SetAudioCapture(std::make_unique<eillance::AudioCaptureCli>());
+
+  if (auto backup_path = args.Get("--backup")) {
+      std::cout << "Enter password for backup: ";
+      std::string password;
+      std::getline(std::cin, password);
+      if (client->CreateBackup(*backup_path, password)) {
+          std::cout << "Backup created successfully at " << *backup_path << std::endl;
+      } else {
+          std::cerr << "Backup failed." << std::endl;
+      }
+      return 0;
+  }
+
+  if (auto restore_path = args.Get("--restore")) {
+      std::cout << "Enter password for backup file: ";
+      std::string password;
+      std::getline(std::cin, password);
+      std::cout << "WARNING: This will overwrite your current identity, contacts, and messages." << std::endl;
+      std::cout << "Type 'yes' to continue: ";
+      std::string confirmation;
+      std::getline(std::cin, confirmation);
+      if (confirmation == "yes") {
+          if (client->RestoreBackup(*restore_path, password)) {
+              std::cout << "Restore successful. Please restart the application." << std::endl;
+          } else {
+              std::cerr << "Restore failed. Check password or file integrity." << std::endl;
+          }
+      } else {
+          std::cout << "Restore cancelled." << std::endl;
+      }
+      return 0;
+  }
+
+  if (!client->IdentityExists()) {
+      std::cout << "Welcome to Mercury! No identity found.\n"
+                << "1. Create a new identity\n"
+                << "2. Restore from a 12-word recovery phrase\n"
+                << "Enter your choice: ";
+      int choice;
+      std::cin >> choice;
+      std::cin.ignore(); 
+      if (choice == 1) {
+          auto mnemonic = client->GenerateNewIdentity();
+          std::cout << "\nIMPORTANT: Save this recovery phrase securely:\n\n" << mnemonic << "\n\nPress Enter to continue...";
+          std::cin.get();
+      } else if (choice == 2) {
+          std::cout << "Enter your 12-word recovery phrase: ";
+          std::string phrase;
+          std::getline(std::cin, phrase);
+          if (!client->RestoreIdentity(phrase)) { std::cerr << "Invalid phrase." << std::endl; return 1; }
+      } else { std::cerr << "Invalid choice." << std::endl; return 1; }
+      std::cout << "Identity configured. Starting Mercury..." << std::endl;
+  }
 
   // Handle command-line override for signaling URL before starting the client
   if (auto cli_url = args.Get("--signaling-url")) {
@@ -342,6 +397,9 @@ int main(int argc, char** argv) {
             } catch (const std::exception& e) {
               view_model->AddSystemMessageToChat(std::string("--> Invalid usage. Use /load <message_id>. Error: ") + e.what());
             }
+          } else if (command == "/myid") {
+            const auto state = view_model->GetState();
+            view_model->AddSystemMessageToChat("--> Your ID: " + state.my_id);
           } else if (command == "/exit") {
             screen.Exit();
           } else {

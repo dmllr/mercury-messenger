@@ -29,11 +29,13 @@ constexpr int CurrentDbVersion = 3;
 class SQLiteStorage final : public PersistentStorageImpl {
   sqlite3* db_ = nullptr;
   std::recursive_mutex mutex_;
+  std::filesystem::path db_path_;
 
 public:
-  explicit SQLiteStorage(const std::filesystem::path& db_path) {
+  explicit SQLiteStorage(const std::filesystem::path& db_path) : db_path_(db_path) {
     try {
-      if (sqlite3_open(db_path.string().c_str(), &db_) != SQLITE_OK) {
+      std::filesystem::create_directories(db_path_.parent_path());
+      if (sqlite3_open(db_path_.string().c_str(), &db_) != SQLITE_OK) {
         throw std::runtime_error(std::string("Failed to open database: ") + sqlite3_errmsg(db_));
       }
       sqlite3_exec(db_, "PRAGMA journal_mode=WAL;", nullptr, nullptr, nullptr);
@@ -53,6 +55,10 @@ public:
     if (db_) {
       sqlite3_close_v2(db_);
     }
+  }
+
+  [[nodiscard]] auto GetPath() const -> std::string override {
+    return db_path_.string();
   }
 
   // --- Settings ---
