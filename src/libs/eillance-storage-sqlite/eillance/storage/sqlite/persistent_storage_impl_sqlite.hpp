@@ -183,14 +183,36 @@ public:
 
   void RemoveContact(std::string_view peer_id) override {
     const std::lock_guard lock(mutex_);
-    const SQLiteStatement stmt(db_, R"SQL(
-      DELETE FROM
-        contacts
-      WHERE
-        peer_id = ?;
-    )SQL");
-    BindText(stmt.Get(), 1, std::string(peer_id));
-    sqlite3_step(stmt.Get());
+    char* err_msg = nullptr;
+    if (sqlite3_exec(db_, "BEGIN TRANSACTION;", nullptr, nullptr, &err_msg) != SQLITE_OK) {
+        LOGE << "Failed to begin transaction for contact removal: " << (err_msg ? err_msg : "Unknown error");
+        sqlite3_free(err_msg);
+        return;
+    }
+
+    try {
+        const SQLiteStatement history_stmt(db_, "DELETE FROM history WHERE peer_id = ?;");
+        BindText(history_stmt.Get(), 1, std::string(peer_id));
+        if (sqlite3_step(history_stmt.Get()) != SQLITE_DONE) {
+            throw std::runtime_error(sqlite3_errmsg(db_));
+        }
+
+        const SQLiteStatement contact_stmt(db_, "DELETE FROM contacts WHERE peer_id = ?;");
+        BindText(contact_stmt.Get(), 1, std::string(peer_id));
+        if (sqlite3_step(contact_stmt.Get()) != SQLITE_DONE) {
+            throw std::runtime_error(sqlite3_errmsg(db_));
+        }
+    } catch (const std::runtime_error& e) {
+        LOGE << "Error during contact removal: " << e.what();
+        sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+        return;
+    }
+
+    if (sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, &err_msg) != SQLITE_OK) {
+        LOGE << "Failed to commit transaction for contact removal: " << (err_msg ? err_msg : "Unknown error");
+        sqlite3_free(err_msg);
+        sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    }
   }
 
   // --- History ---

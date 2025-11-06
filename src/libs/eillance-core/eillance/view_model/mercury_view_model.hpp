@@ -135,6 +135,7 @@ public:
   void Hangup();
   void AcceptCall();
   void RejectCall();
+  void RemoveContact(const std::string& peer_id);
   void AddContact(const std::string& peer_id);
   void UpdateSignalingUrl(const std::string& url);
   void AcceptContact(const std::string& peer_id);
@@ -330,6 +331,23 @@ inline void MercuryViewModel::AddContact(const std::string& peer_id) {
 
 inline void MercuryViewModel::UpdateSignalingUrl(const std::string& url) {
   dispatch_queue_.Dispatch([this, url] { client_->UpdateSignalingUrl(url); });
+}
+
+inline void MercuryViewModel::RemoveContact(const std::string& peer_id) {
+  dispatch_queue_.Dispatch([this, peer_id] {
+    client_->removeContact(peer_id);
+    {
+      const std::lock_guard<std::mutex> lock(state_mutex_);
+      if (current_state_.selected_contact_id && *current_state_.selected_contact_id == peer_id) {
+        current_state_.selected_contact_id.reset();
+        current_state_.interaction_history.clear();
+        current_state_.has_older_messages = false;
+      }
+      UpdateContacts();
+    }
+    UpdateChats();
+    NotifyStateChanged();
+  });
 }
 
 inline void MercuryViewModel::AcceptContact(const std::string& peer_id) {

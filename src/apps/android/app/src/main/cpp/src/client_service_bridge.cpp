@@ -54,6 +54,13 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_acceptContact(J
   if (client_engine && client_engine->ViewModel()) { client_engine->ViewModel()->AcceptContact(peer_id_str); }
 }
 
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_removeContact(JNIEnv* env, jobject /*instance*/, jstring peer_id) {
+  const char* chars = env->GetStringUTFChars(peer_id, nullptr);
+  const std::string peer_id_str(chars);
+  env->ReleaseStringUTFChars(peer_id, chars);
+  if (client_engine && client_engine->ViewModel()) { client_engine->ViewModel()->RemoveContact(peer_id_str); }
+}
+
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_selectContact(JNIEnv* env, jobject /*instance*/, jstring peer_id) {
   const char* chars = env->GetStringUTFChars(peer_id, nullptr);
   const std::string peer_id_str(chars);
