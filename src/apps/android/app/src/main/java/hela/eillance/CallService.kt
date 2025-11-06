@@ -19,6 +19,11 @@ import hela.eillance.ndkio.ServiceConnectionState
 import hela.eillance.ndkio.VideoConfig
 import hela.eillance.ndkio.interfaces.IClientNativeBridge
 import hela.eillance.webrtc.WebRtcTransport
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import org.webrtc.VideoSink
 
@@ -29,6 +34,7 @@ class CallService : Service(), IClientNativeBridge {
   }
 
   private val binder = CallServiceBinder()
+  private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
   private val json = Json { ignoreUnknownKeys = true }
   private val notificationManager by lazy { getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager }
 
@@ -53,12 +59,11 @@ class CallService : Service(), IClientNativeBridge {
   override fun onCreate() {
     super.onCreate()
     createNotificationChannels()
-    // The native engine initialization involves disk I/O and network setup,
-    // which can be slow and must not block the main thread.
-    Thread {
-      initEngine(this)
+    // Native engine initialization is slow and must not block the main thread.
+    serviceScope.launch {
+      initEngine(this@CallService)
       start()
-    }.start()
+    }
     startForegroundService()
   }
 
@@ -76,6 +81,7 @@ class CallService : Service(), IClientNativeBridge {
   }
 
   override fun onDestroy() {
+    serviceScope.cancel()
     terminate()
     releaseWakeLock()
     super.onDestroy()
