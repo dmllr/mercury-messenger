@@ -45,7 +45,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import coil.compose.rememberAsyncImagePainter
 import hela.eillance.MainViewModel
 import hela.eillance.ndkio.AppState
 import hela.eillance.ndkio.Contact
@@ -160,15 +159,10 @@ fun ContactListItem(
 
     ListItem(
         leadingContent = {
-            val painter = rememberAsyncImagePainter(
-                model = "data:image/png;base64," + contact.photo,
-                onError = {
-                    // You can log the error if needed
-                }
-            )
-            if (contact.photo != null) {
+            val imageBitmap = rememberImageBitmapFromBase64(contact.photo)
+            if (imageBitmap != null) {
                 Image(
-                    painter = painter,
+                    bitmap = imageBitmap,
                     contentDescription = "Profile Photo",
                     modifier = Modifier
                         .size(40.dp)
