@@ -439,6 +439,10 @@ inline void MercuryViewModel::MarkMessagesAsRead(const std::vector<std::uint64_t
     if (peer_id && !message_ids.empty()) {
       LOGI << "Marking " << message_ids.size() << " messages as read for peer " << *peer_id;
       client_->markMessagesAsRead(*peer_id, message_ids);
+      // After marking messages as read in the database, the chat summaries
+      // must be recalculated to reflect the new unread counts.
+      UpdateChats();
+      NotifyStateChanged();
     }
   });
 }
@@ -697,4 +701,4 @@ inline void MercuryViewModel::UpdateChats() {
   }
 }
 
-}  // namespace eillance::view_model
+}  // namespace eillance::view_model```
