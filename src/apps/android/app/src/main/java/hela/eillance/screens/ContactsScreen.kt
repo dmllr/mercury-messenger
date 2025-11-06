@@ -172,16 +172,18 @@ fun ContactListItem(
                     contentDescription = "Profile Photo",
                     modifier = Modifier
                         .size(40.dp)
-                        .clip(CircleShape),
+                        .clip(CircleShape)
+                        .clickable { onShowProfile() },
                     contentScale = ContentScale.Crop
                 )
             } else {
                 Icon(
                     imageVector = Icons.Default.Person,
                     contentDescription = "Default Profile Icon",
-                    modifier = Modifier
+                    modifier = Modifier                         
                         .size(40.dp)
                         .clip(CircleShape)
+                        .clickable { onShowProfile() }
                         .background(MaterialTheme.colorScheme.secondaryContainer)
                         .padding(8.dp)
                 )
@@ -219,14 +221,8 @@ fun ContactListItem(
                     TextButton(onClick = onResend) { Text("Resend") }
                 }
                 else -> {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (contact.unreadCount > 0) {
-                            Badge { Text(contact.unreadCount.toString()) }
-                            Spacer(Modifier.width(8.dp))
-                        }
-                        IconButton(onClick = onShowProfile) {
-                            Icon(Icons.Default.MoreVert, contentDescription = "Contact options")
-                        }
+                    if (contact.unreadCount > 0) {
+                        Badge { Text(contact.unreadCount.toString()) }
                     }
                 }
             }
