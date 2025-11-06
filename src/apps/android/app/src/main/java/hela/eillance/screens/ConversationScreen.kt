@@ -1,5 +1,4 @@
 package hela.eillance.screens
-
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -19,6 +18,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -31,6 +31,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.DoneAll
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Button
@@ -73,6 +74,7 @@ import hela.eillance.ndkio.MessageDirection
 import hela.eillance.ndkio.MessageStatus
 import hela.eillance.ndkio.PeerConnectionState
 import hela.eillance.theme.extendedColors
+import hela.eillance.utils.rememberImageBitmapFromBase64
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -90,7 +92,8 @@ fun ConversationScreen(
   uiState: AppState,
   peerId: String,
   onBack: () -> Unit,
-  onNavigateToCall: (String) -> Unit
+  onNavigateToCall: (String) -> Unit,
+  onShowContactProfile: (String) -> Unit
 ) {
   LaunchedEffect(peerId) {
     viewModel.selectContact(peerId)
@@ -100,6 +103,7 @@ fun ConversationScreen(
   val coroutineScope = rememberCoroutineScope()
   val history = uiState.interactionHistory
   var previousHistory by remember(peerId) { mutableStateOf(history) }
+  val contact = uiState.contacts.find { it.peerId == peerId }
 
   val isInCall = uiState.callState.isInCall && uiState.callState.peerId == peerId
 
@@ -155,9 +159,40 @@ fun ConversationScreen(
 
   Scaffold(
     topBar = {
-      TopAppBar(
-        title = { Text(uiState.contacts.find { it.peerId == peerId }?.name ?: peerId,
-          maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        TopAppBar(
+            title = {
+                Row(
+                    modifier = Modifier.clickable { onShowContactProfile(peerId) },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val imageBitmap = rememberImageBitmapFromBase64(contact?.photo)
+                    if (imageBitmap != null) {
+                        androidx.compose.foundation.Image(
+                            bitmap = imageBitmap,
+                            contentDescription = "Profile Photo",
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape),
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.Person,
+                            contentDescription = "Default Profile Icon",
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.secondaryContainer)
+                                .padding(8.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = contact?.name ?: peerId,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            },
         navigationIcon = {
           IconButton(onClick = onBack) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -170,8 +205,8 @@ fun ConversationScreen(
           IconButton(onClick = { viewModel.startVideoCall() }) {
             Icon(Icons.Default.Videocam, contentDescription = "Video Call")
           }
-        }
-      )
+            }
+        )
     }
   ) { padding ->
     Column(
@@ -181,7 +216,6 @@ fun ConversationScreen(
         .navigationBarsPadding()
         .imePadding()
     ) {
-      val contact = uiState.contacts.find { it.peerId == peerId }
       contact?.let {
         ConnectionStatusBar(contact = it)
       }

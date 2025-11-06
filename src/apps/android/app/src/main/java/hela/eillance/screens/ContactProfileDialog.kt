@@ -14,6 +14,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import hela.eillance.utils.rememberImageBitmapFromBase64
 import hela.eillance.ndkio.Contact
 
 @Composable

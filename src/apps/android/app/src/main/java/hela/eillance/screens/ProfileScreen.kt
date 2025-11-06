@@ -3,7 +3,6 @@ package hela.eillance.screens
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Base64
-import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -55,8 +54,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -65,10 +62,10 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import coil.compose.rememberAsyncImagePainter
 import hela.eillance.MainViewModel
 import hela.eillance.camera.BuildConfig
 import hela.eillance.ndkio.AppState
+import hela.eillance.utils.rememberImageBitmapFromBase64
 import kotlinx.coroutines.launch
 import java.io.ByteArrayOutputStream
 
@@ -76,24 +73,6 @@ private enum class DebugAction {
     ERASE_HISTORY,
     ERASE_CONTACTS,
     REVOKE_APPROVALS
-}
-
-@Composable
-internal fun rememberImageBitmapFromBase64(base64: String?): ImageBitmap? {
-    return remember(base64) {
-        if (base64.isNullOrBlank()) {
-            null
-        } else {
-            try {
-                val decodedBytes = Base64.decode(base64, Base64.NO_WRAP)
-                BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)?.asImageBitmap()
-            } catch (e: IllegalArgumentException) {
-                // Handle invalid Base64 string
-                Log.e("ImageBitmap", "Failed to decode base64 string", e)
-                null
-            }
-        }
-    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

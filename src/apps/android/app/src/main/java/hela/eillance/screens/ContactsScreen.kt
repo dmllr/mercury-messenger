@@ -52,6 +52,7 @@ import hela.eillance.ndkio.ContactStatus
 import hela.eillance.ndkio.PeerConnectionState
 import hela.eillance.ndkio.ServiceConnectionState
 import hela.eillance.theme.extendedColors
+import hela.eillance.utils.rememberImageBitmapFromBase64
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
