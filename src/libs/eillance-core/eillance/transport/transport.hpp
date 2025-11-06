@@ -21,10 +21,10 @@ public:
 
   struct TransportInterface;
 
-  template <typename T>
+  template<typename T>
   class TransportModel;
 
-  template <typename T>
+  template<typename T>
   explicit Transport(std::unique_ptr<T> impl) : self_(new TransportModel<T>(std::move(impl))) {}
 
   Transport(const Transport&) = delete;
@@ -74,8 +74,8 @@ public:
     virtual void SetName(const std::string& device_name) = 0;                    // Not used by Android (name is set in ClientEngine)
     virtual void SetId(const std::string& id) = 0;                               // Used by Android
     virtual void SetSignalingUrl(const std::string& url) = 0;
-    virtual void Start() = 0;                                                    // Used by Android
-    virtual void Terminate() = 0;                                                // Used by Android
+    virtual void Start() = 0;      // Used by Android
+    virtual void Terminate() = 0;  // Used by Android
     virtual void Reconnect() = 0;
 
     // --- Peer Management ---
@@ -108,7 +108,7 @@ public:
     virtual auto AddAudio(const std::string& peer_id, const std::function<void(void)>& on_open) -> std::shared_ptr<ITrack> = 0;  // Used by Android (returns a stub)
   };
 
-  template <typename T>
+  template<typename T>
   class TransportModel final : public TransportInterface {
     std::unique_ptr<T> transport_;
 

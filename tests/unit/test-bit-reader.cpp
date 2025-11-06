@@ -7,14 +7,22 @@ TEST(BitReaderTest, ReadBit) {
   eillance::BitReader reader(data, sizeof(data));
 
   std::uint32_t bit;
-  EXPECT_TRUE(reader.ReadBit(bit)); EXPECT_EQ(bit, 1);
-  EXPECT_TRUE(reader.ReadBit(bit)); EXPECT_EQ(bit, 0);
-  EXPECT_TRUE(reader.ReadBit(bit)); EXPECT_EQ(bit, 1);
-  EXPECT_TRUE(reader.ReadBit(bit)); EXPECT_EQ(bit, 0);
-  EXPECT_TRUE(reader.ReadBit(bit)); EXPECT_EQ(bit, 1);
-  EXPECT_TRUE(reader.ReadBit(bit)); EXPECT_EQ(bit, 0);
-  EXPECT_TRUE(reader.ReadBit(bit)); EXPECT_EQ(bit, 1);
-  EXPECT_TRUE(reader.ReadBit(bit)); EXPECT_EQ(bit, 0);
+  EXPECT_TRUE(reader.ReadBit(bit));
+  EXPECT_EQ(bit, 1);
+  EXPECT_TRUE(reader.ReadBit(bit));
+  EXPECT_EQ(bit, 0);
+  EXPECT_TRUE(reader.ReadBit(bit));
+  EXPECT_EQ(bit, 1);
+  EXPECT_TRUE(reader.ReadBit(bit));
+  EXPECT_EQ(bit, 0);
+  EXPECT_TRUE(reader.ReadBit(bit));
+  EXPECT_EQ(bit, 1);
+  EXPECT_TRUE(reader.ReadBit(bit));
+  EXPECT_EQ(bit, 0);
+  EXPECT_TRUE(reader.ReadBit(bit));
+  EXPECT_EQ(bit, 1);
+  EXPECT_TRUE(reader.ReadBit(bit));
+  EXPECT_EQ(bit, 0);
 }
 
 TEST(BitReaderTest, ReadBits) {
@@ -53,12 +61,12 @@ TEST(BitReaderTest, ReadBit_OutOfBounds) {
   for (int i = 0; i < 8; ++i) {
     EXPECT_TRUE(reader.ReadBit(bit));
   }
-  EXPECT_FALSE(reader.ReadBit(bit)); // Should fail after reading all bits
+  EXPECT_FALSE(reader.ReadBit(bit));  // Should fail after reading all bits
 }
 
 TEST(BitReaderTest, ReadBits_OutOfBounds) {
   std::uint8_t data[] = {0b10101010};
   eillance::BitReader reader(data, sizeof(data));
 
-  EXPECT_EQ(reader.ReadBits(10), 0b10101010); // Should return only available 8 bits
+  EXPECT_EQ(reader.ReadBits(10), 0b10101010);  // Should return only available 8 bits
 }

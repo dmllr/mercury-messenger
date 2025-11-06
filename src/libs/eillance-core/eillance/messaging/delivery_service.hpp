@@ -88,7 +88,7 @@ private:
   void CheckForQueuedMessages() {
     if (!contact_manager_) { return; }
     const auto all_contacts = contact_manager_->GetContacts();
-    for (const auto& contact : all_contacts) {
+    for (const auto& contact: all_contacts) {
       // Check if there are any messages marked as 'sending' for this contact.
       if (!storage_->GetMessagesWithStatus(contact.peer_id, MessageStatus::sending).empty()) {
         // We have messages for this contact, let's try to deliver them.

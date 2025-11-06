@@ -1,6 +1,6 @@
+#include <iostream>
 #include <miniaudio.h>
 #include <opus.h>
-#include <iostream>
 #include <vector>
 
 #include "eillance/capture/audio_config.hpp"

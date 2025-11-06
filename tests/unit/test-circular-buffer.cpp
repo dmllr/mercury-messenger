@@ -51,9 +51,9 @@ TEST(CircularBufferTest, PopOrder) {
 
   EXPECT_EQ(buffer.pop(), "A");
 
-  buffer.push("D"); 
+  buffer.push("D");
   buffer.push("E");  // Fills the buffer. `B` is now the oldest element.
- 
+
   // The buffer now contains B, C, D, E in order.
   EXPECT_EQ(buffer.pop(), "B");
   EXPECT_EQ(buffer.pop(), "C");

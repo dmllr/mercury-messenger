@@ -1,6 +1,6 @@
 #include <atomic>
-#include <iostream>
 #include <chrono>
+#include <iostream>
 
 #include "eillance/capture/video_capture.hpp"
 
@@ -12,7 +12,7 @@ int main(int /*argc*/, char** /*argv*/) {
 
   const auto start_time = std::chrono::high_resolution_clock::now();
 
-  constexpr int num_frames = 100; // Number of frames to capture
+  constexpr int num_frames = 100;  // Number of frames to capture
   while (frames_captured < num_frames) {
     cap.FetchBuffers();
     frames_captured++;

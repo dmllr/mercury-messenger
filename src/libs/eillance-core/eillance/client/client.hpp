@@ -10,8 +10,8 @@
 
 #include <nlohmann/json.hpp>
 
-#include "eillance/capture/capture.hpp"
 #include "eillance/backup/backup_manager.hpp"
+#include "eillance/capture/capture.hpp"
 #include "eillance/client/settings_manager.hpp"
 #include "eillance/crypto/crypto.hpp"
 #include "eillance/identity/contact_manager.hpp"
@@ -72,9 +72,9 @@ public:
   ~Client() override = default;
 
   // Setter injection for platform-specific capture implementations
-  template <typename T>
+  template<typename T>
   [[maybe_unused]] void SetVideoCapture(std::unique_ptr<T> impl);
-  template <typename T>
+  template<typename T>
   [[maybe_unused]] void SetAudioCapture(std::unique_ptr<T> impl);
 
   [[nodiscard]] auto getId() const -> std::string;
@@ -187,9 +187,8 @@ private:
 inline Client::Client(std::shared_ptr<storage::PersistentStorage> storage, std::shared_ptr<transport::Transport> transport) : storage_(std::move(storage)), transport_(std::move(transport)) {
   transport_->setDelegate(this);
 
-  if(auto db_path = storage_->GetPath(); !db_path.empty())
-  {
-      backup_manager_ = std::make_unique<backup::BackupManager>(db_path);
+  if (auto db_path = storage_->GetPath(); !db_path.empty()) {
+    backup_manager_ = std::make_unique<backup::BackupManager>(db_path);
   }
 
   id_manager_ = std::make_unique<identity::IdManager>(storage_);
@@ -224,13 +223,13 @@ inline Client::Client(std::shared_ptr<storage::PersistentStorage> storage, std::
   });
 }
 
-template <typename T>
+template<typename T>
 [[maybe_unused]] inline void Client::SetVideoCapture(std::unique_ptr<T> impl) {
   video_capture_ = std::make_unique<Capture>(std::move(impl));
   if (audio_capture_) { InitializeAVStream(); }
 }
 
-template <typename T>
+template<typename T>
 [[maybe_unused]] inline void Client::SetAudioCapture(std::unique_ptr<T> impl) {
   audio_capture_ = std::make_unique<Capture>(std::move(impl));
   if (video_capture_) { InitializeAVStream(); }
@@ -247,29 +246,29 @@ inline auto Client::getId() const -> std::string {
 }
 
 inline auto Client::IdentityExists() const -> bool {
-    return id_manager_->IdentityExists();
+  return id_manager_->IdentityExists();
 }
 
 inline auto Client::GenerateNewIdentity() -> std::string {
-    return id_manager_->GenerateNewIdentity();
+  return id_manager_->GenerateNewIdentity();
 }
 
 inline auto Client::GetMnemonic() -> std::optional<std::string> {
-    return id_manager_->GetMnemonic();
+  return id_manager_->GetMnemonic();
 }
 
 inline auto Client::RestoreIdentity(const std::string& mnemonic) -> bool {
-    return id_manager_->RestoreFromMnemonic(mnemonic);
+  return id_manager_->RestoreFromMnemonic(mnemonic);
 }
 
 inline auto Client::CreateBackup(const std::string& output_path, const std::string& password) -> bool {
-    if (!backup_manager_) return false;
-    return backup_manager_->CreateBackup(output_path, password);
+  if (!backup_manager_) return false;
+  return backup_manager_->CreateBackup(output_path, password);
 }
 
 inline auto Client::RestoreBackup(const std::string& input_path, const std::string& password) -> bool {
-    if (!backup_manager_) return false;
-    return backup_manager_->RestoreFromBackup(input_path, password);
+  if (!backup_manager_) return false;
+  return backup_manager_->RestoreFromBackup(input_path, password);
 }
 
 inline auto Client::getStorage() const -> std::shared_ptr<storage::PersistentStorage> {
@@ -286,8 +285,8 @@ inline void Client::setName(const std::string& name) const {
 
 inline void Client::start() const {
   if (!id_manager_->IdentityExists()) {
-      LOGE << "Client started without an identity. Please generate or restore one.";
-      return;
+    LOGE << "Client started without an identity. Please generate or restore one.";
+    return;
   }
   if (auto url = settings_manager_->GetSignalingServerUrl()) {
     transport_->setSignalingUrl(*url);
@@ -396,7 +395,7 @@ inline void Client::acceptCall(const std::string& peer_id) {
 
   if (!peer->pending_candidates.empty()) {
     LOGI << "Applying " << peer->pending_candidates.size() << " buffered ICE candidates for " << peer_id;
-    for (const auto& candidate : peer->pending_candidates) {
+    for (const auto& candidate: peer->pending_candidates) {
       transport_->addRemoteCandidate(peer_id, "media", candidate.sdp, candidate.mid);
     }
     peer->pending_candidates.clear();
@@ -427,9 +426,9 @@ inline void Client::removeContact(const std::string& peer_id) {
   contact_manager_->RemoveContact(peer_id);
   // Close any active connections and remove the peer object.
   if (auto peer = transport_->getPeer(peer_id)) {
-      transport_->closePeerConnection(peer_id, "data");
-      transport_->closePeerConnection(peer_id, "media");
-      transport_->removePeer(peer_id);
+    transport_->closePeerConnection(peer_id, "data");
+    transport_->closePeerConnection(peer_id, "media");
+    transport_->removePeer(peer_id);
   }
 }
 
@@ -550,7 +549,8 @@ inline void Client::processPeerMessage(Json message) {
       }
     } else if (peer->has_media_peer_connection_ && type == "answer") {
       const auto sdp = message["sdp"].get<std::string>();
-      LOGD << "Remote SDP (" << type << ") for " << peer_id << " context " << context << ":\\n" << sdp;
+      LOGD << "Remote SDP (" << type << ") for " << peer_id << " context " << context << ":\\n"
+           << sdp;
       transport_->setRemoteDescription(peer_id, "media", sdp, type);
     } else {
       LOGW << "Received media message of type '" << type << "' for " << peer_id << " in an unexpected state.";
@@ -609,7 +609,7 @@ inline void Client::processPeerMessage(Json message) {
 
       // Find the original request and mark it as applied.
       auto pending_requests = storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::sent);
-      for (const auto& req : pending_requests) {
+      for (const auto& req: pending_requests) {
         if (req.kind == messaging::HistoryEntryKind::systemMessage) {
           const auto& content_str = std::get<messaging::MessageEntry>(req.data).content;
           try {
@@ -632,7 +632,7 @@ inline void Client::processPeerMessage(Json message) {
 inline void Client::processSystemMessage(const std::string& type, Json message) {
   if (type == "peers" && on_peer_list_update_) {
     std::vector<Device> peers;
-    for (const auto& peer_json : message.at("peers")) {
+    for (const auto& peer_json: message.at("peers")) {
       Device d;
       d.id = peer_json.at("id").get<std::string>();
       d.name = peer_json.value("name", d.id);
@@ -691,7 +691,7 @@ inline void Client::updateMyProfile(const std::optional<std::string>& name, cons
   if (photo) { settings_manager_->SetMyPhotoBase64(*photo); }
 
   // Immediately notify all confirmed contacts of the profile change.
-  for (const auto& contact : contact_manager_->GetContacts()) {
+  for (const auto& contact: contact_manager_->GetContacts()) {
     if (contact.status == identity::ContactStatus::confirmed) {
       Json profile_update_msg;
       profile_update_msg["action"] = "profile_update";
@@ -774,7 +774,7 @@ inline void Client::updateAndNotifyPeerList() const {
     std::vector<Device> peer_list;
     {
       const std::lock_guard<std::mutex> lock(online_peers_mutex_);
-      for (const auto& pair : online_peers_) {
+      for (const auto& pair: online_peers_) {
         peer_list.push_back(pair.second);
       }
     }
@@ -783,7 +783,7 @@ inline void Client::updateAndNotifyPeerList() const {
 }
 
 inline void Client::sendSampleToPeers(const std::vector<std::byte>& sample, Stream::Source::Type type, std::uint64_t sample_time) const {
-  for (const auto& [id, peer] : transport_->getPeers()) {
+  for (const auto& [id, peer]: transport_->getPeers()) {
     if (peer->GetState() == Peer::State::ready) {
       auto track = (type == Stream::Source::Type::video) ? peer->video_ : peer->audio_;
       if (track) { track->SendSample(sample, sample_time); }
@@ -916,7 +916,7 @@ inline void Client::processDataChannelMessage(const std::string& peer_id, const 
     message_history_->UpdateMessageStatus(peer_id, message_id, status);
   } else if (type == "message_read") {
     const auto message_ids = message.at("message_ids").get<std::vector<std::uint64_t>>();
-    for (const auto msg_id : message_ids) {
+    for (const auto msg_id: message_ids) {
       message_history_->UpdateMessageStatus(peer_id, msg_id, messaging::MessageStatus::read);
     }
   } else if (type == "profile_info") {
@@ -948,7 +948,7 @@ inline void Client::sendQueuedMessages(const std::string& peer_id) const {
   if (!peer) { return; }
 
   LOGI << "Processing " << messages.size() << " queued message(s) for " << peer_id;
-  for (const auto& entry : messages) {
+  for (const auto& entry: messages) {
     bool sent = false;
     switch (entry.kind) {  // NOLINT(*-multi-way-paths-covered)
       case messaging::HistoryEntryKind::textMessage:
@@ -1049,11 +1049,11 @@ inline void Client::setupDataChannel(const std::shared_ptr<Peer>& peer, const st
 
 inline auto Client::parseDeviceProfile(const Json& jprofile) -> Device::Profile {
   Device::Profile profile;
-  for (const auto& cam_item : jprofile) {
+  for (const auto& cam_item: jprofile) {
     Device::Camera camera;
     camera.id = cam_item.at("id").get<std::string>();
     camera.name = cam_item.at("name").get<std::string>();
-    for (const auto& res_item : cam_item.at("resolutions")) {
+    for (const auto& res_item: cam_item.at("resolutions")) {
       camera.resolutions.push_back({res_item.at("width").get<uint16_t>(), res_item.at("height").get<uint16_t>()});
     }
     profile.push_back(camera);

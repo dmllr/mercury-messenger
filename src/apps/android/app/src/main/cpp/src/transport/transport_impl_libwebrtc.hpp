@@ -277,7 +277,6 @@ public:
   }
 
 private:
-
   void CreatePeerConnection(const std::string& peer_id, const std::string& context) {
     JNIEnv* env = Attach();
     if ((env == nullptr) || (transport_java_ref_ == nullptr)) {

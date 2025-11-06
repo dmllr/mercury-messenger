@@ -134,10 +134,7 @@ private:
     reader.read_ue();      // Skip seq_parameter_set_id
 
     uint32_t chroma_format_idc = 1;  // Default for many profiles.
-    if (profile_idc == 100 || profile_idc == 110 || profile_idc == 122
-      || profile_idc == 244 || profile_idc == 44 || profile_idc == 83
-      || profile_idc == 86 || profile_idc == 118 || profile_idc == 128
-      || profile_idc == 138) {
+    if (profile_idc == 100 || profile_idc == 110 || profile_idc == 122 || profile_idc == 244 || profile_idc == 44 || profile_idc == 83 || profile_idc == 86 || profile_idc == 118 || profile_idc == 128 || profile_idc == 138) {
       chroma_format_idc = reader.read_ue();
       if (chroma_format_idc == 3) reader.read_bits(1);  // separate_colour_plane_flag
       reader.read_ue();                                 // bit_depth_luma_minus8

@@ -222,7 +222,8 @@ public:
     });
 
     peer_connection->onLocalDescription([this, peer_id, context](const ::rtc::Description& description) {
-      LOGD << "Local SDP (" << description.typeString() << ") for " << peer_id << " context " << context << ":\n" << std::string(description);
+      LOGD << "Local SDP (" << description.typeString() << ") for " << peer_id << " context " << context << ":\n"
+           << std::string(description);
       Json message = {{"type", description.typeString()}, {"sdp", std::string(description)}, {"context", context}};
       message["to"] = peer_id;
       WsSendMessage(message);
@@ -311,7 +312,9 @@ public:
       }
     });
 
-    if (peer->on_data_channel_message_) { dc->onMessage(nullptr, [cb = peer->on_data_channel_message_](const std::string& msg) { cb(msg); }); }
+    if (peer->on_data_channel_message_) {
+      dc->onMessage(nullptr, [cb = peer->on_data_channel_message_](const std::string& msg) { cb(msg); });
+    }
 
     peer->data_channel_ = dc;
   }
@@ -395,7 +398,7 @@ private:
     const std::lock_guard<std::mutex> lock(message_queue_mutex_);
     if (!message_queue_.empty()) {
       LOGI << "Flushing " << message_queue_.size() << " queued signaling messages.";
-      for (const auto& msg : message_queue_) {
+      for (const auto& msg: message_queue_) {
         ws_->send(msg);
       }
       message_queue_.clear();
@@ -412,7 +415,7 @@ private:
     }
 
     auto peers_to_close = GetPeers();
-    for (const auto& [id, peer] : peers_to_close) {
+    for (const auto& [id, peer]: peers_to_close) {
       if (peer && peer->data_peer_connection_) { std::static_pointer_cast<::rtc::PeerConnection>(peer->data_peer_connection_)->close(); }
     }
 

@@ -1,8 +1,8 @@
-#include <iostream>
 #include <chrono>
+#include <iostream>
 
-#include <opencv2/videoio.hpp>
 #include <opencv2/core/mat.hpp>
+#include <opencv2/videoio.hpp>
 
 struct CrossPlatformProperties {
 #if defined __ANDROID__
@@ -41,7 +41,7 @@ int main(int /*argc*/, char** /*argv*/) {
   std::cout << "Capture resolution set to: " << actual_width << "x" << actual_height << std::endl;
 
 
-  constexpr int num_frames = 100; // Number of frames to capture
+  constexpr int num_frames = 100;  // Number of frames to capture
   auto frames_captured = 0;
   auto start_time = std::chrono::high_resolution_clock::now();
   while (frames_captured < num_frames) {
