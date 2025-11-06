@@ -55,7 +55,7 @@ inline void BindText(sqlite3_stmt* stmt, const int idx, const std::string& val) 
 }
 
 inline void BindOptionalText(sqlite3_stmt* stmt, const int idx,
-                               const std::optional<std::string>& val) {
+                             const std::optional<std::string>& val) {
   if (val) {
     sqlite3_bind_text(stmt, idx, val->c_str(), -1, SQLITE_TRANSIENT);
   } else {

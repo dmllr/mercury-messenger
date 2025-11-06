@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <deque>
 #include <functional>
@@ -12,7 +13,6 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
-#include <chrono>
 
 #include "eillance/client/client.hpp"
 #include "eillance/events/service_connection_state.h"
@@ -24,14 +24,15 @@
 
 namespace eillance::view_model {
 
-NLOHMANN_JSON_SERIALIZE_ENUM(eillance::transport::PeerConnectionState, {  // NOLINT
-  {transport::PeerConnectionState::NewConnection, 0},
-  {transport::PeerConnectionState::Connecting, 1},
-  {transport::PeerConnectionState::Connected, 2},
-  {transport::PeerConnectionState::Disconnected, 3},
-  {transport::PeerConnectionState::Failed, 4},
-  {transport::PeerConnectionState::Closed, 5},
-})
+NLOHMANN_JSON_SERIALIZE_ENUM(eillance::transport::PeerConnectionState, {
+                                                                           // NOLINT
+                                                                           {transport::PeerConnectionState::NewConnection, 0},
+                                                                           {transport::PeerConnectionState::Connecting, 1},
+                                                                           {transport::PeerConnectionState::Connected, 2},
+                                                                           {transport::PeerConnectionState::Disconnected, 3},
+                                                                           {transport::PeerConnectionState::Failed, 4},
+                                                                           {transport::PeerConnectionState::Closed, 5},
+                                                                       })
 
 struct UIState {
   struct CallState {
@@ -48,7 +49,7 @@ struct UIState {
     std::string peer_id;
     std::string display_name;
     std::optional<std::string> bio;
-    std::optional<std::string> photo; // base64
+    std::optional<std::string> photo;  // base64
     identity::ContactStatus status;
     eillance::transport::PeerConnectionState connection_state = eillance::transport::PeerConnectionState::Disconnected;
     uint32_t unread_count = 0;
@@ -57,7 +58,7 @@ struct UIState {
   std::string my_id;
   std::optional<std::string> my_display_name;
   std::optional<std::string> my_bio;
-  std::optional<std::string> my_photo; // base64
+  std::optional<std::string> my_photo;  // base64
   ServiceConnectionState connection_state = ServiceConnectionState::unknown;
   std::vector<ViewContact> contacts;
   std::vector<messaging::ChatSummary> chats;
@@ -72,7 +73,7 @@ struct UIState {
 inline void to_json(nlohmann::json& json, const UIState::ViewContact& c) {
   json = nlohmann::json{
       {"peer_id", c.peer_id},
-      {"name", c.display_name}, // Mapped to 'name' for Kotlin consistency
+      {"name", c.display_name},  // Mapped to 'name' for Kotlin consistency
       {"bio", c.bio},
       {"photo", c.photo},
       {"status", c.status},
@@ -84,7 +85,7 @@ inline void to_json(nlohmann::json& json, const UIState::ViewContact& c) {
 //NOLINTNEXTLINE(readability-identifier-naming)
 inline void to_json(nlohmann::json& j, const std::deque<messaging::HistoryEntryRecord>& deq) {
   j = nlohmann::json::array();
-  for (const auto& msg : deq) {
+  for (const auto& msg: deq) {
     j.push_back(msg);
   }
 }
@@ -190,43 +191,40 @@ private:
 };
 
 inline auto MercuryViewModel::GenerateNewIdentity() -> std::string {
-    auto mnemonic = client_->GenerateNewIdentity();
-    if (!mnemonic.empty()) {
-        dispatch_queue_.Dispatch([this] {
-            RefreshState();
-        });
-    }
-    return mnemonic;
+  auto mnemonic = client_->GenerateNewIdentity();
+  if (!mnemonic.empty()) {
+    dispatch_queue_.Dispatch([this] {
+      RefreshState();
+    });
+  }
+  return mnemonic;
 }
 
 inline auto MercuryViewModel::RestoreIdentity(const std::string& mnemonic) -> bool {
-    if (client_->RestoreIdentity(mnemonic)) {
-        dispatch_queue_.Dispatch([this] {
-            RefreshState();
-        });
-        return true;
-    }
-    return false;
+  if (client_->RestoreIdentity(mnemonic)) {
+    dispatch_queue_.Dispatch([this] {
+      RefreshState();
+    });
+    return true;
+  }
+  return false;
 }
 
 inline auto MercuryViewModel::GetMnemonic() -> std::optional<std::string> {
-    return client_->GetMnemonic();
+  return client_->GetMnemonic();
 }
 
 inline auto MercuryViewModel::CreateBackup(const std::string& path, const std::string& password) -> bool {
-    return client_->CreateBackup(path, password);
+  return client_->CreateBackup(path, password);
 }
 
 inline auto MercuryViewModel::RestoreBackup(const std::string& path, const std::string& password) -> bool {
-    return client_->RestoreBackup(path, password);
+  return client_->RestoreBackup(path, password);
 }
 
 inline void MercuryViewModel::SelectContact(const std::string& peer_id) {
   const auto state = client_->getPeerConnectionState(peer_id);
-  if (state == transport::PeerConnectionState::Disconnected
-      || state == transport::PeerConnectionState::Failed
-      || state == transport::PeerConnectionState::Closed
-      || state == transport::PeerConnectionState::NewConnection) {
+  if (state == transport::PeerConnectionState::Disconnected || state == transport::PeerConnectionState::Failed || state == transport::PeerConnectionState::Closed || state == transport::PeerConnectionState::NewConnection) {
     client_->connect(peer_id);
   }
 
@@ -412,7 +410,7 @@ inline void MercuryViewModel::UpdateMyProfile(const std::optional<std::string>& 
 inline void MercuryViewModel::SetContactDisplayNameOverride(const std::string& peer_id, const std::string& name) {
   dispatch_queue_.Dispatch([this, peer_id, name] {
     client_->setContactDisplayNameOverride(peer_id, name);
-    RefreshState(); // Easiest way to update the view model's contact list
+    RefreshState();  // Easiest way to update the view model's contact list
   });
 }
 
@@ -459,7 +457,7 @@ inline void MercuryViewModel::LoadFullMessage(uint64_t message_id) {
     {
       const std::lock_guard<std::mutex> lock(state_mutex_);
       if (current_state_.selected_contact_id) {
-        for (auto& entry : current_state_.interaction_history) {
+        for (auto& entry: current_state_.interaction_history) {
           if (entry.id == message_id) {
             if (std::holds_alternative<messaging::MessageEntry>(entry.data)) {
               auto& msg_entry = std::get<messaging::MessageEntry>(entry.data);
@@ -623,7 +621,7 @@ inline void MercuryViewModel::SetupClientCallbacks() {
           }
         } else if (source == EventSource::peerConnectionState) {
           const auto state = static_cast<eillance::transport::PeerConnectionState>(state_val);
-          for (auto& contact : current_state_.contacts) {
+          for (auto& contact: current_state_.contacts) {
             if (contact.peer_id == peer_id) {
               if (contact.connection_state != state) {
                 contact.connection_state = state;
@@ -688,7 +686,7 @@ inline void MercuryViewModel::SetupClientCallbacks() {
             const std::lock_guard<std::mutex> lock(state_mutex_);
             if (current_state_.selected_contact_id &&
                 *current_state_.selected_contact_id == peer_id) {
-              for (auto& entry : current_state_.interaction_history) {
+              for (auto& entry: current_state_.interaction_history) {
                 if (entry.id == message_id) {
                   if (entry.status != status) {
                     entry.status = status;
@@ -721,7 +719,7 @@ inline void MercuryViewModel::NotifyStateChanged() const {
 inline void MercuryViewModel::UpdateContacts() {
   auto contacts_from_manager = client_->getContacts();
   current_state_.contacts.clear();
-  for (const auto& c : contacts_from_manager) {
+  for (const auto& c: contacts_from_manager) {
     const std::string display_name = c.display_name_override.value_or(c.display_name.value_or(c.peer_id));
     current_state_.contacts.push_back({.peer_id = c.peer_id, .display_name = display_name, .bio = c.bio, .photo = c.photo_base64, .status = c.status, .connection_state = client_->getPeerConnectionState(c.peer_id), .unread_count = 0});
   }
@@ -739,7 +737,7 @@ inline void MercuryViewModel::UpdateChats() {
   {
     const std::lock_guard<std::mutex> lock(state_mutex_);
     contact_ids.reserve(current_state_.contacts.size());
-    for (const auto& contact : current_state_.contacts) {
+    for (const auto& contact: current_state_.contacts) {
       contact_ids.push_back(contact.peer_id);
     }
   }
@@ -748,11 +746,11 @@ inline void MercuryViewModel::UpdateChats() {
     const std::lock_guard<std::mutex> lock(state_mutex_);
 
     std::unordered_map<std::string, uint32_t> unread_counts;
-    for (const auto& chat : new_chats) {
+    for (const auto& chat: new_chats) {
       unread_counts[chat.peer_id] = chat.unread_count;
     }
 
-    for (auto& contact : current_state_.contacts) {
+    for (auto& contact: current_state_.contacts) {
       if (unread_counts.contains(contact.peer_id)) {
         contact.unread_count = unread_counts.at(contact.peer_id);
       } else {
@@ -764,4 +762,4 @@ inline void MercuryViewModel::UpdateChats() {
   }
 }
 
-}  // namespace eillance::view_model```
+}  // namespace eillance::view_model

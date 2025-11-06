@@ -67,5 +67,5 @@ private:
   std::unordered_map<std::string, std::string> key_value_map_;
 };
 
-}
-}
+}  // namespace utils
+}  // namespace eillance

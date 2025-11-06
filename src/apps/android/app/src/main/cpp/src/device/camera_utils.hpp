@@ -89,7 +89,7 @@ inline auto GetDeviceProfileAsJson() -> nlohmann::json {
   auto cameras = GetAvailableCameras();
   auto cameras_json = Json::array();
 
-  for (const auto& camera : cameras) {
+  for (const auto& camera: cameras) {
     Json camera_json{};
     camera_json["id"] = camera.first;
     camera_json["name"] = camera.second;
@@ -101,7 +101,7 @@ inline auto GetDeviceProfileAsJson() -> nlohmann::json {
     resolutions.erase(last, resolutions.end());
 
     Json resolutions_json = Json::array();
-    for (const auto& res : resolutions) {
+    for (const auto& res: resolutions) {
       resolutions_json.push_back({{"width", res.first}, {"height", res.second}});
     }
 
@@ -112,9 +112,9 @@ inline auto GetDeviceProfileAsJson() -> nlohmann::json {
   return cameras_json;
 }
 
-template <typename T, std::size_t N>
+template<typename T, std::size_t N>
 constexpr auto GetPairStr(T key, const std::array<std::pair<T, const char*>, N>& store) -> const char* {
-  for (const auto& pair : store) {
+  for (const auto& pair: store) {
     if (pair.first == key) { return pair.second; }
   }
   if (!std::is_constant_evaluated()) { Log::w("(%#08x) : UNKNOWN TAG for %s", key, typeid(store[0].first).name()); }

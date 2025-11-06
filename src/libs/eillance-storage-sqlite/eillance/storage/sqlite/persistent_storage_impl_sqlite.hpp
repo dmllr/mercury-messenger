@@ -133,11 +133,11 @@ public:
     while (sqlite3_step(stmt.Get()) == SQLITE_ROW) {
       contacts.push_back(
           {.peer_id = ColumnString(stmt.Get(), 0),
-              .status = static_cast<identity::ContactStatus>(sqlite3_column_int(stmt.Get(), 1)),
-              .display_name = ColumnOptionalString(stmt.Get(), 2),
-              .display_name_override = ColumnOptionalString(stmt.Get(), 3),
-              .bio = ColumnOptionalString(stmt.Get(), 4),
-              .photo_base64 = ColumnOptionalString(stmt.Get(), 5)});
+           .status = static_cast<identity::ContactStatus>(sqlite3_column_int(stmt.Get(), 1)),
+           .display_name = ColumnOptionalString(stmt.Get(), 2),
+           .display_name_override = ColumnOptionalString(stmt.Get(), 3),
+           .bio = ColumnOptionalString(stmt.Get(), 4),
+           .photo_base64 = ColumnOptionalString(stmt.Get(), 5)});
     }
     return contacts;
   }
@@ -191,39 +191,39 @@ public:
     const std::lock_guard lock(mutex_);
     char* err_msg = nullptr;
     if (sqlite3_exec(db_, "BEGIN TRANSACTION;", nullptr, nullptr, &err_msg) != SQLITE_OK) {
-        LOGE << "Failed to begin transaction for contact removal: " << (err_msg ? err_msg : "Unknown error");
-        sqlite3_free(err_msg);
-        return;
+      LOGE << "Failed to begin transaction for contact removal: " << (err_msg ? err_msg : "Unknown error");
+      sqlite3_free(err_msg);
+      return;
     }
 
     try {
-        const SQLiteStatement history_stmt(db_, "DELETE FROM history WHERE peer_id = ?;");
-        BindText(history_stmt.Get(), 1, std::string(peer_id));
-        if (sqlite3_step(history_stmt.Get()) != SQLITE_DONE) {
-            throw std::runtime_error(sqlite3_errmsg(db_));
-        }
+      const SQLiteStatement history_stmt(db_, "DELETE FROM history WHERE peer_id = ?;");
+      BindText(history_stmt.Get(), 1, std::string(peer_id));
+      if (sqlite3_step(history_stmt.Get()) != SQLITE_DONE) {
+        throw std::runtime_error(sqlite3_errmsg(db_));
+      }
 
-        const SQLiteStatement contact_stmt(db_, "DELETE FROM contacts WHERE peer_id = ?;");
-        BindText(contact_stmt.Get(), 1, std::string(peer_id));
-        if (sqlite3_step(contact_stmt.Get()) != SQLITE_DONE) {
-            throw std::runtime_error(sqlite3_errmsg(db_));
-        }
+      const SQLiteStatement contact_stmt(db_, "DELETE FROM contacts WHERE peer_id = ?;");
+      BindText(contact_stmt.Get(), 1, std::string(peer_id));
+      if (sqlite3_step(contact_stmt.Get()) != SQLITE_DONE) {
+        throw std::runtime_error(sqlite3_errmsg(db_));
+      }
     } catch (const std::runtime_error& e) {
-        LOGE << "Error during contact removal: " << e.what();
-        sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
-        return;
+      LOGE << "Error during contact removal: " << e.what();
+      sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+      return;
     }
 
     if (sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, &err_msg) != SQLITE_OK) {
-        LOGE << "Failed to commit transaction for contact removal: " << (err_msg ? err_msg : "Unknown error");
-        sqlite3_free(err_msg);
-        sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+      LOGE << "Failed to commit transaction for contact removal: " << (err_msg ? err_msg : "Unknown error");
+      sqlite3_free(err_msg);
+      sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     }
   }
 
   // --- History ---
   auto AddHistoryEntry(messaging::HistoryEntryRecord entry)
-  -> messaging::HistoryEntryRecord override {
+      -> messaging::HistoryEntryRecord override {
     const std::lock_guard lock(mutex_);
     const SQLiteStatement stmt(db_, R"SQL(
       INSERT INTO history (
@@ -318,19 +318,19 @@ public:
     sqlite3_bind_int(stmt.Get(), 4, static_cast<int>(entry.status));
 
     std::visit([&]<typename T0>(T0&& arg) {
-                 using T = std::decay_t<T0>;
-                 if constexpr (std::is_same_v<T, messaging::MessageEntry>) {
-                   BindText(stmt.Get(), 5, arg.content);
-                   sqlite3_bind_int(stmt.Get(), 6, 0);
-                   sqlite3_bind_int(stmt.Get(), 7, 0);
-                   sqlite3_bind_int(stmt.Get(), 8, 0);
-                 } else if constexpr (std::is_same_v<T, messaging::CallEntry>) {
-                   sqlite3_bind_null(stmt.Get(), 5);
-                   sqlite3_bind_int(stmt.Get(), 6, arg.duration_seconds);
-                   sqlite3_bind_int(stmt.Get(), 7, static_cast<int>(arg.call_direction));
-                   sqlite3_bind_int(stmt.Get(), 8, static_cast<int>(arg.call_status));
-                 }
-               },
+      using T = std::decay_t<T0>;
+      if constexpr (std::is_same_v<T, messaging::MessageEntry>) {
+        BindText(stmt.Get(), 5, arg.content);
+        sqlite3_bind_int(stmt.Get(), 6, 0);
+        sqlite3_bind_int(stmt.Get(), 7, 0);
+        sqlite3_bind_int(stmt.Get(), 8, 0);
+      } else if constexpr (std::is_same_v<T, messaging::CallEntry>) {
+        sqlite3_bind_null(stmt.Get(), 5);
+        sqlite3_bind_int(stmt.Get(), 6, arg.duration_seconds);
+        sqlite3_bind_int(stmt.Get(), 7, static_cast<int>(arg.call_direction));
+        sqlite3_bind_int(stmt.Get(), 8, static_cast<int>(arg.call_status));
+      }
+    },
                entry.data);
 
     sqlite3_bind_int64(stmt.Get(), 9, entry.id);
@@ -446,14 +446,14 @@ public:
   }
 
   auto GetChatSummaries(const std::vector<std::string>& peer_ids)
-  -> std::vector<messaging::ChatSummary> override {
+      -> std::vector<messaging::ChatSummary> override {
     if (peer_ids.empty()) {
       return {};
     }
     const std::lock_guard lock(mutex_);
     std::vector<messaging::ChatSummary> summaries;
 
-    for (const auto& peer_id : peer_ids) {
+    for (const auto& peer_id: peer_ids) {
       messaging::ChatSummary summary;
       summary.peer_id = peer_id;
       summary.unread_count = 0;
@@ -524,7 +524,7 @@ public:
   }
 
   auto GetMessagesWithStatus(const std::string& peer_id, messaging::MessageStatus status)
-  -> std::vector<messaging::HistoryEntryRecord> override {
+      -> std::vector<messaging::HistoryEntryRecord> override {
     const std::lock_guard lock(mutex_);
     std::vector<messaging::HistoryEntryRecord> records;
     const SQLiteStatement stmt(db_, R"SQL(

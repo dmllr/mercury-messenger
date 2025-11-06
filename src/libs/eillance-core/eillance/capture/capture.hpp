@@ -9,7 +9,7 @@ namespace eillance {
 
 class Capture {
 public:
-  template <typename T>
+  template<typename T>
   explicit Capture(std::unique_ptr<T> impl) : self_(new CaptureModel<T>(std::move(impl))) {}
   Capture(const Capture&) = delete;
   Capture(Capture&&) noexcept = default;
@@ -39,11 +39,11 @@ private:
   };
 
 public:
-  template <typename T>
+  template<typename T>
   class CaptureModel final : public CaptureInterface {
     std::unique_ptr<T> capture_;
 
-public:
+  public:
     explicit CaptureModel(std::unique_ptr<T> impl) : capture_(std::move(impl)) {}
     void Configure(Config config) final { capture_->Configure(config); }
     void Engage() final { capture_->Engage(); }

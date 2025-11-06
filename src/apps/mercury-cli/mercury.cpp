@@ -10,11 +10,11 @@
 #include <thread>
 #include <vector>
 
-#include <plog/Appenders/RollingFileAppender.h>
-#include <plog/Formatters/TxtFormatter.h>
 #include "ftxui/component/component.hpp"
 #include "ftxui/component/screen_interactive.hpp"
 #include "ftxui/dom/elements.hpp"
+#include <plog/Appenders/RollingFileAppender.h>
+#include <plog/Formatters/TxtFormatter.h>
 
 #include "eillance/capture/audio_capture.hpp"
 #include "eillance/capture/video_capture.hpp"
@@ -34,7 +34,7 @@ namespace {
 // Helper function to format contact entries for the ftxui::Menu component.
 std::vector<std::string> GetContactMenuEntries(const std::vector<eillance::view_model::UIState::ViewContact>& contacts) {
   std::vector<std::string> entries;
-  for (const auto& contact : contacts) {
+  for (const auto& contact: contacts) {
     std::string status_str;
     switch (contact.status) {
       case eillance::identity::ContactStatus::pendingApproval:
@@ -185,56 +185,63 @@ int main(int argc, char** argv) {
   client->SetAudioCapture(std::make_unique<eillance::AudioCaptureCli>());
 
   if (auto backup_path = args.Get("--backup")) {
-      std::cout << "Enter password for backup: ";
-      std::string password;
-      std::getline(std::cin, password);
-      if (client->CreateBackup(*backup_path, password)) {
-          std::cout << "Backup created successfully at " << *backup_path << std::endl;
-      } else {
-          std::cerr << "Backup failed." << std::endl;
-      }
-      return 0;
+    std::cout << "Enter password for backup: ";
+    std::string password;
+    std::getline(std::cin, password);
+    if (client->CreateBackup(*backup_path, password)) {
+      std::cout << "Backup created successfully at " << *backup_path << std::endl;
+    } else {
+      std::cerr << "Backup failed." << std::endl;
+    }
+    return 0;
   }
 
   if (auto restore_path = args.Get("--restore")) {
-      std::cout << "Enter password for backup file: ";
-      std::string password;
-      std::getline(std::cin, password);
-      std::cout << "WARNING: This will overwrite your current identity, contacts, and messages." << std::endl;
-      std::cout << "Type 'yes' to continue: ";
-      std::string confirmation;
-      std::getline(std::cin, confirmation);
-      if (confirmation == "yes") {
-          if (client->RestoreBackup(*restore_path, password)) {
-              std::cout << "Restore successful. Please restart the application." << std::endl;
-          } else {
-              std::cerr << "Restore failed. Check password or file integrity." << std::endl;
-          }
+    std::cout << "Enter password for backup file: ";
+    std::string password;
+    std::getline(std::cin, password);
+    std::cout << "WARNING: This will overwrite your current identity, contacts, and messages." << std::endl;
+    std::cout << "Type 'yes' to continue: ";
+    std::string confirmation;
+    std::getline(std::cin, confirmation);
+    if (confirmation == "yes") {
+      if (client->RestoreBackup(*restore_path, password)) {
+        std::cout << "Restore successful. Please restart the application." << std::endl;
       } else {
-          std::cout << "Restore cancelled." << std::endl;
+        std::cerr << "Restore failed. Check password or file integrity." << std::endl;
       }
-      return 0;
+    } else {
+      std::cout << "Restore cancelled." << std::endl;
+    }
+    return 0;
   }
 
   if (!client->IdentityExists()) {
-      std::cout << "Welcome to Mercury! No identity found.\n"
-                << "1. Create a new identity\n"
-                << "2. Restore from a 12-word recovery phrase\n"
-                << "Enter your choice: ";
-      int choice;
-      std::cin >> choice;
-      std::cin.ignore(); 
-      if (choice == 1) {
-          auto mnemonic = client->GenerateNewIdentity();
-          std::cout << "\nIMPORTANT: Save this recovery phrase securely:\n\n" << mnemonic << "\n\nPress Enter to continue...";
-          std::cin.get();
-      } else if (choice == 2) {
-          std::cout << "Enter your 12-word recovery phrase: ";
-          std::string phrase;
-          std::getline(std::cin, phrase);
-          if (!client->RestoreIdentity(phrase)) { std::cerr << "Invalid phrase." << std::endl; return 1; }
-      } else { std::cerr << "Invalid choice." << std::endl; return 1; }
-      std::cout << "Identity configured. Starting Mercury..." << std::endl;
+    std::cout << "Welcome to Mercury! No identity found.\n"
+              << "1. Create a new identity\n"
+              << "2. Restore from a 12-word recovery phrase\n"
+              << "Enter your choice: ";
+    int choice;
+    std::cin >> choice;
+    std::cin.ignore();
+    if (choice == 1) {
+      auto mnemonic = client->GenerateNewIdentity();
+      std::cout << "\nIMPORTANT: Save this recovery phrase securely:\n\n"
+                << mnemonic << "\n\nPress Enter to continue...";
+      std::cin.get();
+    } else if (choice == 2) {
+      std::cout << "Enter your 12-word recovery phrase: ";
+      std::string phrase;
+      std::getline(std::cin, phrase);
+      if (!client->RestoreIdentity(phrase)) {
+        std::cerr << "Invalid phrase." << std::endl;
+        return 1;
+      }
+    } else {
+      std::cerr << "Invalid choice." << std::endl;
+      return 1;
+    }
+    std::cout << "Identity configured. Starting Mercury..." << std::endl;
   }
 
   // Handle command-line override for signaling URL before starting the client
@@ -259,7 +266,7 @@ int main(int argc, char** argv) {
 
     if (state.has_older_messages) { elements.push_back(ftxui::text("--- older messages available (use /history load) ---") | ftxui::dim); }
 
-    for (const auto& entry : state.interaction_history) {
+    for (const auto& entry: state.interaction_history) {
       std::string prefix;
       std::string content;
       switch (entry.kind) {
@@ -270,7 +277,7 @@ int main(int argc, char** argv) {
             prefix = "[you]: ";
           } else {
             if (state.selected_contact_id.has_value()) {
-              const auto it = std::ranges::find_if(state.contacts, [&](const auto& c){ return c.peer_id == *state.selected_contact_id; });
+              const auto it = std::ranges::find_if(state.contacts, [&](const auto& c) { return c.peer_id == *state.selected_contact_id; });
               const std::string display_id = (it != state.contacts.end()) ? it->display_name : *state.selected_contact_id;
               prefix = "[" + display_id + "]: ";
             } else {
@@ -359,7 +366,7 @@ int main(int argc, char** argv) {
             } else {
               std::vector<std::string> matches;
               const auto state = view_model->GetState();
-              for (const auto& contact : state.contacts) {
+              for (const auto& contact: state.contacts) {
                 if (contact.peer_id.starts_with(arg)) { matches.push_back(contact.peer_id); }
               }
               if (matches.empty()) {

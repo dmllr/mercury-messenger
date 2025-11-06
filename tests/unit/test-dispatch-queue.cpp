@@ -22,7 +22,7 @@ protected:
   }
 
   // Improved helper to wait for a condition with timeout
-  template <typename F>
+  template<typename F>
   bool WaitFor(F condition, std::chrono::milliseconds timeout) {
     auto start = std::chrono::steady_clock::now();
 

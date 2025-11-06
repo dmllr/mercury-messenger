@@ -5,18 +5,18 @@
 #include <memory>
 #include <openssl/bio.h>
 #include <openssl/evp.h>
+#include <openssl/kdf.h>
 #include <openssl/pem.h>
 #include <openssl/rand.h>
 #include <openssl/sha.h>
-#include <openssl/kdf.h>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
-#include <sstream>
 
-#include "eillance/logging/logging.h"
 #include "eillance/crypto/bip39_wordlist.hpp"
+#include "eillance/logging/logging.h"
 
 namespace eillance::crypto {
 
@@ -67,18 +67,18 @@ class Identity {
 
   // Generate a 64-byte seed from a mnemonic phrase using PBKDF2, then take the first 32 bytes.
   static auto MnemonicToSeed(const std::string& mnemonic) -> std::vector<uint8_t> {
-      std::vector<uint8_t> seed(64);
-      // BIP39 uses "mnemonic" as the salt prefix. Here, just "mnemonic" for simplicity.
-      const std::string salt_str = "mnemonic";
-      // BIP39 specifies 2048 iterations and SHA512.
-      if (PKCS5_PBKDF2_HMAC(mnemonic.c_str(), static_cast<int>(mnemonic.length()),
-                             reinterpret_cast<const unsigned char*>(salt_str.c_str()), static_cast<int>(salt_str.length()),
-                             2048, EVP_sha512(), 64, seed.data()) != 1) {
-          return {};
-      }
-      // Ed25519 seed is 32 bytes.
-      seed.resize(32);
-      return seed;
+    std::vector<uint8_t> seed(64);
+    // BIP39 uses "mnemonic" as the salt prefix. Here, just "mnemonic" for simplicity.
+    const std::string salt_str = "mnemonic";
+    // BIP39 specifies 2048 iterations and SHA512.
+    if (PKCS5_PBKDF2_HMAC(mnemonic.c_str(), static_cast<int>(mnemonic.length()),
+                          reinterpret_cast<const unsigned char*>(salt_str.c_str()), static_cast<int>(salt_str.length()),
+                          2048, EVP_sha512(), 64, seed.data()) != 1) {
+      return {};
+    }
+    // Ed25519 seed is 32 bytes.
+    seed.resize(32);
+    return seed;
   }
 
 public:
@@ -90,9 +90,9 @@ public:
 
   static auto CreateNew(std::string& mnemonic_out) -> std::unique_ptr<Identity> {
     // 12 words = 128 bits of entropy + 4 bits of checksum = 132 bits.
-    std::vector<uint8_t> entropy(16); // 128 bits
+    std::vector<uint8_t> entropy(16);  // 128 bits
     if (RAND_bytes(entropy.data(), entropy.size()) != 1) {
-        return nullptr;
+      return nullptr;
     }
 
     uint8_t hash[SHA256_DIGEST_LENGTH];
@@ -102,22 +102,22 @@ public:
     std::vector<bool> bits(132);
     // Populate bits from entropy
     for (int i = 0; i < 16; ++i) {
-        for (int j = 0; j < 8; ++j) {
-            bits[i * 8 + j] = (entropy[i] >> (7 - j)) & 1;
-        }
+      for (int j = 0; j < 8; ++j) {
+        bits[i * 8 + j] = (entropy[i] >> (7 - j)) & 1;
+      }
     }
     // Populate bits from checksum (first 4 bits of the hash)
     for (int i = 0; i < 4; ++i) {
-        bits[128 + i] = (checksum_byte >> (7 - i)) & 1;
+      bits[128 + i] = (checksum_byte >> (7 - i)) & 1;
     }
 
     std::stringstream mnemonic_ss;
     for (int i = 0; i < 12; ++i) {
-        uint16_t index = 0;
-        for (int j = 0; j < 11; ++j) {
-            index = (index << 1) | (bits[i * 11 + j] ? 1 : 0);
-        }
-        mnemonic_ss << bip39English[index] << (i == 11 ? "" : " ");
+      uint16_t index = 0;
+      for (int j = 0; j < 11; ++j) {
+        index = (index << 1) | (bits[i * 11 + j] ? 1 : 0);
+      }
+      mnemonic_ss << bip39English[index] << (i == 11 ? "" : " ");
     }
     mnemonic_out = mnemonic_ss.str();
     return GenerateFromMnemonic(mnemonic_out);

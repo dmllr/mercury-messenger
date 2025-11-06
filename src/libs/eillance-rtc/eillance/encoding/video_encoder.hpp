@@ -84,7 +84,7 @@ public:
     CoUninitialize();
 #endif
     const AVCodec* codec = nullptr;
-    for (const auto& codec_id : preferred_codecs) {
+    for (const auto& codec_id: preferred_codecs) {
       codec = avcodec_find_encoder(codec_id);
       if (codec && SetupCodecContext(codec, width, height, framerate)) {
         LOGD << "Using codec: [" << codec->id << "] " << codec->name << " | " << codec->long_name;

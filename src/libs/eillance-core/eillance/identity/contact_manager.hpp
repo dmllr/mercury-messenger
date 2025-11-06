@@ -99,7 +99,7 @@ public:
     const std::lock_guard<std::mutex> lock(mutex_);
     std::vector<Contact> result;
     result.reserve(contacts_.size());
-    for (const auto& val : contacts_ | std::views::values) {
+    for (const auto& val: contacts_ | std::views::values) {
       result.push_back(val);
     }
     return result;
@@ -149,7 +149,7 @@ public:
 private:
   void LoadContacts() {
     const auto contacts_from_db = storage_->GetContacts();
-    for (const auto& contact : contacts_from_db) {
+    for (const auto& contact: contacts_from_db) {
       contacts_[contact.peer_id] = contact;
     }
   }

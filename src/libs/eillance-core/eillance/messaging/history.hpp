@@ -1,10 +1,10 @@
 #pragma once
 
+#include <chrono>
 #include <functional>
 #include <memory>
 #include <string>
 #include <vector>
-#include <chrono>
 
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/utils/time.hpp"
@@ -51,7 +51,7 @@ public:
 
   void MarkMessagesAsRead(const std::string& peer_id, const std::vector<uint64_t>& message_ids) {
     storage_->UpdateMessageStatuses(peer_id, message_ids, MessageStatus::read);
-    for (const auto message_id : message_ids) {
+    for (const auto message_id: message_ids) {
       if (on_status_changed_) { on_status_changed_(peer_id, message_id, MessageStatus::read); }
     }
   }

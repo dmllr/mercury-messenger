@@ -1,7 +1,9 @@
+#include "eillance/crypto/crypto.hpp"
 #include <chrono>
 #include <csignal>
 #include <memory>
 #include <mutex>
+#include <openssl/rand.h>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -9,8 +11,6 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
-#include <openssl/rand.h>
-#include "eillance/crypto/crypto.hpp"
 
 #include <nlohmann/json.hpp>
 #include <plog/Appenders/ColorConsoleAppender.h>

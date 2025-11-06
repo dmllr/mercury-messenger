@@ -34,7 +34,7 @@ public:
   auto GetId() const -> std::string { return identity_ ? identity_->GetId() : ""; }
 
   [[nodiscard]] auto GetMnemonic() const -> std::optional<std::string> {
-      return storage_->GetSetting(mnemonic_key_file);
+    return storage_->GetSetting(mnemonic_key_file);
   }
 
   [[nodiscard]] auto IdentityExists() const -> bool { return identity_ != nullptr; }
@@ -43,23 +43,23 @@ public:
     std::string mnemonic;
     identity_ = crypto::Identity::CreateNew(mnemonic);
     if (identity_) {
-        const auto pem_str = identity_->SaveToMemory();
-        storage_->SetSetting(identity_key_file, pem_str);
-        storage_->SetSetting(mnemonic_key_file, mnemonic);
-        LOGI << "New identity generated and saved. ID: " << identity_->GetId();
+      const auto pem_str = identity_->SaveToMemory();
+      storage_->SetSetting(identity_key_file, pem_str);
+      storage_->SetSetting(mnemonic_key_file, mnemonic);
+      LOGI << "New identity generated and saved. ID: " << identity_->GetId();
     }
     return mnemonic;
   }
 
   auto RestoreFromMnemonic(const std::string& mnemonic) -> bool {
-      identity_ = crypto::Identity::GenerateFromMnemonic(mnemonic);
-      if (identity_) {
-          const auto pem_str = identity_->SaveToMemory();
-          storage_->SetSetting(identity_key_file, pem_str);
-          LOGI << "Identity restored from mnemonic. ID: " << identity_->GetId();
-          return true;
-      }
-      return false;
+    identity_ = crypto::Identity::GenerateFromMnemonic(mnemonic);
+    if (identity_) {
+      const auto pem_str = identity_->SaveToMemory();
+      storage_->SetSetting(identity_key_file, pem_str);
+      LOGI << "Identity restored from mnemonic. ID: " << identity_->GetId();
+      return true;
+    }
+    return false;
   }
 
   auto Sign(const std::string& message) const -> std::vector<std::byte> {

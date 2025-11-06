@@ -40,7 +40,7 @@ public:
     return it->second;
   }
   /// Create a new object using the cached constructor.
-  template <typename... Args>
+  template<typename... Args>
   [[nodiscard]] [[maybe_unused]] jobject NewObject(JNIEnv* env, Args... args) const {
     // NOLINTNEXTLINE(*-vararg)
     return env->NewObject(class_, ctor_, args...);
