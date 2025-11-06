@@ -161,6 +161,7 @@ class PersistentStorageImpl {
 public:
   virtual ~PersistentStorageImpl() = default;
 
+  virtual auto GetPath() const -> std::string = 0;
   // --- Settings ---
   virtual auto GetSetting(std::string_view key) -> std::optional<std::string> = 0;
   virtual void SetSetting(std::string_view key, std::string_view value) = 0;
@@ -205,6 +206,7 @@ public:
   PersistentStorage(PersistentStorage&&) noexcept = default;
   auto operator=(PersistentStorage&&) noexcept -> PersistentStorage& = default;
 
+  auto GetPath() const { return pimpl_->GetPath(); }
   // --- Settings ---
   auto GetSetting(std::string_view key) const { return pimpl_->GetSetting(key); }
   void SetSetting(std::string_view key, std::string_view value) const { pimpl_->SetSetting(key, value); }

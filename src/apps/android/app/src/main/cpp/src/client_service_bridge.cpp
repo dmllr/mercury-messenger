@@ -22,6 +22,10 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_start(JNIEnv* /
   if (client_engine) { client_engine->Start(); }
 }
 
+extern "C" JNIEXPORT jboolean JNICALL Java_hela_eillance_CallService_identityExists(JNIEnv* /*env*/, jobject /*instance*/) {
+    return client_engine && client_engine->ViewModel() && client_engine->ViewModel()->GetState().identity_exists;
+}
+
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_terminate(JNIEnv* /*env*/, jobject /*instance*/) {
   if (client_engine) {
     client_engine->Terminate();
@@ -207,6 +211,59 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_nativeDebugEras
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_nativeDebugRevokeAllApprovals(JNIEnv* /*env*/, jobject /*instance*/) {
   if (client_engine && client_engine->ViewModel()) { client_engine->ViewModel()->DebugRevokeAllApprovals(); }
+}
+
+extern "C" JNIEXPORT jstring JNICALL Java_hela_eillance_CallService_nativeGetMnemonic(JNIEnv* env, jobject /*instance*/) {
+    if (client_engine && client_engine->ViewModel()) {
+        if (auto mnemonic = client_engine->ViewModel()->GetMnemonic()) {
+            return env->NewStringUTF(mnemonic->c_str());
+        }
+    }
+    return nullptr;
+}
+
+extern "C" JNIEXPORT jstring JNICALL Java_hela_eillance_CallService_nativeGenerateNewIdentity(JNIEnv* env, jobject /*instance*/) {
+    if (client_engine && client_engine->ViewModel()) {
+        std::string mnemonic = client_engine->ViewModel()->GenerateNewIdentity();
+        return env->NewStringUTF(mnemonic.c_str());
+    }
+    return env->NewStringUTF("");
+}
+
+extern "C" JNIEXPORT jboolean JNICALL Java_hela_eillance_CallService_nativeRestoreIdentity(JNIEnv* env, jobject /*instance*/, jstring mnemonic) {
+    if (client_engine && client_engine->ViewModel()) {
+        const char* chars = env->GetStringUTFChars(mnemonic, nullptr);
+        const std::string mnemonic_str(chars);
+        env->ReleaseStringUTFChars(mnemonic, chars);
+        return client_engine->ViewModel()->RestoreIdentity(mnemonic_str);
+    }
+    return false;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL Java_hela_eillance_CallService_nativeCreateBackup(JNIEnv* env, jobject /*instance*/, jstring path, jstring password) {
+    if (client_engine && client_engine->ViewModel()) {
+        const char* path_chars = env->GetStringUTFChars(path, nullptr);
+        const char* pw_chars = env->GetStringUTFChars(password, nullptr);
+        bool result = client_engine->ViewModel()->CreateBackup(path_chars, pw_chars);
+        env->ReleaseStringUTFChars(path, path_chars);
+        env->ReleaseStringUTFChars(password, pw_chars);
+        return result;
+    }
+    return false;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL Java_hela_eillance_CallService_nativeRestoreBackup(JNIEnv* env, jobject /*instance*/, jstring path, jstring password) {
+    // The implementation is identical to createBackup, just calling a different ViewModel method.
+    // This can be refactored into a helper if more such functions are added.
+    if (client_engine && client_engine->ViewModel()) {
+        const char* path_chars = env->GetStringUTFChars(path, nullptr);
+        const char* pw_chars = env->GetStringUTFChars(password, nullptr);
+        bool result = client_engine->ViewModel()->RestoreBackup(path_chars, pw_chars);
+        env->ReleaseStringUTFChars(path, path_chars);
+        env->ReleaseStringUTFChars(password, pw_chars);
+        return result;
+    }
+    return false;
 }
 
 jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {

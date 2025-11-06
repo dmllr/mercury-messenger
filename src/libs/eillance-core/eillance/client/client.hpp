@@ -11,6 +11,7 @@
 #include <nlohmann/json.hpp>
 
 #include "eillance/capture/capture.hpp"
+#include "eillance/backup/backup_manager.hpp"
 #include "eillance/client/settings_manager.hpp"
 #include "eillance/crypto/crypto.hpp"
 #include "eillance/identity/contact_manager.hpp"
@@ -77,6 +78,14 @@ public:
   [[maybe_unused]] void SetAudioCapture(std::unique_ptr<T> impl);
 
   [[nodiscard]] auto getId() const -> std::string;
+  auto IdentityExists() const -> bool;
+  auto GenerateNewIdentity() -> std::string;
+  auto GetMnemonic() -> std::optional<std::string>;
+  auto RestoreIdentity(const std::string& mnemonic) -> bool;
+
+  auto CreateBackup(const std::string& output_path, const std::string& password) -> bool;
+  auto RestoreBackup(const std::string& input_path, const std::string& password) -> bool;
+
   auto getStorage() const -> std::shared_ptr<storage::PersistentStorage>;
   auto getSettingsManager() const -> SettingsManager*;
   void setName(const std::string& name) const;
@@ -168,6 +177,7 @@ private:
   std::unique_ptr<messaging::MessageHistory> message_history_;
 
   std::unique_ptr<SettingsManager> settings_manager_;
+  std::unique_ptr<backup::BackupManager> backup_manager_;
   std::unordered_map<std::string, Device> online_peers_;
   mutable std::mutex online_peers_mutex_;
 };
@@ -176,6 +186,11 @@ private:
 
 inline Client::Client(std::shared_ptr<storage::PersistentStorage> storage, std::shared_ptr<transport::Transport> transport) : storage_(std::move(storage)), transport_(std::move(transport)) {
   transport_->setDelegate(this);
+
+  if(auto db_path = storage_->GetPath(); !db_path.empty())
+  {
+      backup_manager_ = std::make_unique<backup::BackupManager>(db_path);
+  }
 
   id_manager_ = std::make_unique<identity::IdManager>(storage_);
   settings_manager_ = std::make_unique<SettingsManager>(storage_);
@@ -231,6 +246,32 @@ inline auto Client::getId() const -> std::string {
   return id_manager_->GetId();
 }
 
+inline auto Client::IdentityExists() const -> bool {
+    return id_manager_->IdentityExists();
+}
+
+inline auto Client::GenerateNewIdentity() -> std::string {
+    return id_manager_->GenerateNewIdentity();
+}
+
+inline auto Client::GetMnemonic() -> std::optional<std::string> {
+    return id_manager_->GetMnemonic();
+}
+
+inline auto Client::RestoreIdentity(const std::string& mnemonic) -> bool {
+    return id_manager_->RestoreFromMnemonic(mnemonic);
+}
+
+inline auto Client::CreateBackup(const std::string& output_path, const std::string& password) -> bool {
+    if (!backup_manager_) return false;
+    return backup_manager_->CreateBackup(output_path, password);
+}
+
+inline auto Client::RestoreBackup(const std::string& input_path, const std::string& password) -> bool {
+    if (!backup_manager_) return false;
+    return backup_manager_->RestoreFromBackup(input_path, password);
+}
+
 inline auto Client::getStorage() const -> std::shared_ptr<storage::PersistentStorage> {
   return storage_;
 }
@@ -244,6 +285,10 @@ inline void Client::setName(const std::string& name) const {
 }
 
 inline void Client::start() const {
+  if (!id_manager_->IdentityExists()) {
+      LOGE << "Client started without an identity. Please generate or restore one.";
+      return;
+  }
   if (auto url = settings_manager_->GetSignalingServerUrl()) {
     transport_->setSignalingUrl(*url);
   }

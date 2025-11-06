@@ -7,12 +7,16 @@
 #include <openssl/evp.h>
 #include <openssl/pem.h>
 #include <openssl/rand.h>
+#include <openssl/sha.h>
+#include <openssl/kdf.h>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
+#include <sstream>
 
 #include "eillance/logging/logging.h"
+#include "eillance/crypto/bip39_wordlist.hpp"
 
 namespace eillance::crypto {
 
@@ -61,6 +65,22 @@ class Identity {
 
   explicit Identity(EvpPkeyPtr pkey) : pkey_(std::move(pkey)) {}
 
+  // Generate a 64-byte seed from a mnemonic phrase using PBKDF2, then take the first 32 bytes.
+  static auto MnemonicToSeed(const std::string& mnemonic) -> std::vector<uint8_t> {
+      std::vector<uint8_t> seed(64);
+      // BIP39 uses "mnemonic" as the salt prefix. Here, just "mnemonic" for simplicity.
+      const std::string salt_str = "mnemonic";
+      // BIP39 specifies 2048 iterations and SHA512.
+      if (PKCS5_PBKDF2_HMAC(mnemonic.c_str(), static_cast<int>(mnemonic.length()),
+                             reinterpret_cast<const unsigned char*>(salt_str.c_str()), static_cast<int>(salt_str.length()),
+                             2048, EVP_sha512(), 64, seed.data()) != 1) {
+          return {};
+      }
+      // Ed25519 seed is 32 bytes.
+      seed.resize(32);
+      return seed;
+  }
+
 public:
   Identity(const Identity&) = delete;
   auto operator=(const Identity&) -> Identity& = delete;
@@ -68,12 +88,47 @@ public:
   auto operator=(Identity&&) noexcept -> Identity& = default;
   ~Identity() = default;
 
-  static auto CreateNew() -> std::unique_ptr<Identity> {
-    const EvpPkeyCtxPtr ctx(EVP_PKEY_CTX_new_id(EVP_PKEY_ED25519, nullptr), EVP_PKEY_CTX_free);
-    if (!ctx) { return nullptr; }
-    if (EVP_PKEY_keygen_init(ctx.get()) <= 0) { return nullptr; }
-    EVP_PKEY* pkey_ptr = nullptr;
-    if (EVP_PKEY_keygen(ctx.get(), &pkey_ptr) <= 0) { return nullptr; }
+  static auto CreateNew(std::string& mnemonic_out) -> std::unique_ptr<Identity> {
+    // 12 words = 128 bits of entropy + 4 bits of checksum = 132 bits.
+    std::vector<uint8_t> entropy(16); // 128 bits
+    if (RAND_bytes(entropy.data(), entropy.size()) != 1) {
+        return nullptr;
+    }
+
+    uint8_t hash[SHA256_DIGEST_LENGTH];
+    SHA256(entropy.data(), entropy.size(), hash);
+    uint8_t checksum_byte = hash[0];
+
+    std::vector<bool> bits(132);
+    // Populate bits from entropy
+    for (int i = 0; i < 16; ++i) {
+        for (int j = 0; j < 8; ++j) {
+            bits[i * 8 + j] = (entropy[i] >> (7 - j)) & 1;
+        }
+    }
+    // Populate bits from checksum (first 4 bits of the hash)
+    for (int i = 0; i < 4; ++i) {
+        bits[128 + i] = (checksum_byte >> (7 - i)) & 1;
+    }
+
+    std::stringstream mnemonic_ss;
+    for (int i = 0; i < 12; ++i) {
+        uint16_t index = 0;
+        for (int j = 0; j < 11; ++j) {
+            index = (index << 1) | (bits[i * 11 + j] ? 1 : 0);
+        }
+        mnemonic_ss << bip39English[index] << (i == 11 ? "" : " ");
+    }
+    mnemonic_out = mnemonic_ss.str();
+    return GenerateFromMnemonic(mnemonic_out);
+  }
+
+  static auto GenerateFromMnemonic(const std::string& mnemonic) -> std::unique_ptr<Identity> {
+    auto seed = MnemonicToSeed(mnemonic);
+    if (seed.empty()) { return nullptr; }
+
+    EVP_PKEY* pkey_ptr = EVP_PKEY_new_raw_private_key(EVP_PKEY_ED25519, nullptr, seed.data(), seed.size());
+    if (!pkey_ptr) { return nullptr; }
     return std::unique_ptr<Identity>(new Identity(EvpPkeyPtr(pkey_ptr, EVP_PKEY_free)));
   }
 

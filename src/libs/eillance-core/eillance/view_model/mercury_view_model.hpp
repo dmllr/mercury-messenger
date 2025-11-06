@@ -42,6 +42,8 @@ struct UIState {
     messaging::HistoryEntryKind call_type = messaging::HistoryEntryKind::voiceCall;
   };
 
+  bool identity_exists = true;
+
   struct ViewContact {
     std::string peer_id;
     std::string display_name;
@@ -90,6 +92,7 @@ inline void to_json(nlohmann::json& j, const std::deque<messaging::HistoryEntryR
 //NOLINTNEXTLINE(readability-identifier-naming)
 inline void to_json(nlohmann::json& json, const UIState& s) {
   json["my_id"] = s.my_id;
+  json["identity_exists"] = s.identity_exists;
   json["myDisplayName"] = s.my_display_name;
   json["myBio"] = s.my_bio;
   json["myPhoto"] = s.my_photo;
@@ -112,6 +115,8 @@ public:
   explicit MercuryViewModel(std::shared_ptr<Client> client) : client_(std::move(client)) {
     {
       const std::lock_guard<std::mutex> lock(state_mutex_);
+      current_state_.identity_exists = client_->IdentityExists();
+      if (!current_state_.identity_exists) return;
       current_state_.my_id = client_->getId();
       UpdateMyProfileFromSettings();
       current_state_.signaling_server_url = client_->getSettingsManager()->GetSignalingServerUrl();
@@ -126,6 +131,13 @@ public:
   auto operator=(const MercuryViewModel&) -> MercuryViewModel& = delete;
   MercuryViewModel(MercuryViewModel&&) = delete;
   auto operator=(MercuryViewModel&&) -> MercuryViewModel& = delete;
+
+  auto GenerateNewIdentity() -> std::string;
+  auto RestoreIdentity(const std::string& mnemonic) -> bool;
+  auto GetMnemonic() -> std::optional<std::string>;
+
+  auto CreateBackup(const std::string& path, const std::string& password) -> bool;
+  auto RestoreBackup(const std::string& path, const std::string& password) -> bool;
 
   void SelectContact(const std::string& peer_id);
   void DeselectContact();
@@ -176,6 +188,38 @@ private:
 
   std::function<void()> on_state_changed_callback_;
 };
+
+inline auto MercuryViewModel::GenerateNewIdentity() -> std::string {
+    auto mnemonic = client_->GenerateNewIdentity();
+    if (!mnemonic.empty()) {
+        dispatch_queue_.Dispatch([this] {
+            RefreshState();
+        });
+    }
+    return mnemonic;
+}
+
+inline auto MercuryViewModel::RestoreIdentity(const std::string& mnemonic) -> bool {
+    if (client_->RestoreIdentity(mnemonic)) {
+        dispatch_queue_.Dispatch([this] {
+            RefreshState();
+        });
+        return true;
+    }
+    return false;
+}
+
+inline auto MercuryViewModel::GetMnemonic() -> std::optional<std::string> {
+    return client_->GetMnemonic();
+}
+
+inline auto MercuryViewModel::CreateBackup(const std::string& path, const std::string& password) -> bool {
+    return client_->CreateBackup(path, password);
+}
+
+inline auto MercuryViewModel::RestoreBackup(const std::string& path, const std::string& password) -> bool {
+    return client_->RestoreBackup(path, password);
+}
 
 inline void MercuryViewModel::SelectContact(const std::string& peer_id) {
   const auto state = client_->getPeerConnectionState(peer_id);
@@ -437,6 +481,7 @@ inline void MercuryViewModel::RefreshState() {
   dispatch_queue_.Dispatch([this] {
     {
       const std::lock_guard<std::mutex> lock(state_mutex_);
+      current_state_.identity_exists = client_->IdentityExists();
       current_state_.my_id = client_->getId();
       UpdateMyProfileFromSettings();
       current_state_.signaling_server_url = client_->getSettingsManager()->GetSignalingServerUrl();
