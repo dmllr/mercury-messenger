@@ -43,16 +43,6 @@
      fill="url(#g1)"
      id="circle3"
      style="fill:url(#g1)" />
-  <!-- Mercury orbit centered on Sun -->
-  <circle
-     cx="-150"
-     cy="256"
-     r="200"
-     fill="none"
-     stroke="rgba(255,255,255,0.12)"
-     stroke-width="2"
-     stroke-dasharray="4 4"
-     id="circle4" />
   <circle
      style="fill:none;stroke:#ffffff;stroke-width:1.5646;stroke-dasharray:1.5646, 4.6938"
      id="path5"

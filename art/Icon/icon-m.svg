@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<svg
+   width="512"
+   height="512"
+   viewBox="0 0 512 512"
+   version="1.1"
+   xmlns="http://www.w3.org/2000/svg">
+  <rect
+     width="512"
+     height="512"
+     rx="90"
+     ry="90"
+     fill="#0b1020" />
+  <path
+     d="M 96.000006,348 V 192 c 0,-18 14.000004,-32 32.000004,-32 h 64 l 64,96 64,-96 h 64 c 18,0 32,14 32,32 v 156"
+     fill="none"
+     stroke="#92FE9D"
+     stroke-width="8"
+     stroke-linecap="round"
+     stroke-linejoin="round" />
+</svg>

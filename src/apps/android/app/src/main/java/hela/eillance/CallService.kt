@@ -166,7 +166,7 @@ class CallService : Service(), IClientNativeBridge {
     val acceptPendingIntent = PendingIntent.getService(this, 2, acceptIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
     val builder = NotificationCompat.Builder(this, CALLS_CHANNEL_ID)
-      .setSmallIcon(R.drawable.ic_camera_stream)
+      .setSmallIcon(android.R.drawable.stat_notify_chat)
       .setContentTitle("Incoming Call")
       .setContentText(peerId)
       .setPriority(NotificationCompat.PRIORITY_MAX)
@@ -201,7 +201,7 @@ class CallService : Service(), IClientNativeBridge {
       .addMessage(content, System.currentTimeMillis(), person)
 
     val builder = NotificationCompat.Builder(this, MESSAGES_CHANNEL_ID)
-      .setSmallIcon(R.drawable.ic_camera_stream)
+      .setSmallIcon(android.R.drawable.stat_notify_chat)
       .setStyle(messagingStyle)
       .setContentIntent(pendingIntent)
       .setAutoCancel(true)
@@ -215,7 +215,7 @@ class CallService : Service(), IClientNativeBridge {
 
     val builder = NotificationCompat.Builder(this, FOREGROUND_CHANNEL_ID)
       .setContentTitle(getString(R.string.app_name))
-      .setSmallIcon(R.drawable.ic_camera_stream)
+      .setSmallIcon(android.R.drawable.stat_notify_chat)
       .setContentIntent(pendingIntent)
 
     if (inCall) {
