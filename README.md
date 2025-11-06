@@ -19,20 +19,43 @@ It operates without traditional registration; users are identified solely via an
 
 Project Mercury is built around a strict separation of concerns where the **Core** module acts as the sole engine of the application.
 
-End applications (Android, CLI, etc.) are designed to be extremely thin wrappers - they are the user interface and platform liaison, handling device-specific concerns (like rendering, input events, and permissions). All core business logic, state management, cryptography, and network orchestration must reside exclusively within the Core module.
+The core business logic is encapsulated within a set of C++ libraries collectively known as **Eillance**. End applications (Android, CLI, etc.) are designed to be extremely thin wrappers around this core. They serve as the user interface and platform liaison, handling device-specific concerns (like rendering, input events, and permissions). All state management, cryptography, and network orchestration reside exclusively within the Eillance libraries.
 
 ### Component Breakdown
 
-| Component | Location | Responsibility |
+| Library / App | Location | Responsibility |
 | :--- | :--- | :--- |
-| **Core Engine** | `src/core` | The primary module containing all application logic, data models, networking protocols, encryption handlers, and presentation view models. |
-| **Signaling Server** | `src/server` | Handles initial discovery, serving as an intermediary to help peers find each other and establish a direct connection while minimizing exposure of private metadata. |
-| **Android App** | `src/apps/android` | The mobile presentation layer built upon the Core Engine. |
-| **CLI Client** | `src/apps/mercury-cli` | A minimal application useful for robust end-to-end testing and integration verification. |
+| `eillance-core` | `src/libs/eillance-core` | The primary module containing all application logic, data models, protocol handlers, and the presentation view model that bridges the core state to the UI layer. |
+| `eillance-crypto` | `src/libs/eillance-crypto` | A dedicated cryptography layer wrapping BoringSSL for identity management and end-to-end encrypted session establishment. |
+| `eillance-rtc` | `src/libs/eillance-rtc` | Provides a cross-platform RTC transport implementation for desktop/CLI clients based on `libdatachannel`. |
+| `eillance-storage-sqlite`| `src/libs/eillance-storage-sqlite`| An SQLite-based implementation of the persistent storage interface, handling all database operations and schema migrations. |
+| `eillance-utils` | `src/libs/eillance-utils` | A collection of common, reusable utilities such as custom dispatch queues, argument parsers, and data structures. |
+| `eillance-logging` | `src/libs/eillance-logging` | A lightweight logging abstraction. |
+| `eillance-h264` | `src/libs/eillance-h264` | Helper utilities for parsing H.264 video streams. |
+| **Signaling Server** | `src/server` | Handles initial peer discovery, serving as an intermediary to help peers find each other and establish a direct connection while minimizing exposure of private metadata. |
+| **Android App** | `src/apps/android` | The mobile presentation layer built upon the Eillance libraries, using Google's official WebRTC library for transport. |
+| **CLI Client** | `src/apps/mercury-cli` | A minimal application useful for robust end-to-end testing and integration verification, using `libdatachannel` for transport. |
 
 ### Tech Stack
 
-Project Mercury utilizes real-time data and media exchange through a Peer Connection, a signaled peer-to-peer connection capable of carrying both data and media tracks.
+#### Key Libraries & Implementations
+
+*   **Cross-platform Core:** C++20
+*   **RTC/Data Transport:**
+    *   **`libdatachannel`**: Used for the CLI client and future desktop platforms.
+    *   **Google WebRTC (`org.webrtc`)**: Used for the Android application.
+*   **Database:** SQLite via the `eillance-storage-sqlite` library.
+*   **Cryptography:** BoringSSL, abstracted by the `eillance-crypto` library.
+*   **CLI Media Handling:**
+    *   **OpenCV**: Video capture.
+    *   **FFmpeg**: Video encoding.
+    *   **miniaudio**: Audio capture.
+    *   **Opus**: Audio encoding.
+*   **Android UI:** Jetpack Compose.
+
+#### Protocol Stack
+
+Project Mercury utilizes real-time data and media exchange through a Peer Connection, a signaled peer-to-peer connection capable of carrying both data and media tracks based on the following standards:
 
 **Protocol Stack:**
 
