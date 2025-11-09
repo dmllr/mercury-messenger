@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="512"
+   height="512"
+   viewBox="0 0 512 512"
+   version="1.1"
+   id="svg5"
+   xmlns="http://www.w3.org/2000/svg">
+  <rect
+     width="100%"
+     height="100%"
+     fill="#0b1020"
+     id="rect1" />
+  <defs
+     id="defs3">
+    <radialGradient
+       id="g1"
+       cx="-277.99999"
+       cy="256"
+       fx="-277.99999"
+       fy="256"
+       r="320"
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="translate(19.625861)">
+      <stop
+         offset="0%"
+         stop-color="#ffd04d"
+         id="stop1" />
+      <stop
+         offset="70%"
+         stop-color="#ff9b1a"
+         id="stop2" />
+      <stop
+         offset="100%"
+         stop-color="#ff6a00"
+         id="stop3" />
+    </radialGradient>
+  </defs>
+  <circle
+     cx="-130.37415"
+     cy="256"
+     r="320"
+     fill="url(#g1)"
+     id="circle3"
+     style="fill:url(#g1)" />
+  <circle
+     style="fill:none;stroke:#ffffff;stroke-width:1.5646;stroke-dasharray:1.5646, 4.6938"
+     id="path5"
+     cx="-130.37485"
+     cy="256.00214"
+     r="472.91849" />
+  <g
+     id="g5"
+     transform="matrix(3.4543715,0,0,3.4543715,169.93568,-628.3191)">
+    <circle
+       cx="50"
+       cy="256"
+       r="9"
+       fill="#b7c1cf"
+       stroke="#ffffff"
+       stroke-opacity="0.6"
+       stroke-width="0.8"
+       id="circle5" />
+    <ellipse
+       cx="46"
+       cy="252"
+       rx="3"
+       ry="1.6"
+       fill="#ffffff"
+       opacity="0.6"
+       id="ellipse5" />
+  </g>
+</svg>
