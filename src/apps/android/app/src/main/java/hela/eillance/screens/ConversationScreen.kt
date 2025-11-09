@@ -542,7 +542,7 @@ fun formatTimestamp(timestamp: Long): String {
   val locale = ConfigurationCompat.getLocales(LocalConfiguration.current)[0]
     ?: java.util.Locale.getDefault()
 
-  val messageTime = Instant.ofEpochSecond(timestamp).atZone(ZoneId.systemDefault())
+  val messageTime = Instant.ofEpochMilli(timestamp / 1000).atZone(ZoneId.systemDefault())
   val now = ZonedDateTime.now(ZoneId.systemDefault())
 
   val isToday = messageTime.toLocalDate().isEqual(now.toLocalDate())

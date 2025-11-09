@@ -28,6 +28,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import org.webrtc.VideoSink
 import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
 import java.io.FileOutputStream
 
 class CallService : Service(), IClientNativeBridge {
@@ -44,6 +45,7 @@ class CallService : Service(), IClientNativeBridge {
   private var onJsonStateUpdate: ((String) -> Unit)? = null
   private var wakeLock: PowerManager.WakeLock? = null
   private var webRtcTransport: WebRtcTransport? = null // This will be set by the native code
+  private val isEngineInitialized = AtomicBoolean(false)
 
   // --- Public API for ViewModel ---
   fun startLocalMedia() = webRtcTransport?.startLocalMedia()
@@ -65,9 +67,15 @@ class CallService : Service(), IClientNativeBridge {
     // Native engine initialization is slow and must not block the main thread.
     serviceScope.launch {
       initEngine(this@CallService)
+      isEngineInitialized.set(true)
       if (identityExists()) {
         start()
       }
+      // Always refresh state after initialization to broadcast the initial state to any
+      // already-connected UI components.
+      // This is crucial for the clean-run scenario where the UI might be waiting for the
+      // initial `identityExists = false` state.
+      refreshState()
     }
     startForegroundService()
   }
@@ -349,7 +357,16 @@ class CallService : Service(), IClientNativeBridge {
   external fun start()
   private external fun terminate()
   external fun identityExists(): Boolean
-  external fun refreshState()
+
+  fun refreshState() {
+    // Only execute if the engine has been initialized.
+    if (isEngineInitialized.get()) {
+      nativeRefreshState()
+    } else {
+      Log.d("CallService", "refreshState called before engine initialized; ignoring.")
+    }
+  }
+  private external fun nativeRefreshState()
   external fun addContact(peerId: String)
   external fun acceptContact(peerId: String)
   external fun removeContact(peerId: String)

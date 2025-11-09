@@ -117,13 +117,16 @@ public:
     {
       const std::lock_guard<std::mutex> lock(state_mutex_);
       current_state_.identity_exists = client_->IdentityExists();
-      if (!current_state_.identity_exists) return;
-      current_state_.my_id = client_->getId();
-      UpdateMyProfileFromSettings();
-      current_state_.signaling_server_url = client_->getSettingsManager()->GetSignalingServerUrl();
-      UpdateContacts();
+      if (current_state_.identity_exists) {
+        current_state_.my_id = client_->getId();
+        UpdateMyProfileFromSettings();
+        current_state_.signaling_server_url = client_->getSettingsManager()->GetSignalingServerUrl();
+        UpdateContacts();
+      }
     }
-    UpdateChats();
+    if (GetState().identity_exists) {
+      UpdateChats();
+    }
     SetupClientCallbacks();
   }
   ~MercuryViewModel() = default;
