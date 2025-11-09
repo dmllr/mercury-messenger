@@ -1,5 +1,18 @@
 # Setup CMake for the project
 
+if(MSVC)
+  # Set the desired static runtime library for all targets in the project.
+  # This uses a generator expression to select MultiThreadedDebug (/MTd) for Debug builds
+  # and MultiThreaded (/MT) for Release builds, ensuring consistency with dependencies.
+  set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
+  # Some sub-projects or CMake defaults might add the dynamic runtime flags (/MD or /MDd).
+  # To prevent D9025 override warnings, we explicitly remove these flags from the compiler
+  # flag variables, allowing CMAKE_MSVC_RUNTIME_LIBRARY to be the single source of truth.
+  string(REGEX REPLACE "/MDd?" "" CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
+  string(REGEX REPLACE "/MDd?" "" CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
+endif()
+
 enable_language(C)
 enable_language(CXX)
 
