@@ -88,12 +88,11 @@ constexpr auto GetConnectionStatusString(eillance::ServiceConnectionState state)
 }
 
 // Helper function to format timestamps according to the specified rules.
-std::string FormatTimestamp(Time::Unit ts_seconds) {
+std::string FormatTimestamp(Time::Unit ts_microseconds) {
   using namespace std::chrono;
-  const auto message_tp = system_clock::time_point(seconds(ts_seconds));
+  const time_t message_time_t = ts_microseconds / 1000000;
   const auto now_tp = system_clock::now();
 
-  const time_t message_time_t = system_clock::to_time_t(message_tp);
   const time_t now_time_t = system_clock::to_time_t(now_tp);
 
 #ifdef _WIN32

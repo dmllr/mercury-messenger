@@ -33,7 +33,7 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_terminate(JNIEn
   }
 }
 
-extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_refreshState(JNIEnv* /*env*/, jobject /*instance*/) {
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_nativeRefreshState(JNIEnv* /*env*/, jobject /*instance*/) {
   if (client_engine && client_engine->ViewModel()) { client_engine->ViewModel()->RefreshState(); }
 }
 
