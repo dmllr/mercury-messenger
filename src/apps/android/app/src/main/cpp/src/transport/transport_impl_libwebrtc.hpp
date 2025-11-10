@@ -347,7 +347,7 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcTransport_nati
     const char* msg_chars = env->GetStringUTFChars(message, nullptr);
     try {
       const auto json_msg = nlohmann::json::parse(msg_chars);
-      transport->Delegate()->processPeerMessage(json_msg);
+      transport->Delegate()->ProcessPeerMessage(json_msg);
     } catch (const std::exception& e) {
       LOGE << "Failed to parse peer message: " << e.what();
     }
@@ -370,21 +370,7 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcTransport_nati
 
     try {
       const auto json_msg = nlohmann::json::parse(msg_str);
-
-      if (type_str == "auth_challenge") {
-        const auto challenge = json_msg.value("challenge", "");
-        if (!challenge.empty()) {
-          const auto signature_bytes = transport->Delegate()->Sign(challenge);
-          const auto signature_hex = eillance::crypto::ToHex(signature_bytes);
-          const nlohmann::json response = {{"type", "auth_response"}, {"id", transport->GetId()}, {"signature", signature_hex}};
-          transport->SendSignalingMessage(response);
-        }
-      } else if (type_str == "login_success") {
-        transport->Delegate()->onLoginSuccess();
-        transport->ReportStateChange("", eillance::EventSource::system, static_cast<int>(eillance::ServiceConnectionState::online));
-      } else {
-        transport->Delegate()->processSystemMessage(type_str, json_msg);
-      }
+      transport->Delegate()->OnSystemMessage(type_str, json_msg);
     } catch (const std::exception& e) {
       LOGE << "Failed to parse system message: " << e.what();
     }
@@ -396,7 +382,7 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcTransport_nati
   if ((transport != nullptr) && (transport->Delegate() != nullptr)) {
     const char* peer_id_chars = env->GetStringUTFChars(peer_id, nullptr);
     const char* error_chars = env->GetStringUTFChars(error, nullptr);
-    transport->Delegate()->onSignalingErrorForPeer(peer_id_chars, error_chars);
+    transport->Delegate()->OnSignalingErrorForPeer(peer_id_chars, error_chars);
     env->ReleaseStringUTFChars(peer_id, peer_id_chars);
     env->ReleaseStringUTFChars(error, error_chars);
   }

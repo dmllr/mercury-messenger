@@ -14,6 +14,7 @@
 #include "eillance/capture/capture.hpp"
 #include "eillance/client/settings_manager.hpp"
 #include "eillance/crypto/crypto.hpp"
+#include "eillance/events/service_connection_state.h"
 #include "eillance/identity/contact_manager.hpp"
 #include "eillance/identity/id_manager.hpp"
 #include "eillance/logging/logging.h"
@@ -133,13 +134,14 @@ public:
   void DebugRevokeAllApprovals();
 
   // TransportDelegate implementation
-  void onPeerReady(const std::shared_ptr<Peer>& peer) override;
-  void onSignalingErrorForPeer(const std::string& peer_id, const std::string& error) override;
+  void OnPeerReady(const std::shared_ptr<Peer>& peer) override;
+  void OnSignalingErrorForPeer(const std::string& peer_id, const std::string& error) override;
   auto Sign(const std::string& message) -> std::vector<std::byte> override;
-  void onLoginSuccess() override;
-  void processPeerMessage(Json message) override;
-  void processSystemMessage(const std::string& type, Json message) override;
-  void onFrameReceived(const std::string& peer_id, const std::vector<std::byte>& frame) override;
+  void OnLoginSuccess() override;
+  void ProcessPeerMessage(Json message) override;
+  void OnSystemMessage(const std::string& type, const Json& message) override;
+  void OnDataChannelOpen(const std::string& peer_id) override;
+  void OnFrameReceived(const std::string& peer_id, const std::vector<std::byte>& frame) override;
 
 private:
   void InitializeAVStream();
@@ -492,17 +494,36 @@ inline void Client::configure(const Config& config) const {
   }
 }
 
-inline void Client::onPeerReady(const std::shared_ptr<Peer>&) {}
+inline void Client::OnPeerReady(const std::shared_ptr<Peer>&) {}
 
 inline auto Client::Sign(const std::string& message) -> std::vector<std::byte> {
   return id_manager_->Sign(message);
 }
 
-inline void Client::onLoginSuccess() {
+inline void Client::OnLoginSuccess() {
   delivery_service_->start();
 }
 
-inline void Client::onSignalingErrorForPeer(const std::string& peer_id, const std::string& error) {
+inline void Client::OnSystemMessage(const std::string& type, const Json& message) {
+  if (type == "auth_challenge") {
+    const auto challenge = message.value("challenge", "");
+    if (!challenge.empty()) {
+      const auto signature_bytes = Sign(challenge);
+      const auto signature_hex = crypto::ToHex(signature_bytes);
+      const Json response = {{"type", "auth_response"}, {"id", getId()}, {"signature", signature_hex}};
+      transport_->sendSignalingMessage(response);
+    }
+  } else if (type == "login_success") {
+    OnLoginSuccess();
+    if (status_callback_) {
+      (*status_callback_)("", EventSource::system, static_cast<int>(ServiceConnectionState::online));
+    }
+  } else {
+    LOGW << "Received unknown system message of type: " << type;
+  }
+}
+
+inline void Client::OnSignalingErrorForPeer(const std::string& peer_id, const std::string& error) {
   if (error == "peer_not_found") {
     LOGW << "Connection attempt failed for peer " << peer_id << " because they are not online. Will retry when they appear.";
     delivery_service_->connectionAttemptFinished(peer_id);
@@ -510,7 +531,31 @@ inline void Client::onSignalingErrorForPeer(const std::string& peer_id, const st
   }
 }
 
-inline void Client::processPeerMessage(Json message) {
+inline void Client::OnDataChannelOpen(const std::string& peer_id) {
+  auto peer = transport_->getPeer(peer_id);
+  if (!peer) {
+    LOGW << "onDataChannelOpen called for non-existent peer: " << peer_id;
+    return;
+  }
+
+  LOGI << "Data channel with " << peer_id << " opened.";
+  peer->data_channel_is_open_ = true;
+
+  // 1. Initiate key exchange
+  auto my_pub_key = peer->session_cipher_->GetPublicKey();
+  const Json key_exchange_message = {{"type", "key_exchange"}, {"key", std::vector<std::byte>(my_pub_key.begin(), my_pub_key.end())}, {"is_reply", false}};
+  transport_->sendPeerDataChannelMessage(peer_id, key_exchange_message);
+
+  // 2. Send profile info
+  Json profile_msg;
+  profile_msg["type"] = "profile_info";
+  profile_msg["display_name"] = settings_manager_->GetMyDisplayName().value_or("");
+  profile_msg["bio"] = settings_manager_->GetMyBio().value_or("");
+  profile_msg["photo"] = settings_manager_->GetMyPhotoBase64();
+  transport_->sendPeerDataChannelMessage(peer_id, profile_msg);
+}
+
+inline void Client::ProcessPeerMessage(Json message) {
   const auto from_it = message.find("from");
   if (from_it == message.end()) { return; }
   auto peer_id = from_it->get<std::string>();
@@ -629,22 +674,7 @@ inline void Client::processPeerMessage(Json message) {
   }
 }
 
-inline void Client::processSystemMessage(const std::string& type, Json message) {
-  if (type == "peers" && on_peer_list_update_) {
-    std::vector<Device> peers;
-    for (const auto& peer_json: message.at("peers")) {
-      Device d;
-      d.id = peer_json.at("id").get<std::string>();
-      d.name = peer_json.value("name", d.id);
-      peers.push_back(d);
-    }
-    (*on_peer_list_update_)(peers);
-    return;
-  }
-  LOGW << "Unhandled system message of type: " << type;
-}
-
-inline void Client::onFrameReceived(const std::string& /*peer_id*/, const std::vector<std::byte>& frame) {
+inline void Client::OnFrameReceived(const std::string& /*peer_id*/, const std::vector<std::byte>& frame) {
   if (on_frame_received_) { (*on_frame_received_)(frame); }
 }
 
@@ -1029,22 +1059,7 @@ inline void Client::sendQueuedMessages(const std::string& peer_id) const {
 }
 
 inline void Client::setupDataChannel(const std::shared_ptr<Peer>& peer, const std::string& peer_id) {
-  peer->on_data_channel_message_ = [this, peer_id, peer](const std::string& msg) { processDataChannelMessage(peer_id, nlohmann::json::parse(msg)); };
-
-  // When the data channel opens, send our profile information.
-  peer->on_data_channel_open_ = [this, peer_id]() {
-    Json profile_msg;
-    profile_msg["type"] = "profile_info";
-    profile_msg["display_name"] = settings_manager_->GetMyDisplayName().value_or("");
-    profile_msg["bio"] = settings_manager_->GetMyBio().value_or("");
-    auto my_photo = settings_manager_->GetMyPhotoBase64();
-    if (my_photo && !my_photo->empty()) {
-      profile_msg["photo"] = *my_photo;
-    } else {
-      profile_msg["photo"] = nullptr;
-    }
-    transport_->sendPeerDataChannelMessage(peer_id, profile_msg);
-  };
+  peer->on_data_channel_message_ = [this, peer_id](const std::string& msg) { processDataChannelMessage(peer_id, nlohmann::json::parse(msg)); };
 }
 
 inline auto Client::parseDeviceProfile(const Json& jprofile) -> Device::Profile {
