@@ -1,3 +1,7 @@
+if(TARGET libopencv)
+    return()
+endif()
+
 set(OpenCV_VERSION 4.11.0)
 
 set(BUILD_SHARED_LIBS OFF)
