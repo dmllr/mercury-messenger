@@ -680,6 +680,23 @@ inline void MercuryViewModel::SetupClientCallbacks() {
     });
   });
 
+  client_->setOnContactRemovedCallback([this](const std::string& peer_id) {
+    dispatch_queue_.Dispatch([this, peer_id] {
+        {
+            const std::lock_guard<std::mutex> lock(state_mutex_);
+            // If the user is currently viewing the conversation with the contact
+            // who just removed them, clear the view.
+            if (current_state_.selected_contact_id && *current_state_.selected_contact_id == peer_id) {
+                current_state_.selected_contact_id.reset();
+                current_state_.interaction_history.clear();
+                current_state_.has_older_messages = false;
+            }
+        }
+        RefreshState();
+    });
+  });
+
+
   client_->setMessageStatusChangedCallback(
       [this](const std::string& peer_id, const std::uint64_t message_id,
              const messaging::MessageStatus status) {
