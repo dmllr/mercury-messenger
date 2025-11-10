@@ -438,6 +438,10 @@ inline void Client::confirmContact(const std::string& peer_id) const {
   if (contact_manager_->ConfirmContact(peer_id)) {
     const Json content = {{"action", "contact_confirm"}};
     message_history_->AddTextEntry(peer_id, content.dump(), messaging::MessageDirection::sent, messaging::HistoryEntryKind::systemMessage);
+
+    const Json profile_content = {{"action", "send_profile"}};
+    message_history_->AddTextEntry(peer_id, profile_content.dump(), messaging::MessageDirection::sent, messaging::HistoryEntryKind::systemMessage);
+
     if (on_contact_status_changed_) { (*on_contact_status_changed_)(peer_id, identity::ContactStatus::confirmed); }
     delivery_service_->attemptDelivery(peer_id);
   }
@@ -541,18 +545,10 @@ inline void Client::OnDataChannelOpen(const std::string& peer_id) {
   LOGI << "Data channel with " << peer_id << " opened.";
   peer->data_channel_is_open_ = true;
 
-  // 1. Initiate key exchange
+  // Initiate key exchange
   auto my_pub_key = peer->session_cipher_->GetPublicKey();
   const Json key_exchange_message = {{"type", "key_exchange"}, {"key", std::vector<std::byte>(my_pub_key.begin(), my_pub_key.end())}, {"is_reply", false}};
   transport_->sendPeerDataChannelMessage(peer_id, key_exchange_message);
-
-  // 2. Send profile info
-  Json profile_msg;
-  profile_msg["type"] = "profile_info";
-  profile_msg["display_name"] = settings_manager_->GetMyDisplayName().value_or("");
-  profile_msg["bio"] = settings_manager_->GetMyBio().value_or("");
-  profile_msg["photo"] = settings_manager_->GetMyPhotoBase64();
-  transport_->sendPeerDataChannelMessage(peer_id, profile_msg);
 }
 
 inline void Client::ProcessPeerMessage(Json message) {
@@ -668,6 +664,16 @@ inline void Client::ProcessPeerMessage(Json message) {
           }
         }
       }
+
+      // Send our profile back upon confirmation.
+      const Json profile_content = {{"action", "send_profile"}};
+      message_history_->AddTextEntry(peer_id, profile_content.dump(), messaging::MessageDirection::sent, messaging::HistoryEntryKind::systemMessage);
+
+      // Also request the peer's profile to ensure a two-way exchange,
+      // mitigating a race condition where their initial profile send might be dropped.
+      const Json request_content = {{"action", "request_profile"}};
+      message_history_->AddTextEntry(peer_id, request_content.dump(), messaging::MessageDirection::sent,
+                                     messaging::HistoryEntryKind::systemMessage);
 
       delivery_service_->attemptDelivery(peer_id);
     }
@@ -1041,6 +1047,27 @@ inline void Client::sendQueuedMessages(const std::string& peer_id) const {
                                            {"payload", std::vector<std::byte>(encrypted_payload.begin(),
                                                                               encrypted_payload.end())}};
                 transport_->sendPeerDataChannelMessage(peer_id, json_message);
+                sent = true;
+              }
+            } else if (action == "request_profile") {
+              if (peer->data_channel_is_open_ && peer->session_cipher_->IsReady()) {
+                const Json request = {{"type", "profile_request"}};
+                transport_->sendPeerDataChannelMessage(peer_id, request);
+                sent = true;
+              }
+            } else if (action == "send_profile") {
+              if (peer->data_channel_is_open_ && peer->session_cipher_->IsReady()) {
+                Json profile_msg;
+                profile_msg["type"] = "profile_info";
+                profile_msg["display_name"] = settings_manager_->GetMyDisplayName().value_or("");
+                profile_msg["bio"] = settings_manager_->GetMyBio().value_or("");
+                auto my_photo = settings_manager_->GetMyPhotoBase64();
+                if (my_photo && !my_photo->empty()) {
+                  profile_msg["photo"] = *my_photo;
+                } else {
+                  profile_msg["photo"] = nullptr;
+                }
+                transport_->sendPeerDataChannelMessage(peer_id, profile_msg);
                 sent = true;
               }
             }
