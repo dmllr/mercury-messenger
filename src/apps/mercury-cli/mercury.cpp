@@ -377,6 +377,24 @@ int main(int argc, char** argv) {
                 view_model->AcceptContact(matches[0]);
               }
             }
+          } else if (command == "/remove") {
+            if (arg.empty()) {
+              view_model->AddSystemMessageToChat("--> Usage: /remove <contact_id>");
+            } else {
+              std::vector<std::string> matches;
+              const auto state = view_model->GetState();
+              for (const auto& contact : state.contacts) {
+                if (contact.peer_id.starts_with(arg)) { matches.push_back(contact.peer_id); }
+              }
+              if (matches.empty()) {
+                view_model->AddSystemMessageToChat("--> Contact not found for ID starting with: " + arg);
+              } else if (matches.size() > 1) {
+                view_model->AddSystemMessageToChat("--> Ambiguous ID. Multiple contacts start with: " + arg);
+              } else {
+                view_model->AddSystemMessageToChat("--> Removing contact: " + matches[0]);
+                view_model->RemoveContact(matches[0]);
+              }
+            }
           } else if (command == "/set") {
             std::string key;
             std::string value;
