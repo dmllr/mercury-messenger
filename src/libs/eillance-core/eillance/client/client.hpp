@@ -63,6 +63,7 @@ public:
   using OnIncomingCallCallback = std::function<void(const std::string& peer_id, messaging::HistoryEntryKind call_type)>;
   using OnContactProfileUpdatedCallback = std::function<void(const std::string& peer_id)>;
   using OnCallTerminatedCallback = std::function<void(const std::string& peer_id)>;
+  using OnContactRemovedCallback = std::function<void(const std::string& peer_id)>;
 
   explicit Client(std::shared_ptr<storage::PersistentStorage> storage, std::shared_ptr<transport::Transport> transport);
 
@@ -104,6 +105,7 @@ public:
   void setPeerListUpdateCallback(const OnPeerListUpdateCallback& callback);
   void setIncomingCallCallback(const OnIncomingCallCallback& callback);
   void setOnCallTerminatedCallback(const OnCallTerminatedCallback& callback);
+  void setOnContactRemovedCallback(const OnContactRemovedCallback& callback);
   void setOnContactProfileUpdatedCallback(const OnContactProfileUpdatedCallback& callback);
   void call(const std::string& peer_id);
   void connect(const std::string& peer_id);
@@ -111,9 +113,9 @@ public:
   void startVideoCall(const std::string& peer_id);
   void acceptCall(const std::string& peer_id);
   void rejectCall(const std::string& peer_id) const;
-  void addContact(const std::string& peer_id) const;
-  void confirmContact(const std::string& peer_id) const;
-  void removeContact(const std::string& peer_id);
+  void addContact(const std::string& peer_id);
+  void confirmContact(const std::string& peer_id);
+  void removeContact(const std::string& peer_id, bool notify_peer = true);
   auto getPeerConnectionState(const std::string& peer_id) const -> eillance::transport::PeerConnectionState;
   auto getContacts() const -> std::vector<identity::Contact>;
   auto getChatSummaries(const std::vector<std::string>& peer_ids) const -> std::vector<messaging::ChatSummary>;
@@ -171,6 +173,7 @@ private:
   std::shared_ptr<OnIncomingCallCallback> on_incoming_call_{};
   std::shared_ptr<OnCallTerminatedCallback> on_call_terminated_{};
   std::shared_ptr<OnContactProfileUpdatedCallback> on_contact_profile_updated_{};
+  std::shared_ptr<OnContactRemovedCallback> on_contact_removed_{};
 
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::unique_ptr<identity::IdManager> id_manager_;
@@ -339,6 +342,10 @@ inline void Client::setOnCallTerminatedCallback(const OnCallTerminatedCallback& 
   on_call_terminated_ = std::make_shared<OnCallTerminatedCallback>(callback);
 }
 
+inline void Client::setOnContactRemovedCallback(const OnContactRemovedCallback& callback) {
+  on_contact_removed_ = std::make_shared<OnContactRemovedCallback>(callback);
+}
+
 inline void Client::setOnContactProfileUpdatedCallback(const OnContactProfileUpdatedCallback& callback) {
   on_contact_profile_updated_ = std::make_shared<OnContactProfileUpdatedCallback>(callback);
 }
@@ -410,7 +417,7 @@ inline void Client::rejectCall(const std::string& peer_id) const {
   hangup(peer_id);
 }
 
-inline void Client::addContact(const std::string& peer_id) const {
+inline void Client::addContact(const std::string& peer_id) {
   const auto existing_contact = contact_manager_->GetContact(peer_id);
   if (existing_contact && existing_contact->status == identity::ContactStatus::awaitingApproval) {
     confirmContact(peer_id);
@@ -424,17 +431,26 @@ inline void Client::addContact(const std::string& peer_id) const {
   }
 }
 
-inline void Client::removeContact(const std::string& peer_id) {
-  contact_manager_->RemoveContact(peer_id);
+inline void Client::removeContact(const std::string& peer_id, bool notify_peer) {
+  if (notify_peer) {
+    if (auto peer = transport_->getPeer(peer_id); peer && peer->data_channel_is_open_) {
+      const Json msg = {{"type", "contact_removed"}};
+      // This is a fire-and-forget message. We don't use the delivery service because
+      // we are about to tear down the connection and remove the contact entirely.
+      transport_->sendPeerDataChannelMessage(peer_id, msg);
+    }
+  }
+
   // Close any active connections and remove the peer object.
   if (auto peer = transport_->getPeer(peer_id)) {
     transport_->closePeerConnection(peer_id, "data");
     transport_->closePeerConnection(peer_id, "media");
     transport_->removePeer(peer_id);
   }
+  contact_manager_->RemoveContact(peer_id);
 }
 
-inline void Client::confirmContact(const std::string& peer_id) const {
+inline void Client::confirmContact(const std::string& peer_id) {
   if (contact_manager_->ConfirmContact(peer_id)) {
     const Json content = {{"action", "contact_confirm"}};
     message_history_->AddTextEntry(peer_id, content.dump(), messaging::MessageDirection::sent, messaging::HistoryEntryKind::systemMessage);
@@ -879,19 +895,9 @@ inline void Client::processDataChannelMessage(const std::string& peer_id, const 
   const auto type = itr->get<std::string>();
   const auto peer = transport_->getPeer(peer_id);
   if (!peer) { return; };
-  if (type == "profile") {
-    const auto profile = parseDeviceProfile(message.at("profile"));
-    {
-      const std::lock_guard<std::mutex> lock(online_peers_mutex_);
-      online_peers_[peer_id].id = peer_id;
-      online_peers_[peer_id].profile = profile;
-      if (message.contains("name")) { online_peers_[peer_id].name = message.at("name").get<std::string>(); }
-    }
-    updateAndNotifyPeerList();
-    if (on_profile_received_) { (*on_profile_received_)(peer_id, profile); }
-  } else if (type == "termination") {
-    transport_->removePeer(peer_id);
-  } else if (type == "key_exchange") {
+
+  // Handle messages that DO NOT require a confirmed contact first.
+  if (type == "key_exchange") {
     auto pub_key_bytes = message.at("key").get<std::vector<std::byte>>();
     if (peer->session_cipher_->ComputeSharedSecret({pub_key_bytes.begin(), pub_key_bytes.end()})) {
       LOGI << "Successfully computed shared secret with peer " << peer_id;
@@ -904,15 +910,35 @@ inline void Client::processDataChannelMessage(const std::string& peer_id, const 
     } else {
       LOGE << "Failed to compute shared secret with peer " << peer_id;
     }
+    return;
+  }
+
+  // For all other messages, require the sender to be a confirmed contact. This is a security boundary.
+  if (!contact_manager_->IsConfirmedContact(peer_id)) {
+    LOGW << "Received data channel message of type '" << type << "' from non-contact peer " << peer_id << ". Ignoring.";
+    return;
+  }
+
+  if (type == "profile") {
+    const auto profile = parseDeviceProfile(message.at("profile"));
+
+    {
+      const std::lock_guard<std::mutex> lock(online_peers_mutex_);
+      online_peers_[peer_id].id = peer_id;
+      online_peers_[peer_id].profile = profile;
+      if (message.contains("name")) { online_peers_[peer_id].name = message.at("name").get<std::string>(); }
+    }
+    updateAndNotifyPeerList();
+    if (on_profile_received_) { (*on_profile_received_)(peer_id, profile); }
+  } else if (type == "termination") {
+    transport_->removePeer(peer_id);
   } else if (type == "chat") {
     if (!peer->session_cipher_->IsReady()) {
       LOGW << "Received chat message from " << peer_id << " but session cipher is not ready. Ignoring.";
       return;
     }
-
     auto message_id = message.at("message_id").get<std::uint64_t>();
     bool is_system = message.value("is_system", false);
-
     if (is_system) {
       auto payload = message.at("payload").get<std::vector<std::byte>>();
       auto decrypted_message = peer->session_cipher_->Decrypt({payload.begin(), payload.end()});
@@ -971,6 +997,12 @@ inline void Client::processDataChannelMessage(const std::string& peer_id, const 
       profile_msg["photo"] = nullptr;
     }
     transport_->sendPeerDataChannelMessage(peer_id, profile_msg);
+  } else if (type == "contact_removed") {
+    LOGI << "Received contact removal notification from " << peer_id;
+    if (on_contact_removed_) {
+      (*on_contact_removed_)(peer_id);
+    }
+    removeContact(peer_id, false);
   } else {
     throw std::runtime_error("Unknown message type in ProcessDataChannelMessage");
   }
