@@ -25,6 +25,7 @@
 #include "eillance/transport/transport.hpp"
 #include "eillance/transport/transport_delegate.hpp"
 #include "eillance/utils/dispatch_queue.hpp"
+#include "eillance/utils/invariant.hpp"
 #include "eillance/utils/memory.h"
 
 namespace eillance::rtc {
@@ -169,7 +170,7 @@ public:
       peer->SetState(Peer::State::ready);
     }
 
-    if (peer->GetState() == Peer::State::ready && delegate_) { delegate_->onPeerReady(peer); }
+    if (peer->GetState() == Peer::State::ready && delegate_) { delegate_->OnPeerReady(peer); }
   }
 
   void CreatePeerConnection(const std::string& peer_id, const std::string& context) {
@@ -254,7 +255,7 @@ public:
       assert(delegate_);
       if (track->mid().find("video") != std::string::npos) {
         track->onMessage([this, peer_id](::rtc::message_variant var) {
-          if (std::holds_alternative<::rtc::binary>(var)) { delegate_->onFrameReceived(peer_id, std::get<::rtc::binary>(var)); }
+          if (std::holds_alternative<::rtc::binary>(var)) { delegate_->OnFrameReceived(peer_id, std::get<::rtc::binary>(var)); }
         });
       }
     });
@@ -268,8 +269,7 @@ public:
           return;
         }
 
-        dc->onOpen([peer, peer_id]() { peer->data_channel_is_open_ = true; });
-
+        dc->onOpen([this, peer_id]() { delegate_->OnDataChannelOpen(peer_id); });
         if (peer->on_data_channel_message_) {
           dc->onMessage(nullptr, [cb = peer->on_data_channel_message_](const std::string& msg) { cb(msg); });
         } else {
@@ -302,16 +302,7 @@ public:
 
     auto dc = pc->createDataChannel("data");
 
-    dc->onOpen([this, peer_id, wpeer = make_weak_ptr(peer)]() {
-      auto peer = wpeer.lock();
-      if (!peer) { return; }
-      LOGI << "Data channel with " << peer_id << " opened.";
-      peer->data_channel_is_open_ = true;
-      if (peer->on_data_channel_open_) {
-        peer->on_data_channel_open_();
-      }
-    });
-
+    dc->onOpen([this, peer_id]() { delegate_->OnDataChannelOpen(peer_id); });
     if (peer->on_data_channel_message_) {
       dc->onMessage(nullptr, [cb = peer->on_data_channel_message_](const std::string& msg) { cb(msg); });
     }
@@ -446,7 +437,7 @@ private:
     if (itr == message.end()) {
       DispatchQueue::MainThread().Dispatch([this, message]() { OnSystemMessage(message); });
     } else {
-      DispatchQueue::MainThread().Dispatch([this, message]() { delegate_->processPeerMessage(message); });
+      DispatchQueue::MainThread().Dispatch([this, message]() { delegate_->ProcessPeerMessage(message); });
     }
   }
 
@@ -483,35 +474,19 @@ private:
     if (itr == message.end()) { return; }
     const auto type = itr->get<std::string>();
 
-    if (type == "auth_challenge") {
-      const auto challenge = message.value("challenge", "");
-      if (challenge.empty()) {
-        LOGE << "Received auth_challenge without a challenge string.";
-        return;
-      }
-      const auto signature_bytes = delegate_->Sign(challenge);
-      const auto signature_hex = crypto::ToHex(signature_bytes);
-      const Json response = {{"type", "auth_response"}, {"id", id_}, {"signature", signature_hex}};
-      WsSendMessage(response);
-    } else if (type == "login_success") {
-      LOGI << "Successfully logged into signaling server.";
-      is_logged_in_ = true;
-      ReportServiceConnectionState(ServiceConnectionState::online);
-      delegate_->onLoginSuccess();
-    } else if (type == "error") {
+    if (type == "error") {
       const auto error = message.value("error", "unknown");
       LOGE << "Signaling error received: " << error;
       if (const auto for_peer_it = message.find("for_peer"); for_peer_it != message.end()) {
-        delegate_->onSignalingErrorForPeer(for_peer_it->get<std::string>(), error);
+        delegate_->OnSignalingErrorForPeer(for_peer_it->get<std::string>(), error);
       } else {
         if (error == "auth_failed") {
-          LOGE << "Authentication failed. Terminating connection.";
           Terminate();
         }
         ReportServiceConnectionState(ServiceConnectionState::failure);
       }
     } else {
-      delegate_->processSystemMessage(type, message);
+      delegate_->OnSystemMessage(type, message);
     }
   }
 
