@@ -90,8 +90,15 @@ fun MainAppContent(viewModel: MainViewModel) {
       confirmButton = {
         TextButton(
           onClick = {
+            // If the user is on a conversation screen when they delete a
+            // contact, navigate back to the contacts list to avoid showing
+            // an empty screen for the now-deleted contact.
+            val isOnConversationScreen = navController.currentBackStackEntry?.destination?.route == Route.Interaction.route
             viewModel.removeContact(contact.peerId)
             contactToRemove = null
+            if (isOnConversationScreen) {
+              navController.popBackStack()
+            }
           },
           colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
         ) {
