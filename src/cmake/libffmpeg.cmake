@@ -1,3 +1,7 @@
+if(TARGET libffmpeg)
+  return()
+endif()
+
 # reference:
 # https://github.com/IljaKosynkin/FFmpeg-Development-Kit/tree/master/ffmpeg-sample/app/src/main/cpp
 # LIB_X264 is not included
