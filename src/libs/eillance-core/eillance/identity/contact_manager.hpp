@@ -41,11 +41,17 @@ public:
   // Marks that we have received a request from a peer.
   auto ReceiveContactRequest(const std::string& peer_id) -> bool {
     const std::lock_guard<std::mutex> lock(mutex_);
-    if (contacts_.contains(peer_id) && contacts_[peer_id].status == ContactStatus::confirmed) {
-      return false;  // Already confirmed
+    auto it = contacts_.find(peer_id);
+    if (it != contacts_.end()) {
+      if (it->second.status == ContactStatus::confirmed) {
+        return false;  // Already confirmed
+      }
+      it->second.status = ContactStatus::awaitingApproval;
+      storage_->UpdateContact(it->second);
+    } else {
+      contacts_[peer_id] = {.peer_id = peer_id, .status = ContactStatus::awaitingApproval};
+      storage_->UpdateContact(contacts_[peer_id]);
     }
-    contacts_[peer_id] = {.peer_id = peer_id, .status = ContactStatus::awaitingApproval};
-    storage_->UpdateContact(contacts_[peer_id]);
     return true;
   }
 
@@ -65,15 +71,21 @@ public:
   // Marks a contact as confirmed after they accepted our request.
   auto MarkAsConfirmed(const std::string& peer_id) -> bool {
     const std::lock_guard<std::mutex> lock(mutex_);
-    const auto it = contacts_.find(peer_id);
-    if (it != contacts_.end() && it->second.status == ContactStatus::confirmed) {
-      return false;  // Already confirmed, no state change.
+    auto it = contacts_.find(peer_id);
+
+    if (it != contacts_.end()) {
+      if (it->second.status == ContactStatus::confirmed) {
+        return false;  // Already confirmed, no state change.
+      }
+      // If contact exists, just update its status.
+      it->second.status = ContactStatus::confirmed;
+      storage_->UpdateContact(it->second);
+    } else {
+      // If we receive a confirmation for a contact that doesn't exist (e.g., after
+      // a clear data), create it.
+      contacts_[peer_id] = {.peer_id = peer_id, .status = ContactStatus::confirmed};
+      storage_->UpdateContact(contacts_[peer_id]);
     }
-    // If we receive a confirmation, we trust it and set the contact to confirmed,
-    // regardless of its previous state. This makes the protocol robust against
-    // state inconsistencies (e.g., after an app restart).
-    contacts_[peer_id] = {.peer_id = peer_id, .status = ContactStatus::confirmed};
-    storage_->UpdateContact(contacts_[peer_id]);
     return true;
   }
 
