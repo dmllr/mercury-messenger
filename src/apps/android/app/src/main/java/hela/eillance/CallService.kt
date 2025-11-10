@@ -28,8 +28,8 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import org.webrtc.VideoSink
 import java.io.File
-import java.util.concurrent.atomic.AtomicBoolean
 import java.io.FileOutputStream
+import java.util.concurrent.atomic.AtomicBoolean
 
 class CallService : Service(), IClientNativeBridge {
 
@@ -235,7 +235,7 @@ class CallService : Service(), IClientNativeBridge {
 
     val builder = NotificationCompat.Builder(this, FOREGROUND_CHANNEL_ID)
       .setContentTitle(getString(R.string.app_name))
-      .setSmallIcon(android.R.drawable.stat_notify_chat)
+      .setSmallIcon(R.drawable.ic_status_standby)
       .setContentIntent(pendingIntent)
 
     if (inCall) {
