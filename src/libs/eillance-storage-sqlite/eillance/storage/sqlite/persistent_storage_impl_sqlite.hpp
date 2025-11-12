@@ -22,7 +22,7 @@ namespace eillance::storage {
 namespace {
 
 constexpr size_t MaxInlineContentSize = 2048;
-constexpr int CurrentDbVersion = 3;
+constexpr int CurrentDbVersion = 4;
 
 }  // namespace
 
@@ -633,6 +633,9 @@ private:
     }
     if (user_version < 3) {
       migrations::migrate_to_v3(db_, MaxInlineContentSize);
+    }
+    if (user_version < 4) {
+      migrations::migrate_to_v4(db_);
     }
 
     if (user_version != CurrentDbVersion) {
