@@ -30,9 +30,9 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import hela.eillance.navigation.Screen
 
-private const val URL_IDENTITY = "https://mercury.eillance.com/articles/3/"
-private const val URL_P2P = "https://mercury.eillance.com/articles/2/"
-private const val URL_E2EE = "https://mercury.eillance.com/articles/4/"
+private const val URL_IDENTITY = "https://mercury.eillance.com/articles/cryptographic-identity/embed/"
+private const val URL_P2P = "https://mercury.eillance.com/articles/peer-to-peer-connections/embed/"
+private const val URL_E2EE = "https://mercury.eillance.com/articles/end-to-end-encryption/embed/"
 
 @Composable
 fun IdentityScreen(navController: NavController) {
