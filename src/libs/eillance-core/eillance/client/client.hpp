@@ -790,16 +790,18 @@ inline void Client::DebugRevokeAllApprovals() {
   storage_->DebugRevokeAllContactApprovals();
 }
 
-inline void Client::startMediaCall(const std::string& peer_id, bool is_video) {
+inline void Client::startMediaCall(const std::string& peer_id, const bool is_video) {
   // On platforms with custom capture (like CLI), start the media stream.
   // On Android, this block is skipped.
   if (av_stream_) { av_stream_->Start(); }
 
   auto peer = transport_->getPeer(peer_id);
+  // If a peer object for this ID doesn't exist, we must create one.
+  // A call should not depend on a pre-existing data channel connection.
   if (!peer) {
-    LOGI << "Peer " << peer_id << " not found for call. Creating new peer object.";
-    connect(peer_id);
-    peer = transport_->getPeer(peer_id);
+    LOGI << "Peer object for " << peer_id << " not found. Creating a new one for the call.";
+    peer = std::make_shared<Peer>(peer_id);
+    transport_->addPeer(peer_id, peer);
   }
   if (peer->has_media_peer_connection_) {
     LOGW << "Media connection already exists for peer " << peer_id << ", cannot start a new call.";
