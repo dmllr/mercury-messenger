@@ -1,8 +1,6 @@
 package hela.eillance.screens
 
-import android.net.Uri
 import android.widget.Toast
-import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -26,14 +24,14 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavController
 import hela.eillance.MainViewModel
+import hela.eillance.navigation.Route
 
 private const val URL_IDENTITY = "https://mercury.eillance.com/articles/3/"
 private const val URL_P2P = "https://mercury.eillance.com/articles/2/"
@@ -41,7 +39,7 @@ private const val URL_E2EE = "https://mercury.eillance.com/articles/4/"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(viewModel: MainViewModel, onBack: () -> Unit) {
+fun SettingsScreen(viewModel: MainViewModel, onBack: () -> Unit, navController: NavController) {
   val context = LocalContext.current
   val signalingUrl by viewModel.signalingUrl.collectAsState()
 
@@ -97,16 +95,9 @@ fun SettingsScreen(viewModel: MainViewModel, onBack: () -> Unit) {
         modifier = Modifier.padding(bottom = 8.dp)
       )
 
-      val toolbarColor = MaterialTheme.colorScheme.surfaceVariant
-      val customTabsIntent = remember {
-        CustomTabsIntent.Builder()
-          .setToolbarColor(toolbarColor.toArgb())
-          .build()
-      }
-
-      HelpItem(title = "What is a Cryptographic Identity?") { customTabsIntent.launchUrl(context, Uri.parse(URL_IDENTITY)) }
-      HelpItem(title = "The Power of Peer-to-Peer") { customTabsIntent.launchUrl(context, Uri.parse(URL_P2P)) }
-      HelpItem(title = "Securing the Conversation: End-to-End Encryption") { customTabsIntent.launchUrl(context, Uri.parse(URL_E2EE)) }
+      HelpItem(title = "What is a Cryptographic Identity?") { navController.navigate(Route.WebView.createRoute(URL_IDENTITY)) }
+      HelpItem(title = "The Power of Peer-to-Peer") { navController.navigate(Route.WebView.createRoute(URL_P2P)) }
+      HelpItem(title = "Securing the Conversation: End-to-End Encryption") { navController.navigate(Route.WebView.createRoute(URL_E2EE)) }
 
       // This spacer pushes the save button to the bottom if the content is short.
       Spacer(modifier = Modifier.weight(1f))

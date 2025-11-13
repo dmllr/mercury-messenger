@@ -1,5 +1,6 @@
 package hela.eillance
 
+import android.net.Uri
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
@@ -12,9 +13,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import hela.eillance.navigation.Route
 import hela.eillance.navigation.Screen
 import hela.eillance.ndkio.Contact
@@ -30,6 +33,7 @@ import hela.eillance.screens.ProfileScreen
 import hela.eillance.screens.RecoverIdentityScreen
 import hela.eillance.screens.RecoveryPhraseScreen
 import hela.eillance.screens.SettingsScreen
+import hela.eillance.screens.WebViewScreen
 
 @Composable
 fun MercuryApp(viewModel: MainViewModel) {
@@ -51,6 +55,14 @@ fun IdentitySetupFlow(viewModel: MainViewModel) {
     composable(Screen.Identity.route) { IdentityScreen(navController) }
     composable(Screen.MnemonicDisplay.route) { MnemonicDisplayScreen(viewModel) }
     composable(Screen.RecoverIdentity.route) { RecoverIdentityScreen(navController, viewModel) }
+    composable(
+      route = Route.WebView.route,
+      arguments = listOf(navArgument("url") { type = NavType.StringType })
+    ) { backStackEntry ->
+      backStackEntry.arguments?.getString("url")?.let {
+        WebViewScreen(navController = navController, url = Uri.decode(it))
+      }
+    }
   }
 }
 
@@ -187,7 +199,8 @@ fun MainAppContent(viewModel: MainViewModel) {
       composable(Screen.Settings.route) {
         SettingsScreen(
           viewModel = viewModel,
-          onBack = { navController.popBackStack() }
+          onBack = { navController.popBackStack() },
+          navController = navController
         )
       }
       composable(Screen.BackupRestore.route) {
@@ -202,6 +215,23 @@ fun MainAppContent(viewModel: MainViewModel) {
           viewModel = viewModel,
           onBack = { navController.popBackStack() }
         )
+      }
+      composable(
+        route = Route.WebView.route,
+        arguments = listOf(navArgument("url") { type = NavType.StringType })
+      ) { backStackEntry ->
+        val url = backStackEntry.arguments?.getString("url")
+        if (url != null) {
+          WebViewScreen(navController = navController, url = url)
+        }
+      }
+      composable(
+        route = Route.WebView.route,
+        arguments = listOf(navArgument("url") { type = NavType.StringType })
+      ) { backStackEntry ->
+        backStackEntry.arguments?.getString("url")?.let {
+          WebViewScreen(navController = navController, url = Uri.decode(it))
+        }
       }
     }
   }

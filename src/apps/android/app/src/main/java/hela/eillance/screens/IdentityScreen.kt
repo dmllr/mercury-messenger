@@ -1,6 +1,5 @@
 package hela.eillance.screens
 
-import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -15,10 +14,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
@@ -28,8 +25,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
-import androidx.core.net.toUri
 import androidx.navigation.NavController
+import hela.eillance.navigation.Route
 import hela.eillance.navigation.Screen
 
 private const val URL_IDENTITY = "https://mercury.eillance.com/articles/cryptographic-identity/embed/"
@@ -49,14 +46,6 @@ fun IdentityScreen(navController: NavController) {
       Text("Welcome to Mercury", style = MaterialTheme.typography.headlineLarge)
       Spacer(modifier = Modifier.height(16.dp))
 
-      val context = LocalContext.current
-      val toolbarColor = MaterialTheme.colorScheme.surfaceVariant
-      val customTabsIntent = remember {
-        CustomTabsIntent.Builder()
-          .setToolbarColor(toolbarColor.toArgb())
-          .build()
-      }
-
       val linkStyle = SpanStyle(
         color = MaterialTheme.colorScheme.primary,
         textDecoration = TextDecoration.Underline
@@ -69,7 +58,7 @@ fun IdentityScreen(navController: NavController) {
             tag = URL_IDENTITY,
             styles = TextLinkStyles(style = linkStyle),
             linkInteractionListener = {
-              customTabsIntent.launchUrl(context, URL_IDENTITY.toUri())
+              navController.navigate(Route.WebView.createRoute(URL_IDENTITY))
             }
           )
         ) {
@@ -81,7 +70,7 @@ fun IdentityScreen(navController: NavController) {
             tag = URL_E2EE,
             styles = TextLinkStyles(style = linkStyle),
             linkInteractionListener = {
-              customTabsIntent.launchUrl(context, URL_E2EE.toUri())
+              navController.navigate(Route.WebView.createRoute(URL_E2EE))
             }
           )
         ) {
@@ -93,7 +82,7 @@ fun IdentityScreen(navController: NavController) {
             tag = URL_P2P,
             styles = TextLinkStyles(style = linkStyle),
             linkInteractionListener = {
-              customTabsIntent.launchUrl(context, URL_P2P.toUri())
+              navController.navigate(Route.WebView.createRoute(URL_P2P))
             }
           )
         ) {
