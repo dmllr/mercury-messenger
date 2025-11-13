@@ -10,19 +10,19 @@ import androidx.compose.ui.graphics.asImageBitmap
 
 @Composable
 fun rememberImageBitmapFromBase64(base64: String?): ImageBitmap? {
-    return remember(base64) {
-        if (base64.isNullOrBlank()) {
-            null
-        } else {
-            try {
-                val decodedBytes = Base64.decode(base64, Base64.NO_WRAP)
-                BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)?.asImageBitmap()
-            } catch (e: IllegalArgumentException) {
-                // Handle invalid Base64 string
-                Log.e("ImageBitmap", "Failed to decode base64 string", e)
-                null
-            }
-        }
+  return remember(base64) {
+    if (base64.isNullOrBlank()) {
+      null
+    } else {
+      try {
+        val decodedBytes = Base64.decode(base64, Base64.NO_WRAP)
+        BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)?.asImageBitmap()
+      } catch (e: IllegalArgumentException) {
+        // Handle invalid Base64 string
+        Log.e("ImageBitmap", "Failed to decode base64 string", e)
+        null
+      }
     }
+  }
 }
 
