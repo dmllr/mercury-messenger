@@ -82,12 +82,10 @@ class CallService : Service(), IClientNativeBridge {
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     when (intent?.action) {
-      ACTION_ACCEPT_CALL -> {
-        acceptCall()
-      }
       ACTION_REJECT_CALL -> {
         rejectCall()
       }
+
       ACTION_HANGUP -> hangup()
     }
     return START_STICKY
@@ -182,8 +180,13 @@ class CallService : Service(), IClientNativeBridge {
     val rejectIntent = Intent(this, CallService::class.java).apply { action = ACTION_REJECT_CALL }
     val rejectPendingIntent = PendingIntent.getService(this, 1, rejectIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
-    val acceptIntent = Intent(this, CallService::class.java).apply { action = ACTION_ACCEPT_CALL }
-    val acceptPendingIntent = PendingIntent.getService(this, 2, acceptIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    // This intent will launch the MainActivity and bring the app to the foreground.
+    val acceptIntent = Intent(this, MainActivity::class.java).apply {
+      action = ACTION_ACCEPT_CALL
+      putExtra(EXTRA_PEER_ID, peerId)
+      flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+    }
+    val acceptPendingIntent = PendingIntent.getActivity(this, 2, acceptIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
     val builder = NotificationCompat.Builder(this, CALLS_CHANNEL_ID)
       .setSmallIcon(android.R.drawable.stat_notify_chat)
@@ -410,7 +413,7 @@ class CallService : Service(), IClientNativeBridge {
     private const val MESSAGES_CHANNEL_ID = "messages_channel"
 
     private const val ACTION_HANGUP = "hela.eillance.ACTION_HANGUP"
-    private const val ACTION_ACCEPT_CALL = "hela.eillance.ACTION_ACCEPT_CALL"
+    const val ACTION_ACCEPT_CALL = "hela.eillance.ACTION_ACCEPT_CALL"
     private const val ACTION_REJECT_CALL = "hela.eillance.ACTION_REJECT_CALL"
 
     const val EXTRA_PEER_ID = "hela.eillance.EXTRA_PEER_ID"

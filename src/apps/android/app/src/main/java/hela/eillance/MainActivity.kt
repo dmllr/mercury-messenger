@@ -87,7 +87,13 @@ class MainActivity : ComponentActivity() {
   }
 
   private fun handleIntent(intent: Intent?) {
-    intent?.getStringExtra(CallService.EXTRA_PEER_ID)?.let { peerId ->
+    val peerId = intent?.getStringExtra(CallService.EXTRA_PEER_ID)
+    val isAcceptAction = intent?.action == CallService.ACTION_ACCEPT_CALL
+
+    if (isAcceptAction && peerId != null) {
+      viewModel.onCallAcceptedFromNotification(peerId)
+    } else if (peerId != null) {
+      // This handles "new message" notifications.
       viewModel.navigateToPeer(peerId)
     }
   }
