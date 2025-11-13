@@ -137,6 +137,9 @@ dependencies {
     implementation 'androidx.preference:preference-ktx:1.2.1'
     implementation 'androidx.localbroadcastmanager:localbroadcastmanager:1.1.0'
 
+    // For in-app browser tabs (Custom Tabs)
+    implementation 'androidx.browser:browser:1.8.0'
+
     // Google WebRTC
     implementation 'com.dafruits:webrtc:123.0.0'
 
