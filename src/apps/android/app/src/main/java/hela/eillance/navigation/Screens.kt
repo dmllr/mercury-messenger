@@ -1,5 +1,6 @@
 package hela.eillance.navigation
 
+import android.net.Uri
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.Person
@@ -23,5 +24,8 @@ sealed class Route(val route: String) {
     }
     object Call : Route("call/{peerId}") {
         fun createRoute(peerId: String) = "call/$peerId"
+    }
+    object WebView : Route("webview/{url}") {
+        fun createRoute(url: String): String = "webview/${Uri.encode(url)}"
     }
 }
