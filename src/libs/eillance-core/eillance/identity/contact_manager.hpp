@@ -39,7 +39,7 @@ public:
   }
 
   // Marks that we have received a request from a peer.
-  auto ReceiveContactRequest(const std::string& peer_id) -> bool {
+  auto ReceiveContactRequest(const std::string& peer_id, const std::optional<std::string>& name, const std::optional<std::string>& bio, const std::optional<std::string>& photo) -> bool {
     const std::lock_guard<std::mutex> lock(mutex_);
     auto it = contacts_.find(peer_id);
     if (it != contacts_.end()) {
@@ -47,9 +47,18 @@ public:
         return false;  // Already confirmed
       }
       it->second.status = ContactStatus::awaitingApproval;
+      if (name) { it->second.display_name = name; }
+      if (bio) { it->second.bio = bio; }
+      if (photo) { it->second.photo_base64 = photo; }
       storage_->UpdateContact(it->second);
     } else {
-      contacts_[peer_id] = {.peer_id = peer_id, .status = ContactStatus::awaitingApproval};
+      contacts_[peer_id] = {
+          .peer_id = peer_id,
+          .status = ContactStatus::awaitingApproval,
+          .display_name = name,
+          .bio = bio,
+          .photo_base64 = photo,
+      };
       storage_->UpdateContact(contacts_[peer_id]);
     }
     return true;

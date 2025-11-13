@@ -6,17 +6,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Badge
 import androidx.compose.material3.Button
@@ -57,172 +54,187 @@ import hela.eillance.utils.rememberImageBitmapFromBase64
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ContactsScreen(
-    viewModel: MainViewModel,
-    uiState: AppState,
-    onContactClick: (String) -> Unit,
-    onNavigateToProfile: () -> Unit,
-    onShowContactProfile: (String) -> Unit
+  viewModel: MainViewModel,
+  uiState: AppState,
+  onContactClick: (String) -> Unit,
+  onNavigateToProfile: () -> Unit,
+  onShowContactProfile: (String) -> Unit
 ) {
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Mercury") },
-                actions = {
-                    Box {
-                        IconButton(onClick = onNavigateToProfile) {
-                            Icon(Icons.Default.Person, contentDescription = "Profile")
-                        }
-                        val connectionStatus = ServiceConnectionState.fromInt(uiState.connectionState)
-                        if (connectionStatus != ServiceConnectionState.Unknown) {
-                            val dotColor = when (connectionStatus) {
-                                ServiceConnectionState.Online -> MaterialTheme.extendedColors.success
-                                ServiceConnectionState.Failure -> MaterialTheme.colorScheme.error
-                                else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-                            }
-                            // Status dot
-                            Box(
-                                modifier = Modifier
-                                    .padding(bottom = 4.dp, end = 4.dp)
-                                    .size(12.dp)
-                                    .background(color = dotColor, shape = CircleShape)
-                                    .align(Alignment.BottomEnd)
-                            )
-                        }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                )
-            )
-        },
-        floatingActionButton = {
-            FloatingActionButton(onClick = { viewModel.onAddContactClicked() }) {
-                Icon(Icons.Default.Add, contentDescription = "Add Contact")
+  Scaffold(
+    topBar = {
+      TopAppBar(
+        title = { Text("Mercury") },
+        actions = {
+          Box {
+            IconButton(onClick = onNavigateToProfile) {
+              Icon(Icons.Default.Person, contentDescription = "Profile")
             }
-        }
-    ) { padding ->
-        if (uiState.contacts.isEmpty()) {
-            Box(
+            val connectionStatus = ServiceConnectionState.fromInt(uiState.connectionState)
+            if (connectionStatus != ServiceConnectionState.Unknown) {
+              val dotColor = when (connectionStatus) {
+                ServiceConnectionState.Online -> MaterialTheme.extendedColors.success
+                ServiceConnectionState.Failure -> MaterialTheme.colorScheme.error
+                else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+              }
+              // Status dot
+              Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentAlignment = Alignment.Center
-            ) {
-                if (uiState.myId.isEmpty()) {
-                    CircularProgressIndicator()
-                } else {
-                    Text("No contacts yet. Add one!", style = MaterialTheme.typography.bodyLarge)
-                }
+                  .padding(bottom = 4.dp, end = 4.dp)
+                  .size(12.dp)
+                  .background(color = dotColor, shape = CircleShape)
+                  .align(Alignment.BottomEnd)
+              )
             }
-        } else {
-            LazyColumn(modifier = Modifier.padding(padding)) {
-                items(uiState.contacts, key = { it.peerId }) { contact ->
-                    ContactListItem(
-                        contact = contact,
-                        onClick = { onContactClick(contact.peerId) },
-                        onAccept = { viewModel.acceptContact(contact.peerId) },
-                        onResend = { viewModel.addContact(contact.peerId) },
-                        onShowProfile = { onShowContactProfile(contact.peerId) }
-                    )
-                    HorizontalDivider(color = DividerDefaults.color.copy(alpha = 0.5f))
-                }
-            }
-        }
+          }
+        },
+        colors = TopAppBarDefaults.topAppBarColors(
+          containerColor = MaterialTheme.colorScheme.primaryContainer
+        )
+      )
+    },
+    floatingActionButton = {
+      FloatingActionButton(onClick = { viewModel.onAddContactClicked() }) {
+        Icon(Icons.Default.Add, contentDescription = "Add Contact")
+      }
     }
+  ) { padding ->
+    if (uiState.contacts.isEmpty()) {
+      Box(
+        modifier = Modifier
+          .fillMaxSize()
+          .padding(padding),
+        contentAlignment = Alignment.Center
+      ) {
+        if (uiState.myId.isEmpty()) {
+          CircularProgressIndicator()
+        } else {
+          Text("No contacts yet. Add one!", style = MaterialTheme.typography.bodyLarge)
+        }
+      }
+    } else {
+      LazyColumn(modifier = Modifier.padding(padding)) {
+        items(uiState.contacts, key = { it.peerId }) { contact ->
+          ContactListItem(
+            contact = contact,
+            onClick = { onContactClick(contact.peerId) },
+            onAccept = { viewModel.acceptContact(contact.peerId) },
+            onResend = { viewModel.addContact(contact.peerId) },
+            onShowProfile = { onShowContactProfile(contact.peerId) }
+          )
+          HorizontalDivider(color = DividerDefaults.color.copy(alpha = 0.5f))
+        }
+      }
+    }
+  }
 }
 
 @Composable
 fun ContactListItem(
-    contact: Contact,
-    onClick: () -> Unit,
-    onAccept: () -> Unit,
-    onResend: () -> Unit,
-    onShowProfile: () -> Unit
+  contact: Contact,
+  onClick: () -> Unit,
+  onAccept: () -> Unit,
+  onResend: () -> Unit,
+  onShowProfile: () -> Unit
 ) {
-    val statusText = when (contact.status) {
-        ContactStatus.confirmed -> "Confirmed"
-        ContactStatus.pendingApproval -> "Request sent"
-        ContactStatus.awaitingApproval -> "New request"
-    }
-    val statusColor = when (contact.status) {
-        ContactStatus.confirmed -> MaterialTheme.colorScheme.primary
-        ContactStatus.pendingApproval -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-        ContactStatus.awaitingApproval -> MaterialTheme.colorScheme.tertiary
-    }
+  val statusText = when (contact.status) {
+    ContactStatus.confirmed -> "Confirmed"
+    ContactStatus.pendingApproval -> "Request sent"
+    ContactStatus.awaitingApproval -> "New request"
+  }
+  val statusColor = when (contact.status) {
+    ContactStatus.confirmed -> MaterialTheme.colorScheme.primary
+    ContactStatus.pendingApproval -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+    ContactStatus.awaitingApproval -> MaterialTheme.colorScheme.tertiary
+  }
 
-    val connectionStatus = PeerConnectionState.fromInt(contact.connectionState)
-    val (connectionText, connectionColor) = when (connectionStatus) {
-        PeerConnectionState.Connecting -> "Connecting..." to MaterialTheme.colorScheme.secondary
-        PeerConnectionState.Connected -> "Connected" to MaterialTheme.colorScheme.primary
-        PeerConnectionState.Failed -> "Failed" to MaterialTheme.colorScheme.error
-        else -> "" to Color.Transparent
-    }
+  val containerColor = if (contact.status == ContactStatus.awaitingApproval) {
+    MaterialTheme.colorScheme.tertiaryContainer
+  } else {
+    Color.Transparent
+  }
 
-    ListItem(
-        leadingContent = {
-            val imageBitmap = rememberImageBitmapFromBase64(contact.photo)
-            if (imageBitmap != null) {
-                Image(
-                    bitmap = imageBitmap,
-                    contentDescription = "Profile Photo",
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .clickable { onShowProfile() },
-                    contentScale = ContentScale.Crop
-                )
-            } else {
-                Icon(
-                    imageVector = Icons.Default.Person,
-                    contentDescription = "Default Profile Icon",
-                    modifier = Modifier                         
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .clickable { onShowProfile() }
-                        .background(MaterialTheme.colorScheme.secondaryContainer)
-                        .padding(8.dp)
-                )
-            }
-        },
-        headlineContent = {
-            Text(
-                text = contact.name,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.SemiBold
-            )
-        },
-        supportingContent = {
-            Column {
-                Text(
-                    text = contact.peerId,
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.alpha(0.7f)
-                )
-                if (connectionText.isNotEmpty() && contact.status == ContactStatus.confirmed) {
-                    Text(text = connectionText, color = connectionColor, style = MaterialTheme.typography.bodySmall)
-                }
-            }
-        },
-        trailingContent = {
-            when (contact.status) {
-                ContactStatus.awaitingApproval -> {
-                    Row {
-                        Button(onClick = onAccept) { Text("Accept") }
-                    }
-                }
-                ContactStatus.pendingApproval -> {
-                    TextButton(onClick = onResend) { Text("Resend") }
-                }
-                else -> {
-                    if (contact.unreadCount > 0) {
-                        Badge { Text(contact.unreadCount.toString()) }
-                    }
-                }
-            }
-        },
-        modifier = Modifier.clickable(enabled = contact.status == ContactStatus.confirmed, onClick = onClick),
-        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-    )
+  val connectionStatus = PeerConnectionState.fromInt(contact.connectionState)
+  val (connectionText, connectionColor) = when (connectionStatus) {
+    PeerConnectionState.Connecting -> "Connecting..." to MaterialTheme.colorScheme.secondary
+    PeerConnectionState.Connected -> "Connected" to MaterialTheme.colorScheme.primary
+    PeerConnectionState.Failed -> "Failed" to MaterialTheme.colorScheme.error
+    else -> "" to Color.Transparent
+  }
+
+  ListItem(
+    leadingContent = {
+      val imageBitmap = rememberImageBitmapFromBase64(contact.photo)
+      if (imageBitmap != null) {
+        Image(
+          bitmap = imageBitmap,
+          contentDescription = "Profile Photo",
+          modifier = Modifier
+            .size(40.dp)
+            .clip(CircleShape)
+            .clickable { onShowProfile() },
+          contentScale = ContentScale.Crop
+        )
+      } else {
+        Icon(
+          imageVector = Icons.Default.Person,
+          contentDescription = "Default Profile Icon",
+          modifier = Modifier
+            .size(40.dp)
+            .clip(CircleShape)
+            .clickable { onShowProfile() }
+            .background(MaterialTheme.colorScheme.secondaryContainer)
+            .padding(8.dp)
+        )
+      }
+    },
+    headlineContent = {
+      Text(
+        text = contact.name,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        style = MaterialTheme.typography.bodyLarge,
+        fontWeight = FontWeight.SemiBold
+      )
+    },
+    supportingContent = {
+      Column {
+        Text(
+          text = contact.peerId,
+          style = MaterialTheme.typography.bodySmall,
+          modifier = Modifier.alpha(0.7f)
+        )
+        // Show bio on contact requests if available
+        if (contact.status == ContactStatus.awaitingApproval && !contact.bio.isNullOrBlank()) {
+          Text(
+            text = contact.bio,
+            style = MaterialTheme.typography.bodySmall,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+          )
+        }
+        if (connectionText.isNotEmpty() && contact.status == ContactStatus.confirmed) {
+          Text(text = connectionText, color = connectionColor, style = MaterialTheme.typography.bodySmall)
+        }
+      }
+    },
+    trailingContent = {
+      when (contact.status) {
+        ContactStatus.awaitingApproval -> {
+          Row {
+            Button(onClick = onAccept) { Text("Accept") }
+          }
+        }
+        ContactStatus.pendingApproval -> {
+          TextButton(onClick = onResend) { Text("Resend") }
+        }
+        else -> {
+          if (contact.unreadCount > 0) {
+            Badge { Text(contact.unreadCount.toString()) }
+          }
+        }
+      }
+    },
+    modifier = Modifier.clickable(enabled = contact.status == ContactStatus.confirmed, onClick = onClick),
+    colors = ListItemDefaults.colors(containerColor = containerColor)
+  )
 }

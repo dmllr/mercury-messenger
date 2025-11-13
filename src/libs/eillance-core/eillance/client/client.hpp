@@ -424,7 +424,11 @@ inline void Client::addContact(const std::string& peer_id) {
     return;
   }
   if (contact_manager_->AddContact(peer_id)) {
-    const Json content = {{"action", "contact_request"}};
+    Json content;
+    content["action"] = "contact_request";
+    content["profile"]["display_name"] = settings_manager_->GetMyDisplayName().value_or("");
+    content["profile"]["bio"] = settings_manager_->GetMyBio().value_or("");
+    content["profile"]["photo"] = settings_manager_->GetMyPhotoBase64();
     message_history_->AddTextEntry(peer_id, content.dump(), messaging::MessageDirection::sent, messaging::HistoryEntryKind::systemMessage);
     if (on_contact_status_changed_) { (*on_contact_status_changed_)(peer_id, identity::ContactStatus::pendingApproval); }
     delivery_service_->attemptDelivery(peer_id);
@@ -653,11 +657,27 @@ inline void Client::ProcessPeerMessage(Json message) {
       LOGI << "Received contact request from already confirmed peer " << peer_id << ". Resending confirmation.";
       const Json msg = {{"type", "contact_confirm"}, {"to", peer_id}};
       transport_->sendSignalingMessage(msg);
-    } else if (contact_manager_->ReceiveContactRequest(peer_id)) {
-      const Json content = {{"action", "contact_request_received"}};
-      auto entry = message_history_->AddTextEntry(peer_id, content.dump(), messaging::MessageDirection::received, messaging::HistoryEntryKind::systemMessage);
-      message_history_->UpdateMessageStatus(peer_id, entry.id, messaging::MessageStatus::read);
-      if (on_contact_request_) { (*on_contact_request_)(peer_id); }
+    } else {
+      std::optional<std::string> name, bio, photo;
+      if (message.contains("profile")) {
+        const auto &profile = message["profile"];
+        if (profile.contains("display_name") &&
+            profile["display_name"].is_string()) { name = profile["display_name"].get<std::string>(); }
+        if (profile.contains("bio") && profile["bio"].is_string()) {
+          bio = profile["bio"].get<std::string>();
+        }
+        if (profile.contains("photo") && profile["photo"].is_string()) {
+          photo = profile["photo"].get<std::string>();
+        }
+      }
+      if (contact_manager_->ReceiveContactRequest(peer_id, name, bio, photo)) {
+        const Json content = {{"action", "contact_request_received"}};
+        auto entry = message_history_->AddTextEntry(peer_id, content.dump(),
+                                                    messaging::MessageDirection::received,
+                                                    messaging::HistoryEntryKind::systemMessage);
+        message_history_->UpdateMessageStatus(peer_id, entry.id, messaging::MessageStatus::read);
+        if (on_contact_request_) { (*on_contact_request_)(peer_id); }
+      }
     }
   } else if (type == "contact_confirm") {
     if (contact_manager_->MarkAsConfirmed(peer_id)) {
@@ -1064,8 +1084,10 @@ inline void Client::sendQueuedMessages(const std::string& peer_id) const {
             Json content_json = Json::parse(content_to_send);
             std::string action = content_json.value("action", "");
             if (action == "contact_request" || action == "contact_confirm") {
-              const Json msg = {{"type", action == "contact_request" ? "contact_add_request" : "contact_confirm"},
-                                {"to", peer_id}};
+              Json msg = {{"type", action == "contact_request" ? "contact_add_request" : "contact_confirm"}, {"to", peer_id}};
+              if (action == "contact_request") {
+                if (content_json.contains("profile")) { msg["profile"] = content_json["profile"]; }
+              }
               transport_->sendSignalingMessage(msg);
               sent = true;
             } else if (action == "profile_update") {
