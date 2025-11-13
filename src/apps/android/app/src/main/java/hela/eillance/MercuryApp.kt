@@ -116,9 +116,11 @@ fun MainAppContent(viewModel: MainViewModel) {
   peerIdForProfileDialog?.let { peerId ->
     val contact = uiState.contacts.find { it.peerId == peerId }
     contact?.let {
-      ContactProfileDialog(
-        contact = it, onDismissRequest = { viewModel.onAddContactDialogDismiss() }, onOverrideSave = { newName -> viewModel.setContactDisplayNameOverride(peerId, newName) }, onOverrideReset = { viewModel.resetContactDisplayNameOverride(peerId) }, onRemoveRequest = { contactToRemove = it }
-      )
+      ContactProfileDialog(contact = it,
+                           onDismissRequest = { viewModel.onContactProfileDialogDismiss() },
+                           onOverrideSave = { newName -> viewModel.setContactDisplayNameOverride(peerId, newName) },
+                           onOverrideReset = { viewModel.resetContactDisplayNameOverride(peerId) },
+                           onRemoveRequest = { contactToRemove = it })
     }
   }
 
