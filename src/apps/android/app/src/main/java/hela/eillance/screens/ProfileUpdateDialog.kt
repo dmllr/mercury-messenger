@@ -42,138 +42,138 @@ import kotlinx.serialization.json.Json
 
 @Serializable
 private data class ProfileUpdateAction(
-    val action: String,
-    val old: ProfileData? = null,
-    val new: ProfileData? = null
+  val action: String,
+  val old: ProfileData? = null,
+  val new: ProfileData? = null
 ) {
-    @Serializable
-    data class ProfileData(
-        @SerialName("display_name") val displayName: String? = null,
-        val bio: String? = null,
-        val photo: String? = null
-    )
+  @Serializable
+  data class ProfileData(
+    @SerialName("display_name") val displayName: String? = null,
+    val bio: String? = null,
+    val photo: String? = null
+  )
 }
 
 @Composable
 fun SystemMessageDetailsDialog(entry: HistoryEntry, onDismiss: () -> Unit) {
-    val json = Json { ignoreUnknownKeys = true }
-    val action = remember(entry.content) {
-        entry.content?.let {
-            try {
-                json.decodeFromString<ProfileUpdateAction>(it)
-            } catch (e: Exception) {
-                // Log the error for debugging, but don't crash.
-                Log.w("SystemMessageDialog", "Failed to parse system message content", e)
-                null
-            }
-        }
+  val json = Json { ignoreUnknownKeys = true }
+  val action = remember(entry.content) {
+    entry.content?.let {
+      try {
+        json.decodeFromString<ProfileUpdateAction>(it)
+      } catch (e: Exception) {
+        // Log the error for debugging, but don't crash.
+        Log.w("SystemMessageDialog", "Failed to parse system message content", e)
+        null
+      }
     }
+  }
 
-    if (action?.action == "profile_update_diff") {
-        ProfileUpdateDialog(action = action, onDismiss = onDismiss)
-    }
+  if (action?.action == "profile_update_diff") {
+    ProfileUpdateDialog(action = action, onDismiss = onDismiss)
+  }
 }
 
 @Composable
 private fun ProfileUpdateDialog(action: ProfileUpdateAction, onDismiss: () -> Unit) {
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.large,
-        ) {
-            Column(
-                modifier = Modifier
-                    .padding(24.dp)
-                    .verticalScroll(rememberScrollState())
-            ) {
-                Text("Profile Updated", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(bottom = 16.dp))
+  Dialog(onDismissRequest = onDismiss) {
+    Card(
+      modifier = Modifier.fillMaxWidth(),
+      shape = MaterialTheme.shapes.large,
+    ) {
+      Column(
+        modifier = Modifier
+          .padding(24.dp)
+          .verticalScroll(rememberScrollState())
+      ) {
+        Text("Profile Updated", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(bottom = 16.dp))
 
-                ComparePhotos(action.old?.photo, action.new?.photo)
-                CompareField("Display Name", action.old?.displayName, action.new?.displayName)
-                CompareField("Bio", action.old?.bio, action.new?.bio)
+        ComparePhotos(action.old?.photo, action.new?.photo)
+        CompareField("Display Name", action.old?.displayName, action.new?.displayName)
+        CompareField("Bio", action.old?.bio, action.new?.bio)
 
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = onDismiss) {
-                        Text("Close")
-                    }
-                }
-            }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+          TextButton(onClick = onDismiss) {
+            Text("Close")
+          }
         }
+      }
     }
+  }
 }
 
 @Composable
 private fun ComparePhotos(oldPhoto: String?, newPhoto: String?) {
-    if (oldPhoto == newPhoto) return
+  if (oldPhoto == newPhoto) return
 
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text("Photo", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-        Spacer(Modifier.height(8.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            ProfilePhoto(photoBase64 = oldPhoto, modifier = Modifier.weight(1f))
-            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "changed to", modifier = Modifier.padding(horizontal = 8.dp))
-            ProfilePhoto(photoBase64 = newPhoto, modifier = Modifier.weight(1f))
-        }
-        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+  Column(modifier = Modifier.fillMaxWidth()) {
+    Text("Photo", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+    Spacer(Modifier.height(8.dp))
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.SpaceEvenly,
+      verticalAlignment = Alignment.CenterVertically
+    ) {
+      ProfilePhoto(photoBase64 = oldPhoto, modifier = Modifier.weight(1f))
+      Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "changed to", modifier = Modifier.padding(horizontal = 8.dp))
+      ProfilePhoto(photoBase64 = newPhoto, modifier = Modifier.weight(1f))
     }
+    HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+  }
 }
 
 @Composable
 private fun CompareField(label: String, oldValue: String?, newValue: String?) {
-    val old = oldValue.orEmpty()
-    val new = newValue.orEmpty()
-    if (old == new) return
+  val old = oldValue.orEmpty()
+  val new = newValue.orEmpty()
+  if (old == new) return
 
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text(label, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-        Spacer(Modifier.height(8.dp))
-        DiffText(label = "From", value = old)
-        DiffText(label = "To", value = new)
-        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
-    }
+  Column(modifier = Modifier.fillMaxWidth()) {
+    Text(label, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+    Spacer(Modifier.height(8.dp))
+    DiffText(label = "From", value = old)
+    DiffText(label = "To", value = new)
+    HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+  }
 }
 
 @Composable
 private fun DiffText(label: String, value: String) {
-    Row {
-        Text(
-            "$label: ",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        if (value.isNotEmpty()) {
-            Text(value, style = MaterialTheme.typography.bodyMedium)
-        } else {
-            Text("Not set", style = MaterialTheme.typography.bodyMedium, fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+  Row {
+    Text(
+      "$label: ",
+      style = MaterialTheme.typography.bodyMedium,
+      color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    if (value.isNotEmpty()) {
+      Text(value, style = MaterialTheme.typography.bodyMedium)
+    } else {
+      Text("Not set", style = MaterialTheme.typography.bodyMedium, fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
+  }
 }
 
 
 @Composable
 private fun ProfilePhoto(photoBase64: String?, modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier
-            .aspectRatio(1f)
-            .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.surfaceContainer)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape),
-        contentAlignment = Alignment.Center
-    ) {
-        val imageBitmap = rememberImageBitmapFromBase64(photoBase64)
-        if (imageBitmap != null) {
-            Image(
-                bitmap = imageBitmap,
-                contentDescription = "Profile Photo",
-                modifier = Modifier.matchParentSize(),
-                contentScale = ContentScale.Crop
-            )
-        } else {
-            Text("No Photo", textAlign = TextAlign.Center, style = MaterialTheme.typography.bodySmall)
-        }
+  Box(
+    modifier = modifier
+      .aspectRatio(1f)
+      .clip(CircleShape)
+      .background(MaterialTheme.colorScheme.surfaceContainer)
+      .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape),
+    contentAlignment = Alignment.Center
+  ) {
+    val imageBitmap = rememberImageBitmapFromBase64(photoBase64)
+    if (imageBitmap != null) {
+      Image(
+        bitmap = imageBitmap,
+        contentDescription = "Profile Photo",
+        modifier = Modifier.matchParentSize(),
+        contentScale = ContentScale.Crop
+      )
+    } else {
+      Text("No Photo", textAlign = TextAlign.Center, style = MaterialTheme.typography.bodySmall)
     }
+  }
 }

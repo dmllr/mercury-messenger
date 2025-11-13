@@ -18,9 +18,9 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -159,40 +159,40 @@ fun ConversationScreen(
 
   Scaffold(
     topBar = {
-        TopAppBar(
-            title = {
-                Row(
-                    modifier = Modifier.clickable { onShowContactProfile(peerId) },
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    val imageBitmap = rememberImageBitmapFromBase64(contact?.photo)
-                    if (imageBitmap != null) {
-                        androidx.compose.foundation.Image(
-                            bitmap = imageBitmap,
-                            contentDescription = "Profile Photo",
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape),
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Default.Person,
-                            contentDescription = "Default Profile Icon",
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.secondaryContainer)
-                                .padding(8.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = contact?.name ?: peerId,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            },
+      TopAppBar(
+        title = {
+          Row(
+            modifier = Modifier.clickable { onShowContactProfile(peerId) },
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            val imageBitmap = rememberImageBitmapFromBase64(contact?.photo)
+            if (imageBitmap != null) {
+              androidx.compose.foundation.Image(
+                bitmap = imageBitmap,
+                contentDescription = "Profile Photo",
+                modifier = Modifier
+                  .size(40.dp)
+                  .clip(CircleShape),
+              )
+            } else {
+              Icon(
+                imageVector = Icons.Default.Person,
+                contentDescription = "Default Profile Icon",
+                modifier = Modifier
+                  .size(40.dp)
+                  .clip(CircleShape)
+                  .background(MaterialTheme.colorScheme.secondaryContainer)
+                  .padding(8.dp)
+              )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+              text = contact?.name ?: peerId,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis
+            )
+          }
+        },
         navigationIcon = {
           IconButton(onClick = onBack) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -205,8 +205,8 @@ fun ConversationScreen(
           IconButton(onClick = { viewModel.startVideoCall() }) {
             Icon(Icons.Default.Videocam, contentDescription = "Video Call")
           }
-            }
-        )
+        }
+      )
     }
   ) { padding ->
     Column(
