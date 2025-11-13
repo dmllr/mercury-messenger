@@ -28,6 +28,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
   val identitySetupComplete = _identitySetupComplete.asStateFlow()
 
   private var pendingNavigationPeerId: String? = null
+  private var pendingAcceptPeerId: String? = null
 
   private val _signalingUrl = MutableStateFlow("")
   val signalingUrl = _signalingUrl.asStateFlow()
@@ -48,6 +49,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     pendingNavigationPeerId?.let { peerIdToNavigate ->
       pendingNavigationPeerId = null // Clear before calling to avoid re-entry
       navigateToPeer(peerIdToNavigate)
+    }
+    // If an accept call action from a notification arrived before the service was bound, execute it now.
+    pendingAcceptPeerId?.let { peerIdToAccept ->
+      pendingAcceptPeerId = null
+      onCallAcceptedFromNotification(peerIdToAccept)
     }
   }
 
@@ -139,6 +145,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
   fun hangup() {
     callService?.hangup()
+  }
+
+  fun onCallAcceptedFromNotification(peerId: String) {
+    if (callService != null) {
+      // 1. Accept the call via the service. This will update the state.
+      acceptCall()
+      // 2. Navigate to the conversation screen, which will then auto-navigate to the call screen.
+      navigateToPeer(peerId)
+    } else {
+      // Defer the action until the service is connected.
+      pendingAcceptPeerId = peerId
+    }
   }
 
   fun acceptCall() {
