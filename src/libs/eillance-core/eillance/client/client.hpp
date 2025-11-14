@@ -463,8 +463,18 @@ inline void Client::RemoveContact(const std::string& peer_id, bool notify_peer) 
 
 inline void Client::ConfirmContact(const std::string& peer_id) const {
   if (contact_manager_->ConfirmContact(peer_id)) {
+    // 1. Send confirmation back to peer_id (this peer) via signaling
     const Json content = {{"action", "contact_confirm"}};
     message_history_->AddTextEntry(peer_id, content.dump(), messaging::MessageDirection::sent, messaging::HistoryEntryKind::systemMessage);
+
+    // 2. Create signature for them (this peer signs the other's ID)
+    auto signature_bytes = id_manager_->Sign(peer_id);
+    auto signature_hex = crypto::ToHex(signature_bytes);
+    contact_manager_->StoreMySignatureFor(peer_id, signature_hex);
+
+    // 3. Send signature to them via data channel
+    const Json sig_content = {{"action", "contact_signature"}, {"signature", signature_hex}};
+    message_history_->AddTextEntry(peer_id, sig_content.dump(), messaging::MessageDirection::sent, messaging::HistoryEntryKind::systemMessage);
 
     const Json profile_content = {{"action", "send_profile"}};
     message_history_->AddTextEntry(peer_id, profile_content.dump(), messaging::MessageDirection::sent, messaging::HistoryEntryKind::systemMessage);
@@ -930,12 +940,16 @@ inline void Client::HandleProfileUpdate(const std::string& peer_id, const Json& 
 
 inline void Client::ProcessDataChannelMessage(const std::string& peer_id, const Json& message) {
   const auto itr = message.find("type");
-  if (itr == message.end()) { return; }
+  if (itr == message.end()) {
+    return;
+  }
   const auto type = itr->get<std::string>();
   const auto peer = transport_->getPeer(peer_id);
-  if (!peer) { return; };
+  if (!peer) {
+    return;
+  };
 
-  // Handle messages that DO NOT require a confirmed contact first.
+  // Handle messages that DO NOT require a confirmed contact or session cipher.
   if (type == "key_exchange") {
     auto pub_key_bytes = message.at("key").get<std::vector<std::byte>>();
     if (peer->session_cipher_->ComputeSharedSecret({pub_key_bytes.begin(), pub_key_bytes.end()})) {
@@ -952,9 +966,65 @@ inline void Client::ProcessDataChannelMessage(const std::string& peer_id, const 
     return;
   }
 
-  // For all other messages, require the sender to be a confirmed contact. This is a security boundary.
+  if (type == "reconfirm_request") {
+    const auto contact_info = contact_manager_->GetContact(peer_id);
+    if (contact_info && contact_info->my_signature_for_them) {
+      LOGI << "Received reconfirm_request from " << peer_id << ". Sending back my signature for them.";
+      const Json reconfirm_response = {{"type", "reconfirm_response"}, {"signature", *contact_info->my_signature_for_them}};
+      transport_->sendPeerDataChannelMessage(peer_id, reconfirm_response);
+    } else {
+      LOGW << "Received reconfirm_request from " << peer_id << " but I have no signature for them to send back.";
+    }
+    return;
+  }
+
+  if (type == "reconfirm_response") {
+    const auto signature_hex = message.at("signature").get<std::string>();
+    const auto signature_bytes = crypto::FromHex(signature_hex);
+
+    if (crypto::Identity::Verify(peer_id, GetId(), signature_bytes)) {
+      LOGI << "Re-confirmation from " << peer_id << " successful. Re-adding as contact.";
+      contact_manager_->MarkAsConfirmed(peer_id);
+
+      const auto my_signature_bytes = id_manager_->Sign(peer_id);
+      const auto my_signature_hex = crypto::ToHex(my_signature_bytes);
+      contact_manager_->StoreMySignatureFor(peer_id, my_signature_hex);
+
+      const Json sig_content = {{"type", "contact_signature"}, {"signature", my_signature_hex}};
+      transport_->sendPeerDataChannelMessage(peer_id, sig_content);
+
+      if (on_contact_status_changed_) {
+        (*on_contact_status_changed_)(peer_id, identity::ContactStatus::confirmed);
+      }
+
+      const Json request_profile = {{"type", "profile_request"}};
+      transport_->sendPeerDataChannelMessage(peer_id, request_profile);
+      const Json send_profile = {{"action", "send_profile"}};
+      message_history_->AddTextEntry(peer_id, send_profile.dump(), messaging::MessageDirection::sent, messaging::HistoryEntryKind::systemMessage);
+      delivery_service_->attemptDelivery(peer_id);
+    } else {
+      LOGW << "Re-confirmation from " << peer_id << " failed. Signature invalid.";
+    }
+    return;
+  }
+
+  if (type == "contact_signature") {
+    auto signature_hex = message.at("signature").get<std::string>();
+    auto signature_bytes = crypto::FromHex(signature_hex);
+    if (crypto::Identity::Verify(peer_id, GetId(), signature_bytes)) {
+      LOGI << "Received and verified contact signature from " << peer_id;
+      contact_manager_->StoreSignatureFrom(peer_id, signature_hex);
+    } else {
+      LOGW << "Received invalid contact signature from " << peer_id;
+    }
+    return;
+  }
+
+  // For all other messages, require the sender to be a confirmed contact.
   if (!contact_manager_->IsConfirmedContact(peer_id)) {
-    LOGW << "Received data channel message of type '" << type << "' from non-contact peer " << peer_id << ". Ignoring.";
+    LOGW << "Received data channel message of type '" << type << "' from non-contact peer " << peer_id << ". Requesting re-confirmation.";
+    const Json reconfirm_request = {{"type", "reconfirm_request"}};
+    transport_->sendPeerDataChannelMessage(peer_id, reconfirm_request);
     return;
   }
 
@@ -987,7 +1057,25 @@ inline void Client::ProcessDataChannelMessage(const std::string& peer_id, const 
       }
       const auto content_json = Json::parse(decrypted_message);
       const auto action = content_json.value("action", "");
-      if (action == "profile_update") {
+      if (action == "contact_signature") {
+        auto signature_hex = content_json.at("signature").get<std::string>();
+        auto signature_bytes = crypto::FromHex(signature_hex);
+        if (crypto::Identity::Verify(peer_id, GetId(), signature_bytes)) {
+          LOGI << "Received and verified contact signature from " << peer_id;
+          contact_manager_->StoreSignatureFrom(peer_id, signature_hex);
+          auto my_contact_info_for_them = contact_manager_->GetContact(peer_id);
+          if (!my_contact_info_for_them || !my_contact_info_for_them->my_signature_for_them) {
+            auto my_signature_bytes = id_manager_->Sign(peer_id);
+            auto my_signature_hex = crypto::ToHex(my_signature_bytes);
+            contact_manager_->StoreMySignatureFor(peer_id, my_signature_hex);
+            const Json sig_content = {{"action", "contact_signature"}, {"signature", my_signature_hex}};
+            message_history_->AddTextEntry(peer_id, sig_content.dump(), messaging::MessageDirection::sent, messaging::HistoryEntryKind::systemMessage);
+            delivery_service_->attemptDelivery(peer_id);
+          }
+        } else {
+          LOGW << "Received invalid contact signature from " << peer_id;
+        }
+      } else if (action == "profile_update") {
         HandleProfileUpdate(peer_id, content_json);
       }
     } else if (on_chat_message_received_) {
@@ -1107,11 +1195,11 @@ inline void Client::SendQueuedMessages(const std::string& peer_id) const {
               }
               transport_->sendSignalingMessage(msg);
               sent = true;
-            } else if (action == "profile_update") {
+            } else if (action == "profile_update" || action == "contact_signature") {
               if (peer->data_channel_is_open_ && peer->session_cipher_->IsReady()) {
                 auto encrypted_payload = peer->session_cipher_->Encrypt(content_to_send);
                 if (encrypted_payload.empty()) {
-                  LOGE << "Failed to encrypt profile update message for peer " << peer_id;
+                  LOGE << "Failed to encrypt system message (" << action << ") for peer " << peer_id;
                   continue;
                 }
                 const Json json_message = {{"type", "chat"},

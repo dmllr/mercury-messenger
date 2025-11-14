@@ -226,12 +226,9 @@ inline void migrate_to_v4(sqlite3* db) {
   //   }
   //   throw std::runtime_error(error);
   // }
-  // LOGI << "Migration to V4 successful.";
 
-#else
-  (void)db;  // Avoid unused parameter warning in release builds
-  LOGI << "Skipping fake data population in RELEASE build.";
 #endif
+  LOGI << "Database migrated to version 4: no-op.";
 }
 
 }  // namespace eillance::storage::migrations

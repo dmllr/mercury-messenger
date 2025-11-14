@@ -4,3 +4,4 @@
 #include "eillance/storage/sqlite/migrations/0002_add_large_messages.hpp"
 #include "eillance/storage/sqlite/migrations/0003_populate_large_messages.hpp"
 #include "eillance/storage/sqlite/migrations/0004_populate_fake_conversations.hpp"
+#include "eillance/storage/sqlite/migrations/0005_add_signatures.hpp"
