@@ -25,6 +25,8 @@ struct Contact {
   std::optional<std::string> display_name_override;
   std::optional<std::string> bio;
   std::optional<std::string> photo_base64;
+  std::optional<std::string> signature_from_them;  // hex
+  std::optional<std::string> my_signature_for_them;  // hex
 };
 
 struct ProfileInfo {

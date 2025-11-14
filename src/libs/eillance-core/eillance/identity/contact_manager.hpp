@@ -84,14 +84,14 @@ public:
 
     if (it != contacts_.end()) {
       if (it->second.status == ContactStatus::confirmed) {
-        return false;  // Already confirmed, no state change.
+        return true;  // Already confirmed, treat as success but no state change.
       }
       // If contact exists, just update its status.
       it->second.status = ContactStatus::confirmed;
       storage_->UpdateContact(it->second);
     } else {
       // If we receive a confirmation for a contact that doesn't exist (e.g., after
-      // a clear data), create it.
+      // a clear data or re-confirmation), create it.
       contacts_[peer_id] = {.peer_id = peer_id, .status = ContactStatus::confirmed};
       storage_->UpdateContact(contacts_[peer_id]);
     }
@@ -166,6 +166,27 @@ public:
       storage_->UpdateContact(it->second);
     }
   }
+
+  void StoreMySignatureFor(const std::string& peer_id, const std::string& signature_hex) {
+    const std::lock_guard<std::mutex> lock(mutex_);
+    const auto it = contacts_.find(peer_id);
+    if (it == contacts_.end()) {
+      return;
+    }
+    it->second.my_signature_for_them = signature_hex;
+    storage_->UpdateContact(it->second);
+  }
+
+  void StoreSignatureFrom(const std::string& peer_id, const std::string& signature_hex) {
+    const std::lock_guard<std::mutex> lock(mutex_);
+    const auto it = contacts_.find(peer_id);
+    if (it == contacts_.end()) {
+      return;
+    }
+    it->second.signature_from_them = signature_hex;
+    storage_->UpdateContact(it->second);
+  }
+
 
 private:
   void LoadContacts() {

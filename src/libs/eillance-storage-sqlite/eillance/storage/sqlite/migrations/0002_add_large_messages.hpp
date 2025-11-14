@@ -27,7 +27,7 @@ inline void migrate_to_v2(sqlite3* db) {
     sqlite3_free(err_msg);
     throw std::runtime_error(error);
   }
-  LOGI << "Migration to V2 successful.";
+  LOGI << "Database migrated to version 2: Added support for large messages.";
 }
 
 }  // namespace eillance::storage::migrations

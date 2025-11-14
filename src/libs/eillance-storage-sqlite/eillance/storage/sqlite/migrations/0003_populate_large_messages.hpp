@@ -80,7 +80,7 @@ inline void migrate_to_v3(sqlite3* db, const size_t max_inline_content_size) {
   if (sqlite3_exec(db, "COMMIT;", nullptr, nullptr, nullptr) != SQLITE_OK) {
     throw std::runtime_error("Failed to commit V3 migration transaction.");
   }
-  LOGI << "Migration to V3 successful.";
+  LOGI << "Database migrated to version 3: Added support for large messages.";
 }
 
 }  // namespace eillance::storage::migrations

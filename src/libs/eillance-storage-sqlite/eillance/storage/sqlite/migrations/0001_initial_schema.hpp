@@ -47,7 +47,7 @@ inline void migrate_to_v1(sqlite3* db) {
     sqlite3_free(err_msg);
     throw std::runtime_error(error);
   }
-  LOGI << "Migration to V1 successful.";
+  LOGI << "Database migrated to version 1: Foundation.";
 }
 
 }  // namespace eillance::storage::migrations

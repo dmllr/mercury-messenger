@@ -22,7 +22,7 @@ namespace eillance::storage {
 namespace {
 
 constexpr size_t MaxInlineContentSize = 2048;
-constexpr int CurrentDbVersion = 4;
+constexpr int CurrentDbVersion = 5;
 
 }  // namespace
 
@@ -126,18 +126,21 @@ public:
         display_name,
         display_name_override,
         bio,
-        photo_base64
+        photo_base64,
+        signature_from_them,
+        my_signature_for_them
       FROM
         contacts;
     )SQL");
     while (sqlite3_step(stmt.Get()) == SQLITE_ROW) {
-      contacts.push_back(
-          {.peer_id = ColumnString(stmt.Get(), 0),
-           .status = static_cast<identity::ContactStatus>(sqlite3_column_int(stmt.Get(), 1)),
-           .display_name = ColumnOptionalString(stmt.Get(), 2),
-           .display_name_override = ColumnOptionalString(stmt.Get(), 3),
-           .bio = ColumnOptionalString(stmt.Get(), 4),
-           .photo_base64 = ColumnOptionalString(stmt.Get(), 5)});
+      contacts.push_back({.peer_id = ColumnString(stmt.Get(), 0),
+                           .status = static_cast<identity::ContactStatus>(sqlite3_column_int(stmt.Get(), 1)),
+                           .display_name = ColumnOptionalString(stmt.Get(), 2),
+                           .display_name_override = ColumnOptionalString(stmt.Get(), 3),
+                           .bio = ColumnOptionalString(stmt.Get(), 4),
+                           .photo_base64 = ColumnOptionalString(stmt.Get(), 5),
+                           .signature_from_them = ColumnOptionalString(stmt.Get(), 6),
+                           .my_signature_for_them = ColumnOptionalString(stmt.Get(), 7)});
     }
     return contacts;
   }
@@ -151,7 +154,9 @@ public:
         display_name,
         display_name_override,
         bio,
-        photo_base64
+        photo_base64,
+        signature_from_them,
+        my_signature_for_them
       FROM
         contacts
       WHERE
@@ -159,13 +164,14 @@ public:
     )SQL");
     BindText(stmt.Get(), 1, std::string(peer_id));
     if (sqlite3_step(stmt.Get()) == SQLITE_ROW) {
-      return identity::Contact{
-          .peer_id = ColumnString(stmt.Get(), 0),
-          .status = static_cast<identity::ContactStatus>(sqlite3_column_int(stmt.Get(), 1)),
-          .display_name = ColumnOptionalString(stmt.Get(), 2),
-          .display_name_override = ColumnOptionalString(stmt.Get(), 3),
-          .bio = ColumnOptionalString(stmt.Get(), 4),
-          .photo_base64 = ColumnOptionalString(stmt.Get(), 5)};
+      return identity::Contact{.peer_id = ColumnString(stmt.Get(), 0),
+                               .status = static_cast<identity::ContactStatus>(sqlite3_column_int(stmt.Get(), 1)),
+                               .display_name = ColumnOptionalString(stmt.Get(), 2),
+                               .display_name_override = ColumnOptionalString(stmt.Get(), 3),
+                               .bio = ColumnOptionalString(stmt.Get(), 4),
+                               .photo_base64 = ColumnOptionalString(stmt.Get(), 5),
+                               .signature_from_them = ColumnOptionalString(stmt.Get(), 6),
+                               .my_signature_for_them = ColumnOptionalString(stmt.Get(), 7)};
     }
     return std::nullopt;
   }
@@ -174,9 +180,9 @@ public:
     const std::lock_guard lock(mutex_);
     const SQLiteStatement stmt(db_, R"SQL(
       REPLACE INTO contacts
-        (peer_id, status, display_name, display_name_override, bio, photo_base64)
+        (peer_id, status, display_name, display_name_override, bio, photo_base64, signature_from_them, my_signature_for_them)
       VALUES
-        (?, ?, ?, ?, ?, ?);
+        (?, ?, ?, ?, ?, ?, ?, ?);
     )SQL");
     BindText(stmt.Get(), 1, contact.peer_id);
     sqlite3_bind_int(stmt.Get(), 2, static_cast<int>(contact.status));
@@ -184,6 +190,8 @@ public:
     BindOptionalText(stmt.Get(), 4, contact.display_name_override);
     BindOptionalText(stmt.Get(), 5, contact.bio);
     BindOptionalText(stmt.Get(), 6, contact.photo_base64);
+    BindOptionalText(stmt.Get(), 7, contact.signature_from_them);
+    BindOptionalText(stmt.Get(), 8, contact.my_signature_for_them);
     sqlite3_step(stmt.Get());
   }
 
@@ -636,6 +644,9 @@ private:
     }
     if (user_version < 4) {
       migrations::migrate_to_v4(db_);
+    }
+    if (user_version < 5) {
+      migrations::migrate_to_v5(db_);
     }
 
     if (user_version != CurrentDbVersion) {
