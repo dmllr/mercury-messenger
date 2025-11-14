@@ -93,7 +93,7 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
     signalingClient.connect(peerId, signalingUrl)
   }
 
-  fun terminate() {
+  fun Terminate() {
     signalingClient.disconnect()
     stopLocalMedia()
     peerConnections.values.forEach { contextMap ->

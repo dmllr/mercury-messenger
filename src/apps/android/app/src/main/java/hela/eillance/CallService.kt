@@ -69,7 +69,7 @@ class CallService : Service(), IClientNativeBridge {
       initEngine(this@CallService)
       isEngineInitialized.set(true)
       if (identityExists()) {
-        start()
+        Start()
       }
       // Always refresh state after initialization to broadcast the initial state to any
       // already-connected UI components.
@@ -93,7 +93,7 @@ class CallService : Service(), IClientNativeBridge {
 
   override fun onDestroy() {
     serviceScope.cancel()
-    terminate()
+    Terminate()
     releaseWakeLock()
     super.onDestroy()
   }
@@ -219,7 +219,7 @@ class CallService : Service(), IClientNativeBridge {
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
 
-    val person = Person.Builder().setName(peerId).build()
+    val person = Person.Builder().SetName(peerId).build()
     val messagingStyle = NotificationCompat.MessagingStyle(person)
       .addMessage(content, System.currentTimeMillis(), person)
 
@@ -341,7 +341,7 @@ class CallService : Service(), IClientNativeBridge {
     val mnemonic = nativeGenerateNewIdentity()
     // After generating, the client needs to be (re)started to connect to signaling
     if (mnemonic.isNotEmpty()) {
-      start()
+      Start()
     }
     return mnemonic
   }
@@ -349,7 +349,7 @@ class CallService : Service(), IClientNativeBridge {
   fun restoreIdentity(mnemonic: String): Boolean {
     val success = nativeRestoreIdentity(mnemonic)
     if (success) {
-      start()
+      Start()
     }
     return success
   }
@@ -357,8 +357,8 @@ class CallService : Service(), IClientNativeBridge {
   fun getMnemonic(): String? = nativeGetMnemonic()
 
   private external fun initEngine(nativeBridge: IClientNativeBridge)
-  external fun start()
-  private external fun terminate()
+  external fun Start()
+  private external fun Terminate()
   external fun identityExists(): Boolean
 
   fun refreshState() {

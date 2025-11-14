@@ -11,7 +11,8 @@
 #include <variant>
 
 namespace eillance::identity {
-enum class ContactStatus {
+
+enum class ContactStatus : std::uint8_t {
   pendingApproval,   // We sent a request, waiting for them to confirm.
   awaitingApproval,  // They sent a request, we need to confirm.
   confirmed,
@@ -53,51 +54,38 @@ struct ProfileInfo {
 }  // namespace eillance::identity
 
 namespace eillance::messaging {
-enum class MessageDirection : std::uint8_t { sent,
-                                             received };
-enum class CallDirection : std::uint8_t { outgoing,
-                                          incoming };
-enum class CallStatus : std::uint8_t { answered,
-                                       missed,
-                                       rejected,
-                                       busy };
-enum class MessageStatus : std::uint8_t { none,
-                                          sending,
-                                          sent,
-                                          delivered,
-                                          read };
-enum class HistoryEntryKind : std::uint8_t { textMessage,
-                                             voiceCall,
-                                             videoCall,
-                                             systemMessage };
 
-NLOHMANN_JSON_SERIALIZE_ENUM(MessageDirection, {
-                                                   {MessageDirection::sent, "sent"},
-                                                   {MessageDirection::received, "received"},
-                                               })
-NLOHMANN_JSON_SERIALIZE_ENUM(CallDirection, {
-                                                {CallDirection::outgoing, "outgoing"},
-                                                {CallDirection::incoming, "incoming"},
-                                            })
-NLOHMANN_JSON_SERIALIZE_ENUM(CallStatus, {
-                                             {CallStatus::answered, "answered"},
-                                             {CallStatus::missed, "missed"},
-                                             {CallStatus::rejected, "rejected"},
-                                             {CallStatus::busy, "busy"},
-                                         })
-NLOHMANN_JSON_SERIALIZE_ENUM(MessageStatus, {
-                                                {MessageStatus::none, "none"},
-                                                {MessageStatus::sending, "sending"},
-                                                {MessageStatus::sent, "sent"},
-                                                {MessageStatus::delivered, "delivered"},
-                                                {MessageStatus::read, "read"},
-                                            })
-NLOHMANN_JSON_SERIALIZE_ENUM(HistoryEntryKind, {
-                                                   {HistoryEntryKind::textMessage, "text_message"},
-                                                   {HistoryEntryKind::voiceCall, "voice_call"},
-                                                   {HistoryEntryKind::videoCall, "video_call"},
-                                                   {HistoryEntryKind::systemMessage, "system_message"},
-                                               })
+enum class MessageDirection : std::uint8_t {
+  sent,
+  received,
+};
+
+enum class CallDirection : std::uint8_t {
+  outgoing,
+  incoming,
+};
+
+enum class CallStatus : std::uint8_t {
+  answered,
+  missed,
+  rejected,
+  busy,
+};
+
+enum class MessageStatus : std::uint8_t {
+  none,
+  sending,
+  sent,
+  delivered,
+  read,
+};
+
+enum class HistoryEntryKind : std::uint8_t {
+  textMessage,
+  voiceCall,
+  videoCall,
+  systemMessage,
+};
 
 // Data specific to a text or system message.
 struct MessageEntry {

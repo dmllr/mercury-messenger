@@ -34,12 +34,12 @@ public:
   ~Transport() = default;
 
   void setDelegate(transport::TransportDelegate* delegate) const { self_->SetDelegate(delegate); }
-  void setStatusCallback(const StatusCallbackFunction& callback) const { self_->SetStatusCallback(callback); }
-  void setName(const std::string& device_name) const { self_->SetName(device_name); }
+  void SetStatusCallback(const StatusCallbackFunction& callback) const { self_->SetStatusCallback(callback); }
+  void SetName(const std::string& device_name) const { self_->SetName(device_name); }
   void setId(const std::string& id) const { self_->SetId(id); }
   void setSignalingUrl(const std::string& url) const { self_->SetSignalingUrl(url); }
-  void start() const { self_->Start(); }
-  void terminate() const { self_->Terminate(); }
+  void Start() const { self_->Start(); }
+  void Terminate() const { self_->Terminate(); }
   void reconnect() const { self_->Reconnect(); }
   void addPeer(const std::string& peer_id, const std::shared_ptr<Peer>& peer) const { self_->AddPeer(peer_id, peer); }
   auto getPeer(const std::string& peer_id) const -> std::shared_ptr<Peer> { return self_->GetPeer(peer_id); }
