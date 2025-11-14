@@ -18,15 +18,6 @@ enum class ContactStatus : std::uint8_t {
   confirmed,
 };
 
-// Helper for JSON serialization
-NLOHMANN_JSON_SERIALIZE_ENUM(  // NOLINT
-    ContactStatus,
-    {
-        {ContactStatus::pendingApproval, "pending_approval"},
-        {ContactStatus::awaitingApproval, "awaiting_approval"},
-        {ContactStatus::confirmed, "confirmed"},
-    })
-
 struct Contact {
   std::string peer_id;
   ContactStatus status;
@@ -36,21 +27,12 @@ struct Contact {
   std::optional<std::string> photo_base64;
 };
 
-// Helper for JSON serialization
-inline void to_json(nlohmann::json& j, const Contact& c) {
-  j = nlohmann::json{{"peer_id", c.peer_id}, {"status", c.status}};
-}
-
-inline void from_json(const nlohmann::json& j, Contact& c) {  // NOLINT(*-swappable-parameters)
-  j.at("peer_id").get_to(c.peer_id);
-  j.at("status").get_to(c.status);
-}
-
 struct ProfileInfo {
   std::string display_name;
   std::string bio;
   std::string photo_base64;
 };
+
 }  // namespace eillance::identity
 
 namespace eillance::messaging {
@@ -87,6 +69,34 @@ enum class HistoryEntryKind : std::uint8_t {
   systemMessage,
 };
 
+NLOHMANN_JSON_SERIALIZE_ENUM(MessageDirection, {
+  {MessageDirection::sent, "sent"},
+  {MessageDirection::received, "received"},
+})
+NLOHMANN_JSON_SERIALIZE_ENUM(CallDirection, {
+  {CallDirection::outgoing, "outgoing"},
+  {CallDirection::incoming, "incoming"},
+})
+NLOHMANN_JSON_SERIALIZE_ENUM(CallStatus, {
+  {CallStatus::answered, "answered"},
+  {CallStatus::missed, "missed"},
+  {CallStatus::rejected, "rejected"},
+  {CallStatus::busy, "busy"},
+})
+NLOHMANN_JSON_SERIALIZE_ENUM(MessageStatus, {
+  {MessageStatus::none, "none"},
+  {MessageStatus::sending, "sending"},
+  {MessageStatus::sent, "sent"},
+  {MessageStatus::delivered, "delivered"},
+  {MessageStatus::read, "read"},
+})
+NLOHMANN_JSON_SERIALIZE_ENUM(HistoryEntryKind, {
+  {HistoryEntryKind::textMessage, "text_message"},
+  {HistoryEntryKind::voiceCall, "voice_call"},
+  {HistoryEntryKind::videoCall, "video_call"},
+  {HistoryEntryKind::systemMessage, "system_message"},
+})
+
 // Data specific to a text or system message.
 struct MessageEntry {
   std::string content;
@@ -120,53 +130,6 @@ struct ChatSummary {
   HistoryEntryRecord last_message;
   uint32_t unread_count = 0;
 };
-
-inline void to_json(nlohmann::json& j, const HistoryEntryRecord& e) {  // NOLINT(*-identifier-naming)
-  j["id"] = e.id;
-  j["kind"] = e.kind;
-  j["timestamp"] = e.timestamp;
-  j["direction"] = e.direction;
-  j["status"] = e.status;
-  j["is_truncated"] = e.is_truncated;
-
-  std::visit(
-      [&j](auto&& arg) {
-        using T = std::decay_t<decltype(arg)>;
-        if constexpr (std::is_same_v<T, MessageEntry>) {
-          j["content"] = arg.content;
-        } else if constexpr (std::is_same_v<T, CallEntry>) {
-          j["duration_seconds"] = arg.duration_seconds;
-          j["call_direction"] = arg.call_direction;
-          j["call_status"] = arg.call_status;
-        }
-      },
-      e.data);
-}
-
-inline void from_json(const nlohmann::json& j, HistoryEntryRecord& e) {  // NOLINT(*-identifier-naming)
-  j.at("id").get_to(e.id);
-  j.at("kind").get_to(e.kind);
-  j.at("timestamp").get_to(e.timestamp);
-  e.direction = j.value("direction", MessageDirection::received);
-  e.status = j.value("status", MessageStatus::none);
-  e.is_truncated = j.value("is_truncated", false);
-  switch (e.kind) {
-    case HistoryEntryKind::textMessage:
-    case HistoryEntryKind::systemMessage:
-      e.data = MessageEntry{j.at("content").get<std::string>()};
-      break;
-    case HistoryEntryKind::voiceCall:
-    case HistoryEntryKind::videoCall:
-      e.data = CallEntry{j.value("duration_seconds", 0U), j.at("call_direction").get<CallDirection>(), j.at("call_status").get<CallStatus>()};
-      break;
-  }
-}
-
-inline void to_json(nlohmann::json& j, const ChatSummary& s) {
-  j["peer_id"] = s.peer_id;
-  j["last_message"] = s.last_message;
-  j["unread_count"] = s.unread_count;
-}
 
 struct HistoryPage {
   std::vector<HistoryEntryRecord> messages;

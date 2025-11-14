@@ -1,5 +1,6 @@
 package hela.eillance.screens
 
+import android.content.ClipData
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Base64
@@ -25,8 +26,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.DeleteForever
-import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Settings
@@ -56,8 +57,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.toClipEntry
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
@@ -65,7 +67,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import hela.eillance.MainViewModel
 import hela.eillance.camera.BuildConfig
-import hela.eillance.ndkio.AppState
+import hela.eillance.ndkio.MyProfileInfo
 import hela.eillance.utils.rememberImageBitmapFromBase64
 import kotlinx.coroutines.launch
 import java.io.ByteArrayOutputStream
@@ -80,7 +82,7 @@ private enum class DebugAction {
 @Composable
 fun ProfileScreen(
   viewModel: MainViewModel,
-  uiState: AppState,
+  myProfile: MyProfileInfo,
   onBack: () -> Unit,
   onNavigateToSettings: () -> Unit,
   onNavigateToBackupAndRestore: () -> Unit
@@ -90,7 +92,7 @@ fun ProfileScreen(
 
   if (showEditDialog) {
     ProfileEditDialog(
-      uiState = uiState,
+      myProfile = myProfile,
       viewModel = viewModel,
       onDismiss = { showEditDialog = false }
     )
@@ -130,7 +132,7 @@ fun ProfileScreen(
         .verticalScroll(rememberScrollState()),
       horizontalAlignment = Alignment.CenterHorizontally
     ) {
-      ProfileHeader(uiState = uiState)
+      ProfileHeader(myProfile = myProfile)
       HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp, horizontal = 16.dp))
       ProfileMenu(
         onEditProfile = { showEditDialog = true },
@@ -143,8 +145,8 @@ fun ProfileScreen(
 }
 
 @Composable
-private fun ProfileHeader(uiState: AppState) {
-  val clipboardManager = LocalClipboardManager.current
+private fun ProfileHeader(myProfile: MyProfileInfo) {
+  val clipboard = LocalClipboard.current
   val snackbarHostState = remember { SnackbarHostState() }
   val scope = rememberCoroutineScope()
 
@@ -154,7 +156,6 @@ private fun ProfileHeader(uiState: AppState) {
       .padding(top = 24.dp, start = 16.dp, end = 16.dp),
     horizontalAlignment = Alignment.CenterHorizontally
   ) {
-    // Photo
     Box(
       modifier = Modifier
         .size(120.dp)
@@ -162,7 +163,7 @@ private fun ProfileHeader(uiState: AppState) {
         .background(MaterialTheme.colorScheme.surfaceVariant),
       contentAlignment = Alignment.Center
     ) {
-      val imageBitmap = rememberImageBitmapFromBase64(uiState.myPhoto)
+      val imageBitmap = rememberImageBitmapFromBase64(myProfile.myPhoto)
 
       if (imageBitmap != null) {
         Image(
@@ -183,19 +184,17 @@ private fun ProfileHeader(uiState: AppState) {
 
     Spacer(modifier = Modifier.height(16.dp))
 
-    // Name
     Text(
-      text = uiState.myDisplayName ?: uiState.myId,
+      text = myProfile.myDisplayName ?: myProfile.myId,
       style = MaterialTheme.typography.headlineSmall,
       textAlign = TextAlign.Center
     )
 
     Spacer(modifier = Modifier.height(4.dp))
 
-    // Bio
-    if (!uiState.myBio.isNullOrBlank()) {
+    if (!myProfile.myBio.isNullOrBlank()) {
       Text(
-        text = uiState.myBio,
+        text = myProfile.myBio,
         style = MaterialTheme.typography.bodyLarge,
         textAlign = TextAlign.Center,
         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -203,16 +202,16 @@ private fun ProfileHeader(uiState: AppState) {
       Spacer(modifier = Modifier.height(16.dp))
     }
 
-    // Your ID
     Text(
-      text = "ID: ${formatId(uiState.myId)}",
+      text = "ID: ${formatId(myProfile.myId)}",
       style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
       textAlign = TextAlign.Center,
       modifier = Modifier
         .clip(MaterialTheme.shapes.small)
         .clickable {
-          clipboardManager.setText(AnnotatedString(uiState.myId))
-          scope.launch {
+          val clipData = ClipData.newPlainText("ID", AnnotatedString(myProfile.myId))
+          scope.launch{
+            clipboard.setClipEntry(clipData.toClipEntry())
             snackbarHostState.showSnackbar("ID Copied!")
           }
         }
@@ -288,7 +287,7 @@ private fun ProfileMenu(
       )
       ListItem(
         headlineContent = { Text("Revoke contact approvals/accepts", color = MaterialTheme.colorScheme.error) },
-        leadingContent = { Icon(Icons.Default.Logout, contentDescription = "Revoke Approvals", tint = MaterialTheme.colorScheme.error) },
+        leadingContent = { Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "Revoke Approvals", tint = MaterialTheme.colorScheme.error) },
         modifier = Modifier
           .clip(MaterialTheme.shapes.medium)
           .clickable { onDebugAction(DebugAction.REVOKE_APPROVALS) }
@@ -299,13 +298,13 @@ private fun ProfileMenu(
 
 @Composable
 private fun ProfileEditDialog(
-  uiState: AppState,
+  myProfile: MyProfileInfo,
   viewModel: MainViewModel,
   onDismiss: () -> Unit
 ) {
-  var displayName by remember(uiState.myDisplayName) { mutableStateOf(uiState.myDisplayName ?: "") }
-  var bio by remember(uiState.myBio) { mutableStateOf(uiState.myBio ?: "") }
-  var photoBase64 by remember(uiState.myPhoto) { mutableStateOf(uiState.myPhoto) }
+  var displayName by remember(myProfile.myDisplayName) { mutableStateOf(myProfile.myDisplayName ?: "") }
+  var bio by remember(myProfile.myBio) { mutableStateOf(myProfile.myBio ?: "") }
+  var photoBase64 by remember(myProfile.myPhoto) { mutableStateOf(myProfile.myPhoto) }
 
   val context = LocalContext.current
   val scope = rememberCoroutineScope()

@@ -1,109 +1,102 @@
 package hela.eillance.ndkio
 
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
+// This enum must be kept in sync with the C++ view_model::StateChange
+enum class StateChange {
+  MyProfile,
+  Contacts,
+  Connection,
+  SelectedContact,
+  InteractionHistory,
+  CallState,
+  SignalingUrl,
+  Unknown;
 
-// --- UI State Data Classes ---
-// These classes mirror the C++ UIState structure for JSON serialization.
-
-@Serializable
-enum class MessageDirection {
-  @SerialName("sent") Sent,
-  @SerialName("received") Received
+  companion object {
+    fun fromInt(value: Int) = entries.getOrNull(value) ?: Unknown
+  }
 }
 
-@Serializable
-enum class CallDirection {
-  @SerialName("outgoing") Outgoing,
-  @SerialName("incoming") Incoming
+enum class MessageDirection(val value: Int) {
+  Sent(0), Received(1);
+  companion object { fun fromInt(value: Int) = entries.firstOrNull { it.value == value } ?: Sent }
 }
 
-@Serializable
-enum class CallStatus {
-  @SerialName("answered") Answered,
-  @SerialName("missed") Missed,
-  @SerialName("rejected") Rejected,
-  @SerialName("busy") Busy
+enum class CallDirection(val value: Int) {
+  Outgoing(0), Incoming(1);
+  companion object { fun fromInt(value: Int) = entries.firstOrNull { it.value == value } ?: Outgoing }
 }
 
-@Serializable
-enum class MessageStatus {
-  @SerialName("none") None,
-  @SerialName("sending") Sending,
-  @SerialName("sent") Sent,
-  @SerialName("delivered") Delivered,
-  @SerialName("read") Read,
+enum class CallStatus(val value: Int) {
+  Answered(0), Missed(1), Rejected(2), Busy(3);
+  companion object { fun fromInt(value: Int) = entries.firstOrNull { it.value == value } ?: Answered }
 }
 
-@Serializable
-enum class HistoryEntryKind {
-  @SerialName("text_message") TextMessage,
-  @SerialName("voice_call") VoiceCall,
-  @SerialName("video_call") VideoCall,
-  @SerialName("system_message") SystemMessage
+enum class MessageStatus(val value: Int) {
+  None(0), Sending(1), Sent(2), Delivered(3), Read(4);
+  companion object { fun fromInt(value: Int) = entries.firstOrNull { it.value == value } ?: None }
 }
 
-@Serializable
+enum class HistoryEntryKind(val value: Int) {
+  TextMessage(0), VoiceCall(1), VideoCall(2), SystemMessage(3);
+  companion object { fun fromInt(value: Int) = entries.firstOrNull { it.value == value } ?: TextMessage }
+}
+
+enum class ContactStatus(val value: Int) {
+  pendingApproval(0), awaitingApproval(1), confirmed(2);
+  companion object { fun fromInt(value: Int) = entries.firstOrNull { it.value == value } ?: pendingApproval }
+}
+
 data class HistoryEntry(
   val id: Long,
-  val kind: HistoryEntryKind,
+  private val kindValue: Int,
   val timestamp: Long,
-  val content: String? = null,
-  val direction: MessageDirection,
-  @SerialName("duration_seconds") val durationSeconds: Int? = null,
-  @SerialName("call_direction") val callDirection: CallDirection? = null,
-  @SerialName("call_status") val callStatus: CallStatus? = null,
-  val status: MessageStatus = MessageStatus.None,
-  @SerialName("is_truncated") val isTruncated: Boolean = false,
-)
-
-@Serializable
-data class ChatSummary(
-  @SerialName("peer_id") val peerId: String,
-  @SerialName("last_message") val lastMessage: HistoryEntry,
-  @SerialName("unread_count") val unreadCount: Int
-)
-
-@Serializable
-enum class ContactStatus {
-  @SerialName("pending_approval") pendingApproval,
-  @SerialName("awaiting_approval") awaitingApproval,
-  @SerialName("confirmed") confirmed
+  val content: String?,
+  private val directionValue: Int,
+  val durationSeconds: Int,
+  private val callDirectionValue: Int,
+  private val callStatusValue: Int,
+  private val statusValue: Int,
+  val isTruncated: Boolean,
+) {
+  val kind: HistoryEntryKind get() = HistoryEntryKind.fromInt(kindValue)
+  val direction: MessageDirection get() = MessageDirection.fromInt(directionValue)
+  val status: MessageStatus get() = MessageStatus.fromInt(statusValue)
+  val callDirection: CallDirection? get() = if (callDirectionValue != -1) CallDirection.fromInt(callDirectionValue) else null
+  val callStatus: CallStatus? get() = if (callStatusValue != -1) CallStatus.fromInt(callStatusValue) else null
 }
 
-@Serializable
+data class HistoryPage(
+  val messages: List<HistoryEntry> = emptyList(),
+  val hasOlderMessages: Boolean = false
+)
+
 data class Contact(
-  @SerialName("peer_id") val peerId: String,
-  val name: String, // Resolved display name (override or original)
-  val bio: String? = null,
-  val photo: String? = null, // base64
-  val status: ContactStatus,
-  @SerialName("connection_state") val connectionState: Int = 0,
-  @SerialName("unread_count") val unreadCount: Int = 0,
-)
+  val peerId: String,
+  val name: String,
+  val bio: String?,
+  val photo: String?,
+  private val statusValue: Int,
+  val connectionState: Int,
+  val unreadCount: Int,
+) {
+  val status: ContactStatus get() = ContactStatus.fromInt(statusValue)
+}
 
-@Serializable
 data class CallState(
-  @SerialName("is_in_call") val isInCall: Boolean = false,
-  @SerialName("is_ringing") val isRinging: Boolean = false,
-  @SerialName("call_direction") val callDirection: CallDirection = CallDirection.Outgoing,
-  @SerialName("peer_id") val peerId: String = "",
-  @SerialName("call_type") val callType: HistoryEntryKind = HistoryEntryKind.VoiceCall
-)
+  val isInCall: Boolean = false,
+  val isRinging: Boolean = false,
+  private val callDirectionValue: Int = CallDirection.Outgoing.value,
+  val peerId: String = "",
+  private val callTypeValue: Int = HistoryEntryKind.VoiceCall.value
+) {
+  val callDirection: CallDirection get() = CallDirection.fromInt(callDirectionValue)
+  val callType: HistoryEntryKind get() = HistoryEntryKind.fromInt(callTypeValue)
+}
 
-@Serializable
-data class AppState(
-  @SerialName("my_id") val myId: String = "",
-  @SerialName("identity_exists") val identityExists: Boolean = true,
+data class MyProfileInfo(
+  val myId: String = "",
+  val identityExists: Boolean = true,
   val myDisplayName: String? = null,
   val myBio: String? = null,
-  val myPhoto: String? = null, // base64
-  @SerialName("connection_state") val connectionState: Int = 0, // Maps to ServiceConnectionState
-  val contacts: List<Contact> = emptyList(),
-  val chats: List<ChatSummary> = emptyList(),
-  @SerialName("selected_contact_id") val selectedContactId: String? = null,
-  @SerialName("interaction_history") val interactionHistory: List<HistoryEntry> = emptyList(),
-  @SerialName("has_older_messages") val hasOlderMessages: Boolean = false,
-  @SerialName("call_state") val callState: CallState = CallState(),
-  @SerialName("signaling_server_url") val signalingServerUrl: String? = null
+  val myPhoto: String? = null,
 )

@@ -251,7 +251,7 @@ int main(int argc, char** argv) {
   // --- ViewModel Initialization ---
   auto view_model = std::make_unique<eillance::view_model::MercuryViewModel>(client);
 
-  view_model->SetOnStateChangedCallback([&] { screen.Post(ftxui::Event::Custom); });
+  view_model->SetOnStateChangedCallback([&](const auto&) { screen.Post(ftxui::Event::Custom); });
 
   // --- UI Components ---
   std::vector<std::string> contact_menu_entries;
@@ -307,7 +307,7 @@ int main(int argc, char** argv) {
           }
           auto timestamp_str = FormatTimestamp(entry.timestamp);
           elements.push_back(ftxui::text(prefix + content + suffix));
-          elements.push_back(ftxui::text("  → " + timestamp_str) | ftxui::dim);
+          elements.push_back(ftxui::text("  ΓåÆ " + timestamp_str) | ftxui::dim);
           break;
         }
         case eillance::messaging::HistoryEntryKind::voiceCall:
@@ -334,7 +334,7 @@ int main(int argc, char** argv) {
           content = "--- " + direction_str + " " + call_type_str + " Call (" + status_str + ") ---";
           auto timestamp_str = FormatTimestamp(entry.timestamp);
           elements.push_back(ftxui::text(prefix + content) | ftxui::dim);
-          elements.push_back(ftxui::text("  → " + timestamp_str) | ftxui::dim);
+          elements.push_back(ftxui::text("  ΓåÆ " + timestamp_str) | ftxui::dim);
           break;
         }
       }
@@ -423,7 +423,7 @@ int main(int argc, char** argv) {
             }
           } else if (command == "/myid") {
             const auto state = view_model->GetState();
-            view_model->AddSystemMessageToChat("--> Your ID: " + state.my_id);
+            view_model->AddSystemMessageToChat("--> Your ID: " + state.my_profile.my_id);
           } else if (command == "/exit") {
             screen.Exit();
           } else {
@@ -455,15 +455,15 @@ int main(int argc, char** argv) {
     constexpr auto contact_list_width = 40;
     const auto main_view = ftxui::hbox({contact_menu->Render() | ftxui::size(ftxui::WIDTH, ftxui::EQUAL, contact_list_width) | ftxui::border, ftxui::vbox({chat_renderer->Render() | ftxui::flex, ftxui::separator(), input_component->Render()}) | ftxui::flex});
 
-    const std::string my_name = state.my_display_name ? " (" + *state.my_display_name + ")" : "";
-    const auto status_line = " Mercury CLI | Your ID: " + state.my_id + my_name + " | Status: " + std::string(GetConnectionStatusString(state.connection_state));
+    const std::string my_name = state.my_profile.my_display_name ? " (" + *state.my_profile.my_display_name + ")" : "";
+    const auto status_line = " Mercury CLI | Your ID: " + state.my_profile.my_id + my_name + " | Status: " + std::string(GetConnectionStatusString(state.connection_state));
     return ftxui::window(ftxui::text(status_line), main_view);
   });
 
-  std::thread client_thread([&] { client->start(); });
+  std::thread client_thread([&] { client->Start(); });
   screen.Loop(layout);
 
-  client->terminate();
+  client->Terminate();
   if (client_thread.joinable()) { client_thread.join(); }
 
   return 0;

@@ -3,13 +3,28 @@
 #include <memory>
 #include <string>
 
-#include "class_refs.hpp"
 #include "client_engine.hpp"
+#include "view_model_delegate.hpp"
 
 namespace {
 JavaVM* java_vm = nullptr;
 std::unique_ptr<eillance::ClientEngine> client_engine{};
 }  // namespace
+
+// --- JNI Helper Functions ---
+
+namespace {
+auto GetJniApi() -> eillance::AndroidViewModelDelegate* {
+  if (client_engine) { return client_engine->ViewModelDelegate(); }
+  return nullptr;
+}
+
+auto GetViewModel() -> eillance::view_model::MercuryViewModel* {
+  if (auto* api = GetJniApi()) { return api->ViewModel(); }
+  return nullptr;
+}
+}  // namespace
+
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_initEngine(JNIEnv* env, jobject instance, jobject native_bridge) {
   // The 'instance' here is the CallService, which is a Context.
@@ -23,7 +38,8 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_start(JNIEnv* /
 }
 
 extern "C" JNIEXPORT jboolean JNICALL Java_hela_eillance_CallService_identityExists(JNIEnv* /*env*/, jobject /*instance*/) {
-  return client_engine && client_engine->ViewModel() && client_engine->ViewModel()->GetState().identity_exists;
+  if (auto* vm = GetViewModel()) { return vm->GetMyProfile().identity_exists; }
+  return false;
 }
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_terminate(JNIEnv* /*env*/, jobject /*instance*/) {
@@ -34,82 +50,79 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_terminate(JNIEn
 }
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_nativeRefreshState(JNIEnv* /*env*/, jobject /*instance*/) {
-  if (client_engine && client_engine->ViewModel()) { client_engine->ViewModel()->RefreshState(); }
-}
-
-extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_call(JNIEnv* env, jobject /*instance*/, jstring peer_id) {
-  const char* chars = env->GetStringUTFChars(peer_id, nullptr);
-  const std::string peer_id_str(chars);
-  env->ReleaseStringUTFChars(peer_id, chars);
-  if (client_engine) { client_engine->Call(peer_id_str); }
+  if (auto* vm = GetViewModel()) { vm->RefreshState(); }
 }
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_addContact(JNIEnv* env, jobject /*instance*/, jstring peer_id) {
-  const char* chars = env->GetStringUTFChars(peer_id, nullptr);
-  const std::string peer_id_str(chars);
-  env->ReleaseStringUTFChars(peer_id, chars);
-  if (client_engine && client_engine->ViewModel()) { client_engine->ViewModel()->AddContact(peer_id_str); }
+  if (auto* vm = GetViewModel()) {
+    const char* chars = env->GetStringUTFChars(peer_id, nullptr);
+    vm->AddContact(chars);
+    env->ReleaseStringUTFChars(peer_id, chars);
+  }
 }
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_acceptContact(JNIEnv* env, jobject /*instance*/, jstring peer_id) {
-  const char* chars = env->GetStringUTFChars(peer_id, nullptr);
-  const std::string peer_id_str(chars);
-  env->ReleaseStringUTFChars(peer_id, chars);
-  if (client_engine && client_engine->ViewModel()) { client_engine->ViewModel()->AcceptContact(peer_id_str); }
+  if (auto* vm = GetViewModel()) {
+    const char* chars = env->GetStringUTFChars(peer_id, nullptr);
+    vm->AcceptContact(chars);
+    env->ReleaseStringUTFChars(peer_id, chars);
+  }
 }
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_removeContact(JNIEnv* env, jobject /*instance*/, jstring peer_id) {
-  const char* chars = env->GetStringUTFChars(peer_id, nullptr);
-  const std::string peer_id_str(chars);
-  env->ReleaseStringUTFChars(peer_id, chars);
-  if (client_engine && client_engine->ViewModel()) { client_engine->ViewModel()->RemoveContact(peer_id_str); }
+  if (auto* vm = GetViewModel()) {
+    const char* chars = env->GetStringUTFChars(peer_id, nullptr);
+    vm->RemoveContact(chars);
+    env->ReleaseStringUTFChars(peer_id, chars);
+  }
 }
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_selectContact(JNIEnv* env, jobject /*instance*/, jstring peer_id) {
-  const char* chars = env->GetStringUTFChars(peer_id, nullptr);
-  const std::string peer_id_str(chars);
-  env->ReleaseStringUTFChars(peer_id, chars);
-  if (client_engine && client_engine->ViewModel()) { client_engine->ViewModel()->SelectContact(peer_id_str); }
+  if (auto* vm = GetViewModel()) {
+    const char* chars = env->GetStringUTFChars(peer_id, nullptr);
+    vm->SelectContact(chars);
+    env->ReleaseStringUTFChars(peer_id, chars);
+  }
 }
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_sendMessage(JNIEnv* env, jobject /*instance*/, jstring message) {
-  const char* chars = env->GetStringUTFChars(message, nullptr);
-  const std::string message_str(chars);
-  env->ReleaseStringUTFChars(message, chars);
-  if (client_engine && client_engine->ViewModel()) { client_engine->ViewModel()->SendMessage(message_str); }
+  if (auto* vm = GetViewModel()) {
+    const char* chars = env->GetStringUTFChars(message, nullptr);
+    vm->SendMessage(chars);
+    env->ReleaseStringUTFChars(message, chars);
+  }
 }
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_startVoiceCall(JNIEnv* /*env*/, jobject /*instance*/) {
-  if (client_engine && client_engine->ViewModel()) { client_engine->ViewModel()->StartVoiceCall(); }
+  if (auto* vm = GetViewModel()) { vm->StartVoiceCall(); }
 }
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_startVideoCall(JNIEnv* /*env*/, jobject /*instance*/) {
-  if (client_engine && client_engine->ViewModel()) { client_engine->ViewModel()->StartVideoCall(); }
+  if (auto* vm = GetViewModel()) { vm->StartVideoCall(); }
 }
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_hangup(JNIEnv* /*env*/, jobject /*instance*/) {
-  if (client_engine && client_engine->ViewModel()) { client_engine->Hangup(); }
+  if (auto* vm = GetViewModel()) { vm->Hangup(); }
 }
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_nativeAcceptCall(JNIEnv* /*env*/, jobject /*instance*/) {
-  if (client_engine && client_engine->ViewModel()) { client_engine->ViewModel()->AcceptCall(); }
+  if (auto* vm = GetViewModel()) { vm->AcceptCall(); }
 }
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_nativeRejectCall(JNIEnv* /*env*/, jobject /*instance*/) {
-  if (client_engine && client_engine->ViewModel()) { client_engine->ViewModel()->RejectCall(); }
+  if (auto* vm = GetViewModel()) { vm->RejectCall(); }
 }
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_nativeUpdateSignalingUrl(JNIEnv* env, jobject /*instance*/, jstring url) {
-  if (client_engine && client_engine->ViewModel()) {
+  if (auto* vm = GetViewModel()) {
     const char* chars = env->GetStringUTFChars(url, nullptr);
-    const std::string url_str(chars);
+    vm->UpdateSignalingUrl(chars);
     env->ReleaseStringUTFChars(url, chars);
-    client_engine->ViewModel()->UpdateSignalingUrl(url_str);
   }
 }
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_nativeUpdateMyProfile(JNIEnv* env, jobject /*instance*/, jstring name, jstring bio, jstring photo_base64) {
-  if (client_engine && client_engine->ViewModel()) {
+  if (auto* vm = GetViewModel()) {
     const char* c_name_chars = (name != nullptr) ? env->GetStringUTFChars(name, nullptr) : nullptr;
     const char* c_bio_chars = (bio != nullptr) ? env->GetStringUTFChars(bio, nullptr) : nullptr;
     const char* c_photo_chars = (photo_base64 != nullptr) ? env->GetStringUTFChars(photo_base64, nullptr) : nullptr;
@@ -118,7 +131,7 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_nativeUpdateMyP
     const auto c_bio = (c_bio_chars) ? std::optional<std::string>(c_bio_chars) : std::nullopt;
     const auto c_photo = (c_photo_chars) ? std::optional<std::string>(c_photo_chars) : std::nullopt;
 
-    client_engine->ViewModel()->UpdateMyProfile(c_name, c_bio, c_photo);
+    vm->UpdateMyProfile(c_name, c_bio, c_photo);
 
     if (c_name_chars) { env->ReleaseStringUTFChars(name, c_name_chars); }
     if (c_bio_chars) { env->ReleaseStringUTFChars(bio, c_bio_chars); }
@@ -127,40 +140,40 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_nativeUpdateMyP
 }
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_nativeSetContactDisplayNameOverride(JNIEnv* env, jobject /*instance*/, jstring peer_id, jstring name) {
-  if (client_engine && client_engine->ViewModel()) {
+  if (auto* vm = GetViewModel()) {
     const char* peer_id_chars = env->GetStringUTFChars(peer_id, nullptr);
     const char* name_chars = env->GetStringUTFChars(name, nullptr);
-    client_engine->ViewModel()->SetContactDisplayNameOverride(peer_id_chars, name_chars);
+    vm->SetContactDisplayNameOverride(peer_id_chars, name_chars);
     env->ReleaseStringUTFChars(peer_id, peer_id_chars);
     env->ReleaseStringUTFChars(name, name_chars);
   }
 }
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_nativeResetContactDisplayNameOverride(JNIEnv* env, jobject /*instance*/, jstring peer_id) {
-  if (client_engine && client_engine->ViewModel()) {
+  if (auto* vm = GetViewModel()) {
     const char* peer_id_chars = env->GetStringUTFChars(peer_id, nullptr);
-    client_engine->ViewModel()->ResetContactDisplayNameOverride(peer_id_chars);
+    vm->ResetContactDisplayNameOverride(peer_id_chars);
     env->ReleaseStringUTFChars(peer_id, peer_id_chars);
   }
 }
 
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_loadOlderMessages(JNIEnv* /*env*/, jobject /*instance*/) {
-  if (client_engine && client_engine->ViewModel()) { client_engine->ViewModel()->LoadOlderMessages(); }
+  if (auto* vm = GetViewModel()) { vm->LoadOlderMessages(); }
 }
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_loadFullMessage(JNIEnv* /*env*/, jobject /*instance*/, jlong message_id) {
-  if (client_engine && client_engine->ViewModel()) { client_engine->ViewModel()->LoadFullMessage(static_cast<std::uint64_t>(message_id)); }
+  if (auto* vm = GetViewModel()) { vm->LoadFullMessage(static_cast<std::uint64_t>(message_id)); }
 }
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_markMessagesAsRead(JNIEnv* env, jobject /*instance*/, jlongArray message_ids) {
-  if (client_engine && client_engine->ViewModel()) {
+  if (auto* vm = GetViewModel()) {
     if (message_ids == nullptr) {
       LOGW << "markMessagesAsRead called with a null message_ids array.";
       return;
     }
 
-    if (auto state = client_engine->ViewModel()->GetState(); !state.selected_contact_id) { return; }
+    if (!vm->GetState().selected_contact_id) { return; }
 
     std::vector<std::uint64_t> ids;
     jsize count = env->GetArrayLength(message_ids);
@@ -174,7 +187,6 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_markMessagesAsR
       }
       env->ReleaseLongArrayElements(message_ids, elements, JNI_ABORT);
     } else {
-      // Error handling for GetLongArrayElements failure
       if (env->ExceptionCheck()) {
         LOGE << "Failed to get long array elements. JNI exception occurred.";
         env->ExceptionDescribe();
@@ -184,7 +196,7 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_markMessagesAsR
       }
       return;
     }
-    client_engine->ViewModel()->MarkMessagesAsRead(ids);
+    vm->MarkMessagesAsRead(ids);
   }
 }
 
@@ -202,20 +214,20 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_configureVideoC
 }
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_nativeDebugEraseAllHistory(JNIEnv* /*env*/, jobject /*instance*/) {
-  if (client_engine && client_engine->ViewModel()) { client_engine->ViewModel()->DebugEraseAllHistory(); }
+  if (auto* vm = GetViewModel()) { vm->DebugEraseAllHistory(); }
 }
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_nativeDebugEraseAllContacts(JNIEnv* /*env*/, jobject /*instance*/) {
-  if (client_engine && client_engine->ViewModel()) { client_engine->ViewModel()->DebugEraseAllContacts(); }
+  if (auto* vm = GetViewModel()) { vm->DebugEraseAllContacts(); }
 }
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_nativeDebugRevokeAllApprovals(JNIEnv* /*env*/, jobject /*instance*/) {
-  if (client_engine && client_engine->ViewModel()) { client_engine->ViewModel()->DebugRevokeAllApprovals(); }
+  if (auto* vm = GetViewModel()) { vm->DebugRevokeAllApprovals(); }
 }
 
 extern "C" JNIEXPORT jstring JNICALL Java_hela_eillance_CallService_nativeGetMnemonic(JNIEnv* env, jobject /*instance*/) {
-  if (client_engine && client_engine->ViewModel()) {
-    if (auto mnemonic = client_engine->ViewModel()->GetMnemonic()) {
+  if (auto* vm = GetViewModel()) {
+    if (auto mnemonic = vm->GetMnemonic()) {
       return env->NewStringUTF(mnemonic->c_str());
     }
   }
@@ -223,28 +235,28 @@ extern "C" JNIEXPORT jstring JNICALL Java_hela_eillance_CallService_nativeGetMne
 }
 
 extern "C" JNIEXPORT jstring JNICALL Java_hela_eillance_CallService_nativeGenerateNewIdentity(JNIEnv* env, jobject /*instance*/) {
-  if (client_engine && client_engine->ViewModel()) {
-    std::string mnemonic = client_engine->ViewModel()->GenerateNewIdentity();
+  if (auto* vm = GetViewModel()) {
+    std::string mnemonic = vm->GenerateNewIdentity();
     return env->NewStringUTF(mnemonic.c_str());
   }
   return env->NewStringUTF("");
 }
 
 extern "C" JNIEXPORT jboolean JNICALL Java_hela_eillance_CallService_nativeRestoreIdentity(JNIEnv* env, jobject /*instance*/, jstring mnemonic) {
-  if (client_engine && client_engine->ViewModel()) {
+  if (auto* vm = GetViewModel()) {
     const char* chars = env->GetStringUTFChars(mnemonic, nullptr);
-    const std::string mnemonic_str(chars);
+    bool result = vm->RestoreIdentity(chars);
     env->ReleaseStringUTFChars(mnemonic, chars);
-    return client_engine->ViewModel()->RestoreIdentity(mnemonic_str);
+    return result;
   }
   return false;
 }
 
 extern "C" JNIEXPORT jboolean JNICALL Java_hela_eillance_CallService_nativeCreateBackup(JNIEnv* env, jobject /*instance*/, jstring path, jstring password) {
-  if (client_engine && client_engine->ViewModel()) {
+  if (auto* vm = GetViewModel()) {
     const char* path_chars = env->GetStringUTFChars(path, nullptr);
     const char* pw_chars = env->GetStringUTFChars(password, nullptr);
-    bool result = client_engine->ViewModel()->CreateBackup(path_chars, pw_chars);
+    bool result = vm->CreateBackup(path_chars, pw_chars);
     env->ReleaseStringUTFChars(path, path_chars);
     env->ReleaseStringUTFChars(password, pw_chars);
     return result;
@@ -253,18 +265,62 @@ extern "C" JNIEXPORT jboolean JNICALL Java_hela_eillance_CallService_nativeCreat
 }
 
 extern "C" JNIEXPORT jboolean JNICALL Java_hela_eillance_CallService_nativeRestoreBackup(JNIEnv* env, jobject /*instance*/, jstring path, jstring password) {
-  // The implementation is identical to createBackup, just calling a different ViewModel method.
-  // This can be refactored into a helper if more such functions are added.
-  if (client_engine && client_engine->ViewModel()) {
+  if (auto* vm = GetViewModel()) {
     const char* path_chars = env->GetStringUTFChars(path, nullptr);
     const char* pw_chars = env->GetStringUTFChars(password, nullptr);
-    bool result = client_engine->ViewModel()->RestoreBackup(path_chars, pw_chars);
+    bool result = vm->RestoreBackup(path_chars, pw_chars);
     env->ReleaseStringUTFChars(path, path_chars);
     env->ReleaseStringUTFChars(password, pw_chars);
     return result;
   }
   return false;
 }
+
+// --- New State Query JNI Functions ---
+
+extern "C" JNIEXPORT jobject JNICALL Java_hela_eillance_CallService_nativeGetMyProfile(JNIEnv* env, jobject /*instance*/) {
+  if (auto* api = GetJniApi()) { return api->GetMyProfile(env); }
+  return nullptr;
+}
+
+extern "C" JNIEXPORT jobject JNICALL Java_hela_eillance_CallService_nativeGetContacts(JNIEnv* env, jobject /*instance*/) {
+  if (auto* api = GetJniApi()) { return api->GetContacts(env); }
+  return nullptr;
+}
+
+extern "C" JNIEXPORT jobject JNICALL Java_hela_eillance_CallService_nativeGetInteractionHistoryPage(JNIEnv* env, jobject /*instance*/) {
+  if (auto* api = GetJniApi()) { return api->GetInteractionHistoryPage(env); }
+  return nullptr;
+}
+
+extern "C" JNIEXPORT jobject JNICALL Java_hela_eillance_CallService_nativeGetCallState(JNIEnv* env, jobject /*instance*/) {
+  if (auto* api = GetJniApi()) { return api->GetCallState(env); }
+  return nullptr;
+}
+
+extern "C" JNIEXPORT jint JNICALL Java_hela_eillance_CallService_nativeGetConnectionState(JNIEnv* /*env*/, jobject /*instance*/) {
+  if (auto* vm = GetViewModel()) { return static_cast<jint>(vm->GetState().connection_state); }
+  return 0;
+}
+
+extern "C" JNIEXPORT jstring JNICALL Java_hela_eillance_CallService_nativeGetSignalingUrl(JNIEnv* env, jobject /*instance*/) {
+  if (auto* vm = GetViewModel()) {
+    if (auto url = vm->GetState().signaling_server_url) {
+      return env->NewStringUTF(url->c_str());
+    }
+  }
+  return nullptr;
+}
+
+extern "C" JNIEXPORT jstring JNICALL Java_hela_eillance_CallService_nativeGetSelectedContactId(JNIEnv* env, jobject /*instance*/) {
+  if (auto* vm = GetViewModel()) {
+    if (auto id = vm->GetState().selected_contact_id) {
+      return env->NewStringUTF(id->c_str());
+    }
+  }
+  return nullptr;
+}
+
 
 jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
   java_vm = vm;
@@ -284,7 +340,7 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     const std::string call_service_class = "hela/eillance/CallService";
     classref.RegisterClass(env, call_service_class);
     classref.RegisterMethod(env, call_service_class, "setWebRtcTransport", "(Lhela/eillance/webrtc/WebRtcTransport;)V");
-    classref.RegisterMethod(env, call_service_class, "onStateUpdate", "(Ljava/lang/String;)V");
+    classref.RegisterMethod(env, call_service_class, "onStateChanged", "([I)V");
 
     // Register WebRtcTransport and its methods
     const std::string webrtc_transport_class = "hela/eillance/webrtc/WebRtcTransport";
@@ -307,11 +363,15 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     classref.RegisterMethod(env, webrtc_transport_class, "createDataChannel", "(Ljava/lang/String;)V");
     classref.RegisterMethod(env, webrtc_transport_class, "nativeOnSignalingConnectionStateChange", "(JI)V");
 
-    // Register other ctors
+    // Register ctors for DTOs
     classref.RegisterCtor(env, "java/util/ArrayList", "()V");
-    classref.RegisterCtor(env, "hela/eillance/ndkio/Peer", "(Ljava/lang/String;Ljava/lang/String;Ljava/util/List;)V");
-    classref.RegisterCtor(env, "hela/eillance/ndkio/Camera", "(Ljava/lang/String;Ljava/lang/String;Ljava/util/List;)V");
-    classref.RegisterCtor(env, "hela/eillance/ndkio/Resolution", "(II)V");
+    classref.RegisterMethod(env, "java/util/ArrayList", "add", "(Ljava/lang/Object;)Z");
+    classref.RegisterCtor(env, "hela/eillance/ndkio/MyProfileInfo", "(Ljava/lang/String;ZLjava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
+    classref.RegisterCtor(env, "hela/eillance/ndkio/Contact", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;III)V");
+    classref.RegisterCtor(env, "hela/eillance/ndkio/CallState", "(ZZILjava/lang/String;I)V");
+    classref.RegisterCtor(env, "hela/eillance/ndkio/HistoryEntry", "(JIJLjava/lang/String;IIIIIZ)V");
+    classref.RegisterCtor(env, "hela/eillance/ndkio/HistoryPage", "(Ljava/util/List;Z)V");
+
 
     // Register VideoConfig and its fields
     const std::string video_config_class = "hela/eillance/ndkio/VideoConfig";

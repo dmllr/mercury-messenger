@@ -8,8 +8,6 @@
 #include <string>
 #include <vector>
 
-#include <nlohmann/json.hpp>
-
 #include "class_refs.hpp"
 #include "eillance/capture/video_config.hpp"
 #include "eillance/client/client.hpp"
@@ -18,19 +16,17 @@
 #include "eillance/storage/sqlite/persistent_storage_impl_sqlite.hpp"
 #include "eillance/view_model/mercury_view_model.hpp"
 #include "transport/transport_impl_libwebrtc.hpp"
+#include "view_model_delegate.hpp"
 
 
 namespace eillance {
 
 class ClientEngine {
-  JavaVM* jvm_;
-  jobject native_bridge_{nullptr};
-
   std::shared_ptr<Client> client_;
-  std::unique_ptr<view_model::MercuryViewModel> view_model_;
+  std::unique_ptr<AndroidViewModelDelegate> view_model_delegate_;
 
 public:
-  ClientEngine(JavaVM* jvm, JNIEnv* env, jobject context, jobject native_bridge) : jvm_(jvm), native_bridge_(env->NewGlobalRef(native_bridge)) {
+  ClientEngine(JavaVM* jvm, JNIEnv* env, jobject context, jobject native_bridge) {
     auto& class_refs = ClassRefs::Instance();
     // Get the app's private files directory for the database
     jmethodID get_files_dir_method = class_refs.Class("android/content/Context").GetMethod("getFilesDir");
@@ -48,9 +44,8 @@ public:
     auto transport = std::make_shared<transport::Transport>(std::move(rtc_transport_impl));
     client_ = std::make_shared<Client>(storage, transport);
 
-    view_model_ = std::make_unique<view_model::MercuryViewModel>(client_);
-
-    view_model_->SetOnStateChangedCallback([this]() { UpdateState(); });
+    auto view_model = std::make_unique<view_model::MercuryViewModel>(client_);
+    view_model_delegate_ = std::make_unique<AndroidViewModelDelegate>(jvm, native_bridge, std::move(view_model));
 
     std::string device_name;
     auto stored_name = storage->GetSetting("device_name");
@@ -69,80 +64,22 @@ public:
   ClientEngine(const ClientEngine&) = delete;
   auto operator=(ClientEngine&&) -> ClientEngine& = delete;
   auto operator=(const ClientEngine&) -> ClientEngine& = delete;
+  ~ClientEngine() { Terminate(); }
 
-  ~ClientEngine() {
-    Terminate();
-
-    JNIEnv* env = AttachCurrentThreadIfNeeded();
-    if (env == nullptr) {
-      LOGE << "Failed to get JNIEnv in destructor.";
-      return;
-    }
-
-    if (native_bridge_ != nullptr && (env->IsSameObject(native_bridge_, nullptr) == JNI_FALSE)) {
-      LOGD << "Deleting native_bridge_ GlobalRef.";
-      env->DeleteGlobalRef(native_bridge_);
-      native_bridge_ = nullptr;
-    }
-  }
-
-  auto ViewModel() -> view_model::MercuryViewModel* { return view_model_.get(); }
+  [[nodiscard]] auto ViewModelDelegate() const -> AndroidViewModelDelegate* { return view_model_delegate_.get(); }
+  [[nodiscard]] auto GetClient() const -> Client* { return client_.get(); }
 
   void Start() {
     client_->Start();
     LOGI << "Client engine is initialized and ready.";
   }
 
-  void Stop() {}
-
-  void Terminate() {
-    Stop();
-    client_->Terminate();
-  }
-
-  void Call(const std::string& peer_id) const { client_->Call(peer_id); }
-
-  void Hangup() const {
-    if (view_model_) { view_model_->Hangup(); }
-  }
+  void Terminate() { client_->Terminate(); }
 
   void ConfigureVideoCapture(const VideoConfig& config) const {
     Config core_config;
     core_config.video_config = config;
     client_->Configure(core_config);
-  }
-
-private:
-  auto AttachCurrentThreadIfNeeded() -> JNIEnv* {
-    JNIEnv* env{};
-    const jint res = jvm_->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6);
-    switch (res) {
-      case JNI_OK:
-        return env;
-      case JNI_EDETACHED:
-        if (jvm_->AttachCurrentThread(&env, nullptr) == JNI_OK) {
-          return env;
-        }
-        return nullptr;
-      default:
-        return nullptr;
-    }
-  }
-
-  void UpdateState() {
-    if (native_bridge_ == nullptr) { return; }
-    auto* env = AttachCurrentThreadIfNeeded();
-    if (env == nullptr) { return; }
-
-    auto& callback_class_holder = ClassRefs::Instance().Class("hela/eillance/CallService");
-    jmethodID callback_method = callback_class_holder.GetMethod("onStateUpdate");
-    if (callback_method != nullptr) {
-      nlohmann::json state_json = view_model_->GetState();
-      std::string state_str = state_json.dump();
-      jstring j_state_str = env->NewStringUTF(state_str.c_str());
-      env->CallVoidMethod(native_bridge_, callback_method, j_state_str);
-      env->DeleteLocalRef(j_state_str);
-    }
   }
 };
 

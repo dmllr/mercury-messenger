@@ -35,7 +35,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import hela.eillance.MainViewModel
-import hela.eillance.ndkio.AppState
+import hela.eillance.ndkio.CallState
 import hela.eillance.ndkio.HistoryEntryKind
 import hela.eillance.webrtc.WebRtcTransport
 import org.webrtc.SurfaceViewRenderer
@@ -43,20 +43,15 @@ import org.webrtc.SurfaceViewRenderer
 @Composable
 fun CallScreen(
   viewModel: MainViewModel,
-  uiState: AppState,
+  callState: CallState,
   onNavigateBack: () -> Unit
 ) {
-  val callState = uiState.callState
-
-  // This is the key fix: This effect will trigger navigation whenever the user is no longer in a call.
-  // This handles both local hang-ups (viewModel.hangup()) and remote hang-ups (state update from C++).
   LaunchedEffect(callState.isInCall) {
     if (!callState.isInCall) {
       onNavigateBack()
     }
   }
 
-  // This effect ensures media resources are cleaned up when the user leaves the screen for any reason.
   DisposableEffect(Unit) {
     onDispose {
       viewModel.stopCallMedia()
@@ -71,7 +66,6 @@ fun CallScreen(
     .background(Color.Black)) {
 
     if (isVideoCall) {
-      // Remote video view (fullscreen)
       AndroidView(
         factory = {
           SurfaceViewRenderer(it).apply {
@@ -94,7 +88,6 @@ fun CallScreen(
       horizontalAlignment = Alignment.CenterHorizontally,
       verticalArrangement = Arrangement.SpaceBetween
     ) {
-      // Peer info at the top
       Column(
         modifier = Modifier.padding(top = 48.dp),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -114,7 +107,6 @@ fun CallScreen(
         )
       }
 
-      // Local video preview (PiP)
       if (isVideoCall) {
         Box(
           modifier = Modifier
@@ -144,7 +136,6 @@ fun CallScreen(
         }
       }
 
-      // Controls at the bottom
       Row(
         modifier = Modifier
           .fillMaxWidth()
@@ -152,12 +143,10 @@ fun CallScreen(
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically
       ) {
-        // Mute button
         IconButton(onClick = { /* TODO */ }) {
           Icon(Icons.Default.Mic, contentDescription = "Mute", tint = Color.White, modifier = Modifier.size(32.dp))
         }
 
-        // Hangup button
         FloatingActionButton(
           onClick = { viewModel.hangup() },
           containerColor = MaterialTheme.colorScheme.error,
@@ -171,7 +160,6 @@ fun CallScreen(
           )
         }
 
-        // Speaker button
         IconButton(onClick = { /* TODO */ }) {
           Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = "Speaker", tint = Color.White, modifier = Modifier.size(32.dp))
         }

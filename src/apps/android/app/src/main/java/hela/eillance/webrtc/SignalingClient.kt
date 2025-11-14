@@ -80,7 +80,7 @@ class SignalingClient {
                 val signalingMessage = when {
                   json.has("from") -> SignalingMessage.PeerMessage(json)
                   json.getString("type") == "error" -> {
-                    val forPeer = json.optString("for_peer", null)
+                    val forPeer = json.optString("for_peer", "Undefined")
                     SignalingMessage.Error(json.getString("error"), forPeer)
                   }
                   else -> SignalingMessage.SystemMessage(json.getString("type"), json)

@@ -15,7 +15,10 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.Person
 import hela.eillance.camera.R
-import hela.eillance.ndkio.AppState
+import hela.eillance.ndkio.CallState
+import hela.eillance.ndkio.Contact
+import hela.eillance.ndkio.HistoryPage
+import hela.eillance.ndkio.MyProfileInfo
 import hela.eillance.ndkio.ServiceConnectionState
 import hela.eillance.ndkio.VideoConfig
 import hela.eillance.ndkio.interfaces.IClientNativeBridge
@@ -25,7 +28,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.Json
 import org.webrtc.VideoSink
 import java.io.File
 import java.io.FileOutputStream
@@ -39,42 +41,34 @@ class CallService : Service(), IClientNativeBridge {
 
   private val binder = CallServiceBinder()
   private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-  private val json = Json { ignoreUnknownKeys = true }
   private val notificationManager by lazy { getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager }
 
-  private var onJsonStateUpdate: ((String) -> Unit)? = null
+  private var onStateChanged: ((IntArray) -> Unit)? = null
   private var wakeLock: PowerManager.WakeLock? = null
-  private var webRtcTransport: WebRtcTransport? = null // This will be set by the native code
+  private var webRtcTransport: WebRtcTransport? = null
   private val isEngineInitialized = AtomicBoolean(false)
+
+  private var lastKnownCallState: CallState? = null
+  private var lastKnownContacts: List<Contact>? = null
 
   // --- Public API for ViewModel ---
   fun startLocalMedia() = webRtcTransport?.startLocalMedia()
   fun stopLocalMedia() = webRtcTransport?.stopLocalMedia()
   fun setLocalVideoSink(sink: VideoSink?) = webRtcTransport?.setLocalSink(sink)
   fun setRemoteVideoSink(peerId: String, sink: VideoSink?) = webRtcTransport?.setRemoteSink(peerId, sink)
-  fun updateSignalingUrl(newUrl: String) {
-    // This call updates the URL in the core and triggers a reconnect.
-    nativeUpdateSignalingUrl(newUrl)
-  }
+  fun updateSignalingUrl(newUrl: String) = nativeUpdateSignalingUrl(newUrl)
 
-  // --- Service Lifecycle ---
   override fun onBind(intent: Intent?): IBinder = binder
-  private var previousState: AppState? = null
 
   override fun onCreate() {
     super.onCreate()
     createNotificationChannels()
-    // Native engine initialization is slow and must not block the main thread.
     serviceScope.launch {
       initEngine(this@CallService)
       isEngineInitialized.set(true)
       if (identityExists()) {
-        Start()
+        start()
       }
-      // Always refresh state after initialization to broadcast the initial state to any
-      // already-connected UI components.
-      // This is crucial for the clean-run scenario where the UI might be waiting for the
-      // initial `identityExists = false` state.
       refreshState()
     }
     startForegroundService()
@@ -82,10 +76,7 @@ class CallService : Service(), IClientNativeBridge {
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     when (intent?.action) {
-      ACTION_REJECT_CALL -> {
-        rejectCall()
-      }
-
+      ACTION_REJECT_CALL -> rejectCall()
       ACTION_HANGUP -> hangup()
     }
     return START_STICKY
@@ -93,65 +84,57 @@ class CallService : Service(), IClientNativeBridge {
 
   override fun onDestroy() {
     serviceScope.cancel()
-    Terminate()
+    terminate()
     releaseWakeLock()
     super.onDestroy()
   }
 
-  fun setJsonStateCallback(callback: ((String) -> Unit)?) {
-    onJsonStateUpdate = callback
+  fun setStateChangedCallback(callback: ((IntArray) -> Unit)?) {
+    onStateChanged = callback
   }
 
-  // Called from C++ during initialization
   @Suppress("unused")
   fun setWebRtcTransport(transport: WebRtcTransport) {
     webRtcTransport = transport
   }
 
-  // This is the new single callback from C++
-  override fun onStateUpdate(jsonState: String) {
-    // Immediately forward the raw JSON to the UI to ensure it's always up-to-date
-    try {
-      val newState = json.decodeFromString<AppState>(jsonState)
-      onJsonStateUpdate?.invoke(jsonState)
-
-      // Handle notifications based on state changes
-      checkForIncomingCall(previousState, newState)
-      checkForNewMessages(previousState, newState)
-
-      val connectionState = ServiceConnectionState.fromInt(newState.connectionState)
-      updateForegroundServiceNotification(newState.callState.isInCall, newState.callState.peerId, connectionState)
-
-      previousState = newState
-    } catch (e: Exception) {
-      Log.e("CallService", "Failed to parse AppState from C++", e)
-    }
+  override fun onStateChanged(changeSet: IntArray) {
+    onStateChanged?.invoke(changeSet)
   }
 
-  private fun checkForIncomingCall(oldState: AppState?, newState: AppState) {
-    val wasRinging = oldState?.callState?.isRinging ?: false
-    val isRinging = newState.callState.isRinging
+  fun handleNotifications() {
+    val newCallState = nativeGetCallState()
+    val newContacts = nativeGetContacts()
+
+    checkForIncomingCall(lastKnownCallState, newCallState)
+    checkForNewMessages(lastKnownContacts, newContacts)
+
+    val connectionState = ServiceConnectionState.fromInt(nativeGetConnectionState())
+    updateForegroundServiceNotification(newCallState?.isInCall ?: false, newCallState?.peerId, connectionState)
+
+    lastKnownCallState = newCallState
+    lastKnownContacts = newContacts
+  }
+
+  private fun checkForIncomingCall(oldState: CallState?, newState: CallState?) {
+    val wasRinging = oldState?.isRinging ?: false
+    val isRinging = newState?.isRinging ?: false
 
     if (!wasRinging && isRinging && !MercuryApplication.isAppInForeground) {
-      showIncomingCallNotification(newState.callState.peerId)
+      showIncomingCallNotification(newState?.peerId ?: "Unknown Caller")
     } else if (wasRinging && !isRinging) {
       notificationManager.cancel(INCOMING_CALL_NOTIFICATION_ID)
     }
   }
 
-  private fun checkForNewMessages(oldState: AppState?, newState: AppState) {
-    if (oldState == null) return
+  private fun checkForNewMessages(oldContacts: List<Contact>?, newContacts: List<Contact>?) {
+    if (oldContacts == null || newContacts == null) return
 
-    val oldChats = oldState.chats.associateBy { it.peerId }
-    newState.chats.forEach { newChat ->
-      val oldChat = oldChats[newChat.peerId]
-      val lastMessage = newChat.lastMessage
-
-      if (lastMessage.direction == hela.eillance.ndkio.MessageDirection.Received) {
-        val oldLastMessageId = oldChat?.lastMessage?.id ?: -1
-        if (lastMessage.id > oldLastMessageId && !MercuryApplication.isAppInForeground) {
-          showNewMessageNotification(newChat.peerId, lastMessage.content ?: "New message")
-        }
+    val oldUnreadCounts = oldContacts.associate { it.peerId to it.unreadCount }
+    newContacts.forEach { newContact ->
+      val oldUnread = oldUnreadCounts[newContact.peerId] ?: 0
+      if (newContact.unreadCount > oldUnread && !MercuryApplication.isAppInForeground) {
+        showNewMessageNotification(newContact.peerId, "New message from ${newContact.name}")
       }
     }
   }
@@ -180,7 +163,6 @@ class CallService : Service(), IClientNativeBridge {
     val rejectIntent = Intent(this, CallService::class.java).apply { action = ACTION_REJECT_CALL }
     val rejectPendingIntent = PendingIntent.getService(this, 1, rejectIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
-    // This intent will launch the MainActivity and bring the app to the foreground.
     val acceptIntent = Intent(this, MainActivity::class.java).apply {
       action = ACTION_ACCEPT_CALL
       putExtra(EXTRA_PEER_ID, peerId)
@@ -204,22 +186,19 @@ class CallService : Service(), IClientNativeBridge {
   }
 
   private fun showNewMessageNotification(peerId: String, content: String) {
-    // Create an Intent that will start the MainActivity.
     val intent = Intent(this, MainActivity::class.java).apply {
       flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-      // Add extra data to identify which chat to open.
       putExtra(EXTRA_PEER_ID, peerId)
     }
 
-    // This PendingIntent will launch the activity and deliver the intent.
     val pendingIntent = PendingIntent.getActivity(
       this,
-      MESSAGE_NOTIFICATION_ID_BASE + peerId.hashCode(), // Unique request code per peer
+      MESSAGE_NOTIFICATION_ID_BASE + peerId.hashCode(),
       intent,
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
 
-    val person = Person.Builder().SetName(peerId).build()
+    val person = Person.Builder().setName(peerId).build()
     val messagingStyle = NotificationCompat.MessagingStyle(person)
       .addMessage(content, System.currentTimeMillis(), person)
 
@@ -278,20 +257,16 @@ class CallService : Service(), IClientNativeBridge {
       val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
       wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Mercury::CallWakeLock")
       wakeLock?.setReferenceCounted(false)
-      wakeLock?.acquire(10*60*1000L /*10 minutes timeout*/)
+      wakeLock?.acquire(10*60*1000L)
     }
   }
 
   private fun releaseWakeLock() {
     wakeLock?.let {
-      if (it.isHeld) {
-        it.release()
-      }
+      if (it.isHeld) it.release()
     }
     wakeLock = null
   }
-
-  // --- Public wrappers for native methods ---
 
   fun acceptCall() {
     notificationManager.cancel(INCOMING_CALL_NOTIFICATION_ID)
@@ -303,33 +278,25 @@ class CallService : Service(), IClientNativeBridge {
     nativeRejectCall()
   }
 
-  // --- Public wrappers for profile methods ---
   fun updateMyProfile(name: String?, bio: String?, photo: String?) = nativeUpdateMyProfile(name, bio, photo)
   fun setContactDisplayNameOverride(peerId: String, name: String) = nativeSetContactDisplayNameOverride(peerId, name)
   fun resetContactDisplayNameOverride(peerId: String) = nativeResetContactDisplayNameOverride(peerId)
 
-  // --- Debug Methods ---
   fun debugEraseAllHistory() = nativeDebugEraseAllHistory()
   fun debugEraseAllContacts() = nativeDebugEraseAllContacts()
   fun debugRevokeAllApprovals() = nativeDebugRevokeAllApprovals()
 
-  // --- Backup & Restore ---
-  fun createBackup(path: String, password: String): Boolean {
-    return nativeCreateBackup(path, password)
-  }
+  fun createBackup(path: String, password: String): Boolean = nativeCreateBackup(path, password)
 
   fun restoreBackup(uri: Uri, password: String): Boolean {
-    // JNI needs a file path, but SAF gives a Uri. We must copy it to a temporary file.
     return try {
       val inputStream = contentResolver.openInputStream(uri) ?: return false
       val tempFile = File(cacheDir, "restore_temp.mcr")
-      val outputStream = FileOutputStream(tempFile)
-      inputStream.copyTo(outputStream)
-      inputStream.close()
-      outputStream.close()
-
+      FileOutputStream(tempFile).use { outputStream ->
+        inputStream.use { it.copyTo(outputStream) }
+      }
       val success = nativeRestoreBackup(tempFile.absolutePath, password)
-      tempFile.delete() // Clean up the temporary file
+      tempFile.delete()
       success
     } catch (e: Exception) {
       Log.e("CallService", "Error during backup restore", e)
@@ -339,9 +306,8 @@ class CallService : Service(), IClientNativeBridge {
 
   fun generateNewIdentity(): String {
     val mnemonic = nativeGenerateNewIdentity()
-    // After generating, the client needs to be (re)started to connect to signaling
     if (mnemonic.isNotEmpty()) {
-      Start()
+      start()
     }
     return mnemonic
   }
@@ -349,7 +315,7 @@ class CallService : Service(), IClientNativeBridge {
   fun restoreIdentity(mnemonic: String): Boolean {
     val success = nativeRestoreIdentity(mnemonic)
     if (success) {
-      Start()
+      start()
     }
     return success
   }
@@ -357,18 +323,27 @@ class CallService : Service(), IClientNativeBridge {
   fun getMnemonic(): String? = nativeGetMnemonic()
 
   private external fun initEngine(nativeBridge: IClientNativeBridge)
-  external fun Start()
-  private external fun Terminate()
+  external fun start()
+  private external fun terminate()
   external fun identityExists(): Boolean
 
   fun refreshState() {
-    // Only execute if the engine has been initialized.
     if (isEngineInitialized.get()) {
       nativeRefreshState()
     } else {
       Log.d("CallService", "refreshState called before engine initialized; ignoring.")
     }
   }
+
+  // --- NDK Query API ---
+  external fun nativeGetMyProfile(): MyProfileInfo?
+  external fun nativeGetContacts(): List<Contact>?
+  external fun nativeGetInteractionHistoryPage(): HistoryPage?
+  external fun nativeGetCallState(): CallState?
+  external fun nativeGetConnectionState(): Int
+  external fun nativeGetSignalingUrl(): String?
+  external fun nativeGetSelectedContactId(): String?
+
   private external fun nativeRefreshState()
   external fun addContact(peerId: String)
   external fun acceptContact(peerId: String)
@@ -382,40 +357,31 @@ class CallService : Service(), IClientNativeBridge {
   external fun markMessagesAsRead(messageIds: LongArray)
   external fun configureVideoCapture(config: VideoConfig)
   external fun hangup()
-  // Native implementations for wrapped methods
   private external fun nativeUpdateSignalingUrl(url: String)
   private external fun nativeAcceptCall()
   private external fun nativeRejectCall()
   private external fun nativeUpdateMyProfile(name: String?, bio: String?, photo_base64: String?)
   private external fun nativeSetContactDisplayNameOverride(peerId: String, name: String)
   private external fun nativeResetContactDisplayNameOverride(peerId: String)
-
   private external fun nativeGetMnemonic(): String?
-  // --- Native Backup & Restore ---
   private external fun nativeCreateBackup(path: String, password: String): Boolean
   private external fun nativeRestoreBackup(path: String, password: String): Boolean
   private external fun nativeGenerateNewIdentity(): String
   private external fun nativeRestoreIdentity(mnemonic: String): Boolean
-
-  // --- Native Debug Methods ---
   private external fun nativeDebugEraseAllHistory()
   private external fun nativeDebugEraseAllContacts()
   private external fun nativeDebugRevokeAllApprovals()
-
 
   companion object {
     private const val FOREGROUND_SERVICE_NOTIFICATION_ID = 101
     const val INCOMING_CALL_NOTIFICATION_ID = 102
     const val MESSAGE_NOTIFICATION_ID_BASE = 1000
-
     private const val FOREGROUND_CHANNEL_ID = "foreground_service_channel"
     private const val CALLS_CHANNEL_ID = "incoming_calls_channel"
     private const val MESSAGES_CHANNEL_ID = "messages_channel"
-
     private const val ACTION_HANGUP = "hela.eillance.ACTION_HANGUP"
     const val ACTION_ACCEPT_CALL = "hela.eillance.ACTION_ACCEPT_CALL"
     private const val ACTION_REJECT_CALL = "hela.eillance.ACTION_REJECT_CALL"
-
     const val EXTRA_PEER_ID = "hela.eillance.EXTRA_PEER_ID"
   }
 }

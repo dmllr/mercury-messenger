@@ -37,11 +37,9 @@ import hela.eillance.screens.WebViewScreen
 
 @Composable
 fun MercuryApp(viewModel: MainViewModel) {
-  val uiState by viewModel.uiState.collectAsState()
+  val myProfile by viewModel.myProfile.collectAsState()
 
-  // The source of truth for navigation is the AppState from the C++ core.
-  // If an identity exists, we show the main app. Otherwise, the identity setup flow.
-  if (uiState.identityExists) {
+  if (myProfile.identityExists) {
     MainAppContent(viewModel = viewModel)
   } else {
     IdentitySetupFlow(viewModel = viewModel)
@@ -69,17 +67,22 @@ fun IdentitySetupFlow(viewModel: MainViewModel) {
 @Composable
 fun MainAppContent(viewModel: MainViewModel) {
   val navController = rememberNavController()
-  val uiState by viewModel.uiState.collectAsState()
+
+  // Collect all necessary states from the ViewModel
+  val myProfile by viewModel.myProfile.collectAsState()
+  val contacts by viewModel.contacts.collectAsState()
+  val historyPage by viewModel.interactionHistoryPage.collectAsState()
+  val callState by viewModel.callState.collectAsState()
+  val connectionState by viewModel.connectionState.collectAsState()
   val navigateToPeerId by viewModel.navigateToPeerId.collectAsState()
   val peerIdForProfileDialog by viewModel.showContactProfileDialog.collectAsState()
+
   var contactToRemove by remember { mutableStateOf<Contact?>(null) }
 
   LaunchedEffect(navigateToPeerId) {
     navigateToPeerId?.let { peerId ->
-      // Ensure we are not on the call screen when navigating to a chat
-      if (!uiState.callState.isInCall && !uiState.callState.isRinging) {
+      if (!callState.isInCall && !callState.isRinging) {
         navController.navigate(Route.Interaction.createRoute(peerId)) {
-          // This is key: If we are already on the target screen, don't create a new instance.
           launchSingleTop = true
         }
       }
@@ -102,9 +105,6 @@ fun MainAppContent(viewModel: MainViewModel) {
       confirmButton = {
         TextButton(
           onClick = {
-            // If the user is on a conversation screen when they delete a
-            // contact, navigate back to the contacts list to avoid showing
-            // an empty screen for the now-deleted contact.
             val isOnConversationScreen = navController.currentBackStackEntry?.destination?.route == Route.Interaction.route
             viewModel.removeContact(contact.peerId)
             contactToRemove = null
@@ -126,25 +126,21 @@ fun MainAppContent(viewModel: MainViewModel) {
   }
 
   peerIdForProfileDialog?.let { peerId ->
-    val contact = uiState.contacts.find { it.peerId == peerId }
-    contact?.let {
+    contacts.find { it.peerId == peerId }?.let {
       ContactProfileDialog(contact = it,
-                           onDismissRequest = { viewModel.onContactProfileDialogDismiss() },
-                           onOverrideSave = { newName -> viewModel.setContactDisplayNameOverride(peerId, newName) },
-                           onOverrideReset = { viewModel.resetContactDisplayNameOverride(peerId) },
-                           onRemoveRequest = { contactToRemove = it })
+        onDismissRequest = { viewModel.onContactProfileDialogDismiss() },
+        onOverrideSave = { newName -> viewModel.setContactDisplayNameOverride(peerId, newName) },
+        onOverrideReset = { viewModel.resetContactDisplayNameOverride(peerId) },
+        onRemoveRequest = { contactToRemove = it })
     }
   }
 
-  // Global handler for incoming call
-  if (uiState.callState.isRinging) {
+  if (callState.isRinging) {
     IncomingCallScreen(
-      callerId = uiState.callState.peerId,
+      callerId = callState.peerId,
       onAccept = {
         viewModel.acceptCall()
-        // Navigate to the interaction screen for the accepted call
-        navController.navigate(Route.Interaction.createRoute(uiState.callState.peerId)) {
-          // Clear back stack to prevent going back to the incoming call screen
+        navController.navigate(Route.Interaction.createRoute(callState.peerId)) {
           popUpTo(Screen.Contacts.route)
         }
       },
@@ -158,7 +154,9 @@ fun MainAppContent(viewModel: MainViewModel) {
       composable(Screen.Contacts.route) {
         ContactsScreen(
           viewModel = viewModel,
-          uiState = uiState,
+          myProfile = myProfile,
+          contacts = contacts,
+          connectionState = connectionState,
           onContactClick = { peerId ->
             viewModel.navigateToPeer(peerId)
           },
@@ -171,7 +169,7 @@ fun MainAppContent(viewModel: MainViewModel) {
       composable(Screen.Profile.route) {
         ProfileScreen(
           viewModel = viewModel,
-          uiState = uiState,
+          myProfile = myProfile,
           onBack = { navController.popBackStack() },
           onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
           onNavigateToBackupAndRestore = { navController.navigate(Screen.BackupRestore.route) }
@@ -179,10 +177,13 @@ fun MainAppContent(viewModel: MainViewModel) {
       }
       composable(Route.Interaction.route) { backStackEntry ->
         val peerId = backStackEntry.arguments?.getString("peerId")
-          ?: return@composable // Or show an error screen
+          ?: return@composable
+        val contact = contacts.find { it.peerId == peerId }
         ConversationScreen(
           viewModel = viewModel,
-          uiState = uiState,
+          contact = contact,
+          historyPage = historyPage,
+          callState = callState,
           peerId = peerId,
           onBack = { navController.popBackStack() },
           onNavigateToCall = { navController.navigate(Route.Call.createRoute(it)) },
@@ -192,7 +193,7 @@ fun MainAppContent(viewModel: MainViewModel) {
       composable(Route.Call.route) {
         CallScreen(
           viewModel = viewModel,
-          uiState = uiState,
+          callState = callState,
           onNavigateBack = { navController.popBackStack() }
         )
       }
@@ -223,14 +224,6 @@ fun MainAppContent(viewModel: MainViewModel) {
         val url = backStackEntry.arguments?.getString("url")
         if (url != null) {
           WebViewScreen(navController = navController, url = url)
-        }
-      }
-      composable(
-        route = Route.WebView.route,
-        arguments = listOf(navArgument("url") { type = NavType.StringType })
-      ) { backStackEntry ->
-        backStackEntry.arguments?.getString("url")?.let {
-          WebViewScreen(navController = navController, url = Uri.decode(it))
         }
       }
     }
