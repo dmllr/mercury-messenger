@@ -64,12 +64,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.os.ConfigurationCompat
 import hela.eillance.MainViewModel
-import hela.eillance.ndkio.AppState
 import hela.eillance.ndkio.CallDirection
+import hela.eillance.ndkio.CallState
 import hela.eillance.ndkio.CallStatus
 import hela.eillance.ndkio.Contact
 import hela.eillance.ndkio.HistoryEntry
 import hela.eillance.ndkio.HistoryEntryKind
+import hela.eillance.ndkio.HistoryPage
 import hela.eillance.ndkio.MessageDirection
 import hela.eillance.ndkio.MessageStatus
 import hela.eillance.ndkio.PeerConnectionState
@@ -89,8 +90,10 @@ import java.util.concurrent.TimeUnit
 @Composable
 fun ConversationScreen(
   viewModel: MainViewModel,
-  uiState: AppState,
   peerId: String,
+  contact: Contact?,
+  historyPage: HistoryPage,
+  callState: CallState,
   onBack: () -> Unit,
   onNavigateToCall: (String) -> Unit,
   onShowContactProfile: (String) -> Unit
@@ -101,11 +104,9 @@ fun ConversationScreen(
 
   val listState = rememberLazyListState()
   val coroutineScope = rememberCoroutineScope()
-  val history = uiState.interactionHistory
-  var previousHistory by remember(peerId) { mutableStateOf(history) }
-  val contact = uiState.contacts.find { it.peerId == peerId }
+  var previousHistory by remember(peerId) { mutableStateOf(historyPage.messages) }
 
-  val isInCall = uiState.callState.isInCall && uiState.callState.peerId == peerId
+  val isInCall = callState.isInCall && callState.peerId == peerId
 
   var systemMessageToShowDetails by remember { mutableStateOf<HistoryEntry?>(null) }
   var tappedTruncatedMessageId by remember { mutableStateOf<Long?>(null) }
@@ -116,20 +117,17 @@ fun ConversationScreen(
     }
   }
 
-  // This effect handles auto-scrolling when new messages are added.
-  LaunchedEffect(history) {
-    // We only scroll if the list has actually grown, not just on recomposition.
-    if (history.size > previousHistory.size) {
+  LaunchedEffect(historyPage.messages) {
+    if (historyPage.messages.size > previousHistory.size) {
       coroutineScope.launch {
         listState.animateScrollToItem(0)
       }
     }
-    previousHistory = history
+    previousHistory = historyPage.messages
   }
 
-
-  LaunchedEffect(uiState.interactionHistory) {
-    val unreadMessageIds = uiState.interactionHistory
+  LaunchedEffect(historyPage.messages) {
+    val unreadMessageIds = historyPage.messages
       .filter { it.kind == HistoryEntryKind.TextMessage && it.direction == MessageDirection.Received && it.status != MessageStatus.Read }
       .map { it.id }
     if (unreadMessageIds.isNotEmpty()) {
@@ -137,10 +135,8 @@ fun ConversationScreen(
     }
   }
 
-  // This effect watches for when a tapped truncated message has been loaded.
-  // When it's loaded (no longer truncated), it triggers the details dialog.
   val loadedMessage = if (tappedTruncatedMessageId != null) {
-    uiState.interactionHistory.find { it.id == tappedTruncatedMessageId && !it.isTruncated }
+    historyPage.messages.find { it.id == tappedTruncatedMessageId && !it.isTruncated }
   } else {
     null
   }
@@ -148,11 +144,10 @@ fun ConversationScreen(
   LaunchedEffect(loadedMessage) {
     if (loadedMessage != null) {
       systemMessageToShowDetails = loadedMessage
-      tappedTruncatedMessageId = null // Reset the trigger
+      tappedTruncatedMessageId = null
     }
   }
 
-  // Display the dialog when its state is set
   systemMessageToShowDetails?.let { entry ->
     SystemMessageDetailsDialog(entry = entry, onDismiss = { systemMessageToShowDetails = null })
   }
@@ -222,12 +217,10 @@ fun ConversationScreen(
 
       ChatHistory(
         modifier = Modifier.weight(1f),
-        uiState = uiState,
+        historyPage = historyPage,
         listState = listState,
         viewModel = viewModel,
         onSystemMessageClick = { clickedEntry ->
-          // If the message content is truncated, first trigger a load.
-          // The LaunchedEffect above will handle showing the dialog once loaded.
           if (clickedEntry.isTruncated) {
             tappedTruncatedMessageId = clickedEntry.id
             viewModel.loadFullMessage(clickedEntry.id)
@@ -298,11 +291,10 @@ fun ConnectionStatusBar(contact: Contact) {
   }
 }
 
-
 @Composable
 fun ChatHistory(
   modifier: Modifier = Modifier,
-  uiState: AppState,
+  historyPage: HistoryPage,
   listState: androidx.compose.foundation.lazy.LazyListState,
   viewModel: MainViewModel,
   onSystemMessageClick: (HistoryEntry) -> Unit
@@ -314,10 +306,7 @@ fun ChatHistory(
     contentPadding = PaddingValues(vertical = 8.dp),
     reverseLayout = true
   ) {
-    // The `items` block is defined first, so its contents will be rendered from the bottom up.
-    // The "Load Older" button is defined last, so it appears at the top of the scrollable area.
-
-    val history = uiState.interactionHistory
+    val history = historyPage.messages
     items(
       count = history.size,
       key = { index -> history[history.lastIndex - index].id }
@@ -330,7 +319,7 @@ fun ChatHistory(
       }
     }
 
-    if (uiState.hasOlderMessages) {
+    if (historyPage.hasOlderMessages) {
       item {
         Button(
           onClick = viewModel::loadOlderMessages,
@@ -440,7 +429,7 @@ fun CallLogBubble(entry: HistoryEntry) {
 
   val formattedTime = formatTimestamp(entry.timestamp)
 
-  val duration = entry.durationSeconds ?: 0
+  val duration = entry.durationSeconds
   val durationText = if (entry.callStatus == CallStatus.Answered && duration > 0) {
     val minutes = TimeUnit.SECONDS.toMinutes(duration.toLong())
     val seconds = duration - TimeUnit.MINUTES.toSeconds(minutes)
@@ -465,18 +454,13 @@ fun CallLogBubble(entry: HistoryEntry) {
 
 @Composable
 fun SystemMessageBubble(entry: HistoryEntry, onClick: (HistoryEntry) -> Unit) {
-  // This JSON parser is lenient and will ignore fields it doesn't recognize.
   val json = Json { ignoreUnknownKeys = true }
 
-  // Attempt to parse the content as a structured system message.
   val parsedAction = remember(entry.content, entry.isTruncated) {
     entry.content?.let { content ->
       try {
-        // For truncated messages, we can't fully parse, but we can reliably get the action
-        // because it's at the beginning of the JSON. If full parsing fails, we fall back to regex.
         json.decodeFromString<JsonAction>(content)
       } catch (e: Exception) {
-        // This will catch errors for both truncated and malformed JSON
         val actionMatch = Regex("\"action\"\\s*:\\s*\"([^\"]+)\"").find(content)
         actionMatch?.groupValues?.get(1)?.let { action -> JsonAction(action) }
       }
@@ -484,25 +468,16 @@ fun SystemMessageBubble(entry: HistoryEntry, onClick: (HistoryEntry) -> Unit) {
   }
 
   val (displayText, isClickable) = when (parsedAction?.action) {
-    "profile_update" -> {
-      "You updated your profile." to false
-    }
-    "profile_update_diff" -> {
-      "Profile was updated." to true
-    }
+    "profile_update" -> "You updated your profile." to false
+    "profile_update_diff" -> "Profile was updated." to true
     "contact_request_received" -> "You received a contact request." to false
     "contact_request" -> "You sent a contact request." to false
     "contact_confirm" -> {
-      if (entry.direction == MessageDirection.Sent) {
-        "You accepted the contact request." to false
-      } else {
-        "Your contact request was accepted." to false
-      }
+      if (entry.direction == MessageDirection.Sent) "You accepted the contact request." to false
+      else "Your contact request was accepted." to false
     }
-    // If parsing fails completely, show nothing. It's better than showing broken JSON.
     else -> "" to false
   }
-
 
   if (displayText.isBlank()) return
 
@@ -530,10 +505,6 @@ fun SystemMessageBubble(entry: HistoryEntry, onClick: (HistoryEntry) -> Unit) {
   }
 }
 
-/**
- * A simple data class for parsing only the 'action' field from a JSON string
- * to determine how to render a system message.
- */
 @Serializable
 private data class JsonAction(val action: String)
 
@@ -550,15 +521,9 @@ fun formatTimestamp(timestamp: Long): String {
 
   return when {
     isToday -> messageTime.format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(locale))
-    isYesterday -> {
-      "Yesterday, " + messageTime.format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(locale))
-    }
-    messageTime.year == now.year -> {
-      messageTime.format(DateTimeFormatter.ofPattern("MMM d, HH:mm", locale))
-    }
-    else -> {
-      messageTime.format(DateTimeFormatter.ofLocalizedDateTime(FormatStyle.SHORT, FormatStyle.SHORT).withLocale(locale))
-    }
+    isYesterday -> "Yesterday, " + messageTime.format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(locale))
+    messageTime.year == now.year -> messageTime.format(DateTimeFormatter.ofPattern("MMM d, HH:mm", locale))
+    else -> messageTime.format(DateTimeFormatter.ofLocalizedDateTime(FormatStyle.SHORT, FormatStyle.SHORT).withLocale(locale))
   }
 }
 

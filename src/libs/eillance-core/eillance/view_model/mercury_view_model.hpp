@@ -24,16 +24,8 @@
 
 namespace eillance::view_model {
 
-NLOHMANN_JSON_SERIALIZE_ENUM(eillance::transport::PeerConnectionState, {
-                                                                           // NOLINT
-                                                                           {transport::PeerConnectionState::NewConnection, 0},
-                                                                           {transport::PeerConnectionState::Connecting, 1},
-                                                                           {transport::PeerConnectionState::Connected, 2},
-                                                                           {transport::PeerConnectionState::Disconnected, 3},
-                                                                           {transport::PeerConnectionState::Failed, 4},
-                                                                           {transport::PeerConnectionState::Closed, 5},
-                                                                       })
-
+// This struct is now primarily for the CLI client's convenience.
+// The Android UI queries the ViewModel through granular getters.
 struct UIState {
   struct CallState {
     bool is_in_call = false;
@@ -55,13 +47,17 @@ struct UIState {
     uint32_t unread_count = 0;
   };
 
-  std::string my_id;
-  std::optional<std::string> my_display_name;
-  std::optional<std::string> my_bio;
-  std::optional<std::string> my_photo;  // base64
+  struct MyProfile {
+    std::string my_id;
+    bool identity_exists = true;
+    std::optional<std::string> my_display_name;
+    std::optional<std::string> my_bio;
+    std::optional<std::string> my_photo;  // base64
+  };
+
+  MyProfile my_profile;
   ServiceConnectionState connection_state = ServiceConnectionState::unknown;
   std::vector<ViewContact> contacts;
-  std::vector<messaging::ChatSummary> chats;
   std::optional<std::string> selected_contact_id;
   std::deque<messaging::HistoryEntryRecord> interaction_history;
   bool has_older_messages = false;
@@ -69,66 +65,19 @@ struct UIState {
   std::optional<std::string> signaling_server_url;
 };
 
-//NOLINTNEXTLINE(readability-identifier-naming)
-inline void to_json(nlohmann::json& json, const UIState::ViewContact& c) {
-  json = nlohmann::json{
-      {"peer_id", c.peer_id},
-      {"name", c.display_name},  // Mapped to 'name' for Kotlin consistency
-      {"bio", c.bio},
-      {"photo", c.photo},
-      {"status", c.status},
-      {"connection_state", c.connection_state},
-      {"unread_count", c.unread_count},
-  };
-}
-
-//NOLINTNEXTLINE(readability-identifier-naming)
-inline void to_json(nlohmann::json& j, const std::deque<messaging::HistoryEntryRecord>& deq) {
-  j = nlohmann::json::array();
-  for (const auto& msg: deq) {
-    j.push_back(msg);
-  }
-}
-
-//NOLINTNEXTLINE(readability-identifier-naming)
-inline void to_json(nlohmann::json& json, const UIState& s) {
-  json["my_id"] = s.my_id;
-  json["identity_exists"] = s.identity_exists;
-  json["myDisplayName"] = s.my_display_name;
-  json["myBio"] = s.my_bio;
-  json["myPhoto"] = s.my_photo;
-  json["connection_state"] = static_cast<int>(s.connection_state);
-  json["contacts"] = s.contacts;
-  json["chats"] = s.chats;
-  json["selected_contact_id"] = s.selected_contact_id;
-  json["interaction_history"] = s.interaction_history;
-  json["has_older_messages"] = s.has_older_messages;
-  json["call_state"]["is_in_call"] = s.call_state.is_in_call;
-  json["call_state"]["is_ringing"] = s.call_state.is_ringing;
-  json["call_state"]["call_direction"] = s.call_state.call_direction;
-  json["call_state"]["peer_id"] = s.call_state.peer_id;
-  json["call_state"]["call_type"] = s.call_state.call_type;
-  json["signaling_server_url"] = s.signaling_server_url;
-}
+enum class StateChange {
+  MyProfile,
+  Contacts,
+  Connection,
+  SelectedContact,
+  InteractionHistory,
+  CallState,
+  SignalingUrl
+};
 
 class MercuryViewModel {
 public:
-  explicit MercuryViewModel(std::shared_ptr<Client> client) : client_(std::move(client)) {
-    {
-      const std::lock_guard<std::mutex> lock(state_mutex_);
-      current_state_.identity_exists = client_->IdentityExists();
-      if (current_state_.identity_exists) {
-        current_state_.my_id = client_->getId();
-        UpdateMyProfileFromSettings();
-        current_state_.signaling_server_url = client_->getSettingsManager()->GetSignalingServerUrl();
-        UpdateContacts();
-      }
-    }
-    if (GetState().identity_exists) {
-      UpdateChats();
-    }
-    SetupClientCallbacks();
-  }
+  explicit MercuryViewModel(std::shared_ptr<Client> client);
   ~MercuryViewModel() = default;
 
   MercuryViewModel(const MercuryViewModel&) = delete;
@@ -167,31 +116,67 @@ public:
   void DebugEraseAllHistory();
   void DebugEraseAllContacts();
   void DebugRevokeAllApprovals();
+
+  /// Returns a full copy of the current state. Used for CLI and initial state hydration.
   [[nodiscard]] auto GetState() const -> UIState;
-  void SetOnStateChangedCallback(std::function<void()> callback);
+
+  // --- Granular Getters for Android UI ---
+  [[nodiscard]] auto GetMyProfile() const -> UIState::MyProfile;
+  [[nodiscard]] auto GetContacts() const -> std::vector<UIState::ViewContact>;
+  [[nodiscard]] auto GetInteractionHistory() const -> std::deque<messaging::HistoryEntryRecord>;
+  [[nodiscard]] auto HasOlderMessages() const -> bool;
+  [[nodiscard]] auto GetCallState() const -> UIState::CallState;
+
+  void SetOnStateChangedCallback(std::function<void(const std::vector<StateChange>&)> callback);
 
 private:
   void SetupClientCallbacks();
-  void UpdateChatHistoryForSelectedContact();
-  void NotifyStateChanged() const;
-  void UpdateContacts();
-  void UpdateMyProfileFromSettings();
-  void UpdateChats();
+  void NotifyStateChanged(const std::vector<StateChange>& changes) const;
+  void UpdateContacts(bool notify);
+  void UpdateMyProfileFromSettings(bool notify);
+  void UpdateChats(bool notify);
   void LoadInitialChatHistory(const std::string& peer_id);
 
   static inline std::atomic<std::uint64_t> nextSystemMessageId{10000000000000000000ULL};
   std::shared_ptr<Client> client_;
 
   mutable std::mutex state_mutex_;
-  UIState current_state_;
+
+  // --- Decomposed State Members ---
+  UIState::MyProfile my_profile_;
+  ServiceConnectionState connection_state_ = ServiceConnectionState::unknown;
+  std::vector<UIState::ViewContact> contacts_;
+  std::optional<std::string> selected_contact_id_;
+  std::deque<messaging::HistoryEntryRecord> interaction_history_;
+  bool has_older_messages_ = false;
+  UIState::CallState call_state_;
+  std::optional<std::string> signaling_server_url_;
 
   std::unordered_map<std::string, size_t> chat_pages_loaded_;
   DispatchQueue dispatch_queue_{"ViewModel", 1};
 
   static constexpr size_t kChatPageSize = 50;
 
-  std::function<void()> on_state_changed_callback_;
+  std::function<void(const std::vector<StateChange>&)> on_state_changed_callback_;
 };
+
+inline MercuryViewModel::MercuryViewModel(std::shared_ptr<Client> client) : client_(std::move(client)) {
+  {
+    const std::lock_guard<std::mutex> lock(state_mutex_);
+    my_profile_.identity_exists = client_->IdentityExists();
+    if (my_profile_.identity_exists) {
+      my_profile_.my_id = client_->GetId();
+      UpdateMyProfileFromSettings(false);
+      signaling_server_url_ = client_->GetSettingsManager()->GetSignalingServerUrl();
+      UpdateContacts(false);
+    }
+  }
+  if (my_profile_.identity_exists) {
+    UpdateChats(false);
+  }
+  SetupClientCallbacks();
+}
+
 
 inline auto MercuryViewModel::GenerateNewIdentity() -> std::string {
   auto mnemonic = client_->GenerateNewIdentity();
@@ -206,7 +191,7 @@ inline auto MercuryViewModel::GenerateNewIdentity() -> std::string {
 inline auto MercuryViewModel::RestoreIdentity(const std::string& mnemonic) -> bool {
   if (client_->RestoreIdentity(mnemonic)) {
     dispatch_queue_.Dispatch([this] {
-      RefreshState();
+    RefreshState();
     });
     return true;
   }
@@ -235,13 +220,15 @@ inline void MercuryViewModel::SelectContact(const std::string& peer_id) {
     bool selection_changed{false};
     {
       const std::lock_guard<std::mutex> lock(state_mutex_);
-      selection_changed = current_state_.selected_contact_id != peer_id;
+      selection_changed = selected_contact_id_ != peer_id;
       if (selection_changed) {
-        current_state_.selected_contact_id = peer_id;
+        selected_contact_id_ = peer_id;
         LoadInitialChatHistory(peer_id);
       }
     }
-    if (selection_changed) { NotifyStateChanged(); }
+    if (selection_changed) {
+      NotifyStateChanged({StateChange::SelectedContact, StateChange::InteractionHistory});
+    }
   });
 }
 
@@ -250,15 +237,15 @@ inline void MercuryViewModel::DeselectContact() {
     bool changed = false;
     {
       const std::lock_guard<std::mutex> lock(state_mutex_);
-      if (current_state_.selected_contact_id.has_value()) {
-        current_state_.selected_contact_id.reset();
-        current_state_.interaction_history.clear();
-        current_state_.has_older_messages = false;
+      if (selected_contact_id_.has_value()) {
+        selected_contact_id_.reset();
+        interaction_history_.clear();
+        has_older_messages_ = false;
         changed = true;
       }
     }
     if (changed) {
-      NotifyStateChanged();
+      NotifyStateChanged({StateChange::SelectedContact, StateChange::InteractionHistory});
     }
   });
 }
@@ -268,7 +255,7 @@ inline void MercuryViewModel::SendMessage(const std::string& content) {
     std::optional<std::string> selected_id;
     {
       const std::lock_guard<std::mutex> lock(state_mutex_);
-      selected_id = current_state_.selected_contact_id;
+      selected_id = selected_contact_id_;
       if (!selected_id) {
         LOGW << "SendMessage called with no selected contact.";
         return;
@@ -279,13 +266,13 @@ inline void MercuryViewModel::SendMessage(const std::string& content) {
 
     {
       const std::lock_guard<std::mutex> lock(state_mutex_);
-      if (current_state_.selected_contact_id == selected_id) {
-        current_state_.interaction_history.push_back(entry);
+      if (selected_contact_id_ == selected_id) {
+        interaction_history_.push_back(entry);
       }
     }
 
-    UpdateChats();
-    NotifyStateChanged();
+    UpdateChats(true);
+    NotifyStateChanged({StateChange::InteractionHistory});
   });
 }
 
@@ -294,16 +281,16 @@ inline void MercuryViewModel::StartVoiceCall() {
     std::optional<std::string> peer_id;
     {
       const std::lock_guard<std::mutex> lock(state_mutex_);
-      peer_id = current_state_.selected_contact_id;
+      peer_id = selected_contact_id_;
     }
     if (peer_id) {
       {
         const std::lock_guard<std::mutex> lock(state_mutex_);
-        current_state_.call_state = {.is_in_call = true, .is_ringing = false, .call_direction = messaging::CallDirection::outgoing, .peer_id = *peer_id, .call_type = messaging::HistoryEntryKind::voiceCall};
+        call_state_ = {.is_in_call = true, .is_ringing = false, .call_direction = messaging::CallDirection::outgoing, .peer_id = *peer_id, .call_type = messaging::HistoryEntryKind::voiceCall};
       }
       client_->StartVoiceCall(*peer_id);
-      UpdateChats();
-      NotifyStateChanged();
+      UpdateChats(true);
+      NotifyStateChanged({StateChange::CallState});
     }
   });
 }
@@ -313,16 +300,16 @@ inline void MercuryViewModel::StartVideoCall() {
     std::optional<std::string> peer_id;
     {
       const std::lock_guard<std::mutex> lock(state_mutex_);
-      peer_id = current_state_.selected_contact_id;
+      peer_id = selected_contact_id_;
     }
     if (peer_id) {
       {
         const std::lock_guard<std::mutex> lock(state_mutex_);
-        current_state_.call_state = {.is_in_call = true, .is_ringing = false, .call_direction = messaging::CallDirection::outgoing, .peer_id = *peer_id, .call_type = messaging::HistoryEntryKind::videoCall};
+        call_state_ = {.is_in_call = true, .is_ringing = false, .call_direction = messaging::CallDirection::outgoing, .peer_id = *peer_id, .call_type = messaging::HistoryEntryKind::videoCall};
       }
       client_->StartVideoCall(*peer_id);
-      UpdateChats();
-      NotifyStateChanged();
+      UpdateChats(true);
+      NotifyStateChanged({StateChange::CallState});
     }
   });
 }
@@ -330,43 +317,49 @@ inline void MercuryViewModel::StartVideoCall() {
 inline void MercuryViewModel::Hangup() {
   dispatch_queue_.Dispatch([this] {
     std::string peer_id_to_hangup;
+    bool changed = false;
     {
       const std::lock_guard<std::mutex> lock(state_mutex_);
-      if (!current_state_.call_state.is_in_call && !current_state_.call_state.is_ringing) { return; }
-      peer_id_to_hangup = current_state_.call_state.peer_id;
-      current_state_.call_state = {};
+      if (!call_state_.is_in_call && !call_state_.is_ringing) { return; }
+      peer_id_to_hangup = call_state_.peer_id;
+      call_state_ = {};
+      changed = true;
     }
     if (!peer_id_to_hangup.empty()) { client_->Hangup(peer_id_to_hangup); }
-    NotifyStateChanged();
+    if (changed) { NotifyStateChanged({StateChange::CallState}); }
   });
 }
 
 inline void MercuryViewModel::AcceptCall() {
   dispatch_queue_.Dispatch([this] {
     std::string peer_id;
+    bool changed = false;
     {
       const std::lock_guard<std::mutex> lock(state_mutex_);
-      if (!current_state_.call_state.is_ringing) { return; }
-      peer_id = current_state_.call_state.peer_id;
-      current_state_.call_state.is_in_call = true;
-      current_state_.call_state.is_ringing = false;
+      if (!call_state_.is_ringing) { return; }
+      peer_id = call_state_.peer_id;
+      call_state_.is_in_call = true;
+      call_state_.is_ringing = false;
+      changed = true;
     }
     if (!peer_id.empty()) { client_->AcceptCall(peer_id); }
-    NotifyStateChanged();
+    if (changed) { NotifyStateChanged({StateChange::CallState}); }
   });
 }
 
 inline void MercuryViewModel::RejectCall() {
   dispatch_queue_.Dispatch([this] {
     std::string peer_id;
+    bool changed = false;
     {
       const std::lock_guard<std::mutex> lock(state_mutex_);
-      if (!current_state_.call_state.is_ringing) { return; }
-      peer_id = current_state_.call_state.peer_id;
-      current_state_.call_state = {};
+      if (!call_state_.is_ringing) { return; }
+      peer_id = call_state_.peer_id;
+      call_state_ = {};
+      changed = true;
     }
     if (!peer_id.empty()) { client_->RejectCall(peer_id); }
-    NotifyStateChanged();
+    if (changed) { NotifyStateChanged({StateChange::CallState}); }
   });
 }
 
@@ -383,15 +376,15 @@ inline void MercuryViewModel::RemoveContact(const std::string& peer_id) {
     client_->RemoveContact(peer_id);
     {
       const std::lock_guard<std::mutex> lock(state_mutex_);
-      if (current_state_.selected_contact_id && *current_state_.selected_contact_id == peer_id) {
-        current_state_.selected_contact_id.reset();
-        current_state_.interaction_history.clear();
-        current_state_.has_older_messages = false;
+      if (selected_contact_id_ && *selected_contact_id_ == peer_id) {
+        selected_contact_id_.reset();
+        interaction_history_.clear();
+        has_older_messages_ = false;
       }
-      UpdateContacts();
+      UpdateContacts(false);
     }
-    UpdateChats();
-    NotifyStateChanged();
+    UpdateChats(false);
+    NotifyStateChanged({StateChange::Contacts, StateChange::SelectedContact, StateChange::InteractionHistory});
   });
 }
 
@@ -404,16 +397,16 @@ inline void MercuryViewModel::UpdateMyProfile(const std::optional<std::string>& 
     client_->UpdateMyProfile(name, bio, photo);
     {
       const std::lock_guard<std::mutex> lock(state_mutex_);
-      UpdateMyProfileFromSettings();
+      UpdateMyProfileFromSettings(false);
     }
-    NotifyStateChanged();
+    NotifyStateChanged({StateChange::MyProfile});
   });
 }
 
 inline void MercuryViewModel::SetContactDisplayNameOverride(const std::string& peer_id, const std::string& name) {
   dispatch_queue_.Dispatch([this, peer_id, name] {
     client_->SetContactDisplayNameOverride(peer_id, name);
-    RefreshState();  // Easiest way to update the view model's contact list
+    RefreshState();
   });
 }
 
@@ -426,25 +419,28 @@ inline void MercuryViewModel::ResetContactDisplayNameOverride(const std::string&
 
 inline void MercuryViewModel::LoadOlderMessages() {
   dispatch_queue_.Dispatch([this] {
+    bool changed = false;
     {
       const std::lock_guard<std::mutex> lock(state_mutex_);
-      if (!current_state_.selected_contact_id) { return; }
+      if (!selected_contact_id_) { return; }
 
-      const auto& peer_id = *current_state_.selected_contact_id;
+      const auto& peer_id = *selected_contact_id_;
       const size_t pages_loaded = chat_pages_loaded_[peer_id];
 
       auto page = client_->GetMessageHistoryPage(peer_id, pages_loaded, kChatPageSize);
-      if (page.messages.empty()) {
-        current_state_.has_older_messages = false;
-      } else {
+      if (!page.messages.empty()) {
         for (auto it = page.messages.rbegin(); it != page.messages.rend(); ++it) {
-          current_state_.interaction_history.push_front(*it);
+          interaction_history_.push_front(*it);
         }
         chat_pages_loaded_[peer_id]++;
-        current_state_.has_older_messages = (chat_pages_loaded_[peer_id] * kChatPageSize) < page.total_messages;
+        has_older_messages_ = (chat_pages_loaded_[peer_id] * kChatPageSize) < page.total_messages;
+        changed = true;
+      } else if (has_older_messages_) {
+        has_older_messages_ = false;
+        changed = true;
       }
     }
-    NotifyStateChanged();
+    if (changed) { NotifyStateChanged({StateChange::InteractionHistory}); }
   });
 }
 
@@ -459,8 +455,8 @@ inline void MercuryViewModel::LoadFullMessage(uint64_t message_id) {
     bool updated = false;
     {
       const std::lock_guard<std::mutex> lock(state_mutex_);
-      if (current_state_.selected_contact_id) {
-        for (auto& entry: current_state_.interaction_history) {
+      if (selected_contact_id_) {
+        for (auto& entry: interaction_history_) {
           if (entry.id == message_id) {
             if (std::holds_alternative<messaging::MessageEntry>(entry.data)) {
               auto& msg_entry = std::get<messaging::MessageEntry>(entry.data);
@@ -474,7 +470,7 @@ inline void MercuryViewModel::LoadFullMessage(uint64_t message_id) {
       }
     }
 
-    if (updated) { NotifyStateChanged(); }
+    if (updated) { NotifyStateChanged({StateChange::InteractionHistory}); }
   });
 }
 
@@ -482,14 +478,14 @@ inline void MercuryViewModel::RefreshState() {
   dispatch_queue_.Dispatch([this] {
     {
       const std::lock_guard<std::mutex> lock(state_mutex_);
-      current_state_.identity_exists = client_->IdentityExists();
-      current_state_.my_id = client_->GetId();
-      UpdateMyProfileFromSettings();
-      current_state_.signaling_server_url = client_->GetSettingsManager()->GetSignalingServerUrl();
-      UpdateContacts();
+      my_profile_.identity_exists = client_->IdentityExists();
+      my_profile_.my_id = client_->GetId();
+      UpdateMyProfileFromSettings(false);
+      signaling_server_url_ = client_->GetSettingsManager()->GetSignalingServerUrl();
+      UpdateContacts(false);
     }
-    UpdateChats();
-    NotifyStateChanged();
+    UpdateChats(false);
+    NotifyStateChanged({StateChange::MyProfile, StateChange::Contacts, StateChange::SignalingUrl});
   });
 }
 
@@ -498,30 +494,26 @@ inline void MercuryViewModel::MarkMessagesAsRead(const std::vector<std::uint64_t
     std::optional<std::string> peer_id;
     {
       const std::lock_guard<std::mutex> lock(state_mutex_);
-      peer_id = current_state_.selected_contact_id;
+      peer_id = selected_contact_id_;
     }
     if (peer_id && !message_ids.empty()) {
-      LOGI << "Marking " << message_ids.size() << " messages as read for peer " << *peer_id;
       client_->MarkMessagesAsRead(*peer_id, message_ids);
-      // After marking messages as read in the database, the chat summaries
-      // must be recalculated to reflect the new unread counts.
-      UpdateChats();
-      NotifyStateChanged();
+      UpdateChats(true);
     }
   });
 }
 
 inline void MercuryViewModel::AddSystemMessageToChat(const std::string& message) {
   const std::lock_guard<std::mutex> lock(state_mutex_);
-  current_state_.interaction_history.push_back({.id = nextSystemMessageId++, .kind = messaging::HistoryEntryKind::systemMessage, .timestamp = static_cast<Time::Unit>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count()), .direction = messaging::MessageDirection::received, .is_truncated = false, .data = messaging::MessageEntry{message}});
-  NotifyStateChanged();
+  interaction_history_.push_back({.id = nextSystemMessageId++, .kind = messaging::HistoryEntryKind::systemMessage, .timestamp = static_cast<Time::Unit>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count()), .direction = messaging::MessageDirection::received, .is_truncated = false, .data = messaging::MessageEntry{message}});
+  NotifyStateChanged({StateChange::InteractionHistory});
 }
 
 inline void MercuryViewModel::SelectContactByIndex(size_t index) {
   std::string new_selection_id;
   {
     const std::lock_guard<std::mutex> lock(state_mutex_);
-    if (index < current_state_.contacts.size()) { new_selection_id = current_state_.contacts[index].peer_id; }
+    if (index < contacts_.size()) { new_selection_id = contacts_[index].peer_id; }
   }
   if (!new_selection_id.empty()) {
     SelectContact(new_selection_id);
@@ -553,16 +545,51 @@ inline void MercuryViewModel::DebugRevokeAllApprovals() {
 
 inline auto MercuryViewModel::GetState() const -> UIState {
   const std::lock_guard<std::mutex> lock(state_mutex_);
-  return current_state_;
+  return {
+    .my_profile = my_profile_,
+    .connection_state = connection_state_,
+    .contacts = contacts_,
+    .selected_contact_id = selected_contact_id_,
+    .interaction_history = interaction_history_,
+    .has_older_messages = has_older_messages_,
+    .call_state = call_state_,
+    .signaling_server_url = signaling_server_url_
+  };
 }
 
-inline void MercuryViewModel::SetOnStateChangedCallback(std::function<void()> callback) { on_state_changed_callback_ = std::move(callback); }
+inline auto MercuryViewModel::GetMyProfile() const -> UIState::MyProfile {
+  const std::lock_guard<std::mutex> lock(state_mutex_);
+  return my_profile_;
+}
+
+inline auto MercuryViewModel::GetContacts() const -> std::vector<UIState::ViewContact> {
+  const std::lock_guard<std::mutex> lock(state_mutex_);
+  return contacts_;
+}
+
+inline auto MercuryViewModel::GetInteractionHistory() const -> std::deque<messaging::HistoryEntryRecord> {
+  const std::lock_guard<std::mutex> lock(state_mutex_);
+  return interaction_history_;
+}
+
+inline auto MercuryViewModel::HasOlderMessages() const -> bool {
+  const std::lock_guard<std::mutex> lock(state_mutex_);
+  return has_older_messages_;
+}
+
+inline auto MercuryViewModel::GetCallState() const -> UIState::CallState {
+  const std::lock_guard<std::mutex> lock(state_mutex_);
+  return call_state_;
+}
+
+
+inline void MercuryViewModel::SetOnStateChangedCallback(std::function<void(const std::vector<StateChange>&)> callback) { on_state_changed_callback_ = std::move(callback); }
 
 inline void MercuryViewModel::LoadInitialChatHistory(const std::string& peer_id) {
   auto page = client_->GetMessageHistoryPage(peer_id, 0, kChatPageSize);
-  current_state_.interaction_history.assign(page.messages.begin(), page.messages.end());
+  interaction_history_.assign(page.messages.begin(), page.messages.end());
   chat_pages_loaded_[peer_id] = 1;
-  current_state_.has_older_messages = (kChatPageSize < page.total_messages);
+  has_older_messages_ = (kChatPageSize < page.total_messages);
 }
 
 inline void MercuryViewModel::SetupClientCallbacks() {
@@ -571,12 +598,12 @@ inline void MercuryViewModel::SetupClientCallbacks() {
     dispatch_queue_.Dispatch([this, peer_id, message] {
       {
         const std::lock_guard<std::mutex> lock(state_mutex_);
-        if (current_state_.selected_contact_id && *current_state_.selected_contact_id == peer_id) {
-          current_state_.interaction_history.push_back(message);
+        if (selected_contact_id_ && *selected_contact_id_ == peer_id) {
+          interaction_history_.push_back(message);
         }
       }
-      UpdateChats();
-      NotifyStateChanged();
+      UpdateChats(true);
+      NotifyStateChanged({StateChange::InteractionHistory});
     });
   });
 
@@ -584,23 +611,19 @@ inline void MercuryViewModel::SetupClientCallbacks() {
     dispatch_queue_.Dispatch([this, peer_id] {
       {
         const std::lock_guard<std::mutex> lock(state_mutex_);
-        UpdateContacts();
-        if (current_state_.selected_contact_id &&
-            *current_state_.selected_contact_id == peer_id) {
+        UpdateContacts(false);
+        if (selected_contact_id_ &&
+            *selected_contact_id_ == peer_id) {
           AddSystemMessageToChat("--> Contact request received. Use '/accept' to confirm.");
         }
       }
-      NotifyStateChanged();
+      NotifyStateChanged({StateChange::Contacts});
     });
   });
 
   client_->SetOnContactProfileUpdatedCallback([this](const std::string& /*peer_id*/) {
     dispatch_queue_.Dispatch([this] {
-      {
-        const std::lock_guard<std::mutex> lock(state_mutex_);
-        UpdateContacts();
-      }
-      NotifyStateChanged();
+        UpdateContacts(true);
     });
   });
 
@@ -610,25 +633,28 @@ inline void MercuryViewModel::SetupClientCallbacks() {
   client_->SetStatusCallback([this](const std::string& peer_id, EventSource source, int state_val) {
     dispatch_queue_.Dispatch([this, peer_id, source, state_val] {
       bool state_changed = false;
+      StateChange change_type = StateChange::Connection;
       {
         const std::lock_guard<std::mutex> lock(state_mutex_);
         if (source == EventSource::system) {
           auto new_state = static_cast<ServiceConnectionState>(state_val);
-          if (current_state_.connection_state != new_state) {
-            current_state_.connection_state = new_state;
-            if (current_state_.connection_state == ServiceConnectionState::online) {
-              current_state_.signaling_server_url =
-                  client_->GetSettingsManager()->GetSignalingServerUrl();
+          if (connection_state_ != new_state) {
+            connection_state_ = new_state;
+            if (connection_state_ == ServiceConnectionState::online) {
+              signaling_server_url_ = client_->GetSettingsManager()->GetSignalingServerUrl();
+              NotifyStateChanged({StateChange::SignalingUrl});
             }
             state_changed = true;
+            change_type = StateChange::Connection;
           }
         } else if (source == EventSource::peerConnectionState) {
           const auto state = static_cast<eillance::transport::PeerConnectionState>(state_val);
-          for (auto& contact: current_state_.contacts) {
+          for (auto& contact: contacts_) {
             if (contact.peer_id == peer_id) {
               if (contact.connection_state != state) {
                 contact.connection_state = state;
                 state_changed = true;
+                change_type = StateChange::Contacts;
               }
               break;
             }
@@ -636,15 +662,15 @@ inline void MercuryViewModel::SetupClientCallbacks() {
           if (state == transport::PeerConnectionState::Closed ||
               state == transport::PeerConnectionState::Disconnected ||
               state == transport::PeerConnectionState::Failed) {
-            if ((current_state_.call_state.is_in_call || current_state_.call_state.is_ringing) &&
-                current_state_.call_state.peer_id == peer_id) {
-              current_state_.call_state = {};
-              state_changed = true;
+            if ((call_state_.is_in_call || call_state_.is_ringing) &&
+                call_state_.peer_id == peer_id) {
+              call_state_ = {};
+              NotifyStateChanged({StateChange::CallState});
             }
           }
         }
       }
-      if (state_changed) { NotifyStateChanged(); }
+      if (state_changed) { NotifyStateChanged({change_type}); }
     });
   });
 
@@ -653,15 +679,15 @@ inline void MercuryViewModel::SetupClientCallbacks() {
       bool state_changed = false;
       {
         const std::lock_guard<std::mutex> lock(state_mutex_);
-        if (!current_state_.call_state.is_in_call && !current_state_.call_state.is_ringing) {
-          current_state_.call_state.is_ringing = true;
-          current_state_.call_state.peer_id = peer_id;
-          current_state_.call_state.call_type = call_type;
-          current_state_.call_state.call_direction = messaging::CallDirection::incoming;
+        if (!call_state_.is_in_call && !call_state_.is_ringing) {
+          call_state_.is_ringing = true;
+          call_state_.peer_id = peer_id;
+          call_state_.call_type = call_type;
+          call_state_.call_direction = messaging::CallDirection::incoming;
           state_changed = true;
         }
       }
-      if (state_changed) { NotifyStateChanged(); }
+      if (state_changed) { NotifyStateChanged({StateChange::CallState}); }
     });
   });
 
@@ -670,13 +696,13 @@ inline void MercuryViewModel::SetupClientCallbacks() {
       bool state_changed = false;
       {
         const std::lock_guard<std::mutex> lock(state_mutex_);
-        if ((current_state_.call_state.is_in_call || current_state_.call_state.is_ringing) &&
-            current_state_.call_state.peer_id == peer_id) {
-          current_state_.call_state = {};  // Reset the call state
+        if ((call_state_.is_in_call || call_state_.is_ringing) &&
+            call_state_.peer_id == peer_id) {
+          call_state_ = {};
           state_changed = true;
         }
       }
-      if (state_changed) { NotifyStateChanged(); }
+      if (state_changed) { NotifyStateChanged({StateChange::CallState}); }
     });
   });
 
@@ -684,12 +710,10 @@ inline void MercuryViewModel::SetupClientCallbacks() {
     dispatch_queue_.Dispatch([this, peer_id] {
         {
             const std::lock_guard<std::mutex> lock(state_mutex_);
-            // If the user is currently viewing the conversation with the contact
-            // who just removed them, clear the view.
-            if (current_state_.selected_contact_id && *current_state_.selected_contact_id == peer_id) {
-                current_state_.selected_contact_id.reset();
-                current_state_.interaction_history.clear();
-                current_state_.has_older_messages = false;
+            if (selected_contact_id_ && *selected_contact_id_ == peer_id) {
+                selected_contact_id_.reset();
+                interaction_history_.clear();
+                has_older_messages_ = false;
             }
         }
         RefreshState();
@@ -704,9 +728,9 @@ inline void MercuryViewModel::SetupClientCallbacks() {
           bool changed = false;
           {
             const std::lock_guard<std::mutex> lock(state_mutex_);
-            if (current_state_.selected_contact_id &&
-                *current_state_.selected_contact_id == peer_id) {
-              for (auto& entry: current_state_.interaction_history) {
+            if (selected_contact_id_ &&
+                *selected_contact_id_ == peer_id) {
+              for (auto& entry: interaction_history_) {
                 if (entry.id == message_id) {
                   if (entry.status != status) {
                     entry.status = status;
@@ -717,52 +741,46 @@ inline void MercuryViewModel::SetupClientCallbacks() {
               }
             }
           }
-          if (changed) { NotifyStateChanged(); }
+          if (changed) { NotifyStateChanged({StateChange::InteractionHistory}); }
         });
       });
 }
 
-inline void MercuryViewModel::UpdateChatHistoryForSelectedContact() {
-  if (current_state_.selected_contact_id) {
-    const auto& peer_id = *current_state_.selected_contact_id;
-    if (!chat_pages_loaded_.contains(peer_id)) { LoadInitialChatHistory(peer_id); }
-  } else {
-    current_state_.interaction_history.clear();
-    current_state_.has_older_messages = false;
-  }
+inline void MercuryViewModel::NotifyStateChanged(const std::vector<StateChange>& changes) const {
+  if (on_state_changed_callback_) { on_state_changed_callback_(changes); }
 }
 
-inline void MercuryViewModel::NotifyStateChanged() const {
-  if (on_state_changed_callback_) { on_state_changed_callback_(); }
-}
-
-inline void MercuryViewModel::UpdateContacts() {
+inline void MercuryViewModel::UpdateContacts(bool notify) {
   auto contacts_from_manager = client_->GetContacts();
-  current_state_.contacts.clear();
+  contacts_.clear();
   for (const auto& c: contacts_from_manager) {
     const std::string display_name = c.display_name_override.value_or(c.display_name.value_or(c.peer_id));
-    current_state_.contacts.push_back({.peer_id = c.peer_id, .display_name = display_name, .bio = c.bio, .photo = c.photo_base64, .status = c.status, .connection_state = client_->GetPeerConnectionState(c.peer_id), .unread_count = 0});
+    contacts_.push_back({.peer_id = c.peer_id, .display_name = display_name, .bio = c.bio, .photo = c.photo_base64, .status = c.status, .connection_state = client_->GetPeerConnectionState(c.peer_id), .unread_count = 0});
   }
+  if (notify) { NotifyStateChanged({StateChange::Contacts}); }
 }
 
-inline void MercuryViewModel::UpdateMyProfileFromSettings() {
+inline void MercuryViewModel::UpdateMyProfileFromSettings(bool notify) {
   const auto* settings = client_->GetSettingsManager();
-  current_state_.my_display_name = settings->GetMyDisplayName();
-  current_state_.my_bio = settings->GetMyBio();
-  current_state_.my_photo = settings->GetMyPhotoBase64();
+  my_profile_.my_display_name = settings->GetMyDisplayName();
+  my_profile_.my_bio = settings->GetMyBio();
+  my_profile_.my_photo = settings->GetMyPhotoBase64();
+  if (notify) { NotifyStateChanged({StateChange::MyProfile}); }
 }
 
-inline void MercuryViewModel::UpdateChats() {
+inline void MercuryViewModel::UpdateChats(bool notify) {
   std::vector<std::string> contact_ids;
   {
     const std::lock_guard<std::mutex> lock(state_mutex_);
-    contact_ids.reserve(current_state_.contacts.size());
-    for (const auto& contact: current_state_.contacts) {
+    contact_ids.reserve(contacts_.size());
+    for (const auto& contact: contacts_) {
       contact_ids.push_back(contact.peer_id);
     }
   }
+
+  auto new_chats = client_->GetChatSummaries(contact_ids);
+
   {
-    auto new_chats = client_->GetChatSummaries(contact_ids);
     const std::lock_guard<std::mutex> lock(state_mutex_);
 
     std::unordered_map<std::string, uint32_t> unread_counts;
@@ -770,16 +788,15 @@ inline void MercuryViewModel::UpdateChats() {
       unread_counts[chat.peer_id] = chat.unread_count;
     }
 
-    for (auto& contact: current_state_.contacts) {
+    for (auto& contact: contacts_) {
       if (unread_counts.contains(contact.peer_id)) {
         contact.unread_count = unread_counts.at(contact.peer_id);
       } else {
         contact.unread_count = 0;
       }
     }
-
-    current_state_.chats = std::move(new_chats);
   }
+  if (notify) { NotifyStateChanged({StateChange::Contacts}); }
 }
 
 }  // namespace eillance::view_model

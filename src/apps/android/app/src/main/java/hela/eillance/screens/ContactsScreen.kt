@@ -43,9 +43,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import hela.eillance.MainViewModel
-import hela.eillance.ndkio.AppState
 import hela.eillance.ndkio.Contact
 import hela.eillance.ndkio.ContactStatus
+import hela.eillance.ndkio.MyProfileInfo
 import hela.eillance.ndkio.PeerConnectionState
 import hela.eillance.ndkio.ServiceConnectionState
 import hela.eillance.theme.extendedColors
@@ -55,7 +55,9 @@ import hela.eillance.utils.rememberImageBitmapFromBase64
 @Composable
 fun ContactsScreen(
   viewModel: MainViewModel,
-  uiState: AppState,
+  myProfile: MyProfileInfo,
+  contacts: List<Contact>,
+  connectionState: ServiceConnectionState,
   onContactClick: (String) -> Unit,
   onNavigateToProfile: () -> Unit,
   onShowContactProfile: (String) -> Unit
@@ -69,14 +71,12 @@ fun ContactsScreen(
             IconButton(onClick = onNavigateToProfile) {
               Icon(Icons.Default.Person, contentDescription = "Profile")
             }
-            val connectionStatus = ServiceConnectionState.fromInt(uiState.connectionState)
-            if (connectionStatus != ServiceConnectionState.Unknown) {
-              val dotColor = when (connectionStatus) {
+            if (connectionState != ServiceConnectionState.Unknown) {
+              val dotColor = when (connectionState) {
                 ServiceConnectionState.Online -> MaterialTheme.extendedColors.success
                 ServiceConnectionState.Failure -> MaterialTheme.colorScheme.error
                 else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
               }
-              // Status dot
               Box(
                 modifier = Modifier
                   .padding(bottom = 4.dp, end = 4.dp)
@@ -98,14 +98,14 @@ fun ContactsScreen(
       }
     }
   ) { padding ->
-    if (uiState.contacts.isEmpty()) {
+    if (contacts.isEmpty()) {
       Box(
         modifier = Modifier
           .fillMaxSize()
           .padding(padding),
         contentAlignment = Alignment.Center
       ) {
-        if (uiState.myId.isEmpty()) {
+        if (myProfile.myId.isEmpty()) {
           CircularProgressIndicator()
         } else {
           Text("No contacts yet. Add one!", style = MaterialTheme.typography.bodyLarge)
@@ -113,7 +113,7 @@ fun ContactsScreen(
       }
     } else {
       LazyColumn(modifier = Modifier.padding(padding)) {
-        items(uiState.contacts, key = { it.peerId }) { contact ->
+        items(contacts, key = { it.peerId }) { contact ->
           ContactListItem(
             contact = contact,
             onClick = { onContactClick(contact.peerId) },
@@ -136,11 +136,6 @@ fun ContactListItem(
   onResend: () -> Unit,
   onShowProfile: () -> Unit
 ) {
-  val statusText = when (contact.status) {
-    ContactStatus.confirmed -> "Confirmed"
-    ContactStatus.pendingApproval -> "Request sent"
-    ContactStatus.awaitingApproval -> "New request"
-  }
   val statusColor = when (contact.status) {
     ContactStatus.confirmed -> MaterialTheme.colorScheme.primary
     ContactStatus.pendingApproval -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
@@ -156,7 +151,7 @@ fun ContactListItem(
   val connectionStatus = PeerConnectionState.fromInt(contact.connectionState)
   val (connectionText, connectionColor) = when (connectionStatus) {
     PeerConnectionState.Connecting -> "Connecting..." to MaterialTheme.colorScheme.secondary
-    PeerConnectionState.Connected -> "Connected" to MaterialTheme.colorScheme.primary
+    PeerConnectionState.Connected -> "Connected" to MaterialTheme.extendedColors.success
     PeerConnectionState.Failed -> "Failed" to MaterialTheme.colorScheme.error
     else -> "" to Color.Transparent
   }
@@ -203,7 +198,6 @@ fun ContactListItem(
           style = MaterialTheme.typography.bodySmall,
           modifier = Modifier.alpha(0.7f)
         )
-        // Show bio on contact requests if available
         if (contact.status == ContactStatus.awaitingApproval && !contact.bio.isNullOrBlank()) {
           Text(
             text = contact.bio,

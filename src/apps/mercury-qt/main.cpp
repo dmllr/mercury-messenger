@@ -78,13 +78,13 @@ int main(int argc, char* argv[]) {
 
     // --- Start Client Core Logic in a Separate Thread ---
     std::thread client_thread([client] {
-        client->start();
+        client->Start();
     });
 
     int app_result = app.exec();
 
     // --- Shutdown ---
-    client->terminate();
+    client->Terminate();
     if (client_thread.joinable()) {
         client_thread.join();
     }
