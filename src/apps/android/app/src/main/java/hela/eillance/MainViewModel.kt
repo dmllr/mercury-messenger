@@ -49,8 +49,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
   private val _navigateToPeerId = MutableStateFlow<String?>(null)
   val navigateToPeerId = _navigateToPeerId.asStateFlow()
 
-  private val _identitySetupComplete = MutableStateFlow(false)
-  val identitySetupComplete = _identitySetupComplete.asStateFlow()
+  private val _isIdentityReady = MutableStateFlow(false)
+  val isIdentityReady = _isIdentityReady.asStateFlow()
 
   private var pendingNavigationPeerId: String? = null
   private var pendingAcceptPeerId: String? = null
@@ -90,7 +90,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
   private fun refreshMyProfile() {
     callService?.nativeGetMyProfile()?.let {
       _myProfile.value = it
-      if (it.identityExists) _identitySetupComplete.value = true
+      _isIdentityReady.value = true
     }
   }
 
@@ -139,7 +139,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
   }
 
   fun finishIdentitySetup() {
-    _identitySetupComplete.value = true
+    _isIdentityReady.value = true
     callService?.refreshState()
   }
 
