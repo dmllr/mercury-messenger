@@ -33,7 +33,7 @@ class MessageDeliveryService {
 public:
   MessageDeliveryService(std::shared_ptr<storage::PersistentStorage> storage, std::shared_ptr<identity::ContactManager> contacts, ConnectionRequestHandler handler) : storage_(std::move(storage)), contact_manager_(std::move(contacts)), connection_handler_(std::move(handler)) {}
 
-  void start() {
+  void Start() {
     // Set to true and check if it was already true.
     if (is_running_.exchange(true)) {
       // It was already running. This call is likely from a reconnect.

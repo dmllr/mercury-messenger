@@ -62,7 +62,7 @@ public:
       device_name = std::string(model_string);
       storage->SetSetting("device_name", device_name);
     }
-    client_->setName(device_name);
+    client_->SetName(device_name);
   }
 
   ClientEngine(ClientEngine&&) = delete;
@@ -89,7 +89,7 @@ public:
   auto ViewModel() -> view_model::MercuryViewModel* { return view_model_.get(); }
 
   void Start() {
-    client_->start();
+    client_->Start();
     LOGI << "Client engine is initialized and ready.";
   }
 
@@ -97,10 +97,10 @@ public:
 
   void Terminate() {
     Stop();
-    client_->terminate();
+    client_->Terminate();
   }
 
-  void Call(const std::string& peer_id) const { client_->call(peer_id); }
+  void Call(const std::string& peer_id) const { client_->Call(peer_id); }
 
   void Hangup() const {
     if (view_model_) { view_model_->Hangup(); }
@@ -109,7 +109,7 @@ public:
   void ConfigureVideoCapture(const VideoConfig& config) const {
     Config core_config;
     core_config.video_config = config;
-    client_->configure(core_config);
+    client_->Configure(core_config);
   }
 
 private:
