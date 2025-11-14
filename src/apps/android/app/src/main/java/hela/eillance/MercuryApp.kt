@@ -1,13 +1,18 @@
 package hela.eillance
 
 import android.net.Uri
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,11 +43,18 @@ import hela.eillance.screens.WebViewScreen
 @Composable
 fun MercuryApp(viewModel: MainViewModel) {
   val myProfile by viewModel.myProfile.collectAsState()
+  val isIdentityReady by viewModel.isIdentityReady.collectAsState()
 
-  if (myProfile.identityExists) {
-    MainAppContent(viewModel = viewModel)
+  if (!isIdentityReady) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+      CircularProgressIndicator()
+    }
   } else {
-    IdentitySetupFlow(viewModel = viewModel)
+    if (myProfile.identityExists) {
+      MainAppContent(viewModel = viewModel)
+    } else {
+      IdentitySetupFlow(viewModel = viewModel)
+    }
   }
 }
 
