@@ -61,6 +61,7 @@ public:
   using OnPeerListUpdateCallback = std::function<void(const std::vector<Device>&)>;
   using StatusCallbackFunction = transport::Transport::StatusCallbackFunction;
   using OnIncomingCallCallback = std::function<void(const std::string& peer_id, messaging::HistoryEntryKind call_type)>;
+  using OnMyProfileUpdatedCallback = std::function<void()>;
   using OnContactProfileUpdatedCallback = std::function<void(const std::string& peer_id)>;
   using OnCallTerminatedCallback = std::function<void(const std::string& peer_id)>;
   using OnContactRemovedCallback = std::function<void(const std::string& peer_id)>;
@@ -105,6 +106,7 @@ public:
   void SetPeerListUpdateCallback(const OnPeerListUpdateCallback& callback);
   void SetIncomingCallCallback(const OnIncomingCallCallback& callback);
   void SetOnCallTerminatedCallback(const OnCallTerminatedCallback& callback);
+  void SetOnMyProfileUpdatedCallback(const OnMyProfileUpdatedCallback& callback);
   void SetOnContactRemovedCallback(const OnContactRemovedCallback& callback);
   void SetOnContactProfileUpdatedCallback(const OnContactProfileUpdatedCallback& callback);
   void Call(const std::string& peer_id);
@@ -126,7 +128,7 @@ public:
   void MarkMessagesAsRead(const std::string& peer_id, const std::vector<std::uint64_t>& message_ids) const;
   auto GetMessageHistoryPage(const std::string& peer_id, size_t page_index, size_t page_size) const -> messaging::HistoryPage;
   auto GetFullMessageContent(uint64_t message_id) const -> std::optional<std::string>;
-  void UpdateMyProfile(const std::optional<std::string>& name, const std::optional<std::string>& bio, const std::optional<std::string>& photo) const;
+  void UpdateMyProfile(const std::optional<std::string>& name, const std::optional<std::string>& bio, const std::optional<std::string>& photo);
   void SetContactDisplayNameOverride(const std::string& peer_id, const std::string& override_name) const;
   void ResetContactDisplayNameOverride(const std::string& peer_id) const;
 
@@ -172,6 +174,7 @@ private:
   std::shared_ptr<StatusCallbackFunction> status_callback_{};
   std::shared_ptr<OnIncomingCallCallback> on_incoming_call_{};
   std::shared_ptr<OnCallTerminatedCallback> on_call_terminated_{};
+  std::shared_ptr<OnMyProfileUpdatedCallback> on_my_profile_updated_{};
   std::shared_ptr<OnContactProfileUpdatedCallback> on_contact_profile_updated_{};
   std::shared_ptr<OnContactRemovedCallback> on_contact_removed_{};
 
@@ -340,6 +343,10 @@ inline void Client::SetIncomingCallCallback(const OnIncomingCallCallback& callba
 
 inline void Client::SetOnCallTerminatedCallback(const OnCallTerminatedCallback& callback) {
   on_call_terminated_ = std::make_shared<OnCallTerminatedCallback>(callback);
+}
+
+inline void Client::SetOnMyProfileUpdatedCallback(const OnMyProfileUpdatedCallback& callback) {
+  on_my_profile_updated_ = std::make_shared<OnMyProfileUpdatedCallback>(callback);
 }
 
 inline void Client::SetOnContactRemovedCallback(const OnContactRemovedCallback& callback) {
@@ -763,10 +770,14 @@ inline auto Client::GetFullMessageContent(uint64_t message_id) const -> std::opt
   return message_history_->GetFullMessageContent(message_id);
 }
 
-inline void Client::UpdateMyProfile(const std::optional<std::string>& name, const std::optional<std::string>& bio, const std::optional<std::string>& photo) const {
+inline void Client::UpdateMyProfile(const std::optional<std::string>& name, const std::optional<std::string>& bio, const std::optional<std::string>& photo) {
   if (name) { settings_manager_->SetMyDisplayName(*name); }
   if (bio) { settings_manager_->SetMyBio(*bio); }
   if (photo) { settings_manager_->SetMyPhotoBase64(*photo); }
+
+  if (on_my_profile_updated_) {
+    (*on_my_profile_updated_)();
+  }
 
   // Immediately notify all confirmed contacts of the profile change.
   for (const auto& contact: contact_manager_->GetContacts()) {

@@ -393,14 +393,7 @@ inline void MercuryViewModel::AcceptContact(const std::string& peer_id) {
 }
 
 inline void MercuryViewModel::UpdateMyProfile(const std::optional<std::string>& name, const std::optional<std::string>& bio, const std::optional<std::string>& photo) {
-  dispatch_queue_.Dispatch([this, name, bio, photo] {
-    client_->UpdateMyProfile(name, bio, photo);
-    {
-      const std::lock_guard<std::mutex> lock(state_mutex_);
-      UpdateMyProfileFromSettings(false);
-    }
-    NotifyStateChanged({StateChange::MyProfile});
-  });
+  dispatch_queue_.Dispatch([this, name, bio, photo] { client_->UpdateMyProfile(name, bio, photo); });
 }
 
 inline void MercuryViewModel::SetContactDisplayNameOverride(const std::string& peer_id, const std::string& name) {
@@ -627,6 +620,16 @@ inline void MercuryViewModel::SetupClientCallbacks() {
     });
   });
 
+  client_->SetOnMyProfileUpdatedCallback([this] {
+    dispatch_queue_.Dispatch([this] {
+      {
+        const std::lock_guard<std::mutex> lock(state_mutex_);
+        UpdateMyProfileFromSettings(false);
+      }
+      NotifyStateChanged({StateChange::MyProfile});
+    });
+  });
+
   client_->SetContactStatusChangedCallback(
       [this](const std::string& /*peer_id*/, identity::ContactStatus /*status*/) { RefreshState(); });
 
@@ -796,7 +799,9 @@ inline void MercuryViewModel::UpdateChats(bool notify) {
       }
     }
   }
-  if (notify) { NotifyStateChanged({StateChange::Contacts}); }
+  if (notify) {
+    NotifyStateChanged({StateChange::Contacts});
+  }
 }
 
 }  // namespace eillance::view_model
