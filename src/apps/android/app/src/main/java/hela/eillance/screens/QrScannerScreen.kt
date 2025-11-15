@@ -29,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -41,11 +42,11 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 @Composable
 fun QrScannerScreen(
-  onQrCodeScanned: (String) -> Unit,
+  onQrCodeScanned: (peerId: String, token: String?) -> Unit,
   onClose: () -> Unit
 ) {
   val context = LocalContext.current
-  val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+  val lifecycleOwner = LocalLifecycleOwner.current
   var hasCameraPermission by remember {
     mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
   }
@@ -103,9 +104,25 @@ fun QrScannerScreen(
                           barcode.rawValue?.let { rawValue ->
                             val prefix = "mercury:contact:"
                             if (rawValue.startsWith(prefix) && qrCodeScanned.compareAndSet(false, true)) {
-                              val peerId = rawValue.substring(prefix.length)
+                              val fullData = rawValue.substring(prefix.length)
+                              val parts = fullData.split('?', limit = 2)
+                              val peerId = parts[0]
+                              var token: String? = null
+
+                              if (parts.size > 1) {
+                                val query = parts[1]
+                                val queryParams = query.split('&')
+                                for (param in queryParams) {
+                                  val keyValue = param.split('=', limit = 2)
+                                  if (keyValue.size == 2 && keyValue[0] == "token") {
+                                    token = keyValue[1]
+                                    break
+                                  }
+                                }
+                              }
+
                               if (peerId.isNotBlank()) {
-                                onQrCodeScanned(peerId)
+                                onQrCodeScanned(peerId, token)
                               }
                             }
                           }

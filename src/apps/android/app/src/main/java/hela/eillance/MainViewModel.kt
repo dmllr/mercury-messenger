@@ -179,9 +179,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     _navigateToScanner.value = false
   }
 
-  fun addContact(peerId: String) {
-    callService?.addContact(peerId)
+  fun addContact(peerId: String, token: String? = null) {
+    callService?.addContact(peerId, token)
     onAddContactDialogDismiss()
+  }
+
+  fun generateContactToken(): String? {
+    return callService?.generateContactToken()
   }
 
   fun removeContact(peerId: String) {

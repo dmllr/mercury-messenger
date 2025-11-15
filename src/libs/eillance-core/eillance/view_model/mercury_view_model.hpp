@@ -101,7 +101,8 @@ public:
   void AcceptCall();
   void RejectCall();
   void RemoveContact(const std::string& peer_id);
-  void AddContact(const std::string& peer_id);
+  void AddContact(const std::string& peer_id, const std::optional<std::string>& token = std::nullopt);
+  auto GenerateContactToken() -> std::string;
   void UpdateSignalingUrl(const std::string& url);
   void AcceptContact(const std::string& peer_id);
   void UpdateMyProfile(const std::optional<std::string>& name, const std::optional<std::string>& bio, const std::optional<std::string>& photo);
@@ -363,8 +364,12 @@ inline void MercuryViewModel::RejectCall() {
   });
 }
 
-inline void MercuryViewModel::AddContact(const std::string& peer_id) {
-  dispatch_queue_.Dispatch([this, peer_id] { client_->AddContact(peer_id); });
+inline void MercuryViewModel::AddContact(const std::string& peer_id, const std::optional<std::string>& token) {
+  dispatch_queue_.Dispatch([this, peer_id, token] { client_->AddContact(peer_id, token); });
+}
+
+inline auto MercuryViewModel::GenerateContactToken() -> std::string {
+  return client_->GenerateContactToken();
 }
 
 inline void MercuryViewModel::UpdateSignalingUrl(const std::string& url) {
