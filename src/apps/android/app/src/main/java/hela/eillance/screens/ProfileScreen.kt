@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -55,6 +56,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -146,7 +148,7 @@ fun ProfileScreen(
         .verticalScroll(rememberScrollState()),
       horizontalAlignment = Alignment.CenterHorizontally
     ) {
-      ProfileHeader(myProfile = myProfile)
+      ProfileHeader(myProfile = myProfile, viewModel = viewModel)
       HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp, horizontal = 16.dp))
       ProfileMenu(
         onEditProfile = { showEditDialog = true },
@@ -160,7 +162,7 @@ fun ProfileScreen(
 }
 
 @Composable
-private fun ProfileHeader(myProfile: MyProfileInfo) {
+private fun ProfileHeader(myProfile: MyProfileInfo, viewModel: MainViewModel) {
   val context = LocalContext.current
   var showQrDialog by remember { mutableStateOf(false) }
   val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -179,6 +181,7 @@ private fun ProfileHeader(myProfile: MyProfileInfo) {
     if (showQrDialog) {
       QrCodeDialog(
         profileId = myProfile.myId,
+        viewModel = viewModel,
         onDismiss = { showQrDialog = false }
       )
     }
@@ -548,18 +551,39 @@ private fun generateQrCodeBitmap(content: String): ImageBitmap {
 }
 
 @Composable
-private fun QrCodeDialog(profileId: String, onDismiss: () -> Unit) {
-  val qrContent = remember(profileId) {
-    "mercury:contact:$profileId"
+private fun QrCodeDialog(profileId: String, viewModel: MainViewModel, onDismiss: () -> Unit) {
+  var qrContent by remember { mutableStateOf<String?>(null) }
+
+  // Generate a new token every time the dialog becomes visible.
+  LaunchedEffect(Unit) {
+    val token = viewModel.generateContactToken()
+    qrContent = if (token != null) {
+      "mercury:contact:$profileId?token=$token"
+    } else {
+      "mercury:contact:$profileId"
+    }
   }
+
   Dialog(onDismissRequest = onDismiss) {
     Card(
       modifier = Modifier.padding(16.dp),
       shape = MaterialTheme.shapes.large
     ) {
-      Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        val qrBitmap = remember(qrContent) { generateQrCodeBitmap(qrContent) }
-        Image(bitmap = qrBitmap, contentDescription = "Profile ID QR Code", modifier = Modifier.size(256.dp))
+      Column(
+        modifier = Modifier.padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+      ) {
+        if (qrContent != null) {
+          val qrBitmap = remember(qrContent) { generateQrCodeBitmap(qrContent!!) }
+          Image(
+            bitmap = qrBitmap,
+            contentDescription = "Profile ID QR Code",
+            modifier = Modifier.size(256.dp)
+          )
+        } else {
+          // Show a progress indicator while the token is being generated.
+          CircularProgressIndicator(modifier = Modifier.size(256.dp))
+        }
         Spacer(Modifier.height(16.dp))
         TextButton(onClick = onDismiss) { Text("Close") }
       }

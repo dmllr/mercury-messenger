@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <chrono>
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -17,6 +18,13 @@ class ContactManager {
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::unordered_map<std::string, Contact> contacts_;
   mutable std::mutex mutex_;
+  
+  struct TokenInfo {
+    std::chrono::steady_clock::time_point creation_time;
+  };
+  std::unordered_map<std::string, TokenInfo> one_time_tokens_;
+  static constexpr std::chrono::seconds kTokenValidityDuration{60};
+
 
 public:
   explicit ContactManager(std::shared_ptr<storage::PersistentStorage> storage) : storage_(std::move(storage)) { LoadContacts(); }
@@ -187,6 +195,35 @@ public:
     storage_->UpdateContact(it->second);
   }
 
+  auto GenerateContactToken() -> std::string {
+    const std::lock_guard<std::mutex> lock(mutex_);
+    // Cleanup expired tokens to prevent unbounded growth.
+    auto now = std::chrono::steady_clock::now();
+    std::erase_if(one_time_tokens_, [now](const auto& item) {
+      return (now - item.second.creation_time) > kTokenValidityDuration;
+    });
+
+    std::vector<std::byte> token_bytes(16);
+    RAND_bytes(reinterpret_cast<unsigned char*>(token_bytes.data()), static_cast<int>(token_bytes.size()));
+    std::string token_hex = crypto::ToHex(token_bytes);
+    one_time_tokens_[token_hex] = {now};
+    return token_hex;
+  }
+
+  auto ValidateAndConsumeContactToken(const std::string& token) -> bool {
+    const std::lock_guard<std::mutex> lock(mutex_);
+    auto it = one_time_tokens_.find(token);
+    if (it == one_time_tokens_.end()) {
+      return false;  // Token not found
+    }
+    auto now = std::chrono::steady_clock::now();
+    if ((now - it->second.creation_time) > kTokenValidityDuration) {
+      one_time_tokens_.erase(it);
+      return false;  // Token expired
+    }
+    one_time_tokens_.erase(it);  // Valid token, consume it
+    return true;
+  }
 
 private:
   void LoadContacts() {

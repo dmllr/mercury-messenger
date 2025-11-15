@@ -256,8 +256,8 @@ fun MainAppContent(viewModel: MainViewModel) {
       }
       composable(Screen.QrScanner.route) {
         QrScannerScreen(
-          onQrCodeScanned = { result ->
-            viewModel.addContact(result)
+          onQrCodeScanned = { peerId, token ->
+            viewModel.addContact(peerId, token)
             navController.popBackStack()
           },
           onClose = { navController.popBackStack() }

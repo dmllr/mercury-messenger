@@ -53,11 +53,16 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_nativeRefreshSt
   if (auto* vm = GetViewModel()) { vm->RefreshState(); }
 }
 
-extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_addContact(JNIEnv* env, jobject /*instance*/, jstring peer_id) {
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_addContact(JNIEnv* env, jobject /*instance*/, jstring peer_id, jstring token) {
   if (auto* vm = GetViewModel()) {
-    const char* chars = env->GetStringUTFChars(peer_id, nullptr);
-    vm->AddContact(chars);
-    env->ReleaseStringUTFChars(peer_id, chars);
+    const char* peer_id_chars = env->GetStringUTFChars(peer_id, nullptr);
+    const char* token_chars = (token != nullptr) ? env->GetStringUTFChars(token, nullptr) : nullptr;
+    const auto c_token = (token_chars) ? std::optional<std::string>(token_chars) : std::nullopt;
+
+    vm->AddContact(peer_id_chars, c_token);
+
+    env->ReleaseStringUTFChars(peer_id, peer_id_chars);
+    if (token_chars) { env->ReleaseStringUTFChars(token, token_chars); }
   }
 }
 
@@ -240,6 +245,13 @@ extern "C" JNIEXPORT jstring JNICALL Java_hela_eillance_CallService_nativeGenera
     return env->NewStringUTF(mnemonic.c_str());
   }
   return env->NewStringUTF("");
+}
+
+extern "C" JNIEXPORT jstring JNICALL Java_hela_eillance_CallService_nativeGenerateContactToken(JNIEnv* env, jobject /*instance*/) {
+  if (auto* vm = GetViewModel()) {
+    std::string token = vm->GenerateContactToken();
+    return env->NewStringUTF(token.c_str());
+  }
 }
 
 extern "C" JNIEXPORT jboolean JNICALL Java_hela_eillance_CallService_nativeRestoreIdentity(JNIEnv* env, jobject /*instance*/, jstring mnemonic) {

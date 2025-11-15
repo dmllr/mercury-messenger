@@ -115,7 +115,8 @@ public:
   void StartVideoCall(const std::string& peer_id) const;
   void AcceptCall(const std::string& peer_id) const;
   void RejectCall(const std::string& peer_id) const;
-  void AddContact(const std::string& peer_id) const;
+  void AddContact(const std::string& peer_id, const std::optional<std::string>& token = std::nullopt) const;
+  auto GenerateContactToken() -> std::string;
   void ConfirmContact(const std::string& peer_id) const;
   void RemoveContact(const std::string& peer_id, bool notify_peer = true) const;
   auto GetPeerConnectionState(const std::string& peer_id) const -> eillance::transport::PeerConnectionState;
@@ -424,22 +425,28 @@ inline void Client::RejectCall(const std::string& peer_id) const {
   Hangup(peer_id);
 }
 
-inline void Client::AddContact(const std::string& peer_id) const {
+inline void Client::AddContact(const std::string& peer_id, const std::optional<std::string>& token) const {
   const auto existing_contact = contact_manager_->GetContact(peer_id);
   if (existing_contact && existing_contact->status == identity::ContactStatus::awaitingApproval) {
     ConfirmContact(peer_id);
     return;
   }
   if (contact_manager_->AddContact(peer_id)) {
-    Json content;
-    content["action"] = "contact_request";
-    content["profile"]["display_name"] = settings_manager_->GetMyDisplayName().value_or("");
-    content["profile"]["bio"] = settings_manager_->GetMyBio().value_or("");
-    content["profile"]["photo"] = settings_manager_->GetMyPhotoBase64();
+    Json content = {
+        {"action", "contact_request"},
+        {"profile", {{"display_name", settings_manager_->GetMyDisplayName().value_or("")}, {"bio", settings_manager_->GetMyBio().value_or("")}, {"photo", settings_manager_->GetMyPhotoBase64()}}},
+    };
+    if (token) {
+      content["token"] = *token;
+    }
     message_history_->AddTextEntry(peer_id, content.dump(), messaging::MessageDirection::sent, messaging::HistoryEntryKind::systemMessage);
     if (on_contact_status_changed_) { (*on_contact_status_changed_)(peer_id, identity::ContactStatus::pendingApproval); }
     delivery_service_->attemptDelivery(peer_id);
   }
+}
+
+inline auto Client::GenerateContactToken() -> std::string {
+  return contact_manager_->GenerateContactToken();
 }
 
 inline void Client::RemoveContact(const std::string& peer_id, bool notify_peer) const {
@@ -674,27 +681,38 @@ inline void Client::ProcessPeerMessage(Json message) {
       LOGI << "Received contact request from already confirmed peer " << peer_id << ". Resending confirmation.";
       const Json msg = {{"type", "contact_confirm"}, {"to", peer_id}};
       transport_->sendSignalingMessage(msg);
-    } else {
-      std::optional<std::string> name, bio, photo;
-      if (message.contains("profile")) {
-        const auto &profile = message["profile"];
-        if (profile.contains("display_name") &&
-            profile["display_name"].is_string()) { name = profile["display_name"].get<std::string>(); }
-        if (profile.contains("bio") && profile["bio"].is_string()) {
-          bio = profile["bio"].get<std::string>();
-        }
-        if (profile.contains("photo") && profile["photo"].is_string()) {
-          photo = profile["photo"].get<std::string>();
-        }
-      }
-      if (contact_manager_->ReceiveContactRequest(peer_id, name, bio, photo)) {
+      return;  // Early exit
+    }
+
+    // Process the request for non-confirmed contacts.
+    std::optional<std::string> token;
+    if (message.contains("token") && message.at("token").is_string()) {
+      token = message.at("token").get<std::string>();
+    }
+
+    std::optional<std::string> name, bio, photo;
+    if (message.contains("profile")) {
+      const auto& profile = message["profile"];
+      if (profile.contains("display_name") && profile["display_name"].is_string()) { name = profile["display_name"].get<std::string>(); }
+      if (profile.contains("bio") && profile["bio"].is_string()) { bio = profile["bio"].get<std::string>(); }
+      if (profile.contains("photo") && profile["photo"].is_string()) { photo = profile["photo"].get<std::string>(); }
+    }
+
+    // Create the contact in 'awaitingApproval' state. This is safe to do even if the contact already exists in a pending state.
+    if (contact_manager_->ReceiveContactRequest(peer_id, name, bio, photo)) {
+      // If the token is valid, immediately confirm the request.
+      if (token && contact_manager_->ValidateAndConsumeContactToken(*token)) {
+        LOGI << "Received contact request from " << peer_id << " with a valid one-time token. Auto-confirming.";
+        ConfirmContact(peer_id);
+      } else {
+        // Otherwise, notify UI for manual approval.
         const Json content = {{"action", "contact_request_received"}};
-        auto entry = message_history_->AddTextEntry(peer_id, content.dump(),
-                                                    messaging::MessageDirection::received,
-                                                    messaging::HistoryEntryKind::systemMessage);
+        auto entry = message_history_->AddTextEntry(peer_id, content.dump(), messaging::MessageDirection::received, messaging::HistoryEntryKind::systemMessage);
         message_history_->UpdateMessageStatus(peer_id, entry.id, messaging::MessageStatus::read);
         if (on_contact_request_) { (*on_contact_request_)(peer_id); }
       }
+    } else {
+      LOGW << "ReceiveContactRequest failed for peer " << peer_id << ", cannot proceed.";
     }
   } else if (type == "contact_confirm") {
     if (contact_manager_->MarkAsConfirmed(peer_id)) {
@@ -1192,6 +1210,9 @@ inline void Client::SendQueuedMessages(const std::string& peer_id) const {
               Json msg = {{"type", action == "contact_request" ? "contact_add_request" : "contact_confirm"}, {"to", peer_id}};
               if (action == "contact_request") {
                 if (content_json.contains("profile")) { msg["profile"] = content_json["profile"]; }
+                if (content_json.contains("token")) {
+                  msg["token"] = content_json["token"];
+                }
               }
               transport_->sendSignalingMessage(msg);
               sent = true;

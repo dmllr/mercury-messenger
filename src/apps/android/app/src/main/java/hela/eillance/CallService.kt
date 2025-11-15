@@ -345,10 +345,11 @@ class CallService : Service(), IClientNativeBridge {
   external fun nativeGetSelectedContactId(): String?
 
   private external fun nativeRefreshState()
-  external fun addContact(peerId: String)
+  external fun addContact(peerId: String, token: String?)
   external fun acceptContact(peerId: String)
   external fun removeContact(peerId: String)
   external fun selectContact(peerId: String)
+  private external fun nativeGenerateContactToken(): String?
   external fun sendMessage(message: String)
   external fun startVoiceCall()
   external fun startVideoCall()
@@ -371,6 +372,8 @@ class CallService : Service(), IClientNativeBridge {
   private external fun nativeDebugEraseAllHistory()
   private external fun nativeDebugEraseAllContacts()
   private external fun nativeDebugRevokeAllApprovals()
+
+  fun generateContactToken(): String? = nativeGenerateContactToken()
 
   companion object {
     private const val FOREGROUND_SERVICE_NOTIFICATION_ID = 101
