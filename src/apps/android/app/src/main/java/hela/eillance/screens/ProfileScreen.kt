@@ -1,9 +1,13 @@
 package hela.eillance.screens
 
 import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Color
 import android.util.Base64
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -21,6 +25,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -28,7 +33,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.DeleteForever
+import androidx.compose.material.icons.filled.FileCopy
+import androidx.compose.material.icons.filled.Help
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
@@ -42,7 +50,6 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -56,15 +63,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.toClipEntry
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.navigation.NavController
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.EncodeHintType
+import com.google.zxing.qrcode.QRCodeWriter
+import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import hela.eillance.MainViewModel
 import hela.eillance.camera.BuildConfig
 import hela.eillance.ndkio.MyProfileInfo
@@ -85,7 +97,9 @@ fun ProfileScreen(
   myProfile: MyProfileInfo,
   onBack: () -> Unit,
   onNavigateToSettings: () -> Unit,
-  onNavigateToBackupAndRestore: () -> Unit
+  navController: NavController,
+  onNavigateToBackupAndRestore: () -> Unit,
+  onNavigateToHelp: () -> Unit
 ) {
   var showEditDialog by remember { mutableStateOf(false) }
   var showDebugConfirmDialog by remember { mutableStateOf<DebugAction?>(null) }
@@ -138,7 +152,8 @@ fun ProfileScreen(
         onEditProfile = { showEditDialog = true },
         onNavigateToSettings = onNavigateToSettings,
         onNavigateToBackupAndRestore = onNavigateToBackupAndRestore,
-        onDebugAction = { action -> showDebugConfirmDialog = action }
+        onDebugAction = { action: DebugAction -> showDebugConfirmDialog = action },
+        onNavigateToHelp = onNavigateToHelp
       )
     }
   }
@@ -146,9 +161,14 @@ fun ProfileScreen(
 
 @Composable
 private fun ProfileHeader(myProfile: MyProfileInfo) {
-  val clipboard = LocalClipboard.current
-  val snackbarHostState = remember { SnackbarHostState() }
-  val scope = rememberCoroutineScope()
+  val context = LocalContext.current
+  var showQrDialog by remember { mutableStateOf(false) }
+  val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+
+  val copyIdToClipboard: () -> Unit = {
+    clipboardManager.setPrimaryClip(ClipData.newPlainText("User ID", myProfile.myId))
+    Toast.makeText(context, "ID copied to clipboard", Toast.LENGTH_SHORT).show()
+  }
 
   Column(
     modifier = Modifier
@@ -156,41 +176,67 @@ private fun ProfileHeader(myProfile: MyProfileInfo) {
       .padding(top = 24.dp, start = 16.dp, end = 16.dp),
     horizontalAlignment = Alignment.CenterHorizontally
   ) {
-    Box(
-      modifier = Modifier
-        .size(120.dp)
-        .clip(CircleShape)
-        .background(MaterialTheme.colorScheme.surfaceVariant),
-      contentAlignment = Alignment.Center
-    ) {
-      val imageBitmap = rememberImageBitmapFromBase64(myProfile.myPhoto)
+    if (showQrDialog) {
+      QrCodeDialog(
+        profileId = myProfile.myId,
+        onDismiss = { showQrDialog = false }
+      )
+    }
 
-      if (imageBitmap != null) {
-        Image(
-          bitmap = imageBitmap,
-          contentDescription = "Profile Photo",
-          modifier = Modifier.fillMaxSize(),
-          contentScale = ContentScale.Crop
-        )
-      } else {
+    Box(contentAlignment = Alignment.Center) {
+      Box(
+        modifier = Modifier
+          .size(120.dp)
+          .clip(CircleShape)
+          .background(MaterialTheme.colorScheme.surfaceVariant),
+        contentAlignment = Alignment.Center
+      ) {
+        val imageBitmap = rememberImageBitmapFromBase64(myProfile.myPhoto)
+
+        if (imageBitmap != null) {
+          Image(
+            bitmap = imageBitmap,
+            contentDescription = "Profile Photo",
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop
+          )
+        } else {
+          Icon(
+            imageVector = Icons.Default.Person,
+            contentDescription = "Default Profile Icon",
+            modifier = Modifier.size(72.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
+          )
+        }
+      }
+
+      IconButton(
+        onClick = { showQrDialog = true },
+        modifier = Modifier
+          .align(Alignment.BottomEnd)
+          .size(48.dp)
+          .clip(CircleShape)
+          .background(MaterialTheme.colorScheme.secondaryContainer)
+          .border(2.dp, MaterialTheme.colorScheme.background, CircleShape)
+      ) {
         Icon(
-          imageVector = Icons.Default.Person,
-          contentDescription = "Default Profile Icon",
-          modifier = Modifier.size(72.dp),
-          tint = MaterialTheme.colorScheme.onSurfaceVariant
+          Icons.Default.QrCode2,
+          contentDescription = "Show QR Code",
+          tint = MaterialTheme.colorScheme.onSecondaryContainer
         )
       }
     }
 
     Spacer(modifier = Modifier.height(16.dp))
 
-    Text(
-      text = myProfile.myDisplayName ?: myProfile.myId,
-      style = MaterialTheme.typography.headlineSmall,
-      textAlign = TextAlign.Center
-    )
-
-    Spacer(modifier = Modifier.height(4.dp))
+    if (!myProfile.myDisplayName.isNullOrBlank()) {
+      Text(
+        text = myProfile.myDisplayName,
+        style = MaterialTheme.typography.headlineSmall,
+        textAlign = TextAlign.Center
+      )
+      Spacer(modifier = Modifier.height(4.dp))
+    }
 
     if (!myProfile.myBio.isNullOrBlank()) {
       Text(
@@ -202,29 +248,38 @@ private fun ProfileHeader(myProfile: MyProfileInfo) {
       Spacer(modifier = Modifier.height(16.dp))
     }
 
-    Text(
-      text = "ID: ${formatId(myProfile.myId)}",
-      style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
-      textAlign = TextAlign.Center,
-      modifier = Modifier
-        .clip(MaterialTheme.shapes.small)
-        .clickable {
-          val clipData = ClipData.newPlainText("ID", AnnotatedString(myProfile.myId))
-          scope.launch{
-            clipboard.setClipEntry(clipData.toClipEntry())
-            snackbarHostState.showSnackbar("ID Copied!")
-          }
-        }
-        .padding(8.dp)
-    )
-  }
-  Box(modifier = Modifier.fillMaxWidth()) {
-    SnackbarHost(hostState = snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
-  }
-}
+    Row(
+      modifier = Modifier.padding(top = 8.dp),
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+      Text(
+        text = "ID:",
+      )
 
-private fun formatId(id: String): String {
-  return id.chunked(4).joinToString(" ")
+      Text(
+        text = formatId(myProfile.myId),
+        maxLines = 4,
+        style = MaterialTheme.typography.bodyMedium.copy(
+          fontFamily = FontFamily.Monospace,
+          fontWeight = FontWeight.Bold
+        ),
+        modifier = Modifier
+          .clip(MaterialTheme.shapes.medium)
+          .clickable(onClick = copyIdToClipboard)
+          .padding(horizontal = 12.dp, vertical = 8.dp)
+          .widthIn(max = 200.dp)
+      )
+
+      IconButton(onClick = copyIdToClipboard) {
+        Icon(
+          Icons.Default.FileCopy,
+          contentDescription = "Copy ID",
+          tint = MaterialTheme.colorScheme.primary
+        )
+      }
+    }
+  }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -233,7 +288,8 @@ private fun ProfileMenu(
   onEditProfile: () -> Unit,
   onNavigateToSettings: () -> Unit,
   onNavigateToBackupAndRestore: () -> Unit,
-  onDebugAction: (DebugAction) -> Unit
+  onDebugAction: (DebugAction) -> Unit,
+  onNavigateToHelp: () -> Unit
 ) {
   Column(modifier = Modifier.padding(horizontal = 8.dp)) {
     ListItem(
@@ -251,6 +307,14 @@ private fun ProfileMenu(
       modifier = Modifier
         .clip(MaterialTheme.shapes.medium)
         .clickable(onClick = onNavigateToSettings)
+    )
+    ListItem(
+      headlineContent = { Text("Help") },
+      supportingContent = { Text("Learn more about Mercury") },
+      leadingContent = { Icon(Icons.Default.Help, contentDescription = "Help") },
+      modifier = Modifier
+        .clip(MaterialTheme.shapes.medium)
+        .clickable(onClick = onNavigateToHelp)
     )
     ListItem(
       headlineContent = { Text("Backup & Restore") },
@@ -315,13 +379,14 @@ private fun ProfileEditDialog(
   ) { uri ->
     uri?.let {
       try {
-        val inputStream = context.contentResolver.openInputStream(it)
-        val bitmap = BitmapFactory.decodeStream(inputStream)
-        val resizedBitmap = Bitmap.createScaledBitmap(bitmap, 512, 512, true)
-        val outputStream = ByteArrayOutputStream()
-        resizedBitmap.compress(Bitmap.CompressFormat.JPEG, 80, outputStream)
-        val byteArray = outputStream.toByteArray()
-        photoBase64 = Base64.encodeToString(byteArray, Base64.NO_WRAP)
+        context.contentResolver.openInputStream(it)?.use { inputStream ->
+          val bitmap = BitmapFactory.decodeStream(inputStream)
+          val resizedBitmap = Bitmap.createScaledBitmap(bitmap, 512, 512, true)
+          val outputStream = ByteArrayOutputStream()
+          resizedBitmap.compress(Bitmap.CompressFormat.JPEG, 80, outputStream)
+          val byteArray = outputStream.toByteArray()
+          photoBase64 = Base64.encodeToString(byteArray, Base64.NO_WRAP)
+        }
       } catch (e: Exception) {
         e.printStackTrace()
         scope.launch { snackbarHostState.showSnackbar("Failed to load image.") }
@@ -415,7 +480,6 @@ private fun ProfileEditDialog(
             Text("Save")
           }
         }
-        SnackbarHost(hostState = snackbarHostState)
       }
     }
   }
@@ -455,6 +519,46 @@ private fun DebugConfirmDialog(
             Text("Confirm")
           }
         }
+      }
+    }
+  }
+}
+
+private fun formatId(id: String): String {
+  if (id.isEmpty()) return ""
+  return id.chunked(4).joinToString(" ")
+}
+
+private fun generateQrCodeBitmap(content: String): ImageBitmap {
+  val size = 512
+  val hints = mapOf(
+    EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.H,
+    EncodeHintType.MARGIN to 1
+  )
+  val bitMatrix = QRCodeWriter().encode(content, BarcodeFormat.QR_CODE, size, size, hints)
+  val pixels = IntArray(size * size)
+  for (y in 0 until size) {
+    for (x in 0 until size) {
+      pixels[y * size + x] = if (bitMatrix[x, y]) Color.BLACK else Color.WHITE
+    }
+  }
+  val bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
+  bitmap.setPixels(pixels, 0, size, 0, 0, size, size)
+  return bitmap.asImageBitmap()
+}
+
+@Composable
+private fun QrCodeDialog(profileId: String, onDismiss: () -> Unit) {
+  Dialog(onDismissRequest = onDismiss) {
+    Card(
+      modifier = Modifier.padding(16.dp),
+      shape = MaterialTheme.shapes.large
+    ) {
+      Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        val qrBitmap = remember(profileId) { generateQrCodeBitmap(profileId) }
+        Image(bitmap = qrBitmap, contentDescription = "Profile ID QR Code", modifier = Modifier.size(256.dp))
+        Spacer(Modifier.height(16.dp))
+        TextButton(onClick = onDismiss) { Text("Close") }
       }
     }
   }

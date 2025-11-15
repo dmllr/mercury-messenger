@@ -1,7 +1,6 @@
 package hela.eillance.screens
 
 import android.widget.Toast
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,16 +25,10 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import hela.eillance.MainViewModel
-import hela.eillance.navigation.Route
-
-private const val URL_IDENTITY = "https://mercury.eillance.com/articles/3/"
-private const val URL_P2P = "https://mercury.eillance.com/articles/2/"
-private const val URL_E2EE = "https://mercury.eillance.com/articles/4/"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -87,18 +80,6 @@ fun SettingsScreen(viewModel: MainViewModel, onBack: () -> Unit, navController: 
 
       HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
-      // Help Section
-      Text(
-        "Help",
-        style = MaterialTheme.typography.titleMedium,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(bottom = 8.dp)
-      )
-
-      HelpItem(title = "What is a Cryptographic Identity?") { navController.navigate(Route.WebView.createRoute(URL_IDENTITY)) }
-      HelpItem(title = "The Power of Peer-to-Peer") { navController.navigate(Route.WebView.createRoute(URL_P2P)) }
-      HelpItem(title = "Securing the Conversation: End-to-End Encryption") { navController.navigate(Route.WebView.createRoute(URL_E2EE)) }
-
       // This spacer pushes the save button to the bottom if the content is short.
       Spacer(modifier = Modifier.weight(1f))
 
@@ -114,15 +95,4 @@ fun SettingsScreen(viewModel: MainViewModel, onBack: () -> Unit, navController: 
       }
     }
   }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun HelpItem(title: String, onClick: () -> Unit) {
-  ListItem(
-    headlineContent = { Text(title) },
-    modifier = Modifier
-      .clip(MaterialTheme.shapes.medium)
-      .clickable(onClick = onClick)
-  )
 }

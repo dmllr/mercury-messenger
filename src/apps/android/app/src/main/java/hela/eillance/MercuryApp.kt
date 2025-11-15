@@ -32,6 +32,7 @@ import hela.eillance.screens.ContactProfileDialog
 import hela.eillance.screens.ContactsScreen
 import hela.eillance.screens.ConversationScreen
 import hela.eillance.screens.IdentityScreen
+import hela.eillance.screens.HelpScreen
 import hela.eillance.screens.IncomingCallScreen
 import hela.eillance.screens.MnemonicDisplayScreen
 import hela.eillance.screens.ProfileScreen
@@ -180,11 +181,13 @@ fun MainAppContent(viewModel: MainViewModel) {
       }
       composable(Screen.Profile.route) {
         ProfileScreen(
+          navController = navController,
           viewModel = viewModel,
           myProfile = myProfile,
           onBack = { navController.popBackStack() },
           onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
-          onNavigateToBackupAndRestore = { navController.navigate(Screen.BackupRestore.route) }
+          onNavigateToBackupAndRestore = { navController.navigate(Screen.BackupRestore.route) },
+          onNavigateToHelp = { navController.navigate(Screen.Help.route) }
         )
       }
       composable(Route.Interaction.route) { backStackEntry ->
@@ -237,6 +240,9 @@ fun MainAppContent(viewModel: MainViewModel) {
         if (url != null) {
           WebViewScreen(navController = navController, url = url)
         }
+      }
+      composable(Screen.Help.route) {
+        HelpScreen(navController = navController)
       }
     }
   }
