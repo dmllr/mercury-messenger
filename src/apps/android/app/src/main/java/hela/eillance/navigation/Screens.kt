@@ -18,6 +18,7 @@ sealed class Screen(val route: String, val title: String? = null, val icon: Imag
   object RecoverIdentity : Screen("recover_identity", "Recover Identity")
   object RecoveryPhrase : Screen("recovery_phrase", "Recovery Phrase")
   object Help : Screen("help", "Help", Icons.AutoMirrored.Filled.Help)
+  object QrScanner : Screen("qr_scanner", "Scan QR Code")
 }
 
 sealed class Route(val route: String) {
