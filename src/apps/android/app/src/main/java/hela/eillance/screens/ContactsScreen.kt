@@ -5,7 +5,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -16,7 +15,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Badge
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DividerDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -29,7 +27,6 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -117,8 +114,6 @@ fun ContactsScreen(
           ContactListItem(
             contact = contact,
             onClick = { onContactClick(contact.peerId) },
-            onAccept = { viewModel.acceptContact(contact.peerId) },
-            onResend = { viewModel.addContact(contact.peerId) },
             onShowProfile = { onShowContactProfile(contact.peerId) }
           )
           HorizontalDivider(color = DividerDefaults.color.copy(alpha = 0.5f))
@@ -132,16 +127,8 @@ fun ContactsScreen(
 fun ContactListItem(
   contact: Contact,
   onClick: () -> Unit,
-  onAccept: () -> Unit,
-  onResend: () -> Unit,
   onShowProfile: () -> Unit
 ) {
-  val statusColor = when (contact.status) {
-    ContactStatus.confirmed -> MaterialTheme.colorScheme.primary
-    ContactStatus.pendingApproval -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-    ContactStatus.awaitingApproval -> MaterialTheme.colorScheme.tertiary
-  }
-
   val containerColor = if (contact.status == ContactStatus.awaitingApproval) {
     MaterialTheme.colorScheme.tertiaryContainer
   } else {
@@ -213,13 +200,16 @@ fun ContactListItem(
     },
     trailingContent = {
       when (contact.status) {
-        ContactStatus.awaitingApproval -> {
-          Row {
-            Button(onClick = onAccept) { Text("Accept") }
-          }
-        }
+        ContactStatus.awaitingApproval ->
+          Text(
+            "New Request",
+            color = MaterialTheme.colorScheme.tertiary
+          )
         ContactStatus.pendingApproval -> {
-          TextButton(onClick = onResend) { Text("Resend") }
+          Text(
+            "Pending",
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+          )
         }
         else -> {
           if (contact.unreadCount > 0) {
@@ -228,7 +218,7 @@ fun ContactListItem(
         }
       }
     },
-    modifier = Modifier.clickable(enabled = contact.status == ContactStatus.confirmed, onClick = onClick),
+    modifier = Modifier.clickable(onClick = onClick),
     colors = ListItemDefaults.colors(containerColor = containerColor)
   )
 }
