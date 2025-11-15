@@ -2,6 +2,7 @@ package hela.eillance.navigation
 
 import android.net.Uri
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Help
 import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
@@ -16,6 +17,7 @@ sealed class Screen(val route: String, val title: String? = null, val icon: Imag
   object MnemonicDisplay : Screen("mnemonic_display")
   object RecoverIdentity : Screen("recover_identity", "Recover Identity")
   object RecoveryPhrase : Screen("recovery_phrase", "Recovery Phrase")
+  object Help : Screen("help", "Help", Icons.AutoMirrored.Filled.Help)
 }
 
 sealed class Route(val route: String) {

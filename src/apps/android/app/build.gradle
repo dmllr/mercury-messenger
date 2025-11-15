@@ -143,6 +143,9 @@ dependencies {
     // Google WebRTC
     implementation 'com.dafruits:webrtc:123.0.0'
 
+    // QR Code Generation
+    implementation 'com.google.zxing:core:3.5.3'
+
     // Networking for Signaling
     implementation(platform("com.squareup.okhttp3:okhttp-bom:5.2.1"))
     implementation("com.squareup.okhttp3:okhttp")
