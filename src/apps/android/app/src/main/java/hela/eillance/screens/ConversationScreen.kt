@@ -39,6 +39,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -59,7 +60,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.os.ConfigurationCompat
@@ -68,6 +71,7 @@ import hela.eillance.ndkio.CallDirection
 import hela.eillance.ndkio.CallState
 import hela.eillance.ndkio.CallStatus
 import hela.eillance.ndkio.Contact
+import hela.eillance.ndkio.ContactStatus
 import hela.eillance.ndkio.HistoryEntry
 import hela.eillance.ndkio.HistoryEntryKind
 import hela.eillance.ndkio.HistoryPage
@@ -229,7 +233,27 @@ fun ConversationScreen(
           }
         }
       )
-      MessageInput(onSendMessage = viewModel::sendMessage)
+      if (contact?.status == ContactStatus.awaitingApproval) {
+        ApprovalRequestBar(
+          contact = contact,
+          onApprove = { viewModel.acceptContact(peerId) },
+          onReject = {
+            viewModel.removeContact(peerId)
+            onBack()
+          }
+        )
+      } else if (contact?.status == ContactStatus.pendingApproval) {
+        PendingApprovalBar(
+          contact = contact,
+          onCancel = {
+            viewModel.removeContact(peerId)
+            onBack()
+          },
+          onResend = { viewModel.addContact(peerId) }
+        )
+      } else {
+        MessageInput(onSendMessage = viewModel::sendMessage)
+      }
     }
   }
 }
@@ -507,6 +531,82 @@ fun SystemMessageBubble(entry: HistoryEntry, onClick: (HistoryEntry) -> Unit) {
 
 @Serializable
 private data class JsonAction(val action: String)
+
+@Composable
+private fun PendingApprovalBar(
+  contact: Contact,
+  onCancel: () -> Unit,
+  onResend: () -> Unit
+) {
+  Surface(
+    modifier = Modifier.fillMaxWidth(),
+    tonalElevation = 3.dp
+  ) {
+    Column(
+      modifier = Modifier
+        .padding(16.dp)
+        .navigationBarsPadding(),
+      horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+      Text(
+        text = "Waiting for ${contact.name} to approve your request.",
+        style = MaterialTheme.typography.titleMedium,
+        textAlign = TextAlign.Center
+      )
+      Spacer(modifier = Modifier.height(16.dp))
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceEvenly
+      ) {
+        OutlinedButton(onClick = onCancel) { Text("Cancel Request") }
+        Button(onClick = onResend) { Text("Resend Request") }
+      }
+    }
+  }
+}
+
+@Composable
+private fun ApprovalRequestBar(
+  contact: Contact,
+  onApprove: () -> Unit,
+  onReject: () -> Unit
+) {
+  Surface(
+    modifier = Modifier.fillMaxWidth(),
+    tonalElevation = 3.dp
+  ) {
+    Column(
+      modifier = Modifier
+        .padding(16.dp)
+        .navigationBarsPadding(),
+      horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+      Text(
+        text = "${contact.name} would like to connect.",
+        style = MaterialTheme.typography.titleMedium,
+        textAlign = TextAlign.Center
+      )
+      if (!contact.bio.isNullOrBlank()) {
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+          text = "\"${contact.bio}\"",
+          style = MaterialTheme.typography.bodyMedium,
+          fontStyle = FontStyle.Italic,
+          textAlign = TextAlign.Center,
+          color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+      }
+      Spacer(modifier = Modifier.height(16.dp))
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceEvenly
+      ) {
+        OutlinedButton(onClick = onReject) { Text("Reject") }
+        Button(onClick = onApprove) { Text("Approve Contact") }
+      }
+    }
+  }
+}
 
 @Composable
 fun formatTimestamp(timestamp: Long): String {
