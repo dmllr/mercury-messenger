@@ -49,6 +49,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
   private val _navigateToPeerId = MutableStateFlow<String?>(null)
   val navigateToPeerId = _navigateToPeerId.asStateFlow()
 
+  private val _navigateToScanner = MutableStateFlow(false)
+  val navigateToScanner = _navigateToScanner.asStateFlow()
+
   private val _isIdentityReady = MutableStateFlow(false)
   val isIdentityReady = _isIdentityReady.asStateFlow()
 
@@ -165,6 +168,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
   fun onAddContactDialogDismiss() {
     _showAddContactDialog.value = false
+  }
+
+  fun onScanQrClicked() {
+    _showAddContactDialog.value = false
+    _navigateToScanner.value = true
+  }
+
+  fun onScannerNavigated() {
+    _navigateToScanner.value = false
   }
 
   fun addContact(peerId: String) {

@@ -31,10 +31,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Help
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.FileCopy
-import androidx.compose.material.icons.filled.Help
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Save
@@ -311,7 +311,7 @@ private fun ProfileMenu(
     ListItem(
       headlineContent = { Text("Help") },
       supportingContent = { Text("Learn more about Mercury") },
-      leadingContent = { Icon(Icons.Default.Help, contentDescription = "Help") },
+      leadingContent = { Icon(Icons.AutoMirrored.Filled.Help, contentDescription = "Help") },
       modifier = Modifier
         .clip(MaterialTheme.shapes.medium)
         .clickable(onClick = onNavigateToHelp)
@@ -549,13 +549,16 @@ private fun generateQrCodeBitmap(content: String): ImageBitmap {
 
 @Composable
 private fun QrCodeDialog(profileId: String, onDismiss: () -> Unit) {
+  val qrContent = remember(profileId) {
+    "mercury:contact:$profileId"
+  }
   Dialog(onDismissRequest = onDismiss) {
     Card(
       modifier = Modifier.padding(16.dp),
       shape = MaterialTheme.shapes.large
     ) {
       Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        val qrBitmap = remember(profileId) { generateQrCodeBitmap(profileId) }
+        val qrBitmap = remember(qrContent) { generateQrCodeBitmap(qrContent) }
         Image(bitmap = qrBitmap, contentDescription = "Profile ID QR Code", modifier = Modifier.size(256.dp))
         Spacer(Modifier.height(16.dp))
         TextButton(onClick = onDismiss) { Text("Close") }

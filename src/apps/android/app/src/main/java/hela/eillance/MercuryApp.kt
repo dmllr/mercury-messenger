@@ -11,13 +11,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -31,11 +31,12 @@ import hela.eillance.screens.CallScreen
 import hela.eillance.screens.ContactProfileDialog
 import hela.eillance.screens.ContactsScreen
 import hela.eillance.screens.ConversationScreen
-import hela.eillance.screens.IdentityScreen
 import hela.eillance.screens.HelpScreen
+import hela.eillance.screens.IdentityScreen
 import hela.eillance.screens.IncomingCallScreen
 import hela.eillance.screens.MnemonicDisplayScreen
 import hela.eillance.screens.ProfileScreen
+import hela.eillance.screens.QrScannerScreen
 import hela.eillance.screens.RecoverIdentityScreen
 import hela.eillance.screens.RecoveryPhraseScreen
 import hela.eillance.screens.SettingsScreen
@@ -89,6 +90,7 @@ fun MainAppContent(viewModel: MainViewModel) {
   val connectionState by viewModel.connectionState.collectAsState()
   val navigateToPeerId by viewModel.navigateToPeerId.collectAsState()
   val peerIdForProfileDialog by viewModel.showContactProfileDialog.collectAsState()
+  val navigateToScanner by viewModel.navigateToScanner.collectAsState()
 
   var contactToRemove by remember { mutableStateOf<Contact?>(null) }
 
@@ -103,10 +105,18 @@ fun MainAppContent(viewModel: MainViewModel) {
     }
   }
 
+  LaunchedEffect(navigateToScanner) {
+    if (navigateToScanner) {
+      navController.navigate(Screen.QrScanner.route)
+      viewModel.onScannerNavigated()
+    }
+  }
+
   if (viewModel.showAddContactDialog.collectAsState().value) {
     AddContactDialog(
       onDismissRequest = { viewModel.onAddContactDialogDismiss() },
-      onConfirm = { peerId -> viewModel.addContact(peerId) }
+      onConfirm = { peerId -> viewModel.addContact(peerId) },
+      onScanQrCode = { viewModel.onScanQrClicked() }
     )
   }
 
@@ -243,6 +253,15 @@ fun MainAppContent(viewModel: MainViewModel) {
       }
       composable(Screen.Help.route) {
         HelpScreen(navController = navController)
+      }
+      composable(Screen.QrScanner.route) {
+        QrScannerScreen(
+          onQrCodeScanned = { result ->
+            viewModel.addContact(result)
+            navController.popBackStack()
+          },
+          onClose = { navController.popBackStack() }
+        )
       }
     }
   }
