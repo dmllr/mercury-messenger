@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
@@ -36,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import hela.eillance.MainViewModel
 import hela.eillance.ndkio.CallState
+import hela.eillance.ndkio.CallDirection
 import hela.eillance.ndkio.HistoryEntryKind
 import hela.eillance.webrtc.WebRtcTransport
 import org.webrtc.SurfaceViewRenderer
@@ -46,8 +48,8 @@ fun CallScreen(
   callState: CallState,
   onNavigateBack: () -> Unit
 ) {
-  LaunchedEffect(callState.isInCall) {
-    if (!callState.isInCall) {
+  LaunchedEffect(callState) {
+    if (!callState.isInCall && !callState.isConnecting && !callState.isRinging) {
       onNavigateBack()
     }
   }
@@ -65,7 +67,7 @@ fun CallScreen(
     .fillMaxSize()
     .background(Color.Black)) {
 
-    if (isVideoCall) {
+    if (isVideoCall && callState.isInCall) {
       AndroidView(
         factory = {
           SurfaceViewRenderer(it).apply {
@@ -99,15 +101,21 @@ fun CallScreen(
           maxLines = 1,
           overflow = TextOverflow.Ellipsis
         )
-        Spacer(modifier = Modifier.padding(4.dp))
-        Text(
-          text = "Calling...", // TODO: Add call timer
-          style = MaterialTheme.typography.bodyLarge,
-          color = Color.White.copy(alpha = 0.7f)
-        )
+        if (callState.isConnecting) {
+            Spacer(modifier = Modifier.padding(4.dp))
+            Text(text = "Connecting...", style = MaterialTheme.typography.bodyLarge, color = Color.White.copy(alpha = 0.7f))
+        } else if (callState.isRinging && callState.callDirection == CallDirection.Outgoing) {
+            Spacer(modifier = Modifier.padding(4.dp))
+            Text(text = "Ringing...", style = MaterialTheme.typography.bodyLarge, color = Color.White.copy(alpha = 0.7f))
+        } else if (callState.isInCall) {
+            Spacer(modifier = Modifier.padding(4.dp))
+            Text(text = "00:00", style = MaterialTheme.typography.bodyLarge, color = Color.White.copy(alpha = 0.7f)) // TODO: Add call timer
+        }
       }
 
-      if (isVideoCall) {
+      if (callState.isConnecting || (callState.isRinging && callState.callDirection == CallDirection.Outgoing)) {
+        CircularProgressIndicator(modifier = Modifier.size(64.dp))
+      } else if (isVideoCall && callState.isInCall) {
         Box(
           modifier = Modifier
             .fillMaxWidth()

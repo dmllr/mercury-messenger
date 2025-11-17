@@ -111,14 +111,12 @@ fun ConversationScreen(
   val listState = rememberLazyListState()
   val coroutineScope = rememberCoroutineScope()
   var previousHistory by remember(peerId) { mutableStateOf(historyPage.messages) }
-
-  val isInCall = callState.isInCall && callState.peerId == peerId
-
+  
   var systemMessageToShowDetails by remember { mutableStateOf<HistoryEntry?>(null) }
   var tappedTruncatedMessageId by remember { mutableStateOf<Long?>(null) }
 
-  LaunchedEffect(isInCall) {
-    if (isInCall) {
+  LaunchedEffect(callState) {
+    if ((callState.isConnecting || callState.isRinging || callState.isInCall) && callState.peerId == peerId) {
       onNavigateToCall(peerId)
     }
   }
