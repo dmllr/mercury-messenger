@@ -544,9 +544,13 @@ inline void Client::Hangup(const std::string& peer_id) const {
 
     // If the call was active in any state, notify the other peer.
     if (call_was_active) {
-      LOGI << "Sending hangup signal to " << peer_id;
-      const Json msg = {{"type", "hangup"}, {"to", peer_id}};
-      transport_->sendSignalingMessage(msg);
+      LOGI << "Sending hangup signal to " << peer_id << " via data channel.";
+      if (peer && peer->data_channel_is_open_) {
+        const Json msg = {{"type", "hangup"}};
+        transport_->sendPeerDataChannelMessage(peer_id, msg);
+      } else {
+        LOGW << "Cannot send hangup message to " << peer_id << "; data channel is not open.";
+      }
     } else {
       LOGW << "Hangup called for " << peer_id << ", but no active call state (ringing or connected) was found.";
     }
@@ -625,13 +629,6 @@ inline void Client::ProcessPeerMessage(Json message) {
   if (type_it == message.end()) { return; }
   auto type = type_it->get<std::string>();
   const auto context = message.value("context", "data");
-
-  if (type == "hangup") {
-    LOGI << "Received hangup signal from " << peer_id;
-    Hangup(peer_id);
-    if (on_call_terminated_) { (*on_call_terminated_)(peer_id); }
-    return;
-  }
 
   if (context == "media") {
     auto peer = transport_->getPeer(peer_id);
@@ -1020,6 +1017,13 @@ inline void Client::ProcessDataChannelMessage(const std::string& peer_id, const 
     } else {
       LOGE << "Failed to compute shared secret with peer " << peer_id;
     }
+    return;
+  }
+
+  if (type == "hangup") {
+    LOGI << "Received hangup signal from " << peer_id << " via data channel.";
+    Hangup(peer_id);
+    if (on_call_terminated_) { (*on_call_terminated_)(peer_id); }
     return;
   }
 
