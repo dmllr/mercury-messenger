@@ -5,11 +5,14 @@ import android.util.Log
 import hela.eillance.ndkio.PeerConnectionState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import org.json.JSONException
 import org.json.JSONObject
 import org.webrtc.AudioSource
 import org.webrtc.AudioTrack
@@ -26,6 +29,7 @@ import org.webrtc.PeerConnection
 import org.webrtc.PeerConnection.RTCConfiguration
 import org.webrtc.PeerConnectionFactory
 import org.webrtc.RtpReceiver
+import org.webrtc.RtpTransceiver
 import org.webrtc.SdpObserver
 import org.webrtc.SessionDescription
 import org.webrtc.SurfaceTextureHelper
@@ -44,6 +48,7 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
   private val peerConnectionFactory: PeerConnectionFactory
   private val peerConnections = ConcurrentHashMap<String, ConcurrentHashMap<String, PeerConnection>>()
   private val dataChannels = ConcurrentHashMap<String, DataChannel>()
+  private val connectionTimeoutJobs = ConcurrentHashMap<String, Job>()
 
   // Local media resources
   private var localVideoTrack: VideoTrack? = null
@@ -129,24 +134,31 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
     val observer = object : PeerConnection.Observer {
       override fun onSignalingChange(newState: PeerConnection.SignalingState?) {
         Log.i(TAG, "onSignalingChange for peer $peerId ($context): $newState")
-        if (newState == PeerConnection.SignalingState.CLOSED) {
-          nativeOnPeerConnectionStateChange(nativePointer, peerId, PeerConnectionState.Closed.value)
-        }
       }
-      override fun onIceConnectionChange(newState: PeerConnection.IceConnectionState?) {
-        Log.i(TAG, "onIceConnectionChange for peer $peerId ($context): $newState")
+
+      override fun onConnectionChange(newState: PeerConnection.PeerConnectionState?) {
+        Log.i(TAG, "onConnectionChange for peer $peerId ($context): $newState")
+
+        // If we reach a terminal or successful state, cancel the timeout job.
+        if (newState == PeerConnection.PeerConnectionState.CONNECTED ||
+          newState == PeerConnection.PeerConnectionState.FAILED ||
+          newState == PeerConnection.PeerConnectionState.CLOSED ||
+          newState == PeerConnection.PeerConnectionState.DISCONNECTED) {
+          connectionTimeoutJobs.remove(peerId + context)?.cancel()
+        }
+
         val stateInt = when(newState) {
-          PeerConnection.IceConnectionState.NEW -> PeerConnectionState.New.value
-          PeerConnection.IceConnectionState.CHECKING -> PeerConnectionState.Connecting.value
-          PeerConnection.IceConnectionState.CONNECTED -> PeerConnectionState.Connected.value
-          PeerConnection.IceConnectionState.COMPLETED -> PeerConnectionState.Connected.value // Treat COMPLETED as CONNECTED
-          PeerConnection.IceConnectionState.DISCONNECTED -> PeerConnectionState.Disconnected.value
-          PeerConnection.IceConnectionState.FAILED -> PeerConnectionState.Failed.value
-          PeerConnection.IceConnectionState.CLOSED -> PeerConnectionState.Closed.value
+          PeerConnection.PeerConnectionState.NEW -> PeerConnectionState.New.value
+          PeerConnection.PeerConnectionState.CONNECTING -> PeerConnectionState.Connecting.value
+          PeerConnection.PeerConnectionState.CONNECTED -> PeerConnectionState.Connected.value
+          PeerConnection.PeerConnectionState.DISCONNECTED -> PeerConnectionState.Disconnected.value
+          PeerConnection.PeerConnectionState.FAILED -> PeerConnectionState.Failed.value
+          PeerConnection.PeerConnectionState.CLOSED -> PeerConnectionState.Closed.value
           null -> PeerConnectionState.Closed.value
         }
         nativeOnPeerConnectionStateChange(nativePointer, peerId, stateInt)
       }
+      override fun onIceConnectionChange(newState: PeerConnection.IceConnectionState?) {}
       override fun onIceConnectionReceivingChange(p0: Boolean) {}
       override fun onIceGatheringChange(newState: PeerConnection.IceGatheringState?) {
         Log.i(TAG, "onIceGatheringChange for peer $peerId ($context): $newState")
@@ -156,15 +168,19 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
           Log.d(TAG, "End of ICE candidates for peer $peerId ($context)")
           return
         }
-        val candidateJson = JSONObject().apply {
-          put("type", "candidate")
-          put("to", peerId)
-          put("context", context)
-          put("candidate", candidate.sdp)
-          put("sdpMLineIndex", candidate.sdpMLineIndex)
-          put("sdpMid", candidate.sdpMid)
+        try {
+          val candidateJson = JSONObject().apply {
+            put("type", "candidate")
+            put("to", peerId)
+            put("context", context)
+            put("candidate", candidate.sdp)
+            put("sdpMLineIndex", candidate.sdpMLineIndex)
+            put("sdpMid", candidate.sdpMid)
+          }
+          sendSignalingMessage(candidateJson.toString())
+        } catch(e: JSONException) {
+          Log.e(TAG, "Failed to create ICE candidate JSON", e)
         }
-        sendSignalingMessage(candidateJson.toString())
         Log.d(TAG, "onIceCandidate for peer $peerId ($context): ${candidate.sdp}")
       }
 
@@ -201,9 +217,14 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
       override fun onRenegotiationNeeded() {
         Log.i(TAG, "onRenegotiationNeeded for peer: $peerId, context: $context")
         // The C++ layer is responsible for initiating offer/answer exchanges.
-        // Automatically creating an offer here can lead to glare, especially on the callee's side.
         // If renegotiation is needed, the C++ client logic should call createOffer explicitly.
       }
+
+      override fun onTrack(transceiver: RtpTransceiver?) {
+        // This callback is for Unified Plan when a new track is added by the remote peer.
+        // We handle this in onAddTrack for simplicity with the existing stream logic.
+      }
+
       override fun onAddTrack(rtpReceiver: RtpReceiver, mediaStreams: Array<out MediaStream>) {
         rtpReceiver.track()?.let { track ->
           Log.i(TAG, "onAddTrack: Received ${track.kind()} track from $peerId")
@@ -228,10 +249,23 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
     val peerContextMap = peerConnections.getOrPut(peerId) { ConcurrentHashMap() }
     val pc = peerConnectionFactory.createPeerConnection(rtcConfig, observer) ?: return
     peerContextMap[context] = pc
+
+    // Start a timeout for this connection attempt.
+    val timeoutJob = coroutineScope.launch {
+      delay(CONNECTION_TIMEOUT_MS)
+      // If after the timeout the connection is still not established, close it to trigger a failure state.
+      val currentState = pc.connectionState()
+      if (currentState != PeerConnection.PeerConnectionState.CONNECTED) {
+        Log.w(TAG, "PeerConnection to $peerId ($context) timed out. Current state: $currentState. Closing.")
+        pc.close()
+      }
+    }
+    connectionTimeoutJobs[peerId + context] = timeoutJob
   }
 
   fun closePeerConnection(peerId: String, context: String) {
     Log.i(TAG, "Closing peer connection for peer $peerId ($context)")
+    connectionTimeoutJobs.remove(peerId + context)?.cancel()
     val pc = peerConnections[peerId]?.remove(context)
     pc?.close()
 
@@ -568,6 +602,7 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
     private const val MEDIA_STREAM_ID = "ARDAMS"
     private const val VIDEO_TRACK_ID = "ARDAMSv0"
     private const val AUDIO_TRACK_ID = "ARDAMSa0"
+    private const val CONNECTION_TIMEOUT_MS = 30_000L
 
     // Singleton EglBase instance for the entire application.
     // All WebRTC video components (factory, capturers, renderers) must share this context.
