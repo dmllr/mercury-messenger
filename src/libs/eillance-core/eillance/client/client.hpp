@@ -28,6 +28,7 @@
 #include "eillance/transport/peer_connection_state.h"
 #include "eillance/transport/transport.hpp"
 #include "eillance/transport/transport_delegate.hpp"
+#include "eillance/utils/dispatch_queue.hpp"
 #include "eillance/utils/memory.h"
 
 namespace eillance {
@@ -94,8 +95,8 @@ public:
   auto GetStorage() const -> std::shared_ptr<storage::PersistentStorage>;
   auto GetSettingsManager() const -> SettingsManager*;
   void SetName(const std::string& name) const;
-  void Start() const;
-  void Terminate() const;
+  void Start();
+  void Terminate();
   void SetStatusCallback(const StatusCallbackFunction& callback);
 
   [[maybe_unused]] void SetFrameReceivedCallback(const OnFrameReceivedCallback& callback);
@@ -117,7 +118,7 @@ public:
   void Connect(const std::string& peer_id);
   void StartVoiceCall(const std::string& peer_id);
   void StartVideoCall(const std::string& peer_id);
-  void AcceptCall(const std::string& peer_id) const;
+  void AcceptCall(const std::string& peer_id, messaging::HistoryEntryKind call_kind) const;
   void RejectCall(const std::string& peer_id) const;
   void AddContact(const std::string& peer_id, const std::optional<std::string>& token = std::nullopt) const;
   auto GenerateContactToken() -> std::string;
@@ -131,7 +132,7 @@ public:
   void Hangup(const std::string& peer_id) const;
   void Configure(const Config& config) const;
   auto SendChatMessage(const std::string& peer_id, const std::string& message) -> messaging::HistoryEntryRecord;
-  void UpdateSignalingUrl(const std::string& url) const;
+  void UpdateSignalingUrl(const std::string& url);
   void MarkMessagesAsRead(const std::string& peer_id, const std::vector<std::uint64_t>& message_ids) const;
   auto GetMessageHistoryPage(const std::string& peer_id, size_t page_index, size_t page_size) const -> messaging::HistoryPage;
   auto GetFullMessageContent(uint64_t message_id) const -> std::optional<std::string>;
@@ -157,10 +158,16 @@ public:
 private:
   void InitializeAVStream();
   void StartMediaCall(const std::string& peer_id, bool is_video);
-  void UpdateAndNotifyPeerList() const;
+  void UpdateAndNotifyPeerList();
   void SendSampleToPeers(const std::vector<std::byte>& sample, Stream::Source::Type type, std::uint64_t sample_time) const;
   void ProcessDataChannelMessage(const std::string& peer_id, const Json& message);
-  void SendQueuedMessages(const std::string& peer_id) const;
+  void SendQueuedMessages(const std::string& peer_id);
+
+  void CheckForInactivePeers();
+  void UpdatePeerActivity(const std::string& peer_id);
+  DispatchQueue inactivity_check_queue_{"InactiveCheck", 1};
+  std::atomic<bool> is_running_{false};
+
   void SetupDataChannel(const std::shared_ptr<Peer>& peer, const std::string& peer_id);
   void HandleProfileUpdate(const std::string& peer_id, const Json& profile_json) const;
   static auto ParseDeviceProfile(const Json& jprofile) -> Device::Profile;
@@ -197,6 +204,8 @@ private:
   std::unique_ptr<backup::BackupManager> backup_manager_;
   std::unordered_map<std::string, Device> online_peers_;
   mutable std::mutex online_peers_mutex_;
+  static constexpr std::chrono::seconds kPeerInactivityCheckInterval{30};
+  static constexpr std::chrono::minutes kPeerInactivityTimeout{5};
 };
 
 // --- Implementation ---
@@ -300,20 +309,26 @@ inline void Client::SetName(const std::string& name) const {
   transport_->SetName(name);
 }
 
-inline void Client::Start() const {
+inline void Client::Start() {
   if (!id_manager_->IdentityExists()) {
     LOGE << "Client started without an identity. Please generate or restore one.";
     return;
   }
+  if (is_running_.exchange(true)) {
+    return;
+  }
+
   if (auto url = settings_manager_->GetSignalingServerUrl()) {
     transport_->setSignalingUrl(*url);
   }
 
   transport_->setId(id_manager_->GetId());
   transport_->Start();
+  inactivity_check_queue_.Dispatch([this] { CheckForInactivePeers(); });
 }
 
-inline void Client::Terminate() const {
+inline void Client::Terminate() {
+  is_running_ = false;
   delivery_service_->stop();
   transport_->Terminate();
 }
@@ -399,15 +414,12 @@ inline void Client::StartVideoCall(const std::string& peer_id) {
   StartMediaCall(peer_id, true);
 }
 
-inline void Client::AcceptCall(const std::string& peer_id) const {
+inline void Client::AcceptCall(const std::string& peer_id, messaging::HistoryEntryKind call_kind) const {
   auto peer = transport_->getPeer(peer_id);
   if (!peer) {
     LOGW << "Cannot accept call from " << peer_id << ", peer object not found.";
     return;
   }
-
-  // The call kind is determined by the original request.
-  const auto call_kind = peer->pending_call_kind.value_or(messaging::HistoryEntryKind::voiceCall);
 
   nlohmann::json msg = {{"action", "call_accept"}, {"kind", call_kind}};
   message_history_->AddTextEntry(peer_id, msg.dump(), messaging::MessageDirection::sent, messaging::HistoryEntryKind::systemMessage);
@@ -514,11 +526,8 @@ inline auto Client::GetChatSummaries(const std::vector<std::string>& peer_ids) c
 
 inline void Client::Hangup(const std::string& peer_id) const {
   if (const auto peer = transport_->getPeer(peer_id); peer != nullptr) {
-    const bool call_was_active = peer->pending_offer_sdp.has_value() || peer->has_media_peer_connection_ || peer->pending_call_kind.has_value();
-
-    // Clean up local state related to pending calls.
+    const bool call_was_active = peer->pending_offer_sdp.has_value() || peer->has_media_peer_connection_;
     peer->pending_offer_sdp.reset();
-    peer->pending_call_kind.reset();
     if (!peer->pending_candidates.empty()) { peer->pending_candidates.clear(); }
 
     // If a media connection exists, close it. This will trigger the onStateChange callback
@@ -565,7 +574,7 @@ inline void Client::OnLoginSuccess() {
   delivery_service_->Start();
 }
 
-inline void Client::OnSystemMessage(const std::string& type, const Json& message) {
+inline void Client::OnSystemMessage(const std::string& type, const Json& message) {  // NOLINT(*-cognitive-complexity)
   if (type == "auth_challenge") {
     const auto challenge = message.value("challenge", "");
     if (!challenge.empty()) {
@@ -598,17 +607,9 @@ inline void Client::OnDataChannelOpen(const std::string& peer_id) {
     LOGW << "onDataChannelOpen called for non-existent peer: " << peer_id;
     return;
   }
-
+  UpdatePeerActivity(peer_id);
   LOGI << "Data channel with " << peer_id << " opened.";
   peer->data_channel_is_open_ = true;
-
-  if (peer->pending_call_kind) {
-    LOGI << "Data channel to " << peer_id << " is open, sending call request.";
-    nlohmann::json msg = {{"action", "call_request"}, {"kind", *peer->pending_call_kind}};
-    message_history_->AddTextEntry(peer_id, msg.dump(), messaging::MessageDirection::sent, messaging::HistoryEntryKind::systemMessage);
-    // Don't reset pending_call_kind here. It indicates we are the caller.
-    delivery_service_->attemptDelivery(peer_id);
-  }
 
   if (GetId() > peer_id) {
     auto my_pub_key = peer->session_cipher_->GetPublicKey();
@@ -617,7 +618,7 @@ inline void Client::OnDataChannelOpen(const std::string& peer_id) {
   }
 }
 
-inline void Client::ProcessPeerMessage(Json message) {
+inline void Client::ProcessPeerMessage(Json message) {  // NOLINT(*-cognitive-complexity)
   const auto from_it = message.find("from");
   if (from_it == message.end()) { return; }
   auto peer_id = from_it->get<std::string>();
@@ -808,12 +809,16 @@ inline auto Client::SendChatMessage(const std::string& peer_id, const std::strin
   return entry;
 }
 
-inline void Client::UpdateSignalingUrl(const std::string& url) const {
-  settings_manager_->SetSignalingServerUrl(url);
-  transport_->setSignalingUrl(url);
-  transport_->reconnect();
+inline void Client::UpdateSignalingUrl(const std::string& url) {
+    if (is_running_) {
+        settings_manager_->SetSignalingServerUrl(url);
+        transport_->setSignalingUrl(url);
+        transport_->reconnect();
+    } else {
+        LOGW << "UpdateSignalingUrl called while client is not running. URL will be applied on next start.";
+        settings_manager_->SetSignalingServerUrl(url);
+    }
 }
-
 inline void Client::MarkMessagesAsRead(const std::string& peer_id, const std::vector<std::uint64_t>& message_ids) const {
   const auto peer = transport_->getPeer(peer_id);
   message_history_->MarkMessagesAsRead(peer_id, message_ids);
@@ -891,32 +896,25 @@ inline void Client::DebugRevokeAllApprovals() const {
 }
 
 inline void Client::StartMediaCall(const std::string& peer_id, const bool is_video) {
-  auto peer = transport_->getPeer(peer_id);
   const auto call_kind = is_video ? messaging::HistoryEntryKind::videoCall : messaging::HistoryEntryKind::voiceCall;
 
-  // If peer is fully connected, send the request directly.
-  if (peer && peer->data_channel_is_open_ && peer->session_cipher_->IsReady()) {
-    LOGI << "Data channel to " << peer_id << " is already open, sending call request directly.";
-    nlohmann::json msg = {{"action", "call_request"}, {"kind", call_kind}};
-    message_history_->AddTextEntry(peer_id, msg.dump(), messaging::MessageDirection::sent, messaging::HistoryEntryKind::systemMessage);
-    SendQueuedMessages(peer_id); // Force send now
-  } else {
-    // Peer doesn't exist, or isn't fully connected.
-    // We ensure a peer object exists and set the pending_call_kind flag.
-    if (!peer) {
-      peer = std::make_shared<Peer>(peer_id);
-      transport_->addPeer(peer_id, peer);
-      SetupDataChannel(peer, peer_id);
-    }
-    peer->pending_call_kind = call_kind;
+  // Create the call request message first and queue it for delivery.
+  nlohmann::json msg = {{"action", "call_request"}, {"kind", call_kind}};
+  message_history_->AddTextEntry(peer_id, msg.dump(), messaging::MessageDirection::sent, messaging::HistoryEntryKind::systemMessage);
 
-    // Use the delivery service to manage the connection. This avoids duplicate attempts.
-    // The delivery service will call Connect() if needed.
+  // Now, trigger the delivery mechanism.
+  auto peer = transport_->getPeer(peer_id);
+  if (peer && peer->data_channel_is_open_ && peer->session_cipher_->IsReady()) {
+    // If already connected, just send the queue.
+    SendQueuedMessages(peer_id);
+  } else {
+    // If not connected, let the delivery service handle establishing the connection.
+    // The message we just added will cause it to trigger a connection attempt.
     delivery_service_->attemptDelivery(peer_id);
   }
 }
 
-inline void Client::UpdateAndNotifyPeerList() const {
+inline void Client::UpdateAndNotifyPeerList() {
   if (on_peer_list_update_) {
     std::vector<Device> peer_list;
     {
@@ -936,6 +934,30 @@ inline void Client::SendSampleToPeers(const std::vector<std::byte>& sample, Stre
       if (track) { track->SendSample(sample, sample_time); }
     }
   }
+}
+
+inline void Client::UpdatePeerActivity(const std::string& peer_id) {
+  if (auto peer = transport_->getPeer(peer_id)) {
+    peer->last_activity_time_ = Time::Now();
+  }
+}
+
+inline void Client::CheckForInactivePeers() {
+  if (!is_running_) { return; }
+
+  auto peers = transport_->getPeers();
+  auto now = Time::Now();
+  const auto timeout_us = std::chrono::duration_cast<std::chrono::microseconds>(kPeerInactivityTimeout).count();
+
+  for (const auto& [peer_id, peer] : peers) {
+    if (!peer->has_media_peer_connection_ && GetPeerConnectionState(peer_id) == transport::PeerConnectionState::Connected) {
+      if ((now - peer->last_activity_time_.load()) > timeout_us) {
+        LOGI << "Peer " << peer_id << " inactive for too long. Closing data connection.";
+        transport_->closePeerConnection(peer_id, "data");
+      }
+    }
+  }
+  inactivity_check_queue_.DispatchAfter(kPeerInactivityCheckInterval, [this] { CheckForInactivePeers(); });
 }
 
 inline void Client::HandleProfileUpdate(const std::string& peer_id, const Json& profile_json) const {
@@ -985,6 +1007,7 @@ inline void Client::HandleProfileUpdate(const std::string& peer_id, const Json& 
 }
 
 inline void Client::ProcessDataChannelMessage(const std::string& peer_id, const Json& message) {
+  UpdatePeerActivity(peer_id);
   const auto itr = message.find("type");
   if (itr == message.end()) {
     return;
@@ -1136,24 +1159,20 @@ inline void Client::ProcessDataChannelMessage(const std::string& peer_id, const 
         }
       } else if (action == "call_request") {
         if (on_incoming_call_) {
-          auto peer_to_call = transport_->getPeer(peer_id);
-          if(peer_to_call) {
-            messaging::HistoryEntryKind call_type = content_json.value("kind", messaging::HistoryEntryKind::voiceCall);
-            peer_to_call->pending_call_kind = call_type;
-            (*on_incoming_call_)(peer_id, call_type);
+          messaging::HistoryEntryKind call_type = content_json.value("kind", messaging::HistoryEntryKind::voiceCall);
+          (*on_incoming_call_)(peer_id, call_type);
 
-            // Acknowledge the request by sending a "ringing" message back
-            Json ringing_msg = {{"action", "call_ringing"}};
-            message_history_->AddTextEntry(peer_id, ringing_msg.dump(), messaging::MessageDirection::sent, messaging::HistoryEntryKind::systemMessage);
-            delivery_service_->attemptDelivery(peer_id);
-          }
+          // Acknowledge the request by sending a "ringing" message back
+          Json ringing_msg = {{"action", "call_ringing"}};
+          message_history_->AddTextEntry(peer_id, ringing_msg.dump(), messaging::MessageDirection::sent, messaging::HistoryEntryKind::systemMessage);
+          delivery_service_->attemptDelivery(peer_id);
         }
       } else if (action == "call_ringing") {
-        if (peer->pending_call_kind && on_call_ringing_) {
+        if (on_call_ringing_) {
           (*on_call_ringing_)(peer_id);
         }
       } else if (action == "call_accept") {
-        if (peer->pending_call_kind && on_call_accepted_) {
+        if (on_call_accepted_) {
           (*on_call_accepted_)(peer_id);
         }
         const auto contact = contact_manager_->GetContact(peer_id);
@@ -1238,13 +1257,12 @@ inline void Client::ProcessDataChannelMessage(const std::string& peer_id, const 
   }
 }
 
-inline void Client::SendQueuedMessages(const std::string& peer_id) const {
+inline void Client::SendQueuedMessages(const std::string& peer_id) {
   delivery_service_->connectionAttemptFinished(peer_id);
   const auto messages = storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::sending);
   if (messages.empty()) { return; }
   const auto peer = transport_->getPeer(peer_id);
   if (!peer) { return; }
-
   LOGI << "Processing " << messages.size() << " queued message(s) for " << peer_id;
   for (const auto& entry: messages) {
     bool sent = false;
@@ -1254,6 +1272,7 @@ inline void Client::SendQueuedMessages(const std::string& peer_id) const {
       case messaging::HistoryEntryKind::systemMessage: {
         if (!std::holds_alternative<messaging::MessageEntry>(entry.data)) {
           LOGW << "Skipping message " << entry.id << " with unexpected data type for its kind.";
+          UpdatePeerActivity(peer_id);
           continue;
         }
 
@@ -1275,6 +1294,7 @@ inline void Client::SendQueuedMessages(const std::string& peer_id) const {
         if (entry.kind == messaging::HistoryEntryKind::textMessage) {
           if (peer->data_channel_is_open_ && peer->session_cipher_->IsReady()) {
             auto encrypted_payload = peer->session_cipher_->Encrypt(content_to_send);
+            UpdatePeerActivity(peer_id);
             if (encrypted_payload.empty()) {
               LOGE << "Failed to encrypt chat message for peer " << peer_id;
               continue;
@@ -1304,6 +1324,7 @@ inline void Client::SendQueuedMessages(const std::string& peer_id) const {
             } else if (action == "profile_update" || action == "contact_signature" || action == "call_accept" || action == "call_request" || action == "call_ringing") {
               if (peer->data_channel_is_open_ && peer->session_cipher_->IsReady()) {
                 auto encrypted_payload = peer->session_cipher_->Encrypt(content_to_send);
+                UpdatePeerActivity(peer_id);
                 if (encrypted_payload.empty()) {
                   LOGE << "Failed to encrypt system message (" << action << ") for peer " << peer_id;
                   continue;
@@ -1318,6 +1339,7 @@ inline void Client::SendQueuedMessages(const std::string& peer_id) const {
               }
             } else if (action == "request_profile") {
               if (peer->data_channel_is_open_ && peer->session_cipher_->IsReady()) {
+                UpdatePeerActivity(peer_id);
                 const Json request = {{"type", "profile_request"}};
                 transport_->sendPeerDataChannelMessage(peer_id, request);
                 sent = true;
@@ -1325,6 +1347,7 @@ inline void Client::SendQueuedMessages(const std::string& peer_id) const {
             } else if (action == "send_profile") {
               if (peer->data_channel_is_open_ && peer->session_cipher_->IsReady()) {
                 Json profile_msg;
+                UpdatePeerActivity(peer_id);
                 profile_msg["type"] = "profile_info";
                 profile_msg["display_name"] = settings_manager_->GetMyDisplayName().value_or("");
                 profile_msg["bio"] = settings_manager_->GetMyBio().value_or("");

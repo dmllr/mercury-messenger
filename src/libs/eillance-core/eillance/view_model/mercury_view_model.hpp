@@ -215,11 +215,6 @@ inline auto MercuryViewModel::RestoreBackup(const std::string& path, const std::
 }
 
 inline void MercuryViewModel::SelectContact(const std::string& peer_id) {
-  const auto state = client_->GetPeerConnectionState(peer_id);
-  if (state == transport::PeerConnectionState::Disconnected || state == transport::PeerConnectionState::Failed || state == transport::PeerConnectionState::Closed || state == transport::PeerConnectionState::NewConnection) {
-    client_->Connect(peer_id);
-  }
-
   dispatch_queue_.Dispatch([this, peer_id]() -> void {
     bool selection_changed{false};
     {
@@ -337,17 +332,19 @@ inline void MercuryViewModel::Hangup() {
 inline void MercuryViewModel::AcceptCall() {
   dispatch_queue_.Dispatch([this] {
     std::string peer_id;
+    messaging::HistoryEntryKind call_kind;
     bool changed = false;
     {
       const std::lock_guard<std::mutex> lock(state_mutex_);
       if (!call_state_.is_ringing) { return; }
       peer_id = call_state_.peer_id;
+      call_kind = call_state_.call_type;
       call_state_.is_connecting = false;
       call_state_.is_in_call = true;
       call_state_.is_ringing = false;
       changed = true;
     }
-    if (!peer_id.empty()) { client_->AcceptCall(peer_id); }
+    if (!peer_id.empty()) { client_->AcceptCall(peer_id, call_kind); }
     if (changed) { NotifyStateChanged({StateChange::CallState}); }
   });
 }
@@ -758,6 +755,26 @@ inline void MercuryViewModel::SetupClientCallbacks() {
     });
   });
 
+  client_->SetOnCallAcceptedCallback([this](const std::string& peer_id) {
+    dispatch_queue_.Dispatch([this, peer_id] {
+      bool state_changed = false;
+      {
+        const std::lock_guard<std::mutex> lock(state_mutex_);
+        // This is for the caller: transition from ringing to in-call.
+        if ((call_state_.is_connecting || call_state_.is_ringing) &&
+            call_state_.peer_id == peer_id &&
+            call_state_.call_direction == messaging::CallDirection::outgoing) {
+          call_state_.is_connecting = false;
+          call_state_.is_ringing = false;
+          call_state_.is_in_call = true;
+          state_changed = true;
+        }
+      }
+      if (state_changed) {
+        NotifyStateChanged({StateChange::CallState});
+      }
+    });
+  });
   client_->SetOnContactRemovedCallback([this](const std::string& peer_id) {
     dispatch_queue_.Dispatch([this, peer_id] {
         {
