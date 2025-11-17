@@ -100,7 +100,9 @@ public:
   void Hangup();
   void AcceptCall();
   void RejectCall();
-  void RemoveContact(const std::string& peer_id);
+  void BlockContact(const std::string& peer_id);
+  void DeleteContact(const std::string& peer_id);
+  void UnblockContact(const std::string& peer_id);
   void AddContact(const std::string& peer_id, const std::optional<std::string>& token = std::nullopt);
   auto GenerateContactToken() -> std::string;
   void UpdateSignalingUrl(const std::string& url);
@@ -376,9 +378,26 @@ inline void MercuryViewModel::UpdateSignalingUrl(const std::string& url) {
   dispatch_queue_.Dispatch([this, url] { client_->UpdateSignalingUrl(url); });
 }
 
-inline void MercuryViewModel::RemoveContact(const std::string& peer_id) {
+inline void MercuryViewModel::BlockContact(const std::string& peer_id) {
   dispatch_queue_.Dispatch([this, peer_id] {
-    client_->RemoveContact(peer_id);
+    client_->BlockContact(peer_id);
+    {
+      const std::lock_guard<std::mutex> lock(state_mutex_);
+      if (selected_contact_id_ && *selected_contact_id_ == peer_id) {
+        selected_contact_id_.reset();
+        interaction_history_.clear();
+        has_older_messages_ = false;
+      }
+      UpdateContacts(false);
+    }
+    UpdateChats(false);
+    NotifyStateChanged({StateChange::Contacts, StateChange::SelectedContact, StateChange::InteractionHistory});
+  });
+}
+
+inline void MercuryViewModel::DeleteContact(const std::string& peer_id) {
+  dispatch_queue_.Dispatch([this, peer_id] {
+    client_->DeleteContact(peer_id);
     {
       const std::lock_guard<std::mutex> lock(state_mutex_);
       if (selected_contact_id_ && *selected_contact_id_ == peer_id) {
@@ -395,6 +414,12 @@ inline void MercuryViewModel::RemoveContact(const std::string& peer_id) {
 
 inline void MercuryViewModel::AcceptContact(const std::string& peer_id) {
   dispatch_queue_.Dispatch([this, peer_id] { client_->ConfirmContact(peer_id); });
+}
+
+inline void MercuryViewModel::UnblockContact(const std::string& peer_id) {
+  dispatch_queue_.Dispatch([this, peer_id] {
+    client_->UnblockContact(peer_id);
+  });
 }
 
 inline void MercuryViewModel::UpdateMyProfile(const std::optional<std::string>& name, const std::optional<std::string>& bio, const std::optional<std::string>& photo) {

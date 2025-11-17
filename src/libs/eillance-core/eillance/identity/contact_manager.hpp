@@ -14,11 +14,17 @@
 
 namespace eillance::identity {
 
+enum class RequestStatus {
+  New,       // A new, valid request that should be processed.
+  Duplicate, // A resent request for one already awaiting approval.
+  Ignored    // The request was ignored (contact is already confirmed or was rejected).
+};
+
 class ContactManager {
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::unordered_map<std::string, Contact> contacts_;
   mutable std::mutex mutex_;
-  
+
   struct TokenInfo {
     std::chrono::steady_clock::time_point creation_time;
   };
@@ -36,8 +42,18 @@ public:
     if (it != contacts_.end()) {
       // If the contact exists and is pending, we allow the "add" operation
       // to succeed so the caller can re-send the request.
-      if (it->second.status == ContactStatus::pendingApproval) { return true; }
-      LOGW << "Contact " << peer_id << " already exists.";
+      if (it->second.status == ContactStatus::pendingApproval) {
+        return true;
+      }
+      // If the contact was rejected, this action un-rejects them and moves
+      // them to pending, allowing a new request to be sent.
+      if (it->second.status == ContactStatus::rejected) {
+        it->second.status = ContactStatus::awaitingApproval;
+        storage_->UpdateContact(it->second);
+        return true;
+      }
+
+      LOGW << "Contact " << peer_id << " already exists with status " << static_cast<int>(it->second.status);
       return false;
     }
     contacts_[peer_id] = {.peer_id = peer_id, .status = ContactStatus::pendingApproval};
@@ -47,29 +63,40 @@ public:
   }
 
   // Marks that we have received a request from a peer.
-  auto ReceiveContactRequest(const std::string& peer_id, const std::optional<std::string>& name, const std::optional<std::string>& bio, const std::optional<std::string>& photo) -> bool {
+  auto ReceiveContactRequest(const std::string& peer_id, const std::optional<std::string>& name,
+                           const std::optional<std::string>& bio,
+                           const std::optional<std::string>& photo) -> RequestStatus {
     const std::lock_guard<std::mutex> lock(mutex_);
     auto it = contacts_.find(peer_id);
     if (it != contacts_.end()) {
-      if (it->second.status == ContactStatus::confirmed) {
-        return false;  // Already confirmed
+      // If contact is already confirmed or has been rejected, ignore new requests.
+      if (it->second.status == ContactStatus::confirmed || it->second.status == ContactStatus::rejected) {
+        return RequestStatus::Ignored;
       }
+      if (it->second.status == ContactStatus::awaitingApproval) {
+        // It's a resend of a request we are already awaiting, just update profile info.
+        if (name) { it->second.display_name = name; }
+        if (bio) { it->second.bio = bio; }
+        if (photo) { it->second.photo_base64 = photo; }
+        storage_->UpdateContact(it->second);
+        return RequestStatus::Duplicate;
+      }
+
+      // This handles transition from other states (like pendingApproval) to awaitingApproval.
       it->second.status = ContactStatus::awaitingApproval;
       if (name) { it->second.display_name = name; }
       if (bio) { it->second.bio = bio; }
       if (photo) { it->second.photo_base64 = photo; }
       storage_->UpdateContact(it->second);
     } else {
-      contacts_[peer_id] = {
-          .peer_id = peer_id,
-          .status = ContactStatus::awaitingApproval,
-          .display_name = name,
-          .bio = bio,
-          .photo_base64 = photo,
-      };
+      contacts_[peer_id] = {.peer_id = peer_id,
+                            .status = ContactStatus::awaitingApproval,
+                            .display_name = name,
+                            .bio = bio,
+                            .photo_base64 = photo};
       storage_->UpdateContact(contacts_[peer_id]);
     }
-    return true;
+    return RequestStatus::New;
   }
 
   // Confirms a contact that was awaiting our approval.
@@ -106,7 +133,23 @@ public:
     return true;
   }
 
-  void RemoveContact(const std::string& peer_id) {
+  void BlockContact(const std::string& peer_id) {
+    const std::lock_guard<std::mutex> lock(mutex_);
+    auto it = contacts_.find(peer_id);
+    if (it != contacts_.end()) {
+        if (it->second.status != ContactStatus::rejected) {
+            it->second.status = ContactStatus::rejected;
+            storage_->UpdateContact(it->second);
+        }
+    } else {
+        // If we are rejecting a peer that we have no record of, create one
+        // to enforce the blacklist.
+        contacts_[peer_id] = {.peer_id = peer_id, .status = ContactStatus::rejected};
+        storage_->UpdateContact(contacts_[peer_id]);
+    }
+  }
+
+  void DeleteContact(const std::string& peer_id) {
     const std::lock_guard<std::mutex> lock(mutex_);
     contacts_.erase(peer_id);
     storage_->RemoveContact(peer_id);
@@ -225,6 +268,17 @@ public:
     return true;
   }
 
+  auto UnblockContact(const std::string& peer_id) -> bool {
+    const std::lock_guard<std::mutex> lock(mutex_);
+    auto it = contacts_.find(peer_id);
+    if (it != contacts_.end() && it->second.status == ContactStatus::rejected) {
+      // Transitioning to awaitingApproval allows the user to now act on the contact request.
+      it->second.status = ContactStatus::awaitingApproval;
+      storage_->UpdateContact(it->second);
+      return true;
+    }
+    return false;
+  }
 private:
   void LoadContacts() {
     const auto contacts_from_db = storage_->GetContacts();
