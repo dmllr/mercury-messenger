@@ -28,6 +28,7 @@ namespace eillance::view_model {
 // The Android UI queries the ViewModel through granular getters.
 struct UIState {
   struct CallState {
+    bool is_connecting = false;
     bool is_in_call = false;
     bool is_ringing = false;
     messaging::CallDirection call_direction = messaging::CallDirection::outgoing;
@@ -289,7 +290,7 @@ inline void MercuryViewModel::StartVoiceCall() {
     if (peer_id) {
       {
         const std::lock_guard<std::mutex> lock(state_mutex_);
-        call_state_ = {.is_in_call = true, .is_ringing = false, .call_direction = messaging::CallDirection::outgoing, .peer_id = *peer_id, .call_type = messaging::HistoryEntryKind::voiceCall};
+        call_state_ = {.is_connecting = true, .is_in_call = false, .is_ringing = false, .call_direction = messaging::CallDirection::outgoing, .peer_id = *peer_id, .call_type = messaging::HistoryEntryKind::voiceCall};
       }
       client_->StartVoiceCall(*peer_id);
       UpdateChats(true);
@@ -308,7 +309,7 @@ inline void MercuryViewModel::StartVideoCall() {
     if (peer_id) {
       {
         const std::lock_guard<std::mutex> lock(state_mutex_);
-        call_state_ = {.is_in_call = true, .is_ringing = false, .call_direction = messaging::CallDirection::outgoing, .peer_id = *peer_id, .call_type = messaging::HistoryEntryKind::videoCall};
+        call_state_ = {.is_connecting = true, .is_in_call = false, .is_ringing = false, .call_direction = messaging::CallDirection::outgoing, .peer_id = *peer_id, .call_type = messaging::HistoryEntryKind::videoCall};
       }
       client_->StartVideoCall(*peer_id);
       UpdateChats(true);
@@ -323,7 +324,7 @@ inline void MercuryViewModel::Hangup() {
     bool changed = false;
     {
       const std::lock_guard<std::mutex> lock(state_mutex_);
-      if (!call_state_.is_in_call && !call_state_.is_ringing) { return; }
+      if (!call_state_.is_connecting && !call_state_.is_in_call && !call_state_.is_ringing) { return; }
       peer_id_to_hangup = call_state_.peer_id;
       call_state_ = {};
       changed = true;
@@ -341,6 +342,7 @@ inline void MercuryViewModel::AcceptCall() {
       const std::lock_guard<std::mutex> lock(state_mutex_);
       if (!call_state_.is_ringing) { return; }
       peer_id = call_state_.peer_id;
+      call_state_.is_connecting = false;
       call_state_.is_in_call = true;
       call_state_.is_ringing = false;
       changed = true;
@@ -694,9 +696,9 @@ inline void MercuryViewModel::SetupClientCallbacks() {
           }
           if (state == transport::PeerConnectionState::Closed ||
               state == transport::PeerConnectionState::Disconnected ||
-              state == transport::PeerConnectionState::Failed) {
-            if ((call_state_.is_in_call || call_state_.is_ringing) &&
-                call_state_.peer_id == peer_id) {
+              state == transport::PeerConnectionState::Failed)
+          {
+            if ((call_state_.is_connecting || call_state_.is_in_call || call_state_.is_ringing) && call_state_.peer_id == peer_id) {
               call_state_ = {};
               NotifyStateChanged({StateChange::CallState});
             }
@@ -712,7 +714,8 @@ inline void MercuryViewModel::SetupClientCallbacks() {
       bool state_changed = false;
       {
         const std::lock_guard<std::mutex> lock(state_mutex_);
-        if (!call_state_.is_in_call && !call_state_.is_ringing) {
+        if (!call_state_.is_connecting && !call_state_.is_in_call && !call_state_.is_ringing) {
+          call_state_.is_connecting = false;
           call_state_.is_ringing = true;
           call_state_.peer_id = peer_id;
           call_state_.call_type = call_type;
@@ -729,13 +732,29 @@ inline void MercuryViewModel::SetupClientCallbacks() {
       bool state_changed = false;
       {
         const std::lock_guard<std::mutex> lock(state_mutex_);
-        if ((call_state_.is_in_call || call_state_.is_ringing) &&
-            call_state_.peer_id == peer_id) {
+        if ((call_state_.is_connecting || call_state_.is_in_call || call_state_.is_ringing) && call_state_.peer_id == peer_id) {
           call_state_ = {};
           state_changed = true;
         }
       }
       if (state_changed) { NotifyStateChanged({StateChange::CallState}); }
+    });
+  });
+
+  client_->SetOnCallRingingCallback([this](const std::string& peer_id) {
+    dispatch_queue_.Dispatch([this, peer_id] {
+        bool state_changed = false;
+        {
+            const std::lock_guard<std::mutex> lock(state_mutex_);
+            if (call_state_.is_connecting && call_state_.peer_id == peer_id) {
+                call_state_.is_connecting = false;
+                call_state_.is_ringing = true;
+                state_changed = true;
+            }
+        }
+        if (state_changed) {
+            NotifyStateChanged({StateChange::CallState});
+        }
     });
   });
 

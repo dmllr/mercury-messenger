@@ -60,6 +60,8 @@ public:
   using OnMessageStatusChangedCallback = std::function<void(const std::string& peer_id, std::uint64_t message_id, messaging::MessageStatus status)>;
   using OnPeerListUpdateCallback = std::function<void(const std::vector<Device>&)>;
   using StatusCallbackFunction = transport::Transport::StatusCallbackFunction;
+  using OnCallRingingCallback = std::function<void(const std::string& peer_id)>;
+  using OnCallAcceptedCallback = std::function<void(const std::string& peer_id)>;
   using OnIncomingCallCallback = std::function<void(const std::string& peer_id, messaging::HistoryEntryKind call_type)>;
   using OnMyProfileUpdatedCallback = std::function<void()>;
   using OnContactProfileUpdatedCallback = std::function<void(const std::string& peer_id)>;
@@ -105,14 +107,16 @@ public:
   void SetMessageStatusChangedCallback(const OnMessageStatusChangedCallback& callback);
   void SetPeerListUpdateCallback(const OnPeerListUpdateCallback& callback);
   void SetIncomingCallCallback(const OnIncomingCallCallback& callback);
+  void SetOnCallRingingCallback(const OnCallRingingCallback& callback);
+  void SetOnCallAcceptedCallback(const OnCallAcceptedCallback& callback);
   void SetOnCallTerminatedCallback(const OnCallTerminatedCallback& callback);
   void SetOnMyProfileUpdatedCallback(const OnMyProfileUpdatedCallback& callback);
   void SetOnContactRemovedCallback(const OnContactRemovedCallback& callback);
   void SetOnContactProfileUpdatedCallback(const OnContactProfileUpdatedCallback& callback);
   void Call(const std::string& peer_id);
   void Connect(const std::string& peer_id);
-  void StartVoiceCall(const std::string& peer_id) const;
-  void StartVideoCall(const std::string& peer_id) const;
+  void StartVoiceCall(const std::string& peer_id);
+  void StartVideoCall(const std::string& peer_id);
   void AcceptCall(const std::string& peer_id) const;
   void RejectCall(const std::string& peer_id) const;
   void AddContact(const std::string& peer_id, const std::optional<std::string>& token = std::nullopt) const;
@@ -152,7 +156,7 @@ public:
 
 private:
   void InitializeAVStream();
-  void StartMediaCall(const std::string& peer_id, bool is_video) const;
+  void StartMediaCall(const std::string& peer_id, bool is_video);
   void UpdateAndNotifyPeerList() const;
   void SendSampleToPeers(const std::vector<std::byte>& sample, Stream::Source::Type type, std::uint64_t sample_time) const;
   void ProcessDataChannelMessage(const std::string& peer_id, const Json& message);
@@ -176,6 +180,8 @@ private:
   std::shared_ptr<OnPeerListUpdateCallback> on_peer_list_update_{};
   std::shared_ptr<StatusCallbackFunction> status_callback_{};
   std::shared_ptr<OnIncomingCallCallback> on_incoming_call_{};
+  std::shared_ptr<OnCallRingingCallback> on_call_ringing_{};
+  std::shared_ptr<OnCallAcceptedCallback> on_call_accepted_{};
   std::shared_ptr<OnCallTerminatedCallback> on_call_terminated_{};
   std::shared_ptr<OnMyProfileUpdatedCallback> on_my_profile_updated_{};
   std::shared_ptr<OnContactProfileUpdatedCallback> on_contact_profile_updated_{};
@@ -344,6 +350,14 @@ inline void Client::SetIncomingCallCallback(const OnIncomingCallCallback& callba
   on_incoming_call_ = std::make_shared<OnIncomingCallCallback>(callback);
 }
 
+inline void Client::SetOnCallRingingCallback(const OnCallRingingCallback& callback) {
+  on_call_ringing_ = std::make_shared<OnCallRingingCallback>(callback);
+}
+
+inline void Client::SetOnCallAcceptedCallback(const OnCallAcceptedCallback& callback) {
+  on_call_accepted_ = std::make_shared<OnCallAcceptedCallback>(callback);
+}
+
 inline void Client::SetOnCallTerminatedCallback(const OnCallTerminatedCallback& callback) {
   on_call_terminated_ = std::make_shared<OnCallTerminatedCallback>(callback);
 }
@@ -366,7 +380,7 @@ inline void Client::Call(const std::string& peer_id) {
 
 inline void Client::Connect(const std::string& peer_id) {
   if (transport_->getPeer(peer_id)) {
-    LOGW << "Already connected or connecting to peer " << peer_id;
+    LOGW << "Connect called for peer that already exists: " << peer_id;
     return;
   }
   const auto peer = std::make_shared<Peer>(peer_id);
@@ -377,50 +391,27 @@ inline void Client::Connect(const std::string& peer_id) {
   transport_->createOffer(peer_id, "data");
 }
 
-inline void Client::StartVoiceCall(const std::string& peer_id) const {
+inline void Client::StartVoiceCall(const std::string& peer_id) {
   StartMediaCall(peer_id, false);
 }
 
-inline void Client::StartVideoCall(const std::string& peer_id) const {
+inline void Client::StartVideoCall(const std::string& peer_id) {
   StartMediaCall(peer_id, true);
 }
 
 inline void Client::AcceptCall(const std::string& peer_id) const {
-  // On platforms with custom capture (like CLI), start the media stream.
-  // On Android, this block is skipped.
-  if (av_stream_) { av_stream_->Start(); }
-
   auto peer = transport_->getPeer(peer_id);
-  if (!peer || !peer->pending_offer_sdp) {
-    LOGW << "Cannot accept call from " << peer_id << ", no pending offer found.";
+  if (!peer) {
+    LOGW << "Cannot accept call from " << peer_id << ", peer object not found.";
     return;
   }
-  const bool is_video_call = peer->pending_offer_sdp->find("m=video") != std::string::npos;
 
-  transport_->createMediaPeerConnection(peer_id);
-  peer->has_media_peer_connection_ = true;
+  // The call kind is determined by the original request.
+  const auto call_kind = peer->pending_call_kind.value_or(messaging::HistoryEntryKind::voiceCall);
 
-  peer->audio_ = transport_->addAudio(peer_id, [this, wpeer = make_weak_ptr(peer)]() {
-    if (const auto p = wpeer.lock()) { transport_->addToStream(p, false); }
-  });
-  if (is_video_call) {
-    peer->video_ = transport_->addVideo(peer_id, [this, wpeer = make_weak_ptr(peer)]() {
-      if (const auto p = wpeer.lock()) { transport_->addToStream(p, true); }
-    });
-  }
-
-  transport_->setRemoteDescription(peer_id, "media", *peer->pending_offer_sdp, "offer");
-  peer->pending_offer_sdp.reset();
-
-  if (!peer->pending_candidates.empty()) {
-    LOGI << "Applying " << peer->pending_candidates.size() << " buffered ICE candidates for " << peer_id;
-    for (const auto& candidate: peer->pending_candidates) {
-      transport_->addRemoteCandidate(peer_id, "media", candidate.sdp, candidate.mid);
-    }
-    peer->pending_candidates.clear();
-  }
-  LOGI << "Generating SDP answer for " << peer_id;
-  transport_->createAnswer(peer_id, "media");
+  nlohmann::json msg = {{"action", "call_accept"}, {"kind", call_kind}};
+  message_history_->AddTextEntry(peer_id, msg.dump(), messaging::MessageDirection::sent, messaging::HistoryEntryKind::systemMessage);
+  delivery_service_->attemptDelivery(peer_id);
 }
 
 inline void Client::RejectCall(const std::string& peer_id) const {
@@ -523,11 +514,11 @@ inline auto Client::GetChatSummaries(const std::vector<std::string>& peer_ids) c
 
 inline void Client::Hangup(const std::string& peer_id) const {
   if (const auto peer = transport_->getPeer(peer_id); peer != nullptr) {
-    // A call is considered active if we have a pending offer OR an established media connection.
-    const bool call_was_active = peer->pending_offer_sdp.has_value() || peer->has_media_peer_connection_;
+    const bool call_was_active = peer->pending_offer_sdp.has_value() || peer->has_media_peer_connection_ || peer->pending_call_kind.has_value();
 
     // Clean up local state related to pending calls.
     peer->pending_offer_sdp.reset();
+    peer->pending_call_kind.reset();
     if (!peer->pending_candidates.empty()) { peer->pending_candidates.clear(); }
 
     // If a media connection exists, close it. This will trigger the onStateChange callback
@@ -611,9 +602,14 @@ inline void Client::OnDataChannelOpen(const std::string& peer_id) {
   LOGI << "Data channel with " << peer_id << " opened.";
   peer->data_channel_is_open_ = true;
 
-  // Initiate key exchange
-  // To break symmetry and avoid a race condition in the handshake,
-  // only the peer with the lexicographically greater ID will initiate.
+  if (peer->pending_call_kind) {
+    LOGI << "Data channel to " << peer_id << " is open, sending call request.";
+    nlohmann::json msg = {{"action", "call_request"}, {"kind", *peer->pending_call_kind}};
+    message_history_->AddTextEntry(peer_id, msg.dump(), messaging::MessageDirection::sent, messaging::HistoryEntryKind::systemMessage);
+    // Don't reset pending_call_kind here. It indicates we are the caller.
+    delivery_service_->attemptDelivery(peer_id);
+  }
+
   if (GetId() > peer_id) {
     auto my_pub_key = peer->session_cipher_->GetPublicKey();
     const Json key_exchange_message = {{"type", "key_exchange"}, {"key", std::vector<std::byte>(my_pub_key.begin(), my_pub_key.end())}, {"is_reply", false}};
@@ -635,25 +631,34 @@ inline void Client::ProcessPeerMessage(Json message) {
     if (!peer) {
       LOGI << "Received media message for unknown peer " << peer_id << ". Creating peer object first.";
       peer = std::make_shared<Peer>(peer_id);
-      transport_->addPeer(peer_id, peer);  // NOLINT
+      transport_->addPeer(peer_id, peer);
     }
     if (type == "offer") {
-      LOGD << "Received media offer from " << peer_id << ". Storing it and notifying UI.";
-      peer->pending_offer_sdp = message["sdp"].get<std::string>();
-      auto call_type = (peer->pending_offer_sdp->find("m=video") != std::string::npos) ? messaging::HistoryEntryKind::videoCall : messaging::HistoryEntryKind::voiceCall;
-      (*on_incoming_call_)(peer_id, call_type);
+      LOGD << "Received media offer from " << peer_id << ". Replying with answer.";
+      const auto sdp = message["sdp"].get<std::string>();
+      const bool is_video_call = sdp.find("m=video") != std::string::npos;
+      if (av_stream_) { av_stream_->Start(); }
+      if (!peer->has_media_peer_connection_) {
+        transport_->createMediaPeerConnection(peer_id);
+        peer->has_media_peer_connection_ = true;
+      }
+      peer->audio_ = transport_->addAudio(peer_id, [this, wpeer = make_weak_ptr(peer)]() {
+        if (const auto p = wpeer.lock()) { transport_->addToStream(p, false); }
+      });
+      if (is_video_call) {
+        peer->video_ = transport_->addVideo(peer_id, [this, wpeer = make_weak_ptr(peer)]() {
+          if (const auto p = wpeer.lock()) { transport_->addToStream(p, true); }
+        });
+      }
+      transport_->setRemoteDescription(peer_id, "media", sdp, "offer");
+      transport_->createAnswer(peer_id, "media");
     } else if (type == "candidate") {
       const auto candidate_str = message["candidate"].get<std::string>();
       const auto mid = message["sdpMid"].get<std::string>();
-      if (peer->has_media_peer_connection_) {
-        transport_->addRemoteCandidate(peer_id, "media", candidate_str, mid);
-      } else {
-        LOGD << "Buffering ICE candidate for peer " << peer_id;
-        peer->pending_candidates.push_back({candidate_str, mid});
-      }
+      transport_->addRemoteCandidate(peer_id, "media", candidate_str, mid);
     } else if (peer->has_media_peer_connection_ && type == "answer") {
       const auto sdp = message["sdp"].get<std::string>();
-      LOGD << "Remote SDP (" << type << ") for " << peer_id << " context " << context << ":\\n"
+      LOGD << "Remote SDP (" << type << ") for " << peer_id << " context " << context << ":\n"
            << sdp;
       transport_->setRemoteDescription(peer_id, "media", sdp, type);
     } else {
@@ -737,7 +742,7 @@ inline void Client::ProcessPeerMessage(Json message) {
         if (on_contact_profile_updated_) { (*on_contact_profile_updated_)(peer_id); }
       }
     } else {  // Ignored
-      LOGI << "Contact request from " << peer_id << " ignored (contact is confirmed or rejected).";
+      LOGI << "Contact request from " << peer_id << " ignored (contact is confirmed or was rejected).";
       if (contact_manager_->IsConfirmedContact(peer_id)) {
         LOGI << "Resending confirmation to already confirmed peer " << peer_id;
         const Json msg = {{"type", "contact_confirm"}, {"to", peer_id}};
@@ -885,37 +890,30 @@ inline void Client::DebugRevokeAllApprovals() const {
   storage_->DebugRevokeAllContactApprovals();
 }
 
-inline void Client::StartMediaCall(const std::string& peer_id, const bool is_video) const {
-  // On platforms with custom capture (like CLI), start the media stream.
-  // On Android, this block is skipped.
-  if (av_stream_) { av_stream_->Start(); }
-
+inline void Client::StartMediaCall(const std::string& peer_id, const bool is_video) {
   auto peer = transport_->getPeer(peer_id);
-  // If a peer object for this ID doesn't exist, we must create one.
-  // A call should not depend on a pre-existing data channel connection.
-  if (!peer) {
-    LOGI << "Peer object for " << peer_id << " not found. Creating a new one for the call.";
-    peer = std::make_shared<Peer>(peer_id);
-    transport_->addPeer(peer_id, peer);
+  const auto call_kind = is_video ? messaging::HistoryEntryKind::videoCall : messaging::HistoryEntryKind::voiceCall;
+
+  // If peer is fully connected, send the request directly.
+  if (peer && peer->data_channel_is_open_ && peer->session_cipher_->IsReady()) {
+    LOGI << "Data channel to " << peer_id << " is already open, sending call request directly.";
+    nlohmann::json msg = {{"action", "call_request"}, {"kind", call_kind}};
+    message_history_->AddTextEntry(peer_id, msg.dump(), messaging::MessageDirection::sent, messaging::HistoryEntryKind::systemMessage);
+    SendQueuedMessages(peer_id); // Force send now
+  } else {
+    // Peer doesn't exist, or isn't fully connected.
+    // We ensure a peer object exists and set the pending_call_kind flag.
+    if (!peer) {
+      peer = std::make_shared<Peer>(peer_id);
+      transport_->addPeer(peer_id, peer);
+      SetupDataChannel(peer, peer_id);
+    }
+    peer->pending_call_kind = call_kind;
+
+    // Use the delivery service to manage the connection. This avoids duplicate attempts.
+    // The delivery service will call Connect() if needed.
+    delivery_service_->attemptDelivery(peer_id);
   }
-  if (peer->has_media_peer_connection_) {
-    LOGW << "Media connection already exists for peer " << peer_id << ", cannot start a new call.";
-    if (av_stream_) { av_stream_->Stop(); }
-    return;
-  }
-  transport_->createMediaPeerConnection(peer_id);
-  peer->has_media_peer_connection_ = true;
-  const auto history_kind = is_video ? messaging::HistoryEntryKind::videoCall : messaging::HistoryEntryKind::voiceCall;
-  message_history_->AddCallEntry(peer_id, history_kind, messaging::CallDirection::outgoing, messaging::CallStatus::answered);
-  peer->audio_ = transport_->addAudio(peer_id, [this, wpeer = make_weak_ptr(peer)]() {
-    if (const auto p = wpeer.lock()) { transport_->addToStream(p, false); }
-  });
-  if (is_video) {
-    peer->video_ = transport_->addVideo(peer_id, [this, wpeer = make_weak_ptr(peer)]() {
-      if (const auto p = wpeer.lock()) { transport_->addToStream(p, true); }
-    });
-  }
-  transport_->createOffer(peer_id, "media");
 }
 
 inline void Client::UpdateAndNotifyPeerList() const {
@@ -1136,6 +1134,46 @@ inline void Client::ProcessDataChannelMessage(const std::string& peer_id, const 
         } else {
           LOGW << "Received invalid contact signature from " << peer_id;
         }
+      } else if (action == "call_request") {
+        if (on_incoming_call_) {
+          auto peer_to_call = transport_->getPeer(peer_id);
+          if(peer_to_call) {
+            messaging::HistoryEntryKind call_type = content_json.value("kind", messaging::HistoryEntryKind::voiceCall);
+            peer_to_call->pending_call_kind = call_type;
+            (*on_incoming_call_)(peer_id, call_type);
+
+            // Acknowledge the request by sending a "ringing" message back
+            Json ringing_msg = {{"action", "call_ringing"}};
+            message_history_->AddTextEntry(peer_id, ringing_msg.dump(), messaging::MessageDirection::sent, messaging::HistoryEntryKind::systemMessage);
+            delivery_service_->attemptDelivery(peer_id);
+          }
+        }
+      } else if (action == "call_ringing") {
+        if (peer->pending_call_kind && on_call_ringing_) {
+          (*on_call_ringing_)(peer_id);
+        }
+      } else if (action == "call_accept") {
+        if (peer->pending_call_kind && on_call_accepted_) {
+          (*on_call_accepted_)(peer_id);
+        }
+        const auto contact = contact_manager_->GetContact(peer_id);
+        if (contact && contact->status == identity::ContactStatus::confirmed) {
+          const bool is_video = content_json.value("kind", messaging::HistoryEntryKind::voiceCall) == messaging::HistoryEntryKind::videoCall;
+          if (av_stream_) { av_stream_->Start(); }
+          auto accepted_peer = transport_->getPeer(peer_id);
+          if (!accepted_peer) return;
+          transport_->createMediaPeerConnection(peer_id);
+          accepted_peer->has_media_peer_connection_ = true;
+          accepted_peer->audio_ = transport_->addAudio(peer_id, [this, wpeer = make_weak_ptr(accepted_peer)]() {
+            if (const auto p = wpeer.lock()) { transport_->addToStream(p, false); }
+          });
+          if (is_video) {
+            accepted_peer->video_ = transport_->addVideo(peer_id, [this, wpeer = make_weak_ptr(accepted_peer)]() {
+              if (const auto p = wpeer.lock()) { transport_->addToStream(p, true); }
+            });
+          }
+          transport_->createOffer(peer_id, "media");
+        }
       } else if (action == "profile_update") {
         HandleProfileUpdate(peer_id, content_json);
       }
@@ -1210,7 +1248,7 @@ inline void Client::SendQueuedMessages(const std::string& peer_id) const {
   LOGI << "Processing " << messages.size() << " queued message(s) for " << peer_id;
   for (const auto& entry: messages) {
     bool sent = false;
-    switch (entry.kind) {  // NOLINT(*-multi-way-paths-covered)
+    switch (entry.kind) {
       case messaging::HistoryEntryKind::textMessage:
         [[fallthrough]];
       case messaging::HistoryEntryKind::systemMessage: {
@@ -1263,7 +1301,7 @@ inline void Client::SendQueuedMessages(const std::string& peer_id) const {
               }
               transport_->sendSignalingMessage(msg);
               sent = true;
-            } else if (action == "profile_update" || action == "contact_signature") {
+            } else if (action == "profile_update" || action == "contact_signature" || action == "call_accept" || action == "call_request" || action == "call_ringing") {
               if (peer->data_channel_is_open_ && peer->session_cipher_->IsReady()) {
                 auto encrypted_payload = peer->session_cipher_->Encrypt(content_to_send);
                 if (encrypted_payload.empty()) {

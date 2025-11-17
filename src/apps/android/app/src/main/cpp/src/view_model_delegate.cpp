@@ -147,7 +147,7 @@ auto AndroidViewModelDelegate::GetCallState(JNIEnv* env) const -> jobject {
   auto& call_state_holder = class_refs.Class("hela/eillance/ndkio/CallState");
 
   jstring peer_id = env->NewStringUTF(call_state.peer_id.c_str());
-  jobject call_state_java = call_state_holder.NewObject(env, call_state.is_in_call, call_state.is_ringing,
+  jobject call_state_java = call_state_holder.NewObject(env, call_state.is_connecting, call_state.is_in_call, call_state.is_ringing,
                                                         (jint)call_state.call_direction, peer_id,
                                                         (jint)call_state.call_type);
   env->DeleteLocalRef(peer_id);

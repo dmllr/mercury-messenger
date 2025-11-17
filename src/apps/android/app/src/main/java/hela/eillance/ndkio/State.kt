@@ -83,6 +83,7 @@ data class Contact(
 }
 
 data class CallState(
+  val isConnecting: Boolean = false,
   val isInCall: Boolean = false,
   val isRinging: Boolean = false,
   private val callDirectionValue: Int = CallDirection.Outgoing.value,

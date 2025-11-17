@@ -24,6 +24,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import hela.eillance.navigation.Route
+import hela.eillance.ndkio.CallDirection
 import hela.eillance.navigation.Screen
 import hela.eillance.ndkio.Contact
 import hela.eillance.screens.BackupAndRestoreScreen
@@ -98,7 +99,7 @@ fun MainAppContent(viewModel: MainViewModel) {
 
   LaunchedEffect(navigateToPeerId) {
     navigateToPeerId?.let { peerId ->
-      if (!callState.isInCall && !callState.isRinging) {
+      if (!callState.isConnecting && !callState.isInCall && !callState.isRinging) {
         navController.navigate(Route.Interaction.createRoute(peerId)) {
           launchSingleTop = true
         }
@@ -189,7 +190,7 @@ fun MainAppContent(viewModel: MainViewModel) {
     }
   }
 
-  if (callState.isRinging) {
+  if (callState.isRinging && callState.callDirection == CallDirection.Incoming) {
     IncomingCallScreen(
       callerId = callState.peerId,
       onAccept = {

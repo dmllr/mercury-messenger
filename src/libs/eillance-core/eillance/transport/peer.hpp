@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "eillance/crypto/crypto.hpp"
+#include "eillance/messaging/history.hpp"
 #include "eillance/transport/candidate.hpp"
 #include "eillance/transport/track.hpp"
 #include "eillance/utils/memory.h"
@@ -35,6 +36,7 @@ struct Peer {
   std::atomic<bool> incoming_call_notified_{false};
   std::optional<std::string> pending_offer_sdp;
   std::vector<Candidate> pending_candidates;
+  std::optional<messaging::HistoryEntryKind> pending_call_kind;
 
   void SetState(State state) {
     const auto lock = std::unique_lock(mutex_);
