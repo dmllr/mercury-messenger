@@ -608,9 +608,13 @@ inline void Client::OnDataChannelOpen(const std::string& peer_id) {
   peer->data_channel_is_open_ = true;
 
   // Initiate key exchange
-  auto my_pub_key = peer->session_cipher_->GetPublicKey();
-  const Json key_exchange_message = {{"type", "key_exchange"}, {"key", std::vector<std::byte>(my_pub_key.begin(), my_pub_key.end())}, {"is_reply", false}};
-  transport_->sendPeerDataChannelMessage(peer_id, key_exchange_message);
+  // To break symmetry and avoid a race condition in the handshake,
+  // only the peer with the lexicographically greater ID will initiate.
+  if (GetId() > peer_id) {
+    auto my_pub_key = peer->session_cipher_->GetPublicKey();
+    const Json key_exchange_message = {{"type", "key_exchange"}, {"key", std::vector<std::byte>(my_pub_key.begin(), my_pub_key.end())}, {"is_reply", false}};
+    transport_->sendPeerDataChannelMessage(peer_id, key_exchange_message);
+  }
 }
 
 inline void Client::ProcessPeerMessage(Json message) {
@@ -993,12 +997,18 @@ inline void Client::ProcessDataChannelMessage(const std::string& peer_id, const 
     auto pub_key_bytes = message.at("key").get<std::vector<std::byte>>();
     if (peer->session_cipher_->ComputeSharedSecret({pub_key_bytes.begin(), pub_key_bytes.end()})) {
       LOGI << "Successfully computed shared secret with peer " << peer_id;
-      if (!message.value("is_reply", false)) {
+      const bool is_reply = message.value("is_reply", false);
+      if (!is_reply) {
+        // This is an initial key exchange request from the peer with the greater ID.
+        // We compute the secret and send back a reply. We DO NOT send queued messages yet.
         auto my_pub_key = peer->session_cipher_->GetPublicKey();
         const Json reply = {{"type", "key_exchange"}, {"key", std::vector<std::byte>(my_pub_key.begin(), my_pub_key.end())}, {"is_reply", true}};
         transport_->sendPeerDataChannelMessage(peer_id, reply);
+      } else {
+        // This is a reply to our key exchange request. We are the initiator.
+        // The handshake is complete, and we can now send our queued messages.
+        SendQueuedMessages(peer_id);
       }
-      SendQueuedMessages(peer_id);
     } else {
       LOGE << "Failed to compute shared secret with peer " << peer_id;
     }
@@ -1131,6 +1141,10 @@ inline void Client::ProcessDataChannelMessage(const std::string& peer_id, const 
     // ALWAYS send receipt after processing
     const Json receipt = {{"type", "message_receipt"}, {"status", "delivered"}, {"message_id", message_id}};
     transport_->sendPeerDataChannelMessage(peer_id, receipt);
+
+    // After successfully processing the first encrypted message, we know the other side is ready.
+    // We can now send our own queued messages. This is safe to call multiple times as it's idempotent.
+    SendQueuedMessages(peer_id);
 
   } else if (type == "message_receipt") {
     auto message_id = message.at("message_id").get<std::uint64_t>();
