@@ -5,6 +5,7 @@
 #include <mutex>
 #include <string>
 #include <unordered_set>
+#include <unordered_map>
 
 #include "eillance/identity/contact_manager.hpp"
 #include "eillance/logging/logging.h"
@@ -25,6 +26,7 @@ class MessageDeliveryService {
 
   // Track peers for which we are actively trying to connect to avoid duplicate requests.
   std::unordered_set<std::string> pending_connections_;
+  std::unordered_map<std::string, int> retry_delays_s_;
   std::recursive_mutex mutex_;
 
   static constexpr int initial_retry_delay_s = 5;
@@ -34,40 +36,52 @@ public:
   MessageDeliveryService(std::shared_ptr<storage::PersistentStorage> storage, std::shared_ptr<identity::ContactManager> contacts, ConnectionRequestHandler handler) : storage_(std::move(storage)), contact_manager_(std::move(contacts)), connection_handler_(std::move(handler)) {}
 
   void Start() {
-    // Set to true and check if it was already true.
     if (is_running_.exchange(true)) {
-      // It was already running. This call is likely from a reconnect.
-      // Just trigger an immediate check. The existing loop will continue.
-      dispatch_queue_.Dispatch([this] { CheckForQueuedMessages(); });
-      return;
+      return;  // Already running.
     }
-
-    // It was not running. We have now started it.
-    // Perform an immediate check, then start the recurring schedule.
-    dispatch_queue_.Dispatch([this] {
-      CheckForQueuedMessages();
-      scheduleCheck(initial_retry_delay_s);
-    });
+    // On start, check for any messages that were queued while offline.
+    dispatch_queue_.Dispatch([this] { CheckForAllQueuedMessages(); });
   }
 
   void stop() {
-    // Atomically set to false and check if it was already false.
     if (!is_running_.exchange(false)) {
       return;  // Already stopped.
     }
     dispatch_queue_.RemovePending();
   }
 
-  // Called by Client when a connection attempt is finished (succeeded or failed)
+  // Called by Client when a connection attempt is finished (succeeded and messages sent, or failed)
   void connectionAttemptFinished(const std::string& peer_id) {
     const std::lock_guard<std::recursive_mutex> lock(mutex_);
     pending_connections_.erase(peer_id);
+
+    if (!is_running_) { return; }
+
+    // Check if there are more messages to send. If so, it means the connection
+    // likely failed, and we should schedule a retry.
+    if (!storage_->GetMessagesWithStatus(peer_id, MessageStatus::sending).empty()) {
+      int& delay = retry_delays_s_[peer_id];
+      if (delay == 0) { delay = initial_retry_delay_s; }
+
+      LOGI << "Connection to " << peer_id << " failed or did not clear queue. Retrying in " << delay << "s.";
+
+      dispatch_queue_.DispatchAfter(std::chrono::seconds(delay), [this, peer_id]() { attemptDelivery(peer_id); });
+
+      // Increase delay for next time (exponential backoff).
+      delay = std::min(delay * 2, max_retry_delay_s);
+    } else {
+      // All messages for this peer were sent successfully. Reset backoff timer.
+      retry_delays_s_.erase(peer_id);
+    }
   }
 
-  // Called by Client when queuing a new message or action
+  // Called by Client when queuing a new message or action that requires a connection.
   void attemptDelivery(const std::string& peer_id) {
     const std::lock_guard<std::recursive_mutex> lock(mutex_);
-    if (pending_connections_.contains(peer_id)) { return; }  // Already trying to connect
+    if (pending_connections_.contains(peer_id)) { return; }  // Already trying to connect.
+
+    // This check is important to prevent connection attempts when there's nothing to do.
+    if (storage_->GetMessagesWithStatus(peer_id, MessageStatus::sending).empty()) { return; }
 
     LOGI << "Delivery requested for " << peer_id << ". Requesting connection.";
     pending_connections_.insert(peer_id);
@@ -75,17 +89,7 @@ public:
   }
 
 private:
-  void scheduleCheck(int delay_s) {
-    if (!is_running_) { return; }
-    dispatch_queue_.DispatchAfter(std::chrono::seconds(delay_s), [this, delay_s]() {
-      CheckForQueuedMessages();
-      // Exponential backoff
-      const auto next_delay = std::min(delay_s * 2, max_retry_delay_s);
-      scheduleCheck(next_delay);
-    });
-  }
-
-  void CheckForQueuedMessages() {
+  void CheckForAllQueuedMessages() {
     if (!contact_manager_) { return; }
     const auto all_contacts = contact_manager_->GetContacts();
     for (const auto& contact: all_contacts) {
