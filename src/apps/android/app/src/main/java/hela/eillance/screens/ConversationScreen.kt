@@ -238,7 +238,7 @@ fun ConversationScreen(
           contact = contact,
           onApprove = { viewModel.acceptContact(peerId) },
           onReject = {
-            viewModel.removeContact(peerId)
+            viewModel.blockContact(peerId)
             onBack()
           }
         )
@@ -246,7 +246,7 @@ fun ConversationScreen(
         PendingApprovalBar(
           contact = contact,
           onCancel = {
-            viewModel.removeContact(peerId)
+            viewModel.blockContact(peerId)
             onBack()
           },
           onResend = { viewModel.addContact(peerId) }

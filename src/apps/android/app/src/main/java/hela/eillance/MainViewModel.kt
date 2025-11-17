@@ -188,11 +188,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     return callService?.generateContactToken()
   }
 
-  fun removeContact(peerId: String) {
-    callService?.removeContact(peerId)
+  fun blockContact(peerId: String) {
+    callService?.blockContact(peerId)
     if (_showContactProfileDialog.value == peerId) {
       _showContactProfileDialog.value = null
     }
+  }
+
+  fun deleteContact(peerId: String) {
+    callService?.deleteContact(peerId)
+  }
+
+  fun unblockContact(peerId: String) {
+    callService?.unblockContact(peerId)
   }
 
   fun acceptContact(peerId: String) {

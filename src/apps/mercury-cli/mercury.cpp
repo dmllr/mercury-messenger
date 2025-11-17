@@ -35,6 +35,10 @@ namespace {
 std::vector<std::string> GetContactMenuEntries(const std::vector<eillance::view_model::UIState::ViewContact>& contacts) {
   std::vector<std::string> entries;
   for (const auto& contact: contacts) {
+    if (contact.status == eillance::identity::ContactStatus::rejected) {
+      continue;
+    }
+
     std::string status_str;
     switch (contact.status) {
       case eillance::identity::ContactStatus::pendingApproval:
@@ -45,6 +49,10 @@ std::vector<std::string> GetContactMenuEntries(const std::vector<eillance::view_
         break;
       case eillance::identity::ContactStatus::confirmed:
         status_str = "";
+        break;
+      case eillance::identity::ContactStatus::rejected:
+        // This case is filtered out, but included for completeness.
+        status_str = " [blocked]";
         break;
     }
 
@@ -356,44 +364,58 @@ int main(int argc, char** argv) {
           ss >> command;
           std::getline(ss >> std::ws, arg);
 
+          auto find_contact_id = [&](const std::string& partial_id) -> std::optional<std::string> {
+            if (partial_id.empty()) {
+              return std::nullopt;
+            }
+            std::vector<std::string> matches;
+            const auto state = view_model->GetState();
+            for (const auto& contact: state.contacts) {
+              if (contact.peer_id.starts_with(partial_id)) {
+                matches.push_back(contact.peer_id);
+              }
+            }
+            if (matches.empty()) {
+              view_model->AddSystemMessageToChat("--> Contact not found for ID starting with: " + partial_id);
+              return std::nullopt;
+            }
+            if (matches.size() > 1) {
+              view_model->AddSystemMessageToChat("--> Ambiguous ID. Multiple contacts start with: " + partial_id);
+              return std::nullopt;
+            }
+            return matches[0];
+          };
+
           if (command == "/add") {
             view_model->AddSystemMessageToChat("--> Adding contact: " + arg);
             view_model->AddContact(arg);
           } else if (command == "/accept") {
-            if (arg.empty()) {
+            if (auto peer_id = find_contact_id(arg)) {
+              view_model->AddSystemMessageToChat("--> Accepting contact: " + *peer_id);
+              view_model->AcceptContact(*peer_id);
+            } else if (arg.empty()) {
               view_model->AddSystemMessageToChat("--> Usage: /accept <contact_id>");
-            } else {
-              std::vector<std::string> matches;
-              const auto state = view_model->GetState();
-              for (const auto& contact: state.contacts) {
-                if (contact.peer_id.starts_with(arg)) { matches.push_back(contact.peer_id); }
-              }
-              if (matches.empty()) {
-                view_model->AddSystemMessageToChat("--> Contact not found for ID starting with: " + arg);
-              } else if (matches.size() > 1) {
-                view_model->AddSystemMessageToChat("--> Ambiguous ID. Multiple contacts start with: " + arg);
-              } else {
-                view_model->AddSystemMessageToChat("--> Accepting contact: " + matches[0]);
-                view_model->AcceptContact(matches[0]);
-              }
             }
-          } else if (command == "/remove") {
-            if (arg.empty()) {
-              view_model->AddSystemMessageToChat("--> Usage: /remove <contact_id>");
-            } else {
-              std::vector<std::string> matches;
-              const auto state = view_model->GetState();
-              for (const auto& contact : state.contacts) {
-                if (contact.peer_id.starts_with(arg)) { matches.push_back(contact.peer_id); }
-              }
-              if (matches.empty()) {
-                view_model->AddSystemMessageToChat("--> Contact not found for ID starting with: " + arg);
-              } else if (matches.size() > 1) {
-                view_model->AddSystemMessageToChat("--> Ambiguous ID. Multiple contacts start with: " + arg);
-              } else {
-                view_model->AddSystemMessageToChat("--> Removing contact: " + matches[0]);
-                view_model->RemoveContact(matches[0]);
-              }
+          } else if (command == "/block") {
+            if (auto peer_id = find_contact_id(arg)) {
+              view_model->AddSystemMessageToChat("--> Blocking contact: " + *peer_id);
+              view_model->BlockContact(*peer_id);
+            } else if (arg.empty()) {
+              view_model->AddSystemMessageToChat("--> Usage: /block <contact_id>");
+            }
+          } else if (command == "/delete") {
+            if (auto peer_id = find_contact_id(arg)) {
+              view_model->AddSystemMessageToChat("--> DELETING contact and all history (irreversible): " + *peer_id);
+              view_model->DeleteContact(*peer_id);
+            } else if (arg.empty()) {
+              view_model->AddSystemMessageToChat("--> Usage: /delete <contact_id>");
+            }
+          } else if (command == "/unblock") {
+            if (auto peer_id = find_contact_id(arg)) {
+              view_model->AddSystemMessageToChat("--> Unblocking contact: " + *peer_id);
+              view_model->UnblockContact(*peer_id);
+            } else if (arg.empty()) {
+              view_model->AddSystemMessageToChat("--> Usage: /unblock <contact_id>");
             }
           } else if (command == "/set") {
             std::string key;

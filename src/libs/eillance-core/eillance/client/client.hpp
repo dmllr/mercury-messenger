@@ -118,7 +118,9 @@ public:
   void AddContact(const std::string& peer_id, const std::optional<std::string>& token = std::nullopt) const;
   auto GenerateContactToken() -> std::string;
   void ConfirmContact(const std::string& peer_id) const;
-  void RemoveContact(const std::string& peer_id, bool notify_peer = true) const;
+  void BlockContact(const std::string& peer_id, bool notify_peer = true) const;
+  void DeleteContact(const std::string& peer_id) const;
+  void UnblockContact(const std::string& peer_id);
   auto GetPeerConnectionState(const std::string& peer_id) const -> eillance::transport::PeerConnectionState;
   auto GetContacts() const -> std::vector<identity::Contact>;
   auto GetChatSummaries(const std::vector<std::string>& peer_ids) const -> std::vector<messaging::ChatSummary>;
@@ -449,7 +451,17 @@ inline auto Client::GenerateContactToken() -> std::string {
   return contact_manager_->GenerateContactToken();
 }
 
-inline void Client::RemoveContact(const std::string& peer_id, bool notify_peer) const {
+inline void Client::DeleteContact(const std::string& peer_id) const {
+  // Close any active connections and remove the peer object.
+  if (auto peer = transport_->getPeer(peer_id)) {
+    transport_->closePeerConnection(peer_id, "data");
+    transport_->closePeerConnection(peer_id, "media");
+    transport_->removePeer(peer_id);
+  }
+  contact_manager_->DeleteContact(peer_id);
+}
+
+inline void Client::BlockContact(const std::string& peer_id, bool notify_peer) const {
   if (notify_peer) {
     if (auto peer = transport_->getPeer(peer_id); peer && peer->data_channel_is_open_) {
       const Json msg = {{"type", "contact_removed"}};
@@ -465,7 +477,13 @@ inline void Client::RemoveContact(const std::string& peer_id, bool notify_peer) 
     transport_->closePeerConnection(peer_id, "media");
     transport_->removePeer(peer_id);
   }
-  contact_manager_->RemoveContact(peer_id);
+  contact_manager_->BlockContact(peer_id);
+}
+
+inline void Client::UnblockContact(const std::string& peer_id) {
+  if (contact_manager_->UnblockContact(peer_id)) {
+    if (on_contact_status_changed_) { (*on_contact_status_changed_)(peer_id, identity::ContactStatus::awaitingApproval); }
+  }
 }
 
 inline void Client::ConfirmContact(const std::string& peer_id) const {
@@ -677,42 +695,45 @@ inline void Client::ProcessPeerMessage(Json message) {
     const auto mid = message["sdpMid"].get<std::string>();
     transport_->addRemoteCandidate(peer_id, "data", candidate, mid);
   } else if (type == "contact_add_request") {
-    if (contact_manager_->IsConfirmedContact(peer_id)) {
-      LOGI << "Received contact request from already confirmed peer " << peer_id << ". Resending confirmation.";
-      const Json msg = {{"type", "contact_confirm"}, {"to", peer_id}};
-      transport_->sendSignalingMessage(msg);
-      return;  // Early exit
-    }
-
-    // Process the request for non-confirmed contacts.
     std::optional<std::string> token;
     if (message.contains("token") && message.at("token").is_string()) {
       token = message.at("token").get<std::string>();
     }
 
-    std::optional<std::string> name, bio, photo;
+    std::optional<std::string> name, bio, photo_base64;
     if (message.contains("profile")) {
       const auto& profile = message["profile"];
       if (profile.contains("display_name") && profile["display_name"].is_string()) { name = profile["display_name"].get<std::string>(); }
       if (profile.contains("bio") && profile["bio"].is_string()) { bio = profile["bio"].get<std::string>(); }
-      if (profile.contains("photo") && profile["photo"].is_string()) { photo = profile["photo"].get<std::string>(); }
+      if (profile.contains("photo") && profile["photo"].is_string()) { photo_base64 = profile["photo"].get<std::string>(); }
     }
 
-    // Create the contact in 'awaitingApproval' state. This is safe to do even if the contact already exists in a pending state.
-    if (contact_manager_->ReceiveContactRequest(peer_id, name, bio, photo)) {
-      // If the token is valid, immediately confirm the request.
+    auto result = contact_manager_->ReceiveContactRequest(peer_id, name, bio, photo_base64);
+
+    if (result == identity::RequestStatus::New || result == identity::RequestStatus::Duplicate) {
       if (token && contact_manager_->ValidateAndConsumeContactToken(*token)) {
-        LOGI << "Received contact request from " << peer_id << " with a valid one-time token. Auto-confirming.";
+        LOGI << "Received contact request from " << peer_id << " with a valid token. Auto-confirming.";
         ConfirmContact(peer_id);
-      } else {
-        // Otherwise, notify UI for manual approval.
-        const Json content = {{"action", "contact_request_received"}};
-        auto entry = message_history_->AddTextEntry(peer_id, content.dump(), messaging::MessageDirection::received, messaging::HistoryEntryKind::systemMessage);
-        message_history_->UpdateMessageStatus(peer_id, entry.id, messaging::MessageStatus::read);
-        if (on_contact_request_) { (*on_contact_request_)(peer_id); }
+        return;
       }
-    } else {
-      LOGW << "ReceiveContactRequest failed for peer " << peer_id << ", cannot proceed.";
+
+      const Json content = {{"action", "contact_request_received"}};
+      auto entry = message_history_->AddTextEntry(peer_id, content.dump(), messaging::MessageDirection::received, messaging::HistoryEntryKind::systemMessage);
+      message_history_->UpdateMessageStatus(peer_id, entry.id, messaging::MessageStatus::read);
+
+      if (result == identity::RequestStatus::New) {
+        if (on_contact_request_) { (*on_contact_request_)(peer_id); }
+      } else {  // Duplicate
+        LOGI << "Received duplicate contact request from " << peer_id << ".";
+        if (on_contact_profile_updated_) { (*on_contact_profile_updated_)(peer_id); }
+      }
+    } else {  // Ignored
+      LOGI << "Contact request from " << peer_id << " ignored (contact is confirmed or rejected).";
+      if (contact_manager_->IsConfirmedContact(peer_id)) {
+        LOGI << "Resending confirmation to already confirmed peer " << peer_id;
+        const Json msg = {{"type", "contact_confirm"}, {"to", peer_id}};
+        transport_->sendSignalingMessage(msg);
+      }
     }
   } else if (type == "contact_confirm") {
     if (contact_manager_->MarkAsConfirmed(peer_id)) {
@@ -1147,7 +1168,7 @@ inline void Client::ProcessDataChannelMessage(const std::string& peer_id, const 
     if (on_contact_removed_) {
       (*on_contact_removed_)(peer_id);
     }
-    RemoveContact(peer_id, false);
+    BlockContact(peer_id, false);
   } else {
     throw std::runtime_error("Unknown message type in ProcessDataChannelMessage");
   }

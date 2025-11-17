@@ -347,7 +347,9 @@ class CallService : Service(), IClientNativeBridge {
   private external fun nativeRefreshState()
   external fun addContact(peerId: String, token: String?)
   external fun acceptContact(peerId: String)
-  external fun removeContact(peerId: String)
+  external fun blockContact(peerId: String)
+  external fun deleteContact(peerId: String)
+  external fun unblockContact(peerId: String)
   external fun selectContact(peerId: String)
   private external fun nativeGenerateContactToken(): String?
   external fun sendMessage(message: String)

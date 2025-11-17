@@ -1,6 +1,7 @@
 package hela.eillance.screens
 
 import android.widget.Toast
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,10 +26,12 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import hela.eillance.MainViewModel
+import hela.eillance.navigation.Screen
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -79,6 +82,21 @@ fun SettingsScreen(viewModel: MainViewModel, onBack: () -> Unit, navController: 
       )
 
       HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
+      Text(
+        "Privacy",
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(bottom = 8.dp)
+      )
+
+      ListItem(
+        headlineContent = { Text("Blocked Contacts") },
+        supportingContent = { Text("View and manage contacts you have blocked") },
+        modifier = Modifier
+          .clip(MaterialTheme.shapes.medium)
+          .clickable { navController.navigate(Screen.RejectedContacts.route) }
+      )
 
       // This spacer pushes the save button to the bottom if the content is short.
       Spacer(modifier = Modifier.weight(1f))

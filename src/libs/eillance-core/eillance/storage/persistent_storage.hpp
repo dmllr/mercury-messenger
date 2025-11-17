@@ -16,6 +16,7 @@ enum class ContactStatus : std::uint8_t {
   pendingApproval,   // We sent a request, waiting for them to confirm.
   awaitingApproval,  // They sent a request, we need to confirm.
   confirmed,
+  rejected,
 };
 
 struct Contact {

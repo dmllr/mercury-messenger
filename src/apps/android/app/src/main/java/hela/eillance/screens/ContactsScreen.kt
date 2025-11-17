@@ -95,7 +95,9 @@ fun ContactsScreen(
       }
     }
   ) { padding ->
-    if (contacts.isEmpty()) {
+    val visibleContacts = contacts.filter { it.status != ContactStatus.rejected }
+
+    if (visibleContacts.isEmpty()) {
       Box(
         modifier = Modifier
           .fillMaxSize()
@@ -105,12 +107,16 @@ fun ContactsScreen(
         if (myProfile.myId.isEmpty()) {
           CircularProgressIndicator()
         } else {
-          Text("No contacts yet. Add one!", style = MaterialTheme.typography.bodyLarge)
+          Text(
+            "No contacts yet. Add one!",
+            style = MaterialTheme.typography.bodyLarge
+          )
         }
       }
-    } else {
+    }
+    else {
       LazyColumn(modifier = Modifier.padding(padding)) {
-        items(contacts, key = { it.peerId }) { contact ->
+        items(visibleContacts, key = { it.peerId }) { contact ->
           ContactListItem(
             contact = contact,
             onClick = { onContactClick(contact.peerId) },

@@ -74,10 +74,26 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_acceptContact(J
   }
 }
 
-extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_removeContact(JNIEnv* env, jobject /*instance*/, jstring peer_id) {
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_blockContact(JNIEnv* env, jobject /*instance*/, jstring peer_id) {
   if (auto* vm = GetViewModel()) {
     const char* chars = env->GetStringUTFChars(peer_id, nullptr);
-    vm->RemoveContact(chars);
+    vm->BlockContact(chars);
+    env->ReleaseStringUTFChars(peer_id, chars);
+  }
+}
+
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_deleteContact(JNIEnv* env, jobject /*instance*/, jstring peer_id) {
+  if (auto* vm = GetViewModel()) {
+    const char* chars = env->GetStringUTFChars(peer_id, nullptr);
+    vm->DeleteContact(chars);
+    env->ReleaseStringUTFChars(peer_id, chars);
+  }
+}
+
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_unblockContact(JNIEnv* env, jobject /*instance*/, jstring peer_id) {
+  if (auto* vm = GetViewModel()) {
+    const char* chars = env->GetStringUTFChars(peer_id, nullptr);
+    vm->UnblockContact(chars);
     env->ReleaseStringUTFChars(peer_id, chars);
   }
 }

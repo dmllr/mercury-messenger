@@ -23,6 +23,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -46,7 +47,8 @@ fun ContactProfileDialog(
   onDismissRequest: () -> Unit,
   onOverrideSave: (String) -> Unit,
   onOverrideReset: () -> Unit,
-  onRemoveRequest: () -> Unit
+  onRemoveRequest: () -> Unit,
+  onBlockRequest: () -> Unit
 ) {
   var overrideName by remember { mutableStateOf("") }
 
@@ -159,13 +161,22 @@ fun ContactProfileDialog(
 
           Button(
             onClick = {
-              onRemoveRequest()
+              onBlockRequest()
               onDismissRequest()
             },
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
             modifier = Modifier.fillMaxWidth()
           ) {
-            Text("Remove Contact")
+            Text("Block Contact")
+          }
+          OutlinedButton(
+            onClick = {
+              onRemoveRequest()
+              onDismissRequest()
+            },
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+          ) {
+            Text("Delete Contact")
           }
         }
       }

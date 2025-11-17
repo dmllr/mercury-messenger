@@ -42,7 +42,7 @@ enum class HistoryEntryKind(val value: Int) {
 }
 
 enum class ContactStatus(val value: Int) {
-  pendingApproval(0), awaitingApproval(1), confirmed(2);
+  pendingApproval(0), awaitingApproval(1), confirmed(2), rejected(3);
   companion object { fun fromInt(value: Int) = entries.firstOrNull { it.value == value } ?: pendingApproval }
 }
 

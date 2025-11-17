@@ -39,6 +39,7 @@ import hela.eillance.screens.ProfileScreen
 import hela.eillance.screens.QrScannerScreen
 import hela.eillance.screens.RecoverIdentityScreen
 import hela.eillance.screens.RecoveryPhraseScreen
+import hela.eillance.screens.RejectedContactsScreen
 import hela.eillance.screens.SettingsScreen
 import hela.eillance.screens.WebViewScreen
 
@@ -93,6 +94,7 @@ fun MainAppContent(viewModel: MainViewModel) {
   val navigateToScanner by viewModel.navigateToScanner.collectAsState()
 
   var contactToRemove by remember { mutableStateOf<Contact?>(null) }
+  var contactToBlock by remember { mutableStateOf<Contact?>(null) }
 
   LaunchedEffect(navigateToPeerId) {
     navigateToPeerId?.let { peerId ->
@@ -123,13 +125,13 @@ fun MainAppContent(viewModel: MainViewModel) {
   contactToRemove?.let { contact ->
     AlertDialog(
       onDismissRequest = { contactToRemove = null },
-      title = { Text("Remove Contact?") },
-      text = { Text("Are you sure you want to remove ${contact.name}? All conversation history will be permanently deleted.") },
+      title = { Text("Delete Contact?") },
+      text = { Text("Are you sure you want to permanently delete ${contact.name}? All conversation history will be lost. This cannot be undone.") },
       confirmButton = {
         TextButton(
           onClick = {
             val isOnConversationScreen = navController.currentBackStackEntry?.destination?.route == Route.Interaction.route
-            viewModel.removeContact(contact.peerId)
+            viewModel.deleteContact(contact.peerId)
             contactToRemove = null
             if (isOnConversationScreen) {
               navController.popBackStack()
@@ -137,11 +139,39 @@ fun MainAppContent(viewModel: MainViewModel) {
           },
           colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
         ) {
-          Text("Remove")
+          Text("Delete")
         }
       },
       dismissButton = {
         TextButton(onClick = { contactToRemove = null }) {
+          Text("Cancel")
+        }
+      }
+    )
+  }
+
+  contactToBlock?.let { contact ->
+    AlertDialog(
+      onDismissRequest = { contactToBlock = null },
+      title = { Text("Block Contact?") },
+      text = { Text("Are you sure you want to block ${contact.name}? You will no longer receive messages or calls from them.") },
+      confirmButton = {
+        TextButton(
+          onClick = {
+            val isOnConversationScreen = navController.currentBackStackEntry?.destination?.route == Route.Interaction.route
+            viewModel.blockContact(contact.peerId)
+            contactToBlock = null
+            if (isOnConversationScreen) {
+              navController.popBackStack()
+            }
+          },
+          colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+        ) {
+          Text("Block")
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = { contactToBlock = null }) {
           Text("Cancel")
         }
       }
@@ -154,7 +184,8 @@ fun MainAppContent(viewModel: MainViewModel) {
         onDismissRequest = { viewModel.onContactProfileDialogDismiss() },
         onOverrideSave = { newName -> viewModel.setContactDisplayNameOverride(peerId, newName) },
         onOverrideReset = { viewModel.resetContactDisplayNameOverride(peerId) },
-        onRemoveRequest = { contactToRemove = it })
+        onRemoveRequest = { contactToRemove = it },
+        onBlockRequest = { contactToBlock = it })
     }
   }
 
@@ -261,6 +292,12 @@ fun MainAppContent(viewModel: MainViewModel) {
             navController.popBackStack()
           },
           onClose = { navController.popBackStack() }
+        )
+      }
+      composable(Screen.RejectedContacts.route) {
+        RejectedContactsScreen(
+          viewModel = viewModel,
+          onBack = { navController.popBackStack() }
         )
       }
     }
