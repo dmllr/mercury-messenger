@@ -704,12 +704,20 @@ inline void Client::ProcessPeerMessage(Json message) {
       token = message.at("token").get<std::string>();
     }
 
-    std::optional<std::string> name, bio, photo_base64;
+    std::optional<std::string> name;
+    std::optional<std::string> bio;
+    std::optional<std::string> photo_base64;
     if (message.contains("profile")) {
       const auto& profile = message["profile"];
-      if (profile.contains("display_name") && profile["display_name"].is_string()) { name = profile["display_name"].get<std::string>(); }
-      if (profile.contains("bio") && profile["bio"].is_string()) { bio = profile["bio"].get<std::string>(); }
-      if (profile.contains("photo") && profile["photo"].is_string()) { photo_base64 = profile["photo"].get<std::string>(); }
+      if (profile.contains("display_name") && profile["display_name"].is_string()) {
+        name = profile["display_name"].get<std::string>();
+      }
+      if (profile.contains("bio") && profile["bio"].is_string()) {
+        bio = profile["bio"].get<std::string>();
+      }
+      if (profile.contains("photo") && profile["photo"].is_string()) {
+        photo_base64 = profile["photo"].get<std::string>();
+      }
     }
 
     auto result = contact_manager_->ReceiveContactRequest(peer_id, name, bio, photo_base64);
