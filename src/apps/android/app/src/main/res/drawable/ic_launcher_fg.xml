@@ -5,24 +5,25 @@
     android:viewportWidth="512"
     android:viewportHeight="512">
 
+    <path
+        android:pathData="M-90.37,256m-320,0a320,360 0,1 1,640 0a320,360 0,1 1,-640 0">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:centerX="-258.37"
+                android:centerY="256"
+                android:gradientRadius="320"
+                android:type="radial">
+                <item android:offset="0" android:color="#FFFFD04D"/>
+                <item android:offset="0.7" android:color="#FFFF9B1A"/>
+                <item android:offset="1" android:color="#FFFF6A00"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+
     <group
-        android:translateX="42"
+        android:translateX="-16"
         android:translateY="0">
 
-        <path
-            android:pathData="M-130.37,256m-320,0a320,320 0,1 1,640 0a320,320 0,1 1,-640 0">
-            <aapt:attr name="android:fillColor">
-                <gradient
-                    android:centerX="-258.37"
-                    android:centerY="256"
-                    android:gradientRadius="320"
-                    android:type="radial">
-                    <item android:offset="0" android:color="#FFFFD04D"/>
-                    <item android:offset="0.7" android:color="#FFFF9B1A"/>
-                    <item android:offset="1" android:color="#FFFF6A00"/>
-                </gradient>
-            </aapt:attr>
-        </path>
         <path
             android:pathData="M-130.37,256m-472.92,0a472.92,472.92 0,1 1,945.84 0a472.92,472.92 0,1 1,-945.84 0"
             android:strokeWidth="1.5646"
