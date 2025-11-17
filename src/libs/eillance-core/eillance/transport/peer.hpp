@@ -10,6 +10,7 @@
 #include "eillance/messaging/history.hpp"
 #include "eillance/transport/candidate.hpp"
 #include "eillance/transport/track.hpp"
+#include "eillance/utils/time.hpp"
 #include "eillance/utils/memory.h"
 
 namespace eillance::transport {
@@ -30,13 +31,13 @@ struct Peer {
   std::shared_ptr<void> media_peer_connection_;
   std::shared_ptr<void> data_channel_;
   std::atomic<bool> data_channel_is_open_{false};
+  std::atomic<Time::Unit> last_activity_time_{0};
   std::atomic<bool> has_media_peer_connection_{false};
   std::unique_ptr<crypto::SessionCipher> session_cipher_;
   std::function<void(const std::string&)> on_data_channel_message_;
   std::atomic<bool> incoming_call_notified_{false};
   std::optional<std::string> pending_offer_sdp;
   std::vector<Candidate> pending_candidates;
-  std::optional<messaging::HistoryEntryKind> pending_call_kind;
 
   void SetState(State state) {
     const auto lock = std::unique_lock(mutex_);
@@ -54,6 +55,9 @@ private:
   std::string id_;
 };
 
-inline Peer::Peer(const std::string& id) : id_(id) { session_cipher_ = std::make_unique<crypto::SessionCipher>(); }
+inline Peer::Peer(const std::string& id) : id_(id) {
+  session_cipher_ = std::make_unique<crypto::SessionCipher>();
+  last_activity_time_ = Time::Now();
+}
 
 }  // namespace eillance::transport
