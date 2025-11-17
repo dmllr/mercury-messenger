@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -69,6 +70,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -451,7 +453,8 @@ private fun ProfileEditDialog(
           onValueChange = { if (it.length <= 64) displayName = it },
           label = { Text("Display Name") },
           modifier = Modifier.fillMaxWidth(),
-          singleLine = true
+          singleLine = true,
+          keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words)
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -463,7 +466,8 @@ private fun ProfileEditDialog(
           modifier = Modifier
             .fillMaxWidth()
             .height(120.dp),
-          maxLines = 5
+          maxLines = 5,
+          keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences)
         )
 
         Spacer(modifier = Modifier.height(24.dp))
