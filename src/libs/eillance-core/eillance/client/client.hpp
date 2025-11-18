@@ -814,14 +814,14 @@ inline auto Client::SendChatMessage(const std::string& peer_id, const std::strin
 }
 
 inline void Client::UpdateSignalingUrl(const std::string& url) {
-    if (is_running_) {
-        settings_manager_->SetSignalingServerUrl(url);
-        transport_->setSignalingUrl(url);
-        transport_->reconnect();
-    } else {
-        LOGW << "UpdateSignalingUrl called while client is not running. URL will be applied on next start.";
-        settings_manager_->SetSignalingServerUrl(url);
-    }
+  if (is_running_) {
+    settings_manager_->SetSignalingServerUrl(url);
+    transport_->setSignalingUrl(url);
+    transport_->reconnect();
+  } else {
+    LOGW << "UpdateSignalingUrl called while client is not running. URL will be applied on next start.";
+    settings_manager_->SetSignalingServerUrl(url);
+  }
 }
 inline void Client::MarkMessagesAsRead(const std::string& peer_id, const std::vector<std::uint64_t>& message_ids) const {
   const auto peer = transport_->getPeer(peer_id);
@@ -953,7 +953,7 @@ inline void Client::CheckForInactivePeers() {
   auto now = Time::Now();
   const auto timeout_us = std::chrono::duration_cast<std::chrono::microseconds>(kPeerInactivityTimeout).count();
 
-  for (const auto& [peer_id, peer] : peers) {
+  for (const auto& [peer_id, peer]: peers) {
     if (!peer->has_media_peer_connection_ && GetPeerConnectionState(peer_id) == transport::PeerConnectionState::Connected) {
       if ((now - peer->last_activity_time_.load()) > timeout_us) {
         LOGI << "Peer " << peer_id << " inactive for too long. Closing data connection.";

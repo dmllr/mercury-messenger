@@ -26,7 +26,7 @@ struct Contact {
   std::optional<std::string> display_name_override;
   std::optional<std::string> bio;
   std::optional<std::string> photo_base64;
-  std::optional<std::string> signature_from_them;  // hex
+  std::optional<std::string> signature_from_them;    // hex
   std::optional<std::string> my_signature_for_them;  // hex
 };
 
@@ -73,32 +73,32 @@ enum class HistoryEntryKind : std::uint8_t {
 };
 
 NLOHMANN_JSON_SERIALIZE_ENUM(MessageDirection, {
-  {MessageDirection::sent, "sent"},
-  {MessageDirection::received, "received"},
-})
+                                                   {MessageDirection::sent, "sent"},
+                                                   {MessageDirection::received, "received"},
+                                               })
 NLOHMANN_JSON_SERIALIZE_ENUM(CallDirection, {
-  {CallDirection::outgoing, "outgoing"},
-  {CallDirection::incoming, "incoming"},
-})
+                                                {CallDirection::outgoing, "outgoing"},
+                                                {CallDirection::incoming, "incoming"},
+                                            })
 NLOHMANN_JSON_SERIALIZE_ENUM(CallStatus, {
-  {CallStatus::answered, "answered"},
-  {CallStatus::missed, "missed"},
-  {CallStatus::rejected, "rejected"},
-  {CallStatus::busy, "busy"},
-})
+                                             {CallStatus::answered, "answered"},
+                                             {CallStatus::missed, "missed"},
+                                             {CallStatus::rejected, "rejected"},
+                                             {CallStatus::busy, "busy"},
+                                         })
 NLOHMANN_JSON_SERIALIZE_ENUM(MessageStatus, {
-  {MessageStatus::none, "none"},
-  {MessageStatus::sending, "sending"},
-  {MessageStatus::sent, "sent"},
-  {MessageStatus::delivered, "delivered"},
-  {MessageStatus::read, "read"},
-})
+                                                {MessageStatus::none, "none"},
+                                                {MessageStatus::sending, "sending"},
+                                                {MessageStatus::sent, "sent"},
+                                                {MessageStatus::delivered, "delivered"},
+                                                {MessageStatus::read, "read"},
+                                            })
 NLOHMANN_JSON_SERIALIZE_ENUM(HistoryEntryKind, {
-  {HistoryEntryKind::textMessage, "text_message"},
-  {HistoryEntryKind::voiceCall, "voice_call"},
-  {HistoryEntryKind::videoCall, "video_call"},
-  {HistoryEntryKind::systemMessage, "system_message"},
-})
+                                                   {HistoryEntryKind::textMessage, "text_message"},
+                                                   {HistoryEntryKind::voiceCall, "voice_call"},
+                                                   {HistoryEntryKind::videoCall, "video_call"},
+                                                   {HistoryEntryKind::systemMessage, "system_message"},
+                                               })
 
 // Data specific to a text or system message.
 struct MessageEntry {

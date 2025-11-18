@@ -4,8 +4,8 @@
 #include <memory>
 #include <mutex>
 #include <string>
-#include <unordered_set>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "eillance/identity/contact_manager.hpp"
 #include "eillance/logging/logging.h"

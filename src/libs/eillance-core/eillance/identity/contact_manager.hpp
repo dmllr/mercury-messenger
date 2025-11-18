@@ -1,7 +1,7 @@
 #pragma once
 
-#include <memory>
 #include <chrono>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -15,9 +15,9 @@
 namespace eillance::identity {
 
 enum class RequestStatus {
-  New,       // A new, valid request that should be processed.
-  Duplicate, // A resent request for one already awaiting approval.
-  Ignored    // The request was ignored (contact is already confirmed or was rejected).
+  New,        // A new, valid request that should be processed.
+  Duplicate,  // A resent request for one already awaiting approval.
+  Ignored     // The request was ignored (contact is already confirmed or was rejected).
 };
 
 class ContactManager {
@@ -64,8 +64,8 @@ public:
 
   // Marks that we have received a request from a peer.
   auto ReceiveContactRequest(const std::string& peer_id, const std::optional<std::string>& name,
-                           const std::optional<std::string>& bio,
-                           const std::optional<std::string>& photo) -> RequestStatus {
+                             const std::optional<std::string>& bio,
+                             const std::optional<std::string>& photo) -> RequestStatus {
     const std::lock_guard<std::mutex> lock(mutex_);
     auto it = contacts_.find(peer_id);
     if (it != contacts_.end()) {
@@ -137,15 +137,15 @@ public:
     const std::lock_guard<std::mutex> lock(mutex_);
     auto it = contacts_.find(peer_id);
     if (it != contacts_.end()) {
-        if (it->second.status != ContactStatus::rejected) {
-            it->second.status = ContactStatus::rejected;
-            storage_->UpdateContact(it->second);
-        }
+      if (it->second.status != ContactStatus::rejected) {
+        it->second.status = ContactStatus::rejected;
+        storage_->UpdateContact(it->second);
+      }
     } else {
-        // If we are rejecting a peer that we have no record of, create one
-        // to enforce the blacklist.
-        contacts_[peer_id] = {.peer_id = peer_id, .status = ContactStatus::rejected};
-        storage_->UpdateContact(contacts_[peer_id]);
+      // If we are rejecting a peer that we have no record of, create one
+      // to enforce the blacklist.
+      contacts_[peer_id] = {.peer_id = peer_id, .status = ContactStatus::rejected};
+      storage_->UpdateContact(contacts_[peer_id]);
     }
   }
 
@@ -279,6 +279,7 @@ public:
     }
     return false;
   }
+
 private:
   void LoadContacts() {
     const auto contacts_from_db = storage_->GetContacts();

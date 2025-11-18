@@ -195,7 +195,7 @@ inline auto MercuryViewModel::GenerateNewIdentity() -> std::string {
 inline auto MercuryViewModel::RestoreIdentity(const std::string& mnemonic) -> bool {
   if (client_->RestoreIdentity(mnemonic)) {
     dispatch_queue_.Dispatch([this] {
-    RefreshState();
+      RefreshState();
     });
     return true;
   }
@@ -568,15 +568,14 @@ inline void MercuryViewModel::DebugRevokeAllApprovals() {
 inline auto MercuryViewModel::GetState() const -> UIState {
   const std::lock_guard<std::mutex> lock(state_mutex_);
   return {
-    .my_profile = my_profile_,
-    .connection_state = connection_state_,
-    .contacts = contacts_,
-    .selected_contact_id = selected_contact_id_,
-    .interaction_history = interaction_history_,
-    .has_older_messages = has_older_messages_,
-    .call_state = call_state_,
-    .signaling_server_url = signaling_server_url_
-  };
+      .my_profile = my_profile_,
+      .connection_state = connection_state_,
+      .contacts = contacts_,
+      .selected_contact_id = selected_contact_id_,
+      .interaction_history = interaction_history_,
+      .has_older_messages = has_older_messages_,
+      .call_state = call_state_,
+      .signaling_server_url = signaling_server_url_};
 }
 
 inline auto MercuryViewModel::GetMyProfile() const -> UIState::MyProfile {
@@ -645,7 +644,7 @@ inline void MercuryViewModel::SetupClientCallbacks() {
 
   client_->SetOnContactProfileUpdatedCallback([this](const std::string& /*peer_id*/) {
     dispatch_queue_.Dispatch([this] {
-        UpdateContacts(true);
+      UpdateContacts(true);
     });
   });
 
@@ -693,8 +692,7 @@ inline void MercuryViewModel::SetupClientCallbacks() {
           }
           if (state == transport::PeerConnectionState::Closed ||
               state == transport::PeerConnectionState::Disconnected ||
-              state == transport::PeerConnectionState::Failed)
-          {
+              state == transport::PeerConnectionState::Failed) {
             if ((call_state_.is_connecting || call_state_.is_in_call || call_state_.is_ringing) && call_state_.peer_id == peer_id) {
               call_state_ = {};
               NotifyStateChanged({StateChange::CallState});
@@ -740,18 +738,18 @@ inline void MercuryViewModel::SetupClientCallbacks() {
 
   client_->SetOnCallRingingCallback([this](const std::string& peer_id) {
     dispatch_queue_.Dispatch([this, peer_id] {
-        bool state_changed = false;
-        {
-            const std::lock_guard<std::mutex> lock(state_mutex_);
-            if (call_state_.is_connecting && call_state_.peer_id == peer_id) {
-                call_state_.is_connecting = false;
-                call_state_.is_ringing = true;
-                state_changed = true;
-            }
+      bool state_changed = false;
+      {
+        const std::lock_guard<std::mutex> lock(state_mutex_);
+        if (call_state_.is_connecting && call_state_.peer_id == peer_id) {
+          call_state_.is_connecting = false;
+          call_state_.is_ringing = true;
+          state_changed = true;
         }
-        if (state_changed) {
-            NotifyStateChanged({StateChange::CallState});
-        }
+      }
+      if (state_changed) {
+        NotifyStateChanged({StateChange::CallState});
+      }
     });
   });
 
@@ -777,15 +775,15 @@ inline void MercuryViewModel::SetupClientCallbacks() {
   });
   client_->SetOnContactRemovedCallback([this](const std::string& peer_id) {
     dispatch_queue_.Dispatch([this, peer_id] {
-        {
-            const std::lock_guard<std::mutex> lock(state_mutex_);
-            if (selected_contact_id_ && *selected_contact_id_ == peer_id) {
-                selected_contact_id_.reset();
-                interaction_history_.clear();
-                has_older_messages_ = false;
-            }
+      {
+        const std::lock_guard<std::mutex> lock(state_mutex_);
+        if (selected_contact_id_ && *selected_contact_id_ == peer_id) {
+          selected_contact_id_.reset();
+          interaction_history_.clear();
+          has_older_messages_ = false;
         }
-        RefreshState();
+      }
+      RefreshState();
     });
   });
 

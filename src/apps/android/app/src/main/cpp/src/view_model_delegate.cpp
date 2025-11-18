@@ -39,7 +39,7 @@ void AndroidViewModelDelegate::NotifyStateChanged(const std::vector<view_model::
 
     std::vector<jint> int_changes;
     int_changes.reserve(changes.size());
-    for (const auto& change : changes) {
+    for (const auto& change: changes) {
       int_changes.push_back(static_cast<jint>(change));
     }
 
@@ -79,7 +79,7 @@ auto AndroidViewModelDelegate::GetContacts(JNIEnv* env) const -> jobject {
   jmethodID list_add_method = list_holder.GetMethod("add");
   auto& contact_holder = class_refs.Class("hela/eillance/ndkio/Contact");
 
-  for (const auto& contact_cpp : contacts) {
+  for (const auto& contact_cpp: contacts) {
     jstring peer_id = env->NewStringUTF(contact_cpp.peer_id.c_str());
     jstring name = env->NewStringUTF(contact_cpp.display_name.c_str());
     jstring bio = contact_cpp.bio ? env->NewStringUTF(contact_cpp.bio->c_str()) : nullptr;
@@ -110,7 +110,7 @@ auto AndroidViewModelDelegate::GetInteractionHistoryPage(JNIEnv* env) const -> j
   jmethodID list_add_method = list_holder.GetMethod("add");
   auto& entry_holder = class_refs.Class("hela/eillance/ndkio/HistoryEntry");
 
-  for (const auto& entry_cpp : history) {
+  for (const auto& entry_cpp: history) {
     const std::string* content_str = std::visit(
         [](auto&& arg) -> const std::string* {
           using T = std::decay_t<decltype(arg)>;
