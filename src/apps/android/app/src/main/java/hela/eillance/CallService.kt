@@ -286,12 +286,39 @@ class CallService : Service(), IClientNativeBridge {
   fun debugEraseAllContacts() = nativeDebugEraseAllContacts()
   fun debugRevokeAllApprovals() = nativeDebugRevokeAllApprovals()
 
-  fun createBackup(path: String, password: String): Boolean = nativeCreateBackup(path, password)
+  fun createBackupToTemp(password: String): String? {
+    return try {
+        val tempFile = File.createTempFile("mercury-backup-", ".mcr", cacheDir)
+        val success = nativeCreateBackup(tempFile.absolutePath, password)
+        if (success) {
+            tempFile.absolutePath
+        } else {
+            tempFile.delete() // clean up if backup failed
+            null
+        }
+    } catch (e: Exception) {
+        Log.e("CallService", "Error creating temporary backup file", e)
+        null
+    }
+  }
+
+  fun deleteTempBackup(path: String) {
+    try {
+        val file = File(path)
+        if (file.exists()) {
+            if (!file.delete()) {
+                Log.w("CallService", "Failed to delete temporary backup file: $path")
+            }
+        }
+    } catch (e: Exception) {
+        Log.e("CallService", "Error deleting temporary backup file", e)
+    }
+  }
 
   fun restoreBackup(uri: Uri, password: String): Boolean {
     return try {
       val inputStream = contentResolver.openInputStream(uri) ?: return false
-      val tempFile = File(cacheDir, "restore_temp.mcr")
+      val tempFile = File.createTempFile("restore_temp", ".mcr", cacheDir)
       FileOutputStream(tempFile).use { outputStream ->
         inputStream.use { it.copyTo(outputStream) }
       }
