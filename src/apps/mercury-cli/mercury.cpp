@@ -57,29 +57,29 @@ std::vector<std::string> GetContactMenuEntries(const std::vector<eillance::view_
     }
 
     std::string conn_status_str;
-    const auto& call_state = eillance::view_model::MercuryViewModel(nullptr).GetState().call_state; // Hack to get access to view_model
+    const auto& call_state = eillance::view_model::MercuryViewModel(nullptr).GetState().call_state;  // Hack to get access to view_model
     if (call_state.peer_id == contact.peer_id && (call_state.is_connecting || call_state.is_ringing || call_state.is_in_call)) {
-        if (call_state.is_connecting) {
-            conn_status_str = " (Calling)";
-        } else if (call_state.is_ringing) {
-            conn_status_str = " (Ringing)";
-        } else if (call_state.is_in_call) {
-            conn_status_str = " (In Call)";
-        }
+      if (call_state.is_connecting) {
+        conn_status_str = " (Calling)";
+      } else if (call_state.is_ringing) {
+        conn_status_str = " (Ringing)";
+      } else if (call_state.is_in_call) {
+        conn_status_str = " (In Call)";
+      }
     } else {
-        switch (contact.connection_state) {
-            case eillance::transport::PeerConnectionState::Connecting:
-                conn_status_str = " (Connecting)";
-                break;
-            case eillance::transport::PeerConnectionState::Connected:
-                conn_status_str = " (Connected)";
-                break;
-            case eillance::transport::PeerConnectionState::Failed:
-                conn_status_str = " (Failed)";
-                break;
-            default:
-                break;
-        }
+      switch (contact.connection_state) {
+        case eillance::transport::PeerConnectionState::Connecting:
+          conn_status_str = " (Connecting)";
+          break;
+        case eillance::transport::PeerConnectionState::Connected:
+          conn_status_str = " (Connected)";
+          break;
+        case eillance::transport::PeerConnectionState::Failed:
+          conn_status_str = " (Failed)";
+          break;
+        default:
+          break;
+      }
     }
 
     std::string unread_count_str;

@@ -7,12 +7,12 @@
 #else
 #include <plog/Appenders/ColorConsoleAppender.h>
 #endif
+#include "eillance/utils/likely.h"
 #include <plog/Appenders/IAppender.h>
 #include <plog/Formatters/FuncMessageFormatter.h>
 #include <plog/Formatters/TxtFormatter.h>
 #include <plog/Init.h>
 #include <plog/Log.h>
-#include "eillance/utils/likely.h"
 
 
 struct Log {
@@ -57,32 +57,32 @@ struct Log {
     va_end(ap);
   }
 
-  template <typename... T>
+  template<typename... T>
   static void i(std::string_view fmt, T... p) {
     log_print(ANDROID_LOG_INFO, fmt.data(), p...);
   }
 
-  template <typename... T>
+  template<typename... T>
   static void d(std::string_view fmt, T... p) {
     log_print(ANDROID_LOG_DEBUG, fmt.data(), p...);
   }
 
-  template <typename... T>
+  template<typename... T>
   static void w(std::string_view fmt, T... p) {
     log_print(ANDROID_LOG_WARN, fmt.data(), p...);
   }
 
-  template <typename... T>
+  template<typename... T>
   static void e(std::string_view fmt, T... p) {
     log_print(ANDROID_LOG_ERROR, fmt.data(), p...);
   }
 
-  template <typename... T>
+  template<typename... T>
   static void v(std::string_view fmt, T... p) {
     log_print(ANDROID_LOG_VERBOSE, fmt.data(), p...);
   }
 
-  template <typename... T>
+  template<typename... T>
   static void assert_or_die(bool cond, std::string_view fmt, T... p) {
     if (unlikely(!cond)) {
       log_print(ANDROID_LOG_FATAL, fmt.data(), p...);
@@ -90,7 +90,7 @@ struct Log {
     }
   }
 
-  template <typename... T>
+  template<typename... T>
   static void assert_soft(bool cond, std::string_view fmt, T... p) {
     if (unlikely(!cond)) { log_print(ANDROID_LOG_ERROR, fmt.data(), p...); }
   }

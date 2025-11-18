@@ -134,13 +134,13 @@ public:
     )SQL");
     while (sqlite3_step(stmt.Get()) == SQLITE_ROW) {
       contacts.push_back({.peer_id = ColumnString(stmt.Get(), 0),
-                           .status = static_cast<identity::ContactStatus>(sqlite3_column_int(stmt.Get(), 1)),
-                           .display_name = ColumnOptionalString(stmt.Get(), 2),
-                           .display_name_override = ColumnOptionalString(stmt.Get(), 3),
-                           .bio = ColumnOptionalString(stmt.Get(), 4),
-                           .photo_base64 = ColumnOptionalString(stmt.Get(), 5),
-                           .signature_from_them = ColumnOptionalString(stmt.Get(), 6),
-                           .my_signature_for_them = ColumnOptionalString(stmt.Get(), 7)});
+                          .status = static_cast<identity::ContactStatus>(sqlite3_column_int(stmt.Get(), 1)),
+                          .display_name = ColumnOptionalString(stmt.Get(), 2),
+                          .display_name_override = ColumnOptionalString(stmt.Get(), 3),
+                          .bio = ColumnOptionalString(stmt.Get(), 4),
+                          .photo_base64 = ColumnOptionalString(stmt.Get(), 5),
+                          .signature_from_them = ColumnOptionalString(stmt.Get(), 6),
+                          .my_signature_for_them = ColumnOptionalString(stmt.Get(), 7)});
     }
     return contacts;
   }
