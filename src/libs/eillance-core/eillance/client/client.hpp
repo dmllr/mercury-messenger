@@ -288,12 +288,16 @@ inline auto Client::RestoreIdentity(const std::string& mnemonic) -> bool {
 }
 
 inline auto Client::CreateBackup(const std::string& output_path, const std::string& password) -> bool {
-  if (!backup_manager_) return false;
+  if (!backup_manager_) {
+    return false;
+  }
   return backup_manager_->CreateBackup(output_path, password);
 }
 
 inline auto Client::RestoreBackup(const std::string& input_path, const std::string& password) -> bool {
-  if (!backup_manager_) return false;
+  if (!backup_manager_) {
+    return false;
+  }
   return backup_manager_->RestoreFromBackup(input_path, password);
 }
 
@@ -1310,7 +1314,7 @@ inline void Client::SendQueuedMessages(const std::string& peer_id) {
         } else {  // systemMessage
           try {
             Json content_json = Json::parse(content_to_send);
-            std::string action = content_json.value("action", "");
+            const std::string action = content_json.value("action", "");
             if (action == "contact_request" || action == "contact_confirm") {
               Json msg = {{"type", action == "contact_request" ? "contact_add_request" : "contact_confirm"}, {"to", peer_id}};
               if (action == "contact_request") {
@@ -1371,12 +1375,16 @@ inline void Client::SendQueuedMessages(const std::string& peer_id) {
         LOGW << "Don't know how to deliver queued message of kind: " << static_cast<int>(entry.kind);
         break;
     }
-    if (sent) { message_history_->UpdateMessageStatus(peer_id, entry.id, messaging::MessageStatus::sent); }
+    if (sent) {
+      message_history_->UpdateMessageStatus(peer_id, entry.id, messaging::MessageStatus::sent);
+    }
   }
 }
 
 inline void Client::SetupDataChannel(const std::shared_ptr<Peer>& peer, const std::string& peer_id) {
-  peer->on_data_channel_message_ = [this, peer_id](const std::string& msg) { ProcessDataChannelMessage(peer_id, nlohmann::json::parse(msg)); };
+  peer->on_data_channel_message_ = [this, peer_id](const std::string& msg) {
+    ProcessDataChannelMessage(peer_id, nlohmann::json::parse(msg));
+  };
 }
 
 inline auto Client::ParseDeviceProfile(const Json& jprofile) -> Device::Profile {
