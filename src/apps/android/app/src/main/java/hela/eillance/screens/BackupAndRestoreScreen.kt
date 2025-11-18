@@ -68,6 +68,7 @@ fun BackupAndRestoreScreen(
   val scope = rememberCoroutineScope()
   val context = LocalContext.current
   var showViewPhraseDialog by remember { mutableStateOf(false) }
+  var passwordForBackup by remember { mutableStateOf<String?>(null) }
 
   val restoreLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.GetContent()
@@ -77,23 +78,43 @@ fun BackupAndRestoreScreen(
     }
   }
 
+  val createBackupLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.CreateDocument("application/octet-stream")
+  ) { uri: Uri? ->
+    uri?.let { destinationUri ->
+      passwordForBackup?.let { password ->
+        scope.launch {
+          val tempBackupPath = viewModel.createBackupToTemp(password)
+          if (tempBackupPath != null) {
+            try {
+              context.contentResolver.openOutputStream(destinationUri)?.use { outputStream ->
+                File(tempBackupPath).inputStream().use { inputStream ->
+                  inputStream.copyTo(outputStream)
+                }
+              }
+              snackbarHostState.showSnackbar("Backup saved successfully.")
+            } catch (e: Exception) {
+              snackbarHostState.showSnackbar("Failed to save backup file.")
+            } finally {
+              viewModel.deleteTempBackup(tempBackupPath)
+            }
+          } else {
+            snackbarHostState.showSnackbar("Backup creation failed.")
+          }
+        }
+      }
+    }
+    passwordForBackup = null
+  }
+
   if (showBackupDialog) {
     BackupPasswordDialog(
       onDismiss = { showBackupDialog = false },
       onConfirm = { password ->
-        scope.launch {
-          val backupsDir = context.getExternalFilesDir("backups")
-          if (backupsDir != null && (backupsDir.exists() || backupsDir.mkdirs())) {
-            val timestamp = SimpleDateFormat("yyyy-MM-dd-HHmmss", Locale.US).format(Date())
-            val backupFile = File(backupsDir, "mercury-backup-$timestamp.mcr")
-            val success = viewModel.createBackup(backupFile.absolutePath, password)
-            snackbarHostState.showSnackbar(
-              if (success) "Backup created successfully." else "Backup failed."
-            )
-          } else {
-            snackbarHostState.showSnackbar("Could not access backup directory.")
-          }
-        }
+        showBackupDialog = false
+        passwordForBackup = password
+        val timestamp = SimpleDateFormat("yyyy-MM-dd-HHmmss", Locale.US).format(Date())
+        createBackupLauncher.launch("mercury-backup-$timestamp.mcr")
       }
     )
   }

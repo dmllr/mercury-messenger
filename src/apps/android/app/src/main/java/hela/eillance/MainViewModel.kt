@@ -133,12 +133,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     return callService?.getMnemonic()
   }
 
-  fun createBackup(path: String, password: String): Boolean {
-    return callService?.createBackup(path, password) ?: false
-  }
-
   fun restoreBackup(uri: Uri, password: String): Boolean {
     return callService?.restoreBackup(uri, password) ?: false
+  }
+
+  fun createBackupToTemp(password: String): String? {
+    return callService?.createBackupToTemp(password)
+  }
+
+  fun deleteTempBackup(path: String) {
+    callService?.deleteTempBackup(path)
   }
 
   fun finishIdentitySetup() {
