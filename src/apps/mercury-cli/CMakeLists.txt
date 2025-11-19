@@ -24,6 +24,7 @@ target_compile_features(mercury-cli PRIVATE cxx_std_20)
 
 target_link_libraries(mercury-cli PRIVATE
   eillance-core
+  eillance-capture
   eillance-rtc
   libftxui
   libopencv
