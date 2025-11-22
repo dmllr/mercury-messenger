@@ -20,6 +20,7 @@ import hela.eillance.ndkio.Contact
 import hela.eillance.ndkio.HistoryPage
 import hela.eillance.ndkio.MyProfileInfo
 import hela.eillance.ndkio.ServiceConnectionState
+import hela.eillance.ndkio.StateChange
 import hela.eillance.ndkio.VideoConfig
 import hela.eillance.ndkio.interfaces.IClientNativeBridge
 import hela.eillance.webrtc.WebRtcTransport
@@ -50,6 +51,9 @@ class CallService : Service(), IClientNativeBridge {
 
   private var lastKnownCallState: CallState? = null
   private var lastKnownContacts: List<Contact>? = null
+
+  // Explicitly typed to assist type inference
+  private val soundPlayer: CallSoundPlayer by lazy { CallSoundPlayer(this) }
 
   // --- Public API for ViewModel ---
   fun startLocalMedia() = webRtcTransport?.startLocalMedia()
@@ -83,6 +87,7 @@ class CallService : Service(), IClientNativeBridge {
   }
 
   override fun onDestroy() {
+    soundPlayer.stop()
     serviceScope.cancel()
     terminate()
     releaseWakeLock()
@@ -99,6 +104,13 @@ class CallService : Service(), IClientNativeBridge {
   }
 
   override fun onStateChanged(changeSet: IntArray) {
+    // Update in-call sounds if call state has changed
+    if (changeSet.contains(StateChange.CallState.ordinal)) {
+      val callState = nativeGetCallState()
+      serviceScope.launch(Dispatchers.Main) {
+        soundPlayer.updateCallState(callState)
+      }
+    }
     onStateChanged?.invoke(changeSet)
   }
 
@@ -288,30 +300,30 @@ class CallService : Service(), IClientNativeBridge {
 
   fun createBackupToTemp(password: String): String? {
     return try {
-        val tempFile = File.createTempFile("mercury-backup-", ".mcr", cacheDir)
-        val success = nativeCreateBackup(tempFile.absolutePath, password)
-        if (success) {
-            tempFile.absolutePath
-        } else {
-            tempFile.delete() // clean up if backup failed
-            null
-        }
-    } catch (e: Exception) {
-        Log.e("CallService", "Error creating temporary backup file", e)
+      val tempFile = File.createTempFile("mercury-backup-", ".mcr", cacheDir)
+      val success = nativeCreateBackup(tempFile.absolutePath, password)
+      if (success) {
+        tempFile.absolutePath
+      } else {
+        tempFile.delete() // clean up if backup failed
         null
+      }
+    } catch (e: Exception) {
+      Log.e("CallService", "Error creating temporary backup file", e)
+      null
     }
   }
 
   fun deleteTempBackup(path: String) {
     try {
-        val file = File(path)
-        if (file.exists()) {
-            if (!file.delete()) {
-                Log.w("CallService", "Failed to delete temporary backup file: $path")
-            }
+      val file = File(path)
+      if (file.exists()) {
+        if (!file.delete()) {
+          Log.w("CallService", "Failed to delete temporary backup file: $path")
         }
+      }
     } catch (e: Exception) {
-        Log.e("CallService", "Error deleting temporary backup file", e)
+      Log.e("CallService", "Error deleting temporary backup file", e)
     }
   }
 
