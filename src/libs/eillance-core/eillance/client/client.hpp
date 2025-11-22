@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <memory>
 #include <optional>
@@ -129,7 +130,7 @@ public:
   auto GetPeerConnectionState(const std::string& peer_id) const -> eillance::transport::PeerConnectionState;
   auto GetContacts() const -> std::vector<identity::Contact>;
   auto GetChatSummaries(const std::vector<std::string>& peer_ids) const -> std::vector<messaging::ChatSummary>;
-  void Hangup(const std::string& peer_id) const;
+  void Hangup(const std::string& peer_id, bool notify_peer = true) const;
   void Configure(const Config& config) const;
   auto SendChatMessage(const std::string& peer_id, const std::string& message) -> messaging::HistoryEntryRecord;
   void UpdateSignalingUrl(const std::string& url);
@@ -528,9 +529,8 @@ inline auto Client::GetChatSummaries(const std::vector<std::string>& peer_ids) c
   return message_history_->GetChatSummaries(peer_ids);
 }
 
-inline void Client::Hangup(const std::string& peer_id) const {
+inline void Client::Hangup(const std::string& peer_id, bool notify_peer) const {
   if (const auto peer = transport_->getPeer(peer_id); peer != nullptr) {
-    const bool call_was_active = peer->pending_offer_sdp.has_value() || peer->has_media_peer_connection_;
     peer->pending_offer_sdp.reset();
     if (!peer->pending_candidates.empty()) { peer->pending_candidates.clear(); }
 
@@ -546,17 +546,12 @@ inline void Client::Hangup(const std::string& peer_id) const {
       if (av_stream_) { av_stream_->Stop(); }
     }
 
-    // If the call was active in any state, notify the other peer.
-    if (call_was_active) {
+    // Send hangup notification if the data channel is open, regardless of media state.
+    // This ensures that "ringing" calls (which haven't established media yet) can be rejected/cancelled.
+    if (notify_peer && peer->data_channel_is_open_) {
       LOGI << "Sending hangup signal to " << peer_id << " via data channel.";
-      if (peer && peer->data_channel_is_open_) {
-        const Json msg = {{"type", "hangup"}};
-        transport_->sendPeerDataChannelMessage(peer_id, msg);
-      } else {
-        LOGW << "Cannot send hangup message to " << peer_id << "; data channel is not open.";
-      }
-    } else {
-      LOGW << "Hangup called for " << peer_id << ", but no active call state (ringing or connected) was found.";
+      const Json msg = {{"type", "hangup"}};
+      transport_->sendPeerDataChannelMessage(peer_id, msg);
     }
   }
 }
@@ -1047,7 +1042,7 @@ inline void Client::ProcessDataChannelMessage(const std::string& peer_id, const 
 
   if (type == "hangup") {
     LOGI << "Received hangup signal from " << peer_id << " via data channel.";
-    Hangup(peer_id);
+    Hangup(peer_id, false);
     if (on_call_terminated_) { (*on_call_terminated_)(peer_id); }
     return;
   }
