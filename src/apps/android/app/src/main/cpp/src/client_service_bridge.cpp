@@ -257,17 +257,18 @@ extern "C" JNIEXPORT jstring JNICALL Java_hela_eillance_CallService_nativeGetMne
 
 extern "C" JNIEXPORT jstring JNICALL Java_hela_eillance_CallService_nativeGenerateNewIdentity(JNIEnv* env, jobject /*instance*/) {
   if (auto* vm = GetViewModel()) {
-    std::string mnemonic = vm->GenerateNewIdentity();
+    const std::string mnemonic = vm->GenerateNewIdentity();
     return env->NewStringUTF(mnemonic.c_str());
   }
-  return env->NewStringUTF("");
+  return nullptr;
 }
 
 extern "C" JNIEXPORT jstring JNICALL Java_hela_eillance_CallService_nativeGenerateContactToken(JNIEnv* env, jobject /*instance*/) {
   if (auto* vm = GetViewModel()) {
-    std::string token = vm->GenerateContactToken();
+    const std::string token = vm->GenerateContactToken();
     return env->NewStringUTF(token.c_str());
   }
+  return nullptr;
 }
 
 extern "C" JNIEXPORT jboolean JNICALL Java_hela_eillance_CallService_nativeRestoreIdentity(JNIEnv* env, jobject /*instance*/, jstring mnemonic) {
@@ -277,31 +278,31 @@ extern "C" JNIEXPORT jboolean JNICALL Java_hela_eillance_CallService_nativeResto
     env->ReleaseStringUTFChars(mnemonic, chars);
     return result;
   }
-  return false;
+  return 0u;
 }
 
 extern "C" JNIEXPORT jboolean JNICALL Java_hela_eillance_CallService_nativeCreateBackup(JNIEnv* env, jobject /*instance*/, jstring path, jstring password) {
   if (auto* vm = GetViewModel()) {
     const char* path_chars = env->GetStringUTFChars(path, nullptr);
     const char* pw_chars = env->GetStringUTFChars(password, nullptr);
-    bool result = vm->CreateBackup(path_chars, pw_chars);
+    const bool result = vm->CreateBackup(path_chars, pw_chars);
     env->ReleaseStringUTFChars(path, path_chars);
     env->ReleaseStringUTFChars(password, pw_chars);
-    return result;
+    return static_cast<jboolean>(result);
   }
-  return false;
+  return 0U;
 }
 
 extern "C" JNIEXPORT jboolean JNICALL Java_hela_eillance_CallService_nativeRestoreBackup(JNIEnv* env, jobject /*instance*/, jstring path, jstring password) {
   if (auto* vm = GetViewModel()) {
     const char* path_chars = env->GetStringUTFChars(path, nullptr);
     const char* pw_chars = env->GetStringUTFChars(password, nullptr);
-    bool result = vm->RestoreBackup(path_chars, pw_chars);
+    const bool result = vm->RestoreBackup(path_chars, pw_chars);
     env->ReleaseStringUTFChars(path, path_chars);
     env->ReleaseStringUTFChars(password, pw_chars);
-    return result;
+    return static_cast<jboolean>(result);
   }
-  return false;
+  return 0U;
 }
 
 // --- New State Query JNI Functions ---

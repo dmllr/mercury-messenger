@@ -89,9 +89,16 @@ class MainActivity : ComponentActivity() {
   private fun handleIntent(intent: Intent?) {
     val peerId = intent?.getStringExtra(CallService.EXTRA_PEER_ID)
     val isAcceptAction = intent?.action == CallService.ACTION_ACCEPT_CALL
+    val isShowIncomingCall = intent?.action == CallService.ACTION_SHOW_INCOMING_CALL
 
     if (isAcceptAction && peerId != null) {
       viewModel.onCallAcceptedFromNotification(peerId)
+    } else if (isShowIncomingCall && peerId != null) {
+      // Just navigate to the peer, the IncomingCallScreen composable will show up
+      // based on the call state (Ringing)
+      // We also need to ensure we don't automatically navigate away if the call state changes?
+      // The ViewModel observes call state. If call state is Ringing, UI shows IncomingCallScreen.
+      // We don't strictly need to navigate, but setting the peer might help context.
     } else if (peerId != null) {
       // This handles "new message" notifications.
       viewModel.navigateToPeer(peerId)
@@ -101,10 +108,14 @@ class MainActivity : ComponentActivity() {
   private fun checkPermissionsAndStart() {
     val requiredPermissions = mutableListOf(
       Manifest.permission.CAMERA,
-      Manifest.permission.RECORD_AUDIO
+      Manifest.permission.RECORD_AUDIO,
+      Manifest.permission.MANAGE_OWN_CALLS
     )
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
       requiredPermissions.add(Manifest.permission.POST_NOTIFICATIONS)
+    }
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+      requiredPermissions.add(Manifest.permission.READ_PHONE_STATE)
     }
 
     val allGranted = requiredPermissions.all {
