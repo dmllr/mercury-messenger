@@ -21,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import hela.eillance.theme.extendedColors
 
 @Composable
 fun IncomingCallScreen(
@@ -54,7 +55,7 @@ fun IncomingCallScreen(
         }
         FloatingActionButton(
           onClick = onAccept,
-          containerColor = Color(0xFF4CAF50) // A standard green color for accept
+          containerColor = MaterialTheme.extendedColors.success
         ) {
           Icon(Icons.Default.Call, contentDescription = "Accept", tint = Color.White)
         }
