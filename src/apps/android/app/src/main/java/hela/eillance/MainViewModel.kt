@@ -1,7 +1,13 @@
 package hela.eillance
 
+import android.Manifest
 import android.app.Application
+import android.content.Context
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
+import android.widget.Toast
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import hela.eillance.ndkio.CallState
@@ -55,8 +61,65 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
   private val _isIdentityReady = MutableStateFlow(false)
   val isIdentityReady = _isIdentityReady.asStateFlow()
 
+  // New States
+  private val _showBetaNotice = MutableStateFlow(false)
+  val showBetaNotice = _showBetaNotice.asStateFlow()
+
+  private val _hasCallPermissions = MutableStateFlow(false)
+  val hasCallPermissions = _hasCallPermissions.asStateFlow()
+
+  private val _hasNotificationPermission = MutableStateFlow(true)
+  val hasNotificationPermission = _hasNotificationPermission.asStateFlow()
+
   private var pendingNavigationPeerId: String? = null
   private var pendingAcceptPeerId: String? = null
+
+  init {
+    checkBetaNotice()
+    checkAllPermissions()
+  }
+
+  private fun checkBetaNotice() {
+    val prefs = getApplication<Application>().getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+    val hasSeenNotice = prefs.getBoolean("has_seen_beta_notice_v1", false)
+    _showBetaNotice.value = !hasSeenNotice
+  }
+
+  fun dismissBetaNotice() {
+    val prefs = getApplication<Application>().getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+    prefs.edit().putBoolean("has_seen_beta_notice_v1", true).apply()
+    _showBetaNotice.value = false
+  }
+
+  fun checkAllPermissions() {
+    checkCallPermissions()
+    checkNotificationPermission()
+  }
+
+  fun checkCallPermissions() {
+    val context = getApplication<Application>()
+    val camera = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+    val audio = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+    val phone = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED
+
+    val manageCalls = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      ContextCompat.checkSelfPermission(context, Manifest.permission.MANAGE_OWN_CALLS) == PackageManager.PERMISSION_GRANTED
+    } else {
+      true
+    }
+
+    _hasCallPermissions.value = camera && audio && phone && manageCalls
+  }
+
+  fun checkNotificationPermission() {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+      val context = getApplication<Application>()
+      val notif = ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+      _hasNotificationPermission.value = notif
+    } else {
+      _hasNotificationPermission.value = true
+    }
+  }
 
   fun setService(service: CallService?) {
     callService = service
@@ -222,11 +285,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
   }
 
   fun startVoiceCall() {
-    callService?.startVoiceCall()
+    if (_hasCallPermissions.value) {
+      callService?.startVoiceCall()
+    } else {
+      Toast.makeText(getApplication(), "Tap the permission banner to enable calls", Toast.LENGTH_SHORT).show()
+    }
   }
 
   fun startVideoCall() {
-    callService?.startVideoCall()
+    if (_hasCallPermissions.value) {
+      callService?.startVideoCall()
+    } else {
+      Toast.makeText(getApplication(), "Tap the permission banner to enable calls", Toast.LENGTH_SHORT).show()
+    }
   }
 
   fun hangup() {
@@ -251,7 +322,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
   }
 
   fun startCallMedia() {
-    callService?.startLocalMedia()
+    if (_hasCallPermissions.value) {
+      callService?.startLocalMedia()
+    }
   }
 
   fun stopCallMedia() {

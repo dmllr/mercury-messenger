@@ -20,9 +20,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.CallMade
@@ -61,8 +61,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -100,6 +100,9 @@ fun ConversationScreen(
   contact: Contact?,
   historyPage: HistoryPage,
   callState: CallState,
+  hasCallPermissions: Boolean,
+  hasNotificationPermission: Boolean,
+  onCheckPermissions: () -> Unit,
   onBack: () -> Unit,
   onNavigateToCall: (String) -> Unit,
   onShowContactProfile: (String) -> Unit
@@ -111,7 +114,7 @@ fun ConversationScreen(
   val listState = rememberLazyListState()
   val coroutineScope = rememberCoroutineScope()
   var previousHistory by remember(peerId) { mutableStateOf(historyPage.messages) }
-  
+
   var systemMessageToShowDetails by remember { mutableStateOf<HistoryEntry?>(null) }
   var tappedTruncatedMessageId by remember { mutableStateOf<Long?>(null) }
 
@@ -215,6 +218,13 @@ fun ConversationScreen(
         .navigationBarsPadding()
         .imePadding()
     ) {
+      if (!hasNotificationPermission) {
+        NotificationPermissionBanner(onCheckPermissions)
+      }
+      if (!hasCallPermissions) {
+        CallPermissionBanner(onCheckPermissions)
+      }
+
       contact?.let {
         ConnectionStatusBar(contact = it)
       }

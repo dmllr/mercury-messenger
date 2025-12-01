@@ -10,6 +10,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -18,16 +19,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import hela.eillance.navigation.Route
-import hela.eillance.ndkio.CallDirection
 import hela.eillance.navigation.Screen
+import hela.eillance.ndkio.CallDirection
 import hela.eillance.ndkio.Contact
 import hela.eillance.screens.BackupAndRestoreScreen
+import hela.eillance.screens.BetaNoticeDialog
 import hela.eillance.screens.CallScreen
 import hela.eillance.screens.ContactProfileDialog
 import hela.eillance.screens.ContactsScreen
@@ -48,6 +53,25 @@ import hela.eillance.screens.WebViewScreen
 fun MercuryApp(viewModel: MainViewModel) {
   val myProfile by viewModel.myProfile.collectAsState()
   val isIdentityReady by viewModel.isIdentityReady.collectAsState()
+  val showBetaNotice by viewModel.showBetaNotice.collectAsState()
+  val lifecycleOwner = LocalLifecycleOwner.current
+
+  // Check permissions on Resume to handle restart/settings changes
+  DisposableEffect(lifecycleOwner) {
+    val observer = LifecycleEventObserver { _, event ->
+      if (event == Lifecycle.Event.ON_RESUME) {
+        viewModel.checkAllPermissions()
+      }
+    }
+    lifecycleOwner.lifecycle.addObserver(observer)
+    onDispose {
+      lifecycleOwner.lifecycle.removeObserver(observer)
+    }
+  }
+
+  if (showBetaNotice) {
+    BetaNoticeDialog(onDismiss = viewModel::dismissBetaNotice)
+  }
 
   if (!isIdentityReady) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -93,6 +117,8 @@ fun MainAppContent(viewModel: MainViewModel) {
   val navigateToPeerId by viewModel.navigateToPeerId.collectAsState()
   val peerIdForProfileDialog by viewModel.showContactProfileDialog.collectAsState()
   val navigateToScanner by viewModel.navigateToScanner.collectAsState()
+  val hasCallPermissions by viewModel.hasCallPermissions.collectAsState()
+  val hasNotificationPermission by viewModel.hasNotificationPermission.collectAsState()
 
   var contactToRemove by remember { mutableStateOf<Contact?>(null) }
   var contactToBlock by remember { mutableStateOf<Contact?>(null) }
@@ -205,6 +231,7 @@ fun MainAppContent(viewModel: MainViewModel) {
     NavHost(
       navController = navController,
       startDestination = Screen.Contacts.route,
+      modifier = Modifier.fillMaxSize()
     ) {
       composable(Screen.Contacts.route) {
         ContactsScreen(
@@ -212,6 +239,9 @@ fun MainAppContent(viewModel: MainViewModel) {
           myProfile = myProfile,
           contacts = contacts,
           connectionState = connectionState,
+          hasCallPermissions = hasCallPermissions,
+          hasNotificationPermission = hasNotificationPermission,
+          onCheckPermissions = viewModel::checkAllPermissions,
           onContactClick = { peerId ->
             viewModel.navigateToPeer(peerId)
           },
@@ -242,6 +272,9 @@ fun MainAppContent(viewModel: MainViewModel) {
           historyPage = historyPage,
           callState = callState,
           peerId = peerId,
+          hasCallPermissions = hasCallPermissions,
+          hasNotificationPermission = hasNotificationPermission,
+          onCheckPermissions = viewModel::checkAllPermissions,
           onBack = { navController.popBackStack() },
           onNavigateToCall = { navController.navigate(Route.Call.createRoute(it)) },
           onShowContactProfile = viewModel::onShowContactProfile
