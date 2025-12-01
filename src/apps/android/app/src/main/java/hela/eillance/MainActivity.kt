@@ -1,25 +1,19 @@
 package hela.eillance
 
-import android.Manifest
 import android.app.NotificationManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
-import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
-import androidx.core.content.ContextCompat
 import hela.eillance.theme.EillanceTheme
 
 class MainActivity : ComponentActivity() {
@@ -40,20 +34,14 @@ class MainActivity : ComponentActivity() {
     }
   }
 
-  private val requestPermissionLauncher =
-    registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
-      if (permissions.values.all { it }) {
-        startAndBindService()
-      } else {
-        Toast.makeText(this, "Permissions are required for this app to function.", Toast.LENGTH_LONG).show()
-      }
-    }
-
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
 
     handleIntent(intent)
-    checkPermissionsAndStart()
+
+    // Start service immediately without requesting permissions.
+    // Permissions are now handled entirely by on-demand banners in the UI.
+    startAndBindService()
 
     setContent {
       EillanceTheme {
@@ -75,6 +63,12 @@ class MainActivity : ComponentActivity() {
     notificationManager.cancelAll()
   }
 
+  override fun onResume() {
+    super.onResume()
+    // Re-check permissions whenever the activity resumes.
+    viewModel.checkAllPermissions()
+  }
+
   override fun onStop() {
     super.onStop()
     MercuryApplication.isAppInForeground = false
@@ -94,38 +88,9 @@ class MainActivity : ComponentActivity() {
     if (isAcceptAction && peerId != null) {
       viewModel.onCallAcceptedFromNotification(peerId)
     } else if (isShowIncomingCall && peerId != null) {
-      // Just navigate to the peer, the IncomingCallScreen composable will show up
-      // based on the call state (Ringing)
-      // We also need to ensure we don't automatically navigate away if the call state changes?
-      // The ViewModel observes call state. If call state is Ringing, UI shows IncomingCallScreen.
-      // We don't strictly need to navigate, but setting the peer might help context.
+      // Logic handled by UI state
     } else if (peerId != null) {
-      // This handles "new message" notifications.
       viewModel.navigateToPeer(peerId)
-    }
-  }
-
-  private fun checkPermissionsAndStart() {
-    val requiredPermissions = mutableListOf(
-      Manifest.permission.CAMERA,
-      Manifest.permission.RECORD_AUDIO,
-      Manifest.permission.MANAGE_OWN_CALLS
-    )
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-      requiredPermissions.add(Manifest.permission.POST_NOTIFICATIONS)
-    }
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-      requiredPermissions.add(Manifest.permission.READ_PHONE_STATE)
-    }
-
-    val allGranted = requiredPermissions.all {
-      ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
-    }
-
-    if (allGranted) {
-      startAndBindService()
-    } else {
-      requestPermissionLauncher.launch(requiredPermissions.toTypedArray())
     }
   }
 

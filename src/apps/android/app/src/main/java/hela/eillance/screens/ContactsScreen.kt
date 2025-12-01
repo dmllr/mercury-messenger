@@ -5,7 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -55,6 +55,9 @@ fun ContactsScreen(
   myProfile: MyProfileInfo,
   contacts: List<Contact>,
   connectionState: ServiceConnectionState,
+  hasCallPermissions: Boolean,
+  hasNotificationPermission: Boolean,
+  onCheckPermissions: () -> Unit,
   onContactClick: (String) -> Unit,
   onNavigateToProfile: () -> Unit,
   onShowContactProfile: (String) -> Unit
@@ -95,34 +98,43 @@ fun ContactsScreen(
       }
     }
   ) { padding ->
-    val visibleContacts = contacts.filter { it.status != ContactStatus.rejected }
-
-    if (visibleContacts.isEmpty()) {
-      Box(
-        modifier = Modifier
-          .fillMaxSize()
-          .padding(padding),
-        contentAlignment = Alignment.Center
-      ) {
-        if (myProfile.myId.isEmpty()) {
-          CircularProgressIndicator()
-        } else {
-          Text(
-            "No contacts yet. Add one!",
-            style = MaterialTheme.typography.bodyLarge
-          )
-        }
+    Column(modifier = Modifier.padding(padding)) {
+      if (!hasNotificationPermission) {
+        NotificationPermissionBanner(onCheckPermissions)
       }
-    }
-    else {
-      LazyColumn(modifier = Modifier.padding(padding)) {
-        items(visibleContacts, key = { it.peerId }) { contact ->
-          ContactListItem(
-            contact = contact,
-            onClick = { onContactClick(contact.peerId) },
-            onShowProfile = { onShowContactProfile(contact.peerId) }
-          )
-          HorizontalDivider(color = DividerDefaults.color.copy(alpha = 0.5f))
+
+      if (!hasCallPermissions) {
+        CallPermissionBanner(onCheckPermissions)
+      }
+
+      val visibleContacts = contacts.filter { it.status != ContactStatus.rejected }
+
+      if (visibleContacts.isEmpty()) {
+        Box(
+          modifier = Modifier
+            .weight(1f)
+            .fillMaxWidth(),
+          contentAlignment = Alignment.Center
+        ) {
+          if (myProfile.myId.isEmpty()) {
+            CircularProgressIndicator()
+          } else {
+            Text(
+              "No contacts yet. Add one!",
+              style = MaterialTheme.typography.bodyLarge
+            )
+          }
+        }
+      } else {
+        LazyColumn(modifier = Modifier.weight(1f)) {
+          items(visibleContacts, key = { it.peerId }) { contact ->
+            ContactListItem(
+              contact = contact,
+              onClick = { onContactClick(contact.peerId) },
+              onShowProfile = { onShowContactProfile(contact.peerId) }
+            )
+            HorizontalDivider(color = DividerDefaults.color.copy(alpha = 0.5f))
+          }
         }
       }
     }
