@@ -38,7 +38,8 @@ std::string FormatFilenameTimestamp(Time::Unit ts_microseconds) {
   localtime_r(&seconds_since_epoch, &tm_struct);
 #endif
   std::stringstream ss;
-  ss << std::put_time(&tm_struct, "%Y%m%d,%H%M%S");
+  const auto micros = ts_microseconds % 1000000;
+  ss << std::put_time(&tm_struct, "%Y%m%d,%H%M%S") << "." << std::setfill('0') << std::setw(6) << micros;
   return ss.str();
 }
 
