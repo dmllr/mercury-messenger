@@ -1,31 +1,22 @@
 project(eillance-capture CXX) 
 
-if(ANDROID)
-    add_library(eillance-capture INTERFACE)
-    target_compile_features(eillance-capture INTERFACE cxx_std_20)
-    target_include_directories(eillance-capture INTERFACE
-        "${CMAKE_CURRENT_SOURCE_DIR}"
-    )
-    target_link_libraries(eillance-capture INTERFACE eillance-core log)
-else()
-    set(CMAKE_CXX_STANDARD 20)
-    set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-    set(root "../../..")
-    set(shared_src_path "${root}/src")
-    set(shared_cmake_libs_path "${shared_src_path}/cmake")
+set(root "../../..")
+set(shared_src_path "${root}/src")
+set(shared_cmake_libs_path "${shared_src_path}/cmake")
 
-    include("${shared_cmake_libs_path}/libopus.cmake")
-    include("${shared_cmake_libs_path}/libminiaudio.cmake")
+include("${shared_cmake_libs_path}/libopus.cmake")
+include("${shared_cmake_libs_path}/libminiaudio.cmake")
 
-    add_library(eillance-capture INTERFACE)
-    target_compile_features(eillance-capture INTERFACE cxx_std_20)
-    target_include_directories(eillance-capture INTERFACE
-      "${CMAKE_CURRENT_SOURCE_DIR}"
-    )
-    target_link_libraries(eillance-capture INTERFACE
-      libminiaudio
-      opus      
-      eillance-core
-    )
-endif()
+add_library(eillance-capture INTERFACE)
+target_compile_features(eillance-capture INTERFACE cxx_std_20)
+target_include_directories(eillance-capture INTERFACE
+  "${CMAKE_CURRENT_SOURCE_DIR}"
+)
+target_link_libraries(eillance-capture INTERFACE
+  libminiaudio
+  opus
+  eillance-core
+)
