@@ -16,7 +16,6 @@ target_include_directories(eillance-rtc INTERFACE
   "${CMAKE_CURRENT_SOURCE_DIR}"
 )
 target_link_libraries(eillance-rtc INTERFACE
-  eillance-capture
   eillance-core
   datachannel-static
   plog
