@@ -7,8 +7,9 @@
 #include <unordered_map>
 #include <vector>
 
-#include <nlohmann/json.hpp>
+#include <openssl/rand.h>
 
+#include "eillance/crypto/crypto.hpp"
 #include "eillance/logging/logging.h"
 #include "eillance/storage/persistent_storage.hpp"
 
