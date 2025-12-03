@@ -69,8 +69,7 @@ exit /b %errorlevel%
 
 :run_format
     echo INFO: Running clang-format...
-    rem Use 'git ls-files' to respect .gitignore and only format tracked files. grep -z filters the null-terminated list by extension.
-    call :run_in_docker bash -c "git ls-files -z -- src tests | grep -z -E \"\\.(cpp|hpp|h)$\" | while IFS= read -r -d '' file; do echo \"Formatting $$file...\"; clang-format-18 -i \"$$file\"; done"
+    call :run_in_docker bash -c "git ls-files -z -- src tests ^| grep -z -E \"\\.(cpp^|hpp^|h)$\" ^| while IFS= read -r -d '' file; do echo \"Formatting $$file...\"; clang-format-18 -i \"$$file\"; done"
     if %errorlevel% neq 0 (
         echo ERROR: clang-format failed.
         exit /b 1
