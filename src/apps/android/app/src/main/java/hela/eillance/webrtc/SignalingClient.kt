@@ -17,7 +17,9 @@ import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.json.JSONObject
+import java.io.EOFException
 import java.net.ConnectException
+import java.net.SocketException
 import java.net.SocketTimeoutException
 import java.net.UnknownServiceException
 import java.util.concurrent.TimeUnit
@@ -156,7 +158,7 @@ class SignalingClient {
 
   private fun logError(t: Throwable) {
     when (t) {
-      is SocketTimeoutException, is ConnectException, is UnknownServiceException -> {
+      is SocketTimeoutException, is ConnectException, is UnknownServiceException, is SocketException, is EOFException -> {
         Log.w(TAG, "Signaling connection failed: ${t.javaClass.simpleName}: ${t.message}")
       }
       else -> {
