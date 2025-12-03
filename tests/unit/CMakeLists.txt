@@ -30,7 +30,14 @@ add_executable(h-e-tests
   test-settings-manager.cpp
   test-sqlite-storage.cpp
 )
-target_link_libraries(h-e-tests GTest::gtest_main eillance-core eillance-rtc eillance-h264)
+target_link_libraries(h-e-tests
+  GTest::gtest_main
+  eillance-core
+  eillance-crypto
+  eillance-capture
+  eillance-rtc
+  eillance-h264
+)
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/../files" DESTINATION "${CMAKE_BINARY_DIR}/bin")
 
 include(GoogleTest)

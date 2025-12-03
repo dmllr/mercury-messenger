@@ -41,6 +41,16 @@ protected:
     });
   }
 
+  void AddPendingMessage(const std::string& peer_id) {
+    mock_storage_impl_->AddHistoryEntry(  //
+        {.kind = messaging::HistoryEntryKind::textMessage,
+         .timestamp = Time::Now(),
+         .direction = messaging::MessageDirection::sent,
+         .status = messaging::MessageStatus::sending,
+         .data = messaging::MessageEntry{"test payload"},
+         .peer_id_for_db = peer_id});
+  }
+
   storage::MockPersistentStorageImpl* mock_storage_impl_;
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<identity::ContactManager> contact_manager_;
@@ -56,12 +66,13 @@ protected:
 
 TEST_F(DeliveryServiceTest, NoActionWhenNoQueuedMessages) {
   contact_manager_->AddContact(peer1_);
-  delivery_service_->start();
+  delivery_service_->Start();
   std::this_thread::sleep_for(std::chrono::milliseconds(100));  // Wait a bit to ensure checks could have run
   EXPECT_TRUE(requested_connections_.empty());
 }
 
 TEST_F(DeliveryServiceTest, AttemptDeliveryCallsHandler) {
+  AddPendingMessage(peer1_);
   delivery_service_->attemptDelivery(peer1_);
   ASSERT_TRUE(WaitForRequests(1));
   EXPECT_EQ(requested_connections_.size(), 1);
@@ -69,6 +80,7 @@ TEST_F(DeliveryServiceTest, AttemptDeliveryCallsHandler) {
 }
 
 TEST_F(DeliveryServiceTest, AttemptDeliveryIsDebounced) {
+  AddPendingMessage(peer1_);
   delivery_service_->attemptDelivery(peer1_);
   delivery_service_->attemptDelivery(peer1_);  // This one should be ignored
   ASSERT_TRUE(WaitForRequests(1, std::chrono::milliseconds(100)));
@@ -78,6 +90,7 @@ TEST_F(DeliveryServiceTest, AttemptDeliveryIsDebounced) {
 }
 
 TEST_F(DeliveryServiceTest, CanAttemptDeliveryAgainAfterFinished) {
+  AddPendingMessage(peer1_);
   delivery_service_->attemptDelivery(peer1_);
   ASSERT_TRUE(WaitForRequests(1));
   EXPECT_EQ(requested_connections_.size(), 1);
@@ -92,29 +105,21 @@ TEST_F(DeliveryServiceTest, CanAttemptDeliveryAgainAfterFinished) {
 TEST_F(DeliveryServiceTest, StartTriggersCheckForQueuedMessages) {
   // Setup state before starting the service
   contact_manager_->AddContact(peer1_);
-  mock_storage_impl_->AddHistoryEntry({.kind = messaging::HistoryEntryKind::textMessage,
-                                       .direction = messaging::MessageDirection::sent,
-                                       .status = messaging::MessageStatus::sending,
-                                       .data = messaging::MessageEntry{"hello"},
-                                       .peer_id_for_db = peer1_});
+  AddPendingMessage(peer1_);
 
-  delivery_service_->start();
+  delivery_service_->Start();
 
   ASSERT_TRUE(WaitForRequests(1));
   EXPECT_EQ(requested_connections_[0], peer1_);
 }
 
 TEST_F(DeliveryServiceTest, StopPreventsFurtherChecks) {
-  delivery_service_->start();
+  delivery_service_->Start();
   delivery_service_->stop();  // Stop it immediately
 
   // Now add a message that would have been picked up
   contact_manager_->AddContact(peer1_);
-  mock_storage_impl_->AddHistoryEntry({.kind = messaging::HistoryEntryKind::textMessage,
-                                       .direction = messaging::MessageDirection::sent,
-                                       .status = messaging::MessageStatus::sending,
-                                       .data = messaging::MessageEntry{"hello"},
-                                       .peer_id_for_db = peer1_});
+  AddPendingMessage(peer1_);
 
   // Wait and check that nothing happened
   std::this_thread::sleep_for(std::chrono::milliseconds(100));

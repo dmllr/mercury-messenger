@@ -2,6 +2,7 @@
 #include "mock_persistent_storage.hpp"
 
 #include <gtest/gtest.h>
+#include <optional>
 
 using namespace eillance;
 
@@ -36,14 +37,14 @@ TEST_F(ContactManagerTest, AddExistingContact) {
 }
 
 TEST_F(ContactManagerTest, ReceiveContactRequest) {
-  ASSERT_TRUE(contact_manager_->ReceiveContactRequest(peer1));
+  EXPECT_EQ(contact_manager_->ReceiveContactRequest(peer1, std::nullopt, std::nullopt, std::nullopt), identity::RequestStatus::New);
   auto contact = contact_manager_->GetContact(peer1);
   ASSERT_TRUE(contact.has_value());
   EXPECT_EQ(contact->status, identity::ContactStatus::awaitingApproval);
 }
 
 TEST_F(ContactManagerTest, ConfirmContact) {
-  contact_manager_->ReceiveContactRequest(peer1);
+  contact_manager_->ReceiveContactRequest(peer1, std::nullopt, std::nullopt, std::nullopt);
   ASSERT_TRUE(contact_manager_->ConfirmContact(peer1));
   auto contact = contact_manager_->GetContact(peer1);
   ASSERT_TRUE(contact.has_value());
@@ -67,16 +68,16 @@ TEST_F(ContactManagerTest, IsConfirmedContact) {
   ASSERT_TRUE(contact_manager_->IsConfirmedContact(peer1));
 }
 
-TEST_F(ContactManagerTest, RemoveContact) {
+TEST_F(ContactManagerTest, DeleteContact) {
   contact_manager_->AddContact(peer1);
   ASSERT_TRUE(contact_manager_->GetContact(peer1).has_value());
-  contact_manager_->RemoveContact(peer1);
+  contact_manager_->DeleteContact(peer1);
   ASSERT_FALSE(contact_manager_->GetContact(peer1).has_value());
 }
 
 TEST_F(ContactManagerTest, Persistence) {
   contact_manager_->AddContact(peer1);
-  contact_manager_->ReceiveContactRequest(peer2);
+  contact_manager_->ReceiveContactRequest(peer2, std::nullopt, std::nullopt, std::nullopt);
   contact_manager_->MarkAsConfirmed(peer1);
 
   // Create new manager with the same storage
