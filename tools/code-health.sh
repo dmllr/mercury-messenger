@@ -28,7 +28,7 @@ warn() {
 build_docker_image_if_needed() {
   if [[ "$(docker images -q "${DOCKER_IMAGE_NAME}" 2> /dev/null)" == "" ]]; then
     info "Docker image '${DOCKER_IMAGE_NAME}' not found. Building..."
-    docker build -t "${DOCKER_IMAGE_NAME}" -f "${DOCKERFILE_PATH}" "${PROJECT_ROOT}"
+    docker build -t "${DOCKER_IMAGE_NAME}" -f "${DOCKERFILE_PATH}" "${PROJECT_ROOT}/devenv"
     success "Docker image built."
   else
     info "Docker image '${DOCKER_IMAGE_NAME}' found."
