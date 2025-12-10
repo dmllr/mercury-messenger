@@ -241,11 +241,8 @@ public:
         direction,
         status,
         is_truncated,
-        content,
-        duration_seconds,
-        call_direction,
-        call_status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        content
+      ) VALUES (?, ?, ?, ?, ?, ?, ?);
     )SQL");
 
     BindText(stmt.Get(), 1, entry.peer_id_for_db);
@@ -266,16 +263,15 @@ public:
       }
       sqlite3_bind_int(stmt.Get(), 6, entry.is_truncated);
       BindText(stmt.Get(), 7, msg_entry->content);
-      sqlite3_bind_int(stmt.Get(), 8, 0);
-      sqlite3_bind_int(stmt.Get(), 9, 0);
-      sqlite3_bind_int(stmt.Get(), 10, 0);
     } else if (const auto* call_entry = std::get_if<messaging::CallEntry>(&entry.data)) {
       entry.is_truncated = false;
       sqlite3_bind_int(stmt.Get(), 6, 0);  // is_truncated = false
-      sqlite3_bind_null(stmt.Get(), 7);
-      sqlite3_bind_int(stmt.Get(), 8, call_entry->duration_seconds);
-      sqlite3_bind_int(stmt.Get(), 9, static_cast<int>(call_entry->call_direction));
-      sqlite3_bind_int(stmt.Get(), 10, static_cast<int>(call_entry->call_status));
+
+      nlohmann::json j;
+      j["duration_seconds"] = call_entry->duration_seconds;
+      j["call_direction"] = call_entry->call_direction;
+      j["call_status"] = call_entry->call_status;
+      BindText(stmt.Get(), 7, j.dump());
     }
 
     if (sqlite3_step(stmt.Get()) != SQLITE_DONE) {
@@ -312,10 +308,7 @@ public:
         timestamp = ?,
         direction = ?,
         status = ?,
-        content = ?,
-        duration_seconds = ?,
-        call_direction = ?,
-        call_status = ?
+        content = ?
       WHERE
         id = ?;
     )SQL");
@@ -329,19 +322,17 @@ public:
       using T = std::decay_t<T0>;
       if constexpr (std::is_same_v<T, messaging::MessageEntry>) {
         BindText(stmt.Get(), 5, arg.content);
-        sqlite3_bind_int(stmt.Get(), 6, 0);
-        sqlite3_bind_int(stmt.Get(), 7, 0);
-        sqlite3_bind_int(stmt.Get(), 8, 0);
       } else if constexpr (std::is_same_v<T, messaging::CallEntry>) {
-        sqlite3_bind_null(stmt.Get(), 5);
-        sqlite3_bind_int(stmt.Get(), 6, arg.duration_seconds);
-        sqlite3_bind_int(stmt.Get(), 7, static_cast<int>(arg.call_direction));
-        sqlite3_bind_int(stmt.Get(), 8, static_cast<int>(arg.call_status));
+        nlohmann::json j;
+        j["duration_seconds"] = arg.duration_seconds;
+        j["call_direction"] = arg.call_direction;
+        j["call_status"] = arg.call_status;
+        BindText(stmt.Get(), 5, j.dump());
       }
     },
                entry.data);
 
-    sqlite3_bind_int64(stmt.Get(), 9, entry.id);
+    sqlite3_bind_int64(stmt.Get(), 6, entry.id);
     sqlite3_step(stmt.Get());
   }
 
@@ -368,7 +359,7 @@ public:
       return;
     }
     const std::lock_guard lock(mutex_);
-    nlohmann::json ids_json = message_ids;
+    const nlohmann::json ids_json = message_ids;
     const std::string query = R"SQL(
       UPDATE
         messages
@@ -413,10 +404,7 @@ public:
         direction,
         status,
         is_truncated,
-        content,
-        duration_seconds,
-        call_direction,
-        call_status
+        content
       FROM
         messages
       WHERE
@@ -504,10 +492,7 @@ public:
             direction,
             status,
             is_truncated,
-            content,
-            duration_seconds,
-            call_direction,
-            call_status
+            content
           FROM
             messages
           WHERE
@@ -543,10 +528,7 @@ public:
         direction,
         status,
         is_truncated,
-        content,
-        duration_seconds,
-        call_direction,
-        call_status
+        content
       FROM
         messages
       WHERE
@@ -655,12 +637,22 @@ private:
             messaging::MessageEntry{.content = ColumnString(stmt, 6)};
         break;
       case messaging::HistoryEntryKind::voiceCall:
-      case messaging::HistoryEntryKind::videoCall:
-        record.data = messaging::CallEntry{
-            .duration_seconds = static_cast<uint32_t>(sqlite3_column_int(stmt, 7)),
-            .call_direction = static_cast<messaging::CallDirection>(sqlite3_column_int(stmt, 8)),
-            .call_status = static_cast<messaging::CallStatus>(sqlite3_column_int(stmt, 9))};
+      case messaging::HistoryEntryKind::videoCall: {
+        auto content_json_str = ColumnString(stmt, 6);
+        messaging::CallEntry call_entry{};
+        if (!content_json_str.empty()) {
+          try {
+            auto j = nlohmann::json::parse(content_json_str);
+            call_entry.duration_seconds = j.value("duration_seconds", 0u);
+            call_entry.call_direction = j.value("call_direction", messaging::CallDirection::outgoing);
+            call_entry.call_status = j.value("call_status", messaging::CallStatus::answered);
+          } catch (const std::exception& e) {
+            LOGE << "Failed to parse call entry JSON: " << e.what();
+          }
+        }
+        record.data = call_entry;
         break;
+      }
     }
     return record;
   }
