@@ -9,22 +9,27 @@
 namespace eillance::storage::migrations {
 
 inline void migrate_to_v1(sqlite3* db) {
-  LOGI << "Database version is 0, migrating to version 1...";
-  const char* schema = R"SQL(
+  LOGI << "Initializing database schema (v1)...";
+  const auto schema = R"SQL(
       BEGIN TRANSACTION;
+
       CREATE TABLE IF NOT EXISTS settings (
         key   TEXT PRIMARY KEY NOT NULL,
         value TEXT
       );
+
       CREATE TABLE IF NOT EXISTS contacts (
         peer_id               TEXT PRIMARY KEY NOT NULL,
         status                INTEGER NOT NULL,
         display_name          TEXT,
         display_name_override TEXT,
         bio                   TEXT,
-        photo_base64          TEXT
+        photo_base64          TEXT,
+        signature_from_them   TEXT,
+        my_signature_for_them TEXT
       );
-      CREATE TABLE IF NOT EXISTS history (
+
+      CREATE TABLE IF NOT EXISTS messages (
         id               INTEGER PRIMARY KEY AUTOINCREMENT,
         peer_id          TEXT NOT NULL,
         kind             INTEGER NOT NULL,
@@ -34,21 +39,30 @@ inline void migrate_to_v1(sqlite3* db) {
         content          TEXT,
         duration_seconds INTEGER,
         call_direction   INTEGER,
-        call_status      INTEGER
+        call_status      INTEGER,
+        is_truncated     INTEGER NOT NULL DEFAULT 0
       );
-      CREATE INDEX IF NOT EXISTS idx_history_peer_timestamp ON history (peer_id, timestamp);
+
+      CREATE TABLE IF NOT EXISTS large_messages (
+        message_id   INTEGER PRIMARY KEY NOT NULL,
+        full_content TEXT,
+        FOREIGN KEY(message_id) REFERENCES messages(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_messages_peer_timestamp ON messages (peer_id, timestamp);
+
       PRAGMA user_version = 1;
       COMMIT;
     )SQL";
 
   char* err_msg = nullptr;
   if (sqlite3_exec(db, schema, nullptr, nullptr, &err_msg) != SQLITE_OK) {
-    std::string error = "Failed to execute migration to V1: ";
+    std::string error = "Failed to execute initial migration: ";
     error += err_msg;
     sqlite3_free(err_msg);
     throw std::runtime_error(error);
   }
-  LOGI << "Database migrated to version 1: Foundation.";
+  LOGI << "Database schema initialized.";
 }
 
 }  // namespace eillance::storage::migrations

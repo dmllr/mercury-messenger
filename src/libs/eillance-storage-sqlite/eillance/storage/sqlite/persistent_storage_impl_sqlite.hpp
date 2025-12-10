@@ -22,7 +22,7 @@ namespace eillance::storage {
 namespace {
 
 constexpr size_t MaxInlineContentSize = 2048;
-constexpr int CurrentDbVersion = 5;
+constexpr int CurrentDbVersion = 1;
 
 }  // namespace
 
@@ -205,9 +205,9 @@ public:
     }
 
     try {
-      const SQLiteStatement history_stmt(db_, "DELETE FROM history WHERE peer_id = ?;");
-      BindText(history_stmt.Get(), 1, std::string(peer_id));
-      if (sqlite3_step(history_stmt.Get()) != SQLITE_DONE) {
+      const SQLiteStatement messages_stmt(db_, "DELETE FROM messages WHERE peer_id = ?;");
+      BindText(messages_stmt.Get(), 1, std::string(peer_id));
+      if (sqlite3_step(messages_stmt.Get()) != SQLITE_DONE) {
         throw std::runtime_error(sqlite3_errmsg(db_));
       }
 
@@ -229,12 +229,12 @@ public:
     }
   }
 
-  // --- History ---
+  // --- History / Messages ---
   auto AddHistoryEntry(messaging::HistoryEntryRecord entry)
       -> messaging::HistoryEntryRecord override {
     const std::lock_guard lock(mutex_);
     const SQLiteStatement stmt(db_, R"SQL(
-      INSERT INTO history (
+      INSERT INTO messages (
         peer_id,
         kind,
         timestamp,
@@ -279,7 +279,7 @@ public:
     }
 
     if (sqlite3_step(stmt.Get()) != SQLITE_DONE) {
-      LOGE << "Failed to insert history entry: " << sqlite3_errmsg(db_);
+      LOGE << "Failed to insert message entry: " << sqlite3_errmsg(db_);
       return {};  // Return empty record on failure
     }
 
@@ -288,7 +288,7 @@ public:
     if (full_content_for_storage) {
       const SQLiteStatement large_msg_stmt(db_, R"SQL(
         INSERT INTO large_messages
-          (history_id, full_content)
+          (message_id, full_content)
         VALUES
           (?, ?);
         )SQL");
@@ -306,7 +306,7 @@ public:
     const std::lock_guard lock(mutex_);
     const SQLiteStatement stmt(db_, R"SQL(
       UPDATE
-        history
+        messages
       SET
         kind = ?,
         timestamp = ?,
@@ -350,7 +350,7 @@ public:
     const std::lock_guard lock(mutex_);
     const SQLiteStatement stmt(db_, R"SQL(
       UPDATE
-        history
+        messages
       SET
         status = ?
       WHERE
@@ -371,7 +371,7 @@ public:
     nlohmann::json ids_json = message_ids;
     const std::string query = R"SQL(
       UPDATE
-        history
+        messages
       SET
         status = ?
       WHERE
@@ -395,7 +395,7 @@ public:
         SELECT
           count(*)
         FROM
-          history
+          messages
         WHERE
           peer_id = ?;
       )SQL");
@@ -418,7 +418,7 @@ public:
         call_direction,
         call_status
       FROM
-        history
+        messages
       WHERE
         peer_id = ?
       ORDER BY
@@ -444,7 +444,7 @@ public:
       FROM
         large_messages
       WHERE
-        history_id = ?;
+        message_id = ?;
     )SQL");
     sqlite3_bind_int64(stmt.Get(), 1, message_id);
     if (sqlite3_step(stmt.Get()) == SQLITE_ROW) {
@@ -472,7 +472,7 @@ public:
           SELECT
             COUNT(*)
           FROM
-            history
+            messages
           WHERE
             peer_id = ?
             AND direction = ?
@@ -509,7 +509,7 @@ public:
             call_direction,
             call_status
           FROM
-            history
+            messages
           WHERE
             peer_id = ?
           ORDER BY
@@ -548,7 +548,7 @@ public:
         call_direction,
         call_status
       FROM
-        history
+        messages
       WHERE
         peer_id = ? AND status = ?;
     )SQL");
@@ -567,7 +567,7 @@ public:
     const char* sql = R"SQL(
       BEGIN TRANSACTION;
       DELETE FROM large_messages;
-      DELETE FROM history;
+      DELETE FROM messages;
       COMMIT;
     )SQL";
     char* err_msg = nullptr;
@@ -626,27 +626,15 @@ public:
   }
 
 private:
-  void RunMigrations() {
+  void RunMigrations() const {
     int user_version = 0;
     const SQLiteStatement get_version_stmt(db_, "PRAGMA user_version;");
     if (sqlite3_step(get_version_stmt.Get()) == SQLITE_ROW) {
       user_version = sqlite3_column_int(get_version_stmt.Get(), 0);
     }
 
-    if (user_version < 1) {
+    if (user_version == 0) {
       migrations::migrate_to_v1(db_);
-    }
-    if (user_version < 2) {
-      migrations::migrate_to_v2(db_);
-    }
-    if (user_version < 3) {
-      migrations::migrate_to_v3(db_, MaxInlineContentSize);
-    }
-    if (user_version < 4) {
-      migrations::migrate_to_v4(db_);
-    }
-    if (user_version < 5) {
-      migrations::migrate_to_v5(db_);
     }
   }
 
