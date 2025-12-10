@@ -648,18 +648,6 @@ private:
     if (user_version < 5) {
       migrations::migrate_to_v5(db_);
     }
-
-    if (user_version != CurrentDbVersion) {
-      std::string set_version_sql =
-          "PRAGMA user_version = " + std::to_string(CurrentDbVersion) + ";";
-      char* err_msg = nullptr;
-      if (sqlite3_exec(db_, set_version_sql.c_str(), nullptr, nullptr, &err_msg) != SQLITE_OK) {
-        std::string error = "Failed to set DB version: ";
-        error += err_msg;
-        sqlite3_free(err_msg);
-        throw std::runtime_error(error);
-      }
-    }
   }
 
   static auto ParseHistoryEntry(sqlite3_stmt* stmt) -> messaging::HistoryEntryRecord {

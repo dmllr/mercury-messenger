@@ -37,6 +37,7 @@ inline void migrate_to_v1(sqlite3* db) {
         call_status      INTEGER
       );
       CREATE INDEX IF NOT EXISTS idx_history_peer_timestamp ON history (peer_id, timestamp);
+      PRAGMA user_version = 1;
       COMMIT;
     )SQL";
 
