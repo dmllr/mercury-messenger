@@ -71,6 +71,11 @@ inline void migrate_to_v3(sqlite3* db, const size_t max_inline_content_size) {
         throw std::runtime_error("Failed to update history during V3 migration.");
       }
     }
+
+    if (sqlite3_exec(db, "PRAGMA user_version = 3;", nullptr, nullptr, nullptr) != SQLITE_OK) {
+      throw std::runtime_error("Failed to update user_version to 3.");
+    }
+
   } catch (const std::exception& e) {
     sqlite3_exec(db, "ROLLBACK;", nullptr, nullptr, nullptr);
     LOGE << "Migration to V3 failed: " << e.what();

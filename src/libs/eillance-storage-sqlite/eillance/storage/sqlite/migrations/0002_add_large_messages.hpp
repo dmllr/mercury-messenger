@@ -18,6 +18,7 @@ inline void migrate_to_v2(sqlite3* db) {
         full_content TEXT,
         FOREIGN KEY(history_id) REFERENCES history(id) ON DELETE CASCADE
       );
+      PRAGMA user_version = 2;
       COMMIT;
     )SQL";
   char* err_msg = nullptr;
