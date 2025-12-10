@@ -37,9 +37,6 @@ inline void migrate_to_v1(sqlite3* db) {
         direction        INTEGER NOT NULL,
         status           INTEGER NOT NULL,
         content          TEXT,
-        duration_seconds INTEGER,
-        call_direction   INTEGER,
-        call_status      INTEGER,
         is_truncated     INTEGER NOT NULL DEFAULT 0
       );
 
