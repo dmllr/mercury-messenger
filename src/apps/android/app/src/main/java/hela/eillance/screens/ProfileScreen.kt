@@ -35,6 +35,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Help
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.DeleteForever
+import androidx.compose.material.icons.filled.Feedback
 import androidx.compose.material.icons.filled.FileCopy
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.QrCode2
@@ -157,7 +158,8 @@ fun ProfileScreen(
         onNavigateToSettings = onNavigateToSettings,
         onNavigateToBackupAndRestore = onNavigateToBackupAndRestore,
         onDebugAction = { action: DebugAction -> showDebugConfirmDialog = action },
-        onNavigateToHelp = onNavigateToHelp
+        onNavigateToHelp = onNavigateToHelp,
+        onSendFeedback = { viewModel.sendFeedback() }
       )
     }
   }
@@ -294,7 +296,8 @@ private fun ProfileMenu(
   onNavigateToSettings: () -> Unit,
   onNavigateToBackupAndRestore: () -> Unit,
   onDebugAction: (DebugAction) -> Unit,
-  onNavigateToHelp: () -> Unit
+  onNavigateToHelp: () -> Unit,
+  onSendFeedback: () -> Unit
 ) {
   Column(modifier = Modifier.padding(horizontal = 8.dp)) {
     ListItem(
@@ -320,6 +323,14 @@ private fun ProfileMenu(
       modifier = Modifier
         .clip(MaterialTheme.shapes.medium)
         .clickable(onClick = onNavigateToHelp)
+    )
+    ListItem(
+      headlineContent = { Text("Send Feedback") },
+      supportingContent = { Text("Report bugs or send comments") },
+      leadingContent = { Icon(Icons.Default.Feedback, contentDescription = "Send Feedback") },
+      modifier = Modifier
+        .clip(MaterialTheme.shapes.medium)
+        .clickable(onClick = onSendFeedback)
     )
     ListItem(
       headlineContent = { Text("Backup & Restore") },

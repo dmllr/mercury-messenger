@@ -251,6 +251,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     onAddContactDialogDismiss()
   }
 
+  fun sendFeedback() {
+    val feedbackId = "ba5fc552e3e16a7604e3ec74ad65370ba1b36345ffcfe7d726e217e85295b382"
+    addContact(feedbackId)
+    navigateToPeer(feedbackId)
+  }
+
   fun generateContactToken(): String? {
     return callService?.generateContactToken()
   }
