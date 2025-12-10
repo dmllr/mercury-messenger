@@ -21,6 +21,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.Person
 import hela.eillance.camera.R
+import hela.eillance.ndkio.CallDirection
 import hela.eillance.ndkio.CallState
 import hela.eillance.ndkio.Contact
 import hela.eillance.ndkio.HistoryPage
@@ -194,7 +195,7 @@ class CallService : Service(), IClientNativeBridge {
     val wasRinging = oldState?.isRinging ?: false
     val isRinging = newState?.isRinging ?: false
 
-    if (!wasRinging && isRinging && newState?.peerId != null) {
+    if (!wasRinging && isRinging && newState.callDirection == CallDirection.Incoming) {
       // Trigger Telecom incoming call
       try {
         val extras = Bundle()
