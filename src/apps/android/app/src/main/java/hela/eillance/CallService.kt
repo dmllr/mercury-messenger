@@ -63,11 +63,9 @@ class CallService : Service(), IClientNativeBridge {
   private var lastKnownCallState: CallState? = null
   private var lastKnownContacts: List<Contact>? = null
 
-  // Explicitly typed to assist type inference
   private val soundPlayer: CallSoundPlayer by lazy { CallSoundPlayer(this) }
 
   private lateinit var phoneAccountHandle: PhoneAccountHandle
-  // Track active telecom connection to sync state
   private val activeTelecomConnections = ConcurrentHashMap<String, MercuryConnection>()
 
   // --- Public API for ViewModel ---
@@ -101,7 +99,7 @@ class CallService : Service(), IClientNativeBridge {
 
     val builder = PhoneAccount.builder(phoneAccountHandle, "Mercury")
       .setCapabilities(PhoneAccount.CAPABILITY_SELF_MANAGED)
-    // In a real app, add icon and other metadata
+      .setShortDescription("Mercury Secure Call")
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
       try {
@@ -126,7 +124,6 @@ class CallService : Service(), IClientNativeBridge {
     serviceScope.cancel()
     terminate()
     releaseWakeLock()
-    // Unregistering phone account is generally not required on destroy
     super.onDestroy()
   }
 
@@ -142,12 +139,7 @@ class CallService : Service(), IClientNativeBridge {
   override fun onStateChanged(changeSet: IntArray) {
     if (changeSet.contains(StateChange.CallState.ordinal)) {
       val callState = nativeGetCallState()
-
-      // Sync with Telecom
       syncTelecomState(callState)
-
-      // Play in-call sounds only if Telecom isn't managing ringtone (Self-Managed usually requires app to play sound)
-      // Note: For incoming calls, the onShowIncomingCallUi trigger should start the ringing.
       serviceScope.launch(Dispatchers.Main) {
         soundPlayer.updateCallState(callState)
       }
@@ -156,25 +148,42 @@ class CallService : Service(), IClientNativeBridge {
   }
 
   private fun syncTelecomState(callState: CallState?) {
-    if (callState == null) return
+    val currentActivePeerId = if (callState != null &&
+      (callState.isConnecting || callState.isRinging || callState.isInCall)) {
+      callState.peerId.takeIf { it.isNotEmpty() }
+    } else {
+      null
+    }
 
-    val peerId = callState.peerId
-    if (peerId.isEmpty()) return
+    val iterator = activeTelecomConnections.iterator()
+    while (iterator.hasNext()) {
+      val entry = iterator.next()
+      val trackedPeerId = entry.key
+      val connection = entry.value
 
-    // If we have a connection object, update its state
-    val connection = activeTelecomConnections[peerId]
-
-    if (callState.isInCall) {
-      connection?.onEstablished()
-    } else if (!callState.isConnecting && !callState.isRinging && !callState.isInCall) {
-      // Call ended
-      connection?.onRemoteHangup()
-      activeTelecomConnections.remove(peerId)
+      if (trackedPeerId == currentActivePeerId) {
+        if (callState?.isInCall == true) {
+          if (connection.state != android.telecom.Connection.STATE_ACTIVE) {
+            connection.onEstablished()
+          }
+        }
+      } else {
+        // Disconnect connections that don't match the current C++ engine state
+        connection.onRemoteHangup()
+        iterator.remove()
+      }
     }
   }
 
   fun registerTelecomConnection(peerId: String, connection: MercuryConnection) {
-    activeTelecomConnections[peerId] = connection
+    val existing = activeTelecomConnections.put(peerId, connection)
+    if (existing != null && existing != connection) {
+      existing.onRemoteHangup()
+    }
+  }
+
+  fun unregisterTelecomConnection(peerId: String) {
+    activeTelecomConnections.remove(peerId)
   }
 
   fun handleNotifications() {
@@ -196,14 +205,20 @@ class CallService : Service(), IClientNativeBridge {
     val isRinging = newState?.isRinging ?: false
 
     if (!wasRinging && isRinging && newState.callDirection == CallDirection.Incoming) {
-      // Trigger Telecom incoming call
       try {
         val extras = Bundle()
         extras.putString(MercuryConnectionService.EXTRA_PEER_ID, newState.peerId)
+
+        val uri = Uri.fromParts(PhoneAccount.SCHEME_SIP, newState.peerId, null)
+        extras.putParcelable(TelecomManager.EXTRA_INCOMING_CALL_ADDRESS, uri)
+
+        val nestedExtras = Bundle()
+        nestedExtras.putString(MercuryConnectionService.EXTRA_PEER_ID, newState.peerId)
+        extras.putBundle(TelecomManager.EXTRA_INCOMING_CALL_EXTRAS, nestedExtras)
+
         telecomManager.addNewIncomingCall(phoneAccountHandle, extras)
       } catch (e: SecurityException) {
         Log.e("CallService", "Permission missing for addNewIncomingCall", e)
-        // Fallback to old notification if permission revoked
         showIncomingCallNotification(newState.peerId)
       } catch (e: Exception) {
         Log.e("CallService", "Failed to add incoming call to Telecom", e)
@@ -239,7 +254,6 @@ class CallService : Service(), IClientNativeBridge {
     notificationManager.notify(FOREGROUND_SERVICE_NOTIFICATION_ID, notification)
   }
 
-  // Fallback notification if Telecom fails
   private fun showIncomingCallNotification(peerId: String) {
     val fullScreenIntent = Intent(this, MainActivity::class.java).apply {
       flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
@@ -494,34 +508,38 @@ class CallService : Service(), IClientNativeBridge {
   fun startVoiceCall(peerId: String? = null) {
     if (peerId != null) selectContact(peerId)
 
-    // Check if we already have a selected contact
     val targetId = peerId ?: nativeGetSelectedContactId() ?: return
+
+    if (activeTelecomConnections.containsKey(targetId)) {
+      Log.w("CallService", "Call already active for $targetId")
+      return
+    }
 
     try {
       val extras = Bundle()
       extras.putString(MercuryConnectionService.EXTRA_PEER_ID, targetId)
-      // Use Uri.fromParts to create the handle
       val uri = Uri.fromParts(PhoneAccount.SCHEME_SIP, targetId, null)
       val extrasBundle = Bundle()
       extrasBundle.putParcelable(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, phoneAccountHandle)
       extrasBundle.putBundle(TelecomManager.EXTRA_OUTGOING_CALL_EXTRAS, extras)
 
       telecomManager.placeCall(uri, extrasBundle)
-
-      // We trigger the engine start logic in createOutgoingConnection or after
-      // the connection is initialized, but to keep UI responsive we can trigger the native call
-      // here. Telecom will just wrap it.
       startVoiceCall()
 
     } catch (e: SecurityException) {
       Log.e("CallService", "Permission missing for placeCall", e)
-      startVoiceCall() // Fallback to engine direct call
+      startVoiceCall()
     }
   }
 
   fun startVideoCall(peerId: String? = null) {
     if (peerId != null) selectContact(peerId)
     val targetId = peerId ?: nativeGetSelectedContactId() ?: return
+
+    if (activeTelecomConnections.containsKey(targetId)) {
+      Log.w("CallService", "Call already active for $targetId")
+      return
+    }
 
     try {
       val extras = Bundle()
@@ -543,7 +561,6 @@ class CallService : Service(), IClientNativeBridge {
   fun generateContactToken(): String? = nativeGenerateContactToken()
 
   companion object {
-    // Singleton instance for the ConnectionService to access
     var instance: CallService? = null
       private set
 

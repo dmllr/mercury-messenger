@@ -1,5 +1,8 @@
 package hela.eillance.telecom
 
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.telecom.CallAudioState
@@ -8,6 +11,7 @@ import android.telecom.DisconnectCause
 import android.telecom.PhoneAccount
 import android.telecom.TelecomManager
 import android.util.Log
+import androidx.core.app.NotificationCompat
 import hela.eillance.CallService
 import hela.eillance.MainActivity
 
@@ -18,9 +22,6 @@ class MercuryConnection(
 ) : Connection() {
 
   init {
-    // PROPERTY_SELF_MANAGED requires the app to handle:
-    // 1. The UI (Incoming call screen, In-call screen)
-    // 2. The Audio (Playing ringtone, Ringback tone)
     connectionProperties = PROPERTY_SELF_MANAGED
     audioModeIsVoip = true
     connectionCapabilities = CAPABILITY_MUTE or CAPABILITY_SUPPORT_HOLD
@@ -28,8 +29,6 @@ class MercuryConnection(
     setCallerDisplayName(peerId, TelecomManager.PRESENTATION_ALLOWED)
     setAddress(Uri.fromParts(PhoneAccount.SCHEME_SIP, peerId, null), TelecomManager.PRESENTATION_ALLOWED)
 
-    // If this is an outgoing call, we initialize it as initializing.
-    // The Service will set it to Dialing/Active.
     if (!isIncoming) {
       setInitializing()
     }
@@ -37,66 +36,98 @@ class MercuryConnection(
 
   override fun onShowIncomingCallUi() {
     Log.i(TAG, "onShowIncomingCallUi for $peerId")
-    // Launch the custom Incoming Call UI.
-    // Note: The ringtone is played by CallSoundPlayer in CallService based on the 'Ringing' state.
-    val intent = Intent(callService, MainActivity::class.java).apply {
-      flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+
+    // 1. Launch Activity directly
+    val fullScreenIntent = Intent(callService, MainActivity::class.java).apply {
+      flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
       action = CallService.ACTION_SHOW_INCOMING_CALL
       putExtra(CallService.EXTRA_PEER_ID, peerId)
     }
-    callService.startActivity(intent)
+    callService.startActivity(fullScreenIntent)
+
+    // 2. Post High-Priority Notification (Heads-up) as fallback
+    val pendingIntent = PendingIntent.getActivity(
+      callService,
+      peerId.hashCode(),
+      fullScreenIntent,
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+
+    val rejectIntent = Intent(callService, CallService::class.java).apply { action = "hela.eillance.ACTION_REJECT_CALL" }
+    val rejectPendingIntent = PendingIntent.getService(callService, 1, rejectIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+
+    val acceptIntent = Intent(callService, MainActivity::class.java).apply {
+      action = CallService.ACTION_ACCEPT_CALL
+      putExtra(CallService.EXTRA_PEER_ID, peerId)
+      flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+    }
+    val acceptPendingIntent = PendingIntent.getActivity(callService, 2, acceptIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+
+    val builder = NotificationCompat.Builder(callService, "incoming_calls_channel")
+      .setSmallIcon(android.R.drawable.stat_notify_chat)
+      .setContentTitle("Incoming Call")
+      .setContentText(peerId)
+      .setPriority(NotificationCompat.PRIORITY_MAX)
+      .setCategory(NotificationCompat.CATEGORY_CALL)
+      .setContentIntent(pendingIntent)
+      .setFullScreenIntent(pendingIntent, true)
+      .addAction(0, "Reject", rejectPendingIntent)
+      .addAction(0, "Accept", acceptPendingIntent)
+      .setAutoCancel(true)
+      .setOngoing(true)
+
+    val notificationManager = callService.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    notificationManager.notify(CallService.INCOMING_CALL_NOTIFICATION_ID, builder.build())
   }
 
+  @Deprecated("Deprecated in Java")
   override fun onCallAudioStateChanged(state: CallAudioState?) {
-    Log.i(TAG, "onCallAudioStateChanged: $state")
-    // ConnectionService handles audio focus and routing (Bluetooth/Speaker),
-    // but WebRTC handles the actual audio stream I/O.
+    // Audio focus managed by ConnectionService, routing managed by WebRTC
   }
 
   override fun onAnswer() {
-    Log.i(TAG, "onAnswer")
+    cancelNotification()
     callService.acceptCall()
     setActive()
   }
 
   override fun onReject() {
-    Log.i(TAG, "onReject")
+    cancelNotification()
     callService.rejectCall()
     setDisconnected(DisconnectCause(DisconnectCause.REJECTED))
+    callService.unregisterTelecomConnection(peerId)
     destroy()
   }
 
   override fun onDisconnect() {
-    Log.i(TAG, "onDisconnect")
+    cancelNotification()
     callService.hangup()
     setDisconnected(DisconnectCause(DisconnectCause.LOCAL))
+    callService.unregisterTelecomConnection(peerId)
     destroy()
   }
 
-  override fun onHold() {
-    Log.i(TAG, "onHold")
-    // Implement hold logic if supported by C++ engine
-    setOnHold()
-  }
-
-  override fun onUnhold() {
-    Log.i(TAG, "onUnhold")
-    setActive()
-  }
-
   override fun onAbort() {
-    Log.i(TAG, "onAbort")
+    cancelNotification()
     super.onAbort()
+    callService.unregisterTelecomConnection(peerId)
     destroy()
   }
 
   fun onRemoteHangup() {
+    cancelNotification()
     setDisconnected(DisconnectCause(DisconnectCause.REMOTE))
     destroy()
   }
 
   fun onEstablished() {
+    cancelNotification()
     setActive()
+  }
+
+  private fun cancelNotification() {
+    val notificationManager = callService.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    notificationManager.cancel(CallService.INCOMING_CALL_NOTIFICATION_ID)
   }
 
   companion object {
