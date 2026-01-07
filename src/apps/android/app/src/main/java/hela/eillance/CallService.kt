@@ -285,6 +285,11 @@ class CallService : Service(), IClientNativeBridge {
       .setOngoing(true)
 
     notificationManager.notify(INCOMING_CALL_NOTIFICATION_ID, builder.build())
+
+    // IMMEDIATE UI LAUNCH FOR FOREGROUND (Fallback path)
+    if (MercuryApplication.isAppInForeground) {
+      startActivity(fullScreenIntent)
+    }
   }
 
   private fun showNewMessageNotification(peerId: String, content: String) {

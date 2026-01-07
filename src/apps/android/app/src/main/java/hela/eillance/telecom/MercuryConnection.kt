@@ -14,6 +14,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import hela.eillance.CallService
 import hela.eillance.MainActivity
+import hela.eillance.MercuryApplication
 
 class MercuryConnection(
   private val callService: CallService,
@@ -37,15 +38,13 @@ class MercuryConnection(
   override fun onShowIncomingCallUi() {
     Log.i(TAG, "onShowIncomingCallUi for $peerId")
 
-    // 1. Launch Activity directly
+    // Create the Intent for the Incoming Call UI.
     val fullScreenIntent = Intent(callService, MainActivity::class.java).apply {
       flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
       action = CallService.ACTION_SHOW_INCOMING_CALL
       putExtra(CallService.EXTRA_PEER_ID, peerId)
     }
-    callService.startActivity(fullScreenIntent)
 
-    // 2. Post High-Priority Notification (Heads-up) as fallback
     val pendingIntent = PendingIntent.getActivity(
       callService,
       peerId.hashCode(),
@@ -59,7 +58,7 @@ class MercuryConnection(
     val acceptIntent = Intent(callService, MainActivity::class.java).apply {
       action = CallService.ACTION_ACCEPT_CALL
       putExtra(CallService.EXTRA_PEER_ID, peerId)
-      flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+      flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
     }
     val acceptPendingIntent = PendingIntent.getActivity(callService, 2, acceptIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
@@ -78,6 +77,12 @@ class MercuryConnection(
 
     val notificationManager = callService.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     notificationManager.notify(CallService.INCOMING_CALL_NOTIFICATION_ID, builder.build())
+
+    // If the app is already in the foreground, we want to show the call screen immediately
+    // rather than waiting for the user to tap the heads-up notification.
+    if (MercuryApplication.isAppInForeground) {
+      callService.startActivity(fullScreenIntent)
+    }
   }
 
   @Deprecated("Deprecated in Java")

@@ -119,9 +119,23 @@ fun MainAppContent(viewModel: MainViewModel) {
   val navigateToScanner by viewModel.navigateToScanner.collectAsState()
   val hasCallPermissions by viewModel.hasCallPermissions.collectAsState()
   val hasNotificationPermission by viewModel.hasNotificationPermission.collectAsState()
+  val incomingCallUiVisible by viewModel.incomingCallUiVisible.collectAsState()
 
   var contactToRemove by remember { mutableStateOf<Contact?>(null) }
   var contactToBlock by remember { mutableStateOf<Contact?>(null) }
+
+  // Global navigation to Call Screen when a call is active (Outgoing or InCall)
+  LaunchedEffect(callState) {
+    if (callState.isInCall || callState.isConnecting || (callState.isRinging && callState.callDirection == CallDirection.Outgoing)) {
+      val route = Route.Call.createRoute(callState.peerId)
+      val currentRoute = navController.currentDestination?.route
+      if (currentRoute != Route.Call.route && currentRoute?.startsWith(Route.Call.route.substringBefore("{")) != true) {
+        navController.navigate(route) {
+          launchSingleTop = true
+        }
+      }
+    }
+  }
 
   LaunchedEffect(navigateToPeerId) {
     navigateToPeerId?.let { peerId ->
@@ -216,14 +230,15 @@ fun MainAppContent(viewModel: MainViewModel) {
     }
   }
 
-  if (callState.isRinging && callState.callDirection == CallDirection.Incoming) {
+  // Only show full screen incoming call UI if ringing AND explicitly requested
+  if (callState.isRinging && callState.callDirection == CallDirection.Incoming && incomingCallUiVisible) {
+    val caller = contacts.find { it.peerId == callState.peerId }
     IncomingCallScreen(
       callerId = callState.peerId,
+      callerName = caller?.name,
+      callerPhoto = caller?.photo,
       onAccept = {
         viewModel.acceptCall()
-        navController.navigate(Route.Interaction.createRoute(callState.peerId)) {
-          popUpTo(Screen.Contacts.route)
-        }
       },
       onReject = { viewModel.rejectCall() }
     )

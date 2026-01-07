@@ -71,6 +71,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
   private val _hasNotificationPermission = MutableStateFlow(true)
   val hasNotificationPermission = _hasNotificationPermission.asStateFlow()
 
+  // Incoming Call UI State
+  private val _incomingCallUiVisible = MutableStateFlow(false)
+  val incomingCallUiVisible = _incomingCallUiVisible.asStateFlow()
+
   private var pendingNavigationPeerId: String? = null
   private var pendingAcceptPeerId: String? = null
 
@@ -177,11 +181,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
   }
 
   private fun refreshCallState() {
-    _callState.value = callService?.nativeGetCallState() ?: CallState()
+    val newState = callService?.nativeGetCallState() ?: CallState()
+    _callState.value = newState
+    // Automatically hide the incoming call UI if the ringing state stops (call answered, rejected, or timed out)
+    if (!newState.isRinging) {
+      _incomingCallUiVisible.value = false
+    }
   }
 
   private fun refreshSignalingUrl() {
     _signalingUrl.value = callService?.nativeGetSignalingUrl() ?: ""
+  }
+
+  fun showIncomingCallUi() {
+    _incomingCallUiVisible.value = true
   }
 
   fun generateNewIdentity(): String {

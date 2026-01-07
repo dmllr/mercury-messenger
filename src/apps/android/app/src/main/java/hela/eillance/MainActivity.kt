@@ -97,8 +97,9 @@ class MainActivity : ComponentActivity() {
     if (isAcceptAction && peerId != null) {
       viewModel.onCallAcceptedFromNotification(peerId)
     } else if (isShowIncomingCall && peerId != null) {
-      // Logic handled by UI state, but ensure we wake up
+      // Show incoming call UI only when explicitly requested (e.g. notification tap or lock screen intent)
       configureWindowForLockScreen()
+      viewModel.showIncomingCallUi()
     } else if (peerId != null) {
       viewModel.navigateToPeer(peerId)
     }
