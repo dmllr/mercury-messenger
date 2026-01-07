@@ -41,40 +41,48 @@ class MercuryConnectionService : ConnectionService() {
   }
 
   private fun createConnection(request: ConnectionRequest?, incoming: Boolean): Connection {
-    // 1. Try to get ID from the address (sip:peerId)
-    var peerId: String? = request?.address?.schemeSpecificPart
+    // 1. Try to get ID from the extras (passed from CallService)
+    var peerId = request?.extras?.getString(EXTRA_PEER_ID)
 
-    // 2. Try explicit extra
-    if (peerId == null || peerId.isEmpty()) {
-      peerId = request?.extras?.getString(EXTRA_PEER_ID)
-    }
-
-    // 3. Try nested extras (some Android versions wrap incoming extras)
-    if ((peerId == null || peerId.isEmpty()) && request?.extras?.containsKey(TelecomManager.EXTRA_INCOMING_CALL_EXTRAS) == true) {
+    // 2. Try nested extras (Android Telecom sometimes wraps the Bundle)
+    if (peerId.isNullOrEmpty() && request?.extras?.containsKey(TelecomManager.EXTRA_INCOMING_CALL_EXTRAS) == true) {
       val incomingExtras = request.extras.getBundle(TelecomManager.EXTRA_INCOMING_CALL_EXTRAS)
       peerId = incomingExtras?.getString(EXTRA_PEER_ID)
     }
 
-    // 4. Fallback
-    if (peerId == null || peerId.isEmpty()) {
-      peerId = "Unknown"
+    // 3. Fallback to address parsing
+    if (peerId.isNullOrEmpty()) {
+      peerId = request?.address?.schemeSpecificPart
     }
 
-    val service = CallService.instance ?: run {
-      Log.e(TAG, "CallService instance is not available.")
-      return Connection.createFailedConnection(android.telecom.DisconnectCause(android.telecom.DisconnectCause.ERROR))
+    if (peerId.isNullOrEmpty()) {
+      Log.e(TAG, "Failed to determine peerId for connection")
+      return Connection.createFailedConnection(
+        android.telecom.DisconnectCause(android.telecom.DisconnectCause.ERROR, "Unknown Peer")
+      )
+    }
+
+    val service = CallService.instance
+    if (service == null) {
+      Log.e(TAG, "CallService instance is not available. Cannot create connection.")
+      return Connection.createFailedConnection(
+        android.telecom.DisconnectCause(android.telecom.DisconnectCause.ERROR, "Service Disconnected")
+      )
     }
 
     val connection = MercuryConnection(service, peerId, incoming)
 
-    if (!incoming) {
-      connection.setDialing()
-    } else {
+    // Set initial state based on direction
+    if (incoming) {
       connection.setRinging()
+    } else {
+      connection.setDialing()
     }
 
+    // Register this connection with the CallService to synchronize state with the C++ engine
     service.registerTelecomConnection(peerId, connection)
 
+    Log.i(TAG, "Created new ${if(incoming) "incoming" else "outgoing"} connection for $peerId")
     return connection
   }
 
