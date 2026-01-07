@@ -147,16 +147,21 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
           connectionTimeoutJobs.remove(peerId + context)?.cancel()
         }
 
-        val stateInt = when(newState) {
-          PeerConnection.PeerConnectionState.NEW -> PeerConnectionState.New.value
-          PeerConnection.PeerConnectionState.CONNECTING -> PeerConnectionState.Connecting.value
-          PeerConnection.PeerConnectionState.CONNECTED -> PeerConnectionState.Connected.value
-          PeerConnection.PeerConnectionState.DISCONNECTED -> PeerConnectionState.Disconnected.value
-          PeerConnection.PeerConnectionState.FAILED -> PeerConnectionState.Failed.value
-          PeerConnection.PeerConnectionState.CLOSED -> PeerConnectionState.Closed.value
-          null -> PeerConnectionState.Closed.value
+        // Only report state changes for the Data connection.
+        // Closing the transient Media connection (e.g. during hangup) should not
+        // be interpreted by the Core as the Peer disconnecting entirely.
+        if (context == "data") {
+          val stateInt = when (newState) {
+            PeerConnection.PeerConnectionState.NEW -> PeerConnectionState.New.value
+            PeerConnection.PeerConnectionState.CONNECTING -> PeerConnectionState.Connecting.value
+            PeerConnection.PeerConnectionState.CONNECTED -> PeerConnectionState.Connected.value
+            PeerConnection.PeerConnectionState.DISCONNECTED -> PeerConnectionState.Disconnected.value
+            PeerConnection.PeerConnectionState.FAILED -> PeerConnectionState.Failed.value
+            PeerConnection.PeerConnectionState.CLOSED -> PeerConnectionState.Closed.value
+            null -> PeerConnectionState.Closed.value
+          }
+          nativeOnPeerConnectionStateChange(nativePointer, peerId, stateInt)
         }
-        nativeOnPeerConnectionStateChange(nativePointer, peerId, stateInt)
       }
       override fun onIceConnectionChange(newState: PeerConnection.IceConnectionState?) {}
       override fun onIceConnectionReceivingChange(p0: Boolean) {}
@@ -213,6 +218,11 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
           }
         }
         dc.registerObserver(dataChannelObserver)
+
+        // Check immediately in case it opened before we registered the observer
+        if (dc.state() == DataChannel.State.OPEN) {
+          nativeOnDataChannelOpen(nativePointer, peerId)
+        }
       }
       override fun onRenegotiationNeeded() {
         Log.i(TAG, "onRenegotiationNeeded for peer: $peerId, context: $context")
@@ -305,6 +315,11 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
       }
     }
     dc.registerObserver(dataChannelObserver)
+
+    // Check immediately in case it opened before we registered the observer
+    if (dc.state() == DataChannel.State.OPEN) {
+      nativeOnDataChannelOpen(nativePointer, peerId)
+    }
   }
 
   fun sendDataChannelMessage(peerId: String, message: String) {
