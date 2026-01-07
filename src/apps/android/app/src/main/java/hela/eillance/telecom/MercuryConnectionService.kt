@@ -1,6 +1,5 @@
 package hela.eillance.telecom
 
-import android.net.Uri
 import android.telecom.Connection
 import android.telecom.ConnectionRequest
 import android.telecom.ConnectionService
@@ -15,7 +14,6 @@ class MercuryConnectionService : ConnectionService() {
     connectionManagerPhoneAccount: PhoneAccountHandle?,
     request: ConnectionRequest?
   ): Connection {
-    Log.d(TAG, "onCreateIncomingConnection")
     return createConnection(request, incoming = true)
   }
 
@@ -23,7 +21,6 @@ class MercuryConnectionService : ConnectionService() {
     connectionManagerPhoneAccount: PhoneAccountHandle?,
     request: ConnectionRequest?
   ): Connection {
-    Log.d(TAG, "onCreateOutgoingConnection")
     return createConnection(request, incoming = false)
   }
 
@@ -44,9 +41,25 @@ class MercuryConnectionService : ConnectionService() {
   }
 
   private fun createConnection(request: ConnectionRequest?, incoming: Boolean): Connection {
-    val peerId = request?.extras?.getString(EXTRA_PEER_ID) ?: "Unknown"
+    // 1. Try to get ID from the address (sip:peerId)
+    var peerId: String? = request?.address?.schemeSpecificPart
 
-    // Establish the link with the CallService singleton or bound instance
+    // 2. Try explicit extra
+    if (peerId == null || peerId.isEmpty()) {
+      peerId = request?.extras?.getString(EXTRA_PEER_ID)
+    }
+
+    // 3. Try nested extras (some Android versions wrap incoming extras)
+    if ((peerId == null || peerId.isEmpty()) && request?.extras?.containsKey(TelecomManager.EXTRA_INCOMING_CALL_EXTRAS) == true) {
+      val incomingExtras = request.extras.getBundle(TelecomManager.EXTRA_INCOMING_CALL_EXTRAS)
+      peerId = incomingExtras?.getString(EXTRA_PEER_ID)
+    }
+
+    // 4. Fallback
+    if (peerId == null || peerId.isEmpty()) {
+      peerId = "Unknown"
+    }
+
     val service = CallService.instance ?: run {
       Log.e(TAG, "CallService instance is not available.")
       return Connection.createFailedConnection(android.telecom.DisconnectCause(android.telecom.DisconnectCause.ERROR))
@@ -54,15 +67,12 @@ class MercuryConnectionService : ConnectionService() {
 
     val connection = MercuryConnection(service, peerId, incoming)
 
-    // If this is an outgoing call, we need to tell the CallService that the telecom connection is ready
-    // so it can proceed with the engine logic if waiting.
     if (!incoming) {
       connection.setDialing()
     } else {
       connection.setRinging()
     }
 
-    // Register this connection with the CallService so state changes can be propagated
     service.registerTelecomConnection(peerId, connection)
 
     return connection

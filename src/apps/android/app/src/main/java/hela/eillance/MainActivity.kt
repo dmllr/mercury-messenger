@@ -1,5 +1,6 @@
 package hela.eillance
 
+import android.app.KeyguardManager
 import android.app.NotificationManager
 import android.content.ComponentName
 import android.content.Context
@@ -37,6 +38,7 @@ class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
 
+    configureWindowForLockScreen()
     handleIntent(intent)
 
     // Start service immediately without requesting permissions.
@@ -53,6 +55,13 @@ class MainActivity : ComponentActivity() {
         }
       }
     }
+  }
+
+  private fun configureWindowForLockScreen() {
+    setShowWhenLocked(true)
+    setTurnScreenOn(true)
+    val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+    keyguardManager.requestDismissKeyguard(this, null)
   }
 
   override fun onStart() {
@@ -88,7 +97,8 @@ class MainActivity : ComponentActivity() {
     if (isAcceptAction && peerId != null) {
       viewModel.onCallAcceptedFromNotification(peerId)
     } else if (isShowIncomingCall && peerId != null) {
-      // Logic handled by UI state
+      // Logic handled by UI state, but ensure we wake up
+      configureWindowForLockScreen()
     } else if (peerId != null) {
       viewModel.navigateToPeer(peerId)
     }
