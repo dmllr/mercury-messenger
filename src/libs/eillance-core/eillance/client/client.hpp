@@ -426,7 +426,7 @@ inline void Client::AcceptCall(const std::string& peer_id, messaging::HistoryEnt
     return;
   }
 
-  nlohmann::json msg = {{"action", "call_accept"}, {"kind", call_kind}};
+  const Json msg = {{"action", "call_accept"}, {"kind", call_kind}};
   message_history_->AddTextEntry(peer_id, msg.dump(), messaging::MessageDirection::sent, messaging::HistoryEntryKind::systemMessage);
   delivery_service_->attemptDelivery(peer_id);
 }
@@ -764,7 +764,7 @@ inline void Client::ProcessPeerMessage(Json message) {  // NOLINT(*-cognitive-co
         if (req.kind == messaging::HistoryEntryKind::systemMessage) {
           const auto& content_str = std::get<messaging::MessageEntry>(req.data).content;
           try {
-            Json content_json = Json::parse(content_str);
+            const Json content_json = Json::parse(content_str);
             if (content_json.value("action", "") == "contact_request") {
               message_history_->UpdateMessageStatus(peer_id, req.id, messaging::MessageStatus::read);
               break;  // Assume only one pending request needs to be marked.
@@ -902,7 +902,7 @@ inline void Client::StartMediaCall(const std::string& peer_id, const bool is_vid
   const auto call_kind = is_video ? messaging::HistoryEntryKind::videoCall : messaging::HistoryEntryKind::voiceCall;
 
   // Create the call request message first and queue it for delivery.
-  nlohmann::json msg = {{"action", "call_request"}, {"kind", call_kind}};
+  const Json msg = {{"action", "call_request"}, {"kind", call_kind}};
   message_history_->AddTextEntry(peer_id, msg.dump(), messaging::MessageDirection::sent, messaging::HistoryEntryKind::systemMessage);
 
   // Now, trigger the delivery mechanism.
@@ -1162,11 +1162,11 @@ inline void Client::ProcessDataChannelMessage(const std::string& peer_id, const 
           }
         } else if (action == "call_request") {
           if (on_incoming_call_) {
-            messaging::HistoryEntryKind call_type = content_json.value("kind", messaging::HistoryEntryKind::voiceCall);
+            const messaging::HistoryEntryKind call_type = content_json.value("kind", messaging::HistoryEntryKind::voiceCall);
             (*on_incoming_call_)(peer_id, call_type);
 
             // Acknowledge the request by sending a "ringing" message back
-            Json ringing_msg = {{"action", "call_ringing"}};
+            const Json ringing_msg = {{"action", "call_ringing"}};
             message_history_->AddTextEntry(peer_id, ringing_msg.dump(), messaging::MessageDirection::sent, messaging::HistoryEntryKind::systemMessage);
             delivery_service_->attemptDelivery(peer_id);
           }
@@ -1390,7 +1390,7 @@ inline void Client::SendQueuedMessages(const std::string& peer_id) {
 
 inline void Client::SetupDataChannel(const std::shared_ptr<Peer>& peer, const std::string& peer_id) {
   peer->on_data_channel_message_ = [this, peer_id](const std::string& msg) {
-    ProcessDataChannelMessage(peer_id, nlohmann::json::parse(msg));
+    ProcessDataChannelMessage(peer_id, Json::parse(msg));
   };
 }
 
