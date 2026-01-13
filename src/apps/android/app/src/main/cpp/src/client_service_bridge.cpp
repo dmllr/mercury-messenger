@@ -59,7 +59,11 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_addContact(JNIE
     const char* token_chars = (token != nullptr) ? env->GetStringUTFChars(token, nullptr) : nullptr;
     const auto c_token = (token_chars) ? std::optional<std::string>(token_chars) : std::nullopt;
 
-    vm->AddContact(peer_id_chars, c_token);
+    try {
+      vm->AddContact(eillance::ContactID(peer_id_chars), c_token);
+    } catch (...) {
+      // Handle invalid hex string
+    }
 
     env->ReleaseStringUTFChars(peer_id, peer_id_chars);
     if (token_chars) { env->ReleaseStringUTFChars(token, token_chars); }
@@ -69,7 +73,9 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_addContact(JNIE
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_acceptContact(JNIEnv* env, jobject /*instance*/, jstring peer_id) {
   if (auto* vm = GetViewModel()) {
     const char* chars = env->GetStringUTFChars(peer_id, nullptr);
-    vm->AcceptContact(chars);
+    try {
+      vm->AcceptContact(eillance::ContactID(chars));
+    } catch (...) {}
     env->ReleaseStringUTFChars(peer_id, chars);
   }
 }
@@ -77,7 +83,9 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_acceptContact(J
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_blockContact(JNIEnv* env, jobject /*instance*/, jstring peer_id) {
   if (auto* vm = GetViewModel()) {
     const char* chars = env->GetStringUTFChars(peer_id, nullptr);
-    vm->BlockContact(chars);
+    try {
+      vm->BlockContact(eillance::ContactID(chars));
+    } catch (...) {}
     env->ReleaseStringUTFChars(peer_id, chars);
   }
 }
@@ -85,7 +93,9 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_blockContact(JN
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_deleteContact(JNIEnv* env, jobject /*instance*/, jstring peer_id) {
   if (auto* vm = GetViewModel()) {
     const char* chars = env->GetStringUTFChars(peer_id, nullptr);
-    vm->DeleteContact(chars);
+    try {
+      vm->DeleteContact(eillance::ContactID(chars));
+    } catch (...) {}
     env->ReleaseStringUTFChars(peer_id, chars);
   }
 }
@@ -93,7 +103,9 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_deleteContact(J
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_unblockContact(JNIEnv* env, jobject /*instance*/, jstring peer_id) {
   if (auto* vm = GetViewModel()) {
     const char* chars = env->GetStringUTFChars(peer_id, nullptr);
-    vm->UnblockContact(chars);
+    try {
+      vm->UnblockContact(eillance::ContactID(chars));
+    } catch (...) {}
     env->ReleaseStringUTFChars(peer_id, chars);
   }
 }
@@ -101,7 +113,9 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_unblockContact(
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_selectContact(JNIEnv* env, jobject /*instance*/, jstring peer_id) {
   if (auto* vm = GetViewModel()) {
     const char* chars = env->GetStringUTFChars(peer_id, nullptr);
-    vm->SelectContact(chars);
+    try {
+      vm->SelectContact(eillance::ContactID(chars));
+    } catch (...) {}
     env->ReleaseStringUTFChars(peer_id, chars);
   }
 }
@@ -164,7 +178,9 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_nativeSetContac
   if (auto* vm = GetViewModel()) {
     const char* peer_id_chars = env->GetStringUTFChars(peer_id, nullptr);
     const char* name_chars = env->GetStringUTFChars(name, nullptr);
-    vm->SetContactDisplayNameOverride(peer_id_chars, name_chars);
+    try {
+      vm->SetContactDisplayNameOverride(eillance::ContactID(peer_id_chars), name_chars);
+    } catch (...) {}
     env->ReleaseStringUTFChars(peer_id, peer_id_chars);
     env->ReleaseStringUTFChars(name, name_chars);
   }
@@ -173,7 +189,9 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_nativeSetContac
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_nativeResetContactDisplayNameOverride(JNIEnv* env, jobject /*instance*/, jstring peer_id) {
   if (auto* vm = GetViewModel()) {
     const char* peer_id_chars = env->GetStringUTFChars(peer_id, nullptr);
-    vm->ResetContactDisplayNameOverride(peer_id_chars);
+    try {
+      vm->ResetContactDisplayNameOverride(eillance::ContactID(peer_id_chars));
+    } catch (...) {}
     env->ReleaseStringUTFChars(peer_id, peer_id_chars);
   }
 }
@@ -344,7 +362,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_hela_eillance_CallService_nativeGetSig
 extern "C" JNIEXPORT jstring JNICALL Java_hela_eillance_CallService_nativeGetSelectedContactId(JNIEnv* env, jobject /*instance*/) {
   if (auto* vm = GetViewModel()) {
     if (auto id = vm->GetState().selected_contact_id) {
-      return env->NewStringUTF(id->c_str());
+      return env->NewStringUTF(id->ToString().c_str());
     }
   }
   return nullptr;

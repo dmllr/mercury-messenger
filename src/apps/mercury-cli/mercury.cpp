@@ -20,6 +20,7 @@
 #include "eillance/capture/video_capture.hpp"
 #include "eillance/client/client.hpp"
 #include "eillance/events/service_connection_state.h"
+#include "eillance/identity/contact_id.hpp"
 #include "eillance/logging/logging.h"
 #include "eillance/rtc/transport_impl_libdatachannel.hpp"
 #include "eillance/storage/persistent_storage.hpp"
@@ -85,7 +86,6 @@ std::vector<std::string> GetContactMenuEntries(const std::vector<eillance::view_
     std::string unread_count_str;
     if (contact.unread_count > 0) { unread_count_str = " [" + std::to_string(contact.unread_count) + "]"; }
 
-    constexpr auto max_id_display_length = 12;
     entries.push_back(contact.display_name + status_str + conn_status_str + unread_count_str);
   }
   return entries;
@@ -296,7 +296,7 @@ int main(int argc, char** argv) {
           } else {
             if (state.selected_contact_id.has_value()) {
               const auto it = std::ranges::find_if(state.contacts, [&](const auto& c) { return c.peer_id == *state.selected_contact_id; });
-              const std::string display_id = (it != state.contacts.end()) ? it->display_name : *state.selected_contact_id;
+              const std::string display_id = (it != state.contacts.end()) ? it->display_name : state.selected_contact_id->ToString();
               prefix = "[" + display_id + "]: ";
             } else {
               prefix = "[system]: ";
@@ -375,14 +375,14 @@ int main(int argc, char** argv) {
           ss >> command;
           std::getline(ss >> std::ws, arg);
 
-          auto find_contact_id = [&](const std::string& partial_id) -> std::optional<std::string> {
+          auto find_contact_id = [&](const std::string& partial_id) -> std::optional<eillance::ContactID> {
             if (partial_id.empty()) {
               return std::nullopt;
             }
-            std::vector<std::string> matches;
+            std::vector<eillance::ContactID> matches;
             const auto state = view_model->GetState();
             for (const auto& contact: state.contacts) {
-              if (contact.peer_id.starts_with(partial_id)) {
+              if (contact.peer_id.ToString().starts_with(partial_id)) {
                 matches.push_back(contact.peer_id);
               }
             }
@@ -399,31 +399,35 @@ int main(int argc, char** argv) {
 
           if (command == "/add") {
             view_model->AddSystemMessageToChat("--> Adding contact: " + arg);
-            view_model->AddContact(arg);
+            try {
+              view_model->AddContact(eillance::ContactID(arg));
+            } catch (...) {
+              view_model->AddSystemMessageToChat("--> Invalid Contact ID format.");
+            }
           } else if (command == "/accept") {
             if (auto peer_id = find_contact_id(arg)) {
-              view_model->AddSystemMessageToChat("--> Accepting contact: " + *peer_id);
+              view_model->AddSystemMessageToChat("--> Accepting contact: " + peer_id->ToString());
               view_model->AcceptContact(*peer_id);
             } else if (arg.empty()) {
               view_model->AddSystemMessageToChat("--> Usage: /accept <contact_id>");
             }
           } else if (command == "/block") {
             if (auto peer_id = find_contact_id(arg)) {
-              view_model->AddSystemMessageToChat("--> Blocking contact: " + *peer_id);
+              view_model->AddSystemMessageToChat("--> Blocking contact: " + peer_id->ToString());
               view_model->BlockContact(*peer_id);
             } else if (arg.empty()) {
               view_model->AddSystemMessageToChat("--> Usage: /block <contact_id>");
             }
           } else if (command == "/delete") {
             if (auto peer_id = find_contact_id(arg)) {
-              view_model->AddSystemMessageToChat("--> DELETING contact and all history (irreversible): " + *peer_id);
+              view_model->AddSystemMessageToChat("--> DELETING contact and all history (irreversible): " + peer_id->ToString());
               view_model->DeleteContact(*peer_id);
             } else if (arg.empty()) {
               view_model->AddSystemMessageToChat("--> Usage: /delete <contact_id>");
             }
           } else if (command == "/unblock") {
             if (auto peer_id = find_contact_id(arg)) {
-              view_model->AddSystemMessageToChat("--> Unblocking contact: " + *peer_id);
+              view_model->AddSystemMessageToChat("--> Unblocking contact: " + peer_id->ToString());
               view_model->UnblockContact(*peer_id);
             } else if (arg.empty()) {
               view_model->AddSystemMessageToChat("--> Usage: /unblock <contact_id>");
@@ -456,7 +460,7 @@ int main(int argc, char** argv) {
             }
           } else if (command == "/myid") {
             const auto state = view_model->GetState();
-            view_model->AddSystemMessageToChat("--> Your ID: " + state.my_profile.my_id);
+            view_model->AddSystemMessageToChat("--> Your ID: " + state.my_profile.my_id.ToString());
           } else if (command == "/exit") {
             screen.Exit();
           } else {
@@ -489,7 +493,7 @@ int main(int argc, char** argv) {
     const auto main_view = ftxui::hbox({contact_menu->Render() | ftxui::size(ftxui::WIDTH, ftxui::EQUAL, contact_list_width) | ftxui::border, ftxui::vbox({chat_renderer->Render() | ftxui::flex, ftxui::separator(), input_component->Render()}) | ftxui::flex});
 
     const std::string my_name = state.my_profile.my_display_name ? " (" + *state.my_profile.my_display_name + ")" : "";
-    const auto status_line = " Mercury CLI | Your ID: " + state.my_profile.my_id + my_name + " | Status: " + std::string(GetConnectionStatusString(state.connection_state));
+    const auto status_line = " Mercury CLI | Your ID: " + state.my_profile.my_id.ToString() + my_name + " | Status: " + std::string(GetConnectionStatusString(state.connection_state));
     return ftxui::window(ftxui::text(status_line), main_view);
   });
 

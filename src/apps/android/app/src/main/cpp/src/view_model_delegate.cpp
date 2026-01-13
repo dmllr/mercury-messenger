@@ -55,7 +55,7 @@ auto AndroidViewModelDelegate::GetMyProfile(JNIEnv* env) const -> jobject {
 
   auto& profile_holder = class_refs.Class("hela/eillance/ndkio/MyProfileInfo");
 
-  jstring my_id = env->NewStringUTF(profile.my_id.c_str());
+  jstring my_id = env->NewStringUTF(profile.my_id.ToString().c_str());
   jstring display_name = profile.my_display_name ? env->NewStringUTF(profile.my_display_name->c_str()) : nullptr;
   jstring bio = profile.my_bio ? env->NewStringUTF(profile.my_bio->c_str()) : nullptr;
   jstring photo = profile.my_photo ? env->NewStringUTF(profile.my_photo->c_str()) : nullptr;
@@ -80,7 +80,7 @@ auto AndroidViewModelDelegate::GetContacts(JNIEnv* env) const -> jobject {
   auto& contact_holder = class_refs.Class("hela/eillance/ndkio/Contact");
 
   for (const auto& contact_cpp: contacts) {
-    jstring peer_id = env->NewStringUTF(contact_cpp.peer_id.c_str());
+    jstring peer_id = env->NewStringUTF(contact_cpp.peer_id.ToString().c_str());
     jstring name = env->NewStringUTF(contact_cpp.display_name.c_str());
     jstring bio = contact_cpp.bio ? env->NewStringUTF(contact_cpp.bio->c_str()) : nullptr;
     jstring photo = contact_cpp.photo ? env->NewStringUTF(contact_cpp.photo->c_str()) : nullptr;
@@ -146,7 +146,7 @@ auto AndroidViewModelDelegate::GetCallState(JNIEnv* env) const -> jobject {
   auto call_state = view_model_->GetCallState();
   auto& call_state_holder = class_refs.Class("hela/eillance/ndkio/CallState");
 
-  jstring peer_id = env->NewStringUTF(call_state.peer_id.c_str());
+  jstring peer_id = env->NewStringUTF(call_state.peer_id.ToString().c_str());
   jobject call_state_java = call_state_holder.NewObject(env, call_state.is_connecting, call_state.is_in_call, call_state.is_ringing,
                                                         (jint)call_state.call_direction, peer_id,
                                                         (jint)call_state.call_type);

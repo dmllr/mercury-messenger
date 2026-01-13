@@ -7,6 +7,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "eillance/identity/contact_id.hpp"
 #include "eillance/identity/contact_manager.hpp"
 #include "eillance/logging/logging.h"
 #include "eillance/messaging/history.hpp"
@@ -16,7 +17,7 @@
 namespace eillance::messaging {
 
 class MessageDeliveryService {
-  using ConnectionRequestHandler = std::function<void(const std::string&)>;
+  using ConnectionRequestHandler = std::function<void(const ContactID&)>;
 
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<identity::ContactManager> contact_manager_;
@@ -25,8 +26,8 @@ class MessageDeliveryService {
   std::atomic<bool> is_running_{false};
 
   // Track peers for which we are actively trying to connect to avoid duplicate requests.
-  std::unordered_set<std::string> pending_connections_;
-  std::unordered_map<std::string, int> retry_delays_s_;
+  std::unordered_set<ContactID> pending_connections_;
+  std::unordered_map<ContactID, int> retry_delays_s_;
   std::recursive_mutex mutex_;
 
   static constexpr int initial_retry_delay_s = 5;
@@ -51,7 +52,7 @@ public:
   }
 
   // Called by Client when a connection attempt is finished (succeeded and messages sent, or failed)
-  void connectionAttemptFinished(const std::string& peer_id) {
+  void connectionAttemptFinished(const ContactID& peer_id) {
     const std::lock_guard<std::recursive_mutex> lock(mutex_);
     pending_connections_.erase(peer_id);
 
@@ -76,7 +77,7 @@ public:
   }
 
   // Called by Client when queuing a new message or action that requires a connection.
-  void attemptDelivery(const std::string& peer_id) {
+  void attemptDelivery(const ContactID& peer_id) {
     const std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (pending_connections_.contains(peer_id)) { return; }  // Already trying to connect.
 
@@ -93,10 +94,11 @@ private:
     if (!contact_manager_) { return; }
     const auto all_contacts = contact_manager_->GetContacts();
     for (const auto& contact: all_contacts) {
+      ContactID id(contact.peer_id);
       // Check if there are any messages marked as 'sending' for this contact.
-      if (!storage_->GetMessagesWithStatus(contact.peer_id, MessageStatus::sending).empty()) {
+      if (!storage_->GetMessagesWithStatus(id, MessageStatus::sending).empty()) {
         // We have messages for this contact, let's try to deliver them.
-        attemptDelivery(contact.peer_id);
+        attemptDelivery(id);
       }
     }
   }

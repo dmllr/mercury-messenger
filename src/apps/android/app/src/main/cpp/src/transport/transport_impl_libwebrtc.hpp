@@ -11,6 +11,7 @@
 #include "../class_refs.hpp"
 #include "../utils/jni_utils.hpp"
 #include "eillance/crypto/crypto.hpp"
+#include "eillance/identity/contact_id.hpp"
 #include "eillance/logging/logging.h"
 #include "eillance/transport/peer.hpp"
 #include "eillance/transport/transport.hpp"
@@ -29,10 +30,10 @@ class AndroidRtcTransport final : public Transport::TransportInterface {
   jobject transport_java_ref_{nullptr};
   TransportDelegate* delegate_{nullptr};
   std::shared_ptr<Transport::StatusCallbackFunction> status_callback_{};
-  std::string id_;
+  ContactID id_;
   std::string signaling_url_;
 
-  std::unordered_map<std::string, std::shared_ptr<Peer>> peers_;
+  std::unordered_map<ContactID, std::shared_ptr<Peer>> peers_;
   mutable std::mutex peers_mutex_;
 
   auto Attach() const -> JNIEnv* { return eillance::jni::AttachCurrentThreadIfNeeded(jvm_); }
@@ -66,12 +67,12 @@ public:
   auto Delegate() -> TransportDelegate* { return delegate_; }
 
   void SetStatusCallback(const Transport::StatusCallbackFunction& callback) override { status_callback_ = std::make_shared<Transport::StatusCallbackFunction>(callback); }
-  void ReportStateChange(const std::string& peer_id, EventSource source, int state) {
+  void ReportStateChange(const ContactID& peer_id, EventSource source, int state) {
     if (status_callback_) { (*status_callback_)(peer_id, source, state); }
   }
   void SetName(const std::string& /*device_name*/) override {}
-  void SetId(const std::string& id) override { id_ = id; }
-  auto GetId() const -> const std::string& { return id_; }
+  void SetId(const ContactID& id) override { id_ = id; }
+  auto GetId() const -> const ContactID& { return id_; }
   void SetSignalingUrl(const std::string& url) override { signaling_url_ = url; }
 
   void Start() override {
@@ -81,7 +82,7 @@ public:
     }
     auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcTransport");
     jmethodID start_method = transport_holder.GetMethod("connect");
-    auto j_id = env->NewStringUTF(id_.c_str());
+    auto j_id = env->NewStringUTF(id_.ToString().c_str());
     auto j_url = env->NewStringUTF(signaling_url_.c_str());
     env->CallVoidMethod(transport_java_ref_, start_method, j_id, j_url);
     env->DeleteLocalRef(j_id);
@@ -110,32 +111,32 @@ public:
     env->DeleteLocalRef(j_url);
   }
 
-  void AddPeer(const std::string& peer_id, const std::shared_ptr<Peer>& peer) override {
+  void AddPeer(const ContactID& peer_id, const std::shared_ptr<Peer>& peer) override {
     const std::lock_guard<std::mutex> lock(peers_mutex_);
     peers_.emplace(peer_id, peer);
   }
-  auto GetPeer(const std::string& peer_id) const -> std::shared_ptr<Peer> override {
+  auto GetPeer(const ContactID& peer_id) const -> std::shared_ptr<Peer> override {
     const std::lock_guard<std::mutex> lock(peers_mutex_);
     const auto it = peers_.find(peer_id);
     return (it != peers_.end()) ? it->second : nullptr;
   }
-  auto GetPeers() const -> std::unordered_map<std::string, std::shared_ptr<Peer>> override {
+  auto GetPeers() const -> std::unordered_map<ContactID, std::shared_ptr<Peer>> override {
     const std::lock_guard<std::mutex> lock(peers_mutex_);
     return peers_;
   }
-  void RemovePeer(const std::string& peer_id) override {
+  void RemovePeer(const ContactID& peer_id) override {
     const std::lock_guard<std::mutex> lock(peers_mutex_);
     peers_.erase(peer_id);
   }
 
-  auto GetPeerConnectionState(const std::string& peer_id) const -> eillance::transport::PeerConnectionState override {
+  auto GetPeerConnectionState(const ContactID& peer_id) const -> eillance::transport::PeerConnectionState override {
     JNIEnv* env = Attach();
     if ((env == nullptr) || (transport_java_ref_ == nullptr)) {
       return eillance::transport::PeerConnectionState::Closed;
     }
     auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcTransport");
     auto method = transport_holder.GetMethod("getPeerConnectionState");
-    auto* j_peer_id = env->NewStringUTF(peer_id.c_str());
+    auto* j_peer_id = env->NewStringUTF(peer_id.ToString().c_str());
     auto state_val = env->CallIntMethod(transport_java_ref_, method, j_peer_id);
     env->DeleteLocalRef(j_peer_id);
     return static_cast<eillance::transport::PeerConnectionState>(state_val);
@@ -154,7 +155,7 @@ public:
     env->DeleteLocalRef(j_msg);
   }
 
-  void SendPeerDataChannelMessage(const std::string& peer_id, const Transport::Json& message) const override {
+  void SendPeerDataChannelMessage(const ContactID& peer_id, const Transport::Json& message) const override {
     JNIEnv* env = Attach();
     if ((env == nullptr) || (transport_java_ref_ == nullptr)) {
       return;
@@ -162,7 +163,7 @@ public:
     auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcTransport");
     auto method = transport_holder.GetMethod("sendDataChannelMessage");
     const auto msg_str = message.dump();
-    auto* j_peer_id = env->NewStringUTF(peer_id.c_str());
+    auto* j_peer_id = env->NewStringUTF(peer_id.ToString().c_str());
     auto j_msg = env->NewStringUTF(msg_str.c_str());
     env->CallVoidMethod(transport_java_ref_, method, j_peer_id, j_msg);
     env->DeleteLocalRef(j_peer_id);
@@ -170,57 +171,59 @@ public:
   }
 
   void AddToStream(const std::shared_ptr<Peer>& /*peer*/, bool /*is_adding_video*/) const override {}
-  void CreateDataPeerConnection(const std::string& peer_id) override { CreatePeerConnection(peer_id, "data"); }
-  void CreateMediaPeerConnection(const std::string& peer_id) override { CreatePeerConnection(peer_id, "media"); }
-  void CreateDataChannel(const std::string& peer_id) override;
-  void ClosePeerConnection(const std::string& peer_id, const std::string& context) override {
+  void CreateDataPeerConnection(const ContactID& peer_id) override { CreatePeerConnection(peer_id, "data"); }
+  void CreateMediaPeerConnection(const ContactID& peer_id) override { CreatePeerConnection(peer_id, "media"); }
+  void CreateDataChannel(const ContactID& peer_id) override;
+  void ClosePeerConnection(const ContactID& peer_id, const std::string& context) override {
     JNIEnv* env = Attach();
     if ((env == nullptr) || (transport_java_ref_ == nullptr)) {
       return;
     }
     auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcTransport");
     jmethodID close_pc_method = transport_holder.GetMethod("closePeerConnection");
-    auto* j_peer_id = env->NewStringUTF(peer_id.c_str());
+    auto* j_peer_id = env->NewStringUTF(peer_id.ToString().c_str());
     auto j_context = env->NewStringUTF(context.c_str());
     env->CallVoidMethod(transport_java_ref_, close_pc_method, j_peer_id, j_context);
+    env->DeleteLocalRef(j_peer_id);
+    env->DeleteLocalRef(j_context);
   }
 
-  void CreateOffer(const std::string& peer_id, const std::string& context) override {
+  void CreateOffer(const ContactID& peer_id, const std::string& context) override {
     JNIEnv* env = Attach();
     if ((env == nullptr) || (transport_java_ref_ == nullptr)) {
       return;
     }
     auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcTransport");
     auto* mid = transport_holder.GetMethod("createOffer");
-    auto* j_peer_id = env->NewStringUTF(peer_id.c_str());
+    auto* j_peer_id = env->NewStringUTF(peer_id.ToString().c_str());
     auto j_context = env->NewStringUTF(context.c_str());
     env->CallVoidMethod(transport_java_ref_, mid, j_peer_id, j_context);
     env->DeleteLocalRef(j_peer_id);
     env->DeleteLocalRef(j_context);
   }
 
-  void CreateAnswer(const std::string& peer_id, const std::string& context) override {
+  void CreateAnswer(const ContactID& peer_id, const std::string& context) override {
     JNIEnv* env = Attach();
     if ((env == nullptr) || (transport_java_ref_ == nullptr)) {
       return;
     }
     auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcTransport");
     auto* mid = transport_holder.GetMethod("createAnswer");
-    auto* j_peer_id = env->NewStringUTF(peer_id.c_str());
+    auto* j_peer_id = env->NewStringUTF(peer_id.ToString().c_str());
     auto j_context = env->NewStringUTF(context.c_str());
     env->CallVoidMethod(transport_java_ref_, mid, j_peer_id, j_context);
     env->DeleteLocalRef(j_peer_id);
     env->DeleteLocalRef(j_context);
   }
 
-  void SetRemoteDescription(const std::string& peer_id, const std::string& context, const std::string& sdp, const std::string& type) override {
+  void SetRemoteDescription(const ContactID& peer_id, const std::string& context, const std::string& sdp, const std::string& type) override {
     JNIEnv* env = Attach();
     if ((env == nullptr) || (transport_java_ref_ == nullptr)) {
       return;
     }
     auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcTransport");
     auto* mid = transport_holder.GetMethod("setRemoteDescription");
-    auto* j_peer_id = env->NewStringUTF(peer_id.c_str());
+    auto* j_peer_id = env->NewStringUTF(peer_id.ToString().c_str());
     auto* j_context = env->NewStringUTF(context.c_str());
     auto* j_sdp = env->NewStringUTF(sdp.c_str());
     auto* j_type = env->NewStringUTF(type.c_str());
@@ -231,14 +234,14 @@ public:
     env->DeleteLocalRef(j_type);
   }
 
-  void AddRemoteCandidate(const std::string& peer_id, const std::string& context, const std::string& candidate, const std::string& mid) override {
+  void AddRemoteCandidate(const ContactID& peer_id, const std::string& context, const std::string& candidate, const std::string& mid) override {
     JNIEnv* env = Attach();
     if ((env == nullptr) || (transport_java_ref_ == nullptr)) {
       return;
     }
     auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcTransport");
     auto* method_id = transport_holder.GetMethod("addRemoteCandidate");
-    auto* j_peer_id = env->NewStringUTF(peer_id.c_str());
+    auto* j_peer_id = env->NewStringUTF(peer_id.ToString().c_str());
     auto* j_context = env->NewStringUTF(context.c_str());
     auto* j_candidate = env->NewStringUTF(candidate.c_str());
     auto* j_mid = env->NewStringUTF(mid.c_str());
@@ -249,27 +252,27 @@ public:
     env->DeleteLocalRef(j_mid);
   }
 
-  auto AddVideo(const std::string& peer_id, const std::function<void(void)>& /*on_open*/) -> std::shared_ptr<ITrack> override {
+  auto AddVideo(const ContactID& peer_id, const std::function<void(void)>& /*on_open*/) -> std::shared_ptr<ITrack> override {
     JNIEnv* env = Attach();
     if (!env || (transport_java_ref_ == nullptr)) {
       return nullptr;
     }
     auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcTransport");
     auto* mid = transport_holder.GetMethod("addVideoTrack");
-    auto* j_peer_id = env->NewStringUTF(peer_id.c_str());
+    auto* j_peer_id = env->NewStringUTF(peer_id.ToString().c_str());
     env->CallVoidMethod(transport_java_ref_, mid, j_peer_id);
     env->DeleteLocalRef(j_peer_id);
     return std::make_shared<AndroidRtcTrack>();
   }
 
-  auto AddAudio(const std::string& peer_id, const std::function<void(void)>& /*on_open*/) -> std::shared_ptr<ITrack> override {
+  auto AddAudio(const ContactID& peer_id, const std::function<void(void)>& /*on_open*/) -> std::shared_ptr<ITrack> override {
     JNIEnv* env = Attach();
     if (!env || (transport_java_ref_ == nullptr)) {
       return nullptr;
     }
     auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcTransport");
     auto* mid = transport_holder.GetMethod("addAudioTrack");
-    auto* j_peer_id = env->NewStringUTF(peer_id.c_str());
+    auto* j_peer_id = env->NewStringUTF(peer_id.ToString().c_str());
     env->CallVoidMethod(transport_java_ref_, mid, j_peer_id);
     env->DeleteLocalRef(j_peer_id);
 
@@ -277,14 +280,14 @@ public:
   }
 
 private:
-  void CreatePeerConnection(const std::string& peer_id, const std::string& context) {
+  void CreatePeerConnection(const ContactID& peer_id, const std::string& context) {
     JNIEnv* env = Attach();
     if ((env == nullptr) || (transport_java_ref_ == nullptr)) {
       return;
     }
     auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcTransport");
     jmethodID create_pc_method = transport_holder.GetMethod("createPeerConnection");
-    auto* j_peer_id = env->NewStringUTF(peer_id.c_str());
+    auto* j_peer_id = env->NewStringUTF(peer_id.ToString().c_str());
     auto* j_context = env->NewStringUTF(context.c_str());
     env->CallVoidMethod(transport_java_ref_, create_pc_method, j_peer_id, j_context);
     env->DeleteLocalRef(j_peer_id);
@@ -292,14 +295,14 @@ private:
   }
 };
 
-inline void AndroidRtcTransport::CreateDataChannel(const std::string& peer_id) {
+inline void AndroidRtcTransport::CreateDataChannel(const ContactID& peer_id) {
   JNIEnv* env = Attach();
   if ((env == nullptr) || (transport_java_ref_ == nullptr)) {
     return;
   }
   auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcTransport");
   auto create_dc_method = transport_holder.GetMethod("createDataChannel");
-  auto* j_peer_id = env->NewStringUTF(peer_id.c_str());
+  auto* j_peer_id = env->NewStringUTF(peer_id.ToString().c_str());
   env->CallVoidMethod(transport_java_ref_, create_dc_method, j_peer_id);
   env->DeleteLocalRef(j_peer_id);
 }
@@ -313,8 +316,10 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcTransport_nati
   auto* transport = reinterpret_cast<eillance::transport::AndroidRtcTransport*>(native_ptr);
   if (transport != nullptr) {
     const char* peer_id_chars = env->GetStringUTFChars(j_peer_id, nullptr);
-    const std::string peer_id_str(peer_id_chars);
-    transport->ReportStateChange(peer_id_str, eillance::EventSource::peerConnectionState, state);
+    try {
+      eillance::ContactID peer_id(peer_id_chars);
+      transport->ReportStateChange(peer_id, eillance::EventSource::peerConnectionState, state);
+    } catch(...) {}
     env->ReleaseStringUTFChars(j_peer_id, peer_id_chars);
   }
 }
@@ -337,7 +342,7 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcTransport_nati
       default:
         break;
     }
-    if (service_state != eillance::ServiceConnectionState::unknown) { transport->ReportStateChange("", eillance::EventSource::system, static_cast<int>(service_state)); }
+    if (service_state != eillance::ServiceConnectionState::unknown) { transport->ReportStateChange(eillance::ContactID(), eillance::EventSource::system, static_cast<int>(service_state)); }
   }
 }
 
@@ -382,7 +387,9 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcTransport_nati
   if ((transport != nullptr) && (transport->Delegate() != nullptr)) {
     const char* peer_id_chars = env->GetStringUTFChars(peer_id, nullptr);
     const char* error_chars = env->GetStringUTFChars(error, nullptr);
-    transport->Delegate()->OnSignalingErrorForPeer(peer_id_chars, error_chars);
+    try {
+      transport->Delegate()->OnSignalingErrorForPeer(eillance::ContactID(peer_id_chars), error_chars);
+    } catch(...) {}
     env->ReleaseStringUTFChars(peer_id, peer_id_chars);
     env->ReleaseStringUTFChars(error, error_chars);
   }
@@ -393,15 +400,18 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcTransport_nati
   if (transport != nullptr) {
     const char* peer_id_chars = env->GetStringUTFChars(j_peer_id, nullptr);
     const char* message_chars = env->GetStringUTFChars(j_message, nullptr);
-    const auto* peer_id_str(peer_id_chars);
-    const auto* message_str(message_chars);
 
-    auto peer = transport->GetPeer(peer_id_str);
-    if (peer && peer->on_data_channel_message_) {
-      peer->on_data_channel_message_(message_str);
-    } else {
-      LOGW << "Received DC message for peer " << peer_id_str << " but no handler or peer found.";
-    }
+    try {
+      eillance::ContactID peer_id(peer_id_chars);
+      const auto* message_str(message_chars);
+
+      auto peer = transport->GetPeer(peer_id);
+      if (peer && peer->on_data_channel_message_) {
+        peer->on_data_channel_message_(message_str);
+      } else {
+        LOGW << "Received DC message for peer " << peer_id_chars << " but no handler or peer found.";
+      }
+    } catch(...) {}
 
     env->ReleaseStringUTFChars(j_peer_id, peer_id_chars);
     env->ReleaseStringUTFChars(j_message, message_chars);
@@ -412,16 +422,19 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcTransport_nati
   auto* transport = reinterpret_cast<eillance::transport::AndroidRtcTransport*>(native_ptr);
   if (transport != nullptr) {
     const char* peer_id_chars = env->GetStringUTFChars(j_peer_id, nullptr);
-    const auto* peer_id_str(peer_id_chars);
-    auto peer = transport->GetPeer(peer_id_str);
 
-    if (peer) {
-      LOGI << "Data channel with " << peer_id_str << " opened.";
-      peer->data_channel_is_open_ = true;
-      auto my_pub_key = peer->session_cipher_->GetPublicKey();
-      const nlohmann::json key_exchange_message = {{"type", "key_exchange"}, {"key", std::vector<std::byte>(my_pub_key.begin(), my_pub_key.end())}, {"is_reply", false}};
-      transport->SendPeerDataChannelMessage(peer_id_str, key_exchange_message);
-    }
+    try {
+      eillance::ContactID peer_id(peer_id_chars);
+      auto peer = transport->GetPeer(peer_id);
+
+      if (peer) {
+        LOGI << "Data channel with " << peer_id_chars << " opened.";
+        peer->data_channel_is_open_ = true;
+        auto my_pub_key = peer->session_cipher_->GetPublicKey();
+        const nlohmann::json key_exchange_message = {{"type", "key_exchange"}, {"key", std::vector<std::byte>(my_pub_key.begin(), my_pub_key.end())}, {"is_reply", false}};
+        transport->SendPeerDataChannelMessage(peer_id, key_exchange_message);
+      }
+    } catch(...) {}
 
     env->ReleaseStringUTFChars(j_peer_id, peer_id_chars);
   }
