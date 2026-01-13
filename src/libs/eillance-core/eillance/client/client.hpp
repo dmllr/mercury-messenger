@@ -241,7 +241,14 @@ inline Client::Client(std::shared_ptr<storage::PersistentStorage> storage, std::
     if (source == EventSource::peerConnectionState) {
       const auto state = static_cast<eillance::transport::PeerConnectionState>(state_val);
       if (state == eillance::transport::PeerConnectionState::Failed || state == eillance::transport::PeerConnectionState::Closed || state == eillance::transport::PeerConnectionState::Disconnected) {
-        // The peer connection is no longer viable. Removing the peer object from the transport layer
+        // The peer connection is no longer viable.
+        // Explicitly close the underlying connection to stop any pending events (like late data messages)
+        // from trying to access the Peer object we are about to remove.
+        transport_->closePeerConnection(peer_id, "data");
+        // Also clean up media connection if it exists, to be safe.
+        transport_->closePeerConnection(peer_id, "media");
+
+        // Removing the peer object from the transport layer
         // ensures that a new connection attempt by the MessageDeliveryService will start from a clean state.
         transport_->removePeer(peer_id);
         delivery_service_->connectionAttemptFinished(peer_id);
@@ -685,7 +692,7 @@ inline void Client::ProcessPeerMessage(Json message) {  // NOLINT(*-cognitive-co
     if (!peer) {
       peer = std::make_shared<Peer>(peer_id);
       transport_->addPeer(peer_id, peer);
-      SetupDataChannel(peer, peer_id);  // Set callback before creating the PC
+      SetupDataChannel(peer, peer_id);
       transport_->createDataPeerConnection(peer_id);
       const auto sdp = message["sdp"].get<std::string>();
       transport_->setRemoteDescription(peer_id, "data", sdp, "offer");
@@ -1252,9 +1259,11 @@ inline void Client::ProcessDataChannelMessage(const ContactID& peer_id, const Js
 }
 
 inline void Client::SendQueuedMessages(const ContactID& peer_id) {
-  delivery_service_->connectionAttemptFinished(peer_id);
   const auto messages = storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::sending);
-  if (messages.empty()) { return; }
+  if (messages.empty()) {
+    delivery_service_->connectionAttemptFinished(peer_id);
+    return;
+  }
   const auto peer = transport_->getPeer(peer_id);
   if (!peer) { return; }
   LOGI << "Processing " << messages.size() << " queued message(s) for " << peer_id;
@@ -1369,6 +1378,7 @@ inline void Client::SendQueuedMessages(const ContactID& peer_id) {
       message_history_->UpdateMessageStatus(peer_id, entry.id, messaging::MessageStatus::sent);
     }
   }
+  delivery_service_->connectionAttemptFinished(peer_id);
 }
 
 inline void Client::SetupDataChannel(const std::shared_ptr<Peer>& peer, const ContactID& peer_id) {
