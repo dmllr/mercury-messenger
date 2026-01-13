@@ -608,6 +608,10 @@ inline void Client::OnDataChannelOpen(const std::string& peer_id) {
   }
   UpdatePeerActivity(peer_id);
   LOGI << "Data channel with " << peer_id << " opened.";
+
+  // Reset the cipher state on every new connection to prevent race conditions with stale keys where one side has rebooted.
+  // This invalidates IsReady(), forcing a new key exchange before any data flow.
+  peer->session_cipher_->Reset();
   peer->data_channel_is_open_ = true;
 
   if (GetId() > peer_id) {
@@ -1129,76 +1133,80 @@ inline void Client::ProcessDataChannelMessage(const std::string& peer_id, const 
     }
     auto message_id = message.at("message_id").get<std::uint64_t>();
     bool is_system = message.value("is_system", false);
+    bool message_processed_successfully = false;
+
     if (is_system) {
       auto payload = message.at("payload").get<std::vector<std::byte>>();
       auto decrypted_message = peer->session_cipher_->Decrypt({payload.begin(), payload.end()});
-      if (decrypted_message.empty()) {
-        LOGW << "Failed to decrypt system message from " << peer_id;
-        return;
-      }
-      const auto content_json = Json::parse(decrypted_message);
-      const auto action = content_json.value("action", "");
-      if (action == "contact_signature") {
-        auto signature_hex = content_json.at("signature").get<std::string>();
-        auto signature_bytes = crypto::FromHex(signature_hex);
-        if (crypto::Identity::Verify(peer_id, GetId(), signature_bytes)) {
-          LOGI << "Received and verified contact signature from " << peer_id;
-          contact_manager_->StoreSignatureFrom(peer_id, signature_hex);
-          auto my_contact_info_for_them = contact_manager_->GetContact(peer_id);
-          if (!my_contact_info_for_them || !my_contact_info_for_them->my_signature_for_them) {
-            auto my_signature_bytes = id_manager_->Sign(peer_id);
-            auto my_signature_hex = crypto::ToHex(my_signature_bytes);
-            contact_manager_->StoreMySignatureFor(peer_id, my_signature_hex);
-            const Json sig_content = {{"action", "contact_signature"}, {"signature", my_signature_hex}};
-            message_history_->AddTextEntry(peer_id, sig_content.dump(), messaging::MessageDirection::sent, messaging::HistoryEntryKind::systemMessage);
+      if (!decrypted_message.empty()) {
+        message_processed_successfully = true;
+        const auto content_json = Json::parse(decrypted_message);
+        const auto action = content_json.value("action", "");
+        if (action == "contact_signature") {
+          auto signature_hex = content_json.at("signature").get<std::string>();
+          auto signature_bytes = crypto::FromHex(signature_hex);
+          if (crypto::Identity::Verify(peer_id, GetId(), signature_bytes)) {
+            LOGI << "Received and verified contact signature from " << peer_id;
+            contact_manager_->StoreSignatureFrom(peer_id, signature_hex);
+            auto my_contact_info_for_them = contact_manager_->GetContact(peer_id);
+            if (!my_contact_info_for_them || !my_contact_info_for_them->my_signature_for_them) {
+              auto my_signature_bytes = id_manager_->Sign(peer_id);
+              auto my_signature_hex = crypto::ToHex(my_signature_bytes);
+              contact_manager_->StoreMySignatureFor(peer_id, my_signature_hex);
+              const Json sig_content = {{"action", "contact_signature"}, {"signature", my_signature_hex}};
+              message_history_->AddTextEntry(peer_id, sig_content.dump(), messaging::MessageDirection::sent, messaging::HistoryEntryKind::systemMessage);
+              delivery_service_->attemptDelivery(peer_id);
+            }
+          } else {
+            LOGW << "Received invalid contact signature from " << peer_id;
+          }
+        } else if (action == "call_request") {
+          if (on_incoming_call_) {
+            messaging::HistoryEntryKind call_type = content_json.value("kind", messaging::HistoryEntryKind::voiceCall);
+            (*on_incoming_call_)(peer_id, call_type);
+
+            // Acknowledge the request by sending a "ringing" message back
+            Json ringing_msg = {{"action", "call_ringing"}};
+            message_history_->AddTextEntry(peer_id, ringing_msg.dump(), messaging::MessageDirection::sent, messaging::HistoryEntryKind::systemMessage);
             delivery_service_->attemptDelivery(peer_id);
           }
-        } else {
-          LOGW << "Received invalid contact signature from " << peer_id;
-        }
-      } else if (action == "call_request") {
-        if (on_incoming_call_) {
-          messaging::HistoryEntryKind call_type = content_json.value("kind", messaging::HistoryEntryKind::voiceCall);
-          (*on_incoming_call_)(peer_id, call_type);
-
-          // Acknowledge the request by sending a "ringing" message back
-          Json ringing_msg = {{"action", "call_ringing"}};
-          message_history_->AddTextEntry(peer_id, ringing_msg.dump(), messaging::MessageDirection::sent, messaging::HistoryEntryKind::systemMessage);
-          delivery_service_->attemptDelivery(peer_id);
-        }
-      } else if (action == "call_ringing") {
-        if (on_call_ringing_) {
-          (*on_call_ringing_)(peer_id);
-        }
-      } else if (action == "call_accept") {
-        if (on_call_accepted_) {
-          (*on_call_accepted_)(peer_id);
-        }
-        const auto contact = contact_manager_->GetContact(peer_id);
-        if (contact && contact->status == identity::ContactStatus::confirmed) {
-          const bool is_video = content_json.value("kind", messaging::HistoryEntryKind::voiceCall) == messaging::HistoryEntryKind::videoCall;
-          if (av_stream_) { av_stream_->Start(); }
-          auto accepted_peer = transport_->getPeer(peer_id);
-          if (!accepted_peer) return;
-          transport_->createMediaPeerConnection(peer_id);
-          accepted_peer->has_media_peer_connection_ = true;
-          accepted_peer->audio_ = transport_->addAudio(peer_id, [this, wpeer = make_weak_ptr(accepted_peer)]() {
-            if (const auto p = wpeer.lock()) { transport_->addToStream(p, false); }
-          });
-          if (is_video) {
-            accepted_peer->video_ = transport_->addVideo(peer_id, [this, wpeer = make_weak_ptr(accepted_peer)]() {
-              if (const auto p = wpeer.lock()) { transport_->addToStream(p, true); }
-            });
+        } else if (action == "call_ringing") {
+          if (on_call_ringing_) {
+            (*on_call_ringing_)(peer_id);
           }
-          transport_->createOffer(peer_id, "media");
+        } else if (action == "call_accept") {
+          if (on_call_accepted_) {
+            (*on_call_accepted_)(peer_id);
+          }
+          const auto contact = contact_manager_->GetContact(peer_id);
+          if (contact && contact->status == identity::ContactStatus::confirmed) {
+            const bool is_video = content_json.value("kind", messaging::HistoryEntryKind::voiceCall) == messaging::HistoryEntryKind::videoCall;
+            if (av_stream_) { av_stream_->Start(); }
+            auto accepted_peer = transport_->getPeer(peer_id);
+            if (!accepted_peer) return;
+            transport_->createMediaPeerConnection(peer_id);
+            accepted_peer->has_media_peer_connection_ = true;
+            accepted_peer->audio_ = transport_->addAudio(peer_id, [this, wpeer = make_weak_ptr(accepted_peer)]() {
+              if (const auto p = wpeer.lock()) { transport_->addToStream(p, false); }
+            });
+            if (is_video) {
+              accepted_peer->video_ = transport_->addVideo(peer_id, [this, wpeer = make_weak_ptr(accepted_peer)]() {
+                if (const auto p = wpeer.lock()) { transport_->addToStream(p, true); }
+              });
+            }
+            transport_->createOffer(peer_id, "media");
+          }
+        } else if (action == "profile_update") {
+          HandleProfileUpdate(peer_id, content_json);
         }
-      } else if (action == "profile_update") {
-        HandleProfileUpdate(peer_id, content_json);
+      } else {
+        LOGW << "Failed to decrypt system message from " << peer_id;
       }
     } else if (on_chat_message_received_) {
       auto payload = message.at("payload").get<std::vector<std::byte>>();
       auto decrypted_message = peer->session_cipher_->Decrypt({payload.begin(), payload.end()});
       if (!decrypted_message.empty()) {
+        message_processed_successfully = true;
         auto history_entry = message_history_->AddTextEntry(peer_id, decrypted_message, messaging::MessageDirection::received);
         (*on_chat_message_received_)(peer_id, history_entry);
       } else {
@@ -1206,13 +1214,17 @@ inline void Client::ProcessDataChannelMessage(const std::string& peer_id, const 
       }
     }
 
-    // ALWAYS send receipt after processing
-    const Json receipt = {{"type", "message_receipt"}, {"status", "delivered"}, {"message_id", message_id}};
-    transport_->sendPeerDataChannelMessage(peer_id, receipt);
+    if (message_processed_successfully) {
+      // ONLY send receipt after processing successfully (decryption worked)
+      const Json receipt = {{"type", "message_receipt"}, {"status", "delivered"}, {"message_id", message_id}};
+      transport_->sendPeerDataChannelMessage(peer_id, receipt);
 
-    // After successfully processing the first encrypted message, we know the other side is ready.
-    // We can now send our own queued messages. This is safe to call multiple times as it's idempotent.
-    SendQueuedMessages(peer_id);
+      // After successfully processing the first encrypted message, we know the other side is ready.
+      // We can now send our own queued messages. This is safe to call multiple times as it's idempotent.
+      SendQueuedMessages(peer_id);
+    } else {
+      LOGW << "Skipping receipt for message " << message_id << " from " << peer_id << " due to processing failure.";
+    }
 
   } else if (type == "message_receipt") {
     auto message_id = message.at("message_id").get<std::uint64_t>();

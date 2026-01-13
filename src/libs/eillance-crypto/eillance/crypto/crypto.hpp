@@ -204,6 +204,8 @@ class SessionCipher {
 public:
   SessionCipher() : ephemeral_key_(nullptr, EVP_PKEY_free) { GenerateEphemeralKey(); }
 
+  void Reset() { shared_secret_.clear(); }
+
   [[nodiscard]] auto GetPublicKey() const -> std::vector<std::byte> {
     size_t len = 0;
     if (EVP_PKEY_get_raw_public_key(ephemeral_key_.get(), nullptr, &len) <= 0 || len == 0) { return {}; }
