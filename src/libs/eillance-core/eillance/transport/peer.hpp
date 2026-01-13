@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "eillance/crypto/crypto.hpp"
+#include "eillance/identity/contact_id.hpp"
 #include "eillance/messaging/history.hpp"
 #include "eillance/transport/candidate.hpp"
 #include "eillance/transport/track.hpp"
@@ -23,7 +24,9 @@ struct Peer {
     ready
   };
 
-  explicit Peer(const std::string& id);
+  explicit Peer(const ContactID& id);
+
+  const ContactID id_;  // Atomic-friendly immutable ID (no lock needed for read)
 
   std::shared_ptr<ITrack> video_;
   std::shared_ptr<ITrack> audio_;
@@ -45,17 +48,16 @@ struct Peer {
   }
 
   auto GetState() -> State {
-    const auto lock = std::unique_lock(mutex_);
+    const auto lock = std::shared_lock(mutex_);
     return state_;
   }
 
 private:
   std::shared_mutex mutex_;
   State state_ = State::waiting;
-  std::string id_;
 };
 
-inline Peer::Peer(const std::string& id) : id_(id) {
+inline Peer::Peer(const ContactID& id) : id_(id) {
   session_cipher_ = std::make_unique<crypto::SessionCipher>();
   last_activity_time_ = Time::Now();
 }

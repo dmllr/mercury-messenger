@@ -10,6 +10,8 @@
 #include <nlohmann/json.hpp>
 #include <variant>
 
+#include "eillance/identity/contact_id.hpp"
+
 namespace eillance::identity {
 
 enum class ContactStatus : std::uint8_t {
@@ -204,19 +206,19 @@ public:
 
   // --- Contacts ---
   auto GetContacts() const { return pimpl_->GetContacts(); }
-  auto GetContact(std::string_view peer_id) const { return pimpl_->GetContact(peer_id); }
+  auto GetContact(const ContactID& peer_id) const { return pimpl_->GetContact(peer_id.ToString()); }
   void UpdateContact(const identity::Contact& contact) const { pimpl_->UpdateContact(contact); }
-  void RemoveContact(std::string_view peer_id) const { pimpl_->RemoveContact(peer_id); }
+  void RemoveContact(const std::string& peer_id) const { pimpl_->RemoveContact(peer_id); }
 
   // --- History ---
   auto AddHistoryEntry(messaging::HistoryEntryRecord entry) const { return pimpl_->AddHistoryEntry(std::move(entry)); }
   void UpdateHistoryEntry(const messaging::HistoryEntryRecord& entry) const { pimpl_->UpdateHistoryEntry(entry); }
-  void UpdateMessageStatus(const std::string& peer_id, uint64_t message_id, messaging::MessageStatus new_status) const { pimpl_->UpdateMessageStatus(peer_id, message_id, new_status); }
-  void UpdateMessageStatuses(const std::string& peer_id, const std::vector<uint64_t>& message_ids, messaging::MessageStatus new_status) const { pimpl_->UpdateMessageStatuses(peer_id, message_ids, new_status); }
-  auto GetHistoryPage(const std::string& peer_id, size_t page_index, size_t page_size) const { return pimpl_->GetHistoryPage(peer_id, page_index, page_size); }
+  void UpdateMessageStatus(const ContactID& peer_id, uint64_t message_id, messaging::MessageStatus new_status) const { pimpl_->UpdateMessageStatus(peer_id.ToString(), message_id, new_status); }
+  void UpdateMessageStatuses(const ContactID& peer_id, const std::vector<uint64_t>& message_ids, messaging::MessageStatus new_status) const { pimpl_->UpdateMessageStatuses(peer_id.ToString(), message_ids, new_status); }
+  auto GetHistoryPage(const ContactID& peer_id, size_t page_index, size_t page_size) const { return pimpl_->GetHistoryPage(peer_id.ToString(), page_index, page_size); }
   auto GetFullMessageContent(std::uint64_t message_id) const { return pimpl_->GetFullMessageContent(message_id); }
   auto GetChatSummaries(const std::vector<std::string>& peer_ids) const { return pimpl_->GetChatSummaries(peer_ids); }
-  auto GetMessagesWithStatus(const std::string& peer_id, messaging::MessageStatus status) const { return pimpl_->GetMessagesWithStatus(peer_id, status); }
+  auto GetMessagesWithStatus(const ContactID& peer_id, messaging::MessageStatus status) const { return pimpl_->GetMessagesWithStatus(peer_id.ToString(), status); }
 
   // --- Debug ---
   void DebugClearAllHistory() const { pimpl_->DebugClearAllHistory(); }

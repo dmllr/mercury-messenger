@@ -10,6 +10,7 @@
 #include <openssl/rand.h>
 
 #include "eillance/crypto/crypto.hpp"
+#include "eillance/identity/contact_id.hpp"
 #include "eillance/logging/logging.h"
 #include "eillance/storage/persistent_storage.hpp"
 
@@ -23,7 +24,7 @@ enum class RequestStatus {
 
 class ContactManager {
   std::shared_ptr<storage::PersistentStorage> storage_;
-  std::unordered_map<std::string, Contact> contacts_;
+  std::unordered_map<ContactID, Contact> contacts_;
   mutable std::mutex mutex_;
 
   struct TokenInfo {
@@ -37,17 +38,13 @@ public:
   explicit ContactManager(std::shared_ptr<storage::PersistentStorage> storage) : storage_(std::move(storage)) { LoadContacts(); }
 
   // Initiates adding a new contact.
-  auto AddContact(const std::string& peer_id) -> bool {
+  auto AddContact(const ContactID& peer_id) -> bool {
     const std::lock_guard<std::mutex> lock(mutex_);
     const auto it = contacts_.find(peer_id);
     if (it != contacts_.end()) {
-      // If the contact exists and is pending, we allow the "add" operation
-      // to succeed so the caller can re-send the request.
       if (it->second.status == ContactStatus::pendingApproval) {
         return true;
       }
-      // If the contact was rejected, this action un-rejects them and moves
-      // them to pending, allowing a new request to be sent.
       if (it->second.status == ContactStatus::rejected) {
         it->second.status = ContactStatus::awaitingApproval;
         storage_->UpdateContact(it->second);
@@ -57,25 +54,23 @@ public:
       LOGW << "Contact " << peer_id << " already exists with status " << static_cast<int>(it->second.status);
       return false;
     }
-    contacts_[peer_id] = {.peer_id = peer_id, .status = ContactStatus::pendingApproval};
+    contacts_[peer_id] = {.peer_id = peer_id.ToString(), .status = ContactStatus::pendingApproval};
 
     storage_->UpdateContact(contacts_[peer_id]);
     return true;
   }
 
   // Marks that we have received a request from a peer.
-  auto ReceiveContactRequest(const std::string& peer_id, const std::optional<std::string>& name,
+  auto ReceiveContactRequest(const ContactID& peer_id, const std::optional<std::string>& name,
                              const std::optional<std::string>& bio,
                              const std::optional<std::string>& photo) -> RequestStatus {
     const std::lock_guard<std::mutex> lock(mutex_);
     auto it = contacts_.find(peer_id);
     if (it != contacts_.end()) {
-      // If contact is already confirmed or has been rejected, ignore new requests.
       if (it->second.status == ContactStatus::confirmed || it->second.status == ContactStatus::rejected) {
         return RequestStatus::Ignored;
       }
       if (it->second.status == ContactStatus::awaitingApproval) {
-        // It's a resend of a request we are already awaiting, just update profile info.
         if (name) { it->second.display_name = name; }
         if (bio) { it->second.bio = bio; }
         if (photo) { it->second.photo_base64 = photo; }
@@ -83,14 +78,13 @@ public:
         return RequestStatus::Duplicate;
       }
 
-      // This handles transition from other states (like pendingApproval) to awaitingApproval.
       it->second.status = ContactStatus::awaitingApproval;
       if (name) { it->second.display_name = name; }
       if (bio) { it->second.bio = bio; }
       if (photo) { it->second.photo_base64 = photo; }
       storage_->UpdateContact(it->second);
     } else {
-      contacts_[peer_id] = {.peer_id = peer_id,
+      contacts_[peer_id] = {.peer_id = peer_id.ToString(),
                             .status = ContactStatus::awaitingApproval,
                             .display_name = name,
                             .bio = bio,
@@ -101,7 +95,7 @@ public:
   }
 
   // Confirms a contact that was awaiting our approval.
-  auto ConfirmContact(const std::string& peer_id) -> bool {
+  auto ConfirmContact(const ContactID& peer_id) -> bool {
     const std::lock_guard<std::mutex> lock(mutex_);
     const auto it = contacts_.find(peer_id);
     if (it == contacts_.end() || it->second.status != ContactStatus::awaitingApproval) {
@@ -114,27 +108,24 @@ public:
   }
 
   // Marks a contact as confirmed after they accepted our request.
-  auto MarkAsConfirmed(const std::string& peer_id) -> bool {
+  auto MarkAsConfirmed(const ContactID& peer_id) -> bool {
     const std::lock_guard<std::mutex> lock(mutex_);
     auto it = contacts_.find(peer_id);
 
     if (it != contacts_.end()) {
       if (it->second.status == ContactStatus::confirmed) {
-        return true;  // Already confirmed, treat as success but no state change.
+        return true;
       }
-      // If contact exists, just update its status.
       it->second.status = ContactStatus::confirmed;
       storage_->UpdateContact(it->second);
     } else {
-      // If we receive a confirmation for a contact that doesn't exist (e.g., after
-      // a clear data or re-confirmation), create it.
-      contacts_[peer_id] = {.peer_id = peer_id, .status = ContactStatus::confirmed};
+      contacts_[peer_id] = {.peer_id = peer_id.ToString(), .status = ContactStatus::confirmed};
       storage_->UpdateContact(contacts_[peer_id]);
     }
     return true;
   }
 
-  void BlockContact(const std::string& peer_id) {
+  void BlockContact(const ContactID& peer_id) {
     const std::lock_guard<std::mutex> lock(mutex_);
     auto it = contacts_.find(peer_id);
     if (it != contacts_.end()) {
@@ -143,26 +134,24 @@ public:
         storage_->UpdateContact(it->second);
       }
     } else {
-      // If we are rejecting a peer that we have no record of, create one
-      // to enforce the blacklist.
-      contacts_[peer_id] = {.peer_id = peer_id, .status = ContactStatus::rejected};
+      contacts_[peer_id] = {.peer_id = peer_id.ToString(), .status = ContactStatus::rejected};
       storage_->UpdateContact(contacts_[peer_id]);
     }
   }
 
-  void DeleteContact(const std::string& peer_id) {
+  void DeleteContact(const ContactID& peer_id) {
     const std::lock_guard<std::mutex> lock(mutex_);
     contacts_.erase(peer_id);
-    storage_->RemoveContact(peer_id);
+    storage_->RemoveContact(peer_id.ToString());
   }
 
-  auto IsConfirmedContact(const std::string& peer_id) const -> bool {
+  auto IsConfirmedContact(const ContactID& peer_id) const -> bool {
     const std::lock_guard<std::mutex> lock(mutex_);
     const auto itr = contacts_.find(peer_id);
     return (itr != contacts_.end() && itr->second.status == ContactStatus::confirmed);
   }
 
-  auto GetContact(const std::string& peer_id) -> std::optional<Contact> {
+  auto GetContact(const ContactID& peer_id) -> std::optional<Contact> {
     const std::lock_guard<std::mutex> lock(mutex_);
     if (contacts_.contains(peer_id)) { return contacts_.at(peer_id); }
     return std::nullopt;
@@ -178,7 +167,7 @@ public:
     return result;
   }
 
-  void UpdateContactProfile(const std::string& peer_id, const std::optional<std::string>& name, const std::optional<std::string>& bio, const std::optional<std::string>& photo) {
+  void UpdateContactProfile(const ContactID& peer_id, const std::optional<std::string>& name, const std::optional<std::string>& bio, const std::optional<std::string>& photo) {
     const std::lock_guard<std::mutex> lock(mutex_);
     const auto it = contacts_.find(peer_id);
     if (it == contacts_.end()) {
@@ -191,7 +180,7 @@ public:
     storage_->UpdateContact(it->second);
   }
 
-  void SetDisplayNameOverride(const std::string& peer_id, const std::string& override_name) {
+  void SetDisplayNameOverride(const ContactID& peer_id, const std::string& override_name) {
     const std::lock_guard<std::mutex> lock(mutex_);
     const auto it = contacts_.find(peer_id);
     if (it == contacts_.end()) {
@@ -206,7 +195,7 @@ public:
     storage_->UpdateContact(it->second);
   }
 
-  void ResetDisplayNameOverride(const std::string& peer_id) {
+  void ResetDisplayNameOverride(const ContactID& peer_id) {
     const std::lock_guard<std::mutex> lock(mutex_);
     const auto it = contacts_.find(peer_id);
     if (it == contacts_.end()) {
@@ -219,7 +208,7 @@ public:
     }
   }
 
-  void StoreMySignatureFor(const std::string& peer_id, const std::string& signature_hex) {
+  void StoreMySignatureFor(const ContactID& peer_id, const std::string& signature_hex) {
     const std::lock_guard<std::mutex> lock(mutex_);
     const auto it = contacts_.find(peer_id);
     if (it == contacts_.end()) {
@@ -229,7 +218,7 @@ public:
     storage_->UpdateContact(it->second);
   }
 
-  void StoreSignatureFrom(const std::string& peer_id, const std::string& signature_hex) {
+  void StoreSignatureFrom(const ContactID& peer_id, const std::string& signature_hex) {
     const std::lock_guard<std::mutex> lock(mutex_);
     const auto it = contacts_.find(peer_id);
     if (it == contacts_.end()) {
@@ -241,7 +230,6 @@ public:
 
   auto GenerateContactToken() -> std::string {
     const std::lock_guard<std::mutex> lock(mutex_);
-    // Cleanup expired tokens to prevent unbounded growth.
     auto now = std::chrono::steady_clock::now();
     std::erase_if(one_time_tokens_, [now](const auto& item) {
       return (now - item.second.creation_time) > kTokenValidityDuration;
@@ -258,22 +246,21 @@ public:
     const std::lock_guard<std::mutex> lock(mutex_);
     auto it = one_time_tokens_.find(token);
     if (it == one_time_tokens_.end()) {
-      return false;  // Token not found
+      return false;
     }
     auto now = std::chrono::steady_clock::now();
     if ((now - it->second.creation_time) > kTokenValidityDuration) {
       one_time_tokens_.erase(it);
-      return false;  // Token expired
+      return false;
     }
-    one_time_tokens_.erase(it);  // Valid token, consume it
+    one_time_tokens_.erase(it);
     return true;
   }
 
-  auto UnblockContact(const std::string& peer_id) -> bool {
+  auto UnblockContact(const ContactID& peer_id) -> bool {
     const std::lock_guard<std::mutex> lock(mutex_);
     auto it = contacts_.find(peer_id);
     if (it != contacts_.end() && it->second.status == ContactStatus::rejected) {
-      // Transitioning to awaitingApproval allows the user to now act on the contact request.
       it->second.status = ContactStatus::awaitingApproval;
       storage_->UpdateContact(it->second);
       return true;
@@ -285,7 +272,7 @@ private:
   void LoadContacts() {
     const auto contacts_from_db = storage_->GetContacts();
     for (const auto& contact: contacts_from_db) {
-      contacts_[contact.peer_id] = contact;
+      contacts_[ContactID(contact.peer_id)] = contact;
     }
   }
 };

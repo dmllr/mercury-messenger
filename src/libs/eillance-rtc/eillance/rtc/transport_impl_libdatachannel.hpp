@@ -19,6 +19,7 @@
 #include "eillance/crypto/crypto.hpp"
 #include "eillance/events/event_source.h"
 #include "eillance/events/service_connection_state.h"
+#include "eillance/identity/contact_id.hpp"
 #include "eillance/logging/logging.h"
 #include "eillance/transport/peer.hpp"
 #include "eillance/transport/peer_connection_state.h"
@@ -91,18 +92,18 @@ public:
 
   void SetName(const std::string& device_name) override { device_name_ = device_name; }
 
-  void SetId(const std::string& id) override {
+  void SetId(const ContactID& id) override {
     assert(!is_logged_in_);
     id_ = id;
-    if (device_name_.empty()) { device_name_ = id_; }
+    if (device_name_.empty()) { device_name_ = id_.ToString(); }
   }
 
   void SetSignalingUrl(const std::string& url) override { signaling_server_url_ = url; }
 
   void Start() override {
     assert(delegate_ != nullptr && "RtcTransport delegate must be set before starting");
-    assert(!id_.empty());
-    LOGI << "The local ID is: " << id_.data();
+    assert(!id_.IsEmpty());
+    LOGI << "The local ID is: " << id_;
     terminate_requested_ = false;
     ConnectWebSocket();
   }
@@ -123,37 +124,37 @@ public:
     }
   }
 
-  void AddPeer(const std::string& peer_id, const std::shared_ptr<Peer>& peer) override {
+  void AddPeer(const ContactID& peer_id, const std::shared_ptr<Peer>& peer) override {
     const std::lock_guard<std::mutex> lock(peers_mutex_);
-    peers_.emplace(std::string(peer_id), peer);
+    peers_.emplace(peer_id, peer);
   }
 
-  auto GetPeer(const std::string& peer_id) const -> std::shared_ptr<Peer> override {
+  auto GetPeer(const ContactID& peer_id) const -> std::shared_ptr<Peer> override {
     const std::lock_guard<std::mutex> lock(peers_mutex_);
     const auto it = peers_.find(peer_id);
     return (it != peers_.end()) ? it->second : nullptr;
   }
 
-  auto GetPeers() const -> std::unordered_map<std::string, std::shared_ptr<Peer>> override {
+  auto GetPeers() const -> std::unordered_map<ContactID, std::shared_ptr<Peer>> override {
     const std::lock_guard<std::mutex> lock(peers_mutex_);
     return peers_;
   }
 
-  auto GetPeerConnectionState(const std::string& peer_id) const -> eillance::transport::PeerConnectionState override {
+  auto GetPeerConnectionState(const ContactID& peer_id) const -> eillance::transport::PeerConnectionState override {
     const std::lock_guard<std::mutex> lock(peers_mutex_);
     const auto it = peers_.find(peer_id);
     if (it != peers_.end() && it->second && it->second->data_peer_connection_) { return toEillanceState(std::static_pointer_cast<::rtc::PeerConnection>(it->second->data_peer_connection_)->state()); }
     return eillance::transport::PeerConnectionState::Disconnected;
   }
 
-  void RemovePeer(const std::string& peer_id) override {
+  void RemovePeer(const ContactID& peer_id) override {
     const std::lock_guard<std::mutex> lock(peers_mutex_);
     peers_.erase(peer_id);
   }
 
   void SendSignalingMessage(const Json& message) const override { WsSendMessage(message); }
 
-  void SendPeerDataChannelMessage(const std::string& peer_id, const Json& message) const override {
+  void SendPeerDataChannelMessage(const ContactID& peer_id, const Json& message) const override {
     const std::lock_guard<std::mutex> lock(peers_mutex_);
     auto it = peers_.find(peer_id);
     if (it == peers_.end() || !it->second->data_channel_) { return; }
@@ -173,7 +174,7 @@ public:
     if (peer->GetState() == Peer::State::ready && delegate_) { delegate_->OnPeerReady(peer); }
   }
 
-  void CreatePeerConnection(const std::string& peer_id, const std::string& context) {
+  void CreatePeerConnection(const ContactID& peer_id, const std::string& context) {
     auto peer_connection = std::make_shared<::rtc::PeerConnection>(RtcConfiguration::Config());
 
     peer_connection->onStateChange([this, peer_id, context, pc_sptr = peer_connection](::rtc::PeerConnection::State state) {
@@ -292,10 +293,10 @@ public:
     }
   }
 
-  void CreateDataPeerConnection(const std::string& peer_id) override { CreatePeerConnection(peer_id, "data"); }
-  void CreateMediaPeerConnection(const std::string& peer_id) override { CreatePeerConnection(peer_id, "media"); }
+  void CreateDataPeerConnection(const ContactID& peer_id) override { CreatePeerConnection(peer_id, "data"); }
+  void CreateMediaPeerConnection(const ContactID& peer_id) override { CreatePeerConnection(peer_id, "media"); }
 
-  void CreateDataChannel(const std::string& peer_id) override {
+  void CreateDataChannel(const ContactID& peer_id) override {
     auto peer = GetPeer(peer_id);
     if (!peer || !peer->data_peer_connection_) { return; }
     auto pc = std::static_pointer_cast<::rtc::PeerConnection>(peer->data_peer_connection_);
@@ -310,34 +311,34 @@ public:
     peer->data_channel_ = dc;
   }
 
-  void ClosePeerConnection(const std::string& peer_id, const std::string& context) override {
+  void ClosePeerConnection(const ContactID& peer_id, const std::string& context) override {
     auto peer = GetPeer(peer_id);
     if (!peer) { return; }
     auto pc = (context == "data") ? std::static_pointer_cast<::rtc::PeerConnection>(peer->data_peer_connection_) : std::static_pointer_cast<::rtc::PeerConnection>(peer->media_peer_connection_);
     if (pc) { pc->close(); }
   }
 
-  void CreateOffer(const std::string& peer_id, const std::string& context) override {
+  void CreateOffer(const ContactID& peer_id, const std::string& context) override {
     auto peer = GetPeer(peer_id);
     if (!peer) { return; }
     auto pc = (context == "data") ? std::static_pointer_cast<::rtc::PeerConnection>(peer->data_peer_connection_) : std::static_pointer_cast<::rtc::PeerConnection>(peer->media_peer_connection_);
     if (pc) { pc->setLocalDescription(); }
   }
 
-  void CreateAnswer(const std::string& peer_id, const std::string& context) override {
+  void CreateAnswer(const ContactID& peer_id, const std::string& context) override {
     auto peer = GetPeer(peer_id);
     if (!peer) { return; }
     auto pc = (context == "data") ? std::static_pointer_cast<::rtc::PeerConnection>(peer->data_peer_connection_) : std::static_pointer_cast<::rtc::PeerConnection>(peer->media_peer_connection_);
     if (pc) { pc->setLocalDescription(::rtc::Description::Type::Answer); }
   }
 
-  void SetRemoteDescription(const std::string& peer_id, const std::string& context, const std::string& sdp, const std::string& type) override {
+  void SetRemoteDescription(const ContactID& peer_id, const std::string& context, const std::string& sdp, const std::string& type) override {
     auto peer = GetPeer(peer_id);
     if (!peer) { return; }
     auto pc = (context == "data") ? std::static_pointer_cast<::rtc::PeerConnection>(peer->data_peer_connection_) : std::static_pointer_cast<::rtc::PeerConnection>(peer->media_peer_connection_);
     if (pc) { pc->setRemoteDescription(::rtc::Description(sdp, type)); }
   }
-  void AddRemoteCandidate(const std::string& peer_id, const std::string& context, const std::string& candidate, const std::string& mid) override {
+  void AddRemoteCandidate(const ContactID& peer_id, const std::string& context, const std::string& candidate, const std::string& mid) override {
     auto peer = GetPeer(peer_id);
     if (!peer) { return; }
     auto pc = (context == "data") ? std::static_pointer_cast<::rtc::PeerConnection>(peer->data_peer_connection_) : std::static_pointer_cast<::rtc::PeerConnection>(peer->media_peer_connection_);
@@ -443,7 +444,7 @@ private:
 
   void ReportServiceConnectionState(ServiceConnectionState state) const {
     service_connection_state_ = state;
-    if (status_callback_) { (*status_callback_)("", EventSource::system, static_cast<int>(state)); }
+    if (status_callback_) { (*status_callback_)(ContactID(), EventSource::system, static_cast<int>(state)); }
   }
 
   void WsSendMessage(const Json& message) const {
@@ -478,7 +479,7 @@ private:
       const auto error = message.value("error", "unknown");
       LOGE << "Signaling error received: " << error;
       if (const auto for_peer_it = message.find("for_peer"); for_peer_it != message.end()) {
-        delegate_->OnSignalingErrorForPeer(for_peer_it->get<std::string>(), error);
+        delegate_->OnSignalingErrorForPeer(for_peer_it->get<ContactID>(), error);
       } else {
         if (error == "auth_failed") {
           Terminate();
@@ -490,12 +491,12 @@ private:
     }
   }
 
-  void ReportPeerStateChange(const std::string& peer_id, EventSource source, int state) const {
+  void ReportPeerStateChange(const ContactID& peer_id, EventSource source, int state) const {
     if (status_callback_) { (*status_callback_)(peer_id, source, static_cast<int>(state)); }
   }
 
 public:
-  auto AddVideo(const std::string& peer_id, const std::function<void(void)>& on_open) -> std::shared_ptr<transport::ITrack> override {
+  auto AddVideo(const ContactID& peer_id, const std::function<void(void)>& on_open) -> std::shared_ptr<transport::ITrack> override {
     auto peer = GetPeer(peer_id);
     if (!peer || !peer->media_peer_connection_) { return nullptr; }
     auto pc = std::static_pointer_cast<::rtc::PeerConnection>(peer->media_peer_connection_);
@@ -517,7 +518,7 @@ public:
     return std::make_shared<RtcTrack>(track, sr_reporter, rtp_config);
   }
 
-  auto AddAudio(const std::string& peer_id, const std::function<void(void)>& on_open) -> std::shared_ptr<transport::ITrack> override {
+  auto AddAudio(const ContactID& peer_id, const std::function<void(void)>& on_open) -> std::shared_ptr<transport::ITrack> override {
     auto peer = GetPeer(peer_id);
     if (!peer || !peer->media_peer_connection_) { return nullptr; }
     auto pc = std::static_pointer_cast<::rtc::PeerConnection>(peer->media_peer_connection_);
@@ -538,8 +539,8 @@ public:
   }
 
 private:
-  std::string id_{};
-  std::string device_name_{id_};
+  ContactID id_{};
+  std::string device_name_{};
   std::atomic<bool> is_logged_in_{false};
   std::atomic<bool> terminate_requested_{false};
 
@@ -557,7 +558,7 @@ private:
   mutable ServiceConnectionState service_connection_state_{ServiceConnectionState::unknown};
   std::shared_ptr<StatusCallbackFunction> status_callback_{};
 
-  std::unordered_map<std::string, std::shared_ptr<Peer>> peers_;
+  std::unordered_map<ContactID, std::shared_ptr<Peer>> peers_;
   mutable std::mutex peers_mutex_;
 
   std::string signaling_server_url_;
