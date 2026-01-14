@@ -358,7 +358,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     callService?.loadFullMessage(messageId)
   }
 
-  fun MarkMessagesAsRead(messageIds: List<Long>) {
+  fun markMessagesAsRead(messageIds: List<Long>) {
     callService?.markMessagesAsRead(messageIds.toLongArray())
   }
 
