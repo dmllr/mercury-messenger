@@ -138,7 +138,7 @@ fun ConversationScreen(
       .filter { it.kind == HistoryEntryKind.TextMessage && it.direction == MessageDirection.Received && it.status != MessageStatus.Read }
       .map { it.id }
     if (unreadMessageIds.isNotEmpty()) {
-      viewModel.MarkMessagesAsRead(unreadMessageIds)
+      viewModel.markMessagesAsRead(unreadMessageIds)
     }
   }
 
