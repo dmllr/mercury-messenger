@@ -47,6 +47,8 @@ struct UIState {
     identity::ContactStatus status;
     eillance::transport::PeerConnectionState connection_state = eillance::transport::PeerConnectionState::Disconnected;
     uint32_t unread_count = 0;
+    std::optional<std::string> last_message_snippet;
+    uint64_t last_activity_timestamp = 0;
   };
 
   struct MyProfile {
@@ -819,7 +821,14 @@ inline void MercuryViewModel::UpdateContacts(bool notify) {
   auto contacts_from_manager = client_->GetContacts();
   contacts_.clear();
   for (const auto& c: contacts_from_manager) {
-    const std::string display_name = c.display_name_override.value_or(c.display_name.value_or(c.peer_id));
+    std::string display_name;
+    if (c.display_name_override) {
+      display_name = *c.display_name_override;
+    } else if (c.display_name) {
+      display_name = *c.display_name;
+    }
+    // If no display name is available, leave it empty. The UI will handle displaying truncated Peer ID.
+
     contacts_.push_back({.peer_id = ContactID(c.peer_id), .display_name = display_name, .bio = c.bio, .photo = c.photo_base64, .status = c.status, .connection_state = client_->GetPeerConnectionState(ContactID(c.peer_id)), .unread_count = 0});
   }
   if (notify) { NotifyStateChanged({StateChange::Contacts}); }
@@ -848,18 +857,41 @@ inline void MercuryViewModel::UpdateChats(bool notify) {
   {
     const std::lock_guard<std::mutex> lock(state_mutex_);
 
-    std::unordered_map<ContactID, uint32_t> unread_counts;
+    std::unordered_map<ContactID, messaging::ChatSummary> chat_map;
     for (const auto& chat: new_chats) {
-      unread_counts[ContactID(chat.peer_id)] = chat.unread_count;
+      chat_map[ContactID(chat.peer_id)] = chat;
     }
 
     for (auto& contact: contacts_) {
-      if (unread_counts.contains(contact.peer_id)) {
-        contact.unread_count = unread_counts.at(contact.peer_id);
+      if (chat_map.contains(contact.peer_id)) {
+        const auto& summary = chat_map.at(contact.peer_id);
+        contact.unread_count = summary.unread_count;
+        contact.last_activity_timestamp = summary.last_message.timestamp;
+
+        // Populate snippet
+        if (std::holds_alternative<messaging::MessageEntry>(summary.last_message.data)) {
+          const auto& content = std::get<messaging::MessageEntry>(summary.last_message.data).content;
+          // Truncate if necessary (though UI usually handles truncation, limiting size here saves JNI cost)
+          contact.last_message_snippet = (content.length() > 100) ? content.substr(0, 100) + "..." : content;
+        } else if (std::holds_alternative<messaging::CallEntry>(summary.last_message.data)) {
+          const auto& call = std::get<messaging::CallEntry>(summary.last_message.data);
+          if (summary.last_message.kind == messaging::HistoryEntryKind::videoCall) {
+            contact.last_message_snippet = "Video Call";
+          } else {
+            contact.last_message_snippet = "Voice Call";
+          }
+        }
       } else {
         contact.unread_count = 0;
+        contact.last_activity_timestamp = 0;
+        contact.last_message_snippet.reset();
       }
     }
+
+    // Sort contacts by last activity (descending)
+    std::sort(contacts_.begin(), contacts_.end(), [](const auto& a, const auto& b) {
+      return a.last_activity_timestamp > b.last_activity_timestamp;
+    });
   }
   if (notify) {
     NotifyStateChanged({StateChange::Contacts});
