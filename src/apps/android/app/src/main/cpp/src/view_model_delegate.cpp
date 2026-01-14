@@ -84,16 +84,21 @@ auto AndroidViewModelDelegate::GetContacts(JNIEnv* env) const -> jobject {
     jstring name = env->NewStringUTF(contact_cpp.display_name.c_str());
     jstring bio = contact_cpp.bio ? env->NewStringUTF(contact_cpp.bio->c_str()) : nullptr;
     jstring photo = contact_cpp.photo ? env->NewStringUTF(contact_cpp.photo->c_str()) : nullptr;
+    jstring snippet = contact_cpp.last_message_snippet ? env->NewStringUTF(contact_cpp.last_message_snippet->c_str()) : nullptr;
+
     jobject contact_java = contact_holder.NewObject(env, peer_id, name, bio, photo,
                                                     static_cast<jint>(contact_cpp.status),
                                                     static_cast<jint>(contact_cpp.connection_state),
-                                                    static_cast<jint>(contact_cpp.unread_count));
+                                                    static_cast<jint>(contact_cpp.unread_count),
+                                                    snippet,
+                                                    static_cast<jlong>(contact_cpp.last_activity_timestamp));
     env->CallBooleanMethod(contact_list, list_add_method, contact_java);
 
     env->DeleteLocalRef(peer_id);
     env->DeleteLocalRef(name);
     if (bio) env->DeleteLocalRef(bio);
     if (photo) env->DeleteLocalRef(photo);
+    if (snippet) env->DeleteLocalRef(snippet);
     env->DeleteLocalRef(contact_java);
   }
   return contact_list;

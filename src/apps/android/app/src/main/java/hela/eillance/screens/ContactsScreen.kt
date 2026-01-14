@@ -30,15 +30,18 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.os.ConfigurationCompat
 import hela.eillance.MainViewModel
 import hela.eillance.ndkio.Contact
 import hela.eillance.ndkio.ContactStatus
@@ -47,6 +50,12 @@ import hela.eillance.ndkio.PeerConnectionState
 import hela.eillance.ndkio.ServiceConnectionState
 import hela.eillance.theme.extendedColors
 import hela.eillance.utils.rememberImageBitmapFromBase64
+import java.time.Instant
+import java.time.ZoneId
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -126,12 +135,24 @@ fun ContactsScreen(
           }
         }
       } else {
+        val locale = ConfigurationCompat.getLocales(LocalConfiguration.current)[0] ?: Locale.getDefault()
+        val zoneId = ZoneId.systemDefault()
+        val formatters = remember(locale) {
+          Triple(
+            DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(locale),
+            DateTimeFormatter.ofPattern("MMM d", locale),
+            DateTimeFormatter.ofLocalizedDate(FormatStyle.SHORT).withLocale(locale)
+          )
+        }
+
         LazyColumn(modifier = Modifier.weight(1f)) {
           items(visibleContacts, key = { it.peerId }) { contact ->
             ContactListItem(
               contact = contact,
               onClick = { onContactClick(contact.peerId) },
-              onShowProfile = { onShowContactProfile(contact.peerId) }
+              onShowProfile = { onShowContactProfile(contact.peerId) },
+              zoneId = zoneId,
+              formatters = formatters
             )
             HorizontalDivider(color = DividerDefaults.color.copy(alpha = 0.5f))
           }
@@ -145,7 +166,9 @@ fun ContactsScreen(
 fun ContactListItem(
   contact: Contact,
   onClick: () -> Unit,
-  onShowProfile: () -> Unit
+  onShowProfile: () -> Unit,
+  zoneId: ZoneId,
+  formatters: Triple<DateTimeFormatter, DateTimeFormatter, DateTimeFormatter>
 ) {
   val containerColor = if (contact.status == ContactStatus.awaitingApproval) {
     MaterialTheme.colorScheme.tertiaryContainer
@@ -153,12 +176,26 @@ fun ContactListItem(
     Color.Transparent
   }
 
-  val connectionStatus = PeerConnectionState.fromInt(contact.connectionState)
-  val (connectionText, connectionColor) = when (connectionStatus) {
-    PeerConnectionState.Connecting -> "Connecting..." to MaterialTheme.colorScheme.secondary
-    PeerConnectionState.Connected -> "Connected" to MaterialTheme.extendedColors.success
-    PeerConnectionState.Failed -> "Failed" to MaterialTheme.colorScheme.error
-    else -> "" to Color.Transparent
+  val displayName = if (contact.name.isNotEmpty()) {
+    contact.name
+  } else {
+    // Shorten crypto ID: first 8 chars
+    contact.peerId.take(8)
+  }
+
+  val displayId = if (contact.name.isNotEmpty()) {
+    // If a display name is set, we don't show the crypto ID at all (or show it in small text if desired, but request says "No crypto identity to be shown if a display name has been defined")
+    null
+  } else {
+    // If no display name, we've already used the shortened ID as the primary name.
+    null
+  }
+
+  // Last update timestamp
+  val timestampText = if (contact.lastActivityTimestamp > 0) {
+    formatContactTimestamp(contact.lastActivityTimestamp, zoneId, formatters)
+  } else {
+    ""
   }
 
   ListItem(
@@ -169,7 +206,7 @@ fun ContactListItem(
           bitmap = imageBitmap,
           contentDescription = "Profile Photo",
           modifier = Modifier
-            .size(40.dp)
+            .size(48.dp)
             .clip(CircleShape)
             .clickable { onShowProfile() },
           contentScale = ContentScale.Crop
@@ -179,17 +216,17 @@ fun ContactListItem(
           imageVector = Icons.Default.Person,
           contentDescription = "Default Profile Icon",
           modifier = Modifier
-            .size(40.dp)
+            .size(48.dp)
             .clip(CircleShape)
             .clickable { onShowProfile() }
             .background(MaterialTheme.colorScheme.secondaryContainer)
-            .padding(8.dp)
+            .padding(10.dp)
         )
       }
     },
     headlineContent = {
       Text(
-        text = contact.name,
+        text = displayName,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
         style = MaterialTheme.typography.bodyLarge,
@@ -197,46 +234,72 @@ fun ContactListItem(
       )
     },
     supportingContent = {
-      Column {
-        Text(
-          text = contact.peerId,
-          style = MaterialTheme.typography.bodySmall,
-          modifier = Modifier.alpha(0.7f)
-        )
-        if (contact.status == ContactStatus.awaitingApproval && !contact.bio.isNullOrBlank()) {
+      if (contact.status == ContactStatus.awaitingApproval) {
+        Column {
           Text(
-            text = contact.bio,
-            style = MaterialTheme.typography.bodySmall,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
+            text = "New Contact Request",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.tertiary
           )
+          if (!contact.bio.isNullOrBlank()) {
+            Text(
+              text = contact.bio,
+              style = MaterialTheme.typography.bodySmall,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis
+            )
+          }
         }
-        if (connectionText.isNotEmpty() && contact.status == ContactStatus.confirmed) {
-          Text(text = connectionText, color = connectionColor, style = MaterialTheme.typography.bodySmall)
+      } else {
+        // Show shortened last message if available, otherwise bio or ID if name is used
+        val subText = contact.lastMessageSnippet ?: contact.bio
+        if (!subText.isNullOrBlank()) {
+          Text(
+            text = subText,
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+          )
         }
       }
     },
     trailingContent = {
-      when (contact.status) {
-        ContactStatus.awaitingApproval ->
+      Column(horizontalAlignment = Alignment.End) {
+        if (timestampText.isNotEmpty()) {
           Text(
-            "New Request",
-            color = MaterialTheme.colorScheme.tertiary
-          )
-        ContactStatus.pendingApproval -> {
-          Text(
-            "Pending",
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+            text = timestampText,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
           )
         }
-        else -> {
-          if (contact.unreadCount > 0) {
-            Badge { Text(contact.unreadCount.toString()) }
-          }
+        if (contact.unreadCount > 0) {
+          Badge { Text(contact.unreadCount.toString()) }
+        } else if (contact.connectionState == PeerConnectionState.Connected.value) {
+          // Optionally show online indicator
+          Box(modifier = Modifier.size(8.dp).background(MaterialTheme.extendedColors.success, CircleShape))
         }
       }
     },
     modifier = Modifier.clickable(onClick = onClick),
     colors = ListItemDefaults.colors(containerColor = containerColor)
   )
+}
+
+fun formatContactTimestamp(
+  timestamp: Long,
+  zoneId: ZoneId,
+  formatters: Triple<DateTimeFormatter, DateTimeFormatter, DateTimeFormatter>
+): String {
+  val messageTime = Instant.ofEpochMilli(timestamp / 1000).atZone(zoneId)
+  val now = ZonedDateTime.now(zoneId)
+
+  val isToday = messageTime.toLocalDate().isEqual(now.toLocalDate())
+  val isYesterday = messageTime.toLocalDate().isEqual(now.toLocalDate().minusDays(1))
+
+  return when {
+    isToday -> messageTime.format(formatters.first) // 10:30 AM
+    isYesterday -> "Yesterday"
+    else -> messageTime.format(formatters.second) // Jan 5
+  }
 }
