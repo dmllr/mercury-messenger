@@ -217,18 +217,15 @@ inline auto MercuryViewModel::RestoreBackup(const std::string& path, const std::
 
 inline void MercuryViewModel::SelectContact(const ContactID& peer_id) {
   dispatch_queue_.Dispatch([this, peer_id]() -> void {
-    bool selection_changed{false};
     {
       const std::lock_guard<std::mutex> lock(state_mutex_);
-      selection_changed = selected_contact_id_ != peer_id;
-      if (selection_changed) {
+      if (selected_contact_id_ != peer_id) {
         selected_contact_id_ = peer_id;
         LoadInitialChatHistory(peer_id);
       }
     }
-    if (selection_changed) {
-      NotifyStateChanged({StateChange::SelectedContact, StateChange::InteractionHistory});
-    }
+    // Always notify to ensure UI is in sync, even if C++ state didn't change (e.g. UI reconnecting).
+    NotifyStateChanged({StateChange::SelectedContact, StateChange::InteractionHistory});
   });
 }
 
@@ -508,7 +505,7 @@ inline void MercuryViewModel::RefreshState() {
       UpdateContacts(false);
     }
     UpdateChats(false);
-    NotifyStateChanged({StateChange::MyProfile, StateChange::Contacts, StateChange::SignalingUrl});
+    NotifyStateChanged({StateChange::MyProfile, StateChange::Contacts, StateChange::SignalingUrl, StateChange::Connection, StateChange::CallState, StateChange::SelectedContact, StateChange::InteractionHistory});
   });
 }
 
