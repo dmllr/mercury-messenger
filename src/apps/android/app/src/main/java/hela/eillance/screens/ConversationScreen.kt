@@ -1,6 +1,8 @@
 package hela.eillance.screens
+
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -19,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -51,6 +54,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -90,7 +94,10 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
+import java.util.Locale
 import java.util.concurrent.TimeUnit
+
+private val jsonParser = Json { ignoreUnknownKeys = true }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -113,35 +120,45 @@ fun ConversationScreen(
 
   val listState = rememberLazyListState()
   val coroutineScope = rememberCoroutineScope()
-  var previousHistory by remember(peerId) { mutableStateOf(historyPage.messages) }
+
+  var previousHistorySize by remember(peerId) { mutableIntStateOf(historyPage.messages.size) }
 
   var systemMessageToShowDetails by remember { mutableStateOf<HistoryEntry?>(null) }
   var tappedTruncatedMessageId by remember { mutableStateOf<Long?>(null) }
 
-  LaunchedEffect(callState) {
+  // Auto-navigation to call screen
+  LaunchedEffect(callState.isConnecting, callState.isRinging, callState.isInCall, callState.peerId) {
     if ((callState.isConnecting || callState.isRinging || callState.isInCall) && callState.peerId == peerId) {
       onNavigateToCall(peerId)
     }
   }
 
-  LaunchedEffect(historyPage.messages) {
-    if (historyPage.messages.size > previousHistory.size) {
-      coroutineScope.launch {
-        listState.animateScrollToItem(0)
+  // Scroll to bottom when new messages arrive
+  LaunchedEffect(historyPage.messages.size) {
+    if (historyPage.messages.size > previousHistorySize) {
+      // Only scroll if we were arguably at the bottom or it's an incoming message
+      // Note: LazyColumn with reverseLayout=true means index 0 is the bottom.
+      if (listState.firstVisibleItemIndex < 3) {
+        coroutineScope.launch {
+          listState.animateScrollToItem(0)
+        }
       }
     }
-    previousHistory = historyPage.messages
+    previousHistorySize = historyPage.messages.size
   }
 
+  // Mark messages as read
   LaunchedEffect(historyPage.messages) {
     val unreadMessageIds = historyPage.messages
       .filter { it.kind == HistoryEntryKind.TextMessage && it.direction == MessageDirection.Received && it.status != MessageStatus.Read }
       .map { it.id }
+
     if (unreadMessageIds.isNotEmpty()) {
       viewModel.markMessagesAsRead(unreadMessageIds)
     }
   }
 
+  // Logic to handle tapping "Read more" on a truncated message
   val loadedMessage = if (tappedTruncatedMessageId != null) {
     historyPage.messages.find { it.id == tappedTruncatedMessageId && !it.isTruncated }
   } else {
@@ -169,7 +186,7 @@ fun ConversationScreen(
           ) {
             val imageBitmap = rememberImageBitmapFromBase64(contact?.photo)
             if (imageBitmap != null) {
-              androidx.compose.foundation.Image(
+              Image(
                 bitmap = imageBitmap,
                 contentDescription = "Profile Photo",
                 modifier = Modifier
@@ -229,11 +246,17 @@ fun ConversationScreen(
         ConnectionStatusBar(contact = it)
       }
 
+      // Capture locale and time zone once for the list
+      val locale = ConfigurationCompat.getLocales(LocalConfiguration.current)[0] ?: Locale.getDefault()
+      val zoneId = ZoneId.systemDefault()
+
       ChatHistory(
         modifier = Modifier.weight(1f),
         historyPage = historyPage,
         listState = listState,
         viewModel = viewModel,
+        locale = locale,
+        zoneId = zoneId,
         onSystemMessageClick = { clickedEntry ->
           if (clickedEntry.isTruncated) {
             tappedTruncatedMessageId = clickedEntry.id
@@ -243,26 +266,31 @@ fun ConversationScreen(
           }
         }
       )
-      if (contact?.status == ContactStatus.awaitingApproval) {
-        ApprovalRequestBar(
-          contact = contact,
-          onApprove = { viewModel.acceptContact(peerId) },
-          onReject = {
-            viewModel.blockContact(peerId)
-            onBack()
-          }
-        )
-      } else if (contact?.status == ContactStatus.pendingApproval) {
-        PendingApprovalBar(
-          contact = contact,
-          onCancel = {
-            viewModel.blockContact(peerId)
-            onBack()
-          },
-          onResend = { viewModel.addContact(peerId) }
-        )
-      } else {
-        MessageInput(onSendMessage = viewModel::sendMessage)
+
+      when (contact?.status) {
+        ContactStatus.awaitingApproval -> {
+          ApprovalRequestBar(
+            contact = contact,
+            onApprove = { viewModel.acceptContact(peerId) },
+            onReject = {
+              viewModel.blockContact(peerId)
+              onBack()
+            }
+          )
+        }
+        ContactStatus.pendingApproval -> {
+          PendingApprovalBar(
+            contact = contact,
+            onCancel = {
+              viewModel.blockContact(peerId)
+              onBack()
+            },
+            onResend = { viewModel.addContact(peerId) }
+          )
+        }
+        else -> {
+          MessageInput(onSendMessage = viewModel::sendMessage)
+        }
       }
     }
   }
@@ -305,9 +333,11 @@ fun ConnectionStatusBar(contact: Contact) {
     ) {
       if (!isExpanded) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-          Box(modifier = Modifier
-            .size(10.dp)
-            .background(statusColor, RoundedCornerShape(2.dp)))
+          Box(
+            modifier = Modifier
+              .size(10.dp)
+              .background(statusColor, RoundedCornerShape(2.dp))
+          )
           Spacer(Modifier.width(8.dp))
           Text(statusText, style = MaterialTheme.typography.labelMedium)
         }
@@ -329,10 +359,21 @@ fun ConnectionStatusBar(contact: Contact) {
 fun ChatHistory(
   modifier: Modifier = Modifier,
   historyPage: HistoryPage,
-  listState: androidx.compose.foundation.lazy.LazyListState,
+  listState: LazyListState,
   viewModel: MainViewModel,
+  locale: Locale,
+  zoneId: ZoneId,
   onSystemMessageClick: (HistoryEntry) -> Unit
 ) {
+  // Remember formatters to avoid recreating them for every row
+  val formatters = remember(locale) {
+    Triple(
+      DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(locale),
+      DateTimeFormatter.ofPattern("MMM d, HH:mm", locale),
+      DateTimeFormatter.ofLocalizedDateTime(FormatStyle.SHORT, FormatStyle.SHORT).withLocale(locale)
+    )
+  }
+
   LazyColumn(
     state = listState,
     modifier = modifier.fillMaxSize(),
@@ -347,8 +388,17 @@ fun ChatHistory(
     ) { index ->
       val item = history[history.lastIndex - index]
       when (item.kind) {
-        HistoryEntryKind.TextMessage -> MessageBubble(item, onShowMore = viewModel::loadFullMessage)
-        HistoryEntryKind.VoiceCall, HistoryEntryKind.VideoCall -> CallLogBubble(item)
+        HistoryEntryKind.TextMessage -> MessageBubble(
+          entry = item,
+          onShowMore = viewModel::loadFullMessage,
+          zoneId = zoneId,
+          formatters = formatters
+        )
+        HistoryEntryKind.VoiceCall, HistoryEntryKind.VideoCall -> CallLogBubble(
+          entry = item,
+          zoneId = zoneId,
+          formatters = formatters
+        )
         HistoryEntryKind.SystemMessage -> SystemMessageBubble(item, onClick = onSystemMessageClick)
       }
     }
@@ -369,7 +419,12 @@ fun ChatHistory(
 }
 
 @Composable
-fun MessageBubble(entry: HistoryEntry, onShowMore: (Long) -> Unit) {
+fun MessageBubble(
+  entry: HistoryEntry,
+  onShowMore: (Long) -> Unit,
+  zoneId: ZoneId,
+  formatters: Triple<DateTimeFormatter, DateTimeFormatter, DateTimeFormatter>
+) {
   val isFromMe = entry.direction == MessageDirection.Sent
   val alignment = if (isFromMe) Alignment.CenterEnd else Alignment.CenterStart
   val colors = if (isFromMe) {
@@ -419,21 +474,20 @@ fun MessageBubble(entry: HistoryEntry, onShowMore: (Long) -> Unit) {
         verticalAlignment = Alignment.CenterVertically
       ) {
         Text(
-          text = formatTimestamp(entry.timestamp),
-          style = MaterialTheme.typography.bodySmall,
+          text = formatTimestamp(entry.timestamp, zoneId, formatters),
+          style = MaterialTheme.typography.labelSmall,
           color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
         )
         if (isFromMe) {
-          Spacer(Modifier.width(4.dp))
           Icon(
-            imageVector = when(entry.status) {
+            imageVector = when (entry.status) {
               MessageStatus.Read -> Icons.Filled.DoneAll
               MessageStatus.Delivered -> Icons.Filled.DoneAll
               MessageStatus.Sent -> Icons.Filled.Done
               else -> Icons.Filled.Schedule
             },
             contentDescription = "Message status: ${entry.status}",
-            modifier = Modifier.padding(start = 4.dp),
+            modifier = Modifier.size(16.dp).padding(start = 4.dp),
             tint = if (entry.status == MessageStatus.Read) {
               MaterialTheme.colorScheme.primary
             } else {
@@ -447,21 +501,37 @@ fun MessageBubble(entry: HistoryEntry, onShowMore: (Long) -> Unit) {
 }
 
 @Composable
-fun CallLogBubble(entry: HistoryEntry) {
+fun CallLogBubble(
+  entry: HistoryEntry,
+  zoneId: ZoneId,
+  formatters: Triple<DateTimeFormatter, DateTimeFormatter, DateTimeFormatter>
+) {
   val (icon, color, text) = when (entry.callDirection) {
     CallDirection.Outgoing -> when (entry.callStatus) {
-      CallStatus.Answered -> Triple(Icons.AutoMirrored.Filled.CallMade, MaterialTheme.colorScheme.primary, if(entry.kind == HistoryEntryKind.VideoCall) "Outgoing video call" else "Outgoing call")
-      else -> Triple(Icons.AutoMirrored.Filled.CallMade, Color.Red, if(entry.kind == HistoryEntryKind.VideoCall) "Unanswered video call" else "Unanswered call")
+      CallStatus.Answered -> Triple(
+        Icons.AutoMirrored.Filled.CallMade,
+        MaterialTheme.colorScheme.primary,
+        if (entry.kind == HistoryEntryKind.VideoCall) "Outgoing video call" else "Outgoing call"
+      )
+      else -> Triple(
+        Icons.AutoMirrored.Filled.CallMade,
+        Color.Red,
+        if (entry.kind == HistoryEntryKind.VideoCall) "Unanswered video call" else "Unanswered call"
+      )
     }
     CallDirection.Incoming -> when (entry.callStatus) {
-      CallStatus.Answered -> Triple(Icons.AutoMirrored.Filled.CallReceived, MaterialTheme.colorScheme.primary, if(entry.kind == HistoryEntryKind.VideoCall) "Incoming video call" else "Incoming call")
+      CallStatus.Answered -> Triple(
+        Icons.AutoMirrored.Filled.CallReceived,
+        MaterialTheme.colorScheme.primary,
+        if (entry.kind == HistoryEntryKind.VideoCall) "Incoming video call" else "Incoming call"
+      )
       CallStatus.Missed -> Triple(Icons.AutoMirrored.Filled.CallMissed, Color.Red, "Missed call")
       else -> Triple(Icons.AutoMirrored.Filled.CallReceived, Color.Red, "Rejected call")
     }
     null -> Triple(Icons.Default.Call, MaterialTheme.colorScheme.onSurfaceVariant, "Call")
   }
 
-  val formattedTime = formatTimestamp(entry.timestamp)
+  val formattedTime = formatTimestamp(entry.timestamp, zoneId, formatters)
 
   val duration = entry.durationSeconds
   val durationText = if (entry.callStatus == CallStatus.Answered && duration > 0) {
@@ -477,7 +547,12 @@ fun CallLogBubble(entry: HistoryEntry) {
     horizontalArrangement = Arrangement.Center,
     verticalAlignment = Alignment.CenterVertically
   ) {
-    Icon(imageVector = icon, contentDescription = text, tint = color, modifier = Modifier.padding(end = 8.dp))
+    Icon(
+      imageVector = icon,
+      contentDescription = text,
+      tint = color,
+      modifier = Modifier.padding(end = 8.dp)
+    )
     Text(
       text = "$text - $formattedTime$durationText",
       style = MaterialTheme.typography.bodySmall,
@@ -488,13 +563,12 @@ fun CallLogBubble(entry: HistoryEntry) {
 
 @Composable
 fun SystemMessageBubble(entry: HistoryEntry, onClick: (HistoryEntry) -> Unit) {
-  val json = Json { ignoreUnknownKeys = true }
-
   val parsedAction = remember(entry.content, entry.isTruncated) {
     entry.content?.let { content ->
       try {
-        json.decodeFromString<JsonAction>(content)
+        jsonParser.decodeFromString<JsonAction>(content)
       } catch (e: Exception) {
+        // Fallback regex parsing if JSON is malformed or complex
         val actionMatch = Regex("\"action\"\\s*:\\s*\"([^\"]+)\"").find(content)
         actionMatch?.groupValues?.get(1)?.let { action -> JsonAction(action) }
       }
@@ -618,22 +692,23 @@ private fun ApprovalRequestBar(
   }
 }
 
-@Composable
-fun formatTimestamp(timestamp: Long): String {
-  val locale = ConfigurationCompat.getLocales(LocalConfiguration.current)[0]
-    ?: java.util.Locale.getDefault()
-
-  val messageTime = Instant.ofEpochMilli(timestamp / 1000).atZone(ZoneId.systemDefault())
-  val now = ZonedDateTime.now(ZoneId.systemDefault())
+// Timestamp formatter using pre-created formatters
+fun formatTimestamp(
+  timestamp: Long,
+  zoneId: ZoneId,
+  formatters: Triple<DateTimeFormatter, DateTimeFormatter, DateTimeFormatter>
+): String {
+  val messageTime = Instant.ofEpochMilli(timestamp / 1000).atZone(zoneId)
+  val now = ZonedDateTime.now(zoneId)
 
   val isToday = messageTime.toLocalDate().isEqual(now.toLocalDate())
   val isYesterday = messageTime.toLocalDate().isEqual(now.toLocalDate().minusDays(1))
 
   return when {
-    isToday -> messageTime.format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(locale))
-    isYesterday -> "Yesterday, " + messageTime.format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(locale))
-    messageTime.year == now.year -> messageTime.format(DateTimeFormatter.ofPattern("MMM d, HH:mm", locale))
-    else -> messageTime.format(DateTimeFormatter.ofLocalizedDateTime(FormatStyle.SHORT, FormatStyle.SHORT).withLocale(locale))
+    isToday -> messageTime.format(formatters.first)
+    isYesterday -> "Yesterday, " + messageTime.format(formatters.first)
+    messageTime.year == now.year -> messageTime.format(formatters.second)
+    else -> messageTime.format(formatters.third)
   }
 }
 
