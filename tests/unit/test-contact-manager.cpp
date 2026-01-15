@@ -18,15 +18,15 @@ protected:
   storage::MockPersistentStorageImpl* mock_storage_impl_;
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::unique_ptr<identity::ContactManager> contact_manager_;
-  const std::string peer1 = "peer1_id";
-  const std::string peer2 = "peer2_id";
+  const ContactID peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
+  const ContactID peer2 = ContactID("0000000000000000000000000000000000000000000000000000000000000002");
 };
 
 TEST_F(ContactManagerTest, AddContact) {
   ASSERT_TRUE(contact_manager_->AddContact(peer1));
   auto contact = contact_manager_->GetContact(peer1);
   ASSERT_TRUE(contact.has_value());
-  EXPECT_EQ(contact->peer_id, peer1);
+  EXPECT_EQ(contact->peer_id, peer1.ToString());
   EXPECT_EQ(contact->status, identity::ContactStatus::pendingApproval);
 }
 
