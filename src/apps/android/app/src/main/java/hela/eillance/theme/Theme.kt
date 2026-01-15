@@ -64,14 +64,14 @@ private val StrictLightOutline = Color(0xFFBDBDBD)
 private val StrictLightError = Color(0xFFB00020)
 
 val LightExtendedColors = ExtendedColors(
-  success = Color(0xFF2E7D32),
-  warning = Color(0xFFF57F17),
+  success = Color(0xFF388E3C),
+  warning = Color(0xFFFFB74D),
   offline = Color(0xFF9E9E9E),
 )
 
 val DarkExtendedColors = ExtendedColors(
-  success = Color(0xFF388E3C), // Darker green to support white icons/text
-  warning = Color(0xFFFFB74D),
+  success = Color(0xFF2E7D32),
+  warning = Color(0xFFF57F17),
   offline = Color(0xFF616161),
 )
 

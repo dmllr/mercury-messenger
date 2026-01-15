@@ -25,6 +25,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -66,7 +67,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -715,7 +718,7 @@ fun formatTimestamp(
 @Composable
 fun MessageInput(onSendMessage: (String) -> Unit) {
   var text by remember { mutableStateOf(TextFieldValue("")) }
-  Surface(tonalElevation = 3.dp) {
+  Box {
     Row(
       modifier = Modifier
         .fillMaxWidth()
@@ -725,18 +728,32 @@ fun MessageInput(onSendMessage: (String) -> Unit) {
       TextField(
         value = text,
         onValueChange = { text = it },
-        modifier = Modifier.weight(1f),
+        modifier = Modifier
+          .weight(1f),
         placeholder = { Text("Message...") },
-        shape = RoundedCornerShape(24.dp),
         colors = TextFieldDefaults.colors(
           focusedIndicatorColor = Color.Transparent,
           unfocusedIndicatorColor = Color.Transparent,
           disabledIndicatorColor = Color.Transparent
         ),
-        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences)
+        keyboardOptions = KeyboardOptions(
+          capitalization = KeyboardCapitalization.Sentences,
+          keyboardType = KeyboardType.Text,
+          imeAction = ImeAction.Send
+        ),
+        keyboardActions = KeyboardActions(
+          onSend = {
+            if (text.text.isNotBlank()) {
+              onSendMessage(text.text)
+              text = TextFieldValue("")
+            }
+          }
+        )
       )
       Spacer(modifier = Modifier.width(8.dp))
       IconButton(
+        modifier = Modifier
+          .background(MaterialTheme.extendedColors.success, shape = CircleShape),
         onClick = {
           if (text.text.isNotBlank()) {
             onSendMessage(text.text)
@@ -745,7 +762,10 @@ fun MessageInput(onSendMessage: (String) -> Unit) {
         },
         enabled = text.text.isNotBlank()
       ) {
-        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send Message")
+        Icon(Icons.AutoMirrored.Filled.Send,
+          contentDescription = "Send Message",
+          tint = MaterialTheme.colorScheme.onPrimary
+        )
       }
     }
   }
