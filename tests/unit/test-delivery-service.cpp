@@ -20,7 +20,7 @@ protected:
     storage_ = std::make_shared<storage::PersistentStorage>(std::move(mock_impl));
     contact_manager_ = std::make_shared<identity::ContactManager>(storage_);
 
-    connection_handler_ = [this](const std::string& peer_id) {
+    connection_handler_ = [this](const ContactID& peer_id) {
       std::lock_guard<std::mutex> lock(mtx_);
       requested_connections_.push_back(peer_id);
       cv_.notify_one();
@@ -41,27 +41,27 @@ protected:
     });
   }
 
-  void AddPendingMessage(const std::string& peer_id) {
+  void AddPendingMessage(const ContactID& peer_id) {
     mock_storage_impl_->AddHistoryEntry(  //
         {.kind = messaging::HistoryEntryKind::textMessage,
          .timestamp = Time::Now(),
          .direction = messaging::MessageDirection::sent,
          .status = messaging::MessageStatus::sending,
          .data = messaging::MessageEntry{"test payload"},
-         .peer_id_for_db = peer_id});
+         .peer_id_for_db = peer_id.ToString()});
   }
 
   storage::MockPersistentStorageImpl* mock_storage_impl_;
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<identity::ContactManager> contact_manager_;
-  std::function<void(const std::string&)> connection_handler_;
+  std::function<void(const ContactID&)> connection_handler_;
   std::unique_ptr<messaging::MessageDeliveryService> delivery_service_;
 
-  std::vector<std::string> requested_connections_;
+  std::vector<ContactID> requested_connections_;
   std::mutex mtx_;
   std::condition_variable cv_;
 
-  const std::string peer1_ = "peer1";
+  const ContactID peer1_ = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
 };
 
 TEST_F(DeliveryServiceTest, NoActionWhenNoQueuedMessages) {

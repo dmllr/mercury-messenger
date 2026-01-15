@@ -18,7 +18,8 @@ protected:
   storage::MockPersistentStorageImpl* mock_storage_impl_;
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::unique_ptr<messaging::MessageHistory> message_history_;
-  const std::string peer1 = "peer1";
+  const ContactID peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
+  const ContactID peer2 = ContactID("0000000000000000000000000000000000000000000000000000000000000002");
 };
 
 TEST_F(MessageHistoryTest, AddTextEntry) {
@@ -41,11 +42,11 @@ TEST_F(MessageHistoryTest, AddCallEntry) {
 }
 
 TEST_F(MessageHistoryTest, UpdateMessageStatus) {
-  std::string received_peer_id;
+  ContactID received_peer_id;
   uint64_t received_msg_id = 0;
   messaging::MessageStatus received_status = messaging::MessageStatus::none;
 
-  message_history_->SetStatusChangedCallback([&](const std::string& p_id, uint64_t msg_id, messaging::MessageStatus status) {
+  message_history_->SetStatusChangedCallback([&](const ContactID& p_id, uint64_t msg_id, messaging::MessageStatus status) {
     received_peer_id = p_id;
     received_msg_id = msg_id;
     received_status = status;
@@ -89,22 +90,22 @@ TEST_F(MessageHistoryTest, GetHistoryPage) {
 }
 
 TEST_F(MessageHistoryTest, GetChatSummaries) {
-  message_history_->AddTextEntry("peer1", "p1m1", messaging::MessageDirection::sent);
+  message_history_->AddTextEntry(peer1, "p1m1", messaging::MessageDirection::sent);
   std::this_thread::sleep_for(std::chrono::milliseconds(10));
-  message_history_->AddTextEntry("peer2", "p2m1", messaging::MessageDirection::received);
-  message_history_->AddTextEntry("peer2", "p2m2", messaging::MessageDirection::received);  // unread
+  message_history_->AddTextEntry(peer2, "p2m1", messaging::MessageDirection::received);
+  message_history_->AddTextEntry(peer2, "p2m2", messaging::MessageDirection::received);  // unread
   std::this_thread::sleep_for(std::chrono::milliseconds(10));
-  message_history_->AddTextEntry("peer1", "p1m2", messaging::MessageDirection::received);  // unread
+  message_history_->AddTextEntry(peer1, "p1m2", messaging::MessageDirection::received);  // unread
 
-  auto summaries = message_history_->GetChatSummaries({"peer1", "peer2"});
+  auto summaries = message_history_->GetChatSummaries({peer1.ToString(), peer2.ToString()});
   ASSERT_EQ(summaries.size(), 2);
 
   // Summaries are sorted by most recent timestamp
-  EXPECT_EQ(summaries[0].peer_id, "peer1");
+  EXPECT_EQ(summaries[0].peer_id, peer1.ToString());
   EXPECT_EQ(std::get<messaging::MessageEntry>(summaries[0].last_message.data).content, "p1m2");
   EXPECT_EQ(summaries[0].unread_count, 1);
 
-  EXPECT_EQ(summaries[1].peer_id, "peer2");
+  EXPECT_EQ(summaries[1].peer_id, peer2.ToString());
   EXPECT_EQ(std::get<messaging::MessageEntry>(summaries[1].last_message.data).content, "p2m2");
   EXPECT_EQ(summaries[1].unread_count, 2);
 }
