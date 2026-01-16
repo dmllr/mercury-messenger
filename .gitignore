@@ -2,6 +2,7 @@
 /_imported/
 /build/
 /build-deploy/
+/build-tidy/
 /bin/
 /out/
 /lib/
