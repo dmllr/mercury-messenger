@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.PowerManager
 import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
@@ -74,6 +75,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
   private val _hasNotificationPermission = MutableStateFlow(true)
   val hasNotificationPermission = _hasNotificationPermission.asStateFlow()
 
+  private val _hasBatteryExemption = MutableStateFlow(true)
+  val hasBatteryExemption = _hasBatteryExemption.asStateFlow()
+
   // Incoming Call UI State
   private val _incomingCallUiVisible = MutableStateFlow(false)
   val incomingCallUiVisible = _incomingCallUiVisible.asStateFlow()
@@ -101,6 +105,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
   fun checkAllPermissions() {
     checkCallPermissions()
     checkNotificationPermission()
+    checkBatteryOptimization()
   }
 
   fun checkCallPermissions() {
@@ -126,6 +131,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     } else {
       _hasNotificationPermission.value = true
     }
+  }
+
+  fun checkBatteryOptimization() {
+    val context = getApplication<Application>()
+    val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+    val packageName = context.packageName
+    _hasBatteryExemption.value = powerManager.isIgnoringBatteryOptimizations(packageName)
   }
 
   fun setService(service: CallService?) {
