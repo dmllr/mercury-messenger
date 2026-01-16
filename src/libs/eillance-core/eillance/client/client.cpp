@@ -1085,7 +1085,8 @@ void Client::CheckForInactivePeers() {
 
   auto peers = transport_->getPeers();
   auto now = Time::Now();
-  const auto timeout_us = std::chrono::duration_cast<std::chrono::microseconds>(kPeerInactivityTimeout).count();
+  const auto timeout_s = settings_manager_->GetPeerInactivityTimeout();
+  const auto timeout_us = std::chrono::duration_cast<std::chrono::microseconds>(timeout_s).count();
 
   for (const auto& [peer_id, peer]: peers) {
     if (!peer->has_media_peer_connection_ && GetPeerConnectionState(peer_id) == transport::PeerConnectionState::Connected) {

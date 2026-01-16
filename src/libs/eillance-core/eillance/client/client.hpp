@@ -211,7 +211,6 @@ private:
   mutable std::mutex online_peers_mutex_;
 
   static constexpr std::chrono::seconds kPeerInactivityCheckInterval{30};
-  static constexpr std::chrono::minutes kPeerInactivityTimeout{5};
 };
 
 }  // namespace eillance

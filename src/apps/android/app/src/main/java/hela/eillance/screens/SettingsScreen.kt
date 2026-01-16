@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
@@ -28,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import hela.eillance.MainViewModel
@@ -38,6 +40,7 @@ import hela.eillance.navigation.Screen
 fun SettingsScreen(viewModel: MainViewModel, onBack: () -> Unit, navController: NavController) {
   val context = LocalContext.current
   val signalingUrl by viewModel.signalingUrl.collectAsState()
+  val peerInactivityTimeout by viewModel.peerInactivityTimeout.collectAsState()
 
   Scaffold(
     topBar = {
@@ -77,6 +80,32 @@ fun SettingsScreen(viewModel: MainViewModel, onBack: () -> Unit, navController: 
       Spacer(modifier = Modifier.height(4.dp))
       Text(
         "Leave empty to use the default server. Reconnects automatically on save.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+      )
+
+      Spacer(modifier = Modifier.height(16.dp))
+
+      // Setting Item: Peer Inactivity Timeout
+      OutlinedTextField(
+        value = peerInactivityTimeout.toString(),
+        onValueChange = {
+          if (it.isEmpty()) {
+            viewModel.onPeerInactivityTimeoutChange(0)
+          } else {
+            it.toIntOrNull()?.let { num ->
+              viewModel.onPeerInactivityTimeoutChange(num)
+            }
+          }
+        },
+        label = { Text("Peer Inactivity Timeout (s)") },
+        modifier = Modifier.fillMaxWidth(),
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+      )
+      Spacer(modifier = Modifier.height(4.dp))
+      Text(
+        "Seconds of inactivity before disconnecting a peer connection. Default is 120s.",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant
       )

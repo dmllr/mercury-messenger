@@ -13,6 +13,7 @@ MercuryViewModel::MercuryViewModel(std::shared_ptr<Client> client) : client_(std
       my_profile_.my_id = client_->GetId();
       UpdateMyProfileFromSettings(false);
       signaling_server_url_ = client_->GetSettingsManager()->GetSignalingServerUrl();
+      peer_inactivity_timeout_seconds_ = static_cast<int>(client_->GetSettingsManager()->GetPeerInactivityTimeout().count());
       UpdateContacts(false);
     }
   }
@@ -213,6 +214,17 @@ void MercuryViewModel::UpdateSignalingUrl(const std::string& url) {
   dispatch_queue_.Dispatch([this, url] { client_->UpdateSignalingUrl(url); });
 }
 
+void MercuryViewModel::SetPeerInactivityTimeout(int seconds) {
+  dispatch_queue_.Dispatch([this, seconds] {
+    client_->GetSettingsManager()->SetPeerInactivityTimeout(std::chrono::seconds(seconds));
+    {
+      const std::lock_guard<std::mutex> lock(state_mutex_);
+      peer_inactivity_timeout_seconds_ = seconds;
+    }
+    NotifyStateChanged({StateChange::PeerInactivityTimeout});
+  });
+}
+
 void MercuryViewModel::BlockContact(const ContactID& peer_id) {
   dispatch_queue_.Dispatch([this, peer_id] {
     client_->BlockContact(peer_id);
@@ -340,10 +352,11 @@ void MercuryViewModel::RefreshState() {
       my_profile_.my_id = client_->GetId();
       UpdateMyProfileFromSettings(false);
       signaling_server_url_ = client_->GetSettingsManager()->GetSignalingServerUrl();
+      peer_inactivity_timeout_seconds_ = static_cast<int>(client_->GetSettingsManager()->GetPeerInactivityTimeout().count());
       UpdateContacts(false);
     }
     UpdateChats(false);
-    NotifyStateChanged({StateChange::MyProfile, StateChange::Contacts, StateChange::SignalingUrl, StateChange::Connection, StateChange::CallState, StateChange::SelectedContact, StateChange::InteractionHistory});
+    NotifyStateChanged({StateChange::MyProfile, StateChange::Contacts, StateChange::SignalingUrl, StateChange::Connection, StateChange::CallState, StateChange::SelectedContact, StateChange::InteractionHistory, StateChange::PeerInactivityTimeout});
   });
 }
 
@@ -411,7 +424,8 @@ auto MercuryViewModel::GetState() const -> UIState {
       .interaction_history = interaction_history_,
       .has_older_messages = has_older_messages_,
       .call_state = call_state_,
-      .signaling_server_url = signaling_server_url_};
+      .signaling_server_url = signaling_server_url_,
+      .peer_inactivity_timeout_seconds = peer_inactivity_timeout_seconds_};
 }
 
 auto MercuryViewModel::GetMyProfile() const -> UIState::MyProfile {

@@ -9,6 +9,7 @@ enum class StateChange {
   InteractionHistory,
   CallState,
   SignalingUrl,
+  PeerInactivityTimeout,
   Unknown;
 
   companion object {

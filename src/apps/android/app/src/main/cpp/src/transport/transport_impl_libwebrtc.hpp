@@ -319,7 +319,7 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcTransport_nati
     try {
       eillance::ContactID peer_id(peer_id_chars);
       transport->ReportStateChange(peer_id, eillance::EventSource::peerConnectionState, state);
-    } catch(...) {}
+    } catch (...) {}
     env->ReleaseStringUTFChars(j_peer_id, peer_id_chars);
   }
 }
@@ -389,7 +389,7 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcTransport_nati
     const char* error_chars = env->GetStringUTFChars(error, nullptr);
     try {
       transport->Delegate()->OnSignalingErrorForPeer(eillance::ContactID(peer_id_chars), error_chars);
-    } catch(...) {}
+    } catch (...) {}
     env->ReleaseStringUTFChars(peer_id, peer_id_chars);
     env->ReleaseStringUTFChars(error, error_chars);
   }
@@ -411,7 +411,7 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcTransport_nati
       } else {
         LOGW << "Received DC message for peer " << peer_id_chars << " but no handler or peer found.";
       }
-    } catch(...) {}
+    } catch (...) {}
 
     env->ReleaseStringUTFChars(j_peer_id, peer_id_chars);
     env->ReleaseStringUTFChars(j_message, message_chars);
@@ -434,7 +434,7 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcTransport_nati
         const nlohmann::json key_exchange_message = {{"type", "key_exchange"}, {"key", std::vector<std::byte>(my_pub_key.begin(), my_pub_key.end())}, {"is_reply", false}};
         transport->SendPeerDataChannelMessage(peer_id, key_exchange_message);
       }
-    } catch(...) {}
+    } catch (...) {}
 
     env->ReleaseStringUTFChars(j_peer_id, peer_id_chars);
   }
