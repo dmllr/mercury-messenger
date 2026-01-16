@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <memory>
 #include <optional>
 #include <string>
@@ -50,6 +51,20 @@ public:
     storage_->SetSetting(kMyPhotoBase64Key, photo);
   }
 
+  // --- Peer Connection ---
+  [[nodiscard]] auto GetPeerInactivityTimeout() const -> std::chrono::seconds {
+    if (auto str_val = storage_->GetSetting(kPeerInactivityTimeoutKey)) {
+      try {
+        return std::chrono::seconds(std::stoi(*str_val));
+      } catch (...) {}
+    }
+    return std::chrono::seconds(120);
+  }
+
+  void SetPeerInactivityTimeout(std::chrono::seconds timeout) {
+    storage_->SetSetting(kPeerInactivityTimeoutKey, std::to_string(timeout.count()));
+  }
+
 private:
   void Load() {
     signaling_server_url_ = storage_->GetSetting(kSignalingServerUrlKey);
@@ -62,6 +77,7 @@ private:
   static constexpr auto kMyDisplayNameKey = "my_display_name";
   static constexpr auto kMyBioKey = "my_bio";
   static constexpr auto kMyPhotoBase64Key = "my_photo_base64";
+  static constexpr auto kPeerInactivityTimeoutKey = "peer_inactivity_timeout";
 
   std::shared_ptr<storage::PersistentStorage> storage_;
 

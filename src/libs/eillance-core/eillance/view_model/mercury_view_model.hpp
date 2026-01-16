@@ -61,6 +61,7 @@ struct UIState {
   bool has_older_messages = false;
   CallState call_state;
   std::optional<std::string> signaling_server_url;
+  int peer_inactivity_timeout_seconds = 120;
 };
 
 enum class StateChange {
@@ -70,7 +71,8 @@ enum class StateChange {
   SelectedContact,
   InteractionHistory,
   CallState,
-  SignalingUrl
+  SignalingUrl,
+  PeerInactivityTimeout
 };
 
 class MercuryViewModel {
@@ -104,6 +106,7 @@ public:
   void AddContact(const ContactID& peer_id, const std::optional<std::string>& token = std::nullopt);
   auto GenerateContactToken() -> std::string;
   void UpdateSignalingUrl(const std::string& url);
+  void SetPeerInactivityTimeout(int seconds);
   void AcceptContact(const ContactID& peer_id);
   void UpdateMyProfile(const std::optional<std::string>& name, const std::optional<std::string>& bio, const std::optional<std::string>& photo);
   void SetContactDisplayNameOverride(const ContactID& peer_id, const std::string& name);
@@ -150,6 +153,7 @@ private:
   bool has_older_messages_ = false;
   UIState::CallState call_state_;
   std::optional<std::string> signaling_server_url_;
+  int peer_inactivity_timeout_seconds_ = 120;
 
   std::unordered_map<ContactID, size_t> chat_pages_loaded_;
   DispatchQueue dispatch_queue_{"ViewModel", 1};

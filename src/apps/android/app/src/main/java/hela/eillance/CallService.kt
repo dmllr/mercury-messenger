@@ -74,6 +74,7 @@ class CallService : Service(), IClientNativeBridge {
   fun setLocalVideoSink(sink: VideoSink?) = webRtcTransport?.setLocalSink(sink)
   fun setRemoteVideoSink(peerId: String, sink: VideoSink?) = webRtcTransport?.setRemoteSink(peerId, sink)
   fun updateSignalingUrl(newUrl: String) = nativeUpdateSignalingUrl(newUrl)
+  fun updatePeerInactivityTimeout(seconds: Int) = nativeSetPeerInactivityTimeout(seconds)
 
   override fun onBind(intent: Intent?): IBinder = binder
 
@@ -477,6 +478,7 @@ class CallService : Service(), IClientNativeBridge {
   external fun nativeGetConnectionState(): Int
   external fun nativeGetSignalingUrl(): String?
   external fun nativeGetSelectedContactId(): String?
+  external fun nativeGetPeerInactivityTimeout(): Int
 
   private external fun nativeRefreshState()
   external fun addContact(peerId: String, token: String?)
@@ -495,6 +497,7 @@ class CallService : Service(), IClientNativeBridge {
   external fun configureVideoCapture(config: VideoConfig)
   external fun hangup()
   private external fun nativeUpdateSignalingUrl(url: String)
+  private external fun nativeSetPeerInactivityTimeout(seconds: Int)
   private external fun nativeAcceptCall()
   private external fun nativeRejectCall()
   private external fun nativeUpdateMyProfile(name: String?, bio: String?, photo_base64: String?)

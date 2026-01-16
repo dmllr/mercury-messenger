@@ -323,6 +323,15 @@ extern "C" JNIEXPORT jboolean JNICALL Java_hela_eillance_CallService_nativeResto
   return 0U;
 }
 
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_nativeSetPeerInactivityTimeout(JNIEnv* /*env*/, jobject /*instance*/, jint seconds) {
+  if (auto* vm = GetViewModel()) { vm->SetPeerInactivityTimeout(seconds); }
+}
+
+extern "C" JNIEXPORT jint JNICALL Java_hela_eillance_CallService_nativeGetPeerInactivityTimeout(JNIEnv* /*env*/, jobject /*instance*/) {
+  if (auto* vm = GetViewModel()) { return vm->GetState().peer_inactivity_timeout_seconds; }
+  return 120;
+}
+
 // --- New State Query JNI Functions ---
 
 extern "C" JNIEXPORT jobject JNICALL Java_hela_eillance_CallService_nativeGetMyProfile(JNIEnv* env, jobject /*instance*/) {

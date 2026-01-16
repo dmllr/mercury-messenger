@@ -46,6 +46,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
   private val _signalingUrl = MutableStateFlow("")
   val signalingUrl = _signalingUrl.asStateFlow()
 
+  private val _peerInactivityTimeout = MutableStateFlow(120)
+  val peerInactivityTimeout = _peerInactivityTimeout.asStateFlow()
+
   private val _showAddContactDialog = MutableStateFlow(false)
   val showAddContactDialog = _showAddContactDialog.asStateFlow()
 
@@ -152,6 +155,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
       if (changes.contains(StateChange.InteractionHistory)) refreshHistory()
       if (changes.contains(StateChange.CallState)) refreshCallState()
       if (changes.contains(StateChange.SignalingUrl)) refreshSignalingUrl()
+      if (changes.contains(StateChange.PeerInactivityTimeout)) refreshPeerInactivityTimeout()
 
       callService?.handleNotifications()
     }
@@ -193,6 +197,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     _signalingUrl.value = callService?.nativeGetSignalingUrl() ?: ""
   }
 
+  private fun refreshPeerInactivityTimeout() {
+    _peerInactivityTimeout.value = callService?.nativeGetPeerInactivityTimeout() ?: 120
+  }
+
   fun showIncomingCallUi() {
     _incomingCallUiVisible.value = true
   }
@@ -230,8 +238,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     _signalingUrl.value = newUrl
   }
 
+  fun onPeerInactivityTimeoutChange(newValue: Int) {
+    _peerInactivityTimeout.value = newValue
+  }
+
   fun saveSettings() {
     callService?.updateSignalingUrl(_signalingUrl.value)
+    callService?.updatePeerInactivityTimeout(_peerInactivityTimeout.value)
   }
 
   fun onAddContactClicked() {
