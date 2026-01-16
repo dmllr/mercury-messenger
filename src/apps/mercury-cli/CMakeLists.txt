@@ -26,6 +26,7 @@ target_link_libraries(mercury-cli PRIVATE
   eillance-core
   eillance-capture
   eillance-rtc
+  eillance-utils
   libftxui
   libopencv
   libffmpeg

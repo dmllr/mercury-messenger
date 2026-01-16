@@ -5,7 +5,6 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.Color
 import android.util.Base64
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -67,7 +66,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -87,7 +85,7 @@ import hela.eillance.camera.BuildConfig
 import hela.eillance.ndkio.MyProfileInfo
 import hela.eillance.utils.rememberImageBitmapFromBase64
 import hela.eillance.viewmodels.ContactsViewModel
-import hela.eillance.viewmodels.ConversationViewModel
+import hela.eillance.viewmodels.DebugViewModel
 import hela.eillance.viewmodels.ProfileViewModel
 import kotlinx.coroutines.launch
 import java.io.ByteArrayOutputStream
@@ -103,7 +101,7 @@ private enum class DebugAction {
 fun ProfileScreen(
   profileVM: ProfileViewModel,
   contactsVM: ContactsViewModel,
-  conversationVM: ConversationViewModel,
+  debugVM: DebugViewModel,
   myProfile: MyProfileInfo,
   onBack: () -> Unit,
   onNavigateToSettings: () -> Unit,
@@ -126,9 +124,9 @@ fun ProfileScreen(
       action = action,
       onConfirm = { confirmedAction ->
         when(confirmedAction) {
-          DebugAction.ERASE_HISTORY -> conversationVM.debugEraseAllHistory()
-          DebugAction.ERASE_CONTACTS -> contactsVM.debugEraseAllContacts()
-          DebugAction.REVOKE_APPROVALS -> contactsVM.debugRevokeAllApprovals()
+          DebugAction.ERASE_HISTORY -> debugVM.eraseAllHistory()
+          DebugAction.ERASE_CONTACTS -> debugVM.eraseAllContacts()
+          DebugAction.REVOKE_APPROVALS -> debugVM.revokeAllApprovals()
         }
         showDebugConfirmDialog = null
       },
@@ -551,7 +549,7 @@ private fun formatId(id: String): String {
   return id.chunked(4).joinToString(" ")
 }
 
-private fun generateQrCodeBitmap(content: String): ImageBitmap {
+private fun generateQrCodeBitmap(content: String): androidx.compose.ui.graphics.ImageBitmap {
   val size = 512
   val hints = mapOf(
     EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.H,
@@ -561,7 +559,7 @@ private fun generateQrCodeBitmap(content: String): ImageBitmap {
   val pixels = IntArray(size * size)
   for (y in 0 until size) {
     for (x in 0 until size) {
-      pixels[y * size + x] = if (bitMatrix[x, y]) Color.BLACK else Color.WHITE
+      pixels[y * size + x] = if (bitMatrix[x, y]) android.graphics.Color.BLACK else android.graphics.Color.WHITE
     }
   }
   val bitmap = createBitmap(size, size)
@@ -573,7 +571,6 @@ private fun generateQrCodeBitmap(content: String): ImageBitmap {
 private fun QrCodeDialog(profileId: String, contactsVM: ContactsViewModel, onDismiss: () -> Unit) {
   var qrContent by remember { mutableStateOf<String?>(null) }
 
-  // Generate a new token every time the dialog becomes visible.
   LaunchedEffect(Unit) {
     val token = contactsVM.generateContactToken()
     qrContent = if (token != null) {
@@ -600,7 +597,6 @@ private fun QrCodeDialog(profileId: String, contactsVM: ContactsViewModel, onDis
             modifier = Modifier.size(256.dp)
           )
         } else {
-          // Show a progress indicator while the token is being generated.
           CircularProgressIndicator(modifier = Modifier.size(256.dp))
         }
         Spacer(Modifier.height(16.dp))

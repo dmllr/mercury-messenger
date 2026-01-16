@@ -1,15 +1,15 @@
 package hela.eillance.viewmodels
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
-import hela.eillance.CallService
 import hela.eillance.ndkio.ServiceConnectionState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-class SettingsViewModel(application: Application) : AndroidViewModel(application) {
-  private var callService: CallService? = null
+class SettingsViewModel(application: Application) : AndroidViewModel(application), NativeSettingsObserver {
 
+  private var nativePtr: Long = 0
   private val _connectionState = MutableStateFlow(ServiceConnectionState.Unknown)
   val connectionState = _connectionState.asStateFlow()
 
@@ -19,20 +19,28 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
   private val _peerInactivityTimeout = MutableStateFlow(120)
   val peerInactivityTimeout = _peerInactivityTimeout.asStateFlow()
 
-  fun setService(service: CallService?) {
-    callService = service
+  init {
+    nativePtr = nativeCreate(this)
+    if (nativePtr == 0L) {
+      Log.e("SettingsViewModel", "Failed to create native SettingsViewModel.")
+    }
   }
 
-  fun refreshConnectionState() {
-    _connectionState.value = ServiceConnectionState.fromInt(callService?.nativeGetConnectionState() ?: 0)
+  override fun onCleared() {
+    if (nativePtr != 0L) {
+      nativeDestroy(nativePtr)
+      nativePtr = 0
+    }
+    super.onCleared()
   }
 
-  fun refreshSignalingUrl() {
-    _signalingUrl.value = callService?.nativeGetSignalingUrl() ?: ""
+  override fun onSettingsUpdated(signalingUrl: String?, timeout: Int) {
+    _signalingUrl.value = signalingUrl ?: ""
+    _peerInactivityTimeout.value = timeout
   }
 
-  fun refreshPeerInactivityTimeout() {
-    _peerInactivityTimeout.value = callService?.nativeGetPeerInactivityTimeout() ?: 120
+  override fun onConnectionStateChanged(state: Int) {
+    _connectionState.value = ServiceConnectionState.fromInt(state)
   }
 
   fun onSignalingUrlChange(newUrl: String) {
@@ -44,7 +52,14 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
   }
 
   fun saveSettings() {
-    callService?.updateSignalingUrl(_signalingUrl.value)
-    callService?.updatePeerInactivityTimeout(_peerInactivityTimeout.value)
+    if (nativePtr != 0L) {
+      nativeUpdateUrl(nativePtr, _signalingUrl.value)
+      nativeSetTimeout(nativePtr, _peerInactivityTimeout.value)
+    }
   }
+
+  private external fun nativeCreate(observer: NativeSettingsObserver): Long
+  private external fun nativeDestroy(ptr: Long)
+  private external fun nativeUpdateUrl(ptr: Long, url: String)
+  private external fun nativeSetTimeout(ptr: Long, seconds: Int)
 }

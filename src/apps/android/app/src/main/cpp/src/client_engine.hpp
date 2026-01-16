@@ -5,6 +5,7 @@
 #include <atomic>
 #include <cstddef>
 #include <jni.h>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -14,19 +15,17 @@
 #include "eillance/logging/logging.h"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/storage/sqlite/persistent_storage_impl_sqlite.hpp"
-#include "eillance/view_model/mercury_view_model.hpp"
+#include "eillance/view_model/client_event_router.hpp"
 #include "transport/transport_impl_libwebrtc.hpp"
-#include "view_model_delegate.hpp"
-
 
 namespace eillance {
 
 class ClientEngine {
   std::shared_ptr<Client> client_;
-  std::unique_ptr<AndroidViewModelDelegate> view_model_delegate_;
+  std::shared_ptr<view_model::ClientEventRouter> router_;
 
 public:
-  ClientEngine(JavaVM* jvm, JNIEnv* env, jobject context, jobject native_bridge) {
+  ClientEngine(JavaVM* jvm, JNIEnv* env, jobject context) {
     auto& class_refs = ClassRefs::Instance();
     // Get the app's private files directory for the database
     jmethodID get_files_dir_method = class_refs.Class("android/content/Context").GetMethod("getFilesDir");
@@ -43,9 +42,7 @@ public:
     auto rtc_transport_impl = std::make_unique<transport::AndroidRtcTransport>(jvm, context);
     auto transport = std::make_shared<transport::Transport>(std::move(rtc_transport_impl));
     client_ = std::make_shared<Client>(storage, transport);
-
-    auto view_model = std::make_unique<view_model::MercuryViewModel>(client_);
-    view_model_delegate_ = std::make_unique<AndroidViewModelDelegate>(jvm, native_bridge, std::move(view_model));
+    router_ = std::make_shared<view_model::ClientEventRouter>(client_);
 
     std::string device_name;
     auto stored_name = storage->GetSetting("device_name");
@@ -66,8 +63,8 @@ public:
   auto operator=(const ClientEngine&) -> ClientEngine& = delete;
   ~ClientEngine() { Terminate(); }
 
-  [[nodiscard]] auto ViewModelDelegate() const -> AndroidViewModelDelegate* { return view_model_delegate_.get(); }
-  [[nodiscard]] auto GetClient() const -> Client* { return client_.get(); }
+  [[nodiscard]] auto GetClient() const -> std::shared_ptr<Client> { return client_; }
+  [[nodiscard]] auto GetRouter() const -> std::shared_ptr<view_model::ClientEventRouter> { return router_; }
 
   void Start() {
     client_->Start();

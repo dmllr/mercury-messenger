@@ -13,17 +13,6 @@
 
 namespace eillance::view_model {
 
-enum class StateChange {
-  MyProfile,
-  Contacts,
-  Connection,
-  SelectedContact,
-  InteractionHistory,
-  CallState,
-  SignalingUrl,
-  PeerInactivityTimeout
-};
-
 struct ViewContact {
   ContactID peer_id;
   std::string display_name;
