@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.PowerManager
 import android.widget.Toast
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import hela.eillance.ndkio.CallState
@@ -98,7 +99,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
   fun dismissBetaNotice() {
     val prefs = getApplication<Application>().getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
-    prefs.edit().putBoolean("has_seen_beta_notice_v1", true).apply()
+    prefs.edit { putBoolean("has_seen_beta_notice_v1", true) }
     _showBetaNotice.value = false
   }
 
@@ -114,11 +115,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val audio = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
     val phone = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED
 
-    val manageCalls = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+    val manageCalls =
       ContextCompat.checkSelfPermission(context, Manifest.permission.MANAGE_OWN_CALLS) == PackageManager.PERMISSION_GRANTED
-    } else {
-      true
-    }
 
     _hasCallPermissions.value = camera && audio && phone && manageCalls
   }
