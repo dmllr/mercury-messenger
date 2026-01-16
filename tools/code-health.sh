@@ -73,9 +73,12 @@ run_tidy() {
   success "compile_commands.json generated in '${build_dir}'."
 
   info "Step 2: Running clang-tidy on the codebase..."
-  # run-clang-tidy exits with a non-zero code if it finds issues, even if fixed.
-  # We catch this to provide a helpful message instead of letting `set -e` terminate the script.
-  if ! run_in_docker bash -c "run-clang-tidy-18 -p ${build_dir} -j $(nproc) -fix"; then
+  # append a Regex argument: '^(?!.*/_imported).*'
+  # ^            : Start of the string
+  # (?!...)      : Negative lookahead (fails if the pattern inside matches)
+  # .*/_imported/: Matches any path containing /_imported
+  # .*           : Matches the rest of the file path (if the lookahead didn't fail)
+  if ! run_in_docker bash -c "run-clang-tidy-18 -p ${build_dir} -j $(nproc) -fix '^(?!.*/_imported).*'"; then
     warn "clang-tidy reported issues. Please review the changes or re-run to confirm fixes."
   fi
   success "clang-tidy finished."
