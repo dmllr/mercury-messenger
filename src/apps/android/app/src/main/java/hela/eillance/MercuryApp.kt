@@ -119,6 +119,7 @@ fun MainAppContent(viewModel: MainViewModel) {
   val navigateToScanner by viewModel.navigateToScanner.collectAsState()
   val hasCallPermissions by viewModel.hasCallPermissions.collectAsState()
   val hasNotificationPermission by viewModel.hasNotificationPermission.collectAsState()
+  val hasBatteryExemption by viewModel.hasBatteryExemption.collectAsState()
   val incomingCallUiVisible by viewModel.incomingCallUiVisible.collectAsState()
 
   var contactToRemove by remember { mutableStateOf<Contact?>(null) }
@@ -256,6 +257,7 @@ fun MainAppContent(viewModel: MainViewModel) {
           connectionState = connectionState,
           hasCallPermissions = hasCallPermissions,
           hasNotificationPermission = hasNotificationPermission,
+          hasBatteryExemption = hasBatteryExemption,
           onCheckPermissions = viewModel::checkAllPermissions,
           onContactClick = { peerId ->
             viewModel.navigateToPeer(peerId)

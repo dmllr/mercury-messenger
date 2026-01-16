@@ -66,6 +66,7 @@ fun ContactsScreen(
   connectionState: ServiceConnectionState,
   hasCallPermissions: Boolean,
   hasNotificationPermission: Boolean,
+  hasBatteryExemption: Boolean,
   onCheckPermissions: () -> Unit,
   onContactClick: (String) -> Unit,
   onNavigateToProfile: () -> Unit,
@@ -110,6 +111,10 @@ fun ContactsScreen(
     Column(modifier = Modifier.padding(padding)) {
       if (!hasNotificationPermission) {
         NotificationPermissionBanner(onCheckPermissions)
+      }
+
+      if (!hasBatteryExemption) {
+        BatteryOptimizationBanner(onCheckPermissions)
       }
 
       if (!hasCallPermissions) {
@@ -181,14 +186,6 @@ fun ContactListItem(
   } else {
     // Shorten crypto ID: first 8 chars
     contact.peerId.take(8)
-  }
-
-  val displayId = if (contact.name.isNotEmpty()) {
-    // If a display name is set, we don't show the crypto ID at all (or show it in small text if desired, but request says "No crypto identity to be shown if a display name has been defined")
-    null
-  } else {
-    // If no display name, we've already used the shortened ID as the primary name.
-    null
   }
 
   // Last update timestamp

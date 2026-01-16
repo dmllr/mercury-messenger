@@ -1,6 +1,7 @@
 package hela.eillance.screens
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BatteryAlert
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PermCameraMic
 import androidx.compose.material.icons.filled.Settings
@@ -34,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
+import androidx.core.net.toUri
 
 @Composable
 fun CallPermissionBanner(
@@ -157,6 +160,51 @@ fun NotificationPermissionBanner(
       Text(
         text = if (showSettingsRedirect) "Notifications blocked. Tap to Settings." else "Tap to enable notifications",
         color = MaterialTheme.colorScheme.onSecondaryContainer,
+        style = MaterialTheme.typography.bodyMedium
+      )
+    }
+  }
+}
+
+@SuppressLint("BatteryLife")
+@Composable
+fun BatteryOptimizationBanner(
+  onCheckPermissions: () -> Unit
+) {
+  val context = LocalContext.current
+
+  Surface(
+    color = MaterialTheme.colorScheme.errorContainer,
+    modifier = Modifier
+      .fillMaxWidth()
+      .clickable {
+        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+          data = "package:${context.packageName}".toUri()
+        }
+        try {
+          context.startActivity(intent)
+        } catch (e: Exception) {
+          openAppSettings(context)
+        }
+        onCheckPermissions()
+      }
+  ) {
+    Row(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(16.dp),
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.Center
+    ) {
+      Icon(
+        imageVector = Icons.Default.BatteryAlert,
+        contentDescription = null,
+        tint = MaterialTheme.colorScheme.onErrorContainer
+      )
+      Spacer(modifier = Modifier.width(16.dp))
+      Text(
+        text = "Tap to disable battery optimization for reliable calls",
+        color = MaterialTheme.colorScheme.onErrorContainer,
         style = MaterialTheme.typography.bodyMedium
       )
     }
