@@ -227,6 +227,8 @@ void Client::AcceptCall(const ContactID& peer_id, messaging::HistoryEntryKind ca
   const Json msg = {{"action", "call_accept"}, {"kind", call_kind}};
   message_history_->AddTextEntry(peer_id, msg.dump(), messaging::MessageDirection::sent, messaging::HistoryEntryKind::systemMessage);
   delivery_service_->attemptDelivery(peer_id);
+
+  if (on_call_accepted_) { (*on_call_accepted_)(peer_id); }
 }
 
 void Client::RejectCall(const ContactID& peer_id) const {
@@ -340,6 +342,8 @@ void Client::Hangup(const ContactID& peer_id, bool notify_peer) const {
       transport_->sendPeerDataChannelMessage(peer_id, msg);
     }
   }
+  // Notify listeners (including other ViewModels/Services) that the call is terminated.
+  if (on_call_terminated_) { (*on_call_terminated_)(peer_id); }
 }
 
 void Client::Configure(const Config& config) const {
@@ -365,7 +369,7 @@ auto Client::SendChatMessage(const ContactID& peer_id, const std::string& messag
   return entry;
 }
 
-void Client::UpdateSignalingUrl(const std::string& url) {
+void Client::UpdateSignalingUrl(const std::string& url) const {
   if (is_running_) {
     settings_manager_->SetSignalingServerUrl(url);
     transport_->setSignalingUrl(url);
@@ -581,7 +585,6 @@ void Client::ProcessDataChannelMessage(const ContactID& peer_id, const Json& mes
   if (type == "hangup") {
     LOGI << "Received hangup signal from " << peer_id << " via data channel.";
     Hangup(peer_id, false);
-    if (on_call_terminated_) { (*on_call_terminated_)(peer_id); }
     return;
   }
 
