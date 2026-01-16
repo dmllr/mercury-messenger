@@ -48,7 +48,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import hela.eillance.MainViewModel
+import hela.eillance.viewmodels.ProfileViewModel
 import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
@@ -58,7 +58,7 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BackupAndRestoreScreen(
-  viewModel: MainViewModel,
+  profileVM: ProfileViewModel,
   onBack: () -> Unit,
   onNavigateToRecoveryPhrase: () -> Unit
 ) {
@@ -84,7 +84,7 @@ fun BackupAndRestoreScreen(
     uri?.let { destinationUri ->
       passwordForBackup?.let { password ->
         scope.launch {
-          val tempBackupPath = viewModel.createBackupToTemp(password)
+          val tempBackupPath = profileVM.createBackupToTemp(password)
           if (tempBackupPath != null) {
             try {
               context.contentResolver.openOutputStream(destinationUri)?.use { outputStream ->
@@ -96,7 +96,7 @@ fun BackupAndRestoreScreen(
             } catch (e: Exception) {
               snackbarHostState.showSnackbar("Failed to save backup file.")
             } finally {
-              viewModel.deleteTempBackup(tempBackupPath)
+              profileVM.deleteTempBackup(tempBackupPath)
             }
           } else {
             snackbarHostState.showSnackbar("Backup creation failed.")
@@ -124,7 +124,7 @@ fun BackupAndRestoreScreen(
       onDismiss = { showRestoreConfirmation = null },
       onConfirm = { password ->
         scope.launch {
-          val success = viewModel.restoreBackup(uri, password)
+          val success = profileVM.restoreBackup(uri, password)
           snackbarHostState.showSnackbar(
             if (success) "Restore successful. Please restart the app." else "Restore failed. Check password or file."
           )

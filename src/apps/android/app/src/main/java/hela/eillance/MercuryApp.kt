@@ -51,12 +51,11 @@ import hela.eillance.screens.WebViewScreen
 
 @Composable
 fun MercuryApp(viewModel: MainViewModel) {
-  val myProfile by viewModel.myProfile.collectAsState()
+  val myProfile by viewModel.profileViewModel.myProfile.collectAsState()
   val isIdentityReady by viewModel.isIdentityReady.collectAsState()
   val showBetaNotice by viewModel.showBetaNotice.collectAsState()
   val lifecycleOwner = LocalLifecycleOwner.current
 
-  // Check permissions on Resume to handle restart/settings changes
   DisposableEffect(lifecycleOwner) {
     val observer = LifecycleEventObserver { _, event ->
       if (event == Lifecycle.Event.ON_RESUME) {
@@ -91,8 +90,8 @@ fun IdentitySetupFlow(viewModel: MainViewModel) {
   val navController = rememberNavController()
   NavHost(navController = navController, startDestination = Screen.Identity.route) {
     composable(Screen.Identity.route) { IdentityScreen(navController) }
-    composable(Screen.MnemonicDisplay.route) { MnemonicDisplayScreen(viewModel) }
-    composable(Screen.RecoverIdentity.route) { RecoverIdentityScreen(navController, viewModel) }
+    composable(Screen.MnemonicDisplay.route) { MnemonicDisplayScreen(viewModel.profileViewModel, viewModel::finishIdentitySetup) }
+    composable(Screen.RecoverIdentity.route) { RecoverIdentityScreen(navController, viewModel.profileViewModel) }
     composable(
       route = Route.WebView.route,
       arguments = listOf(navArgument("url") { type = NavType.StringType })
@@ -108,24 +107,31 @@ fun IdentitySetupFlow(viewModel: MainViewModel) {
 fun MainAppContent(viewModel: MainViewModel) {
   val navController = rememberNavController()
 
-  // Collect all necessary states from the ViewModel
-  val myProfile by viewModel.myProfile.collectAsState()
-  val contacts by viewModel.contacts.collectAsState()
-  val historyPage by viewModel.interactionHistoryPage.collectAsState()
-  val callState by viewModel.callState.collectAsState()
-  val connectionState by viewModel.connectionState.collectAsState()
+  val contactsVM = viewModel.contactsViewModel
+  val chatVM = viewModel.conversationViewModel
+  val callVM = viewModel.callViewModel
+  val profileVM = viewModel.profileViewModel
+  val settingsVM = viewModel.settingsViewModel
+
+  val myProfile by profileVM.myProfile.collectAsState()
+  val contacts by contactsVM.contacts.collectAsState()
+  val callState by callVM.callState.collectAsState()
+  val connectionState by settingsVM.connectionState.collectAsState()
+
   val navigateToPeerId by viewModel.navigateToPeerId.collectAsState()
-  val peerIdForProfileDialog by viewModel.showContactProfileDialog.collectAsState()
+  val peerIdForProfileDialog by contactsVM.showContactProfileDialog.collectAsState()
   val navigateToScanner by viewModel.navigateToScanner.collectAsState()
+  val incomingCallUiVisible by viewModel.incomingCallUiVisible.collectAsState()
+
+  // Permissions state
   val hasCallPermissions by viewModel.hasCallPermissions.collectAsState()
   val hasNotificationPermission by viewModel.hasNotificationPermission.collectAsState()
   val hasBatteryExemption by viewModel.hasBatteryExemption.collectAsState()
-  val incomingCallUiVisible by viewModel.incomingCallUiVisible.collectAsState()
 
   var contactToRemove by remember { mutableStateOf<Contact?>(null) }
   var contactToBlock by remember { mutableStateOf<Contact?>(null) }
 
-  // Global navigation to Call Screen when a call is active (Outgoing or InCall)
+  // Global Navigation: Call
   LaunchedEffect(callState) {
     if (callState.isInCall || callState.isConnecting || (callState.isRinging && callState.callDirection == CallDirection.Outgoing)) {
       val route = Route.Call.createRoute(callState.peerId)
@@ -138,6 +144,7 @@ fun MainAppContent(viewModel: MainViewModel) {
     }
   }
 
+  // Global Navigation: Chat
   LaunchedEffect(navigateToPeerId) {
     navigateToPeerId?.let { peerId ->
       if (!callState.isConnecting && !callState.isInCall && !callState.isRinging) {
@@ -149,6 +156,7 @@ fun MainAppContent(viewModel: MainViewModel) {
     }
   }
 
+  // Global Navigation: Scanner
   LaunchedEffect(navigateToScanner) {
     if (navigateToScanner) {
       navController.navigate(Screen.QrScanner.route)
@@ -156,11 +164,11 @@ fun MainAppContent(viewModel: MainViewModel) {
     }
   }
 
-  if (viewModel.showAddContactDialog.collectAsState().value) {
+  if (contactsVM.showAddContactDialog.collectAsState().value) {
     AddContactDialog(
-      onDismissRequest = { viewModel.onAddContactDialogDismiss() },
-      onConfirm = { peerId -> viewModel.addContact(peerId) },
-      onScanQrCode = { viewModel.onScanQrClicked() }
+      onDismissRequest = { contactsVM.onAddContactDialogDismiss() },
+      onConfirm = { peerId -> contactsVM.addContact(peerId) },
+      onScanQrCode = { viewModel.onScanQrClicked(); contactsVM.onAddContactDialogDismiss() }
     )
   }
 
@@ -173,7 +181,7 @@ fun MainAppContent(viewModel: MainViewModel) {
         TextButton(
           onClick = {
             val isOnConversationScreen = navController.currentBackStackEntry?.destination?.route == Route.Interaction.route
-            viewModel.deleteContact(contact.peerId)
+            contactsVM.deleteContact(contact.peerId)
             contactToRemove = null
             if (isOnConversationScreen) {
               navController.popBackStack()
@@ -201,7 +209,7 @@ fun MainAppContent(viewModel: MainViewModel) {
         TextButton(
           onClick = {
             val isOnConversationScreen = navController.currentBackStackEntry?.destination?.route == Route.Interaction.route
-            viewModel.blockContact(contact.peerId)
+            contactsVM.blockContact(contact.peerId)
             contactToBlock = null
             if (isOnConversationScreen) {
               navController.popBackStack()
@@ -223,25 +231,22 @@ fun MainAppContent(viewModel: MainViewModel) {
   peerIdForProfileDialog?.let { peerId ->
     contacts.find { it.peerId == peerId }?.let {
       ContactProfileDialog(contact = it,
-        onDismissRequest = { viewModel.onContactProfileDialogDismiss() },
-        onOverrideSave = { newName -> viewModel.setContactDisplayNameOverride(peerId, newName) },
-        onOverrideReset = { viewModel.resetContactDisplayNameOverride(peerId) },
+        onDismissRequest = { contactsVM.onContactProfileDialogDismiss() },
+        onOverrideSave = { newName -> contactsVM.setContactDisplayNameOverride(peerId, newName) },
+        onOverrideReset = { contactsVM.resetContactDisplayNameOverride(peerId) },
         onRemoveRequest = { contactToRemove = it },
         onBlockRequest = { contactToBlock = it })
     }
   }
 
-  // Only show full screen incoming call UI if ringing AND explicitly requested
   if (callState.isRinging && callState.callDirection == CallDirection.Incoming && incomingCallUiVisible) {
     val caller = contacts.find { it.peerId == callState.peerId }
     IncomingCallScreen(
       callerId = callState.peerId,
       callerName = caller?.name,
       callerPhoto = caller?.photo,
-      onAccept = {
-        viewModel.acceptCall()
-      },
-      onReject = { viewModel.rejectCall() }
+      onAccept = { callVM.acceptCall() },
+      onReject = { callVM.rejectCall() }
     )
   } else {
     NavHost(
@@ -251,7 +256,7 @@ fun MainAppContent(viewModel: MainViewModel) {
     ) {
       composable(Screen.Contacts.route) {
         ContactsScreen(
-          viewModel = viewModel,
+          contactsVM = contactsVM,
           myProfile = myProfile,
           contacts = contacts,
           connectionState = connectionState,
@@ -259,19 +264,16 @@ fun MainAppContent(viewModel: MainViewModel) {
           hasNotificationPermission = hasNotificationPermission,
           hasBatteryExemption = hasBatteryExemption,
           onCheckPermissions = viewModel::checkAllPermissions,
-          onContactClick = { peerId ->
-            viewModel.navigateToPeer(peerId)
-          },
-          onNavigateToProfile = {
-            navController.navigate(Screen.Profile.route)
-          },
-          onShowContactProfile = viewModel::onShowContactProfile
+          onContactClick = { peerId -> viewModel.navigateToPeer(peerId) },
+          onNavigateToProfile = { navController.navigate(Screen.Profile.route) },
+          onShowContactProfile = contactsVM::onShowContactProfile
         )
       }
       composable(Screen.Profile.route) {
         ProfileScreen(
-          navController = navController,
-          viewModel = viewModel,
+          profileVM = profileVM,
+          contactsVM = contactsVM,
+          conversationVM = chatVM,
           myProfile = myProfile,
           onBack = { navController.popBackStack() },
           onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
@@ -283,8 +285,12 @@ fun MainAppContent(viewModel: MainViewModel) {
         val peerId = backStackEntry.arguments?.getString("peerId")
           ?: return@composable
         val contact = contacts.find { it.peerId == peerId }
+        val historyPage by chatVM.interactionHistoryPage.collectAsState()
+
         ConversationScreen(
-          viewModel = viewModel,
+          chatVM = chatVM,
+          contactsVM = contactsVM,
+          callVM = callVM,
           contact = contact,
           historyPage = historyPage,
           callState = callState,
@@ -294,33 +300,33 @@ fun MainAppContent(viewModel: MainViewModel) {
           onCheckPermissions = viewModel::checkAllPermissions,
           onBack = { navController.popBackStack() },
           onNavigateToCall = { navController.navigate(Route.Call.createRoute(it)) },
-          onShowContactProfile = viewModel::onShowContactProfile
+          onShowContactProfile = contactsVM::onShowContactProfile
         )
       }
       composable(Route.Call.route) {
         CallScreen(
-          viewModel = viewModel,
+          callVM = callVM,
           callState = callState,
           onNavigateBack = { navController.popBackStack() }
         )
       }
       composable(Screen.Settings.route) {
         SettingsScreen(
-          viewModel = viewModel,
+          settingsVM = settingsVM,
           onBack = { navController.popBackStack() },
           navController = navController
         )
       }
       composable(Screen.BackupRestore.route) {
         BackupAndRestoreScreen(
-          viewModel = viewModel,
+          profileVM = profileVM,
           onBack = { navController.popBackStack() },
           onNavigateToRecoveryPhrase = { navController.navigate(Screen.RecoveryPhrase.route) }
         )
       }
       composable(Screen.RecoveryPhrase.route) {
         RecoveryPhraseScreen(
-          viewModel = viewModel,
+          profileVM = profileVM,
           onBack = { navController.popBackStack() }
         )
       }
@@ -339,7 +345,7 @@ fun MainAppContent(viewModel: MainViewModel) {
       composable(Screen.QrScanner.route) {
         QrScannerScreen(
           onQrCodeScanned = { peerId, token ->
-            viewModel.addContact(peerId, token)
+            contactsVM.addContact(peerId, token)
             navController.popBackStack()
           },
           onClose = { navController.popBackStack() }
@@ -347,7 +353,7 @@ fun MainAppContent(viewModel: MainViewModel) {
       }
       composable(Screen.RejectedContacts.route) {
         RejectedContactsScreen(
-          viewModel = viewModel,
+          contactsVM = contactsVM,
           onBack = { navController.popBackStack() }
         )
       }

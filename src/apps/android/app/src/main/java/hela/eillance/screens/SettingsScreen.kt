@@ -32,15 +32,19 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import hela.eillance.MainViewModel
 import hela.eillance.navigation.Screen
+import hela.eillance.viewmodels.SettingsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(viewModel: MainViewModel, onBack: () -> Unit, navController: NavController) {
+fun SettingsScreen(
+  settingsVM: SettingsViewModel,
+  onBack: () -> Unit,
+  navController: NavController
+) {
   val context = LocalContext.current
-  val signalingUrl by viewModel.signalingUrl.collectAsState()
-  val peerInactivityTimeout by viewModel.peerInactivityTimeout.collectAsState()
+  val signalingUrl by settingsVM.signalingUrl.collectAsState()
+  val peerInactivityTimeout by settingsVM.peerInactivityTimeout.collectAsState()
 
   Scaffold(
     topBar = {
@@ -71,7 +75,7 @@ fun SettingsScreen(viewModel: MainViewModel, onBack: () -> Unit, navController: 
       // Setting Item: Custom Server URL
       OutlinedTextField(
         value = signalingUrl,
-        onValueChange = viewModel::onSignalingUrlChange,
+        onValueChange = settingsVM::onSignalingUrlChange,
         label = { Text("Custom server URL") },
         placeholder = { Text("wss://example.com:8000") },
         modifier = Modifier.fillMaxWidth(),
@@ -91,10 +95,10 @@ fun SettingsScreen(viewModel: MainViewModel, onBack: () -> Unit, navController: 
         value = peerInactivityTimeout.toString(),
         onValueChange = {
           if (it.isEmpty()) {
-            viewModel.onPeerInactivityTimeoutChange(0)
+            settingsVM.onPeerInactivityTimeoutChange(0)
           } else {
             it.toIntOrNull()?.let { num ->
-              viewModel.onPeerInactivityTimeoutChange(num)
+              settingsVM.onPeerInactivityTimeoutChange(num)
             }
           }
         },
@@ -133,7 +137,7 @@ fun SettingsScreen(viewModel: MainViewModel, onBack: () -> Unit, navController: 
       // Action Button
       Button(
         onClick = {
-          viewModel.saveSettings()
+          settingsVM.saveSettings()
           Toast.makeText(context, "Settings Saved. Reconnecting...", Toast.LENGTH_SHORT).show()
         },
         modifier = Modifier.align(Alignment.End)

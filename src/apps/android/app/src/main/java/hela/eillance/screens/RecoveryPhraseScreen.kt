@@ -28,12 +28,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import hela.eillance.MainViewModel
+import hela.eillance.viewmodels.ProfileViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RecoveryPhraseScreen(viewModel: MainViewModel, onBack: () -> Unit) {
-  val mnemonic by remember { mutableStateOf(viewModel.getMnemonic()) }
+fun RecoveryPhraseScreen(profileVM: ProfileViewModel, onBack: () -> Unit) {
+  val mnemonic by remember { mutableStateOf(profileVM.getMnemonic()) }
 
   Scaffold(
     topBar = {

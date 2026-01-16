@@ -71,21 +71,24 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import androidx.navigation.NavController
+import androidx.core.graphics.createBitmap
+import androidx.core.graphics.scale
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.qrcode.QRCodeWriter
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
-import hela.eillance.MainViewModel
 import hela.eillance.camera.BuildConfig
 import hela.eillance.ndkio.MyProfileInfo
 import hela.eillance.utils.rememberImageBitmapFromBase64
+import hela.eillance.viewmodels.ContactsViewModel
+import hela.eillance.viewmodels.ConversationViewModel
+import hela.eillance.viewmodels.ProfileViewModel
 import kotlinx.coroutines.launch
 import java.io.ByteArrayOutputStream
 
@@ -98,11 +101,12 @@ private enum class DebugAction {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(
-  viewModel: MainViewModel,
+  profileVM: ProfileViewModel,
+  contactsVM: ContactsViewModel,
+  conversationVM: ConversationViewModel,
   myProfile: MyProfileInfo,
   onBack: () -> Unit,
   onNavigateToSettings: () -> Unit,
-  navController: NavController,
   onNavigateToBackupAndRestore: () -> Unit,
   onNavigateToHelp: () -> Unit
 ) {
@@ -112,7 +116,7 @@ fun ProfileScreen(
   if (showEditDialog) {
     ProfileEditDialog(
       myProfile = myProfile,
-      viewModel = viewModel,
+      profileVM = profileVM,
       onDismiss = { showEditDialog = false }
     )
   }
@@ -122,9 +126,9 @@ fun ProfileScreen(
       action = action,
       onConfirm = { confirmedAction ->
         when(confirmedAction) {
-          DebugAction.ERASE_HISTORY -> viewModel.debugEraseAllHistory()
-          DebugAction.ERASE_CONTACTS -> viewModel.debugEraseAllContacts()
-          DebugAction.REVOKE_APPROVALS -> viewModel.debugRevokeAllApprovals()
+          DebugAction.ERASE_HISTORY -> conversationVM.debugEraseAllHistory()
+          DebugAction.ERASE_CONTACTS -> contactsVM.debugEraseAllContacts()
+          DebugAction.REVOKE_APPROVALS -> contactsVM.debugRevokeAllApprovals()
         }
         showDebugConfirmDialog = null
       },
@@ -151,7 +155,7 @@ fun ProfileScreen(
         .verticalScroll(rememberScrollState()),
       horizontalAlignment = Alignment.CenterHorizontally
     ) {
-      ProfileHeader(myProfile = myProfile, viewModel = viewModel)
+      ProfileHeader(myProfile = myProfile, contactsVM = contactsVM)
       HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp, horizontal = 16.dp))
       ProfileMenu(
         onEditProfile = { showEditDialog = true },
@@ -159,14 +163,14 @@ fun ProfileScreen(
         onNavigateToBackupAndRestore = onNavigateToBackupAndRestore,
         onDebugAction = { action: DebugAction -> showDebugConfirmDialog = action },
         onNavigateToHelp = onNavigateToHelp,
-        onSendFeedback = { viewModel.sendFeedback() }
+        onSendFeedback = { contactsVM.sendFeedback() }
       )
     }
   }
 }
 
 @Composable
-private fun ProfileHeader(myProfile: MyProfileInfo, viewModel: MainViewModel) {
+private fun ProfileHeader(myProfile: MyProfileInfo, contactsVM: ContactsViewModel) {
   val context = LocalContext.current
   var showQrDialog by remember { mutableStateOf(false) }
   val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -185,7 +189,7 @@ private fun ProfileHeader(myProfile: MyProfileInfo, viewModel: MainViewModel) {
     if (showQrDialog) {
       QrCodeDialog(
         profileId = myProfile.myId,
-        viewModel = viewModel,
+        contactsVM = contactsVM,
         onDismiss = { showQrDialog = false }
       )
     }
@@ -379,7 +383,7 @@ private fun ProfileMenu(
 @Composable
 private fun ProfileEditDialog(
   myProfile: MyProfileInfo,
-  viewModel: MainViewModel,
+  profileVM: ProfileViewModel,
   onDismiss: () -> Unit
 ) {
   var displayName by remember(myProfile.myDisplayName) { mutableStateOf(myProfile.myDisplayName ?: "") }
@@ -397,7 +401,7 @@ private fun ProfileEditDialog(
       try {
         context.contentResolver.openInputStream(it)?.use { inputStream ->
           val bitmap = BitmapFactory.decodeStream(inputStream)
-          val resizedBitmap = Bitmap.createScaledBitmap(bitmap, 512, 512, true)
+          val resizedBitmap = bitmap.scale(512, 512)
           val outputStream = ByteArrayOutputStream()
           resizedBitmap.compress(Bitmap.CompressFormat.JPEG, 80, outputStream)
           val byteArray = outputStream.toByteArray()
@@ -492,7 +496,7 @@ private fun ProfileEditDialog(
           }
           Spacer(modifier = Modifier.width(8.dp))
           Button(onClick = {
-            viewModel.updateMyProfile(displayName, bio, photoBase64)
+            profileVM.updateMyProfile(displayName, bio, photoBase64)
             onDismiss()
           }) {
             Text("Save")
@@ -560,18 +564,18 @@ private fun generateQrCodeBitmap(content: String): ImageBitmap {
       pixels[y * size + x] = if (bitMatrix[x, y]) Color.BLACK else Color.WHITE
     }
   }
-  val bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
+  val bitmap = createBitmap(size, size)
   bitmap.setPixels(pixels, 0, size, 0, 0, size, size)
   return bitmap.asImageBitmap()
 }
 
 @Composable
-private fun QrCodeDialog(profileId: String, viewModel: MainViewModel, onDismiss: () -> Unit) {
+private fun QrCodeDialog(profileId: String, contactsVM: ContactsViewModel, onDismiss: () -> Unit) {
   var qrContent by remember { mutableStateOf<String?>(null) }
 
   // Generate a new token every time the dialog becomes visible.
   LaunchedEffect(Unit) {
-    val token = viewModel.generateContactToken()
+    val token = contactsVM.generateContactToken()
     qrContent = if (token != null) {
       "mercury:contact:$profileId?token=$token"
     } else {

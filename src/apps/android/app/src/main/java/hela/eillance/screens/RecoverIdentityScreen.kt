@@ -29,12 +29,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import hela.eillance.MainViewModel
+import hela.eillance.viewmodels.ProfileViewModel
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RecoverIdentityScreen(navController: NavController, viewModel: MainViewModel) {
+fun RecoverIdentityScreen(
+  navController: NavController,
+  profileVM: ProfileViewModel
+) {
   var mnemonic by remember { mutableStateOf("") }
   var error by remember { mutableStateOf<String?>(null) }
   var isLoading by remember { mutableStateOf(false) }
@@ -82,12 +85,12 @@ fun RecoverIdentityScreen(navController: NavController, viewModel: MainViewModel
               error = "Please enter exactly 12 words."
               isLoading = false
             } else {
-              val success = viewModel.restoreIdentity(mnemonic.trim())
+              val success = profileVM.restoreIdentity(mnemonic.trim())
               if (!success) {
                 error = "Invalid recovery phrase. Please check the words and try again."
                 isLoading = false
               }
-              // On success, the AppState will change, and the NavHost in MercuryApp will automatically switch screens.
+              // On success, the MainViewModel state will change, and the NavHost in MercuryApp will automatically switch screens.
             }
           }
         },
