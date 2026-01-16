@@ -75,7 +75,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.os.ConfigurationCompat
-import hela.eillance.MainViewModel
 import hela.eillance.ndkio.CallDirection
 import hela.eillance.ndkio.CallState
 import hela.eillance.ndkio.CallStatus
@@ -89,6 +88,9 @@ import hela.eillance.ndkio.MessageStatus
 import hela.eillance.ndkio.PeerConnectionState
 import hela.eillance.theme.extendedColors
 import hela.eillance.utils.rememberImageBitmapFromBase64
+import hela.eillance.viewmodels.CallViewModel
+import hela.eillance.viewmodels.ContactsViewModel
+import hela.eillance.viewmodels.ConversationViewModel
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -105,7 +107,9 @@ private val jsonParser = Json { ignoreUnknownKeys = true }
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConversationScreen(
-  viewModel: MainViewModel,
+  chatVM: ConversationViewModel,
+  contactsVM: ContactsViewModel,
+  callVM: CallViewModel,
   peerId: String,
   contact: Contact?,
   historyPage: HistoryPage,
@@ -118,7 +122,7 @@ fun ConversationScreen(
   onShowContactProfile: (String) -> Unit
 ) {
   LaunchedEffect(peerId) {
-    viewModel.selectContact(peerId)
+    chatVM.selectContact(peerId)
   }
 
   val listState = rememberLazyListState()
@@ -139,8 +143,6 @@ fun ConversationScreen(
   // Scroll to bottom when new messages arrive
   LaunchedEffect(historyPage.messages.size) {
     if (historyPage.messages.size > previousHistorySize) {
-      // Only scroll if we were arguably at the bottom or it's an incoming message
-      // Note: LazyColumn with reverseLayout=true means index 0 is the bottom.
       if (listState.firstVisibleItemIndex < 3) {
         coroutineScope.launch {
           listState.animateScrollToItem(0)
@@ -157,7 +159,7 @@ fun ConversationScreen(
       .map { it.id }
 
     if (unreadMessageIds.isNotEmpty()) {
-      viewModel.markMessagesAsRead(unreadMessageIds)
+      chatVM.markMessagesAsRead(unreadMessageIds)
     }
   }
 
@@ -221,10 +223,10 @@ fun ConversationScreen(
           }
         },
         actions = {
-          IconButton(onClick = { viewModel.startVoiceCall() }) {
+          IconButton(onClick = { callVM.startVoiceCall() }) {
             Icon(Icons.Default.Call, contentDescription = "Voice Call")
           }
-          IconButton(onClick = { viewModel.startVideoCall() }) {
+          IconButton(onClick = { callVM.startVideoCall() }) {
             Icon(Icons.Default.Videocam, contentDescription = "Video Call")
           }
         }
@@ -257,13 +259,13 @@ fun ConversationScreen(
         modifier = Modifier.weight(1f),
         historyPage = historyPage,
         listState = listState,
-        viewModel = viewModel,
+        chatVM = chatVM,
         locale = locale,
         zoneId = zoneId,
         onSystemMessageClick = { clickedEntry ->
           if (clickedEntry.isTruncated) {
             tappedTruncatedMessageId = clickedEntry.id
-            viewModel.loadFullMessage(clickedEntry.id)
+            chatVM.loadFullMessage(clickedEntry.id)
           } else {
             systemMessageToShowDetails = clickedEntry
           }
@@ -274,9 +276,9 @@ fun ConversationScreen(
         ContactStatus.awaitingApproval -> {
           ApprovalRequestBar(
             contact = contact,
-            onApprove = { viewModel.acceptContact(peerId) },
+            onApprove = { contactsVM.acceptContact(peerId) },
             onReject = {
-              viewModel.blockContact(peerId)
+              contactsVM.blockContact(peerId)
               onBack()
             }
           )
@@ -285,14 +287,14 @@ fun ConversationScreen(
           PendingApprovalBar(
             contact = contact,
             onCancel = {
-              viewModel.blockContact(peerId)
+              contactsVM.blockContact(peerId)
               onBack()
             },
-            onResend = { viewModel.addContact(peerId) }
+            onResend = { contactsVM.addContact(peerId) }
           )
         }
         else -> {
-          MessageInput(onSendMessage = viewModel::sendMessage)
+          MessageInput(onSendMessage = chatVM::sendMessage)
         }
       }
     }
@@ -363,12 +365,11 @@ fun ChatHistory(
   modifier: Modifier = Modifier,
   historyPage: HistoryPage,
   listState: LazyListState,
-  viewModel: MainViewModel,
+  chatVM: ConversationViewModel,
   locale: Locale,
   zoneId: ZoneId,
   onSystemMessageClick: (HistoryEntry) -> Unit
 ) {
-  // Remember formatters to avoid recreating them for every row
   val formatters = remember(locale) {
     Triple(
       DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(locale),
@@ -393,7 +394,7 @@ fun ChatHistory(
       when (item.kind) {
         HistoryEntryKind.TextMessage -> MessageBubble(
           entry = item,
-          onShowMore = viewModel::loadFullMessage,
+          onShowMore = chatVM::loadFullMessage,
           zoneId = zoneId,
           formatters = formatters
         )
@@ -409,7 +410,7 @@ fun ChatHistory(
     if (historyPage.hasOlderMessages) {
       item {
         Button(
-          onClick = viewModel::loadOlderMessages,
+          onClick = chatVM::loadOlderMessages,
           modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp)
@@ -571,7 +572,6 @@ fun SystemMessageBubble(entry: HistoryEntry, onClick: (HistoryEntry) -> Unit) {
       try {
         jsonParser.decodeFromString<JsonAction>(content)
       } catch (e: Exception) {
-        // Fallback regex parsing if JSON is malformed or complex
         val actionMatch = Regex("\"action\"\\s*:\\s*\"([^\"]+)\"").find(content)
         actionMatch?.groupValues?.get(1)?.let { action -> JsonAction(action) }
       }
@@ -695,7 +695,6 @@ private fun ApprovalRequestBar(
   }
 }
 
-// Timestamp formatter using pre-created formatters
 fun formatTimestamp(
   timestamp: Long,
   zoneId: ZoneId,

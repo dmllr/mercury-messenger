@@ -21,13 +21,13 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import hela.eillance.MainViewModel
 import hela.eillance.ndkio.ContactStatus
+import hela.eillance.viewmodels.ContactsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RejectedContactsScreen(viewModel: MainViewModel, onBack: () -> Unit) {
-  val contacts by viewModel.contacts.collectAsState()
+fun RejectedContactsScreen(contactsVM: ContactsViewModel, onBack: () -> Unit) {
+  val contacts by contactsVM.contacts.collectAsState()
   val rejectedContacts = contacts.filter { it.status == ContactStatus.rejected }
 
   Scaffold(
@@ -57,7 +57,7 @@ fun RejectedContactsScreen(viewModel: MainViewModel, onBack: () -> Unit) {
             headlineContent = { Text(contact.name) },
             supportingContent = { Text(contact.peerId) },
             trailingContent = {
-              Button(onClick = { viewModel.unblockContact(contact.peerId) }) {
+              Button(onClick = { contactsVM.unblockContact(contact.peerId) }) {
                 Text("Unblock")
               }
             }

@@ -35,16 +35,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import hela.eillance.MainViewModel
-import hela.eillance.ndkio.CallState
 import hela.eillance.ndkio.CallDirection
+import hela.eillance.ndkio.CallState
 import hela.eillance.ndkio.HistoryEntryKind
+import hela.eillance.viewmodels.CallViewModel
 import hela.eillance.webrtc.WebRtcTransport
 import org.webrtc.SurfaceViewRenderer
 
 @Composable
 fun CallScreen(
-  viewModel: MainViewModel,
+  callVM: CallViewModel,
   callState: CallState,
   onNavigateBack: () -> Unit
 ) {
@@ -56,7 +56,7 @@ fun CallScreen(
 
   DisposableEffect(Unit) {
     onDispose {
-      viewModel.stopCallMedia()
+      callVM.stopCallMedia()
     }
   }
 
@@ -76,10 +76,10 @@ fun CallScreen(
         },
         modifier = Modifier.fillMaxSize(),
         update = { surfaceViewRenderer ->
-          viewModel.setRemoteVideoSink(callState.peerId, surfaceViewRenderer)
+          callVM.setRemoteVideoSink(callState.peerId, surfaceViewRenderer)
         },
         onRelease = { surfaceViewRenderer ->
-          viewModel.setRemoteVideoSink(callState.peerId, null)
+          callVM.setRemoteVideoSink(callState.peerId, null)
           surfaceViewRenderer.release()
         }
       )
@@ -102,14 +102,14 @@ fun CallScreen(
           overflow = TextOverflow.Ellipsis
         )
         if (callState.isConnecting) {
-            Spacer(modifier = Modifier.padding(4.dp))
-            Text(text = "Connecting...", style = MaterialTheme.typography.bodyLarge, color = Color.White.copy(alpha = 0.7f))
+          Spacer(modifier = Modifier.padding(4.dp))
+          Text(text = "Connecting...", style = MaterialTheme.typography.bodyLarge, color = Color.White.copy(alpha = 0.7f))
         } else if (callState.isRinging && callState.callDirection == CallDirection.Outgoing) {
-            Spacer(modifier = Modifier.padding(4.dp))
-            Text(text = "Ringing...", style = MaterialTheme.typography.bodyLarge, color = Color.White.copy(alpha = 0.7f))
+          Spacer(modifier = Modifier.padding(4.dp))
+          Text(text = "Ringing...", style = MaterialTheme.typography.bodyLarge, color = Color.White.copy(alpha = 0.7f))
         } else if (callState.isInCall) {
-            Spacer(modifier = Modifier.padding(4.dp))
-            Text(text = "00:00", style = MaterialTheme.typography.bodyLarge, color = Color.White.copy(alpha = 0.7f)) // TODO: Add call timer
+          Spacer(modifier = Modifier.padding(4.dp))
+          Text(text = "00:00", style = MaterialTheme.typography.bodyLarge, color = Color.White.copy(alpha = 0.7f))
         }
       }
 
@@ -134,10 +134,10 @@ fun CallScreen(
               .aspectRatio(0.75f)
               .clip(RoundedCornerShape(16.dp)),
             update = { surfaceViewRenderer ->
-              viewModel.setLocalVideoSink(surfaceViewRenderer)
+              callVM.setLocalVideoSink(surfaceViewRenderer)
             },
             onRelease = { surfaceViewRenderer ->
-              viewModel.setLocalVideoSink(null)
+              callVM.setLocalVideoSink(null)
               surfaceViewRenderer.release()
             }
           )
@@ -156,7 +156,7 @@ fun CallScreen(
         }
 
         FloatingActionButton(
-          onClick = { viewModel.hangup() },
+          onClick = { callVM.hangup() },
           containerColor = MaterialTheme.colorScheme.error,
           elevation = FloatingActionButtonDefaults.elevation(0.dp)
         ) {

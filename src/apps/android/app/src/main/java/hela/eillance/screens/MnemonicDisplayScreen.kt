@@ -31,14 +31,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import hela.eillance.MainViewModel
+import hela.eillance.viewmodels.ProfileViewModel
 
 @Composable
-fun MnemonicDisplayScreen(viewModel: MainViewModel) {
+fun MnemonicDisplayScreen(
+  profileVM: ProfileViewModel,
+  onFinishSetup: () -> Unit
+) {
   var mnemonic by remember { mutableStateOf<String?>(null) }
 
   LaunchedEffect(Unit) {
-    mnemonic = viewModel.generateNewIdentity()
+    mnemonic = profileVM.generateNewIdentity()
   }
 
   Surface(modifier = Modifier.fillMaxSize()) {
@@ -85,7 +88,7 @@ fun MnemonicDisplayScreen(viewModel: MainViewModel) {
         Spacer(modifier = Modifier.height(24.dp))
 
         Button(
-          onClick = { viewModel.finishIdentitySetup() },
+          onClick = onFinishSetup,
           modifier = Modifier.fillMaxWidth()
         ) {
           Icon(Icons.Default.Done, contentDescription = null)

@@ -33,7 +33,7 @@
 namespace {
 
 // Helper function to format contact entries for the ftxui::Menu component.
-std::vector<std::string> GetContactMenuEntries(const std::vector<eillance::view_model::UIState::ViewContact>& contacts) {
+std::vector<std::string> GetContactMenuEntries(const std::vector<eillance::view_model::ViewContact>& contacts, const eillance::view_model::CallState& call_state) {
   std::vector<std::string> entries;
   for (const auto& contact: contacts) {
     if (contact.status == eillance::identity::ContactStatus::rejected) {
@@ -58,7 +58,6 @@ std::vector<std::string> GetContactMenuEntries(const std::vector<eillance::view_
     }
 
     std::string conn_status_str;
-    const auto& call_state = eillance::view_model::MercuryViewModel(nullptr).GetState().call_state;  // Hack to get access to view_model
     if (call_state.peer_id == contact.peer_id && (call_state.is_connecting || call_state.is_ringing || call_state.is_in_call)) {
       if (call_state.is_connecting) {
         conn_status_str = " (Calling)";
@@ -279,12 +278,13 @@ int main(int argc, char** argv) {
   auto contact_menu = ftxui::Menu(&contact_menu_entries, &contact_menu_selected);
 
   auto chat_renderer = ftxui::Renderer([&]() -> ftxui::Element {
-    const auto state = view_model->GetState();
+    const auto conv_state = view_model->Conversation()->GetState();
+    const auto contacts_state = view_model->Contacts()->GetContacts();
     ftxui::Elements elements;
 
-    if (state.has_older_messages) { elements.push_back(ftxui::text("--- older messages available (use /history load) ---") | ftxui::dim); }
+    if (conv_state.has_older_messages) { elements.push_back(ftxui::text("--- older messages available (use /history load) ---") | ftxui::dim); }
 
-    for (const auto& entry: state.interaction_history) {
+    for (const auto& entry: conv_state.history) {
       std::string prefix;
       std::string content;
       switch (entry.kind) {
@@ -294,9 +294,9 @@ int main(int argc, char** argv) {
           if (entry.direction == eillance::messaging::MessageDirection::sent) {
             prefix = "[you]: ";
           } else {
-            if (state.selected_contact_id.has_value()) {
-              const auto it = std::ranges::find_if(state.contacts, [&](const auto& c) { return c.peer_id == *state.selected_contact_id; });
-              const std::string display_id = (it != state.contacts.end()) ? it->display_name : state.selected_contact_id->ToString();
+            if (conv_state.selected_contact_id.has_value()) {
+              const auto it = std::ranges::find_if(contacts_state, [&](const auto& c) { return c.peer_id == *conv_state.selected_contact_id; });
+              const std::string display_id = (it != contacts_state.end()) ? it->display_name : conv_state.selected_contact_id->ToString();
               prefix = "[" + display_id + "]: ";
             } else {
               prefix = "[system]: ";
@@ -326,7 +326,7 @@ int main(int argc, char** argv) {
           }
           auto timestamp_str = FormatTimestamp(entry.timestamp);
           elements.push_back(ftxui::text(prefix + content + suffix));
-          elements.push_back(ftxui::text("  ΓåÆ " + timestamp_str) | ftxui::dim);
+          elements.push_back(ftxui::text("  -> " + timestamp_str) | ftxui::dim);
           break;
         }
         case eillance::messaging::HistoryEntryKind::voiceCall:
@@ -353,7 +353,7 @@ int main(int argc, char** argv) {
           content = "--- " + direction_str + " " + call_type_str + " Call (" + status_str + ") ---";
           auto timestamp_str = FormatTimestamp(entry.timestamp);
           elements.push_back(ftxui::text(prefix + content) | ftxui::dim);
-          elements.push_back(ftxui::text("  ΓåÆ " + timestamp_str) | ftxui::dim);
+          elements.push_back(ftxui::text("  -> " + timestamp_str) | ftxui::dim);
           break;
         }
       }
@@ -380,57 +380,57 @@ int main(int argc, char** argv) {
               return std::nullopt;
             }
             std::vector<eillance::ContactID> matches;
-            const auto state = view_model->GetState();
-            for (const auto& contact: state.contacts) {
+            const auto contacts = view_model->Contacts()->GetContacts();
+            for (const auto& contact: contacts) {
               if (contact.peer_id.ToString().starts_with(partial_id)) {
                 matches.push_back(contact.peer_id);
               }
             }
             if (matches.empty()) {
-              view_model->AddSystemMessageToChat("--> Contact not found for ID starting with: " + partial_id);
+              view_model->Conversation()->AddSystemMessage("--> Contact not found for ID starting with: " + partial_id);
               return std::nullopt;
             }
             if (matches.size() > 1) {
-              view_model->AddSystemMessageToChat("--> Ambiguous ID. Multiple contacts start with: " + partial_id);
+              view_model->Conversation()->AddSystemMessage("--> Ambiguous ID. Multiple contacts start with: " + partial_id);
               return std::nullopt;
             }
             return matches[0];
           };
 
           if (command == "/add") {
-            view_model->AddSystemMessageToChat("--> Adding contact: " + arg);
+            view_model->Conversation()->AddSystemMessage("--> Adding contact: " + arg);
             try {
-              view_model->AddContact(eillance::ContactID(arg));
+              view_model->Contacts()->AddContact(eillance::ContactID(arg));
             } catch (...) {
-              view_model->AddSystemMessageToChat("--> Invalid Contact ID format.");
+              view_model->Conversation()->AddSystemMessage("--> Invalid Contact ID format.");
             }
           } else if (command == "/accept") {
             if (auto peer_id = find_contact_id(arg)) {
-              view_model->AddSystemMessageToChat("--> Accepting contact: " + peer_id->ToString());
-              view_model->AcceptContact(*peer_id);
+              view_model->Conversation()->AddSystemMessage("--> Accepting contact: " + peer_id->ToString());
+              view_model->Contacts()->AcceptContact(*peer_id);
             } else if (arg.empty()) {
-              view_model->AddSystemMessageToChat("--> Usage: /accept <contact_id>");
+              view_model->Conversation()->AddSystemMessage("--> Usage: /accept <contact_id>");
             }
           } else if (command == "/block") {
             if (auto peer_id = find_contact_id(arg)) {
-              view_model->AddSystemMessageToChat("--> Blocking contact: " + peer_id->ToString());
-              view_model->BlockContact(*peer_id);
+              view_model->Conversation()->AddSystemMessage("--> Blocking contact: " + peer_id->ToString());
+              view_model->Contacts()->BlockContact(*peer_id);
             } else if (arg.empty()) {
-              view_model->AddSystemMessageToChat("--> Usage: /block <contact_id>");
+              view_model->Conversation()->AddSystemMessage("--> Usage: /block <contact_id>");
             }
           } else if (command == "/delete") {
             if (auto peer_id = find_contact_id(arg)) {
-              view_model->AddSystemMessageToChat("--> DELETING contact and all history (irreversible): " + peer_id->ToString());
-              view_model->DeleteContact(*peer_id);
+              view_model->Conversation()->AddSystemMessage("--> DELETING contact and all history (irreversible): " + peer_id->ToString());
+              view_model->Contacts()->DeleteContact(*peer_id);
             } else if (arg.empty()) {
-              view_model->AddSystemMessageToChat("--> Usage: /delete <contact_id>");
+              view_model->Conversation()->AddSystemMessage("--> Usage: /delete <contact_id>");
             }
           } else if (command == "/unblock") {
             if (auto peer_id = find_contact_id(arg)) {
-              view_model->AddSystemMessageToChat("--> Unblocking contact: " + peer_id->ToString());
-              view_model->UnblockContact(*peer_id);
+              view_model->Conversation()->AddSystemMessage("--> Unblocking contact: " + peer_id->ToString());
+              view_model->Contacts()->UnblockContact(*peer_id);
             } else if (arg.empty()) {
-              view_model->AddSystemMessageToChat("--> Usage: /unblock <contact_id>");
+              view_model->Conversation()->AddSystemMessage("--> Usage: /unblock <contact_id>");
             }
           } else if (command == "/set") {
             std::string key;
@@ -439,35 +439,35 @@ int main(int argc, char** argv) {
             arg_ss >> key;
             std::getline(arg_ss >> std::ws, value);
             if (key == "name") {
-              view_model->UpdateMyProfile(value, std::nullopt, std::nullopt);
-              view_model->AddSystemMessageToChat("--> Display name updated.");
+              view_model->Profile()->UpdateProfile(value, std::nullopt, std::nullopt);
+              view_model->Conversation()->AddSystemMessage("--> Display name updated.");
             } else if (key == "signaling_server_url") {
-              view_model->UpdateSignalingUrl(value);
-              view_model->AddSystemMessageToChat("--> Signaling server URL updated. Reconnecting...");
+              view_model->Settings()->UpdateSignalingUrl(value);
+              view_model->Conversation()->AddSystemMessage("--> Signaling server URL updated. Reconnecting...");
             } else {
-              view_model->AddSystemMessageToChat("--> Unknown setting: " + key);
+              view_model->Conversation()->AddSystemMessage("--> Unknown setting: " + key);
             }
           } else if (command == "/history" && arg == "load") {
-            view_model->LoadOlderMessages();
+            view_model->Conversation()->LoadOlderMessages();
           } else if (command == "/load") {
             try {
               if (arg.empty()) { throw std::invalid_argument("Message ID required."); }
               const uint64_t id = std::stoull(arg);
-              view_model->LoadFullMessage(id);
-              view_model->AddSystemMessageToChat("--> Loading full content for message " + arg);
+              view_model->Conversation()->LoadFullMessage(id);
+              view_model->Conversation()->AddSystemMessage("--> Loading full content for message " + arg);
             } catch (const std::exception& e) {
-              view_model->AddSystemMessageToChat(std::string("--> Invalid usage. Use /load <message_id>. Error: ") + e.what());
+              view_model->Conversation()->AddSystemMessage(std::string("--> Invalid usage. Use /load <message_id>. Error: ") + e.what());
             }
           } else if (command == "/myid") {
-            const auto state = view_model->GetState();
-            view_model->AddSystemMessageToChat("--> Your ID: " + state.my_profile.my_id.ToString());
+            const auto profile = view_model->Profile()->GetProfile();
+            view_model->Conversation()->AddSystemMessage("--> Your ID: " + profile.my_id.ToString());
           } else if (command == "/exit") {
             screen.Exit();
           } else {
-            view_model->AddSystemMessageToChat("--> Unknown command: " + command);
+            view_model->Conversation()->AddSystemMessage("--> Unknown command: " + command);
           }
         } else {
-          view_model->SendMessage(input_content);
+          view_model->Conversation()->SendMessage(input_content);
         }
       }
       input_content.clear();
@@ -480,20 +480,26 @@ int main(int argc, char** argv) {
 
   // The main layout renderer, responsible for drawing the entire screen.
   auto layout = ftxui::Renderer(main_container, [&]() -> ftxui::Element {
-    // Fetch the latest state from the ViewModel for rendering.
-    const auto state = view_model->GetState();
-
     // Update local UI structures needed by components.
-    contact_menu_entries = GetContactMenuEntries(state.contacts);
+    const auto contacts = view_model->Contacts()->GetContacts();
+    const auto call_state = view_model->Call()->GetState();
+    contact_menu_entries = GetContactMenuEntries(contacts, call_state);
 
     // Inform the ViewModel of the currently selected item in the UI.
-    view_model->SelectContactByIndex(contact_menu_selected);
+    if (contact_menu_selected < contacts.size()) {
+      view_model->Conversation()->SelectContact(contacts[contact_menu_selected].peer_id);
+    } else {
+      view_model->Conversation()->DeselectContact();
+    }
 
     constexpr auto contact_list_width = 40;
     const auto main_view = ftxui::hbox({contact_menu->Render() | ftxui::size(ftxui::WIDTH, ftxui::EQUAL, contact_list_width) | ftxui::border, ftxui::vbox({chat_renderer->Render() | ftxui::flex, ftxui::separator(), input_component->Render()}) | ftxui::flex});
 
-    const std::string my_name = state.my_profile.my_display_name ? " (" + *state.my_profile.my_display_name + ")" : "";
-    const auto status_line = " Mercury CLI | Your ID: " + state.my_profile.my_id.ToString() + my_name + " | Status: " + std::string(GetConnectionStatusString(state.connection_state));
+    const auto profile = view_model->Profile()->GetProfile();
+    const auto connection = view_model->Settings()->GetState().connection_state;
+
+    const std::string my_name = profile.my_display_name ? " (" + *profile.my_display_name + ")" : "";
+    const auto status_line = " Mercury CLI | Your ID: " + profile.my_id.ToString() + my_name + " | Status: " + std::string(GetConnectionStatusString(connection));
     return ftxui::window(ftxui::text(status_line), main_view);
   });
 

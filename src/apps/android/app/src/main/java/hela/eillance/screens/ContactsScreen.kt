@@ -33,7 +33,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -42,7 +41,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.os.ConfigurationCompat
-import hela.eillance.MainViewModel
 import hela.eillance.ndkio.Contact
 import hela.eillance.ndkio.ContactStatus
 import hela.eillance.ndkio.MyProfileInfo
@@ -50,6 +48,7 @@ import hela.eillance.ndkio.PeerConnectionState
 import hela.eillance.ndkio.ServiceConnectionState
 import hela.eillance.theme.extendedColors
 import hela.eillance.utils.rememberImageBitmapFromBase64
+import hela.eillance.viewmodels.ContactsViewModel
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -60,7 +59,7 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ContactsScreen(
-  viewModel: MainViewModel,
+  contactsVM: ContactsViewModel,
   myProfile: MyProfileInfo,
   contacts: List<Contact>,
   connectionState: ServiceConnectionState,
@@ -103,7 +102,7 @@ fun ContactsScreen(
       )
     },
     floatingActionButton = {
-      FloatingActionButton(onClick = { viewModel.onAddContactClicked() }) {
+      FloatingActionButton(onClick = { contactsVM.onAddContactClicked() }) {
         Icon(Icons.Default.Add, contentDescription = "Add Contact")
       }
     }

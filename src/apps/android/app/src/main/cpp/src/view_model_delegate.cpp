@@ -51,7 +51,7 @@ void AndroidViewModelDelegate::NotifyStateChanged(const std::vector<view_model::
 
 auto AndroidViewModelDelegate::GetMyProfile(JNIEnv* env) const -> jobject {
   auto& class_refs = ClassRefs::Instance();
-  auto profile = view_model_->GetMyProfile();
+  auto profile = view_model_->Profile()->GetProfile();
 
   auto& profile_holder = class_refs.Class("hela/eillance/ndkio/MyProfileInfo");
 
@@ -63,16 +63,22 @@ auto AndroidViewModelDelegate::GetMyProfile(JNIEnv* env) const -> jobject {
   jobject profile_java = profile_holder.NewObject(env, my_id, profile.identity_exists, display_name, bio, photo);
 
   env->DeleteLocalRef(my_id);
-  if (display_name) env->DeleteLocalRef(display_name);
-  if (bio) env->DeleteLocalRef(bio);
-  if (photo) env->DeleteLocalRef(photo);
+  if (display_name) {
+    env->DeleteLocalRef(display_name);
+  }
+  if (bio) {
+    env->DeleteLocalRef(bio);
+  }
+  if (photo) {
+    env->DeleteLocalRef(photo);
+  }
 
   return profile_java;
 }
 
 auto AndroidViewModelDelegate::GetContacts(JNIEnv* env) const -> jobject {
   auto& class_refs = ClassRefs::Instance();
-  auto contacts = view_model_->GetContacts();
+  auto contacts = view_model_->Contacts()->GetContacts();
 
   auto& list_holder = class_refs.Class("java/util/ArrayList");
   jobject contact_list = list_holder.NewObject(env);
@@ -96,9 +102,15 @@ auto AndroidViewModelDelegate::GetContacts(JNIEnv* env) const -> jobject {
 
     env->DeleteLocalRef(peer_id);
     env->DeleteLocalRef(name);
-    if (bio) env->DeleteLocalRef(bio);
-    if (photo) env->DeleteLocalRef(photo);
-    if (snippet) env->DeleteLocalRef(snippet);
+    if (bio) {
+      env->DeleteLocalRef(bio);
+    }
+    if (photo) {
+      env->DeleteLocalRef(photo);
+    }
+    if (snippet) {
+      env->DeleteLocalRef(snippet);
+    }
     env->DeleteLocalRef(contact_java);
   }
   return contact_list;
@@ -106,8 +118,9 @@ auto AndroidViewModelDelegate::GetContacts(JNIEnv* env) const -> jobject {
 
 auto AndroidViewModelDelegate::GetInteractionHistoryPage(JNIEnv* env) const -> jobject {
   auto& class_refs = ClassRefs::Instance();
-  auto history = view_model_->GetInteractionHistory();
-  bool has_older = view_model_->HasOlderMessages();
+  auto conv_state = view_model_->Conversation()->GetState();
+  const auto& history = conv_state.history;
+  bool has_older = conv_state.has_older_messages;
 
   // Create List<HistoryEntry>
   auto& list_holder = class_refs.Class("java/util/ArrayList");
@@ -137,7 +150,9 @@ auto AndroidViewModelDelegate::GetInteractionHistoryPage(JNIEnv* env) const -> j
 
     env->CallBooleanMethod(history_list, list_add_method, entry_java);
 
-    if (content) { env->DeleteLocalRef(content); }
+    if (content) {
+      env->DeleteLocalRef(content);
+    }
     env->DeleteLocalRef(entry_java);
   }
 
@@ -148,7 +163,7 @@ auto AndroidViewModelDelegate::GetInteractionHistoryPage(JNIEnv* env) const -> j
 
 auto AndroidViewModelDelegate::GetCallState(JNIEnv* env) const -> jobject {
   auto& class_refs = ClassRefs::Instance();
-  auto call_state = view_model_->GetCallState();
+  auto call_state = view_model_->Call()->GetState();
   auto& call_state_holder = class_refs.Class("hela/eillance/ndkio/CallState");
 
   jstring peer_id = env->NewStringUTF(call_state.peer_id.ToString().c_str());
