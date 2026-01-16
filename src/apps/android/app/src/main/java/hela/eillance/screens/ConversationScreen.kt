@@ -121,10 +121,6 @@ fun ConversationScreen(
   onNavigateToCall: (String) -> Unit,
   onShowContactProfile: (String) -> Unit
 ) {
-  LaunchedEffect(peerId) {
-    chatVM.selectContact(peerId)
-  }
-
   val listState = rememberLazyListState()
   val coroutineScope = rememberCoroutineScope()
 
@@ -223,10 +219,10 @@ fun ConversationScreen(
           }
         },
         actions = {
-          IconButton(onClick = { callVM.startVoiceCall() }) {
+          IconButton(onClick = { callVM.startVoiceCall(peerId) }) {
             Icon(Icons.Default.Call, contentDescription = "Voice Call")
           }
-          IconButton(onClick = { callVM.startVideoCall() }) {
+          IconButton(onClick = { callVM.startVideoCall(peerId) }) {
             Icon(Icons.Default.Videocam, contentDescription = "Video Call")
           }
         }

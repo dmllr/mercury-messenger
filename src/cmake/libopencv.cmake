@@ -25,8 +25,6 @@ set(BUILD_opencv_apps OFF CACHE BOOL "Do not build OpenCV apps" FORCE)
 set(BUILD_opencv_js OFF CACHE BOOL "Do not build Javascript bindings" FORCE)
 
 # Tell OpenCV to find and use the dependencies we provide.
-set(WITH_ZLIB OFF CACHE BOOL "Use external zlib" FORCE)
-set(WITH_ZLIB_NG ON CACHE BOOL "Use external zlib" FORCE)
 set(BUILD_ZLIB OFF CACHE BOOL "Do not build the bundled zlib" FORCE)
 set(WITH_PROTOBUF OFF CACHE BOOL "Use external Protobuf" FORCE)
 set(BUILD_PROTOBUF OFF CACHE BOOL "Do not build the bundled Protobuf" FORCE)
@@ -70,5 +68,6 @@ target_include_directories(libopencv INTERFACE
   "${libopencv_path}/modules/imgproc/include"
   "${libopencv_path}/modules/highgui/include"
   "${libopencv_path}/modules/videoio/include"
+  "${libopencv_path}/3rdparty/zlib"
   "${CMAKE_BINARY_DIR}"
 )

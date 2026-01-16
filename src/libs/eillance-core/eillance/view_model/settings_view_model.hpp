@@ -5,7 +5,9 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <vector>
 
+#include "client_event_router.hpp"
 #include "eillance/client/client.hpp"
 #include "eillance/events/service_connection_state.h"
 #include "view_model_defines.hpp"
@@ -14,7 +16,16 @@ namespace eillance::view_model {
 
 class SettingsViewModel {
 public:
-  explicit SettingsViewModel(std::shared_ptr<Client> client, std::function<void(StateChange)> notifier);
+  struct Observer {
+    virtual ~Observer() = default;
+    virtual void OnSettingsUpdated(const std::optional<std::string>& signaling_url, int timeout) = 0;
+    virtual void OnConnectionStateChanged(ServiceConnectionState state) = 0;
+  };
+
+  explicit SettingsViewModel(std::shared_ptr<Client> client, std::shared_ptr<ClientEventRouter> router);
+  ~SettingsViewModel();
+
+  void SetObserver(std::shared_ptr<Observer> observer);
 
   struct State {
     std::optional<std::string> signaling_server_url;
@@ -28,18 +39,19 @@ public:
   void UpdateSignalingUrl(const std::string& url);
   void SetPeerInactivityTimeout(int seconds);
 
-  // Updates from Client
-  void OnConnectionStateChanged(ServiceConnectionState state);
-
-  // Internal initialization
+private:
   void LoadSettings();
 
-private:
+  template<typename EventType>
+  void Subscribe(EventQueue& q, std::function<void(const EventType&)> callback);
+
   std::shared_ptr<Client> client_;
-  std::function<void(StateChange)> notifier_;
+  std::shared_ptr<ClientEventRouter> router_;
+  std::shared_ptr<Observer> observer_;
 
   mutable std::mutex mutex_;
   State state_;
+  std::vector<std::function<void()>> event_unsubscribers_;
 };
 
 }  // namespace eillance::view_model

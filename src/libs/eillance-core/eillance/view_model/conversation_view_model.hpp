@@ -2,11 +2,14 @@
 
 #include <atomic>
 #include <deque>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <unordered_map>
+#include <vector>
 
+#include "client_event_router.hpp"
 #include "eillance/client/client.hpp"
 #include "view_model_defines.hpp"
 
@@ -14,45 +17,49 @@ namespace eillance::view_model {
 
 class ConversationViewModel {
 public:
-  explicit ConversationViewModel(std::shared_ptr<Client> client, std::function<void(StateChange)> notifier);
+  explicit ConversationViewModel(const ContactID& peer_id, std::shared_ptr<Client> client, std::shared_ptr<ClientEventRouter> router);
+  ~ConversationViewModel();
 
   struct State {
-    std::optional<ContactID> selected_contact_id;
+    ContactID peer_id;
     std::deque<messaging::HistoryEntryRecord> history;
     bool has_older_messages = false;
   };
 
-  [[nodiscard]] auto GetState() const -> State;
-  [[nodiscard]] auto GetSelectedContactId() const -> std::optional<ContactID>;
+  struct Observer {
+    virtual ~Observer() = default;
+    virtual void OnHistoryUpdated(const State& state) = 0;
+  };
 
-  // Actions
-  void SelectContact(const ContactID& peer_id);
-  void DeselectContact();
-  void SendMessage(const std::string& content);
+  void SetObserver(std::shared_ptr<Observer> observer);
+
+  [[nodiscard]] auto GetState() const -> State;
+
+  void SendText(const std::string& content);
   void LoadOlderMessages();
   void LoadFullMessage(uint64_t message_id);
   void MarkMessagesAsRead(const std::vector<std::uint64_t>& message_ids);
-
-  // Internal helper for system messages (e.g. from CLI)
   void AddSystemMessage(const std::string& message);
 
-  // Updates from Client
+private:
+  void LoadInitialHistory();
   void OnMessageReceived(const ContactID& peer_id, const messaging::HistoryEntryRecord& message);
   void OnMessageStatusChanged(const ContactID& peer_id, uint64_t message_id, messaging::MessageStatus status);
 
-  // Debug
-  void DebugEraseAllHistory();
+  template<typename EventType>
+  void Subscribe(EventQueue& q, std::function<void(const EventType&)> callback);
 
-private:
-  void LoadInitialHistory(const ContactID& peer_id);
-
+  const ContactID peer_id_;
   std::shared_ptr<Client> client_;
-  std::function<void(StateChange)> notifier_;
+  std::shared_ptr<ClientEventRouter> router_;
+  std::shared_ptr<Observer> observer_;
 
   mutable std::mutex mutex_;
   State state_;
 
-  std::unordered_map<ContactID, size_t> chat_pages_loaded_;
+  std::size_t chat_pages_loaded_ = 0;
+  std::vector<std::function<void()>> event_unsubscribers_;
+
   static constexpr size_t kPageSize = 50;
   static inline std::atomic<std::uint64_t> next_system_msg_id_{10000000000000000000ULL};
 };

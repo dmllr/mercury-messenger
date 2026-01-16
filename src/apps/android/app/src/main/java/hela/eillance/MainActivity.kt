@@ -2,12 +2,9 @@ package hela.eillance
 
 import android.app.KeyguardManager
 import android.app.NotificationManager
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.ServiceConnection
 import android.os.Bundle
-import android.os.IBinder
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -20,20 +17,6 @@ import hela.eillance.theme.EillanceTheme
 class MainActivity : ComponentActivity() {
 
   private val viewModel: MainViewModel by viewModels()
-  private var callService: CallService? = null
-
-  private val serviceConnection = object : ServiceConnection {
-    override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-      val binder = service as CallService.CallServiceBinder
-      callService = binder.getService()
-      viewModel.setService(callService)
-    }
-
-    override fun onServiceDisconnected(name: ComponentName?) {
-      callService = null
-      viewModel.setService(null)
-    }
-  }
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
@@ -41,9 +24,8 @@ class MainActivity : ComponentActivity() {
     configureWindowForLockScreen()
     handleIntent(intent)
 
-    // Start service immediately without requesting permissions.
-    // Permissions are now handled entirely by on-demand banners in the UI.
-    startAndBindService()
+    // Start service immediately.
+    startService()
 
     setContent {
       EillanceTheme {
@@ -67,14 +49,12 @@ class MainActivity : ComponentActivity() {
   override fun onStart() {
     super.onStart()
     MercuryApplication.isAppInForeground = true
-    // Clear all notifications when the app is opened
     val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     notificationManager.cancelAll()
   }
 
   override fun onResume() {
     super.onResume()
-    // Re-check permissions whenever the activity resumes.
     viewModel.checkAllPermissions()
   }
 
@@ -95,9 +75,12 @@ class MainActivity : ComponentActivity() {
     val isShowIncomingCall = intent?.action == CallService.ACTION_SHOW_INCOMING_CALL
 
     if (isAcceptAction && peerId != null) {
-      viewModel.onCallAcceptedFromNotification(peerId)
+      // In new architecture, we might just navigate. Acceptance is handled by CallService/Notification action directly if possible,
+      // or we instruct VM here. But MainViewModel doesn't have CallVM access directly.
+      // We rely on the UI layer (MercuryApp) to see the state.
+      // Actually, if we accepted via notification action, the Service handled it. We just need to navigate to call screen.
+      viewModel.navigateToPeer(peerId)
     } else if (isShowIncomingCall && peerId != null) {
-      // Show incoming call UI only when explicitly requested (e.g. notification tap or lock screen intent)
       configureWindowForLockScreen()
       viewModel.showIncomingCallUi()
     } else if (peerId != null) {
@@ -105,15 +88,9 @@ class MainActivity : ComponentActivity() {
     }
   }
 
-  private fun startAndBindService() {
+  private fun startService() {
     Intent(this, CallService::class.java).also { intent ->
       startForegroundService(intent)
-      bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
     }
-  }
-
-  override fun onDestroy() {
-    super.onDestroy()
-    unbindService(serviceConnection)
   }
 }

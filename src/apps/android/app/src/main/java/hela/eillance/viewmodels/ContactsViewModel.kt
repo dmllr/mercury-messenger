@@ -1,15 +1,15 @@
 package hela.eillance.viewmodels
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
-import hela.eillance.CallService
 import hela.eillance.ndkio.Contact
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-class ContactsViewModel(application: Application) : AndroidViewModel(application) {
-  private var callService: CallService? = null
+class ContactsViewModel(application: Application) : AndroidViewModel(application), NativeContactsObserver {
 
+  private var nativePtr: Long = 0
   private val _contacts = MutableStateFlow<List<Contact>>(emptyList())
   val contacts = _contacts.asStateFlow()
 
@@ -19,13 +19,27 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
   private val _showContactProfileDialog = MutableStateFlow<String?>(null)
   val showContactProfileDialog = _showContactProfileDialog.asStateFlow()
 
-  fun setService(service: CallService?) {
-    callService = service
+  init {
+    nativePtr = nativeCreate(this)
+    if (nativePtr == 0L) {
+      Log.e("ContactsViewModel", "Failed to create native ContactsViewModel.")
+    }
   }
 
-  fun refreshContacts() {
-    _contacts.value = callService?.nativeGetContacts() ?: emptyList()
+  override fun onCleared() {
+    if (nativePtr != 0L) {
+      nativeDestroy(nativePtr)
+      nativePtr = 0
+    }
+    super.onCleared()
   }
+
+  // --- Observer Callback called from JNI ---
+  override fun onContactsUpdated(contacts: List<Contact>) {
+    _contacts.value = contacts
+  }
+
+  // --- Actions ---
 
   fun onAddContactClicked() {
     _showAddContactDialog.value = true
@@ -36,7 +50,7 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
   }
 
   fun addContact(peerId: String, token: String? = null) {
-    callService?.addContact(peerId, token)
+    if (nativePtr != 0L) nativeAddContact(nativePtr, peerId, token)
     onAddContactDialogDismiss()
   }
 
@@ -49,34 +63,34 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
   }
 
   fun blockContact(peerId: String) {
-    callService?.blockContact(peerId)
+    if (nativePtr != 0L) nativeBlockContact(nativePtr, peerId)
     if (_showContactProfileDialog.value == peerId) {
       _showContactProfileDialog.value = null
     }
   }
 
   fun deleteContact(peerId: String) {
-    callService?.deleteContact(peerId)
+    if (nativePtr != 0L) nativeDeleteContact(nativePtr, peerId)
   }
 
   fun unblockContact(peerId: String) {
-    callService?.unblockContact(peerId)
+    if (nativePtr != 0L) nativeUnblockContact(nativePtr, peerId)
   }
 
   fun acceptContact(peerId: String) {
-    callService?.acceptContact(peerId)
+    if (nativePtr != 0L) nativeAcceptContact(nativePtr, peerId)
   }
 
   fun setContactDisplayNameOverride(peerId: String, name: String) {
-    callService?.setContactDisplayNameOverride(peerId, name)
+    if (nativePtr != 0L) nativeSetDisplayName(nativePtr, peerId, name)
   }
 
   fun resetContactDisplayNameOverride(peerId: String) {
-    callService?.resetContactDisplayNameOverride(peerId)
+    if (nativePtr != 0L) nativeResetDisplayName(nativePtr, peerId)
   }
 
   fun generateContactToken(): String? {
-    return callService?.generateContactToken()
+    return if (nativePtr != 0L) nativeGenerateToken(nativePtr) else null
   }
 
   fun sendFeedback() {
@@ -84,6 +98,15 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
     addContact(feedbackId)
   }
 
-  fun debugEraseAllContacts() = callService?.debugEraseAllContacts()
-  fun debugRevokeAllApprovals() = callService?.debugRevokeAllApprovals()
+  // --- JNI Definitions ---
+  private external fun nativeCreate(observer: NativeContactsObserver): Long
+  private external fun nativeDestroy(ptr: Long)
+  private external fun nativeAddContact(ptr: Long, peerId: String, token: String?)
+  private external fun nativeAcceptContact(ptr: Long, peerId: String)
+  private external fun nativeBlockContact(ptr: Long, peerId: String)
+  private external fun nativeDeleteContact(ptr: Long, peerId: String)
+  private external fun nativeUnblockContact(ptr: Long, peerId: String)
+  private external fun nativeSetDisplayName(ptr: Long, peerId: String, name: String)
+  private external fun nativeResetDisplayName(ptr: Long, peerId: String)
+  private external fun nativeGenerateToken(ptr: Long): String
 }

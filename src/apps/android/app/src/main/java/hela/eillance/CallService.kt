@@ -9,7 +9,6 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.os.Binder
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
@@ -24,57 +23,53 @@ import hela.eillance.camera.R
 import hela.eillance.ndkio.CallDirection
 import hela.eillance.ndkio.CallState
 import hela.eillance.ndkio.Contact
-import hela.eillance.ndkio.HistoryPage
-import hela.eillance.ndkio.MyProfileInfo
 import hela.eillance.ndkio.ServiceConnectionState
-import hela.eillance.ndkio.StateChange
 import hela.eillance.ndkio.VideoConfig
-import hela.eillance.ndkio.interfaces.IClientNativeBridge
 import hela.eillance.telecom.MercuryConnection
 import hela.eillance.telecom.MercuryConnectionService
+import hela.eillance.viewmodels.CallViewModel
+import hela.eillance.viewmodels.ContactsViewModel
+import hela.eillance.viewmodels.SettingsViewModel
 import hela.eillance.webrtc.WebRtcTransport
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.webrtc.VideoSink
-import java.io.File
-import java.io.FileOutputStream
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicBoolean
 
-class CallService : Service(), IClientNativeBridge {
+class CallService : Service() {
 
-  inner class CallServiceBinder : Binder() {
+  inner class CallServiceBinder : android.os.Binder() {
     fun getService(): CallService = this@CallService
   }
 
   private val binder = CallServiceBinder()
-  private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+  private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
   private val notificationManager by lazy { getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager }
   private val telecomManager by lazy { getSystemService(Context.TELECOM_SERVICE) as TelecomManager }
 
-  private var onStateChanged: ((IntArray) -> Unit)? = null
   private var wakeLock: PowerManager.WakeLock? = null
   private var webRtcTransport: WebRtcTransport? = null
-  private val isEngineInitialized = AtomicBoolean(false)
+
+  // Flag to signal engine readiness
+  private val _isEngineReady = MutableStateFlow(false)
+  val isEngineReady = _isEngineReady.asStateFlow()
+
+  // Background ViewModels
+  private var backgroundContactsVM: ContactsViewModel? = null
+  private var backgroundCallVM: CallViewModel? = null
+  private var backgroundSettingsVM: SettingsViewModel? = null
 
   private var lastKnownCallState: CallState? = null
   private var lastKnownContacts: List<Contact>? = null
 
   private val soundPlayer: CallSoundPlayer by lazy { CallSoundPlayer(this) }
-
   private lateinit var phoneAccountHandle: PhoneAccountHandle
   private val activeTelecomConnections = ConcurrentHashMap<String, MercuryConnection>()
-
-  // --- Public API for ViewModel ---
-  fun startLocalMedia() = webRtcTransport?.startLocalMedia()
-  fun stopLocalMedia() = webRtcTransport?.stopLocalMedia()
-  fun setLocalVideoSink(sink: VideoSink?) = webRtcTransport?.setLocalSink(sink)
-  fun setRemoteVideoSink(peerId: String, sink: VideoSink?) = webRtcTransport?.setRemoteSink(peerId, sink)
-  fun updateSignalingUrl(newUrl: String) = nativeUpdateSignalingUrl(newUrl)
-  fun updatePeerInactivityTimeout(seconds: Int) = nativeSetPeerInactivityTimeout(seconds)
 
   override fun onBind(intent: Intent?): IBinder = binder
 
@@ -83,30 +78,81 @@ class CallService : Service(), IClientNativeBridge {
     instance = this
     createNotificationChannels()
     registerPhoneAccount()
-    serviceScope.launch {
+
+    // Initialize Engine on Main thread synchronously to avoid race conditions with UI
+    // The engine constructor mainly does JNI env setup and pointer allocation.
+    // Heavy DB operations are internal to the C++ objects but `new Client` is generally fast enough.
+    // Ideally this should be async but we need to block UI or have UI wait.
+    try {
       initEngine(this@CallService)
-      isEngineInitialized.set(true)
+      _isEngineReady.value = true
       if (identityExists()) {
         start()
       }
-      refreshState()
+      setupBackgroundObservers()
+    } catch (e: Exception) {
+      Log.e(TAG, "Failed to initialize engine", e)
     }
+
     startForegroundService()
   }
+
+  private fun setupBackgroundObservers() {
+    val app = application
+    backgroundContactsVM = ContactsViewModel(app)
+    backgroundCallVM = CallViewModel(app)
+    backgroundSettingsVM = SettingsViewModel(app)
+
+    serviceScope.launch {
+      launch {
+        backgroundContactsVM?.contacts?.collect { contacts ->
+          checkForNewMessages(lastKnownContacts, contacts)
+          lastKnownContacts = contacts
+        }
+      }
+      launch {
+        backgroundCallVM?.callState?.collect { state ->
+          handleCallStateChange(state)
+        }
+      }
+      launch {
+        backgroundSettingsVM?.connectionState?.collect { state ->
+          updateForegroundServiceNotification(lastKnownCallState?.isInCall == true, lastKnownCallState?.peerId, state)
+        }
+      }
+    }
+  }
+
+  fun acceptCall() {
+    notificationManager.cancel(INCOMING_CALL_NOTIFICATION_ID)
+    backgroundCallVM?.acceptCall()
+  }
+
+  fun rejectCall() {
+    notificationManager.cancel(INCOMING_CALL_NOTIFICATION_ID)
+    backgroundCallVM?.rejectCall()
+  }
+
+  fun hangup() {
+    backgroundCallVM?.hangup()
+  }
+
+  fun startLocalMedia() = webRtcTransport?.startLocalMedia()
+  fun stopLocalMedia() = webRtcTransport?.stopLocalMedia()
+  fun setLocalVideoSink(sink: VideoSink?) = webRtcTransport?.setLocalSink(sink)
+  fun setRemoteVideoSink(peerId: String, sink: VideoSink?) = webRtcTransport?.setRemoteSink(peerId, sink)
 
   private fun registerPhoneAccount() {
     val componentName = ComponentName(this, MercuryConnectionService::class.java)
     phoneAccountHandle = PhoneAccountHandle(componentName, "Mercury")
-
     val builder = PhoneAccount.builder(phoneAccountHandle, "Mercury")
       .setCapabilities(PhoneAccount.CAPABILITY_SELF_MANAGED)
       .setShortDescription("Mercury Secure Call")
-
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
       try {
         telecomManager.registerPhoneAccount(builder.build())
       } catch (e: SecurityException) {
-        Log.e("CallService", "Failed to register PhoneAccount", e)
+        Log.e(TAG, "Failed to register PhoneAccount", e)
       }
     }
   }
@@ -128,29 +174,21 @@ class CallService : Service(), IClientNativeBridge {
     super.onDestroy()
   }
 
-  fun setStateChangedCallback(callback: ((IntArray) -> Unit)?) {
-    onStateChanged = callback
-  }
-
   @Suppress("unused")
   fun setWebRtcTransport(transport: WebRtcTransport) {
     webRtcTransport = transport
   }
 
-  override fun onStateChanged(changeSet: IntArray) {
-    if (changeSet.contains(StateChange.CallState.ordinal)) {
-      val callState = nativeGetCallState()
-      syncTelecomState(callState)
-      serviceScope.launch(Dispatchers.Main) {
-        soundPlayer.updateCallState(callState)
-      }
-    }
-    onStateChanged?.invoke(changeSet)
+  private fun handleCallStateChange(callState: CallState) {
+    syncTelecomState(callState)
+    soundPlayer.updateCallState(callState)
+    checkForIncomingCall(lastKnownCallState, callState)
+    updateForegroundServiceNotification(callState.isInCall, callState.peerId, ServiceConnectionState.Online)
+    lastKnownCallState = callState
   }
 
-  private fun syncTelecomState(callState: CallState?) {
-    val currentActivePeerId = if (callState != null &&
-      (callState.isConnecting || callState.isRinging || callState.isInCall)) {
+  private fun syncTelecomState(callState: CallState) {
+    val currentActivePeerId = if (callState.isConnecting || callState.isRinging || callState.isInCall) {
       callState.peerId.takeIf { it.isNotEmpty() }
     } else {
       null
@@ -163,13 +201,12 @@ class CallService : Service(), IClientNativeBridge {
       val connection = entry.value
 
       if (trackedPeerId == currentActivePeerId) {
-        if (callState?.isInCall == true) {
+        if (callState.isInCall) {
           if (connection.state != android.telecom.Connection.STATE_ACTIVE) {
             connection.onEstablished()
           }
         }
       } else {
-        // Disconnect connections that don't match the current C++ engine state
         connection.onRemoteHangup()
         iterator.remove()
       }
@@ -178,59 +215,34 @@ class CallService : Service(), IClientNativeBridge {
 
   fun registerTelecomConnection(peerId: String, connection: MercuryConnection) {
     val existing = activeTelecomConnections.put(peerId, connection)
-    if (existing != null && existing != connection) {
-      existing.onRemoteHangup()
-    }
+    existing?.onRemoteHangup()
   }
 
   fun unregisterTelecomConnection(peerId: String) {
     activeTelecomConnections.remove(peerId)
   }
 
-  fun handleNotifications() {
-    val newCallState = nativeGetCallState()
-    val newContacts = nativeGetContacts()
-
-    checkForIncomingCall(lastKnownCallState, newCallState)
-    checkForNewMessages(lastKnownContacts, newContacts)
-
-    val connectionState = ServiceConnectionState.fromInt(nativeGetConnectionState())
-    updateForegroundServiceNotification(newCallState?.isInCall ?: false, newCallState?.peerId, connectionState)
-
-    lastKnownCallState = newCallState
-    lastKnownContacts = newContacts
-  }
-
-  private fun checkForIncomingCall(oldState: CallState?, newState: CallState?) {
+  private fun checkForIncomingCall(oldState: CallState?, newState: CallState) {
     val wasRinging = oldState?.isRinging ?: false
-    val isRinging = newState?.isRinging ?: false
-
-    if (!wasRinging && isRinging && newState.callDirection == CallDirection.Incoming) {
+    if (!wasRinging && newState.isRinging && newState.callDirection == CallDirection.Incoming) {
       try {
         val extras = Bundle()
         extras.putString(MercuryConnectionService.EXTRA_PEER_ID, newState.peerId)
-
         val uri = Uri.fromParts(PhoneAccount.SCHEME_SIP, newState.peerId, null)
         extras.putParcelable(TelecomManager.EXTRA_INCOMING_CALL_ADDRESS, uri)
-
         val nestedExtras = Bundle()
         nestedExtras.putString(MercuryConnectionService.EXTRA_PEER_ID, newState.peerId)
         extras.putBundle(TelecomManager.EXTRA_INCOMING_CALL_EXTRAS, nestedExtras)
-
         telecomManager.addNewIncomingCall(phoneAccountHandle, extras)
-      } catch (e: SecurityException) {
-        Log.e("CallService", "Permission missing for addNewIncomingCall", e)
-        showIncomingCallNotification(newState.peerId)
       } catch (e: Exception) {
-        Log.e("CallService", "Failed to add incoming call to Telecom", e)
+        Log.e(TAG, "Failed to add incoming call to Telecom", e)
         showIncomingCallNotification(newState.peerId)
       }
     }
   }
 
-  private fun checkForNewMessages(oldContacts: List<Contact>?, newContacts: List<Contact>?) {
-    if (oldContacts == null || newContacts == null) return
-
+  private fun checkForNewMessages(oldContacts: List<Contact>?, newContacts: List<Contact>) {
+    if (oldContacts == null) return
     val oldUnreadCounts = oldContacts.associate { it.peerId to it.unreadCount }
     newContacts.forEach { newContact ->
       val oldUnread = oldUnreadCounts[newContact.peerId] ?: 0
@@ -245,7 +257,7 @@ class CallService : Service(), IClientNativeBridge {
     try {
       startForeground(FOREGROUND_SERVICE_NOTIFICATION_ID, notification)
     } catch (e: Exception) {
-      Log.e("CallService", "Failed to start foreground service", e)
+      Log.e(TAG, "Failed to start foreground service", e)
     }
   }
 
@@ -286,8 +298,6 @@ class CallService : Service(), IClientNativeBridge {
       .setOngoing(true)
 
     notificationManager.notify(INCOMING_CALL_NOTIFICATION_ID, builder.build())
-
-    // IMMEDIATE UI LAUNCH FOR FOREGROUND (Fallback path)
     if (MercuryApplication.isAppInForeground) {
       startActivity(fullScreenIntent)
     }
@@ -298,31 +308,26 @@ class CallService : Service(), IClientNativeBridge {
       flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
       putExtra(EXTRA_PEER_ID, peerId)
     }
-
     val pendingIntent = PendingIntent.getActivity(
       this,
       MESSAGE_NOTIFICATION_ID_BASE + peerId.hashCode(),
       intent,
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
-
     val person = Person.Builder().setName(peerId).build()
     val messagingStyle = NotificationCompat.MessagingStyle(person)
       .addMessage(content, System.currentTimeMillis(), person)
-
     val builder = NotificationCompat.Builder(this, MESSAGES_CHANNEL_ID)
       .setSmallIcon(android.R.drawable.stat_notify_chat)
       .setStyle(messagingStyle)
       .setContentIntent(pendingIntent)
       .setAutoCancel(true)
-
     notificationManager.notify(MESSAGE_NOTIFICATION_ID_BASE + peerId.hashCode(), builder.build())
   }
 
   private fun buildForegroundServiceNotification(inCall: Boolean, peerId: String?, connectionState: ServiceConnectionState): Notification {
     val notificationIntent = Intent(this, MainActivity::class.java)
     val pendingIntent = PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-
     val builder = NotificationCompat.Builder(this, FOREGROUND_CHANNEL_ID)
       .setContentTitle(getString(R.string.app_name))
       .setSmallIcon(R.drawable.ic_status_standby)
@@ -335,12 +340,10 @@ class CallService : Service(), IClientNativeBridge {
         .addAction(0, "Hang Up", hangupPendingIntent)
     } else {
       val contentText = when (connectionState) {
-        ServiceConnectionState.Online -> "Ready for connections"
+        ServiceConnectionState.Online -> "Ready"
         ServiceConnectionState.Establishing -> "Connecting..."
         ServiceConnectionState.Failure -> "Connection failed"
-        ServiceConnectionState.Disconnected -> "Offline"
-        ServiceConnectionState.InvalidToken -> "Authentication error"
-        else -> "Initializing..."
+        else -> "Background Service"
       }
       builder.setContentText(contentText)
     }
@@ -350,11 +353,9 @@ class CallService : Service(), IClientNativeBridge {
   private fun createNotificationChannels() {
     val foregroundChannel = NotificationChannel(FOREGROUND_CHANNEL_ID, "Foreground Service", NotificationManager.IMPORTANCE_MIN)
     val callsChannel = NotificationChannel(CALLS_CHANNEL_ID, "Incoming Calls", NotificationManager.IMPORTANCE_HIGH).apply {
-      description = "Notifications for incoming voice and video calls"
+      description = "Notifications for incoming calls"
     }
-    val messagesChannel = NotificationChannel(MESSAGES_CHANNEL_ID, "New Messages", NotificationManager.IMPORTANCE_DEFAULT).apply {
-      description = "Notifications for new chat messages"
-    }
+    val messagesChannel = NotificationChannel(MESSAGES_CHANNEL_ID, "New Messages", NotificationManager.IMPORTANCE_DEFAULT)
     notificationManager.createNotificationChannel(foregroundChannel)
     notificationManager.createNotificationChannel(callsChannel)
     notificationManager.createNotificationChannel(messagesChannel)
@@ -365,213 +366,51 @@ class CallService : Service(), IClientNativeBridge {
       val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
       wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Mercury::CallWakeLock")
       wakeLock?.setReferenceCounted(false)
-      wakeLock?.acquire(10*60*1000L)
+      wakeLock?.acquire(10 * 60 * 1000L)
     }
   }
 
   private fun releaseWakeLock() {
-    wakeLock?.let {
-      if (it.isHeld) it.release()
-    }
+    wakeLock?.let { if (it.isHeld) it.release() }
     wakeLock = null
   }
 
-  fun acceptCall() {
-    notificationManager.cancel(INCOMING_CALL_NOTIFICATION_ID)
-    nativeAcceptCall()
+  fun startVoiceCallViaTelecom(targetId: String) {
+    placeTelecomCall(targetId, false)
   }
 
-  fun rejectCall() {
-    notificationManager.cancel(INCOMING_CALL_NOTIFICATION_ID)
-    nativeRejectCall()
+  fun startVideoCallViaTelecom(targetId: String) {
+    placeTelecomCall(targetId, true)
   }
 
-  fun updateMyProfile(name: String?, bio: String?, photo: String?) = nativeUpdateMyProfile(name, bio, photo)
-  fun setContactDisplayNameOverride(peerId: String, name: String) = nativeSetContactDisplayNameOverride(peerId, name)
-  fun resetContactDisplayNameOverride(peerId: String) = nativeResetContactDisplayNameOverride(peerId)
-
-  fun debugEraseAllHistory() = nativeDebugEraseAllHistory()
-  fun debugEraseAllContacts() = nativeDebugEraseAllContacts()
-  fun debugRevokeAllApprovals() = nativeDebugRevokeAllApprovals()
-
-  fun createBackupToTemp(password: String): String? {
-    return try {
-      val tempFile = File.createTempFile("mercury-backup-", ".mcr", cacheDir)
-      val success = nativeCreateBackup(tempFile.absolutePath, password)
-      if (success) {
-        tempFile.absolutePath
-      } else {
-        tempFile.delete() // clean up if backup failed
-        null
-      }
-    } catch (e: Exception) {
-      Log.e("CallService", "Error creating temporary backup file", e)
-      null
-    }
-  }
-
-  fun deleteTempBackup(path: String) {
+  private fun placeTelecomCall(targetId: String, isVideo: Boolean) {
+    if (activeTelecomConnections.containsKey(targetId)) return
     try {
-      val file = File(path)
-      if (file.exists()) {
-        if (!file.delete()) {
-          Log.w("CallService", "Failed to delete temporary backup file: $path")
-        }
+      val extras = Bundle()
+      extras.putString(MercuryConnectionService.EXTRA_PEER_ID, targetId)
+      val uri = Uri.fromParts(PhoneAccount.SCHEME_SIP, targetId, null)
+      val extrasBundle = Bundle()
+      extrasBundle.putParcelable(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, phoneAccountHandle)
+      extrasBundle.putBundle(TelecomManager.EXTRA_OUTGOING_CALL_EXTRAS, extras)
+      if (isVideo) {
+        extrasBundle.putInt(TelecomManager.EXTRA_START_CALL_WITH_VIDEO_STATE, android.telecom.VideoProfile.STATE_BIDIRECTIONAL)
       }
-    } catch (e: Exception) {
-      Log.e("CallService", "Error deleting temporary backup file", e)
+      telecomManager.placeCall(uri, extrasBundle)
+    } catch (e: SecurityException) {
+      Log.e(TAG, "Permission missing for placeCall", e)
     }
   }
 
-  fun restoreBackup(uri: Uri, password: String): Boolean {
-    return try {
-      val inputStream = contentResolver.openInputStream(uri) ?: return false
-      val tempFile = File.createTempFile("restore_temp", ".mcr", cacheDir)
-      FileOutputStream(tempFile).use { outputStream ->
-        inputStream.use { it.copyTo(outputStream) }
-      }
-      val success = nativeRestoreBackup(tempFile.absolutePath, password)
-      tempFile.delete()
-      success
-    } catch (e: Exception) {
-      Log.e("CallService", "Error during backup restore", e)
-      false
-    }
-  }
-
-  fun generateNewIdentity(): String {
-    val mnemonic = nativeGenerateNewIdentity()
-    if (mnemonic.isNotEmpty()) {
-      start()
-    }
-    return mnemonic
-  }
-
-  fun restoreIdentity(mnemonic: String): Boolean {
-    val success = nativeRestoreIdentity(mnemonic)
-    if (success) {
-      start()
-    }
-    return success
-  }
-
-  fun getMnemonic(): String? = nativeGetMnemonic()
-
-  private external fun initEngine(nativeBridge: IClientNativeBridge)
+  private external fun initEngine(context: Context)
   external fun start()
   private external fun terminate()
   external fun identityExists(): Boolean
-
-  fun refreshState() {
-    if (isEngineInitialized.get()) {
-      nativeRefreshState()
-    } else {
-      Log.d("CallService", "refreshState called before engine initialized; ignoring.")
-    }
-  }
-
-  // --- NDK Query API ---
-  external fun nativeGetMyProfile(): MyProfileInfo?
-  external fun nativeGetContacts(): List<Contact>?
-  external fun nativeGetInteractionHistoryPage(): HistoryPage?
-  external fun nativeGetCallState(): CallState?
-  external fun nativeGetConnectionState(): Int
-  external fun nativeGetSignalingUrl(): String?
-  external fun nativeGetSelectedContactId(): String?
-  external fun nativeGetPeerInactivityTimeout(): Int
-
-  private external fun nativeRefreshState()
-  external fun addContact(peerId: String, token: String?)
-  external fun acceptContact(peerId: String)
-  external fun blockContact(peerId: String)
-  external fun deleteContact(peerId: String)
-  external fun unblockContact(peerId: String)
-  external fun selectContact(peerId: String)
-  private external fun nativeGenerateContactToken(): String?
-  external fun sendMessage(message: String)
-  private external fun startVoiceCall()
-  private external fun startVideoCall()
-  external fun loadOlderMessages()
-  external fun loadFullMessage(messageId: Long)
-  external fun markMessagesAsRead(messageIds: LongArray)
   external fun configureVideoCapture(config: VideoConfig)
-  external fun hangup()
-  private external fun nativeUpdateSignalingUrl(url: String)
-  private external fun nativeSetPeerInactivityTimeout(seconds: Int)
-  private external fun nativeAcceptCall()
-  private external fun nativeRejectCall()
-  private external fun nativeUpdateMyProfile(name: String?, bio: String?, photo_base64: String?)
-  private external fun nativeSetContactDisplayNameOverride(peerId: String, name: String)
-  private external fun nativeResetContactDisplayNameOverride(peerId: String)
-  private external fun nativeGetMnemonic(): String?
-  private external fun nativeCreateBackup(path: String, password: String): Boolean
-  private external fun nativeRestoreBackup(path: String, password: String): Boolean
-  private external fun nativeGenerateNewIdentity(): String
-  private external fun nativeRestoreIdentity(mnemonic: String): Boolean
-  private external fun nativeDebugEraseAllHistory()
-  private external fun nativeDebugEraseAllContacts()
-  private external fun nativeDebugRevokeAllApprovals()
-
-  // Place call via Telecom Manager
-  fun startVoiceCall(peerId: String? = null) {
-    if (peerId != null) selectContact(peerId)
-
-    val targetId = peerId ?: nativeGetSelectedContactId() ?: return
-
-    if (activeTelecomConnections.containsKey(targetId)) {
-      Log.w("CallService", "Call already active for $targetId")
-      return
-    }
-
-    try {
-      val extras = Bundle()
-      extras.putString(MercuryConnectionService.EXTRA_PEER_ID, targetId)
-      val uri = Uri.fromParts(PhoneAccount.SCHEME_SIP, targetId, null)
-      val extrasBundle = Bundle()
-      extrasBundle.putParcelable(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, phoneAccountHandle)
-      extrasBundle.putBundle(TelecomManager.EXTRA_OUTGOING_CALL_EXTRAS, extras)
-
-      telecomManager.placeCall(uri, extrasBundle)
-      startVoiceCall()
-
-    } catch (e: SecurityException) {
-      Log.e("CallService", "Permission missing for placeCall", e)
-      startVoiceCall()
-    }
-  }
-
-  fun startVideoCall(peerId: String? = null) {
-    if (peerId != null) selectContact(peerId)
-    val targetId = peerId ?: nativeGetSelectedContactId() ?: return
-
-    if (activeTelecomConnections.containsKey(targetId)) {
-      Log.w("CallService", "Call already active for $targetId")
-      return
-    }
-
-    try {
-      val extras = Bundle()
-      extras.putString(MercuryConnectionService.EXTRA_PEER_ID, targetId)
-      val uri = Uri.fromParts(PhoneAccount.SCHEME_SIP, targetId, null)
-      val extrasBundle = Bundle()
-      extrasBundle.putParcelable(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, phoneAccountHandle)
-      extrasBundle.putBundle(TelecomManager.EXTRA_OUTGOING_CALL_EXTRAS, extras)
-      extrasBundle.putInt(TelecomManager.EXTRA_START_CALL_WITH_VIDEO_STATE, android.telecom.VideoProfile.STATE_BIDIRECTIONAL)
-
-      telecomManager.placeCall(uri, extrasBundle)
-      startVideoCall()
-    } catch (e: SecurityException) {
-      Log.e("CallService", "Permission missing for placeCall", e)
-      startVideoCall()
-    }
-  }
-
-  fun generateContactToken(): String? = nativeGenerateContactToken()
 
   companion object {
     var instance: CallService? = null
       private set
-
+    private const val TAG = "CallService"
     private const val FOREGROUND_SERVICE_NOTIFICATION_ID = 101
     const val INCOMING_CALL_NOTIFICATION_ID = 102
     const val MESSAGE_NOTIFICATION_ID_BASE = 1000

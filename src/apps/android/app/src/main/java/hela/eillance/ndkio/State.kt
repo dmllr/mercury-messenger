@@ -1,22 +1,5 @@
 package hela.eillance.ndkio
 
-// This enum must be kept in sync with the C++ view_model::StateChange
-enum class StateChange {
-  MyProfile,
-  Contacts,
-  Connection,
-  SelectedContact,
-  InteractionHistory,
-  CallState,
-  SignalingUrl,
-  PeerInactivityTimeout,
-  Unknown;
-
-  companion object {
-    fun fromInt(value: Int) = entries.getOrNull(value) ?: Unknown
-  }
-}
-
 enum class MessageDirection(val value: Int) {
   Sent(0), Received(1);
   companion object { fun fromInt(value: Int) = entries.firstOrNull { it.value == value } ?: Sent }
