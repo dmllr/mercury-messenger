@@ -135,7 +135,7 @@ public:
   void Hangup(const ContactID& peer_id, bool notify_peer = true) const;
   void Configure(const Config& config) const;
   auto SendChatMessage(const ContactID& peer_id, const std::string& message) -> messaging::HistoryEntryRecord;
-  void UpdateSignalingUrl(const std::string& url);
+  void UpdateSignalingUrl(const std::string& url) const;
   void MarkMessagesAsRead(const ContactID& peer_id, const std::vector<std::uint64_t>& message_ids) const;
   [[nodiscard]] auto GetMessageHistoryPage(const ContactID& peer_id, size_t page_index, size_t page_size) const -> messaging::HistoryPage;
   [[nodiscard]] auto GetFullMessageContent(uint64_t message_id) const -> std::optional<std::string>;
