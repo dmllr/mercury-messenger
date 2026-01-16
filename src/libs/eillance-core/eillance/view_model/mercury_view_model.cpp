@@ -59,10 +59,8 @@ void MercuryViewModel::SelectContact(const ContactID& peer_id) {
   dispatch_queue_.Dispatch([this, peer_id]() -> void {
     {
       const std::lock_guard<std::mutex> lock(state_mutex_);
-      if (selected_contact_id_ != peer_id) {
-        selected_contact_id_ = peer_id;
-        LoadInitialChatHistory(peer_id);
-      }
+      selected_contact_id_ = peer_id;
+      LoadInitialChatHistory(peer_id);
     }
     NotifyStateChanged({StateChange::SelectedContact, StateChange::InteractionHistory});
   });
