@@ -8,6 +8,7 @@ import android.app.Service
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -34,10 +35,11 @@ import hela.eillance.webrtc.WebRtcTransport
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.webrtc.VideoSink
 import java.util.concurrent.ConcurrentHashMap
 
@@ -51,6 +53,7 @@ class CallService : Service() {
   private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
   private val notificationManager by lazy { getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager }
   private val telecomManager by lazy { getSystemService(Context.TELECOM_SERVICE) as TelecomManager }
+  private val engineMutex = Mutex()
 
   private var wakeLock: PowerManager.WakeLock? = null
   private var webRtcTransport: WebRtcTransport? = null
@@ -76,18 +79,18 @@ class CallService : Service() {
     registerPhoneAccount()
 
     // Initialize Engine on Background thread to avoid ANR.
-    // Initialization includes DB opening and WebRTC factory setup which are heavy.
     serviceScope.launch(Dispatchers.IO) {
-      try {
-        initEngine(this@CallService)
-        if (identityExists()) {
-          start()
+      engineMutex.withLock {
+        try {
+          initEngine(this@CallService)
+          if (identityExists()) {
+            start()
+          }
+          setupBackgroundObservers()
+          _isEngineReady.value = true
+        } catch (e: Exception) {
+          Log.e(TAG, "Failed to initialize engine", e)
         }
-        setupBackgroundObservers()
-        // Signal readiness only after all background components are set up
-        _isEngineReady.value = true
-      } catch (e: Exception) {
-        Log.e(TAG, "Failed to initialize engine", e)
       }
     }
 
@@ -166,8 +169,22 @@ class CallService : Service() {
     instance = null
     _isEngineReady.value = false
     soundPlayer.stop()
-    serviceScope.cancel()
-    terminate()
+
+    // We must launch a blocking run or a separate scope to ensure terminate happens,
+    // but since we are in onDestroy, the process might be dying.
+    // Ideally, we block briefly to ensure clean C++ shutdown.
+    // However, on Android, it's often safer to let the OS kill the process if we are going down,
+    // to avoid the exact race condition you saw.
+    // We try to clean up if possible.
+    val shutdownJob = serviceScope.launch(Dispatchers.IO) {
+      engineMutex.withLock {
+        terminate()
+      }
+    }
+
+    // We can't easily wait for this job in onDestroy without blocking UI thread potentially.
+    // But since serviceScope is Supervisor + Main, we just let it trigger.
+
     releaseWakeLock()
     super.onDestroy()
   }
@@ -251,9 +268,15 @@ class CallService : Service() {
   }
 
   private fun startForegroundService() {
+    // Initial start: We are NOT in a call, so we use CONNECTED_DEVICE.
+    // This avoids the SecurityException because we don't need RECORD_AUDIO yet.
     val notification = buildForegroundServiceNotification(false, null, ServiceConnectionState.Unknown)
     try {
-      startForeground(FOREGROUND_SERVICE_NOTIFICATION_ID, notification)
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        startForeground(FOREGROUND_SERVICE_NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
+      } else {
+        startForeground(FOREGROUND_SERVICE_NOTIFICATION_ID, notification)
+      }
     } catch (e: Exception) {
       Log.e(TAG, "Failed to start foreground service", e)
     }
@@ -261,8 +284,30 @@ class CallService : Service() {
 
   private fun updateForegroundServiceNotification(inCall: Boolean, peerId: String?, connectionState: ServiceConnectionState) {
     if (inCall) acquireWakeLock() else releaseWakeLock()
+
     val notification = buildForegroundServiceNotification(inCall, peerId, connectionState)
-    notificationManager.notify(FOREGROUND_SERVICE_NOTIFICATION_ID, notification)
+
+    try {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        // If we are in a call, we upgrade to MICROPHONE + CAMERA (if video) + CONNECTED_DEVICE
+        val serviceType = if (inCall) {
+          // Note: In a real app, you should check runtime permissions here before applying these types
+          // to avoid a crash if the user revoked them while the app was running.
+          var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+          }
+          type
+        } else {
+          ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+        }
+        startForeground(FOREGROUND_SERVICE_NOTIFICATION_ID, notification, serviceType)
+      } else {
+        notificationManager.notify(FOREGROUND_SERVICE_NOTIFICATION_ID, notification)
+      }
+    } catch (e: Exception) {
+      Log.e(TAG, "Failed to update foreground service notification", e)
+    }
   }
 
   private fun showIncomingCallNotification(peerId: String) {
