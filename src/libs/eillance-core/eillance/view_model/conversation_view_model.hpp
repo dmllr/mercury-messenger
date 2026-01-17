@@ -1,13 +1,8 @@
 #pragma once
 
 #include <atomic>
-#include <deque>
 #include <functional>
 #include <memory>
-#include <mutex>
-#include <optional>
-#include <thread>
-#include <unordered_map>
 #include <vector>
 
 #include "client_event_router.hpp"
@@ -43,27 +38,15 @@ public:
   void AddSystemMessage(const std::string& message);
 
 private:
-  void LoadInitialHistory();
-  void OnMessageReceived(const ContactID& peer_id, const messaging::HistoryEntryRecord& message);
-  void OnMessageStatusChanged(const ContactID& peer_id, uint64_t message_id, messaging::MessageStatus status);
+  // Internal implementation that can outlive the ViewModel wrapper
+  struct Impl;
+  std::shared_ptr<Impl> impl_;
+
+  // Unsubscribers must be kept in the wrapper to handle event deregistration on destruction
+  std::vector<std::function<void()>> event_unsubscribers_;
 
   template<typename EventType>
   void Subscribe(EventQueue& q, std::function<void(const EventType&)> callback);
-
-  const ContactID peer_id_;
-  std::shared_ptr<Client> client_;
-  std::shared_ptr<ClientEventRouter> router_;
-  std::shared_ptr<Observer> observer_;
-
-  mutable std::mutex mutex_;
-  State state_;
-
-  std::size_t chat_pages_loaded_ = 0;
-  std::vector<std::function<void()>> event_unsubscribers_;
-  std::thread initial_load_thread_;
-
-  static constexpr size_t kPageSize = 50;
-  static inline std::atomic<std::uint64_t> next_system_msg_id_{10000000000000000000ULL};
 };
 
 }  // namespace eillance::view_model

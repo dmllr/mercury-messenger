@@ -1,31 +1,220 @@
 #include "contacts_view_model.hpp"
 
 #include <algorithm>
+#include <thread>
 #include <unordered_map>
 
 #include "eillance/logging/logging.h"
 
 namespace eillance::view_model {
 
-ContactsViewModel::ContactsViewModel(std::shared_ptr<Client> client, std::shared_ptr<ClientEventRouter> router)
-    : client_(std::move(client)), router_(std::move(router)) {
-  auto& q = router_->Queue();
+// --- Implementation Struct ---
 
-  Subscribe<EventContactRequest>(q, [this](const auto&) { UpdateContactsList(); });
-  Subscribe<EventContactStatusChanged>(q, [this](const auto&) { UpdateContactsList(); });
-  Subscribe<EventContactProfileUpdated>(q, [this](const auto&) { UpdateContactsList(); });
-  Subscribe<EventContactRemoved>(q, [this](const auto&) { UpdateContactsList(); });
-  Subscribe<EventChatMessageReceived>(q, [this](const auto&) { UpdateContactsList(); });
-  Subscribe<EventMessageStatusChanged>(q, [this](const auto&) { UpdateContactsList(); });
-  Subscribe<EventDebugDataReset>(q, [this](const auto&) { UpdateContactsList(); });
+struct ContactsViewModel::Impl : public std::enable_shared_from_this<Impl> {
+  std::shared_ptr<Client> client_;
+  std::shared_ptr<ClientEventRouter> router_;
+  std::shared_ptr<Observer> observer_;
+
+  mutable std::mutex mutex_;
+  std::vector<ViewContact> contacts_;
+
+  Impl(std::shared_ptr<Client> client, std::shared_ptr<ClientEventRouter> router)
+      : client_(std::move(client)), router_(std::move(router)) {}
+
+  void SetObserver(std::shared_ptr<Observer> observer) {
+    std::shared_ptr<Observer> local_obs;
+    std::vector<ViewContact> current_contacts;
+    {
+      const std::lock_guard<std::mutex> lock(mutex_);
+      observer_ = std::move(observer);
+      local_obs = observer_;
+      current_contacts = contacts_;
+    }
+    // If we have data, notify the new observer immediately outside the lock
+    if (local_obs && !current_contacts.empty()) {
+      local_obs->OnContactsUpdated(current_contacts);
+    }
+  }
+
+  auto GetContacts() const -> std::vector<ViewContact> {
+    const std::lock_guard<std::mutex> lock(mutex_);
+    return contacts_;
+  }
+
+  // --- Actions (run asynchronously to avoid blocking main thread) ---
+
+  void AddContact(const ContactID& peer_id, const std::optional<std::string>& token) {
+    std::thread([self = shared_from_this(), peer_id, token]() {
+      self->client_->AddContact(peer_id, token);
+    }).detach();
+  }
+
+  void BlockContact(const ContactID& peer_id) {
+    std::thread([self = shared_from_this(), peer_id]() {
+      self->client_->BlockContact(peer_id);
+      self->DoUpdateContactsList();
+    }).detach();
+  }
+
+  void DeleteContact(const ContactID& peer_id) {
+    std::thread([self = shared_from_this(), peer_id]() {
+      self->client_->DeleteContact(peer_id);
+      self->DoUpdateContactsList();
+    }).detach();
+  }
+
+  void UnblockContact(const ContactID& peer_id) {
+    std::thread([self = shared_from_this(), peer_id]() {
+      self->client_->UnblockContact(peer_id);
+    }).detach();
+  }
+
+  void AcceptContact(const ContactID& peer_id) {
+    std::thread([self = shared_from_this(), peer_id]() {
+      self->client_->ConfirmContact(peer_id);
+    }).detach();
+  }
+
+  void SetContactDisplayNameOverride(const ContactID& peer_id, const std::string& name) {
+    std::thread([self = shared_from_this(), peer_id, name]() {
+      self->client_->SetContactDisplayNameOverride(peer_id, name);
+      self->DoUpdateContactsList();
+    }).detach();
+  }
+
+  void ResetContactDisplayNameOverride(const ContactID& peer_id) {
+    std::thread([self = shared_from_this(), peer_id]() {
+      self->client_->ResetContactDisplayNameOverride(peer_id);
+      self->DoUpdateContactsList();
+    }).detach();
+  }
+
+  void UpdateContactsList() {
+    std::thread([self = shared_from_this()]() {
+      self->DoUpdateContactsList();
+    }).detach();
+  }
+
+  void DoUpdateContactsList() {
+    std::vector<ViewContact> temp_contacts;
+    {
+      auto contacts_from_manager = client_->GetContacts();
+      temp_contacts.reserve(contacts_from_manager.size());
+      std::vector<std::string> contact_ids;
+      contact_ids.reserve(contacts_from_manager.size());
+
+      for (const auto& c: contacts_from_manager) {
+        std::string display_name;
+        if (c.display_name_override) {
+          display_name = *c.display_name_override;
+        } else if (c.display_name) {
+          display_name = *c.display_name;
+        }
+
+        temp_contacts.push_back({.peer_id = ContactID(c.peer_id),
+                                    .display_name = display_name,
+                                    .bio = c.bio,
+                                    .photo = c.photo_base64,
+                                    .status = c.status,
+                                    .connection_state = client_->GetPeerConnectionState(ContactID(c.peer_id)),
+                                    .unread_count = 0});
+        contact_ids.push_back(c.peer_id);
+      }
+
+      auto chat_summaries = client_->GetChatSummaries(contact_ids);
+      std::unordered_map<ContactID, messaging::ChatSummary> chat_map;
+      for (const auto& chat: chat_summaries) {
+        chat_map[ContactID(chat.peer_id)] = chat;
+      }
+
+      for (auto& contact: temp_contacts) {
+        if (chat_map.contains(contact.peer_id)) {
+          const auto& summary = chat_map.at(contact.peer_id);
+          contact.unread_count = summary.unread_count;
+          contact.last_activity_timestamp = summary.last_message.timestamp;
+
+          if (std::holds_alternative<messaging::MessageEntry>(summary.last_message.data)) {
+            const auto& content = std::get<messaging::MessageEntry>(summary.last_message.data).content;
+            contact.last_message_snippet = (content.length() > 100) ? content.substr(0, 100) + "..." : content;
+          } else if (std::holds_alternative<messaging::CallEntry>(summary.last_message.data)) {
+            if (summary.last_message.kind == messaging::HistoryEntryKind::videoCall) {
+              contact.last_message_snippet = "Video Call";
+            } else {
+              contact.last_message_snippet = "Voice Call";
+            }
+          }
+        } else {
+          contact.unread_count = 0;
+          contact.last_activity_timestamp = 0;
+          contact.last_message_snippet.reset();
+        }
+      }
+
+      std::sort(temp_contacts.begin(), temp_contacts.end(), [](const auto& a, const auto& b) {
+        return a.last_activity_timestamp > b.last_activity_timestamp;
+      });
+    }
+
+    std::shared_ptr<Observer> obs;
+    {
+      const std::lock_guard<std::mutex> lock(mutex_);
+      contacts_ = temp_contacts; // Keep internal copy
+      obs = observer_;
+    }
+    if (obs) {
+      obs->OnContactsUpdated(temp_contacts);
+    }
+  }
+
+  void UpdateContactConnectionState(const ContactID& peer_id, transport::PeerConnectionState state) {
+    std::shared_ptr<Observer> obs;
+    std::vector<ViewContact> notify_copy;
+    bool changed = false;
+    {
+      const std::lock_guard<std::mutex> lock(mutex_);
+      for (auto& contact: contacts_) {
+        if (contact.peer_id == peer_id) {
+          if (contact.connection_state != state) {
+            contact.connection_state = state;
+            changed = true;
+          }
+          break;
+        }
+      }
+      if (changed) {
+        notify_copy = contacts_;
+        obs = observer_;
+      }
+    }
+    if (changed && obs) {
+      obs->OnContactsUpdated(notify_copy);
+    }
+  }
+};
+
+// --- ContactsViewModel Wrapper ---
+
+ContactsViewModel::ContactsViewModel(std::shared_ptr<Client> client, std::shared_ptr<ClientEventRouter> router)
+    : impl_(std::make_shared<Impl>(std::move(client), std::move(router))) {
+
+  // Start initial load asynchronously
+  impl_->UpdateContactsList();
+
+  auto& q = impl_->router_->Queue();
+
+  Subscribe<EventContactRequest>(q, [this](const auto&) { impl_->UpdateContactsList(); });
+  Subscribe<EventContactStatusChanged>(q, [this](const auto&) { impl_->UpdateContactsList(); });
+  Subscribe<EventContactProfileUpdated>(q, [this](const auto&) { impl_->UpdateContactsList(); });
+  Subscribe<EventContactRemoved>(q, [this](const auto&) { impl_->UpdateContactsList(); });
+  Subscribe<EventChatMessageReceived>(q, [this](const auto&) { impl_->UpdateContactsList(); });
+  Subscribe<EventMessageStatusChanged>(q, [this](const auto&) { impl_->UpdateContactsList(); });
+  Subscribe<EventDebugDataReset>(q, [this](const auto&) { impl_->UpdateContactsList(); });
 
   Subscribe<EventStatusChanged>(q, [this](const EventStatusChanged& e) {
     if (e.source == EventSource::peerConnectionState) {
-      UpdateContactConnectionState(e.peer_id, static_cast<transport::PeerConnectionState>(e.state));
+      impl_->UpdateContactConnectionState(e.peer_id, static_cast<transport::PeerConnectionState>(e.state));
     }
   });
-
-  UpdateContactsList();
 }
 
 ContactsViewModel::~ContactsViewModel() {
@@ -41,138 +230,43 @@ void ContactsViewModel::Subscribe(EventQueue& q, std::function<void(const EventT
 }
 
 void ContactsViewModel::SetObserver(std::shared_ptr<Observer> observer) {
-  const std::lock_guard<std::mutex> lock(mutex_);
-  observer_ = std::move(observer);
-  if (observer_) {
-    observer_->OnContactsUpdated(contacts_);
-  }
+  impl_->SetObserver(std::move(observer));
 }
 
 auto ContactsViewModel::GetContacts() const -> std::vector<ViewContact> {
-  const std::lock_guard<std::mutex> lock(mutex_);
-  return contacts_;
+  return impl_->GetContacts();
 }
 
 void ContactsViewModel::AddContact(const ContactID& peer_id, const std::optional<std::string>& token) {
-  client_->AddContact(peer_id, token);
+  impl_->AddContact(peer_id, token);
 }
 
 void ContactsViewModel::BlockContact(const ContactID& peer_id) {
-  client_->BlockContact(peer_id);
-  UpdateContactsList();
+  impl_->BlockContact(peer_id);
 }
 
 void ContactsViewModel::DeleteContact(const ContactID& peer_id) {
-  client_->DeleteContact(peer_id);
-  UpdateContactsList();
+  impl_->DeleteContact(peer_id);
 }
 
 void ContactsViewModel::UnblockContact(const ContactID& peer_id) {
-  client_->UnblockContact(peer_id);
+  impl_->UnblockContact(peer_id);
 }
 
 void ContactsViewModel::AcceptContact(const ContactID& peer_id) {
-  client_->ConfirmContact(peer_id);
+  impl_->AcceptContact(peer_id);
 }
 
 void ContactsViewModel::SetContactDisplayNameOverride(const ContactID& peer_id, const std::string& name) {
-  client_->SetContactDisplayNameOverride(peer_id, name);
-  UpdateContactsList();
+  impl_->SetContactDisplayNameOverride(peer_id, name);
 }
 
 void ContactsViewModel::ResetContactDisplayNameOverride(const ContactID& peer_id) {
-  client_->ResetContactDisplayNameOverride(peer_id);
-  UpdateContactsList();
+  impl_->ResetContactDisplayNameOverride(peer_id);
 }
 
 auto ContactsViewModel::GenerateContactToken() -> std::string {
-  return client_->GenerateContactToken();
-}
-
-void ContactsViewModel::UpdateContactsList() {
-  std::vector<ViewContact> temp_contacts;
-  {
-    auto contacts_from_manager = client_->GetContacts();
-    temp_contacts.reserve(contacts_from_manager.size());
-    std::vector<std::string> contact_ids;
-    contact_ids.reserve(contacts_from_manager.size());
-
-    for (const auto& c: contacts_from_manager) {
-      std::string display_name;
-      if (c.display_name_override) {
-        display_name = *c.display_name_override;
-      } else if (c.display_name) {
-        display_name = *c.display_name;
-      }
-
-      temp_contacts.push_back({.peer_id = ContactID(c.peer_id),
-                               .display_name = display_name,
-                               .bio = c.bio,
-                               .photo = c.photo_base64,
-                               .status = c.status,
-                               .connection_state = client_->GetPeerConnectionState(ContactID(c.peer_id)),
-                               .unread_count = 0});
-      contact_ids.push_back(c.peer_id);
-    }
-
-    auto chat_summaries = client_->GetChatSummaries(contact_ids);
-    std::unordered_map<ContactID, messaging::ChatSummary> chat_map;
-    for (const auto& chat: chat_summaries) {
-      chat_map[ContactID(chat.peer_id)] = chat;
-    }
-
-    for (auto& contact: temp_contacts) {
-      if (chat_map.contains(contact.peer_id)) {
-        const auto& summary = chat_map.at(contact.peer_id);
-        contact.unread_count = summary.unread_count;
-        contact.last_activity_timestamp = summary.last_message.timestamp;
-
-        if (std::holds_alternative<messaging::MessageEntry>(summary.last_message.data)) {
-          const auto& content = std::get<messaging::MessageEntry>(summary.last_message.data).content;
-          contact.last_message_snippet = (content.length() > 100) ? content.substr(0, 100) + "..." : content;
-        } else if (std::holds_alternative<messaging::CallEntry>(summary.last_message.data)) {
-          if (summary.last_message.kind == messaging::HistoryEntryKind::videoCall) {
-            contact.last_message_snippet = "Video Call";
-          } else {
-            contact.last_message_snippet = "Voice Call";
-          }
-        }
-      } else {
-        contact.unread_count = 0;
-        contact.last_activity_timestamp = 0;
-        contact.last_message_snippet.reset();
-      }
-    }
-
-    std::sort(temp_contacts.begin(), temp_contacts.end(), [](const auto& a, const auto& b) {
-      return a.last_activity_timestamp > b.last_activity_timestamp;
-    });
-  }
-
-  {
-    const std::lock_guard<std::mutex> lock(mutex_);
-    contacts_ = std::move(temp_contacts);
-    if (observer_) {
-      observer_->OnContactsUpdated(contacts_);
-    }
-  }
-}
-
-void ContactsViewModel::UpdateContactConnectionState(const ContactID& peer_id, transport::PeerConnectionState state) {
-  const std::lock_guard<std::mutex> lock(mutex_);
-  bool changed = false;
-  for (auto& contact: contacts_) {
-    if (contact.peer_id == peer_id) {
-      if (contact.connection_state != state) {
-        contact.connection_state = state;
-        changed = true;
-      }
-      break;
-    }
-  }
-  if (changed && observer_) {
-    observer_->OnContactsUpdated(contacts_);
-  }
+  return impl_->client_->GenerateContactToken();
 }
 
 }  // namespace eillance::view_model
