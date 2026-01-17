@@ -6,6 +6,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -59,6 +60,7 @@ private:
 
   std::size_t chat_pages_loaded_ = 0;
   std::vector<std::function<void()>> event_unsubscribers_;
+  std::thread initial_load_thread_;
 
   static constexpr size_t kPageSize = 50;
   static inline std::atomic<std::uint64_t> next_system_msg_id_{10000000000000000000ULL};
