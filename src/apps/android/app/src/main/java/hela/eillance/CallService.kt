@@ -55,10 +55,6 @@ class CallService : Service() {
   private var wakeLock: PowerManager.WakeLock? = null
   private var webRtcTransport: WebRtcTransport? = null
 
-  // Flag to signal engine readiness
-  private val _isEngineReady = MutableStateFlow(false)
-  val isEngineReady = _isEngineReady.asStateFlow()
-
   // Background ViewModels
   private var backgroundContactsVM: ContactsViewModel? = null
   private var backgroundCallVM: CallViewModel? = null
@@ -79,19 +75,20 @@ class CallService : Service() {
     createNotificationChannels()
     registerPhoneAccount()
 
-    // Initialize Engine on Main thread synchronously to avoid race conditions with UI
-    // The engine constructor mainly does JNI env setup and pointer allocation.
-    // Heavy DB operations are internal to the C++ objects but `new Client` is generally fast enough.
-    // Ideally this should be async but we need to block UI or have UI wait.
-    try {
-      initEngine(this@CallService)
-      _isEngineReady.value = true
-      if (identityExists()) {
-        start()
+    // Initialize Engine on Background thread to avoid ANR.
+    // Initialization includes DB opening and WebRTC factory setup which are heavy.
+    serviceScope.launch(Dispatchers.IO) {
+      try {
+        initEngine(this@CallService)
+        if (identityExists()) {
+          start()
+        }
+        setupBackgroundObservers()
+        // Signal readiness only after all background components are set up
+        _isEngineReady.value = true
+      } catch (e: Exception) {
+        Log.e(TAG, "Failed to initialize engine", e)
       }
-      setupBackgroundObservers()
-    } catch (e: Exception) {
-      Log.e(TAG, "Failed to initialize engine", e)
     }
 
     startForegroundService()
@@ -167,6 +164,7 @@ class CallService : Service() {
 
   override fun onDestroy() {
     instance = null
+    _isEngineReady.value = false
     soundPlayer.stop()
     serviceScope.cancel()
     terminate()
@@ -410,6 +408,12 @@ class CallService : Service() {
   companion object {
     var instance: CallService? = null
       private set
+
+    // Flag to signal engine readiness, exposed statically so UI can observe it
+    // even before Service instance is fully attached/observed via other means.
+    private val _isEngineReady = MutableStateFlow(false)
+    val isEngineReady = _isEngineReady.asStateFlow()
+
     private const val TAG = "CallService"
     private const val FOREGROUND_SERVICE_NOTIFICATION_ID = 101
     const val INCOMING_CALL_NOTIFICATION_ID = 102

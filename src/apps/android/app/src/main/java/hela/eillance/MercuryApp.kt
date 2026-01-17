@@ -54,8 +54,10 @@ fun MercuryApp(viewModel: MainViewModel) {
   val showBetaNotice by viewModel.showBetaNotice.collectAsState()
   val lifecycleOwner = LocalLifecycleOwner.current
 
-  // Wait for the service to initialize the engine
-  val isEngineReady = CallService.instance?.isEngineReady?.collectAsState(initial = false)?.value ?: false
+  // Wait for the service to initialize the engine.
+  // We observe the static StateFlow from CallService companion to avoid issues with instance nullability
+  // during early app startup.
+  val isEngineReady by CallService.isEngineReady.collectAsState()
 
   DisposableEffect(lifecycleOwner) {
     val observer = LifecycleEventObserver { _, event ->
