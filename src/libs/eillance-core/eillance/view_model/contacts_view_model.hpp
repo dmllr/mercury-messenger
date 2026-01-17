@@ -37,20 +37,14 @@ public:
   auto GenerateContactToken() -> std::string;
 
 private:
-  void UpdateContactsList();
-  void UpdateContactConnectionState(const ContactID& peer_id, transport::PeerConnectionState state);
+  struct Impl;
+  std::shared_ptr<Impl> impl_;
+
+  // Unsubscribers must be kept in the wrapper to handle event deregistration on destruction
+  std::vector<std::function<void()>> event_unsubscribers_;
 
   template<typename EventType>
   void Subscribe(EventQueue& q, std::function<void(const EventType&)> callback);
-
-  std::shared_ptr<Client> client_;
-  std::shared_ptr<ClientEventRouter> router_;
-  std::shared_ptr<Observer> observer_;
-
-  mutable std::mutex mutex_;
-  std::vector<ViewContact> contacts_;
-
-  std::vector<std::function<void()>> event_unsubscribers_;
 };
 
 }  // namespace eillance::view_model
