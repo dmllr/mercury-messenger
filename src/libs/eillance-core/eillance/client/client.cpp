@@ -333,7 +333,9 @@ void Client::Hangup(const ContactID& peer_id, bool notify_peer) const {
       peer->has_media_peer_connection_ = false;
       peer->audio_ = nullptr;
       peer->video_ = nullptr;
-      if (av_stream_) { av_stream_->Stop(); }
+      if (av_stream_) {
+        av_stream_->Stop();
+      }
     }
 
     if (notify_peer && peer->data_channel_is_open_) {
@@ -343,7 +345,9 @@ void Client::Hangup(const ContactID& peer_id, bool notify_peer) const {
     }
   }
   // Notify listeners (including other ViewModels/Services) that the call is terminated.
-  if (on_call_terminated_) { (*on_call_terminated_)(peer_id); }
+  if (on_call_terminated_) {
+    (*on_call_terminated_)(peer_id);
+  }
 }
 
 void Client::Configure(const Config& config) const {
@@ -417,7 +421,7 @@ void Client::UpdateMyProfile(const std::optional<std::string>& name, const std::
       profile_update_msg["bio"] = settings_manager_->GetMyBio().value_or("");
       profile_update_msg["photo"] = settings_manager_->GetMyPhotoBase64();
 
-      ContactID id(contact.peer_id);
+      const ContactID id(contact.peer_id);
       message_history_->AddTextEntry(id, profile_update_msg.dump(), messaging::MessageDirection::sent, messaging::HistoryEntryKind::systemMessage);
 
       if (auto peer = transport_->getPeer(id); peer && peer->data_channel_is_open_ && peer->session_cipher_->IsReady()) {
