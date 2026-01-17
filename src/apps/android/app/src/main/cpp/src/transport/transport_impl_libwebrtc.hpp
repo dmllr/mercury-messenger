@@ -36,11 +36,12 @@ class AndroidRtcTransport final : public Transport::TransportInterface {
   std::unordered_map<ContactID, std::shared_ptr<Peer>> peers_;
   mutable std::mutex peers_mutex_;
 
-  auto Attach() const -> JNIEnv* { return eillance::jni::AttachCurrentThreadIfNeeded(jvm_); }
+  [[nodiscard]] auto GetEnv() const -> eillance::jni::ScopedJniEnv { return eillance::jni::ScopedJniEnv(jvm_); }
 
 public:
   explicit AndroidRtcTransport(JavaVM* jvm, jobject context) : jvm_(jvm) {
-    JNIEnv* env = Attach();
+    auto env_scope = GetEnv();
+    auto* env = env_scope.Get();
     if (env == nullptr) {
       return;
     }
@@ -57,8 +58,8 @@ public:
   }
 
   ~AndroidRtcTransport() override {
-    JNIEnv* env = Attach();
-    if ((env != nullptr) && transport_java_ref_ != nullptr) {
+    auto env_scope = GetEnv();
+    if (auto* env = env_scope.Get(); (env != nullptr) && transport_java_ref_ != nullptr) {
       env->DeleteGlobalRef(transport_java_ref_);
     }
   }
@@ -76,7 +77,8 @@ public:
   void SetSignalingUrl(const std::string& url) override { signaling_url_ = url; }
 
   void Start() override {
-    JNIEnv* env = Attach();
+    auto env_scope = GetEnv();
+    auto* env = env_scope.Get();
     if ((env == nullptr) || (transport_java_ref_ == nullptr)) {
       return;
     }
@@ -90,7 +92,8 @@ public:
   }
 
   void Terminate() override {
-    JNIEnv* env = Attach();
+    auto env_scope = GetEnv();
+    auto* env = env_scope.Get();
     if ((env == nullptr) || (transport_java_ref_ == nullptr)) {
       return;
     }
@@ -100,7 +103,8 @@ public:
   }
 
   void Reconnect() override {
-    JNIEnv* env = Attach();
+    auto env_scope = GetEnv();
+    auto* env = env_scope.Get();
     if ((env == nullptr) || (transport_java_ref_ == nullptr)) {
       return;
     }
@@ -130,7 +134,8 @@ public:
   }
 
   auto GetPeerConnectionState(const ContactID& peer_id) const -> eillance::transport::PeerConnectionState override {
-    JNIEnv* env = Attach();
+    auto env_scope = GetEnv();
+    auto* env = env_scope.Get();
     if ((env == nullptr) || (transport_java_ref_ == nullptr)) {
       return eillance::transport::PeerConnectionState::Closed;
     }
@@ -143,7 +148,8 @@ public:
   }
 
   void SendSignalingMessage(const Transport::Json& message) const override {
-    JNIEnv* env = Attach();
+    auto env_scope = GetEnv();
+    auto* env = env_scope.Get();
     if ((env == nullptr) || (transport_java_ref_ == nullptr)) {
       return;
     }
@@ -156,7 +162,8 @@ public:
   }
 
   void SendPeerDataChannelMessage(const ContactID& peer_id, const Transport::Json& message) const override {
-    JNIEnv* env = Attach();
+    auto env_scope = GetEnv();
+    auto* env = env_scope.Get();
     if ((env == nullptr) || (transport_java_ref_ == nullptr)) {
       return;
     }
@@ -173,9 +180,23 @@ public:
   void AddToStream(const std::shared_ptr<Peer>& /*peer*/, bool /*is_adding_video*/) const override {}
   void CreateDataPeerConnection(const ContactID& peer_id) override { CreatePeerConnection(peer_id, "data"); }
   void CreateMediaPeerConnection(const ContactID& peer_id) override { CreatePeerConnection(peer_id, "media"); }
-  void CreateDataChannel(const ContactID& peer_id) override;
+
+  void CreateDataChannel(const ContactID& peer_id) override {
+    auto env_scope = GetEnv();
+    auto* env = env_scope.Get();
+    if ((env == nullptr) || (transport_java_ref_ == nullptr)) {
+      return;
+    }
+    auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcTransport");
+    auto create_dc_method = transport_holder.GetMethod("createDataChannel");
+    auto* j_peer_id = env->NewStringUTF(peer_id.ToString().c_str());
+    env->CallVoidMethod(transport_java_ref_, create_dc_method, j_peer_id);
+    env->DeleteLocalRef(j_peer_id);
+  }
+
   void ClosePeerConnection(const ContactID& peer_id, const std::string& context) override {
-    JNIEnv* env = Attach();
+    auto env_scope = GetEnv();
+    auto* env = env_scope.Get();
     if ((env == nullptr) || (transport_java_ref_ == nullptr)) {
       return;
     }
@@ -189,7 +210,8 @@ public:
   }
 
   void CreateOffer(const ContactID& peer_id, const std::string& context) override {
-    JNIEnv* env = Attach();
+    auto env_scope = GetEnv();
+    auto* env = env_scope.Get();
     if ((env == nullptr) || (transport_java_ref_ == nullptr)) {
       return;
     }
@@ -203,7 +225,8 @@ public:
   }
 
   void CreateAnswer(const ContactID& peer_id, const std::string& context) override {
-    JNIEnv* env = Attach();
+    auto env_scope = GetEnv();
+    auto* env = env_scope.Get();
     if ((env == nullptr) || (transport_java_ref_ == nullptr)) {
       return;
     }
@@ -217,7 +240,8 @@ public:
   }
 
   void SetRemoteDescription(const ContactID& peer_id, const std::string& context, const std::string& sdp, const std::string& type) override {
-    JNIEnv* env = Attach();
+    auto env_scope = GetEnv();
+    auto* env = env_scope.Get();
     if ((env == nullptr) || (transport_java_ref_ == nullptr)) {
       return;
     }
@@ -235,7 +259,8 @@ public:
   }
 
   void AddRemoteCandidate(const ContactID& peer_id, const std::string& context, const std::string& candidate, const std::string& mid) override {
-    JNIEnv* env = Attach();
+    auto env_scope = GetEnv();
+    auto* env = env_scope.Get();
     if ((env == nullptr) || (transport_java_ref_ == nullptr)) {
       return;
     }
@@ -253,7 +278,8 @@ public:
   }
 
   auto AddVideo(const ContactID& peer_id, const std::function<void(void)>& /*on_open*/) -> std::shared_ptr<ITrack> override {
-    JNIEnv* env = Attach();
+    auto env_scope = GetEnv();
+    auto* env = env_scope.Get();
     if (!env || (transport_java_ref_ == nullptr)) {
       return nullptr;
     }
@@ -266,7 +292,8 @@ public:
   }
 
   auto AddAudio(const ContactID& peer_id, const std::function<void(void)>& /*on_open*/) -> std::shared_ptr<ITrack> override {
-    JNIEnv* env = Attach();
+    auto env_scope = GetEnv();
+    auto* env = env_scope.Get();
     if (!env || (transport_java_ref_ == nullptr)) {
       return nullptr;
     }
@@ -281,7 +308,8 @@ public:
 
 private:
   void CreatePeerConnection(const ContactID& peer_id, const std::string& context) {
-    JNIEnv* env = Attach();
+    auto env_scope = GetEnv();
+    auto* env = env_scope.Get();
     if ((env == nullptr) || (transport_java_ref_ == nullptr)) {
       return;
     }
@@ -294,19 +322,6 @@ private:
     env->DeleteLocalRef(j_context);
   }
 };
-
-inline void AndroidRtcTransport::CreateDataChannel(const ContactID& peer_id) {
-  JNIEnv* env = Attach();
-  if ((env == nullptr) || (transport_java_ref_ == nullptr)) {
-    return;
-  }
-  auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcTransport");
-  auto create_dc_method = transport_holder.GetMethod("createDataChannel");
-  auto* j_peer_id = env->NewStringUTF(peer_id.ToString().c_str());
-  env->CallVoidMethod(transport_java_ref_, create_dc_method, j_peer_id);
-  env->DeleteLocalRef(j_peer_id);
-}
-
 
 }  // namespace eillance::transport
 

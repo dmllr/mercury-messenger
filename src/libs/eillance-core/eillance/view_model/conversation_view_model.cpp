@@ -11,7 +11,9 @@ namespace eillance::view_model {
 ConversationViewModel::ConversationViewModel(const ContactID& peer_id, std::shared_ptr<Client> client, std::shared_ptr<ClientEventRouter> router)
     : peer_id_(peer_id), client_(std::move(client)), router_(std::move(router)) {
   state_.peer_id = peer_id_;
-  LoadInitialHistory();
+
+  // Load initial history asynchronously to prevent blocking the UI thread (ANR fix)
+  initial_load_thread_ = std::thread([this] { LoadInitialHistory(); });
 
   auto& q = router_->Queue();
   Subscribe<EventChatMessageReceived>(q, [this](const EventChatMessageReceived& e) {
@@ -24,12 +26,18 @@ ConversationViewModel::ConversationViewModel(const ContactID& peer_id, std::shar
       OnMessageStatusChanged(e.peer_id, e.message_id, e.status);
     }
   });
-  Subscribe<EventDebugDataReset>(q, [this](const auto&) { LoadInitialHistory(); });
+  Subscribe<EventDebugDataReset>(q, [this](const auto&) {
+    if (initial_load_thread_.joinable()) { initial_load_thread_.join(); }
+    initial_load_thread_ = std::thread([this] { LoadInitialHistory(); });
+  });
 }
 
 ConversationViewModel::~ConversationViewModel() {
   for (const auto& unsubscribe: event_unsubscribers_) {
     unsubscribe();
+  }
+  if (initial_load_thread_.joinable()) {
+    initial_load_thread_.join();
   }
 }
 
@@ -112,11 +120,11 @@ void ConversationViewModel::MarkMessagesAsRead(const std::vector<std::uint64_t>&
 void ConversationViewModel::AddSystemMessage(const std::string& message) {
   const std::lock_guard<std::mutex> lock(mutex_);
   state_.history.push_back({.id = next_system_msg_id_++,
-                            .kind = messaging::HistoryEntryKind::systemMessage,
-                            .timestamp = static_cast<Time::Unit>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count()),
-                            .direction = messaging::MessageDirection::received,
-                            .is_truncated = false,
-                            .data = messaging::MessageEntry{message}});
+                               .kind = messaging::HistoryEntryKind::systemMessage,
+                               .timestamp = static_cast<Time::Unit>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count()),
+                               .direction = messaging::MessageDirection::received,
+                               .is_truncated = false,
+                               .data = messaging::MessageEntry{message}});
   if (observer_) { observer_->OnHistoryUpdated(state_); }
 }
 
@@ -144,8 +152,9 @@ void ConversationViewModel::OnMessageStatusChanged(const ContactID& /*peer_id*/,
 }
 
 void ConversationViewModel::LoadInitialHistory() {
-  const std::lock_guard<std::mutex> lock(mutex_);
   auto page = client_->GetMessageHistoryPage(peer_id_, 0, kPageSize);
+
+  const std::lock_guard<std::mutex> lock(mutex_);
   state_.history.assign(page.messages.begin(), page.messages.end());
   chat_pages_loaded_ = 1;
   state_.has_older_messages = (kPageSize < page.total_messages);

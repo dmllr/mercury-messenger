@@ -19,18 +19,20 @@ protected:
   JavaVM* jvm_;
   jobject java_listener_;
 
-  [[nodiscard]] auto AttachCurrentThread() const -> JNIEnv* { return jni::AttachCurrentThreadIfNeeded(jvm_); }
+  [[nodiscard]] auto GetEnv() const -> jni::ScopedJniEnv { return jni::ScopedJniEnv(jvm_); }
 
 public:
   AndroidObserverBase(JavaVM* jvm, jobject java_listener) : jvm_(jvm) {
-    if (auto* env = AttachCurrentThread()) {
+    auto env_scope = GetEnv();
+    if (auto* env = env_scope.Get()) {
       java_listener_ = env->NewGlobalRef(java_listener);
     }
   }
 
   virtual ~AndroidObserverBase() {
-    if (java_listener_) {
-      if (auto* env = AttachCurrentThread()) {
+    if (java_listener_ != nullptr) {
+      auto env_scope = GetEnv();
+      if (auto* env = env_scope.Get()) {
         env->DeleteGlobalRef(java_listener_);
       }
     }
@@ -42,8 +44,11 @@ public:
   using AndroidObserverBase::AndroidObserverBase;
 
   void OnContactsUpdated(const std::vector<view_model::ViewContact>& contacts) override {
-    auto* env = AttachCurrentThread();
-    if (!env || !java_listener_) return;
+    auto env_scope = GetEnv();
+    auto* env = env_scope.Get();
+    if ((env == nullptr) || (java_listener_ == nullptr)) {
+      return;
+    }
 
     auto& class_refs = ClassRefs::Instance();
     auto& list_holder = class_refs.Class("java/util/ArrayList");
@@ -58,19 +63,30 @@ public:
       jstring photo = contact_cpp.photo ? env->NewStringUTF(contact_cpp.photo->c_str()) : nullptr;
       jstring snippet = contact_cpp.last_message_snippet ? env->NewStringUTF(contact_cpp.last_message_snippet->c_str()) : nullptr;
 
-      jobject contact_java = contact_holder.NewObject(env, peer_id, name, bio, photo,
-                                                      static_cast<jint>(contact_cpp.status),
-                                                      static_cast<jint>(contact_cpp.connection_state),
-                                                      static_cast<jint>(contact_cpp.unread_count),
-                                                      snippet,
-                                                      static_cast<jlong>(contact_cpp.last_activity_timestamp));
+      jobject contact_java = contact_holder.NewObject(
+          env,
+          peer_id,
+          name,
+          bio,
+          photo,
+          static_cast<jint>(contact_cpp.status),
+          static_cast<jint>(contact_cpp.connection_state),
+          static_cast<jint>(contact_cpp.unread_count),
+          snippet,
+          static_cast<jlong>(contact_cpp.last_activity_timestamp));
       env->CallBooleanMethod(contact_list, list_add_method, contact_java);
 
       env->DeleteLocalRef(peer_id);
       env->DeleteLocalRef(name);
-      if (bio) env->DeleteLocalRef(bio);
-      if (photo) env->DeleteLocalRef(photo);
-      if (snippet) env->DeleteLocalRef(snippet);
+      if (bio != nullptr) {
+        env->DeleteLocalRef(bio);
+      }
+      if (photo != nullptr) {
+        env->DeleteLocalRef(photo);
+      }
+      if (snippet != nullptr) {
+        env->DeleteLocalRef(snippet);
+      }
       env->DeleteLocalRef(contact_java);
     }
 
@@ -86,8 +102,11 @@ public:
   using AndroidObserverBase::AndroidObserverBase;
 
   void OnHistoryUpdated(const view_model::ConversationViewModel::State& state) override {
-    auto* env = AttachCurrentThread();
-    if (!env || !java_listener_) return;
+    auto env_scope = GetEnv();
+    auto* env = env_scope.Get();
+    if ((env == nullptr) || (java_listener_ == nullptr)) {
+      return;
+    }
 
     auto& class_refs = ClassRefs::Instance();
     auto& list_holder = class_refs.Class("java/util/ArrayList");
@@ -109,14 +128,22 @@ public:
       jstring content = content_str ? env->NewStringUTF(content_str->c_str()) : nullptr;
       jint duration = call_entry ? static_cast<jint>(call_entry->duration_seconds) : 0;
 
-      jobject entry_java = entry_holder.NewObject(env, (jlong)entry_cpp.id, (jint)entry_cpp.kind, (jlong)entry_cpp.timestamp,
-                                                  content, (jint)entry_cpp.direction, duration,
-                                                  call_entry ? (jint)call_entry->call_direction : -1,
-                                                  call_entry ? (jint)call_entry->call_status : -1, (jint)entry_cpp.status,
-                                                  (jboolean)entry_cpp.is_truncated);
+      jobject entry_java = entry_holder.NewObject(
+          env,
+          static_cast<jlong>(entry_cpp.id),
+          static_cast<jint>(entry_cpp.kind),
+          static_cast<jlong>(entry_cpp.timestamp),
+          content,
+          static_cast<jint>(entry_cpp.direction),
+          duration,
+          (call_entry != nullptr) ? static_cast<jint>(call_entry->call_direction) : -1,
+          (call_entry != nullptr) ? static_cast<jint>(call_entry->call_status) : -1, static_cast<jint>(entry_cpp.status),
+          static_cast<jboolean>(entry_cpp.is_truncated));
 
       env->CallBooleanMethod(history_list, list_add_method, entry_java);
-      if (content) env->DeleteLocalRef(content);
+      if (content != nullptr) {
+        env->DeleteLocalRef(content);
+      }
       env->DeleteLocalRef(entry_java);
     }
 
@@ -137,8 +164,11 @@ public:
   using AndroidObserverBase::AndroidObserverBase;
 
   void OnProfileUpdated(const view_model::MyProfile& profile) override {
-    auto* env = AttachCurrentThread();
-    if (!env || !java_listener_) return;
+    auto env_scope = GetEnv();
+    auto* env = env_scope.Get();
+    if ((env == nullptr) || (java_listener_ == nullptr)) {
+      return;
+    }
 
     auto& class_refs = ClassRefs::Instance();
     auto& profile_holder = class_refs.Class("hela/eillance/ndkio/MyProfileInfo");
@@ -167,8 +197,11 @@ public:
   using AndroidObserverBase::AndroidObserverBase;
 
   void OnCallStateChanged(const view_model::CallState& call_state) override {
-    auto* env = AttachCurrentThread();
-    if (!env || !java_listener_) return;
+    auto env_scope = GetEnv();
+    auto* env = env_scope.Get();
+    if ((env == nullptr) || (java_listener_ == nullptr)) {
+      return;
+    }
 
     auto& class_refs = ClassRefs::Instance();
     auto& call_state_holder = class_refs.Class("hela/eillance/ndkio/CallState");
@@ -192,27 +225,35 @@ public:
   using AndroidObserverBase::AndroidObserverBase;
 
   void OnSettingsUpdated(const std::optional<std::string>& signaling_url, int timeout) override {
-    auto* env = AttachCurrentThread();
-    if (!env || !java_listener_) return;
+    auto env_scope = GetEnv();
+    auto* env = env_scope.Get();
+    if ((env == nullptr) || (java_listener_ == nullptr)) {
+      return;
+    }
 
     jstring url_str = signaling_url ? env->NewStringUTF(signaling_url->c_str()) : nullptr;
 
     auto& class_refs = ClassRefs::Instance();
     auto& listener_holder = class_refs.Class("hela/eillance/viewmodels/NativeSettingsObserver");
     jmethodID on_update = listener_holder.GetMethod("onSettingsUpdated");
-    env->CallVoidMethod(java_listener_, on_update, url_str, (jint)timeout);
+    env->CallVoidMethod(java_listener_, on_update, url_str, static_cast<jint>(timeout));
 
-    if (url_str) env->DeleteLocalRef(url_str);
+    if (url_str != nullptr) {
+      env->DeleteLocalRef(url_str);
+    }
   }
 
   void OnConnectionStateChanged(ServiceConnectionState state) override {
-    auto* env = AttachCurrentThread();
-    if (!env || !java_listener_) return;
+    auto env_scope = GetEnv();
+    auto* env = env_scope.Get();
+    if ((env == nullptr) || (java_listener_ == nullptr)) {
+      return;
+    }
 
     auto& class_refs = ClassRefs::Instance();
     auto& listener_holder = class_refs.Class("hela/eillance/viewmodels/NativeSettingsObserver");
     jmethodID on_update = listener_holder.GetMethod("onConnectionStateChanged");
-    env->CallVoidMethod(java_listener_, on_update, (jint)state);
+    env->CallVoidMethod(java_listener_, on_update, static_cast<jint>(state));
   }
 };
 
