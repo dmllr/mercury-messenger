@@ -78,22 +78,22 @@ public:
   template<typename T>
   void SetVideoCapture(std::unique_ptr<T> impl) {
     video_capture_ = std::make_unique<Capture>(std::move(impl));
-    if (audio_capture_) { InitializeAVStream(); }
+    if (audio_capture_) { InitializeAvStream(); }
   }
 
   template<typename T>
   void SetAudioCapture(std::unique_ptr<T> impl) {
     audio_capture_ = std::make_unique<Capture>(std::move(impl));
-    if (video_capture_) { InitializeAVStream(); }
+    if (video_capture_) { InitializeAvStream(); }
   }
 
   [[nodiscard]] auto GetId() const -> ContactID;
   [[nodiscard]] auto IdentityExists() const -> bool;
-  auto GenerateNewIdentity() -> std::string;
-  [[nodiscard]] auto GetMnemonic() -> std::optional<std::string>;
-  auto RestoreIdentity(const std::string& mnemonic) -> bool;
+  auto GenerateNewIdentity() const -> std::string;
+  [[nodiscard]] auto GetMnemonic() const -> std::optional<std::string>;
+  auto RestoreIdentity(const std::string& mnemonic) const -> bool;
 
-  auto CreateBackup(const std::string& output_path, const std::string& password) -> bool;
+  auto CreateBackup(const std::string& output_path, const std::string& password) const -> bool;
   auto RestoreBackup(const std::string& input_path, const std::string& password) -> bool;
 
   [[nodiscard]] auto GetStorage() const -> std::shared_ptr<storage::PersistentStorage>;
@@ -129,7 +129,7 @@ public:
   void ConfirmContact(const ContactID& peer_id) const;
   void BlockContact(const ContactID& peer_id, bool notify_peer = true) const;
   void DeleteContact(const ContactID& peer_id) const;
-  void UnblockContact(const ContactID& peer_id);
+  void UnblockContact(const ContactID& peer_id) const;
   [[nodiscard]] auto GetPeerConnectionState(const ContactID& peer_id) const -> eillance::transport::PeerConnectionState;
   [[nodiscard]] auto GetContacts() const -> std::vector<identity::Contact>;
   [[nodiscard]] auto GetChatSummaries(const std::vector<ContactID>& peer_ids) const -> std::vector<messaging::ChatSummary>;
@@ -160,7 +160,7 @@ public:
   void OnFrameReceived(const ContactID& peer_id, const std::vector<std::byte>& frame) override;
 
 private:
-  void InitializeAVStream();
+  void InitializeAvStream();
   void StartMediaCall(const ContactID& peer_id, bool is_video);
   void UpdateAndNotifyPeerList();
   void SendSampleToPeers(const std::vector<std::byte>& sample, Stream::Source::Type type, std::uint64_t sample_time) const;
@@ -168,7 +168,7 @@ private:
   void SendQueuedMessages(const ContactID& peer_id);
 
   void CheckForInactivePeers();
-  void UpdatePeerActivity(const ContactID& peer_id);
+  void UpdatePeerActivity(const ContactID& peer_id) const;
 
   void SetupDataChannel(const std::shared_ptr<Peer>& peer, const ContactID& peer_id);
   void HandleProfileUpdate(const ContactID& peer_id, const Json& profile_json) const;
@@ -211,7 +211,7 @@ private:
   std::unordered_map<ContactID, Device> online_peers_;
   mutable std::mutex online_peers_mutex_;
 
-  static constexpr std::chrono::seconds kPeerInactivityCheckInterval{30};
+  static constexpr std::chrono::seconds peerInactivityCheckInterval{30};
 };
 
 }  // namespace eillance

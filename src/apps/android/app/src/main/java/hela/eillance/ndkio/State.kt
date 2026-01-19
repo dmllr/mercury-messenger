@@ -63,7 +63,7 @@ data class Contact(
   val connectionState: Int,
   val unreadCount: Int,
   val lastMessageSnippet: String?,
-  val lastActivityTimestamp: Long
+  val last_activity_timestamp: Long
 ) {
   val status: ContactStatus get() = ContactStatus.fromInt(statusValue)
 }

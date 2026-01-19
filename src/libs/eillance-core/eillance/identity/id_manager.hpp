@@ -13,17 +13,17 @@
 namespace eillance::identity {
 
 class IdManager {
-  static constexpr auto identity_key_file = "identity.key";
-  static constexpr auto mnemonic_key_file = "identity.mnemonic";
+  static constexpr auto kIdentityKeyFile = "identity.key";
+  static constexpr auto kMnemonicKeyFile = "identity.mnemonic";
   std::unique_ptr<crypto::Identity> identity_{nullptr};
   std::shared_ptr<storage::PersistentStorage> storage_;
 
   void LoadIdentity() {
-    const auto pem_data_opt = storage_->GetSetting(identity_key_file);
+    const auto pem_data_opt = storage_->GetSetting(kIdentityKeyFile);
     if (pem_data_opt) {
       identity_ = crypto::Identity::LoadFromMemory(*pem_data_opt);
       if (identity_) {
-        LOGI << "Identity loaded successfully.";
+        LGI << "Identity loaded successfully.";
       }
     }
   }
@@ -38,7 +38,7 @@ public:
   }
 
   [[nodiscard]] auto GetMnemonic() const -> std::optional<std::string> {
-    return storage_->GetSetting(mnemonic_key_file);
+    return storage_->GetSetting(kMnemonicKeyFile);
   }
 
   [[nodiscard]] auto IdentityExists() const -> bool { return identity_ != nullptr; }
@@ -48,9 +48,9 @@ public:
     identity_ = crypto::Identity::CreateNew(mnemonic);
     if (identity_) {
       const auto pem_str = identity_->SaveToMemory();
-      storage_->SetSetting(identity_key_file, pem_str);
-      storage_->SetSetting(mnemonic_key_file, mnemonic);
-      LOGI << "New identity generated and saved.";
+      storage_->SetSetting(kIdentityKeyFile, pem_str);
+      storage_->SetSetting(kMnemonicKeyFile, mnemonic);
+      LGI << "New identity generated and saved.";
     }
     return mnemonic;
   }
@@ -59,8 +59,8 @@ public:
     identity_ = crypto::Identity::GenerateFromMnemonic(mnemonic);
     if (identity_) {
       const auto pem_str = identity_->SaveToMemory();
-      storage_->SetSetting(identity_key_file, pem_str);
-      LOGI << "Identity restored from mnemonic.";
+      storage_->SetSetting(kIdentityKeyFile, pem_str);
+      LGI << "Identity restored from mnemonic.";
       return true;
     }
     return false;

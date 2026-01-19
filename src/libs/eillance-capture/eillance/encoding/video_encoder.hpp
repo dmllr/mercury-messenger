@@ -87,7 +87,7 @@ public:
     for (const auto& codec_id: preferred_codecs) {
       codec = avcodec_find_encoder(codec_id);
       if (codec && SetupCodecContext(codec, width, height, framerate)) {
-        LOGD << "Using codec: [" << codec->id << "] " << codec->name << " | " << codec->long_name;
+        LGD << "Using codec: [" << codec->id << "] " << codec->name << " | " << codec->long_name;
         break;
       }
     }
@@ -96,7 +96,7 @@ public:
     if (codec_context_ == nullptr) {
       codec = avcodec_find_encoder(AV_CODEC_ID_H264);
       if (!SetupCodecContext(codec, width, height, framerate)) { throw std::runtime_error("Failed to initialize any encoder."); }
-      LOGD << "Falling back to software codec: [" << codec->id << "] " << codec->name;
+      LGD << "Falling back to software codec: [" << codec->id << "] " << codec->name;
     }
 
     AllocateFrame(width, height);
@@ -121,13 +121,13 @@ public:
     av_frame_->pts = Time::Now();
 
     if (const auto ret = avcodec_send_frame(codec_context_, av_frame_); ret < 0) {
-      LOGE << "Error encoding frame in avcodec_send_frame.";
+      LGE << "Error encoding frame in avcodec_send_frame.";
       return {};
     }
     if (const auto ret = avcodec_receive_packet(codec_context_, packet_); ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
       return {};
     } else if (ret < 0) {
-      LOGE << "Error encoding frame in avcodec_receive_packet.";
+      LGE << "Error encoding frame in avcodec_receive_packet.";
       return {};
     }
 

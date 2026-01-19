@@ -20,13 +20,13 @@ namespace eillance {
 inline auto GetAvailableCameras() -> std::vector<std::pair<std::string, std::string>> {
   ACameraManager* camera_manager = ACameraManager_create();
   if (camera_manager == nullptr) {
-    LOGE << "Failed to create camera manager";
+    LGE << "Failed to create camera manager";
     return {};
   }
 
   ACameraIdList* camera_id_list = nullptr;
   if (ACameraManager_getCameraIdList(camera_manager, &camera_id_list) != ACAMERA_OK) {
-    LOGE << "Failed to get camera ID list";
+    LGE << "Failed to get camera ID list";
     ACameraManager_delete(camera_manager);
     return {};
   }
@@ -37,7 +37,7 @@ inline auto GetAvailableCameras() -> std::vector<std::pair<std::string, std::str
 
     ACameraMetadata* metadata = nullptr;
     if (ACameraManager_getCameraCharacteristics(camera_manager, camera_id, &metadata) != ACAMERA_OK) {
-      LOGE << "Failed to get camera characteristics for camera ID: " << camera_id;
+      LGE << "Failed to get camera characteristics for camera ID: " << camera_id;
       continue;
     }
 
@@ -59,13 +59,13 @@ inline auto GetAvailableCameras() -> std::vector<std::pair<std::string, std::str
 inline auto GetSupportedResolutions(const std::string& camera_id) -> std::vector<std::pair<int32_t, int32_t>> {
   ACameraManager* camera_manager = ACameraManager_create();
   if (camera_manager == nullptr) {
-    LOGE << "Failed to create camera manager";
+    LGE << "Failed to create camera manager";
     return {};
   }
 
   ACameraMetadata* metadata = nullptr;
   if (ACameraManager_getCameraCharacteristics(camera_manager, camera_id.c_str(), &metadata) != ACAMERA_OK) {
-    LOGE << "Failed to get camera characteristics for camera ID: " << camera_id.c_str();
+    LGE << "Failed to get camera characteristics for camera ID: " << camera_id.c_str();
     ACameraManager_delete(camera_manager);
     return {};
   }

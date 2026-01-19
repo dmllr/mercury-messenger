@@ -4,11 +4,11 @@ namespace eillance::view_model {
 
 SettingsViewModel::SettingsViewModel(std::shared_ptr<Client> client, std::shared_ptr<ClientEventRouter> router)
     : client_(std::move(client)), router_(std::move(router)) {
-  auto& q = router_->Queue();
-  Subscribe<EventStatusChanged>(q, [this](const EventStatusChanged& e) {
-    if (e.source == EventSource::system) {
+  auto& queue = router_->Queue();
+  Subscribe<EventStatusChanged>(queue, [this](const EventStatusChanged& event) {
+    if (event.source == EventSource::system) {
       std::lock_guard<std::mutex> lock(mutex_);
-      state_.connection_state = static_cast<ServiceConnectionState>(e.state);
+      state_.connection_state = static_cast<ServiceConnectionState>(event.state);
       if (state_.connection_state == ServiceConnectionState::online) {
         state_.signaling_server_url = client_->GetSettingsManager()->GetSignalingServerUrl();
       }
@@ -24,19 +24,19 @@ SettingsViewModel::SettingsViewModel(std::shared_ptr<Client> client, std::shared
 }
 
 SettingsViewModel::~SettingsViewModel() {
-  for (const auto& unsubscribe: event_unsubscribers_) {
+  for (const auto& unsubscribe: eventUnsubscribers_) {
     unsubscribe();
   }
 }
 
 template<typename EventType>
-void SettingsViewModel::Subscribe(EventQueue& q, std::function<void(const EventType&)> callback) {
-  auto id = q.Subscribe<EventType>(std::move(callback));
-  event_unsubscribers_.push_back([&q, id] { q.Unsubscribe<EventType>(id); });
+void SettingsViewModel::Subscribe(EventQueue& queue, std::function<void(const EventType&)> callback) {
+  auto id = queue.Subscribe<EventType>(std::move(callback));
+  eventUnsubscribers_.emplace_back([&queue, id] { queue.Unsubscribe<EventType>(id); });
 }
 
 void SettingsViewModel::SetObserver(std::shared_ptr<Observer> observer) {
-  std::lock_guard<std::mutex> lock(mutex_);
+  const std::lock_guard<std::mutex> lock(mutex_);
   observer_ = std::move(observer);
   if (observer_) {
     observer_->OnConnectionStateChanged(state_.connection_state);

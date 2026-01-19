@@ -20,44 +20,44 @@ namespace eillance {
 
 class AudioCaptureCli {
   ma_context context_{};
-  ma_device audio_device_{};
-  ma_device_config device_config_{ma_device_config_init(ma_device_type_capture)};
+  ma_device audioDevice_{};
+  ma_device_config deviceConfig_{ma_device_config_init(ma_device_type_capture)};
 
   AudioEncoderCli encoder_{};
 
   // buffer last 1 second of encoded data
-  CircularBuffer<Packet, AudioConfig::samples_per_second> encoded_packets_;
+  CircularBuffer<Packet, AudioConfig::samplesPerSecond> encoded_packets_;
 
   // Implementation-specific configuration
   static constexpr auto ma_sample_format = ma_format_s16;
 
-  TELEMETRY(Time::Unit last_fps_milestone{}; std::uint32_t fps_counter{}; std::uint32_t load_counter_{};)
+  TELEMETRY(Time::Unit last_fps_milestone{}; std::uint32_t fps_counter{}; std::uint32_t loadCounter_{};)
 
 public:
   AudioCaptureCli() {
     // audio device
-    device_config_.capture.format = ma_sample_format;
-    device_config_.capture.channels = AudioConfig::channels;
-    device_config_.sampleRate = AudioConfig::sample_rate;
-    device_config_.pUserData = this;
-    device_config_.dataCallback = [](ma_device* device, void*, const void* frames, const ma_uint32 nb_samples) {
-      assert(nb_samples == AudioConfig::frame_size);
+    deviceConfig_.capture.format = ma_sample_format;
+    deviceConfig_.capture.channels = AudioConfig::channels;
+    deviceConfig_.sampleRate = AudioConfig::sampleRate;
+    deviceConfig_.pUserData = this;
+    deviceConfig_.dataCallback = [](ma_device* device, void*, const void* frames, const ma_uint32 nb_samples) {
+      assert(nb_samples == AudioConfig::frameSize);
       auto* self = static_cast<AudioCaptureCli*>(device->pUserData);
       if (self == nullptr) { return; }
 
       auto encoded_packet = self->encoder_.EncodeBuffer(static_cast<const AudioConfig::SampleDataType*>(frames));
       self->encoded_packets_.push(std::move(encoded_packet));
 
-      TELEMETRY(if (self->fps_counter % (telemetry_interval * AudioConfig::samples_per_second) == 0) {
+      TELEMETRY(if (self->fps_counter % (telemetry_interval * AudioConfig::samplesPerSecond) == 0) {
         const auto elapsed = (Time::Now() - self->last_fps_milestone) / Time::uS;
-        const auto fetch_fps = static_cast<double>(self->load_counter_) / elapsed;
-        self->load_counter_ = 0;
+        const auto fetch_fps = static_cast<double>(self->loadCounter_) / elapsed;
+        self->loadCounter_ = 0;
 
         const auto capture_fps = static_cast<double>(self->fps_counter) / elapsed;
         self->last_fps_milestone = Time::Now();
         self->fps_counter = 0;
 
-        LOGI << "Audio capture rate FPS: " << std::setprecision(2) << std::fixed << capture_fps << ", RTC request rate FPS:" << fetch_fps;
+        LGI << "Audio capture rate FPS: " << std::setprecision(2) << std::fixed << capture_fps << ", RTC request rate FPS:" << fetch_fps;
       } self->fps_counter++;)
     };
   }
@@ -68,30 +68,30 @@ public:
     encoder_.Engage();
 
     if (ma_context_init(nullptr, 0, nullptr, &context_) != MA_SUCCESS) {
-      LOGE << "Failed to initialize Miniaudio context";
+      LGE << "Failed to initialize Miniaudio context";
       return;
     }
-    if (ma_device_init(&context_, &device_config_, &audio_device_) != MA_SUCCESS) {
-      LOGE << "Failed to open audio device";
+    if (ma_device_init(&context_, &deviceConfig_, &audioDevice_) != MA_SUCCESS) {
+      LGE << "Failed to open audio device";
       ma_context_uninit(&context_);
       return;
     }
-    if (ma_device_start(&audio_device_) != MA_SUCCESS) {
-      LOGE << "Failed to start audio device";
-      ma_device_uninit(&audio_device_);
+    if (ma_device_start(&audioDevice_) != MA_SUCCESS) {
+      LGE << "Failed to start audio device";
+      ma_device_uninit(&audioDevice_);
       ma_context_uninit(&context_);
     }
   }
 
   void Revoke() {
-    ma_device_stop(&audio_device_);
-    ma_device_uninit(&audio_device_);
+    ma_device_stop(&audioDevice_);
+    ma_device_uninit(&audioDevice_);
     ma_context_uninit(&context_);
     encoder_.Revoke();
   }
 
   auto FetchBuffers() -> Packet {
-    TELEMETRY(load_counter_++;)
+    TELEMETRY(loadCounter_++;)
     Packet combined_packet;
     while (!encoded_packets_.isEmpty()) {
       auto packet = encoded_packets_.pop();
@@ -100,7 +100,7 @@ public:
     return combined_packet;
   }
 
-  static auto GetSampleDuration() -> Time::Unit { return AudioConfig::sample_duration * Time::uS; }
+  static auto GetSampleDuration() -> Time::Unit { return AudioConfig::sampleDuration * Time::uS; }
 };
 
 }  // namespace eillance

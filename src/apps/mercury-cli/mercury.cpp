@@ -38,7 +38,7 @@
 namespace {
 
 // Helper function to format contact entries for the ftxui::Menu component.
-std::vector<std::string> GetContactMenuEntries(const std::vector<eillance::view_model::ViewContact>& contacts, const eillance::view_model::CallState& call_state) {
+std::vector<std::string> GetContactMenuEntries(const std::vector<eillance::view_model::ViewContact>& contacts, const eillance::view_model::CallState& callState) {
   std::vector<std::string> entries;
   for (const auto& contact: contacts) {
     if (contact.status == eillance::identity::ContactStatus::rejected) {
@@ -62,12 +62,12 @@ std::vector<std::string> GetContactMenuEntries(const std::vector<eillance::view_
     }
 
     std::string conn_status_str;
-    if (call_state.peer_id == contact.peer_id && (call_state.is_connecting || call_state.is_ringing || call_state.is_in_call)) {
-      if (call_state.is_connecting) {
+    if (callState.peer_id == contact.peer_id && (callState.is_connecting || callState.is_ringing || callState.is_in_call)) {
+      if (callState.is_connecting) {
         conn_status_str = " (Calling)";
-      } else if (call_state.is_ringing) {
+      } else if (callState.is_ringing) {
         conn_status_str = " (Ringing)";
-      } else if (call_state.is_in_call) {
+      } else if (callState.is_in_call) {
         conn_status_str = " (In Call)";
       }
     } else {
@@ -94,7 +94,7 @@ std::vector<std::string> GetContactMenuEntries(const std::vector<eillance::view_
   return entries;
 }
 
-constexpr auto GetConnectionStatusString(eillance::ServiceConnectionState state) -> std::string_view {
+constexpr auto GetConnectionStatusString(const eillance::ServiceConnectionState state) -> std::string_view {
   switch (state) {
     case eillance::ServiceConnectionState::establishing:
       return "CONNECTING";
@@ -110,9 +110,9 @@ constexpr auto GetConnectionStatusString(eillance::ServiceConnectionState state)
 }
 
 // Helper function to format timestamps according to the specified rules.
-std::string FormatTimestamp(Time::Unit ts_microseconds) {
+std::string FormatTimestamp(const Time::Unit tsMicroseconds) {
   using namespace std::chrono;
-  const time_t message_time_t = ts_microseconds / 1000000;
+  const time_t message_time_t = tsMicroseconds / 1000000;
   const auto now_tp = system_clock::now();
   const time_t now_time_t = system_clock::to_time_t(now_tp);
 
@@ -128,16 +128,16 @@ std::string FormatTimestamp(Time::Unit ts_microseconds) {
   localtime_r(&now_time_t, &now_tm);
 #endif
 
-  constexpr auto buffer_size = 64;
-  char buffer[buffer_size];
+  constexpr auto kBufferSize = 64;
+  char buffer[kBufferSize];
 
   if (message_tm.tm_year == now_tm.tm_year && message_tm.tm_yday == now_tm.tm_yday) {
     strftime(buffer, sizeof(buffer), "%H:%M", &message_tm);
     return std::string(buffer);
   }
 
-  constexpr auto seconds_in_day = 86400;
-  time_t yesterday_time_t = now_time_t - seconds_in_day;
+  constexpr auto kSecondsInDay = 86400;
+  time_t yesterday_time_t = now_time_t - kSecondsInDay;
 #ifdef _WIN32
   tm yesterday_tm{};
   localtime_s(&yesterday_tm, &yesterday_time_t);
@@ -175,7 +175,7 @@ int main(int argc, char** argv) {
   const char* home_dir_env = getenv("HOME");
 #endif
   if (home_dir_env == nullptr) {
-    std::cerr << "Could not determine home directory." << std::endl;
+    std::cerr << "Could not determine home directory.\n";
     return 1;
   }
   auto config_path = std::filesystem::path(home_dir_env) / ".mercury" / config_name;
@@ -207,9 +207,9 @@ int main(int argc, char** argv) {
     std::string password;
     std::getline(std::cin, password);
     if (client->CreateBackup(*backup_path, password)) {
-      std::cout << "Backup created successfully at " << *backup_path << std::endl;
+      std::cout << "Backup created successfully at " << *backup_path << "\n";
     } else {
-      std::cerr << "Backup failed." << std::endl;
+      std::cerr << "Backup failed.\n";
     }
     return 0;
   }
@@ -219,9 +219,9 @@ int main(int argc, char** argv) {
     std::string password;
     std::getline(std::cin, password);
     if (client->RestoreBackup(*restore_path, password)) {
-      std::cout << "Restore successful. Please restart the application." << std::endl;
+      std::cout << "Restore successful. Please restart the application.\n";
     } else {
-      std::cerr << "Restore failed. Check password or file integrity." << std::endl;
+      std::cerr << "Restore failed. Check password or file integrity.\n";
     }
     return 0;
   }
@@ -245,7 +245,7 @@ int main(int argc, char** argv) {
       std::string phrase;
       std::getline(std::cin, phrase);
       if (!client->RestoreIdentity(phrase)) {
-        std::cerr << "Invalid phrase." << std::endl;
+        std::cerr << "Invalid phrase.\n";
         return 1;
       }
     } else {
@@ -275,7 +275,7 @@ int main(int argc, char** argv) {
                         public eillance::view_model::SettingsViewModel::Observer,
                         public eillance::view_model::ConversationViewModel::Observer {
     ftxui::ScreenInteractive& screen;
-    MainObserver(ftxui::ScreenInteractive& s) : screen(s) {}
+    explicit MainObserver(ftxui::ScreenInteractive& s) : screen(s) {}
 
     void OnContactsUpdated(const std::vector<eillance::view_model::ViewContact>&) override { screen.Post(ftxui::Event::Custom); }
     void OnCallStateChanged(const eillance::view_model::CallState&) override { screen.Post(ftxui::Event::Custom); }
@@ -284,7 +284,6 @@ int main(int argc, char** argv) {
     void OnHistoryUpdated(const eillance::view_model::ConversationViewModel::State&) override { screen.Post(ftxui::Event::Custom); }
     // Implement Profile Observer requirement if needed or just ignore for CLI main loop
     // But since we are not observing profile changes in this CLI loop (it's mainly for chat), we can omit or add empty impl if required by interface.
-    // Wait, MainObserver inherits from specific observers. ProfileVM observer is separate.
   };
 
   auto observer = std::make_shared<MainObserver>(screen);
@@ -319,8 +318,8 @@ int main(int argc, char** argv) {
           if (entry.direction == eillance::messaging::MessageDirection::sent) {
             prefix = "[you]: ";
           } else {
-            const auto it = std::ranges::find_if(contacts, [&](const auto& c) { return c.peer_id == conv_state.peer_id; });
-            const std::string display_id = (it != contacts.end()) ? it->display_name : conv_state.peer_id.ToString();
+            const auto iter = std::ranges::find_if(contacts, [&](const auto& c) { return c.peer_id == conv_state.peer_id; });
+            const std::string display_id = (iter != contacts.end()) ? iter->display_name : conv_state.peer_id.ToString();
             prefix = "[" + display_id + "]: ";
           }
           if (entry.direction == eillance::messaging::MessageDirection::sent) {
@@ -354,8 +353,8 @@ int main(int argc, char** argv) {
         case eillance::messaging::HistoryEntryKind::videoCall: {
           prefix = "[system]: ";
           const auto& call_data = std::get<eillance::messaging::CallEntry>(entry.data);
-          std::string call_type_str = (entry.kind == eillance::messaging::HistoryEntryKind::voiceCall ? "Voice" : "Video");
-          std::string direction_str = (call_data.call_direction == eillance::messaging::CallDirection::incoming ? "Incoming" : "Outgoing");
+          const auto* call_type_str = (entry.kind == eillance::messaging::HistoryEntryKind::voiceCall ? "Voice" : "Video");
+          const auto* direction_str = (call_data.call_direction == eillance::messaging::CallDirection::incoming ? "Incoming" : "Outgoing");
           std::string status_str;
           switch (call_data.call_status) {
             case eillance::messaging::CallStatus::answered:
@@ -371,7 +370,7 @@ int main(int argc, char** argv) {
               status_str = "Busy";
               break;
           }
-          content = "--- " + direction_str + " " + call_type_str + " Call (" + status_str + ") ---";
+          content = std::string("--- ") + direction_str + " " + call_type_str + " Call (" + status_str + ") ---";
           auto timestamp_str = FormatTimestamp(entry.timestamp);
           elements.push_back(ftxui::text(prefix + content) | ftxui::dim);
           elements.push_back(ftxui::text("  -> " + timestamp_str) | ftxui::dim);
@@ -379,7 +378,9 @@ int main(int argc, char** argv) {
         }
       }
     }
-    if (!elements.empty()) { elements.back() |= ftxui::focus; }
+    if (!elements.empty()) {
+      elements.back() |= ftxui::focus;
+    }
     return ftxui::vbox(std::move(elements)) | ftxui::yframe;
   });
 
@@ -437,8 +438,8 @@ int main(int argc, char** argv) {
       conversation_vm = nullptr;
     }
 
-    constexpr auto contact_list_width = 40;
-    const auto main_view = ftxui::hbox({contact_menu->Render() | ftxui::size(ftxui::WIDTH, ftxui::EQUAL, contact_list_width) | ftxui::border, ftxui::vbox({chat_renderer->Render() | ftxui::flex, ftxui::separator(), input_component->Render()}) | ftxui::flex});
+    constexpr auto kContactListWidth = 40;
+    const auto main_view = ftxui::hbox({contact_menu->Render() | ftxui::size(ftxui::WIDTH, ftxui::EQUAL, kContactListWidth) | ftxui::border, ftxui::vbox({chat_renderer->Render() | ftxui::flex, ftxui::separator(), input_component->Render()}) | ftxui::flex});
 
     const auto profile = profile_vm->GetProfile();
     const auto connection = settings_vm->GetState().connection_state;

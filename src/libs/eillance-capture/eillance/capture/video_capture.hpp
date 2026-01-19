@@ -23,15 +23,15 @@ namespace eillance {
 class VideoCaptureCli {
 private:
   cv::VideoCapture cap_{};
-  cv::Mat cv_frame_{};
-  cv::Mat nv12_frame_{};
+  cv::Mat cvFrame_{};
+  cv::Mat nv12Frame_{};
   VideoConfig config_{};
   VideoEncoderCli encoder_{};
 
-  TELEMETRY(Time::Unit last_fps_milestone_{}; std::uint32_t fps_counter_{}; std::uint32_t load_counter_{};)
+  TELEMETRY(Time::Unit lastFpsMilestone_{}; std::uint32_t fps_counter_{}; std::uint32_t load_counter_{};)
 
-  std::atomic_bool capture_is_running_{false};
-  DispatchQueue dispatch_queue_{"Capture", 1};
+  std::atomic_bool captureIsRunning_{false};
+  DispatchQueue dispatchQueue_{"Capture", 1};
 
   struct CrossPlatformProperties {
 #if defined __ANDROID__
@@ -53,8 +53,8 @@ public:
   ~VideoCaptureCli() { Revoke(); }
 
   void Engage() {
-    if (capture_is_running_) { return; }
-    capture_is_running_ = true;
+    if (captureIsRunning_) { return; }
+    captureIsRunning_ = true;
 
     if (cap_.isOpened()) { cap_.release(); }
 
@@ -62,7 +62,7 @@ public:
     cap_.open(0, CrossPlatformProperties::open_cv_camera_capabilities);
 
     if (!cap_.isOpened()) {
-      LOGE << "Can't open the capture device. The video source has not been started.";
+      LGE << "Can't open the capture device. The video source has not been started.";
       return;
     }
 
@@ -77,9 +77,9 @@ public:
     cap_.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'));
 #endif
 
-    cap_ >> cv_frame_;
-    if (cv_frame_.empty()) {
-      LOGE << "Can't capture a test frame. The video source has not been started.";
+    cap_ >> cvFrame_;
+    if (cvFrame_.empty()) {
+      LGE << "Can't capture a test frame. The video source has not been started.";
       return;
     }
 
@@ -87,74 +87,74 @@ public:
     const auto actual_width = static_cast<int>(cap_.get(cv::CAP_PROP_FRAME_WIDTH));
     const auto actual_height = static_cast<int>(cap_.get(cv::CAP_PROP_FRAME_HEIGHT));
     auto actual_fps = static_cast<int>(cap_.get(cv::CAP_PROP_FPS));
-    if (actual_fps <= 0) { actual_fps = config_.frame_rate; }
+    if (actual_fps <= 0) { actual_fps = config_.frameRate; }
 
-    LOGI << "Capture resolution set to: " << actual_width << "x" << actual_height;
+    LGI << "Capture resolution set to: " << actual_width << "x" << actual_height;
 
     encoder_.Engage(actual_width, actual_height, actual_fps);
 
-    //    dispatch_queue_.Dispatch([this]() {
+    //    dispatchQueue_.Dispatch([this]() {
     //      CaptureFrame();
     //    });
   }
 
   auto FetchBuffers() -> Packet {
     CaptureFrame();
-    if (cv_frame_.empty()) { return {}; }
+    if (cvFrame_.empty()) { return {}; }
 #if defined __ANDROID__
-    auto frame = cv_frame_;
+    auto frame = cvFrame_;
     cv::cvtColor(frame, frame, cv::COLOR_BGR2YUV_YV12);
-    YV12toNV12(frame, nv12_frame_);
+    YV12toNV12(frame, nv12Frame_);
 #else
-    cv::cvtColor(cv_frame_, nv12_frame_, cv::COLOR_BGR2YUV_I420);
+    cv::cvtColor(cvFrame_, nv12Frame_, cv::COLOR_BGR2YUV_I420);
 #endif
 
     TELEMETRY(load_counter_++;)
 
-    return encoder_.EncodeBuffer(nv12_frame_.data);
+    return encoder_.EncodeBuffer(nv12Frame_.data);
   }
 
   void Revoke() {
-    if (!capture_is_running_) { return; }
-    capture_is_running_ = false;
-    dispatch_queue_.RemovePending();
+    if (!captureIsRunning_) { return; }
+    captureIsRunning_ = false;
+    dispatchQueue_.RemovePending();
     encoder_.Revoke();
     cap_.release();
   }
 
-  auto GetSampleDuration() const -> Time::Unit { return Time::uS / config_.frame_rate; }
+  auto GetSampleDuration() const -> Time::Unit { return Time::uS / config_.frameRate; }
 
   void Configure(const Config& config) { ConfigureVideo(config.video_config); }
 
   void ConfigureVideo(const VideoConfig& config) {
-    TELEMETRY(LOGI << "Video capture configuration event triggered: device " << config.camera_id << " " << config.width << "x" << config.height << " " << config.frame_rate << "fps";)
-    LOGW << "General video capture does not support configuration";
+    TELEMETRY(LGI << "Video capture configuration event triggered: device " << config.cameraId << " " << config.width << "x" << config.height << " " << config.frameRate << "fps";)
+    LGW << "General video capture does not support configuration";
   }
 
 private:
   void CaptureFrame() {
-    if (!capture_is_running_) { return; }
-    cap_ >> cv_frame_;
-    if (cv_frame_.empty()) {
-      LOGE << "Unexpected end of stream.";
+    if (!captureIsRunning_) { return; }
+    cap_ >> cvFrame_;
+    if (cvFrame_.empty()) {
+      LGE << "Unexpected end of stream.";
       return;
     }
 
-    TELEMETRY(if (fps_counter_ % (telemetry_interval * config_.frame_rate) == 0) {
-      const auto elapsed = (Time::Now() - last_fps_milestone_) / Time::uS;
+    TELEMETRY(if (fps_counter_ % (telemetry_interval * config_.frameRate) == 0) {
+      const auto elapsed = (Time::Now() - lastFpsMilestone_) / Time::uS;
       const auto fetch_fps = static_cast<double>(load_counter_) / elapsed;
       load_counter_ = 0;
 
       const auto capture_fps = static_cast<double>(fps_counter_) / elapsed;
-      last_fps_milestone_ = Time::Now();
+      lastFpsMilestone_ = Time::Now();
       fps_counter_ = 0;
 
-      LOGI << "Video capture rate FPS: " << std::setprecision(2) << std::fixed << capture_fps << ", RTC request rate FPS:" << fetch_fps;
+      LGI << "Video capture rate FPS: " << std::setprecision(2) << std::fixed << capture_fps << ", RTC request rate FPS:" << fetch_fps;
     } fps_counter_++;)
 
     // due to OpenCV issue, camera frames should be captured as soon as possible,
     // otherwise a framerate will be significantly lowered
-    //    dispatch_queue_.Dispatch([this]() {
+    //    dispatchQueue_.Dispatch([this]() {
     //      CaptureFrame();
     //    });
   }

@@ -14,10 +14,10 @@ class StreamSource final : public Stream::Source {
   Capture capture_;
 
   Packet sample_{};
-  std::vector<std::byte> encoded_data_{};
+  std::vector<std::byte> encodedData_{};
 
 public:
-  ~StreamSource() = default;
+  ~StreamSource() override = default;
   explicit StreamSource(Capture capture) : capture_(std::move(capture)) {};
   StreamSource(StreamSource&&) = delete;
   StreamSource(const StreamSource&) = delete;

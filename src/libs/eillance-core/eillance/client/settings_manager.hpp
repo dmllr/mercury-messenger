@@ -15,39 +15,41 @@ public:
   explicit SettingsManager(std::shared_ptr<storage::PersistentStorage> storage) : storage_(std::move(storage)) { Load(); }
 
   // Retrieves the custom signaling server URL. Returns an empty optional if not set.
-  [[nodiscard]] auto GetSignalingServerUrl() const -> std::optional<std::string> { return signaling_server_url_; }
+  [[nodiscard]] auto GetSignalingServerUrl() const -> std::optional<std::string> { return signalingServerUrl_; }
 
   // Sets and persists the custom signaling server URL.
   void SetSignalingServerUrl(const std::string& url) {
-    signaling_server_url_ = url;
+    signalingServerUrl_ = url;
     storage_->SetSetting(kSignalingServerUrlKey, url);
   }
 
   // --- User Profile ---
-  [[nodiscard]] auto GetMyDisplayName() const -> std::optional<std::string> { return my_display_name_; }
-  [[nodiscard]] auto GetMyBio() const -> std::optional<std::string> { return my_bio_; }
-  [[nodiscard]] auto GetMyPhotoBase64() const -> std::optional<std::string> { return my_photo_base64_; }
+  [[nodiscard]] auto GetMyDisplayName() const -> std::optional<std::string> { return myDisplayName_; }
+  [[nodiscard]] auto GetMyBio() const -> std::optional<std::string> { return myBio_; }
+  [[nodiscard]] auto GetMyPhotoBase64() const -> std::optional<std::string> { return myPhotoBase64_; }
 
   void SetMyDisplayName(const std::string& name) {
-    if (name.length() > 64) {
-      my_display_name_ = name.substr(0, 64);
+    constexpr size_t kMaxNameLength = 64;
+    if (name.length() > kMaxNameLength) {
+      myDisplayName_ = name.substr(0, kMaxNameLength);
     } else {
-      my_display_name_ = name;
+      myDisplayName_ = name;
     }
-    storage_->SetSetting(kMyDisplayNameKey, *my_display_name_);
+    storage_->SetSetting(kMyDisplayNameKey, *myDisplayName_);
   }
 
   void SetMyBio(const std::string& bio) {
-    if (bio.length() > 300) {
-      my_bio_ = bio.substr(0, 300);
+    constexpr size_t kMaxBioLength = 300;
+    if (bio.length() > kMaxBioLength) {
+      myBio_ = bio.substr(0, kMaxBioLength);
     } else {
-      my_bio_ = bio;
+      myBio_ = bio;
     }
-    storage_->SetSetting(kMyBioKey, *my_bio_);
+    storage_->SetSetting(kMyBioKey, *myBio_);
   }
 
   void SetMyPhotoBase64(const std::string& photo) {
-    my_photo_base64_ = photo;
+    myPhotoBase64_ = photo;
     storage_->SetSetting(kMyPhotoBase64Key, photo);
   }
 
@@ -67,10 +69,10 @@ public:
 
 private:
   void Load() {
-    signaling_server_url_ = storage_->GetSetting(kSignalingServerUrlKey);
-    my_display_name_ = storage_->GetSetting(kMyDisplayNameKey);
-    my_bio_ = storage_->GetSetting(kMyBioKey);
-    my_photo_base64_ = storage_->GetSetting(kMyPhotoBase64Key);
+    signalingServerUrl_ = storage_->GetSetting(kSignalingServerUrlKey);
+    myDisplayName_ = storage_->GetSetting(kMyDisplayNameKey);
+    myBio_ = storage_->GetSetting(kMyBioKey);
+    myPhotoBase64_ = storage_->GetSetting(kMyPhotoBase64Key);
   }
 
   static constexpr auto kSignalingServerUrlKey = "signaling_server_url";
@@ -82,10 +84,10 @@ private:
   std::shared_ptr<storage::PersistentStorage> storage_;
 
   // Cached settings
-  std::optional<std::string> signaling_server_url_;
-  std::optional<std::string> my_display_name_;
-  std::optional<std::string> my_bio_;
-  std::optional<std::string> my_photo_base64_;
+  std::optional<std::string> signalingServerUrl_;
+  std::optional<std::string> myDisplayName_;
+  std::optional<std::string> myBio_;
+  std::optional<std::string> myPhotoBase64_;
 };
 
 }  // namespace eillance

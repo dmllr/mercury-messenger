@@ -94,7 +94,7 @@ TEST(CryptoTest, VerificationFailsWithWrongSignature) {
   auto id = identity->GetPublicKey();
 
   std::string message_str = "Another test message.";
-  std::span<const std::byte> message(reinterpret_cast<const std::byte*>(message_str.data()), message_str.size());
+  const std::span<const std::byte> message(reinterpret_cast<const std::byte*>(message_str.data()), message_str.size());
   auto signature = identity->Sign(message);
   ASSERT_FALSE(signature.empty());
 
@@ -104,7 +104,7 @@ TEST(CryptoTest, VerificationFailsWithWrongSignature) {
   EXPECT_FALSE(Identity::Verify(id, message, signature));
 }
 
-TEST(CryptoTest, SessionCipherKeyExchange) {
+TEST(CryptoTest, session_cipherKeyExchange) {
   SessionCipher cipher_alice;
   SessionCipher cipher_bob;
 
@@ -121,14 +121,14 @@ TEST(CryptoTest, SessionCipherKeyExchange) {
   EXPECT_TRUE(cipher_bob.IsReady());
 }
 
-TEST(CryptoTest, SessionCipherEncryptDecrypt) {
+TEST(CryptoTest, session_cipherEncryptDecrypt) {
   SessionCipher cipher_alice;
   SessionCipher cipher_bob;
 
   ASSERT_TRUE(cipher_alice.ComputeSharedSecret(cipher_bob.GetPublicKey()));
   ASSERT_TRUE(cipher_bob.ComputeSharedSecret(cipher_alice.GetPublicKey()));
 
-  std::string plaintext = "This is a secret message between Alice and Bob.";
+  const std::string plaintext = "This is a secret message between Alice and Bob.";
   auto ciphertext = cipher_alice.Encrypt(plaintext);
   ASSERT_FALSE(ciphertext.empty());
 
@@ -136,7 +136,7 @@ TEST(CryptoTest, SessionCipherEncryptDecrypt) {
   EXPECT_EQ(plaintext, decrypted_text);
 }
 
-TEST(CryptoTest, SessionCipherDecryptFails) {
+TEST(CryptoTest, session_cipherDecryptFails) {
   SessionCipher cipher_alice;
   SessionCipher cipher_bob;
   SessionCipher cipher_eve;

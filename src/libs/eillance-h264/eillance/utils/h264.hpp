@@ -20,12 +20,12 @@ public:
   }
 
   void Reset() {
-    is_configured_ = false;
+    isConfigured_ = false;
   }
 
   // Processes a raw H.264 frame, which may contain one or more NAL units.
   void ProcessFrame(const std::vector<std::byte>& frame) {
-    if (is_configured_ || !on_configure_callback_) {
+    if (isConfigured_ || !on_configure_callback_) {
       return;
     }
 
@@ -58,7 +58,7 @@ public:
 
           ParseSPS(sps_payload);
           // Once configured, we can stop parsing subsequent frames.
-          if (is_configured_) return;
+          if (isConfigured_) return;
         }
       }
       offset = nal_unit_end;
@@ -198,19 +198,19 @@ private:
     }
 
     if (width > 0 && height > 0) {
-      LOGI << "H264Parser: Decoded SPS. Resolution: " << width << "x" << height;
+      LGI << "H264Parser: Decoded SPS. Resolution: " << width << "x" << height;
       VideoConfig conf;
       conf.width = width;
       conf.height = height;
       on_configure_callback_(conf);
-      is_configured_ = true;
+      isConfigured_ = true;
     } else {
-      LOGE << "H264Parser: Failed to decode a valid resolution from SPS.";
+      LGE << "H264Parser: Failed to decode a valid resolution from SPS.";
     }
   }
 
   std::function<void(VideoConfig)> on_configure_callback_;
-  bool is_configured_ = false;
+  bool isConfigured_ = false;
 };
 
 }  // namespace eillance

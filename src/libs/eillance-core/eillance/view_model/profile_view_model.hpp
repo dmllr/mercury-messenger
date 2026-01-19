@@ -16,6 +16,11 @@ namespace eillance::view_model {
 class ProfileViewModel {
 public:
   struct Observer {
+    Observer() = default;
+    Observer(const Observer&) = delete;
+    Observer(Observer&&) = delete;
+    auto operator=(const Observer&) -> Observer& = delete;
+    auto operator=(Observer&&) -> Observer& = delete;
     virtual ~Observer() = default;
     virtual void OnProfileUpdated(const MyProfile& profile) = 0;
   };
@@ -35,7 +40,7 @@ public:
   // Creation/Restore
   auto GenerateNewIdentity() -> std::string;
   auto RestoreIdentity(const std::string& mnemonic) -> bool;
-  auto GetMnemonic() -> std::optional<std::string>;
+  [[nodiscard]] auto GetMnemonic() -> std::optional<std::string>;
   auto CreateBackup(const std::string& path, const std::string& password) -> bool;
   auto RestoreBackup(const std::string& path, const std::string& password) -> bool;
 
@@ -43,7 +48,7 @@ private:
   void RefreshFromSettings();
 
   template<typename EventType>
-  void Subscribe(EventQueue& q, std::function<void(const EventType&)> callback);
+  void Subscribe(EventQueue& queue, std::function<void(const EventType&)> callback);
 
   std::shared_ptr<Client> client_;
   std::shared_ptr<ClientEventRouter> router_;
@@ -51,7 +56,7 @@ private:
 
   mutable std::mutex mutex_;
   MyProfile profile_;
-  std::vector<std::function<void()>> event_unsubscribers_;
+  std::vector<std::function<void()>> eventUnsubscribers_;
 };
 
 }  // namespace eillance::view_model

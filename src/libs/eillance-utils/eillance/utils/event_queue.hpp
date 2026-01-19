@@ -22,8 +22,8 @@ public:
   using SubscriberTypeId = std::size_t;
 
 private:
-  std::mutex sync_mutex_;
-  std::mutex condition_mutex_;
+  std::mutex syncMutex_;
+  std::mutex conditionMutex_;
   std::condition_variable condition_;
   std::deque<std::pair<std::type_index, std::any>> events_;
   std::unordered_map<std::type_index, std::vector<std::pair<SubscriberTypeId, std::function<void(const std::any&)>>>> subscribers_;
@@ -57,7 +57,7 @@ public:
   /// Subscribe to events of a specific type.
   template<typename EventType>
   SubscriberTypeId Subscribe(const std::function<void(const EventType&)>& callback) {
-    const auto lock = std::lock_guard<std::mutex>(sync_mutex_);
+    const auto lock = std::lock_guard<std::mutex>(syncMutex_);
     SubscriberTypeId id = nextId_++;
     subscribers_[typeid(EventType)].emplace_back(id, [callback](const std::any& event) {
       callback(std::any_cast<EventType>(event));
@@ -68,7 +68,7 @@ public:
   /// Unsubscribe from events of a specific type.
   template<typename EventType>
   void Unsubscribe(SubscriberTypeId id) {
-    const auto lock = std::lock_guard<std::mutex>(sync_mutex_);
+    const auto lock = std::lock_guard<std::mutex>(syncMutex_);
     auto& vec = subscribers_[typeid(EventType)];
     vec.erase(std::remove_if(vec.begin(), vec.end(), [id](const auto& pair) {
                 return pair.first == id;
@@ -80,7 +80,7 @@ public:
   template<typename EventType>
   void Push(const EventType& event) {
     {
-      std::lock_guard<std::mutex> const lock(sync_mutex_);
+      std::lock_guard<std::mutex> const lock(syncMutex_);
       events_.push_back(MakePair(typeid(EventType), std::move(event)));
     }
     condition_.notify_one();
@@ -90,7 +90,7 @@ public:
   void DispatchEvents() {
     // Wait for an event to be pushed.
     {
-      std::unique_lock<std::mutex> lock(condition_mutex_);
+      std::unique_lock<std::mutex> lock(conditionMutex_);
       condition_.wait(lock, [this] { return !events_.empty(); });
     }
 
@@ -98,7 +98,7 @@ public:
     std::type_index type{typeid(int)};
     std::any contents;
     {
-      std::lock_guard<std::mutex> const lock(sync_mutex_);
+      std::lock_guard<std::mutex> const lock(syncMutex_);
       type = events_.front().first;
       contents = events_.front().second;
       events_.pop_front();

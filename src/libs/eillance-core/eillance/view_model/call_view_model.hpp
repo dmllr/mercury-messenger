@@ -14,6 +14,11 @@ namespace eillance::view_model {
 class CallViewModel {
 public:
   struct Observer {
+    Observer() = default;
+    Observer(const Observer&) = delete;
+    Observer(Observer&&) = delete;
+    auto operator=(const Observer&) -> Observer& = delete;
+    auto operator=(Observer&&) -> Observer& = delete;
     virtual ~Observer() = default;
     virtual void OnCallStateChanged(const CallState& state) = 0;
   };
@@ -26,21 +31,21 @@ public:
   [[nodiscard]] auto GetState() const -> CallState;
 
   // Actions
-  void StartVoiceCall(const ContactID& peer_id);
-  void StartVideoCall(const ContactID& peer_id);
+  void StartVoiceCall(const ContactID& peerId);
+  void StartVideoCall(const ContactID& peerId);
   void Hangup();
   void AcceptCall();
   void RejectCall();
 
 private:
-  void OnIncomingCall(const ContactID& peer_id, messaging::HistoryEntryKind call_type);
-  void OnCallRinging(const ContactID& peer_id);
-  void OnCallAccepted(const ContactID& peer_id);
-  void OnCallTerminated(const ContactID& peer_id);
+  void OnIncomingCall(const ContactID& peerId, messaging::HistoryEntryKind callType);
+  void OnCallRinging(const ContactID& peerId);
+  void OnCallAccepted(const ContactID& peerId);
+  void OnCallTerminated(const ContactID& peerId);
   void Notify();
 
   template<typename EventType>
-  void Subscribe(EventQueue& q, std::function<void(const EventType&)> callback);
+  void Subscribe(EventQueue& queue, std::function<void(const EventType&)> callback);
 
   std::shared_ptr<Client> client_;
   std::shared_ptr<ClientEventRouter> router_;
@@ -48,7 +53,7 @@ private:
 
   mutable std::mutex mutex_;
   CallState state_;
-  std::vector<std::function<void()>> event_unsubscribers_;
+  std::vector<std::function<void()>> eventUnsubscribers_;
 };
 
 }  // namespace eillance::view_model

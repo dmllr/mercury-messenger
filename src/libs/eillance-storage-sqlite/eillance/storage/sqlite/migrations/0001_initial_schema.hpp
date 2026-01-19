@@ -8,8 +8,8 @@
 
 namespace eillance::storage::migrations {
 
-inline void migrate_to_v1(sqlite3* db) {
-  LOGI << "Initializing database schema (v1)...";
+inline void MigrateToV0001(sqlite3* db) {
+  LGI << "Initializing database schema (v1)...";
   const auto schema = R"SQL(
       BEGIN TRANSACTION;
 
@@ -59,7 +59,7 @@ inline void migrate_to_v1(sqlite3* db) {
     sqlite3_free(err_msg);
     throw std::runtime_error(error);
   }
-  LOGI << "Database schema initialized.";
+  LGI << "Database schema initialized.";
 }
 
 }  // namespace eillance::storage::migrations

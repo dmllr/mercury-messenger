@@ -15,18 +15,18 @@ namespace eillance {
 class BitReader {
 public:
   BitReader(const std::uint8_t* data, const std::uint32_t size)
-      : data_(data), size_(size), byte_offset_(0), bit_offset_(0) {}
+      : data_(data), size_(size), byteOffset_(0), bitOffset_(0) {}
 
   // Read a single bit (returns in 'bit').
   bool ReadBit(std::uint32_t& bit) {
-    if (byte_offset_ >= size_) {
+    if (byteOffset_ >= size_) {
       return false;
     }
-    bit = (data_[byte_offset_] >> (7U - bit_offset_)) & 0x01U;
-    bit_offset_++;
-    if (bit_offset_ == 8) {
-      bit_offset_ = 0;
-      byte_offset_++;
+    bit = (data_[byteOffset_] >> (7U - bitOffset_)) & 0x01U;
+    bitOffset_++;
+    if (bitOffset_ == 8) {
+      bitOffset_ = 0;
+      byteOffset_++;
     }
     return true;
   }
@@ -78,8 +78,8 @@ public:
 private:
   const std::uint8_t* data_;
   std::uint32_t size_;
-  std::uint32_t byte_offset_;
-  std::uint8_t bit_offset_;
+  std::uint32_t byteOffset_;
+  std::uint8_t bitOffset_;
 };
 
 }  // namespace eillance

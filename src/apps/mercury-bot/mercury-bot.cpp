@@ -69,11 +69,11 @@ int main(int argc, char** argv) {
   const auto output_dir_str = args.Get("--output-dir");
 
   if (!identity_dir_str) {
-    LOGE << "Missing required parameter: --identity-dir <path>";
+    LGE << "Missing required parameter: --identity-dir <path>";
     return 1;
   }
   if (!output_dir_str) {
-    LOGE << "Missing required parameter: --output-dir <path>";
+    LGE << "Missing required parameter: --output-dir <path>";
     return 1;
   }
 
@@ -81,14 +81,14 @@ int main(int argc, char** argv) {
   const std::filesystem::path output_path(*output_dir_str);
 
   if (!std::filesystem::is_directory(identity_path)) {
-    LOGE << "Identity directory does not exist or is not a directory: " << identity_path;
+    LGE << "Identity directory does not exist or is not a directory: " << identity_path;
     return 1;
   }
 
   if (!std::filesystem::is_directory(output_path)) {
-    LOGI << "Output directory does not exist, creating it: " << output_path;
+    LGI << "Output directory does not exist, creating it: " << output_path;
     if (!std::filesystem::create_directories(output_path)) {
-      LOGE << "Failed to create output directory.";
+      LGE << "Failed to create output directory.";
       return 1;
     }
   }
@@ -100,21 +100,21 @@ int main(int argc, char** argv) {
   auto client = std::make_shared<eillance::Client>(storage, transport);
 
   if (!client->IdentityExists()) {
-    LOGE << "Identity not found in: " << identity_path;
-    LOGE << "This bot requires a pre-existing identity. Please create one using mercury-cli.";
+    LGE << "Identity not found in: " << identity_path;
+    LGE << "This bot requires a pre-existing identity. Please create one using mercury-cli.";
     return 1;
   }
 
-  LOGI << "Bot starting with ID: " << client->GetId();
+  LGI << "Bot starting with ID: " << client->GetId();
 
   // --- BOT LOGIC SETUP ---
   client->SetContactRequestCallback([&client](const std::string& peer_id) {
-    LOGI << "Received contact request from " << peer_id << ". Accepting automatically.";
+    LGI << "Received contact request from " << peer_id << ". Accepting automatically.";
     client->ConfirmContact(peer_id);
   });
 
   client->SetIncomingCallCallback([&client](const std::string& peer_id, eillance::messaging::HistoryEntryKind /*call_type*/) {
-    LOGI << "Received incoming call from " << peer_id << ". Rejecting automatically.";
+    LGI << "Received incoming call from " << peer_id << ". Rejecting automatically.";
     client->RejectCall(peer_id);
   });
 
@@ -124,7 +124,7 @@ int main(int argc, char** argv) {
     }
 
     const auto& message_entry = std::get<eillance::messaging::MessageEntry>(record.data);
-    LOGI << "Received message from " << peer_id.substr(0, 8) << "...: \"" << message_entry.content << "\"";
+    LGI << "Received message from " << peer_id.substr(0, 8) << "...: \"" << message_entry.content << "\"";
 
     const std::string timestamp_str = FormatFilenameTimestamp(record.timestamp);
     const std::string sender_id_prefix = peer_id.substr(0, 8);
@@ -134,20 +134,20 @@ int main(int argc, char** argv) {
     std::ofstream out_file(file_path);
     if (out_file) {
       out_file << message_entry.content;
-      LOGI << "Message saved to " << file_path;
+      LGI << "Message saved to " << file_path;
     } else {
-      LOGE << "Failed to open file for writing: " << file_path;
+      LGE << "Failed to open file for writing: " << file_path;
     }
   });
 
   client->SetStatusCallback([](const std::string& peer_id, eillance::EventSource source, int state_val) {
     if (source == eillance::EventSource::system) {
       const auto state = static_cast<eillance::ServiceConnectionState>(state_val);
-      LOGI << "Signaling Connection Status: " << GetConnectionStatusString(state);
+      LGI << "Signaling Connection Status: " << GetConnectionStatusString(state);
     } else if (source == eillance::EventSource::peerConnectionState && !peer_id.empty()) {
       const auto state = static_cast<eillance::transport::PeerConnectionState>(state_val);
       // This can get noisy, so we log at debug level.
-      LOGD << "Peer " << peer_id.substr(0, 8) << "... Connection Status: " << static_cast<int>(state);
+      LGD << "Peer " << peer_id.substr(0, 8) << "... Connection Status: " << static_cast<int>(state);
     }
   });
 
@@ -160,18 +160,18 @@ int main(int argc, char** argv) {
   std::signal(SIGINT, SignalHandler);
   std::signal(SIGTERM, SignalHandler);
 
-  LOGI << "Bot is running. Press Ctrl+C to exit.";
+  LGI << "Bot is running. Press Ctrl+C to exit.";
 
   while (gSignalStatus == 0) {
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
 
-  LOGI << "Shutdown signal received. Terminating client...";
+  LGI << "Shutdown signal received. Terminating client...";
   client->Terminate();
   if (client_thread.joinable()) {
     client_thread.join();
   }
-  LOGI << "Client terminated. Exiting.";
+  LGI << "Client terminated. Exiting.";
 
   return 0;
 }
