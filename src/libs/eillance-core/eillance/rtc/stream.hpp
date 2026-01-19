@@ -42,14 +42,14 @@ public:
     virtual auto GetSample() -> std::vector<std::byte> = 0;
 
   protected:
-    ~Source() = default;
+    virtual ~Source() = default;
   };
 
 private:
-  DispatchQueue dispatch_queue_ = DispatchQueue("StreamQueue", 1);
+  DispatchQueue dispatchQueue_ = DispatchQueue("StreamQueue", 1);
   std::shared_ptr<Source> audio_;
   std::shared_ptr<Source> video_;
-  bool is_running_ = false;
+  bool isRunning_{false};
 
 public:
   Stream(std::shared_ptr<Source> video, std::shared_ptr<Source> audio) : audio_(std::move(audio)), video_(std::move(video)) {}
@@ -65,20 +65,20 @@ public:
   ~Stream() { Stop(); }
 
 private:
-  std::function<void(Source::Type, std::uint64_t, const std::vector<std::byte>&)> sample_handler_func_;
-  std::mutex sample_handler_mutex_;
+  std::function<void(Source::Type, std::uint64_t, const std::vector<std::byte>&)> sampleHandlerFunc_;
+  std::mutex sampleHandlerMutex_;
 
-  auto UnsafePrepareForSample() const -> std::pair<std::shared_ptr<Source>, Source::Type> {
+  [[nodiscard]] auto UnsafePrepareForSample() const -> std::pair<std::shared_ptr<Source>, Source::Type> {
     std::shared_ptr<Source> src;
-    Source::Type srct{};
+    Source::Type src_type{};
     std::uint64_t next_time{};
     if (audio_->GetSampleTime() < video_->GetSampleTime()) {
       src = audio_;
-      srct = Source::Type::audio;
+      src_type = Source::Type::audio;
       next_time = audio_->GetSampleTime();
     } else {
       src = video_;
-      srct = Source::Type::video;
+      src_type = Source::Type::video;
       next_time = video_->GetSampleTime();
     }
 
@@ -88,45 +88,45 @@ private:
       const auto wait_time = next_time - current_time;
       std::this_thread::sleep_for(std::chrono::microseconds(wait_time));
     }
-    return {src, srct};
+    return {src, src_type};
   }
 
   void SendSample() {
-    if (!is_running_) { return; }
-    auto [ss, sst] = UnsafePrepareForSample();
-    const auto sample = ss->GetSample();
+    if (!isRunning_) { return; }
+    auto [source, source_type] = UnsafePrepareForSample();
+    const auto sample = source->GetSample();
 
     std::function<void(Source::Type, std::uint64_t, const std::vector<std::byte>&)> handler;
     {
-      std::lock_guard<std::mutex> lock(sample_handler_mutex_);
-      handler = sample_handler_func_;
+      const std::lock_guard<std::mutex> lock(sampleHandlerMutex_);
+      handler = sampleHandlerFunc_;
     }
-    if (handler) { handler(sst, ss->GetSampleTime(), sample); }
+    if (handler) { handler(source_type, source->GetSampleTime(), sample); }
 
-    ss->LoadNextSample();
-    dispatch_queue_.Dispatch([this]() { this->SendSample(); });
+    source->LoadNextSample();
+    dispatchQueue_.Dispatch([this]() { this->SendSample(); });
   }
 
 public:
   void OnSample(std::function<void(Source::Type, std::uint64_t, const std::vector<std::byte>&)> handler) {
-    std::lock_guard<std::mutex> lock(sample_handler_mutex_);
-    sample_handler_func_ = std::move(handler);
+    const std::lock_guard<std::mutex> lock(sampleHandlerMutex_);
+    sampleHandlerFunc_ = std::move(handler);
   }
 
-  auto IsRunning() const { return is_running_; }
+  [[nodiscard]] auto IsRunning() const -> bool { return isRunning_; }
 
   void Start() {
-    if (is_running_) { return; }
-    is_running_ = true;
+    if (isRunning_) { return; }
+    isRunning_ = true;
     video_->Start();
     audio_->Start();
-    dispatch_queue_.Dispatch([this]() { this->SendSample(); });
+    dispatchQueue_.Dispatch([this]() { this->SendSample(); });
   }
 
   void Stop() {
-    if (!is_running_) { return; }
-    is_running_ = false;
-    dispatch_queue_.RemovePending();
+    if (!isRunning_) { return; }
+    isRunning_ = false;
+    dispatchQueue_.RemovePending();
     audio_->Stop();
     video_->Stop();
   }

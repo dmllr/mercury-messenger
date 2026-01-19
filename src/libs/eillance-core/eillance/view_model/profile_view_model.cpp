@@ -4,25 +4,25 @@ namespace eillance::view_model {
 
 ProfileViewModel::ProfileViewModel(std::shared_ptr<Client> client, std::shared_ptr<ClientEventRouter> router)
     : client_(std::move(client)), router_(std::move(router)) {
-  auto& q = router_->Queue();
-  Subscribe<EventMyProfileUpdated>(q, [this](const auto&) { RefreshFromSettings(); });
+  auto& queue = router_->Queue();
+  Subscribe<EventMyProfileUpdated>(queue, [this](const auto&) { RefreshFromSettings(); });
   RefreshFromSettings();
 }
 
 ProfileViewModel::~ProfileViewModel() {
-  for (const auto& unsubscribe: event_unsubscribers_) {
+  for (const auto& unsubscribe: eventUnsubscribers_) {
     unsubscribe();
   }
 }
 
 template<typename EventType>
-void ProfileViewModel::Subscribe(EventQueue& q, std::function<void(const EventType&)> callback) {
-  auto id = q.Subscribe<EventType>(std::move(callback));
-  event_unsubscribers_.push_back([&q, id] { q.Unsubscribe<EventType>(id); });
+void ProfileViewModel::Subscribe(EventQueue& queue, std::function<void(const EventType&)> callback) {
+  auto id = queue.Subscribe<EventType>(std::move(callback));
+  eventUnsubscribers_.emplace_back([&queue, id] { queue.Unsubscribe<EventType>(id); });
 }
 
 void ProfileViewModel::SetObserver(std::shared_ptr<Observer> observer) {
-  std::lock_guard<std::mutex> lock(mutex_);
+  const std::lock_guard<std::mutex> lock(mutex_);
   observer_ = std::move(observer);
   if (observer_) {
     observer_->OnProfileUpdated(profile_);
@@ -73,9 +73,9 @@ auto ProfileViewModel::RestoreBackup(const std::string& path, const std::string&
 }
 
 void ProfileViewModel::RefreshFromSettings() {
-  std::lock_guard<std::mutex> lock(mutex_);
+  const std::lock_guard<std::mutex> lock(mutex_);
   bool changed = false;
-  bool exists = client_->IdentityExists();
+  const bool exists = client_->IdentityExists();
   if (profile_.identity_exists != exists) {
     profile_.identity_exists = exists;
     changed = true;

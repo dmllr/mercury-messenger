@@ -39,7 +39,7 @@ int main(int argc, char* argv[]) {
   const char* home_dir_env = getenv("HOME");
 #endif
   if (home_dir_env == nullptr) {
-    LOGE << "Could not determine home directory.";
+    LGE << "Could not determine home directory.";
     return 1;
   }
   auto config_path = std::filesystem::path(home_dir_env) / ".mercury" / "Default";
@@ -57,7 +57,7 @@ int main(int argc, char* argv[]) {
 
   if (!client->IdentityExists()) {
     auto mnemonic = client->GenerateNewIdentity();
-    LOGI << "Generated new identity with mnemonic: " << mnemonic;
+    LGI << "Generated new identity with mnemonic: " << mnemonic;
   }
 
   // --- ViewModel and QML Bridge ---

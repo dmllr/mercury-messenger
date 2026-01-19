@@ -34,32 +34,32 @@ public:
   auto operator=(Transport&&) noexcept -> Transport& = default;
   ~Transport() = default;
 
-  void setDelegate(transport::TransportDelegate* delegate) const { self_->SetDelegate(delegate); }
+  void SetDelegate(transport::TransportDelegate* delegate) const { self_->SetDelegate(delegate); }
   void SetStatusCallback(const StatusCallbackFunction& callback) const { self_->SetStatusCallback(callback); }
   void SetName(const std::string& device_name) const { self_->SetName(device_name); }
-  void setId(const ContactID& id) const { self_->SetId(id); }
-  void setSignalingUrl(const std::string& url) const { self_->SetSignalingUrl(url); }
+  void SetId(const ContactID& id) const { self_->SetId(id); }
+  void SetSignalingUrl(const std::string& url) const { self_->SetSignalingUrl(url); }
   void Start() const { self_->Start(); }
   void Terminate() const { self_->Terminate(); }
-  void reconnect() const { self_->Reconnect(); }
-  void addPeer(const ContactID& peer_id, const std::shared_ptr<Peer>& peer) const { self_->AddPeer(peer_id, peer); }
-  auto getPeer(const ContactID& peer_id) const -> std::shared_ptr<Peer> { return self_->GetPeer(peer_id); }
-  auto getPeers() const -> std::unordered_map<ContactID, std::shared_ptr<Peer>> { return self_->GetPeers(); }
-  auto getPeerConnectionState(const ContactID& peer_id) const -> eillance::transport::PeerConnectionState { return self_->GetPeerConnectionState(peer_id); }
-  void createDataPeerConnection(const ContactID& peer_id) const { self_->CreateDataPeerConnection(peer_id); }
-  void createMediaPeerConnection(const ContactID& peer_id) const { self_->CreateMediaPeerConnection(peer_id); }
-  void createDataChannel(const ContactID& peer_id) const { self_->CreateDataChannel(peer_id); }
-  void closePeerConnection(const ContactID& peer_id, const std::string& context) const { self_->ClosePeerConnection(peer_id, context); }
-  void createOffer(const ContactID& peer_id, const std::string& context) const { self_->CreateOffer(peer_id, context); }
-  void createAnswer(const ContactID& peer_id, const std::string& context) const { self_->CreateAnswer(peer_id, context); }
-  void setRemoteDescription(const ContactID& peer_id, const std::string& context, const std::string& sdp, const std::string& type) const { self_->SetRemoteDescription(peer_id, context, sdp, type); }
-  void addRemoteCandidate(const ContactID& peer_id, const std::string& context, const std::string& candidate, const std::string& mid) const { self_->AddRemoteCandidate(peer_id, context, candidate, mid); }
-  void removePeer(const ContactID& peer_id) const { self_->RemovePeer(peer_id); }
-  void sendSignalingMessage(const Json& message) const { self_->SendSignalingMessage(message); }
-  void sendPeerDataChannelMessage(const ContactID& peer_id, const Json& message) const { self_->SendPeerDataChannelMessage(peer_id, message); }
-  void addToStream(const std::shared_ptr<Peer>& peer, bool isAddingVideo) const { self_->AddToStream(peer, isAddingVideo); }
-  auto addVideo(const ContactID& peer_id, const std::function<void(void)>& on_open) const -> std::shared_ptr<ITrack> { return self_->AddVideo(peer_id, on_open); }
-  auto addAudio(const ContactID& peer_id, const std::function<void(void)>& on_open) const -> std::shared_ptr<ITrack> { return self_->AddAudio(peer_id, on_open); }
+  void Reconnect() const { self_->Reconnect(); }
+  void AddPeer(const ContactID& peerId, const std::shared_ptr<Peer>& peer) const { self_->AddPeer(peerId, peer); }
+  auto GetPeer(const ContactID& peerId) const -> std::shared_ptr<Peer> { return self_->GetPeer(peerId); }
+  auto GetPeers() const -> std::unordered_map<ContactID, std::shared_ptr<Peer>> { return self_->GetPeers(); }
+  auto GetPeerConnectionState(const ContactID& peerId) const -> eillance::transport::PeerConnectionState { return self_->GetPeerConnectionState(peerId); }
+  void CreateDataPeerConnection(const ContactID& peerId) const { self_->CreateDataPeerConnection(peerId); }
+  void CreateMediaPeerConnection(const ContactID& peerId) const { self_->CreateMediaPeerConnection(peerId); }
+  void CreateDataChannel(const ContactID& peerId) const { self_->CreateDataChannel(peerId); }
+  void ClosePeerConnection(const ContactID& peerId, const std::string& context) const { self_->ClosePeerConnection(peerId, context); }
+  void CreateOffer(const ContactID& peerId, const std::string& context) const { self_->CreateOffer(peerId, context); }
+  void CreateAnswer(const ContactID& peerId, const std::string& context) const { self_->CreateAnswer(peerId, context); }
+  void SetRemoteDescription(const ContactID& peerId, const std::string& context, const std::string& sdp, const std::string& type) const { self_->SetRemoteDescription(peerId, context, sdp, type); }
+  void AddRemoteCandidate(const ContactID& peerId, const std::string& context, const std::string& candidate, const std::string& mid) const { self_->AddRemoteCandidate(peerId, context, candidate, mid); }
+  void RemovePeer(const ContactID& peerId) const { self_->RemovePeer(peerId); }
+  void SendSignalingMessage(const Json& message) const { self_->SendSignalingMessage(message); }
+  void SendPeerDataChannelMessage(const ContactID& peerId, const Json& message) const { self_->SendPeerDataChannelMessage(peerId, message); }
+  void AddToStream(const std::shared_ptr<Peer>& peer, bool isAddingVideo) const { self_->AddToStream(peer, isAddingVideo); }
+  auto AddVideo(const ContactID& peerId, const std::function<void(void)>& onOpen) const -> std::shared_ptr<ITrack> { return self_->AddVideo(peerId, onOpen); }
+  auto AddAudio(const ContactID& peerId, const std::function<void(void)>& onOpen) const -> std::shared_ptr<ITrack> { return self_->AddAudio(peerId, onOpen); }
 
   struct TransportInterface {
     TransportInterface() = default;

@@ -68,7 +68,7 @@ public:
 
   void Start() {
     client_->Start();
-    LOGI << "Client engine is initialized and ready.";
+    LGI << "Client engine is initialized and ready.";
   }
 
   void Terminate() { client_->Terminate(); }

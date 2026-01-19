@@ -15,7 +15,7 @@ class SQLiteStatement {
 public:
   explicit SQLiteStatement(sqlite3* db, const std::string& query) {
     if (sqlite3_prepare_v2(db, query.c_str(), -1, &stmt_, nullptr) != SQLITE_OK) {
-      LOGE << "SQLite prepare failed: " << sqlite3_errmsg(db);
+      LGE << "SQLite prepare failed: " << sqlite3_errmsg(db);
       throw std::runtime_error("SQLite prepare failed");
     }
   }

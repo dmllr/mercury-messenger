@@ -188,8 +188,8 @@ fun ContactListItem(
   }
 
   // Last update timestamp
-  val timestampText = if (contact.lastActivityTimestamp > 0) {
-    formatContactTimestamp(contact.lastActivityTimestamp, zoneId, formatters)
+  val timestampText = if (contact.last_activity_timestamp > 0) {
+    formatContactTimestamp(contact.last_activity_timestamp, zoneId, formatters)
   } else {
     ""
   }

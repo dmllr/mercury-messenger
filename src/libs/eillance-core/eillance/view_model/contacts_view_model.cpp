@@ -36,7 +36,7 @@ struct ContactsViewModel::Impl : public std::enable_shared_from_this<Impl> {
     }
   }
 
-  auto GetContacts() const -> std::vector<ViewContact> {
+  [[nodiscard]] auto GetContacts() const -> std::vector<ViewContact> {
     const std::lock_guard<std::mutex> lock(mutex_);
     return contacts_;
   }
@@ -135,7 +135,8 @@ struct ContactsViewModel::Impl : public std::enable_shared_from_this<Impl> {
 
           if (std::holds_alternative<messaging::MessageEntry>(summary.last_message.data)) {
             const auto& content = std::get<messaging::MessageEntry>(summary.last_message.data).content;
-            contact.last_message_snippet = (content.length() > 100) ? content.substr(0, 100) + "..." : content;
+            constexpr size_t kSnippetLength = 100;
+            contact.last_message_snippet = (content.length() > kSnippetLength) ? content.substr(0, kSnippetLength) + "..." : content;
           } else if (std::holds_alternative<messaging::CallEntry>(summary.last_message.data)) {
             if (summary.last_message.kind == messaging::HistoryEntryKind::videoCall) {
               contact.last_message_snippet = "Video Call";
@@ -200,33 +201,33 @@ ContactsViewModel::ContactsViewModel(std::shared_ptr<Client> client, std::shared
   // Start initial load asynchronously
   impl_->UpdateContactsList();
 
-  auto& q = impl_->router_->Queue();
+  auto& queue = impl_->router_->Queue();
 
-  Subscribe<EventContactRequest>(q, [this](const auto&) { impl_->UpdateContactsList(); });
-  Subscribe<EventContactStatusChanged>(q, [this](const auto&) { impl_->UpdateContactsList(); });
-  Subscribe<EventContactProfileUpdated>(q, [this](const auto&) { impl_->UpdateContactsList(); });
-  Subscribe<EventContactRemoved>(q, [this](const auto&) { impl_->UpdateContactsList(); });
-  Subscribe<EventChatMessageReceived>(q, [this](const auto&) { impl_->UpdateContactsList(); });
-  Subscribe<EventMessageStatusChanged>(q, [this](const auto&) { impl_->UpdateContactsList(); });
-  Subscribe<EventDebugDataReset>(q, [this](const auto&) { impl_->UpdateContactsList(); });
+  Subscribe<EventContactRequest>(queue, [this](const auto&) { impl_->UpdateContactsList(); });
+  Subscribe<EventContactStatusChanged>(queue, [this](const auto&) { impl_->UpdateContactsList(); });
+  Subscribe<EventContactProfileUpdated>(queue, [this](const auto&) { impl_->UpdateContactsList(); });
+  Subscribe<EventContactRemoved>(queue, [this](const auto&) { impl_->UpdateContactsList(); });
+  Subscribe<EventChatMessageReceived>(queue, [this](const auto&) { impl_->UpdateContactsList(); });
+  Subscribe<EventMessageStatusChanged>(queue, [this](const auto&) { impl_->UpdateContactsList(); });
+  Subscribe<EventDebugDataReset>(queue, [this](const auto&) { impl_->UpdateContactsList(); });
 
-  Subscribe<EventStatusChanged>(q, [this](const EventStatusChanged& e) {
-    if (e.source == EventSource::peerConnectionState) {
-      impl_->UpdateContactConnectionState(e.peer_id, static_cast<transport::PeerConnectionState>(e.state));
+  Subscribe<EventStatusChanged>(queue, [this](const EventStatusChanged& event) {
+    if (event.source == EventSource::peerConnectionState) {
+      impl_->UpdateContactConnectionState(event.peer_id, static_cast<transport::PeerConnectionState>(event.state));
     }
   });
 }
 
 ContactsViewModel::~ContactsViewModel() {
-  for (const auto& unsubscribe: event_unsubscribers_) {
+  for (const auto& unsubscribe: eventUnsubscribers_) {
     unsubscribe();
   }
 }
 
 template<typename EventType>
-void ContactsViewModel::Subscribe(EventQueue& q, std::function<void(const EventType&)> callback) {
-  auto id = q.Subscribe<EventType>(std::move(callback));
-  event_unsubscribers_.push_back([&q, id] { q.Unsubscribe<EventType>(id); });
+void ContactsViewModel::Subscribe(EventQueue& queue, std::function<void(const EventType&)> callback) {
+  auto id = queue.Subscribe<EventType>(std::move(callback));
+  eventUnsubscribers_.emplace_back([&queue, id] { queue.Unsubscribe<EventType>(id); });
 }
 
 void ContactsViewModel::SetObserver(std::shared_ptr<Observer> observer) {
@@ -237,32 +238,32 @@ auto ContactsViewModel::GetContacts() const -> std::vector<ViewContact> {
   return impl_->GetContacts();
 }
 
-void ContactsViewModel::AddContact(const ContactID& peer_id, const std::optional<std::vector<std::byte>>& token) {
-  impl_->AddContact(peer_id, token);
+void ContactsViewModel::AddContact(const ContactID& peerId, const std::optional<std::vector<std::byte>>& token) {
+  impl_->AddContact(peerId, token);
 }
 
-void ContactsViewModel::BlockContact(const ContactID& peer_id) {
-  impl_->BlockContact(peer_id);
+void ContactsViewModel::BlockContact(const ContactID& peerId) {
+  impl_->BlockContact(peerId);
 }
 
-void ContactsViewModel::DeleteContact(const ContactID& peer_id) {
-  impl_->DeleteContact(peer_id);
+void ContactsViewModel::DeleteContact(const ContactID& peerId) {
+  impl_->DeleteContact(peerId);
 }
 
-void ContactsViewModel::UnblockContact(const ContactID& peer_id) {
-  impl_->UnblockContact(peer_id);
+void ContactsViewModel::UnblockContact(const ContactID& peerId) {
+  impl_->UnblockContact(peerId);
 }
 
-void ContactsViewModel::AcceptContact(const ContactID& peer_id) {
-  impl_->AcceptContact(peer_id);
+void ContactsViewModel::AcceptContact(const ContactID& peerId) {
+  impl_->AcceptContact(peerId);
 }
 
-void ContactsViewModel::SetContactDisplayNameOverride(const ContactID& peer_id, const std::string& name) {
-  impl_->SetContactDisplayNameOverride(peer_id, name);
+void ContactsViewModel::SetContactDisplayNameOverride(const ContactID& peerId, const std::string& name) {
+  impl_->SetContactDisplayNameOverride(peerId, name);
 }
 
-void ContactsViewModel::ResetContactDisplayNameOverride(const ContactID& peer_id) {
-  impl_->ResetContactDisplayNameOverride(peer_id);
+void ContactsViewModel::ResetContactDisplayNameOverride(const ContactID& peerId) {
+  impl_->ResetContactDisplayNameOverride(peerId);
 }
 
 auto ContactsViewModel::GenerateContactToken() -> std::vector<std::byte> {

@@ -55,59 +55,59 @@ public:
   }
 
   // begin method to return the iterator to the beginning of the buffer
-  [[nodiscard]] auto begin() {
+  [[nodiscard]] auto begin() {  // NOLINT(*-identifier-naming)
     return buffer_.begin();
   }
 
   // const begin method to return the const iterator to the beginning of the buffer
-  [[nodiscard]] auto begin() const {
+  [[nodiscard]] auto begin() const {  // NOLINT(*-identifier-naming)
     return buffer_.begin();
   }
 
   // end method to return the iterator to the end of the buffer
-  [[nodiscard]] auto end() {
+  [[nodiscard]] auto end() {  // NOLINT(*-identifier-naming)
     return buffer_.end();
   }
 
   // const end method to return the const iterator to the end of the buffer
-  [[nodiscard]] auto end() const {
+  [[nodiscard]] auto end() const {  // NOLINT(*-identifier-naming)
     return buffer_.end();
   }
 
-  void append(const Packet& other) {
+  void append(const Packet& other) {  // NOLINT(*-identifier-naming)
     buffer_.insert(buffer_.end(), other.buffer_.begin(), other.buffer_.end());
     timestamp_ = other.timestamp_;
   }
 
-  [[nodiscard]] auto buffer() {
+  [[nodiscard]] auto buffer() {  // NOLINT(*-identifier-naming)
     return buffer_;
   }
 
-  [[nodiscard]] auto data() const {
+  [[nodiscard]] auto data() const {  // NOLINT(*-identifier-naming)
     return buffer_.data();
   }
 
-  [[maybe_unused]] [[nodiscard]] auto dataAsChars() const {
+  [[maybe_unused]] [[nodiscard]] auto dataAsChars() const {  // NOLINT(*-identifier-naming)
     return reinterpret_cast<const char*>(buffer_.data());
   }
 
-  [[maybe_unused]] [[nodiscard]] auto dataAsUChars() const {
+  [[maybe_unused]] [[nodiscard]] auto dataAsUChars() const {  // NOLINT(*-identifier-naming)
     return reinterpret_cast<const unsigned char*>(buffer_.data());
   }
 
-  [[nodiscard]] auto timestamp() const {
+  [[nodiscard]] auto timestamp() const {  // NOLINT(*-identifier-naming)
     return timestamp_;
   }
 
-  [[nodiscard]] auto empty() const {
+  [[nodiscard]] auto empty() const {  // NOLINT(*-identifier-naming)
     return buffer_.empty();
   }
 
-  [[nodiscard]] auto size() const {
+  [[nodiscard]] auto size() const {  // NOLINT(*-identifier-naming)
     return buffer_.size();
   }
 
-  void clear() {
+  void clear() {  // NOLINT(*-identifier-naming)
     buffer_.clear();
   }
 };

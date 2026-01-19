@@ -350,10 +350,10 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_configureVideoC
   if (client_engine) {
     auto& video_config_holder = ClassRefs::Instance().Class("hela/eillance/ndkio/VideoConfig");
     auto conf = eillance::VideoConfig{};
-    conf.camera_id = env->GetIntField(video_config, video_config_holder.GetField("cameraId"));
+    conf.cameraId = env->GetIntField(video_config, video_config_holder.GetField("cameraId"));
     conf.width = env->GetIntField(video_config, video_config_holder.GetField("width"));
     conf.height = env->GetIntField(video_config, video_config_holder.GetField("height"));
-    conf.frame_rate = env->GetIntField(video_config, video_config_holder.GetField("frameRate"));
+    conf.frameRate = env->GetIntField(video_config, video_config_holder.GetField("frameRate"));
     conf.bitrate = env->GetIntField(video_config, video_config_holder.GetField("bitrate"));
     client_engine->ConfigureVideoCapture(conf);
   }
@@ -431,7 +431,7 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     classref.RegisterField(env, video_config_class, "bitrate", "I");
 
   } catch (const std::exception& e) {
-    LOGE << "JNI_OnLoad failed: " << e.what();
+    LGE << "JNI_OnLoad failed: " << e.what();
     return JNI_ERR;
   }
 

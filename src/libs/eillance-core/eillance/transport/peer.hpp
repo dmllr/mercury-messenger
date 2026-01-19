@@ -3,7 +3,6 @@
 #include <atomic>
 #include <optional>
 #include <shared_mutex>
-#include <utility>
 #include <vector>
 
 #include "eillance/crypto/crypto.hpp"
@@ -11,7 +10,6 @@
 #include "eillance/messaging/history.hpp"
 #include "eillance/transport/candidate.hpp"
 #include "eillance/transport/track.hpp"
-#include "eillance/utils/memory.h"
 #include "eillance/utils/time.hpp"
 
 namespace eillance::transport {
@@ -26,29 +24,31 @@ struct Peer {
 
   explicit Peer(const ContactID& id);
 
-  const ContactID id_;  // Atomic-friendly immutable ID (no lock needed for read)
+  // NOLINTBEGIN(*-non-private-member-variables-in-classes)
+  const ContactID id;
 
-  std::shared_ptr<ITrack> video_;
-  std::shared_ptr<ITrack> audio_;
-  std::shared_ptr<void> data_peer_connection_;
-  std::shared_ptr<void> media_peer_connection_;
-  std::shared_ptr<void> data_channel_;
-  std::atomic<bool> data_channel_is_open_{false};
-  std::atomic<Time::Unit> last_activity_time_{0};
-  std::atomic<bool> has_media_peer_connection_{false};
-  std::unique_ptr<crypto::SessionCipher> session_cipher_;
-  std::function<void(const std::string&)> on_data_channel_message_;
-  std::atomic<bool> incoming_call_notified_{false};
+  std::shared_ptr<ITrack> video;
+  std::shared_ptr<ITrack> audio;
+  std::shared_ptr<void> data_peer_connection;
+  std::shared_ptr<void> media_peer_connection;
+  std::shared_ptr<void> data_channel;
+  std::atomic<bool> data_channel_is_open{false};
+  std::atomic<Time::Unit> last_activity_time{0};
+  std::atomic<bool> has_media_peer_connection{false};
+  std::unique_ptr<crypto::SessionCipher> session_cipher;
+  std::function<void(const std::string&)> on_data_channel_message;
+  std::atomic<bool> incoming_call_notified{false};
   std::optional<std::string> pending_offer_sdp;
   std::vector<Candidate> pending_candidates;
+  // NOLINTEND(*-non-private-member-variables-in-classes)
 
   void SetState(State state) {
-    const auto lock = std::unique_lock(mutex_);
+    const std::unique_lock<std::shared_mutex> lock(mutex_);
     this->state_ = state;
   }
 
   auto GetState() -> State {
-    const auto lock = std::shared_lock(mutex_);
+    const std::shared_lock<std::shared_mutex> lock(mutex_);
     return state_;
   }
 
@@ -57,9 +57,8 @@ private:
   State state_ = State::waiting;
 };
 
-inline Peer::Peer(const ContactID& id) : id_(id) {
-  session_cipher_ = std::make_unique<crypto::SessionCipher>();
-  last_activity_time_ = Time::Now();
+inline Peer::Peer(const ContactID& id) : id(id), last_activity_time(Time::Now()) {
+  session_cipher = std::make_unique<crypto::SessionCipher>();
 }
 
 }  // namespace eillance::transport

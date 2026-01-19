@@ -17,8 +17,13 @@ namespace eillance::view_model {
 class SettingsViewModel {
 public:
   struct Observer {
+    Observer() = default;
+    Observer(const Observer&) = delete;
+    Observer(Observer&&) = delete;
+    auto operator=(const Observer&) -> Observer& = delete;
+    auto operator=(Observer&&) -> Observer& = delete;
     virtual ~Observer() = default;
-    virtual void OnSettingsUpdated(const std::optional<std::string>& signaling_url, int timeout) = 0;
+    virtual void OnSettingsUpdated(const std::optional<std::string>& signalingUrl, int timeout) = 0;
     virtual void OnConnectionStateChanged(ServiceConnectionState state) = 0;
   };
 
@@ -43,7 +48,7 @@ private:
   void LoadSettings();
 
   template<typename EventType>
-  void Subscribe(EventQueue& q, std::function<void(const EventType&)> callback);
+  void Subscribe(EventQueue& queue, std::function<void(const EventType&)> callback);
 
   std::shared_ptr<Client> client_;
   std::shared_ptr<ClientEventRouter> router_;
@@ -51,7 +56,7 @@ private:
 
   mutable std::mutex mutex_;
   State state_;
-  std::vector<std::function<void()>> event_unsubscribers_;
+  std::vector<std::function<void()>> eventUnsubscribers_;
 };
 
 }  // namespace eillance::view_model

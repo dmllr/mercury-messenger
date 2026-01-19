@@ -206,19 +206,19 @@ public:
 
   // --- Contacts ---
   auto GetContacts() const { return pimpl_->GetContacts(); }
-  auto GetContact(const ContactID& peer_id) const { return pimpl_->GetContact(peer_id); }
+  auto GetContact(const ContactID& peerId) const { return pimpl_->GetContact(peerId); }
   void UpdateContact(const identity::Contact& contact) const { pimpl_->UpdateContact(contact); }
-  void RemoveContact(const ContactID& peer_id) const { pimpl_->RemoveContact(peer_id); }
+  void RemoveContact(const ContactID& peerId) const { pimpl_->RemoveContact(peerId); }
 
   // --- History ---
   auto AddHistoryEntry(messaging::HistoryEntryRecord entry) const { return pimpl_->AddHistoryEntry(std::move(entry)); }
   void UpdateHistoryEntry(const messaging::HistoryEntryRecord& entry) const { pimpl_->UpdateHistoryEntry(entry); }
-  void UpdateMessageStatus(const ContactID& peer_id, uint64_t message_id, messaging::MessageStatus new_status) const { pimpl_->UpdateMessageStatus(peer_id, message_id, new_status); }
-  void UpdateMessageStatuses(const ContactID& peer_id, const std::vector<uint64_t>& message_ids, messaging::MessageStatus new_status) const { pimpl_->UpdateMessageStatuses(peer_id, message_ids, new_status); }
-  auto GetHistoryPage(const ContactID& peer_id, size_t page_index, size_t page_size) const { return pimpl_->GetHistoryPage(peer_id, page_index, page_size); }
-  auto GetFullMessageContent(std::uint64_t message_id) const { return pimpl_->GetFullMessageContent(message_id); }
-  auto GetChatSummaries(const std::vector<ContactID>& peer_ids) const { return pimpl_->GetChatSummaries(peer_ids); }
-  auto GetMessagesWithStatus(const ContactID& peer_id, messaging::MessageStatus status) const { return pimpl_->GetMessagesWithStatus(peer_id, status); }
+  void UpdateMessageStatus(const ContactID& peerId, uint64_t messageId, messaging::MessageStatus newStatus) const { pimpl_->UpdateMessageStatus(peerId, messageId, newStatus); }
+  void UpdateMessageStatuses(const ContactID& peerId, const std::vector<uint64_t>& messageIds, messaging::MessageStatus newStatus) const { pimpl_->UpdateMessageStatuses(peerId, messageIds, newStatus); }
+  auto GetHistoryPage(const ContactID& peerId, size_t pageIndex, size_t pageSize) const { return pimpl_->GetHistoryPage(peerId, pageIndex, pageSize); }
+  auto GetFullMessageContent(std::uint64_t messageId) const { return pimpl_->GetFullMessageContent(messageId); }
+  auto GetChatSummaries(const std::vector<ContactID>& peerIds) const { return pimpl_->GetChatSummaries(peerIds); }
+  auto GetMessagesWithStatus(const ContactID& peerId, messaging::MessageStatus status) const { return pimpl_->GetMessagesWithStatus(peerId, status); }
 
   // --- Debug ---
   void DebugClearAllHistory() const { pimpl_->DebugClearAllHistory(); }
