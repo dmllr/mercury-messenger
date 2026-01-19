@@ -30,8 +30,8 @@ class MessageDeliveryService {
   std::unordered_map<ContactID, int> retry_delays_s_;
   std::recursive_mutex mutex_;
 
-  static constexpr int initial_retry_delay_s = 5;
-  static constexpr int max_retry_delay_s = 60;
+  static constexpr int initialRetryDelayS = 5;
+  static constexpr int maxRetryDelayS = 60;
 
 public:
   MessageDeliveryService(std::shared_ptr<storage::PersistentStorage> storage, std::shared_ptr<identity::ContactManager> contacts, ConnectionRequestHandler handler) : storage_(std::move(storage)), contact_manager_(std::move(contacts)), connection_handler_(std::move(handler)) {}
@@ -44,7 +44,7 @@ public:
     dispatch_queue_.Dispatch([this] { CheckForAllQueuedMessages(); });
   }
 
-  void stop() {
+  void Stop() {
     if (!is_running_.exchange(false)) {
       return;  // Already stopped.
     }
@@ -52,24 +52,26 @@ public:
   }
 
   // Called by Client when a connection attempt is finished (succeeded and messages sent, or failed)
-  void connectionAttemptFinished(const ContactID& peer_id) {
+  void ConnectionAttemptFinished(const ContactID& peer_id) {
     const std::lock_guard<std::recursive_mutex> lock(mutex_);
     pending_connections_.erase(peer_id);
 
-    if (!is_running_) { return; }
+    if (!is_running_) {
+      return;
+    }
 
     // Check if there are more messages to send. If so, it means the connection
     // likely failed, and we should schedule a retry.
     if (!storage_->GetMessagesWithStatus(peer_id, MessageStatus::sending).empty()) {
       int& delay = retry_delays_s_[peer_id];
-      if (delay == 0) { delay = initial_retry_delay_s; }
+      if (delay == 0) { delay = initialRetryDelayS; }
 
       LOGI << "Connection to " << peer_id << " failed or did not clear queue. Retrying in " << delay << "s.";
 
-      dispatch_queue_.DispatchAfter(std::chrono::seconds(delay), [this, peer_id]() { attemptDelivery(peer_id); });
+      dispatch_queue_.DispatchAfter(std::chrono::seconds(delay), [this, peer_id]() { AttemptDelivery(peer_id); });
 
       // Increase delay for next time (exponential backoff).
-      delay = std::min(delay * 2, max_retry_delay_s);
+      delay = std::min(delay * 2, maxRetryDelayS);
     } else {
       // All messages for this peer were sent successfully. Reset backoff timer.
       retry_delays_s_.erase(peer_id);
@@ -77,15 +79,23 @@ public:
   }
 
   // Called by Client when queuing a new message or action that requires a connection.
-  void attemptDelivery(const ContactID& peer_id) {
-    const std::lock_guard<std::recursive_mutex> lock(mutex_);
-    if (pending_connections_.contains(peer_id)) { return; }  // Already trying to connect.
+  void AttemptDelivery(const ContactID& peer_id) {
+    {
+      const std::lock_guard<std::recursive_mutex> lock(mutex_);
+      if (pending_connections_.contains(peer_id)) {
+        // Already trying to connect.
+        return;
+      }
 
-    // This check is important to prevent connection attempts when there's nothing to do.
-    if (storage_->GetMessagesWithStatus(peer_id, MessageStatus::sending).empty()) { return; }
+      // Prevent connection attempts when there's nothing to do.
+      if (storage_->GetMessagesWithStatus(peer_id, MessageStatus::sending).empty()) {
+        return;
+      }
 
-    LOGI << "Delivery requested for " << peer_id << ". Requesting connection.";
-    pending_connections_.insert(peer_id);
+      LOGI << "Delivery requested for " << peer_id << ". Requesting connection.";
+      pending_connections_.insert(peer_id);
+    }
+    // Perform the callback outside the lock to prevent deadlocks
     connection_handler_(peer_id);
   }
 
@@ -94,11 +104,11 @@ private:
     if (!contact_manager_) { return; }
     const auto all_contacts = contact_manager_->GetContacts();
     for (const auto& contact: all_contacts) {
-      ContactID id(contact.peer_id);
+      const ContactID id(contact.peer_id);
       // Check if there are any messages marked as 'sending' for this contact.
       if (!storage_->GetMessagesWithStatus(id, MessageStatus::sending).empty()) {
         // We have messages for this contact, let's try to deliver them.
-        attemptDelivery(id);
+        AttemptDelivery(id);
       }
     }
   }
