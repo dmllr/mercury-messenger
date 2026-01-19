@@ -37,9 +37,6 @@ build_docker_image_if_needed() {
 
 run_in_docker() {
   info "Running in Docker: $*"
-  # 1. Set a writable global git config inside the project dir to avoid permission errors with //.gitconfig.
-  # 2. Add the workspace as a safe directory to fix the 'dubious ownership' error.
-  # 3. 'exec "$@"' ensures that the original command is then executed.
   docker run --rm -it \
     --user "$(id -u):$(id -g)" \
     -v "${PROJECT_ROOT}:/work" \
@@ -54,10 +51,20 @@ run_in_docker() {
 
 run_format() {
   info "Running clang-format..."
-  # Use 'git ls-files' to respect .gitignore and only format tracked files.
-  # grep -z filters the null-terminated list by extension.
+
+  # Logic:
+  # 1. git ls-files -z -- src tests     -> Only list tracked files in src and tests
+  # 2. grep -z -v -E "..."              -> Exclude specific Android subdirectories
+  # 3. grep -z -E "..."                 -> Filter for C/C++ extensions
+
   run_in_docker bash -c '
-    git ls-files -z -- src tests | grep -z -E "\.(cpp|hpp|h)$" | while IFS= read -r -d "" file; do
+    # Define exclusion pattern for format (escaped for grep -E)
+    EXCLUDE_PATTERN="src/apps/android/(build|app/(\.cxx|build|release|src/main/cpp/_imported))"
+
+    git ls-files -z -- src tests \
+    | grep -z -v -E "$EXCLUDE_PATTERN" \
+    | grep -z -E "\.(cpp|hpp|h)$" \
+    | while IFS= read -r -d "" file; do
       echo "Formatting $file..."
       clang-format-18 -i "$file"
     done'
@@ -73,14 +80,22 @@ run_tidy() {
   success "compile_commands.json generated in '${build_dir}'."
 
   info "Step 2: Running clang-tidy on the codebase..."
-  # append a Regex argument: '^(?!.*/_imported).*'
-  # ^            : Start of the string
-  # (?!...)      : Negative lookahead (fails if the pattern inside matches)
-  # .*/_imported/: Matches any path containing /_imported
-  # .*           : Matches the rest of the file path (if the lookahead didn't fail)
-  if ! run_in_docker bash -c "run-clang-tidy-18 -p ${build_dir} -j $(nproc) -fix '^(?!.*/_imported).*'"; then
+
+  run_in_docker bash -c '
+    REGEX_TESTS="^/work/tests/.*"
+    REGEX_SRC="^/work/src/(?!apps/android/(build|app/(\.cxx|build|release|src/main/cpp/_imported))).*"
+    REGEX_HEADER_FILTER="^/work/(src|tests)/"
+
+    run-clang-tidy-18 \
+      -config-file '"/work/.clang-tidy"' \
+      -p '"${build_dir}"' \
+      -j $(nproc) \
+      -header-filter="$REGEX_HEADER_FILTER" \
+      "$REGEX_TESTS" "$REGEX_SRC"
+  ' || {
     warn "clang-tidy reported issues. Please review the changes or re-run to confirm fixes."
-  fi
+  }
+
   success "clang-tidy finished."
 }
 
