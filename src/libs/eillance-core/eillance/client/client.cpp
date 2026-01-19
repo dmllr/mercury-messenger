@@ -47,7 +47,7 @@ Client::Client(std::shared_ptr<storage::PersistentStorage> storage, std::shared_
         // Removing the peer object from the transport layer
         // ensures that a new connection attempt by the MessageDeliveryService will start from a clean state.
         transport_->removePeer(peer_id);
-        delivery_service_->connectionAttemptFinished(peer_id);
+        delivery_service_->ConnectionAttemptFinished(peer_id);
       }
     }
     if (status_callback_) { (*status_callback_)(peer_id, source, state_val); }
@@ -128,7 +128,7 @@ void Client::Start() {
 
 void Client::Terminate() {
   is_running_ = false;
-  delivery_service_->stop();
+  delivery_service_->Stop();
   transport_->Terminate();
 }
 
@@ -226,7 +226,7 @@ void Client::AcceptCall(const ContactID& peer_id, messaging::HistoryEntryKind ca
 
   const Json msg = {{"action", "call_accept"}, {"kind", call_kind}};
   message_history_->AddTextEntry(peer_id, msg.dump(), messaging::MessageDirection::sent, messaging::HistoryEntryKind::systemMessage);
-  delivery_service_->attemptDelivery(peer_id);
+  delivery_service_->AttemptDelivery(peer_id);
 
   if (on_call_accepted_) { (*on_call_accepted_)(peer_id); }
 }
@@ -251,7 +251,7 @@ void Client::AddContact(const ContactID& peer_id, const std::optional<std::strin
     }
     message_history_->AddTextEntry(peer_id, content.dump(), messaging::MessageDirection::sent, messaging::HistoryEntryKind::systemMessage);
     if (on_contact_status_changed_) { (*on_contact_status_changed_)(peer_id, identity::ContactStatus::pendingApproval); }
-    delivery_service_->attemptDelivery(peer_id);
+    delivery_service_->AttemptDelivery(peer_id);
   }
 }
 
@@ -306,7 +306,7 @@ void Client::ConfirmContact(const ContactID& peer_id) const {
     message_history_->AddTextEntry(peer_id, profile_content.dump(), messaging::MessageDirection::sent, messaging::HistoryEntryKind::systemMessage);
 
     if (on_contact_status_changed_) { (*on_contact_status_changed_)(peer_id, identity::ContactStatus::confirmed); }
-    delivery_service_->attemptDelivery(peer_id);
+    delivery_service_->AttemptDelivery(peer_id);
   }
 }
 
@@ -367,7 +367,7 @@ auto Client::SendChatMessage(const ContactID& peer_id, const std::string& messag
   if (auto peer = transport_->getPeer(peer_id); peer && peer->data_channel_is_open_ && peer->session_cipher_->IsReady()) {
     SendQueuedMessages(peer_id);
   } else {
-    delivery_service_->attemptDelivery(peer_id);
+    delivery_service_->AttemptDelivery(peer_id);
   }
 
   return entry;
@@ -427,7 +427,7 @@ void Client::UpdateMyProfile(const std::optional<std::string>& name, const std::
       if (auto peer = transport_->getPeer(id); peer && peer->data_channel_is_open_ && peer->session_cipher_->IsReady()) {
         SendQueuedMessages(id);
       } else {
-        delivery_service_->attemptDelivery(id);
+        delivery_service_->AttemptDelivery(id);
       }
     }
   }
@@ -492,7 +492,7 @@ void Client::OnSystemMessage(const std::string& type, const Json& message) {
 void Client::OnSignalingErrorForPeer(const ContactID& peer_id, const std::string& error) {
   if (error == "peer_not_found") {
     LOGW << "Connection attempt failed for peer " << peer_id << " because they are not online. Will retry when they appear.";
-    delivery_service_->connectionAttemptFinished(peer_id);
+    delivery_service_->ConnectionAttemptFinished(peer_id);
     if (transport_->getPeer(peer_id)) { transport_->closePeerConnection(peer_id, "data"); }
   }
 }
@@ -530,7 +530,7 @@ void Client::StartMediaCall(const ContactID& peer_id, const bool is_video) {
   if (peer && peer->data_channel_is_open_ && peer->session_cipher_->IsReady()) {
     SendQueuedMessages(peer_id);
   } else {
-    delivery_service_->attemptDelivery(peer_id);
+    delivery_service_->AttemptDelivery(peer_id);
   }
 }
 
@@ -627,7 +627,7 @@ void Client::ProcessDataChannelMessage(const ContactID& peer_id, const Json& mes
       transport_->sendPeerDataChannelMessage(peer_id, request_profile);
       const Json send_profile = {{"action", "send_profile"}};
       message_history_->AddTextEntry(peer_id, send_profile.dump(), messaging::MessageDirection::sent, messaging::HistoryEntryKind::systemMessage);
-      delivery_service_->attemptDelivery(peer_id);
+      delivery_service_->AttemptDelivery(peer_id);
     } else {
       LOGW << "Re-confirmation from " << peer_id << " failed. Signature invalid.";
     }
@@ -695,7 +695,7 @@ void Client::ProcessDataChannelMessage(const ContactID& peer_id, const Json& mes
               contact_manager_->StoreMySignatureFor(peer_id, my_signature_hex);
               const Json sig_content = {{"action", "contact_signature"}, {"signature", my_signature_hex}};
               message_history_->AddTextEntry(peer_id, sig_content.dump(), messaging::MessageDirection::sent, messaging::HistoryEntryKind::systemMessage);
-              delivery_service_->attemptDelivery(peer_id);
+              delivery_service_->AttemptDelivery(peer_id);
             }
           } else {
             LOGW << "Received invalid contact signature from " << peer_id;
@@ -707,7 +707,7 @@ void Client::ProcessDataChannelMessage(const ContactID& peer_id, const Json& mes
 
             const Json ringing_msg = {{"action", "call_ringing"}};
             message_history_->AddTextEntry(peer_id, ringing_msg.dump(), messaging::MessageDirection::sent, messaging::HistoryEntryKind::systemMessage);
-            delivery_service_->attemptDelivery(peer_id);
+            delivery_service_->AttemptDelivery(peer_id);
           }
         } else if (action == "call_ringing") {
           if (on_call_ringing_) {
@@ -805,7 +805,7 @@ void Client::ProcessDataChannelMessage(const ContactID& peer_id, const Json& mes
 void Client::SendQueuedMessages(const ContactID& peer_id) {
   const auto messages = storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::sending);
   if (messages.empty()) {
-    delivery_service_->connectionAttemptFinished(peer_id);
+    delivery_service_->ConnectionAttemptFinished(peer_id);
     return;
   }
   const auto peer = transport_->getPeer(peer_id);
@@ -922,7 +922,7 @@ void Client::SendQueuedMessages(const ContactID& peer_id) {
       message_history_->UpdateMessageStatus(peer_id, entry.id, messaging::MessageStatus::sent);
     }
   }
-  delivery_service_->connectionAttemptFinished(peer_id);
+  delivery_service_->ConnectionAttemptFinished(peer_id);
 }
 
 void Client::ProcessPeerMessage(Json message) {
@@ -1082,7 +1082,7 @@ void Client::ProcessPeerMessage(Json message) {
       message_history_->AddTextEntry(peer_id, request_content.dump(), messaging::MessageDirection::sent,
                                      messaging::HistoryEntryKind::systemMessage);
 
-      delivery_service_->attemptDelivery(peer_id);
+      delivery_service_->AttemptDelivery(peer_id);
     }
   }
 }
