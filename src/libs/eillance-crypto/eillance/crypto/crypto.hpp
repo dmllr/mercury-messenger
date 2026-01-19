@@ -9,6 +9,7 @@
 #include <openssl/pem.h>
 #include <openssl/rand.h>
 #include <openssl/sha.h>
+#include <span>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -30,7 +31,7 @@ constexpr auto hex_char_to_int(char c) -> int {
 }  // namespace
 
 /// @brief Convert binary data to a hex string
-[[nodiscard]] static auto ToHex(const std::vector<std::byte>& data) -> std::string {
+[[nodiscard]] static auto ToHex(std::span<const std::byte> data) -> std::string {
   constexpr char hex_map[] = "0123456789abcdef";
   std::string hex_str(data.size() * 2, ' ');
   for (size_t i = 0; i < data.size(); ++i) {
@@ -38,6 +39,10 @@ constexpr auto hex_char_to_int(char c) -> int {
     hex_str[2 * i + 1] = hex_map[static_cast<unsigned char>(data[i]) & 0x0F];
   }
   return hex_str;
+}
+
+[[nodiscard]] static auto ToHex(const std::vector<std::byte>& data) -> std::string {
+  return ToHex(std::span{data});
 }
 
 /// @brief Convert a hex string to binary data
@@ -166,15 +171,15 @@ public:
     return file.good();
   }
 
-  [[nodiscard]] auto GetId() const -> std::string {
+  [[nodiscard]] auto GetPublicKey() const -> std::vector<std::byte> {
     size_t len = 0;
-    if (EVP_PKEY_get_raw_public_key(pkey_.get(), nullptr, &len) <= 0 || len == 0) { return ""; }
+    if (EVP_PKEY_get_raw_public_key(pkey_.get(), nullptr, &len) <= 0 || len == 0) { return {}; }
     std::vector<std::byte> pub_key(len);
-    if (EVP_PKEY_get_raw_public_key(pkey_.get(), reinterpret_cast<unsigned char*>(pub_key.data()), &len) <= 0) { return ""; }
-    return ToHex(pub_key);
+    if (EVP_PKEY_get_raw_public_key(pkey_.get(), reinterpret_cast<unsigned char*>(pub_key.data()), &len) <= 0) { return {}; }
+    return pub_key;
   }
 
-  [[nodiscard]] auto Sign(const std::string& message) const -> std::vector<std::byte> {
+  [[nodiscard]] auto Sign(std::span<const std::byte> message) const -> std::vector<std::byte> {
     const std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)> ctx(EVP_MD_CTX_new(), EVP_MD_CTX_free);
     if (!ctx) { return {}; }
     if (EVP_DigestSignInit(ctx.get(), nullptr, nullptr, nullptr, pkey_.get()) <= 0) { return {}; }
@@ -186,9 +191,9 @@ public:
     return signature;
   }
 
-  static auto Verify(const std::string& id, const std::string& message, const std::vector<std::byte>& signature) -> bool {
-    auto pub_key_bytes = FromHex(id);
-    const EvpPkeyPtr pkey(EVP_PKEY_new_raw_public_key(EVP_PKEY_ED25519, nullptr, reinterpret_cast<const unsigned char*>(pub_key_bytes.data()), pub_key_bytes.size()), EVP_PKEY_free);
+  static auto Verify(std::span<const std::byte> pub_key, std::span<const std::byte> message, std::span<const std::byte> signature) -> bool {
+    if (pub_key.empty() || signature.empty()) return false;
+    const EvpPkeyPtr pkey(EVP_PKEY_new_raw_public_key(EVP_PKEY_ED25519, nullptr, reinterpret_cast<const unsigned char*>(pub_key.data()), pub_key.size()), EVP_PKEY_free);
     if (!pkey) { return false; }
     const std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)> ctx(EVP_MD_CTX_new(), EVP_MD_CTX_free);
     if (!ctx) { return false; }

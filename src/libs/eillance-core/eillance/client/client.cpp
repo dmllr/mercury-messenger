@@ -37,15 +37,8 @@ Client::Client(std::shared_ptr<storage::PersistentStorage> storage, std::shared_
     if (source == EventSource::peerConnectionState) {
       const auto state = static_cast<eillance::transport::PeerConnectionState>(state_val);
       if (state == eillance::transport::PeerConnectionState::Failed || state == eillance::transport::PeerConnectionState::Closed || state == eillance::transport::PeerConnectionState::Disconnected) {
-        // The peer connection is no longer viable.
-        // Explicitly close the underlying connection to stop any pending events (like late data messages)
-        // from trying to access the Peer object we are about to remove.
         transport_->closePeerConnection(peer_id, "data");
-        // Also clean up media connection if it exists, to be safe.
         transport_->closePeerConnection(peer_id, "media");
-
-        // Removing the peer object from the transport layer
-        // ensures that a new connection attempt by the MessageDeliveryService will start from a clean state.
         transport_->removePeer(peer_id);
         delivery_service_->ConnectionAttemptFinished(peer_id);
       }
@@ -63,7 +56,7 @@ void Client::InitializeAVStream() {
 }
 
 auto Client::GetId() const -> ContactID {
-  return ContactID(id_manager_->GetId());
+  return ContactID(id_manager_->GetPublicKey());
 }
 
 auto Client::IdentityExists() const -> bool {
@@ -110,7 +103,7 @@ void Client::SetName(const std::string& name) const {
 
 void Client::Start() {
   if (!id_manager_->IdentityExists()) {
-    LOGE << "Client started without an identity. Please generate or restore one.";
+    LOGE << "Client started without an identity.";
     return;
   }
   if (is_running_.exchange(true)) {
@@ -198,7 +191,7 @@ void Client::Call(const ContactID& peer_id) {
 
 void Client::Connect(const ContactID& peer_id) {
   if (transport_->getPeer(peer_id)) {
-    LOGW << "Connect called for peer that already exists: " << peer_id;
+    LOGW << "Connect called for peer that already exists: " << peer_id.ToString();
     return;
   }
   const auto peer = std::make_shared<Peer>(peer_id);
@@ -220,7 +213,7 @@ void Client::StartVideoCall(const ContactID& peer_id) {
 void Client::AcceptCall(const ContactID& peer_id, messaging::HistoryEntryKind call_kind) const {
   auto peer = transport_->getPeer(peer_id);
   if (!peer) {
-    LOGW << "Cannot accept call from " << peer_id << ", peer object not found.";
+    LOGW << "Cannot accept call from " << peer_id.ToString() << ", peer object not found.";
     return;
   }
 
@@ -235,7 +228,7 @@ void Client::RejectCall(const ContactID& peer_id) const {
   Hangup(peer_id);
 }
 
-void Client::AddContact(const ContactID& peer_id, const std::optional<std::string>& token) const {
+void Client::AddContact(const ContactID& peer_id, const std::optional<std::vector<std::byte>>& token) const {
   const auto existing_contact = contact_manager_->GetContact(peer_id);
   if (existing_contact && existing_contact->status == identity::ContactStatus::awaitingApproval) {
     ConfirmContact(peer_id);
@@ -247,7 +240,7 @@ void Client::AddContact(const ContactID& peer_id, const std::optional<std::strin
         {"profile", {{"display_name", settings_manager_->GetMyDisplayName().value_or("")}, {"bio", settings_manager_->GetMyBio().value_or("")}, {"photo", settings_manager_->GetMyPhotoBase64()}}},
     };
     if (token) {
-      content["token"] = *token;
+      content["token"] = crypto::ToHex(*token);
     }
     message_history_->AddTextEntry(peer_id, content.dump(), messaging::MessageDirection::sent, messaging::HistoryEntryKind::systemMessage);
     if (on_contact_status_changed_) { (*on_contact_status_changed_)(peer_id, identity::ContactStatus::pendingApproval); }
@@ -255,8 +248,9 @@ void Client::AddContact(const ContactID& peer_id, const std::optional<std::strin
   }
 }
 
-auto Client::GenerateContactToken() -> std::string {
-  return contact_manager_->GenerateContactToken();
+auto Client::GenerateContactToken() -> std::vector<std::byte> {
+  auto token_bytes = contact_manager_->GenerateContactToken();
+  return {token_bytes.begin(), token_bytes.end()};
 }
 
 void Client::DeleteContact(const ContactID& peer_id) const {
@@ -295,11 +289,10 @@ void Client::ConfirmContact(const ContactID& peer_id) const {
     const Json content = {{"action", "contact_confirm"}};
     message_history_->AddTextEntry(peer_id, content.dump(), messaging::MessageDirection::sent, messaging::HistoryEntryKind::systemMessage);
 
-    auto signature_bytes = id_manager_->Sign(peer_id.ToString());
-    auto signature_hex = crypto::ToHex(signature_bytes);
-    contact_manager_->StoreMySignatureFor(peer_id, signature_hex);
+    auto signature_bytes = id_manager_->Sign(peer_id.Span());
+    contact_manager_->StoreMySignatureFor(peer_id, signature_bytes);
 
-    const Json sig_content = {{"action", "contact_signature"}, {"signature", signature_hex}};
+    const Json sig_content = {{"action", "contact_signature"}, {"signature", crypto::ToHex(signature_bytes)}};
     message_history_->AddTextEntry(peer_id, sig_content.dump(), messaging::MessageDirection::sent, messaging::HistoryEntryKind::systemMessage);
 
     const Json profile_content = {{"action", "send_profile"}};
@@ -318,7 +311,7 @@ auto Client::GetContacts() const -> std::vector<identity::Contact> {
   return contact_manager_->GetContacts();
 }
 
-auto Client::GetChatSummaries(const std::vector<std::string>& peer_ids) const -> std::vector<messaging::ChatSummary> {
+auto Client::GetChatSummaries(const std::vector<ContactID>& peer_ids) const -> std::vector<messaging::ChatSummary> {
   return message_history_->GetChatSummaries(peer_ids);
 }
 
@@ -328,7 +321,6 @@ void Client::Hangup(const ContactID& peer_id, bool notify_peer) const {
     if (!peer->pending_candidates.empty()) { peer->pending_candidates.clear(); }
 
     if (peer->has_media_peer_connection_) {
-      LOGI << "Closing media peer connection for " << peer_id;
       transport_->closePeerConnection(peer_id, "media");
       peer->has_media_peer_connection_ = false;
       peer->audio_ = nullptr;
@@ -339,12 +331,10 @@ void Client::Hangup(const ContactID& peer_id, bool notify_peer) const {
     }
 
     if (notify_peer && peer->data_channel_is_open_) {
-      LOGI << "Sending hangup signal to " << peer_id << " via data channel.";
       const Json msg = {{"type", "hangup"}};
       transport_->sendPeerDataChannelMessage(peer_id, msg);
     }
   }
-  // Notify listeners (including other ViewModels/Services) that the call is terminated.
   if (on_call_terminated_) {
     (*on_call_terminated_)(peer_id);
   }
@@ -359,7 +349,7 @@ void Client::Configure(const Config& config) const {
 
 auto Client::SendChatMessage(const ContactID& peer_id, const std::string& message) -> messaging::HistoryEntryRecord {
   if (!contact_manager_->GetContact(peer_id)) {
-    LOGE << "Cannot send message to " << peer_id << ". Not a contact.";
+    LOGE << "Cannot send message to " << peer_id.ToString() << ". Not a contact.";
     return {};
   }
   auto entry = message_history_->AddTextEntry(peer_id, message, messaging::MessageDirection::sent);
@@ -379,7 +369,6 @@ void Client::UpdateSignalingUrl(const std::string& url) const {
     transport_->setSignalingUrl(url);
     transport_->reconnect();
   } else {
-    LOGW << "UpdateSignalingUrl called while client is not running. URL will be applied on next start.";
     settings_manager_->SetSignalingServerUrl(url);
   }
 }
@@ -462,7 +451,7 @@ void Client::DebugRevokeAllApprovals() const {
 
 void Client::OnPeerReady(const std::shared_ptr<Peer>&) {}
 
-auto Client::Sign(const std::string& message) -> std::vector<std::byte> {
+auto Client::Sign(std::span<const std::byte> message) -> std::vector<std::byte> {
   return id_manager_->Sign(message);
 }
 
@@ -474,9 +463,10 @@ void Client::OnSystemMessage(const std::string& type, const Json& message) {
   if (type == "auth_challenge") {
     const auto challenge = message.value("challenge", "");
     if (!challenge.empty()) {
-      const auto signature_bytes = Sign(challenge);
+      const std::span<const std::byte> challenge_bytes(reinterpret_cast<const std::byte*>(challenge.data()), challenge.size());
+      const auto signature_bytes = Sign(challenge_bytes);
       const auto signature_hex = crypto::ToHex(signature_bytes);
-      const Json response = {{"type", "auth_response"}, {"id", GetId()}, {"signature", signature_hex}};
+      const Json response = {{"type", "auth_response"}, {"id", GetId().ToString()}, {"signature", signature_hex}};
       transport_->sendSignalingMessage(response);
     }
   } else if (type == "login_success") {
@@ -491,7 +481,7 @@ void Client::OnSystemMessage(const std::string& type, const Json& message) {
 
 void Client::OnSignalingErrorForPeer(const ContactID& peer_id, const std::string& error) {
   if (error == "peer_not_found") {
-    LOGW << "Connection attempt failed for peer " << peer_id << " because they are not online. Will retry when they appear.";
+    LOGW << "Connection attempt failed for peer " << peer_id.ToString() << " not online.";
     delivery_service_->ConnectionAttemptFinished(peer_id);
     if (transport_->getPeer(peer_id)) { transport_->closePeerConnection(peer_id, "data"); }
   }
@@ -500,11 +490,10 @@ void Client::OnSignalingErrorForPeer(const ContactID& peer_id, const std::string
 void Client::OnDataChannelOpen(const ContactID& peer_id) {
   auto peer = transport_->getPeer(peer_id);
   if (!peer) {
-    LOGW << "onDataChannelOpen called for non-existent peer: " << peer_id;
     return;
   }
   UpdatePeerActivity(peer_id);
-  LOGI << "Data channel with " << peer_id << " opened.";
+  LOGI << "Data channel with " << peer_id.ToString() << " opened.";
 
   peer->session_cipher_->Reset();
   peer->data_channel_is_open_ = true;
@@ -571,7 +560,7 @@ void Client::ProcessDataChannelMessage(const ContactID& peer_id, const Json& mes
   if (type == "key_exchange") {
     auto pub_key_bytes = message.at("key").get<std::vector<std::byte>>();
     if (peer->session_cipher_->ComputeSharedSecret({pub_key_bytes.begin(), pub_key_bytes.end()})) {
-      LOGI << "Successfully computed shared secret with peer " << peer_id;
+      LOGI << "Successfully computed shared secret with peer " << peer_id.ToString();
       const bool is_reply = message.value("is_reply", false);
       if (!is_reply) {
         auto my_pub_key = peer->session_cipher_->GetPublicKey();
@@ -581,13 +570,13 @@ void Client::ProcessDataChannelMessage(const ContactID& peer_id, const Json& mes
         SendQueuedMessages(peer_id);
       }
     } else {
-      LOGE << "Failed to compute shared secret with peer " << peer_id;
+      LOGE << "Failed to compute shared secret with peer " << peer_id.ToString();
     }
     return;
   }
 
   if (type == "hangup") {
-    LOGI << "Received hangup signal from " << peer_id << " via data channel.";
+    LOGI << "Received hangup signal from " << peer_id.ToString();
     Hangup(peer_id, false);
     return;
   }
@@ -595,11 +584,8 @@ void Client::ProcessDataChannelMessage(const ContactID& peer_id, const Json& mes
   if (type == "reconfirm_request") {
     const auto contact_info = contact_manager_->GetContact(peer_id);
     if (contact_info && contact_info->my_signature_for_them) {
-      LOGI << "Received reconfirm_request from " << peer_id << ". Sending back my signature for them.";
-      const Json reconfirm_response = {{"type", "reconfirm_response"}, {"signature", *contact_info->my_signature_for_them}};
+      const Json reconfirm_response = {{"type", "reconfirm_response"}, {"signature", crypto::ToHex(*contact_info->my_signature_for_them)}};
       transport_->sendPeerDataChannelMessage(peer_id, reconfirm_response);
-    } else {
-      LOGW << "Received reconfirm_request from " << peer_id << " but I have no signature for them to send back.";
     }
     return;
   }
@@ -608,13 +594,12 @@ void Client::ProcessDataChannelMessage(const ContactID& peer_id, const Json& mes
     const auto signature_hex = message.at("signature").get<std::string>();
     const auto signature_bytes = crypto::FromHex(signature_hex);
 
-    if (crypto::Identity::Verify(peer_id.ToString(), GetId().ToString(), signature_bytes)) {
-      LOGI << "Re-confirmation from " << peer_id << " successful. Re-adding as contact.";
+    if (crypto::Identity::Verify(peer_id.Span(), GetId().Span(), signature_bytes)) {
       contact_manager_->MarkAsConfirmed(peer_id);
 
-      const auto my_signature_bytes = id_manager_->Sign(peer_id.ToString());
+      const auto my_signature_bytes = id_manager_->Sign(peer_id.Span());
       const auto my_signature_hex = crypto::ToHex(my_signature_bytes);
-      contact_manager_->StoreMySignatureFor(peer_id, my_signature_hex);
+      contact_manager_->StoreMySignatureFor(peer_id, my_signature_bytes);
 
       const Json sig_content = {{"type", "contact_signature"}, {"signature", my_signature_hex}};
       transport_->sendPeerDataChannelMessage(peer_id, sig_content);
@@ -628,8 +613,6 @@ void Client::ProcessDataChannelMessage(const ContactID& peer_id, const Json& mes
       const Json send_profile = {{"action", "send_profile"}};
       message_history_->AddTextEntry(peer_id, send_profile.dump(), messaging::MessageDirection::sent, messaging::HistoryEntryKind::systemMessage);
       delivery_service_->AttemptDelivery(peer_id);
-    } else {
-      LOGW << "Re-confirmation from " << peer_id << " failed. Signature invalid.";
     }
     return;
   }
@@ -637,17 +620,13 @@ void Client::ProcessDataChannelMessage(const ContactID& peer_id, const Json& mes
   if (type == "contact_signature") {
     auto signature_hex = message.at("signature").get<std::string>();
     auto signature_bytes = crypto::FromHex(signature_hex);
-    if (crypto::Identity::Verify(peer_id.ToString(), GetId().ToString(), signature_bytes)) {
-      LOGI << "Received and verified contact signature from " << peer_id;
-      contact_manager_->StoreSignatureFrom(peer_id, signature_hex);
-    } else {
-      LOGW << "Received invalid contact signature from " << peer_id;
+    if (crypto::Identity::Verify(peer_id.Span(), GetId().Span(), signature_bytes)) {
+      contact_manager_->StoreSignatureFrom(peer_id, signature_bytes);
     }
     return;
   }
 
   if (!contact_manager_->IsConfirmedContact(peer_id)) {
-    LOGW << "Received data channel message of type '" << type << "' from non-contact peer " << peer_id << ". Requesting re-confirmation.";
     const Json reconfirm_request = {{"type", "reconfirm_request"}};
     transport_->sendPeerDataChannelMessage(peer_id, reconfirm_request);
     return;
@@ -668,7 +647,6 @@ void Client::ProcessDataChannelMessage(const ContactID& peer_id, const Json& mes
     transport_->removePeer(peer_id);
   } else if (type == "chat") {
     if (!peer->session_cipher_->IsReady()) {
-      LOGW << "Received chat message from " << peer_id << " but session cipher is not ready. Ignoring.";
       return;
     }
     auto message_id = message.at("message_id").get<std::uint64_t>();
@@ -685,20 +663,17 @@ void Client::ProcessDataChannelMessage(const ContactID& peer_id, const Json& mes
         if (action == "contact_signature") {
           auto signature_hex = content_json.at("signature").get<std::string>();
           auto signature_bytes = crypto::FromHex(signature_hex);
-          if (crypto::Identity::Verify(peer_id.ToString(), GetId().ToString(), signature_bytes)) {
-            LOGI << "Received and verified contact signature from " << peer_id;
-            contact_manager_->StoreSignatureFrom(peer_id, signature_hex);
+          if (crypto::Identity::Verify(peer_id.Span(), GetId().Span(), signature_bytes)) {
+            contact_manager_->StoreSignatureFrom(peer_id, signature_bytes);
             auto my_contact_info_for_them = contact_manager_->GetContact(peer_id);
             if (!my_contact_info_for_them || !my_contact_info_for_them->my_signature_for_them) {
-              auto my_signature_bytes = id_manager_->Sign(peer_id.ToString());
+              auto my_signature_bytes = id_manager_->Sign(peer_id.Span());
               auto my_signature_hex = crypto::ToHex(my_signature_bytes);
-              contact_manager_->StoreMySignatureFor(peer_id, my_signature_hex);
+              contact_manager_->StoreMySignatureFor(peer_id, my_signature_bytes);
               const Json sig_content = {{"action", "contact_signature"}, {"signature", my_signature_hex}};
               message_history_->AddTextEntry(peer_id, sig_content.dump(), messaging::MessageDirection::sent, messaging::HistoryEntryKind::systemMessage);
               delivery_service_->AttemptDelivery(peer_id);
             }
-          } else {
-            LOGW << "Received invalid contact signature from " << peer_id;
           }
         } else if (action == "call_request") {
           if (on_incoming_call_) {
@@ -738,8 +713,6 @@ void Client::ProcessDataChannelMessage(const ContactID& peer_id, const Json& mes
         } else if (action == "profile_update") {
           HandleProfileUpdate(peer_id, content_json);
         }
-      } else {
-        LOGW << "Failed to decrypt system message from " << peer_id;
       }
     } else if (on_chat_message_received_) {
       auto payload = message.at("payload").get<std::vector<std::byte>>();
@@ -748,8 +721,6 @@ void Client::ProcessDataChannelMessage(const ContactID& peer_id, const Json& mes
         message_processed_successfully = true;
         auto history_entry = message_history_->AddTextEntry(peer_id, decrypted_message, messaging::MessageDirection::received);
         (*on_chat_message_received_)(peer_id, history_entry);
-      } else {
-        LOGW << "Failed to decrypt message from " << peer_id;
       }
     }
 
@@ -757,8 +728,6 @@ void Client::ProcessDataChannelMessage(const ContactID& peer_id, const Json& mes
       const Json receipt = {{"type", "message_receipt"}, {"status", "delivered"}, {"message_id", message_id}};
       transport_->sendPeerDataChannelMessage(peer_id, receipt);
       SendQueuedMessages(peer_id);
-    } else {
-      LOGW << "Skipping receipt for message " << message_id << " from " << peer_id << " due to processing failure.";
     }
 
   } else if (type == "message_receipt") {
@@ -792,7 +761,6 @@ void Client::ProcessDataChannelMessage(const ContactID& peer_id, const Json& mes
     }
     transport_->sendPeerDataChannelMessage(peer_id, profile_msg);
   } else if (type == "contact_removed") {
-    LOGI << "Received contact removal notification from " << peer_id;
     if (on_contact_removed_) {
       (*on_contact_removed_)(peer_id);
     }
@@ -810,7 +778,7 @@ void Client::SendQueuedMessages(const ContactID& peer_id) {
   }
   const auto peer = transport_->getPeer(peer_id);
   if (!peer) { return; }
-  LOGI << "Processing " << messages.size() << " queued message(s) for " << peer_id;
+  LOGI << "Processing " << messages.size() << " queued message(s) for " << peer_id.ToString();
   for (const auto& entry: messages) {
     bool sent = false;
     switch (entry.kind) {
@@ -818,7 +786,6 @@ void Client::SendQueuedMessages(const ContactID& peer_id) {
         [[fallthrough]];
       case messaging::HistoryEntryKind::systemMessage: {
         if (!std::holds_alternative<messaging::MessageEntry>(entry.data)) {
-          LOGW << "Skipping message " << entry.id << " with unexpected data type for its kind.";
           UpdatePeerActivity(peer_id);
           continue;
         }
@@ -830,8 +797,6 @@ void Client::SendQueuedMessages(const ContactID& peer_id) {
           if (full_content) {
             content_to_send = *full_content;
           } else {
-            LOGE << "Failed to retrieve full content for truncated message " << entry.id
-                 << ", skipping.";
             continue;
           }
         } else {
@@ -843,7 +808,6 @@ void Client::SendQueuedMessages(const ContactID& peer_id) {
             auto encrypted_payload = peer->session_cipher_->Encrypt(content_to_send);
             UpdatePeerActivity(peer_id);
             if (encrypted_payload.empty()) {
-              LOGE << "Failed to encrypt chat message for peer " << peer_id;
               continue;
             }
             const Json json_message = {{"type", "chat"},
@@ -859,7 +823,7 @@ void Client::SendQueuedMessages(const ContactID& peer_id) {
             Json content_json = Json::parse(content_to_send);
             const std::string action = content_json.value("action", "");
             if (action == "contact_request" || action == "contact_confirm") {
-              Json msg = {{"type", action == "contact_request" ? "contact_add_request" : "contact_confirm"}, {"to", peer_id}};
+              Json msg = {{"type", action == "contact_request" ? "contact_add_request" : "contact_confirm"}, {"to", peer_id.ToString()}};
               if (action == "contact_request") {
                 if (content_json.contains("profile")) { msg["profile"] = content_json["profile"]; }
                 if (content_json.contains("token")) {
@@ -873,7 +837,6 @@ void Client::SendQueuedMessages(const ContactID& peer_id) {
                 auto encrypted_payload = peer->session_cipher_->Encrypt(content_to_send);
                 UpdatePeerActivity(peer_id);
                 if (encrypted_payload.empty()) {
-                  LOGE << "Failed to encrypt system message (" << action << ") for peer " << peer_id;
                   continue;
                 }
                 const Json json_message = {{"type", "chat"},
@@ -915,7 +878,6 @@ void Client::SendQueuedMessages(const ContactID& peer_id) {
         break;
       }
       default:
-        LOGW << "Don't know how to deliver queued message of kind: " << static_cast<int>(entry.kind);
         break;
     }
     if (sent) {
@@ -937,12 +899,11 @@ void Client::ProcessPeerMessage(Json message) {
   if (context == "media") {
     auto peer = transport_->getPeer(peer_id);
     if (!peer) {
-      LOGI << "Received media message for unknown peer " << peer_id << ". Creating peer object first.";
+      LOGI << "Received media message for unknown peer " << peer_id.ToString() << ". Creating peer object first.";
       peer = std::make_shared<Peer>(peer_id);
       transport_->addPeer(peer_id, peer);
     }
     if (type == "offer") {
-      LOGD << "Received media offer from " << peer_id << ". Replying with answer.";
       const auto sdp = message["sdp"].get<std::string>();
       const bool is_video_call = sdp.find("m=video") != std::string::npos;
       if (av_stream_) { av_stream_->Start(); }
@@ -966,27 +927,20 @@ void Client::ProcessPeerMessage(Json message) {
       transport_->addRemoteCandidate(peer_id, "media", candidate_str, mid);
     } else if (peer->has_media_peer_connection_ && type == "answer") {
       const auto sdp = message["sdp"].get<std::string>();
-      LOGD << "Remote SDP (" << type << ") for " << peer_id << " context " << context << ":\n"
-           << sdp;
       transport_->setRemoteDescription(peer_id, "media", sdp, type);
-    } else {
-      LOGW << "Received media message of type '" << type << "' for " << peer_id << " in an unexpected state.";
     }
     return;
   }
 
-  // Handle data channel signaling
   if (type == "offer") {
     auto peer = transport_->getPeer(peer_id);
-    if (peer) {                 // Glare condition
-      if (GetId() > peer_id) {  // This peer is "polite"
-        LOGW << "Glare detected, polite peer yielding. Resetting connection to handle incoming offer from " << peer_id;
+    if (peer) {
+      if (GetId() > peer_id) {
         transport_->closePeerConnection(peer_id, "data");
         transport_->removePeer(peer_id);
         peer = nullptr;
-      } else {  // This peer is "impolite"
-        LOGW << "Glare detected, and we are the 'impolite' peer. Ignoring incoming offer from " << peer_id;
-        return;  // Let our outgoing offer attempt proceed.
+      } else {
+        return;
       }
     }
 
@@ -1031,8 +985,15 @@ void Client::ProcessPeerMessage(Json message) {
     auto result = contact_manager_->ReceiveContactRequest(peer_id, name, bio, photo_base64);
 
     if (result == identity::RequestStatus::New || result == identity::RequestStatus::Duplicate) {
-      if (token && contact_manager_->ValidateAndConsumeContactToken(*token)) {
-        LOGI << "Received contact request from " << peer_id << " with a valid token. Auto-confirming.";
+      bool valid_token = false;
+      if (token) {
+        auto token_bytes = crypto::FromHex(*token);
+        if (contact_manager_->ValidateAndConsumeContactToken(token_bytes)) {
+          valid_token = true;
+        }
+      }
+
+      if (valid_token) {
         ConfirmContact(peer_id);
         return;
       }
@@ -1043,21 +1004,17 @@ void Client::ProcessPeerMessage(Json message) {
 
       if (result == identity::RequestStatus::New) {
         if (on_contact_request_) { (*on_contact_request_)(peer_id); }
-      } else {  // Duplicate
-        LOGI << "Received duplicate contact request from " << peer_id << ".";
+      } else {
         if (on_contact_profile_updated_) { (*on_contact_profile_updated_)(peer_id); }
       }
-    } else {  // Ignored
-      LOGI << "Contact request from " << peer_id << " ignored (contact is confirmed or was rejected).";
+    } else {
       if (contact_manager_->IsConfirmedContact(peer_id)) {
-        LOGI << "Resending confirmation to already confirmed peer " << peer_id;
-        const Json msg = {{"type", "contact_confirm"}, {"to", peer_id}};
+        const Json msg = {{"type", "contact_confirm"}, {"to", peer_id.ToString()}};
         transport_->sendSignalingMessage(msg);
       }
     }
   } else if (type == "contact_confirm") {
     if (contact_manager_->MarkAsConfirmed(peer_id)) {
-      LOGI << "Contact " << peer_id << " has confirmed your request.";
       if (on_contact_status_changed_) { (*on_contact_status_changed_)(peer_id, identity::ContactStatus::confirmed); }
 
       auto pending_requests = storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::sent);
@@ -1098,7 +1055,7 @@ void Client::CheckForInactivePeers() {
   for (const auto& [peer_id, peer]: peers) {
     if (!peer->has_media_peer_connection_ && GetPeerConnectionState(peer_id) == transport::PeerConnectionState::Connected) {
       if ((now - peer->last_activity_time_.load()) > timeout_us) {
-        LOGI << "Peer " << peer_id << " inactive for too long. Closing data connection.";
+        LOGI << "Peer " << peer_id.ToString() << " inactive for too long. Closing data connection.";
         transport_->closePeerConnection(peer_id, "data");
       }
     }

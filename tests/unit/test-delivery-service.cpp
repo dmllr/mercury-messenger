@@ -30,7 +30,7 @@ protected:
   }
 
   void TearDown() override {
-    delivery_service_->stop();
+    delivery_service_->Stop();
   }
 
   // Helper to wait for a certain number of connection requests with a timeout
@@ -48,7 +48,7 @@ protected:
          .direction = messaging::MessageDirection::sent,
          .status = messaging::MessageStatus::sending,
          .data = messaging::MessageEntry{"test payload"},
-         .peer_id_for_db = peer_id.ToString()});
+         .peer_id = peer_id});
   }
 
   storage::MockPersistentStorageImpl* mock_storage_impl_;
@@ -73,7 +73,7 @@ TEST_F(DeliveryServiceTest, NoActionWhenNoQueuedMessages) {
 
 TEST_F(DeliveryServiceTest, AttemptDeliveryCallsHandler) {
   AddPendingMessage(peer1_);
-  delivery_service_->attemptDelivery(peer1_);
+  delivery_service_->AttemptDelivery(peer1_);
   ASSERT_TRUE(WaitForRequests(1));
   EXPECT_EQ(requested_connections_.size(), 1);
   EXPECT_EQ(requested_connections_[0], peer1_);
@@ -81,8 +81,8 @@ TEST_F(DeliveryServiceTest, AttemptDeliveryCallsHandler) {
 
 TEST_F(DeliveryServiceTest, AttemptDeliveryIsDebounced) {
   AddPendingMessage(peer1_);
-  delivery_service_->attemptDelivery(peer1_);
-  delivery_service_->attemptDelivery(peer1_);  // This one should be ignored
+  delivery_service_->AttemptDelivery(peer1_);
+  delivery_service_->AttemptDelivery(peer1_);  // This one should be ignored
   ASSERT_TRUE(WaitForRequests(1, std::chrono::milliseconds(100)));
   // Wait a bit more to ensure no second call comes through
   std::this_thread::sleep_for(std::chrono::milliseconds(50));
@@ -91,13 +91,13 @@ TEST_F(DeliveryServiceTest, AttemptDeliveryIsDebounced) {
 
 TEST_F(DeliveryServiceTest, CanAttemptDeliveryAgainAfterFinished) {
   AddPendingMessage(peer1_);
-  delivery_service_->attemptDelivery(peer1_);
+  delivery_service_->AttemptDelivery(peer1_);
   ASSERT_TRUE(WaitForRequests(1));
   EXPECT_EQ(requested_connections_.size(), 1);
 
-  delivery_service_->connectionAttemptFinished(peer1_);
+  delivery_service_->ConnectionAttemptFinished(peer1_);
 
-  delivery_service_->attemptDelivery(peer1_);
+  delivery_service_->AttemptDelivery(peer1_);
   ASSERT_TRUE(WaitForRequests(2));
   EXPECT_EQ(requested_connections_.size(), 2);
 }
@@ -115,7 +115,7 @@ TEST_F(DeliveryServiceTest, StartTriggersCheckForQueuedMessages) {
 
 TEST_F(DeliveryServiceTest, StopPreventsFurtherChecks) {
   delivery_service_->Start();
-  delivery_service_->stop();  // Stop it immediately
+  delivery_service_->Stop();  // Stop it immediately
 
   // Now add a message that would have been picked up
   contact_manager_->AddContact(peer1_);

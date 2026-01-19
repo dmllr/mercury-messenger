@@ -3,7 +3,9 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
+#include <vector>
 
 #include "eillance/crypto/crypto.hpp"
 #include "eillance/storage/persistent_storage.hpp"
@@ -21,7 +23,7 @@ class IdManager {
     if (pem_data_opt) {
       identity_ = crypto::Identity::LoadFromMemory(*pem_data_opt);
       if (identity_) {
-        LOGI << "Identity loaded successfully. ID: " << identity_->GetId();
+        LOGI << "Identity loaded successfully.";
       }
     }
   }
@@ -31,7 +33,9 @@ public:
 
   auto GetIdentity() const -> crypto::Identity* { return identity_.get(); }
 
-  auto GetId() const -> std::string { return identity_ ? identity_->GetId() : ""; }
+  auto GetPublicKey() const -> std::vector<std::byte> {
+    return identity_ ? identity_->GetPublicKey() : std::vector<std::byte>{};
+  }
 
   [[nodiscard]] auto GetMnemonic() const -> std::optional<std::string> {
     return storage_->GetSetting(mnemonic_key_file);
@@ -46,7 +50,7 @@ public:
       const auto pem_str = identity_->SaveToMemory();
       storage_->SetSetting(identity_key_file, pem_str);
       storage_->SetSetting(mnemonic_key_file, mnemonic);
-      LOGI << "New identity generated and saved. ID: " << identity_->GetId();
+      LOGI << "New identity generated and saved.";
     }
     return mnemonic;
   }
@@ -56,13 +60,13 @@ public:
     if (identity_) {
       const auto pem_str = identity_->SaveToMemory();
       storage_->SetSetting(identity_key_file, pem_str);
-      LOGI << "Identity restored from mnemonic. ID: " << identity_->GetId();
+      LOGI << "Identity restored from mnemonic.";
       return true;
     }
     return false;
   }
 
-  auto Sign(const std::string& message) const -> std::vector<std::byte> {
+  auto Sign(std::span<const std::byte> message) const -> std::vector<std::byte> {
     if (!identity_) { return {}; }
     return identity_->Sign(message);
   }

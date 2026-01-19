@@ -6,6 +6,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <span>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -123,15 +124,15 @@ public:
   void StartVideoCall(const ContactID& peer_id);
   void AcceptCall(const ContactID& peer_id, messaging::HistoryEntryKind call_kind) const;
   void RejectCall(const ContactID& peer_id) const;
-  void AddContact(const ContactID& peer_id, const std::optional<std::string>& token = std::nullopt) const;
-  auto GenerateContactToken() -> std::string;
+  void AddContact(const ContactID& peer_id, const std::optional<std::vector<std::byte>>& token = std::nullopt) const;
+  auto GenerateContactToken() -> std::vector<std::byte>;
   void ConfirmContact(const ContactID& peer_id) const;
   void BlockContact(const ContactID& peer_id, bool notify_peer = true) const;
   void DeleteContact(const ContactID& peer_id) const;
   void UnblockContact(const ContactID& peer_id);
   [[nodiscard]] auto GetPeerConnectionState(const ContactID& peer_id) const -> eillance::transport::PeerConnectionState;
   [[nodiscard]] auto GetContacts() const -> std::vector<identity::Contact>;
-  [[nodiscard]] auto GetChatSummaries(const std::vector<std::string>& peer_ids) const -> std::vector<messaging::ChatSummary>;
+  [[nodiscard]] auto GetChatSummaries(const std::vector<ContactID>& peer_ids) const -> std::vector<messaging::ChatSummary>;
   void Hangup(const ContactID& peer_id, bool notify_peer = true) const;
   void Configure(const Config& config) const;
   auto SendChatMessage(const ContactID& peer_id, const std::string& message) -> messaging::HistoryEntryRecord;
@@ -151,7 +152,7 @@ public:
   // TransportDelegate implementation
   void OnPeerReady(const std::shared_ptr<Peer>& peer) override;
   void OnSignalingErrorForPeer(const ContactID& peer_id, const std::string& error) override;
-  auto Sign(const std::string& message) -> std::vector<std::byte> override;
+  auto Sign(std::span<const std::byte> message) -> std::vector<std::byte> override;
   void OnLoginSuccess() override;
   void ProcessPeerMessage(Json message) override;
   void OnSystemMessage(const std::string& type, const Json& message) override;

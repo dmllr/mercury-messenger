@@ -130,7 +130,7 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ContactsViewMode
   auto* vm = reinterpret_cast<eillance::view_model::ContactsViewModel*>(ptr);
   const char* peer_id_chars = env->GetStringUTFChars(peer_id, nullptr);
   const char* token_chars = (token != nullptr) ? env->GetStringUTFChars(token, nullptr) : nullptr;
-  const auto c_token = (token_chars) ? std::optional<std::string>(token_chars) : std::nullopt;
+  const auto c_token = (token_chars) ? std::optional<std::vector<std::byte>>(eillance::crypto::FromHex(token_chars)) : std::nullopt;
   try {
     vm->AddContact(eillance::ContactID(peer_id_chars), c_token);
   } catch (...) {}
@@ -192,8 +192,8 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ContactsViewMode
 
 extern "C" JNIEXPORT jstring JNICALL Java_hela_eillance_viewmodels_ContactsViewModel_nativeGenerateToken(JNIEnv* env, jobject /*instance*/, jlong ptr) {
   auto* vm = reinterpret_cast<eillance::view_model::ContactsViewModel*>(ptr);
-  std::string token = vm->GenerateContactToken();
-  return env->NewStringUTF(token.c_str());
+  std::vector<std::byte> token = vm->GenerateContactToken();
+  return env->NewStringUTF(eillance::crypto::ToHex(token).c_str());
 }
 
 // Conversation

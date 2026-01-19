@@ -22,14 +22,14 @@ enum class ContactStatus : std::uint8_t {
 };
 
 struct Contact {
-  std::string peer_id;
+  ContactID peer_id;
   ContactStatus status;
   std::optional<std::string> display_name;
   std::optional<std::string> display_name_override;
   std::optional<std::string> bio;
   std::optional<std::string> photo_base64;
-  std::optional<std::string> signature_from_them;    // hex
-  std::optional<std::string> my_signature_for_them;  // hex
+  std::optional<std::vector<std::byte>> signature_from_them;
+  std::optional<std::vector<std::byte>> my_signature_for_them;
 };
 
 struct ProfileInfo {
@@ -126,12 +126,12 @@ struct HistoryEntryRecord {
   bool is_truncated = false;
   HistoryEntryData data;
 
-  // Transient field for passing peer_id to the database layer upon creation.
-  std::string peer_id_for_db;
+  // Peer ID associated with this record
+  ContactID peer_id;
 };
 
 struct ChatSummary {
-  std::string peer_id;
+  ContactID peer_id;
   HistoryEntryRecord last_message;
   uint32_t unread_count = 0;
 };
@@ -161,19 +161,19 @@ public:
 
   // --- Contacts ---
   virtual auto GetContacts() -> std::vector<identity::Contact> = 0;
-  virtual auto GetContact(std::string_view peer_id) -> std::optional<identity::Contact> = 0;
+  virtual auto GetContact(const ContactID& peer_id) -> std::optional<identity::Contact> = 0;
   virtual void UpdateContact(const identity::Contact& contact) = 0;
-  virtual void RemoveContact(std::string_view peer_id) = 0;
+  virtual void RemoveContact(const ContactID& peer_id) = 0;
 
   // --- History ---
   virtual auto AddHistoryEntry(messaging::HistoryEntryRecord entry) -> messaging::HistoryEntryRecord = 0;
   virtual void UpdateHistoryEntry(const messaging::HistoryEntryRecord& entry) = 0;
-  virtual void UpdateMessageStatus(const std::string& peer_id, uint64_t message_id, messaging::MessageStatus new_status) = 0;
-  virtual void UpdateMessageStatuses(const std::string& peer_id, const std::vector<uint64_t>& message_ids, messaging::MessageStatus new_status) = 0;
-  virtual auto GetHistoryPage(const std::string& peer_id, size_t page_index, size_t page_size) -> messaging::HistoryPage = 0;
+  virtual void UpdateMessageStatus(const ContactID& peer_id, uint64_t message_id, messaging::MessageStatus new_status) = 0;
+  virtual void UpdateMessageStatuses(const ContactID& peer_id, const std::vector<uint64_t>& message_ids, messaging::MessageStatus new_status) = 0;
+  virtual auto GetHistoryPage(const ContactID& peer_id, size_t page_index, size_t page_size) -> messaging::HistoryPage = 0;
   virtual auto GetFullMessageContent(std::uint64_t message_id) -> std::optional<std::string> = 0;
-  virtual auto GetChatSummaries(const std::vector<std::string>& peer_ids) -> std::vector<messaging::ChatSummary> = 0;
-  virtual auto GetMessagesWithStatus(const std::string& peer_id, messaging::MessageStatus status) -> std::vector<messaging::HistoryEntryRecord> = 0;
+  virtual auto GetChatSummaries(const std::vector<ContactID>& peer_ids) -> std::vector<messaging::ChatSummary> = 0;
+  virtual auto GetMessagesWithStatus(const ContactID& peer_id, messaging::MessageStatus status) -> std::vector<messaging::HistoryEntryRecord> = 0;
 
   // --- Debug ---
   virtual void DebugClearAllHistory() = 0;
@@ -206,19 +206,19 @@ public:
 
   // --- Contacts ---
   auto GetContacts() const { return pimpl_->GetContacts(); }
-  auto GetContact(const ContactID& peer_id) const { return pimpl_->GetContact(peer_id.ToString()); }
+  auto GetContact(const ContactID& peer_id) const { return pimpl_->GetContact(peer_id); }
   void UpdateContact(const identity::Contact& contact) const { pimpl_->UpdateContact(contact); }
-  void RemoveContact(const std::string& peer_id) const { pimpl_->RemoveContact(peer_id); }
+  void RemoveContact(const ContactID& peer_id) const { pimpl_->RemoveContact(peer_id); }
 
   // --- History ---
   auto AddHistoryEntry(messaging::HistoryEntryRecord entry) const { return pimpl_->AddHistoryEntry(std::move(entry)); }
   void UpdateHistoryEntry(const messaging::HistoryEntryRecord& entry) const { pimpl_->UpdateHistoryEntry(entry); }
-  void UpdateMessageStatus(const ContactID& peer_id, uint64_t message_id, messaging::MessageStatus new_status) const { pimpl_->UpdateMessageStatus(peer_id.ToString(), message_id, new_status); }
-  void UpdateMessageStatuses(const ContactID& peer_id, const std::vector<uint64_t>& message_ids, messaging::MessageStatus new_status) const { pimpl_->UpdateMessageStatuses(peer_id.ToString(), message_ids, new_status); }
-  auto GetHistoryPage(const ContactID& peer_id, size_t page_index, size_t page_size) const { return pimpl_->GetHistoryPage(peer_id.ToString(), page_index, page_size); }
+  void UpdateMessageStatus(const ContactID& peer_id, uint64_t message_id, messaging::MessageStatus new_status) const { pimpl_->UpdateMessageStatus(peer_id, message_id, new_status); }
+  void UpdateMessageStatuses(const ContactID& peer_id, const std::vector<uint64_t>& message_ids, messaging::MessageStatus new_status) const { pimpl_->UpdateMessageStatuses(peer_id, message_ids, new_status); }
+  auto GetHistoryPage(const ContactID& peer_id, size_t page_index, size_t page_size) const { return pimpl_->GetHistoryPage(peer_id, page_index, page_size); }
   auto GetFullMessageContent(std::uint64_t message_id) const { return pimpl_->GetFullMessageContent(message_id); }
-  auto GetChatSummaries(const std::vector<std::string>& peer_ids) const { return pimpl_->GetChatSummaries(peer_ids); }
-  auto GetMessagesWithStatus(const ContactID& peer_id, messaging::MessageStatus status) const { return pimpl_->GetMessagesWithStatus(peer_id.ToString(), status); }
+  auto GetChatSummaries(const std::vector<ContactID>& peer_ids) const { return pimpl_->GetChatSummaries(peer_ids); }
+  auto GetMessagesWithStatus(const ContactID& peer_id, messaging::MessageStatus status) const { return pimpl_->GetMessagesWithStatus(peer_id, status); }
 
   // --- Debug ---
   void DebugClearAllHistory() const { pimpl_->DebugClearAllHistory(); }
