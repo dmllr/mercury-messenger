@@ -106,11 +106,11 @@ struct ConversationViewModel::Impl : public std::enable_shared_from_this<Impl> {
   void AddSystemMessage(const std::string& message) {
     const std::lock_guard<std::mutex> lock(mutex_);
     state_.history.push_back({.id = next_system_msg_id_++,
-                                 .kind = messaging::HistoryEntryKind::systemMessage,
-                                 .timestamp = static_cast<Time::Unit>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count()),
-                                 .direction = messaging::MessageDirection::received,
-                                 .is_truncated = false,
-                                 .data = messaging::MessageEntry{message}});
+                              .kind = messaging::HistoryEntryKind::systemMessage,
+                              .timestamp = static_cast<Time::Unit>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count()),
+                              .direction = messaging::MessageDirection::received,
+                              .is_truncated = false,
+                              .data = messaging::MessageEntry{message}});
     if (observer_) { observer_->OnHistoryUpdated(state_); }
   }
 

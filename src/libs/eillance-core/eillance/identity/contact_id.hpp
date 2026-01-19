@@ -6,6 +6,7 @@
 #include <cstring>
 #include <iomanip>
 #include <iostream>
+#include <span>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -21,14 +22,21 @@ struct ContactID {
 
   constexpr ContactID() = default;
 
-  explicit ContactID(const std::array<uint8_t, identitySize>& value) : value(value) {}
+  explicit ContactID(const std::array<std::byte, identitySize>& value) : value(value) {}
 
   // Construct from raw bytes
   explicit ContactID(const std::vector<std::byte>& vec) {
     if (vec.size() != identitySize) {
       throw std::invalid_argument("ContactID must be 32 bytes");
     }
-    std::memcpy(value.data(), vec.data(), identitySize);
+    std::copy(vec.begin(), vec.end(), value.begin());
+  }
+
+  explicit ContactID(std::span<const std::byte> span) {
+    if (span.size() != identitySize) {
+      throw std::invalid_argument("ContactID must be 32 bytes");
+    }
+    std::copy(span.begin(), span.end(), value.begin());
   }
 
   // Construct from Hex String
@@ -40,11 +48,15 @@ struct ContactID {
       throw std::invalid_argument("Invalid hex string length for ContactID: " + std::string(hex));
     }
     for (std::uint8_t i = 0; i < identitySize; ++i) {
-      value[i] = static_cast<uint8_t>(HexCharToInt(hex[2U * i]) << 4U | HexCharToInt(hex[(2U * i) + 1]));
+      value[i] = static_cast<std::byte>((HexCharToInt(hex[2U * i]) << 4U) | HexCharToInt(hex[(2U * i) + 1]));
     }
   }
 
-  auto Value() const -> const std::array<uint8_t, identitySize>& {
+  auto Value() const -> const std::array<std::byte, identitySize>& {
+    return value;
+  }
+
+  auto Span() const -> std::span<const std::byte> {
     return value;
   }
 
@@ -56,21 +68,21 @@ struct ContactID {
     static constexpr std::array<char, 16> hexmap = {
         '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
     for (size_t i = 0; i < identitySize; ++i) {
-      hex[2U * i] = hexmap[(value[i] & 0xF0U) >> 4U];
-      hex[(2U * i) + 1] = hexmap[value[i] & 0x0FU];
+      hex[2U * i] = hexmap[(static_cast<uint8_t>(value[i]) & 0xF0U) >> 4U];
+      hex[(2U * i) + 1] = hexmap[static_cast<uint8_t>(value[i]) & 0x0FU];
     }
     return hex;
   }
 
   [[nodiscard]] auto IsEmpty() const -> bool {
-    return std::ranges::all_of(value, [](uint8_t byte) { return byte == 0; });
+    return std::ranges::all_of(value, [](std::byte byte) { return byte == std::byte{0}; });
   }
 
   auto operator<=>(const ContactID&) const = default;
   auto operator==(const ContactID&) const -> bool = default;
 
 private:
-  std::array<uint8_t, identitySize> value{};
+  std::array<std::byte, identitySize> value{};
 
   static constexpr auto HexCharToInt(char c) -> uint8_t {
     if (c >= '0' && c <= '9') { return c - '0'; }
@@ -108,7 +120,7 @@ struct hash<eillance::ContactID> {
     // FNV-1a hash
     size_t hash = 2166136261u;
     for (auto b: id.Value()) {
-      hash ^= b;
+      hash ^= static_cast<size_t>(b);
       hash *= 16777619u;
     }
     return hash;

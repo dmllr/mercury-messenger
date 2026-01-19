@@ -28,13 +28,13 @@ public:
         .status = (direction == MessageDirection::sent) ? MessageStatus::sending : MessageStatus::none,
         .is_truncated = false,
         .data = MessageEntry{content},
-        .peer_id_for_db = peer_id.ToString(),
+        .peer_id = peer_id,
     };
     return storage_->AddHistoryEntry(entry);
   }
 
   void AddCallEntry(const ContactID& peer_id, const HistoryEntryKind kind, const CallDirection direction, const CallStatus status, uint32_t duration = 0) {
-    storage_->AddHistoryEntry({.id = 0, .kind = kind, .timestamp = static_cast<Time::Unit>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count()), .direction = (direction == CallDirection::incoming) ? MessageDirection::received : MessageDirection::sent, .data = CallEntry{.duration_seconds = duration, .call_direction = direction, .call_status = status}, .peer_id_for_db = peer_id.ToString()});  // NOLINT(*-branch-clone)
+    storage_->AddHistoryEntry({.id = 0, .kind = kind, .timestamp = static_cast<Time::Unit>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count()), .direction = (direction == CallDirection::incoming) ? MessageDirection::received : MessageDirection::sent, .data = CallEntry{.duration_seconds = duration, .call_direction = direction, .call_status = status}, .peer_id = peer_id});  // NOLINT(*-branch-clone)
   }
 
   void SetStatusChangedCallback(std::function<void(const ContactID&, std::uint64_t, MessageStatus)> cb) {
@@ -65,7 +65,16 @@ public:
     return storage_->GetFullMessageContent(message_id);
   }
 
-  auto GetChatSummaries(const std::vector<std::string>& peer_ids) -> std::vector<ChatSummary> {
+  auto GetChatSummaries(const std::vector<std::string>& peer_ids_str) -> std::vector<ChatSummary> {
+    std::vector<ContactID> peer_ids;
+    peer_ids.reserve(peer_ids_str.size());
+    for (const auto& id: peer_ids_str) {
+      peer_ids.emplace_back(ContactID(id));
+    }
+    return storage_->GetChatSummaries(peer_ids);
+  }
+
+  auto GetChatSummaries(const std::vector<ContactID>& peer_ids) -> std::vector<ChatSummary> {
     return storage_->GetChatSummaries(peer_ids);
   }
 };

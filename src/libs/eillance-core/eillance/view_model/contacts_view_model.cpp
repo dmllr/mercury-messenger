@@ -43,7 +43,7 @@ struct ContactsViewModel::Impl : public std::enable_shared_from_this<Impl> {
 
   // --- Actions (run asynchronously to avoid blocking main thread) ---
 
-  void AddContact(const ContactID& peer_id, const std::optional<std::string>& token) {
+  void AddContact(const ContactID& peer_id, const std::optional<std::vector<std::byte>>& token) {
     std::thread([self = shared_from_this(), peer_id, token]() {
       self->client_->AddContact(peer_id, token);
     }).detach();
@@ -100,7 +100,7 @@ struct ContactsViewModel::Impl : public std::enable_shared_from_this<Impl> {
     {
       auto contacts_from_manager = client_->GetContacts();
       temp_contacts.reserve(contacts_from_manager.size());
-      std::vector<std::string> contact_ids;
+      std::vector<ContactID> contact_ids;
       contact_ids.reserve(contacts_from_manager.size());
 
       for (const auto& c: contacts_from_manager) {
@@ -111,20 +111,20 @@ struct ContactsViewModel::Impl : public std::enable_shared_from_this<Impl> {
           display_name = *c.display_name;
         }
 
-        temp_contacts.push_back({.peer_id = ContactID(c.peer_id),
-                                    .display_name = display_name,
-                                    .bio = c.bio,
-                                    .photo = c.photo_base64,
-                                    .status = c.status,
-                                    .connection_state = client_->GetPeerConnectionState(ContactID(c.peer_id)),
-                                    .unread_count = 0});
+        temp_contacts.push_back({.peer_id = c.peer_id,
+                                 .display_name = display_name,
+                                 .bio = c.bio,
+                                 .photo = c.photo_base64,
+                                 .status = c.status,
+                                 .connection_state = client_->GetPeerConnectionState(c.peer_id),
+                                 .unread_count = 0});
         contact_ids.push_back(c.peer_id);
       }
 
       auto chat_summaries = client_->GetChatSummaries(contact_ids);
       std::unordered_map<ContactID, messaging::ChatSummary> chat_map;
       for (const auto& chat: chat_summaries) {
-        chat_map[ContactID(chat.peer_id)] = chat;
+        chat_map[chat.peer_id] = chat;
       }
 
       for (auto& contact: temp_contacts) {
@@ -158,7 +158,7 @@ struct ContactsViewModel::Impl : public std::enable_shared_from_this<Impl> {
     std::shared_ptr<Observer> obs;
     {
       const std::lock_guard<std::mutex> lock(mutex_);
-      contacts_ = temp_contacts; // Keep internal copy
+      contacts_ = temp_contacts;  // Keep internal copy
       obs = observer_;
     }
     if (obs) {
@@ -237,7 +237,7 @@ auto ContactsViewModel::GetContacts() const -> std::vector<ViewContact> {
   return impl_->GetContacts();
 }
 
-void ContactsViewModel::AddContact(const ContactID& peer_id, const std::optional<std::string>& token) {
+void ContactsViewModel::AddContact(const ContactID& peer_id, const std::optional<std::vector<std::byte>>& token) {
   impl_->AddContact(peer_id, token);
 }
 
@@ -265,7 +265,7 @@ void ContactsViewModel::ResetContactDisplayNameOverride(const ContactID& peer_id
   impl_->ResetContactDisplayNameOverride(peer_id);
 }
 
-auto ContactsViewModel::GenerateContactToken() -> std::string {
+auto ContactsViewModel::GenerateContactToken() -> std::vector<std::byte> {
   return impl_->client_->GenerateContactToken();
 }
 

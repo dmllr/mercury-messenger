@@ -19,8 +19,8 @@ namespace eillance::storage {
 class MockPersistentStorageImpl final : public PersistentStorageImpl {
   mutable std::recursive_mutex mutex_;
   std::unordered_map<std::string, std::string> settings_;
-  std::unordered_map<std::string, identity::Contact> contacts_;
-  std::unordered_map<std::string, std::vector<messaging::HistoryEntryRecord>> history_;
+  std::unordered_map<ContactID, identity::Contact> contacts_;
+  std::unordered_map<ContactID, std::vector<messaging::HistoryEntryRecord>> history_;
   std::unordered_map<uint64_t, std::string> large_messages_;
   std::atomic<uint64_t> next_history_id_{1};
 
@@ -69,9 +69,9 @@ public:
     return result;
   }
 
-  auto GetContact(std::string_view peer_id) -> std::optional<identity::Contact> override {
+  auto GetContact(const ContactID& peer_id) -> std::optional<identity::Contact> override {
     const std::lock_guard lock(mutex_);
-    if (auto it = contacts_.find(std::string(peer_id)); it != contacts_.end()) {
+    if (auto it = contacts_.find(peer_id); it != contacts_.end()) {
       return it->second;
     }
     return std::nullopt;
@@ -82,9 +82,9 @@ public:
     contacts_[contact.peer_id] = contact;
   }
 
-  void RemoveContact(std::string_view peer_id) override {
+  void RemoveContact(const ContactID& peer_id) override {
     const std::lock_guard lock(mutex_);
-    contacts_.erase(std::string(peer_id));
+    contacts_.erase(peer_id);
   }
 
   // --- History ---
@@ -103,7 +103,7 @@ public:
       }
     }
 
-    history_[entry.peer_id_for_db].push_back(entry);
+    history_[entry.peer_id].push_back(entry);
     return entry;
   }
 
@@ -119,7 +119,7 @@ public:
     }
   }
 
-  void UpdateMessageStatus(const std::string& peer_id, uint64_t message_id, messaging::MessageStatus new_status) override {
+  void UpdateMessageStatus(const ContactID& peer_id, uint64_t message_id, messaging::MessageStatus new_status) override {
     const std::lock_guard lock(mutex_);
     if (auto it = history_.find(peer_id); it != history_.end()) {
       for (auto& entry: it->second) {
@@ -131,7 +131,7 @@ public:
     }
   }
 
-  void UpdateMessageStatuses(const std::string& peer_id, const std::vector<uint64_t>& message_ids, messaging::MessageStatus new_status) override {
+  void UpdateMessageStatuses(const ContactID& peer_id, const std::vector<uint64_t>& message_ids, messaging::MessageStatus new_status) override {
     const std::lock_guard lock(mutex_);
     if (auto it = history_.find(peer_id); it != history_.end()) {
       for (auto& entry: it->second) {
@@ -143,7 +143,7 @@ public:
   }
 
 
-  auto GetHistoryPage(const std::string& peer_id, size_t page_index, size_t page_size) -> messaging::HistoryPage override {
+  auto GetHistoryPage(const ContactID& peer_id, size_t page_index, size_t page_size) -> messaging::HistoryPage override {
     const std::lock_guard lock(mutex_);
     messaging::HistoryPage page;
     if (auto it = history_.find(peer_id); it != history_.end()) {
@@ -177,7 +177,7 @@ public:
     return std::nullopt;
   }
 
-  auto GetChatSummaries(const std::vector<std::string>& peer_ids) -> std::vector<messaging::ChatSummary> override {
+  auto GetChatSummaries(const std::vector<ContactID>& peer_ids) -> std::vector<messaging::ChatSummary> override {
     const std::lock_guard lock(mutex_);
     std::vector<messaging::ChatSummary> summaries;
 
@@ -210,7 +210,7 @@ public:
     return summaries;
   }
 
-  auto GetMessagesWithStatus(const std::string& peer_id, messaging::MessageStatus status) -> std::vector<messaging::HistoryEntryRecord> override {
+  auto GetMessagesWithStatus(const ContactID& peer_id, messaging::MessageStatus status) -> std::vector<messaging::HistoryEntryRecord> override {
     const std::lock_guard lock(mutex_);
     std::vector<messaging::HistoryEntryRecord> records;
     if (auto it = history_.find(peer_id); it != history_.end()) {

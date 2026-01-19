@@ -27,7 +27,7 @@ TEST(CryptoTest, IdentityLifecycle) {
   ASSERT_NE(identity1, nullptr);
   EXPECT_FALSE(mnemonic.empty());
 
-  std::string id1 = identity1->GetId();
+  auto id1 = identity1->GetPublicKey();
   EXPECT_FALSE(id1.empty());
 
   std::string pem_data = identity1->SaveToMemory();
@@ -36,7 +36,7 @@ TEST(CryptoTest, IdentityLifecycle) {
   auto identity2 = Identity::LoadFromMemory(pem_data);
   ASSERT_NE(identity2, nullptr);
 
-  std::string id2 = identity2->GetId();
+  auto id2 = identity2->GetPublicKey();
   EXPECT_EQ(id1, id2);
 }
 
@@ -44,9 +44,10 @@ TEST(CryptoTest, SignAndVerify) {
   std::string mnemonic;
   auto identity = Identity::CreateNew(mnemonic);
   ASSERT_NE(identity, nullptr);
-  std::string id = identity->GetId();
+  auto id = identity->GetPublicKey();
 
-  std::string message = "This is a test message for signing.";
+  std::string message_str = "This is a test message for signing.";
+  std::span<const std::byte> message(reinterpret_cast<const std::byte*>(message_str.data()), message_str.size());
   auto signature = identity->Sign(message);
   EXPECT_FALSE(signature.empty());
 
@@ -57,10 +58,14 @@ TEST(CryptoTest, VerificationFailsWithWrongMessage) {
   std::string mnemonic;
   auto identity = Identity::CreateNew(mnemonic);
   ASSERT_NE(identity, nullptr);
-  std::string id = identity->GetId();
+  auto id = identity->GetPublicKey();
 
-  std::string message = "Original message.";
-  std::string tampered_message = "Tampered message.";
+  std::string message_str = "Original message.";
+  std::span<const std::byte> message(reinterpret_cast<const std::byte*>(message_str.data()), message_str.size());
+
+  std::string tampered_message_str = "Tampered message.";
+  std::span<const std::byte> tampered_message(reinterpret_cast<const std::byte*>(tampered_message_str.data()), tampered_message_str.size());
+
   auto signature = identity->Sign(message);
 
   EXPECT_FALSE(Identity::Verify(id, tampered_message, signature));
@@ -73,8 +78,10 @@ TEST(CryptoTest, VerificationFailsWithWrongId) {
   ASSERT_NE(identity1, nullptr);
   ASSERT_NE(identity2, nullptr);
 
-  std::string id2 = identity2->GetId();
-  std::string message = "A message to sign.";
+  auto id2 = identity2->GetPublicKey();
+
+  std::string message_str = "A message to sign.";
+  std::span<const std::byte> message(reinterpret_cast<const std::byte*>(message_str.data()), message_str.size());
   auto signature = identity1->Sign(message);
 
   EXPECT_FALSE(Identity::Verify(id2, message, signature));
@@ -84,9 +91,10 @@ TEST(CryptoTest, VerificationFailsWithWrongSignature) {
   std::string mnemonic;
   auto identity = Identity::CreateNew(mnemonic);
   ASSERT_NE(identity, nullptr);
-  std::string id = identity->GetId();
+  auto id = identity->GetPublicKey();
 
-  std::string message = "Another test message.";
+  std::string message_str = "Another test message.";
+  std::span<const std::byte> message(reinterpret_cast<const std::byte*>(message_str.data()), message_str.size());
   auto signature = identity->Sign(message);
   ASSERT_FALSE(signature.empty());
 

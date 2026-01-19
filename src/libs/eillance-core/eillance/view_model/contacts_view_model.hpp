@@ -27,14 +27,14 @@ public:
   [[nodiscard]] auto GetContacts() const -> std::vector<ViewContact>;
 
   // Actions
-  void AddContact(const ContactID& peer_id, const std::optional<std::string>& token = std::nullopt);
+  void AddContact(const ContactID& peer_id, const std::optional<std::vector<std::byte>>& token = std::nullopt);
   void BlockContact(const ContactID& peer_id);
   void DeleteContact(const ContactID& peer_id);
   void UnblockContact(const ContactID& peer_id);
   void AcceptContact(const ContactID& peer_id);
   void SetContactDisplayNameOverride(const ContactID& peer_id, const std::string& name);
   void ResetContactDisplayNameOverride(const ContactID& peer_id);
-  auto GenerateContactToken() -> std::string;
+  auto GenerateContactToken() -> std::vector<std::byte>;
 
 private:
   struct Impl;

@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <memory>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -19,7 +20,7 @@ public:
   virtual ~TransportDelegate() = default;
   virtual void OnPeerReady(const std::shared_ptr<Peer>& peer) = 0;
   virtual void OnSignalingErrorForPeer(const ContactID& peer_id, const std::string& error) = 0;
-  virtual auto Sign(const std::string& message) -> std::vector<std::byte> = 0;
+  virtual auto Sign(std::span<const std::byte> message) -> std::vector<std::byte> = 0;
   virtual void OnLoginSuccess() = 0;
   virtual void ProcessPeerMessage(Json message) = 0;
   virtual void OnSystemMessage(const std::string& type, const Json& message) = 0;

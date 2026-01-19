@@ -26,7 +26,7 @@ TEST_F(ContactManagerTest, AddContact) {
   ASSERT_TRUE(contact_manager_->AddContact(peer1));
   auto contact = contact_manager_->GetContact(peer1);
   ASSERT_TRUE(contact.has_value());
-  EXPECT_EQ(contact->peer_id, peer1.ToString());
+  EXPECT_EQ(contact->peer_id, peer1);
   EXPECT_EQ(contact->status, identity::ContactStatus::pendingApproval);
 }
 

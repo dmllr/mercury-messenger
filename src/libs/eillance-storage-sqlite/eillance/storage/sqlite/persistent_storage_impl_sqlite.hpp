@@ -24,6 +24,16 @@ namespace {
 constexpr size_t MaxInlineContentSize = 2048;
 constexpr int CurrentDbVersion = 1;
 
+auto OptionalHexToBytes(const std::optional<std::string>& hex) -> std::optional<std::vector<std::byte>> {
+  if (!hex) return std::nullopt;
+  return crypto::FromHex(*hex);
+}
+
+auto OptionalBytesToHex(const std::optional<std::vector<std::byte>>& bytes) -> std::optional<std::string> {
+  if (!bytes) return std::nullopt;
+  return crypto::ToHex(*bytes);
+}
+
 }  // namespace
 
 class SQLiteStorage final : public PersistentStorageImpl {
@@ -133,19 +143,19 @@ public:
         contacts;
     )SQL");
     while (sqlite3_step(stmt.Get()) == SQLITE_ROW) {
-      contacts.push_back({.peer_id = ColumnString(stmt.Get(), 0),
+      contacts.push_back({.peer_id = ContactID(ColumnString(stmt.Get(), 0)),
                           .status = static_cast<identity::ContactStatus>(sqlite3_column_int(stmt.Get(), 1)),
                           .display_name = ColumnOptionalString(stmt.Get(), 2),
                           .display_name_override = ColumnOptionalString(stmt.Get(), 3),
                           .bio = ColumnOptionalString(stmt.Get(), 4),
                           .photo_base64 = ColumnOptionalString(stmt.Get(), 5),
-                          .signature_from_them = ColumnOptionalString(stmt.Get(), 6),
-                          .my_signature_for_them = ColumnOptionalString(stmt.Get(), 7)});
+                          .signature_from_them = OptionalHexToBytes(ColumnOptionalString(stmt.Get(), 6)),
+                          .my_signature_for_them = OptionalHexToBytes(ColumnOptionalString(stmt.Get(), 7))});
     }
     return contacts;
   }
 
-  auto GetContact(std::string_view peer_id) -> std::optional<identity::Contact> override {
+  auto GetContact(const ContactID& peer_id) -> std::optional<identity::Contact> override {
     const std::lock_guard lock(mutex_);
     const SQLiteStatement stmt(db_, R"SQL(
       SELECT
@@ -162,16 +172,16 @@ public:
       WHERE
         peer_id = ?;
     )SQL");
-    BindText(stmt.Get(), 1, std::string(peer_id));
+    BindText(stmt.Get(), 1, peer_id.ToString());
     if (sqlite3_step(stmt.Get()) == SQLITE_ROW) {
-      return identity::Contact{.peer_id = ColumnString(stmt.Get(), 0),
+      return identity::Contact{.peer_id = ContactID(ColumnString(stmt.Get(), 0)),
                                .status = static_cast<identity::ContactStatus>(sqlite3_column_int(stmt.Get(), 1)),
                                .display_name = ColumnOptionalString(stmt.Get(), 2),
                                .display_name_override = ColumnOptionalString(stmt.Get(), 3),
                                .bio = ColumnOptionalString(stmt.Get(), 4),
                                .photo_base64 = ColumnOptionalString(stmt.Get(), 5),
-                               .signature_from_them = ColumnOptionalString(stmt.Get(), 6),
-                               .my_signature_for_them = ColumnOptionalString(stmt.Get(), 7)};
+                               .signature_from_them = OptionalHexToBytes(ColumnOptionalString(stmt.Get(), 6)),
+                               .my_signature_for_them = OptionalHexToBytes(ColumnOptionalString(stmt.Get(), 7))};
     }
     return std::nullopt;
   }
@@ -184,18 +194,18 @@ public:
       VALUES
         (?, ?, ?, ?, ?, ?, ?, ?);
     )SQL");
-    BindText(stmt.Get(), 1, contact.peer_id);
+    BindText(stmt.Get(), 1, contact.peer_id.ToString());
     sqlite3_bind_int(stmt.Get(), 2, static_cast<int>(contact.status));
     BindOptionalText(stmt.Get(), 3, contact.display_name);
     BindOptionalText(stmt.Get(), 4, contact.display_name_override);
     BindOptionalText(stmt.Get(), 5, contact.bio);
     BindOptionalText(stmt.Get(), 6, contact.photo_base64);
-    BindOptionalText(stmt.Get(), 7, contact.signature_from_them);
-    BindOptionalText(stmt.Get(), 8, contact.my_signature_for_them);
+    BindOptionalText(stmt.Get(), 7, OptionalBytesToHex(contact.signature_from_them));
+    BindOptionalText(stmt.Get(), 8, OptionalBytesToHex(contact.my_signature_for_them));
     sqlite3_step(stmt.Get());
   }
 
-  void RemoveContact(std::string_view peer_id) override {
+  void RemoveContact(const ContactID& peer_id) override {
     const std::lock_guard lock(mutex_);
     char* err_msg = nullptr;
     if (sqlite3_exec(db_, "BEGIN TRANSACTION;", nullptr, nullptr, &err_msg) != SQLITE_OK) {
@@ -206,13 +216,13 @@ public:
 
     try {
       const SQLiteStatement messages_stmt(db_, "DELETE FROM messages WHERE peer_id = ?;");
-      BindText(messages_stmt.Get(), 1, std::string(peer_id));
+      BindText(messages_stmt.Get(), 1, peer_id.ToString());
       if (sqlite3_step(messages_stmt.Get()) != SQLITE_DONE) {
         throw std::runtime_error(sqlite3_errmsg(db_));
       }
 
       const SQLiteStatement contact_stmt(db_, "DELETE FROM contacts WHERE peer_id = ?;");
-      BindText(contact_stmt.Get(), 1, std::string(peer_id));
+      BindText(contact_stmt.Get(), 1, peer_id.ToString());
       if (sqlite3_step(contact_stmt.Get()) != SQLITE_DONE) {
         throw std::runtime_error(sqlite3_errmsg(db_));
       }
@@ -245,7 +255,7 @@ public:
       ) VALUES (?, ?, ?, ?, ?, ?, ?);
     )SQL");
 
-    BindText(stmt.Get(), 1, entry.peer_id_for_db);
+    BindText(stmt.Get(), 1, entry.peer_id.ToString());
     sqlite3_bind_int(stmt.Get(), 2, static_cast<int>(entry.kind));
     sqlite3_bind_int64(stmt.Get(), 3, entry.timestamp);
     sqlite3_bind_int(stmt.Get(), 4, static_cast<int>(entry.direction));
@@ -336,7 +346,7 @@ public:
     sqlite3_step(stmt.Get());
   }
 
-  void UpdateMessageStatus(const std::string& peer_id, uint64_t message_id,
+  void UpdateMessageStatus(const ContactID& peer_id, uint64_t message_id,
                            messaging::MessageStatus new_status) override {
     const std::lock_guard lock(mutex_);
     const SQLiteStatement stmt(db_, R"SQL(
@@ -349,11 +359,11 @@ public:
     )SQL");
     sqlite3_bind_int(stmt.Get(), 1, static_cast<int>(new_status));
     sqlite3_bind_int64(stmt.Get(), 2, message_id);
-    BindText(stmt.Get(), 3, peer_id);
+    BindText(stmt.Get(), 3, peer_id.ToString());
     sqlite3_step(stmt.Get());
   }
 
-  void UpdateMessageStatuses(const std::string& peer_id, const std::vector<uint64_t>& message_ids,
+  void UpdateMessageStatuses(const ContactID& peer_id, const std::vector<uint64_t>& message_ids,
                              messaging::MessageStatus new_status) override {
     if (message_ids.empty()) {
       return;
@@ -371,12 +381,12 @@ public:
 
     const SQLiteStatement stmt(db_, query);
     sqlite3_bind_int(stmt.Get(), 1, static_cast<int>(new_status));
-    BindText(stmt.Get(), 2, peer_id);
+    BindText(stmt.Get(), 2, peer_id.ToString());
     BindText(stmt.Get(), 3, ids_json.dump());
     sqlite3_step(stmt.Get());
   }
 
-  auto GetHistoryPage(const std::string& peer_id, size_t page_index,
+  auto GetHistoryPage(const ContactID& peer_id, size_t page_index,
                       size_t page_size) -> messaging::HistoryPage override {
     const std::lock_guard lock(mutex_);
     messaging::HistoryPage page;
@@ -390,7 +400,7 @@ public:
         WHERE
           peer_id = ?;
       )SQL");
-      BindText(count_stmt.Get(), 1, peer_id);
+      BindText(count_stmt.Get(), 1, peer_id.ToString());
       if (sqlite3_step(count_stmt.Get()) == SQLITE_ROW) {
         page.total_messages = sqlite3_column_int64(count_stmt.Get(), 0);
       }
@@ -413,12 +423,14 @@ public:
         timestamp DESC
       LIMIT ? OFFSET ?;
     )SQL");
-    BindText(stmt.Get(), 1, peer_id);
+    BindText(stmt.Get(), 1, peer_id.ToString());
     sqlite3_bind_int64(stmt.Get(), 2, page_size);
     sqlite3_bind_int64(stmt.Get(), 3, page_index * page_size);
 
     while (sqlite3_step(stmt.Get()) == SQLITE_ROW) {
-      page.messages.push_back(ParseHistoryEntry(stmt.Get()));
+      auto record = ParseHistoryEntry(stmt.Get());
+      record.peer_id = peer_id;
+      page.messages.push_back(std::move(record));
     }
     std::ranges::reverse(page.messages);  // Reverse to get ascending time order for display
     return page;
@@ -441,7 +453,7 @@ public:
     return std::nullopt;
   }
 
-  auto GetChatSummaries(const std::vector<std::string>& peer_ids)
+  auto GetChatSummaries(const std::vector<ContactID>& peer_ids)
       -> std::vector<messaging::ChatSummary> override {
     if (peer_ids.empty()) {
       return {};
@@ -469,7 +481,7 @@ public:
         )SQL");
 
         int bind_idx = 1;
-        BindText(unread_stmt.Get(), bind_idx++, peer_id);
+        BindText(unread_stmt.Get(), bind_idx++, peer_id.ToString());
         sqlite3_bind_int(unread_stmt.Get(), bind_idx++,
                          static_cast<int>(messaging::MessageDirection::received));
         sqlite3_bind_int(unread_stmt.Get(), bind_idx++,
@@ -501,10 +513,11 @@ public:
             timestamp DESC
           LIMIT 1;
         )SQL");
-        BindText(last_msg_stmt.Get(), 1, peer_id);
+        BindText(last_msg_stmt.Get(), 1, peer_id.ToString());
 
         if (sqlite3_step(last_msg_stmt.Get()) == SQLITE_ROW) {
           summary.last_message = ParseHistoryEntry(last_msg_stmt.Get());
+          summary.last_message.peer_id = peer_id;
           summaries.push_back(summary);
         }
       }
@@ -516,7 +529,7 @@ public:
     return summaries;
   }
 
-  auto GetMessagesWithStatus(const std::string& peer_id, messaging::MessageStatus status)
+  auto GetMessagesWithStatus(const ContactID& peer_id, messaging::MessageStatus status)
       -> std::vector<messaging::HistoryEntryRecord> override {
     const std::lock_guard lock(mutex_);
     std::vector<messaging::HistoryEntryRecord> records;
@@ -534,11 +547,13 @@ public:
       WHERE
         peer_id = ? AND status = ?;
     )SQL");
-    BindText(stmt.Get(), 1, peer_id);
+    BindText(stmt.Get(), 1, peer_id.ToString());
     sqlite3_bind_int(stmt.Get(), 2, static_cast<int>(status));
 
     while (sqlite3_step(stmt.Get()) == SQLITE_ROW) {
-      records.push_back(ParseHistoryEntry(stmt.Get()));
+      auto record = ParseHistoryEntry(stmt.Get());
+      record.peer_id = peer_id;
+      records.push_back(std::move(record));
     }
     return records;
   }

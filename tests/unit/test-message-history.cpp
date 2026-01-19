@@ -97,15 +97,15 @@ TEST_F(MessageHistoryTest, GetChatSummaries) {
   std::this_thread::sleep_for(std::chrono::milliseconds(10));
   message_history_->AddTextEntry(peer1, "p1m2", messaging::MessageDirection::received);  // unread
 
-  auto summaries = message_history_->GetChatSummaries({peer1.ToString(), peer2.ToString()});
+  auto summaries = message_history_->GetChatSummaries({peer1, peer2});
   ASSERT_EQ(summaries.size(), 2);
 
   // Summaries are sorted by most recent timestamp
-  EXPECT_EQ(summaries[0].peer_id, peer1.ToString());
+  EXPECT_EQ(summaries[0].peer_id, peer1);
   EXPECT_EQ(std::get<messaging::MessageEntry>(summaries[0].last_message.data).content, "p1m2");
   EXPECT_EQ(summaries[0].unread_count, 1);
 
-  EXPECT_EQ(summaries[1].peer_id, peer2.ToString());
+  EXPECT_EQ(summaries[1].peer_id, peer2);
   EXPECT_EQ(std::get<messaging::MessageEntry>(summaries[1].last_message.data).content, "p2m2");
   EXPECT_EQ(summaries[1].unread_count, 2);
 }

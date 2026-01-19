@@ -20,7 +20,7 @@ protected:
 TEST_F(IdManagerTest, NoIdentityExistsInitially) {
   identity::IdManager id_manager(storage_);
   EXPECT_FALSE(id_manager.IdentityExists());
-  EXPECT_TRUE(id_manager.GetId().empty());
+  EXPECT_TRUE(id_manager.GetPublicKey().empty());
 }
 
 TEST_F(IdManagerTest, GenerateNewIdentity) {
@@ -31,12 +31,12 @@ TEST_F(IdManagerTest, GenerateNewIdentity) {
   std::string mnemonic = id_manager.GenerateNewIdentity();
   EXPECT_FALSE(mnemonic.empty());
   EXPECT_TRUE(id_manager.IdentityExists());
-  EXPECT_FALSE(id_manager.GetId().empty());
+  EXPECT_FALSE(id_manager.GetPublicKey().empty());
 
   // A new manager should load the created identity
   identity::IdManager new_id_manager(storage_);
   EXPECT_TRUE(new_id_manager.IdentityExists());
-  EXPECT_EQ(new_id_manager.GetId(), id_manager.GetId());
+  EXPECT_EQ(new_id_manager.GetPublicKey(), id_manager.GetPublicKey());
 }
 
 
@@ -44,12 +44,12 @@ TEST_F(IdManagerTest, LoadsExistingIdentity) {
   // Create an identity and save it to mock storage.
   std::string mnemonic;
   auto identity = crypto::Identity::CreateNew(mnemonic);
-  auto expected_id = identity->GetId();
+  auto expected_id = identity->GetPublicKey();
   auto pem_data_str = identity->SaveToMemory();
   storage_->SetSetting("identity.key", pem_data_str);
 
   identity::IdManager id_manager(storage_);
-  auto loaded_id = id_manager.GetId();
+  auto loaded_id = id_manager.GetPublicKey();
 
   EXPECT_EQ(loaded_id, expected_id);
   EXPECT_TRUE(id_manager.IdentityExists());
