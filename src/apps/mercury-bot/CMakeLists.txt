@@ -18,6 +18,6 @@ set_property(TARGET mercury-bot PROPERTY CXX_STANDARD 20)
 target_compile_features(mercury-bot PRIVATE cxx_std_20)
 
 target_link_libraries(mercury-bot PRIVATE
-  eillance-core
-  eillance-rtc
+  eillance-bot-api
+  eillance-logging
 )
