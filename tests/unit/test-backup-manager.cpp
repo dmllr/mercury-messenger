@@ -1,17 +1,19 @@
-#include "eillance/backup/backup_manager.hpp"
-
 #include <filesystem>
 #include <fstream>
-#include <gtest/gtest.h>
 #include <string>
 #include <vector>
 
+#include <gtest/gtest.h>
+
+#include "eillance/backup/backup_manager.hpp"
+
 class BackupManagerTest : public ::testing::Test {
-protected:
+ protected:
   void SetUp() override {
     // Create a unique temporary directory for each test
-    const ::testing::TestInfo* const test_info = ::testing::UnitTest::GetInstance()->current_test_info();
-    temp_dir_ = std::filesystem::temp_directory_path() / "backup_manager_tests" / (std::string(test_info->test_suite_name()) + "_" + std::string(test_info->name()));
+    ::testing::TestInfo const* const test_info = ::testing::UnitTest::GetInstance()->current_test_info();
+    temp_dir_ = std::filesystem::temp_directory_path() / "backup_manager_tests" /
+                (std::string(test_info->test_suite_name()) + "_" + std::string(test_info->name()));
     std::filesystem::create_directories(temp_dir_);
 
     db_path_ = temp_dir_ / "test.db";
@@ -33,7 +35,7 @@ protected:
   std::filesystem::path db_path_;
   std::filesystem::path backup_path_;
   std::string original_db_content_;
-  const std::string password_ = "correct_password";
+  std::string const password_ = "correct_password";
 };
 
 TEST_F(BackupManagerTest, CreateBackupSuccess) {

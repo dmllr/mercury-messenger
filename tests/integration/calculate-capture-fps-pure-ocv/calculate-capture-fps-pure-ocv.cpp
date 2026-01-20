@@ -35,11 +35,10 @@ int main(int /*argc*/, char** /*argv*/) {
   }
 
   // check what resolution was actually set
-  const auto actual_width = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_WIDTH));
-  const auto actual_height = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_HEIGHT));
+  auto const actual_width = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_WIDTH));
+  auto const actual_height = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_HEIGHT));
 
   std::cout << "Capture resolution set to: " << actual_width << "x" << actual_height << std::endl;
-
 
   constexpr int num_frames = 100;  // Number of frames to capture
   auto frames_captured = 0;

@@ -1,13 +1,14 @@
-#include "eillance/identity/contact_manager.hpp"
-#include "mock_persistent_storage.hpp"
+#include <optional>
 
 #include <gtest/gtest.h>
-#include <optional>
+
+#include "eillance/identity/contact_manager.hpp"
+#include "mock_persistent_storage.hpp"
 
 using namespace eillance;
 
 class ContactManagerTest : public ::testing::Test {
-protected:
+ protected:
   void SetUp() override {
     auto mock_impl = std::make_unique<storage::MockPersistentStorageImpl>();
     mock_storage_impl_ = mock_impl.get();
@@ -18,8 +19,8 @@ protected:
   storage::MockPersistentStorageImpl* mock_storage_impl_;
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::unique_ptr<identity::ContactManager> contact_manager_;
-  const ContactID peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
-  const ContactID peer2 = ContactID("0000000000000000000000000000000000000000000000000000000000000002");
+  ContactID const peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
+  ContactID const peer2 = ContactID("0000000000000000000000000000000000000000000000000000000000000002");
 };
 
 TEST_F(ContactManagerTest, AddContact) {
@@ -37,7 +38,10 @@ TEST_F(ContactManagerTest, AddExistingContact) {
 }
 
 TEST_F(ContactManagerTest, ReceiveContactRequest) {
-  EXPECT_EQ(contact_manager_->ReceiveContactRequest(peer1, std::nullopt, std::nullopt, std::nullopt), identity::RequestStatus::New);
+  EXPECT_EQ(
+      contact_manager_->ReceiveContactRequest(peer1, std::nullopt, std::nullopt, std::nullopt),
+      identity::RequestStatus::New
+  );
   auto contact = contact_manager_->GetContact(peer1);
   ASSERT_TRUE(contact.has_value());
   EXPECT_EQ(contact->status, identity::ContactStatus::awaitingApproval);

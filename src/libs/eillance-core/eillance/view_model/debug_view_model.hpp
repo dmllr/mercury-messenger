@@ -8,14 +8,14 @@
 namespace eillance::view_model {
 
 class DebugViewModel {
-public:
+ public:
   explicit DebugViewModel(std::shared_ptr<Client> client, std::shared_ptr<ClientEventRouter> router);
 
   void EraseAllHistory();
   void EraseAllContacts();
   void RevokeAllApprovals();
 
-private:
+ private:
   std::shared_ptr<Client> client_;
   std::shared_ptr<ClientEventRouter> router_;
 };

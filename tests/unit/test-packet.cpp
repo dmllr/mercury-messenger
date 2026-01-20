@@ -1,6 +1,6 @@
-#include "eillance/utils/packet.hpp"
-
 #include <gtest/gtest.h>
+
+#include "eillance/utils/packet.hpp"
 
 TEST(PacketTest, DefaultConstructor) {
   eillance::Packet p;
@@ -57,9 +57,9 @@ TEST(PacketTest, DataAccessors) {
   std::vector<unsigned char> data_uchar = {1, 2, 3};
   eillance::Packet p(data_uchar.data(), data_uchar.size());
 
-  const std::byte* data_byte_ptr = p.data();
-  const char* data_char_ptr = p.dataAsChars();
-  const unsigned char* data_uchar_ptr = p.dataAsUChars();
+  std::byte const* data_byte_ptr = p.data();
+  char const* data_char_ptr = p.dataAsChars();
+  unsigned char const* data_uchar_ptr = p.dataAsUChars();
 
   EXPECT_EQ(data_byte_ptr[0], std::byte{1});
   EXPECT_EQ(data_char_ptr[1], 2);

@@ -1,6 +1,6 @@
-#include "eillance/crypto/crypto.hpp"
-
 #include <gtest/gtest.h>
+
+#include "eillance/crypto/crypto.hpp"
 
 using namespace eillance::crypto;
 
@@ -47,7 +47,7 @@ TEST(CryptoTest, SignAndVerify) {
   auto id = identity->GetPublicKey();
 
   std::string message_str = "This is a test message for signing.";
-  std::span<const std::byte> message(reinterpret_cast<const std::byte*>(message_str.data()), message_str.size());
+  std::span<std::byte const> message(reinterpret_cast<std::byte const*>(message_str.data()), message_str.size());
   auto signature = identity->Sign(message);
   EXPECT_FALSE(signature.empty());
 
@@ -61,10 +61,13 @@ TEST(CryptoTest, VerificationFailsWithWrongMessage) {
   auto id = identity->GetPublicKey();
 
   std::string message_str = "Original message.";
-  std::span<const std::byte> message(reinterpret_cast<const std::byte*>(message_str.data()), message_str.size());
+  std::span<std::byte const> message(reinterpret_cast<std::byte const*>(message_str.data()), message_str.size());
 
   std::string tampered_message_str = "Tampered message.";
-  std::span<const std::byte> tampered_message(reinterpret_cast<const std::byte*>(tampered_message_str.data()), tampered_message_str.size());
+  std::span<std::byte const> tampered_message(
+      reinterpret_cast<std::byte const*>(tampered_message_str.data()),
+      tampered_message_str.size()
+  );
 
   auto signature = identity->Sign(message);
 
@@ -81,7 +84,7 @@ TEST(CryptoTest, VerificationFailsWithWrongId) {
   auto id2 = identity2->GetPublicKey();
 
   std::string message_str = "A message to sign.";
-  std::span<const std::byte> message(reinterpret_cast<const std::byte*>(message_str.data()), message_str.size());
+  std::span<std::byte const> message(reinterpret_cast<std::byte const*>(message_str.data()), message_str.size());
   auto signature = identity1->Sign(message);
 
   EXPECT_FALSE(Identity::Verify(id2, message, signature));
@@ -94,7 +97,7 @@ TEST(CryptoTest, VerificationFailsWithWrongSignature) {
   auto id = identity->GetPublicKey();
 
   std::string message_str = "Another test message.";
-  const std::span<const std::byte> message(reinterpret_cast<const std::byte*>(message_str.data()), message_str.size());
+  std::span<std::byte const> const message(reinterpret_cast<std::byte const*>(message_str.data()), message_str.size());
   auto signature = identity->Sign(message);
   ASSERT_FALSE(signature.empty());
 
@@ -128,7 +131,7 @@ TEST(CryptoTest, session_cipherEncryptDecrypt) {
   ASSERT_TRUE(cipher_alice.ComputeSharedSecret(cipher_bob.GetPublicKey()));
   ASSERT_TRUE(cipher_bob.ComputeSharedSecret(cipher_alice.GetPublicKey()));
 
-  const std::string plaintext = "This is a secret message between Alice and Bob.";
+  std::string const plaintext = "This is a secret message between Alice and Bob.";
   auto ciphertext = cipher_alice.Encrypt(plaintext);
   ASSERT_FALSE(ciphertext.empty());
 

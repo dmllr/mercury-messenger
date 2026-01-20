@@ -1,15 +1,18 @@
 #pragma once
 
-#include <jni.h>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
 
+#include <jni.h>
+
 /// Helper class that holds a global reference to a Java class and caches its methods.
 class ClassHolder {
-public:
+ public:
   /// Construct a ClassHolder from a global reference to a @c jclass.
-  explicit ClassHolder(jclass clazz) : class_(clazz), ctor_(nullptr) {}
+  explicit ClassHolder(jclass clazz)
+      : class_(clazz),
+        ctor_(nullptr) {}
 
   /// Return the stored @c jclass.
   [[nodiscard]] [[maybe_unused]] jclass Class() const { return class_; }
@@ -21,32 +24,36 @@ public:
   [[nodiscard]] [[maybe_unused]] jmethodID Ctor() const { return ctor_; }
 
   /// Cache a method ID.
-  void AddMethod(const std::string& method_name, jmethodID method_id) { methods_[method_name] = method_id; }
+  void AddMethod(std::string const& method_name, jmethodID method_id) { methods_[method_name] = method_id; }
 
   /// Get a cached method ID.
-  [[nodiscard]] jmethodID GetMethod(const std::string& method_name) const {
+  [[nodiscard]] jmethodID GetMethod(std::string const& method_name) const {
     auto it = methods_.find(method_name);
-    if (it == methods_.end()) { throw std::runtime_error("Method not registered: " + method_name); }
+    if (it == methods_.end()) {
+      throw std::runtime_error("Method not registered: " + method_name);
+    }
     return it->second;
   }
 
   /// Cache a field ID.
-  void AddField(const std::string& field_name, jfieldID field_id) { fields_[field_name] = field_id; }
+  void AddField(std::string const& field_name, jfieldID field_id) { fields_[field_name] = field_id; }
 
   /// Get a cached field ID.
-  [[nodiscard]] jfieldID GetField(const std::string& field_name) const {
+  [[nodiscard]] jfieldID GetField(std::string const& field_name) const {
     auto it = fields_.find(field_name);
-    if (it == fields_.end()) { throw std::runtime_error("Field not registered: " + field_name); }
+    if (it == fields_.end()) {
+      throw std::runtime_error("Field not registered: " + field_name);
+    }
     return it->second;
   }
   /// Create a new object using the cached constructor.
-  template<typename... Args>
+  template <typename... Args>
   [[nodiscard]] [[maybe_unused]] jobject NewObject(JNIEnv* env, Args... args) const {
     // NOLINTNEXTLINE(*-vararg)
     return env->NewObject(class_, ctor_, args...);
   }
 
-private:
+ private:
   jclass class_;
   jmethodID ctor_;
   std::unordered_map<std::string, jfieldID> fields_;
@@ -60,11 +67,11 @@ class ClassRefs {
   /// Map of class name to cached class information.
   std::unordered_map<std::string, ClassHolder> classes_;
 
-public:
+ public:
   ClassRefs(ClassRefs&&) = delete;
-  ClassRefs(const ClassRefs&) = delete;
+  ClassRefs(ClassRefs const&) = delete;
   auto operator=(ClassRefs&&) -> ClassRefs& = delete;
-  auto operator=(const ClassRefs&) -> ClassRefs& = delete;
+  auto operator=(ClassRefs const&) -> ClassRefs& = delete;
   ~ClassRefs() = default;
 
   /// Get the singleton instance.
@@ -75,7 +82,7 @@ public:
 
   /// Registers a class by name if it hasn't already been registered.
   /// The class name must be in JNI format (e.g. "java/util/ArrayList").
-  void RegisterClass(JNIEnv* env, const std::string& class_name) {
+  void RegisterClass(JNIEnv* env, std::string const& class_name) {
     if (classes_.find(class_name) == classes_.end()) {
       jclass local_cls = env->FindClass(class_name.c_str());
       if (local_cls == nullptr) {
@@ -90,7 +97,7 @@ public:
 
   /// Registers a constructor for a given class (by class name) with the given signature.
   /// Example: registerCtor(env, "java/util/ArrayList", "()V");
-  void RegisterCtor(JNIEnv* env, const std::string& class_name, const std::string& ctor_sig) {
+  void RegisterCtor(JNIEnv* env, std::string const& class_name, std::string const& ctor_sig) {
     RegisterClass(env, class_name);
     jclass cls = classes_.at(class_name).Class();
     jmethodID ctor = env->GetMethodID(cls, "<init>", ctor_sig.c_str());
@@ -101,7 +108,12 @@ public:
   }
 
   /// Registers a method for a given class with the given name and signature.
-  void RegisterMethod(JNIEnv* env, const std::string& class_name, const std::string& method_name, const std::string& method_sig) {
+  void RegisterMethod(
+      JNIEnv* env,
+      std::string const& class_name,
+      std::string const& method_name,
+      std::string const& method_sig
+  ) {
     RegisterClass(env, class_name);
     jclass cls = classes_.at(class_name).Class();
     jmethodID mid = env->GetMethodID(cls, method_name.c_str(), method_sig.c_str());
@@ -112,7 +124,12 @@ public:
   }
 
   /// Registers a static method for a given class with the given name and signature.
-  void RegisterStaticMethod(JNIEnv* env, const std::string& class_name, const std::string& method_name, const std::string& method_sig) {
+  void RegisterStaticMethod(
+      JNIEnv* env,
+      std::string const& class_name,
+      std::string const& method_name,
+      std::string const& method_sig
+  ) {
     RegisterClass(env, class_name);
     jclass cls = classes_.at(class_name).Class();
     jmethodID mid = env->GetStaticMethodID(cls, method_name.c_str(), method_sig.c_str());
@@ -123,7 +140,12 @@ public:
   }
 
   /// Registers a field for a given class with the given name and signature.
-  void RegisterField(JNIEnv* env, const std::string& class_name, const std::string& field_name, const std::string& field_sig) {
+  void RegisterField(
+      JNIEnv* env,
+      std::string const& class_name,
+      std::string const& field_name,
+      std::string const& field_sig
+  ) {
     RegisterClass(env, class_name);
     jclass cls = classes_.at(class_name).Class();
     jfieldID fid = env->GetFieldID(cls, field_name.c_str(), field_sig.c_str());
@@ -134,7 +156,7 @@ public:
   }
 
   /// Retrieve the ClassHolder for a given class.
-  auto Class(const std::string& class_name) -> ClassHolder& {
+  auto Class(std::string const& class_name) -> ClassHolder& {
     auto itr = classes_.find(class_name);
     if (itr == classes_.end()) {
       throw std::runtime_error("Class not registered: " + class_name);

@@ -9,12 +9,13 @@ class ScopedJniEnv {
   JNIEnv* env_{nullptr};
   bool attached_{false};
 
-public:
-  explicit ScopedJniEnv(JavaVM* jvm) : jvm_(jvm) {
+ public:
+  explicit ScopedJniEnv(JavaVM* jvm)
+      : jvm_(jvm) {
     if (jvm_ == nullptr) {
       return;
     }
-    const jint res = jvm_->GetEnv(reinterpret_cast<void**>(&env_), JNI_VERSION_1_6);
+    jint const res = jvm_->GetEnv(reinterpret_cast<void**>(&env_), JNI_VERSION_1_6);
     if (res == JNI_EDETACHED) {
       if (jvm_->AttachCurrentThread(&env_, nullptr) == JNI_OK) {
         attached_ = true;
@@ -24,8 +25,8 @@ public:
     }
   }
 
-  ScopedJniEnv(const ScopedJniEnv&) = delete;
-  auto operator=(const ScopedJniEnv&) -> ScopedJniEnv& = delete;
+  ScopedJniEnv(ScopedJniEnv const&) = delete;
+  auto operator=(ScopedJniEnv const&) -> ScopedJniEnv& = delete;
 
   ~ScopedJniEnv() {
     if (attached_ && (jvm_ != nullptr)) {

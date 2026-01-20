@@ -1,11 +1,11 @@
-#include "eillance/utils/event_queue.hpp"
-
-#include <gtest/gtest.h>
-
 #include <atomic>
 #include <chrono>
 #include <string>
 #include <thread>
+
+#include <gtest/gtest.h>
+
+#include "eillance/utils/event_queue.hpp"
 
 // Event structs for testing
 struct TestEvent1 {
@@ -19,9 +19,7 @@ TEST(EventQueueTest, SubscribeAndPush) {
   auto& queue = eillance::EventQueue::Instance();
   std::atomic<int> received_value = 0;
 
-  auto subId = queue.Subscribe<TestEvent1>([&](const TestEvent1& event) {
-    received_value = event.value;
-  });
+  auto subId = queue.Subscribe<TestEvent1>([&](TestEvent1 const& event) { received_value = event.value; });
 
   queue.Push(TestEvent1{42});
 
@@ -37,12 +35,8 @@ TEST(EventQueueTest, MultipleSubscribers) {
   std::atomic<int> counter1 = 0;
   std::atomic<int> counter2 = 0;
 
-  auto subId1 = queue.Subscribe<TestEvent1>([&](const TestEvent1& event) {
-    counter1 += event.value;
-  });
-  auto subId2 = queue.Subscribe<TestEvent1>([&](const TestEvent1& event) {
-    counter2 += event.value * 2;
-  });
+  auto subId1 = queue.Subscribe<TestEvent1>([&](TestEvent1 const& event) { counter1 += event.value; });
+  auto subId2 = queue.Subscribe<TestEvent1>([&](TestEvent1 const& event) { counter2 += event.value * 2; });
 
   queue.Push(TestEvent1{10});
 
@@ -59,9 +53,7 @@ TEST(EventQueueTest, Unsubscribe) {
   auto& queue = eillance::EventQueue::Instance();
   std::atomic<bool> received = false;
 
-  auto subId = queue.Subscribe<TestEvent1>([&](const TestEvent1& /*event*/) {
-    received = true;
-  });
+  auto subId = queue.Subscribe<TestEvent1>([&](TestEvent1 const& /*event*/) { received = true; });
 
   queue.Unsubscribe<TestEvent1>(subId);
   queue.Push(TestEvent1{100});
@@ -76,12 +68,8 @@ TEST(EventQueueTest, DifferentEventTypes) {
   std::atomic<int> event1_value = 0;
   std::atomic<bool> event2_received = false;
 
-  auto subId1 = queue.Subscribe<TestEvent1>([&](const TestEvent1& event) {
-    event1_value = event.value;
-  });
-  auto subId2 = queue.Subscribe<TestEvent2>([&](const TestEvent2& /*event*/) {
-    event2_received = true;
-  });
+  auto subId1 = queue.Subscribe<TestEvent1>([&](TestEvent1 const& event) { event1_value = event.value; });
+  auto subId2 = queue.Subscribe<TestEvent2>([&](TestEvent2 const& /*event*/) { event2_received = true; });
 
   queue.Push(TestEvent1{99});
   std::this_thread::sleep_for(std::chrono::milliseconds(50));

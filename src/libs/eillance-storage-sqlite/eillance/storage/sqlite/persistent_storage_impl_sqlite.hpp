@@ -1,13 +1,14 @@
 #pragma once
 
 #include <filesystem>
-#include <memory>
 #include <mutex>
 #include <optional>
-#include <sqlite3.h>
 #include <string>
 #include <string_view>
 #include <vector>
+
+#include <nlohmann/json.hpp>
+#include <sqlite3.h>
 
 #include "eillance/crypto/crypto.hpp"
 #include "eillance/logging/logging.hpp"
@@ -15,22 +16,20 @@
 #include "eillance/storage/sqlite/migrations.hpp"
 #include "eillance/storage/sqlite/sqlite_helpers.hpp"
 
-#include <nlohmann/json.hpp>
-
 namespace eillance::storage {
 
 namespace {
 
 constexpr size_t kMaxInlineContentSize = 2048;
 
-auto OptionalHexToBytes(const std::optional<std::string>& hex) -> std::optional<std::vector<std::byte>> {
+auto OptionalHexToBytes(std::optional<std::string> const& hex) -> std::optional<std::vector<std::byte>> {
   if (!hex) {
     return std::nullopt;
   }
   return crypto::FromHex(*hex);
 }
 
-auto OptionalBytesToHex(const std::optional<std::vector<std::byte>>& bytes) -> std::optional<std::string> {
+auto OptionalBytesToHex(std::optional<std::vector<std::byte>> const& bytes) -> std::optional<std::string> {
   if (!bytes) {
     return std::nullopt;
   }
@@ -44,8 +43,9 @@ class SQLiteStorage final : public PersistentStorageImpl {
   std::recursive_mutex mutex_;
   std::filesystem::path dbPath_;
 
-public:
-  explicit SQLiteStorage(const std::filesystem::path& db_path) : dbPath_(db_path) {
+ public:
+  explicit SQLiteStorage(std::filesystem::path const& db_path)
+      : dbPath_(db_path) {
     try {
       std::filesystem::create_directories(dbPath_.parent_path());
       if (sqlite3_open(dbPath_.string().c_str(), &db_) != SQLITE_OK) {
@@ -54,7 +54,7 @@ public:
       sqlite3_exec(db_, "PRAGMA journal_mode=WAL;", nullptr, nullptr, nullptr);
       sqlite3_exec(db_, "PRAGMA foreign_keys=ON;", nullptr, nullptr, nullptr);
       RunMigrations();
-    } catch (const std::exception& e) {
+    } catch (std::exception const& e) {
       LGE << "Failed to initialize SQLite database at " << db_path.string() << ": " << e.what();
       if (db_ != nullptr) {
         sqlite3_close_v2(db_);
@@ -70,14 +70,12 @@ public:
     }
   }
 
-  [[nodiscard]] auto GetPath() const -> std::string override {
-    return dbPath_.string();
-  }
+  [[nodiscard]] auto GetPath() const -> std::string override { return dbPath_.string(); }
 
   // --- Settings ---
-  auto GetSetting(const std::string_view key) -> std::optional<std::string> override {
-    const std::lock_guard lock(mutex_);
-    const SQLiteStatement statement(db_, R"SQL(
+  auto GetSetting(std::string_view const key) -> std::optional<std::string> override {
+    std::lock_guard const lock(mutex_);
+    SQLiteStatement const statement(db_, R"SQL(
         SELECT
           value
         FROM
@@ -92,9 +90,9 @@ public:
     return std::nullopt;
   }
 
-  void SetSetting(const std::string_view key, const std::string_view value) override {
-    const std::lock_guard lock(mutex_);
-    const SQLiteStatement statement(db_, R"SQL(
+  void SetSetting(std::string_view const key, std::string_view const value) override {
+    std::lock_guard const lock(mutex_);
+    SQLiteStatement const statement(db_, R"SQL(
       REPLACE INTO settings
         (key, value)
       VALUES
@@ -105,9 +103,9 @@ public:
     sqlite3_step(statement.Get());
   }
 
-  void DeleteSetting(const std::string_view key) override {
-    const std::lock_guard lock(mutex_);
-    const SQLiteStatement statement(db_, R"SQL(
+  void DeleteSetting(std::string_view const key) override {
+    std::lock_guard const lock(mutex_);
+    SQLiteStatement const statement(db_, R"SQL(
       DELETE FROM
         settings
       WHERE
@@ -118,21 +116,23 @@ public:
   }
 
   // --- Raw Key-Value for backward compatibility if needed ---
-  auto GetRaw(const std::string& key) -> std::optional<std::vector<std::byte>> override {
-    if (const auto val = GetSetting(key)) { return crypto::FromHex(*val); }
+  auto GetRaw(std::string const& key) -> std::optional<std::vector<std::byte>> override {
+    if (auto const val = GetSetting(key)) {
+      return crypto::FromHex(*val);
+    }
     return std::nullopt;
   }
 
-  auto SetRaw(const std::string& key, const std::vector<std::byte>& value) -> bool override {
+  auto SetRaw(std::string const& key, std::vector<std::byte> const& value) -> bool override {
     SetSetting(key, crypto::ToHex(value));
     return true;
   }
 
   // --- Contacts ---
   auto GetContacts() -> std::vector<identity::Contact> override {
-    const std::lock_guard lock(mutex_);
+    std::lock_guard const lock(mutex_);
     std::vector<identity::Contact> contacts;
-    const SQLiteStatement statement(db_, R"SQL(
+    SQLiteStatement const statement(db_, R"SQL(
       SELECT
         peer_id,
         status,
@@ -146,21 +146,23 @@ public:
         contacts;
     )SQL");
     while (sqlite3_step(statement.Get()) == SQLITE_ROW) {
-      contacts.push_back({.peer_id = ContactID(ColumnString(statement.Get(), 0)),
-                          .status = static_cast<identity::ContactStatus>(sqlite3_column_int(statement.Get(), 1)),
-                          .display_name = ColumnOptionalString(statement.Get(), 2),
-                          .display_name_override = ColumnOptionalString(statement.Get(), 3),
-                          .bio = ColumnOptionalString(statement.Get(), 4),
-                          .photo_base64 = ColumnOptionalString(statement.Get(), 5),
-                          .signature_from_them = OptionalHexToBytes(ColumnOptionalString(statement.Get(), 6)),
-                          .my_signature_for_them = OptionalHexToBytes(ColumnOptionalString(statement.Get(), 7))});
+      contacts.push_back(
+          {.peer_id = ContactID(ColumnString(statement.Get(), 0)),
+           .status = static_cast<identity::ContactStatus>(sqlite3_column_int(statement.Get(), 1)),
+           .display_name = ColumnOptionalString(statement.Get(), 2),
+           .display_name_override = ColumnOptionalString(statement.Get(), 3),
+           .bio = ColumnOptionalString(statement.Get(), 4),
+           .photo_base64 = ColumnOptionalString(statement.Get(), 5),
+           .signature_from_them = OptionalHexToBytes(ColumnOptionalString(statement.Get(), 6)),
+           .my_signature_for_them = OptionalHexToBytes(ColumnOptionalString(statement.Get(), 7))}
+      );
     }
     return contacts;
   }
 
-  auto GetContact(const ContactID& peer_id) -> std::optional<identity::Contact> override {
-    const std::lock_guard lock(mutex_);
-    const SQLiteStatement statement(db_, R"SQL(
+  auto GetContact(ContactID const& peer_id) -> std::optional<identity::Contact> override {
+    std::lock_guard const lock(mutex_);
+    SQLiteStatement const statement(db_, R"SQL(
       SELECT
         peer_id,
         status,
@@ -177,21 +179,23 @@ public:
     )SQL");
     BindText(statement.Get(), 1, peer_id.ToString());
     if (sqlite3_step(statement.Get()) == SQLITE_ROW) {
-      return identity::Contact{.peer_id = ContactID(ColumnString(statement.Get(), 0)),
-                               .status = static_cast<identity::ContactStatus>(sqlite3_column_int(statement.Get(), 1)),
-                               .display_name = ColumnOptionalString(statement.Get(), 2),
-                               .display_name_override = ColumnOptionalString(statement.Get(), 3),
-                               .bio = ColumnOptionalString(statement.Get(), 4),
-                               .photo_base64 = ColumnOptionalString(statement.Get(), 5),
-                               .signature_from_them = OptionalHexToBytes(ColumnOptionalString(statement.Get(), 6)),
-                               .my_signature_for_them = OptionalHexToBytes(ColumnOptionalString(statement.Get(), 7))};
+      return identity::Contact{
+          .peer_id = ContactID(ColumnString(statement.Get(), 0)),
+          .status = static_cast<identity::ContactStatus>(sqlite3_column_int(statement.Get(), 1)),
+          .display_name = ColumnOptionalString(statement.Get(), 2),
+          .display_name_override = ColumnOptionalString(statement.Get(), 3),
+          .bio = ColumnOptionalString(statement.Get(), 4),
+          .photo_base64 = ColumnOptionalString(statement.Get(), 5),
+          .signature_from_them = OptionalHexToBytes(ColumnOptionalString(statement.Get(), 6)),
+          .my_signature_for_them = OptionalHexToBytes(ColumnOptionalString(statement.Get(), 7))
+      };
     }
     return std::nullopt;
   }
 
-  void UpdateContact(const identity::Contact& contact) override {
-    const std::lock_guard lock(mutex_);
-    const SQLiteStatement statement(db_, R"SQL(
+  void UpdateContact(identity::Contact const& contact) override {
+    std::lock_guard const lock(mutex_);
+    SQLiteStatement const statement(db_, R"SQL(
       REPLACE INTO contacts
         (peer_id, status, display_name, display_name_override, bio, photo_base64, signature_from_them, my_signature_for_them)
       VALUES
@@ -208,8 +212,8 @@ public:
     sqlite3_step(statement.Get());
   }
 
-  void RemoveContact(const ContactID& peer_id) override {
-    const std::lock_guard lock(mutex_);
+  void RemoveContact(ContactID const& peer_id) override {
+    std::lock_guard const lock(mutex_);
     char* err_msg = nullptr;
     if (sqlite3_exec(db_, "BEGIN TRANSACTION;", nullptr, nullptr, &err_msg) != SQLITE_OK) {
       LGE << "Failed to begin transaction for contact removal: " << ((err_msg != nullptr) ? err_msg : "Unknown error");
@@ -218,18 +222,18 @@ public:
     }
 
     try {
-      const SQLiteStatement messages_stmt(db_, "DELETE FROM messages WHERE peer_id = ?;");
+      SQLiteStatement const messages_stmt(db_, "DELETE FROM messages WHERE peer_id = ?;");
       BindText(messages_stmt.Get(), 1, peer_id.ToString());
       if (sqlite3_step(messages_stmt.Get()) != SQLITE_DONE) {
         throw std::runtime_error(sqlite3_errmsg(db_));
       }
 
-      const SQLiteStatement contact_stmt(db_, "DELETE FROM contacts WHERE peer_id = ?;");
+      SQLiteStatement const contact_stmt(db_, "DELETE FROM contacts WHERE peer_id = ?;");
       BindText(contact_stmt.Get(), 1, peer_id.ToString());
       if (sqlite3_step(contact_stmt.Get()) != SQLITE_DONE) {
         throw std::runtime_error(sqlite3_errmsg(db_));
       }
-    } catch (const std::runtime_error& e) {
+    } catch (std::runtime_error const& e) {
       LGE << "Error during contact removal: " << e.what();
       sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
       return;
@@ -243,10 +247,9 @@ public:
   }
 
   // --- History / Messages ---
-  auto AddHistoryEntry(messaging::HistoryEntryRecord entry)
-      -> messaging::HistoryEntryRecord override {
-    const std::lock_guard lock(mutex_);
-    const SQLiteStatement statement(db_, R"SQL(
+  auto AddHistoryEntry(messaging::HistoryEntryRecord entry) -> messaging::HistoryEntryRecord override {
+    std::lock_guard const lock(mutex_);
+    SQLiteStatement const statement(db_, R"SQL(
       INSERT INTO messages (
         peer_id,
         kind,
@@ -276,7 +279,7 @@ public:
       }
       sqlite3_bind_int(statement.Get(), 6, static_cast<int>(entry.is_truncated));
       BindText(statement.Get(), 7, msg_entry->content);
-    } else if (const auto* call_entry = std::get_if<messaging::CallEntry>(&entry.data)) {
+    } else if (auto const* call_entry = std::get_if<messaging::CallEntry>(&entry.data)) {
       entry.is_truncated = false;
       sqlite3_bind_int(statement.Get(), 6, 0);  // is_truncated = false
 
@@ -295,7 +298,7 @@ public:
     entry.id = sqlite3_last_insert_rowid(db_);
 
     if (full_content_for_storage) {
-      const SQLiteStatement large_msg_stmt(db_, R"SQL(
+      SQLiteStatement const large_msg_stmt(db_, R"SQL(
         INSERT INTO large_messages
           (message_id, full_content)
         VALUES
@@ -311,9 +314,9 @@ public:
     return entry;
   }
 
-  void UpdateHistoryEntry(const messaging::HistoryEntryRecord& entry) override {
-    const std::lock_guard lock(mutex_);
-    const SQLiteStatement statement(db_, R"SQL(
+  void UpdateHistoryEntry(messaging::HistoryEntryRecord const& entry) override {
+    std::lock_guard const lock(mutex_);
+    SQLiteStatement const statement(db_, R"SQL(
       UPDATE
         messages
       SET
@@ -331,28 +334,30 @@ public:
     sqlite3_bind_int(statement.Get(), 3, static_cast<int>(entry.direction));
     sqlite3_bind_int(statement.Get(), 4, static_cast<int>(entry.status));
 
-    std::visit([&]<typename T0>(T0&& arg) {
-      using T = std::decay_t<T0>;
-      if constexpr (std::is_same_v<T, messaging::MessageEntry>) {
-        BindText(statement.Get(), 5, arg.content);
-      } else if constexpr (std::is_same_v<T, messaging::CallEntry>) {
-        nlohmann::json j;
-        j["duration_seconds"] = arg.duration_seconds;
-        j["call_direction"] = arg.call_direction;
-        j["call_status"] = arg.call_status;
-        BindText(statement.Get(), 5, j.dump());
-      }
-    },
-               entry.data);
+    std::visit(
+        [&]<typename T0>(T0&& arg) {
+          using T = std::decay_t<T0>;
+          if constexpr (std::is_same_v<T, messaging::MessageEntry>) {
+            BindText(statement.Get(), 5, arg.content);
+          } else if constexpr (std::is_same_v<T, messaging::CallEntry>) {
+            nlohmann::json j;
+            j["duration_seconds"] = arg.duration_seconds;
+            j["call_direction"] = arg.call_direction;
+            j["call_status"] = arg.call_status;
+            BindText(statement.Get(), 5, j.dump());
+          }
+        },
+        entry.data
+    );
 
     sqlite3_bind_int64(statement.Get(), 6, entry.id);
     sqlite3_step(statement.Get());
   }
 
-  void UpdateMessageStatus(const ContactID& peer_id, uint64_t message_id,
-                           messaging::MessageStatus new_status) override {
-    const std::lock_guard lock(mutex_);
-    const SQLiteStatement statement(db_, R"SQL(
+  void UpdateMessageStatus(ContactID const& peer_id, uint64_t message_id, messaging::MessageStatus new_status)
+      override {
+    std::lock_guard const lock(mutex_);
+    SQLiteStatement const statement(db_, R"SQL(
       UPDATE
         messages
       SET
@@ -366,14 +371,17 @@ public:
     sqlite3_step(statement.Get());
   }
 
-  void UpdateMessageStatuses(const ContactID& peer_id, const std::vector<uint64_t>& message_ids,
-                             messaging::MessageStatus new_status) override {
+  void UpdateMessageStatuses(
+      ContactID const& peer_id,
+      std::vector<uint64_t> const& message_ids,
+      messaging::MessageStatus new_status
+  ) override {
     if (message_ids.empty()) {
       return;
     }
-    const std::lock_guard lock(mutex_);
-    const nlohmann::json ids_json = message_ids;
-    const std::string query = R"SQL(
+    std::lock_guard const lock(mutex_);
+    nlohmann::json const ids_json = message_ids;
+    std::string const query = R"SQL(
       UPDATE
         messages
       SET
@@ -382,20 +390,20 @@ public:
         peer_id = ? AND id IN (SELECT value FROM json_each(?));
     )SQL";
 
-    const SQLiteStatement statement(db_, query);
+    SQLiteStatement const statement(db_, query);
     sqlite3_bind_int(statement.Get(), 1, static_cast<int>(new_status));
     BindText(statement.Get(), 2, peer_id.ToString());
     BindText(statement.Get(), 3, ids_json.dump());
     sqlite3_step(statement.Get());
   }
 
-  auto GetHistoryPage(const ContactID& peer_id, size_t page_index,
-                      size_t page_size) -> messaging::HistoryPage override {
-    const std::lock_guard lock(mutex_);
+  auto GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t page_size)
+      -> messaging::HistoryPage override {
+    std::lock_guard const lock(mutex_);
     messaging::HistoryPage page;
 
     {
-      const SQLiteStatement count_stmt(db_, R"SQL(
+      SQLiteStatement const count_stmt(db_, R"SQL(
         SELECT
           count(*)
         FROM
@@ -409,7 +417,7 @@ public:
       }
     }
 
-    const SQLiteStatement statement(db_, R"SQL(
+    SQLiteStatement const statement(db_, R"SQL(
       SELECT
         id,
         kind,
@@ -440,8 +448,8 @@ public:
   }
 
   auto GetFullMessageContent(std::uint64_t message_id) -> std::optional<std::string> override {
-    const std::lock_guard lock(mutex_);
-    const SQLiteStatement statement(db_, R"SQL(
+    std::lock_guard const lock(mutex_);
+    SQLiteStatement const statement(db_, R"SQL(
       SELECT
         full_content
       FROM
@@ -456,22 +464,21 @@ public:
     return std::nullopt;
   }
 
-  auto GetChatSummaries(const std::vector<ContactID>& peer_ids)
-      -> std::vector<messaging::ChatSummary> override {
+  auto GetChatSummaries(std::vector<ContactID> const& peer_ids) -> std::vector<messaging::ChatSummary> override {
     if (peer_ids.empty()) {
       return {};
     }
-    const std::lock_guard lock(mutex_);
+    std::lock_guard const lock(mutex_);
     std::vector<messaging::ChatSummary> summaries;
 
-    for (const auto& peer_id: peer_ids) {
+    for (auto const& peer_id : peer_ids) {
       messaging::ChatSummary summary;
       summary.peer_id = peer_id;
       summary.unread_count = 0;
 
       // Query 1: Get unread count
       {
-        const SQLiteStatement unread_stmt(db_, R"SQL(
+        SQLiteStatement const unread_stmt(db_, R"SQL(
           SELECT
             COUNT(*)
           FROM
@@ -485,12 +492,9 @@ public:
 
         int bind_idx = 1;
         BindText(unread_stmt.Get(), bind_idx++, peer_id.ToString());
-        sqlite3_bind_int(unread_stmt.Get(), bind_idx++,
-                         static_cast<int>(messaging::MessageDirection::received));
-        sqlite3_bind_int(unread_stmt.Get(), bind_idx++,
-                         static_cast<int>(messaging::MessageStatus::read));
-        sqlite3_bind_int(unread_stmt.Get(), bind_idx++,
-                         static_cast<int>(messaging::HistoryEntryKind::textMessage));
+        sqlite3_bind_int(unread_stmt.Get(), bind_idx++, static_cast<int>(messaging::MessageDirection::received));
+        sqlite3_bind_int(unread_stmt.Get(), bind_idx++, static_cast<int>(messaging::MessageStatus::read));
+        sqlite3_bind_int(unread_stmt.Get(), bind_idx++, static_cast<int>(messaging::HistoryEntryKind::textMessage));
 
         if (sqlite3_step(unread_stmt.Get()) == SQLITE_ROW) {
           summary.unread_count = sqlite3_column_int(unread_stmt.Get(), 0);
@@ -499,7 +503,7 @@ public:
 
       // Query 2: Get last message
       {
-        const SQLiteStatement last_msg_stmt(db_, R"SQL(
+        SQLiteStatement const last_msg_stmt(db_, R"SQL(
           SELECT
             id,
             kind,
@@ -526,17 +530,17 @@ public:
       }
     }
 
-    std::ranges::sort(summaries, [](const auto& a, const auto& b) {
+    std::ranges::sort(summaries, [](auto const& a, auto const& b) {
       return a.last_message.timestamp > b.last_message.timestamp;
     });
     return summaries;
   }
 
-  auto GetMessagesWithStatus(const ContactID& peer_id, messaging::MessageStatus status)
+  auto GetMessagesWithStatus(ContactID const& peer_id, messaging::MessageStatus status)
       -> std::vector<messaging::HistoryEntryRecord> override {
-    const std::lock_guard lock(mutex_);
+    std::lock_guard const lock(mutex_);
     std::vector<messaging::HistoryEntryRecord> records;
-    const SQLiteStatement statement(db_, R"SQL(
+    SQLiteStatement const statement(db_, R"SQL(
       SELECT
         id,
         kind,
@@ -563,8 +567,8 @@ public:
 
   // --- Debug ---
   void DebugClearAllHistory() override {
-    const std::lock_guard lock(mutex_);
-    const char* sql = R"SQL(
+    std::lock_guard const lock(mutex_);
+    auto sql = R"SQL(
       BEGIN TRANSACTION;
       DELETE FROM large_messages;
       DELETE FROM messages;
@@ -579,8 +583,8 @@ public:
   }
 
   void DebugClearAllContacts() override {
-    const std::lock_guard lock(mutex_);
-    const char* sql = R"SQL(
+    std::lock_guard const lock(mutex_);
+    auto sql = R"SQL(
       BEGIN TRANSACTION;
       DELETE FROM contacts;
       COMMIT;
@@ -594,15 +598,16 @@ public:
   }
 
   void DebugRevokeAllContactApprovals() override {
-    const std::lock_guard lock(mutex_);
+    std::lock_guard const lock(mutex_);
     char* err_msg = nullptr;
     if (sqlite3_exec(db_, "BEGIN TRANSACTION;", nullptr, nullptr, &err_msg) != SQLITE_OK) {
-      LGE << "Failed to begin transaction for revoking approvals: " << ((err_msg != nullptr) ? err_msg : "Unknown error");
+      LGE << "Failed to begin transaction for revoking approvals: "
+          << ((err_msg != nullptr) ? err_msg : "Unknown error");
       sqlite3_free(err_msg);
       return;
     }
 
-    const SQLiteStatement statement(db_, R"SQL(
+    SQLiteStatement const statement(db_, R"SQL(
       UPDATE
         contacts
       SET
@@ -625,10 +630,10 @@ public:
     }
   }
 
-private:
+ private:
   void RunMigrations() const {
     int user_version = 0;
-    const SQLiteStatement get_version_stmt(db_, "PRAGMA user_version;");
+    SQLiteStatement const get_version_stmt(db_, "PRAGMA user_version;");
     if (sqlite3_step(get_version_stmt.Get()) == SQLITE_ROW) {
       user_version = sqlite3_column_int(get_version_stmt.Get(), 0);
     }
@@ -651,8 +656,7 @@ private:
     switch (record.kind) {
       case messaging::HistoryEntryKind::textMessage:
       case messaging::HistoryEntryKind::systemMessage:
-        record.data =
-            messaging::MessageEntry{.content = ColumnString(stmt, 6)};
+        record.data = messaging::MessageEntry{.content = ColumnString(stmt, 6)};
         break;
       case messaging::HistoryEntryKind::voiceCall:
       case messaging::HistoryEntryKind::videoCall: {
@@ -664,7 +668,7 @@ private:
             call_entry.duration_seconds = j.value("duration_seconds", 0U);
             call_entry.call_direction = j.value("call_direction", messaging::CallDirection::outgoing);
             call_entry.call_status = j.value("call_status", messaging::CallStatus::answered);
-          } catch (const std::exception& e) {
+          } catch (std::exception const& e) {
             LGE << "Failed to parse call entry JSON: " << e.what();
           }
         }

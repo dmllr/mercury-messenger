@@ -11,13 +11,14 @@
 #include <plog/Init.h>
 #include <plog/Log.h>
 
-
 constexpr auto logInstanceId = 454;
-#define LGV PLOG_(logInstanceId, plog::verbose)  // NOLINT(*-pro-type-reinterpret-cast,*-lambda-function-name)
-#define LGD PLOG_(logInstanceId, plog::debug)    // NOLINT(*-pro-type-reinterpret-cast,*-lambda-function-name)
-#define LGI PLOG_(logInstanceId, plog::info)     // NOLINT(*-pro-type-reinterpret-cast,*-lambda-function-name)
-#define LGW PLOG_(logInstanceId, plog::warning)  // NOLINT(*-pro-type-reinterpret-cast,*-lambda-function-name)
-#define LGE PLOG_(logInstanceId, plog::error)    // NOLINT(*-pro-type-reinterpret-cast,*-lambda-function-name)
+// NOLINTBEGIN(*-pro-type-reinterpret-cast,*-lambda-function-name)
+#define LGV PLOG_(logInstanceId, plog::verbose)
+#define LGD PLOG_(logInstanceId, plog::debug)
+#define LGI PLOG_(logInstanceId, plog::info)
+#define LGW PLOG_(logInstanceId, plog::warning)
+#define LGE PLOG_(logInstanceId, plog::error)
+// NOLINTEND(*-pro-type-reinterpret-cast,*-lambda-function-name)
 
 struct Log {
   static constexpr auto tag = "eillance";
@@ -33,7 +34,9 @@ struct Log {
    * @param severity The minimum severity level to log.
    */
   // NOLINTNEXTLINE(*-default-arguments-declarations)
-  static void Initialize(plog::IAppender* appender, plog::Severity severity = logLevel) { plog::init(severity, appender); }
+  static void Initialize(plog::IAppender* appender, plog::Severity severity = logLevel) {
+    plog::init(severity, appender);
+  }
 
   /**
    * @brief Initializes the logging system with the default platform-specific appender.

@@ -1,19 +1,19 @@
 #pragma once
 
 #include <array>
-#include <camera/NdkCameraError.h>
-#include <camera/NdkCameraManager.h>
 #include <cinttypes>
-#include <media/NdkImage.h>
-#include <nlohmann/json.hpp>
 #include <string>
 #include <type_traits>
 #include <typeinfo>
 #include <utility>
 #include <vector>
 
-#include "eillance/logging/logging.hpp"
+#include <camera/NdkCameraError.h>
+#include <camera/NdkCameraManager.h>
+#include <media/NdkImage.h>
+#include <nlohmann/json.hpp>
 
+#include "eillance/logging/logging.hpp"
 
 namespace eillance {
 
@@ -33,7 +33,7 @@ inline auto GetAvailableCameras() -> std::vector<std::pair<std::string, std::str
 
   std::vector<std::pair<std::string, std::string>> cameras;
   for (int i = 0; i < camera_id_list->numCameras; ++i) {
-    const char* camera_id = camera_id_list->cameraIds[i];
+    char const* camera_id = camera_id_list->cameraIds[i];
 
     ACameraMetadata* metadata = nullptr;
     if (ACameraManager_getCameraCharacteristics(camera_manager, camera_id, &metadata) != ACAMERA_OK) {
@@ -43,7 +43,7 @@ inline auto GetAvailableCameras() -> std::vector<std::pair<std::string, std::str
 
     ACameraMetadata_const_entry entry;
     if (ACameraMetadata_getConstEntry(metadata, ACAMERA_LENS_FACING, &entry) == ACAMERA_OK) {
-      const char* facing = (entry.data.u8[0] == ACAMERA_LENS_FACING_FRONT) ? "Front" : "Back";
+      char const* facing = (entry.data.u8[0] == ACAMERA_LENS_FACING_FRONT) ? "Front" : "Back";
       cameras.emplace_back(camera_id, facing);
     }
 
@@ -56,7 +56,7 @@ inline auto GetAvailableCameras() -> std::vector<std::pair<std::string, std::str
   return cameras;
 }
 
-inline auto GetSupportedResolutions(const std::string& camera_id) -> std::vector<std::pair<int32_t, int32_t>> {
+inline auto GetSupportedResolutions(std::string const& camera_id) -> std::vector<std::pair<int32_t, int32_t>> {
   ACameraManager* camera_manager = ACameraManager_create();
   if (camera_manager == nullptr) {
     LGE << "Failed to create camera manager";
@@ -74,7 +74,9 @@ inline auto GetSupportedResolutions(const std::string& camera_id) -> std::vector
   std::vector<std::pair<int32_t, int32_t>> resolutions;
   if (ACameraMetadata_getConstEntry(metadata, ACAMERA_SCALER_AVAILABLE_STREAM_CONFIGURATIONS, &entry) == ACAMERA_OK) {
     for (uint32_t i = 0; i < entry.count; i += 4) {
-      if (entry.data.i32[i + 3] == ACAMERA_SCALER_AVAILABLE_STREAM_CONFIGURATIONS_OUTPUT) { resolutions.emplace_back(entry.data.i32[i + 1], entry.data.i32[i + 2]); }
+      if (entry.data.i32[i + 3] == ACAMERA_SCALER_AVAILABLE_STREAM_CONFIGURATIONS_OUTPUT) {
+        resolutions.emplace_back(entry.data.i32[i + 1], entry.data.i32[i + 2]);
+      }
     }
   }
 
@@ -89,7 +91,7 @@ inline auto GetDeviceProfileAsJson() -> nlohmann::json {
   auto cameras = GetAvailableCameras();
   auto cameras_json = Json::array();
 
-  for (const auto& camera: cameras) {
+  for (auto const& camera : cameras) {
     Json camera_json{};
     camera_json["id"] = camera.first;
     camera_json["name"] = camera.second;
@@ -101,7 +103,7 @@ inline auto GetDeviceProfileAsJson() -> nlohmann::json {
     resolutions.erase(last, resolutions.end());
 
     Json resolutions_json = Json::array();
-    for (const auto& res: resolutions) {
+    for (auto const& res : resolutions) {
       resolutions_json.push_back({{"width", res.first}, {"height", res.second}});
     }
 
@@ -112,16 +114,20 @@ inline auto GetDeviceProfileAsJson() -> nlohmann::json {
   return cameras_json;
 }
 
-template<typename T, std::size_t N>
-constexpr auto GetPairStr(T key, const std::array<std::pair<T, const char*>, N>& store) -> const char* {
-  for (const auto& pair: store) {
-    if (pair.first == key) { return pair.second; }
+template <typename T, std::size_t N>
+constexpr auto GetPairStr(T key, std::array<std::pair<T, char const*>, N> const& store) -> char const* {
+  for (auto const& pair : store) {
+    if (pair.first == key) {
+      return pair.second;
+    }
   }
-  if (!std::is_constant_evaluated()) { Log::w("(%#08x) : UNKNOWN TAG for %s", key, typeid(store[0].first).name()); }
+  if (!std::is_constant_evaluated()) {
+    Log::w("(%#08x) : UNKNOWN TAG for %s", key, typeid(store[0].first).name());
+  }
   return "UNKNOWN";
 }
 
-using ErrorPair = std::pair<camera_status_t, const char*>;
+using ErrorPair = std::pair<camera_status_t, char const*>;
 static constexpr std::array<ErrorPair, 15> camera_error_info{{
     {ACAMERA_OK, "ACAMERA_OK"},
     {ACAMERA_ERROR_UNKNOWN, "ACAMERA_ERROR_UNKNOWN"},
@@ -140,7 +146,7 @@ static constexpr std::array<ErrorPair, 15> camera_error_info{{
     {ACAMERA_ERROR_PERMISSION_DENIED, "ACAMERA_ERROR_PERMISSION_DENIED"},
 }};
 
-using DevErrorPair = std::pair<int, const char*>;
+using DevErrorPair = std::pair<int, char const*>;
 static constexpr std::array<DevErrorPair, 5> camera_device_error_info{{
     {ERROR_CAMERA_IN_USE, "ERROR_CAMERA_IN_USE"},
     {ERROR_MAX_CAMERAS_IN_USE, "ERROR_MAX_CAMERAS_IN_USE"},
@@ -149,11 +155,11 @@ static constexpr std::array<DevErrorPair, 5> camera_device_error_info{{
     {ERROR_CAMERA_SERVICE, "ERROR_CAMERA_SERVICE"},
 }};
 
-constexpr auto GetErrorStr(camera_status_t err) -> const char* {
+constexpr auto GetErrorStr(camera_status_t err) -> char const* {
   return GetPairStr<camera_status_t, std::size(camera_error_info)>(err, camera_error_info);
 }
 
-constexpr auto GetCameraDeviceErrorStr(int err) -> const char* {
+constexpr auto GetCameraDeviceErrorStr(int err) -> char const* {
   return GetPairStr<int, std::size(camera_device_error_info)>(err, camera_device_error_info);
 }
 

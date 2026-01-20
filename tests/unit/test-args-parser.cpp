@@ -1,6 +1,6 @@
-#include "eillance/utils/args_parser.hpp"
-
 #include <gtest/gtest.h>
+
+#include "eillance/utils/args_parser.hpp"
 
 TEST(ArgsParserTest, GetKeyValue) {
   int argc = 2;

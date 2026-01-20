@@ -10,9 +10,6 @@
 #include <thread>
 #include <vector>
 
-#include "ftxui/component/component.hpp"
-#include "ftxui/component/screen_interactive.hpp"
-#include "ftxui/dom/elements.hpp"
 #include <plog/Appenders/RollingFileAppender.h>
 #include <plog/Formatters/TxtFormatter.h>
 
@@ -34,13 +31,19 @@
 #include "eillance/view_model/conversation_view_model.hpp"
 #include "eillance/view_model/profile_view_model.hpp"
 #include "eillance/view_model/settings_view_model.hpp"
+#include "ftxui/component/component.hpp"
+#include "ftxui/component/screen_interactive.hpp"
+#include "ftxui/dom/elements.hpp"
 
 namespace {
 
 // Helper function to format contact entries for the ftxui::Menu component.
-std::vector<std::string> GetContactMenuEntries(const std::vector<eillance::view_model::ViewContact>& contacts, const eillance::view_model::CallState& callState) {
+std::vector<std::string> GetContactMenuEntries(
+    std::vector<eillance::view_model::ViewContact> const& contacts,
+    eillance::view_model::CallState const& callState
+) {
   std::vector<std::string> entries;
-  for (const auto& contact: contacts) {
+  for (auto const& contact : contacts) {
     if (contact.status == eillance::identity::ContactStatus::rejected) {
       continue;
     }
@@ -62,7 +65,8 @@ std::vector<std::string> GetContactMenuEntries(const std::vector<eillance::view_
     }
 
     std::string conn_status_str;
-    if (callState.peer_id == contact.peer_id && (callState.is_connecting || callState.is_ringing || callState.is_in_call)) {
+    if (callState.peer_id == contact.peer_id &&
+        (callState.is_connecting || callState.is_ringing || callState.is_in_call)) {
       if (callState.is_connecting) {
         conn_status_str = " (Calling)";
       } else if (callState.is_ringing) {
@@ -87,14 +91,16 @@ std::vector<std::string> GetContactMenuEntries(const std::vector<eillance::view_
     }
 
     std::string unread_count_str;
-    if (contact.unread_count > 0) { unread_count_str = " [" + std::to_string(contact.unread_count) + "]"; }
+    if (contact.unread_count > 0) {
+      unread_count_str = " [" + std::to_string(contact.unread_count) + "]";
+    }
 
     entries.push_back(contact.display_name + status_str + conn_status_str + unread_count_str);
   }
   return entries;
 }
 
-constexpr auto GetConnectionStatusString(const eillance::ServiceConnectionState state) -> std::string_view {
+constexpr auto GetConnectionStatusString(eillance::ServiceConnectionState const state) -> std::string_view {
   switch (state) {
     case eillance::ServiceConnectionState::establishing:
       return "CONNECTING";
@@ -110,11 +116,11 @@ constexpr auto GetConnectionStatusString(const eillance::ServiceConnectionState 
 }
 
 // Helper function to format timestamps according to the specified rules.
-std::string FormatTimestamp(const Time::Unit ts_microseconds) {
+std::string FormatTimestamp(Time::Unit const ts_microseconds) {
   using namespace std::chrono;
-  const time_t message_time_t = ts_microseconds / 1000000;
-  const auto now_tp = system_clock::now();
-  const time_t now_time_t = system_clock::to_time_t(now_tp);
+  time_t const message_time_t = ts_microseconds / 1000000;
+  auto const now_tp = system_clock::now();
+  time_t const now_time_t = system_clock::to_time_t(now_tp);
 
 #ifdef _WIN32
   tm message_tm{};
@@ -165,14 +171,14 @@ std::string FormatTimestamp(const Time::Unit ts_microseconds) {
 int main(int argc, char** argv) {
   auto screen = ftxui::ScreenInteractive::Fullscreen();
 
-  const eillance::utils::ArgsParser args(argc, argv);
-  const std::string config_name_str = args.GetPositional(0).value_or("Default");
-  const char* config_name = config_name_str.c_str();
+  eillance::utils::ArgsParser const args(argc, argv);
+  std::string const config_name_str = args.GetPositional(0).value_or("Default");
+  char const* config_name = config_name_str.c_str();
 
 #ifdef _WIN32
-  const char* home_dir_env = getenv("USERPROFILE");
+  char const* home_dir_env = getenv("USERPROFILE");
 #else
-  const char* home_dir_env = getenv("HOME");
+  char const* home_dir_env = getenv("HOME");
 #endif
   if (home_dir_env == nullptr) {
     std::cerr << "Could not determine home directory.\n";
@@ -183,11 +189,15 @@ int main(int argc, char** argv) {
   // --- Logging Initialization ---
   auto log_file_path = config_path / "mercury-cli.log";
   std::filesystem::create_directories(log_file_path.parent_path());
-  const auto u8_path = log_file_path.u8string();
-  const auto log_file_path_str{std::string{reinterpret_cast<const char*>(u8_path.c_str()), u8_path.length()}};
+  auto const u8_path = log_file_path.u8string();
+  auto const log_file_path_str{std::string{reinterpret_cast<char const*>(u8_path.c_str()), u8_path.length()}};
   constexpr auto max_log_size_bytes = 5 * 1024 * 1024;
   constexpr auto max_log_files = 3;
-  static plog::RollingFileAppender<plog::TxtFormatter> file_appender(log_file_path_str.c_str(), max_log_size_bytes, max_log_files);
+  static plog::RollingFileAppender<plog::TxtFormatter> file_appender(
+      log_file_path_str.c_str(),
+      max_log_size_bytes,
+      max_log_files
+  );
   Log::Initialize(&file_appender, plog::info);
 
   // --- Service Layer (Model) Initialization ---
@@ -270,20 +280,27 @@ int main(int argc, char** argv) {
   std::shared_ptr<eillance::view_model::ConversationViewModel> conversation_vm;
 
   // --- Observers ---
-  struct MainObserver : public eillance::view_model::ContactsViewModel::Observer,
-                        public eillance::view_model::CallViewModel::Observer,
-                        public eillance::view_model::SettingsViewModel::Observer,
-                        public eillance::view_model::ConversationViewModel::Observer {
+  struct MainObserver
+      : public eillance::view_model::ContactsViewModel::Observer
+      , public eillance::view_model::CallViewModel::Observer
+      , public eillance::view_model::SettingsViewModel::Observer
+      , public eillance::view_model::ConversationViewModel::Observer {
     ftxui::ScreenInteractive& screen;
-    explicit MainObserver(ftxui::ScreenInteractive& s) : screen(s) {}
+    explicit MainObserver(ftxui::ScreenInteractive& s)
+        : screen(s) {}
 
-    void OnContactsUpdated(const std::vector<eillance::view_model::ViewContact>&) override { screen.Post(ftxui::Event::Custom); }
-    void OnCallStateChanged(const eillance::view_model::CallState&) override { screen.Post(ftxui::Event::Custom); }
-    void OnSettingsUpdated(const std::optional<std::string>&, int) override { screen.Post(ftxui::Event::Custom); }
+    void OnContactsUpdated(std::vector<eillance::view_model::ViewContact> const&) override {
+      screen.Post(ftxui::Event::Custom);
+    }
+    void OnCallStateChanged(eillance::view_model::CallState const&) override { screen.Post(ftxui::Event::Custom); }
+    void OnSettingsUpdated(std::optional<std::string> const&, int) override { screen.Post(ftxui::Event::Custom); }
     void OnConnectionStateChanged(eillance::ServiceConnectionState) override { screen.Post(ftxui::Event::Custom); }
-    void OnHistoryUpdated(const eillance::view_model::ConversationViewModel::State&) override { screen.Post(ftxui::Event::Custom); }
+    void OnHistoryUpdated(eillance::view_model::ConversationViewModel::State const&) override {
+      screen.Post(ftxui::Event::Custom);
+    }
     // Implement Profile Observer requirement if needed or just ignore for CLI main loop
-    // But since we are not observing profile changes in this CLI loop (it's mainly for chat), we can omit or add empty impl if required by interface.
+    // But since we are not observing profile changes in this CLI loop (it's mainly for chat), we can omit or add empty
+    // impl if required by interface.
   };
 
   auto observer = std::make_shared<MainObserver>(screen);
@@ -302,15 +319,15 @@ int main(int argc, char** argv) {
       return ftxui::text("Select a contact to start chatting") | ftxui::center;
     }
 
-    const auto conv_state = conversation_vm->GetState();
-    const auto contacts = contacts_vm->GetContacts();
+    auto const conv_state = conversation_vm->GetState();
+    auto const contacts = contacts_vm->GetContacts();
     ftxui::Elements elements;
 
     if (conv_state.has_older_messages) {
       elements.push_back(ftxui::text("--- older messages available (use /history load) ---") | ftxui::dim);
     }
 
-    for (const auto& entry: conv_state.history) {
+    for (auto const& entry : conv_state.history) {
       std::string prefix;
       std::string content;
       switch (entry.kind) {
@@ -320,8 +337,10 @@ int main(int argc, char** argv) {
           if (entry.direction == eillance::messaging::MessageDirection::sent) {
             prefix = "[you]: ";
           } else {
-            const auto iter = std::ranges::find_if(contacts, [&](const auto& c) { return c.peer_id == conv_state.peer_id; });
-            const std::string display_id = (iter != contacts.end()) ? iter->display_name : conv_state.peer_id.ToString();
+            auto const iter =
+                std::ranges::find_if(contacts, [&](auto const& c) { return c.peer_id == conv_state.peer_id; });
+            std::string const display_id =
+                (iter != contacts.end()) ? iter->display_name : conv_state.peer_id.ToString();
             prefix = "[" + display_id + "]: ";
           }
           if (entry.direction == eillance::messaging::MessageDirection::sent) {
@@ -344,7 +363,8 @@ int main(int argc, char** argv) {
           }
           content = std::get<eillance::messaging::MessageEntry>(entry.data).content;
           if (entry.is_truncated) {
-            content += "... [truncated, ID: " + std::to_string(entry.id) + " - use /load " + std::to_string(entry.id) + "]";
+            content +=
+                "... [truncated, ID: " + std::to_string(entry.id) + " - use /load " + std::to_string(entry.id) + "]";
           }
           auto timestamp_str = FormatTimestamp(entry.timestamp);
           elements.push_back(ftxui::text(prefix + content + suffix));
@@ -354,9 +374,11 @@ int main(int argc, char** argv) {
         case eillance::messaging::HistoryEntryKind::voiceCall:
         case eillance::messaging::HistoryEntryKind::videoCall: {
           prefix = "[system]: ";
-          const auto& call_data = std::get<eillance::messaging::CallEntry>(entry.data);
-          const auto* call_type_str = (entry.kind == eillance::messaging::HistoryEntryKind::voiceCall ? "Voice" : "Video");
-          const auto* direction_str = (call_data.call_direction == eillance::messaging::CallDirection::incoming ? "Incoming" : "Outgoing");
+          auto const& call_data = std::get<eillance::messaging::CallEntry>(entry.data);
+          auto const* call_type_str =
+              (entry.kind == eillance::messaging::HistoryEntryKind::voiceCall ? "Voice" : "Video");
+          auto const* direction_str =
+              (call_data.call_direction == eillance::messaging::CallDirection::incoming ? "Incoming" : "Outgoing");
           std::string status_str;
           switch (call_data.call_status) {
             case eillance::messaging::CallStatus::answered:
@@ -387,7 +409,7 @@ int main(int argc, char** argv) {
   });
 
   auto input_component = ftxui::Input(&input_content, "Enter command or message...");
-  input_component |= ftxui::CatchEvent([&](const ftxui::Event& event) {
+  input_component |= ftxui::CatchEvent([&](ftxui::Event const& event) {
     if (event == ftxui::Event::Return) {
       if (!input_content.empty()) {
         if (input_content.starts_with('/')) {
@@ -400,7 +422,8 @@ int main(int argc, char** argv) {
           if (command == "/add") {
             try {
               contacts_vm->AddContact(eillance::ContactID(arg), std::nullopt);
-            } catch (...) {}
+            } catch (...) {
+            }
           } else if (command == "/accept") {
             if (!arg.empty()) {
               contacts_vm->AcceptContact(eillance::ContactID(arg));
@@ -408,7 +431,8 @@ int main(int argc, char** argv) {
           } else if (command == "/load" && conversation_vm) {
             try {
               conversation_vm->LoadFullMessage(std::stoull(arg));
-            } catch (...) {}
+            } catch (...) {
+            }
           } else if (command == "/history" && conversation_vm) {
             conversation_vm->LoadOlderMessages();
           } else if (command == "/exit") {
@@ -428,12 +452,12 @@ int main(int argc, char** argv) {
   auto main_container = ftxui::Container::Horizontal({contact_menu, chat_renderer, input_component});
 
   auto layout = ftxui::Renderer(main_container, [&]() -> ftxui::Element {
-    const auto contacts = contacts_vm->GetContacts();
-    const auto call_state = call_vm->GetState();
+    auto const contacts = contacts_vm->GetContacts();
+    auto const call_state = call_vm->GetState();
     contact_menu_entries = GetContactMenuEntries(contacts, call_state);
 
     if (contact_menu_selected < contacts.size()) {
-      const auto& selected_peer = contacts[contact_menu_selected].peer_id;
+      auto const& selected_peer = contacts[contact_menu_selected].peer_id;
       if (!conversation_vm || conversation_vm->GetState().peer_id != selected_peer) {
         conversation_vm = std::make_shared<eillance::view_model::ConversationViewModel>(selected_peer, client, router);
         conversation_vm->SetObserver(observer);
@@ -443,12 +467,17 @@ int main(int argc, char** argv) {
     }
 
     constexpr auto k_contact_list_width = 40;
-    const auto main_view = ftxui::hbox({contact_menu->Render() | ftxui::size(ftxui::WIDTH, ftxui::EQUAL, k_contact_list_width) | ftxui::border, ftxui::vbox({chat_renderer->Render() | ftxui::flex, ftxui::separator(), input_component->Render()}) | ftxui::flex});
+    auto const main_view = ftxui::hbox(
+        {contact_menu->Render() | ftxui::size(ftxui::WIDTH, ftxui::EQUAL, k_contact_list_width) | ftxui::border,
+         ftxui::vbox({chat_renderer->Render() | ftxui::flex, ftxui::separator(), input_component->Render()}) |
+             ftxui::flex}
+    );
 
-    const auto profile = profile_vm->GetProfile();
-    const auto connection = settings_vm->GetState().connection_state;
-    const std::string my_name = profile.my_display_name ? " (" + *profile.my_display_name + ")" : "";
-    const auto status_line = " Mercury CLI | Your ID: " + profile.my_id.ToString() + my_name + " | Status: " + std::string(GetConnectionStatusString(connection));
+    auto const profile = profile_vm->GetProfile();
+    auto const connection = settings_vm->GetState().connection_state;
+    std::string const my_name = profile.my_display_name ? " (" + *profile.my_display_name + ")" : "";
+    auto const status_line = " Mercury CLI | Your ID: " + profile.my_id.ToString() + my_name +
+                             " | Status: " + std::string(GetConnectionStatusString(connection));
     return ftxui::window(ftxui::text(status_line), main_view);
   });
 
@@ -456,7 +485,9 @@ int main(int argc, char** argv) {
   screen.Loop(layout);
 
   client->Terminate();
-  if (client_thread.joinable()) { client_thread.join(); }
+  if (client_thread.joinable()) {
+    client_thread.join();
+  }
 
   return 0;
 }

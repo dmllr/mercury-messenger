@@ -14,17 +14,15 @@ namespace eillance {
 // A self-contained H.264 NAL unit parser, focused on finding and parsing the
 // Sequence Parameter Set (SPS) to extract video dimensions.
 class H264Parser {
-public:
+ public:
   void SetOnConfigureCallback(std::function<void(VideoConfig)> callback) {
     on_configure_callback_ = std::move(callback);
   }
 
-  void Reset() {
-    isConfigured_ = false;
-  }
+  void Reset() { isConfigured_ = false; }
 
   // Processes a raw H.264 frame, which may contain one or more NAL units.
-  void ProcessFrame(const std::vector<std::byte>& frame) {
+  void ProcessFrame(std::vector<std::byte> const& frame) {
     if (isConfigured_ || !on_configure_callback_) {
       return;
     }
@@ -41,8 +39,8 @@ public:
       auto nal_unit_end = (next_start_code_pos == std::string::npos) ? frame.size() : next_start_code_pos;
 
       // Determine start code length (3 or 4 bytes).
-      const size_t start_code_len = (frame[start_code_pos + 2] == std::byte{0}) ? 4 : 3;
-      const size_t nal_header_pos = start_code_pos + start_code_len;
+      size_t const start_code_len = (frame[start_code_pos + 2] == std::byte{0}) ? 4 : 3;
+      size_t const nal_header_pos = start_code_pos + start_code_len;
 
       if (nal_header_pos < nal_unit_end) {
         // The NAL unit type is in the lower 5 bits of the header byte.
@@ -65,9 +63,9 @@ public:
     }
   }
 
-private:
+ private:
   // Finds the position of the next NAL unit start code (0x000001).
-  static size_t FindNalStart(const std::vector<std::byte>& data, size_t offset) {
+  static size_t FindNalStart(std::vector<std::byte> const& data, size_t offset) {
     for (size_t i = offset; i + 2 < data.size(); ++i) {
       if (data[i] == std::byte{0} && data[i + 1] == std::byte{0} && data[i + 2] == std::byte{1}) {
         // Check for 4-byte start code (0x00000001) vs 3-byte (0x000001)
@@ -79,7 +77,7 @@ private:
 
   // A simple bitstream reader to handle exponential-Golomb decoding.
   struct BitReader {
-    const std::vector<uint8_t>& data;
+    std::vector<uint8_t> const& data;
     size_t bit_pos = 0;
 
     uint32_t read_bits(int n) {
@@ -108,7 +106,7 @@ private:
 
   // This is a simplified SPS parser that extracts just enough information
   // to determine video resolution. It is not a complete implementation.
-  void ParseSPS(const std::vector<uint8_t>& sps) {
+  void ParseSPS(std::vector<uint8_t> const& sps) {
     if (sps.empty()) {
       return;
     }
@@ -134,7 +132,8 @@ private:
     reader.read_ue();      // Skip seq_parameter_set_id
 
     uint32_t chroma_format_idc = 1;  // Default for many profiles.
-    if (profile_idc == 100 || profile_idc == 110 || profile_idc == 122 || profile_idc == 244 || profile_idc == 44 || profile_idc == 83 || profile_idc == 86 || profile_idc == 118 || profile_idc == 128 || profile_idc == 138) {
+    if (profile_idc == 100 || profile_idc == 110 || profile_idc == 122 || profile_idc == 244 || profile_idc == 44 ||
+        profile_idc == 83 || profile_idc == 86 || profile_idc == 118 || profile_idc == 128 || profile_idc == 138) {
       chroma_format_idc = reader.read_ue();
       if (chroma_format_idc == 3) reader.read_bits(1);  // separate_colour_plane_flag
       reader.read_ue();                                 // bit_depth_luma_minus8

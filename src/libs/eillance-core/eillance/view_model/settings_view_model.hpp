@@ -15,15 +15,15 @@
 namespace eillance::view_model {
 
 class SettingsViewModel {
-public:
+ public:
   struct Observer {
     Observer() = default;
-    Observer(const Observer&) = delete;
+    Observer(Observer const&) = delete;
     Observer(Observer&&) = delete;
-    auto operator=(const Observer&) -> Observer& = delete;
+    auto operator=(Observer const&) -> Observer& = delete;
     auto operator=(Observer&&) -> Observer& = delete;
     virtual ~Observer() = default;
-    virtual void OnSettingsUpdated(const std::optional<std::string>& signalingUrl, int timeout) = 0;
+    virtual void OnSettingsUpdated(std::optional<std::string> const& signalingUrl, int timeout) = 0;
     virtual void OnConnectionStateChanged(ServiceConnectionState state) = 0;
   };
 
@@ -41,14 +41,14 @@ public:
   [[nodiscard]] auto GetState() const -> State;
 
   // Actions
-  void UpdateSignalingUrl(const std::string& url);
+  void UpdateSignalingUrl(std::string const& url);
   void SetPeerInactivityTimeout(int seconds);
 
-private:
+ private:
   void LoadSettings();
 
-  template<typename EventType>
-  void Subscribe(EventQueue& queue, std::function<void(const EventType&)> callback);
+  template <typename EventType>
+  void Subscribe(EventQueue& queue, std::function<void(EventType const&)> callback);
 
   std::shared_ptr<Client> client_;
   std::shared_ptr<ClientEventRouter> router_;
