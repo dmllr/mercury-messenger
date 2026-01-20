@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <ranges>
 #include <thread>
 #include <variant>
 
@@ -13,7 +14,7 @@ namespace eillance::view_model {
 // --- Implementation Struct ---
 
 struct ConversationViewModel::Impl : public std::enable_shared_from_this<Impl> {
-  const ContactID peerId_;
+  const ContactID peer_id;
   std::shared_ptr<Client> client_;
   std::shared_ptr<ClientEventRouter> router_;
   std::shared_ptr<Observer> observer_;
@@ -25,12 +26,12 @@ struct ConversationViewModel::Impl : public std::enable_shared_from_this<Impl> {
   // A generation counter to invalidate results from stale load threads (e.g. after debug reset)
   std::atomic<int> loadGeneration_{0};
 
-  static inline std::atomic<std::uint64_t> nextSystemMsgId_{10000000000000000000ULL};
+  static inline std::atomic<std::uint64_t> nextSystemMsgId{10000000000000000000ULL};
   static constexpr size_t kPageSize = 50;
 
   Impl(ContactID peer_id, std::shared_ptr<Client> client, std::shared_ptr<ClientEventRouter> router)
-      : peerId_(std::move(peer_id)), client_(std::move(client)), router_(std::move(router)) {
-    state_.peer_id = peerId_;
+      : peer_id(peer_id), client_(std::move(client)), router_(std::move(router)) {
+    state_.peer_id = peer_id;
   }
 
   void SetObserver(std::shared_ptr<Observer> observer) {
@@ -47,7 +48,7 @@ struct ConversationViewModel::Impl : public std::enable_shared_from_this<Impl> {
   }
 
   void SendText(const std::string& content) {
-    auto entry = client_->SendChatMessage(peerId_, content);
+    auto entry = client_->SendChatMessage(peer_id, content);
     {
       const std::lock_guard<std::mutex> lock(mutex_);
       state_.history.push_back(entry);
@@ -57,11 +58,11 @@ struct ConversationViewModel::Impl : public std::enable_shared_from_this<Impl> {
 
   void LoadOlderMessages() {
     const std::lock_guard<std::mutex> lock(mutex_);
-    auto page = client_->GetMessageHistoryPage(peerId_, chatPagesLoaded_, kPageSize);
+    auto page = client_->GetMessageHistoryPage(peer_id, chatPagesLoaded_, kPageSize);
 
     if (!page.messages.empty()) {
-      for (auto it = page.messages.rbegin(); it != page.messages.rend(); ++it) {
-        state_.history.push_front(*it);
+      for (auto & message : std::ranges::reverse_view(page.messages)) {
+        state_.history.push_front(message);
       }
       chatPagesLoaded_++;
       state_.has_older_messages = (chatPagesLoaded_ * kPageSize) < page.total_messages;
@@ -99,13 +100,13 @@ struct ConversationViewModel::Impl : public std::enable_shared_from_this<Impl> {
 
   void MarkMessagesAsRead(const std::vector<std::uint64_t>& message_ids) {
     if (!message_ids.empty()) {
-      client_->MarkMessagesAsRead(peerId_, message_ids);
+      client_->MarkMessagesAsRead(peer_id, message_ids);
     }
   }
 
   void AddSystemMessage(const std::string& message) {
     const std::lock_guard<std::mutex> lock(mutex_);
-    state_.history.push_back({.id = nextSystemMsgId_++,
+    state_.history.push_back({.id = nextSystemMsgId++,
                               .kind = messaging::HistoryEntryKind::systemMessage,
                               .timestamp = static_cast<Time::Unit>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count()),
                               .direction = messaging::MessageDirection::received,
@@ -138,9 +139,9 @@ struct ConversationViewModel::Impl : public std::enable_shared_from_this<Impl> {
   }
 
   // Runs on a background thread. 'self' keeps Impl alive during execution.
-  void LoadInitialHistory(std::shared_ptr<Impl> self, int generation) {
+  void LoadInitialHistory(const std::shared_ptr<Impl>&  /*self*/, int generation) {
     // Perform blocking DB op without holding the mutex
-    auto page = client_->GetMessageHistoryPage(peerId_, 0, kPageSize);
+    auto page = client_->GetMessageHistoryPage(peer_id, 0, kPageSize);
 
     const std::lock_guard<std::mutex> lock(mutex_);
     // If generation changed (e.g. via reset), discard this result
@@ -155,7 +156,7 @@ struct ConversationViewModel::Impl : public std::enable_shared_from_this<Impl> {
   }
 
   void StartInitialLoad() {
-    int gen = ++loadGeneration_;
+    int const gen = ++loadGeneration_;
     // Detach the thread so it doesn't block destruction of the wrapper.
     // Pass shared_from_this() to keep Impl alive until thread finishes.
     std::thread([this, self = shared_from_this(), gen] {
@@ -173,12 +174,12 @@ ConversationViewModel::ConversationViewModel(const ContactID& peerId, std::share
 
   auto& queue = impl_->router_->Queue();
   Subscribe<EventChatMessageReceived>(queue, [this](const EventChatMessageReceived& event) {
-    if (event.peer_id == impl_->peerId_) {
+    if (event.peer_id == impl_->peer_id) {
       impl_->OnMessageReceived(event.peer_id, event.message);
     }
   });
   Subscribe<EventMessageStatusChanged>(queue, [this](const EventMessageStatusChanged& event) {
-    if (event.peer_id == impl_->peerId_) {
+    if (event.peer_id == impl_->peer_id) {
       impl_->OnMessageStatusChanged(event.peer_id, event.message_id, event.status);
     }
   });

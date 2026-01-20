@@ -19,7 +19,7 @@ class MessageHistory {
 public:
   explicit MessageHistory(std::shared_ptr<storage::PersistentStorage> storage) : storage_(std::move(storage)) {}
 
-  auto AddTextEntry(const ContactID& peerId, const std::string& content, MessageDirection direction, HistoryEntryKind kind = HistoryEntryKind::textMessage) -> HistoryEntryRecord {
+  auto AddTextEntry(const ContactID& peerId, const std::string& content, MessageDirection direction, HistoryEntryKind kind) -> HistoryEntryRecord {
     const HistoryEntryRecord entry{
         .id = 0,  // DB will assign ID
         .kind = kind,
@@ -33,15 +33,16 @@ public:
     return storage_->AddHistoryEntry(entry);
   }
 
-  void AddCallEntry(const ContactID& peerId, const HistoryEntryKind kind, const CallDirection direction, const CallStatus status, uint32_t duration = 0) {
-    storage_->AddHistoryEntry({.id = 0,
-                               .kind = kind,
-                               .timestamp = static_cast<Time::Unit>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count()),
-                               .direction = (direction == CallDirection::incoming) ? MessageDirection::received : MessageDirection::sent,
-                               .status = MessageStatus::none,
-                               .is_truncated = false,
-                               .data = CallEntry{.duration_seconds = duration, .call_direction = direction, .call_status = status},
-                               .peer_id = peerId});
+  auto AddCallEntry(const ContactID& peerId, const HistoryEntryKind kind, const CallDirection direction, const CallStatus status, uint32_t duration) -> HistoryEntryRecord {
+    return storage_->AddHistoryEntry({
+        .id = 0,
+        .kind = kind,
+        .timestamp = static_cast<Time::Unit>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count()),
+        .direction = (direction == CallDirection::incoming) ? MessageDirection::received : MessageDirection::sent,
+        .status = MessageStatus::none,
+        .is_truncated = false,
+        .data = CallEntry{.duration_seconds = duration, .call_direction = direction, .call_status = status},
+        .peer_id = peerId});
   }
 
   void SetStatusChangedCallback(std::function<void(const ContactID&, std::uint64_t, MessageStatus)> cb) {
@@ -52,20 +53,24 @@ public:
     storage_->UpdateHistoryEntry(entry);
   }
 
-  void UpdateMessageStatus(const ContactID& peerId, const std::uint64_t messageId, const MessageStatus newStatus) {
-    storage_->UpdateMessageStatus(peerId, messageId, newStatus);
-    if (onStatusChanged_) { onStatusChanged_(peerId, messageId, newStatus); }
+  void UpdateMessageStatus(const ContactID& peerId, const std::uint64_t message_id, const MessageStatus new_status) {
+    storage_->UpdateMessageStatus(peerId, message_id, new_status);
+    if (onStatusChanged_) {
+      onStatusChanged_(peerId, message_id, new_status);
+    }
   }
 
   void MarkMessagesAsRead(const ContactID& peerId, const std::vector<uint64_t>& messageIds) {
     storage_->UpdateMessageStatuses(peerId, messageIds, MessageStatus::read);
-    for (const auto messageId: messageIds) {
-      if (onStatusChanged_) { onStatusChanged_(peerId, messageId, MessageStatus::read); }
+    for (const auto message_id: messageIds) {
+      if (onStatusChanged_) {
+        onStatusChanged_(peerId, message_id, MessageStatus::read);
+      }
     }
   }
 
-  auto GetHistoryPage(const ContactID& peerId, const size_t pageIndex, const size_t pageSize) -> HistoryPage {
-    return storage_->GetHistoryPage(peerId, pageIndex, pageSize);
+  auto GetHistoryPage(const ContactID& peerId, const size_t page_index, const size_t page_size) -> HistoryPage {
+    return storage_->GetHistoryPage(peerId, page_index, page_size);
   }
 
   auto GetFullMessageContent(std::uint64_t messageId) -> std::optional<std::string> {
@@ -76,7 +81,7 @@ public:
     std::vector<ContactID> peer_ids;
     peer_ids.reserve(peerIdsStr.size());
     for (const auto& id: peerIdsStr) {
-      peer_ids.emplace_back(ContactID(id));
+      peer_ids.emplace_back(id);
     }
     return storage_->GetChatSummaries(peer_ids);
   }

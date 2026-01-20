@@ -23,7 +23,7 @@ protected:
 };
 
 TEST_F(MessageHistoryTest, AddTextEntry) {
-  auto entry = message_history_->AddTextEntry(peer1, "Hello", messaging::MessageDirection::sent);
+  auto entry = message_history_->AddTextEntry(peer1, "Hello", messaging::MessageDirection::sent, messaging::HistoryEntryKind::textMessage);
   EXPECT_EQ(entry.kind, messaging::HistoryEntryKind::textMessage);
   EXPECT_EQ(std::get<messaging::MessageEntry>(entry.data).content, "Hello");
   EXPECT_EQ(entry.direction, messaging::MessageDirection::sent);
@@ -31,7 +31,7 @@ TEST_F(MessageHistoryTest, AddTextEntry) {
 }
 
 TEST_F(MessageHistoryTest, AddCallEntry) {
-  message_history_->AddCallEntry(peer1, messaging::HistoryEntryKind::voiceCall, messaging::CallDirection::incoming, messaging::CallStatus::missed);
+  message_history_->AddCallEntry(peer1, messaging::HistoryEntryKind::voiceCall, messaging::CallDirection::incoming, messaging::CallStatus::missed, 0);
   auto page = message_history_->GetHistoryPage(peer1, 0, 1);
   ASSERT_EQ(page.messages.size(), 1);
   const auto& entry = page.messages[0];
@@ -52,7 +52,7 @@ TEST_F(MessageHistoryTest, UpdateMessageStatus) {
     received_status = status;
   });
 
-  auto entry = message_history_->AddTextEntry(peer1, "Test", messaging::MessageDirection::sent);
+  auto entry = message_history_->AddTextEntry(peer1, "Test", messaging::MessageDirection::sent, messaging::HistoryEntryKind::textMessage);
   ASSERT_EQ(entry.status, messaging::MessageStatus::sending);
 
   message_history_->UpdateMessageStatus(peer1, entry.id, messaging::MessageStatus::delivered);
@@ -67,7 +67,7 @@ TEST_F(MessageHistoryTest, UpdateMessageStatus) {
 
 TEST_F(MessageHistoryTest, GetHistoryPage) {
   for (int i = 0; i < 10; ++i) {
-    message_history_->AddTextEntry(peer1, "Message " + std::to_string(i), messaging::MessageDirection::received);
+    message_history_->AddTextEntry(peer1, "Message " + std::to_string(i), messaging::MessageDirection::received, messaging::HistoryEntryKind::textMessage);
   }
 
   auto page1 = message_history_->GetHistoryPage(peer1, 0, 4);
@@ -90,12 +90,12 @@ TEST_F(MessageHistoryTest, GetHistoryPage) {
 }
 
 TEST_F(MessageHistoryTest, GetChatSummaries) {
-  message_history_->AddTextEntry(peer1, "p1m1", messaging::MessageDirection::sent);
+  message_history_->AddTextEntry(peer1, "p1m1", messaging::MessageDirection::sent, messaging::HistoryEntryKind::textMessage);
   std::this_thread::sleep_for(std::chrono::milliseconds(10));
-  message_history_->AddTextEntry(peer2, "p2m1", messaging::MessageDirection::received);
-  message_history_->AddTextEntry(peer2, "p2m2", messaging::MessageDirection::received);  // unread
+  message_history_->AddTextEntry(peer2, "p2m1", messaging::MessageDirection::received, messaging::HistoryEntryKind::textMessage);
+  message_history_->AddTextEntry(peer2, "p2m2", messaging::MessageDirection::received, messaging::HistoryEntryKind::textMessage);  // unread
   std::this_thread::sleep_for(std::chrono::milliseconds(10));
-  message_history_->AddTextEntry(peer1, "p1m2", messaging::MessageDirection::received);  // unread
+  message_history_->AddTextEntry(peer1, "p1m2", messaging::MessageDirection::received, messaging::HistoryEntryKind::textMessage);  // unread
 
   auto summaries = message_history_->GetChatSummaries({peer1, peer2});
   ASSERT_EQ(summaries.size(), 2);

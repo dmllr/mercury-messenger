@@ -74,21 +74,21 @@ class Identity {
 
   // Generate a 64-byte seed from a mnemonic phrase using PBKDF2, then take the first 32 bytes.
   static auto MnemonicToSeed(const std::string& mnemonic) -> std::vector<uint8_t> {
-    constexpr auto seedBufferSize = 64;
-    constexpr auto ed25519SeedSize = 32;
-    constexpr auto pbkdf2Iterations = 2048;
+    constexpr auto seed_buffer_size = 64;
+    constexpr auto ed25519_seed_size = 32;
+    constexpr auto pbkdf2_iterations = 2048;
 
-    std::vector<uint8_t> seed(seedBufferSize);
+    std::vector<uint8_t> seed(seed_buffer_size);
     // BIP39 uses "mnemonic" as the salt prefix. Here, just "mnemonic" for simplicity.
     const std::string salt_str = "mnemonic";
     // BIP39 specifies 2048 iterations and SHA512.
     // NOLINTNEXTLINE(*-reinterpret-cast)
     if (PKCS5_PBKDF2_HMAC(mnemonic.c_str(), static_cast<int>(mnemonic.length()),
                           reinterpret_cast<const unsigned char*>(salt_str.c_str()), static_cast<int>(salt_str.length()),
-                          pbkdf2Iterations, EVP_sha512(), seedBufferSize, seed.data()) != 1) {
+                          pbkdf2_iterations, EVP_sha512(), seed_buffer_size, seed.data()) != 1) {
       return {};
     }
-    seed.resize(ed25519SeedSize);
+    seed.resize(ed25519_seed_size);
     return seed;
   }
 
@@ -120,12 +120,12 @@ public:
     // Populate bits from entropy
     for (int i = 0; i < entropy_bytes; ++i) {
       for (int j = 0; j < 8; ++j) {
-        bits[i * 8 + j] = (entropy[i] >> (7 - j)) & 1;
+        bits[i * 8 + j] = (((entropy[i] >> (7 - j)) & 1) != 0);
       }
     }
     // Populate bits from checksum (first 4 bits of the hash)
     for (int i = 0; i < checksum_bits; ++i) {
-      bits[128U + i] = (checksum_byte >> (7 - i)) & 1;
+      bits[128U + i] = (((checksum_byte >> (7 - i)) & 1) != 0);
     }
 
     std::stringstream mnemonic_ss;
@@ -163,15 +163,15 @@ public:
     return std::unique_ptr<Identity>(new Identity(EvpPkeyPtr(pkey_ptr, EVP_PKEY_free)));
   }
 
-  static auto LoadFromFile(const std::filesystem::path& path) -> std::unique_ptr<Identity> {
+  [[maybe_unused]] static auto LoadFromFile(const std::filesystem::path& path) -> std::unique_ptr<Identity> {
     if (!std::filesystem::exists(path)) {
       return nullptr;
     }
-    std::ifstream file(path, std::ios::binary);
+    std::ifstream const file(path, std::ios::binary);
     if (!file) {
       return nullptr;
     }
-    const std::string pem_data((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    const std::string pem_data((std::istreambuf_iterator<char>(file.rdbuf())), std::istreambuf_iterator<char>());
     return LoadFromMemory(pem_data);
   }
 
@@ -201,8 +201,8 @@ public:
     return file.good();
   }
 
-  [[nodiscard]] auto GetPublicKey() const -> std::vector<std::byte> {
-    size_t length = 0;
+  [[nodiscard]] auto GetPublicKey() -> std::vector<std::byte> {
+    size_t length = 0;  // NOLINT(*-const-correctness)
     if (EVP_PKEY_get_raw_public_key(pkey_.get(), nullptr, &length) <= 0 || length == 0) {
       return {};
     }
@@ -214,7 +214,7 @@ public:
     return pub_key;
   }
 
-  [[nodiscard]] auto Sign(std::span<const std::byte> message) const -> std::vector<std::byte> {
+  [[nodiscard]] auto Sign(std::span<const std::byte> message) -> std::vector<std::byte> {
     const std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)> ctx(EVP_MD_CTX_new(), EVP_MD_CTX_free);
     if (!ctx) {
       return {};
@@ -236,15 +236,19 @@ public:
     return signature;
   }
 
-  static auto Verify(std::span<const std::byte> pub_key, std::span<const std::byte> message, std::span<const std::byte> signature) -> bool {
+  static auto Verify(const std::span<const std::byte> pub_key, const std::span<const std::byte> message, const std::span<const std::byte> signature) -> bool {
     if (pub_key.empty() || signature.empty()) {
       return false;
     }
     // NOLINTNEXTLINE(*-reinterpret-cast)
     const EvpPkeyPtr pkey(EVP_PKEY_new_raw_public_key(EVP_PKEY_ED25519, nullptr, reinterpret_cast<const unsigned char*>(pub_key.data()), pub_key.size()), EVP_PKEY_free);
-    if (!pkey) { return false; }
+    if (!pkey) {
+      return false;
+    }
     const std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)> ctx(EVP_MD_CTX_new(), EVP_MD_CTX_free);
-    if (!ctx) { return false; }
+    if (!ctx) {
+      return false;
+    }
     if (EVP_DigestVerifyInit(ctx.get(), nullptr, nullptr, nullptr, pkey.get()) <= 0) {
       return false;
     }
@@ -254,7 +258,7 @@ public:
 };
 
 class SessionCipher {
-  std::vector<std::byte> sharedSecret_;
+  std::vector<std::byte> sharedSecret_{};
   EvpPkeyPtr ephemeralKey_;
 
 public:
@@ -262,8 +266,8 @@ public:
 
   void Reset() { sharedSecret_.clear(); }
 
-  [[nodiscard]] auto GetPublicKey() const -> std::vector<std::byte> {
-    size_t length = 0;
+  [[nodiscard]] auto GetPublicKey() -> std::vector<std::byte> {
+    size_t length = 0;  // NOLINT(*-const-correctness)
     if (EVP_PKEY_get_raw_public_key(ephemeralKey_.get(), nullptr, &length) <= 0 || length == 0) { return {}; }
     std::vector<std::byte> pub_key(length);
     // NOLINTNEXTLINE(*-reinterpret-cast)

@@ -39,7 +39,7 @@ private:
 #elif defined _WIN32
     static constexpr auto open_cv_camera_capabilities = cv::CAP_DSHOW;
 #else
-    static constexpr auto open_cv_camera_capabilities = cv::CAP_ANY;
+    static constexpr auto openCvCameraCapabilities = cv::CAP_ANY;
 #endif
   };
 
@@ -59,7 +59,7 @@ public:
     if (cap_.isOpened()) { cap_.release(); }
 
     // open the default camera
-    cap_.open(0, CrossPlatformProperties::open_cv_camera_capabilities);
+    cap_.open(0, CrossPlatformProperties::openCvCameraCapabilities);
 
     if (!cap_.isOpened()) {
       LGE << "Can't open the capture device. The video source has not been started.";
@@ -122,7 +122,7 @@ public:
     cap_.release();
   }
 
-  auto GetSampleDuration() const -> Time::Unit { return Time::uS / config_.frameRate; }
+  [[nodiscard]] auto GetSampleDuration() const -> Time::Unit { return Time::uS / config_.frameRate; }
 
   void Configure(const Config& config) { ConfigureVideo(config.video_config); }
 

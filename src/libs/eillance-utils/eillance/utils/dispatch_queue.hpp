@@ -37,7 +37,7 @@ public:
 
   ~DispatchQueue() {
     {
-      std::unique_lock<std::mutex> lock(queueAccessMutex_);
+      std::unique_lock<std::mutex> const lock(queueAccessMutex_);
       shutdownRequested_ = true;
     }
     condition_.notify_all();
@@ -62,7 +62,7 @@ public:
 
     auto now = std::chrono::steady_clock::now();
     {
-      std::unique_lock<std::mutex> lock(queueAccessMutex_);
+      std::unique_lock<std::mutex> const lock(queueAccessMutex_);
       queue_.push(ScheduledTask{now, op});
     }
     condition_.notify_one();
@@ -76,7 +76,7 @@ public:
 
     auto now = std::chrono::steady_clock::now();
     {
-      std::unique_lock<std::mutex> lock(queueAccessMutex_);
+      std::unique_lock<std::mutex> const lock(queueAccessMutex_);
       queue_.push(ScheduledTask{now, std::move(op)});
     }
     condition_.notify_one();
@@ -90,7 +90,7 @@ public:
 
     auto scheduled_time = std::chrono::steady_clock::now() + delay;
     {
-      std::unique_lock<std::mutex> lock(queueAccessMutex_);
+      std::unique_lock<std::mutex> const lock(queueAccessMutex_);
       queue_.push(ScheduledTask{scheduled_time, op});
     }
     condition_.notify_one();
@@ -103,7 +103,7 @@ public:
 
   /// Remove any pending tasks.
   void RemovePending() {
-    std::unique_lock<std::mutex> lock(queueAccessMutex_);
+    std::unique_lock<std::mutex> const lock(queueAccessMutex_);
     queue_ = decltype(queue_){};
   }
 
@@ -116,8 +116,8 @@ public:
 private:
   std::string name_;
   std::mutex queueAccessMutex_;
-  std::vector<std::thread> threads_;
-  std::priority_queue<ScheduledTask, std::vector<ScheduledTask>, CompareScheduledTask> queue_;
+  std::vector<std::thread> threads_{};
+  std::priority_queue<ScheduledTask, std::vector<ScheduledTask>, CompareScheduledTask> queue_{};
   std::condition_variable condition_;
   bool shutdownRequested_ = false;
 

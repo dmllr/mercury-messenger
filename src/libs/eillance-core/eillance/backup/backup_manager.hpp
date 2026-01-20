@@ -20,7 +20,7 @@ class BackupManager {
 public:
   explicit BackupManager(std::string db_path) : dbPath_(std::move(db_path)) {}
 
-  bool CreateBackup(const std::string& output_path, const std::string& password) const {
+  [[nodiscard]] bool CreateBackup(const std::string& output_path, const std::string& password) const {
     if (password.empty()) {
       LGE << "Backup password cannot be empty.";
       return false;
@@ -57,10 +57,14 @@ public:
     int ciphertext_len = 0;
 
     const crypto::EvpCipherCtxPtr ctx(EVP_CIPHER_CTX_new(), EVP_CIPHER_CTX_free);
-    if (!ctx) return false;
-    if (EVP_EncryptInit_ex(ctx.get(), EVP_aes_256_gcm(), nullptr, nullptr, nullptr) != 1) return false;
-    if (EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_SET_IVLEN, kIvSize, nullptr) != 1) return false;
-    if (EVP_EncryptInit_ex(ctx.get(), nullptr, nullptr, key.data(), iv.data()) != 1) return false;
+    if (!ctx) { return false;
+}
+    if (EVP_EncryptInit_ex(ctx.get(), EVP_aes_256_gcm(), nullptr, nullptr, nullptr) != 1) { return false;
+}
+    if (EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_SET_IVLEN, kIvSize, nullptr) != 1) { return false;
+}
+    if (EVP_EncryptInit_ex(ctx.get(), nullptr, nullptr, key.data(), iv.data()) != 1) { return false;
+}
 
     int len = 0;
     // NOLINTNEXTLINE(*-reinterpret-cast)
@@ -92,7 +96,7 @@ public:
     return true;
   }
 
-  bool RestoreFromBackup(const std::string& input_path, const std::string& password) const {
+  [[nodiscard]] bool RestoreFromBackup(const std::string& input_path, const std::string& password) const {
     if (password.empty()) {
       LGE << "Restore password cannot be empty.";
       return false;
@@ -106,15 +110,18 @@ public:
 
     std::vector<unsigned char> salt(kSaltSize);
     backup_file.read(reinterpret_cast<char*>(salt.data()), kSaltSize);
-    if (backup_file.gcount() != kSaltSize) return false;
+    if (backup_file.gcount() != kSaltSize) { return false;
+}
 
     std::vector<unsigned char> iv(kIvSize);
     backup_file.read(reinterpret_cast<char*>(iv.data()), kIvSize);
-    if (backup_file.gcount() != kIvSize) return false;
+    if (backup_file.gcount() != kIvSize) { return false;
+}
 
     std::vector<unsigned char> tag(kTagSize);
     backup_file.read(reinterpret_cast<char*>(tag.data()), kTagSize);
-    if (backup_file.gcount() != kTagSize) return false;
+    if (backup_file.gcount() != kTagSize) { return false;
+}
 
     const std::vector<unsigned char> ciphertext((std::istreambuf_iterator<char>(backup_file)), std::istreambuf_iterator<char>());
     backup_file.close();
@@ -128,10 +135,14 @@ public:
     int plaintext_len = 0;
 
     const crypto::EvpCipherCtxPtr ctx(EVP_CIPHER_CTX_new(), EVP_CIPHER_CTX_free);
-    if (!ctx) return false;
-    if (EVP_DecryptInit_ex(ctx.get(), EVP_aes_256_gcm(), nullptr, nullptr, nullptr) != 1) return false;
-    if (EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_SET_IVLEN, kIvSize, nullptr) != 1) return false;
-    if (EVP_DecryptInit_ex(ctx.get(), nullptr, nullptr, key.data(), iv.data()) != 1) return false;
+    if (!ctx) { return false;
+}
+    if (EVP_DecryptInit_ex(ctx.get(), EVP_aes_256_gcm(), nullptr, nullptr, nullptr) != 1) { return false;
+}
+    if (EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_SET_IVLEN, kIvSize, nullptr) != 1) { return false;
+}
+    if (EVP_DecryptInit_ex(ctx.get(), nullptr, nullptr, key.data(), iv.data()) != 1) { return false;
+}
 
     int len = 0;
     // NOLINTNEXTLINE(*-reinterpret-cast)

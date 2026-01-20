@@ -5,9 +5,10 @@
 
 class Time {
 public:
-  // NOLINTNEXTLINE(*-identifier-length)
+  // NOLINTBEGIN(*-identifier-length)
   static constexpr auto mS = 1000ULL;
   static constexpr auto uS = 1000000ULL;
+  // NOLINTEND(*-identifier-length)
 
   using DefaultClock = std::chrono::steady_clock;
 

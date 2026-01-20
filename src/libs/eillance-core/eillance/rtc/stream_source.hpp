@@ -17,12 +17,12 @@ class StreamSource final : public Stream::Source {
   std::vector<std::byte> encodedData_{};
 
 public:
-  ~StreamSource() override = default;
   explicit StreamSource(Capture capture) : capture_(std::move(capture)) {};
   StreamSource(StreamSource&&) = delete;
   StreamSource(const StreamSource&) = delete;
   auto operator=(StreamSource&&) -> StreamSource& = delete;
   auto operator=(const StreamSource&) -> StreamSource& = delete;
+  ~StreamSource() = default;
 
   void Configure(Config config) override { capture_.Configure(config); }
 

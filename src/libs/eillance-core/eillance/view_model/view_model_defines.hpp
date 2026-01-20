@@ -19,7 +19,7 @@ struct ViewContact {
   std::optional<std::string> bio;
   std::optional<std::string> photo;  // base64
   identity::ContactStatus status;
-  eillance::transport::PeerConnectionState connection_state = eillance::transport::PeerConnectionState::Disconnected;
+  eillance::transport::PeerConnectionState connection_state = eillance::transport::PeerConnectionState::disconnected;
   uint32_t unread_count = 0;
   std::optional<std::string> last_message_snippet;
   uint64_t last_activity_timestamp = 0;

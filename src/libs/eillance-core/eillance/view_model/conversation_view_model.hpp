@@ -18,7 +18,7 @@ public:
 
   struct State {
     ContactID peer_id;
-    std::deque<messaging::HistoryEntryRecord> history;
+    std::deque<messaging::HistoryEntryRecord> history{};
     bool has_older_messages = false;
   };
 

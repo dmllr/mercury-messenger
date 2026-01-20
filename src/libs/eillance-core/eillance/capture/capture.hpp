@@ -41,7 +41,7 @@ private:
 public:
   template<typename T>
   class CaptureModel final : public CaptureInterface {
-    std::unique_ptr<T> capture_;
+    std::unique_ptr<T> capture_{};
 
   public:
     explicit CaptureModel(std::unique_ptr<T> impl) : capture_(std::move(impl)) {}
@@ -53,7 +53,7 @@ public:
   };
 
 private:
-  std::unique_ptr<CaptureInterface> self_;
+  std::unique_ptr<CaptureInterface> self_{};
 };
 
 }  // namespace eillance

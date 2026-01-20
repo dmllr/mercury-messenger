@@ -29,9 +29,9 @@ public:
   [[nodiscard]] auto GetMyPhotoBase64() const -> std::optional<std::string> { return myPhotoBase64_; }
 
   void SetMyDisplayName(const std::string& name) {
-    constexpr size_t kMaxNameLength = 64;
-    if (name.length() > kMaxNameLength) {
-      myDisplayName_ = name.substr(0, kMaxNameLength);
+    constexpr size_t k_max_name_length = 64;
+    if (name.length() > k_max_name_length) {
+      myDisplayName_ = name.substr(0, k_max_name_length);
     } else {
       myDisplayName_ = name;
     }
@@ -39,9 +39,9 @@ public:
   }
 
   void SetMyBio(const std::string& bio) {
-    constexpr size_t kMaxBioLength = 300;
-    if (bio.length() > kMaxBioLength) {
-      myBio_ = bio.substr(0, kMaxBioLength);
+    constexpr size_t max_bio_length = 300;
+    if (bio.length() > max_bio_length) {
+      myBio_ = bio.substr(0, max_bio_length);
     } else {
       myBio_ = bio;
     }
@@ -56,11 +56,11 @@ public:
   // --- Peer Connection ---
   [[nodiscard]] auto GetPeerInactivityTimeout() const -> std::chrono::seconds {
     if (auto str_val = storage_->GetSetting(kPeerInactivityTimeoutKey)) {
-      try {
-        return std::chrono::seconds(std::stoi(*str_val));
-      } catch (...) {}
+      // TODO: check for user input correctness
+      return std::chrono::seconds(std::stoi(*str_val));
     }
-    return std::chrono::seconds(120);
+    constexpr auto default_timeout = 120U;
+    return std::chrono::seconds(default_timeout);
   }
 
   void SetPeerInactivityTimeout(std::chrono::seconds timeout) {

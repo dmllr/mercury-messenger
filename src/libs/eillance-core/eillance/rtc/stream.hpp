@@ -14,7 +14,7 @@
 
 namespace eillance {
 
-class Stream : std::enable_shared_from_this<Stream> {
+class Stream : public std::enable_shared_from_this<Stream> {
 public:
   // Using alias to avoid redundant namespace qualification
   using Peer = eillance::transport::Peer;
@@ -42,7 +42,7 @@ public:
     virtual auto GetSample() -> std::vector<std::byte> = 0;
 
   protected:
-    virtual ~Source() = default;
+    ~Source() = default;
   };
 
 private:
@@ -101,10 +101,14 @@ private:
       const std::lock_guard<std::mutex> lock(sampleHandlerMutex_);
       handler = sampleHandlerFunc_;
     }
-    if (handler) { handler(source_type, source->GetSampleTime(), sample); }
+    if (handler) {
+      handler(source_type, source->GetSampleTime(), sample);
+    }
 
     source->LoadNextSample();
-    dispatchQueue_.Dispatch([this]() { this->SendSample(); });
+    dispatchQueue_.Dispatch([this]() {
+      this->SendSample();
+    });
   }
 
 public:

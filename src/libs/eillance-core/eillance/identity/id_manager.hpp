@@ -31,9 +31,9 @@ class IdManager {
 public:
   explicit IdManager(std::shared_ptr<storage::PersistentStorage> storage) : storage_(std::move(storage)) { LoadIdentity(); }
 
-  auto GetIdentity() const -> crypto::Identity* { return identity_.get(); }
+  [[nodiscard]] auto GetIdentity() const -> crypto::Identity* { return identity_.get(); }
 
-  auto GetPublicKey() const -> std::vector<std::byte> {
+  [[nodiscard]] auto GetPublicKey() const -> std::vector<std::byte> {
     return identity_ ? identity_->GetPublicKey() : std::vector<std::byte>{};
   }
 
@@ -66,8 +66,10 @@ public:
     return false;
   }
 
-  auto Sign(std::span<const std::byte> message) const -> std::vector<std::byte> {
-    if (!identity_) { return {}; }
+  [[nodiscard]] auto Sign(std::span<const std::byte> message) -> std::vector<std::byte> {
+    if (!identity_) {
+      return {};
+    }
     return identity_->Sign(message);
   }
 };

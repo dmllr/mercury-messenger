@@ -22,13 +22,6 @@
 
 #include "eillance/utils/args_parser.hpp"
 
-constexpr auto logInstanceId = 454;
-#define LGV PLOG_(logInstanceId, plog::verbose)  // NOLINT(*-pro-type-reinterpret-cast,*-lambda-function-name)
-#define LGD PLOG_(logInstanceId, plog::debug)    // NOLINT(*-pro-type-reinterpret-cast,*-lambda-function-name)
-#define LGI PLOG_(logInstanceId, plog::info)     // NOLINT(*-pro-type-reinterpret-cast,*-lambda-function-name)
-#define LGW PLOG_(logInstanceId, plog::warning)  // NOLINT(*-pro-type-reinterpret-cast,*-lambda-function-name)
-#define LGE PLOG_(logInstanceId, plog::error)    // NOLINT(*-pro-type-reinterpret-cast,*-lambda-function-name)
-
 class SignalingServer {
 public:
   using Json = nlohmann::json;
@@ -104,8 +97,10 @@ private:
 
           const auto signature_hex = json["signature"].get<std::string>();
           const auto signature_bytes = eillance::crypto::FromHex(signature_hex);
+          const auto pub_key_bytes = eillance::crypto::FromHex(claimed_id);
+          const std::span<const std::byte> challenge_span(reinterpret_cast<const std::byte*>(challenge.data()), challenge.size());
 
-          if (eillance::crypto::Identity::Verify(claimed_id, challenge, signature_bytes)) {
+          if (eillance::crypto::Identity::Verify(pub_key_bytes, challenge_span, signature_bytes)) {
             LGI << "Peer authenticated: " << claimed_id;
             peer_id = claimed_id;
 
