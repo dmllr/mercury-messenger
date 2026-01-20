@@ -1,0 +1,55 @@
+#pragma once
+
+#include <filesystem>
+#include <functional>
+#include <memory>
+#include <string>
+
+#include "mercury/bot/types.hpp"
+
+namespace mercury::bot {
+
+class Bot {
+ public:
+  struct Options {
+    std::filesystem::path identity_path;
+    std::string signaling_url;
+    bool auto_accept_contacts = true;
+    bool auto_reject_calls = true;
+  };
+
+  explicit Bot(Options options);
+  ~Bot();
+
+  Bot(Bot const&) = delete;
+  Bot(Bot&&) = delete;
+  auto operator=(Bot const&) -> Bot& = delete;
+  auto operator=(Bot&&) -> Bot& = delete;
+
+  // --- Actions ---
+
+  // Starts the bot (non-blocking).
+  void Start() const;
+
+  // Stops the bot and releases resources.
+  void Stop() const;
+
+  // Sends a text message to the specified chat (user ID).
+  void SendMessage(std::string const& chat_id, std::string const& text) const;
+
+  // --- Events ---
+
+  // Register a callback for incoming text messages.
+  void OnMessage(std::function<void(Message const&)> handler) const;
+
+  // --- Information ---
+
+  // Returns the bot's own ID.
+  [[nodiscard]] auto GetId() const -> std::string;
+
+ private:
+  class Impl;
+  std::unique_ptr<Impl> impl_;
+};
+
+}  // namespace mercury::bot
