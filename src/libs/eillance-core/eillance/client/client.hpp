@@ -16,7 +16,7 @@
 #include "eillance/backup/backup_manager.hpp"
 #include "eillance/capture/capture.hpp"
 #include "eillance/client/settings_manager.hpp"
-#include "eillance/events/service_connection_state.h"
+#include "eillance/events/service_connection_state.hpp"
 #include "eillance/identity/contact_id.hpp"
 #include "eillance/identity/contact_manager.hpp"
 #include "eillance/identity/id_manager.hpp"

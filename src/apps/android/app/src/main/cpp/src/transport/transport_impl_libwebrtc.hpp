@@ -12,7 +12,7 @@
 #include "../utils/jni_utils.hpp"
 #include "eillance/crypto/crypto.hpp"
 #include "eillance/identity/contact_id.hpp"
-#include "eillance/logging/logging.h"
+#include "eillance/logging/logging.hpp"
 #include "eillance/transport/peer.hpp"
 #include "eillance/transport/transport.hpp"
 

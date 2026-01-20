@@ -4,7 +4,7 @@
 #include <variant>
 
 #include "eillance/rtc/stream_source.hpp"
-#include "eillance/utils/memory.h"
+#include "eillance/utils/memory.hpp"
 
 namespace eillance {
 
@@ -719,8 +719,9 @@ void Client::ProcessDataChannelMessage(const ContactID& peer_id, const Json& mes
               av_stream_->Start();
             }
             auto accepted_peer = transport_->GetPeer(peer_id);
-            if (!accepted_peer) { return;
-}
+            if (!accepted_peer) {
+              return;
+            }
             transport_->CreateMediaPeerConnection(peer_id);
             accepted_peer->has_media_peer_connection = true;
             accepted_peer->audio = transport_->AddAudio(peer_id, [this, wpeer = MakeWeakPtr(accepted_peer)]() {

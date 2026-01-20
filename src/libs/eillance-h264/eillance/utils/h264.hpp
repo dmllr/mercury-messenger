@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "eillance/capture/video_config.hpp"
-#include "eillance/logging/logging.h"
+#include "eillance/logging/logging.hpp"
 
 namespace eillance {
 

@@ -9,7 +9,7 @@
 #include "eillance/identity/contact_id.hpp"
 #include "eillance/identity/contact_manager.hpp"  // for ContactStatus
 #include "eillance/messaging/history.hpp"
-#include "eillance/transport/peer_connection_state.h"
+#include "eillance/transport/peer_connection_state.hpp"
 
 namespace eillance::view_model {
 

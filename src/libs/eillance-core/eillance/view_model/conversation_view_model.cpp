@@ -6,7 +6,7 @@
 #include <thread>
 #include <variant>
 
-#include "eillance/logging/logging.h"
+#include "eillance/logging/logging.hpp"
 #include "eillance/utils/time.hpp"
 
 namespace eillance::view_model {
@@ -61,7 +61,7 @@ struct ConversationViewModel::Impl : public std::enable_shared_from_this<Impl> {
     auto page = client_->GetMessageHistoryPage(peer_id, chatPagesLoaded_, kPageSize);
 
     if (!page.messages.empty()) {
-      for (auto & message : std::ranges::reverse_view(page.messages)) {
+      for (auto& message: std::ranges::reverse_view(page.messages)) {
         state_.history.push_front(message);
       }
       chatPagesLoaded_++;
@@ -139,7 +139,7 @@ struct ConversationViewModel::Impl : public std::enable_shared_from_this<Impl> {
   }
 
   // Runs on a background thread. 'self' keeps Impl alive during execution.
-  void LoadInitialHistory(const std::shared_ptr<Impl>&  /*self*/, int generation) {
+  void LoadInitialHistory(const std::shared_ptr<Impl>& /*self*/, int generation) {
     // Perform blocking DB op without holding the mutex
     auto page = client_->GetMessageHistoryPage(peer_id, 0, kPageSize);
 

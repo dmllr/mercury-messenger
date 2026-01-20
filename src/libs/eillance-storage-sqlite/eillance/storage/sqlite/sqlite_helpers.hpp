@@ -5,7 +5,7 @@
 #include <stdexcept>
 #include <string>
 
-#include "eillance/logging/logging.h"
+#include "eillance/logging/logging.hpp"
 
 namespace eillance::storage {
 

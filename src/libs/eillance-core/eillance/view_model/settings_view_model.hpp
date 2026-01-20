@@ -9,7 +9,7 @@
 
 #include "client_event_router.hpp"
 #include "eillance/client/client.hpp"
-#include "eillance/events/service_connection_state.h"
+#include "eillance/events/service_connection_state.hpp"
 #include "view_model_defines.hpp"
 
 namespace eillance::view_model {

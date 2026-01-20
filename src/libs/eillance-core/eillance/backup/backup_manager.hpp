@@ -10,7 +10,7 @@
 #include <openssl/rand.h>
 
 #include "eillance/crypto/crypto.hpp"
-#include "eillance/logging/logging.h"
+#include "eillance/logging/logging.hpp"
 
 namespace eillance::backup {
 
@@ -57,14 +57,18 @@ public:
     int ciphertext_len = 0;
 
     const crypto::EvpCipherCtxPtr ctx(EVP_CIPHER_CTX_new(), EVP_CIPHER_CTX_free);
-    if (!ctx) { return false;
-}
-    if (EVP_EncryptInit_ex(ctx.get(), EVP_aes_256_gcm(), nullptr, nullptr, nullptr) != 1) { return false;
-}
-    if (EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_SET_IVLEN, kIvSize, nullptr) != 1) { return false;
-}
-    if (EVP_EncryptInit_ex(ctx.get(), nullptr, nullptr, key.data(), iv.data()) != 1) { return false;
-}
+    if (!ctx) {
+      return false;
+    }
+    if (EVP_EncryptInit_ex(ctx.get(), EVP_aes_256_gcm(), nullptr, nullptr, nullptr) != 1) {
+      return false;
+    }
+    if (EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_SET_IVLEN, kIvSize, nullptr) != 1) {
+      return false;
+    }
+    if (EVP_EncryptInit_ex(ctx.get(), nullptr, nullptr, key.data(), iv.data()) != 1) {
+      return false;
+    }
 
     int len = 0;
     // NOLINTNEXTLINE(*-reinterpret-cast)
@@ -110,18 +114,21 @@ public:
 
     std::vector<unsigned char> salt(kSaltSize);
     backup_file.read(reinterpret_cast<char*>(salt.data()), kSaltSize);
-    if (backup_file.gcount() != kSaltSize) { return false;
-}
+    if (backup_file.gcount() != kSaltSize) {
+      return false;
+    }
 
     std::vector<unsigned char> iv(kIvSize);
     backup_file.read(reinterpret_cast<char*>(iv.data()), kIvSize);
-    if (backup_file.gcount() != kIvSize) { return false;
-}
+    if (backup_file.gcount() != kIvSize) {
+      return false;
+    }
 
     std::vector<unsigned char> tag(kTagSize);
     backup_file.read(reinterpret_cast<char*>(tag.data()), kTagSize);
-    if (backup_file.gcount() != kTagSize) { return false;
-}
+    if (backup_file.gcount() != kTagSize) {
+      return false;
+    }
 
     const std::vector<unsigned char> ciphertext((std::istreambuf_iterator<char>(backup_file)), std::istreambuf_iterator<char>());
     backup_file.close();
@@ -135,14 +142,18 @@ public:
     int plaintext_len = 0;
 
     const crypto::EvpCipherCtxPtr ctx(EVP_CIPHER_CTX_new(), EVP_CIPHER_CTX_free);
-    if (!ctx) { return false;
-}
-    if (EVP_DecryptInit_ex(ctx.get(), EVP_aes_256_gcm(), nullptr, nullptr, nullptr) != 1) { return false;
-}
-    if (EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_SET_IVLEN, kIvSize, nullptr) != 1) { return false;
-}
-    if (EVP_DecryptInit_ex(ctx.get(), nullptr, nullptr, key.data(), iv.data()) != 1) { return false;
-}
+    if (!ctx) {
+      return false;
+    }
+    if (EVP_DecryptInit_ex(ctx.get(), EVP_aes_256_gcm(), nullptr, nullptr, nullptr) != 1) {
+      return false;
+    }
+    if (EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_SET_IVLEN, kIvSize, nullptr) != 1) {
+      return false;
+    }
+    if (EVP_DecryptInit_ex(ctx.get(), nullptr, nullptr, key.data(), iv.data()) != 1) {
+      return false;
+    }
 
     int len = 0;
     // NOLINTNEXTLINE(*-reinterpret-cast)

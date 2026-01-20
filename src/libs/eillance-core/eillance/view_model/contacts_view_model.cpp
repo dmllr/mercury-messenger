@@ -4,7 +4,7 @@
 #include <thread>
 #include <unordered_map>
 
-#include "eillance/logging/logging.h"
+#include "eillance/logging/logging.hpp"
 
 namespace eillance::view_model {
 

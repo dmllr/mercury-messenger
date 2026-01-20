@@ -20,7 +20,7 @@ extern "C" {
 #include <combaseapi.h>
 #endif
 
-#include "eillance/logging/logging.h"
+#include "eillance/logging/logging.hpp"
 #include "eillance/utils/packet.hpp"
 #include "eillance/utils/time.hpp"
 

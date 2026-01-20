@@ -12,7 +12,7 @@ namespace eillance {
 template<typename T, std::size_t Capacity>
 class CircularBuffer {
 public:
-  CircularBuffer()  {}
+  CircularBuffer() {}
 
   [[nodiscard]] auto IsEmpty() const {
     return size_ == 0;

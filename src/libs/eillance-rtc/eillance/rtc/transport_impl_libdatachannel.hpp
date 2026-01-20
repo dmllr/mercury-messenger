@@ -17,17 +17,17 @@
 #include <rtc/rtc.hpp>
 
 #include "eillance/crypto/crypto.hpp"
-#include "eillance/events/event_source.h"
-#include "eillance/events/service_connection_state.h"
+#include "eillance/events/event_source.hpp"
+#include "eillance/events/service_connection_state.hpp"
 #include "eillance/identity/contact_id.hpp"
-#include "eillance/logging/logging.h"
+#include "eillance/logging/logging.hpp"
 #include "eillance/transport/peer.hpp"
-#include "eillance/transport/peer_connection_state.h"
+#include "eillance/transport/peer_connection_state.hpp"
 #include "eillance/transport/transport.hpp"
 #include "eillance/transport/transport_delegate.hpp"
 #include "eillance/utils/dispatch_queue.hpp"
 #include "eillance/utils/invariant.hpp"
-#include "eillance/utils/memory.h"
+#include "eillance/utils/memory.hpp"
 
 namespace eillance::rtc {
 

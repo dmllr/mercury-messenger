@@ -12,7 +12,7 @@
 #include "class_refs.hpp"
 #include "eillance/capture/video_config.hpp"
 #include "eillance/client/client.hpp"
-#include "eillance/logging/logging.h"
+#include "eillance/logging/logging.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/storage/sqlite/persistent_storage_impl_sqlite.hpp"
 #include "eillance/view_model/client_event_router.hpp"

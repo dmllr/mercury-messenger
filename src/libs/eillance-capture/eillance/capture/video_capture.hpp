@@ -11,8 +11,8 @@
 
 #include "eillance/capture/video_config.hpp"
 #include "eillance/encoding/video_encoder.hpp"
-#include "eillance/logging/logging.h"
-#include "eillance/logging/telemetry.h"
+#include "eillance/logging/logging.hpp"
+#include "eillance/logging/telemetry.hpp"
 #include "eillance/rtc/stream.hpp"
 #include "eillance/utils/dispatch_queue.hpp"
 #include "eillance/utils/packet.hpp"
