@@ -1,12 +1,12 @@
+#include <gtest/gtest.h>
+
 #include "eillance/client/settings_manager.hpp"
 #include "mock_persistent_storage.hpp"
-
-#include <gtest/gtest.h>
 
 using namespace eillance;
 
 class SettingsManagerTest : public ::testing::Test {
-protected:
+ protected:
   void SetUp() override {
     auto mock_impl = std::make_unique<storage::MockPersistentStorageImpl>();
     mock_storage_impl_ = mock_impl.get();

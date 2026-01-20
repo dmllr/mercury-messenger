@@ -21,7 +21,7 @@
 namespace eillance {
 
 class VideoCaptureCli {
-private:
+ private:
   cv::VideoCapture cap_{};
   cv::Mat cvFrame_{};
   cv::Mat nv12Frame_{};
@@ -43,20 +43,24 @@ private:
 #endif
   };
 
-public:
+ public:
   VideoCaptureCli() = default;
   VideoCaptureCli(VideoCaptureCli&&) = delete;
-  VideoCaptureCli(const VideoCaptureCli&) = delete;
+  VideoCaptureCli(VideoCaptureCli const&) = delete;
   auto operator=(VideoCaptureCli&&) -> VideoCaptureCli& = delete;
-  auto operator=(const VideoCaptureCli&) -> VideoCaptureCli& = delete;
+  auto operator=(VideoCaptureCli const&) -> VideoCaptureCli& = delete;
 
   ~VideoCaptureCli() { Revoke(); }
 
   void Engage() {
-    if (captureIsRunning_) { return; }
+    if (captureIsRunning_) {
+      return;
+    }
     captureIsRunning_ = true;
 
-    if (cap_.isOpened()) { cap_.release(); }
+    if (cap_.isOpened()) {
+      cap_.release();
+    }
 
     // open the default camera
     cap_.open(0, CrossPlatformProperties::openCvCameraCapabilities);
@@ -84,10 +88,12 @@ public:
     }
 
     // check what resolution was actually set
-    const auto actual_width = static_cast<int>(cap_.get(cv::CAP_PROP_FRAME_WIDTH));
-    const auto actual_height = static_cast<int>(cap_.get(cv::CAP_PROP_FRAME_HEIGHT));
+    auto const actual_width = static_cast<int>(cap_.get(cv::CAP_PROP_FRAME_WIDTH));
+    auto const actual_height = static_cast<int>(cap_.get(cv::CAP_PROP_FRAME_HEIGHT));
     auto actual_fps = static_cast<int>(cap_.get(cv::CAP_PROP_FPS));
-    if (actual_fps <= 0) { actual_fps = config_.frameRate; }
+    if (actual_fps <= 0) {
+      actual_fps = config_.frameRate;
+    }
 
     LGI << "Capture resolution set to: " << actual_width << "x" << actual_height;
 
@@ -100,7 +106,9 @@ public:
 
   auto FetchBuffers() -> Packet {
     CaptureFrame();
-    if (cvFrame_.empty()) { return {}; }
+    if (cvFrame_.empty()) {
+      return {};
+    }
 #if defined __ANDROID__
     auto frame = cvFrame_;
     cv::cvtColor(frame, frame, cv::COLOR_BGR2YUV_YV12);
@@ -115,7 +123,9 @@ public:
   }
 
   void Revoke() {
-    if (!captureIsRunning_) { return; }
+    if (!captureIsRunning_) {
+      return;
+    }
     captureIsRunning_ = false;
     dispatchQueue_.RemovePending();
     encoder_.Revoke();
@@ -124,16 +134,19 @@ public:
 
   [[nodiscard]] auto GetSampleDuration() const -> Time::Unit { return Time::uS / config_.frameRate; }
 
-  void Configure(const Config& config) { ConfigureVideo(config.video_config); }
+  void Configure(Config const& config) { ConfigureVideo(config.video_config); }
 
-  void ConfigureVideo(const VideoConfig& config) {
-    TELEMETRY(LGI << "Video capture configuration event triggered: device " << config.cameraId << " " << config.width << "x" << config.height << " " << config.frameRate << "fps";)
+  void ConfigureVideo(VideoConfig const& config) {  // NOLINT(*-convert-member-functions-to-static)
+    TELEMETRY(LGI << "Video capture configuration event triggered: device " << config.cameraId << " " << config.width
+                  << "x" << config.height << " " << config.frameRate << "fps";)
     LGW << "General video capture does not support configuration";
   }
 
-private:
+ private:
   void CaptureFrame() {
-    if (!captureIsRunning_) { return; }
+    if (!captureIsRunning_) {
+      return;
+    }
     cap_ >> cvFrame_;
     if (cvFrame_.empty()) {
       LGE << "Unexpected end of stream.";
@@ -141,15 +154,16 @@ private:
     }
 
     TELEMETRY(if (fps_counter_ % (telemetry_interval * config_.frameRate) == 0) {
-      const auto elapsed = (Time::Now() - lastFpsMilestone_) / Time::uS;
-      const auto fetch_fps = static_cast<double>(load_counter_) / elapsed;
+      auto const elapsed = (Time::Now() - lastFpsMilestone_) / Time::uS;
+      auto const fetch_fps = static_cast<double>(load_counter_) / elapsed;
       load_counter_ = 0;
 
-      const auto capture_fps = static_cast<double>(fps_counter_) / elapsed;
+      auto const capture_fps = static_cast<double>(fps_counter_) / elapsed;
       lastFpsMilestone_ = Time::Now();
       fps_counter_ = 0;
 
-      LGI << "Video capture rate FPS: " << std::setprecision(2) << std::fixed << capture_fps << ", RTC request rate FPS:" << fetch_fps;
+      LGI << "Video capture rate FPS: " << std::setprecision(2) << std::fixed << capture_fps
+          << ", RTC request rate FPS:" << fetch_fps;
     } fps_counter_++;)
 
     // due to OpenCV issue, camera frames should be captured as soon as possible,
@@ -159,18 +173,23 @@ private:
     //    });
   }
 
-  static void YV12toNV12(const cv::Mat& input, cv::Mat& output) {
-    const auto width = input.cols;
-    const auto height = input.rows * 2 / 3;
-    const auto stride = input.step[0];  // NOLINT(*-narrowing-conversions)
+  static void YV12toNV12(cv::Mat const& input, cv::Mat& output) {
+    auto const width = input.cols;
+    auto const height = input.rows * 2 / 3;
+    auto const stride = input.step[0];  // NOLINT(*-narrowing-conversions)
 
     input.copyTo(output);
 
     // Input V color channel (in YV12 V is above U).
-    cv::Mat in_v = cv::Mat(cv::Size(width / 2, height / 2), CV_8UC1, std::next(input.data, stride * height), stride / 2);
+    auto in_v = cv::Mat(cv::Size(width / 2, height / 2), CV_8UC1, std::next(input.data, stride * height), stride / 2);
 
     // Input V color channel (in YV12 U is below V).
-    cv::Mat in_u = cv::Mat(cv::Size(width / 2, height / 2), CV_8UC1, std::next(input.data, stride * height + (stride / 2) * (height / 2)), stride / 2);
+    auto in_u = cv::Mat(
+        cv::Size(width / 2, height / 2),
+        CV_8UC1,
+        std::next(input.data, stride * height + (stride / 2) * (height / 2)),
+        stride / 2
+    );
 
     for (int row = 0; row < height / 2; row++) {
       for (int col = 0; col < width / 2; col++) {

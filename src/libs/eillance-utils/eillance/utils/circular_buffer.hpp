@@ -9,26 +9,18 @@
 
 namespace eillance {
 
-template<typename T, std::size_t Capacity>
+template <typename T, std::size_t Capacity>
 class CircularBuffer {
-public:
-  CircularBuffer() {}
+ public:
+  CircularBuffer() = default;
 
-  [[nodiscard]] auto IsEmpty() const {
-    return size_ == 0;
-  }
+  [[nodiscard]] auto IsEmpty() const { return size_ == 0; }
 
-  [[nodiscard]] auto IsFull() const {
-    return size_ == Capacity;
-  }
+  [[nodiscard]] auto IsFull() const { return size_ == Capacity; }
 
-  [[nodiscard]] auto Size() const {
-    return size_;
-  }
+  [[nodiscard]] auto Size() const { return size_; }
 
-  void Clear() {
-    head_ = tail_ = size_ = 0;
-  }
+  void Clear() { head_ = tail_ = size_ = 0; }
 
   void Push(T value) {
     if (IsFull()) {
@@ -47,7 +39,7 @@ public:
     return value;
   }
 
-private:
+ private:
   std::array<T, Capacity> buffer_;
   std::size_t head_{0};
   std::size_t tail_{0};

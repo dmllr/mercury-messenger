@@ -1,6 +1,6 @@
-#include "eillance/utils/bit_reader.hpp"
-
 #include <gtest/gtest.h>
+
+#include "eillance/utils/bit_reader.hpp"
 
 TEST(BitReaderTest, ReadBit) {
   std::uint8_t data[] = {0b10101010, 0b11001100};

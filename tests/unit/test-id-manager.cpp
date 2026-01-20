@@ -1,12 +1,12 @@
+#include <gtest/gtest.h>
+
 #include "eillance/identity/id_manager.hpp"
 #include "mock_persistent_storage.hpp"
-
-#include <gtest/gtest.h>
 
 using namespace eillance;
 
 class IdManagerTest : public ::testing::Test {
-protected:
+ protected:
   void SetUp() override {
     auto mock_impl = std::make_unique<storage::MockPersistentStorageImpl>();
     mock_storage_impl_ = mock_impl.get();
@@ -38,7 +38,6 @@ TEST_F(IdManagerTest, GenerateNewIdentity) {
   EXPECT_TRUE(new_id_manager.IdentityExists());
   EXPECT_EQ(new_id_manager.GetPublicKey(), id_manager.GetPublicKey());
 }
-
 
 TEST_F(IdManagerTest, LoadsExistingIdentity) {
   // Create an identity and save it to mock storage.

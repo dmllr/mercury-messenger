@@ -1,9 +1,7 @@
-#include "eillance/crypto/crypto.hpp"
 #include <chrono>
 #include <csignal>
 #include <memory>
 #include <mutex>
-#include <openssl/rand.h>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -13,23 +11,25 @@
 #include <utility>
 
 #include <nlohmann/json.hpp>
+#include <openssl/rand.h>
 #include <rtc/websocket.hpp>
 #include <rtc/websocketserver.hpp>
 
+#include "eillance/crypto/crypto.hpp"
 #include "eillance/logging/logging.hpp"
 #include "eillance/utils/args_parser.hpp"
 
 class SignalingServer {
-public:
+ public:
   using Json = nlohmann::json;
   using PeerId = std::string;
 
-  explicit SignalingServer(const rtc::WebSocketServer::Configuration& config) {
+  explicit SignalingServer(rtc::WebSocketServer::Configuration const& config) {
     server_ = std::make_unique<rtc::WebSocketServer>(config);
-    server_->onClient([this](const std::shared_ptr<rtc::WebSocket>& wss) { HandleConnection(wss); });
+    server_->onClient([this](std::shared_ptr<rtc::WebSocket> const& wss) { HandleConnection(wss); });
   }
 
-private:
+ private:
   struct Peer {
     std::shared_ptr<rtc::WebSocket> ws;
   };
@@ -42,48 +42,50 @@ private:
   // Generates a cryptographically secure random string to be used as a challenge.
   static auto GenerateChallenge() -> std::string {
     std::vector<std::byte> buffer(32);
-    if (RAND_bytes(reinterpret_cast<unsigned char*>(buffer.data()), static_cast<int>(buffer.size())) != 1) { throw std::runtime_error("Failed to generate random bytes for challenge."); }
+    if (RAND_bytes(reinterpret_cast<unsigned char*>(buffer.data()), static_cast<int>(buffer.size())) != 1) {
+      throw std::runtime_error("Failed to generate random bytes for challenge.");
+    }
     return eillance::crypto::ToHex(buffer);
   }
 
-  void HandleConnection(const std::shared_ptr<rtc::WebSocket>& wss) {
+  void HandleConnection(std::shared_ptr<rtc::WebSocket> const& wss) {
     LGD << "New connection established";
     auto peer_id = std::make_shared<PeerId>();
 
-    wss->onMessage(nullptr, [this, wss, peer_id](const std::string& msg) { HandleMessage(wss, msg, *peer_id); });
+    wss->onMessage(nullptr, [this, wss, peer_id](std::string const& msg) { HandleMessage(wss, msg, *peer_id); });
 
     wss->onClosed([this, wss, peer_id]() { HandleDisconnection(wss.get(), *peer_id); });
   }
 
-  void HandleMessage(const std::shared_ptr<rtc::WebSocket>& wss, const std::string& msg, PeerId& peer_id) {
+  void HandleMessage(std::shared_ptr<rtc::WebSocket> const& wss, std::string const& msg, PeerId& peer_id) {
     try {
       LGV << "<< " << msg;
-      const auto json = Json::parse(msg);
-      const auto type = json.value("type", "");
+      auto const json = Json::parse(msg);
+      auto const type = json.value("type", "");
 
       if (peer_id.empty()) {
         if (type == "login" && json.contains("id")) {
-          const PeerId temp_id = json["id"].get<PeerId>();
+          PeerId const temp_id = json["id"].get<PeerId>();
           if (temp_id.empty()) {
             SendError(wss, "invalid_id", "Peer ID cannot be empty.");
             return;
           }
 
-          const std::string challenge = GenerateChallenge();
+          std::string const challenge = GenerateChallenge();
           {
-            const std::lock_guard<std::mutex> lock(peers_mutex_);
+            std::lock_guard<std::mutex> const lock(peers_mutex_);
             challenges_[wss.get()] = challenge;
           }
 
-          const Json response = {{"type", "auth_challenge"}, {"challenge", challenge}};
+          Json const response = {{"type", "auth_challenge"}, {"challenge", challenge}};
           wss->send(response.dump());
 
         } else if (type == "auth_response" && json.contains("signature") && json.contains("id")) {
-          const PeerId claimed_id = json["id"].get<PeerId>();
+          PeerId const claimed_id = json["id"].get<PeerId>();
           std::string challenge;
           {
-            const std::lock_guard<std::mutex> lock(peers_mutex_);
-            const auto it = challenges_.find(wss.get());
+            std::lock_guard<std::mutex> const lock(peers_mutex_);
+            auto const it = challenges_.find(wss.get());
             if (it == challenges_.end()) {
               SendError(wss, "unexpected_auth_response", "No pending challenge for this connection.");
               wss->close();
@@ -92,17 +94,20 @@ private:
             challenge = it->second;
           }
 
-          const auto signature_hex = json["signature"].get<std::string>();
-          const auto signature_bytes = eillance::crypto::FromHex(signature_hex);
-          const auto pub_key_bytes = eillance::crypto::FromHex(claimed_id);
-          const std::span<const std::byte> challenge_span(reinterpret_cast<const std::byte*>(challenge.data()), challenge.size());
+          auto const signature_hex = json["signature"].get<std::string>();
+          auto const signature_bytes = eillance::crypto::FromHex(signature_hex);
+          auto const pub_key_bytes = eillance::crypto::FromHex(claimed_id);
+          std::span<std::byte const> const challenge_span(
+              reinterpret_cast<std::byte const*>(challenge.data()),
+              challenge.size()
+          );
 
           if (eillance::crypto::Identity::Verify(pub_key_bytes, challenge_span, signature_bytes)) {
             LGI << "Peer authenticated: " << claimed_id;
             peer_id = claimed_id;
 
             {
-              const std::lock_guard<std::mutex> lock(peers_mutex_);
+              std::lock_guard<std::mutex> const lock(peers_mutex_);
               challenges_.erase(wss.get());
 
               if (auto itr = peers_.find(peer_id); itr != peers_.end()) {
@@ -112,7 +117,7 @@ private:
               peers_[peer_id] = {wss};
             }
 
-            const Json success_msg = {{"type", "login_success"}};
+            Json const success_msg = {{"type", "login_success"}};
             wss->send(success_msg.dump());
 
           } else {
@@ -129,7 +134,7 @@ private:
           SendError(wss, "missing_recipient", "Message must have a 'to' field for relaying.");
           return;
         }
-        const auto destination_id = json.value("to", "");
+        auto const destination_id = json.value("to", "");
         if (destination_id.empty()) {
           SendError(wss, "empty_recipient", "Recipient 'to' field cannot be empty.");
           return;
@@ -138,8 +143,8 @@ private:
         LGD << "Relaying message from: " << peer_id << " to: " << destination_id.c_str();
 
         {
-          const std::lock_guard<std::mutex> lock(peers_mutex_);
-          const auto itr = peers_.find(destination_id);
+          std::lock_guard<std::mutex> const lock(peers_mutex_);
+          auto const itr = peers_.find(destination_id);
           if (itr == peers_.end() || !itr->second.ws || !itr->second.ws->isOpen()) {
             LGE << "Peer " << destination_id.c_str() << " not found or not connected.";
             SendError(wss, "peer_not_found", "Peer '" + std::string(destination_id) + "' not found.", destination_id);
@@ -148,23 +153,23 @@ private:
 
           auto relayed_json = json;
           relayed_json["from"] = peer_id;
-          const std::string message_str = relayed_json.dump();
+          std::string const message_str = relayed_json.dump();
           LGV << ">> to " << destination_id.c_str() << ": " << message_str;
           itr->second.ws->send(message_str);
         }
       }
-    } catch (const std::exception& e) {
+    } catch (std::exception const& e) {
       SendError(wss, "invalid_message", e.what());
     }
   }
 
-  void HandleDisconnection(rtc::WebSocket* wss, const PeerId& peer_id) {
-    const std::lock_guard<std::mutex> lock(peers_mutex_);
+  void HandleDisconnection(rtc::WebSocket* wss, PeerId const& peer_id) {
+    std::lock_guard<std::mutex> const lock(peers_mutex_);
     if (peer_id.empty()) {
       LGD << "Unauthenticated peer disconnected.";
       challenges_.erase(wss);
     } else {
-      const auto it = peers_.find(peer_id);
+      auto const it = peers_.find(peer_id);
       if (it != peers_.end() && it->second.ws.get() == wss) {
         peers_.erase(it);
         LGI << "Peer disconnected and removed: " << peer_id;
@@ -174,40 +179,63 @@ private:
     }
   }
 
-  static void SendError(const std::shared_ptr<rtc::WebSocket>& wss, const std::string& error, const std::string& message, const std::optional<PeerId>& for_peer = std::nullopt) {
-    if (!wss || !wss->isOpen()) { return; }
+  static void SendError(
+      std::shared_ptr<rtc::WebSocket> const& wss,
+      std::string const& error,
+      std::string const& message,
+      std::optional<PeerId> const& for_peer = std::nullopt
+  ) {
+    if (!wss || !wss->isOpen()) {
+      return;
+    }
     LGE << "Sending error: " << error << " - " << message;
     Json response = {{"type", "error"}, {"error", error}, {"message", message}};
 
-    if (for_peer) { response["for_peer"] = *for_peer; }
+    if (for_peer) {
+      response["for_peer"] = *for_peer;
+    }
     wss->send(response.dump());
   }
 };
 
 namespace {
 
-volatile std::sig_atomic_t signalReceived = 0;  // NOLINT(*-avoid-non-const-global-variables)
+std::sig_atomic_t volatile signalReceived = 0;  // NOLINT(*-avoid-non-const-global-variables)
 
-void SignalHandler(const int signum) {
+void SignalHandler(int const signum) {
   LGI << "\nInterrupt signal (" << signum << ") received.\n";
   signalReceived = signum;
 }
 
-constexpr auto ParseLogLevel(const std::string_view level) -> plog::Severity {
-  if (level == "none") { return plog::none; }
-  if (level == "fatal") { return plog::fatal; }
-  if (level == "error") { return plog::error; }
-  if (level == "warning") { return plog::warning; }
-  if (level == "info") { return plog::info; }
-  if (level == "debug") { return plog::debug; }
-  if (level == "verbose") { return plog::verbose; }
+constexpr auto ParseLogLevel(std::string_view const level) -> plog::Severity {
+  if (level == "none") {
+    return plog::none;
+  }
+  if (level == "fatal") {
+    return plog::fatal;
+  }
+  if (level == "error") {
+    return plog::error;
+  }
+  if (level == "warning") {
+    return plog::warning;
+  }
+  if (level == "info") {
+    return plog::info;
+  }
+  if (level == "debug") {
+    return plog::debug;
+  }
+  if (level == "verbose") {
+    return plog::verbose;
+  }
   return plog::info;
 }
 
 }  // namespace
 
 auto main(int argc, char* argv[]) -> int {
-  const eillance::utils::ArgsParser args(argc, argv);
+  eillance::utils::ArgsParser const args(argc, argv);
 
   static plog::ColorConsoleAppender<plog::TxtFormatter> appender;
   plog::init(plog::warning, &appender);
@@ -220,7 +248,7 @@ auto main(int argc, char* argv[]) -> int {
   auto config = rtc::WebSocketServer::Configuration();
   config.port = default_port;
 
-  if (const auto& port_arg = args.GetInt("--port"); port_arg.has_value()) {
+  if (auto const& port_arg = args.GetInt("--port"); port_arg.has_value()) {
     config.port = static_cast<uint16_t>(port_arg.value());
   }
 

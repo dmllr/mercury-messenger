@@ -4,13 +4,13 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <variant>
 #include <vector>
 
-#include "eillance/utils/time.hpp"
 #include <nlohmann/json.hpp>
-#include <variant>
 
 #include "eillance/identity/contact_id.hpp"
+#include "eillance/utils/time.hpp"
 
 namespace eillance::identity {
 
@@ -74,33 +74,48 @@ enum class HistoryEntryKind : std::uint8_t {
   systemMessage,
 };
 
-NLOHMANN_JSON_SERIALIZE_ENUM(MessageDirection, {
-                                                   {MessageDirection::sent, "sent"},
-                                                   {MessageDirection::received, "received"},
-                                               })
-NLOHMANN_JSON_SERIALIZE_ENUM(CallDirection, {
-                                                {CallDirection::outgoing, "outgoing"},
-                                                {CallDirection::incoming, "incoming"},
-                                            })
-NLOHMANN_JSON_SERIALIZE_ENUM(CallStatus, {
-                                             {CallStatus::answered, "answered"},
-                                             {CallStatus::missed, "missed"},
-                                             {CallStatus::rejected, "rejected"},
-                                             {CallStatus::busy, "busy"},
-                                         })
-NLOHMANN_JSON_SERIALIZE_ENUM(MessageStatus, {
-                                                {MessageStatus::none, "none"},
-                                                {MessageStatus::sending, "sending"},
-                                                {MessageStatus::sent, "sent"},
-                                                {MessageStatus::delivered, "delivered"},
-                                                {MessageStatus::read, "read"},
-                                            })
-NLOHMANN_JSON_SERIALIZE_ENUM(HistoryEntryKind, {
-                                                   {HistoryEntryKind::textMessage, "text_message"},
-                                                   {HistoryEntryKind::voiceCall, "voice_call"},
-                                                   {HistoryEntryKind::videoCall, "video_call"},
-                                                   {HistoryEntryKind::systemMessage, "system_message"},
-                                               })
+NLOHMANN_JSON_SERIALIZE_ENUM(
+    MessageDirection,
+    {
+        {MessageDirection::sent, "sent"},
+        {MessageDirection::received, "received"},
+    }
+)
+NLOHMANN_JSON_SERIALIZE_ENUM(
+    CallDirection,
+    {
+        {CallDirection::outgoing, "outgoing"},
+        {CallDirection::incoming, "incoming"},
+    }
+)
+NLOHMANN_JSON_SERIALIZE_ENUM(
+    CallStatus,
+    {
+        {CallStatus::answered, "answered"},
+        {CallStatus::missed, "missed"},
+        {CallStatus::rejected, "rejected"},
+        {CallStatus::busy, "busy"},
+    }
+)
+NLOHMANN_JSON_SERIALIZE_ENUM(
+    MessageStatus,
+    {
+        {MessageStatus::none, "none"},
+        {MessageStatus::sending, "sending"},
+        {MessageStatus::sent, "sent"},
+        {MessageStatus::delivered, "delivered"},
+        {MessageStatus::read, "read"},
+    }
+)
+NLOHMANN_JSON_SERIALIZE_ENUM(
+    HistoryEntryKind,
+    {
+        {HistoryEntryKind::textMessage, "text_message"},
+        {HistoryEntryKind::voiceCall, "voice_call"},
+        {HistoryEntryKind::videoCall, "video_call"},
+        {HistoryEntryKind::systemMessage, "system_message"},
+    }
+)
 
 // Data specific to a text or system message.
 struct MessageEntry {
@@ -148,7 +163,7 @@ namespace eillance::storage {
 // The abstract interface for platform-specific storage implementations.
 // Core depends on this, but implementations will live in platform-specific projects.
 class PersistentStorageImpl {
-public:
+ public:
   virtual ~PersistentStorageImpl() = default;
 
   [[nodiscard]] virtual auto GetPath() const -> std::string = 0;
@@ -156,24 +171,31 @@ public:
   virtual auto GetSetting(std::string_view key) -> std::optional<std::string> = 0;
   virtual void SetSetting(std::string_view key, std::string_view value) = 0;
   virtual void DeleteSetting(std::string_view key) = 0;
-  virtual auto GetRaw(const std::string& key) -> std::optional<std::vector<std::byte>> = 0;
-  virtual auto SetRaw(const std::string& key, const std::vector<std::byte>& value) -> bool = 0;
+  virtual auto GetRaw(std::string const& key) -> std::optional<std::vector<std::byte>> = 0;
+  virtual auto SetRaw(std::string const& key, std::vector<std::byte> const& value) -> bool = 0;
 
   // --- Contacts ---
   virtual auto GetContacts() -> std::vector<identity::Contact> = 0;
-  virtual auto GetContact(const ContactID& peer_id) -> std::optional<identity::Contact> = 0;
-  virtual void UpdateContact(const identity::Contact& contact) = 0;
-  virtual void RemoveContact(const ContactID& peer_id) = 0;
+  virtual auto GetContact(ContactID const& peer_id) -> std::optional<identity::Contact> = 0;
+  virtual void UpdateContact(identity::Contact const& contact) = 0;
+  virtual void RemoveContact(ContactID const& peer_id) = 0;
 
   // --- History ---
   virtual auto AddHistoryEntry(messaging::HistoryEntryRecord entry) -> messaging::HistoryEntryRecord = 0;
-  virtual void UpdateHistoryEntry(const messaging::HistoryEntryRecord& entry) = 0;
-  virtual void UpdateMessageStatus(const ContactID& peer_id, uint64_t message_id, messaging::MessageStatus new_status) = 0;
-  virtual void UpdateMessageStatuses(const ContactID& peer_id, const std::vector<uint64_t>& message_ids, messaging::MessageStatus new_status) = 0;
-  virtual auto GetHistoryPage(const ContactID& peer_id, size_t page_index, size_t page_size) -> messaging::HistoryPage = 0;
+  virtual void UpdateHistoryEntry(messaging::HistoryEntryRecord const& entry) = 0;
+  virtual void
+  UpdateMessageStatus(ContactID const& peer_id, uint64_t message_id, messaging::MessageStatus new_status) = 0;
+  virtual void UpdateMessageStatuses(
+      ContactID const& peer_id,
+      std::vector<uint64_t> const& message_ids,
+      messaging::MessageStatus new_status
+  ) = 0;
+  virtual auto GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t page_size)
+      -> messaging::HistoryPage = 0;
   virtual auto GetFullMessageContent(std::uint64_t message_id) -> std::optional<std::string> = 0;
-  virtual auto GetChatSummaries(const std::vector<ContactID>& peer_ids) -> std::vector<messaging::ChatSummary> = 0;
-  virtual auto GetMessagesWithStatus(const ContactID& peer_id, messaging::MessageStatus status) -> std::vector<messaging::HistoryEntryRecord> = 0;
+  virtual auto GetChatSummaries(std::vector<ContactID> const& peer_ids) -> std::vector<messaging::ChatSummary> = 0;
+  virtual auto GetMessagesWithStatus(ContactID const& peer_id, messaging::MessageStatus status)
+      -> std::vector<messaging::HistoryEntryRecord> = 0;
 
   // --- Debug ---
   virtual void DebugClearAllHistory() = 0;
@@ -181,18 +203,18 @@ public:
   virtual void DebugRevokeAllContactApprovals() = 0;
 };
 
-
 // Public-facing class that uses the pimpl idiom.
 // This wrapper is instantiated in platform-specific code (which provides the impl)
 // and then passed to core components that require storage access.
 class PersistentStorage {
-public:
+ public:
   // The constructor now accepts a pre-constructed, platform-specific implementation.
-  explicit PersistentStorage(std::unique_ptr<PersistentStorageImpl> pimpl) : pimpl_(std::move(pimpl)) {}
+  explicit PersistentStorage(std::unique_ptr<PersistentStorageImpl> pimpl)
+      : pimpl_(std::move(pimpl)) {}
 
   ~PersistentStorage() = default;
-  PersistentStorage(const PersistentStorage&) = delete;
-  auto operator=(const PersistentStorage&) -> PersistentStorage& = delete;
+  PersistentStorage(PersistentStorage const&) = delete;
+  auto operator=(PersistentStorage const&) -> PersistentStorage& = delete;
   PersistentStorage(PersistentStorage&&) noexcept = default;
   auto operator=(PersistentStorage&&) noexcept -> PersistentStorage& = default;
 
@@ -201,31 +223,51 @@ public:
   [[nodiscard]] auto GetSetting(std::string_view key) const { return pimpl_->GetSetting(key); }
   void SetSetting(std::string_view key, std::string_view value) const { pimpl_->SetSetting(key, value); }
   void DeleteSetting(std::string_view key) const { pimpl_->DeleteSetting(key); }
-  [[nodiscard]] auto GetRaw(const std::string& key) const { return pimpl_->GetRaw(key); }
-  [[nodiscard]] auto SetRaw(const std::string& key, const std::vector<std::byte>& value) const { return pimpl_->SetRaw(key, value); }
+  [[nodiscard]] auto GetRaw(std::string const& key) const { return pimpl_->GetRaw(key); }
+  [[nodiscard]] auto SetRaw(std::string const& key, std::vector<std::byte> const& value) const {
+    return pimpl_->SetRaw(key, value);
+  }
 
   // --- Contacts ---
   [[nodiscard]] auto GetContacts() const { return pimpl_->GetContacts(); }
-  [[nodiscard]] auto GetContact(const ContactID& peerId) const { return pimpl_->GetContact(peerId); }
-  void UpdateContact(const identity::Contact& contact) const { pimpl_->UpdateContact(contact); }
-  void RemoveContact(const ContactID& peerId) const { pimpl_->RemoveContact(peerId); }
+  [[nodiscard]] auto GetContact(ContactID const& peerId) const { return pimpl_->GetContact(peerId); }
+  void UpdateContact(identity::Contact const& contact) const { pimpl_->UpdateContact(contact); }
+  void RemoveContact(ContactID const& peerId) const { pimpl_->RemoveContact(peerId); }
 
   // --- History ---
-  [[nodiscard]] auto AddHistoryEntry(messaging::HistoryEntryRecord entry) const { return pimpl_->AddHistoryEntry(std::move(entry)); }
-  void UpdateHistoryEntry(const messaging::HistoryEntryRecord& entry) const { pimpl_->UpdateHistoryEntry(entry); }
-  void UpdateMessageStatus(const ContactID& peerId, uint64_t messageId, messaging::MessageStatus newStatus) const { pimpl_->UpdateMessageStatus(peerId, messageId, newStatus); }
-  void UpdateMessageStatuses(const ContactID& peerId, const std::vector<uint64_t>& messageIds, messaging::MessageStatus newStatus) const { pimpl_->UpdateMessageStatuses(peerId, messageIds, newStatus); }
-  [[nodiscard]] auto GetHistoryPage(const ContactID& peerId, size_t pageIndex, size_t pageSize) const { return pimpl_->GetHistoryPage(peerId, pageIndex, pageSize); }
-  [[nodiscard]] auto GetFullMessageContent(std::uint64_t messageId) const { return pimpl_->GetFullMessageContent(messageId); }
-  [[nodiscard]] auto GetChatSummaries(const std::vector<ContactID>& peerIds) const { return pimpl_->GetChatSummaries(peerIds); }
-  [[nodiscard]] auto GetMessagesWithStatus(const ContactID& peerId, messaging::MessageStatus status) const { return pimpl_->GetMessagesWithStatus(peerId, status); }
+  [[nodiscard]] auto AddHistoryEntry(messaging::HistoryEntryRecord entry) const {
+    return pimpl_->AddHistoryEntry(std::move(entry));
+  }
+  void UpdateHistoryEntry(messaging::HistoryEntryRecord const& entry) const { pimpl_->UpdateHistoryEntry(entry); }
+  void UpdateMessageStatus(ContactID const& peerId, uint64_t messageId, messaging::MessageStatus newStatus) const {
+    pimpl_->UpdateMessageStatus(peerId, messageId, newStatus);
+  }
+  void UpdateMessageStatuses(
+      ContactID const& peerId,
+      std::vector<uint64_t> const& messageIds,
+      messaging::MessageStatus newStatus
+  ) const {
+    pimpl_->UpdateMessageStatuses(peerId, messageIds, newStatus);
+  }
+  [[nodiscard]] auto GetHistoryPage(ContactID const& peerId, size_t pageIndex, size_t pageSize) const {
+    return pimpl_->GetHistoryPage(peerId, pageIndex, pageSize);
+  }
+  [[nodiscard]] auto GetFullMessageContent(std::uint64_t messageId) const {
+    return pimpl_->GetFullMessageContent(messageId);
+  }
+  [[nodiscard]] auto GetChatSummaries(std::vector<ContactID> const& peerIds) const {
+    return pimpl_->GetChatSummaries(peerIds);
+  }
+  [[nodiscard]] auto GetMessagesWithStatus(ContactID const& peerId, messaging::MessageStatus status) const {
+    return pimpl_->GetMessagesWithStatus(peerId, status);
+  }
 
   // --- Debug ---
   void DebugClearAllHistory() const { pimpl_->DebugClearAllHistory(); }
   void DebugClearAllContacts() const { pimpl_->DebugClearAllContacts(); }
   void DebugRevokeAllContactApprovals() const { pimpl_->DebugRevokeAllContactApprovals(); }
 
-private:
+ private:
   std::unique_ptr<PersistentStorageImpl> pimpl_{};
 };
 

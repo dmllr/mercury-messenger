@@ -20,17 +20,18 @@ class DispatchQueue {
     FpT task;
   };
 
-  // Comparator for the priority queue (earliest executeTime has highest priority)
+  // Comparator for the priority queue (earliest executeTime has the highest priority)
   struct CompareScheduledTask {
-    bool operator()(const ScheduledTask& a, const ScheduledTask& b) const {
-      return a.executeTime > b.executeTime;
+    bool operator()(ScheduledTask const& left, ScheduledTask const& right) const {
+      return left.executeTime > right.executeTime;
     }
   };
 
-public:
+ public:
   explicit DispatchQueue(std::string name, std::size_t threadCount)
-      : name_(std::move(name)), threads_(threadCount) {
-    for (auto& thread: threads_) {
+      : name_(std::move(name)),
+        threads_(threadCount) {
+    for (auto& thread : threads_) {
       thread = std::thread(&DispatchQueue::DispatchThreadHandler, this);
     }
   }
@@ -42,7 +43,7 @@ public:
     }
     condition_.notify_all();
 
-    for (auto& thread: threads_) {
+    for (auto& thread : threads_) {
       if (thread.joinable()) {
         thread.join();
       }
@@ -55,13 +56,13 @@ public:
   }
 
   /// Dispatch an operation immediately.
-  void Dispatch(const FpT& op) {
+  void Dispatch(FpT const& op) {
     if (shutdownRequested_ || !op) {
       return;
     }
 
-    auto now = std::chrono::steady_clock::now();
     {
+      auto const now = std::chrono::steady_clock::now();
       std::unique_lock<std::mutex> const lock(queueAccessMutex_);
       queue_.push(ScheduledTask{now, op});
     }
@@ -74,8 +75,8 @@ public:
       return;
     }
 
-    auto now = std::chrono::steady_clock::now();
     {
+      auto const now = std::chrono::steady_clock::now();
       std::unique_lock<std::mutex> const lock(queueAccessMutex_);
       queue_.push(ScheduledTask{now, std::move(op)});
     }
@@ -83,13 +84,13 @@ public:
   }
 
   /// Dispatch an operation to be executed after a delay.
-  void DispatchAfter(std::chrono::milliseconds delay, const FpT&& op) {
+  void DispatchAfter(std::chrono::milliseconds const delay, FpT const&& op) {
     if (shutdownRequested_ || !op) {
       return;
     }
 
-    auto scheduled_time = std::chrono::steady_clock::now() + delay;
     {
+      auto const scheduled_time = std::chrono::steady_clock::now() + delay;
       std::unique_lock<std::mutex> const lock(queueAccessMutex_);
       queue_.push(ScheduledTask{scheduled_time, op});
     }
@@ -97,9 +98,7 @@ public:
   }
 
   /// Get the size of the queue.
-  [[nodiscard]] auto Size() const -> std::size_t {
-    return queue_.size();
-  }
+  [[nodiscard]] auto Size() const -> std::size_t { return queue_.size(); }
 
   /// Remove any pending tasks.
   void RemovePending() {
@@ -108,12 +107,12 @@ public:
   }
 
   /// Delete copy and move constructors/assignments.
-  DispatchQueue(const DispatchQueue& rhs) = delete;
-  auto operator=(const DispatchQueue& rhs) -> DispatchQueue& = delete;
+  DispatchQueue(DispatchQueue const& rhs) = delete;
+  auto operator=(DispatchQueue const& rhs) -> DispatchQueue& = delete;
   DispatchQueue(DispatchQueue&& rhs) = delete;
   auto operator=(DispatchQueue&& rhs) -> DispatchQueue& = delete;
 
-private:
+ private:
   std::string name_;
   std::mutex queueAccessMutex_;
   std::vector<std::thread> threads_{};
@@ -130,9 +129,7 @@ private:
 
       // Wait for work if queue is empty
       if (queue_.empty()) {
-        condition_.wait(lock, [this] {
-          return shutdownRequested_ || !queue_.empty();
-        });
+        condition_.wait(lock, [this] { return shutdownRequested_ || !queue_.empty(); });
 
         if (queue_.empty()) {
           lock.unlock();
@@ -142,7 +139,7 @@ private:
 
       // Check if the task is ready to execute
       auto now = std::chrono::steady_clock::now();
-      const auto& next_task = queue_.top();
+      auto const& next_task = queue_.top();
 
       // If task is scheduled for the future, wait until it's time
       if (next_task.executeTime > now) {

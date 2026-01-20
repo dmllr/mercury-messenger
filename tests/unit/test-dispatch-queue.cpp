@@ -1,16 +1,17 @@
-#include "eillance/utils/dispatch_queue.hpp"
-
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
-#include <gtest/gtest.h>
 #include <mutex>
 #include <vector>
+
+#include <gtest/gtest.h>
+
+#include "eillance/utils/dispatch_queue.hpp"
 
 namespace eillance {
 
 class DispatchQueueTest : public ::testing::Test {
-protected:
+ protected:
   void SetUp() override {
     // Give time for any previous tests to clean up
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
@@ -22,7 +23,7 @@ protected:
   }
 
   // Improved helper to wait for a condition with timeout
-  template<typename F>
+  template <typename F>
   bool WaitFor(F condition, std::chrono::milliseconds timeout) {
     auto start = std::chrono::steady_clock::now();
 
@@ -96,11 +97,11 @@ TEST_F(DispatchQueueTest, MainThread) {
 }
 
 TEST_F(DispatchQueueTest, MultipleThreads) {
-  const size_t numThreads = 4;
+  size_t const numThreads = 4;
   DispatchQueue queue("MultiThreadQueue", numThreads);
 
   std::atomic<int> counter{0};
-  const int numTasks = 100;
+  int const numTasks = 100;
 
   for (int i = 0; i < numTasks; i++) {
     queue.Dispatch([&counter]() {
@@ -120,7 +121,7 @@ TEST_F(DispatchQueueTest, ScheduledExecution) {
   auto start = std::chrono::steady_clock::now();
 
   // Schedule task with delay
-  const auto delay = std::chrono::milliseconds(100);
+  auto const delay = std::chrono::milliseconds(100);
   queue.DispatchAfter(delay, [&counter]() { counter++; });
 
   // Wait for task execution
@@ -193,9 +194,7 @@ TEST_F(DispatchQueueTest, ExceptionsHandling) {
   });
 
   // Task that should still execute after the exception
-  queue.Dispatch([&counter]() {
-    counter++;
-  });
+  queue.Dispatch([&counter]() { counter++; });
 
   // Wait for both tasks to complete
   EXPECT_TRUE(WaitFor([&]() { return counter == 2; }, std::chrono::milliseconds(100)));
@@ -205,16 +204,14 @@ TEST_F(DispatchQueueTest, MultipleDelayedTasks) {
   DispatchQueue queue("DelayedQueue", 1);
 
   std::atomic<int> counter{0};
-  const int numTasks = 20;
+  int const numTasks = 20;
   auto start = std::chrono::steady_clock::now();
 
   // Dispatch tasks with various delays
   for (int i = 0; i < numTasks; i++) {
     // Random delays between 10-50ms, but out of order
     auto delay = std::chrono::milliseconds((i * 17) % 40 + 10);
-    queue.DispatchAfter(delay, [&counter, i, delay]() {
-      counter++;
-    });
+    queue.DispatchAfter(delay, [&counter, i, delay]() { counter++; });
   }
 
   // Wait for all tasks to complete
@@ -239,9 +236,7 @@ TEST_F(DispatchQueueTest, ConcurrentModification) {
 
   // At the same time, dispatch additional tasks directly
   for (int i = 0; i < 10; i++) {
-    queue.Dispatch([&]() {
-      counter++;
-    });
+    queue.Dispatch([&]() { counter++; });
   }
 
   // Wait for both directly added and dynamically added tasks
@@ -256,9 +251,7 @@ TEST_F(DispatchQueueTest, DestructorCleanup) {
     DispatchQueue queue("DestructorQueue", 1);
 
     // Add a task with a delay longer than the queue's lifetime
-    queue.DispatchAfter(std::chrono::milliseconds(500), [&counter]() {
-      counter++;
-    });
+    queue.DispatchAfter(std::chrono::milliseconds(500), [&counter]() { counter++; });
 
     // Queue will be destroyed here
   }
@@ -269,11 +262,11 @@ TEST_F(DispatchQueueTest, DestructorCleanup) {
 }
 
 TEST_F(DispatchQueueTest, HighConcurrencyStress) {
-  const size_t numThreads = 8;
+  size_t const numThreads = 8;
   DispatchQueue queue("StressQueue", numThreads);
 
   std::atomic<int> counter{0};
-  const int numTasks = 1000;
+  int const numTasks = 1000;
 
   for (int i = 0; i < numTasks; i++) {
     queue.Dispatch([&counter]() {

@@ -1,7 +1,8 @@
 #include <iostream>
+#include <vector>
+
 #include <miniaudio.h>
 #include <opus.h>
-#include <vector>
 
 #include "eillance/capture/audio_config.hpp"
 #include "eillance/encoding/audio_encoder.hpp"
@@ -12,13 +13,13 @@ std::vector<std::vector<std::byte>> opusData;
 int frame = 0;
 
 // Callback function for handling captured audio data
-void OnSendFramesToOpus(ma_device* pDevice, void*, const void* pInput, ma_uint32 frameCount) {
+void OnSendFramesToOpus(ma_device* pDevice, void*, void const* pInput, ma_uint32 frameCount) {
   auto* encoder = static_cast<eillance::AudioEncoderCli*>(pDevice->pUserData);
 
   std::cout << "FC " << frameCount << ". ";
 
   // Encode the input PCM data to Opus
-  auto encoded_packet = encoder->EncodeBuffer(static_cast<const eillance::AudioConfig::SampleDataType*>(pInput));
+  auto encoded_packet = encoder->EncodeBuffer(static_cast<eillance::AudioConfig::SampleDataType const*>(pInput));
   std::cout << "Opus  encoded to " << encoded_packet.size() << std::endl;
 
   // Store the encoded Opus data
@@ -26,7 +27,7 @@ void OnSendFramesToOpus(ma_device* pDevice, void*, const void* pInput, ma_uint32
 }
 
 // Callback function for handling decoded audio data
-void OnReceiveFramesFromOpus(ma_device* pDevice, void* pOutput, const void*, ma_uint32 frameCount) {
+void OnReceiveFramesFromOpus(ma_device* pDevice, void* pOutput, void const*, ma_uint32 frameCount) {
   auto* decoder = static_cast<OpusDecoder*>(pDevice->pUserData);
 
   if (frame >= opusData.size()) {
@@ -34,7 +35,14 @@ void OnReceiveFramesFromOpus(ma_device* pDevice, void* pOutput, const void*, ma_
   }
 
   // Decode the input Opus data to PCM
-  const auto pcm_length = opus_decode(decoder, reinterpret_cast<const unsigned char*>(opusData[frame].data()), frameCount, static_cast<opus_int16*>(pOutput), AudioConfig::frame_size, 0);
+  auto const pcm_length = opus_decode(
+      decoder,
+      reinterpret_cast<unsigned char const*>(opusData[frame].data()),
+      frameCount,
+      static_cast<opus_int16*>(pOutput),
+      AudioConfig::frame_size,
+      0
+  );
   if (pcm_length < 0) {
     std::cerr << "Error decoding from Opus" << std::endl;
     return;

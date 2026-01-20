@@ -13,6 +13,7 @@
 
 #include "eillance/client/client.hpp"
 #include "eillance/events/service_connection_state.hpp"
+#include "eillance/identity/contact_id.hpp"
 #include "eillance/logging/logging.hpp"
 #include "eillance/rtc/transport_impl_libdatachannel.hpp"
 #include "eillance/storage/sqlite/persistent_storage_impl_sqlite.hpp"
@@ -23,14 +24,12 @@
 namespace {
 
 // Global flag for signal handling
-volatile std::sig_atomic_t gSignalStatus = 0;
+std::sig_atomic_t volatile gSignalStatus = 0;
 
-void SignalHandler(int signal) {
-  gSignalStatus = signal;
-}
+void SignalHandler(int signal) { gSignalStatus = signal; }
 
 std::string FormatFilenameTimestamp(Time::Unit ts_microseconds) {
-  const std::time_t seconds_since_epoch = ts_microseconds / 1000000U;
+  std::time_t const seconds_since_epoch = ts_microseconds / 1000000U;
   std::tm tm_struct{};
 #ifdef _WIN32
   localtime_s(&tm_struct, &seconds_since_epoch);
@@ -38,12 +37,12 @@ std::string FormatFilenameTimestamp(Time::Unit ts_microseconds) {
   localtime_r(&seconds_since_epoch, &tm_struct);
 #endif
   std::stringstream ss;
-  const auto micros = ts_microseconds % 1000000;
+  auto const micros = ts_microseconds % 1000000;
   ss << std::put_time(&tm_struct, "%Y%m%d,%H%M%S") << "." << std::setfill('0') << std::setw(6) << micros;
   return ss.str();
 }
 
-constexpr auto GetConnectionStatusString(const eillance::ServiceConnectionState state) -> std::string_view {
+constexpr auto GetConnectionStatusString(eillance::ServiceConnectionState const state) -> std::string_view {
   switch (state) {
     case eillance::ServiceConnectionState::establishing:
       return "CONNECTING";
@@ -64,9 +63,9 @@ int main(int argc, char** argv) {
   static plog::ColorConsoleAppender<plog::TxtFormatter> console_appender;
   Log::Initialize(&console_appender, plog::info);
 
-  const eillance::utils::ArgsParser args(argc, argv);
-  const auto identity_dir_str = args.Get("--identity-dir");
-  const auto output_dir_str = args.Get("--output-dir");
+  eillance::utils::ArgsParser const args(argc, argv);
+  auto const identity_dir_str = args.Get("--identity-dir");
+  auto const output_dir_str = args.Get("--output-dir");
 
   if (!identity_dir_str) {
     LGE << "Missing required parameter: --identity-dir <path>";
@@ -77,8 +76,8 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  const std::filesystem::path identity_path(*identity_dir_str);
-  const std::filesystem::path output_path(*output_dir_str);
+  std::filesystem::path const identity_path(*identity_dir_str);
+  std::filesystem::path const output_path(*output_dir_str);
 
   if (!std::filesystem::is_directory(identity_path)) {
     LGE << "Identity directory does not exist or is not a directory: " << identity_path;
@@ -108,48 +107,53 @@ int main(int argc, char** argv) {
   LGI << "Bot starting with ID: " << client->GetId();
 
   // --- BOT LOGIC SETUP ---
-  client->SetContactRequestCallback([&client](const std::string& peer_id) {
+  client->SetContactRequestCallback([&client](eillance::ContactID const& peer_id) {
     LGI << "Received contact request from " << peer_id << ". Accepting automatically.";
     client->ConfirmContact(peer_id);
   });
 
-  client->SetIncomingCallCallback([&client](const std::string& peer_id, eillance::messaging::HistoryEntryKind /*call_type*/) {
-    LGI << "Received incoming call from " << peer_id << ". Rejecting automatically.";
-    client->RejectCall(peer_id);
-  });
+  client->SetIncomingCallCallback(
+      [&client](eillance::ContactID const& peer_id, eillance::messaging::HistoryEntryKind /*call_type*/) {
+        LGI << "Received incoming call from " << peer_id << ". Rejecting automatically.";
+        client->RejectCall(peer_id);
+      }
+  );
 
-  client->SetChatMessageReceivedCallback([&output_path](const std::string& peer_id, const eillance::messaging::HistoryEntryRecord& record) {
-    if (record.kind != eillance::messaging::HistoryEntryKind::textMessage) {
-      return;  // Ignore system messages and call logs
-    }
+  client->SetChatMessageReceivedCallback(
+      [&output_path](eillance::ContactID const& peer_id, eillance::messaging::HistoryEntryRecord const& record) {
+        if (record.kind != eillance::messaging::HistoryEntryKind::textMessage) {
+          return;  // Ignore system messages and call logs
+        }
 
-    const auto& message_entry = std::get<eillance::messaging::MessageEntry>(record.data);
-    LGI << "Received message from " << peer_id.substr(0, 8) << "...: \"" << message_entry.content << "\"";
+        auto const& message_entry = std::get<eillance::messaging::MessageEntry>(record.data);
+        LGI << "Received message from " << peer_id.ToString().substr(0, 8) << "...: \"" << message_entry.content
+            << "\"";
 
-    const std::string timestamp_str = FormatFilenameTimestamp(record.timestamp);
-    const std::string sender_id_prefix = peer_id.substr(0, 8);
-    const std::string filename = timestamp_str + "," + sender_id_prefix + ".txt";
-    const auto file_path = output_path / filename;
+        std::string const timestamp_str = FormatFilenameTimestamp(record.timestamp);
+        std::string const sender_id_prefix = peer_id.ToString().substr(0, 8);
+        std::string const filename = timestamp_str + "," + sender_id_prefix + ".txt";
+        auto const file_path = output_path / filename;
 
-    std::ofstream out_file(file_path);
-    if (out_file) {
-      out_file << message_entry.content;
-      LGI << "Message saved to " << file_path;
-    } else {
-      LGE << "Failed to open file for writing: " << file_path;
-    }
-  });
+        if (std::ofstream out_file(file_path); out_file) {
+          out_file << message_entry.content;
+          LGI << "Message saved to " << file_path;
+        } else {
+          LGE << "Failed to open file for writing: " << file_path;
+        }
+      }
+  );
 
-  client->SetStatusCallback([](const std::string& peer_id, eillance::EventSource source, int state_val) {
-    if (source == eillance::EventSource::system) {
-      const auto state = static_cast<eillance::ServiceConnectionState>(state_val);
-      LGI << "Signaling Connection Status: " << GetConnectionStatusString(state);
-    } else if (source == eillance::EventSource::peerConnectionState && !peer_id.empty()) {
-      const auto state = static_cast<eillance::transport::PeerConnectionState>(state_val);
-      // This can get noisy, so we log at debug level.
-      LGD << "Peer " << peer_id.substr(0, 8) << "... Connection Status: " << static_cast<int>(state);
-    }
-  });
+  client->SetStatusCallback(
+      [](eillance::ContactID const& peer_id, eillance::EventSource const source, int const state_val) {
+        if (source == eillance::EventSource::system) {
+          auto const state = static_cast<eillance::ServiceConnectionState>(state_val);
+          LGI << "Signaling Connection Status: " << GetConnectionStatusString(state);
+        } else if (source == eillance::EventSource::peerConnectionState && !peer_id.IsEmpty()) {
+          auto const state = static_cast<eillance::transport::PeerConnectionState>(state_val);
+          LGD << "Peer " << peer_id.ToString().substr(0, 8) << "... Connection Status: " << static_cast<int>(state);
+        }
+      }
+  );
 
   if (auto cli_url = args.Get("--signaling-url")) {
     client->UpdateSignalingUrl(*cli_url);

@@ -1,8 +1,9 @@
 #pragma once
 
-#include <jni.h>
 #include <memory>
 #include <vector>
+
+#include <jni.h>
 
 #include "class_refs.hpp"
 #include "eillance/view_model/call_view_model.hpp"
@@ -15,14 +16,15 @@
 namespace eillance {
 
 class AndroidObserverBase {
-protected:
+ protected:
   JavaVM* jvm_;
   jobject java_listener_;
 
   [[nodiscard]] auto GetEnv() const -> jni::ScopedJniEnv { return jni::ScopedJniEnv(jvm_); }
 
-public:
-  AndroidObserverBase(JavaVM* jvm, jobject java_listener) : jvm_(jvm) {
+ public:
+  AndroidObserverBase(JavaVM* jvm, jobject java_listener)
+      : jvm_(jvm) {
     auto env_scope = GetEnv();
     if (auto* env = env_scope.Get()) {
       java_listener_ = env->NewGlobalRef(java_listener);
@@ -39,11 +41,13 @@ public:
   }
 };
 
-class AndroidContactsObserver final : public AndroidObserverBase, public view_model::ContactsViewModel::Observer {
-public:
+class AndroidContactsObserver final
+    : public AndroidObserverBase
+    , public view_model::ContactsViewModel::Observer {
+ public:
   using AndroidObserverBase::AndroidObserverBase;
 
-  void OnContactsUpdated(const std::vector<view_model::ViewContact>& contacts) override {
+  void OnContactsUpdated(std::vector<view_model::ViewContact> const& contacts) override {
     auto env_scope = GetEnv();
     auto* env = env_scope.Get();
     if ((env == nullptr) || (java_listener_ == nullptr)) {
@@ -56,12 +60,13 @@ public:
     jmethodID list_add_method = list_holder.GetMethod("add");
     auto& contact_holder = class_refs.Class("hela/eillance/ndkio/Contact");
 
-    for (const auto& contact_cpp: contacts) {
+    for (auto const& contact_cpp : contacts) {
       jstring peer_id = env->NewStringUTF(contact_cpp.peer_id.ToString().c_str());
       jstring name = env->NewStringUTF(contact_cpp.display_name.c_str());
       jstring bio = contact_cpp.bio ? env->NewStringUTF(contact_cpp.bio->c_str()) : nullptr;
       jstring photo = contact_cpp.photo ? env->NewStringUTF(contact_cpp.photo->c_str()) : nullptr;
-      jstring snippet = contact_cpp.last_message_snippet ? env->NewStringUTF(contact_cpp.last_message_snippet->c_str()) : nullptr;
+      jstring snippet =
+          contact_cpp.last_message_snippet ? env->NewStringUTF(contact_cpp.last_message_snippet->c_str()) : nullptr;
 
       jobject contact_java = contact_holder.NewObject(
           env,
@@ -73,7 +78,8 @@ public:
           static_cast<jint>(contact_cpp.connection_state),
           static_cast<jint>(contact_cpp.unread_count),
           snippet,
-          static_cast<jlong>(contact_cpp.last_activity_timestamp));
+          static_cast<jlong>(contact_cpp.last_activity_timestamp)
+      );
       env->CallBooleanMethod(contact_list, list_add_method, contact_java);
 
       env->DeleteLocalRef(peer_id);
@@ -97,11 +103,13 @@ public:
   }
 };
 
-class AndroidConversationObserver final : public AndroidObserverBase, public view_model::ConversationViewModel::Observer {
-public:
+class AndroidConversationObserver final
+    : public AndroidObserverBase
+    , public view_model::ConversationViewModel::Observer {
+ public:
   using AndroidObserverBase::AndroidObserverBase;
 
-  void OnHistoryUpdated(const view_model::ConversationViewModel::State& state) override {
+  void OnHistoryUpdated(view_model::ConversationViewModel::State const& state) override {
     auto env_scope = GetEnv();
     auto* env = env_scope.Get();
     if ((env == nullptr) || (java_listener_ == nullptr)) {
@@ -114,16 +122,19 @@ public:
     jmethodID list_add_method = list_holder.GetMethod("add");
     auto& entry_holder = class_refs.Class("hela/eillance/ndkio/HistoryEntry");
 
-    for (const auto& entry_cpp: state.history) {
-      const std::string* content_str = std::visit(
-          [](auto&& arg) -> const std::string* {
+    for (auto const& entry_cpp : state.history) {
+      std::string const* content_str = std::visit(
+          [](auto&& arg) -> std::string const* {
             using T = std::decay_t<decltype(arg)>;
-            if constexpr (std::is_same_v<T, messaging::MessageEntry>) { return &arg.content; }
+            if constexpr (std::is_same_v<T, messaging::MessageEntry>) {
+              return &arg.content;
+            }
             return nullptr;
           },
-          entry_cpp.data);
+          entry_cpp.data
+      );
 
-      const auto* call_entry = std::get_if<messaging::CallEntry>(&entry_cpp.data);
+      auto const* call_entry = std::get_if<messaging::CallEntry>(&entry_cpp.data);
 
       jstring content = content_str ? env->NewStringUTF(content_str->c_str()) : nullptr;
       jint duration = call_entry ? static_cast<jint>(call_entry->duration_seconds) : 0;
@@ -137,8 +148,10 @@ public:
           static_cast<jint>(entry_cpp.direction),
           duration,
           (call_entry != nullptr) ? static_cast<jint>(call_entry->call_direction) : -1,
-          (call_entry != nullptr) ? static_cast<jint>(call_entry->call_status) : -1, static_cast<jint>(entry_cpp.status),
-          static_cast<jboolean>(entry_cpp.is_truncated));
+          (call_entry != nullptr) ? static_cast<jint>(call_entry->call_status) : -1,
+          static_cast<jint>(entry_cpp.status),
+          static_cast<jboolean>(entry_cpp.is_truncated)
+      );
 
       env->CallBooleanMethod(history_list, list_add_method, entry_java);
       if (content != nullptr) {
@@ -159,11 +172,13 @@ public:
   }
 };
 
-class AndroidProfileObserver final : public AndroidObserverBase, public view_model::ProfileViewModel::Observer {
-public:
+class AndroidProfileObserver final
+    : public AndroidObserverBase
+    , public view_model::ProfileViewModel::Observer {
+ public:
   using AndroidObserverBase::AndroidObserverBase;
 
-  void OnProfileUpdated(const view_model::MyProfile& profile) override {
+  void OnProfileUpdated(view_model::MyProfile const& profile) override {
     auto env_scope = GetEnv();
     auto* env = env_scope.Get();
     if ((env == nullptr) || (java_listener_ == nullptr)) {
@@ -192,11 +207,13 @@ public:
   }
 };
 
-class AndroidCallObserver final : public AndroidObserverBase, public view_model::CallViewModel::Observer {
-public:
+class AndroidCallObserver final
+    : public AndroidObserverBase
+    , public view_model::CallViewModel::Observer {
+ public:
   using AndroidObserverBase::AndroidObserverBase;
 
-  void OnCallStateChanged(const view_model::CallState& call_state) override {
+  void OnCallStateChanged(view_model::CallState const& call_state) override {
     auto env_scope = GetEnv();
     auto* env = env_scope.Get();
     if ((env == nullptr) || (java_listener_ == nullptr)) {
@@ -207,9 +224,15 @@ public:
     auto& call_state_holder = class_refs.Class("hela/eillance/ndkio/CallState");
 
     jstring peer_id = env->NewStringUTF(call_state.peer_id.ToString().c_str());
-    jobject call_state_java = call_state_holder.NewObject(env, call_state.is_connecting, call_state.is_in_call, call_state.is_ringing,
-                                                          (jint)call_state.call_direction, peer_id,
-                                                          (jint)call_state.call_type);
+    jobject call_state_java = call_state_holder.NewObject(
+        env,
+        call_state.is_connecting,
+        call_state.is_in_call,
+        call_state.is_ringing,
+        (jint)call_state.call_direction,
+        peer_id,
+        (jint)call_state.call_type
+    );
 
     auto& listener_holder = class_refs.Class("hela/eillance/viewmodels/NativeCallObserver");
     jmethodID on_update = listener_holder.GetMethod("onCallStateChanged");
@@ -220,11 +243,13 @@ public:
   }
 };
 
-class AndroidSettingsObserver final : public AndroidObserverBase, public view_model::SettingsViewModel::Observer {
-public:
+class AndroidSettingsObserver final
+    : public AndroidObserverBase
+    , public view_model::SettingsViewModel::Observer {
+ public:
   using AndroidObserverBase::AndroidObserverBase;
 
-  void OnSettingsUpdated(const std::optional<std::string>& signaling_url, int timeout) override {
+  void OnSettingsUpdated(std::optional<std::string> const& signaling_url, int timeout) override {
     auto env_scope = GetEnv();
     auto* env = env_scope.Get();
     if ((env == nullptr) || (java_listener_ == nullptr)) {

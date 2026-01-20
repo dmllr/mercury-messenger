@@ -7,9 +7,9 @@
 namespace eillance::transport {
 
 class ITrack {
-public:
+ public:
   virtual ~ITrack() = default;
-  virtual void SendSample(const std::vector<std::byte>& sample, uint64_t sample_time) = 0;
+  virtual void SendSample(std::vector<std::byte> const& sample, uint64_t sample_time) = 0;
 };
 
 }  // namespace eillance::transport

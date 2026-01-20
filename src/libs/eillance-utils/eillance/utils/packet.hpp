@@ -5,7 +5,6 @@
 
 #include "eillance/utils/time.hpp"
 
-
 namespace eillance {
 
 class Packet {
@@ -14,45 +13,45 @@ class Packet {
   Binary buffer_{};
   Time::Unit timestamp_{Time::Now()};
 
-public:
+ public:
   Packet() = default;
 
   /// construct from Binary pointer and size
-  explicit Packet(Binary&& buffer) : buffer_(std::move(buffer)) {
-  }
+  explicit Packet(Binary&& buffer)
+      : buffer_(std::move(buffer)) {}
 
   /// construct from std::byte pointer and size
-  Packet(const std::byte* data, std::uint32_t data_size) {
+  Packet(std::byte const* data, std::uint32_t data_size) {
     buffer_.insert(buffer_.begin(), data, std::next(data, data_size));
   }
 
   /// construct from two std::byte pointers
-  Packet(const std::byte* data_begin, const std::byte* data_end) {
+  Packet(std::byte const* data_begin, std::byte const* data_end) {
     buffer_.insert(buffer_.begin(), data_begin, data_end);
   }
 
   /// construct from uchar pointer and size
-  Packet(const unsigned char* data, std::uint32_t data_size) {
+  Packet(unsigned char const* data, std::uint32_t data_size) {
     // NOLINTNEXTLINE(*-pro-type-reinterpret-cast)
-    auto* bytes = reinterpret_cast<const std::byte*>(data);
+    auto* bytes = reinterpret_cast<std::byte const*>(data);
 
     buffer_.insert(buffer_.begin(), bytes, std::next(bytes, data_size));
   }
 
   /// construct from two uchar pointers
   // NOLINTNEXTLINE(*-easily-swappable-parameters)
-  Packet(const unsigned char* data_begin, const unsigned char* data_end) {
+  Packet(unsigned char const* data_begin, unsigned char const* data_end) {
     // NOLINTNEXTLINE(*-pro-type-reinterpret-cast)
-    auto* bytes_begin = reinterpret_cast<const std::byte*>(data_begin);
+    auto* bytes_begin = reinterpret_cast<std::byte const*>(data_begin);
     // NOLINTNEXTLINE(*-pro-type-reinterpret-cast)
-    auto* bytes_end = reinterpret_cast<const std::byte*>(data_end);
+    auto* bytes_end = reinterpret_cast<std::byte const*>(data_end);
 
     buffer_.insert(buffer_.begin(), bytes_begin, bytes_end);
   }
 
   /// construct from std::vector
-  explicit Packet(const std::vector<std::byte>& data) : buffer_(data) {
-  }
+  explicit Packet(std::vector<std::byte> const& data)
+      : buffer_(data) {}
 
   // begin method to return the iterator to the beginning of the buffer
   [[nodiscard]] auto begin() {  // NOLINT(*-identifier-naming)
@@ -74,7 +73,7 @@ public:
     return buffer_.end();
   }
 
-  void append(const Packet& other) {  // NOLINT(*-identifier-naming)
+  void append(Packet const& other) {  // NOLINT(*-identifier-naming)
     buffer_.insert(buffer_.end(), other.buffer_.begin(), other.buffer_.end());
     timestamp_ = other.timestamp_;
   }
@@ -88,11 +87,11 @@ public:
   }
 
   [[maybe_unused]] [[nodiscard]] auto dataAsChars() const {  // NOLINT(*-identifier-naming)
-    return reinterpret_cast<const char*>(buffer_.data());
+    return reinterpret_cast<char const*>(buffer_.data());    // NOLINT(*-pro-type-reinterpret-cast)
   }
 
-  [[maybe_unused]] [[nodiscard]] auto dataAsUChars() const {  // NOLINT(*-identifier-naming)
-    return reinterpret_cast<const unsigned char*>(buffer_.data());
+  [[maybe_unused]] [[nodiscard]] auto dataAsUChars() const {        // NOLINT(*-identifier-naming)
+    return reinterpret_cast<unsigned char const*>(buffer_.data());  // NOLINT(*-pro-type-reinterpret-cast)
   }
 
   [[nodiscard]] auto timestamp() const {  // NOLINT(*-identifier-naming)

@@ -1,23 +1,24 @@
-#include <QGuiApplication>
-#include <QIcon>
-#include <QQmlApplicationEngine>
-#include <QQmlContext>
 #include <filesystem>
 #include <memory>
 #include <thread>
 
+#include <QGuiApplication>
+#include <QIcon>
+#include <QQmlApplicationEngine>
+#include <QQmlContext>
 #include <plog/Appenders/ColorConsoleAppender.h>
 #include <plog/Formatters/TxtFormatter.h>
 
+#include "QmlStateBridge.h"
 #include "eillance/capture/audio_capture.hpp"
 #include "eillance/capture/video_capture.hpp"
 #include "eillance/client/client.hpp"
 #include "eillance/logging/logging.h"
 #include "eillance/rtc/transport_impl_libdatachannel.hpp"
 #include "eillance/storage/sqlite/persistent_storage_impl_sqlite.hpp"
-#include "eillance/view_model/mercury_view_model.hpp"
-
-#include "QmlStateBridge.h"
+#include "eillance/view_model/client_event_router.hpp"
+#include "eillance/view_model/contacts_view_model.hpp"
+#include "eillance/view_model/profile_view_model.hpp"
 
 int main(int argc, char* argv[]) {
   // --- Logging Initialization ---
@@ -34,9 +35,9 @@ int main(int argc, char* argv[]) {
 
   // --- Determine Config Path ---
 #ifdef _WIN32
-  const char* home_dir_env = getenv("USERPROFILE");
+  char const* home_dir_env = getenv("USERPROFILE");
 #else
-  const char* home_dir_env = getenv("HOME");
+  char const* home_dir_env = getenv("HOME");
 #endif
   if (home_dir_env == nullptr) {
     LGE << "Could not determine home directory.";
@@ -55,29 +56,38 @@ int main(int argc, char* argv[]) {
   client->SetVideoCapture(std::make_unique<eillance::VideoCaptureCli>());
   client->SetAudioCapture(std::make_unique<eillance::AudioCaptureCli>());
 
+  // --- Setup View Models ---
+  auto router = std::make_shared<eillance::view_model::ClientEventRouter>(client);
+  auto contactsVM = std::make_shared<eillance::view_model::ContactsViewModel>(client, router);
+  auto profileVM = std::make_shared<eillance::view_model::ProfileViewModel>(client, router);
+
   if (!client->IdentityExists()) {
-    auto mnemonic = client->GenerateNewIdentity();
-    LGI << "Generated new identity with mnemonic: " << mnemonic;
+    // Generate new identity if none exists
+    profileVM->GenerateNewIdentity();
   }
 
-  // --- ViewModel and QML Bridge ---
-  auto viewModel = std::make_shared<eillance::view_model::MercuryViewModel>(client);
-  auto qmlBridge = new QmlStateBridge(viewModel);
+  // --- QML Bridge ---
+  // The bridge takes ownership of the ViewModels logic required for QML
+  auto qmlBridge = new QmlStateBridge(client, router, contactsVM, profileVM);
 
   engine.rootContext()->setContextProperty("StateBridge", qmlBridge);
 
   // This URL points to the resource created by qt_add_qml_module.
   // The format is qrc:/<URI>/<QML_FILE>
-  const QUrl url(u"qrc:/mercury/qml/main.qml"_qs);
-  QObject::connect(&engine, &QQmlApplicationEngine::objectCreated, &app, [url](QObject* obj, const QUrl& objUrl) {
-            if (!obj && url == objUrl)
-                QCoreApplication::exit(-1); }, Qt::QueuedConnection);
+  QUrl const url(u"qrc:/mercury/qml/main.qml"_qs);
+  QObject::connect(
+      &engine,
+      &QQmlApplicationEngine::objectCreated,
+      &app,
+      [url](QObject* obj, QUrl const& objUrl) {
+        if (!obj && url == objUrl) QCoreApplication::exit(-1);
+      },
+      Qt::QueuedConnection
+  );
   engine.load(url);
 
   // --- Start Client Core Logic in a Separate Thread ---
-  std::thread client_thread([client] {
-    client->Start();
-  });
+  std::thread client_thread([client] { client->Start(); });
 
   int app_result = app.exec();
 

@@ -11,14 +11,17 @@
 namespace eillance {
 
 class SettingsManager {
-public:
-  explicit SettingsManager(std::shared_ptr<storage::PersistentStorage> storage) : storage_(std::move(storage)) { Load(); }
+ public:
+  explicit SettingsManager(std::shared_ptr<storage::PersistentStorage> storage)
+      : storage_(std::move(storage)) {
+    Load();
+  }
 
   // Retrieves the custom signaling server URL. Returns an empty optional if not set.
   [[nodiscard]] auto GetSignalingServerUrl() const -> std::optional<std::string> { return signalingServerUrl_; }
 
   // Sets and persists the custom signaling server URL.
-  void SetSignalingServerUrl(const std::string& url) {
+  void SetSignalingServerUrl(std::string const& url) {
     signalingServerUrl_ = url;
     storage_->SetSetting(kSignalingServerUrlKey, url);
   }
@@ -28,7 +31,7 @@ public:
   [[nodiscard]] auto GetMyBio() const -> std::optional<std::string> { return myBio_; }
   [[nodiscard]] auto GetMyPhotoBase64() const -> std::optional<std::string> { return myPhotoBase64_; }
 
-  void SetMyDisplayName(const std::string& name) {
+  void SetMyDisplayName(std::string const& name) {
     constexpr size_t k_max_name_length = 64;
     if (name.length() > k_max_name_length) {
       myDisplayName_ = name.substr(0, k_max_name_length);
@@ -38,7 +41,7 @@ public:
     storage_->SetSetting(kMyDisplayNameKey, *myDisplayName_);
   }
 
-  void SetMyBio(const std::string& bio) {
+  void SetMyBio(std::string const& bio) {
     constexpr size_t max_bio_length = 300;
     if (bio.length() > max_bio_length) {
       myBio_ = bio.substr(0, max_bio_length);
@@ -48,7 +51,7 @@ public:
     storage_->SetSetting(kMyBioKey, *myBio_);
   }
 
-  void SetMyPhotoBase64(const std::string& photo) {
+  void SetMyPhotoBase64(std::string const& photo) {
     myPhotoBase64_ = photo;
     storage_->SetSetting(kMyPhotoBase64Key, photo);
   }
@@ -67,7 +70,7 @@ public:
     storage_->SetSetting(kPeerInactivityTimeoutKey, std::to_string(timeout.count()));
   }
 
-private:
+ private:
   void Load() {
     signalingServerUrl_ = storage_->GetSetting(kSignalingServerUrlKey);
     myDisplayName_ = storage_->GetSetting(kMyDisplayNameKey);

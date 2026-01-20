@@ -33,36 +33,39 @@ class AudioCaptureCli {
 
   TELEMETRY(Time::Unit last_fps_milestone{}; std::uint32_t fps_counter{}; std::uint32_t loadCounter_{};)
 
-public:
+ public:
   AudioCaptureCli() {
     // audio device
     deviceConfig_.capture.format = maSampleFormat;
     deviceConfig_.capture.channels = AudioConfig::channels;
     deviceConfig_.sampleRate = AudioConfig::sampleRate;
     deviceConfig_.pUserData = this;
-    deviceConfig_.dataCallback = [](ma_device* device, void*, const void* frames, const ma_uint32 nb_samples) {
+    deviceConfig_.dataCallback = [](ma_device* device, void*, void const* frames, ma_uint32 const nb_samples) {
       assert(nb_samples == AudioConfig::frameSize);
       auto* self = static_cast<AudioCaptureCli*>(device->pUserData);
-      if (self == nullptr) { return; }
+      if (self == nullptr) {
+        return;
+      }
 
-      auto encoded_packet = self->encoder_.EncodeBuffer(static_cast<const AudioConfig::SampleDataType*>(frames));
+      auto encoded_packet = self->encoder_.EncodeBuffer(static_cast<AudioConfig::SampleDataType const*>(frames));
       self->encoded_packets_.Push(std::move(encoded_packet));
 
       TELEMETRY(if (self->fps_counter % (telemetry_interval * AudioConfig::samplesPerSecond) == 0) {
-        const auto elapsed = (Time::Now() - self->last_fps_milestone) / Time::uS;
-        const auto fetch_fps = static_cast<double>(self->loadCounter_) / elapsed;
+        auto const elapsed = (Time::Now() - self->last_fps_milestone) / Time::uS;
+        auto const fetch_fps = static_cast<double>(self->loadCounter_) / elapsed;
         self->loadCounter_ = 0;
 
-        const auto capture_fps = static_cast<double>(self->fps_counter) / elapsed;
+        auto const capture_fps = static_cast<double>(self->fps_counter) / elapsed;
         self->last_fps_milestone = Time::Now();
         self->fps_counter = 0;
 
-        LGI << "Audio capture rate FPS: " << std::setprecision(2) << std::fixed << capture_fps << ", RTC request rate FPS:" << fetch_fps;
+        LGI << "Audio capture rate FPS: " << std::setprecision(2) << std::fixed << capture_fps
+            << ", RTC request rate FPS:" << fetch_fps;
       } self->fps_counter++;)
     };
   }
 
-  void Configure(const Config& /*config*/) {}
+  void Configure(Config const& /*config*/) {}
 
   void Engage() {
     encoder_.Engage();

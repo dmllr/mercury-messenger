@@ -24,7 +24,7 @@ struct ArgsParser final {
     }
   }
 
-  [[nodiscard]] auto Get(const std::string& option) const -> std::optional<std::string> {
+  [[nodiscard]] auto Get(std::string const& option) const -> std::optional<std::string> {
     auto it = key_value_map_.find(option);
     if (it != key_value_map_.end()) {
       return it->second;
@@ -43,7 +43,7 @@ struct ArgsParser final {
     return std::nullopt;
   }
 
-  [[nodiscard]] auto GetInt(const std::string& option) const -> std::optional<int> {
+  [[nodiscard]] auto GetInt(std::string const& option) const -> std::optional<int> {
     auto str_val = Get(option);
     if (!str_val) {
       return std::nullopt;
@@ -59,11 +59,11 @@ struct ArgsParser final {
     return std::nullopt;
   }
 
-  [[nodiscard]] auto Has(const std::string& option) const -> bool {
-    return key_value_map_.contains(option) || std::find(tokens_.begin(), tokens_.end(), option) != tokens_.end();
+  [[nodiscard]] auto Has(std::string const& option) const -> bool {
+    return key_value_map_.contains(option) || std::ranges::find(tokens_, option) != tokens_.end();
   }
 
-private:
+ private:
   std::vector<std::string> tokens_{};
   std::unordered_map<std::string, std::string> key_value_map_{};
 };

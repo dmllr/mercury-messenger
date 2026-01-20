@@ -12,8 +12,12 @@
 namespace eillance::view_model {
 
 class ConversationViewModel {
-public:
-  explicit ConversationViewModel(const ContactID& peerId, std::shared_ptr<Client> client, std::shared_ptr<ClientEventRouter> router);
+ public:
+  explicit ConversationViewModel(
+      ContactID const& peerId,
+      std::shared_ptr<Client> client,
+      std::shared_ptr<ClientEventRouter> router
+  );
   ~ConversationViewModel();
 
   struct State {
@@ -24,25 +28,25 @@ public:
 
   struct Observer {
     Observer() = default;
-    Observer(const Observer&) = delete;
+    Observer(Observer const&) = delete;
     Observer(Observer&&) = delete;
-    auto operator=(const Observer&) -> Observer& = delete;
+    auto operator=(Observer const&) -> Observer& = delete;
     auto operator=(Observer&&) -> Observer& = delete;
     virtual ~Observer() = default;
-    virtual void OnHistoryUpdated(const State& state) = 0;
+    virtual void OnHistoryUpdated(State const& state) = 0;
   };
 
-  void SetObserver(std::shared_ptr<Observer> observer);
+  void SetObserver(std::shared_ptr<Observer> observer) const;
 
   [[nodiscard]] auto GetState() const -> State;
 
-  void SendText(const std::string& content);
-  void LoadOlderMessages();
-  void LoadFullMessage(uint64_t messageId);
-  void MarkMessagesAsRead(const std::vector<std::uint64_t>& messageIds);
-  void AddSystemMessage(const std::string& message);
+  void SendText(std::string const& content) const;
+  void LoadOlderMessages() const;
+  void LoadFullMessage(uint64_t messageId) const;
+  void MarkMessagesAsRead(std::vector<std::uint64_t> const& messageIds) const;
+  void AddSystemMessage(std::string const& message) const;
 
-private:
+ private:
   // Internal implementation that can outlive the ViewModel wrapper
   struct Impl;
   std::shared_ptr<Impl> impl_;
@@ -50,8 +54,8 @@ private:
   // Unsubscribers must be kept in the wrapper to handle event deregistration on destruction
   std::vector<std::function<void()>> eventUnsubscribers_;
 
-  template<typename EventType>
-  void Subscribe(EventQueue& queue, std::function<void(const EventType&)> callback);
+  template <typename EventType>
+  void Subscribe(EventQueue& queue, std::function<void(EventType const&)> const& callback);
 };
 
 }  // namespace eillance::view_model

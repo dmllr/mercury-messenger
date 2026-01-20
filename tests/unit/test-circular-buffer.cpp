@@ -1,6 +1,6 @@
-#include "eillance/utils/circular_buffer.Hpp"
-
 #include <gtest/gtest.h>
+
+#include "eillance/utils/circular_buffer.hpp"
 
 TEST(CircularBufferTest, InitialState) {
   eillance::CircularBuffer<int, 5> buffer;

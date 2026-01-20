@@ -14,15 +14,15 @@
 namespace eillance::view_model {
 
 class ProfileViewModel {
-public:
+ public:
   struct Observer {
     Observer() = default;
-    Observer(const Observer&) = delete;
+    Observer(Observer const&) = delete;
     Observer(Observer&&) = delete;
-    auto operator=(const Observer&) -> Observer& = delete;
+    auto operator=(Observer const&) -> Observer& = delete;
     auto operator=(Observer&&) -> Observer& = delete;
     virtual ~Observer() = default;
-    virtual void OnProfileUpdated(const MyProfile& profile) = 0;
+    virtual void OnProfileUpdated(MyProfile const& profile) = 0;
   };
 
   explicit ProfileViewModel(std::shared_ptr<Client> client, std::shared_ptr<ClientEventRouter> router);
@@ -33,22 +33,24 @@ public:
   [[nodiscard]] auto GetProfile() const -> MyProfile;
 
   // Actions
-  void UpdateProfile(const std::optional<std::string>& name,
-                     const std::optional<std::string>& bio,
-                     const std::optional<std::string>& photo);
+  void UpdateProfile(
+      std::optional<std::string> const& name,
+      std::optional<std::string> const& bio,
+      std::optional<std::string> const& photo
+  );
 
   // Creation/Restore
   auto GenerateNewIdentity() -> std::string;
-  auto RestoreIdentity(const std::string& mnemonic) -> bool;
+  auto RestoreIdentity(std::string const& mnemonic) -> bool;
   [[nodiscard]] auto GetMnemonic() -> std::optional<std::string>;
-  auto CreateBackup(const std::string& path, const std::string& password) -> bool;
-  auto RestoreBackup(const std::string& path, const std::string& password) -> bool;
+  auto CreateBackup(std::string const& path, std::string const& password) -> bool;
+  auto RestoreBackup(std::string const& path, std::string const& password) -> bool;
 
-private:
+ private:
   void RefreshFromSettings();
 
-  template<typename EventType>
-  void Subscribe(EventQueue& queue, std::function<void(const EventType&)> callback);
+  template <typename EventType>
+  void Subscribe(EventQueue& queue, std::function<void(EventType const&)> callback);
 
   std::shared_ptr<Client> client_;
   std::shared_ptr<ClientEventRouter> router_;

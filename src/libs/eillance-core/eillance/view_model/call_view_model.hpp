@@ -12,15 +12,15 @@
 namespace eillance::view_model {
 
 class CallViewModel {
-public:
+ public:
   struct Observer {
     Observer() = default;
-    Observer(const Observer&) = delete;
+    Observer(Observer const&) = delete;
     Observer(Observer&&) = delete;
-    auto operator=(const Observer&) -> Observer& = delete;
+    auto operator=(Observer const&) -> Observer& = delete;
     auto operator=(Observer&&) -> Observer& = delete;
     virtual ~Observer() = default;
-    virtual void OnCallStateChanged(const CallState& state) = 0;
+    virtual void OnCallStateChanged(CallState const& state) = 0;
   };
 
   explicit CallViewModel(std::shared_ptr<Client> client, std::shared_ptr<ClientEventRouter> router);
@@ -31,21 +31,21 @@ public:
   [[nodiscard]] auto GetState() const -> CallState;
 
   // Actions
-  void StartVoiceCall(const ContactID& peerId);
-  void StartVideoCall(const ContactID& peerId);
+  void StartVoiceCall(ContactID const& peerId);
+  void StartVideoCall(ContactID const& peerId);
   void Hangup();
   void AcceptCall();
   void RejectCall();
 
-private:
-  void OnIncomingCall(const ContactID& peerId, messaging::HistoryEntryKind callType);
-  void OnCallRinging(const ContactID& peerId);
-  void OnCallAccepted(const ContactID& peerId);
-  void OnCallTerminated(const ContactID& peerId);
-  void Notify();
+ private:
+  void OnIncomingCall(ContactID const& peerId, messaging::HistoryEntryKind callType);
+  void OnCallRinging(ContactID const& peerId);
+  void OnCallAccepted(ContactID const& peerId);
+  void OnCallTerminated(ContactID const& peerId);
+  void Notify() const;
 
-  template<typename EventType>
-  void Subscribe(EventQueue& queue, std::function<void(const EventType&)> callback);
+  template <typename EventType>
+  void Subscribe(EventQueue& queue, std::function<void(EventType const&)> const& callback);
 
   std::shared_ptr<Client> client_;
   std::shared_ptr<ClientEventRouter> router_;

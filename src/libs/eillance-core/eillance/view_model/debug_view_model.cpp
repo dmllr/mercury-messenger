@@ -3,7 +3,8 @@
 namespace eillance::view_model {
 
 DebugViewModel::DebugViewModel(std::shared_ptr<Client> client, std::shared_ptr<ClientEventRouter> router)
-    : client_(std::move(client)), router_(std::move(router)) {}
+    : client_(std::move(client)),
+      router_(std::move(router)) {}
 
 void DebugViewModel::EraseAllHistory() {
   client_->DebugEraseAllHistory();

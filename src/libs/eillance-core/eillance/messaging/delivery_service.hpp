@@ -18,7 +18,7 @@
 namespace eillance::messaging {
 
 class MessageDeliveryService {
-  using ConnectionRequestHandler = std::function<void(const ContactID&)>;
+  using ConnectionRequestHandler = std::function<void(ContactID const&)>;
 
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<identity::ContactManager> contactManager_;
@@ -34,8 +34,15 @@ class MessageDeliveryService {
   static constexpr int kInitialRetryDelayS = 5;
   static constexpr int kMaxRetryDelayS = 60;
 
-public:
-  MessageDeliveryService(std::shared_ptr<storage::PersistentStorage> storage, std::shared_ptr<identity::ContactManager> contacts, ConnectionRequestHandler handler) : storage_(std::move(storage)), contactManager_(std::move(contacts)), connectionHandler_(std::move(handler)) {}
+ public:
+  MessageDeliveryService(
+      std::shared_ptr<storage::PersistentStorage> storage,
+      std::shared_ptr<identity::ContactManager> contacts,
+      ConnectionRequestHandler handler
+  )
+      : storage_(std::move(storage)),
+        contactManager_(std::move(contacts)),
+        connectionHandler_(std::move(handler)) {}
 
   void Start() {
     if (isRunning_.exchange(true)) {
@@ -53,8 +60,8 @@ public:
   }
 
   // Called by Client when a connection attempt is finished (succeeded and messages sent, or failed)
-  void ConnectionAttemptFinished(const ContactID& peer_id) {
-    const std::lock_guard<std::recursive_mutex> lock(mutex_);
+  void ConnectionAttemptFinished(ContactID const& peer_id) {
+    std::lock_guard<std::recursive_mutex> const lock(mutex_);
     pendingConnections_.erase(peer_id);
 
     if (!isRunning_) {
@@ -65,7 +72,9 @@ public:
     // likely failed, and we should schedule a retry.
     if (!storage_->GetMessagesWithStatus(peer_id, MessageStatus::sending).empty()) {
       int& delay = retryDelaysS_[peer_id];
-      if (delay == 0) { delay = kInitialRetryDelayS; }
+      if (delay == 0) {
+        delay = kInitialRetryDelayS;
+      }
 
       LGI << "Connection to " << peer_id << " failed or did not clear queue. Retrying in " << delay << "s.";
 
@@ -80,9 +89,9 @@ public:
   }
 
   // Called by Client when queuing a new message or action that requires a connection.
-  void AttemptDelivery(const ContactID& peer_id) {
+  void AttemptDelivery(ContactID const& peer_id) {
     {
-      const std::lock_guard<std::recursive_mutex> lock(mutex_);
+      std::lock_guard<std::recursive_mutex> const lock(mutex_);
       if (pendingConnections_.contains(peer_id)) {
         // Already trying to connect.
         return;
@@ -100,13 +109,13 @@ public:
     connectionHandler_(peer_id);
   }
 
-private:
+ private:
   void CheckForAllQueuedMessages() {
     if (!contactManager_) {
       return;
     }
-    const auto all_contacts = contactManager_->GetContacts();
-    for (const auto& contact: all_contacts) {
+    auto const all_contacts = contactManager_->GetContacts();
+    for (auto const& contact : all_contacts) {
       // Check if there are any messages marked as 'sending' for this contact.
       if (!storage_->GetMessagesWithStatus(contact.peer_id, MessageStatus::sending).empty()) {
         AttemptDelivery(contact.peer_id);

@@ -15,17 +15,12 @@
 namespace eillance::transport {
 
 struct Peer {
-  enum class State {
-    waiting,
-    waitingForVideo,
-    waitingForAudio,
-    ready
-  };
+  enum class State { waiting, waitingForVideo, waitingForAudio, ready };
 
-  explicit Peer(const ContactID& id);
+  explicit Peer(ContactID const& id);
 
   // NOLINTBEGIN(*-non-private-member-variables-in-classes)
-  const ContactID id;
+  ContactID const id;
 
   std::shared_ptr<ITrack> video;
   std::shared_ptr<ITrack> audio;
@@ -36,28 +31,30 @@ struct Peer {
   std::atomic<Time::Unit> last_activity_time{0};
   std::atomic<bool> has_media_peer_connection{false};
   std::unique_ptr<crypto::SessionCipher> session_cipher{};
-  std::function<void(const std::string&)> on_data_channel_message;
+  std::function<void(std::string const&)> on_data_channel_message;
   std::atomic<bool> incoming_call_notified{false};
   std::optional<std::string> pending_offer_sdp;
   std::vector<Candidate> pending_candidates{};
   // NOLINTEND(*-non-private-member-variables-in-classes)
 
   void SetState(State state) {
-    const std::unique_lock<std::shared_mutex> lock(mutex_);
+    std::unique_lock<std::shared_mutex> const lock(mutex_);
     this->state_ = state;
   }
 
   auto GetState() -> State {
-    const std::shared_lock<std::shared_mutex> lock(mutex_);
+    std::shared_lock<std::shared_mutex> const lock(mutex_);
     return state_;
   }
 
-private:
+ private:
   std::shared_mutex mutex_;
   State state_ = State::waiting;
 };
 
-inline Peer::Peer(const ContactID& id) : id(id), last_activity_time(Time::Now()) {
+inline Peer::Peer(ContactID const& id)
+    : id(id),
+      last_activity_time(Time::Now()) {
   session_cipher = std::make_unique<crypto::SessionCipher>();
 }
 

@@ -12,7 +12,8 @@ struct AudioConfig {
   static constexpr auto sampleRate = 48000ULL;
   static constexpr auto frameSize = sampleRate / samplesPerSecond;
   static constexpr auto bitrate = 64000ULL;
-  static constexpr auto encodedFrameSizeBytes = 4000;  // 4000 is recommended value, however real encoding needs much less memory (~162 bytes)
+  static constexpr auto encodedFrameSizeBytes =
+      4000;  // 4000 is recommended value, however real encoding needs much less memory (~162 bytes)
   static constexpr auto channels = 2U;
 };
 

@@ -28,8 +28,9 @@ struct VideoConfig {
   std::uint16_t frameRate{VideoConfigDefaults::frameRate};
   std::uint32_t bitrate{VideoConfigDefaults::bitrate};
 
-  auto operator==(const VideoConfig& other) const noexcept -> bool {
-    return cameraId == other.cameraId && width == other.width && height == other.height && frameRate == other.frameRate && bitrate == other.bitrate;
+  auto operator==(VideoConfig const& other) const noexcept -> bool {
+    return cameraId == other.cameraId && width == other.width && height == other.height &&
+           frameRate == other.frameRate && bitrate == other.bitrate;
   }
 };
 

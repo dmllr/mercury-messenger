@@ -11,11 +11,11 @@
 using namespace eillance;
 
 class SQLiteStorageTest : public ::testing::Test {
-protected:
+ protected:
   void SetUp() override {
     // Generate a unique path for the database file for each test.
     // This ensures test isolation.
-    const ::testing::TestInfo* const test_info = ::testing::UnitTest::GetInstance()->current_test_info();
+    ::testing::TestInfo const* const test_info = ::testing::UnitTest::GetInstance()->current_test_info();
     std::string filename = std::string(test_info->test_suite_name()) + "_" + std::string(test_info->name()) + ".db";
     db_path_ = std::filesystem::temp_directory_path() / "eillance_tests" / filename;
 
@@ -41,8 +41,8 @@ protected:
 
   std::filesystem::path db_path_;
   std::unique_ptr<storage::SQLiteStorage> storage_;
-  const ContactID peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
-  const ContactID peer2 = ContactID("0000000000000000000000000000000000000000000000000000000000000002");
+  ContactID const peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
+  ContactID const peer2 = ContactID("0000000000000000000000000000000000000000000000000000000000000002");
 };
 
 // Test suite for settings management
@@ -104,7 +104,8 @@ TEST_F(SQLiteStorageTest, Contacts) {
   EXPECT_EQ(retrieved_contact1->status, contact1.status);
 
   // Test Get non-existent
-  auto non_existent = storage_->GetContact(ContactID("9999999999999999999999999999999999999999999999999999999999999999"));
+  auto non_existent =
+      storage_->GetContact(ContactID("9999999999999999999999999999999999999999999999999999999999999999"));
   EXPECT_FALSE(non_existent.has_value());
 
   // Test Update status
@@ -120,7 +121,7 @@ TEST_F(SQLiteStorageTest, Contacts) {
   ASSERT_EQ(all_contacts.size(), 2);
   // Find our contacts in the list (order is not guaranteed)
   bool found1 = false, found2 = false;
-  for (const auto& c: all_contacts) {
+  for (auto const& c : all_contacts) {
     if (c.peer_id == peer1) {
       EXPECT_EQ(c.status, identity::ContactStatus::confirmed);
       found1 = true;
@@ -152,7 +153,8 @@ TEST_F(SQLiteStorageTest, History) {
       .direction = messaging::MessageDirection::sent,
       .status = messaging::MessageStatus::sending,
       .data = messaging::MessageEntry{"Hello"},
-      .peer_id = peer1};
+      .peer_id = peer1
+  };
   auto added_text_entry = storage_->AddHistoryEntry(text_entry);
   EXPECT_NE(added_text_entry.id, 0);  // ID should be assigned by DB
 
@@ -162,7 +164,8 @@ TEST_F(SQLiteStorageTest, History) {
       .timestamp = Time::Now(),
       .direction = messaging::MessageDirection::received,
       .data = messaging::CallEntry{30, messaging::CallDirection::incoming, messaging::CallStatus::answered},
-      .peer_id = peer1};
+      .peer_id = peer1
+  };
   auto added_call_entry = storage_->AddHistoryEntry(call_entry);
   EXPECT_NE(added_call_entry.id, 0);
 
@@ -189,7 +192,14 @@ TEST_F(SQLiteStorageTest, History) {
   EXPECT_EQ(delivered_messages[0].id, added_text_entry.id);
 
   // Test UpdateMessageStatuses
-  auto text_entry2 = storage_->AddHistoryEntry({.kind = messaging::HistoryEntryKind::textMessage, .timestamp = Time::Now(), .direction = messaging::MessageDirection::sent, .status = messaging::MessageStatus::sending, .data = messaging::MessageEntry{"World"}, .peer_id = peer1});
+  auto text_entry2 = storage_->AddHistoryEntry(
+      {.kind = messaging::HistoryEntryKind::textMessage,
+       .timestamp = Time::Now(),
+       .direction = messaging::MessageDirection::sent,
+       .status = messaging::MessageStatus::sending,
+       .data = messaging::MessageEntry{"World"},
+       .peer_id = peer1}
+  );
   storage_->UpdateMessageStatuses(peer1, {added_text_entry.id, text_entry2.id}, messaging::MessageStatus::read);
 
   auto read_messages = storage_->GetMessagesWithStatus(peer1, messaging::MessageStatus::read);
@@ -204,11 +214,13 @@ TEST_F(SQLiteStorageTest, HistoryPagination) {
   uint64_t newest_id = 0;
 
   for (int i = 0; i < total_messages; ++i) {
-    auto entry = storage_->AddHistoryEntry({.kind = messaging::HistoryEntryKind::textMessage,
-                                            .timestamp = static_cast<uint64_t>(Time::Now() + i),  // ensure unique timestamps for ordering
-                                            .direction = messaging::MessageDirection::received,
-                                            .data = messaging::MessageEntry{"Message " + std::to_string(i)},
-                                            .peer_id = peer1});
+    auto entry = storage_->AddHistoryEntry(
+        {.kind = messaging::HistoryEntryKind::textMessage,
+         .timestamp = static_cast<uint64_t>(Time::Now() + i),  // ensure unique timestamps for ordering
+         .direction = messaging::MessageDirection::received,
+         .data = messaging::MessageEntry{"Message " + std::to_string(i)},
+         .peer_id = peer1}
+    );
     if (i == total_messages - 1) {
       newest_id = entry.id;
     }
@@ -249,16 +261,50 @@ TEST_F(SQLiteStorageTest, ChatSummaries) {
 
   ContactID peer3_no_history = ContactID("0000000000000000000000000000000000000000000000000000000000000003");
 
-  const auto base_time = Time::Now();
+  auto const base_time = Time::Now();
 
   // History for peer1
-  storage_->AddHistoryEntry({.kind = messaging::HistoryEntryKind::textMessage, .timestamp = base_time + 100, .direction = messaging::MessageDirection::received, .status = messaging::MessageStatus::none, .data = messaging::MessageEntry{"p1m1"}, .peer_id = peer1});
-  storage_->AddHistoryEntry({.kind = messaging::HistoryEntryKind::textMessage, .timestamp = base_time + 200, .direction = messaging::MessageDirection::received, .status = messaging::MessageStatus::none, .data = messaging::MessageEntry{"p1m2"}, .peer_id = peer1});
-  storage_->AddHistoryEntry({.kind = messaging::HistoryEntryKind::textMessage, .timestamp = base_time + 300, .direction = messaging::MessageDirection::sent, .status = messaging::MessageStatus::sent, .data = messaging::MessageEntry{"p1m3"}, .peer_id = peer1});
+  storage_->AddHistoryEntry(
+      {.kind = messaging::HistoryEntryKind::textMessage,
+       .timestamp = base_time + 100,
+       .direction = messaging::MessageDirection::received,
+       .status = messaging::MessageStatus::none,
+       .data = messaging::MessageEntry{"p1m1"},
+       .peer_id = peer1}
+  );
+  storage_->AddHistoryEntry(
+      {.kind = messaging::HistoryEntryKind::textMessage,
+       .timestamp = base_time + 200,
+       .direction = messaging::MessageDirection::received,
+       .status = messaging::MessageStatus::none,
+       .data = messaging::MessageEntry{"p1m2"},
+       .peer_id = peer1}
+  );
+  storage_->AddHistoryEntry(
+      {.kind = messaging::HistoryEntryKind::textMessage,
+       .timestamp = base_time + 300,
+       .direction = messaging::MessageDirection::sent,
+       .status = messaging::MessageStatus::sent,
+       .data = messaging::MessageEntry{"p1m3"},
+       .peer_id = peer1}
+  );
 
   // History for peer2
-  storage_->AddHistoryEntry({.kind = messaging::HistoryEntryKind::textMessage, .timestamp = base_time + 50, .direction = messaging::MessageDirection::received, .status = messaging::MessageStatus::read, .data = messaging::MessageEntry{"p2m1"}, .peer_id = peer2});
-  auto p2_last = storage_->AddHistoryEntry({.kind = messaging::HistoryEntryKind::voiceCall, .timestamp = base_time + 150, .direction = messaging::MessageDirection::received, .data = messaging::CallEntry{0, messaging::CallDirection::incoming, messaging::CallStatus::missed}, .peer_id = peer2});
+  storage_->AddHistoryEntry(
+      {.kind = messaging::HistoryEntryKind::textMessage,
+       .timestamp = base_time + 50,
+       .direction = messaging::MessageDirection::received,
+       .status = messaging::MessageStatus::read,
+       .data = messaging::MessageEntry{"p2m1"},
+       .peer_id = peer2}
+  );
+  auto p2_last = storage_->AddHistoryEntry(
+      {.kind = messaging::HistoryEntryKind::voiceCall,
+       .timestamp = base_time + 150,
+       .direction = messaging::MessageDirection::received,
+       .data = messaging::CallEntry{0, messaging::CallDirection::incoming, messaging::CallStatus::missed},
+       .peer_id = peer2}
+  );
 
   auto summaries = storage_->GetChatSummaries({peer1, peer2, peer3_no_history});
 
@@ -280,12 +326,14 @@ TEST_F(SQLiteStorageTest, ChatSummaries) {
 TEST_F(SQLiteStorageTest, UpdateHistoryEntry) {
   storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
 
-  auto entry = storage_->AddHistoryEntry({.kind = messaging::HistoryEntryKind::textMessage,
-                                          .timestamp = Time::Now(),
-                                          .direction = messaging::MessageDirection::sent,
-                                          .status = messaging::MessageStatus::sending,
-                                          .data = messaging::MessageEntry{"Initial content"},
-                                          .peer_id = peer1});
+  auto entry = storage_->AddHistoryEntry(
+      {.kind = messaging::HistoryEntryKind::textMessage,
+       .timestamp = Time::Now(),
+       .direction = messaging::MessageDirection::sent,
+       .status = messaging::MessageStatus::sending,
+       .data = messaging::MessageEntry{"Initial content"},
+       .peer_id = peer1}
+  );
 
   entry.status = messaging::MessageStatus::read;
   entry.data = messaging::MessageEntry{"Updated content"};
@@ -303,12 +351,14 @@ TEST_F(SQLiteStorageTest, LargeMessages) {
 
   std::string long_message(3000, 'a');
 
-  auto entry = storage_->AddHistoryEntry({.kind = messaging::HistoryEntryKind::textMessage,
-                                          .timestamp = Time::Now(),
-                                          .direction = messaging::MessageDirection::sent,
-                                          .status = messaging::MessageStatus::sending,
-                                          .data = messaging::MessageEntry{long_message},
-                                          .peer_id = peer1});
+  auto entry = storage_->AddHistoryEntry(
+      {.kind = messaging::HistoryEntryKind::textMessage,
+       .timestamp = Time::Now(),
+       .direction = messaging::MessageDirection::sent,
+       .status = messaging::MessageStatus::sending,
+       .data = messaging::MessageEntry{long_message},
+       .peer_id = peer1}
+  );
 
   EXPECT_TRUE(entry.is_truncated);
 

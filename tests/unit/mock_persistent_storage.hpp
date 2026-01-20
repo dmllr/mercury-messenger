@@ -6,10 +6,11 @@
 #include <memory>
 #include <mutex>
 #include <optional>
-#include <ranges>
 #include <string>
 #include <unordered_map>
 #include <vector>
+
+#include <ranges>
 
 #include "eillance/crypto/crypto.hpp"
 #include "eillance/storage/persistent_storage.hpp"
@@ -24,15 +25,13 @@ class MockPersistentStorageImpl final : public PersistentStorageImpl {
   std::unordered_map<uint64_t, std::string> large_messages_;
   std::atomic<uint64_t> next_history_id_{1};
 
-public:
+ public:
   // --- Path ---
-  auto GetPath() const -> std::string override {
-    return "mock_db_path";
-  }
+  auto GetPath() const -> std::string override { return "mock_db_path"; }
 
   // --- Settings ---
   auto GetSetting(std::string_view key) -> std::optional<std::string> override {
-    const std::lock_guard lock(mutex_);
+    std::lock_guard const lock(mutex_);
     if (auto it = settings_.find(std::string(key)); it != settings_.end()) {
       return it->second;
     }
@@ -40,56 +39,58 @@ public:
   }
 
   void SetSetting(std::string_view key, std::string_view value) override {
-    const std::lock_guard lock(mutex_);
+    std::lock_guard const lock(mutex_);
     settings_[std::string(key)] = std::string(value);
   }
 
   void DeleteSetting(std::string_view key) override {
-    const std::lock_guard lock(mutex_);
+    std::lock_guard const lock(mutex_);
     settings_.erase(std::string(key));
   }
 
-  auto GetRaw(const std::string& key) -> std::optional<std::vector<std::byte>> override {
-    if (auto val = GetSetting(key)) { return crypto::FromHex(*val); }
+  auto GetRaw(std::string const& key) -> std::optional<std::vector<std::byte>> override {
+    if (auto val = GetSetting(key)) {
+      return crypto::FromHex(*val);
+    }
     return std::nullopt;
   }
 
-  auto SetRaw(const std::string& key, const std::vector<std::byte>& value) -> bool override {
+  auto SetRaw(std::string const& key, std::vector<std::byte> const& value) -> bool override {
     SetSetting(key, crypto::ToHex(value));
     return true;
   }
 
   // --- Contacts ---
   auto GetContacts() -> std::vector<identity::Contact> override {
-    const std::lock_guard lock(mutex_);
+    std::lock_guard const lock(mutex_);
     std::vector<identity::Contact> result;
-    for (const auto& pair: contacts_) {
+    for (auto const& pair : contacts_) {
       result.push_back(pair.second);
     }
     return result;
   }
 
-  auto GetContact(const ContactID& peer_id) -> std::optional<identity::Contact> override {
-    const std::lock_guard lock(mutex_);
+  auto GetContact(ContactID const& peer_id) -> std::optional<identity::Contact> override {
+    std::lock_guard const lock(mutex_);
     if (auto it = contacts_.find(peer_id); it != contacts_.end()) {
       return it->second;
     }
     return std::nullopt;
   }
 
-  void UpdateContact(const identity::Contact& contact) override {
-    const std::lock_guard lock(mutex_);
+  void UpdateContact(identity::Contact const& contact) override {
+    std::lock_guard const lock(mutex_);
     contacts_[contact.peer_id] = contact;
   }
 
-  void RemoveContact(const ContactID& peer_id) override {
-    const std::lock_guard lock(mutex_);
+  void RemoveContact(ContactID const& peer_id) override {
+    std::lock_guard const lock(mutex_);
     contacts_.erase(peer_id);
   }
 
   // --- History ---
   auto AddHistoryEntry(messaging::HistoryEntryRecord entry) -> messaging::HistoryEntryRecord override {
-    const std::lock_guard lock(mutex_);
+    std::lock_guard const lock(mutex_);
     entry.id = next_history_id_++;
 
     constexpr size_t kMaxInlineContentSize = 2048;
@@ -107,10 +108,10 @@ public:
     return entry;
   }
 
-  void UpdateHistoryEntry(const messaging::HistoryEntryRecord& entry) override {
-    const std::lock_guard lock(mutex_);
-    for (auto& [peer_id, history_vec]: history_) {
-      for (auto& existing_entry: history_vec) {
+  void UpdateHistoryEntry(messaging::HistoryEntryRecord const& entry) override {
+    std::lock_guard const lock(mutex_);
+    for (auto& [peer_id, history_vec] : history_) {
+      for (auto& existing_entry : history_vec) {
         if (existing_entry.id == entry.id) {
           existing_entry = entry;
           return;
@@ -119,10 +120,11 @@ public:
     }
   }
 
-  void UpdateMessageStatus(const ContactID& peer_id, uint64_t message_id, messaging::MessageStatus new_status) override {
-    const std::lock_guard lock(mutex_);
+  void UpdateMessageStatus(ContactID const& peer_id, uint64_t message_id, messaging::MessageStatus new_status)
+      override {
+    std::lock_guard const lock(mutex_);
     if (auto it = history_.find(peer_id); it != history_.end()) {
-      for (auto& entry: it->second) {
+      for (auto& entry : it->second) {
         if (entry.id == message_id) {
           entry.status = new_status;
           return;
@@ -131,10 +133,14 @@ public:
     }
   }
 
-  void UpdateMessageStatuses(const ContactID& peer_id, const std::vector<uint64_t>& message_ids, messaging::MessageStatus new_status) override {
-    const std::lock_guard lock(mutex_);
+  void UpdateMessageStatuses(
+      ContactID const& peer_id,
+      std::vector<uint64_t> const& message_ids,
+      messaging::MessageStatus new_status
+  ) override {
+    std::lock_guard const lock(mutex_);
     if (auto it = history_.find(peer_id); it != history_.end()) {
-      for (auto& entry: it->second) {
+      for (auto& entry : it->second) {
         if (std::find(message_ids.begin(), message_ids.end(), entry.id) != message_ids.end()) {
           entry.status = new_status;
         }
@@ -142,16 +148,16 @@ public:
     }
   }
 
-
-  auto GetHistoryPage(const ContactID& peer_id, size_t page_index, size_t page_size) -> messaging::HistoryPage override {
-    const std::lock_guard lock(mutex_);
+  auto GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t page_size)
+      -> messaging::HistoryPage override {
+    std::lock_guard const lock(mutex_);
     messaging::HistoryPage page;
     if (auto it = history_.find(peer_id); it != history_.end()) {
       auto peer_history_copy = it->second;  // Copy to sort
       page.total_messages = peer_history_copy.size();
 
       // Sort by timestamp descending to simulate DB query
-      std::sort(peer_history_copy.begin(), peer_history_copy.end(), [](const auto& a, const auto& b) {
+      std::sort(peer_history_copy.begin(), peer_history_copy.end(), [](auto const& a, auto const& b) {
         return a.timestamp > b.timestamp;
       });
 
@@ -170,28 +176,28 @@ public:
   }
 
   auto GetFullMessageContent(std::uint64_t message_id) -> std::optional<std::string> override {
-    const std::lock_guard lock(mutex_);
+    std::lock_guard const lock(mutex_);
     if (auto it = large_messages_.find(message_id); it != large_messages_.end()) {
       return it->second;
     }
     return std::nullopt;
   }
 
-  auto GetChatSummaries(const std::vector<ContactID>& peer_ids) -> std::vector<messaging::ChatSummary> override {
-    const std::lock_guard lock(mutex_);
+  auto GetChatSummaries(std::vector<ContactID> const& peer_ids) -> std::vector<messaging::ChatSummary> override {
+    std::lock_guard const lock(mutex_);
     std::vector<messaging::ChatSummary> summaries;
 
-    for (const auto& peer_id: peer_ids) {
+    for (auto const& peer_id : peer_ids) {
       if (auto it = history_.find(peer_id); it != history_.end() && !it->second.empty()) {
         auto& peer_history = it->second;
         // Find the last message (most recent timestamp)
-        auto last_message_it = std::max_element(peer_history.begin(), peer_history.end(),
-                                                [](const auto& a, const auto& b) {
-                                                  return a.timestamp < b.timestamp;
-                                                });
+        auto last_message_it =
+            std::max_element(peer_history.begin(), peer_history.end(), [](auto const& a, auto const& b) {
+              return a.timestamp < b.timestamp;
+            });
 
         uint32_t unread_count = 0;
-        for (const auto& entry: peer_history) {
+        for (auto const& entry : peer_history) {
           if (entry.kind == messaging::HistoryEntryKind::textMessage &&
               entry.direction == messaging::MessageDirection::received &&
               entry.status != messaging::MessageStatus::read) {
@@ -203,18 +209,19 @@ public:
     }
 
     // Sort summaries by timestamp of the last message, descending
-    std::sort(summaries.begin(), summaries.end(), [](const auto& a, const auto& b) {
+    std::sort(summaries.begin(), summaries.end(), [](auto const& a, auto const& b) {
       return a.last_message.timestamp > b.last_message.timestamp;
     });
 
     return summaries;
   }
 
-  auto GetMessagesWithStatus(const ContactID& peer_id, messaging::MessageStatus status) -> std::vector<messaging::HistoryEntryRecord> override {
-    const std::lock_guard lock(mutex_);
+  auto GetMessagesWithStatus(ContactID const& peer_id, messaging::MessageStatus status)
+      -> std::vector<messaging::HistoryEntryRecord> override {
+    std::lock_guard const lock(mutex_);
     std::vector<messaging::HistoryEntryRecord> records;
     if (auto it = history_.find(peer_id); it != history_.end()) {
-      for (const auto& entry: it->second) {
+      for (auto const& entry : it->second) {
         if (entry.status == status) {
           records.push_back(entry);
         }
@@ -225,19 +232,19 @@ public:
 
   // --- Debug ---
   void DebugClearAllHistory() override {
-    const std::lock_guard lock(mutex_);
+    std::lock_guard const lock(mutex_);
     history_.clear();
     large_messages_.clear();
   }
 
   void DebugClearAllContacts() override {
-    const std::lock_guard lock(mutex_);
+    std::lock_guard const lock(mutex_);
     contacts_.clear();
   }
 
   void DebugRevokeAllContactApprovals() override {
-    const std::lock_guard lock(mutex_);
-    for (auto& [id, contact]: contacts_) {
+    std::lock_guard const lock(mutex_);
+    for (auto& [id, contact] : contacts_) {
       if (contact.status == identity::ContactStatus::confirmed) {
         contact.status = identity::ContactStatus::pendingApproval;
       }

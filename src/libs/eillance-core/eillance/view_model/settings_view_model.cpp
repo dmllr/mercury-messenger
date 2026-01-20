@@ -3,9 +3,10 @@
 namespace eillance::view_model {
 
 SettingsViewModel::SettingsViewModel(std::shared_ptr<Client> client, std::shared_ptr<ClientEventRouter> router)
-    : client_(std::move(client)), router_(std::move(router)) {
+    : client_(std::move(client)),
+      router_(std::move(router)) {
   auto& queue = router_->Queue();
-  Subscribe<EventStatusChanged>(queue, [this](const EventStatusChanged& event) {
+  Subscribe<EventStatusChanged>(queue, [this](EventStatusChanged const& event) {
     if (event.source == EventSource::system) {
       std::lock_guard<std::mutex> const lock(mutex_);
       state_.connection_state = static_cast<ServiceConnectionState>(event.state);
@@ -24,19 +25,19 @@ SettingsViewModel::SettingsViewModel(std::shared_ptr<Client> client, std::shared
 }
 
 SettingsViewModel::~SettingsViewModel() {
-  for (const auto& unsubscribe: eventUnsubscribers_) {
+  for (auto const& unsubscribe : eventUnsubscribers_) {
     unsubscribe();
   }
 }
 
-template<typename EventType>
-void SettingsViewModel::Subscribe(EventQueue& queue, std::function<void(const EventType&)> callback) {
+template <typename EventType>
+void SettingsViewModel::Subscribe(EventQueue& queue, std::function<void(EventType const&)> callback) {
   auto id = queue.Subscribe<EventType>(std::move(callback));
   eventUnsubscribers_.emplace_back([&queue, id] { queue.Unsubscribe<EventType>(id); });
 }
 
 void SettingsViewModel::SetObserver(std::shared_ptr<Observer> observer) {
-  const std::lock_guard<std::mutex> lock(mutex_);
+  std::lock_guard<std::mutex> const lock(mutex_);
   observer_ = std::move(observer);
   if (observer_) {
     observer_->OnConnectionStateChanged(state_.connection_state);
@@ -45,14 +46,14 @@ void SettingsViewModel::SetObserver(std::shared_ptr<Observer> observer) {
 }
 
 auto SettingsViewModel::GetState() const -> State {
-  const std::lock_guard<std::mutex> lock(mutex_);
+  std::lock_guard<std::mutex> const lock(mutex_);
   return state_;
 }
 
-void SettingsViewModel::UpdateSignalingUrl(const std::string& url) {
+void SettingsViewModel::UpdateSignalingUrl(std::string const& url) {
   client_->UpdateSignalingUrl(url);
   {
-    const std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::mutex> const lock(mutex_);
     state_.signaling_server_url = url;
     if (observer_) {
       observer_->OnSettingsUpdated(state_.signaling_server_url, state_.peer_inactivity_timeout_seconds);
@@ -63,7 +64,7 @@ void SettingsViewModel::UpdateSignalingUrl(const std::string& url) {
 void SettingsViewModel::SetPeerInactivityTimeout(int seconds) {
   client_->GetSettingsManager()->SetPeerInactivityTimeout(std::chrono::seconds(seconds));
   {
-    const std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::mutex> const lock(mutex_);
     state_.peer_inactivity_timeout_seconds = seconds;
     if (observer_) {
       observer_->OnSettingsUpdated(state_.signaling_server_url, state_.peer_inactivity_timeout_seconds);
@@ -72,9 +73,10 @@ void SettingsViewModel::SetPeerInactivityTimeout(int seconds) {
 }
 
 void SettingsViewModel::LoadSettings() {
-  const std::lock_guard<std::mutex> lock(mutex_);
+  std::lock_guard<std::mutex> const lock(mutex_);
   state_.signaling_server_url = client_->GetSettingsManager()->GetSignalingServerUrl();
-  state_.peer_inactivity_timeout_seconds = static_cast<int>(client_->GetSettingsManager()->GetPeerInactivityTimeout().count());
+  state_.peer_inactivity_timeout_seconds =
+      static_cast<int>(client_->GetSettingsManager()->GetPeerInactivityTimeout().count());
 }
 
 }  // namespace eillance::view_model

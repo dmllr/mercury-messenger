@@ -6,12 +6,12 @@
 #include <memory>
 #include <mutex>
 #include <optional>
-#include <span>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
 #include <nlohmann/json.hpp>
+#include <span>
 
 #include "eillance/backup/backup_manager.hpp"
 #include "eillance/capture/capture.hpp"
@@ -47,102 +47,113 @@ struct Device {
 };
 
 class Client final : public transport::TransportDelegate {
-public:
+ public:
   using Json = nlohmann::json;
   using Peer = transport::Peer;
-  using OnFrameReceivedCallback = std::function<void(const std::vector<std::byte>&)>;
-  using OnProfileReceivedCallback = std::function<void(const ContactID&, const Device::Profile&)>;
-  using OnChatMessageReceivedCallback = std::function<void(const ContactID&, const messaging::HistoryEntryRecord&)>;
-  using OnContactRequestCallback = std::function<void(const ContactID& peer_id)>;
-  using OnContactStatusChangedCallback = std::function<void(const ContactID& peer_id, identity::ContactStatus status)>;
-  using OnMessageStatusChangedCallback = std::function<void(const ContactID& peer_id, std::uint64_t message_id, messaging::MessageStatus status)>;
-  using OnPeerListUpdateCallback = std::function<void(const std::vector<Device>&)>;
+  using OnFrameReceivedCallback = std::function<void(std::vector<std::byte> const&)>;
+  using OnProfileReceivedCallback = std::function<void(ContactID const&, Device::Profile const&)>;
+  using OnChatMessageReceivedCallback = std::function<void(ContactID const&, messaging::HistoryEntryRecord const&)>;
+  using OnContactRequestCallback = std::function<void(ContactID const& peer_id)>;
+  using OnContactStatusChangedCallback = std::function<void(ContactID const& peer_id, identity::ContactStatus status)>;
+  using OnMessageStatusChangedCallback =
+      std::function<void(ContactID const& peer_id, std::uint64_t message_id, messaging::MessageStatus status)>;
+  using OnPeerListUpdateCallback = std::function<void(std::vector<Device> const&)>;
   using StatusCallbackFunction = transport::Transport::StatusCallbackFunction;
-  using OnCallRingingCallback = std::function<void(const ContactID& peer_id)>;
-  using OnCallAcceptedCallback = std::function<void(const ContactID& peer_id)>;
-  using OnIncomingCallCallback = std::function<void(const ContactID& peer_id, messaging::HistoryEntryKind call_type)>;
+  using OnCallRingingCallback = std::function<void(ContactID const& peer_id)>;
+  using OnCallAcceptedCallback = std::function<void(ContactID const& peer_id)>;
+  using OnIncomingCallCallback = std::function<void(ContactID const& peer_id, messaging::HistoryEntryKind call_type)>;
   using OnMyProfileUpdatedCallback = std::function<void()>;
-  using OnContactProfileUpdatedCallback = std::function<void(const ContactID& peer_id)>;
-  using OnCallTerminatedCallback = std::function<void(const ContactID& peer_id)>;
-  using OnContactRemovedCallback = std::function<void(const ContactID& peer_id)>;
+  using OnContactProfileUpdatedCallback = std::function<void(ContactID const& peer_id)>;
+  using OnCallTerminatedCallback = std::function<void(ContactID const& peer_id)>;
+  using OnContactRemovedCallback = std::function<void(ContactID const& peer_id)>;
 
   explicit Client(std::shared_ptr<storage::PersistentStorage> storage, std::shared_ptr<transport::Transport> transport);
 
   Client(Client&&) = delete;
-  Client(const Client&) = delete;
+  Client(Client const&) = delete;
   auto operator=(Client&&) -> Client& = delete;
-  auto operator=(const Client&) -> Client& = delete;
+  auto operator=(Client const&) -> Client& = delete;
   ~Client() override;
 
   // Setter injection for platform-specific capture implementations
-  template<typename T>
+  template <typename T>
   void SetVideoCapture(std::unique_ptr<T> impl) {
     video_capture_ = std::make_unique<Capture>(std::move(impl));
-    if (audio_capture_) { InitializeAvStream(); }
+    if (audio_capture_) {
+      InitializeAvStream();
+    }
   }
 
-  template<typename T>
+  template <typename T>
   void SetAudioCapture(std::unique_ptr<T> impl) {
     audio_capture_ = std::make_unique<Capture>(std::move(impl));
-    if (video_capture_) { InitializeAvStream(); }
+    if (video_capture_) {
+      InitializeAvStream();
+    }
   }
 
   [[nodiscard]] auto GetId() const -> ContactID;
   [[nodiscard]] auto IdentityExists() const -> bool;
   auto GenerateNewIdentity() const -> std::string;
   [[nodiscard]] auto GetMnemonic() const -> std::optional<std::string>;
-  auto RestoreIdentity(const std::string& mnemonic) const -> bool;
+  auto RestoreIdentity(std::string const& mnemonic) const -> bool;
 
-  auto CreateBackup(const std::string& output_path, const std::string& password) const -> bool;
-  auto RestoreBackup(const std::string& input_path, const std::string& password) -> bool;
+  auto CreateBackup(std::string const& output_path, std::string const& password) const -> bool;
+  auto RestoreBackup(std::string const& input_path, std::string const& password) -> bool;
 
   [[nodiscard]] auto GetStorage() const -> std::shared_ptr<storage::PersistentStorage>;
   [[nodiscard]] auto GetSettingsManager() const -> SettingsManager*;
-  void SetName(const std::string& name) const;
+  void SetName(std::string const& name) const;
   void Start();
   void Terminate();
-  void SetStatusCallback(const StatusCallbackFunction& callback);
+  void SetStatusCallback(StatusCallbackFunction const& callback);
 
-  void SetFrameReceivedCallback(const OnFrameReceivedCallback& callback);
-  void SetProfileReceivedCallback(const OnProfileReceivedCallback& callback);
-  void SetChatMessageReceivedCallback(const OnChatMessageReceivedCallback& callback);
-  void SetContactRequestCallback(const OnContactRequestCallback& callback);
-  void SetContactStatusChangedCallback(const OnContactStatusChangedCallback& callback);
-  void SetMessageStatusChangedCallback(const OnMessageStatusChangedCallback& callback);
-  void SetPeerListUpdateCallback(const OnPeerListUpdateCallback& callback);
-  void SetIncomingCallCallback(const OnIncomingCallCallback& callback);
-  void SetOnCallRingingCallback(const OnCallRingingCallback& callback);
-  void SetOnCallAcceptedCallback(const OnCallAcceptedCallback& callback);
-  void SetOnCallTerminatedCallback(const OnCallTerminatedCallback& callback);
-  void SetOnMyProfileUpdatedCallback(const OnMyProfileUpdatedCallback& callback);
-  void SetOnContactRemovedCallback(const OnContactRemovedCallback& callback);
-  void SetOnContactProfileUpdatedCallback(const OnContactProfileUpdatedCallback& callback);
+  void SetFrameReceivedCallback(OnFrameReceivedCallback const& callback);
+  void SetProfileReceivedCallback(OnProfileReceivedCallback const& callback);
+  void SetChatMessageReceivedCallback(OnChatMessageReceivedCallback const& callback);
+  void SetContactRequestCallback(OnContactRequestCallback const& callback);
+  void SetContactStatusChangedCallback(OnContactStatusChangedCallback const& callback);
+  void SetMessageStatusChangedCallback(OnMessageStatusChangedCallback const& callback);
+  void SetPeerListUpdateCallback(OnPeerListUpdateCallback const& callback);
+  void SetIncomingCallCallback(OnIncomingCallCallback const& callback);
+  void SetOnCallRingingCallback(OnCallRingingCallback const& callback);
+  void SetOnCallAcceptedCallback(OnCallAcceptedCallback const& callback);
+  void SetOnCallTerminatedCallback(OnCallTerminatedCallback const& callback);
+  void SetOnMyProfileUpdatedCallback(OnMyProfileUpdatedCallback const& callback);
+  void SetOnContactRemovedCallback(OnContactRemovedCallback const& callback);
+  void SetOnContactProfileUpdatedCallback(OnContactProfileUpdatedCallback const& callback);
 
-  void Call(const ContactID& peer_id);
-  void Connect(const ContactID& peer_id);
-  void StartVoiceCall(const ContactID& peer_id);
-  void StartVideoCall(const ContactID& peer_id);
-  void AcceptCall(const ContactID& peer_id, messaging::HistoryEntryKind call_kind) const;
-  void RejectCall(const ContactID& peer_id) const;
-  void AddContact(const ContactID& peer_id, const std::optional<std::vector<std::byte>>& token) const;
+  void Call(ContactID const& peer_id);
+  void Connect(ContactID const& peer_id);
+  void StartVoiceCall(ContactID const& peer_id);
+  void StartVideoCall(ContactID const& peer_id);
+  void AcceptCall(ContactID const& peer_id, messaging::HistoryEntryKind call_kind) const;
+  void RejectCall(ContactID const& peer_id) const;
+  void AddContact(ContactID const& peer_id, std::optional<std::vector<std::byte>> const& token) const;
   auto GenerateContactToken() -> std::vector<std::byte>;
-  void ConfirmContact(const ContactID& peer_id) const;
-  void BlockContact(const ContactID& peer_id, bool notify_peer) const;
-  void DeleteContact(const ContactID& peer_id) const;
-  void UnblockContact(const ContactID& peer_id) const;
-  [[nodiscard]] auto GetPeerConnectionState(const ContactID& peer_id) const -> eillance::transport::PeerConnectionState;
+  void ConfirmContact(ContactID const& peer_id) const;
+  void BlockContact(ContactID const& peer_id, bool notify_peer) const;
+  void DeleteContact(ContactID const& peer_id) const;
+  void UnblockContact(ContactID const& peer_id) const;
+  [[nodiscard]] auto GetPeerConnectionState(ContactID const& peer_id) const -> eillance::transport::PeerConnectionState;
   [[nodiscard]] auto GetContacts() const -> std::vector<identity::Contact>;
-  [[nodiscard]] auto GetChatSummaries(const std::vector<ContactID>& peer_ids) const -> std::vector<messaging::ChatSummary>;
-  void Hangup(const ContactID& peer_id, bool notify_peer) const;
-  void Configure(const Config& config) const;
-  auto SendChatMessage(const ContactID& peer_id, const std::string& message) -> messaging::HistoryEntryRecord;
-  void UpdateSignalingUrl(const std::string& url) const;
-  void MarkMessagesAsRead(const ContactID& peer_id, const std::vector<std::uint64_t>& message_ids) const;
-  [[nodiscard]] auto GetMessageHistoryPage(const ContactID& peer_id, size_t page_index, size_t page_size) const -> messaging::HistoryPage;
+  [[nodiscard]] auto GetChatSummaries(std::vector<ContactID> const& peer_ids
+  ) const -> std::vector<messaging::ChatSummary>;
+  void Hangup(ContactID const& peer_id, bool notify_peer) const;
+  void Configure(Config const& config) const;
+  auto SendChatMessage(ContactID const& peer_id, std::string const& message) -> messaging::HistoryEntryRecord;
+  void UpdateSignalingUrl(std::string const& url) const;
+  void MarkMessagesAsRead(ContactID const& peer_id, std::vector<std::uint64_t> const& message_ids) const;
+  [[nodiscard]] auto GetMessageHistoryPage(ContactID const& peer_id, size_t page_index, size_t page_size) const
+      -> messaging::HistoryPage;
   [[nodiscard]] auto GetFullMessageContent(uint64_t message_id) const -> std::optional<std::string>;
-  void UpdateMyProfile(const std::optional<std::string>& name, const std::optional<std::string>& bio, const std::optional<std::string>& photo);
-  void SetContactDisplayNameOverride(const ContactID& peer_id, const std::string& override_name) const;
-  void ResetContactDisplayNameOverride(const ContactID& peer_id) const;
+  void UpdateMyProfile(
+      std::optional<std::string> const& name,
+      std::optional<std::string> const& bio,
+      std::optional<std::string> const& photo
+  );
+  void SetContactDisplayNameOverride(ContactID const& peer_id, std::string const& override_name) const;
+  void ResetContactDisplayNameOverride(ContactID const& peer_id) const;
 
   // Debug methods
   void DebugEraseAllHistory() const;
@@ -150,29 +161,30 @@ public:
   void DebugRevokeAllApprovals() const;
 
   // TransportDelegate implementation
-  void OnPeerReady(const std::shared_ptr<Peer>& peer) override;
-  void OnSignalingErrorForPeer(const ContactID& peer_id, const std::string& error) override;
-  auto Sign(std::span<const std::byte> message) -> std::vector<std::byte> override;
+  void OnPeerReady(std::shared_ptr<Peer> const& peer) override;
+  void OnSignalingErrorForPeer(ContactID const& peer_id, std::string const& error) override;
+  auto Sign(std::span<std::byte const> message) -> std::vector<std::byte> override;
   void OnLoginSuccess() override;
   void ProcessPeerMessage(Json message) override;
-  void OnSystemMessage(const std::string& type, const Json& message) override;
-  void OnDataChannelOpen(const ContactID& peer_id) override;
-  void OnFrameReceived(const ContactID& peer_id, const std::vector<std::byte>& frame) override;
+  void OnSystemMessage(std::string const& type, Json const& message) override;
+  void OnDataChannelOpen(ContactID const& peer_id) override;
+  void OnFrameReceived(ContactID const& peer_id, std::vector<std::byte> const& frame) override;
 
-private:
+ private:
   void InitializeAvStream();
-  void StartMediaCall(const ContactID& peer_id, bool is_video);
+  void StartMediaCall(ContactID const& peer_id, bool is_video);
   void UpdateAndNotifyPeerList();
-  void SendSampleToPeers(const std::vector<std::byte>& sample, Stream::Source::Type type, std::uint64_t sample_time) const;
-  void ProcessDataChannelMessage(const ContactID& peer_id, const Json& message);
-  void SendQueuedMessages(const ContactID& peer_id);
+  void SendSampleToPeers(std::vector<std::byte> const& sample, Stream::Source::Type type, std::uint64_t sample_time)
+      const;
+  void ProcessDataChannelMessage(ContactID const& peer_id, Json const& message);
+  void SendQueuedMessages(ContactID const& peer_id);
 
   void CheckForInactivePeers();
-  void UpdatePeerActivity(const ContactID& peer_id) const;
+  void UpdatePeerActivity(ContactID const& peer_id) const;
 
-  void SetupDataChannel(const std::shared_ptr<Peer>& peer, const ContactID& peer_id);
-  void HandleProfileUpdate(const ContactID& peer_id, const Json& profile_json) const;
-  static auto ParseDeviceProfile(const Json& jprofile) -> Device::Profile;
+  void SetupDataChannel(std::shared_ptr<Peer> const& peer, ContactID const& peer_id);
+  void HandleProfileUpdate(ContactID const& peer_id, Json const& profile_json) const;
+  static auto ParseDeviceProfile(Json const& jprofile) -> Device::Profile;
 
   DispatchQueue inactivity_check_queue_{"InactiveCheck", 1};
   std::atomic<bool> is_running_{false};

@@ -1,14 +1,16 @@
-#include "eillance/encoding/audio_encoder.hpp"
-
 #include <gtest/gtest.h>
 
 #include "eillance/capture/audio_config.hpp"
+#include "eillance/encoding/audio_encoder.hpp"
 
 using AudioConfig = eillance::AudioConfig;
 using AudioEncoderCli = eillance::AudioEncoderCli;
 
 TEST(Audio, AudioEncoding) {
-  static_assert(std::is_same_v<AudioConfig::SampleDataType, std::int16_t>, "This test isn't suppose to work on non-int16 data");
+  static_assert(
+      std::is_same_v<AudioConfig::SampleDataType, std::int16_t>,
+      "This test isn't suppose to work on non-int16 data"
+  );
 
   auto frame{std::array<AudioConfig::SampleDataType, AudioConfig::frameSize>{}};
   for (size_t i = 0; i < AudioConfig::frameSize; ++i) {
