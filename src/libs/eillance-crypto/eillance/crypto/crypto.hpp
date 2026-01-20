@@ -17,7 +17,7 @@
 #include <vector>
 
 #include "eillance/crypto/bip39_wordlist.hpp"
-#include "eillance/logging/logging.h"
+#include "eillance/logging/logging.hpp"
 
 namespace eillance::crypto {
 

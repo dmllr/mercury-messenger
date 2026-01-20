@@ -10,7 +10,7 @@
 #include <vector>
 
 #include "eillance/crypto/crypto.hpp"
-#include "eillance/logging/logging.h"
+#include "eillance/logging/logging.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/storage/sqlite/migrations.hpp"
 #include "eillance/storage/sqlite/sqlite_helpers.hpp"
@@ -24,14 +24,16 @@ namespace {
 constexpr size_t kMaxInlineContentSize = 2048;
 
 auto OptionalHexToBytes(const std::optional<std::string>& hex) -> std::optional<std::vector<std::byte>> {
-  if (!hex) { return std::nullopt;
-}
+  if (!hex) {
+    return std::nullopt;
+  }
   return crypto::FromHex(*hex);
 }
 
 auto OptionalBytesToHex(const std::optional<std::vector<std::byte>>& bytes) -> std::optional<std::string> {
-  if (!bytes) { return std::nullopt;
-}
+  if (!bytes) {
+    return std::nullopt;
+  }
   return crypto::ToHex(*bytes);
 }
 

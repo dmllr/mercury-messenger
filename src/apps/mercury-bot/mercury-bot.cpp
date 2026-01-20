@@ -12,11 +12,11 @@
 #include <plog/Formatters/TxtFormatter.h>
 
 #include "eillance/client/client.hpp"
-#include "eillance/events/service_connection_state.h"
-#include "eillance/logging/logging.h"
+#include "eillance/events/service_connection_state.hpp"
+#include "eillance/logging/logging.hpp"
 #include "eillance/rtc/transport_impl_libdatachannel.hpp"
 #include "eillance/storage/sqlite/persistent_storage_impl_sqlite.hpp"
-#include "eillance/transport/peer_connection_state.h"
+#include "eillance/transport/peer_connection_state.hpp"
 #include "eillance/utils/args_parser.hpp"
 #include "eillance/utils/time.hpp"
 

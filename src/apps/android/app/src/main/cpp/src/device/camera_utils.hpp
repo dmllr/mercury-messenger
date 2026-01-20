@@ -12,7 +12,7 @@
 #include <utility>
 #include <vector>
 
-#include "eillance/logging/logging.h"
+#include "eillance/logging/logging.hpp"
 
 
 namespace eillance {

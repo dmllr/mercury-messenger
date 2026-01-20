@@ -4,13 +4,13 @@
 #include <stdexcept>
 #include <string>
 
-#include "eillance/logging/logging.h"
+#include "eillance/logging/logging.hpp"
 
 namespace eillance::storage::migrations {
 
 inline void MigrateToV0001(sqlite3* db) {
   LGI << "Initializing database schema (v1)...";
-  const auto *const schema = R"SQL(
+  const auto* const schema = R"SQL(
       BEGIN TRANSACTION;
 
       CREATE TABLE IF NOT EXISTS settings (

@@ -34,15 +34,14 @@ public:
   }
 
   auto AddCallEntry(const ContactID& peerId, const HistoryEntryKind kind, const CallDirection direction, const CallStatus status, uint32_t duration) -> HistoryEntryRecord {
-    return storage_->AddHistoryEntry({
-        .id = 0,
-        .kind = kind,
-        .timestamp = static_cast<Time::Unit>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count()),
-        .direction = (direction == CallDirection::incoming) ? MessageDirection::received : MessageDirection::sent,
-        .status = MessageStatus::none,
-        .is_truncated = false,
-        .data = CallEntry{.duration_seconds = duration, .call_direction = direction, .call_status = status},
-        .peer_id = peerId});
+    return storage_->AddHistoryEntry({.id = 0,
+                                      .kind = kind,
+                                      .timestamp = static_cast<Time::Unit>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count()),
+                                      .direction = (direction == CallDirection::incoming) ? MessageDirection::received : MessageDirection::sent,
+                                      .status = MessageStatus::none,
+                                      .is_truncated = false,
+                                      .data = CallEntry{.duration_seconds = duration, .call_direction = direction, .call_status = status},
+                                      .peer_id = peerId});
   }
 
   void SetStatusChangedCallback(std::function<void(const ContactID&, std::uint64_t, MessageStatus)> cb) {

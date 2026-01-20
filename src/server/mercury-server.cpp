@@ -13,13 +13,10 @@
 #include <utility>
 
 #include <nlohmann/json.hpp>
-#include <plog/Appenders/ColorConsoleAppender.h>
-#include <plog/Formatters/TxtFormatter.h>
-#include <plog/Init.h>
-#include <plog/Log.h>
 #include <rtc/websocket.hpp>
 #include <rtc/websocketserver.hpp>
 
+#include "eillance/logging/logging.hpp"
 #include "eillance/utils/args_parser.hpp"
 
 class SignalingServer {
@@ -191,12 +188,12 @@ namespace {
 
 volatile std::sig_atomic_t signalReceived = 0;  // NOLINT(*-avoid-non-const-global-variables)
 
-void SignalHandler(int signum) {
+void SignalHandler(const int signum) {
   LGI << "\nInterrupt signal (" << signum << ") received.\n";
   signalReceived = signum;
 }
 
-constexpr auto ParseLogLevel(std::string_view level) -> plog::Severity {
+constexpr auto ParseLogLevel(const std::string_view level) -> plog::Severity {
   if (level == "none") { return plog::none; }
   if (level == "fatal") { return plog::fatal; }
   if (level == "error") { return plog::error; }
@@ -223,12 +220,15 @@ auto main(int argc, char* argv[]) -> int {
   auto config = rtc::WebSocketServer::Configuration();
   config.port = default_port;
 
-  const auto& port_arg = args.GetInt("--port");
-  if (port_arg.has_value()) { config.port = static_cast<uint16_t>(port_arg.value()); }
+  if (const auto& port_arg = args.GetInt("--port"); port_arg.has_value()) {
+    config.port = static_cast<uint16_t>(port_arg.value());
+  }
 
   config.certificatePemFile = args.Get("--ssl-cert");
   config.keyPemFile = args.Get("--ssl-cert-key");
-  if (config.certificatePemFile.has_value() && config.keyPemFile.has_value()) { config.enableTls = true; }
+  if (config.certificatePemFile.has_value() && config.keyPemFile.has_value()) {
+    config.enableTls = true;
+  }
 
   std::signal(SIGINT, SignalHandler);
 

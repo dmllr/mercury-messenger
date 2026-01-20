@@ -10,7 +10,7 @@
 
 #include "eillance/identity/contact_id.hpp"
 #include "eillance/identity/contact_manager.hpp"
-#include "eillance/logging/logging.h"
+#include "eillance/logging/logging.hpp"
 #include "eillance/messaging/history.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/utils/dispatch_queue.hpp"
