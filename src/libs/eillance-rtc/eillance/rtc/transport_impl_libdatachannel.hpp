@@ -46,27 +46,27 @@ public:
     if (!sample.empty()) { track_->send(sample); }
   }
 
-  auto getTrack() const { return track_; }
+  [[nodiscard]] auto GetTrack() const { return track_; }
 };
 
 namespace {
 
-auto toEillanceState(::rtc::PeerConnection::State state) -> transport::PeerConnectionState {
+auto ToEillanceState(::rtc::PeerConnection::State state) -> transport::PeerConnectionState {
   switch (state) {
     case ::rtc::PeerConnection::State::New:
-      return transport::PeerConnectionState::NewConnection;
+      return transport::PeerConnectionState::newConnection;
     case ::rtc::PeerConnection::State::Connecting:
-      return transport::PeerConnectionState::Connecting;
+      return transport::PeerConnectionState::connecting;
     case ::rtc::PeerConnection::State::Connected:
-      return transport::PeerConnectionState::Connected;
+      return transport::PeerConnectionState::connected;
     case ::rtc::PeerConnection::State::Disconnected:
-      return transport::PeerConnectionState::Disconnected;
+      return transport::PeerConnectionState::disconnected;
     case ::rtc::PeerConnection::State::Failed:
-      return transport::PeerConnectionState::Failed;
+      return transport::PeerConnectionState::failed;
     case ::rtc::PeerConnection::State::Closed:
-      return transport::PeerConnectionState::Closed;
+      return transport::PeerConnectionState::closed;
   }
-  return transport::PeerConnectionState::Closed;  // Should not happen
+  return transport::PeerConnectionState::closed;  // Should not happen
 }
 
 }  // namespace
@@ -144,9 +144,9 @@ public:
     const std::lock_guard<std::mutex> lock(peersMutex_);
     const auto it = peers_.find(peer_id);
     if (it != peers_.end() && it->second && it->second->data_peer_connection) {
-      return toEillanceState(std::static_pointer_cast<::rtc::PeerConnection>(it->second->data_peer_connection)->state());
+      return ToEillanceState(std::static_pointer_cast<::rtc::PeerConnection>(it->second->data_peer_connection)->state());
     }
-    return eillance::transport::PeerConnectionState::Disconnected;
+    return eillance::transport::PeerConnectionState::disconnected;
   }
 
   void RemovePeer(const ContactID& peer_id) override {
@@ -173,36 +173,38 @@ public:
       peer->SetState(Peer::State::ready);
     }
 
-    if (peer->GetState() == Peer::State::ready && delegate_) { delegate_->OnPeerReady(peer); }
+    if (peer->GetState() == Peer::State::ready && (delegate_ != nullptr)) {
+      delegate_->OnPeerReady(peer);
+    }
   }
 
   void CreatePeerConnection(const ContactID& peer_id, const std::string& context) {
     auto peer_connection = std::make_shared<::rtc::PeerConnection>(RtcConfiguration::Config());
 
     peer_connection->onStateChange([this, peer_id, context, pc_sptr = peer_connection](::rtc::PeerConnection::State state) {
-      std::string stateStr = "unknown";
+      std::string state_str = "unknown";
       switch (state) {
         case ::rtc::PeerConnection::State::New:
-          stateStr = "New";
+          state_str = "New";
           break;
         case ::rtc::PeerConnection::State::Connecting:
-          stateStr = "Connecting";
+          state_str = "Connecting";
           break;
         case ::rtc::PeerConnection::State::Connected:
-          stateStr = "Connected";
+          state_str = "Connected";
           break;
         case ::rtc::PeerConnection::State::Disconnected:
-          stateStr = "Disconnected";
+          state_str = "Disconnected";
           break;
         case ::rtc::PeerConnection::State::Failed:
-          stateStr = "Failed";
+          state_str = "Failed";
           break;
         case ::rtc::PeerConnection::State::Closed:
-          stateStr = "Closed";
+          state_str = "Closed";
           break;
       }
-      LGI << "Peer " << peer_id << " (" << context << ") state changed to " << stateStr << " (" << static_cast<int>(state) << ")";
-      ReportPeerStateChange(peer_id, EventSource::peerConnectionState, static_cast<int>(toEillanceState(state)));
+      LGI << "Peer " << peer_id << " (" << context << ") state changed to " << state_str << " (" << static_cast<int>(state) << ")";
+      ReportPeerStateChange(peer_id, EventSource::peerConnectionState, static_cast<int>(ToEillanceState(state)));
 
       if (state == ::rtc::PeerConnection::State::Failed || state == ::rtc::PeerConnection::State::Disconnected) {
         if (auto peer = GetPeer(peer_id)) {
@@ -264,7 +266,7 @@ public:
     });
 
     if (context == "data") {
-      peer_connection->onDataChannel([this, peer_id](std::shared_ptr<::rtc::DataChannel> dc) {
+      peer_connection->onDataChannel([this, peer_id](const std::shared_ptr<::rtc::DataChannel>& dc) {
         LGI << "Data channel received from " << peer_id;
         auto peer = GetPeer(peer_id);
         if (!peer) {
@@ -364,8 +366,8 @@ private:
 
     ReportServiceConnectionState(ServiceConnectionState::establishing);
     ws_ = std::make_unique<::rtc::WebSocket>(ws_config);
-    ws_->onOpen([this]() { onWebSocketOpen(); });
-    ws_->onClosed([this]() { onWebSocketClosed(); });
+    ws_->onOpen([this]() { OnWebSocketOpen(); });
+    ws_->onClosed([this]() { OnWebSocketClosed(); });
     ws_->onError([this](const std::string& error) { OnWebSocketError(error); });
     ws_->onMessage(nullptr, [this](const std::string& data) { OnWebSocketMessage(data); });
 
@@ -382,7 +384,7 @@ private:
     ws_->open(signalingServerUrl_);
   }
 
-  void onWebSocketOpen() {
+  void OnWebSocketOpen() {
     LGI << "WebSocket connected, signaling ready";
     connectionAttempt_ = 0;
     waitBeforeReconnect_ = minWaitBeforeReconnect;
@@ -399,7 +401,7 @@ private:
     }
   }
 
-  void onWebSocketClosed() {
+  void OnWebSocketClosed() {
     LGW << "WebSocket connection closed";
     is_logged_in_ = false;
 
@@ -493,15 +495,19 @@ private:
     }
   }
 
-  void ReportPeerStateChange(const ContactID& peer_id, EventSource source, int state) const {
-    if (status_callback_) { (*status_callback_)(peer_id, source, static_cast<int>(state)); }
+  void ReportPeerStateChange(const ContactID& peer_id, const EventSource source, const int state) const {
+    if (status_callback_) {
+      (*status_callback_)(peer_id, source, state);
+    }
   }
 
 public:
   auto AddVideo(const ContactID& peer_id, const std::function<void(void)>& on_open) -> std::shared_ptr<transport::ITrack> override {
-    auto peer = GetPeer(peer_id);
-    if (!peer || !peer->media_peer_connection) { return nullptr; }
-    auto pc = std::static_pointer_cast<::rtc::PeerConnection>(peer->media_peer_connection);
+    const auto peer = GetPeer(peer_id);
+    if (!peer || !peer->media_peer_connection) {
+      return nullptr;
+    }
+    const auto pc = std::static_pointer_cast<::rtc::PeerConnection>(peer->media_peer_connection);
 
     auto video = ::rtc::Description::Video("video", ::rtc::Description::Direction::SendRecv);
     constexpr auto payload_type = 102;
@@ -521,9 +527,11 @@ public:
   }
 
   auto AddAudio(const ContactID& peer_id, const std::function<void(void)>& on_open) -> std::shared_ptr<transport::ITrack> override {
-    auto peer = GetPeer(peer_id);
-    if (!peer || !peer->media_peer_connection) { return nullptr; }
-    auto pc = std::static_pointer_cast<::rtc::PeerConnection>(peer->media_peer_connection);
+    const auto peer = GetPeer(peer_id);
+    if (!peer || !peer->media_peer_connection) {
+      return nullptr;
+    }
+    const auto pc = std::static_pointer_cast<::rtc::PeerConnection>(peer->media_peer_connection);
 
     auto audio = ::rtc::Description::Audio("audio", ::rtc::Description::Direction::SendRecv);
     constexpr auto payload_type = 111;
@@ -554,13 +562,13 @@ private:
   std::uint32_t connectionAttempt_{0U};
   std::uint32_t waitBeforeReconnect_{minWaitBeforeReconnect};
 
-  mutable std::vector<std::string> message_queue_;
+  mutable std::vector<std::string> message_queue_{};
   mutable std::mutex messageQueueMutex_;
 
   mutable ServiceConnectionState serviceConnectionState_{ServiceConnectionState::unknown};
   std::shared_ptr<StatusCallbackFunction> status_callback_{};
 
-  std::unordered_map<ContactID, std::shared_ptr<Peer>> peers_;
+  std::unordered_map<ContactID, std::shared_ptr<Peer>> peers_{};
   mutable std::mutex peersMutex_;
 
   std::string signalingServerUrl_;

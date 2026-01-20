@@ -27,8 +27,8 @@ class MessageDeliveryService {
   std::atomic<bool> isRunning_{false};
 
   // Track peers for which we are actively trying to connect to avoid duplicate requests.
-  std::unordered_set<ContactID> pendingConnections_;
-  std::unordered_map<ContactID, int> retryDelaysS_;
+  std::unordered_set<ContactID> pendingConnections_{};
+  std::unordered_map<ContactID, int> retryDelaysS_{};
   std::recursive_mutex mutex_;
 
   static constexpr int kInitialRetryDelayS = 5;
@@ -102,14 +102,14 @@ public:
 
 private:
   void CheckForAllQueuedMessages() {
-    if (!contactManager_) { return; }
+    if (!contactManager_) {
+      return;
+    }
     const auto all_contacts = contactManager_->GetContacts();
     for (const auto& contact: all_contacts) {
-      const ContactID id(contact.peer_id);
       // Check if there are any messages marked as 'sending' for this contact.
-      if (!storage_->GetMessagesWithStatus(id, MessageStatus::sending).empty()) {
-        // We have messages for this contact, let's try to deliver them.
-        AttemptDelivery(id);
+      if (!storage_->GetMessagesWithStatus(contact.peer_id, MessageStatus::sending).empty()) {
+        AttemptDelivery(contact.peer_id);
       }
     }
   }

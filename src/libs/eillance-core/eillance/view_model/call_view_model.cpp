@@ -12,9 +12,9 @@ CallViewModel::CallViewModel(std::shared_ptr<Client> client, std::shared_ptr<Cli
   Subscribe<EventStatusChanged>(queue, [this](const auto& event) {
     if (event.source == EventSource::peerConnectionState) {
       const auto state = static_cast<transport::PeerConnectionState>(event.state);
-      if (state == transport::PeerConnectionState::Closed ||
-          state == transport::PeerConnectionState::Disconnected ||
-          state == transport::PeerConnectionState::Failed) {
+      if (state == transport::PeerConnectionState::closed ||
+          state == transport::PeerConnectionState::disconnected ||
+          state == transport::PeerConnectionState::failed) {
         OnCallTerminated(event.peer_id);
       }
     }
@@ -85,7 +85,7 @@ void CallViewModel::Hangup() {
     state_ = {};
   }
   if (!peer_id_to_hangup.IsEmpty()) {
-    client_->Hangup(peer_id_to_hangup);
+    client_->Hangup(peer_id_to_hangup, true);
   }
   Notify();
 }

@@ -25,8 +25,8 @@ private:
   std::mutex syncMutex_;
   std::mutex conditionMutex_;
   std::condition_variable condition_;
-  std::deque<std::pair<std::type_index, std::any>> events_;
-  std::unordered_map<std::type_index, std::vector<std::pair<SubscriberTypeId, std::function<void(const std::any&)>>>> subscribers_;
+  std::deque<std::pair<std::type_index, std::any>> events_{};
+  std::unordered_map<std::type_index, std::vector<std::pair<SubscriberTypeId, std::function<void(const std::any&)>>>> subscribers_{};
   DispatchQueue dispatchQueue_ = DispatchQueue("EventQueue", 1);
   SubscriberTypeId nextId_ = 0;  // For unique callback identification
 
@@ -58,7 +58,7 @@ public:
   template<typename EventType>
   SubscriberTypeId Subscribe(const std::function<void(const EventType&)>& callback) {
     const auto lock = std::lock_guard<std::mutex>(syncMutex_);
-    SubscriberTypeId id = nextId_++;
+    SubscriberTypeId const id = nextId_++;
     subscribers_[typeid(EventType)].emplace_back(id, [callback](const std::any& event) {
       callback(std::any_cast<EventType>(event));
     });

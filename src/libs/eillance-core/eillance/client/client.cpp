@@ -37,7 +37,7 @@ Client::Client(std::shared_ptr<storage::PersistentStorage> storage, std::shared_
   transport_->SetStatusCallback([this](const ContactID& peer_id, const EventSource source, int state_val) {
     if (source == EventSource::peerConnectionState) {
       const auto state = static_cast<eillance::transport::PeerConnectionState>(state_val);
-      if (state == eillance::transport::PeerConnectionState::Failed || state == eillance::transport::PeerConnectionState::Closed || state == eillance::transport::PeerConnectionState::Disconnected) {
+      if (state == eillance::transport::PeerConnectionState::failed || state == eillance::transport::PeerConnectionState::closed || state == eillance::transport::PeerConnectionState::disconnected) {
         transport_->ClosePeerConnection(peer_id, "data");
         transport_->ClosePeerConnection(peer_id, "media");
         transport_->RemovePeer(peer_id);
@@ -232,7 +232,7 @@ void Client::AcceptCall(const ContactID& peer_id, messaging::HistoryEntryKind ca
 }
 
 void Client::RejectCall(const ContactID& peer_id) const {
-  Hangup(peer_id);
+  Hangup(peer_id, true);
 }
 
 void Client::AddContact(const ContactID& peer_id, const std::optional<std::vector<std::byte>>& token) const {
@@ -365,7 +365,7 @@ auto Client::SendChatMessage(const ContactID& peer_id, const std::string& messag
     LGE << "Cannot send message to " << peer_id.ToString() << ". Not a contact.";
     return {};
   }
-  auto entry = message_history_->AddTextEntry(peer_id, message, messaging::MessageDirection::sent);
+  auto entry = message_history_->AddTextEntry(peer_id, message, messaging::MessageDirection::sent, messaging::HistoryEntryKind::textMessage);
 
   if (auto peer = transport_->GetPeer(peer_id); peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
     SendQueuedMessages(peer_id);
@@ -670,7 +670,7 @@ void Client::ProcessDataChannelMessage(const ContactID& peer_id, const Json& mes
       return;
     }
     auto message_id = message.at("message_id").get<std::uint64_t>();
-    bool is_system = message.value("is_system", false);
+    bool const is_system = message.value("is_system", false);
     bool message_processed_successfully = false;
 
     if (is_system) {
@@ -719,14 +719,15 @@ void Client::ProcessDataChannelMessage(const ContactID& peer_id, const Json& mes
               av_stream_->Start();
             }
             auto accepted_peer = transport_->GetPeer(peer_id);
-            if (!accepted_peer) return;
+            if (!accepted_peer) { return;
+}
             transport_->CreateMediaPeerConnection(peer_id);
             accepted_peer->has_media_peer_connection = true;
-            accepted_peer->audio = transport_->AddAudio(peer_id, [this, wpeer = make_weak_ptr(accepted_peer)]() {
+            accepted_peer->audio = transport_->AddAudio(peer_id, [this, wpeer = MakeWeakPtr(accepted_peer)]() {
               if (const auto p = wpeer.lock()) { transport_->AddToStream(p, false); }
             });
             if (is_video) {
-              accepted_peer->video = transport_->AddVideo(peer_id, [this, wpeer = make_weak_ptr(accepted_peer)]() {
+              accepted_peer->video = transport_->AddVideo(peer_id, [this, wpeer = MakeWeakPtr(accepted_peer)]() {
                 if (const auto p = wpeer.lock()) { transport_->AddToStream(p, true); }
               });
             }
@@ -741,7 +742,7 @@ void Client::ProcessDataChannelMessage(const ContactID& peer_id, const Json& mes
       auto decrypted_message = peer->session_cipher->Decrypt({payload.begin(), payload.end()});
       if (!decrypted_message.empty()) {
         message_processed_successfully = true;
-        auto history_entry = message_history_->AddTextEntry(peer_id, decrypted_message, messaging::MessageDirection::received);
+        auto history_entry = message_history_->AddTextEntry(peer_id, decrypted_message, messaging::MessageDirection::received, messaging::HistoryEntryKind::textMessage);
         (*on_chat_message_received_)(peer_id, history_entry);
       }
     }
@@ -912,7 +913,7 @@ void Client::SendQueuedMessages(const ContactID& peer_id) {
 void Client::ProcessPeerMessage(Json message) {
   const auto from_it = message.find("from");
   if (from_it == message.end()) { return; }
-  ContactID peer_id(from_it->get<std::string>());
+  ContactID const peer_id(from_it->get<std::string>());
   const auto type_it = message.find("type");
   if (type_it == message.end()) { return; }
   auto type = type_it->get<std::string>();
@@ -935,11 +936,11 @@ void Client::ProcessPeerMessage(Json message) {
         transport_->CreateMediaPeerConnection(peer_id);
         peer->has_media_peer_connection = true;
       }
-      peer->audio = transport_->AddAudio(peer_id, [this, wpeer = make_weak_ptr(peer)]() {
+      peer->audio = transport_->AddAudio(peer_id, [this, wpeer = MakeWeakPtr(peer)]() {
         if (const auto p = wpeer.lock()) { transport_->AddToStream(p, false); }
       });
       if (is_video_call) {
-        peer->video = transport_->AddVideo(peer_id, [this, wpeer = make_weak_ptr(peer)]() {
+        peer->video = transport_->AddVideo(peer_id, [this, wpeer = MakeWeakPtr(peer)]() {
           if (const auto p = wpeer.lock()) { transport_->AddToStream(p, true); }
         });
       }
@@ -1008,7 +1009,7 @@ void Client::ProcessPeerMessage(Json message) {
 
     auto result = contact_manager_->ReceiveContactRequest(peer_id, name, bio, photo_base64);
 
-    if (result == identity::RequestStatus::New || result == identity::RequestStatus::Duplicate) {
+    if (result == identity::RequestStatus::New || result == identity::RequestStatus::duplicate) {
       bool valid_token = false;
       if (token) {
         auto token_bytes = crypto::FromHex(*token);
@@ -1085,7 +1086,7 @@ void Client::CheckForInactivePeers() {
   const auto timeout_us = std::chrono::duration_cast<std::chrono::microseconds>(timeout_s).count();
 
   for (const auto& [peer_id, peer]: peers) {
-    if (!peer->has_media_peer_connection && GetPeerConnectionState(peer_id) == transport::PeerConnectionState::Connected) {
+    if (!peer->has_media_peer_connection && GetPeerConnectionState(peer_id) == transport::PeerConnectionState::connected) {
       if ((now - peer->last_activity_time.load()) > timeout_us) {
         LGI << "Peer " << peer_id.ToString() << " inactive for too long. Closing data connection.";
         transport_->ClosePeerConnection(peer_id, "data");

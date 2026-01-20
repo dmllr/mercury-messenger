@@ -20,8 +20,8 @@ namespace eillance::identity {
 
 enum class RequestStatus {
   New,        // A new, valid request that should be processed.
-  Duplicate,  // A resent request for one already awaiting approval.
-  Ignored     // The request was ignored (contact is already confirmed or was rejected).
+  duplicate,  // A resent request for one already awaiting approval.
+  ignored     // The request was ignored (contact is already confirmed or was rejected).
 };
 
 class ContactManager {
@@ -29,14 +29,14 @@ class ContactManager {
   using Token = std::array<std::byte, kTokenSize>;
 
   std::shared_ptr<storage::PersistentStorage> storage_;
-  std::unordered_map<ContactID, Contact> contacts_;
+  std::unordered_map<ContactID, Contact> contacts_{};
   mutable std::mutex mutex_;
 
   struct TokenInfo {
     std::chrono::steady_clock::time_point creationTime;
   };
 
-  std::map<Token, TokenInfo> oneTimeTokens_;
+  std::map<Token, TokenInfo> oneTimeTokens_{};
   static constexpr std::chrono::seconds kTokenValidityDuration{60};
 
 
@@ -74,14 +74,14 @@ public:
     auto iter = contacts_.find(peerId);
     if (iter != contacts_.end()) {
       if (iter->second.status == ContactStatus::confirmed || iter->second.status == ContactStatus::rejected) {
-        return RequestStatus::Ignored;
+        return RequestStatus::ignored;
       }
       if (iter->second.status == ContactStatus::awaitingApproval) {
         if (name) { iter->second.display_name = name; }
         if (bio) { iter->second.bio = bio; }
         if (photo) { iter->second.photo_base64 = photo; }
         storage_->UpdateContact(iter->second);
-        return RequestStatus::Duplicate;
+        return RequestStatus::duplicate;
       }
 
       iter->second.status = ContactStatus::awaitingApproval;
@@ -193,10 +193,10 @@ public:
       LGW << "Cannot set name override for non-existent contact: " << peerId.ToString();
       return;
     }
-    constexpr size_t kMaxNameLen = 64;
+    constexpr size_t k_max_name_len = 64;
     std::string final_name = overrideName;
-    if (final_name.length() > kMaxNameLen) {
-      final_name = final_name.substr(0, kMaxNameLen);
+    if (final_name.length() > k_max_name_len) {
+      final_name = final_name.substr(0, k_max_name_len);
     }
     iter->second.display_name_override = final_name;
     storage_->UpdateContact(iter->second);
@@ -263,12 +263,7 @@ public:
       return false;
     }
     auto now = std::chrono::steady_clock::now();
-    if ((now - iter->second.creationTime) > kTokenValidityDuration) {
-      oneTimeTokens_.erase(iter);
-      return false;
-    }
-    oneTimeTokens_.erase(iter);
-    return true;
+    return static_cast<bool>((now - iter->second.creationTime) <= kTokenValidityDuration);
   }
 
   auto UnblockContact(const ContactID& peerId) -> bool {

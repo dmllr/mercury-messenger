@@ -24,12 +24,14 @@ namespace {
 constexpr size_t kMaxInlineContentSize = 2048;
 
 auto OptionalHexToBytes(const std::optional<std::string>& hex) -> std::optional<std::vector<std::byte>> {
-  if (!hex) return std::nullopt;
+  if (!hex) { return std::nullopt;
+}
   return crypto::FromHex(*hex);
 }
 
 auto OptionalBytesToHex(const std::optional<std::vector<std::byte>>& bytes) -> std::optional<std::string> {
-  if (!bytes) return std::nullopt;
+  if (!bytes) { return std::nullopt;
+}
   return crypto::ToHex(*bytes);
 }
 
@@ -52,7 +54,7 @@ public:
       RunMigrations();
     } catch (const std::exception& e) {
       LGE << "Failed to initialize SQLite database at " << db_path.string() << ": " << e.what();
-      if (db_) {
+      if (db_ != nullptr) {
         sqlite3_close_v2(db_);
         db_ = nullptr;
       }
@@ -61,7 +63,7 @@ public:
   }
 
   ~SQLiteStorage() override {
-    if (db_) {
+    if (db_ != nullptr) {
       sqlite3_close_v2(db_);
     }
   }
@@ -208,7 +210,7 @@ public:
     const std::lock_guard lock(mutex_);
     char* err_msg = nullptr;
     if (sqlite3_exec(db_, "BEGIN TRANSACTION;", nullptr, nullptr, &err_msg) != SQLITE_OK) {
-      LGE << "Failed to begin transaction for contact removal: " << (err_msg ? err_msg : "Unknown error");
+      LGE << "Failed to begin transaction for contact removal: " << ((err_msg != nullptr) ? err_msg : "Unknown error");
       sqlite3_free(err_msg);
       return;
     }
@@ -232,7 +234,7 @@ public:
     }
 
     if (sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, &err_msg) != SQLITE_OK) {
-      LGE << "Failed to commit transaction for contact removal: " << (err_msg ? err_msg : "Unknown error");
+      LGE << "Failed to commit transaction for contact removal: " << ((err_msg != nullptr) ? err_msg : "Unknown error");
       sqlite3_free(err_msg);
       sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     }
@@ -270,7 +272,7 @@ public:
       } else {
         entry.is_truncated = false;
       }
-      sqlite3_bind_int(statement.Get(), 6, entry.is_truncated);
+      sqlite3_bind_int(statement.Get(), 6, static_cast<int>(entry.is_truncated));
       BindText(statement.Get(), 7, msg_entry->content);
     } else if (const auto* call_entry = std::get_if<messaging::CallEntry>(&entry.data)) {
       entry.is_truncated = false;
@@ -593,7 +595,7 @@ public:
     const std::lock_guard lock(mutex_);
     char* err_msg = nullptr;
     if (sqlite3_exec(db_, "BEGIN TRANSACTION;", nullptr, nullptr, &err_msg) != SQLITE_OK) {
-      LGE << "Failed to begin transaction for revoking approvals: " << (err_msg ? err_msg : "Unknown error");
+      LGE << "Failed to begin transaction for revoking approvals: " << ((err_msg != nullptr) ? err_msg : "Unknown error");
       sqlite3_free(err_msg);
       return;
     }
@@ -614,7 +616,7 @@ public:
       sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
     } else {
       if (sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, &err_msg) != SQLITE_OK) {
-        LGE << "Failed to commit revoke contact approvals: " << (err_msg ? err_msg : "Unknown error");
+        LGE << "Failed to commit revoke contact approvals: " << ((err_msg != nullptr) ? err_msg : "Unknown error");
         sqlite3_free(err_msg);
         sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
       }
@@ -657,7 +659,7 @@ private:
         if (!content_json_str.empty()) {
           try {
             auto j = nlohmann::json::parse(content_json_str);
-            call_entry.duration_seconds = j.value("duration_seconds", 0u);
+            call_entry.duration_seconds = j.value("duration_seconds", 0U);
             call_entry.call_direction = j.value("call_direction", messaging::CallDirection::outgoing);
             call_entry.call_status = j.value("call_status", messaging::CallStatus::answered);
           } catch (const std::exception& e) {

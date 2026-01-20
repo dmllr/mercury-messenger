@@ -137,7 +137,7 @@ public:
     auto env_scope = GetEnv();
     auto* env = env_scope.Get();
     if ((env == nullptr) || (transportJavaRef_ == nullptr)) {
-      return eillance::transport::PeerConnectionState::Closed;
+      return eillance::transport::PeerConnectionState::closed;
     }
     auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcTransport");
     const auto method = transport_holder.GetMethod("getPeerConnectionState");

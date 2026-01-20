@@ -30,16 +30,16 @@ class VideoEncoderCli {
   AVCodecContext* codec_context_ = nullptr;
   AVFrame* av_frame_ = nullptr;
   AVPacket* packet_ = nullptr;
-  std::vector<uint8_t> converted_frame_buffer_;
+  std::vector<uint8_t> converted_frame_buffer_{};
 
 #if defined __ANDROID__
   static constexpr auto codec_dest_pixel_format = AV_PIX_FMT_NV12;
 #else
-  static constexpr auto codec_dest_pixel_format = AV_PIX_FMT_YUV420P;
+  static constexpr auto codecDestPixelFormat = AV_PIX_FMT_YUV420P;
 #endif
 
   // List of preferred codecs in priority order
-  static constexpr std::array<AVCodecID, 1> preferred_codecs = {
+  static constexpr std::array<AVCodecID, 1> preferredCodecs = {
       AV_CODEC_ID_H264,  // try H.264 codec first
   };
 
@@ -54,7 +54,7 @@ class VideoEncoderCli {
     codec_context_->thread_count = 4;  // Using 4 threads for efficient CPU usage
     codec_context_->gop_size = 50;     // Larger GOP size for reduced CPU load
     codec_context_->max_b_frames = 0;  // No B-frames for lower latency
-    codec_context_->pix_fmt = codec_dest_pixel_format;
+    codec_context_->pix_fmt = codecDestPixelFormat;
 
 #ifdef _WIN32
     // Disable hardware encoding on Windows if needed
@@ -84,7 +84,7 @@ public:
     CoUninitialize();
 #endif
     const AVCodec* codec = nullptr;
-    for (const auto& codec_id: preferred_codecs) {
+    for (const auto& codec_id: preferredCodecs) {
       codec = avcodec_find_encoder(codec_id);
       if (codec && SetupCodecContext(codec, width, height, framerate)) {
         LGD << "Using codec: [" << codec->id << "] " << codec->name << " | " << codec->long_name;

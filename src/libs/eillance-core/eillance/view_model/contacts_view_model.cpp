@@ -51,7 +51,7 @@ struct ContactsViewModel::Impl : public std::enable_shared_from_this<Impl> {
 
   void BlockContact(const ContactID& peer_id) {
     std::thread([self = shared_from_this(), peer_id]() {
-      self->client_->BlockContact(peer_id);
+      self->client_->BlockContact(peer_id, true);
       self->DoUpdateContactsList();
     }).detach();
   }
@@ -135,8 +135,8 @@ struct ContactsViewModel::Impl : public std::enable_shared_from_this<Impl> {
 
           if (std::holds_alternative<messaging::MessageEntry>(summary.last_message.data)) {
             const auto& content = std::get<messaging::MessageEntry>(summary.last_message.data).content;
-            constexpr size_t kSnippetLength = 100;
-            contact.last_message_snippet = (content.length() > kSnippetLength) ? content.substr(0, kSnippetLength) + "..." : content;
+            constexpr size_t k_snippet_length = 100;
+            contact.last_message_snippet = (content.length() > k_snippet_length) ? content.substr(0, k_snippet_length) + "..." : content;
           } else if (std::holds_alternative<messaging::CallEntry>(summary.last_message.data)) {
             if (summary.last_message.kind == messaging::HistoryEntryKind::videoCall) {
               contact.last_message_snippet = "Video Call";

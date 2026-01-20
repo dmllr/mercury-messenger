@@ -43,9 +43,9 @@ public:
   void Terminate() const { self_->Terminate(); }
   void Reconnect() const { self_->Reconnect(); }
   void AddPeer(const ContactID& peerId, const std::shared_ptr<Peer>& peer) const { self_->AddPeer(peerId, peer); }
-  auto GetPeer(const ContactID& peerId) const -> std::shared_ptr<Peer> { return self_->GetPeer(peerId); }
-  auto GetPeers() const -> std::unordered_map<ContactID, std::shared_ptr<Peer>> { return self_->GetPeers(); }
-  auto GetPeerConnectionState(const ContactID& peerId) const -> eillance::transport::PeerConnectionState { return self_->GetPeerConnectionState(peerId); }
+  [[nodiscard]] auto GetPeer(const ContactID& peerId) const -> std::shared_ptr<Peer> { return self_->GetPeer(peerId); }
+  [[nodiscard]] auto GetPeers() const -> std::unordered_map<ContactID, std::shared_ptr<Peer>> { return self_->GetPeers(); }
+  [[nodiscard]] auto GetPeerConnectionState(const ContactID& peerId) const -> eillance::transport::PeerConnectionState { return self_->GetPeerConnectionState(peerId); }
   void CreateDataPeerConnection(const ContactID& peerId) const { self_->CreateDataPeerConnection(peerId); }
   void CreateMediaPeerConnection(const ContactID& peerId) const { self_->CreateMediaPeerConnection(peerId); }
   void CreateDataChannel(const ContactID& peerId) const { self_->CreateDataChannel(peerId); }
@@ -79,10 +79,10 @@ public:
     virtual void Reconnect() = 0;
 
     virtual void AddPeer(const ContactID& peer_id, const std::shared_ptr<Peer>& peer) = 0;
-    virtual auto GetPeer(const ContactID& peer_id) const -> std::shared_ptr<Peer> = 0;
-    virtual auto GetPeers() const -> std::unordered_map<ContactID, std::shared_ptr<Peer>> = 0;
+    [[nodiscard]] virtual auto GetPeer(const ContactID& peer_id) const -> std::shared_ptr<Peer> = 0;
+    [[nodiscard]] virtual auto GetPeers() const -> std::unordered_map<ContactID, std::shared_ptr<Peer>> = 0;
     virtual void RemovePeer(const ContactID& peer_id) = 0;
-    virtual auto GetPeerConnectionState(const ContactID& peer_id) const -> eillance::transport::PeerConnectionState = 0;
+    [[nodiscard]] virtual auto GetPeerConnectionState(const ContactID& peer_id) const -> eillance::transport::PeerConnectionState = 0;
 
     virtual void CreateDataPeerConnection(const ContactID& peer_id) = 0;
     virtual void CreateMediaPeerConnection(const ContactID& peer_id) = 0;
@@ -104,7 +104,7 @@ public:
 
   template<typename T>
   class TransportModel final : public TransportInterface {
-    std::unique_ptr<T> transport_;
+    std::unique_ptr<T> transport_{};
 
   public:
     explicit TransportModel(std::unique_ptr<T> impl) : transport_(std::move(impl)) {}
@@ -118,9 +118,9 @@ public:
     void Terminate() override { transport_->Terminate(); }
     void Reconnect() override { transport_->Reconnect(); }
     void AddPeer(const ContactID& peer_id, const std::shared_ptr<Peer>& peer) override { transport_->AddPeer(peer_id, peer); }
-    auto GetPeer(const ContactID& peer_id) const -> std::shared_ptr<Peer> override { return transport_->GetPeer(peer_id); }
-    auto GetPeers() const -> std::unordered_map<ContactID, std::shared_ptr<Peer>> override { return transport_->GetPeers(); }
-    auto GetPeerConnectionState(const ContactID& peer_id) const -> PeerConnectionState override { return transport_->GetPeerConnectionState(peer_id); }
+    [[nodiscard]] auto GetPeer(const ContactID& peer_id) const -> std::shared_ptr<Peer> override { return transport_->GetPeer(peer_id); }
+    [[nodiscard]] auto GetPeers() const -> std::unordered_map<ContactID, std::shared_ptr<Peer>> override { return transport_->GetPeers(); }
+    [[nodiscard]] auto GetPeerConnectionState(const ContactID& peer_id) const -> PeerConnectionState override { return transport_->GetPeerConnectionState(peer_id); }
     void CreateDataPeerConnection(const ContactID& peer_id) override { transport_->CreateDataPeerConnection(peer_id); }
     void CreateMediaPeerConnection(const ContactID& peer_id) override { transport_->CreateMediaPeerConnection(peer_id); }
     void CreateDataChannel(const ContactID& peer_id) override { transport_->CreateDataChannel(peer_id); }
@@ -138,7 +138,7 @@ public:
   };
 
 private:
-  std::unique_ptr<TransportInterface> self_;
+  std::unique_ptr<TransportInterface> self_{};
 };
 
 }  // namespace eillance::transport

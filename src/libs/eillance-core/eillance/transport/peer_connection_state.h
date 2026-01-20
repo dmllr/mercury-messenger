@@ -5,12 +5,12 @@
 namespace eillance::transport {
 
 enum class PeerConnectionState : std::uint8_t {
-  NewConnection,
-  Connecting,
-  Connected,
-  Disconnected,
-  Failed,
-  Closed,
+  newConnection,
+  connecting,
+  connected,
+  disconnected,
+  failed,
+  closed,
 };
 
 }  // namespace eillance::transport

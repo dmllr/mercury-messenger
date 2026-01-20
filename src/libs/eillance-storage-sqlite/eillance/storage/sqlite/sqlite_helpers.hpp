@@ -65,7 +65,7 @@ inline void BindOptionalText(sqlite3_stmt* stmt, const int idx,
 
 inline auto ColumnString(sqlite3_stmt* stmt, const int idx) -> std::string {
   const auto* text = reinterpret_cast<const char*>(sqlite3_column_text(stmt, idx));
-  return text ? std::string(text) : "";
+  return (text != nullptr) ? std::string(text) : "";
 }
 
 inline auto ColumnOptionalString(sqlite3_stmt* stmt, const int idx)

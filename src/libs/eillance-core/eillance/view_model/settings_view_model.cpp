@@ -7,7 +7,7 @@ SettingsViewModel::SettingsViewModel(std::shared_ptr<Client> client, std::shared
   auto& queue = router_->Queue();
   Subscribe<EventStatusChanged>(queue, [this](const EventStatusChanged& event) {
     if (event.source == EventSource::system) {
-      std::lock_guard<std::mutex> lock(mutex_);
+      std::lock_guard<std::mutex> const lock(mutex_);
       state_.connection_state = static_cast<ServiceConnectionState>(event.state);
       if (state_.connection_state == ServiceConnectionState::online) {
         state_.signaling_server_url = client_->GetSettingsManager()->GetSignalingServerUrl();

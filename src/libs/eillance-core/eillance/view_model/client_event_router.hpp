@@ -10,11 +10,11 @@ namespace eillance::view_model {
 
 // Events for the internal bus
 struct EventFrameReceived {
-  std::vector<std::byte> frame;
+  std::vector<std::byte> frame{};
 };
 struct EventProfileReceived {
   ContactID peer_id;
-  Device::Profile profile;
+  Device::Profile profile{};
 };
 struct EventChatMessageReceived {
   ContactID peer_id;
@@ -29,16 +29,16 @@ struct EventContactStatusChanged {
 };
 struct EventMessageStatusChanged {
   ContactID peer_id;
-  std::uint64_t message_id;
+  std::uint64_t message_id{};
   messaging::MessageStatus status;
 };
 struct EventPeerListUpdate {
-  std::vector<Device> peers;
+  std::vector<Device> peers{};
 };
 struct EventStatusChanged {
   ContactID peer_id;
   EventSource source;
-  int state;
+  int state{};
 };
 struct EventIncomingCall {
   ContactID peer_id;

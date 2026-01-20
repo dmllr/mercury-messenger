@@ -29,14 +29,14 @@ class AudioCaptureCli {
   CircularBuffer<Packet, AudioConfig::samplesPerSecond> encoded_packets_;
 
   // Implementation-specific configuration
-  static constexpr auto ma_sample_format = ma_format_s16;
+  static constexpr auto maSampleFormat = ma_format_s16;
 
   TELEMETRY(Time::Unit last_fps_milestone{}; std::uint32_t fps_counter{}; std::uint32_t loadCounter_{};)
 
 public:
   AudioCaptureCli() {
     // audio device
-    deviceConfig_.capture.format = ma_sample_format;
+    deviceConfig_.capture.format = maSampleFormat;
     deviceConfig_.capture.channels = AudioConfig::channels;
     deviceConfig_.sampleRate = AudioConfig::sampleRate;
     deviceConfig_.pUserData = this;
@@ -46,7 +46,7 @@ public:
       if (self == nullptr) { return; }
 
       auto encoded_packet = self->encoder_.EncodeBuffer(static_cast<const AudioConfig::SampleDataType*>(frames));
-      self->encoded_packets_.push(std::move(encoded_packet));
+      self->encoded_packets_.Push(std::move(encoded_packet));
 
       TELEMETRY(if (self->fps_counter % (telemetry_interval * AudioConfig::samplesPerSecond) == 0) {
         const auto elapsed = (Time::Now() - self->last_fps_milestone) / Time::uS;
@@ -93,8 +93,8 @@ public:
   auto FetchBuffers() -> Packet {
     TELEMETRY(loadCounter_++;)
     Packet combined_packet;
-    while (!encoded_packets_.isEmpty()) {
-      auto packet = encoded_packets_.pop();
+    while (!encoded_packets_.IsEmpty()) {
+      auto packet = encoded_packets_.Pop();
       combined_packet.append(packet);
     }
     return combined_packet;

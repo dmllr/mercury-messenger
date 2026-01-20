@@ -72,13 +72,13 @@ std::vector<std::string> GetContactMenuEntries(const std::vector<eillance::view_
       }
     } else {
       switch (contact.connection_state) {
-        case eillance::transport::PeerConnectionState::Connecting:
+        case eillance::transport::PeerConnectionState::connecting:
           conn_status_str = " (Connecting)";
           break;
-        case eillance::transport::PeerConnectionState::Connected:
+        case eillance::transport::PeerConnectionState::connected:
           conn_status_str = " (Connected)";
           break;
-        case eillance::transport::PeerConnectionState::Failed:
+        case eillance::transport::PeerConnectionState::failed:
           conn_status_str = " (Failed)";
           break;
         default:
@@ -110,9 +110,9 @@ constexpr auto GetConnectionStatusString(const eillance::ServiceConnectionState 
 }
 
 // Helper function to format timestamps according to the specified rules.
-std::string FormatTimestamp(const Time::Unit tsMicroseconds) {
+std::string FormatTimestamp(const Time::Unit ts_microseconds) {
   using namespace std::chrono;
-  const time_t message_time_t = tsMicroseconds / 1000000;
+  const time_t message_time_t = ts_microseconds / 1000000;
   const auto now_tp = system_clock::now();
   const time_t now_time_t = system_clock::to_time_t(now_tp);
 
@@ -128,16 +128,16 @@ std::string FormatTimestamp(const Time::Unit tsMicroseconds) {
   localtime_r(&now_time_t, &now_tm);
 #endif
 
-  constexpr auto kBufferSize = 64;
-  char buffer[kBufferSize];
+  constexpr auto k_buffer_size = 64;
+  char buffer[k_buffer_size];
 
   if (message_tm.tm_year == now_tm.tm_year && message_tm.tm_yday == now_tm.tm_yday) {
     strftime(buffer, sizeof(buffer), "%H:%M", &message_tm);
     return std::string(buffer);
   }
 
-  constexpr auto kSecondsInDay = 86400;
-  time_t yesterday_time_t = now_time_t - kSecondsInDay;
+  constexpr auto k_seconds_in_day = 86400;
+  time_t const yesterday_time_t = now_time_t - k_seconds_in_day;
 #ifdef _WIN32
   tm yesterday_tm{};
   localtime_s(&yesterday_tm, &yesterday_time_t);
@@ -232,7 +232,7 @@ int main(int argc, char** argv) {
               << "1. Create a new identity\n"
               << "2. Restore from a 12-word recovery phrase\n"
               << "Enter your choice: ";
-    int choice;
+    int choice = 0;
     std::cin >> choice;
     std::cin.ignore();
     if (choice == 1) {
@@ -306,7 +306,9 @@ int main(int argc, char** argv) {
     const auto contacts = contacts_vm->GetContacts();
     ftxui::Elements elements;
 
-    if (conv_state.has_older_messages) { elements.push_back(ftxui::text("--- older messages available (use /history load) ---") | ftxui::dim); }
+    if (conv_state.has_older_messages) {
+      elements.push_back(ftxui::text("--- older messages available (use /history load) ---") | ftxui::dim);
+    }
 
     for (const auto& entry: conv_state.history) {
       std::string prefix;
@@ -397,10 +399,12 @@ int main(int argc, char** argv) {
 
           if (command == "/add") {
             try {
-              contacts_vm->AddContact(eillance::ContactID(arg));
+              contacts_vm->AddContact(eillance::ContactID(arg), std::nullopt);
             } catch (...) {}
           } else if (command == "/accept") {
-            if (!arg.empty()) contacts_vm->AcceptContact(eillance::ContactID(arg));
+            if (!arg.empty()) {
+              contacts_vm->AcceptContact(eillance::ContactID(arg));
+            }
           } else if (command == "/load" && conversation_vm) {
             try {
               conversation_vm->LoadFullMessage(std::stoull(arg));
@@ -438,8 +442,8 @@ int main(int argc, char** argv) {
       conversation_vm = nullptr;
     }
 
-    constexpr auto kContactListWidth = 40;
-    const auto main_view = ftxui::hbox({contact_menu->Render() | ftxui::size(ftxui::WIDTH, ftxui::EQUAL, kContactListWidth) | ftxui::border, ftxui::vbox({chat_renderer->Render() | ftxui::flex, ftxui::separator(), input_component->Render()}) | ftxui::flex});
+    constexpr auto k_contact_list_width = 40;
+    const auto main_view = ftxui::hbox({contact_menu->Render() | ftxui::size(ftxui::WIDTH, ftxui::EQUAL, k_contact_list_width) | ftxui::border, ftxui::vbox({chat_renderer->Render() | ftxui::flex, ftxui::separator(), input_component->Render()}) | ftxui::flex});
 
     const auto profile = profile_vm->GetProfile();
     const auto connection = settings_vm->GetState().connection_state;

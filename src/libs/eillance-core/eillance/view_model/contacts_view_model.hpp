@@ -32,7 +32,7 @@ public:
   [[nodiscard]] auto GetContacts() const -> std::vector<ViewContact>;
 
   // Actions
-  void AddContact(const ContactID& peerId, const std::optional<std::vector<std::byte>>& token = std::nullopt);
+  void AddContact(const ContactID& peerId, const std::optional<std::vector<std::byte>>& token);
   void BlockContact(const ContactID& peerId);
   void DeleteContact(const ContactID& peerId);
   void UnblockContact(const ContactID& peerId);
