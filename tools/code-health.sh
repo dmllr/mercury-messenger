@@ -66,7 +66,7 @@ run_format() {
     | grep -z -E "\.(cpp|hpp|h)$" \
     | while IFS= read -r -d "" file; do
       echo "Formatting $file..."
-      clang-format-18 -i "$file"
+      clang-format-18 -i "$file" -style=file:/work/.clang-format
     done'
   success "clang-format finished."
 }
