@@ -1,5 +1,7 @@
 #include "mercury/bot/bot.hpp"
 
+#include <thread>
+
 #include "eillance/client/client.hpp"
 #include "eillance/rtc/transport_impl_libdatachannel.hpp"
 #include "eillance/storage/sqlite/persistent_storage_impl_sqlite.hpp"
@@ -31,21 +33,21 @@ class Bot::Impl {
 
   void SetupCallbacks() const {
     if (options_.auto_accept_contacts) {
-      client_->SetContactRequestCallback([this](eillance::ContactID const& peer_id) {
+      client_->GetContactService()->SetContactRequestCallback([this](eillance::ContactID const& peer_id) {
         // Automatically accept friend requests
         client_->ConfirmContact(peer_id);
       });
     }
 
     if (options_.auto_reject_calls) {
-      client_->SetIncomingCallCallback(
+      client_->GetMediaCallService()->SetIncomingCallCallback(
           [this](eillance::ContactID const& peer_id, eillance::messaging::HistoryEntryKind /*call_type*/) {
             client_->RejectCall(peer_id);
           }
       );
     }
 
-    client_->SetChatMessageReceivedCallback(
+    client_->GetMessagingService()->SetChatMessageReceivedCallback(
         [this](eillance::ContactID const& peer_id, eillance::messaging::HistoryEntryRecord const& record) {
           if (!message_handler_) {
             return;
@@ -98,11 +100,9 @@ void Bot::Start() const {
   }
 
   // The client starts its own threads.
-  // Note: Client::Start() assumes ownership or management of threads.
-  // In a real production API we might want to manage the thread lifecycle more explicitly here,
-  // but eillance::Client handles it internally via std::thread detached or managed.
-  // Looking at Client::Start(), it spawns a thread.
-  std::thread([c = impl_->client_] { c->Start(); }).detach();
+  // We detach the thread running the client event loop.
+  // The lifecycle is managed by the Bot class destructor calling Stop().
+  std::thread([client = impl_->client_] { client->Start(); }).detach();
 }
 
 void Bot::Stop() const {
