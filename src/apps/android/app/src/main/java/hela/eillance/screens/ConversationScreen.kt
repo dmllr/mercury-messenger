@@ -384,7 +384,11 @@ fun ChatHistory(
     val history = historyPage.messages
     items(
       count = history.size,
-      key = { index -> history[history.lastIndex - index].id }
+      key = { index ->
+        val item = history[history.lastIndex - index]
+        // Fallback key generation for items with ID 0 (pending/failed persistence) to prevent duplicate key crashes
+        if (item.id != 0L) item.id else Long.MIN_VALUE + index
+      }
     ) { index ->
       val item = history[history.lastIndex - index]
       when (item.kind) {
