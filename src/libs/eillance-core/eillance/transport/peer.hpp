@@ -32,7 +32,6 @@ struct Peer {
   std::atomic<bool> has_media_peer_connection{false};
   std::unique_ptr<crypto::SessionCipher> session_cipher{};
   std::function<void(std::string const&)> on_data_channel_message;
-  std::atomic<bool> incoming_call_notified{false};
   std::optional<std::string> pending_offer_sdp;
   std::vector<Candidate> pending_candidates{};
   // NOLINTEND(*-non-private-member-variables-in-classes)
