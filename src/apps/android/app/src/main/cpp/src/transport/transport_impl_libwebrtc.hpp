@@ -15,13 +15,14 @@
 #include "eillance/logging/logging.hpp"
 #include "eillance/transport/peer.hpp"
 #include "eillance/transport/transport.hpp"
+#include "eillance/utils/invariant.hpp"
 
 namespace eillance::transport {
 
 class AndroidRtcTrack final : public ITrack {
  public:
   void SendSample(std::vector<std::byte> const& /*sample*/, uint64_t /*sample_time*/) override {
-    // No-op on Android, media is handled by the platform's WebRTC stack
+    // No-op on Android, media is handled by the platform\'s WebRTC stack
   }
 };
 
@@ -72,9 +73,8 @@ class AndroidRtcTransport final : public Transport::TransportInterface {
     statusCallback_ = std::make_shared<Transport::StatusCallbackFunction>(callback);
   }
   void ReportStateChange(ContactID const& peer_id, EventSource source, int state) {
-    if (statusCallback_) {
-      (*statusCallback_)(peer_id, source, state);
-    }
+    INVARIANT(statusCallback_);
+    (*statusCallback_)(peer_id, source, state);
   }
   void SetName(std::string const& /*device_name*/) override {}
   void SetId(ContactID const& id) override { id_ = id; }

@@ -1,5 +1,6 @@
 #include "eillance/services/account_service.hpp"
 
+#include "eillance/utils/invariant.hpp"
 #include "eillance/logging/logging.hpp"
 
 namespace eillance::services {
@@ -27,39 +28,34 @@ auto AccountService::GetMnemonic() const -> std::optional<std::string> { return 
 auto AccountService::GenerateNewIdentity() -> std::string {
   auto mnemonic = id_manager_->GenerateNewIdentity();
   if (!mnemonic.empty()) {
-    if (on_profile_updated_) {
-      on_profile_updated_();
-    }
+    INVARIANT(on_profile_updated_);
+    on_profile_updated_();
   }
   return mnemonic;
 }
 
 auto AccountService::RestoreIdentity(std::string const& mnemonic) -> bool {
   if (id_manager_->RestoreFromMnemonic(mnemonic)) {
-    if (on_profile_updated_) {
-      on_profile_updated_();
-    }
+    INVARIANT(on_profile_updated_);
+    on_profile_updated_();
     return true;
   }
   return false;
 }
 
 auto AccountService::CreateBackup(std::string const& output_path, std::string const& password) const -> bool {
-  if (!backup_manager_) {
-    return false;
-  }
+  INVARIANT(backup_manager_);
   return backup_manager_->CreateBackup(output_path, password);
 }
 
 auto AccountService::RestoreBackup(std::string const& input_path, std::string const& password) -> bool {
-  if (!backup_manager_) {
-    return false;
-  }
+  INVARIANT(backup_manager_);
   if (backup_manager_->RestoreFromBackup(input_path, password)) {
     // Reload settings and identity after database restore
     id_manager_ = std::make_unique<identity::IdManager>(storage_);
     settings_manager_ = std::make_unique<SettingsManager>(storage_);
-    if (on_profile_updated_) on_profile_updated_();
+    INVARIANT(on_profile_updated_);
+    on_profile_updated_();
     return true;
   }
   return false;
@@ -82,7 +78,8 @@ void AccountService::UpdateMyProfile(
     settings_manager_->SetMyPhotoBase64(*photo);
   }
 
-  if (on_profile_updated_) on_profile_updated_();
+  INVARIANT(on_profile_updated_);
+  on_profile_updated_();
 }
 
 void AccountService::UpdateSignalingUrl(std::string const& url) {

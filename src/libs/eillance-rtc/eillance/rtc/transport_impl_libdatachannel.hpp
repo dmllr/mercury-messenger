@@ -250,10 +250,10 @@ class RtcTransport final : public transport::Transport::TransportInterface {
                 LGI << "Active peer connection for " << peer_id << " (" << context
                     << ") closed. Client layer is responsible for removal.";
               } else {
-                LGI << "Ignoring 'Closed' event from stale peer connection for " << peer_id << " (" << context << ").";
+                LGI << "Ignoring \'Closed\' event from stale peer connection for " << peer_id << " (" << context << ").";
               }
             } else {
-              LGI << "Ignoring 'Closed' event for already removed peer " << peer_id << " (" << context << ").";
+              LGI << "Ignoring \'Closed\' event for already removed peer " << peer_id << " (" << context << ").";
             }
           }
         }
@@ -531,9 +531,8 @@ class RtcTransport final : public transport::Transport::TransportInterface {
 
   void ReportServiceConnectionState(ServiceConnectionState state) const {
     serviceConnectionState_ = state;
-    if (status_callback_) {
-      (*status_callback_)(ContactID(), EventSource::system, static_cast<int>(state));
-    }
+    INVARIANT(status_callback_);
+    (*status_callback_)(ContactID(), EventSource::system, static_cast<int>(state));
   }
 
   void WsSendMessage(Json const& message) const {
@@ -546,7 +545,7 @@ class RtcTransport final : public transport::Transport::TransportInterface {
     try {
       ws_->send(message.dump());
     } catch (std::exception const& e) {
-      LGE << "Can't send a WebSocket message due to the exception: " << e.what();
+      LGE << "Can\'t send a WebSocket message due to the exception: " << e.what();
     }
   }
 
@@ -583,9 +582,8 @@ class RtcTransport final : public transport::Transport::TransportInterface {
   }
 
   void ReportPeerStateChange(ContactID const& peer_id, EventSource const source, int const state) const {
-    if (status_callback_) {
-      (*status_callback_)(peer_id, source, state);
-    }
+    INVARIANT(status_callback_);
+    (*status_callback_)(peer_id, source, state);
   }
 
  public:

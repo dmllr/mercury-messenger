@@ -5,6 +5,7 @@
 
 #include <eillance/events/service_connection_state.hpp>
 
+#include "eillance/utils/invariant.hpp"
 #include "eillance/logging/logging.hpp"
 
 namespace eillance {
@@ -51,9 +52,8 @@ Client::Client(std::shared_ptr<storage::PersistentStorage> storage, std::shared_
       }
     }
 
-    if (status_callback_) {
-      (*status_callback_)(peer_id, source, state_val);
-    }
+    INVARIANT(status_callback_);
+    (*status_callback_)(peer_id, source, state_val);
   });
 }
 
@@ -125,9 +125,8 @@ void Client::OnSystemMessage(std::string const& type, Json const& message) {
     }
   } else if (type == "login_success") {
     OnLoginSuccess();
-    if (status_callback_) {
-      (*status_callback_)(ContactID(), EventSource::system, static_cast<int>(ServiceConnectionState::online));
-    }
+    INVARIANT(status_callback_);
+    (*status_callback_)(ContactID(), EventSource::system, static_cast<int>(ServiceConnectionState::online));
   } else {
     LGW << "Received unknown system message of type: " << type;
   }
@@ -259,9 +258,8 @@ void Client::ProcessDataChannelMessage(ContactID const& peer_id, Json const& mes
         auto my_key = peer->session_cipher->GetPublicKey();
         transport_->SendPeerDataChannelMessage(
             peer_id,
-            {{"type", "key_exchange"}, {"key", std::vector<std::byte>(my_key.begin(), my_key.end())}, {"is_reply", true}
-            }
-        );
+            {{"type", "key_exchange"}, {"key", std::vector<std::byte>(my_key.begin(), my_key.end())}, {"is_reply", true}}
+            );
       } else {
         messaging_service_->SendQueuedMessages(peer_id);
       }

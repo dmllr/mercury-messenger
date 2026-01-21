@@ -2,6 +2,7 @@
 
 #include <stdexcept>
 
+#include "eillance/utils/invariant.hpp"
 #include "eillance/logging/logging.hpp"
 #include "eillance/services/contact_service.hpp"
 
@@ -22,9 +23,8 @@ MessagingService::MessagingService(
   // Register internal status change listener to propagate to the public callback
   history_->SetStatusChangedCallback(
       [this](ContactID const& peer_id, uint64_t msg_id, messaging::MessageStatus status) {
-        if (on_status_changed_) {
-          on_status_changed_(peer_id, msg_id, status);
-        }
+        INVARIANT(on_status_changed_);
+        on_status_changed_(peer_id, msg_id, status);
       }
   );
 
@@ -257,9 +257,8 @@ void MessagingService::OnChatMessageReceived(
   nlohmann::json const receipt = {{"type", "message_receipt"}, {"status", "delivered"}, {"message_id", message_id}};
   transport_->SendPeerDataChannelMessage(peer_id, receipt);
 
-  if (on_message_received_) {
-    on_message_received_(peer_id, entry);
-  }
+  INVARIANT(on_message_received_);
+  on_message_received_(peer_id, entry);
 }
 
 void MessagingService::OnMessageReceipt(ContactID const& peer_id, uint64_t message_id, std::string const& status) {
