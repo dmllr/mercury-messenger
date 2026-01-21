@@ -1,5 +1,6 @@
 #include "eillance/services/contact_service.hpp"
 
+#include "eillance/utils/invariant.hpp"
 #include "eillance/logging/logging.hpp"
 #include "eillance/services/account_service.hpp"
 #include "eillance/services/messaging_service.hpp"
@@ -42,45 +43,39 @@ void ContactService::AddContact(ContactID const& peer_id, std::optional<std::vec
       content["token"] = crypto::ToHex(*token);
     }
 
-    if (messaging_service_) {
-      messaging_service_->AddSystemEntry(peer_id, content.dump(), messaging::MessageDirection::sent);
-    }
+    INVARIANT(messaging_service_);
+    messaging_service_->AddSystemEntry(peer_id, content.dump(), messaging::MessageDirection::sent);
 
-    if (on_contact_status_changed_) {
-      on_contact_status_changed_(peer_id, identity::ContactStatus::pendingApproval);
-    }
+    INVARIANT(on_contact_status_changed_);
+    on_contact_status_changed_(peer_id, identity::ContactStatus::pendingApproval);
 
     // Trigger delivery via messaging service
     // MessagingService will see the pending system message and try to send it.
     // However, since it's a contact request, MessagingService must be able to establish
     // a connection or send it via signaling.
     // We ensure the Client creates the peer structure correctly via the handler.
-    if (messaging_service_) {
-      connection_handler_(peer_id);
-      messaging_service_->SendQueuedMessages(peer_id);
-    }
+    connection_handler_(peer_id);
+    messaging_service_->SendQueuedMessages(peer_id);
   }
 }
 
 void ContactService::ConfirmContact(ContactID const& peer_id) {
   if (manager_->ConfirmContact(peer_id)) {
-    if (messaging_service_) {
-      messaging_service_->SendSystemMessage(peer_id, nlohmann::json{{"action", "contact_confirm"}}.dump());
+    INVARIANT(messaging_service_);
+    messaging_service_->SendSystemMessage(peer_id, nlohmann::json{{"action", "contact_confirm"}}.dump());
 
-      auto signature = account_service_->Sign(peer_id.Span());
-      manager_->StoreMySignatureFor(peer_id, signature);
+    auto signature = account_service_->Sign(peer_id.Span());
+    manager_->StoreMySignatureFor(peer_id, signature);
 
-      messaging_service_->SendSystemMessage(
-          peer_id,
-          nlohmann::json{{"action", "contact_signature"}, {"signature", crypto::ToHex(signature)}}.dump()
-      );
+    messaging_service_->SendSystemMessage(
+        peer_id,
+        nlohmann::json{{"action", "contact_signature"}, {"signature", crypto::ToHex(signature)}}.dump()
+    );
 
-      messaging_service_->SendSystemMessage(peer_id, nlohmann::json{{"action", "send_profile"}}.dump());
-    }
+    messaging_service_->SendSystemMessage(peer_id, nlohmann::json{{"action", "send_profile"}}.dump());
 
-    if (on_contact_status_changed_) {
-      on_contact_status_changed_(peer_id, identity::ContactStatus::confirmed);
-    }
+    INVARIANT(on_contact_status_changed_);
+    on_contact_status_changed_(peer_id, identity::ContactStatus::confirmed);
   }
 }
 
@@ -106,15 +101,15 @@ void ContactService::DeleteContact(ContactID const& peer_id) {
 
 void ContactService::UnblockContact(ContactID const& peer_id) {
   if (manager_->UnblockContact(peer_id)) {
-    if (on_contact_status_changed_) {
-      on_contact_status_changed_(peer_id, identity::ContactStatus::awaitingApproval);
-    }
+    INVARIANT(on_contact_status_changed_);
+    on_contact_status_changed_(peer_id, identity::ContactStatus::awaitingApproval);
   }
 }
 
 void ContactService::SetContactDisplayNameOverride(ContactID const& peer_id, std::string const& name) {
   manager_->SetDisplayNameOverride(peer_id, name);
-  if (on_contact_profile_updated_) on_contact_profile_updated_(peer_id);
+  INVARIANT(on_contact_profile_updated_);
+  on_contact_profile_updated_(peer_id);
 }
 
 void ContactService::ResetContactDisplayNameOverride(ContactID const& peer_id) {
@@ -122,7 +117,8 @@ void ContactService::ResetContactDisplayNameOverride(ContactID const& peer_id) {
   if (auto peer = transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
     transport_->SendPeerDataChannelMessage(peer_id, {{"type", "profile_request"}});
   }
-  if (on_contact_profile_updated_) on_contact_profile_updated_(peer_id);
+  INVARIANT(on_contact_profile_updated_);
+  on_contact_profile_updated_(peer_id);
 }
 
 auto ContactService::GenerateContactToken() -> std::vector<std::byte> {
@@ -132,7 +128,7 @@ auto ContactService::GenerateContactToken() -> std::vector<std::byte> {
 
 auto ContactService::GetContacts() const -> std::vector<identity::Contact> { return manager_->GetContacts(); }
 
-auto ContactService::GetContact(ContactID const& peer_id) -> std::optional<identity::Contact> {
+auto ContactService::GetContact(ContactID const& peer_id) const -> std::optional<identity::Contact> {
   return manager_->GetContact(peer_id);
 }
 
@@ -175,20 +171,17 @@ void ContactService::OnContactAddRequest(
       return;
     }
 
-    if (messaging_service_ != nullptr) {
-      nlohmann::json const content = {{"action", "contact_request_received"}};
-      messaging_service_->AddSystemEntry(peer_id, content.dump(), messaging::MessageDirection::received);
-      messaging_service_->MarkMessagesAsRead(peer_id, {});
-    }
+    INVARIANT(messaging_service_);
+    nlohmann::json const content = {{"action", "contact_request_received"}};
+    messaging_service_->AddSystemEntry(peer_id, content.dump(), messaging::MessageDirection::received);
+    messaging_service_->MarkMessagesAsRead(peer_id, {});
 
     if (status == identity::RequestStatus::New) {
-      if (on_contact_request_) {
-        on_contact_request_(peer_id);
-      }
+      INVARIANT(on_contact_request_);
+      on_contact_request_(peer_id);
     } else {
-      if (on_contact_profile_updated_) {
-        on_contact_profile_updated_(peer_id);
-      }
+      INVARIANT(on_contact_profile_updated_);
+      on_contact_profile_updated_(peer_id);
     }
   } else {
     if (manager_->IsConfirmedContact(peer_id)) {
@@ -199,21 +192,18 @@ void ContactService::OnContactAddRequest(
 
 void ContactService::OnContactConfirm(ContactID const& peer_id) {
   if (manager_->MarkAsConfirmed(peer_id)) {
-    if (on_contact_status_changed_) {
-      on_contact_status_changed_(peer_id, identity::ContactStatus::confirmed);
-    }
+    INVARIANT(on_contact_status_changed_);
+    on_contact_status_changed_(peer_id, identity::ContactStatus::confirmed);
 
-    if (messaging_service_) {
-      messaging_service_->SendSystemMessage(peer_id, nlohmann::json{{"action", "send_profile"}}.dump());
-      messaging_service_->SendSystemMessage(peer_id, nlohmann::json{{"action", "request_profile"}}.dump());
-    }
+    INVARIANT(messaging_service_);
+    messaging_service_->SendSystemMessage(peer_id, nlohmann::json{{"action", "send_profile"}}.dump());
+    messaging_service_->SendSystemMessage(peer_id, nlohmann::json{{"action", "request_profile"}}.dump());
   }
 }
 
 void ContactService::OnContactRemoved(ContactID const& peer_id) {
-  if (on_contact_removed_) {
-    on_contact_removed_(peer_id);
-  }
+  INVARIANT(on_contact_removed_);
+  on_contact_removed_(peer_id);
   BlockContact(peer_id, false);
 }
 
@@ -233,7 +223,8 @@ void ContactService::OnProfileUpdate(ContactID const& peer_id, nlohmann::json co
   if (bio && (!old || old->bio != bio)) changed = true;
   if (photo && (!old || old->photo_base64 != photo)) changed = true;
 
-  if (changed && messaging_service_) {
+  if (changed) {
+    INVARIANT(messaging_service_);
     nlohmann::json diff;
     diff["action"] = "profile_update_diff";
     diff["new"] = {{"display_name", name}, {"bio", bio}, {"photo", photo}};
@@ -244,14 +235,12 @@ void ContactService::OnProfileUpdate(ContactID const& peer_id, nlohmann::json co
   }
 
   manager_->UpdateContactProfile(peer_id, name, bio, photo);
-  if (on_contact_profile_updated_) {
-    on_contact_profile_updated_(peer_id);
-  }
+  INVARIANT(on_contact_profile_updated_);
+  on_contact_profile_updated_(peer_id);
 }
 
 void ContactService::OnReconfirmRequest(ContactID const& peer_id) {
-  auto contact = manager_->GetContact(peer_id);
-  if (contact && contact->my_signature_for_them) {
+  if (auto contact = manager_->GetContact(peer_id); contact && contact->my_signature_for_them) {
     nlohmann::json const resp = {
         {"type", "reconfirm_response"},
         {"signature", crypto::ToHex(*contact->my_signature_for_them)}
@@ -273,14 +262,12 @@ void ContactService::OnReconfirmResponse(ContactID const& peer_id, std::string c
         {{"type", "contact_signature"}, {"signature", crypto::ToHex(my_sig)}}
     );
 
-    if (on_contact_status_changed_) {
-      on_contact_status_changed_(peer_id, identity::ContactStatus::confirmed);
-    }
+    INVARIANT(on_contact_status_changed_);
+    on_contact_status_changed_(peer_id, identity::ContactStatus::confirmed);
 
     transport_->SendPeerDataChannelMessage(peer_id, {{"type", "profile_request"}});
-    if (messaging_service_ != nullptr) {
-      messaging_service_->SendSystemMessage(peer_id, nlohmann::json{{"action", "send_profile"}}.dump());
-    }
+    INVARIANT(messaging_service_);
+    messaging_service_->SendSystemMessage(peer_id, nlohmann::json{{"action", "send_profile"}}.dump());
   }
 }
 
@@ -299,22 +286,20 @@ void ContactService::OnDeviceProfileReceived(ContactID const& peer_id, nlohmann:
     online_peers_[peer_id].profile = profile;
   }
   NotifyPeerListUpdate();
-  if (on_profile_received_) {
-    on_profile_received_(peer_id, profile);
-  }
+  INVARIANT(on_profile_received_);
+  on_profile_received_(peer_id, profile);
 }
 
-void ContactService::NotifyPeerListUpdate() {
-  if (on_peer_list_update_) {
-    std::vector<Device> list;
-    {
-      std::lock_guard<std::mutex> const lock(online_peers_mutex_);
-      for (auto const& pair : online_peers_) {
-        list.push_back(pair.second);
-      }
+void ContactService::NotifyPeerListUpdate() const {
+  INVARIANT(on_peer_list_update_);
+  std::vector<Device> list;
+  {
+    std::lock_guard<std::mutex> const lock(online_peers_mutex_);
+    for (auto const& pair : online_peers_) {
+      list.push_back(pair.second);
     }
-    on_peer_list_update_(list);
   }
+  on_peer_list_update_(list);
 }
 
 auto ContactService::ParseDeviceProfile(nlohmann::json const& jprofile) -> Device::Profile {

@@ -43,7 +43,7 @@ class ContactService {
 
   // Queries
   [[nodiscard]] auto GetContacts() const -> std::vector<identity::Contact>;
-  [[nodiscard]] auto GetContact(ContactID const& peer_id) -> std::optional<identity::Contact>;
+  [[nodiscard]] auto GetContact(ContactID const& peer_id) const -> std::optional<identity::Contact>;
   [[nodiscard]] auto IsConfirmed(ContactID const& peer_id) const -> bool;
 
   // Event Handlers
@@ -76,7 +76,7 @@ class ContactService {
   void SetProfileReceivedCallback(OnProfileReceivedCallback cb);
 
  private:
-  void NotifyPeerListUpdate();
+  void NotifyPeerListUpdate() const;
   static auto ParseDeviceProfile(nlohmann::json const& jprofile) -> Device::Profile;
 
   std::shared_ptr<storage::PersistentStorage> storage_;

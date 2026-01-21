@@ -39,7 +39,7 @@ class VideoCaptureCli {
 #elif defined _WIN32
     static constexpr auto open_cv_camera_capabilities = cv::CAP_DSHOW;
 #else
-    static constexpr auto openCvCameraCapabilities = cv::CAP_ANY;
+    static constexpr auto open_cv_camera_capabilities = cv::CAP_ANY;
 #endif
   };
 
@@ -63,7 +63,7 @@ class VideoCaptureCli {
     }
 
     // open the default camera
-    cap_.open(0, CrossPlatformProperties::openCvCameraCapabilities);
+    cap_.open(0, CrossPlatformProperties::open_cv_camera_capabilities);
 
     if (!cap_.isOpened()) {
       LGE << "Can't open the capture device. The video source has not been started.";
