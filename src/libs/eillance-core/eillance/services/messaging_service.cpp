@@ -28,10 +28,12 @@ MessagingService::MessagingService(
       }
   );
 
-  delivery_service_ =
-      std::make_unique<messaging::MessageDeliveryService>(storage_, contact_manager_, [this](ContactID const& peer_id) {
-        RequestConnection(peer_id);
-      });
+  delivery_service_ = std::make_unique<messaging::MessageDeliveryService>(
+      storage_,
+      contact_manager_,
+      [this](ContactID const& peer_id) { RequestConnection(peer_id); },
+      [this](ContactID const& peer_id) { return HasPendingWork(peer_id); }
+  );
 }
 
 void MessagingService::StartDeliveryService() { delivery_service_->Start(); }
@@ -54,7 +56,7 @@ void MessagingService::UpdatePeerActivity(ContactID const& peer_id) {
 }
 
 auto MessagingService::SendChatMessage(ContactID const& peer_id, std::string const& message)
-    -> messaging::HistoryEntryRecord {
+-> messaging::HistoryEntryRecord {
   if (!contact_manager_->GetContact(peer_id)) {
     LGE << "Cannot send message to " << peer_id.ToString() << ". Not a contact.";
     return {};
@@ -85,6 +87,9 @@ void MessagingService::SendSystemMessage(ContactID const& peer_id, std::string c
 }
 
 void MessagingService::SendQueuedMessages(ContactID const& peer_id) {
+  // Always try to flush pending receipts first
+  SendPendingReadReceipts(peer_id);
+
   auto const messages = storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::sending);
   if (messages.empty()) {
     delivery_service_->ConnectionAttemptFinished(peer_id);
@@ -174,6 +179,38 @@ void MessagingService::SendQueuedMessages(ContactID const& peer_id) {
   delivery_service_->ConnectionAttemptFinished(peer_id);
 }
 
+void MessagingService::SendPendingReadReceipts(ContactID const& peer_id) {
+  std::vector<uint64_t> ids_to_send;
+  {
+    std::lock_guard<std::recursive_mutex> const lock(receipts_mutex_);
+    if (auto it = pending_read_receipts_.find(peer_id); it != pending_read_receipts_.end()) {
+      ids_to_send = std::move(it->second);
+      pending_read_receipts_.erase(it);
+    }
+  }
+
+  if (ids_to_send.empty()) {
+    return;
+  }
+
+  auto peer = transport_->GetPeer(peer_id);
+  if (peer && peer->data_channel_is_open) {
+    nlohmann::json const msg = {
+        {"type", "message_read"},
+        {"message_ids", ids_to_send},
+    };
+    transport_->SendPeerDataChannelMessage(peer_id, msg);
+    LGI << "Sent pending read receipts for " << ids_to_send.size() << " messages to " << peer_id.ToString();
+  } else {
+    // Re-queue if we thought we could send but failed (e.g. peer disconnected in between)
+    // Though this function is usually called when we think we are connected.
+    // Use lock again to merge back if needed.
+    std::lock_guard<std::recursive_mutex> const lock(receipts_mutex_);
+    auto& pending = pending_read_receipts_[peer_id];
+    pending.insert(pending.end(), ids_to_send.begin(), ids_to_send.end());
+  }
+}
+
 void MessagingService::OnConnectionAttemptFinished(ContactID const& peer_id) {
   delivery_service_->ConnectionAttemptFinished(peer_id);
 }
@@ -181,7 +218,7 @@ void MessagingService::OnConnectionAttemptFinished(ContactID const& peer_id) {
 // --- Queries ---
 
 auto MessagingService::GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t page_size) const
-    -> messaging::HistoryPage {
+-> messaging::HistoryPage {
   return history_->GetHistoryPage(peer_id, page_index, page_size);
 }
 
@@ -199,13 +236,17 @@ auto MessagingService::GetChatSummaries(std::vector<ContactID> const& peer_ids
 void MessagingService::MarkMessagesAsRead(ContactID const& peer_id, std::vector<uint64_t> const& message_ids) {
   history_->MarkMessagesAsRead(peer_id, message_ids);
 
+  {
+    std::lock_guard<std::recursive_mutex> const lock(receipts_mutex_);
+    auto& pending = pending_read_receipts_[peer_id];
+    pending.insert(pending.end(), message_ids.begin(), message_ids.end());
+  }
+
   auto peer = transport_->GetPeer(peer_id);
   if (peer && peer->data_channel_is_open) {
-    nlohmann::json const msg = {
-        {"type", "message_read"},
-        {"message_ids", message_ids},
-    };
-    transport_->SendPeerDataChannelMessage(peer_id, msg);
+    SendPendingReadReceipts(peer_id);
+  } else {
+    delivery_service_->AttemptDelivery(peer_id);
   }
 }
 
@@ -284,6 +325,18 @@ void MessagingService::SetChatMessageReceivedCallback(OnChatMessageCallback cb) 
 
 void MessagingService::SetMessageStatusChangedCallback(OnMessageStatusChangedCallback cb) {
   on_status_changed_ = std::move(cb);
+}
+
+bool MessagingService::HasPendingWork(ContactID const& peer_id) {
+  // Check if we have pending read receipts
+  {
+    std::lock_guard<std::recursive_mutex> const lock(receipts_mutex_);
+    if (pending_read_receipts_.contains(peer_id) && !pending_read_receipts_[peer_id].empty()) {
+      return true;
+    }
+  }
+  // Check if we have pending messages in DB
+  return !storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::sending).empty();
 }
 
 }  // namespace eillance::services

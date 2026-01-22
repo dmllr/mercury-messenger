@@ -219,7 +219,7 @@ void Client::ProcessPeerMessage(Json message) {
     );
   }
 
-  // Contact & Profile Logic
+    // Contact & Profile Logic
   else if (type == "contact_add_request") {
     std::optional<std::string> token;
     if (message.contains("token")) {
@@ -283,9 +283,8 @@ void Client::ProcessDataChannelMessage(ContactID const& peer_id, Json const& mes
             {{"type", "key_exchange"}, {"key", std::vector<std::byte>(my_key.begin(), my_key.end())}, {"is_reply", true}
             }
         );
-      } else {
-        messaging_service_->SendQueuedMessages(peer_id);
       }
+      messaging_service_->SendQueuedMessages(peer_id);
     } else {
       LGE << "Failed key exchange with " << peer_id.ToString();
     }

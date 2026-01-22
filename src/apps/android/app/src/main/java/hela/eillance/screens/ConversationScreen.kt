@@ -486,14 +486,14 @@ fun MessageBubble(
           Icon(
             imageVector = when (entry.status) {
               MessageStatus.Read -> Icons.Filled.DoneAll
-              MessageStatus.Delivered -> Icons.Filled.DoneAll
+              MessageStatus.Delivered -> Icons.Filled.Done
               MessageStatus.Sent -> Icons.Filled.Done
               else -> Icons.Filled.Schedule
             },
             contentDescription = "Message status: ${entry.status}",
             modifier = Modifier.size(16.dp).padding(start = 4.dp),
             tint = if (entry.status == MessageStatus.Read) {
-              MaterialTheme.colorScheme.primary
+              MaterialTheme.extendedColors.success
             } else {
               MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
             }

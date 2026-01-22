@@ -2,8 +2,10 @@
 
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "eillance/messaging/delivery_service.hpp"
@@ -14,7 +16,7 @@
 namespace eillance::services {
 
 class MessagingService {
- public:
+public:
   using ConnectionRequestHandler = std::function<void(ContactID const&)>;
 
   explicit MessagingService(
@@ -33,13 +35,14 @@ class MessagingService {
 
   // Attempts to flush queued messages for a connected peer
   void SendQueuedMessages(ContactID const& peer_id);
+  void SendPendingReadReceipts(ContactID const& peer_id);
 
   // Signal that a connection attempt finished (success or fail) to manage retry logic
   void OnConnectionAttemptFinished(ContactID const& peer_id);
 
   // Queries
   [[nodiscard]] auto GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t page_size) const
-      -> messaging::HistoryPage;
+  -> messaging::HistoryPage;
   [[nodiscard]] auto GetFullMessageContent(std::uint64_t message_id) const -> std::optional<std::string>;
   [[nodiscard]] auto GetChatSummaries(std::vector<ContactID> const& peer_ids
   ) const -> std::vector<messaging::ChatSummary>;
@@ -74,10 +77,12 @@ class MessagingService {
   void SetChatMessageReceivedCallback(OnChatMessageCallback cb);
   void SetMessageStatusChangedCallback(OnMessageStatusChangedCallback cb);
 
- private:
+private:
   // Helper to connect to a peer if not connected
   void RequestConnection(ContactID const& peer_id);
   void UpdatePeerActivity(ContactID const& peer_id);
+  // Checks both DB and pending receipts
+  auto HasPendingWork(ContactID const& peer_id) -> bool;
 
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<transport::Transport> transport_;
@@ -89,6 +94,10 @@ class MessagingService {
 
   OnChatMessageCallback on_message_received_;
   OnMessageStatusChangedCallback on_status_changed_;
+
+  // Queue for read receipts that need to be sent reliably
+  std::unordered_map<ContactID, std::vector<uint64_t>> pending_read_receipts_;
+  std::recursive_mutex receipts_mutex_;
 };
 
 }  // namespace eillance::services
