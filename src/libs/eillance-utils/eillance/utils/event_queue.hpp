@@ -36,7 +36,7 @@ class EventQueue {
   };
 
  public:
-  static EventQueue& Instance() {
+  static auto Instance() -> EventQueue& {
     static auto instance{EventQueue()};
     return instance;
   }
@@ -46,8 +46,8 @@ class EventQueue {
   }
   EventQueue(EventQueue&&) = delete;
   EventQueue(EventQueue const&) = delete;
-  EventQueue& operator=(EventQueue&&) = delete;
-  EventQueue& operator=(EventQueue const&) = delete;
+  auto operator=(EventQueue&&) -> EventQueue& = delete;
+  auto operator=(EventQueue const&) -> EventQueue& = delete;
 
   ~EventQueue() {
     dispatchQueue_.RemovePending();
@@ -57,7 +57,7 @@ class EventQueue {
 
   /// Subscribe to events of a specific type.
   template <typename EventType>
-  SubscriberTypeId Subscribe(std::function<void(EventType const&)> const& callback) {
+  auto Subscribe(std::function<void(EventType const&)> const& callback) -> SubscriberTypeId {
     auto const lock = std::lock_guard<std::mutex>(syncMutex_);
     SubscriberTypeId const id = nextId_++;
     subscribers_[typeid(EventType)].emplace_back(id, [callback](std::any const& event) {
@@ -117,7 +117,7 @@ class EventQueue {
 
  private:
   template <typename FirstType, typename SecondType>
-  std::pair<FirstType, SecondType> MakePair(FirstType&& first, SecondType&& second) {
+  auto MakePair(FirstType&& first, SecondType&& second) -> std::pair<FirstType, SecondType> {
     return std::pair<FirstType, SecondType>(std::forward<FirstType>(first), std::forward<SecondType>(second));
   }
 };

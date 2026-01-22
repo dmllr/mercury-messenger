@@ -81,13 +81,13 @@ void AccountService::UpdateMyProfile(
   on_profile_updated_();
 }
 
-void AccountService::UpdateSignalingUrl(std::string const& url) const {
+void AccountService::UpdateSignalingUrl(std::string const& url) {
   settings_manager_->SetSignalingServerUrl(url);
   transport_->SetSignalingUrl(url);
   transport_->Reconnect();
 }
 
-auto AccountService::Sign(std::span<std::byte const> message) const -> std::vector<std::byte> {
+auto AccountService::Sign(std::span<std::byte const> const message) const -> std::vector<std::byte> {
   return id_manager_->Sign(message);
 }
 

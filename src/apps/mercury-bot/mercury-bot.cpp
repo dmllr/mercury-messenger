@@ -21,7 +21,7 @@ std::sig_atomic_t volatile gSignalStatus = 0;  // NOLINT(*-avoid-non-const-globa
 
 void SignalHandler(int signal) { gSignalStatus = signal; }
 
-std::string FormatFilenameTimestamp(std::uint64_t const ts_microseconds) {
+auto FormatFilenameTimestamp(std::uint64_t const ts_microseconds) -> std::string {
   std::time_t const seconds_since_epoch = ts_microseconds / 1000000ULL;
   std::tm tm_struct{};
 #ifdef _WIN32
@@ -37,7 +37,7 @@ std::string FormatFilenameTimestamp(std::uint64_t const ts_microseconds) {
 
 }  // namespace
 
-int main(int argc, char** argv) {
+auto main(int argc, char** argv) -> int {
   static plog::ColorConsoleAppender<plog::TxtFormatter> console_appender;
   Log::Initialize(&console_appender, plog::info);
 

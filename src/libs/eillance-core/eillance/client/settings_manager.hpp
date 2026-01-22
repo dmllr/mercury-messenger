@@ -32,9 +32,9 @@ class SettingsManager {
   [[nodiscard]] auto GetMyPhotoBase64() const -> std::optional<std::string> { return myPhotoBase64_; }
 
   void SetMyDisplayName(std::string const& name) {
-    constexpr size_t k_max_name_length = 64;
-    if (name.length() > k_max_name_length) {
-      myDisplayName_ = name.substr(0, k_max_name_length);
+    constexpr size_t max_name_length = 64;
+    if (name.length() > max_name_length) {
+      myDisplayName_ = name.substr(0, max_name_length);
     } else {
       myDisplayName_ = name;
     }
@@ -57,9 +57,9 @@ class SettingsManager {
   }
 
   // --- Peer Connection ---
-  [[nodiscard]] auto GetPeerInactivityTimeout() const -> std::chrono::seconds {
+  [[nodiscard]] auto GetPeerInactivityTimeout() -> std::chrono::seconds {
     if (auto str_val = storage_->GetSetting(kPeerInactivityTimeoutKey)) {
-      // TODO: check for user input correctness
+      // TODO(unknown): check for user input correctness
       return std::chrono::seconds(std::stoi(*str_val));
     }
     constexpr auto default_timeout = 120U;

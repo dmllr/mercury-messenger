@@ -23,7 +23,7 @@ class SettingsViewModel {
     auto operator=(Observer const&) -> Observer& = delete;
     auto operator=(Observer&&) -> Observer& = delete;
     virtual ~Observer() = default;
-    virtual void OnSettingsUpdated(std::optional<std::string> const& signalingUrl, int timeout) = 0;
+    virtual void OnSettingsUpdated(std::optional<std::string> const& signaling_url, int timeout) = 0;
     virtual void OnConnectionStateChanged(ServiceConnectionState state) = 0;
   };
 

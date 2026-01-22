@@ -22,13 +22,17 @@ class MediaCallService {
   template <typename T>
   void SetVideoCapture(std::unique_ptr<T> impl) {
     video_capture_ = std::make_unique<Capture>(std::move(impl));
-    if (audio_capture_) InitializeAvStream();
+    if (audio_capture_) {
+      InitializeAvStream();
+    }
   }
 
   template <typename T>
   void SetAudioCapture(std::unique_ptr<T> impl) {
     audio_capture_ = std::make_unique<Capture>(std::move(impl));
-    if (video_capture_) InitializeAvStream();
+    if (video_capture_) {
+      InitializeAvStream();
+    }
   }
 
   void Configure(Config const& config);

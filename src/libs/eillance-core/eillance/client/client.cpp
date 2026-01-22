@@ -64,7 +64,9 @@ void Client::Start() {
     LGE << "Client started without an identity.";
     return;
   }
-  if (is_running_.exchange(true)) return;
+  if (is_running_.exchange(true)) {
+    return;
+  }
 
   if (auto url = account_service_->GetSettings()->GetSignalingServerUrl()) {
     transport_->SetSignalingUrl(*url);
@@ -134,11 +136,15 @@ void Client::OnSystemMessage(std::string const& type, Json const& message) {
 
 void Client::ProcessPeerMessage(Json message) {
   auto const from_it = message.find("from");
-  if (from_it == message.end()) return;
+  if (from_it == message.end()) {
+    return;
+  }
 
   ContactID const peer_id(from_it->get<std::string>());
   auto const type_it = message.find("type");
-  if (type_it == message.end()) return;
+  if (type_it == message.end()) {
+    return;
+  }
 
   auto type = type_it->get<std::string>();
   auto const context = message.value("context", "data");
@@ -208,9 +214,11 @@ void Client::ProcessPeerMessage(Json message) {
   // Contact & Profile Logic
   else if (type == "contact_add_request") {
     std::optional<std::string> token;
-    if (message.contains("token")) token = message["token"];
+    if (message.contains("token")) {
+      token = message["token"];
+    }
 
-    Json profile = message.value("profile", Json::object());
+    Json const profile = message.value("profile", Json::object());
     contact_service_->OnContactAddRequest(peer_id, token, profile);
   } else if (type == "contact_confirm") {
     contact_service_->OnContactConfirm(peer_id);
@@ -219,7 +227,9 @@ void Client::ProcessPeerMessage(Json message) {
 
 void Client::OnDataChannelOpen(ContactID const& peer_id) {
   auto peer = transport_->GetPeer(peer_id);
-  if (!peer) return;
+  if (!peer) {
+    return;
+  }
 
   LGI << "Data channel with " << peer_id.ToString() << " opened.";
 
@@ -243,12 +253,16 @@ void Client::OnFrameReceived(ContactID const& peer_id, std::vector<std::byte> co
 }
 
 void Client::ProcessDataChannelMessage(ContactID const& peer_id, Json const& message) {
-  auto peer = transport_->GetPeer(peer_id);
-  if (!peer) return;
+  auto const peer = transport_->GetPeer(peer_id);
+  if (!peer) {
+    return;
+  }
 
   peer->last_activity_time = Time::Now();
 
-  if (!message.contains("type")) return;
+  if (!message.contains("type")) {
+    return;
+  }
   std::string const type = message["type"];
 
   if (type == "key_exchange") {
@@ -273,7 +287,7 @@ void Client::ProcessDataChannelMessage(ContactID const& peer_id, Json const& mes
   // Route to services
   if (type == "chat") {
     auto msg_id = message["message_id"].get<uint64_t>();
-    bool is_sys = message.value("is_system", false);
+    bool const is_sys = message.value("is_system", false);
     auto payload = message["payload"].get<std::vector<std::byte>>();
     messaging_service_->OnChatMessageReceived(peer_id, payload, msg_id, is_sys);
   } else if (type == "message_receipt") {
@@ -318,16 +332,19 @@ void Client::SendProfileInfo(ContactID const& peer_id) {
   msg["bio"] = account_service_->GetSettings()->GetMyBio().value_or("");
 
   auto photo = account_service_->GetSettings()->GetMyPhotoBase64();
-  if (photo && !photo->empty())
+  if (photo && !photo->empty()) {
     msg["photo"] = *photo;
-  else
+  } else {
     msg["photo"] = nullptr;
+  }
 
   transport_->SendPeerDataChannelMessage(peer_id, msg);
 }
 
 void Client::Connect(ContactID const& peer_id) {
-  if (transport_->GetPeer(peer_id)) return;
+  if (transport_->GetPeer(peer_id)) {
+    return;
+  }
 
   auto peer = std::make_shared<transport::Peer>(peer_id);
   transport_->AddPeer(peer_id, peer);
@@ -338,9 +355,11 @@ void Client::Connect(ContactID const& peer_id) {
 }
 
 void Client::CheckForInactivePeers() {
-  if (!is_running_) return;
-  auto now = Time::Now();
-  auto timeout =
+  if (!is_running_) {
+    return;
+  }
+  auto const now = Time::Now();
+  auto const timeout =
       std::chrono::duration_cast<std::chrono::microseconds>(account_service_->GetSettings()->GetPeerInactivityTimeout())
           .count();
 
@@ -366,7 +385,7 @@ auto Client::RestoreIdentity(std::string const& m) const -> bool { return accoun
 auto Client::CreateBackup(std::string const& p, std::string const& pw) const -> bool {
   return account_service_->CreateBackup(p, pw);
 }
-auto Client::RestoreBackup(std::string const& p, std::string const& pw) -> bool {
+auto Client::RestoreBackup(std::string const& p, std::string const& pw) const -> bool {
   return account_service_->RestoreBackup(p, pw);
 }
 void Client::SetName(std::string const& name) const { transport_->SetName(name); }
@@ -375,7 +394,7 @@ void Client::UpdateMyProfile(
     std::optional<std::string> const& n,
     std::optional<std::string> const& b,
     std::optional<std::string> const& p
-) {
+) const {
   account_service_->UpdateMyProfile(n, b, p);
 }
 auto Client::GetSettingsManager() const -> SettingsManager* { return account_service_->GetSettings(); }
@@ -383,7 +402,7 @@ auto Client::GetSettingsManager() const -> SettingsManager* { return account_ser
 void Client::AddContact(ContactID const& id, std::optional<std::vector<std::byte>> const& t) const {
   contact_service_->AddContact(id, t);
 }
-auto Client::GenerateContactToken() -> std::vector<std::byte> { return contact_service_->GenerateContactToken(); }
+auto Client::GenerateContactToken() const -> std::vector<std::byte> { return contact_service_->GenerateContactToken(); }
 void Client::ConfirmContact(ContactID const& id) const { contact_service_->ConfirmContact(id); }
 void Client::BlockContact(ContactID const& id, bool n) const { contact_service_->BlockContact(id, n); }
 void Client::DeleteContact(ContactID const& id) const { contact_service_->DeleteContact(id); }
@@ -396,7 +415,7 @@ void Client::ResetContactDisplayNameOverride(ContactID const& id) const {
 }
 auto Client::GetContacts() const -> std::vector<identity::Contact> { return contact_service_->GetContacts(); }
 
-auto Client::SendChatMessage(ContactID const& id, std::string const& msg) -> messaging::HistoryEntryRecord {
+auto Client::SendChatMessage(ContactID const& id, std::string const& msg) const -> messaging::HistoryEntryRecord {
   return messaging_service_->SendChatMessage(id, msg);
 }
 void Client::MarkMessagesAsRead(ContactID const& id, std::vector<std::uint64_t> const& mids) const {
@@ -413,8 +432,8 @@ auto Client::GetChatSummaries(std::vector<ContactID> const& ids) const -> std::v
 }
 
 void Client::Call(ContactID const& id) { Connect(id); }
-void Client::StartVoiceCall(ContactID const& id) { media_call_service_->StartVoiceCall(id); }
-void Client::StartVideoCall(ContactID const& id) { media_call_service_->StartVideoCall(id); }
+void Client::StartVoiceCall(ContactID const& id) const { media_call_service_->StartVoiceCall(id); }
+void Client::StartVideoCall(ContactID const& id) const { media_call_service_->StartVideoCall(id); }
 void Client::AcceptCall(ContactID const& id, messaging::HistoryEntryKind k) const {
   media_call_service_->AcceptCall(id, k);
 }

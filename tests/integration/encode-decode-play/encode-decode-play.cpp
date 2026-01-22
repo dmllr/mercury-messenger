@@ -13,13 +13,13 @@ std::vector<std::vector<std::byte>> opusData;
 int frame = 0;
 
 // Callback function for handling captured audio data
-void OnSendFramesToOpus(ma_device* pDevice, void*, void const* pInput, ma_uint32 frameCount) {
+void OnSendFramesToOpus(ma_device* p_device, void*, void const* p_input, ma_uint32 frame_count) {
   auto* encoder = static_cast<eillance::AudioEncoderCli*>(pDevice->pUserData);
 
   std::cout << "FC " << frameCount << ". ";
 
   // Encode the input PCM data to Opus
-  auto encoded_packet = encoder->EncodeBuffer(static_cast<eillance::AudioConfig::SampleDataType const*>(pInput));
+  auto encoded_packet = encoder->EncodeBuffer(static_cast<eillance::AudioConfig::SampleDataType const*>(p_input));
   std::cout << "Opus  encoded to " << encoded_packet.size() << std::endl;
 
   // Store the encoded Opus data
@@ -27,7 +27,7 @@ void OnSendFramesToOpus(ma_device* pDevice, void*, void const* pInput, ma_uint32
 }
 
 // Callback function for handling decoded audio data
-void OnReceiveFramesFromOpus(ma_device* pDevice, void* pOutput, void const*, ma_uint32 frameCount) {
+void OnReceiveFramesFromOpus(ma_device* p_device, void* p_output, void const*, ma_uint32 frame_count) {
   auto* decoder = static_cast<OpusDecoder*>(pDevice->pUserData);
 
   if (frame >= opusData.size()) {
@@ -50,9 +50,9 @@ void OnReceiveFramesFromOpus(ma_device* pDevice, void* pOutput, void const*, ma_
   frame++;
 }
 
-int main() {
+auto main() -> int {
   // Initialize Opus encoder and decoder
-  int error{0};
+  int const error{0};
   auto encoder = eillance::AudioEncoderCli{};
   encoder.Engage();
 

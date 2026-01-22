@@ -16,82 +16,82 @@ namespace eillance::view_model {
 
 struct ConversationViewModel::Impl : public std::enable_shared_from_this<Impl> {
   ContactID const peer_id;
-  std::shared_ptr<Client> client_;
-  std::shared_ptr<ClientEventRouter> router_;
-  std::shared_ptr<Observer> observer_;
+  std::shared_ptr<Client> client;
+  std::shared_ptr<ClientEventRouter> router;
+  std::shared_ptr<Observer> observer;
 
-  mutable std::mutex mutex_;
-  State state_;
-  std::size_t chatPagesLoaded_ = 0;
+  mutable std::mutex mutex;
+  State state;
+  std::size_t chat_pages_loaded = 0;
 
   // A generation counter to invalidate results from stale load threads (e.g. after debug reset)
-  std::atomic<int> loadGeneration_{0};
+  std::atomic<int> load_generation{0};
 
   inline static std::atomic<std::uint64_t> nextSystemMsgId{10000000000000000000ULL};
   static constexpr size_t kPageSize = 50;
 
   Impl(ContactID peer_id, std::shared_ptr<Client> client, std::shared_ptr<ClientEventRouter> router)
       : peer_id(peer_id),
-        client_(std::move(client)),
-        router_(std::move(router)) {
-    state_.peer_id = peer_id;
+        client(std::move(client)),
+        router(std::move(router)) {
+    state.peer_id = peer_id;
   }
 
   void SetObserver(std::shared_ptr<Observer> observer) {
-    std::lock_guard<std::mutex> const lock(mutex_);
-    observer_ = std::move(observer);
-    if (observer_) {
-      observer_->OnHistoryUpdated(state_);
+    std::lock_guard<std::mutex> const lock(mutex);
+    observer = std::move(observer);
+    if (observer) {
+      observer->OnHistoryUpdated(state);
     }
   }
 
   auto GetState() const -> State {
-    std::lock_guard<std::mutex> const lock(mutex_);
-    return state_;
+    std::lock_guard<std::mutex> const lock(mutex);
+    return state;
   }
 
   void SendText(std::string const& content) {
-    auto entry = client_->SendChatMessage(peer_id, content);
+    auto entry = client->SendChatMessage(peer_id, content);
     {
-      std::lock_guard<std::mutex> const lock(mutex_);
-      state_.history.push_back(entry);
-      if (observer_) {
-        observer_->OnHistoryUpdated(state_);
+      std::lock_guard<std::mutex> const lock(mutex);
+      state.history.push_back(entry);
+      if (observer) {
+        observer->OnHistoryUpdated(state);
       }
     }
   }
 
   void LoadOlderMessages() {
-    std::lock_guard<std::mutex> const lock(mutex_);
-    auto page = client_->GetMessageHistoryPage(peer_id, chatPagesLoaded_, kPageSize);
+    std::lock_guard<std::mutex> const lock(mutex);
+    auto page = client->GetMessageHistoryPage(peer_id, chat_pages_loaded, kPageSize);
 
     if (!page.messages.empty()) {
       for (auto& message : std::ranges::reverse_view(page.messages)) {
-        state_.history.push_front(message);
+        state.history.push_front(message);
       }
-      chatPagesLoaded_++;
-      state_.has_older_messages = (chatPagesLoaded_ * kPageSize) < page.total_messages;
-      if (observer_) {
-        observer_->OnHistoryUpdated(state_);
+      chat_pages_loaded++;
+      state.has_older_messages = (chat_pages_loaded * kPageSize) < page.total_messages;
+      if (observer) {
+        observer->OnHistoryUpdated(state);
       }
-    } else if (state_.has_older_messages) {
-      state_.has_older_messages = false;
-      if (observer_) {
-        observer_->OnHistoryUpdated(state_);
+    } else if (state.has_older_messages) {
+      state.has_older_messages = false;
+      if (observer) {
+        observer->OnHistoryUpdated(state);
       }
     }
   }
 
   void LoadFullMessage(uint64_t message_id) {
-    auto full_content = client_->GetFullMessageContent(message_id);
+    auto full_content = client->GetFullMessageContent(message_id);
     if (!full_content) {
       LGW << "Could not load full content for message ID: " << message_id;
       return;
     }
 
-    std::lock_guard<std::mutex> const lock(mutex_);
+    std::lock_guard<std::mutex> const lock(mutex);
     bool updated = false;
-    for (auto& entry : state_.history) {
+    for (auto& entry : state.history) {
       if (entry.id == message_id) {
         if (std::holds_alternative<messaging::MessageEntry>(entry.data)) {
           auto& msg_entry = std::get<messaging::MessageEntry>(entry.data);
@@ -102,20 +102,20 @@ struct ConversationViewModel::Impl : public std::enable_shared_from_this<Impl> {
         }
       }
     }
-    if (updated && observer_) {
-      observer_->OnHistoryUpdated(state_);
+    if (updated && observer) {
+      observer->OnHistoryUpdated(state);
     }
   }
 
   void MarkMessagesAsRead(std::vector<std::uint64_t> const& message_ids) {
     if (!message_ids.empty()) {
-      client_->MarkMessagesAsRead(peer_id, message_ids);
+      client->MarkMessagesAsRead(peer_id, message_ids);
     }
   }
 
   void AddSystemMessage(std::string const& message) {
-    std::lock_guard<std::mutex> const lock(mutex_);
-    state_.history.push_back(
+    std::lock_guard<std::mutex> const lock(mutex);
+    state.history.push_back(
         {.id = nextSystemMsgId++,
          .kind = messaging::HistoryEntryKind::systemMessage,
          .timestamp = static_cast<Time::Unit>(
@@ -126,23 +126,23 @@ struct ConversationViewModel::Impl : public std::enable_shared_from_this<Impl> {
          .is_truncated = false,
          .data = messaging::MessageEntry{message}}
     );
-    if (observer_) {
-      observer_->OnHistoryUpdated(state_);
+    if (observer) {
+      observer->OnHistoryUpdated(state);
     }
   }
 
   void OnMessageReceived(ContactID const& /*peer_id*/, messaging::HistoryEntryRecord const& message) {
-    std::lock_guard<std::mutex> const lock(mutex_);
-    state_.history.push_back(message);
-    if (observer_) {
-      observer_->OnHistoryUpdated(state_);
+    std::lock_guard<std::mutex> const lock(mutex);
+    state.history.push_back(message);
+    if (observer) {
+      observer->OnHistoryUpdated(state);
     }
   }
 
   void OnMessageStatusChanged(ContactID const& /*peer_id*/, uint64_t message_id, messaging::MessageStatus status) {
-    std::lock_guard<std::mutex> const lock(mutex_);
+    std::lock_guard<std::mutex> const lock(mutex);
     bool changed = false;
-    for (auto& entry : state_.history) {
+    for (auto& entry : state.history) {
       if (entry.id == message_id) {
         if (entry.status != status) {
           entry.status = status;
@@ -151,32 +151,32 @@ struct ConversationViewModel::Impl : public std::enable_shared_from_this<Impl> {
         break;
       }
     }
-    if (changed && observer_) {
-      observer_->OnHistoryUpdated(state_);
+    if (changed && observer) {
+      observer->OnHistoryUpdated(state);
     }
   }
 
   // Runs on a background thread. 'self' keeps Impl alive during execution.
   void LoadInitialHistory(std::shared_ptr<Impl> const& /*self*/, int generation) {
     // Perform blocking DB op without holding the mutex
-    auto page = client_->GetMessageHistoryPage(peer_id, 0, kPageSize);
+    auto page = client->GetMessageHistoryPage(peer_id, 0, kPageSize);
 
-    std::lock_guard<std::mutex> const lock(mutex_);
+    std::lock_guard<std::mutex> const lock(mutex);
     // If generation changed (e.g. via reset), discard this result
-    if (generation != loadGeneration_) {
+    if (generation != load_generation) {
       return;
     }
 
-    state_.history.assign(page.messages.begin(), page.messages.end());
-    chatPagesLoaded_ = 1;
-    state_.has_older_messages = (kPageSize < page.total_messages);
-    if (observer_) {
-      observer_->OnHistoryUpdated(state_);
+    state.history.assign(page.messages.begin(), page.messages.end());
+    chat_pages_loaded = 1;
+    state.has_older_messages = (kPageSize < page.total_messages);
+    if (observer) {
+      observer->OnHistoryUpdated(state);
     }
   }
 
   void StartInitialLoad() {
-    int const gen = ++loadGeneration_;
+    int const gen = ++load_generation;
     // Detach the thread so it doesn't block destruction of the wrapper.
     // Pass shared_from_this() to keep Impl alive until thread finishes.
     std::thread([this, self = shared_from_this(), gen] { LoadInitialHistory(self, gen); }).detach();
@@ -186,14 +186,14 @@ struct ConversationViewModel::Impl : public std::enable_shared_from_this<Impl> {
 // --- ConversationViewModel Wrapper ---
 
 ConversationViewModel::ConversationViewModel(
-    ContactID const& peerId,
+    ContactID const& peer_id,
     std::shared_ptr<Client> client,
     std::shared_ptr<ClientEventRouter> router
 )
-    : impl_(std::make_shared<Impl>(peerId, std::move(client), std::move(router))) {
+    : impl_(std::make_shared<Impl>(peer_id, std::move(client), std::move(router))) {
   impl_->StartInitialLoad();
 
-  auto& queue = impl_->router_->Queue();
+  auto& queue = impl_->router->Queue();
   Subscribe<EventChatMessageReceived>(queue, [this](EventChatMessageReceived const& event) {
     if (event.peer_id == impl_->peer_id) {
       impl_->OnMessageReceived(event.peer_id, event.message);
@@ -230,10 +230,10 @@ void ConversationViewModel::SendText(std::string const& content) const { impl_->
 
 void ConversationViewModel::LoadOlderMessages() const { impl_->LoadOlderMessages(); }
 
-void ConversationViewModel::LoadFullMessage(uint64_t const messageId) const { impl_->LoadFullMessage(messageId); }
+void ConversationViewModel::LoadFullMessage(uint64_t const message_id) const { impl_->LoadFullMessage(message_id); }
 
-void ConversationViewModel::MarkMessagesAsRead(std::vector<std::uint64_t> const& messageIds) const {
-  impl_->MarkMessagesAsRead(messageIds);
+void ConversationViewModel::MarkMessagesAsRead(std::vector<std::uint64_t> const& message_ids) const {
+  impl_->MarkMessagesAsRead(message_ids);
 }
 
 void ConversationViewModel::AddSystemMessage(std::string const& message) const { impl_->AddSystemMessage(message); }

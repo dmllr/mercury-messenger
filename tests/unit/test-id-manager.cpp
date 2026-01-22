@@ -13,12 +13,12 @@ class IdManagerTest : public ::testing::Test {
     storage_ = std::make_shared<storage::PersistentStorage>(std::move(mock_impl));
   }
 
-  storage::MockPersistentStorageImpl* mock_storage_impl_;
+  storage::MockPersistentStorageImpl* mock_storage_impl_{};
   std::shared_ptr<storage::PersistentStorage> storage_;
 };
 
 TEST_F(IdManagerTest, NoIdentityExistsInitially) {
-  identity::IdManager id_manager(storage_);
+  identity::IdManager const id_manager(storage_);
   EXPECT_FALSE(id_manager.IdentityExists());
   EXPECT_TRUE(id_manager.GetPublicKey().empty());
 }
@@ -28,13 +28,13 @@ TEST_F(IdManagerTest, GenerateNewIdentity) {
   identity::IdManager id_manager(storage_);
   ASSERT_FALSE(id_manager.IdentityExists());
 
-  std::string mnemonic = id_manager.GenerateNewIdentity();
+  std::string const mnemonic = id_manager.GenerateNewIdentity();
   EXPECT_FALSE(mnemonic.empty());
   EXPECT_TRUE(id_manager.IdentityExists());
   EXPECT_FALSE(id_manager.GetPublicKey().empty());
 
   // A new manager should load the created identity
-  identity::IdManager new_id_manager(storage_);
+  identity::IdManager const new_id_manager(storage_);
   EXPECT_TRUE(new_id_manager.IdentityExists());
   EXPECT_EQ(new_id_manager.GetPublicKey(), id_manager.GetPublicKey());
 }
@@ -47,7 +47,7 @@ TEST_F(IdManagerTest, LoadsExistingIdentity) {
   auto pem_data_str = identity->SaveToMemory();
   storage_->SetSetting("identity.key", pem_data_str);
 
-  identity::IdManager id_manager(storage_);
+  identity::IdManager const id_manager(storage_);
   auto loaded_id = id_manager.GetPublicKey();
 
   EXPECT_EQ(loaded_id, expected_id);

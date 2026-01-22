@@ -44,7 +44,7 @@ class H264Parser {
 
       if (nal_header_pos < nal_unit_end) {
         // The NAL unit type is in the lower 5 bits of the header byte.
-        uint8_t nal_type = static_cast<uint8_t>(frame[nal_header_pos]) & 0x1F;
+        uint8_t const nal_type = static_cast<uint8_t>(frame[nal_header_pos]) & 0x1F;
 
         if (nal_type == 7) {  // NAL unit type 7 is SPS.
           // The actual SPS data for parsing excludes the NAL header byte.
@@ -56,7 +56,9 @@ class H264Parser {
 
           ParseSPS(sps_payload);
           // Once configured, we can stop parsing subsequent frames.
-          if (isConfigured_) return;
+          if (isConfigured_) {
+            return;
+          }
         }
       }
       offset = nal_unit_end;
@@ -65,7 +67,7 @@ class H264Parser {
 
  private:
   // Finds the position of the next NAL unit start code (0x000001).
-  static size_t FindNalStart(std::vector<std::byte> const& data, size_t offset) {
+  static auto FindNalStart(std::vector<std::byte> const& data, size_t offset) -> size_t {
     for (size_t i = offset; i + 2 < data.size(); ++i) {
       if (data[i] == std::byte{0} && data[i + 1] == std::byte{0} && data[i + 2] == std::byte{1}) {
         // Check for 4-byte start code (0x00000001) vs 3-byte (0x000001)
@@ -80,12 +82,12 @@ class H264Parser {
     std::vector<uint8_t> const& data;
     size_t bit_pos = 0;
 
-    uint32_t read_bits(int n) {
+    auto ReadBits(int n) -> uint32_t {
       uint32_t val = 0;
       for (int i = 0; i < n; ++i) {
-        size_t current_bit = bit_pos + i;
-        size_t byte_idx = current_bit / 8;
-        size_t bit_idx = 7 - (current_bit % 8);
+        size_t const current_bit = bit_pos + i;
+        size_t const byte_idx = current_bit / 8;
+        size_t const bit_idx = 7 - (current_bit % 8);
         if (byte_idx < data.size()) {
           val = (val << 1) | ((data[byte_idx] >> bit_idx) & 1);
         }
@@ -94,13 +96,15 @@ class H264Parser {
       return val;
     }
 
-    uint32_t read_ue() {  // Unsigned Exponential-Golomb
+    auto ReadUe() -> uint32_t {  // Unsigned Exponential-Golomb
       int leading_zeros = 0;
-      while (bit_pos < data.size() * 8 && read_bits(1) == 0) {
+      while (bit_pos < data.size() * 8 && ReadBits(1) == 0) {
         leading_zeros++;
       }
-      if (leading_zeros > 31) return 0;
-      return (1 << leading_zeros) - 1 + read_bits(leading_zeros);
+      if (leading_zeros > 31) {
+        return 0;
+      }
+      return (1 << leading_zeros) - 1 + ReadBits(leading_zeros);
     }
   };
 
@@ -127,61 +131,67 @@ class H264Parser {
 
     BitReader reader{sps_rbsp};
 
-    uint8_t profile_idc = reader.read_bits(8);
-    reader.read_bits(16);  // Skip constraint flags and level_idc
-    reader.read_ue();      // Skip seq_parameter_set_id
+    uint8_t const profile_idc = reader.ReadBits(8);
+    reader.ReadBits(16);  // Skip constraint flags and level_idc
+    reader.ReadUe();      // Skip seq_parameter_set_id
 
     uint32_t chroma_format_idc = 1;  // Default for many profiles.
     if (profile_idc == 100 || profile_idc == 110 || profile_idc == 122 || profile_idc == 244 || profile_idc == 44 ||
         profile_idc == 83 || profile_idc == 86 || profile_idc == 118 || profile_idc == 128 || profile_idc == 138) {
-      chroma_format_idc = reader.read_ue();
-      if (chroma_format_idc == 3) reader.read_bits(1);  // separate_colour_plane_flag
-      reader.read_ue();                                 // bit_depth_luma_minus8
-      reader.read_ue();                                 // bit_depth_chroma_minus8
-      reader.read_bits(1);                              // qpprime_y_zero_transform_bypass_flag
-      if (reader.read_bits(1)) {                        // seq_scaling_matrix_present_flag
+      chroma_format_idc = reader.ReadUe();
+      if (chroma_format_idc == 3) {
+        reader.ReadBits(1);  // separate_colour_plane_flag
+      }
+      reader.ReadUe();                 // bit_depth_luma_minus8
+      reader.ReadUe();                 // bit_depth_chroma_minus8
+      reader.ReadBits(1);              // qpprime_y_zero_transform_bypass_flag
+      if (reader.ReadBits(1) != 0u) {  // seq_scaling_matrix_present_flag
         // This is a complex part of the spec; skipping it is usually fine for getting resolution.
-        int limit = (chroma_format_idc != 3) ? 8 : 12;
+        int const limit = (chroma_format_idc != 3) ? 8 : 12;
         for (int i = 0; i < limit; i++) {
-          if (reader.read_bits(1)) {  // seq_scaling_list_present_flag[i]
-            int size = (i < 6) ? 16 : 64;
-            for (int j = 0; j < size; j++) reader.read_ue();  // Scaling list delta
+          if (reader.ReadBits(1) != 0u) {  // seq_scaling_list_present_flag[i]
+            int const size = (i < 6) ? 16 : 64;
+            for (int j = 0; j < size; j++) {
+              reader.ReadUe();  // Scaling list delta
+            }
           }
         }
       }
     }
 
-    reader.read_ue();  // log2_max_frame_num_minus4
-    auto pic_order_cnt_type = reader.read_ue();
+    reader.ReadUe();  // log2_max_frame_num_minus4
+    auto pic_order_cnt_type = reader.ReadUe();
     if (pic_order_cnt_type == 0) {
-      reader.read_ue();  // log2_max_pic_order_cnt_lsb_minus4
+      reader.ReadUe();  // log2_max_pic_order_cnt_lsb_minus4
     } else if (pic_order_cnt_type == 1) {
-      reader.read_bits(1);  // delta_pic_order_always_zero_flag
-      reader.read_ue();     // offset_for_non_ref_pic
-      reader.read_ue();     // offset_for_top_to_bottom_field
-      auto num_ref_frames = reader.read_ue();
-      for (uint32_t i = 0; i < num_ref_frames; i++) reader.read_ue();
+      reader.ReadBits(1);  // delta_pic_order_always_zero_flag
+      reader.ReadUe();     // offset_for_non_ref_pic
+      reader.ReadUe();     // offset_for_top_to_bottom_field
+      auto num_ref_frames = reader.ReadUe();
+      for (uint32_t i = 0; i < num_ref_frames; i++) {
+        reader.ReadUe();
+      }
     }
-    reader.read_ue();     // max_num_ref_frames
-    reader.read_bits(1);  // gaps_in_frame_num_value_allowed_flag
+    reader.ReadUe();     // max_num_ref_frames
+    reader.ReadBits(1);  // gaps_in_frame_num_value_allowed_flag
 
-    auto pic_width_in_mbs_minus1 = reader.read_ue();
-    auto pic_height_in_map_units_minus1 = reader.read_ue();
-    auto frame_mbs_only_flag = reader.read_bits(1);
+    auto pic_width_in_mbs_minus1 = reader.ReadUe();
+    auto pic_height_in_map_units_minus1 = reader.ReadUe();
+    auto frame_mbs_only_flag = reader.ReadBits(1);
 
     if (frame_mbs_only_flag == 0) {
-      reader.read_bits(1);  // mb_adaptive_frame_field_flag
+      reader.ReadBits(1);  // mb_adaptive_frame_field_flag
     }
-    reader.read_bits(1);  // direct_8x8_inference_flag
+    reader.ReadBits(1);  // direct_8x8_inference_flag
 
     uint32_t width = (pic_width_in_mbs_minus1 + 1) * 16;
     uint32_t height = (2 - frame_mbs_only_flag) * (pic_height_in_map_units_minus1 + 1) * 16;
 
-    if (reader.read_bits(1)) {  // frame_cropping_flag
-      auto crop_left = reader.read_ue();
-      auto crop_right = reader.read_ue();
-      auto crop_top = reader.read_ue();
-      auto crop_bottom = reader.read_ue();
+    if (reader.ReadBits(1) != 0u) {  // frame_cropping_flag
+      auto crop_left = reader.ReadUe();
+      auto crop_right = reader.ReadUe();
+      auto crop_top = reader.ReadUe();
+      auto crop_bottom = reader.ReadUe();
 
       uint32_t crop_unit_x = 1;
       uint32_t crop_unit_y = (2 - frame_mbs_only_flag);

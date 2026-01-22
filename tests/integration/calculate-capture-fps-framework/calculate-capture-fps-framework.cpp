@@ -4,7 +4,7 @@
 
 #include "eillance/capture/video_capture.hpp"
 
-int main(int /*argc*/, char** /*argv*/) {
+auto main(int /*argc*/, char** /*argv*/) -> int {
   eillance::VideoCaptureCli cap;
   cap.Engage();
 

@@ -11,25 +11,25 @@ namespace eillance::view_model {
 // --- Implementation Struct ---
 
 struct ContactsViewModel::Impl : public std::enable_shared_from_this<Impl> {
-  std::shared_ptr<Client> client_;
-  std::shared_ptr<ClientEventRouter> router_;
-  std::shared_ptr<Observer> observer_;
+  std::shared_ptr<Client> client;
+  std::shared_ptr<ClientEventRouter> router;
+  std::shared_ptr<Observer> observer;
 
-  mutable std::mutex mutex_;
-  std::vector<ViewContact> contacts_;
+  mutable std::mutex mutex;
+  std::vector<ViewContact> contacts;
 
   Impl(std::shared_ptr<Client> client, std::shared_ptr<ClientEventRouter> router)
-      : client_(std::move(client)),
-        router_(std::move(router)) {}
+      : client(std::move(client)),
+        router(std::move(router)) {}
 
   void SetObserver(std::shared_ptr<Observer> observer) {
     std::shared_ptr<Observer> local_obs;
     std::vector<ViewContact> current_contacts;
     {
-      std::lock_guard<std::mutex> const lock(mutex_);
-      observer_ = std::move(observer);
-      local_obs = observer_;
-      current_contacts = contacts_;
+      std::lock_guard<std::mutex> const lock(mutex);
+      observer = std::move(observer);
+      local_obs = observer;
+      current_contacts = contacts;
     }
     // If we have data, notify the new observer immediately outside the lock
     if (local_obs && !current_contacts.empty()) {
@@ -38,48 +38,48 @@ struct ContactsViewModel::Impl : public std::enable_shared_from_this<Impl> {
   }
 
   [[nodiscard]] auto GetContacts() const -> std::vector<ViewContact> {
-    std::lock_guard<std::mutex> const lock(mutex_);
-    return contacts_;
+    std::lock_guard<std::mutex> const lock(mutex);
+    return contacts;
   }
 
   // --- Actions (run asynchronously to avoid blocking main thread) ---
 
   void AddContact(ContactID const& peer_id, std::optional<std::vector<std::byte>> const& token) {
-    std::thread([self = shared_from_this(), peer_id, token]() { self->client_->AddContact(peer_id, token); }).detach();
+    std::thread([self = shared_from_this(), peer_id, token]() { self->client->AddContact(peer_id, token); }).detach();
   }
 
   void BlockContact(ContactID const& peer_id) {
     std::thread([self = shared_from_this(), peer_id]() {
-      self->client_->BlockContact(peer_id, true);
+      self->client->BlockContact(peer_id, true);
       self->DoUpdateContactsList();
     }).detach();
   }
 
   void DeleteContact(ContactID const& peer_id) {
     std::thread([self = shared_from_this(), peer_id]() {
-      self->client_->DeleteContact(peer_id);
+      self->client->DeleteContact(peer_id);
       self->DoUpdateContactsList();
     }).detach();
   }
 
   void UnblockContact(ContactID const& peer_id) {
-    std::thread([self = shared_from_this(), peer_id]() { self->client_->UnblockContact(peer_id); }).detach();
+    std::thread([self = shared_from_this(), peer_id]() { self->client->UnblockContact(peer_id); }).detach();
   }
 
   void AcceptContact(ContactID const& peer_id) {
-    std::thread([self = shared_from_this(), peer_id]() { self->client_->ConfirmContact(peer_id); }).detach();
+    std::thread([self = shared_from_this(), peer_id]() { self->client->ConfirmContact(peer_id); }).detach();
   }
 
   void SetContactDisplayNameOverride(ContactID const& peer_id, std::string const& name) {
     std::thread([self = shared_from_this(), peer_id, name]() {
-      self->client_->SetContactDisplayNameOverride(peer_id, name);
+      self->client->SetContactDisplayNameOverride(peer_id, name);
       self->DoUpdateContactsList();
     }).detach();
   }
 
   void ResetContactDisplayNameOverride(ContactID const& peer_id) {
     std::thread([self = shared_from_this(), peer_id]() {
-      self->client_->ResetContactDisplayNameOverride(peer_id);
+      self->client->ResetContactDisplayNameOverride(peer_id);
       self->DoUpdateContactsList();
     }).detach();
   }
@@ -91,7 +91,7 @@ struct ContactsViewModel::Impl : public std::enable_shared_from_this<Impl> {
   void DoUpdateContactsList() {
     std::vector<ViewContact> temp_contacts;
     {
-      auto const contacts_from_manager = client_->GetContacts();
+      auto const contacts_from_manager = client->GetContacts();
       temp_contacts.reserve(contacts_from_manager.size());
       std::vector<ContactID> contact_ids;
       contact_ids.reserve(contacts_from_manager.size());
@@ -110,13 +110,13 @@ struct ContactsViewModel::Impl : public std::enable_shared_from_this<Impl> {
              .bio = contact.bio,
              .photo = contact.photo_base64,
              .status = contact.status,
-             .connection_state = client_->GetPeerConnectionState(contact.peer_id),
+             .connection_state = client->GetPeerConnectionState(contact.peer_id),
              .unread_count = 0}
         );
         contact_ids.push_back(contact.peer_id);
       }
 
-      auto const chat_summaries = client_->GetChatSummaries(contact_ids);
+      auto const chat_summaries = client->GetChatSummaries(contact_ids);
       std::unordered_map<ContactID, messaging::ChatSummary> chat_map;
       for (auto const& chat : chat_summaries) {
         chat_map[chat.peer_id] = chat;
@@ -154,9 +154,9 @@ struct ContactsViewModel::Impl : public std::enable_shared_from_this<Impl> {
 
     std::shared_ptr<Observer> obs;
     {
-      std::lock_guard<std::mutex> const lock(mutex_);
-      contacts_ = temp_contacts;  // Keep internal copy
-      obs = observer_;
+      std::lock_guard<std::mutex> const lock(mutex);
+      contacts = temp_contacts;  // Keep internal copy
+      obs = observer;
     }
     if (obs) {
       obs->OnContactsUpdated(temp_contacts);
@@ -168,8 +168,8 @@ struct ContactsViewModel::Impl : public std::enable_shared_from_this<Impl> {
     std::vector<ViewContact> notify_copy;
     bool changed = false;
     {
-      std::lock_guard<std::mutex> const lock(mutex_);
-      for (auto& contact : contacts_) {
+      std::lock_guard<std::mutex> const lock(mutex);
+      for (auto& contact : contacts) {
         if (contact.peer_id == peer_id) {
           if (contact.connection_state != state) {
             contact.connection_state = state;
@@ -179,8 +179,8 @@ struct ContactsViewModel::Impl : public std::enable_shared_from_this<Impl> {
         }
       }
       if (changed) {
-        notify_copy = contacts_;
-        obs = observer_;
+        notify_copy = contacts;
+        obs = observer;
       }
     }
     if (changed && obs) {
@@ -196,7 +196,7 @@ ContactsViewModel::ContactsViewModel(std::shared_ptr<Client> client, std::shared
   // Start initial load asynchronously
   impl_->UpdateContactsList();
 
-  auto& queue = impl_->router_->Queue();
+  auto& queue = impl_->router->Queue();
 
   Subscribe<EventContactRequest>(queue, [this](auto const&) { impl_->UpdateContactsList(); });
   Subscribe<EventContactStatusChanged>(queue, [this](auto const&) { impl_->UpdateContactsList(); });
@@ -231,28 +231,28 @@ void ContactsViewModel::SetObserver(std::shared_ptr<Observer> observer) const {
 
 auto ContactsViewModel::GetContacts() const -> std::vector<ViewContact> { return impl_->GetContacts(); }
 
-void ContactsViewModel::AddContact(ContactID const& peerId, std::optional<std::vector<std::byte>> const& token) const {
-  impl_->AddContact(peerId, token);
+void ContactsViewModel::AddContact(ContactID const& peer_id, std::optional<std::vector<std::byte>> const& token) const {
+  impl_->AddContact(peer_id, token);
 }
 
-void ContactsViewModel::BlockContact(ContactID const& peerId) { impl_->BlockContact(peerId); }
+void ContactsViewModel::BlockContact(ContactID const& peer_id) { impl_->BlockContact(peer_id); }
 
-void ContactsViewModel::DeleteContact(ContactID const& peerId) { impl_->DeleteContact(peerId); }
+void ContactsViewModel::DeleteContact(ContactID const& peer_id) { impl_->DeleteContact(peer_id); }
 
-void ContactsViewModel::UnblockContact(ContactID const& peerId) { impl_->UnblockContact(peerId); }
+void ContactsViewModel::UnblockContact(ContactID const& peer_id) { impl_->UnblockContact(peer_id); }
 
-void ContactsViewModel::AcceptContact(ContactID const& peerId) { impl_->AcceptContact(peerId); }
+void ContactsViewModel::AcceptContact(ContactID const& peer_id) { impl_->AcceptContact(peer_id); }
 
-void ContactsViewModel::SetContactDisplayNameOverride(ContactID const& peerId, std::string const& name) {
-  impl_->SetContactDisplayNameOverride(peerId, name);
+void ContactsViewModel::SetContactDisplayNameOverride(ContactID const& peer_id, std::string const& name) {
+  impl_->SetContactDisplayNameOverride(peer_id, name);
 }
 
-void ContactsViewModel::ResetContactDisplayNameOverride(ContactID const& peerId) {
-  impl_->ResetContactDisplayNameOverride(peerId);
+void ContactsViewModel::ResetContactDisplayNameOverride(ContactID const& peer_id) {
+  impl_->ResetContactDisplayNameOverride(peer_id);
 }
 
 auto ContactsViewModel::GenerateContactToken() -> std::vector<std::byte> {
-  return impl_->client_->GenerateContactToken();
+  return impl_->client->GenerateContactToken();
 }
 
 }  // namespace eillance::view_model

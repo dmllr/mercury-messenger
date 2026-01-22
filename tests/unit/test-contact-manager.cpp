@@ -16,7 +16,7 @@ class ContactManagerTest : public ::testing::Test {
     contact_manager_ = std::make_unique<identity::ContactManager>(storage_);
   }
 
-  storage::MockPersistentStorageImpl* mock_storage_impl_;
+  storage::MockPersistentStorageImpl* mock_storage_impl_{};
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::unique_ptr<identity::ContactManager> contact_manager_;
   ContactID const peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");

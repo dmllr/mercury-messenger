@@ -35,11 +35,11 @@ class VideoCaptureCli {
 
   struct CrossPlatformProperties {
 #if defined __ANDROID__
-    static constexpr auto open_cv_camera_capabilities = cv::CAP_ANDROID;
+    static constexpr auto openCvCameraCapabilities = cv::CAP_ANDROID;
 #elif defined _WIN32
-    static constexpr auto open_cv_camera_capabilities = cv::CAP_DSHOW;
+    static constexpr auto openCvCameraCapabilities = cv::CAP_DSHOW;
 #else
-    static constexpr auto open_cv_camera_capabilities = cv::CAP_ANY;
+    static constexpr auto openCvCameraCapabilities = cv::CAP_ANY;
 #endif
   };
 
@@ -63,7 +63,7 @@ class VideoCaptureCli {
     }
 
     // open the default camera
-    cap_.open(0, CrossPlatformProperties::open_cv_camera_capabilities);
+    cap_.open(0, CrossPlatformProperties::openCvCameraCapabilities);
 
     if (!cap_.isOpened()) {
       LGE << "Can't open the capture device. The video source has not been started.";
@@ -92,7 +92,7 @@ class VideoCaptureCli {
     auto const actual_height = static_cast<int>(cap_.get(cv::CAP_PROP_FRAME_HEIGHT));
     auto actual_fps = static_cast<int>(cap_.get(cv::CAP_PROP_FPS));
     if (actual_fps <= 0) {
-      actual_fps = config_.frameRate;
+      actual_fps = config_.frame_rate;
     }
 
     LGI << "Capture resolution set to: " << actual_width << "x" << actual_height;
@@ -132,13 +132,12 @@ class VideoCaptureCli {
     cap_.release();
   }
 
-  [[nodiscard]] auto GetSampleDuration() const -> Time::Unit { return Time::uS / config_.frameRate; }
+  [[nodiscard]] auto GetSampleDuration() const -> Time::Unit { return Time::uS / config_.frame_rate; }
 
   void Configure(Config const& config) { ConfigureVideo(config.video_config); }
 
   void ConfigureVideo(VideoConfig const& config) {  // NOLINT(*-convert-member-functions-to-static)
-    TELEMETRY(LGI << "Video capture configuration event triggered: device " << config.cameraId << " " << config.width
-                  << "x" << config.height << " " << config.frameRate << "fps";)
+    TELEMETRY(LGI << "Video capture configuration event triggered: device " << config.frame_rate << "fps";)
     LGW << "General video capture does not support configuration";
   }
 
@@ -153,7 +152,7 @@ class VideoCaptureCli {
       return;
     }
 
-    TELEMETRY(if (fps_counter_ % (telemetry_interval * config_.frameRate) == 0) {
+    TELEMETRY(if (fps_counter_ % (telemetry_interval * config_.frame_rate) == 0) {
       auto const elapsed = (Time::Now() - lastFpsMilestone_) / Time::uS;
       auto const fetch_fps = static_cast<double>(load_counter_) / elapsed;
       load_counter_ = 0;

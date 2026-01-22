@@ -15,7 +15,7 @@ class MessageHistoryTest : public ::testing::Test {
     message_history_ = std::make_unique<messaging::MessageHistory>(storage_);
   }
 
-  storage::MockPersistentStorageImpl* mock_storage_impl_;
+  storage::MockPersistentStorageImpl* mock_storage_impl_{};
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::unique_ptr<messaging::MessageHistory> message_history_;
   ContactID const peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");

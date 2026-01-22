@@ -16,7 +16,8 @@ class SQLiteStorageTest : public ::testing::Test {
     // Generate a unique path for the database file for each test.
     // This ensures test isolation.
     ::testing::TestInfo const* const test_info = ::testing::UnitTest::GetInstance()->current_test_info();
-    std::string filename = std::string(test_info->test_suite_name()) + "_" + std::string(test_info->name()) + ".db";
+    std::string const filename =
+        std::string(test_info->test_suite_name()) + "_" + std::string(test_info->name()) + ".db";
     db_path_ = std::filesystem::temp_directory_path() / "eillance_tests" / filename;
 
     // Ensure the directory exists and the file does not exist from a previous failed run.
@@ -72,6 +73,7 @@ TEST_F(SQLiteStorageTest, Settings) {
 // Test suite for raw byte storage
 TEST_F(SQLiteStorageTest, RawKeyValue) {
   std::vector<std::byte> raw_data;
+  raw_data.reserve(256);
   for (int i = 0; i < 256; ++i) {
     raw_data.push_back(static_cast<std::byte>(i));
   }
@@ -84,7 +86,7 @@ TEST_F(SQLiteStorageTest, RawKeyValue) {
   EXPECT_EQ(*retrieved_data, raw_data);
 
   // Test with an empty vector
-  std::vector<std::byte> empty_data;
+  std::vector<std::byte> const empty_data;
   ASSERT_TRUE(storage_->SetRaw("empty_raw_key", empty_data));
   auto retrieved_empty = storage_->GetRaw("empty_raw_key");
   ASSERT_TRUE(retrieved_empty.has_value());
@@ -94,7 +96,7 @@ TEST_F(SQLiteStorageTest, RawKeyValue) {
 // Test suite for contact management
 TEST_F(SQLiteStorageTest, Contacts) {
   identity::Contact contact1 = {peer1, identity::ContactStatus::pendingApproval};
-  identity::Contact contact2 = {peer2, identity::ContactStatus::confirmed};
+  identity::Contact const contact2 = {peer2, identity::ContactStatus::confirmed};
 
   // Test Add/Update
   storage_->UpdateContact(contact1);
@@ -120,7 +122,8 @@ TEST_F(SQLiteStorageTest, Contacts) {
   auto all_contacts = storage_->GetContacts();
   ASSERT_EQ(all_contacts.size(), 2);
   // Find our contacts in the list (order is not guaranteed)
-  bool found1 = false, found2 = false;
+  bool found1 = false;
+  bool found2 = false;
   for (auto const& c : all_contacts) {
     if (c.peer_id == peer1) {
       EXPECT_EQ(c.status, identity::ContactStatus::confirmed);
@@ -143,11 +146,11 @@ TEST_F(SQLiteStorageTest, Contacts) {
 // Test suite for history management
 TEST_F(SQLiteStorageTest, History) {
   // Ensure contact exists for FK constraint
-  identity::Contact contact{peer1, identity::ContactStatus::confirmed};
+  identity::Contact const contact{peer1, identity::ContactStatus::confirmed};
   storage_->UpdateContact(contact);
 
   // Add a text message
-  messaging::HistoryEntryRecord text_entry{
+  messaging::HistoryEntryRecord const text_entry{
       .kind = messaging::HistoryEntryKind::textMessage,
       .timestamp = Time::Now(),
       .direction = messaging::MessageDirection::sent,
@@ -159,7 +162,7 @@ TEST_F(SQLiteStorageTest, History) {
   EXPECT_NE(added_text_entry.id, 0);  // ID should be assigned by DB
 
   // Add a call record
-  messaging::HistoryEntryRecord call_entry{
+  messaging::HistoryEntryRecord const call_entry{
       .kind = messaging::HistoryEntryKind::voiceCall,
       .timestamp = Time::Now(),
       .direction = messaging::MessageDirection::received,
@@ -207,7 +210,7 @@ TEST_F(SQLiteStorageTest, History) {
 }
 
 TEST_F(SQLiteStorageTest, HistoryPagination) {
-  identity::Contact contact{peer1, identity::ContactStatus::confirmed};
+  identity::Contact const contact{peer1, identity::ContactStatus::confirmed};
   storage_->UpdateContact(contact);
 
   constexpr int total_messages = 25;
@@ -259,7 +262,7 @@ TEST_F(SQLiteStorageTest, ChatSummaries) {
   storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
   storage_->UpdateContact({peer2, identity::ContactStatus::confirmed});
 
-  ContactID peer3_no_history = ContactID("0000000000000000000000000000000000000000000000000000000000000003");
+  auto const peer3_no_history = ContactID("0000000000000000000000000000000000000000000000000000000000000003");
 
   auto const base_time = Time::Now();
 
@@ -349,7 +352,7 @@ TEST_F(SQLiteStorageTest, UpdateHistoryEntry) {
 TEST_F(SQLiteStorageTest, LargeMessages) {
   storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
 
-  std::string long_message(3000, 'a');
+  std::string const long_message(3000, 'a');
 
   auto entry = storage_->AddHistoryEntry(
       {.kind = messaging::HistoryEntryKind::textMessage,

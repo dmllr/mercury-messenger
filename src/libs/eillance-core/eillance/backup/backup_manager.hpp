@@ -21,7 +21,7 @@ class BackupManager {
   explicit BackupManager(std::string db_path)
       : dbPath_(std::move(db_path)) {}
 
-  [[nodiscard]] bool CreateBackup(std::string const& output_path, std::string const& password) const {
+  [[nodiscard]] auto CreateBackup(std::string const& output_path, std::string const& password) const -> bool {
     if (password.empty()) {
       LGE << "Backup password cannot be empty.";
       return false;
@@ -108,7 +108,7 @@ class BackupManager {
     return true;
   }
 
-  [[nodiscard]] bool RestoreFromBackup(std::string const& input_path, std::string const& password) const {
+  [[nodiscard]] auto RestoreFromBackup(std::string const& input_path, std::string const& password) const -> bool {
     if (password.empty()) {
       LGE << "Restore password cannot be empty.";
       return false;
@@ -197,8 +197,11 @@ class BackupManager {
   }
 
  private:
-  static bool
-  DeriveKey(std::string const& password, std::vector<unsigned char> const& salt, std::vector<unsigned char>& key) {
+  static auto DeriveKey(
+      std::string const& password,
+      std::vector<unsigned char> const& salt,
+      std::vector<unsigned char>& key
+  ) -> bool {
     // NOLINTNEXTLINE(*-reinterpret-cast)
     if (PKCS5_PBKDF2_HMAC(
             password.c_str(),

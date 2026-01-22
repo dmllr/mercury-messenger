@@ -18,7 +18,7 @@ class BitReader {
         bitOffset_{0} {}
 
   // Read a single bit (returns in 'bit').
-  bool ReadBit(std::uint32_t& bit) {
+  auto ReadBit(std::uint32_t& bit) -> bool {
     if (byteOffset_ >= size_) {
       return false;
     }
@@ -32,7 +32,7 @@ class BitReader {
   }
 
   // Read n bits and return as an unsigned integer.
-  std::uint32_t ReadBits(std::uint32_t const n) {
+  auto ReadBits(std::uint32_t const n) -> std::uint32_t {
     assert(n < 8 * sizeof(std::uint32_t));
     std::uint32_t bits = 0;
     for (std::uint32_t i = 0U; i < n; i++) {
@@ -46,10 +46,10 @@ class BitReader {
   }
 
   // Read byte and return as an unsigned integer.
-  std::uint32_t ReadByte() { return ReadBits(CHAR_BIT); }
+  auto ReadByte() -> std::uint32_t { return ReadBits(CHAR_BIT); }
 
   // Read an unsigned Exp-Golomb coded value.
-  std::uint32_t ReadUE() {
+  auto ReadUE() -> std::uint32_t {
     std::uint32_t zeros = 0;
     std::uint32_t bit = 0;
 
@@ -66,7 +66,7 @@ class BitReader {
   }
 
   // Read a signed Exp-Golomb coded value.
-  std::int32_t ReadSE() {
+  auto ReadSE() -> std::int32_t {
     auto const code_num = ReadUE();
     return ((code_num & 1U) != 0U) ? static_cast<int32_t>((code_num + 1) >> 1U) : -static_cast<int32_t>(code_num >> 1U);
   }

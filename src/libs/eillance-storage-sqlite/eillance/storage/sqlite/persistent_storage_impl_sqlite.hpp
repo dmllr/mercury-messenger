@@ -568,7 +568,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
   // --- Debug ---
   void DebugClearAllHistory() override {
     std::lock_guard const lock(mutex_);
-    auto sql = R"SQL(
+    auto const* sql = R"SQL(
       BEGIN TRANSACTION;
       DELETE FROM large_messages;
       DELETE FROM messages;
@@ -584,7 +584,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
 
   void DebugClearAllContacts() override {
     std::lock_guard const lock(mutex_);
-    auto sql = R"SQL(
+    auto const* sql = R"SQL(
       BEGIN TRANSACTION;
       DELETE FROM contacts;
       COMMIT;

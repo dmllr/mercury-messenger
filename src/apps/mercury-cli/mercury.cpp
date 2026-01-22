@@ -40,7 +40,7 @@ namespace {
 // Helper function to format contact entries for the ftxui::Menu component.
 std::vector<std::string> GetContactMenuEntries(
     std::vector<eillance::view_model::ViewContact> const& contacts,
-    eillance::view_model::CallState const& callState
+    eillance::view_model::CallState const& call_state
 ) {
   std::vector<std::string> entries;
   for (auto const& contact : contacts) {
@@ -65,13 +65,13 @@ std::vector<std::string> GetContactMenuEntries(
     }
 
     std::string conn_status_str;
-    if (callState.peer_id == contact.peer_id &&
-        (callState.is_connecting || callState.is_ringing || callState.is_in_call)) {
-      if (callState.is_connecting) {
+    if (call_state.peer_id == contact.peer_id &&
+        (call_state.is_connecting || call_state.is_ringing || call_state.is_in_call)) {
+      if (call_state.is_connecting) {
         conn_status_str = " (Calling)";
-      } else if (callState.is_ringing) {
+      } else if (call_state.is_ringing) {
         conn_status_str = " (Ringing)";
-      } else if (callState.is_in_call) {
+      } else if (call_state.is_in_call) {
         conn_status_str = " (In Call)";
       }
     } else {
@@ -116,7 +116,7 @@ constexpr auto GetConnectionStatusString(eillance::ServiceConnectionState const 
 }
 
 // Helper function to format timestamps according to the specified rules.
-std::string FormatTimestamp(Time::Unit const ts_microseconds) {
+auto FormatTimestamp(Time::Unit const ts_microseconds) -> std::string {
   using namespace std::chrono;
   time_t const message_time_t = ts_microseconds / 1000000;
   auto const now_tp = system_clock::now();
@@ -168,7 +168,7 @@ std::string FormatTimestamp(Time::Unit const ts_microseconds) {
 
 }  // namespace
 
-int main(int argc, char** argv) {
+auto main(int argc, char** argv) -> int {
   auto screen = ftxui::ScreenInteractive::Fullscreen();
 
   eillance::utils::ArgsParser const args(argc, argv);
