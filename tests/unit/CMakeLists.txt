@@ -13,9 +13,11 @@ FetchContent_MakeAvailable(googletest)
 enable_testing()
 
 add_executable(h-e-tests
+  test-account-service.cpp
   test-backup-manager.cpp
   test-audio-encoder.cpp
   test-bit-reader.cpp
+  test-contact-service.cpp
   test-delivery-service.cpp
   test-dispatch-queue.cpp
   test-event-queue.cpp
@@ -25,6 +27,7 @@ add_executable(h-e-tests
   test-contact-manager.cpp
   test-crypto.cpp
   test-id-manager.cpp
+  test-media-call-service.cpp
   test-message-history.cpp
   test-packet.cpp
   test-settings-manager.cpp
