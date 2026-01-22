@@ -76,22 +76,28 @@ run_tidy() {
   local build_dir="build-tidy"
 
   info "Step 1: Generating compile_commands.json..."
+  # Ensure CMake uses absolute paths for the compilation database
   run_in_docker bash -c "cmake -S . -B ${build_dir} -DCMAKE_EXPORT_COMPILE_COMMANDS=ON > /dev/null"
   success "compile_commands.json generated in '${build_dir}'."
 
   info "Step 2: Running clang-tidy on the codebase..."
 
   run_in_docker bash -c '
-    REGEX_TESTS="^/work/tests/.*"
-    REGEX_SRC="^/work/src/(?!apps/android/(build|app/(\.cxx|build|release|src/main/cpp/_imported))).*"
-    REGEX_HEADER_FILTER="^/work/(src|tests)/"
+    # Matches:
+    # /work/src/libs
+    # /work/src/server
+    # /work/src/apps/mercury-(bot|cli|qt)
+    # /work/src/apps/android/app/src/main/cpp/src
+    # /work/tests
+    # followed by any character
+
+    REGEX_SRC="^/work/(src/(libs|server|apps/(mercury-(bot|cli|qt)|android/app/src/main/cpp/src))|tests)/.*"
 
     run-clang-tidy-18 \
       -config-file '"/work/.clang-tidy"' \
       -p '"${build_dir}"' \
       -j $(nproc) \
-      -header-filter="$REGEX_HEADER_FILTER" \
-      "$REGEX_TESTS" "$REGEX_SRC"
+      "$REGEX_SRC"
   ' || {
     warn "clang-tidy reported issues. Please review the changes or re-run to confirm fixes."
   }
