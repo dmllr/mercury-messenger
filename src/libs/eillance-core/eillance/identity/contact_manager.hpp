@@ -45,6 +45,19 @@ class ContactManager {
     LoadContacts();
   }
 
+  // Reloads contacts from storage (useful for debug actions that modify DB directly)
+  void ReloadContacts() {
+    std::lock_guard<std::mutex> const lock(mutex_);
+    contacts_.clear();
+    LoadContactsInternal();
+  }
+
+  // Clears in-memory contacts (useful for debug erase)
+  void ClearContacts() {
+    std::lock_guard<std::mutex> const lock(mutex_);
+    contacts_.clear();
+  }
+
   // Initiates adding a new contact.
   auto AddContact(ContactID const& peer_id) -> bool {
     std::lock_guard<std::mutex> const lock(mutex_);
@@ -312,6 +325,11 @@ class ContactManager {
 
  private:
   void LoadContacts() {
+    std::lock_guard<std::mutex> const lock(mutex_);
+    LoadContactsInternal();
+  }
+
+  void LoadContactsInternal() {
     auto const contacts_from_db = storage_->GetContacts();
     for (auto const& contact : contacts_from_db) {
       contacts_[contact.peer_id] = contact;

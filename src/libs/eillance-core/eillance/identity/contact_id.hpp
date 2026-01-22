@@ -49,8 +49,10 @@ struct ContactID {
     if (hex.size() != 2U * identitySize) {
       throw std::invalid_argument("Invalid hex string length for ContactID: " + std::string(hex));
     }
-    for (std::uint8_t i = 0; i < identitySize; ++i) {
-      value_[i] = static_cast<std::byte>((HexCharToInt(hex[2U * i]) << 4U) | HexCharToInt(hex[(2U * i) + 1]));
+    for (std::size_t i = 0; i < identitySize; ++i) {
+      auto const high = HexCharToInt(hex[2 * i]);
+      auto const low = HexCharToInt(hex[2 * i + 1]);
+      value_[i] = static_cast<std::byte>((high << 4U) | low);
     }
   }
 
@@ -82,17 +84,18 @@ struct ContactID {
  private:
   std::array<std::byte, identitySize> value_{};
 
-  static constexpr auto HexCharToInt(char chr) -> uint8_t {
-    if (chr >= '0' && chr <= '9') {
-      return chr - '0';
+  static constexpr auto HexCharToInt(char const chr) -> uint8_t {
+    auto const c = static_cast<unsigned char>(chr);
+    if (c >= '0' && c <= '9') {
+      return static_cast<uint8_t>(c - '0');
     }
-    if (chr >= 'a' && chr <= 'f') {
-      return chr - 'a' + 10;
+    if (c >= 'a' && c <= 'f') {
+      return static_cast<uint8_t>(c - 'a' + 10);
     }
-    if (chr >= 'A' && chr <= 'F') {
-      return chr - 'A' + 10;
+    if (c >= 'A' && c <= 'F') {
+      return static_cast<uint8_t>(c - 'A' + 10);
     }
-    throw std::invalid_argument("Invalid hex char");
+    throw std::invalid_argument(std::string("Invalid hex char: ") + chr);
   }
 };
 
@@ -113,10 +116,9 @@ inline auto operator<<(std::ostream& oss, ContactID const& cid) -> std::ostream&
 
 }  // namespace eillance
 
-namespace std {
 template <>
-struct hash<eillance::ContactID> {
-  auto operator()(eillance::ContactID const& id) const -> size_t {
+struct std::hash<eillance::ContactID> {
+  auto operator()(eillance::ContactID const& id) const noexcept -> size_t {
     // FNV-1a hash
     auto hash = 2166136261U;
     for (auto byte : id.Value()) {
@@ -125,6 +127,4 @@ struct hash<eillance::ContactID> {
     }
     return hash;
   }
-};
-
-}  // namespace std
+};  // namespace std

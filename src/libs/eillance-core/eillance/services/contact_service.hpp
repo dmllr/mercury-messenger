@@ -42,6 +42,10 @@ class ContactService {
 
   auto GenerateContactToken() -> std::vector<std::byte>;
 
+  // Debug Actions
+  void DebugClearCache() { manager_->ClearContacts(); }
+  void DebugReloadCache() { manager_->ReloadContacts(); }
+
   // Queries
   [[nodiscard]] auto GetContacts() const -> std::vector<identity::Contact>;
   [[nodiscard]] auto GetContact(ContactID const& peer_id) const -> std::optional<identity::Contact>;

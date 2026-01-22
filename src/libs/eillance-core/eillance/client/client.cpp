@@ -450,9 +450,13 @@ auto Client::GetPeerConnectionState(ContactID const& id) const -> transport::Pee
 void Client::DebugEraseAllHistory() const { storage_->DebugClearAllHistory(); }
 void Client::DebugEraseAllContacts() const {
   storage_->DebugClearAllContacts();
+  contact_service_->DebugClearCache();  // Added: ensure cache is cleared
   storage_->DebugClearAllHistory();
 }
-void Client::DebugRevokeAllApprovals() const { storage_->DebugRevokeAllContactApprovals(); }
+void Client::DebugRevokeAllApprovals() const {
+  storage_->DebugRevokeAllContactApprovals();
+  contact_service_->DebugReloadCache();  // Added: ensure cache is reloaded
+}
 
 void Client::SetStatusCallback(StatusCallbackFunction const& cb) {
   status_callback_ = std::make_shared<StatusCallbackFunction>(cb);
