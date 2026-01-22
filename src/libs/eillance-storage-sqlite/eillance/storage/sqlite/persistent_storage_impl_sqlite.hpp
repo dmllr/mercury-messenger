@@ -249,23 +249,53 @@ class SQLiteStorage final : public PersistentStorageImpl {
   // --- History / Messages ---
   auto AddHistoryEntry(messaging::HistoryEntryRecord entry) -> messaging::HistoryEntryRecord override {
     std::lock_guard const lock(mutex_);
+    char* err_msg = nullptr;
+    if (sqlite3_exec(db_, "BEGIN TRANSACTION;", nullptr, nullptr, &err_msg) != SQLITE_OK) {
+      LGE << "Failed to begin transaction for message insertion: "
+          << ((err_msg != nullptr) ? err_msg : "Unknown error");
+      sqlite3_free(err_msg);
+      return {};
+    }
+
+    // 1. Manually determine the next ID for this peer_id
+    uint64_t next_id = 1;
+    {
+      SQLiteStatement const max_id_stmt(db_, "SELECT MAX(id) FROM messages WHERE peer_id = ?;");
+      BindText(max_id_stmt.Get(), 1, entry.peer_id.ToString());
+      if (sqlite3_step(max_id_stmt.Get()) == SQLITE_ROW) {
+        if (sqlite3_column_type(max_id_stmt.Get(), 0) != SQLITE_NULL) {
+          next_id = static_cast<uint64_t>(sqlite3_column_int64(max_id_stmt.Get(), 0)) + 1;
+        }
+      }
+    }
+    entry.id = next_id;
+
+    // 2. Insert message
     SQLiteStatement const statement(db_, R"SQL(
       INSERT INTO messages (
         peer_id,
+        id,
+        remote_id,
         kind,
         timestamp,
         direction,
         status,
         is_truncated,
         content
-      ) VALUES (?, ?, ?, ?, ?, ?, ?);
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
     )SQL");
 
     BindText(statement.Get(), 1, entry.peer_id.ToString());
-    sqlite3_bind_int(statement.Get(), 2, static_cast<int>(entry.kind));
-    sqlite3_bind_int64(statement.Get(), 3, entry.timestamp);
-    sqlite3_bind_int(statement.Get(), 4, static_cast<int>(entry.direction));
-    sqlite3_bind_int(statement.Get(), 5, static_cast<int>(entry.status));
+    sqlite3_bind_int64(statement.Get(), 2, entry.id);
+    if (entry.remote_id) {
+      sqlite3_bind_int64(statement.Get(), 3, *entry.remote_id);
+    } else {
+      sqlite3_bind_null(statement.Get(), 3);
+    }
+    sqlite3_bind_int(statement.Get(), 4, static_cast<int>(entry.kind));
+    sqlite3_bind_int64(statement.Get(), 5, entry.timestamp);
+    sqlite3_bind_int(statement.Get(), 6, static_cast<int>(entry.direction));
+    sqlite3_bind_int(statement.Get(), 7, static_cast<int>(entry.status));
 
     std::optional<std::string> full_content_for_storage;
 
@@ -277,40 +307,43 @@ class SQLiteStorage final : public PersistentStorageImpl {
       } else {
         entry.is_truncated = false;
       }
-      sqlite3_bind_int(statement.Get(), 6, static_cast<int>(entry.is_truncated));
-      BindText(statement.Get(), 7, msg_entry->content);
+      sqlite3_bind_int(statement.Get(), 8, static_cast<int>(entry.is_truncated));
+      BindText(statement.Get(), 9, msg_entry->content);
     } else if (auto const* call_entry = std::get_if<messaging::CallEntry>(&entry.data)) {
       entry.is_truncated = false;
-      sqlite3_bind_int(statement.Get(), 6, 0);  // is_truncated = false
+      sqlite3_bind_int(statement.Get(), 8, 0);  // is_truncated = false
 
       nlohmann::json j;
       j["duration_seconds"] = call_entry->duration_seconds;
       j["call_direction"] = call_entry->call_direction;
       j["call_status"] = call_entry->call_status;
-      BindText(statement.Get(), 7, j.dump());
+      BindText(statement.Get(), 9, j.dump());
     }
 
     if (sqlite3_step(statement.Get()) != SQLITE_DONE) {
       LGE << "Failed to insert message entry: " << sqlite3_errmsg(db_);
-      return {};  // Return empty record on failure
+      sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+      return {};
     }
-
-    entry.id = sqlite3_last_insert_rowid(db_);
 
     if (full_content_for_storage) {
       SQLiteStatement const large_msg_stmt(db_, R"SQL(
         INSERT INTO large_messages
-          (message_id, full_content)
+          (peer_id, message_id, full_content)
         VALUES
-          (?, ?);
+          (?, ?, ?);
         )SQL");
-      sqlite3_bind_int64(large_msg_stmt.Get(), 1, entry.id);
-      BindText(large_msg_stmt.Get(), 2, *full_content_for_storage);
+      BindText(large_msg_stmt.Get(), 1, entry.peer_id.ToString());
+      sqlite3_bind_int64(large_msg_stmt.Get(), 2, entry.id);
+      BindText(large_msg_stmt.Get(), 3, *full_content_for_storage);
       if (sqlite3_step(large_msg_stmt.Get()) != SQLITE_DONE) {
         LGE << "Failed to insert large message content: " << sqlite3_errmsg(db_);
+        sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+        return {};
       }
     }
 
+    sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, nullptr);
     return entry;
   }
 
@@ -326,7 +359,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
         status = ?,
         content = ?
       WHERE
-        id = ?;
+        peer_id = ? AND id = ?;
     )SQL");
 
     sqlite3_bind_int(statement.Get(), 1, static_cast<int>(entry.kind));
@@ -350,7 +383,8 @@ class SQLiteStorage final : public PersistentStorageImpl {
         entry.data
     );
 
-    sqlite3_bind_int64(statement.Get(), 6, entry.id);
+    BindText(statement.Get(), 6, entry.peer_id.ToString());
+    sqlite3_bind_int64(statement.Get(), 7, entry.id);
     sqlite3_step(statement.Get());
   }
 
@@ -363,11 +397,11 @@ class SQLiteStorage final : public PersistentStorageImpl {
       SET
         status = ?
       WHERE
-        id = ? AND peer_id = ?;
+        peer_id = ? AND id = ?;
     )SQL");
     sqlite3_bind_int(statement.Get(), 1, static_cast<int>(new_status));
-    sqlite3_bind_int64(statement.Get(), 2, message_id);
-    BindText(statement.Get(), 3, peer_id.ToString());
+    BindText(statement.Get(), 2, peer_id.ToString());
+    sqlite3_bind_int64(statement.Get(), 3, message_id);
     sqlite3_step(statement.Get());
   }
 
@@ -420,6 +454,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
     SQLiteStatement const statement(db_, R"SQL(
       SELECT
         id,
+        remote_id,
         kind,
         timestamp,
         direction,
@@ -447,7 +482,8 @@ class SQLiteStorage final : public PersistentStorageImpl {
     return page;
   }
 
-  auto GetFullMessageContent(std::uint64_t message_id) -> std::optional<std::string> override {
+  auto GetFullMessageContent(ContactID const& peer_id, std::uint64_t message_id)
+      -> std::optional<std::string> override {
     std::lock_guard const lock(mutex_);
     SQLiteStatement const statement(db_, R"SQL(
       SELECT
@@ -455,9 +491,10 @@ class SQLiteStorage final : public PersistentStorageImpl {
       FROM
         large_messages
       WHERE
-        message_id = ?;
+        peer_id = ? AND message_id = ?;
     )SQL");
-    sqlite3_bind_int64(statement.Get(), 1, message_id);
+    BindText(statement.Get(), 1, peer_id.ToString());
+    sqlite3_bind_int64(statement.Get(), 2, message_id);
     if (sqlite3_step(statement.Get()) == SQLITE_ROW) {
       return ColumnString(statement.Get(), 0);
     }
@@ -506,6 +543,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
         SQLiteStatement const last_msg_stmt(db_, R"SQL(
           SELECT
             id,
+            remote_id,
             kind,
             timestamp,
             direction,
@@ -543,6 +581,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
     SQLiteStatement const statement(db_, R"SQL(
       SELECT
         id,
+        remote_id,
         kind,
         timestamp,
         direction,
@@ -563,6 +602,33 @@ class SQLiteStorage final : public PersistentStorageImpl {
       records.push_back(std::move(record));
     }
     return records;
+  }
+
+  auto GetRemoteIds(ContactID const& peer_id, std::vector<uint64_t> const& local_ids)
+      -> std::vector<uint64_t> override {
+    if (local_ids.empty()) {
+      return {};
+    }
+    std::lock_guard const lock(mutex_);
+    nlohmann::json const ids_json = local_ids;
+    std::string const query = R"SQL(
+      SELECT
+        remote_id
+      FROM
+        messages
+      WHERE
+        peer_id = ? AND id IN (SELECT value FROM json_each(?)) AND remote_id IS NOT NULL;
+    )SQL";
+
+    SQLiteStatement const statement(db_, query);
+    BindText(statement.Get(), 1, peer_id.ToString());
+    BindText(statement.Get(), 2, ids_json.dump());
+
+    std::vector<uint64_t> remote_ids;
+    while (sqlite3_step(statement.Get()) == SQLITE_ROW) {
+      remote_ids.push_back(static_cast<uint64_t>(sqlite3_column_int64(statement.Get(), 0)));
+    }
+    return remote_ids;
   }
 
   // --- Debug ---
@@ -646,21 +712,25 @@ class SQLiteStorage final : public PersistentStorageImpl {
   static auto ParseHistoryEntry(sqlite3_stmt* stmt) -> messaging::HistoryEntryRecord {
     messaging::HistoryEntryRecord record{
         .id = static_cast<uint64_t>(sqlite3_column_int64(stmt, 0)),
-        .kind = static_cast<messaging::HistoryEntryKind>(sqlite3_column_int(stmt, 1)),
-        .timestamp = static_cast<uint64_t>(sqlite3_column_int64(stmt, 2)),
-        .direction = static_cast<messaging::MessageDirection>(sqlite3_column_int(stmt, 3)),
-        .status = static_cast<messaging::MessageStatus>(sqlite3_column_int(stmt, 4)),
-        .is_truncated = (sqlite3_column_int(stmt, 5) == 1),
+        .kind = static_cast<messaging::HistoryEntryKind>(sqlite3_column_int(stmt, 2)),
+        .timestamp = static_cast<uint64_t>(sqlite3_column_int64(stmt, 3)),
+        .direction = static_cast<messaging::MessageDirection>(sqlite3_column_int(stmt, 4)),
+        .status = static_cast<messaging::MessageStatus>(sqlite3_column_int(stmt, 5)),
+        .is_truncated = (sqlite3_column_int(stmt, 6) == 1),
     };
+
+    if (sqlite3_column_type(stmt, 1) != SQLITE_NULL) {
+      record.remote_id = static_cast<uint64_t>(sqlite3_column_int64(stmt, 1));
+    }
 
     switch (record.kind) {
       case messaging::HistoryEntryKind::textMessage:
       case messaging::HistoryEntryKind::systemMessage:
-        record.data = messaging::MessageEntry{.content = ColumnString(stmt, 6)};
+        record.data = messaging::MessageEntry{.content = ColumnString(stmt, 7)};
         break;
       case messaging::HistoryEntryKind::voiceCall:
       case messaging::HistoryEntryKind::videoCall: {
-        auto content_json_str = ColumnString(stmt, 6);
+        auto content_json_str = ColumnString(stmt, 7);
         messaging::CallEntry call_entry{};
         if (!content_json_str.empty()) {
           try {

@@ -56,7 +56,7 @@ void MessagingService::UpdatePeerActivity(ContactID const& peer_id) {
 }
 
 auto MessagingService::SendChatMessage(ContactID const& peer_id, std::string const& message)
--> messaging::HistoryEntryRecord {
+    -> messaging::HistoryEntryRecord {
   if (!contact_manager_->GetContact(peer_id)) {
     LGE << "Cannot send message to " << peer_id.ToString() << ". Not a contact.";
     return {};
@@ -118,7 +118,7 @@ void MessagingService::SendQueuedMessages(ContactID const& peer_id) {
     auto const& msg_entry = std::get<messaging::MessageEntry>(entry.data);
 
     if (entry.is_truncated) {
-      if (auto full = history_->GetFullMessageContent(entry.id)) {
+      if (auto full = history_->GetFullMessageContent(peer_id, entry.id)) {
         content_to_send = *full;
       } else {
         continue;
@@ -203,8 +203,6 @@ void MessagingService::SendPendingReadReceipts(ContactID const& peer_id) {
     LGI << "Sent pending read receipts for " << ids_to_send.size() << " messages to " << peer_id.ToString();
   } else {
     // Re-queue if we thought we could send but failed (e.g. peer disconnected in between)
-    // Though this function is usually called when we think we are connected.
-    // Use lock again to merge back if needed.
     std::lock_guard<std::recursive_mutex> const lock(receipts_mutex_);
     auto& pending = pending_read_receipts_[peer_id];
     pending.insert(pending.end(), ids_to_send.begin(), ids_to_send.end());
@@ -218,12 +216,13 @@ void MessagingService::OnConnectionAttemptFinished(ContactID const& peer_id) {
 // --- Queries ---
 
 auto MessagingService::GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t page_size) const
--> messaging::HistoryPage {
+    -> messaging::HistoryPage {
   return history_->GetHistoryPage(peer_id, page_index, page_size);
 }
 
-auto MessagingService::GetFullMessageContent(uint64_t message_id) const -> std::optional<std::string> {
-  return history_->GetFullMessageContent(message_id);
+auto MessagingService::GetFullMessageContent(ContactID const& peer_id, uint64_t message_id) const
+    -> std::optional<std::string> {
+  return history_->GetFullMessageContent(peer_id, message_id);
 }
 
 auto MessagingService::GetChatSummaries(std::vector<ContactID> const& peer_ids
@@ -234,12 +233,20 @@ auto MessagingService::GetChatSummaries(std::vector<ContactID> const& peer_ids
 // --- Updates ---
 
 void MessagingService::MarkMessagesAsRead(ContactID const& peer_id, std::vector<uint64_t> const& message_ids) {
+  // 1. Update status locally for the local IDs
   history_->MarkMessagesAsRead(peer_id, message_ids);
+
+  // 2. Retrieve corresponding remote IDs to send back to the peer
+  auto remote_ids = storage_->GetRemoteIds(peer_id, message_ids);
+
+  if (remote_ids.empty()) {
+    return;
+  }
 
   {
     std::lock_guard<std::recursive_mutex> const lock(receipts_mutex_);
     auto& pending = pending_read_receipts_[peer_id];
-    pending.insert(pending.end(), message_ids.begin(), message_ids.end());
+    pending.insert(pending.end(), remote_ids.begin(), remote_ids.end());
   }
 
   auto peer = transport_->GetPeer(peer_id);
@@ -292,7 +299,8 @@ void MessagingService::OnChatMessageReceived(
       peer_id,
       decrypted,
       messaging::MessageDirection::received,
-      is_system ? messaging::HistoryEntryKind::systemMessage : messaging::HistoryEntryKind::textMessage
+      is_system ? messaging::HistoryEntryKind::systemMessage : messaging::HistoryEntryKind::textMessage,
+      message_id  // Store the sender's ID as remote_id
   );
 
   nlohmann::json const receipt = {{"type", "message_receipt"}, {"status", "delivered"}, {"message_id", message_id}};
@@ -314,6 +322,7 @@ void MessagingService::OnMessageReceipt(ContactID const& peer_id, uint64_t messa
 }
 
 void MessagingService::OnMessagesRead(ContactID const& peer_id, std::vector<uint64_t> const& message_ids) {
+  // Received read receipt contains IDs that *I* sent. So they match my local IDs.
   for (auto id : message_ids) {
     history_->UpdateMessageStatus(peer_id, id, messaging::MessageStatus::read);
   }

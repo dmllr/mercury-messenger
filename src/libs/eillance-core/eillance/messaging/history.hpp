@@ -24,10 +24,12 @@ class MessageHistory {
       ContactID const& peer_id,
       std::string const& content,
       MessageDirection direction,
-      HistoryEntryKind kind
+      HistoryEntryKind kind,
+      std::optional<uint64_t> remote_id = std::nullopt
   ) const -> HistoryEntryRecord {
     return storage_->AddHistoryEntry({
         .id = 0,  // DB will assign ID
+        .remote_id = remote_id,
         .kind = kind,
         .timestamp = static_cast<Time::Unit>(
             std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch())
@@ -89,8 +91,8 @@ class MessageHistory {
     return storage_->GetHistoryPage(peer_id, page_index, page_size);
   }
 
-  auto GetFullMessageContent(std::uint64_t message_id) -> std::optional<std::string> {
-    return storage_->GetFullMessageContent(message_id);
+  auto GetFullMessageContent(ContactID const& peer_id, std::uint64_t message_id) -> std::optional<std::string> {
+    return storage_->GetFullMessageContent(peer_id, message_id);
   }
 
   auto GetChatSummaries(std::vector<std::string> const& peer_ids_str) -> std::vector<ChatSummary> {

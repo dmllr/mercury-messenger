@@ -91,7 +91,8 @@ class Client final : public transport::TransportDelegate {
   void MarkMessagesAsRead(ContactID const& peer_id, std::vector<std::uint64_t> const& mids) const;
   [[nodiscard]] auto GetMessageHistoryPage(ContactID const& peer_id, size_t i, size_t s) const
       -> messaging::HistoryPage;
-  [[nodiscard]] auto GetFullMessageContent(uint64_t message_id) const -> std::optional<std::string>;
+  [[nodiscard]] auto GetFullMessageContent(ContactID const& peer_id, uint64_t message_id) const
+      -> std::optional<std::string>;
   [[nodiscard]] auto GetChatSummaries(std::vector<ContactID> const& peer_ids
   ) const -> std::vector<messaging::ChatSummary>;
 

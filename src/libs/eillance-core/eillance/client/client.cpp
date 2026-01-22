@@ -219,7 +219,7 @@ void Client::ProcessPeerMessage(Json message) {
     );
   }
 
-    // Contact & Profile Logic
+  // Contact & Profile Logic
   else if (type == "contact_add_request") {
     std::optional<std::string> token;
     if (message.contains("token")) {
@@ -431,8 +431,8 @@ void Client::MarkMessagesAsRead(ContactID const& id, std::vector<std::uint64_t> 
 auto Client::GetMessageHistoryPage(ContactID const& id, size_t i, size_t s) const -> messaging::HistoryPage {
   return messaging_service_->GetHistoryPage(id, i, s);
 }
-auto Client::GetFullMessageContent(uint64_t id) const -> std::optional<std::string> {
-  return messaging_service_->GetFullMessageContent(id);
+auto Client::GetFullMessageContent(ContactID const& id, uint64_t msg_id) const -> std::optional<std::string> {
+  return messaging_service_->GetFullMessageContent(id, msg_id);
 }
 auto Client::GetChatSummaries(std::vector<ContactID> const& ids) const -> std::vector<messaging::ChatSummary> {
   return messaging_service_->GetChatSummaries(ids);

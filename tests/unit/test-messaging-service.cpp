@@ -97,7 +97,7 @@ TEST_F(MessagingServiceTest, OnChatMessageReceived_Valid) {
   transport_->AddPeer(peer1, peer);
 
   std::string plain = "Secret Message";
-  auto encrypted = other.Encrypt(plain);
+  auto const encrypted = other.Encrypt(plain);
 
   bool cb_called = false;
   service_->SetChatMessageReceivedCallback([&](auto const& id, auto const& rec) {
@@ -137,4 +137,46 @@ TEST_F(MessagingServiceTest, OnChatMessageReceived_DecryptionFail) {
   EXPECT_FALSE(cb_called);
   // No receipt should be sent
   EXPECT_TRUE(mock_transport_->log.sent_peer_messages.empty());
+}
+
+TEST_F(MessagingServiceTest, MarkMessagesAsRead_SendsRemoteIds) {
+  // Setup connected peer
+  auto peer = std::make_shared<transport::Peer>(peer1);
+  peer->data_channel_is_open = true;
+  transport_->AddPeer(peer1, peer);
+
+  // 1. Receive a message with a specific remote ID
+  constexpr uint64_t remote_msg_id = 8888;
+
+  eillance::crypto::SessionCipher other;
+  // Perform key exchange both ways so 'other' can encrypt and 'peer' can decrypt
+  peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
+  other.ComputeSharedSecret(peer->session_cipher->GetPublicKey());
+
+  std::string plain = "Content";
+  auto encrypted = other.Encrypt(plain);
+
+  service_->OnChatMessageReceived(peer1, encrypted, remote_msg_id, false);
+
+  // Verify message added and get its local ID
+  auto page = service_->GetHistoryPage(peer1, 0, 1);
+  ASSERT_FALSE(page.messages.empty());
+  uint64_t local_id = page.messages[0].id;
+
+  // 2. Mark as read
+  service_->MarkMessagesAsRead(peer1, {local_id});
+
+  // 3. Verify the read receipt sent contains the REMOTE ID (8888), not local ID
+  ASSERT_FALSE(mock_transport_->log.sent_peer_messages.empty());
+
+  bool read_receipt_found = false;
+  for (auto const& [pid, json] : mock_transport_->log.sent_peer_messages) {
+    if (pid == peer1 && json["type"] == "message_read") {
+      std::vector<uint64_t> ids = json["message_ids"].get<std::vector<uint64_t>>();
+      if (ids.size() == 1 && ids[0] == remote_msg_id) {
+        read_receipt_found = true;
+      }
+    }
+  }
+  EXPECT_TRUE(read_receipt_found);
 }

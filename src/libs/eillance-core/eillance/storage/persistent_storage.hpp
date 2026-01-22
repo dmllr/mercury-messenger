@@ -134,6 +134,7 @@ using HistoryEntryData = std::variant<MessageEntry, CallEntry>;
 
 struct HistoryEntryRecord {
   std::uint64_t id{};
+  std::optional<std::uint64_t> remote_id;
   HistoryEntryKind kind;
   Time::Unit timestamp{};
   MessageDirection direction;
@@ -192,10 +193,13 @@ class PersistentStorageImpl {
   ) = 0;
   virtual auto GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t page_size)
       -> messaging::HistoryPage = 0;
-  virtual auto GetFullMessageContent(std::uint64_t message_id) -> std::optional<std::string> = 0;
+  virtual auto GetFullMessageContent(ContactID const& peer_id, std::uint64_t message_id)
+      -> std::optional<std::string> = 0;
   virtual auto GetChatSummaries(std::vector<ContactID> const& peer_ids) -> std::vector<messaging::ChatSummary> = 0;
   virtual auto GetMessagesWithStatus(ContactID const& peer_id, messaging::MessageStatus status)
       -> std::vector<messaging::HistoryEntryRecord> = 0;
+  virtual auto GetRemoteIds(ContactID const& peer_id, std::vector<uint64_t> const& local_ids)
+      -> std::vector<uint64_t> = 0;
 
   // --- Debug ---
   virtual void DebugClearAllHistory() = 0;
@@ -252,14 +256,17 @@ class PersistentStorage {
   [[nodiscard]] auto GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t page_size) const {
     return pimpl_->GetHistoryPage(peer_id, page_index, page_size);
   }
-  [[nodiscard]] auto GetFullMessageContent(std::uint64_t message_id) const {
-    return pimpl_->GetFullMessageContent(message_id);
+  [[nodiscard]] auto GetFullMessageContent(ContactID const& peer_id, std::uint64_t message_id) const {
+    return pimpl_->GetFullMessageContent(peer_id, message_id);
   }
   [[nodiscard]] auto GetChatSummaries(std::vector<ContactID> const& peer_ids) const {
     return pimpl_->GetChatSummaries(peer_ids);
   }
   [[nodiscard]] auto GetMessagesWithStatus(ContactID const& peer_id, messaging::MessageStatus status) const {
     return pimpl_->GetMessagesWithStatus(peer_id, status);
+  }
+  [[nodiscard]] auto GetRemoteIds(ContactID const& peer_id, std::vector<uint64_t> const& local_ids) const {
+    return pimpl_->GetRemoteIds(peer_id, local_ids);
   }
 
   // --- Debug ---
