@@ -44,6 +44,10 @@ add_executable(h-e-tests
   test-stream-source.cpp
   test-sqlite-storage.cpp
   test-stream.cpp
+  test-transport-peer.cpp
+  test-utils-memory.cpp
+  test-time.cpp
+  test-video-config.cpp
 )
 target_link_libraries(h-e-tests
   GTest::gtest_main
