@@ -19,10 +19,12 @@ namespace eillance::messaging {
 
 class MessageDeliveryService {
   using ConnectionRequestHandler = std::function<void(ContactID const&)>;
+  using HasWorkCallback = std::function<bool(ContactID const&)>;
 
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<identity::ContactManager> contactManager_;
   ConnectionRequestHandler connectionHandler_;
+  HasWorkCallback hasWorkCallback_;
   DispatchQueue dispatchQueue_{"DeliveryService", 1};
   std::atomic<bool> isRunning_{false};
 
@@ -34,15 +36,17 @@ class MessageDeliveryService {
   static constexpr int kInitialRetryDelayS = 5;
   static constexpr int kMaxRetryDelayS = 60;
 
- public:
+public:
   MessageDeliveryService(
       std::shared_ptr<storage::PersistentStorage> storage,
       std::shared_ptr<identity::ContactManager> contacts,
-      ConnectionRequestHandler handler
+      ConnectionRequestHandler handler,
+      HasWorkCallback has_work_callback = nullptr
   )
       : storage_(std::move(storage)),
         contactManager_(std::move(contacts)),
-        connectionHandler_(std::move(handler)) {}
+        connectionHandler_(std::move(handler)),
+        hasWorkCallback_(std::move(has_work_callback)) {}
 
   void Start() {
     if (isRunning_.exchange(true)) {
@@ -68,9 +72,17 @@ class MessageDeliveryService {
       return;
     }
 
+    bool has_work = false;
+    if (hasWorkCallback_) {
+      has_work = hasWorkCallback_(peer_id);
+    } else {
+      // Fallback to default check if no callback provided
+      has_work = !storage_->GetMessagesWithStatus(peer_id, MessageStatus::sending).empty();
+    }
+
     // Check if there are more messages to send. If so, it means the connection
     // likely failed, and we should schedule a retry.
-    if (!storage_->GetMessagesWithStatus(peer_id, MessageStatus::sending).empty()) {
+    if (has_work) {
       int& delay = retryDelaysS_[peer_id];
       if (delay == 0) {
         delay = kInitialRetryDelayS;
@@ -97,8 +109,15 @@ class MessageDeliveryService {
         return;
       }
 
+      bool has_work = false;
+      if (hasWorkCallback_) {
+        has_work = hasWorkCallback_(peer_id);
+      } else {
+        has_work = !storage_->GetMessagesWithStatus(peer_id, MessageStatus::sending).empty();
+      }
+
       // Prevent connection attempts when there's nothing to do.
-      if (storage_->GetMessagesWithStatus(peer_id, MessageStatus::sending).empty()) {
+      if (!has_work) {
         return;
       }
 
@@ -109,17 +128,14 @@ class MessageDeliveryService {
     connectionHandler_(peer_id);
   }
 
- private:
+private:
   void CheckForAllQueuedMessages() {
     if (!contactManager_) {
       return;
     }
     auto const all_contacts = contactManager_->GetContacts();
     for (auto const& contact : all_contacts) {
-      // Check if there are any messages marked as 'sending' for this contact.
-      if (!storage_->GetMessagesWithStatus(contact.peer_id, MessageStatus::sending).empty()) {
-        AttemptDelivery(contact.peer_id);
-      }
+      AttemptDelivery(contact.peer_id);
     }
   }
 };
