@@ -2,7 +2,6 @@
 
 #include <functional>
 #include <memory>
-#include <mutex>
 #include <optional>
 #include <string>
 #include <vector>
@@ -28,7 +27,7 @@ class ProfileViewModel {
   explicit ProfileViewModel(std::shared_ptr<Client> client, std::shared_ptr<ClientEventRouter> router);
   ~ProfileViewModel();
 
-  void SetObserver(std::shared_ptr<Observer> observer);
+  void SetObserver(std::shared_ptr<Observer> observer) const;
 
   [[nodiscard]] auto GetProfile() const -> MyProfile;
 
@@ -47,18 +46,14 @@ class ProfileViewModel {
   auto RestoreBackup(std::string const& path, std::string const& password) -> bool;
 
  private:
-  void RefreshFromSettings();
+  struct Impl;
+  std::shared_ptr<Impl> impl_;
+
+  // Unsubscribers must be kept in the wrapper to handle event deregistration on destruction
+  std::vector<std::function<void()>> eventUnsubscribers_;
 
   template <typename EventType>
-  void Subscribe(EventQueue& queue, std::function<void(EventType const&)> callback);
-
-  std::shared_ptr<Client> client_;
-  std::shared_ptr<ClientEventRouter> router_;
-  std::shared_ptr<Observer> observer_;
-
-  mutable std::mutex mutex_;
-  MyProfile profile_;
-  std::vector<std::function<void()>> eventUnsubscribers_;
+  void Subscribe(EventQueue& queue, std::function<void(EventType const&)> const& callback);
 };
 
 }  // namespace eillance::view_model

@@ -14,15 +14,15 @@ namespace eillance {
 class DispatchQueue {
   using FpT = std::function<void()>;
 
-  // Structure to hold a scheduled task
   struct ScheduledTask {
     std::chrono::steady_clock::time_point execute_time;
     FpT task;
   };
 
-  // Comparator for the priority queue (earliest executeTime has the highest priority)
   struct CompareScheduledTask {
     auto operator()(ScheduledTask const& left, ScheduledTask const& right) const -> bool {
+      // Priority queue orders by "greatest", so we want earliest time to be "greatest".
+      // Return true if left > right (left is later/smaller priority than right).
       return left.execute_time > right.execute_time;
     }
   };
@@ -55,12 +55,8 @@ class DispatchQueue {
     return instance;
   }
 
-  /// Dispatch an operation immediately.
   void Dispatch(FpT const& operation) {
-    if (shutdownRequested_ || !operation) {
-      return;
-    }
-
+    if (shutdownRequested_ || !operation) return;
     {
       auto const now = std::chrono::steady_clock::now();
       std::unique_lock<std::mutex> const lock(queueAccessMutex_);
@@ -69,12 +65,8 @@ class DispatchQueue {
     condition_.notify_one();
   }
 
-  /// Dispatch an operation immediately.
   void Dispatch(FpT&& operation) {
-    if (shutdownRequested_ || !operation) {
-      return;
-    }
-
+    if (shutdownRequested_ || !operation) return;
     {
       auto const now = std::chrono::steady_clock::now();
       std::unique_lock<std::mutex> const lock(queueAccessMutex_);
@@ -83,12 +75,8 @@ class DispatchQueue {
     condition_.notify_one();
   }
 
-  /// Dispatch an operation to be executed after a delay.
   void DispatchAfter(std::chrono::milliseconds const delay, FpT const&& operation) {
-    if (shutdownRequested_ || !operation) {
-      return;
-    }
-
+    if (shutdownRequested_ || !operation) return;
     {
       auto const scheduled_time = std::chrono::steady_clock::now() + delay;
       std::unique_lock<std::mutex> const lock(queueAccessMutex_);
@@ -97,16 +85,13 @@ class DispatchQueue {
     condition_.notify_one();
   }
 
-  /// Get the size of the queue.
   [[nodiscard]] auto Size() const -> std::size_t { return queue_.size(); }
 
-  /// Remove any pending tasks.
   void RemovePending() {
     std::unique_lock<std::mutex> const lock(queueAccessMutex_);
     queue_ = decltype(queue_){};
   }
 
-  /// Delete copy and move constructors/assignments.
   DispatchQueue(DispatchQueue const& rhs) = delete;
   auto operator=(DispatchQueue const& rhs) -> DispatchQueue& = delete;
   DispatchQueue(DispatchQueue&& rhs) = delete;
@@ -120,60 +105,43 @@ class DispatchQueue {
   std::condition_variable condition_;
   bool shutdownRequested_ = false;
 
-  /// Thread handler that waits until tasks are ready to execute.
   void DispatchThreadHandler() {
     std::unique_lock<std::mutex> lock(queueAccessMutex_, std::defer_lock);
 
     while (!shutdownRequested_) {
       lock.lock();
 
-      // Wait for work if queue is empty
       if (queue_.empty()) {
         condition_.wait(lock, [this] { return shutdownRequested_ || !queue_.empty(); });
-
         if (queue_.empty()) {
           lock.unlock();
           continue;
         }
       }
 
-      // Check if the task is ready to execute
       auto now = std::chrono::steady_clock::now();
-      auto const& next_task = queue_.top();
+      // Safe copy of the top element's execution time to avoid invalidating reference if queue changes
+      auto next_execute_time = queue_.top().execute_time;
 
-      // If task is scheduled for the future, wait until it's time
-      if (next_task.execute_time > now) {
-        condition_.wait_until(lock, next_task.execute_time, [this, &next_task, &now] {
-          if (shutdownRequested_) {
-            return true;
-          }
-          if (queue_.empty()) {
-            return false;
-          }
-
-          // Check if the top task has changed or is now due
-          now = std::chrono::steady_clock::now();
-          return queue_.top().execute_time != next_task.execute_time || queue_.top().execute_time <= now;
+      if (next_execute_time > now) {
+        condition_.wait_until(lock, next_execute_time, [this, next_execute_time] {
+          if (shutdownRequested_) return true;
+          if (queue_.empty()) return false;
+          // Accessing top() is safe here because we hold the lock when predicate runs
+          return queue_.top().execute_time < next_execute_time;
         });
 
         lock.unlock();
         continue;
       }
 
-      // Extract the task making a copy (important)
       auto task = queue_.top().task;
       queue_.pop();
-
-      // Release the lock before executing the task
       lock.unlock();
 
-      // Execute the task (with exception handling)
       try {
-        if (task) {
-          task();
-        }
-      } catch (...) {  // NOLINT(*-empty-catch)
-        // Prevent exceptions from killing the thread
+        if (task) task();
+      } catch (...) {
       }
     }
   }

@@ -17,7 +17,10 @@ add_executable(h-e-tests
   test-backup-manager.cpp
   test-audio-encoder.cpp
   test-bit-reader.cpp
+  test-call-view-model.cpp
   test-contact-service.cpp
+  test-contacts-view-model.cpp
+  test-conversation-view-model.cpp
   test-delivery-service.cpp
   test-dispatch-queue.cpp
   test-event-queue.cpp
@@ -30,7 +33,9 @@ add_executable(h-e-tests
   test-media-call-service.cpp
   test-message-history.cpp
   test-packet.cpp
+  test-profile-view-model.cpp
   test-settings-manager.cpp
+  test-settings-view-model.cpp
   test-sqlite-storage.cpp
 )
 target_link_libraries(h-e-tests

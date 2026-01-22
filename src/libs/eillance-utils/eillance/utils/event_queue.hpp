@@ -4,14 +4,13 @@
 #include <condition_variable>
 #include <deque>
 #include <functional>
+#include <iostream>
 #include <mutex>
-#include <thread>
 #include <typeindex>
 #include <typeinfo>
 #include <unordered_map>
 #include <vector>
 
-#include <ranges>
 
 #include "eillance/utils/dispatch_queue.hpp"
 
@@ -22,14 +21,13 @@ class EventQueue {
   using SubscriberTypeId = std::size_t;
 
  private:
-  std::mutex syncMutex_;
-  std::mutex conditionMutex_;
+  std::mutex syncMutex_;  // Single mutex for condition + data protection
   std::condition_variable condition_;
   std::deque<std::pair<std::type_index, std::any>> events_{};
   std::unordered_map<std::type_index, std::vector<std::pair<SubscriberTypeId, std::function<void(std::any const&)>>>>
       subscribers_{};
   DispatchQueue dispatchQueue_ = DispatchQueue("EventQueue", 1);
-  SubscriberTypeId nextId_ = 0;  // For unique callback identification
+  SubscriberTypeId nextId_ = 0;
 
   struct TerminationEvent {
     bool terminate{true};
@@ -42,8 +40,9 @@ class EventQueue {
   }
 
   EventQueue() {
-    dispatchQueue_.Dispatch([this]() { DispatchEvents(); });
+    dispatchQueue_.Dispatch([this]() { DispatchLoop(); });
   }
+
   EventQueue(EventQueue&&) = delete;
   EventQueue(EventQueue const&) = delete;
   auto operator=(EventQueue&&) -> EventQueue& = delete;
@@ -52,10 +51,8 @@ class EventQueue {
   ~EventQueue() {
     dispatchQueue_.RemovePending();
     Push(TerminationEvent{});
-    condition_.notify_one();
   }
 
-  /// Subscribe to events of a specific type.
   template <typename EventType>
   auto Subscribe(std::function<void(EventType const&)> const& callback) -> SubscriberTypeId {
     auto const lock = std::lock_guard<std::mutex>(syncMutex_);
@@ -66,7 +63,6 @@ class EventQueue {
     return id;
   }
 
-  /// Unsubscribe from events of a specific type.
   template <typename EventType>
   void Unsubscribe(SubscriberTypeId id) {
     auto const lock = std::lock_guard<std::mutex>(syncMutex_);
@@ -74,7 +70,6 @@ class EventQueue {
     vec.erase(std::remove_if(vec.begin(), vec.end(), [id](auto const& pair) { return pair.first == id; }), vec.end());
   }
 
-  /// Push an event to the queue.
   template <typename EventType>
   void Push(EventType const& event) {
     {
@@ -84,38 +79,49 @@ class EventQueue {
     condition_.notify_one();
   }
 
-  /// Dispatch events to subscribers.
-  void DispatchEvents() {
-    // Wait for an event to be pushed.
-    {
-      std::unique_lock<std::mutex> lock(conditionMutex_);
-      condition_.wait(lock, [this] { return !events_.empty(); });
-    }
+ private:
+  void DispatchLoop() {
+    while (true) {
+      std::type_index type{typeid(int)};
+      std::any contents;
 
-    // Pop the event from the queue.
-    std::type_index type{typeid(int)};
-    std::any contents;
-    {
-      std::lock_guard<std::mutex> const lock(syncMutex_);
-      type = events_.front().first;
-      contents = events_.front().second;
-      events_.pop_front();
-    }
+      {
+        std::unique_lock<std::mutex> lock(syncMutex_);
+        condition_.wait(lock, [this] { return !events_.empty(); });
 
-    // Find subscribers for the event type.
-    if (subscribers_.contains(type)) {
-      auto& subscribers = subscribers_.at(type);
+        type = events_.front().first;
+        contents = events_.front().second;
+        events_.pop_front();
+      }
 
-      // Dispatch the event to subscribers.
-      for (auto const& callback : subscribers | std::views::values) {
-        callback(contents);
+      if (type == typeid(TerminationEvent)) {
+        return;
+      }
+
+      std::vector<std::function<void(std::any const&)>> callbacks_to_run;
+      {
+        std::lock_guard<std::mutex> const lock(syncMutex_);
+        if (subscribers_.contains(type)) {
+          auto const& subs = subscribers_.at(type);
+          callbacks_to_run.reserve(subs.size());
+          for (auto const& pair : subs) {
+            callbacks_to_run.push_back(pair.second);
+          }
+        }
+      }
+
+      for (auto const& callback : callbacks_to_run) {
+        try {
+          callback(contents);
+        } catch (std::exception const& e) {
+          std::cerr << "EventQueue dispatch error: " << e.what() << " [Event Type: " << type.name() << "]" << std::endl;
+        } catch (...) {
+          std::cerr << "EventQueue dispatch error: Unknown exception [Event Type: " << type.name() << "]" << std::endl;
+        }
       }
     }
-
-    dispatchQueue_.Dispatch([this]() { DispatchEvents(); });
   }
 
- private:
   template <typename FirstType, typename SecondType>
   auto MakePair(FirstType&& first, SecondType&& second) -> std::pair<FirstType, SecondType> {
     return std::pair<FirstType, SecondType>(std::forward<FirstType>(first), std::forward<SecondType>(second));

@@ -30,7 +30,7 @@ class SettingsViewModel {
   explicit SettingsViewModel(std::shared_ptr<Client> client, std::shared_ptr<ClientEventRouter> router);
   ~SettingsViewModel();
 
-  void SetObserver(std::shared_ptr<Observer> observer);
+  void SetObserver(std::shared_ptr<Observer> observer) const;
 
   struct State {
     std::optional<std::string> signaling_server_url;
@@ -40,23 +40,17 @@ class SettingsViewModel {
 
   [[nodiscard]] auto GetState() const -> State;
 
-  // Actions
   void UpdateSignalingUrl(std::string const& url);
   void SetPeerInactivityTimeout(int seconds);
 
  private:
-  void LoadSettings();
+  struct Impl;
+  std::shared_ptr<Impl> impl_;
+
+  std::vector<std::function<void()>> eventUnsubscribers_;
 
   template <typename EventType>
-  void Subscribe(EventQueue& queue, std::function<void(EventType const&)> callback);
-
-  std::shared_ptr<Client> client_;
-  std::shared_ptr<ClientEventRouter> router_;
-  std::shared_ptr<Observer> observer_;
-
-  mutable std::mutex mutex_;
-  State state_;
-  std::vector<std::function<void()>> eventUnsubscribers_;
+  void Subscribe(EventQueue& queue, std::function<void(EventType const&)> const& callback);
 };
 
 }  // namespace eillance::view_model

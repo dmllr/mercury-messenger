@@ -28,8 +28,15 @@ class ContactServiceTest : public ::testing::Test {
       }
     };
 
-    contact_service_ =
-        std::make_unique<services::ContactService>(storage_, transport_, account_service_.get(), conn_handler);
+    auto contact_manager = std::make_shared<identity::ContactManager>(storage_);
+
+    contact_service_ = std::make_unique<services::ContactService>(
+        storage_,
+        transport_,
+        contact_manager,
+        account_service_.get(),
+        conn_handler
+    );
 
     // Initialize dummy callbacks to avoid invariants
     contact_service_->SetContactRequestCallback([](auto const&) {});
@@ -38,8 +45,6 @@ class ContactServiceTest : public ::testing::Test {
     contact_service_->SetContactRemovedCallback([](auto const&) {});
     contact_service_->SetPeerListUpdateCallback([](auto const&) {});
     contact_service_->SetProfileReceivedCallback([](auto const&, auto const&) {});
-
-    auto contact_manager = std::make_shared<identity::ContactManager>(storage_);
 
     messaging_service_ =
         std::make_unique<services::MessagingService>(storage_, transport_, contact_manager, conn_handler);

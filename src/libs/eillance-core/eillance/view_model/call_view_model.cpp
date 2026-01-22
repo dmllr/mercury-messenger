@@ -2,20 +2,202 @@
 
 namespace eillance::view_model {
 
+struct CallViewModel::Impl : std::enable_shared_from_this<Impl> {
+  std::shared_ptr<Client> client;
+  std::shared_ptr<ClientEventRouter> router;
+  std::shared_ptr<Observer> observer;
+
+  mutable std::mutex mutex;
+  CallState state;
+
+  Impl(std::shared_ptr<Client> client, std::shared_ptr<ClientEventRouter> router)
+      : client(std::move(client)),
+        router(std::move(router)) {}
+
+  void SetObserver(std::shared_ptr<Observer> obs) {
+    std::lock_guard<std::mutex> const lock(mutex);
+    observer = std::move(obs);
+    if (observer) {
+      observer->OnCallStateChanged(state);
+    }
+  }
+
+  auto GetState() const -> CallState {
+    std::lock_guard<std::mutex> const lock(mutex);
+    return state;
+  }
+
+  void Notify() const {
+    std::lock_guard<std::mutex> const lock(mutex);
+    if (observer) {
+      observer->OnCallStateChanged(state);
+    }
+  }
+
+  void StartVoiceCall(ContactID const& peer_id) {
+    {
+      std::lock_guard<std::mutex> const lock(mutex);
+      state = {
+          .is_connecting = true,
+          .is_in_call = false,
+          .is_ringing = false,
+          .call_direction = messaging::CallDirection::outgoing,
+          .peer_id = peer_id,
+          .call_type = messaging::HistoryEntryKind::voiceCall
+      };
+    }
+    client->StartVoiceCall(peer_id);
+    Notify();
+  }
+
+  void StartVideoCall(ContactID const& peer_id) {
+    {
+      std::lock_guard<std::mutex> const lock(mutex);
+      state = {
+          .is_connecting = true,
+          .is_in_call = false,
+          .is_ringing = false,
+          .call_direction = messaging::CallDirection::outgoing,
+          .peer_id = peer_id,
+          .call_type = messaging::HistoryEntryKind::videoCall
+      };
+    }
+    client->StartVideoCall(peer_id);
+    Notify();
+  }
+
+  void Hangup() {
+    ContactID peer_id_to_hangup;
+    {
+      std::lock_guard<std::mutex> const lock(mutex);
+      if (!state.is_connecting && !state.is_in_call && !state.is_ringing) {
+        return;
+      }
+      peer_id_to_hangup = state.peer_id;
+      state = {};
+    }
+    if (!peer_id_to_hangup.IsEmpty()) {
+      client->Hangup(peer_id_to_hangup, true);
+    }
+    Notify();
+  }
+
+  void AcceptCall() {
+    ContactID peer_id;
+    auto call_kind = messaging::HistoryEntryKind::voiceCall;
+    {
+      std::lock_guard<std::mutex> const lock(mutex);
+      if (!state.is_ringing) {
+        return;
+      }
+      peer_id = state.peer_id;
+      call_kind = state.call_type;
+      state.is_connecting = false;
+      state.is_in_call = true;
+      state.is_ringing = false;
+    }
+    if (!peer_id.IsEmpty()) {
+      client->AcceptCall(peer_id, call_kind);
+    }
+    Notify();
+  }
+
+  void RejectCall() {
+    ContactID peer_id;
+    {
+      std::lock_guard<std::mutex> const lock(mutex);
+      if (!state.is_ringing) {
+        return;
+      }
+      peer_id = state.peer_id;
+      state = {};
+    }
+    if (!peer_id.IsEmpty()) {
+      client->RejectCall(peer_id);
+    }
+    Notify();
+  }
+
+  void OnIncomingCall(ContactID const& peer_id, messaging::HistoryEntryKind call_type) {
+    bool should_notify = false;
+    {
+      std::lock_guard<std::mutex> const lock(mutex);
+      if (!state.is_connecting && !state.is_in_call && !state.is_ringing) {
+        state.is_connecting = false;
+        state.is_ringing = true;
+        state.peer_id = peer_id;
+        state.call_type = call_type;
+        state.call_direction = messaging::CallDirection::incoming;
+        should_notify = true;
+      }
+    }
+    if (should_notify) {
+      Notify();
+    }
+  }
+
+  void OnCallRinging(ContactID const& peer_id) {
+    bool should_notify = false;
+    {
+      std::lock_guard<std::mutex> const lock(mutex);
+      if (state.is_connecting && state.peer_id == peer_id) {
+        state.is_connecting = false;
+        state.is_ringing = true;
+        should_notify = true;
+      }
+    }
+    if (should_notify) {
+      Notify();
+    }
+  }
+
+  void OnCallAccepted(ContactID const& peer_id) {
+    bool should_notify = false;
+    {
+      std::lock_guard<std::mutex> const lock(mutex);
+      if ((state.is_connecting || state.is_ringing) && state.peer_id == peer_id) {
+        state.is_connecting = false;
+        state.is_ringing = false;
+        state.is_in_call = true;
+        should_notify = true;
+      }
+    }
+    if (should_notify) {
+      Notify();
+    }
+  }
+
+  void OnCallTerminated(ContactID const& peer_id) {
+    bool should_notify = false;
+    {
+      std::lock_guard<std::mutex> const lock(mutex);
+      if ((state.is_connecting || state.is_in_call || state.is_ringing) && state.peer_id == peer_id) {
+        state = {};
+        should_notify = true;
+      }
+    }
+    if (should_notify) {
+      Notify();
+    }
+  }
+};
+
 CallViewModel::CallViewModel(std::shared_ptr<Client> client, std::shared_ptr<ClientEventRouter> router)
-    : client_(std::move(client)),
-      router_(std::move(router)) {
-  auto& queue = router_->Queue();
-  Subscribe<EventIncomingCall>(queue, [this](auto const& event) { OnIncomingCall(event.peer_id, event.call_type); });
-  Subscribe<EventCallRinging>(queue, [this](auto const& event) { OnCallRinging(event.peer_id); });
-  Subscribe<EventCallAccepted>(queue, [this](auto const& event) { OnCallAccepted(event.peer_id); });
-  Subscribe<EventCallTerminated>(queue, [this](auto const& event) { OnCallTerminated(event.peer_id); });
-  Subscribe<EventStatusChanged>(queue, [this](auto const& event) {
+    : impl_(std::make_shared<Impl>(std::move(client), std::move(router))) {
+  auto& queue = impl_->router->Queue();
+  auto impl = impl_;
+  Subscribe<EventIncomingCall>(queue, [impl](auto const& event) {
+    impl->OnIncomingCall(event.peer_id, event.call_type);
+  });
+  Subscribe<EventCallRinging>(queue, [impl](auto const& event) { impl->OnCallRinging(event.peer_id); });
+  Subscribe<EventCallAccepted>(queue, [impl](auto const& event) { impl->OnCallAccepted(event.peer_id); });
+  Subscribe<EventCallTerminated>(queue, [impl](auto const& event) { impl->OnCallTerminated(event.peer_id); });
+  Subscribe<EventStatusChanged>(queue, [impl](auto const& event) {
     if (event.source == EventSource::peerConnectionState) {
       auto const state = static_cast<transport::PeerConnectionState>(event.state);
       if (state == transport::PeerConnectionState::closed || state == transport::PeerConnectionState::disconnected ||
           state == transport::PeerConnectionState::failed) {
-        OnCallTerminated(event.peer_id);
+        impl->OnCallTerminated(event.peer_id);
       }
     }
   });
@@ -33,146 +215,14 @@ void CallViewModel::Subscribe(EventQueue& queue, std::function<void(EventType co
   eventUnsubscribers_.emplace_back([&queue, event_id] { queue.Unsubscribe<EventType>(event_id); });
 }
 
-void CallViewModel::SetObserver(std::shared_ptr<Observer> observer) {
-  std::lock_guard<std::mutex> const lock(mutex_);
-  observer_ = std::move(observer);
-  if (observer_) {
-    observer_->OnCallStateChanged(state_);
-  }
-}
+void CallViewModel::SetObserver(std::shared_ptr<Observer> observer) const { impl_->SetObserver(std::move(observer)); }
 
-auto CallViewModel::GetState() const -> CallState {
-  std::lock_guard<std::mutex> const lock(mutex_);
-  return state_;
-}
+auto CallViewModel::GetState() const -> CallState { return impl_->GetState(); }
 
-void CallViewModel::StartVoiceCall(ContactID const& peer_id) {
-  {
-    std::lock_guard<std::mutex> const lock(mutex_);
-    state_ = {
-        .is_connecting = true,
-        .is_in_call = false,
-        .is_ringing = false,
-        .call_direction = messaging::CallDirection::outgoing,
-        .peer_id = peer_id,
-        .call_type = messaging::HistoryEntryKind::voiceCall
-    };
-  }
-  client_->StartVoiceCall(peer_id);
-  Notify();
-}
-
-void CallViewModel::StartVideoCall(ContactID const& peer_id) {
-  {
-    std::lock_guard<std::mutex> const lock(mutex_);
-    state_ = {
-        .is_connecting = true,
-        .is_in_call = false,
-        .is_ringing = false,
-        .call_direction = messaging::CallDirection::outgoing,
-        .peer_id = peer_id,
-        .call_type = messaging::HistoryEntryKind::videoCall
-    };
-  }
-  client_->StartVideoCall(peer_id);
-  Notify();
-}
-
-void CallViewModel::Hangup() {
-  ContactID peer_id_to_hangup;
-  {
-    std::lock_guard<std::mutex> const lock(mutex_);
-    if (!state_.is_connecting && !state_.is_in_call && !state_.is_ringing) {
-      return;
-    }
-    peer_id_to_hangup = state_.peer_id;
-    state_ = {};
-  }
-  if (!peer_id_to_hangup.IsEmpty()) {
-    client_->Hangup(peer_id_to_hangup, true);
-  }
-  Notify();
-}
-
-void CallViewModel::AcceptCall() {
-  ContactID peer_id;
-  auto call_kind = messaging::HistoryEntryKind::voiceCall;
-  {
-    std::lock_guard<std::mutex> const lock(mutex_);
-    if (!state_.is_ringing) {
-      return;
-    }
-    peer_id = state_.peer_id;
-    call_kind = state_.call_type;
-    state_.is_connecting = false;
-    state_.is_in_call = true;
-    state_.is_ringing = false;
-  }
-  if (!peer_id.IsEmpty()) {
-    client_->AcceptCall(peer_id, call_kind);
-  }
-  Notify();
-}
-
-void CallViewModel::RejectCall() {
-  ContactID peer_id;
-  {
-    std::lock_guard<std::mutex> const lock(mutex_);
-    if (!state_.is_ringing) {
-      return;
-    }
-    peer_id = state_.peer_id;
-    state_ = {};
-  }
-  if (!peer_id.IsEmpty()) {
-    client_->RejectCall(peer_id);
-  }
-  Notify();
-}
-
-void CallViewModel::OnIncomingCall(ContactID const& peer_id, messaging::HistoryEntryKind call_type) {
-  std::lock_guard<std::mutex> const lock(mutex_);
-  if (!state_.is_connecting && !state_.is_in_call && !state_.is_ringing) {
-    state_.is_connecting = false;
-    state_.is_ringing = true;
-    state_.peer_id = peer_id;
-    state_.call_type = call_type;
-    state_.call_direction = messaging::CallDirection::incoming;
-    Notify();
-  }
-}
-
-void CallViewModel::OnCallRinging(ContactID const& peer_id) {
-  std::lock_guard<std::mutex> const lock(mutex_);
-  if (state_.is_connecting && state_.peer_id == peer_id) {
-    state_.is_connecting = false;
-    state_.is_ringing = true;
-    Notify();
-  }
-}
-
-void CallViewModel::OnCallAccepted(ContactID const& peer_id) {
-  std::lock_guard<std::mutex> const lock(mutex_);
-  if ((state_.is_connecting || state_.is_ringing) && state_.peer_id == peer_id) {
-    state_.is_connecting = false;
-    state_.is_ringing = false;
-    state_.is_in_call = true;
-    Notify();
-  }
-}
-
-void CallViewModel::OnCallTerminated(ContactID const& peer_id) {
-  std::lock_guard<std::mutex> const lock(mutex_);
-  if ((state_.is_connecting || state_.is_in_call || state_.is_ringing) && state_.peer_id == peer_id) {
-    state_ = {};
-    Notify();
-  }
-}
-
-void CallViewModel::Notify() const {
-  if (observer_) {
-    observer_->OnCallStateChanged(state_);
-  }
-}
+void CallViewModel::StartVoiceCall(ContactID const& peer_id) { impl_->StartVoiceCall(peer_id); }
+void CallViewModel::StartVideoCall(ContactID const& peer_id) { impl_->StartVideoCall(peer_id); }
+void CallViewModel::Hangup() { impl_->Hangup(); }
+void CallViewModel::AcceptCall() { impl_->AcceptCall(); }
+void CallViewModel::RejectCall() { impl_->RejectCall(); }
 
 }  // namespace eillance::view_model

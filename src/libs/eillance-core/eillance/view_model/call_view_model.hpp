@@ -26,11 +26,10 @@ class CallViewModel {
   explicit CallViewModel(std::shared_ptr<Client> client, std::shared_ptr<ClientEventRouter> router);
   ~CallViewModel();
 
-  void SetObserver(std::shared_ptr<Observer> observer);
+  void SetObserver(std::shared_ptr<Observer> observer) const;
 
   [[nodiscard]] auto GetState() const -> CallState;
 
-  // Actions
   void StartVoiceCall(ContactID const& peer_id);
   void StartVideoCall(ContactID const& peer_id);
   void Hangup();
@@ -38,22 +37,13 @@ class CallViewModel {
   void RejectCall();
 
  private:
-  void OnIncomingCall(ContactID const& peer_id, messaging::HistoryEntryKind call_type);
-  void OnCallRinging(ContactID const& peer_id);
-  void OnCallAccepted(ContactID const& peer_id);
-  void OnCallTerminated(ContactID const& peer_id);
-  void Notify() const;
+  struct Impl;
+  std::shared_ptr<Impl> impl_;
+
+  std::vector<std::function<void()>> eventUnsubscribers_;
 
   template <typename EventType>
   void Subscribe(EventQueue& queue, std::function<void(EventType const&)> const& callback);
-
-  std::shared_ptr<Client> client_;
-  std::shared_ptr<ClientEventRouter> router_;
-  std::shared_ptr<Observer> observer_;
-
-  mutable std::mutex mutex_;
-  CallState state_;
-  std::vector<std::function<void()>> eventUnsubscribers_;
 };
 
 }  // namespace eillance::view_model

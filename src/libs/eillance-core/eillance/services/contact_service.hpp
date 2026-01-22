@@ -23,6 +23,7 @@ class ContactService {
   explicit ContactService(
       std::shared_ptr<storage::PersistentStorage> storage,
       std::shared_ptr<transport::Transport> transport,
+      std::shared_ptr<identity::ContactManager> contact_manager,
       AccountService* account_service,
       ConnectionRequestHandler connection_handler
   );
