@@ -64,6 +64,7 @@ class IdManager {
     if (identity_) {
       auto const pem_str = identity_->SaveToMemory();
       storage_->SetSetting(kIdentityKeyFile, pem_str);
+      storage_->SetSetting(kMnemonicKeyFile, mnemonic);
       LGI << "Identity restored from mnemonic.";
       return true;
     }
