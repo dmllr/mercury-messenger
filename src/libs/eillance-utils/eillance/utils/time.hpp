@@ -6,6 +6,7 @@
 class Time {
  public:
   // NOLINTBEGIN(*-identifier-length)
+  // rationale: `Time::mS` is self-explanatory
   static constexpr auto mS = 1000ULL;
   static constexpr auto uS = 1000000ULL;
   // NOLINTEND(*-identifier-length)
@@ -14,7 +15,7 @@ class Time {
 
   using Unit = std::uint64_t;
 
-  static Unit Now() {
+  static auto Now() -> Unit {
     auto const current_time = DefaultClock::now();
     auto const since_epoch = current_time.time_since_epoch();
     return std::chrono::duration_cast<std::chrono::microseconds>(since_epoch).count();
