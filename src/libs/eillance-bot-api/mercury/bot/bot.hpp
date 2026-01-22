@@ -7,6 +7,10 @@
 
 #include "mercury/bot/types.hpp"
 
+namespace eillance {
+class Client;
+}
+
 namespace mercury::bot {
 
 class Bot {
@@ -19,6 +23,8 @@ class Bot {
   };
 
   explicit Bot(Options options);
+  // Constructor for dependency injection (testing)
+  Bot(std::shared_ptr<eillance::Client> client, Options options);
   ~Bot();
 
   Bot(Bot const&) = delete;

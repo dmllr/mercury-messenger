@@ -17,6 +17,7 @@ add_executable(h-e-tests
   test-backup-manager.cpp
   test-audio-encoder.cpp
   test-bit-reader.cpp
+  test-bot-api.cpp
   test-call-view-model.cpp
   test-client-core.cpp
   test-contact-id.cpp
@@ -51,6 +52,7 @@ target_link_libraries(h-e-tests
   eillance-capture
   eillance-rtc
   eillance-h264
+  eillance-bot-api
 )
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/../files" DESTINATION "${CMAKE_BINARY_DIR}/bin")
 

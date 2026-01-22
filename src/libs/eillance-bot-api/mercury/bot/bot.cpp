@@ -22,6 +22,12 @@ class Bot::Impl {
     SetupCallbacks();
   }
 
+  Impl(std::shared_ptr<eillance::Client> client, Options options)
+      : options_(std::move(options)),
+        client_(std::move(client)) {
+    SetupCallbacks();
+  }
+
   void InitializeClient() {
     auto storage_impl = std::make_unique<eillance::storage::SQLiteStorage>(options_.identity_path / "mercury.db");
     auto storage = std::make_shared<eillance::storage::PersistentStorage>(std::move(storage_impl));
@@ -87,6 +93,9 @@ class Bot::Impl {
 
 Bot::Bot(Options options)
     : impl_(std::make_unique<Impl>(std::move(options))) {}
+
+Bot::Bot(std::shared_ptr<eillance::Client> client, Options options)
+    : impl_(std::make_unique<Impl>(std::move(client), std::move(options))) {}
 
 Bot::~Bot() { Stop(); }
 

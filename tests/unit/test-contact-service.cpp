@@ -157,3 +157,22 @@ TEST_F(ContactServiceTest, UnblockContact) {
   // Should revert to awaiting approval or similar non-blocked state
   EXPECT_NE(contact->status, identity::ContactStatus::rejected);
 }
+
+TEST_F(ContactServiceTest, DeviceProfileReceived) {
+  bool profile_cb_called = false;
+  contact_service_->SetProfileReceivedCallback([&](ContactID const& id, Device::Profile const& profile) {
+    if (id == peer1 && !profile.empty()) {
+      EXPECT_EQ(profile[0].id, "0");
+      EXPECT_EQ(profile[0].name, "Back Camera");
+      profile_cb_called = true;
+    }
+  });
+
+  nlohmann::json const profile_json = {
+      {{"id", "0"}, {"name", "Back Camera"}, {"resolutions", {{{"width", 1280}, {"height", 720}}}}}
+  };
+
+  contact_service_->OnDeviceProfileReceived(peer1, profile_json);
+
+  EXPECT_TRUE(profile_cb_called);
+}
