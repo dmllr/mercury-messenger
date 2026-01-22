@@ -76,6 +76,10 @@ void ContactService::ConfirmContact(ContactID const& peer_id) {
 
     INVARIANT(on_contact_status_changed_);
     on_contact_status_changed_(peer_id, identity::ContactStatus::confirmed);
+
+    // Ensure connection and flush queue to send the "contact_confirm" signaling message immediately
+    connection_handler_(peer_id);
+    messaging_service_->SendQueuedMessages(peer_id);
   }
 }
 

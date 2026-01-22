@@ -13,6 +13,14 @@
 
 namespace eillance::transport {
 
+class MockTrack : public ITrack {
+ public:
+  std::vector<std::vector<std::byte>> samples;
+  void SendSample(std::vector<std::byte> const& sample, uint64_t /*sample_time*/) override {
+    samples.push_back(sample);
+  }
+};
+
 // A manual mock implementation of the Transport implementation concept.
 // This class satisfies the template requirements for Transport::TransportModel<T>.
 class MockTransport {
@@ -137,11 +145,11 @@ class MockTransport {
   void AddToStream(std::shared_ptr<Peer> const& /*peer*/, bool /*is_adding_video*/) const {}
 
   auto AddVideo(ContactID const& /*peer_id*/, std::function<void(void)> const& /*on_open*/) -> std::shared_ptr<ITrack> {
-    return nullptr;
+    return std::make_shared<MockTrack>();
   }
 
   auto AddAudio(ContactID const& /*peer_id*/, std::function<void(void)> const& /*on_open*/) -> std::shared_ptr<ITrack> {
-    return nullptr;
+    return std::make_shared<MockTrack>();
   }
 
   // Helper for tests to simulate incoming messages

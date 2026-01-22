@@ -137,3 +137,38 @@ TEST_F(MediaCallServiceTest, Hangup) {
   }
   EXPECT_TRUE(hangup_sent);
 }
+
+TEST_F(MediaCallServiceTest, MediaSampleRouting) {
+  // Setup peer in Ready state with tracks
+  auto peer = std::make_shared<transport::Peer>(peer1);
+  peer->SetState(transport::Peer::State::ready);
+  transport_->AddPeer(peer1, peer);
+
+  // Accept call to initialize tracks
+  service_->AcceptCall(peer1, messaging::HistoryEntryKind::videoCall);
+
+  // Verify tracks are created
+  auto video_track = std::dynamic_pointer_cast<transport::MockTrack>(peer->video);
+  auto audio_track = std::dynamic_pointer_cast<transport::MockTrack>(peer->audio);
+  ASSERT_NE(video_track, nullptr);
+  ASSERT_NE(audio_track, nullptr);
+
+  // Simulate capture emitting a sample (via InitializeAvStream -> OnSample -> SendSampleToPeers)
+  // This is tricky to invoke directly because `av_stream_` is private and its OnSample logic is internal.
+  // However, we can simulate `SendSampleToPeers` by triggering the `OnSample` callback if we could access `av_stream_`.
+  // Since `av_stream_` logic runs on a dispatch queue, waiting is involved.
+  // Instead, let's rely on the fact that `InitializeAvStream` sets up `Stream` with `MockCaptureImpl`.
+  // `MockCaptureImpl::FetchBuffers` returns dummy data.
+  // `Stream` calls `FetchBuffers` and then `SendSample`.
+  // We just need to wait a bit for the async loop to process a sample.
+
+  // Wait for sample distribution
+  auto start = std::chrono::steady_clock::now();
+  while (video_track->samples.empty() && audio_track->samples.empty()) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    if (std::chrono::steady_clock::now() - start > std::chrono::milliseconds(1000)) break;
+  }
+
+  // The mocks should have received samples
+  EXPECT_FALSE(video_track->samples.empty() || audio_track->samples.empty());
+}

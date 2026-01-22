@@ -162,6 +162,10 @@ void Client::ProcessPeerMessage(Json message) {
     }
 
     if (type == "offer") {
+      // Ensure media peer connection is created and tracked so it can be closed later
+      transport_->CreateMediaPeerConnection(peer_id);
+      peer->has_media_peer_connection = true;
+
       auto const sdp = message["sdp"].get<std::string>();
       bool const is_video = sdp.find("m=video") != std::string::npos;
       media_call_service_->OnCallRequest(
