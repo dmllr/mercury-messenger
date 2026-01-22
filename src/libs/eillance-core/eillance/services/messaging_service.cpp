@@ -2,9 +2,9 @@
 
 #include <stdexcept>
 
-#include "eillance/utils/invariant.hpp"
 #include "eillance/logging/logging.hpp"
 #include "eillance/services/contact_service.hpp"
+#include "eillance/utils/invariant.hpp"
 
 namespace eillance::services {
 

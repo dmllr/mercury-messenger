@@ -1,9 +1,9 @@
 #include "eillance/services/contact_service.hpp"
 
-#include "eillance/utils/invariant.hpp"
 #include "eillance/logging/logging.hpp"
 #include "eillance/services/account_service.hpp"
 #include "eillance/services/messaging_service.hpp"
+#include "eillance/utils/invariant.hpp"
 
 namespace eillance::services {
 

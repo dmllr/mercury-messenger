@@ -187,11 +187,11 @@ class RtcTransport final : public transport::Transport::TransportInterface {
     }
   }
 
-  void AddToStream(std::shared_ptr<Peer> const& peer, bool isAddingVideo) const override {
+  void AddToStream(std::shared_ptr<Peer> const& peer, bool is_adding_video) const override {
     if (peer->GetState() == Peer::State::waiting) {
-      peer->SetState(isAddingVideo ? Peer::State::waitingForAudio : Peer::State::waitingForVideo);
-    } else if ((peer->GetState() == Peer::State::waitingForAudio && !isAddingVideo) ||
-               (peer->GetState() == Peer::State::waitingForVideo && isAddingVideo)) {
+      peer->SetState(is_adding_video ? Peer::State::waitingForAudio : Peer::State::waitingForVideo);
+    } else if ((peer->GetState() == Peer::State::waitingForAudio && !is_adding_video) ||
+               (peer->GetState() == Peer::State::waitingForVideo && is_adding_video)) {
       assert(peer->video != nullptr && peer->audio != nullptr);
       peer->SetState(Peer::State::ready);
     }
@@ -204,60 +204,59 @@ class RtcTransport final : public transport::Transport::TransportInterface {
   void CreatePeerConnection(ContactID const& peer_id, std::string const& context) {
     auto peer_connection = std::make_shared<::rtc::PeerConnection>(RtcConfiguration::Config());
 
-    peer_connection->onStateChange(
-        [this, peer_id, context, pc_sptr = peer_connection](::rtc::PeerConnection::State state) {
-          std::string state_str = "unknown";
-          switch (state) {
-            case ::rtc::PeerConnection::State::New:
-              state_str = "New";
-              break;
-            case ::rtc::PeerConnection::State::Connecting:
-              state_str = "Connecting";
-              break;
-            case ::rtc::PeerConnection::State::Connected:
-              state_str = "Connected";
-              break;
-            case ::rtc::PeerConnection::State::Disconnected:
-              state_str = "Disconnected";
-              break;
-            case ::rtc::PeerConnection::State::Failed:
-              state_str = "Failed";
-              break;
-            case ::rtc::PeerConnection::State::Closed:
-              state_str = "Closed";
-              break;
-          }
-          LGI << "Peer " << peer_id << " (" << context << ") state changed to " << state_str << " ("
-              << static_cast<int>(state) << ")";
-          ReportPeerStateChange(peer_id, EventSource::peerConnectionState, static_cast<int>(ToEillanceState(state)));
+    peer_connection->onStateChange([this, peer_id, context, pc_sptr = peer_connection](
+                                       ::rtc::PeerConnection::State state
+                                   ) {
+      std::string state_str = "unknown";
+      switch (state) {
+        case ::rtc::PeerConnection::State::New:
+          state_str = "New";
+          break;
+        case ::rtc::PeerConnection::State::Connecting:
+          state_str = "Connecting";
+          break;
+        case ::rtc::PeerConnection::State::Connected:
+          state_str = "Connected";
+          break;
+        case ::rtc::PeerConnection::State::Disconnected:
+          state_str = "Disconnected";
+          break;
+        case ::rtc::PeerConnection::State::Failed:
+          state_str = "Failed";
+          break;
+        case ::rtc::PeerConnection::State::Closed:
+          state_str = "Closed";
+          break;
+      }
+      LGI << "Peer " << peer_id << " (" << context << ") state changed to " << state_str << " ("
+          << static_cast<int>(state) << ")";
+      ReportPeerStateChange(peer_id, EventSource::peerConnectionState, static_cast<int>(ToEillanceState(state)));
 
-          if (state == ::rtc::PeerConnection::State::Failed || state == ::rtc::PeerConnection::State::Disconnected) {
-            if (auto peer = GetPeer(peer_id)) {
-              LGI << "Closing failed/disconnected " << context << " peer connection for " << peer_id;
-              if (context == "media" && peer->has_media_peer_connection) {
-                ClosePeerConnection(peer_id, "media");
-              }
-            }
-          } else if (state == ::rtc::PeerConnection::State::Closed) {
-            auto current_peer = GetPeer(peer_id);
-            if (current_peer) {
-              auto current_pc =
-                  (context == "data")
-                      ? std::static_pointer_cast<::rtc::PeerConnection>(current_peer->data_peer_connection)
-                      : std::static_pointer_cast<::rtc::PeerConnection>(current_peer->media_peer_connection);
-
-              if (current_pc == pc_sptr) {
-                LGI << "Active peer connection for " << peer_id << " (" << context
-                    << ") closed. Client layer is responsible for removal.";
-              } else {
-                LGI << "Ignoring \'Closed\' event from stale peer connection for " << peer_id << " (" << context << ").";
-              }
-            } else {
-              LGI << "Ignoring \'Closed\' event for already removed peer " << peer_id << " (" << context << ").";
-            }
+      if (state == ::rtc::PeerConnection::State::Failed || state == ::rtc::PeerConnection::State::Disconnected) {
+        if (auto peer = GetPeer(peer_id)) {
+          LGI << "Closing failed/disconnected " << context << " peer connection for " << peer_id;
+          if (context == "media" && peer->has_media_peer_connection) {
+            ClosePeerConnection(peer_id, "media");
           }
         }
-    );
+      } else if (state == ::rtc::PeerConnection::State::Closed) {
+        auto current_peer = GetPeer(peer_id);
+        if (current_peer) {
+          auto current_pc = (context == "data")
+                                ? std::static_pointer_cast<::rtc::PeerConnection>(current_peer->data_peer_connection)
+                                : std::static_pointer_cast<::rtc::PeerConnection>(current_peer->media_peer_connection);
+
+          if (current_pc == pc_sptr) {
+            LGI << "Active peer connection for " << peer_id << " (" << context
+                << ") closed. Client layer is responsible for removal.";
+          } else {
+            LGI << "Ignoring \'Closed\' event from stale peer connection for " << peer_id << " (" << context << ").";
+          }
+        } else {
+          LGI << "Ignoring \'Closed\' event for already removed peer " << peer_id << " (" << context << ").";
+        }
+      }
+    });
 
     peer_connection->onLocalDescription([this, peer_id, context](::rtc::Description const& description) {
       LGD << "Local SDP (" << description.typeString() << ") for " << peer_id << " context " << context << ":\n"

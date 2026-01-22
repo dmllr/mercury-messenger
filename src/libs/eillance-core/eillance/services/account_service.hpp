@@ -24,8 +24,8 @@ class AccountService {
   [[nodiscard]] auto GetMnemonic() const -> std::optional<std::string>;
 
   // Returns new mnemonic
-  auto GenerateNewIdentity() -> std::string;
-  auto RestoreIdentity(std::string const& mnemonic) -> bool;
+  auto GenerateNewIdentity() const -> std::string;
+  auto RestoreIdentity(std::string const& mnemonic) const -> bool;
 
   auto CreateBackup(std::string const& output_path, std::string const& password) const -> bool;
   auto RestoreBackup(std::string const& input_path, std::string const& password) -> bool;
@@ -37,10 +37,10 @@ class AccountService {
       std::optional<std::string> const& name,
       std::optional<std::string> const& bio,
       std::optional<std::string> const& photo
-  );
+  ) const;
 
   // Updates the signaling URL in settings and triggers transport reconnect
-  void UpdateSignalingUrl(std::string const& url);
+  void UpdateSignalingUrl(std::string const& url) const;
 
   // Signing utility using the managed identity
   [[nodiscard]] auto Sign(std::span<std::byte const> message) const -> std::vector<std::byte>;

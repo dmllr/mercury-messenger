@@ -16,21 +16,21 @@ class DispatchQueue {
 
   // Structure to hold a scheduled task
   struct ScheduledTask {
-    std::chrono::steady_clock::time_point executeTime;
+    std::chrono::steady_clock::time_point execute_time;
     FpT task;
   };
 
   // Comparator for the priority queue (earliest executeTime has the highest priority)
   struct CompareScheduledTask {
-    bool operator()(ScheduledTask const& left, ScheduledTask const& right) const {
-      return left.executeTime > right.executeTime;
+    auto operator()(ScheduledTask const& left, ScheduledTask const& right) const -> bool {
+      return left.execute_time > right.execute_time;
     }
   };
 
  public:
-  explicit DispatchQueue(std::string name, std::size_t threadCount)
+  explicit DispatchQueue(std::string name, std::size_t thread_count)
       : name_(std::move(name)),
-        threads_(threadCount) {
+        threads_(thread_count) {
     for (auto& thread : threads_) {
       thread = std::thread(&DispatchQueue::DispatchThreadHandler, this);
     }
@@ -56,43 +56,43 @@ class DispatchQueue {
   }
 
   /// Dispatch an operation immediately.
-  void Dispatch(FpT const& op) {
-    if (shutdownRequested_ || !op) {
+  void Dispatch(FpT const& operation) {
+    if (shutdownRequested_ || !operation) {
       return;
     }
 
     {
       auto const now = std::chrono::steady_clock::now();
       std::unique_lock<std::mutex> const lock(queueAccessMutex_);
-      queue_.push(ScheduledTask{now, op});
+      queue_.push(ScheduledTask{now, operation});
     }
     condition_.notify_one();
   }
 
   /// Dispatch an operation immediately.
-  void Dispatch(FpT&& op) {
-    if (shutdownRequested_ || !op) {
+  void Dispatch(FpT&& operation) {
+    if (shutdownRequested_ || !operation) {
       return;
     }
 
     {
       auto const now = std::chrono::steady_clock::now();
       std::unique_lock<std::mutex> const lock(queueAccessMutex_);
-      queue_.push(ScheduledTask{now, std::move(op)});
+      queue_.push(ScheduledTask{now, std::move(operation)});
     }
     condition_.notify_one();
   }
 
   /// Dispatch an operation to be executed after a delay.
-  void DispatchAfter(std::chrono::milliseconds const delay, FpT const&& op) {
-    if (shutdownRequested_ || !op) {
+  void DispatchAfter(std::chrono::milliseconds const delay, FpT const&& operation) {
+    if (shutdownRequested_ || !operation) {
       return;
     }
 
     {
       auto const scheduled_time = std::chrono::steady_clock::now() + delay;
       std::unique_lock<std::mutex> const lock(queueAccessMutex_);
-      queue_.push(ScheduledTask{scheduled_time, op});
+      queue_.push(ScheduledTask{scheduled_time, operation});
     }
     condition_.notify_one();
   }
@@ -142,8 +142,8 @@ class DispatchQueue {
       auto const& next_task = queue_.top();
 
       // If task is scheduled for the future, wait until it's time
-      if (next_task.executeTime > now) {
-        condition_.wait_until(lock, next_task.executeTime, [this, &next_task, &now] {
+      if (next_task.execute_time > now) {
+        condition_.wait_until(lock, next_task.execute_time, [this, &next_task, &now] {
           if (shutdownRequested_) {
             return true;
           }
@@ -153,7 +153,7 @@ class DispatchQueue {
 
           // Check if the top task has changed or is now due
           now = std::chrono::steady_clock::now();
-          return queue_.top().executeTime != next_task.executeTime || queue_.top().executeTime <= now;
+          return queue_.top().execute_time != next_task.execute_time || queue_.top().execute_time <= now;
         });
 
         lock.unlock();

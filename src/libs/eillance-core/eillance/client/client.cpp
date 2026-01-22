@@ -5,8 +5,8 @@
 
 #include <eillance/events/service_connection_state.hpp>
 
-#include "eillance/utils/invariant.hpp"
 #include "eillance/logging/logging.hpp"
+#include "eillance/utils/invariant.hpp"
 
 namespace eillance {
 
@@ -258,8 +258,9 @@ void Client::ProcessDataChannelMessage(ContactID const& peer_id, Json const& mes
         auto my_key = peer->session_cipher->GetPublicKey();
         transport_->SendPeerDataChannelMessage(
             peer_id,
-            {{"type", "key_exchange"}, {"key", std::vector<std::byte>(my_key.begin(), my_key.end())}, {"is_reply", true}}
-            );
+            {{"type", "key_exchange"}, {"key", std::vector<std::byte>(my_key.begin(), my_key.end())}, {"is_reply", true}
+            }
+        );
       } else {
         messaging_service_->SendQueuedMessages(peer_id);
       }
