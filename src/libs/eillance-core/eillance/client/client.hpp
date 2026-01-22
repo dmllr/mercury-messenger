@@ -61,35 +61,35 @@ class Client final : public transport::TransportDelegate {
   // Identity / Account
   [[nodiscard]] auto GetId() const -> ContactID;
   [[nodiscard]] auto IdentityExists() const -> bool;
-  auto GenerateNewIdentity() const -> std::string;
+  [[nodiscard]] auto GenerateNewIdentity() const -> std::string;
   [[nodiscard]] auto GetMnemonic() const -> std::optional<std::string>;
-  auto RestoreIdentity(std::string const& mnemonic) const -> bool;
-  auto CreateBackup(std::string const& output_path, std::string const& password) const -> bool;
-  auto RestoreBackup(std::string const& input_path, std::string const& password) -> bool;
+  [[nodiscard]] auto RestoreIdentity(std::string const& mnemonic) const -> bool;
+  [[nodiscard]] auto CreateBackup(std::string const& p, std::string const& pw) const -> bool;
+  auto RestoreBackup(std::string const& p, std::string const& pw) const -> bool;
   void SetName(std::string const& name) const;
   void UpdateSignalingUrl(std::string const& url) const;
   void UpdateMyProfile(
       std::optional<std::string> const& name,
       std::optional<std::string> const& bio,
       std::optional<std::string> const& photo
-  );
+  ) const;
   [[nodiscard]] auto GetSettingsManager() const -> SettingsManager*;
 
   // Contacts
   void AddContact(ContactID const& peer_id, std::optional<std::vector<std::byte>> const& token) const;
-  auto GenerateContactToken() -> std::vector<std::byte>;
+  auto GenerateContactToken() const -> std::vector<std::byte>;
   void ConfirmContact(ContactID const& peer_id) const;
   void BlockContact(ContactID const& peer_id, bool notify_peer) const;
   void DeleteContact(ContactID const& peer_id) const;
   void UnblockContact(ContactID const& peer_id) const;
-  void SetContactDisplayNameOverride(ContactID const& peer_id, std::string const& override_name) const;
+  void SetContactDisplayNameOverride(ContactID const& peer_id, std::string const& n) const;
   void ResetContactDisplayNameOverride(ContactID const& peer_id) const;
   [[nodiscard]] auto GetContacts() const -> std::vector<identity::Contact>;
 
   // Messaging
-  auto SendChatMessage(ContactID const& peer_id, std::string const& message) -> messaging::HistoryEntryRecord;
-  void MarkMessagesAsRead(ContactID const& peer_id, std::vector<std::uint64_t> const& message_ids) const;
-  [[nodiscard]] auto GetMessageHistoryPage(ContactID const& peer_id, size_t page_index, size_t page_size) const
+  auto SendChatMessage(ContactID const& peer_id, std::string const& msg) const -> messaging::HistoryEntryRecord;
+  void MarkMessagesAsRead(ContactID const& peer_id, std::vector<std::uint64_t> const& mids) const;
+  [[nodiscard]] auto GetMessageHistoryPage(ContactID const& peer_id, size_t i, size_t s) const
       -> messaging::HistoryPage;
   [[nodiscard]] auto GetFullMessageContent(uint64_t message_id) const -> std::optional<std::string>;
   [[nodiscard]] auto GetChatSummaries(std::vector<ContactID> const& peer_ids
@@ -98,9 +98,9 @@ class Client final : public transport::TransportDelegate {
   // Call / Connection
   void Call(ContactID const& peer_id);  // Connect data channel
   void Connect(ContactID const& peer_id);
-  void StartVoiceCall(ContactID const& peer_id);
-  void StartVideoCall(ContactID const& peer_id);
-  void AcceptCall(ContactID const& peer_id, messaging::HistoryEntryKind call_kind) const;
+  void StartVoiceCall(ContactID const& peer_id) const;
+  void StartVideoCall(ContactID const& peer_id) const;
+  void AcceptCall(ContactID const& peer_id, messaging::HistoryEntryKind k) const;
   void RejectCall(ContactID const& peer_id) const;
   void Hangup(ContactID const& peer_id, bool notify_peer) const;
   [[nodiscard]] auto GetPeerConnectionState(ContactID const& peer_id) const -> transport::PeerConnectionState;
@@ -112,7 +112,7 @@ class Client final : public transport::TransportDelegate {
 
   // Callbacks (Deprecated access, prefer routing via ClientEventRouter)
   using StatusCallbackFunction = transport::Transport::StatusCallbackFunction;
-  void SetStatusCallback(StatusCallbackFunction const& callback);
+  void SetStatusCallback(StatusCallbackFunction const& cb);
 
  private:
   // TransportDelegate Implementation
@@ -131,7 +131,7 @@ class Client final : public transport::TransportDelegate {
   void SetupPeerHandlers(std::shared_ptr<transport::Peer> const& peer, ContactID const& peer_id);
 
   // Helpers
-  void HandleProfileInfo(ContactID const& peer_id, Json const& message);
+  static void HandleProfileInfo(ContactID const& peer_id, Json const& message);
   void SendProfileInfo(ContactID const& peer_id);
 
   std::shared_ptr<storage::PersistentStorage> storage_;

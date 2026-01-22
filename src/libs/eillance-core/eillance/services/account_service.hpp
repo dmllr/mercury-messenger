@@ -24,10 +24,10 @@ class AccountService {
   [[nodiscard]] auto GetMnemonic() const -> std::optional<std::string>;
 
   // Returns new mnemonic
-  auto GenerateNewIdentity() const -> std::string;
-  auto RestoreIdentity(std::string const& mnemonic) const -> bool;
+  [[nodiscard]] auto GenerateNewIdentity() const -> std::string;
+  [[nodiscard]] auto RestoreIdentity(std::string const& mnemonic) const -> bool;
 
-  auto CreateBackup(std::string const& output_path, std::string const& password) const -> bool;
+  [[nodiscard]] auto CreateBackup(std::string const& output_path, std::string const& password) const -> bool;
   auto RestoreBackup(std::string const& input_path, std::string const& password) -> bool;
 
   // Settings & Profile
@@ -40,10 +40,10 @@ class AccountService {
   ) const;
 
   // Updates the signaling URL in settings and triggers transport reconnect
-  void UpdateSignalingUrl(std::string const& url) const;
+  void UpdateSignalingUrl(std::string const& url);
 
   // Signing utility using the managed identity
-  [[nodiscard]] auto Sign(std::span<std::byte const> message) const -> std::vector<std::byte>;
+  [[nodiscard]] auto Sign(std::span<std::byte const> const message) const -> std::vector<std::byte>;
 
   // Callbacks
   using OnMyProfileUpdatedCallback = std::function<void()>;

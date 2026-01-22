@@ -19,7 +19,7 @@ TEST(EventQueueTest, SubscribeAndPush) {
   auto& queue = eillance::EventQueue::Instance();
   std::atomic<int> received_value = 0;
 
-  auto subId = queue.Subscribe<TestEvent1>([&](TestEvent1 const& event) { received_value = event.value; });
+  auto sub_id = queue.Subscribe<TestEvent1>([&](TestEvent1 const& event) { received_value = event.value; });
 
   queue.Push(TestEvent1{42});
 
@@ -27,7 +27,7 @@ TEST(EventQueueTest, SubscribeAndPush) {
 
   EXPECT_EQ(received_value, 42);
 
-  queue.Unsubscribe<TestEvent1>(subId);
+  queue.Unsubscribe<TestEvent1>(sub_id);
 }
 
 TEST(EventQueueTest, MultipleSubscribers) {
@@ -35,8 +35,8 @@ TEST(EventQueueTest, MultipleSubscribers) {
   std::atomic<int> counter1 = 0;
   std::atomic<int> counter2 = 0;
 
-  auto subId1 = queue.Subscribe<TestEvent1>([&](TestEvent1 const& event) { counter1 += event.value; });
-  auto subId2 = queue.Subscribe<TestEvent1>([&](TestEvent1 const& event) { counter2 += event.value * 2; });
+  auto sub_id1 = queue.Subscribe<TestEvent1>([&](TestEvent1 const& event) { counter1 += event.value; });
+  auto sub_id2 = queue.Subscribe<TestEvent1>([&](TestEvent1 const& event) { counter2 += event.value * 2; });
 
   queue.Push(TestEvent1{10});
 
@@ -45,17 +45,17 @@ TEST(EventQueueTest, MultipleSubscribers) {
   EXPECT_EQ(counter1, 10);
   EXPECT_EQ(counter2, 20);
 
-  queue.Unsubscribe<TestEvent1>(subId1);
-  queue.Unsubscribe<TestEvent1>(subId2);
+  queue.Unsubscribe<TestEvent1>(sub_id1);
+  queue.Unsubscribe<TestEvent1>(sub_id2);
 }
 
 TEST(EventQueueTest, Unsubscribe) {
   auto& queue = eillance::EventQueue::Instance();
   std::atomic<bool> received = false;
 
-  auto subId = queue.Subscribe<TestEvent1>([&](TestEvent1 const& /*event*/) { received = true; });
+  auto sub_id = queue.Subscribe<TestEvent1>([&](TestEvent1 const& /*event*/) { received = true; });
 
-  queue.Unsubscribe<TestEvent1>(subId);
+  queue.Unsubscribe<TestEvent1>(sub_id);
   queue.Push(TestEvent1{100});
 
   std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -68,8 +68,8 @@ TEST(EventQueueTest, DifferentEventTypes) {
   std::atomic<int> event1_value = 0;
   std::atomic<bool> event2_received = false;
 
-  auto subId1 = queue.Subscribe<TestEvent1>([&](TestEvent1 const& event) { event1_value = event.value; });
-  auto subId2 = queue.Subscribe<TestEvent2>([&](TestEvent2 const& /*event*/) { event2_received = true; });
+  auto sub_id1 = queue.Subscribe<TestEvent1>([&](TestEvent1 const& event) { event1_value = event.value; });
+  auto sub_id2 = queue.Subscribe<TestEvent2>([&](TestEvent2 const& /*event*/) { event2_received = true; });
 
   queue.Push(TestEvent1{99});
   std::this_thread::sleep_for(std::chrono::milliseconds(50));
@@ -80,6 +80,6 @@ TEST(EventQueueTest, DifferentEventTypes) {
   std::this_thread::sleep_for(std::chrono::milliseconds(50));
   EXPECT_TRUE(event2_received);
 
-  queue.Unsubscribe<TestEvent1>(subId1);
-  queue.Unsubscribe<TestEvent2>(subId2);
+  queue.Unsubscribe<TestEvent1>(sub_id1);
+  queue.Unsubscribe<TestEvent2>(sub_id2);
 }

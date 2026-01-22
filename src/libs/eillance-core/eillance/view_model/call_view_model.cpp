@@ -46,7 +46,7 @@ auto CallViewModel::GetState() const -> CallState {
   return state_;
 }
 
-void CallViewModel::StartVoiceCall(ContactID const& peerId) {
+void CallViewModel::StartVoiceCall(ContactID const& peer_id) {
   {
     std::lock_guard<std::mutex> const lock(mutex_);
     state_ = {
@@ -54,15 +54,15 @@ void CallViewModel::StartVoiceCall(ContactID const& peerId) {
         .is_in_call = false,
         .is_ringing = false,
         .call_direction = messaging::CallDirection::outgoing,
-        .peer_id = peerId,
+        .peer_id = peer_id,
         .call_type = messaging::HistoryEntryKind::voiceCall
     };
   }
-  client_->StartVoiceCall(peerId);
+  client_->StartVoiceCall(peer_id);
   Notify();
 }
 
-void CallViewModel::StartVideoCall(ContactID const& peerId) {
+void CallViewModel::StartVideoCall(ContactID const& peer_id) {
   {
     std::lock_guard<std::mutex> const lock(mutex_);
     state_ = {
@@ -70,11 +70,11 @@ void CallViewModel::StartVideoCall(ContactID const& peerId) {
         .is_in_call = false,
         .is_ringing = false,
         .call_direction = messaging::CallDirection::outgoing,
-        .peer_id = peerId,
+        .peer_id = peer_id,
         .call_type = messaging::HistoryEntryKind::videoCall
     };
   }
-  client_->StartVideoCall(peerId);
+  client_->StartVideoCall(peer_id);
   Notify();
 }
 
@@ -130,30 +130,30 @@ void CallViewModel::RejectCall() {
   Notify();
 }
 
-void CallViewModel::OnIncomingCall(ContactID const& peerId, messaging::HistoryEntryKind callType) {
+void CallViewModel::OnIncomingCall(ContactID const& peer_id, messaging::HistoryEntryKind call_type) {
   std::lock_guard<std::mutex> const lock(mutex_);
   if (!state_.is_connecting && !state_.is_in_call && !state_.is_ringing) {
     state_.is_connecting = false;
     state_.is_ringing = true;
-    state_.peer_id = peerId;
-    state_.call_type = callType;
+    state_.peer_id = peer_id;
+    state_.call_type = call_type;
     state_.call_direction = messaging::CallDirection::incoming;
     Notify();
   }
 }
 
-void CallViewModel::OnCallRinging(ContactID const& peerId) {
+void CallViewModel::OnCallRinging(ContactID const& peer_id) {
   std::lock_guard<std::mutex> const lock(mutex_);
-  if (state_.is_connecting && state_.peer_id == peerId) {
+  if (state_.is_connecting && state_.peer_id == peer_id) {
     state_.is_connecting = false;
     state_.is_ringing = true;
     Notify();
   }
 }
 
-void CallViewModel::OnCallAccepted(ContactID const& peerId) {
+void CallViewModel::OnCallAccepted(ContactID const& peer_id) {
   std::lock_guard<std::mutex> const lock(mutex_);
-  if ((state_.is_connecting || state_.is_ringing) && state_.peer_id == peerId) {
+  if ((state_.is_connecting || state_.is_ringing) && state_.peer_id == peer_id) {
     state_.is_connecting = false;
     state_.is_ringing = false;
     state_.is_in_call = true;
@@ -161,9 +161,9 @@ void CallViewModel::OnCallAccepted(ContactID const& peerId) {
   }
 }
 
-void CallViewModel::OnCallTerminated(ContactID const& peerId) {
+void CallViewModel::OnCallTerminated(ContactID const& peer_id) {
   std::lock_guard<std::mutex> const lock(mutex_);
-  if ((state_.is_connecting || state_.is_in_call || state_.is_ringing) && state_.peer_id == peerId) {
+  if ((state_.is_connecting || state_.is_in_call || state_.is_ringing) && state_.peer_id == peer_id) {
     state_ = {};
     Notify();
   }

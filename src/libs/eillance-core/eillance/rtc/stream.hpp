@@ -67,7 +67,7 @@ class Stream : public std::enable_shared_from_this<Stream> {
   std::function<void(Source::Type, std::uint64_t, std::vector<std::byte> const&)> sampleHandlerFunc_;
   std::mutex sampleHandlerMutex_;
 
-  [[nodiscard]] auto UnsafePrepareForSample() const -> std::pair<std::shared_ptr<Source>, Source::Type> {
+  [[nodiscard]] auto UnsafePrepareForSample() -> std::pair<std::shared_ptr<Source>, Source::Type> {
     std::shared_ptr<Source> src;
     Source::Type src_type{};
     std::uint64_t next_time{};

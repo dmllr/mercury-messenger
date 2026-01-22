@@ -3,7 +3,7 @@
 #include "eillance/utils/circular_buffer.hpp"
 
 TEST(CircularBufferTest, InitialState) {
-  eillance::CircularBuffer<int, 5> buffer;
+  eillance::CircularBuffer<int, 5> const buffer;
   EXPECT_TRUE(buffer.IsEmpty());
   EXPECT_FALSE(buffer.IsFull());
   EXPECT_EQ(buffer.Size(), 0);

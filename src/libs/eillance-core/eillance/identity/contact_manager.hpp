@@ -25,19 +25,19 @@ enum class RequestStatus {
 };
 
 class ContactManager {
-  static constexpr size_t kTokenSize = 16;
-  using Token = std::array<std::byte, kTokenSize>;
+  static constexpr size_t tokenSize = 16;
+  using Token = std::array<std::byte, tokenSize>;
 
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::unordered_map<ContactID, Contact> contacts_{};
   mutable std::mutex mutex_;
 
   struct TokenInfo {
-    std::chrono::steady_clock::time_point creationTime;
+    std::chrono::steady_clock::time_point creation_time;
   };
 
   std::map<Token, TokenInfo> oneTimeTokens_{};
-  static constexpr std::chrono::seconds kTokenValidityDuration{60};
+  static constexpr std::chrono::seconds tokenValidityDuration{60};
 
  public:
   explicit ContactManager(std::shared_ptr<storage::PersistentStorage> storage)
@@ -46,9 +46,9 @@ class ContactManager {
   }
 
   // Initiates adding a new contact.
-  auto AddContact(ContactID const& peerId) -> bool {
+  auto AddContact(ContactID const& peer_id) -> bool {
     std::lock_guard<std::mutex> const lock(mutex_);
-    auto const iter = contacts_.find(peerId);
+    auto const iter = contacts_.find(peer_id);
     if (iter != contacts_.end()) {
       if (iter->second.status == ContactStatus::pendingApproval) {
         return true;
@@ -59,24 +59,25 @@ class ContactManager {
         return true;
       }
 
-      LGW << "Contact " << peerId.ToString() << " already exists with status " << static_cast<int>(iter->second.status);
+      LGW << "Contact " << peer_id.ToString() << " already exists with status "
+          << static_cast<int>(iter->second.status);
       return false;
     }
-    contacts_[peerId] = {.peer_id = peerId, .status = ContactStatus::pendingApproval};
+    contacts_[peer_id] = {.peer_id = peer_id, .status = ContactStatus::pendingApproval};
 
-    storage_->UpdateContact(contacts_[peerId]);
+    storage_->UpdateContact(contacts_[peer_id]);
     return true;
   }
 
   // Marks that we have received a request from a peer.
   auto ReceiveContactRequest(
-      ContactID const& peerId,
+      ContactID const& peer_id,
       std::optional<std::string> const& name,
       std::optional<std::string> const& bio,
       std::optional<std::string> const& photo
   ) -> RequestStatus {
     std::lock_guard<std::mutex> const lock(mutex_);
-    auto iter = contacts_.find(peerId);
+    auto iter = contacts_.find(peer_id);
     if (iter != contacts_.end()) {
       if (iter->second.status == ContactStatus::confirmed || iter->second.status == ContactStatus::rejected) {
         return RequestStatus::ignored;
@@ -107,24 +108,24 @@ class ContactManager {
       }
       storage_->UpdateContact(iter->second);
     } else {
-      contacts_[peerId] = {
-          .peer_id = peerId,
+      contacts_[peer_id] = {
+          .peer_id = peer_id,
           .status = ContactStatus::awaitingApproval,
           .display_name = name,
           .bio = bio,
           .photo_base64 = photo
       };
-      storage_->UpdateContact(contacts_[peerId]);
+      storage_->UpdateContact(contacts_[peer_id]);
     }
     return RequestStatus::New;
   }
 
   // Confirms a contact that was awaiting our approval.
-  auto ConfirmContact(ContactID const& peerId) -> bool {
+  auto ConfirmContact(ContactID const& peer_id) -> bool {
     std::lock_guard<std::mutex> const lock(mutex_);
-    auto const iter = contacts_.find(peerId);
+    auto const iter = contacts_.find(peer_id);
     if (iter == contacts_.end() || iter->second.status != ContactStatus::awaitingApproval) {
-      LGW << "Cannot confirm contact " << peerId.ToString() << "; not found or not awaiting approval.";
+      LGW << "Cannot confirm contact " << peer_id.ToString() << "; not found or not awaiting approval.";
       return false;
     }
     iter->second.status = ContactStatus::confirmed;
@@ -133,9 +134,9 @@ class ContactManager {
   }
 
   // Marks a contact as confirmed after they accepted our request.
-  auto MarkAsConfirmed(ContactID const& peerId) -> bool {
+  auto MarkAsConfirmed(ContactID const& peer_id) -> bool {
     std::lock_guard<std::mutex> const lock(mutex_);
-    auto iter = contacts_.find(peerId);
+    auto iter = contacts_.find(peer_id);
 
     if (iter != contacts_.end()) {
       if (iter->second.status == ContactStatus::confirmed) {
@@ -144,47 +145,47 @@ class ContactManager {
       iter->second.status = ContactStatus::confirmed;
       storage_->UpdateContact(iter->second);
     } else {
-      contacts_[peerId] = {.peer_id = peerId, .status = ContactStatus::confirmed};
-      storage_->UpdateContact(contacts_[peerId]);
+      contacts_[peer_id] = {.peer_id = peer_id, .status = ContactStatus::confirmed};
+      storage_->UpdateContact(contacts_[peer_id]);
     }
     return true;
   }
 
-  void BlockContact(ContactID const& peerId) {
+  void BlockContact(ContactID const& peer_id) {
     std::lock_guard<std::mutex> const lock(mutex_);
-    auto iter = contacts_.find(peerId);
+    auto iter = contacts_.find(peer_id);
     if (iter != contacts_.end()) {
       if (iter->second.status != ContactStatus::rejected) {
         iter->second.status = ContactStatus::rejected;
         storage_->UpdateContact(iter->second);
       }
     } else {
-      contacts_[peerId] = {.peer_id = peerId, .status = ContactStatus::rejected};
-      storage_->UpdateContact(contacts_[peerId]);
+      contacts_[peer_id] = {.peer_id = peer_id, .status = ContactStatus::rejected};
+      storage_->UpdateContact(contacts_[peer_id]);
     }
   }
 
-  void DeleteContact(ContactID const& peerId) {
+  void DeleteContact(ContactID const& peer_id) {
     std::lock_guard<std::mutex> const lock(mutex_);
-    contacts_.erase(peerId);
-    storage_->RemoveContact(peerId);
+    contacts_.erase(peer_id);
+    storage_->RemoveContact(peer_id);
   }
 
-  [[nodiscard]] auto IsConfirmedContact(ContactID const& peerId) const -> bool {
+  [[nodiscard]] auto IsConfirmedContact(ContactID const& peer_id) -> bool {
     std::lock_guard<std::mutex> const lock(mutex_);
-    auto const iter = contacts_.find(peerId);
+    auto const iter = contacts_.find(peer_id);
     return (iter != contacts_.end() && iter->second.status == ContactStatus::confirmed);
   }
 
-  [[nodiscard]] auto GetContact(ContactID const& peerId) -> std::optional<Contact> {
+  [[nodiscard]] auto GetContact(ContactID const& peer_id) -> std::optional<Contact> {
     std::lock_guard<std::mutex> const lock(mutex_);
-    if (contacts_.contains(peerId)) {
-      return contacts_.at(peerId);
+    if (contacts_.contains(peer_id)) {
+      return contacts_.at(peer_id);
     }
     return std::nullopt;
   }
 
-  [[nodiscard]] auto GetContacts() const -> std::vector<Contact> {
+  [[nodiscard]] auto GetContacts() -> std::vector<Contact> {
     std::lock_guard<std::mutex> const lock(mutex_);
     std::vector<Contact> result;
     result.reserve(contacts_.size());
@@ -195,15 +196,15 @@ class ContactManager {
   }
 
   void UpdateContactProfile(
-      ContactID const& peerId,
+      ContactID const& peer_id,
       std::optional<std::string> const& name,
       std::optional<std::string> const& bio,
       std::optional<std::string> const& photo
   ) {
     std::lock_guard<std::mutex> const lock(mutex_);
-    auto const iter = contacts_.find(peerId);
+    auto const iter = contacts_.find(peer_id);
     if (iter == contacts_.end()) {
-      LGW << "Cannot update profile for non-existent contact: " << peerId.ToString();
+      LGW << "Cannot update profile for non-existent contact: " << peer_id.ToString();
       return;
     }
     if (name) {
@@ -218,27 +219,27 @@ class ContactManager {
     storage_->UpdateContact(iter->second);
   }
 
-  void SetDisplayNameOverride(ContactID const& peerId, std::string const& overrideName) {
+  void SetDisplayNameOverride(ContactID const& peer_id, std::string const& override_name) {
     std::lock_guard<std::mutex> const lock(mutex_);
-    auto const iter = contacts_.find(peerId);
+    auto const iter = contacts_.find(peer_id);
     if (iter == contacts_.end()) {
-      LGW << "Cannot set name override for non-existent contact: " << peerId.ToString();
+      LGW << "Cannot set name override for non-existent contact: " << peer_id.ToString();
       return;
     }
-    constexpr size_t k_max_name_len = 64;
-    std::string final_name = overrideName;
-    if (final_name.length() > k_max_name_len) {
-      final_name = final_name.substr(0, k_max_name_len);
+    constexpr size_t max_name_len = 64;
+    std::string final_name = override_name;
+    if (final_name.length() > max_name_len) {
+      final_name = final_name.substr(0, max_name_len);
     }
     iter->second.display_name_override = final_name;
     storage_->UpdateContact(iter->second);
   }
 
-  void ResetDisplayNameOverride(ContactID const& peerId) {
+  void ResetDisplayNameOverride(ContactID const& peer_id) {
     std::lock_guard<std::mutex> const lock(mutex_);
-    auto const iter = contacts_.find(peerId);
+    auto const iter = contacts_.find(peer_id);
     if (iter == contacts_.end()) {
-      LGW << "Cannot reset name override for non-existent contact: " << peerId.ToString();
+      LGW << "Cannot reset name override for non-existent contact: " << peer_id.ToString();
       return;
     }
     if (iter->second.display_name_override) {
@@ -247,9 +248,9 @@ class ContactManager {
     }
   }
 
-  void StoreMySignatureFor(ContactID const& peerId, std::vector<std::byte> const& signature) {
+  void StoreMySignatureFor(ContactID const& peer_id, std::vector<std::byte> const& signature) {
     std::lock_guard<std::mutex> const lock(mutex_);
-    auto const iter = contacts_.find(peerId);
+    auto const iter = contacts_.find(peer_id);
     if (iter == contacts_.end()) {
       return;
     }
@@ -257,9 +258,9 @@ class ContactManager {
     storage_->UpdateContact(iter->second);
   }
 
-  void StoreSignatureFrom(ContactID const& peerId, std::vector<std::byte> const& signature) {
+  void StoreSignatureFrom(ContactID const& peer_id, std::vector<std::byte> const& signature) {
     std::lock_guard<std::mutex> const lock(mutex_);
-    auto const iter = contacts_.find(peerId);
+    auto const iter = contacts_.find(peer_id);
     if (iter == contacts_.end()) {
       return;
     }
@@ -271,7 +272,7 @@ class ContactManager {
     std::lock_guard<std::mutex> const lock(mutex_);
     auto now = std::chrono::steady_clock::now();
     std::erase_if(oneTimeTokens_, [now](auto const& item) {
-      return (now - item.second.creationTime) > kTokenValidityDuration;
+      return (now - item.second.creation_time) > tokenValidityDuration;
     });
 
     Token token;
@@ -281,26 +282,26 @@ class ContactManager {
     return token;
   }
 
-  auto ValidateAndConsumeContactToken(std::vector<std::byte> const& tokenVec) -> bool {
+  auto ValidateAndConsumeContactToken(std::vector<std::byte> const& token_vec) -> bool {
     std::lock_guard<std::mutex> const lock(mutex_);
-    if (tokenVec.size() != kTokenSize) {
+    if (token_vec.size() != tokenSize) {
       return false;
     }
 
     Token token;
-    std::ranges::copy(tokenVec, token.begin());
+    std::ranges::copy(token_vec, token.begin());
 
     auto const itr = oneTimeTokens_.find(token);
     if (itr == oneTimeTokens_.end()) {
       return false;
     }
     auto const now = std::chrono::steady_clock::now();
-    return now - itr->second.creationTime <= kTokenValidityDuration;
+    return now - itr->second.creation_time <= tokenValidityDuration;
   }
 
-  auto UnblockContact(ContactID const& peerId) -> bool {
+  auto UnblockContact(ContactID const& peer_id) -> bool {
     std::lock_guard<std::mutex> const lock(mutex_);
-    if (auto const itr = contacts_.find(peerId);
+    if (auto const itr = contacts_.find(peer_id);
         itr != contacts_.end() && itr->second.status == ContactStatus::rejected) {
       itr->second.status = ContactStatus::awaitingApproval;
       storage_->UpdateContact(itr->second);

@@ -230,36 +230,36 @@ class PersistentStorage {
 
   // --- Contacts ---
   [[nodiscard]] auto GetContacts() const { return pimpl_->GetContacts(); }
-  [[nodiscard]] auto GetContact(ContactID const& peerId) const { return pimpl_->GetContact(peerId); }
+  [[nodiscard]] auto GetContact(ContactID const& peer_id) const { return pimpl_->GetContact(peer_id); }
   void UpdateContact(identity::Contact const& contact) const { pimpl_->UpdateContact(contact); }
-  void RemoveContact(ContactID const& peerId) const { pimpl_->RemoveContact(peerId); }
+  void RemoveContact(ContactID const& peer_id) const { pimpl_->RemoveContact(peer_id); }
 
   // --- History ---
   [[nodiscard]] auto AddHistoryEntry(messaging::HistoryEntryRecord entry) const {
     return pimpl_->AddHistoryEntry(std::move(entry));
   }
   void UpdateHistoryEntry(messaging::HistoryEntryRecord const& entry) const { pimpl_->UpdateHistoryEntry(entry); }
-  void UpdateMessageStatus(ContactID const& peerId, uint64_t messageId, messaging::MessageStatus newStatus) const {
-    pimpl_->UpdateMessageStatus(peerId, messageId, newStatus);
+  void UpdateMessageStatus(ContactID const& peer_id, uint64_t message_id, messaging::MessageStatus new_status) const {
+    pimpl_->UpdateMessageStatus(peer_id, message_id, new_status);
   }
   void UpdateMessageStatuses(
-      ContactID const& peerId,
-      std::vector<uint64_t> const& messageIds,
-      messaging::MessageStatus newStatus
+      ContactID const& peer_id,
+      std::vector<uint64_t> const& message_ids,
+      messaging::MessageStatus new_status
   ) const {
-    pimpl_->UpdateMessageStatuses(peerId, messageIds, newStatus);
+    pimpl_->UpdateMessageStatuses(peer_id, message_ids, new_status);
   }
-  [[nodiscard]] auto GetHistoryPage(ContactID const& peerId, size_t pageIndex, size_t pageSize) const {
-    return pimpl_->GetHistoryPage(peerId, pageIndex, pageSize);
+  [[nodiscard]] auto GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t page_size) const {
+    return pimpl_->GetHistoryPage(peer_id, page_index, page_size);
   }
-  [[nodiscard]] auto GetFullMessageContent(std::uint64_t messageId) const {
-    return pimpl_->GetFullMessageContent(messageId);
+  [[nodiscard]] auto GetFullMessageContent(std::uint64_t message_id) const {
+    return pimpl_->GetFullMessageContent(message_id);
   }
-  [[nodiscard]] auto GetChatSummaries(std::vector<ContactID> const& peerIds) const {
-    return pimpl_->GetChatSummaries(peerIds);
+  [[nodiscard]] auto GetChatSummaries(std::vector<ContactID> const& peer_ids) const {
+    return pimpl_->GetChatSummaries(peer_ids);
   }
-  [[nodiscard]] auto GetMessagesWithStatus(ContactID const& peerId, messaging::MessageStatus status) const {
-    return pimpl_->GetMessagesWithStatus(peerId, status);
+  [[nodiscard]] auto GetMessagesWithStatus(ContactID const& peer_id, messaging::MessageStatus status) const {
+    return pimpl_->GetMessagesWithStatus(peer_id, status);
   }
 
   // --- Debug ---

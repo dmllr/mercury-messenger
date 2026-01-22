@@ -31,17 +31,17 @@ class CallViewModel {
   [[nodiscard]] auto GetState() const -> CallState;
 
   // Actions
-  void StartVoiceCall(ContactID const& peerId);
-  void StartVideoCall(ContactID const& peerId);
+  void StartVoiceCall(ContactID const& peer_id);
+  void StartVideoCall(ContactID const& peer_id);
   void Hangup();
   void AcceptCall();
   void RejectCall();
 
  private:
-  void OnIncomingCall(ContactID const& peerId, messaging::HistoryEntryKind callType);
-  void OnCallRinging(ContactID const& peerId);
-  void OnCallAccepted(ContactID const& peerId);
-  void OnCallTerminated(ContactID const& peerId);
+  void OnIncomingCall(ContactID const& peer_id, messaging::HistoryEntryKind call_type);
+  void OnCallRinging(ContactID const& peer_id);
+  void OnCallAccepted(ContactID const& peer_id);
+  void OnCallTerminated(ContactID const& peer_id);
   void Notify() const;
 
   template <typename EventType>

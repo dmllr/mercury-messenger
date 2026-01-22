@@ -263,10 +263,11 @@ void MessagingService::OnChatMessageReceived(
 
 void MessagingService::OnMessageReceipt(ContactID const& peer_id, uint64_t message_id, std::string const& status) {
   auto s = messaging::MessageStatus::sent;
-  if (status == "delivered")
+  if (status == "delivered") {
     s = messaging::MessageStatus::delivered;
-  else if (status == "read")
+  } else if (status == "read") {
     s = messaging::MessageStatus::read;
+  }
 
   history_->UpdateMessageStatus(peer_id, message_id, s);
 }

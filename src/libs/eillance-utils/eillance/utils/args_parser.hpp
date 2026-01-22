@@ -10,7 +10,7 @@
 namespace eillance::utils {
 
 struct ArgsParser final {
-  ArgsParser(int& argc, char** argv) {
+  ArgsParser(int const& argc, char** argv) {
     for (int i = 1; i < argc; ++i) {
       std::string const token(argv[i]);  // NOLINT(*-pro-bounds-pointer-arithmetic)
       auto pos = token.find('=');
@@ -36,7 +36,7 @@ struct ArgsParser final {
     return std::nullopt;
   }
 
-  [[nodiscard]] auto GetPositional(size_t index) const -> std::optional<std::string> {
+  [[nodiscard]] auto GetPositional(size_t const index) const -> std::optional<std::string> {
     if (index < tokens_.size()) {
       return tokens_[index];
     }

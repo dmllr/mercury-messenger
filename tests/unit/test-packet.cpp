@@ -3,7 +3,7 @@
 #include "eillance/utils/packet.hpp"
 
 TEST(PacketTest, DefaultConstructor) {
-  eillance::Packet p;
+  eillance::Packet const p;
   EXPECT_TRUE(p.empty());
   EXPECT_EQ(p.size(), 0);
 }
@@ -18,7 +18,7 @@ TEST(PacketTest, ConstructFromBytePointer) {
 
 TEST(PacketTest, ConstructFromUCharPointer) {
   std::vector<unsigned char> data = {0x04, 0x05, 0x06};
-  eillance::Packet p(data.data(), data.size());
+  eillance::Packet const p(data.data(), data.size());
   EXPECT_FALSE(p.empty());
   EXPECT_EQ(p.size(), 3);
   EXPECT_EQ(p.data()[0], std::byte{0x04});
@@ -27,7 +27,7 @@ TEST(PacketTest, ConstructFromUCharPointer) {
 }
 
 TEST(PacketTest, ConstructFromVector) {
-  std::vector<std::byte> data = {std::byte{0x07}, std::byte{0x08}};
+  std::vector<std::byte> const data = {std::byte{0x07}, std::byte{0x08}};
   eillance::Packet p(data);
   EXPECT_EQ(p.size(), 2);
   EXPECT_EQ(p.buffer(), data);
@@ -35,11 +35,11 @@ TEST(PacketTest, ConstructFromVector) {
 
 TEST(PacketTest, Append) {
   eillance::Packet p1({std::byte{0x01}, std::byte{0x02}});
-  eillance::Packet p2({std::byte{0x03}, std::byte{0x04}});
+  eillance::Packet const p2({std::byte{0x03}, std::byte{0x04}});
 
   p1.append(p2);
 
-  std::vector<std::byte> expected = {std::byte{0x01}, std::byte{0x02}, std::byte{0x03}, std::byte{0x04}};
+  std::vector<std::byte> const expected = {std::byte{0x01}, std::byte{0x02}, std::byte{0x03}, std::byte{0x04}};
   EXPECT_EQ(p1.size(), 4);
   EXPECT_EQ(p1.buffer(), expected);
   EXPECT_EQ(p1.timestamp(), p2.timestamp());
@@ -55,7 +55,7 @@ TEST(PacketTest, Clear) {
 
 TEST(PacketTest, DataAccessors) {
   std::vector<unsigned char> data_uchar = {1, 2, 3};
-  eillance::Packet p(data_uchar.data(), data_uchar.size());
+  eillance::Packet const p(data_uchar.data(), data_uchar.size());
 
   std::byte const* data_byte_ptr = p.data();
   char const* data_char_ptr = p.dataAsChars();

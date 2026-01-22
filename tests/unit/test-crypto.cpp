@@ -5,17 +5,17 @@
 using namespace eillance::crypto;
 
 TEST(CryptoTest, HexConversion) {
-  std::vector<std::byte> data = {std::byte{0xDE}, std::byte{0xAD}, std::byte{0xBE}, std::byte{0xEF}};
-  std::string hex_str = "deadbeef";
+  std::vector<std::byte> const data = {std::byte{0xDE}, std::byte{0xAD}, std::byte{0xBE}, std::byte{0xEF}};
+  std::string const hex_str = "deadbeef";
 
   EXPECT_EQ(ToHex(data), hex_str);
   EXPECT_EQ(FromHex(hex_str), data);
 }
 
 TEST(CryptoTest, HexConversionCaseInsensitive) {
-  std::vector<std::byte> data = {std::byte{0xCA}, std::byte{0xFE}};
-  std::string hex_str_upper = "CAFE";
-  std::string hex_str_lower = "cafe";
+  std::vector<std::byte> const data = {std::byte{0xCA}, std::byte{0xFE}};
+  std::string const hex_str_upper = "CAFE";
+  std::string const hex_str_lower = "cafe";
 
   EXPECT_EQ(FromHex(hex_str_upper), data);
   EXPECT_EQ(FromHex(hex_str_lower), data);
@@ -30,7 +30,7 @@ TEST(CryptoTest, IdentityLifecycle) {
   auto id1 = identity1->GetPublicKey();
   EXPECT_FALSE(id1.empty());
 
-  std::string pem_data = identity1->SaveToMemory();
+  std::string const pem_data = identity1->SaveToMemory();
   EXPECT_FALSE(pem_data.empty());
 
   auto identity2 = Identity::LoadFromMemory(pem_data);
@@ -47,7 +47,7 @@ TEST(CryptoTest, SignAndVerify) {
   auto id = identity->GetPublicKey();
 
   std::string message_str = "This is a test message for signing.";
-  std::span<std::byte const> message(reinterpret_cast<std::byte const*>(message_str.data()), message_str.size());
+  std::span<std::byte const> const message(reinterpret_cast<std::byte const*>(message_str.data()), message_str.size());
   auto signature = identity->Sign(message);
   EXPECT_FALSE(signature.empty());
 
@@ -61,10 +61,10 @@ TEST(CryptoTest, VerificationFailsWithWrongMessage) {
   auto id = identity->GetPublicKey();
 
   std::string message_str = "Original message.";
-  std::span<std::byte const> message(reinterpret_cast<std::byte const*>(message_str.data()), message_str.size());
+  std::span<std::byte const> const message(reinterpret_cast<std::byte const*>(message_str.data()), message_str.size());
 
   std::string tampered_message_str = "Tampered message.";
-  std::span<std::byte const> tampered_message(
+  std::span<std::byte const> const tampered_message(
       reinterpret_cast<std::byte const*>(tampered_message_str.data()),
       tampered_message_str.size()
   );
@@ -75,7 +75,8 @@ TEST(CryptoTest, VerificationFailsWithWrongMessage) {
 }
 
 TEST(CryptoTest, VerificationFailsWithWrongId) {
-  std::string mnemonic1, mnemonic2;
+  std::string mnemonic1;
+  std::string mnemonic2;
   auto identity1 = Identity::CreateNew(mnemonic1);
   auto identity2 = Identity::CreateNew(mnemonic2);
   ASSERT_NE(identity1, nullptr);
@@ -84,7 +85,7 @@ TEST(CryptoTest, VerificationFailsWithWrongId) {
   auto id2 = identity2->GetPublicKey();
 
   std::string message_str = "A message to sign.";
-  std::span<std::byte const> message(reinterpret_cast<std::byte const*>(message_str.data()), message_str.size());
+  std::span<std::byte const> const message(reinterpret_cast<std::byte const*>(message_str.data()), message_str.size());
   auto signature = identity1->Sign(message);
 
   EXPECT_FALSE(Identity::Verify(id2, message, signature));
@@ -148,7 +149,7 @@ TEST(CryptoTest, session_cipherDecryptFails) {
   ASSERT_TRUE(cipher_bob.ComputeSharedSecret(cipher_alice.GetPublicKey()));
   ASSERT_TRUE(cipher_eve.ComputeSharedSecret(cipher_alice.GetPublicKey()));
 
-  std::string plaintext = "Top secret!";
+  std::string const plaintext = "Top secret!";
   auto ciphertext = cipher_alice.Encrypt(plaintext);
 
   // Eve tries to decrypt, should fail

@@ -580,7 +580,7 @@ class RtcTransport final : public transport::Transport::TransportInterface {
     }
   }
 
-  void ReportPeerStateChange(ContactID const& peer_id, EventSource const source, int const state) const {
+  void ReportPeerStateChange(ContactID const& peer_id, EventSource const source, int const state) {
     INVARIANT(status_callback_);
     (*status_callback_)(peer_id, source, state);
   }

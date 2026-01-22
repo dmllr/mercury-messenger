@@ -31,7 +31,7 @@ class CircularBuffer {
     size_ = std::min(size_ + 1, Capacity);
   }
 
-  T Pop() {
+  auto Pop() -> T {
     assert(!IsEmpty() && "CircularBuffer is empty");
     T value = buffer_[head_];
     head_ = (head_ + 1) % Capacity;
@@ -40,7 +40,7 @@ class CircularBuffer {
   }
 
  private:
-  std::array<T, Capacity> buffer_;
+  std::array<T, Capacity> buffer_{};
   std::size_t head_{0};
   std::size_t tail_{0};
   std::size_t size_{0};

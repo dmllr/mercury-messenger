@@ -14,7 +14,7 @@ class SettingsManagerTest : public ::testing::Test {
     settings_manager_ = std::make_unique<SettingsManager>(storage_);
   }
 
-  storage::MockPersistentStorageImpl* mock_storage_impl_;
+  storage::MockPersistentStorageImpl* mock_storage_impl_{};
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::unique_ptr<SettingsManager> settings_manager_;
 };
@@ -25,7 +25,7 @@ TEST_F(SettingsManagerTest, GetDefaultUrl) {
 }
 
 TEST_F(SettingsManagerTest, SetAndGetUrl) {
-  std::string custom_url = "ws://custom.server:8080";
+  std::string const custom_url = "ws://custom.server:8080";
   settings_manager_->SetSignalingServerUrl(custom_url);
 
   auto url = settings_manager_->GetSignalingServerUrl();
@@ -34,7 +34,7 @@ TEST_F(SettingsManagerTest, SetAndGetUrl) {
 }
 
 TEST_F(SettingsManagerTest, Persistence) {
-  std::string custom_url = "ws://another.server:9000";
+  std::string const custom_url = "ws://another.server:9000";
   settings_manager_->SetSignalingServerUrl(custom_url);
 
   // Create a new manager with the same storage to simulate app restart

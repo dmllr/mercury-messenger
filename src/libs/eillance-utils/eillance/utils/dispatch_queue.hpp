@@ -50,7 +50,7 @@ class DispatchQueue {
     }
   }
 
-  static DispatchQueue& MainThread() {
+  static auto MainThread() -> DispatchQueue& {
     static DispatchQueue instance("Main", 1);
     return instance;
   }

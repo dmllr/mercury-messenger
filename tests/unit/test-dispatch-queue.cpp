@@ -24,7 +24,7 @@ class DispatchQueueTest : public ::testing::Test {
 
   // Improved helper to wait for a condition with timeout
   template <typename F>
-  bool WaitFor(F condition, std::chrono::milliseconds timeout) {
+  auto WaitFor(F condition, std::chrono::milliseconds timeout) -> bool {
     auto start = std::chrono::steady_clock::now();
 
     // Continue checking until timeout
@@ -97,13 +97,13 @@ TEST_F(DispatchQueueTest, MainThread) {
 }
 
 TEST_F(DispatchQueueTest, MultipleThreads) {
-  size_t const numThreads = 4;
-  DispatchQueue queue("MultiThreadQueue", numThreads);
+  size_t const num_threads = 4;
+  DispatchQueue queue("MultiThreadQueue", num_threads);
 
   std::atomic<int> counter{0};
-  int const numTasks = 100;
+  int const num_tasks = 100;
 
-  for (int i = 0; i < numTasks; i++) {
+  for (int i = 0; i < num_tasks; i++) {
     queue.Dispatch([&counter]() {
       counter++;
       // Add a small sleep to increase thread contention
@@ -111,7 +111,7 @@ TEST_F(DispatchQueueTest, MultipleThreads) {
     });
   }
 
-  EXPECT_TRUE(WaitFor([&]() { return counter == numTasks; }, std::chrono::milliseconds(1000)));
+  EXPECT_TRUE(WaitFor([&]() { return counter == num_tasks; }, std::chrono::milliseconds(1000)));
 }
 
 TEST_F(DispatchQueueTest, ScheduledExecution) {
@@ -141,7 +141,7 @@ TEST_F(DispatchQueueTest, PriorityOrdering) {
   // Schedule tasks in reverse priority order
   for (int i = 5; i >= 1; i--) {
     queue.DispatchAfter(std::chrono::milliseconds(i * 20), [i, &mutex, &execution_order]() {
-      std::lock_guard<std::mutex> lock(mutex);
+      std::lock_guard<std::mutex> const lock(mutex);
       execution_order.push_back(i);
     });
   }
@@ -150,7 +150,7 @@ TEST_F(DispatchQueueTest, PriorityOrdering) {
   std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
   // Verify execution order
-  std::vector<int> expected_order = {1, 2, 3, 4, 5};
+  std::vector<int> const expected_order = {1, 2, 3, 4, 5};
   EXPECT_EQ(execution_order, expected_order);
 }
 
@@ -204,18 +204,18 @@ TEST_F(DispatchQueueTest, MultipleDelayedTasks) {
   DispatchQueue queue("DelayedQueue", 1);
 
   std::atomic<int> counter{0};
-  int const numTasks = 20;
+  int const num_tasks = 20;
   auto start = std::chrono::steady_clock::now();
 
   // Dispatch tasks with various delays
-  for (int i = 0; i < numTasks; i++) {
+  for (int i = 0; i < num_tasks; i++) {
     // Random delays between 10-50ms, but out of order
     auto delay = std::chrono::milliseconds((i * 17) % 40 + 10);
     queue.DispatchAfter(delay, [&counter, i, delay]() { counter++; });
   }
 
   // Wait for all tasks to complete
-  EXPECT_TRUE(WaitFor([&]() { return counter == numTasks; }, std::chrono::milliseconds(500)));
+  EXPECT_TRUE(WaitFor([&]() { return counter == num_tasks; }, std::chrono::milliseconds(500)));
 }
 
 TEST_F(DispatchQueueTest, ConcurrentModification) {
@@ -262,13 +262,13 @@ TEST_F(DispatchQueueTest, DestructorCleanup) {
 }
 
 TEST_F(DispatchQueueTest, HighConcurrencyStress) {
-  size_t const numThreads = 8;
-  DispatchQueue queue("StressQueue", numThreads);
+  size_t const num_threads = 8;
+  DispatchQueue queue("StressQueue", num_threads);
 
   std::atomic<int> counter{0};
-  int const numTasks = 1000;
+  int const num_tasks = 1000;
 
-  for (int i = 0; i < numTasks; i++) {
+  for (int i = 0; i < num_tasks; i++) {
     queue.Dispatch([&counter]() {
       counter++;
       // Simulate varied workloads
@@ -278,7 +278,7 @@ TEST_F(DispatchQueueTest, HighConcurrencyStress) {
     });
   }
 
-  EXPECT_TRUE(WaitFor([&]() { return counter == numTasks; }, std::chrono::milliseconds(5000)));
+  EXPECT_TRUE(WaitFor([&]() { return counter == num_tasks; }, std::chrono::milliseconds(5000)));
 }
 
 TEST_F(DispatchQueueTest, EmptyFunctionHandling) {
@@ -298,29 +298,29 @@ TEST_F(DispatchQueueTest, NestedDispatch) {
   DispatchQueue queue("NestedQueue", 1);
 
   std::atomic<int> counter{0};
-  std::mutex orderMutex;
-  std::vector<int> executionOrder;
+  std::mutex order_mutex;
+  std::vector<int> execution_order;
 
   queue.Dispatch([&]() {
     {
-      std::lock_guard<std::mutex> lock(orderMutex);
-      executionOrder.push_back(1);
+      std::lock_guard<std::mutex> const lock(order_mutex);
+      execution_order.push_back(1);
     }
     counter++;
 
     // Nested dispatch
     queue.Dispatch([&]() {
       {
-        std::lock_guard<std::mutex> lock(orderMutex);
-        executionOrder.push_back(2);
+        std::lock_guard<std::mutex> const lock(order_mutex);
+        execution_order.push_back(2);
       }
       counter++;
 
       // Double-nested dispatch
       queue.Dispatch([&]() {
         {
-          std::lock_guard<std::mutex> lock(orderMutex);
-          executionOrder.push_back(3);
+          std::lock_guard<std::mutex> const lock(order_mutex);
+          execution_order.push_back(3);
         }
         counter++;
       });
@@ -331,8 +331,8 @@ TEST_F(DispatchQueueTest, NestedDispatch) {
   EXPECT_TRUE(WaitFor([&counter]() { return counter == 3; }, std::chrono::milliseconds(500)));
 
   // Verify execution order
-  std::vector<int> expected = {1, 2, 3};
-  EXPECT_EQ(executionOrder, expected);
+  std::vector<int> const expected = {1, 2, 3};
+  EXPECT_EQ(execution_order, expected);
 }
 
 }  // namespace eillance

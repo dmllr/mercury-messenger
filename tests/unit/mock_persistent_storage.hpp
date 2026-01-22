@@ -64,6 +64,7 @@ class MockPersistentStorageImpl final : public PersistentStorageImpl {
   auto GetContacts() -> std::vector<identity::Contact> override {
     std::lock_guard const lock(mutex_);
     std::vector<identity::Contact> result;
+    result.reserve(contacts_.size());
     for (auto const& pair : contacts_) {
       result.push_back(pair.second);
     }
@@ -93,11 +94,11 @@ class MockPersistentStorageImpl final : public PersistentStorageImpl {
     std::lock_guard const lock(mutex_);
     entry.id = next_history_id_++;
 
-    constexpr size_t kMaxInlineContentSize = 2048;
+    constexpr size_t k_max_inline_content_size = 2048;
     if (auto* msg_entry = std::get_if<messaging::MessageEntry>(&entry.data)) {
-      if (msg_entry->content.length() > kMaxInlineContentSize) {
+      if (msg_entry->content.length() > k_max_inline_content_size) {
         large_messages_[entry.id] = msg_entry->content;
-        msg_entry->content = msg_entry->content.substr(0, kMaxInlineContentSize);
+        msg_entry->content = msg_entry->content.substr(0, k_max_inline_content_size);
         entry.is_truncated = true;
       } else {
         entry.is_truncated = false;
@@ -161,9 +162,9 @@ class MockPersistentStorageImpl final : public PersistentStorageImpl {
         return a.timestamp > b.timestamp;
       });
 
-      size_t start = page_index * page_size;
+      size_t const start = page_index * page_size;
       if (start < peer_history_copy.size()) {
-        size_t end = std::min(start + page_size, peer_history_copy.size());
+        size_t const end = std::min(start + page_size, peer_history_copy.size());
         page.messages.assign(peer_history_copy.begin() + start, peer_history_copy.begin() + end);
       }
 

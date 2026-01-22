@@ -14,10 +14,10 @@ struct User {
 
 // Represents a text message.
 struct Message {
-  std::uint64_t message_id;
+  std::uint64_t message_id{};
   User from;
   std::string text;
-  std::uint64_t date;  // Unix timestamp (microseconds)
+  std::uint64_t date{};  // Unix timestamp (microseconds)
 };
 
 }  // namespace mercury::bot

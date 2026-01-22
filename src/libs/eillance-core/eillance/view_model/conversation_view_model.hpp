@@ -14,7 +14,7 @@ namespace eillance::view_model {
 class ConversationViewModel {
  public:
   explicit ConversationViewModel(
-      ContactID const& peerId,
+      ContactID const& peer_id,
       std::shared_ptr<Client> client,
       std::shared_ptr<ClientEventRouter> router
   );
@@ -42,8 +42,8 @@ class ConversationViewModel {
 
   void SendText(std::string const& content) const;
   void LoadOlderMessages() const;
-  void LoadFullMessage(uint64_t messageId) const;
-  void MarkMessagesAsRead(std::vector<std::uint64_t> const& messageIds) const;
+  void LoadFullMessage(uint64_t message_id) const;
+  void MarkMessagesAsRead(std::vector<std::uint64_t> const& message_ids) const;
   void AddSystemMessage(std::string const& message) const;
 
  private:

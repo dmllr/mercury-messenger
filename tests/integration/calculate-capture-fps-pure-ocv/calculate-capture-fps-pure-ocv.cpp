@@ -10,11 +10,11 @@ struct CrossPlatformProperties {
 #elif defined _WIN32
   static constexpr auto OpenCVCameraCapabilities = cv::CAP_DSHOW;
 #else
-  static constexpr auto OpenCVCameraCapabilities = cv::CAP_ANY;
+  static constexpr auto openCvCameraCapabilities = cv::CAP_ANY;
 #endif
 };
 
-int main(int /*argc*/, char** /*argv*/) {
+auto main(int /*argc*/, char** /*argv*/) -> int {
   cv::VideoCapture cap;
   cv::Mat cv_frame;
 

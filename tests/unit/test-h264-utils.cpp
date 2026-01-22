@@ -13,7 +13,7 @@
 namespace {
 
 // Helper: Read the entire file into a vector of bytes.
-std::vector<std::byte> LoadFile(std::string const& filepath) {
+auto LoadFile(std::string const& filepath) -> std::vector<std::byte> {
   std::ifstream file(filepath, std::ios::binary);
   if (!file) {
     std::ostringstream err;
@@ -42,7 +42,7 @@ class H264ParserTest : public ::testing::Test {
   std::string callbackLog_;
 
   // Helper: append a message to the callback log.
-  void log(std::string const& message) { callbackLog_ += message + "\n"; }
+  void Log(std::string const& message) { callbackLog_ += message + "\n"; }
 
   // Dummy SPS and PPS data.
   // These are minimal examples (starting with a valid start code) so that ParseSps() runs.
@@ -85,7 +85,7 @@ TEST_F(H264ParserTest, FirstFrameLeadsToConfiguration) {
 
   // Set callbacks that log their invocation.
   parser.SetOnConfigureCallback([&](eillance::VideoConfig const& conf) {
-    log("onConfigure");
+    Log("onConfigure");
     ASSERT_EQ(conf.width, 1280);
     ASSERT_EQ(conf.height, 720);
   });
@@ -105,7 +105,7 @@ TEST_F(H264ParserTest, PBFramesDoNotTriggerConfigure) {
   eillance::H264Parser parser;
 
   // Set callbacks that log their invocation.
-  parser.SetOnConfigureCallback([&](eillance::VideoConfig const&) { log("onConfigure"); });
+  parser.SetOnConfigureCallback([&](eillance::VideoConfig const&) { Log("onConfigure"); });
 
   // Load the second (002.h264) frame
   parser.ProcessFrame(LoadFile(frame002_path));
@@ -129,7 +129,7 @@ TEST_F(H264ParserTest, ConfiguredFrameProcessing) {  // NOLINT(*-function-cognit
   int configure_count = 0;
 
   parser.SetOnConfigureCallback([&](eillance::VideoConfig const&) {
-    log("onConfigure");
+    Log("onConfigure");
     ++configure_count;
   });
 
@@ -154,10 +154,14 @@ TEST_F(H264ParserTest, NoActionOnInvalidStartCode) {
   eillance::H264Parser parser;
 
   // Set callbacks to record any invocation.
-  parser.SetOnConfigureCallback([&](eillance::VideoConfig const&) { log("onConfigure"); });
+  parser.SetOnConfigureCallback([&](eillance::VideoConfig const&) { Log("onConfigure"); });
 
   // Create a binary buffer that does not contain a valid H.264 start code.
-  std::vector<std::byte> invalid_data = {std::byte{0xFF}, std::byte{0xFF}, std::byte{0xFF}};  // NOLINT(*-magic-numbers)
+  std::vector<std::byte> const invalid_data = {
+      std::byte{0xFF},
+      std::byte{0xFF},
+      std::byte{0xFF}
+  };  // NOLINT(*-magic-numbers)
   parser.ProcessFrame(invalid_data);
 
   EXPECT_EQ(callbackLog_.find("onConfigure"), std::string::npos);

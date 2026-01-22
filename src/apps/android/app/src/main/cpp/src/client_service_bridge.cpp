@@ -490,10 +490,10 @@ Java_hela_eillance_CallService_configureVideoCapture(JNIEnv* env, jobject /*inst
   if (client_engine) {
     auto& video_config_holder = ClassRefs::Instance().Class("hela/eillance/ndkio/VideoConfig");
     auto conf = eillance::VideoConfig{};
-    conf.cameraId = env->GetIntField(video_config, video_config_holder.GetField("cameraId"));
+    conf.camera_id = env->GetIntField(video_config, video_config_holder.GetField("cameraId"));
     conf.width = env->GetIntField(video_config, video_config_holder.GetField("width"));
     conf.height = env->GetIntField(video_config, video_config_holder.GetField("height"));
-    conf.frameRate = env->GetIntField(video_config, video_config_holder.GetField("frameRate"));
+    conf.frame_rate = env->GetIntField(video_config, video_config_holder.GetField("frameRate"));
     conf.bitrate = env->GetIntField(video_config, video_config_holder.GetField("bitrate"));
     client_engine->ConfigureVideoCapture(conf);
   }

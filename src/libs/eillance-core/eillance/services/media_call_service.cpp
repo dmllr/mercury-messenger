@@ -19,7 +19,9 @@ void MediaCallService::SetMessagingService(MessagingService* messaging_service) 
 }
 
 void MediaCallService::InitializeAvStream() {
-  if (!video_capture_ || !audio_capture_) return;
+  if (!video_capture_ || !audio_capture_) {
+    return;
+  }
 
   av_stream_ = std::make_shared<Stream>(
       std::make_shared<StreamSource>(std::move(*video_capture_)),

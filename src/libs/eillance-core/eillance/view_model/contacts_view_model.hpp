@@ -32,13 +32,13 @@ class ContactsViewModel {
   [[nodiscard]] auto GetContacts() const -> std::vector<ViewContact>;
 
   // Actions
-  void AddContact(ContactID const& peerId, std::optional<std::vector<std::byte>> const& token) const;
-  void BlockContact(ContactID const& peerId);
-  void DeleteContact(ContactID const& peerId);
-  void UnblockContact(ContactID const& peerId);
-  void AcceptContact(ContactID const& peerId);
-  void SetContactDisplayNameOverride(ContactID const& peerId, std::string const& name);
-  void ResetContactDisplayNameOverride(ContactID const& peerId);
+  void AddContact(ContactID const& peer_id, std::optional<std::vector<std::byte>> const& token) const;
+  void BlockContact(ContactID const& peer_id);
+  void DeleteContact(ContactID const& peer_id);
+  void UnblockContact(ContactID const& peer_id);
+  void AcceptContact(ContactID const& peer_id);
+  void SetContactDisplayNameOverride(ContactID const& peer_id, std::string const& name);
+  void ResetContactDisplayNameOverride(ContactID const& peer_id);
   auto GenerateContactToken() -> std::vector<std::byte>;
 
  private:

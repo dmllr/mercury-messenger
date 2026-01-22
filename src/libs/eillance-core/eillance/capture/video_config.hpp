@@ -21,16 +21,16 @@ struct VideoConfigDefaults {
 };
 
 struct VideoConfig {
-  int cameraId{};
+  int camera_id{};
   std::uint32_t width{VideoConfigDefaults::width};
   std::uint32_t height{VideoConfigDefaults::height};
   std::uint32_t rotation{VideoConfigDefaults::rotation};
-  std::uint16_t frameRate{VideoConfigDefaults::frameRate};
+  std::uint16_t frame_rate{VideoConfigDefaults::frameRate};
   std::uint32_t bitrate{VideoConfigDefaults::bitrate};
 
   auto operator==(VideoConfig const& other) const noexcept -> bool {
-    return cameraId == other.cameraId && width == other.width && height == other.height &&
-           frameRate == other.frameRate && bitrate == other.bitrate;
+    return camera_id == other.camera_id && width == other.width && height == other.height &&
+           frame_rate == other.frame_rate && bitrate == other.bitrate;
   }
 };
 

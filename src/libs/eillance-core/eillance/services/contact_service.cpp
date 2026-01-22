@@ -209,7 +209,9 @@ void ContactService::OnContactRemoved(ContactID const& peer_id) {
 
 void ContactService::OnProfileUpdate(ContactID const& peer_id, nlohmann::json const& profile_json) {
   auto get_opt = [&](char const* k) -> std::optional<std::string> {
-    if (profile_json.contains(k) && !profile_json[k].is_null()) return profile_json[k].get<std::string>();
+    if (profile_json.contains(k) && !profile_json[k].is_null()) {
+      return profile_json[k].get<std::string>();
+    }
     return std::nullopt;
   };
 
@@ -219,9 +221,15 @@ void ContactService::OnProfileUpdate(ContactID const& peer_id, nlohmann::json co
 
   auto old = manager_->GetContact(peer_id);
   bool changed = false;
-  if (name && (!old || old->display_name != name)) changed = true;
-  if (bio && (!old || old->bio != bio)) changed = true;
-  if (photo && (!old || old->photo_base64 != photo)) changed = true;
+  if (name && (!old || old->display_name != name)) {
+    changed = true;
+  }
+  if (bio && (!old || old->bio != bio)) {
+    changed = true;
+  }
+  if (photo && (!old || old->photo_base64 != photo)) {
+    changed = true;
+  }
 
   if (changed) {
     INVARIANT(messaging_service_);
