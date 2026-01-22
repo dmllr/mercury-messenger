@@ -63,7 +63,6 @@ struct EventContactRemoved {
 };
 struct EventDebugDataReset {};
 
-// Proxies events from the Client services to a multi-listener EventQueue.
 class ClientEventRouter {
   std::shared_ptr<Client> client_;
   EventQueue& eventQueue_;
@@ -75,7 +74,35 @@ class ClientEventRouter {
     AttachToClient();
   }
 
+  ~ClientEventRouter() { DetachFromClient(); }
+
   auto Queue() -> EventQueue& { return eventQueue_; }
+
+  void DetachFromClient() {
+    if (!client_) return;
+    auto messaging = client_->GetMessagingService();
+    auto contacts = client_->GetContactService();
+    auto media = client_->GetMediaCallService();
+    auto account = client_->GetAccountService();
+
+    // NOLINTBEGIN(*-missing-std-forward)
+    messaging->SetChatMessageReceivedCallback([](auto&&, auto&&) {});
+    messaging->SetMessageStatusChangedCallback([](auto&&, auto, auto) {});
+    contacts->SetContactRequestCallback([](auto&&) {});
+    contacts->SetContactStatusChangedCallback([](auto&&, auto) {});
+    contacts->SetContactProfileUpdatedCallback([](auto&&) {});
+    contacts->SetContactRemovedCallback([](auto&&) {});
+    contacts->SetPeerListUpdateCallback([](auto&&) {});
+    contacts->SetProfileReceivedCallback([](auto&&, auto&&) {});
+    media->SetFrameReceivedCallback([](auto&&) {});
+    media->SetIncomingCallCallback([](auto&&, auto) {});
+    media->SetCallRingingCallback([](auto&&) {});
+    media->SetCallAcceptedCallback([](auto&&) {});
+    media->SetCallTerminatedCallback([](auto&&) {});
+    account->SetOnMyProfileUpdatedCallback([]() {});
+    client_->SetStatusCallback([](auto&&, auto, auto) {});
+    // NOLINTEND(*-missing-std-forward)
+  }
 
  private:
   void AttachToClient() {
@@ -84,15 +111,12 @@ class ClientEventRouter {
     auto media = client_->GetMediaCallService();
     auto account = client_->GetAccountService();
 
-    // Messaging
     messaging->SetChatMessageReceivedCallback([this](auto const& id, auto const& msg) {
       eventQueue_.Push(EventChatMessageReceived{id, msg});
     });
     messaging->SetMessageStatusChangedCallback([this](auto const& peer, auto msg_id, auto status) {
       eventQueue_.Push(EventMessageStatusChanged{peer, msg_id, status});
     });
-
-    // Contacts
     contacts->SetContactRequestCallback([this](auto const& id) { eventQueue_.Push(EventContactRequest{id}); });
     contacts->SetContactStatusChangedCallback([this](auto const& id, auto status) {
       eventQueue_.Push(EventContactStatusChanged{id, status});
@@ -105,19 +129,13 @@ class ClientEventRouter {
     contacts->SetProfileReceivedCallback([this](auto const& id, auto const& p) {
       eventQueue_.Push(EventProfileReceived{id, p});
     });
-
-    // Media
     media->SetFrameReceivedCallback([this](auto const& frame) { eventQueue_.Push(EventFrameReceived{frame}); });
     media->SetIncomingCallCallback([this](auto const& id, auto type) { eventQueue_.Push(EventIncomingCall{id, type}); }
     );
     media->SetCallRingingCallback([this](auto const& id) { eventQueue_.Push(EventCallRinging{id}); });
     media->SetCallAcceptedCallback([this](auto const& id) { eventQueue_.Push(EventCallAccepted{id}); });
     media->SetCallTerminatedCallback([this](auto const& id) { eventQueue_.Push(EventCallTerminated{id}); });
-
-    // Account
     account->SetOnMyProfileUpdatedCallback([this]() { eventQueue_.Push(EventMyProfileUpdated{}); });
-
-    // Legacy Client / Transport status
     client_->SetStatusCallback([this](auto const& id, auto src, auto state) {
       eventQueue_.Push(EventStatusChanged{id, src, state});
     });

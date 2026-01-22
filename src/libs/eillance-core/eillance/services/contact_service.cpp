@@ -10,15 +10,15 @@ namespace eillance::services {
 ContactService::ContactService(
     std::shared_ptr<storage::PersistentStorage> storage,
     std::shared_ptr<transport::Transport> transport,
+    std::shared_ptr<identity::ContactManager> contact_manager,
     AccountService* account_service,
     ConnectionRequestHandler connection_handler
 )
     : storage_(std::move(storage)),
       transport_(std::move(transport)),
+      manager_(std::move(contact_manager)),
       account_service_(account_service),
-      connection_handler_(std::move(connection_handler)) {
-  manager_ = std::make_shared<identity::ContactManager>(storage_);
-}
+      connection_handler_(std::move(connection_handler)) {}
 
 void ContactService::SetMessagingService(MessagingService* messaging_service) {
   messaging_service_ = messaging_service;

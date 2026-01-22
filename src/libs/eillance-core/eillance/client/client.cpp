@@ -17,14 +17,18 @@ Client::Client(std::shared_ptr<storage::PersistentStorage> storage, std::shared_
 
   // Initialize Services
   account_service_ = std::make_shared<services::AccountService>(storage_, transport_);
+
+  // Shared ContactManager
+  auto contact_manager = std::make_shared<identity::ContactManager>(storage_);
+
   contact_service_ = std::make_shared<services::ContactService>(
       storage_,
       transport_,
+      contact_manager,
       account_service_.get(),
       [this](ContactID const& id) { this->Connect(id); }  // Inject connection logic
   );
 
-  auto contact_manager = std::make_shared<identity::ContactManager>(storage_);
   messaging_service_ = std::make_shared<services::MessagingService>(
       storage_,
       transport_,

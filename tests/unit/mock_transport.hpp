@@ -4,6 +4,7 @@
 #include <iostream>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <vector>
@@ -30,6 +31,8 @@ class MockTransport {
   };
 
   mutable CallLog log;
+  mutable std::mutex mutex_;  // Protects log and peers
+
   TransportDelegate* delegate = nullptr;
   Transport::StatusCallbackFunction status_callback;
   std::map<ContactID, std::shared_ptr<Peer>> peers;
@@ -39,15 +42,31 @@ class MockTransport {
   void SetName(std::string const& /*device_name*/) {}
   void SetId(ContactID const& /*id*/) {}
 
-  void SetSignalingUrl(std::string const& url) { log.signaling_urls.push_back(url); }
+  void SetSignalingUrl(std::string const& url) {
+    std::lock_guard<std::mutex> const lock(mutex_);
+    log.signaling_urls.push_back(url);
+  }
 
-  void Start() { log.starts.emplace_back("Start"); }
-  void Terminate() { log.terminates.emplace_back("Terminate"); }
-  void Reconnect() { log.starts.emplace_back("Reconnect"); }
+  void Start() {
+    std::lock_guard<std::mutex> const lock(mutex_);
+    log.starts.emplace_back("Start");
+  }
+  void Terminate() {
+    std::lock_guard<std::mutex> const lock(mutex_);
+    log.terminates.emplace_back("Terminate");
+  }
+  void Reconnect() {
+    std::lock_guard<std::mutex> const lock(mutex_);
+    log.starts.emplace_back("Reconnect");
+  }
 
-  void AddPeer(ContactID const& peer_id, std::shared_ptr<Peer> const& peer) { peers[peer_id] = peer; }
+  void AddPeer(ContactID const& peer_id, std::shared_ptr<Peer> const& peer) {
+    std::lock_guard<std::mutex> const lock(mutex_);
+    peers[peer_id] = peer;
+  }
 
   auto GetPeer(ContactID const& peer_id) const -> std::shared_ptr<Peer> {
+    std::lock_guard<std::mutex> const lock(mutex_);
     if (auto it = peers.find(peer_id); it != peers.end()) {
       return it->second;
     }
@@ -55,6 +74,7 @@ class MockTransport {
   }
 
   auto GetPeers() const -> std::unordered_map<ContactID, std::shared_ptr<Peer>> {
+    std::lock_guard<std::mutex> const lock(mutex_);
     std::unordered_map<ContactID, std::shared_ptr<Peer>> result;
     for (auto const& [k, v] : peers) {
       result[k] = v;
@@ -62,7 +82,10 @@ class MockTransport {
     return result;
   }
 
-  void RemovePeer(ContactID const& peer_id) { peers.erase(peer_id); }
+  void RemovePeer(ContactID const& peer_id) {
+    std::lock_guard<std::mutex> const lock(mutex_);
+    peers.erase(peer_id);
+  }
 
   auto GetPeerConnectionState(ContactID const& /*peer_id*/) const -> PeerConnectionState {
     return PeerConnectionState::connected;
@@ -73,12 +96,17 @@ class MockTransport {
   void CreateDataChannel(ContactID const& /*peer_id*/) {}
 
   void ClosePeerConnection(ContactID const& peer_id, std::string const& context) {
+    std::lock_guard<std::mutex> const lock(mutex_);
     log.closed_connections.emplace_back(peer_id, context);
   }
 
-  void CreateOffer(ContactID const& peer_id, std::string const& context) { log.offers.emplace_back(peer_id, context); }
+  void CreateOffer(ContactID const& peer_id, std::string const& context) {
+    std::lock_guard<std::mutex> const lock(mutex_);
+    log.offers.emplace_back(peer_id, context);
+  }
 
   void CreateAnswer(ContactID const& peer_id, std::string const& context) {
+    std::lock_guard<std::mutex> const lock(mutex_);
     log.answers.emplace_back(peer_id, context);
   }
 
@@ -96,9 +124,13 @@ class MockTransport {
       std::string const& /*mid*/
   ) {}
 
-  void SendSignalingMessage(Json const& message) const { log.sent_signaling_messages.push_back(message); }
+  void SendSignalingMessage(Json const& message) const {
+    std::lock_guard<std::mutex> const lock(mutex_);
+    log.sent_signaling_messages.push_back(message);
+  }
 
   void SendPeerDataChannelMessage(ContactID const& peer_id, Json const& message) const {
+    std::lock_guard<std::mutex> const lock(mutex_);
     log.sent_peer_messages.emplace_back(peer_id, message);
   }
 

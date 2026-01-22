@@ -12,8 +12,6 @@
 
 namespace eillance::view_model {
 
-// --- Implementation Struct ---
-
 struct ConversationViewModel::Impl : public std::enable_shared_from_this<Impl> {
   ContactID const peer_id;
   std::shared_ptr<Client> client;
@@ -23,8 +21,6 @@ struct ConversationViewModel::Impl : public std::enable_shared_from_this<Impl> {
   mutable std::mutex mutex;
   State state;
   std::size_t chat_pages_loaded = 0;
-
-  // A generation counter to invalidate results from stale load threads (e.g. after debug reset)
   std::atomic<int> load_generation{0};
 
   inline static std::atomic<std::uint64_t> nextSystemMsgId{10000000000000000000ULL};
@@ -37,9 +33,9 @@ struct ConversationViewModel::Impl : public std::enable_shared_from_this<Impl> {
     state.peer_id = peer_id;
   }
 
-  void SetObserver(std::shared_ptr<Observer> observer) {
+  void SetObserver(std::shared_ptr<Observer> obs) {
     std::lock_guard<std::mutex> const lock(mutex);
-    observer = std::move(observer);
+    observer = std::move(obs);
     if (observer) {
       observer->OnHistoryUpdated(state);
     }
@@ -84,10 +80,7 @@ struct ConversationViewModel::Impl : public std::enable_shared_from_this<Impl> {
 
   void LoadFullMessage(uint64_t message_id) {
     auto full_content = client->GetFullMessageContent(message_id);
-    if (!full_content) {
-      LGW << "Could not load full content for message ID: " << message_id;
-      return;
-    }
+    if (!full_content) return;
 
     std::lock_guard<std::mutex> const lock(mutex);
     bool updated = false;
@@ -131,7 +124,7 @@ struct ConversationViewModel::Impl : public std::enable_shared_from_this<Impl> {
     }
   }
 
-  void OnMessageReceived(ContactID const& /*peer_id*/, messaging::HistoryEntryRecord const& message) {
+  void OnMessageReceived(ContactID const&, messaging::HistoryEntryRecord const& message) {
     std::lock_guard<std::mutex> const lock(mutex);
     state.history.push_back(message);
     if (observer) {
@@ -139,7 +132,7 @@ struct ConversationViewModel::Impl : public std::enable_shared_from_this<Impl> {
     }
   }
 
-  void OnMessageStatusChanged(ContactID const& /*peer_id*/, uint64_t message_id, messaging::MessageStatus status) {
+  void OnMessageStatusChanged(ContactID const&, uint64_t message_id, messaging::MessageStatus status) {
     std::lock_guard<std::mutex> const lock(mutex);
     bool changed = false;
     for (auto& entry : state.history) {
@@ -156,16 +149,10 @@ struct ConversationViewModel::Impl : public std::enable_shared_from_this<Impl> {
     }
   }
 
-  // Runs on a background thread. 'self' keeps Impl alive during execution.
-  void LoadInitialHistory(std::shared_ptr<Impl> const& /*self*/, int generation) {
-    // Perform blocking DB op without holding the mutex
+  void LoadInitialHistory(std::shared_ptr<Impl> const&, int generation) {
     auto page = client->GetMessageHistoryPage(peer_id, 0, kPageSize);
-
     std::lock_guard<std::mutex> const lock(mutex);
-    // If generation changed (e.g. via reset), discard this result
-    if (generation != load_generation) {
-      return;
-    }
+    if (generation != load_generation) return;
 
     state.history.assign(page.messages.begin(), page.messages.end());
     chat_pages_loaded = 1;
@@ -177,13 +164,9 @@ struct ConversationViewModel::Impl : public std::enable_shared_from_this<Impl> {
 
   void StartInitialLoad() {
     int const gen = ++load_generation;
-    // Detach the thread so it doesn't block destruction of the wrapper.
-    // Pass shared_from_this() to keep Impl alive until thread finishes.
     std::thread([this, self = shared_from_this(), gen] { LoadInitialHistory(self, gen); }).detach();
   }
 };
-
-// --- ConversationViewModel Wrapper ---
 
 ConversationViewModel::ConversationViewModel(
     ContactID const& peer_id,
@@ -194,24 +177,24 @@ ConversationViewModel::ConversationViewModel(
   impl_->StartInitialLoad();
 
   auto& queue = impl_->router->Queue();
-  Subscribe<EventChatMessageReceived>(queue, [this](EventChatMessageReceived const& event) {
-    if (event.peer_id == impl_->peer_id) {
-      impl_->OnMessageReceived(event.peer_id, event.message);
+  auto impl = impl_;
+  Subscribe<EventChatMessageReceived>(queue, [impl](EventChatMessageReceived const& event) {
+    if (event.peer_id == impl->peer_id) {
+      impl->OnMessageReceived(event.peer_id, event.message);
     }
   });
-  Subscribe<EventMessageStatusChanged>(queue, [this](EventMessageStatusChanged const& event) {
-    if (event.peer_id == impl_->peer_id) {
-      impl_->OnMessageStatusChanged(event.peer_id, event.message_id, event.status);
+  Subscribe<EventMessageStatusChanged>(queue, [impl](EventMessageStatusChanged const& event) {
+    if (event.peer_id == impl->peer_id) {
+      impl->OnMessageStatusChanged(event.peer_id, event.message_id, event.status);
     }
   });
-  Subscribe<EventDebugDataReset>(queue, [this](auto const&) { impl_->StartInitialLoad(); });
+  Subscribe<EventDebugDataReset>(queue, [impl](auto const&) { impl->StartInitialLoad(); });
 }
 
 ConversationViewModel::~ConversationViewModel() {
   for (auto const& unsubscribe : eventUnsubscribers_) {
     unsubscribe();
   }
-  // No join() needed; Impl is kept alive by the detached thread if it's still running.
 }
 
 template <typename EventType>
@@ -225,17 +208,12 @@ void ConversationViewModel::SetObserver(std::shared_ptr<Observer> observer) cons
 }
 
 auto ConversationViewModel::GetState() const -> State { return impl_->GetState(); }
-
 void ConversationViewModel::SendText(std::string const& content) const { impl_->SendText(content); }
-
 void ConversationViewModel::LoadOlderMessages() const { impl_->LoadOlderMessages(); }
-
 void ConversationViewModel::LoadFullMessage(uint64_t const message_id) const { impl_->LoadFullMessage(message_id); }
-
 void ConversationViewModel::MarkMessagesAsRead(std::vector<std::uint64_t> const& message_ids) const {
   impl_->MarkMessagesAsRead(message_ids);
 }
-
 void ConversationViewModel::AddSystemMessage(std::string const& message) const { impl_->AddSystemMessage(message); }
 
 }  // namespace eillance::view_model

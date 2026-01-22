@@ -15,6 +15,18 @@ struct TestEvent2 {
   std::string text;
 };
 
+// Helper to wait for a condition
+template <typename Func>
+static void WaitFor(Func condition, std::chrono::milliseconds timeout = std::chrono::milliseconds(1000)) {
+  auto const start = std::chrono::steady_clock::now();
+  while (!condition()) {
+    if (std::chrono::steady_clock::now() - start > timeout) {
+      break;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+}
+
 TEST(EventQueueTest, SubscribeAndPush) {
   auto& queue = eillance::EventQueue::Instance();
   std::atomic<int> received_value = 0;
@@ -23,7 +35,7 @@ TEST(EventQueueTest, SubscribeAndPush) {
 
   queue.Push(TestEvent1{42});
 
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));  // Allow time for dispatch
+  WaitFor([&] { return received_value == 42; });
 
   EXPECT_EQ(received_value, 42);
 
@@ -40,7 +52,7 @@ TEST(EventQueueTest, MultipleSubscribers) {
 
   queue.Push(TestEvent1{10});
 
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  WaitFor([&] { return counter1 == 10 && counter2 == 20; });
 
   EXPECT_EQ(counter1, 10);
   EXPECT_EQ(counter2, 20);
@@ -58,9 +70,10 @@ TEST(EventQueueTest, Unsubscribe) {
   queue.Unsubscribe<TestEvent1>(sub_id);
   queue.Push(TestEvent1{100});
 
+  // Wait a bit to ensure it *doesn't* receive
   std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-  EXPECT_FALSE(received);
+  EXPECT_FALSE(received.load());
 }
 
 TEST(EventQueueTest, DifferentEventTypes) {
@@ -72,13 +85,13 @@ TEST(EventQueueTest, DifferentEventTypes) {
   auto sub_id2 = queue.Subscribe<TestEvent2>([&](TestEvent2 const& /*event*/) { event2_received = true; });
 
   queue.Push(TestEvent1{99});
-  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  WaitFor([&] { return event1_value == 99; });
   EXPECT_EQ(event1_value, 99);
-  EXPECT_FALSE(event2_received);
+  EXPECT_FALSE(event2_received.load());
 
   queue.Push(TestEvent2{"hello"});
-  std::this_thread::sleep_for(std::chrono::milliseconds(50));
-  EXPECT_TRUE(event2_received);
+  WaitFor([&] { return event2_received.load(); });
+  EXPECT_TRUE(event2_received.load());
 
   queue.Unsubscribe<TestEvent1>(sub_id1);
   queue.Unsubscribe<TestEvent2>(sub_id2);
