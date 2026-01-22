@@ -16,7 +16,7 @@
 namespace eillance::services {
 
 class MessagingService {
-public:
+ public:
   using ConnectionRequestHandler = std::function<void(ContactID const&)>;
 
   explicit MessagingService(
@@ -42,8 +42,9 @@ public:
 
   // Queries
   [[nodiscard]] auto GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t page_size) const
-  -> messaging::HistoryPage;
-  [[nodiscard]] auto GetFullMessageContent(std::uint64_t message_id) const -> std::optional<std::string>;
+      -> messaging::HistoryPage;
+  [[nodiscard]] auto GetFullMessageContent(ContactID const& peer_id, std::uint64_t message_id) const
+      -> std::optional<std::string>;
   [[nodiscard]] auto GetChatSummaries(std::vector<ContactID> const& peer_ids
   ) const -> std::vector<messaging::ChatSummary>;
 
@@ -77,7 +78,7 @@ public:
   void SetChatMessageReceivedCallback(OnChatMessageCallback cb);
   void SetMessageStatusChangedCallback(OnMessageStatusChangedCallback cb);
 
-private:
+ private:
   // Helper to connect to a peer if not connected
   void RequestConnection(ContactID const& peer_id);
   void UpdatePeerActivity(ContactID const& peer_id);
@@ -95,7 +96,8 @@ private:
   OnChatMessageCallback on_message_received_;
   OnMessageStatusChangedCallback on_status_changed_;
 
-  // Queue for read receipts that need to be sent reliably
+  // Queue for read receipts that need to be sent reliably.
+  // Stores REMOTE IDs (the sender's original message_id).
   std::unordered_map<ContactID, std::vector<uint64_t>> pending_read_receipts_;
   std::recursive_mutex receipts_mutex_;
 };

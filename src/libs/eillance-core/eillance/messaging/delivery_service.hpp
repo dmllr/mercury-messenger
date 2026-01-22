@@ -36,7 +36,7 @@ class MessageDeliveryService {
   static constexpr int kInitialRetryDelayS = 5;
   static constexpr int kMaxRetryDelayS = 60;
 
-public:
+ public:
   MessageDeliveryService(
       std::shared_ptr<storage::PersistentStorage> storage,
       std::shared_ptr<identity::ContactManager> contacts,
@@ -128,7 +128,7 @@ public:
     connectionHandler_(peer_id);
   }
 
-private:
+ private:
   void CheckForAllQueuedMessages() {
     if (!contactManager_) {
       return;

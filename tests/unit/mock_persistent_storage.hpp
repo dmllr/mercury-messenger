@@ -176,7 +176,8 @@ class MockPersistentStorageImpl final : public PersistentStorageImpl {
     return page;
   }
 
-  auto GetFullMessageContent(std::uint64_t message_id) -> std::optional<std::string> override {
+  auto GetFullMessageContent(ContactID const& /*peer_id*/, std::uint64_t message_id)
+      -> std::optional<std::string> override {
     std::lock_guard const lock(mutex_);
     if (auto it = large_messages_.find(message_id); it != large_messages_.end()) {
       return it->second;
@@ -229,6 +230,22 @@ class MockPersistentStorageImpl final : public PersistentStorageImpl {
       }
     }
     return records;
+  }
+
+  auto GetRemoteIds(ContactID const& peer_id, std::vector<uint64_t> const& local_ids)
+      -> std::vector<uint64_t> override {
+    std::lock_guard const lock(mutex_);
+    std::vector<uint64_t> remote_ids;
+    if (auto it = history_.find(peer_id); it != history_.end()) {
+      for (auto const& entry : it->second) {
+        if (std::find(local_ids.begin(), local_ids.end(), entry.id) != local_ids.end()) {
+          if (entry.remote_id) {
+            remote_ids.push_back(*entry.remote_id);
+          }
+        }
+      }
+    }
+    return remote_ids;
   }
 
   // --- Debug ---

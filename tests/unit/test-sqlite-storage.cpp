@@ -370,7 +370,67 @@ TEST_F(SQLiteStorageTest, LargeMessages) {
   EXPECT_TRUE(page.messages[0].is_truncated);
   EXPECT_LT(std::get<messaging::MessageEntry>(page.messages[0].data).content.length(), long_message.length());
 
-  auto full_content = storage_->GetFullMessageContent(entry.id);
+  auto full_content = storage_->GetFullMessageContent(peer1, entry.id);
   ASSERT_TRUE(full_content.has_value());
   EXPECT_EQ(*full_content, long_message);
+}
+
+TEST_F(SQLiteStorageTest, CompositePrimaryKey) {
+  // Ensure contacts exist
+  storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
+  storage_->UpdateContact({peer2, identity::ContactStatus::confirmed});
+
+  // Insert message for peer1
+  auto entry1 = storage_->AddHistoryEntry(
+      {.kind = messaging::HistoryEntryKind::textMessage,
+       .timestamp = Time::Now(),
+       .direction = messaging::MessageDirection::sent,
+       .data = messaging::MessageEntry{"P1"},
+       .peer_id = peer1}
+  );
+  EXPECT_EQ(entry1.id, 1);
+
+  // Insert message for peer2
+  auto entry2 = storage_->AddHistoryEntry(
+      {.kind = messaging::HistoryEntryKind::textMessage,
+       .timestamp = Time::Now(),
+       .direction = messaging::MessageDirection::sent,
+       .data = messaging::MessageEntry{"P2"},
+       .peer_id = peer2}
+  );
+  EXPECT_EQ(entry2.id, 1);  // Should restart at 1 for new peer because of peer_id filtering in ID generation
+
+  // Insert message 2 for peer1
+  auto entry3 = storage_->AddHistoryEntry(
+      {.kind = messaging::HistoryEntryKind::textMessage,
+       .timestamp = Time::Now(),
+       .direction = messaging::MessageDirection::sent,
+       .data = messaging::MessageEntry{"P1-2"},
+       .peer_id = peer1}
+  );
+  EXPECT_EQ(entry3.id, 2);
+}
+
+TEST_F(SQLiteStorageTest, RemoteIdPersistenceAndRetrieval) {
+  storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
+
+  uint64_t const remote_id = 999;
+  auto entry = storage_->AddHistoryEntry(
+      {.remote_id = remote_id,
+       .kind = messaging::HistoryEntryKind::textMessage,
+       .timestamp = Time::Now(),
+       .direction = messaging::MessageDirection::received,
+       .data = messaging::MessageEntry{"Content"},
+       .peer_id = peer1}
+  );
+
+  auto page = storage_->GetHistoryPage(peer1, 0, 10);
+  ASSERT_FALSE(page.messages.empty());
+  ASSERT_TRUE(page.messages[0].remote_id.has_value());
+  EXPECT_EQ(*page.messages[0].remote_id, remote_id);
+
+  std::vector<uint64_t> local_ids = {entry.id};
+  auto remote_ids = storage_->GetRemoteIds(peer1, local_ids);
+  ASSERT_EQ(remote_ids.size(), 1);
+  EXPECT_EQ(remote_ids[0], remote_id);
 }

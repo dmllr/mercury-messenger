@@ -31,20 +31,24 @@ inline void MigrateToV0001(sqlite3* db) {
       );
 
       CREATE TABLE IF NOT EXISTS messages (
-        id               INTEGER PRIMARY KEY AUTOINCREMENT,
         peer_id          TEXT NOT NULL,
+        id               INTEGER NOT NULL,
+        remote_id        INTEGER,
         kind             INTEGER NOT NULL,
         timestamp        INTEGER NOT NULL,
         direction        INTEGER NOT NULL,
         status           INTEGER NOT NULL,
         content          TEXT,
-        is_truncated     INTEGER NOT NULL DEFAULT 0
+        is_truncated     INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (peer_id, id)
       );
 
       CREATE TABLE IF NOT EXISTS large_messages (
-        message_id   INTEGER PRIMARY KEY NOT NULL,
+        peer_id      TEXT NOT NULL,
+        message_id   INTEGER NOT NULL,
         full_content TEXT,
-        FOREIGN KEY(message_id) REFERENCES messages(id) ON DELETE CASCADE
+        PRIMARY KEY (peer_id, message_id),
+        FOREIGN KEY(peer_id, message_id) REFERENCES messages(peer_id, id) ON DELETE CASCADE
       );
 
       CREATE INDEX IF NOT EXISTS idx_messages_peer_timestamp ON messages (peer_id, timestamp);

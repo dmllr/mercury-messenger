@@ -79,7 +79,7 @@ struct ConversationViewModel::Impl : public std::enable_shared_from_this<Impl> {
   }
 
   void LoadFullMessage(uint64_t message_id) {
-    auto full_content = client->GetFullMessageContent(message_id);
+    auto full_content = client->GetFullMessageContent(peer_id, message_id);
     if (!full_content) return;
 
     std::lock_guard<std::mutex> const lock(mutex);
