@@ -1,7 +1,6 @@
 #include "eillance/services/account_service.hpp"
 
 #include "eillance/utils/invariant.hpp"
-#include "eillance/logging/logging.hpp"
 
 namespace eillance::services {
 
@@ -25,7 +24,7 @@ auto AccountService::IdentityExists() const -> bool { return id_manager_->Identi
 
 auto AccountService::GetMnemonic() const -> std::optional<std::string> { return id_manager_->GetMnemonic(); }
 
-auto AccountService::GenerateNewIdentity() -> std::string {
+auto AccountService::GenerateNewIdentity() const -> std::string {
   auto mnemonic = id_manager_->GenerateNewIdentity();
   if (!mnemonic.empty()) {
     INVARIANT(on_profile_updated_);
@@ -34,7 +33,7 @@ auto AccountService::GenerateNewIdentity() -> std::string {
   return mnemonic;
 }
 
-auto AccountService::RestoreIdentity(std::string const& mnemonic) -> bool {
+auto AccountService::RestoreIdentity(std::string const& mnemonic) const -> bool {
   if (id_manager_->RestoreFromMnemonic(mnemonic)) {
     INVARIANT(on_profile_updated_);
     on_profile_updated_();
@@ -67,7 +66,7 @@ void AccountService::UpdateMyProfile(
     std::optional<std::string> const& name,
     std::optional<std::string> const& bio,
     std::optional<std::string> const& photo
-) {
+) const {
   if (name) {
     settings_manager_->SetMyDisplayName(*name);
   }
@@ -82,7 +81,7 @@ void AccountService::UpdateMyProfile(
   on_profile_updated_();
 }
 
-void AccountService::UpdateSignalingUrl(std::string const& url) {
+void AccountService::UpdateSignalingUrl(std::string const& url) const {
   settings_manager_->SetSignalingServerUrl(url);
   transport_->SetSignalingUrl(url);
   transport_->Reconnect();

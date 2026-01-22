@@ -80,8 +80,8 @@ class Transport {
   void SendPeerDataChannelMessage(ContactID const& peerId, Json const& message) const {
     self_->SendPeerDataChannelMessage(peerId, message);
   }
-  void AddToStream(std::shared_ptr<Peer> const& peer, bool isAddingVideo) const {
-    self_->AddToStream(peer, isAddingVideo);
+  void AddToStream(std::shared_ptr<Peer> const& peer, bool is_adding_video) const {
+    self_->AddToStream(peer, is_adding_video);
   }
   auto AddVideo(ContactID const& peerId, std::function<void(void)> const& onOpen) const -> std::shared_ptr<ITrack> {
     return self_->AddVideo(peerId, onOpen);
@@ -137,7 +137,7 @@ class Transport {
 
     virtual void SendSignalingMessage(Json const& message) const = 0;
 
-    virtual void AddToStream(std::shared_ptr<Peer> const& peer, bool isAddingVideo) const = 0;
+    virtual void AddToStream(std::shared_ptr<Peer> const& peer, bool is_adding_video) const = 0;
     virtual auto AddVideo(ContactID const& peer_id, std::function<void(void)> const& on_open)
         -> std::shared_ptr<ITrack> = 0;
     virtual auto AddAudio(ContactID const& peer_id, std::function<void(void)> const& on_open)
@@ -207,8 +207,8 @@ class Transport {
     void SendPeerDataChannelMessage(ContactID const& peer_id, Json const& message) const override {
       transport_->SendPeerDataChannelMessage(peer_id, message);
     }
-    void AddToStream(std::shared_ptr<Peer> const& peer, bool isAddingVideo) const override {
-      transport_->AddToStream(peer, isAddingVideo);
+    void AddToStream(std::shared_ptr<Peer> const& peer, bool is_adding_video) const override {
+      transport_->AddToStream(peer, is_adding_video);
     }
     auto AddVideo(ContactID const& peer_id, std::function<void(void)> const& on_open)
         -> std::shared_ptr<ITrack> override {
