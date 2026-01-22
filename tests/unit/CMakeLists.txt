@@ -4,7 +4,7 @@ set(gtest_disable_pthreads ON)
 include(FetchContent)
 FetchContent_Declare(
   googletest
-  URL https://github.com/google/googletest/archive/03597a01ee50ed33e9dfd640b249b4be3799d395.zip
+  URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip
 )
 # For Windows: Prevent overriding the parent project's compiler/linker settings
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
@@ -19,9 +19,11 @@ add_executable(h-e-tests
   test-bit-reader.cpp
   test-call-view-model.cpp
   test-client-core.cpp
+  test-contact-id.cpp
   test-contact-service.cpp
   test-contacts-view-model.cpp
   test-conversation-view-model.cpp
+  test-debug-view-model.cpp
   test-delivery-service.cpp
   test-dispatch-queue.cpp
   test-event-queue.cpp
@@ -33,10 +35,12 @@ add_executable(h-e-tests
   test-id-manager.cpp
   test-media-call-service.cpp
   test-message-history.cpp
+  test-messaging-service.cpp
   test-packet.cpp
   test-profile-view-model.cpp
   test-settings-manager.cpp
   test-settings-view-model.cpp
+  test-stream-source.cpp
   test-sqlite-storage.cpp
   test-stream.cpp
 )
