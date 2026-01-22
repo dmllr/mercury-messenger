@@ -18,6 +18,7 @@ add_executable(h-e-tests
   test-audio-encoder.cpp
   test-bit-reader.cpp
   test-call-view-model.cpp
+  test-client-core.cpp
   test-contact-service.cpp
   test-contacts-view-model.cpp
   test-conversation-view-model.cpp
@@ -37,6 +38,7 @@ add_executable(h-e-tests
   test-settings-manager.cpp
   test-settings-view-model.cpp
   test-sqlite-storage.cpp
+  test-stream.cpp
 )
 target_link_libraries(h-e-tests
   GTest::gtest_main

@@ -11,7 +11,6 @@
 #include <unordered_map>
 #include <vector>
 
-
 #include "eillance/utils/dispatch_queue.hpp"
 
 namespace eillance {
