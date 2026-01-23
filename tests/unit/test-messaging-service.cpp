@@ -1,3 +1,7 @@
+#include <filesystem>
+#include <fstream>
+#include <thread>
+
 #include <gtest/gtest.h>
 
 #include "eillance/identity/contact_manager.hpp"
@@ -7,10 +11,40 @@
 
 using namespace eillance;
 
+// Local subclass to override GetPath for testing file operations in a safe temp dir
+class TestableMockStorage : public storage::MockPersistentStorageImpl {
+  std::string db_path_;
+
+ public:
+  explicit TestableMockStorage(std::filesystem::path path)
+      : db_path_(std::filesystem::absolute(path).string()) {}
+  auto GetPath() const -> std::string override { return db_path_; }
+};
+
 class MessagingServiceTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    auto storage_impl = std::make_unique<storage::MockPersistentStorageImpl>();
+    // Setup temporary directory for file tests
+    // Use a shorter path to avoid MAX_PATH issues on Windows
+    temp_dir_ = std::filesystem::temp_directory_path() / "eillance_tests";
+
+    // Ensure clean state from previous failed runs
+    std::error_code ec;
+    std::filesystem::remove_all(temp_dir_, ec);
+    std::filesystem::create_directories(temp_dir_, ec);
+
+    try {
+      temp_dir_ = std::filesystem::canonical(temp_dir_);
+    } catch (...) {
+      // Fallback if canonical fails (e.g. symlinks not supported)
+      temp_dir_ = std::filesystem::absolute(temp_dir_);
+    }
+
+    // Pre-create attachments directory
+    std::filesystem::create_directories(temp_dir_ / "attachments");
+
+    // Use the temp dir for the DB path so attachments (stored relative to DB) go there too
+    auto storage_impl = std::make_unique<TestableMockStorage>(temp_dir_ / "test.db");
     mock_storage_ = storage_impl.get();
     storage_ = std::make_shared<storage::PersistentStorage>(std::move(storage_impl));
 
@@ -30,6 +64,33 @@ class MessagingServiceTest : public ::testing::Test {
     service_->SetMessageStatusChangedCallback([](auto, auto, auto) {});
   }
 
+  void TearDown() override {
+    if (service_) {
+      service_->StopDeliveryService();
+    }
+    service_.reset();
+    // Release persistent storage BEFORE deleting files it might hold open (like SQLite DB)
+    storage_.reset();
+    // Best effort cleanup
+    std::error_code ec;
+    std::filesystem::remove_all(temp_dir_, ec);
+  }
+
+  std::string CreateTempFile(size_t size, std::string const& content_pattern = "a") const {
+    static int counter = 0;
+    std::string fname = "f" + std::to_string(++counter) + ".dat";
+    std::filesystem::path path = temp_dir_ / fname;
+    std::ofstream ofs(path, std::ios::binary | std::ios::out | std::ios::trunc);
+    if (ofs.is_open()) {
+      for (size_t i = 0; i < size; ++i) {
+        ofs << content_pattern[i % content_pattern.size()];
+      }
+      ofs.flush();
+      ofs.close();
+    }
+    return path.string();
+  }
+
   storage::MockPersistentStorageImpl* mock_storage_;
   std::unique_ptr<transport::MockTransport> mock_transport_impl_;
   transport::MockTransport* mock_transport_;
@@ -38,6 +99,7 @@ class MessagingServiceTest : public ::testing::Test {
   std::shared_ptr<identity::ContactManager> contact_manager_;
   std::unique_ptr<services::MessagingService> service_;
   std::vector<ContactID> connection_requests_;
+  std::filesystem::path temp_dir_;
 
   ContactID const peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
 };
@@ -287,4 +349,160 @@ TEST_F(MessagingServiceTest, MarkMessagesAsRead_SendsRemoteIds) {
     }
   }
   EXPECT_TRUE(read_receipt_found);
+}
+
+TEST_F(MessagingServiceTest, FileUpload_FlowControl) {
+  auto peer = std::make_shared<transport::Peer>(peer1);
+  peer->data_channel_is_open = true;
+  eillance::crypto::SessionCipher other;
+  peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
+  transport_->AddPeer(peer1, peer);
+
+  size_t const chunk_size = 16 * 1024;
+  size_t const file_size = chunk_size * 40;
+  std::string file_path = CreateTempFile(file_size);
+
+  std::vector<services::AttachmentRequest> atts;
+  atts.push_back({file_path, messaging::AttachmentType::file, ""});
+
+  service_->SendChatMessage(peer1, "File incoming", atts);
+
+  size_t chunk_count = 0;
+  std::string file_id;
+  for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
+    if (msg["type"] == "file_chunk") {
+      chunk_count++;
+      file_id = msg["id"];
+    }
+  }
+
+  EXPECT_EQ(chunk_count, 32);
+
+  nlohmann::json ack_msg = {{"type", "file_chunk"}, {"id", file_id}, {"ack_seq", 32}};
+
+  service_->ProcessIncomingFileChunk(peer1, ack_msg);
+
+  size_t total_chunks = 0;
+  bool eof_sent = false;
+  for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
+    if (msg["type"] == "file_chunk") {
+      if (msg["eof"] == true)
+        eof_sent = true;
+      else
+        total_chunks++;
+    }
+  }
+
+  EXPECT_EQ(total_chunks, 40);
+  EXPECT_TRUE(eof_sent);
+}
+
+TEST_F(MessagingServiceTest, FileDownload_IntegrityCheck) {
+  // 1. Create a dummy file to generate a valid hash
+  // Use absolute path to ensure correct file handling
+  std::filesystem::path original_path = std::filesystem::path(CreateTempFile(1024, "abcdef"));
+  ASSERT_TRUE(std::filesystem::exists(original_path));
+  ASSERT_GT(std::filesystem::file_size(original_path), 0);
+
+  // Ensure file handle is closed from CreateTempFile (it is, but wait a bit for OS)
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+  auto peer = std::make_shared<transport::Peer>(peer1);
+  peer->data_channel_is_open = true;
+  eillance::crypto::SessionCipher other;
+  peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
+  // Setup OTHER side crypto correctly so it can encrypt messages the service can decrypt
+  other.ComputeSharedSecret(peer->session_cipher->GetPublicKey());
+  transport_->AddPeer(peer1, peer);
+
+  std::vector<services::AttachmentRequest> atts;
+  atts.push_back({original_path.string(), messaging::AttachmentType::file, ""});
+  service_->SendChatMessage(peer1, "Gen Hash", atts);
+
+  std::string file_hash;
+  std::string file_id;
+
+  for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
+    if (msg["type"] == "chat" && msg.contains("attachments")) {
+      file_hash = msg["attachments"][0]["hash"];
+      file_id = msg["attachments"][0]["id"];
+    }
+  }
+  ASSERT_FALSE(file_hash.empty());
+
+  mock_transport_->log.sent_peer_messages.clear();
+
+  messaging::Attachment att;
+  att.id = "recv_file_1";
+  att.type = messaging::AttachmentType::file;
+  att.hash = file_hash;
+  att.is_downloaded = false;
+  att.size_bytes = 1024;
+
+  std::string payload_str = "incoming file";
+  payload_str.insert(0, 1, static_cast<char>(services::MessagingService::currentMessageVersion));
+  auto encrypted = other.Encrypt(payload_str);
+
+  service_->OnChatMessageReceived(peer1, encrypted, 999, false, {att});
+
+  std::ifstream input(original_path, std::ios::binary);
+  // Ensure buffer read matches CreateTempFile content
+  std::vector<char> buffer((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+  ASSERT_EQ(buffer.size(), 1024);
+
+  std::vector<std::byte> data_bytes(buffer.size());
+  std::memcpy(data_bytes.data(), buffer.data(), buffer.size());
+
+  nlohmann::json chunk_msg =
+      {{"type", "file_chunk"}, {"id", "recv_file_1"}, {"seq", 0}, {"data", crypto::ToHex(data_bytes)}, {"eof", false}};
+  service_->ProcessIncomingFileChunk(peer1, chunk_msg);
+
+  nlohmann::json eof_msg = {{"type", "file_chunk"}, {"id", "recv_file_1"}, {"seq", 1}, {"data", ""}, {"eof", true}};
+  service_->ProcessIncomingFileChunk(peer1, eof_msg);
+
+  // File should be in temp_dir/attachments/recv_file_1.dat
+  std::filesystem::path expected_path = temp_dir_ / "attachments" / "recv_file_1.dat";
+
+  // Wait slightly for async file ops/rename to complete
+  for (int i = 0; i < 10; ++i) {
+    if (std::filesystem::exists(expected_path)) break;
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  }
+
+  EXPECT_TRUE(std::filesystem::exists(expected_path));
+}
+
+TEST_F(MessagingServiceTest, FileDownload_HashMismatch) {
+  auto peer = std::make_shared<transport::Peer>(peer1);
+  peer->data_channel_is_open = true;
+  eillance::crypto::SessionCipher other;
+  peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
+  other.ComputeSharedSecret(peer->session_cipher->GetPublicKey());
+  transport_->AddPeer(peer1, peer);
+
+  messaging::Attachment att;
+  att.id = "bad_hash_file";
+  att.hash = "deadbeef";  // Fake hash
+  att.is_downloaded = false;
+  att.size_bytes = 2;
+
+  std::string payload_str = "x";
+  payload_str.insert(0, 1, static_cast<char>(services::MessagingService::currentMessageVersion));
+  auto encrypted = other.Encrypt(payload_str);
+
+  service_->OnChatMessageReceived(peer1, encrypted, 888, false, {att});
+
+  std::vector<std::byte> data = {std::byte{0x00}, std::byte{0x01}};
+  nlohmann::json chunk_msg =
+      {{"type", "file_chunk"}, {"id", "bad_hash_file"}, {"seq", 0}, {"data", crypto::ToHex(data)}, {"eof", false}};
+  service_->ProcessIncomingFileChunk(peer1, chunk_msg);
+
+  nlohmann::json eof_msg = {{"type", "file_chunk"}, {"id", "bad_hash_file"}, {"seq", 1}, {"data", ""}, {"eof", true}};
+  service_->ProcessIncomingFileChunk(peer1, eof_msg);
+
+  // Verify file does NOT exist
+  std::filesystem::path expected_path = temp_dir_ / "attachments" / "bad_hash_file.dat";
+  // Wait to ensure deletion happened if it was going to
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  EXPECT_FALSE(std::filesystem::exists(expected_path));
 }

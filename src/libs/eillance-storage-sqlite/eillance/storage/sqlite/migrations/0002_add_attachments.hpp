@@ -23,6 +23,7 @@ inline void MigrateToV0002(sqlite3* db) {
         mime_type        TEXT NOT NULL,
         size_bytes       INTEGER NOT NULL,
         thumbnail_base64 TEXT,
+        hash             TEXT,
         is_downloaded    INTEGER NOT NULL DEFAULT 0,
         FOREIGN KEY(peer_id, message_id) REFERENCES messages(peer_id, id) ON DELETE CASCADE
       );

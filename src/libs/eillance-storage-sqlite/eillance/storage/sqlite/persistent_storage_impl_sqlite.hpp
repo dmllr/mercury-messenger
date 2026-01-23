@@ -348,8 +348,8 @@ class SQLiteStorage final : public PersistentStorageImpl {
       for (auto const& att : msg_entry->attachments) {
         SQLiteStatement const att_stmt(db_, R"SQL(
           INSERT INTO message_attachments (
-            id, peer_id, message_id, type, file_path, mime_type, size_bytes, thumbnail_base64, is_downloaded
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+            id, peer_id, message_id, type, file_path, mime_type, size_bytes, thumbnail_base64, hash, is_downloaded
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         )SQL");
         BindText(att_stmt.Get(), 1, att.id);
         BindText(att_stmt.Get(), 2, entry.peer_id.ToString());
@@ -359,7 +359,8 @@ class SQLiteStorage final : public PersistentStorageImpl {
         BindText(att_stmt.Get(), 6, att.mime_type);
         sqlite3_bind_int64(att_stmt.Get(), 7, att.size_bytes);
         BindText(att_stmt.Get(), 8, att.thumbnail_base64);
-        sqlite3_bind_int(att_stmt.Get(), 9, att.is_downloaded ? 1 : 0);
+        BindText(att_stmt.Get(), 9, att.hash);
+        sqlite3_bind_int(att_stmt.Get(), 10, att.is_downloaded ? 1 : 0);
 
         if (sqlite3_step(att_stmt.Get()) != SQLITE_DONE) {
           LGE << "Failed to insert attachment: " << sqlite3_errmsg(db_);
@@ -531,7 +532,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
       // Hydrate attachments
       if (auto* msg_entry = std::get_if<messaging::MessageEntry>(&record.data)) {
         SQLiteStatement const att_stmt(db_, R"SQL(
-          SELECT id, type, file_path, mime_type, size_bytes, thumbnail_base64, is_downloaded
+          SELECT id, type, file_path, mime_type, size_bytes, thumbnail_base64, hash, is_downloaded
           FROM message_attachments
           WHERE peer_id = ? AND message_id = ?;
         )SQL");
@@ -539,15 +540,16 @@ class SQLiteStorage final : public PersistentStorageImpl {
         sqlite3_bind_int64(att_stmt.Get(), 2, record.id);
 
         while (sqlite3_step(att_stmt.Get()) == SQLITE_ROW) {
-          msg_entry->attachments.push_back({
-              .id = ColumnString(att_stmt.Get(), 0),
-              .type = static_cast<messaging::AttachmentType>(sqlite3_column_int(att_stmt.Get(), 1)),
-              .file_path = ColumnString(att_stmt.Get(), 2),
-              .mime_type = ColumnString(att_stmt.Get(), 3),
-              .size_bytes = static_cast<uint64_t>(sqlite3_column_int64(att_stmt.Get(), 4)),
-              .thumbnail_base64 = ColumnString(att_stmt.Get(), 5),
-              .is_downloaded = (sqlite3_column_int(att_stmt.Get(), 6) != 0)
-          });
+          msg_entry->attachments.push_back(
+              {.id = ColumnString(att_stmt.Get(), 0),
+               .type = static_cast<messaging::AttachmentType>(sqlite3_column_int(att_stmt.Get(), 1)),
+               .file_path = ColumnString(att_stmt.Get(), 2),
+               .mime_type = ColumnString(att_stmt.Get(), 3),
+               .size_bytes = static_cast<uint64_t>(sqlite3_column_int64(att_stmt.Get(), 4)),
+               .thumbnail_base64 = ColumnString(att_stmt.Get(), 5),
+               .hash = ColumnString(att_stmt.Get(), 6),
+               .is_downloaded = (sqlite3_column_int(att_stmt.Get(), 7) != 0)}
+          );
         }
       }
 
@@ -678,7 +680,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
       // Hydrate attachments for pending messages so we know what to upload
       if (auto* msg_entry = std::get_if<messaging::MessageEntry>(&record.data)) {
         SQLiteStatement const att_stmt(db_, R"SQL(
-          SELECT id, type, file_path, mime_type, size_bytes, thumbnail_base64, is_downloaded
+          SELECT id, type, file_path, mime_type, size_bytes, thumbnail_base64, hash, is_downloaded
           FROM message_attachments
           WHERE peer_id = ? AND message_id = ?;
         )SQL");
@@ -686,15 +688,16 @@ class SQLiteStorage final : public PersistentStorageImpl {
         sqlite3_bind_int64(att_stmt.Get(), 2, record.id);
 
         while (sqlite3_step(att_stmt.Get()) == SQLITE_ROW) {
-          msg_entry->attachments.push_back({
-              .id = ColumnString(att_stmt.Get(), 0),
-              .type = static_cast<messaging::AttachmentType>(sqlite3_column_int(att_stmt.Get(), 1)),
-              .file_path = ColumnString(att_stmt.Get(), 2),
-              .mime_type = ColumnString(att_stmt.Get(), 3),
-              .size_bytes = static_cast<uint64_t>(sqlite3_column_int64(att_stmt.Get(), 4)),
-              .thumbnail_base64 = ColumnString(att_stmt.Get(), 5),
-              .is_downloaded = (sqlite3_column_int(att_stmt.Get(), 6) != 0)
-          });
+          msg_entry->attachments.push_back(
+              {.id = ColumnString(att_stmt.Get(), 0),
+               .type = static_cast<messaging::AttachmentType>(sqlite3_column_int(att_stmt.Get(), 1)),
+               .file_path = ColumnString(att_stmt.Get(), 2),
+               .mime_type = ColumnString(att_stmt.Get(), 3),
+               .size_bytes = static_cast<uint64_t>(sqlite3_column_int64(att_stmt.Get(), 4)),
+               .thumbnail_base64 = ColumnString(att_stmt.Get(), 5),
+               .hash = ColumnString(att_stmt.Get(), 6),
+               .is_downloaded = (sqlite3_column_int(att_stmt.Get(), 7) != 0)}
+          );
         }
       }
 

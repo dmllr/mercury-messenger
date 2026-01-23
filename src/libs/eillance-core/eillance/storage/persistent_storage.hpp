@@ -121,7 +121,7 @@ class PersistentStorage {
   void RemoveContact(ContactID const& peer_id) const { pimpl_->RemoveContact(peer_id); }
 
   // --- History ---
-  [[nodiscard]] auto AddHistoryEntry(messaging::HistoryEntryRecord entry) const {
+  [[nodiscard]] auto AddHistoryEntry(messaging::HistoryEntryRecord entry) {
     return pimpl_->AddHistoryEntry(std::move(entry));
   }
   void UpdateHistoryEntry(messaging::HistoryEntryRecord const& entry) const { pimpl_->UpdateHistoryEntry(entry); }

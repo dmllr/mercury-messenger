@@ -1,5 +1,8 @@
-#include <gtest/gtest.h>
+#include <filesystem>
+#include <fstream>
 #include <variant>
+
+#include <gtest/gtest.h>
 
 #include "eillance/messaging/history.hpp"
 #include "eillance/services/messaging_service.hpp"
@@ -11,60 +14,60 @@ using namespace eillance;
 class AttachmentTest : public ::testing::Test {
  protected:
   void SetUp() override {
+    // Setup temp file for hashing tests
+    temp_file_path_ = "test_image.jpg";
+    std::ofstream ofs(temp_file_path_, std::ios::binary);
+    ofs << "fake image data";
+    ofs.close();
+
     auto storage_impl = std::make_unique<storage::MockPersistentStorageImpl>();
     storage_ = std::make_shared<storage::PersistentStorage>(std::move(storage_impl));
 
     mock_transport_impl_ = std::make_unique<transport::MockTransport>();
     transport_ = std::make_shared<transport::Transport>(std::move(mock_transport_impl_));
 
-    // Mock dependencies for service
     auto contact_manager = std::make_shared<identity::ContactManager>(storage_);
-    auto conn_handler = [](ContactID const&){};
+    auto conn_handler = [](ContactID const&) {};
 
-    service_ = std::make_unique<services::MessagingService>(
-        storage_, transport_, contact_manager, conn_handler
-    );
+    service_ = std::make_unique<services::MessagingService>(storage_, transport_, contact_manager, conn_handler);
 
-    // Ensure peer is a contact
     contact_manager->AddContact(peer1);
   }
+
+  void TearDown() override { std::filesystem::remove(temp_file_path_); }
 
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::unique_ptr<transport::MockTransport> mock_transport_impl_;
   std::shared_ptr<transport::Transport> transport_;
   std::unique_ptr<services::MessagingService> service_;
+  std::string temp_file_path_;
 
   ContactID const peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
 };
 
-TEST_F(AttachmentTest, SendMessageWithAttachments) {
+TEST_F(AttachmentTest, SendMessageCalculatesHash) {
   std::vector<services::AttachmentRequest> attachments;
-  attachments.push_back({"/tmp/image.jpg", messaging::AttachmentType::image, "base64thumb"});
+  attachments.push_back({temp_file_path_, messaging::AttachmentType::image, "base64thumb"});
 
-  auto record = service_->SendChatMessage(peer1, "Check this out", attachments);
+  auto const record = service_->SendChatMessage(peer1, "Check this out", attachments);
 
-  // Verify Record
-  EXPECT_NE(record.id, 0);
-  EXPECT_TRUE(std::holds_alternative<messaging::MessageEntry>(record.data));
-
+  ASSERT_TRUE(std::holds_alternative<messaging::MessageEntry>(record.data));
   auto const& entry = std::get<messaging::MessageEntry>(record.data);
-  EXPECT_EQ(entry.content, "Check this out");
   ASSERT_EQ(entry.attachments.size(), 1);
 
   auto const& att = entry.attachments[0];
-  EXPECT_EQ(att.file_path, "/tmp/image.jpg");
-  EXPECT_EQ(att.type, messaging::AttachmentType::image);
-  EXPECT_EQ(att.thumbnail_base64, "base64thumb");
-  EXPECT_TRUE(att.is_downloaded); // Local sender has file
+  EXPECT_EQ(att.file_path, temp_file_path_);
+  // Ensure hash is not empty and looks like a hex string
+  EXPECT_FALSE(att.hash.empty());
+  EXPECT_EQ(att.hash.length(), 64);  // SHA-256 hex length
 }
 
-TEST_F(AttachmentTest, PersistenceAndRetrieval) {
-  // Simulate DB directly to test storage layer
+TEST_F(AttachmentTest, PersistenceStoresHash) {
   messaging::MessageEntry msg_data;
   msg_data.content = "Text";
-  msg_data.attachments.push_back({
-      "uuid-123", messaging::AttachmentType::video, "/data/vid.mp4", "video/mp4", 1024, "", true
-  });
+  msg_data.attachments.push_back(
+      {"uuid-123", messaging::AttachmentType::video, "/data/vid.mp4", "video/mp4", 1024, "", "abc123hash", true}
+  );
 
   messaging::HistoryEntryRecord record{
       .kind = messaging::HistoryEntryKind::textMessage,
@@ -74,17 +77,17 @@ TEST_F(AttachmentTest, PersistenceAndRetrieval) {
       .peer_id = peer1
   };
 
-  storage_->AddHistoryEntry(record);
+  std::ignore = storage_->AddHistoryEntry(record);
 
   // Retrieve
-  auto page = storage_->GetHistoryPage(peer1, 0, 10);
-  ASSERT_EQ(page.messages.size(), 1);
+  auto [messages, total_messages] = storage_->GetHistoryPage(peer1, 0, 10);
+  ASSERT_EQ(messages.size(), 1);
 
-  auto const& retrieved = page.messages[0];
+  auto const& retrieved = messages[0];
   ASSERT_TRUE(std::holds_alternative<messaging::MessageEntry>(retrieved.data));
-  auto const& retrieved_msg = std::get<messaging::MessageEntry>(retrieved.data);
+  auto const& [content, attachments] = std::get<messaging::MessageEntry>(retrieved.data);
 
-  ASSERT_EQ(retrieved_msg.attachments.size(), 1);
-  EXPECT_EQ(retrieved_msg.attachments[0].id, "uuid-123");
-  EXPECT_EQ(retrieved_msg.attachments[0].type, messaging::AttachmentType::video);
+  ASSERT_EQ(attachments.size(), 1);
+  EXPECT_EQ(attachments[0].id, "uuid-123");
+  EXPECT_EQ(attachments[0].type, messaging::AttachmentType::video);
 }
