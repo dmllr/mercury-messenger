@@ -17,6 +17,8 @@ namespace eillance::services {
 
 class MessagingService {
  public:
+  static constexpr uint32_t currentMessageVersion = 1;
+
   using ConnectionRequestHandler = std::function<void(ContactID const&)>;
 
   explicit MessagingService(

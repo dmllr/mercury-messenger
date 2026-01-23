@@ -161,8 +161,13 @@ TEST_F(BotApiTest, MessageHandling) {
   peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
 
   // Simulate encrypted message arrival
-  std::string plain = "Hello Bot";
-  auto encrypted = other.Encrypt(plain);
+  std::string const plain = "Hello Bot";
+  std::string payload_with_version;
+  payload_with_version.reserve(sizeof(services::MessagingService::currentMessageVersion) + plain.size());
+  payload_with_version.push_back(static_cast<char>(services::MessagingService::currentMessageVersion));
+  payload_with_version.append(plain);
+
+  auto encrypted = other.Encrypt(payload_with_version);
   nlohmann::json const chat_msg = {
       {"type", "chat"},
       {"message_id", 123},

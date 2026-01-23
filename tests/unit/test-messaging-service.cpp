@@ -46,12 +46,12 @@ TEST_F(MessagingServiceTest, SendMessage_NoConnection_QueuesAndRequestsConnectio
   // Ensure no peer connected
   ASSERT_FALSE(mock_transport_->GetPeer(peer1));
 
-  auto entry = service_->SendChatMessage(peer1, "Hello");
+  auto const entry = service_->SendChatMessage(peer1, "Hello");
 
   EXPECT_EQ(entry.status, messaging::MessageStatus::sending);
 
   // Verify queued in storage
-  auto pending = storage_->GetMessagesWithStatus(peer1, messaging::MessageStatus::sending);
+  auto const pending = storage_->GetMessagesWithStatus(peer1, messaging::MessageStatus::sending);
   ASSERT_EQ(pending.size(), 1);
   EXPECT_EQ(pending[0].id, entry.id);
 
@@ -87,9 +87,9 @@ TEST_F(MessagingServiceTest, SendMessage_Connected_SendsImmediately) {
   EXPECT_EQ(json_msg["type"], "chat");
 }
 
-TEST_F(MessagingServiceTest, OnChatMessageReceived_Valid) {
+TEST_F(MessagingServiceTest, OnChatMessageReceived_ValidCurrentVersion) {
   // Setup peer with crypto
-  auto peer = std::make_shared<transport::Peer>(peer1);
+  auto const peer = std::make_shared<transport::Peer>(peer1);
   eillance::crypto::SessionCipher other;  // acts as remote
   other.ComputeSharedSecret(peer->session_cipher->GetPublicKey());
   peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
@@ -97,7 +97,12 @@ TEST_F(MessagingServiceTest, OnChatMessageReceived_Valid) {
   transport_->AddPeer(peer1, peer);
 
   std::string plain = "Secret Message";
-  auto const encrypted = other.Encrypt(plain);
+  std::string payload_with_version;
+  payload_with_version.reserve(sizeof(services::MessagingService::currentMessageVersion) + plain.size());
+  // Prepend the CURRENT version
+  payload_with_version.push_back(static_cast<char>(services::MessagingService::currentMessageVersion));
+  payload_with_version.append(plain);
+  auto const encrypted = other.Encrypt(payload_with_version);
 
   bool cb_called = false;
   service_->SetChatMessageReceivedCallback([&](auto const& id, auto const& rec) {
@@ -120,14 +125,113 @@ TEST_F(MessagingServiceTest, OnChatMessageReceived_Valid) {
   EXPECT_TRUE(receipt_sent);
 }
 
+TEST_F(MessagingServiceTest, OnChatMessageReceived_UnsupportedVersion) {
+  // Setup peer with crypto
+  auto const peer = std::make_shared<transport::Peer>(peer1);
+  crypto::SessionCipher other;
+  other.ComputeSharedSecret(peer->session_cipher->GetPublicKey());
+  peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
+  transport_->AddPeer(peer1, peer);
+
+  uint32_t const future_version = services::MessagingService::currentMessageVersion + 1;
+  std::string const plain_content = "This content should not be seen";
+
+  std::string payload_with_version;
+  payload_with_version.push_back(static_cast<char>(future_version));
+  payload_with_version.append(plain_content);
+
+  auto const encrypted = other.Encrypt(payload_with_version);
+
+  bool cb_called = false;
+  service_->SetChatMessageReceivedCallback([&](auto const&, auto const&) { cb_called = true; });
+
+  service_->OnChatMessageReceived(peer1, encrypted, 123, false);
+
+  // Callback should be called to notify the UI of the new system message
+  EXPECT_TRUE(cb_called);
+
+  // Verify that a system message with an error was stored
+  auto history = service_->GetHistoryPage(peer1, 0, 10);
+  ASSERT_FALSE(history.messages.empty());
+  bool error_message_found = false;
+  for (auto const& msg : history.messages) {
+    if (msg.kind == messaging::HistoryEntryKind::systemMessage) {
+      auto const& content = std::get<messaging::MessageEntry>(msg.data).content;
+      if (content.find("Unsupported message of version") != std::string::npos) {
+        error_message_found = true;
+        break;
+      }
+    }
+  }
+  EXPECT_TRUE(error_message_found);
+
+  // A receipt should still be sent
+  bool receipt_sent = false;
+  for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
+    if (pid == peer1 && msg["type"] == "message_receipt" && msg["message_id"] == 123) {
+      receipt_sent = true;
+    }
+  }
+  EXPECT_TRUE(receipt_sent);
+}
+
+TEST_F(MessagingServiceTest, OnChatMessageReceived_OlderVersion) {
+  // This test is valid if currentMessageVersion > 0
+  if (services::MessagingService::currentMessageVersion == 0) {
+    GTEST_SKIP() << "Skipping older version test as current version is 0.";
+  }
+
+  // Setup peer with crypto
+  auto const peer = std::make_shared<transport::Peer>(peer1);
+  crypto::SessionCipher other;
+  other.ComputeSharedSecret(peer->session_cipher->GetPublicKey());
+  peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
+  transport_->AddPeer(peer1, peer);
+
+  uint32_t const older_version = 0;
+  std::string const plain_content = "Message from the past";
+
+  std::string payload_with_version;
+  payload_with_version.push_back(static_cast<char>(older_version));
+  payload_with_version.append(plain_content);
+
+  auto const encrypted = other.Encrypt(payload_with_version);
+
+  bool cb_called = false;
+  service_->SetChatMessageReceivedCallback([&](auto const& id, auto const& rec) {
+    if (id == peer1 && rec.kind == messaging::HistoryEntryKind::textMessage &&
+        std::get<messaging::MessageEntry>(rec.data).content == plain_content) {
+      cb_called = true;
+    }
+  });
+
+  service_->OnChatMessageReceived(peer1, encrypted, 456, false);
+
+  // The message should be processed normally
+  EXPECT_TRUE(cb_called);
+
+  // Verify the stored message is correct and not a system error
+  auto history = service_->GetHistoryPage(peer1, 0, 10);
+  bool message_found = false;
+  for (auto const& msg : history.messages) {
+    if (msg.remote_id.has_value() && *msg.remote_id == 456) {
+      EXPECT_EQ(msg.kind, messaging::HistoryEntryKind::textMessage);
+      EXPECT_EQ(std::get<messaging::MessageEntry>(msg.data).content, plain_content);
+      message_found = true;
+      break;
+    }
+  }
+  EXPECT_TRUE(message_found);
+}
+
 TEST_F(MessagingServiceTest, OnChatMessageReceived_DecryptionFail) {
   // Setup peer
-  auto peer = std::make_shared<transport::Peer>(peer1);
+  auto const peer = std::make_shared<transport::Peer>(peer1);
   eillance::crypto::SessionCipher other;
   peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
   transport_->AddPeer(peer1, peer);
 
-  std::vector<std::byte> garbage(50, std::byte{0x00});
+  std::vector<std::byte> const garbage(50, std::byte{0x00});
 
   bool cb_called = false;
   service_->SetChatMessageReceivedCallback([&](auto, auto) { cb_called = true; });
@@ -141,7 +245,7 @@ TEST_F(MessagingServiceTest, OnChatMessageReceived_DecryptionFail) {
 
 TEST_F(MessagingServiceTest, MarkMessagesAsRead_SendsRemoteIds) {
   // Setup connected peer
-  auto peer = std::make_shared<transport::Peer>(peer1);
+  auto const peer = std::make_shared<transport::Peer>(peer1);
   peer->data_channel_is_open = true;
   transport_->AddPeer(peer1, peer);
 
@@ -153,15 +257,19 @@ TEST_F(MessagingServiceTest, MarkMessagesAsRead_SendsRemoteIds) {
   peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
   other.ComputeSharedSecret(peer->session_cipher->GetPublicKey());
 
-  std::string plain = "Content";
-  auto encrypted = other.Encrypt(plain);
+  std::string const plain = "Content";
+  std::string payload_with_version;
+  payload_with_version.reserve(sizeof(services::MessagingService::currentMessageVersion) + plain.size());
+  payload_with_version.push_back(static_cast<char>(services::MessagingService::currentMessageVersion));
+  payload_with_version.append(plain);
+  auto const encrypted = other.Encrypt(payload_with_version);
 
   service_->OnChatMessageReceived(peer1, encrypted, remote_msg_id, false);
 
   // Verify message added and get its local ID
-  auto page = service_->GetHistoryPage(peer1, 0, 1);
-  ASSERT_FALSE(page.messages.empty());
-  uint64_t local_id = page.messages[0].id;
+  auto [messages, total_messages] = service_->GetHistoryPage(peer1, 0, 1);
+  ASSERT_FALSE(messages.empty());
+  uint64_t const local_id = messages[0].id;
 
   // 2. Mark as read
   service_->MarkMessagesAsRead(peer1, {local_id});
@@ -172,7 +280,7 @@ TEST_F(MessagingServiceTest, MarkMessagesAsRead_SendsRemoteIds) {
   bool read_receipt_found = false;
   for (auto const& [pid, json] : mock_transport_->log.sent_peer_messages) {
     if (pid == peer1 && json["type"] == "message_read") {
-      std::vector<uint64_t> ids = json["message_ids"].get<std::vector<uint64_t>>();
+      auto ids = json["message_ids"].get<std::vector<uint64_t>>();
       if (ids.size() == 1 && ids[0] == remote_msg_id) {
         read_receipt_found = true;
       }
