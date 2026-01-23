@@ -30,6 +30,23 @@ enum class ContactStatus(val value: Int) {
   companion object { fun fromInt(value: Int) = entries.firstOrNull { it.value == value } ?: pendingApproval }
 }
 
+enum class AttachmentType(val value: Int) {
+  Image(0), Video(1), File(2);
+  companion object { fun fromInt(value: Int) = entries.firstOrNull { it.value == value } ?: File }
+}
+
+data class Attachment(
+  val id: String,
+  private val typeValue: Int,
+  val path: String,
+  val mime: String,
+  val size: Long,
+  val thumbnail: String?,
+  val isDownloaded: Boolean
+) {
+  val type: AttachmentType get() = AttachmentType.fromInt(typeValue)
+}
+
 data class HistoryEntry(
   val id: Long,
   private val kindValue: Int,
@@ -41,6 +58,7 @@ data class HistoryEntry(
   private val callStatusValue: Int,
   private val statusValue: Int,
   val isTruncated: Boolean,
+  val attachments: List<Attachment> = emptyList()
 ) {
   val kind: HistoryEntryKind get() = HistoryEntryKind.fromInt(kindValue)
   val direction: MessageDirection get() = MessageDirection.fromInt(directionValue)

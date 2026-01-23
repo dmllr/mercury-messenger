@@ -1,5 +1,8 @@
 package hela.eillance.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
@@ -33,6 +36,7 @@ import androidx.compose.material.icons.automirrored.filled.CallMade
 import androidx.compose.material.icons.automirrored.filled.CallMissed
 import androidx.compose.material.icons.automirrored.filled.CallReceived
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.DoneAll
@@ -75,6 +79,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.os.ConfigurationCompat
+import hela.eillance.components.MediaBubbleContent
+import hela.eillance.ndkio.AttachmentType
 import hela.eillance.ndkio.CallDirection
 import hela.eillance.ndkio.CallState
 import hela.eillance.ndkio.CallStatus
@@ -175,6 +181,26 @@ fun ConversationScreen(
 
   systemMessageToShowDetails?.let { entry ->
     SystemMessageDetailsDialog(entry = entry, onDismiss = { systemMessageToShowDetails = null })
+  }
+
+  // Media Picker Logic
+  val mediaPicker = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.PickMultipleVisualMedia(5)
+  ) { uris ->
+    if (uris.isNotEmpty()) {
+      // For MVP we just pick the first one to determine type,
+      // in real impl we'd iterate. Or the VM handles list.
+      // We assume mostly images for now or mixed.
+      // The VM logic `processAndSendAttachment` currently handles one by one or we adapt it.
+      // Let's send them one by one for simplicity in this MVP iteration
+      // OR update VM to take a list. VM has `sendImage(Uri)`.
+      // Let's iterate.
+      uris.forEach { uri ->
+        // Crude type detection
+        val type = if (uri.toString().contains("video")) AttachmentType.Video else AttachmentType.Image
+        if (type == AttachmentType.Video) chatVM.sendVideo(uri) else chatVM.sendImage(uri)
+      }
+    }
   }
 
   Scaffold(
@@ -290,7 +316,12 @@ fun ConversationScreen(
           )
         }
         else -> {
-          MessageInput(onSendMessage = chatVM::sendMessage)
+          MessageInput(
+            onSendMessage = chatVM::sendMessage,
+            onAttachMedia = {
+              mediaPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+            }
+          )
         }
       }
     }
@@ -386,7 +417,6 @@ fun ChatHistory(
       count = history.size,
       key = { index ->
         val item = history[history.lastIndex - index]
-        // Fallback key generation for items with ID 0 (pending/failed persistence) to prevent duplicate key crashes
         if (item.id != 0L) item.id else Long.MIN_VALUE + index
       }
     ) { index ->
@@ -457,24 +487,40 @@ fun MessageBubble(
           )
         )
         .background(colors.first)
-        .padding(horizontal = 12.dp, vertical = 8.dp),
+        .padding(horizontal = 4.dp, vertical = 4.dp), // Reduced padding to let media take space
       horizontalAlignment = if (isFromMe) Alignment.End else Alignment.Start
     ) {
-      Text(
-        text = entry.content ?: "",
-        color = colors.second,
-        style = MaterialTheme.typography.bodyLarge
-      )
-      if (entry.isTruncated) {
-        TextButton(
-          onClick = { onShowMore(entry.id) },
-          contentPadding = PaddingValues(top = 8.dp, bottom = 0.dp)
-        ) {
-          Text("Show more")
+      // Render Attachments
+      if (entry.attachments.isNotEmpty()) {
+        MediaBubbleContent(
+          attachments = entry.attachments,
+          onMediaClick = { /* Handle fullscreen view logic later */ }
+        )
+        if (!entry.content.isNullOrBlank()) {
+          Spacer(modifier = Modifier.height(8.dp))
         }
       }
+
+      // Render Text
+      if (!entry.content.isNullOrBlank()) {
+        Text(
+          text = entry.content,
+          color = colors.second,
+          style = MaterialTheme.typography.bodyLarge,
+          modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+        )
+        if (entry.isTruncated) {
+          TextButton(
+            onClick = { onShowMore(entry.id) },
+            contentPadding = PaddingValues(top = 8.dp, bottom = 0.dp)
+          ) {
+            Text("Show more")
+          }
+        }
+      }
+
       Row(
-        modifier = Modifier.padding(top = 4.dp, end = 4.dp),
+        modifier = Modifier.padding(top = 4.dp, end = 4.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically
       ) {
         Text(
@@ -715,7 +761,10 @@ fun formatTimestamp(
 }
 
 @Composable
-fun MessageInput(onSendMessage: (String) -> Unit) {
+fun MessageInput(
+  onSendMessage: (String) -> Unit,
+  onAttachMedia: () -> Unit
+) {
   var text by remember { mutableStateOf(TextFieldValue("")) }
   Box {
     Row(
@@ -724,6 +773,9 @@ fun MessageInput(onSendMessage: (String) -> Unit) {
         .padding(horizontal = 8.dp, vertical = 4.dp),
       verticalAlignment = Alignment.CenterVertically
     ) {
+      IconButton(onClick = onAttachMedia) {
+        Icon(Icons.Default.AddPhotoAlternate, contentDescription = "Attach Media", tint = MaterialTheme.colorScheme.primary)
+      }
       TextField(
         value = text,
         onValueChange = { text = it },

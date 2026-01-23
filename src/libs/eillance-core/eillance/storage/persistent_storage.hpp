@@ -10,6 +10,7 @@
 #include <nlohmann/json.hpp>
 
 #include "eillance/identity/contact_id.hpp"
+#include "eillance/messaging/types.hpp"
 #include "eillance/utils/time.hpp"
 
 namespace eillance::identity {
@@ -39,125 +40,6 @@ struct ProfileInfo {
 };
 
 }  // namespace eillance::identity
-
-namespace eillance::messaging {
-
-enum class MessageDirection : std::uint8_t {
-  sent,
-  received,
-};
-
-enum class CallDirection : std::uint8_t {
-  outgoing,
-  incoming,
-};
-
-enum class CallStatus : std::uint8_t {
-  answered,
-  missed,
-  rejected,
-  busy,
-};
-
-enum class MessageStatus : std::uint8_t {
-  none,
-  sending,
-  sent,
-  delivered,
-  read,
-};
-
-enum class HistoryEntryKind : std::uint8_t {
-  textMessage,
-  voiceCall,
-  videoCall,
-  systemMessage,
-};
-
-NLOHMANN_JSON_SERIALIZE_ENUM(
-    MessageDirection,
-    {
-        {MessageDirection::sent, "sent"},
-        {MessageDirection::received, "received"},
-    }
-)
-NLOHMANN_JSON_SERIALIZE_ENUM(
-    CallDirection,
-    {
-        {CallDirection::outgoing, "outgoing"},
-        {CallDirection::incoming, "incoming"},
-    }
-)
-NLOHMANN_JSON_SERIALIZE_ENUM(
-    CallStatus,
-    {
-        {CallStatus::answered, "answered"},
-        {CallStatus::missed, "missed"},
-        {CallStatus::rejected, "rejected"},
-        {CallStatus::busy, "busy"},
-    }
-)
-NLOHMANN_JSON_SERIALIZE_ENUM(
-    MessageStatus,
-    {
-        {MessageStatus::none, "none"},
-        {MessageStatus::sending, "sending"},
-        {MessageStatus::sent, "sent"},
-        {MessageStatus::delivered, "delivered"},
-        {MessageStatus::read, "read"},
-    }
-)
-NLOHMANN_JSON_SERIALIZE_ENUM(
-    HistoryEntryKind,
-    {
-        {HistoryEntryKind::textMessage, "text_message"},
-        {HistoryEntryKind::voiceCall, "voice_call"},
-        {HistoryEntryKind::videoCall, "video_call"},
-        {HistoryEntryKind::systemMessage, "system_message"},
-    }
-)
-
-// Data specific to a text or system message.
-struct MessageEntry {
-  std::string content;
-};
-
-// Data specific to a voice or video call record.
-struct CallEntry {
-  uint32_t duration_seconds = 0;
-  CallDirection call_direction;
-  CallStatus call_status;
-};
-
-// A variant to hold the data for any kind of history entry.
-using HistoryEntryData = std::variant<MessageEntry, CallEntry>;
-
-struct HistoryEntryRecord {
-  std::uint64_t id{};
-  std::optional<std::uint64_t> remote_id;
-  HistoryEntryKind kind;
-  Time::Unit timestamp{};
-  MessageDirection direction;
-  MessageStatus status = MessageStatus::none;
-  bool is_truncated = false;
-  HistoryEntryData data;
-
-  // Peer ID associated with this record
-  ContactID peer_id;
-};
-
-struct ChatSummary {
-  ContactID peer_id;
-  HistoryEntryRecord last_message;
-  uint32_t unread_count = 0;
-};
-
-struct HistoryPage {
-  std::vector<HistoryEntryRecord> messages{};
-  size_t total_messages{};
-};
-
-}  // namespace eillance::messaging
 
 namespace eillance::storage {
 

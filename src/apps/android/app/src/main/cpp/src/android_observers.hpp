@@ -121,15 +121,19 @@ class AndroidConversationObserver final
     jobject history_list = list_holder.NewObject(env);
     jmethodID list_add_method = list_holder.GetMethod("add");
     auto& entry_holder = class_refs.Class("hela/eillance/ndkio/HistoryEntry");
+    auto& attachment_holder = class_refs.Class("hela/eillance/ndkio/Attachment");
 
     for (auto const& entry_cpp : state.history) {
-      std::string const* content_str = std::visit(
-          [](auto&& arg) -> std::string const* {
+      std::string const* content_str = nullptr;
+      std::vector<messaging::Attachment> const* attachments_ptr = nullptr;
+
+      std::visit(
+          [&](auto&& arg) {
             using T = std::decay_t<decltype(arg)>;
             if constexpr (std::is_same_v<T, messaging::MessageEntry>) {
-              return &arg.content;
+              content_str = &arg.content;
+              attachments_ptr = &arg.attachments;
             }
-            return nullptr;
           },
           entry_cpp.data
       );
@@ -138,6 +142,36 @@ class AndroidConversationObserver final
 
       jstring content = content_str ? env->NewStringUTF(content_str->c_str()) : nullptr;
       jint duration = call_entry ? static_cast<jint>(call_entry->duration_seconds) : 0;
+
+      // Handle Attachments
+      jobject j_attachments = list_holder.NewObject(env);
+      if (attachments_ptr && !attachments_ptr->empty()) {
+        for (auto const& att : *attachments_ptr) {
+          jstring j_id = env->NewStringUTF(att.id.c_str());
+          jstring j_path = env->NewStringUTF(att.file_path.c_str());
+          jstring j_mime = env->NewStringUTF(att.mime_type.c_str());
+          jstring j_thumb = att.thumbnail_base64.empty() ? nullptr : env->NewStringUTF(att.thumbnail_base64.c_str());
+
+          jobject j_att = attachment_holder.NewObject(
+              env,
+              j_id,
+              static_cast<jint>(att.type),
+              j_path,
+              j_mime,
+              static_cast<jlong>(att.size_bytes),
+              j_thumb,
+              static_cast<jboolean>(att.is_downloaded)
+          );
+
+          env->CallBooleanMethod(j_attachments, list_add_method, j_att);
+
+          env->DeleteLocalRef(j_id);
+          env->DeleteLocalRef(j_path);
+          env->DeleteLocalRef(j_mime);
+          if (j_thumb) env->DeleteLocalRef(j_thumb);
+          env->DeleteLocalRef(j_att);
+        }
+      }
 
       jobject entry_java = entry_holder.NewObject(
           env,
@@ -150,13 +184,15 @@ class AndroidConversationObserver final
           (call_entry != nullptr) ? static_cast<jint>(call_entry->call_direction) : -1,
           (call_entry != nullptr) ? static_cast<jint>(call_entry->call_status) : -1,
           static_cast<jint>(entry_cpp.status),
-          static_cast<jboolean>(entry_cpp.is_truncated)
+          static_cast<jboolean>(entry_cpp.is_truncated),
+          j_attachments
       );
 
       env->CallBooleanMethod(history_list, list_add_method, entry_java);
       if (content != nullptr) {
         env->DeleteLocalRef(content);
       }
+      env->DeleteLocalRef(j_attachments);
       env->DeleteLocalRef(entry_java);
     }
 

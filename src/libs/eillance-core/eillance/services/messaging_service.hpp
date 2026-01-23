@@ -15,6 +15,12 @@
 
 namespace eillance::services {
 
+struct AttachmentRequest {
+  std::string file_path;
+  messaging::AttachmentType type;
+  std::string thumbnail_base64;
+};
+
 class MessagingService {
  public:
   static constexpr uint32_t currentMessageVersion = 1;
@@ -32,7 +38,12 @@ class MessagingService {
   void StopDeliveryService();
 
   // Sending
-  auto SendChatMessage(ContactID const& peer_id, std::string const& message) -> messaging::HistoryEntryRecord;
+  auto SendChatMessage(
+      ContactID const& peer_id,
+      std::string const& message,
+      std::vector<AttachmentRequest> const& attachments = {}
+  ) -> messaging::HistoryEntryRecord;
+
   void SendSystemMessage(ContactID const& peer_id, std::string const& content);
 
   // Attempts to flush queued messages for a connected peer
@@ -86,6 +97,8 @@ class MessagingService {
   void UpdatePeerActivity(ContactID const& peer_id);
   // Checks both DB and pending receipts
   auto HasPendingWork(ContactID const& peer_id) -> bool;
+  // Generate a unique ID for attachments
+  static auto GenerateAttachmentId() -> std::string;
 
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<transport::Transport> transport_;

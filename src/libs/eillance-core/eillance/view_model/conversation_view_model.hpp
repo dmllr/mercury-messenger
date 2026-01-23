@@ -12,7 +12,7 @@
 namespace eillance::view_model {
 
 class ConversationViewModel {
- public:
+public:
   explicit ConversationViewModel(
       ContactID const& peer_id,
       std::shared_ptr<Client> client,
@@ -41,12 +41,13 @@ class ConversationViewModel {
   [[nodiscard]] auto GetState() const -> State;
 
   void SendText(std::string const& content) const;
+  void SendMessage(std::string const& content, std::vector<services::AttachmentRequest> const& attachments) const;
   void LoadOlderMessages() const;
   void LoadFullMessage(uint64_t message_id) const;
   void MarkMessagesAsRead(std::vector<std::uint64_t> const& message_ids) const;
   void AddSystemMessage(std::string const& message) const;
 
- private:
+private:
   // Internal implementation that can outlive the ViewModel wrapper
   struct Impl;
   std::shared_ptr<Impl> impl_;

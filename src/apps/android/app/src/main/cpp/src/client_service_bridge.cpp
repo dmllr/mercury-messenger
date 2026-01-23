@@ -279,6 +279,48 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationView
   env->ReleaseStringUTFChars(message, chars);
 }
 
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationViewModel_nativeSendMessageWithAttachments(
+    JNIEnv* env,
+    jobject /*instance*/,
+    jlong ptr,
+    jstring message,
+    jobjectArray attachments
+) {
+  auto* vm = reinterpret_cast<eillance::view_model::ConversationViewModel*>(ptr);
+  char const* msg_chars = env->GetStringUTFChars(message, nullptr);
+
+  std::vector<eillance::services::AttachmentRequest> atts;
+  if (attachments != nullptr) {
+    jsize const count = env->GetArrayLength(attachments);
+    auto& cls = ClassRefs::Instance().Class("hela/eillance/ndkio/AttachmentRequest");
+
+    for (int i = 0; i < count; ++i) {
+      jobject obj = env->GetObjectArrayElement(attachments, i);
+
+      jstring path = (jstring)env->GetObjectField(obj, cls.GetField("path"));
+      jint const type = env->GetIntField(obj, cls.GetField("type"));
+      jstring thumb = (jstring)env->GetObjectField(obj, cls.GetField("thumbnail"));
+
+      char const* p = env->GetStringUTFChars(path, nullptr);
+      char const* t = thumb ? env->GetStringUTFChars(thumb, nullptr) : "";
+
+      atts.push_back(
+          {.file_path = p,
+           .type = static_cast<eillance::messaging::AttachmentType>(type),
+           .thumbnail_base64 = t}
+      );
+
+      env->ReleaseStringUTFChars(path, p);
+      if (thumb) {
+        env->ReleaseStringUTFChars(thumb, t);
+      }
+    }
+  }
+
+  vm->SendMessage(msg_chars, atts);
+  env->ReleaseStringUTFChars(message, msg_chars);
+}
+
 extern "C" JNIEXPORT void JNICALL
 Java_hela_eillance_viewmodels_ConversationViewModel_nativeLoadOlder(JNIEnv* /*env*/, jobject /*instance*/, jlong ptr) {
   auto* vm = reinterpret_cast<eillance::view_model::ConversationViewModel*>(ptr);
@@ -616,7 +658,13 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
         "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IIILjava/lang/String;J)V"
     );
     classref.RegisterCtor(env, "hela/eillance/ndkio/CallState", "(ZZZILjava/lang/String;I)V");
-    classref.RegisterCtor(env, "hela/eillance/ndkio/HistoryEntry", "(JIJLjava/lang/String;IIIIIZ)V");
+
+    classref.RegisterCtor(
+        env,
+        "hela/eillance/ndkio/HistoryEntry",
+        "(JIJLjava/lang/String;IIIIIZLjava/util/List;)V"
+    );
+
     classref.RegisterCtor(env, "hela/eillance/ndkio/HistoryPage", "(Ljava/util/List;Z)V");
 
     std::string const video_config_class = "hela/eillance/ndkio/VideoConfig";
@@ -626,6 +674,22 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     classref.RegisterField(env, video_config_class, "height", "I");
     classref.RegisterField(env, video_config_class, "frameRate", "I");
     classref.RegisterField(env, video_config_class, "bitrate", "I");
+
+    // AttachmentRequest
+    std::string const attachment_req_class = "hela/eillance/ndkio/AttachmentRequest";
+    classref.RegisterClass(env, attachment_req_class);
+    classref.RegisterField(env, attachment_req_class, "path", "Ljava/lang/String;");
+    classref.RegisterField(env, attachment_req_class, "type", "I");
+    classref.RegisterField(env, attachment_req_class, "thumbnail", "Ljava/lang/String;");
+
+    // Attachment
+    std::string const attachment_class = "hela/eillance/ndkio/Attachment";
+    classref.RegisterClass(env, attachment_class);
+    classref.RegisterCtor(
+        env,
+        attachment_class,
+        "(Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;JLjava/lang/String;Z)V"
+    );
 
   } catch (std::exception const& e) {
     LGE << "JNI_OnLoad failed: " << e.what();

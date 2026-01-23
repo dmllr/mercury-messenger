@@ -7,3 +7,4 @@
 // Explicitly increment the user_version PRAGMA within the same transaction.
 
 #include "eillance/storage/sqlite/migrations/0001_initial_schema.hpp"
+#include "eillance/storage/sqlite/migrations/0002_add_attachments.hpp"

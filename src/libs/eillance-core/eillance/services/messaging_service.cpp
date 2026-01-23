@@ -1,5 +1,7 @@
 #include "eillance/services/messaging_service.hpp"
 
+#include <filesystem>
+#include <random>
 #include <stdexcept>
 
 #include "eillance/logging/logging.hpp"
@@ -55,16 +57,50 @@ void MessagingService::UpdatePeerActivity(ContactID const& peer_id) {
   }
 }
 
-auto MessagingService::SendChatMessage(ContactID const& peer_id, std::string const& message)
-    -> messaging::HistoryEntryRecord {
+auto MessagingService::SendChatMessage(
+    ContactID const& peer_id,
+    std::string const& message,
+    std::vector<AttachmentRequest> const& attachments
+) -> messaging::HistoryEntryRecord {
   if (!contact_manager_->GetContact(peer_id)) {
     LGE << "Cannot send message to " << peer_id.ToString() << ". Not a contact.";
     return {};
   }
 
-  auto entry =
-      history_
-          ->AddTextEntry(peer_id, message, messaging::MessageDirection::sent, messaging::HistoryEntryKind::textMessage);
+  std::vector<messaging::Attachment> domain_attachments;
+  for (auto const& req : attachments) {
+    std::uint64_t file_size = 0;
+    std::string mime = "application/octet-stream";
+
+    // In a real implementation, we would probe mime type and size here if not provided.
+    // For now, we assume the file exists since the UI just copied it.
+    try {
+      file_size = std::filesystem::file_size(req.file_path);
+    } catch (...) {
+      LGW << "Failed to get file size for " << req.file_path;
+    }
+
+    if (req.type == messaging::AttachmentType::image) mime = "image/jpeg";
+    else if (req.type == messaging::AttachmentType::video) mime = "video/mp4";
+
+    domain_attachments.push_back({
+        .id = GenerateAttachmentId(),
+        .type = req.type,
+        .file_path = req.file_path,
+        .mime_type = mime,
+        .size_bytes = file_size,
+        .thumbnail_base64 = req.thumbnail_base64,
+        .is_downloaded = true
+    });
+  }
+
+  auto entry = history_->AddTextEntry(
+      peer_id,
+      message,
+      domain_attachments,
+      messaging::MessageDirection::sent,
+      messaging::HistoryEntryKind::textMessage
+  );
 
   if (auto peer = transport_->GetPeer(peer_id); peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
     SendQueuedMessages(peer_id);
@@ -76,8 +112,13 @@ auto MessagingService::SendChatMessage(ContactID const& peer_id, std::string con
 }
 
 void MessagingService::SendSystemMessage(ContactID const& peer_id, std::string const& content) {
-  history_
-      ->AddTextEntry(peer_id, content, messaging::MessageDirection::sent, messaging::HistoryEntryKind::systemMessage);
+  history_->AddTextEntry(
+      peer_id,
+      content,
+      {},
+      messaging::MessageDirection::sent,
+      messaging::HistoryEntryKind::systemMessage
+  );
 
   if (auto peer = transport_->GetPeer(peer_id); peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
     SendQueuedMessages(peer_id);
@@ -97,9 +138,6 @@ void MessagingService::SendQueuedMessages(ContactID const& peer_id) {
   }
 
   auto const peer = transport_->GetPeer(peer_id);
-  // Peer object might be missing if we are sending initial contact request signaling
-  // so we check peer existence inside the loop for data channel messages.
-
   LGI << "Processing " << messages.size() << " queued message(s) for " << peer_id.ToString();
 
   for (auto const& entry : messages) {
@@ -127,7 +165,7 @@ void MessagingService::SendQueuedMessages(ContactID const& peer_id) {
       content_to_send = msg_entry.content;
     }
 
-    // Special handling for System Messages that must be sent via Signaling (not Data Channel)
+    // Special handling for System Messages
     if (entry.kind == messaging::HistoryEntryKind::systemMessage) {
       try {
         nlohmann::json content_json = nlohmann::json::parse(content_to_send);
@@ -139,22 +177,16 @@ void MessagingService::SendQueuedMessages(ContactID const& peer_id) {
               {"to", peer_id.ToString()}
           };
           if (action == "contact_request") {
-            if (content_json.contains("profile")) {
-              msg["profile"] = content_json["profile"];
-            }
-            if (content_json.contains("token")) {
-              msg["token"] = content_json["token"];
-            }
+            if (content_json.contains("profile")) msg["profile"] = content_json["profile"];
+            if (content_json.contains("token")) msg["token"] = content_json["token"];
           }
           transport_->SendSignalingMessage(msg);
           sent = true;
         }
-      } catch (...) {
-        // Ignore parse errors, treat as regular message
-      }
+      } catch (...) { }
     }
 
-    // If not sent via signaling, try Data Channel
+    // Data Channel Logic
     if (!sent && peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
       std::string payload_with_version;
       payload_with_version.reserve(sizeof(currentMessageVersion) + content_to_send.size());
@@ -165,12 +197,17 @@ void MessagingService::SendQueuedMessages(ContactID const& peer_id) {
       UpdatePeerActivity(peer_id);
 
       if (!encrypted.empty()) {
-        nlohmann::json const json_msg = {
+        nlohmann::json json_msg = {
             {"type", "chat"},
             {"message_id", entry.id},
             {"is_system", (entry.kind == messaging::HistoryEntryKind::systemMessage)},
             {"payload", std::vector<std::byte>(encrypted.begin(), encrypted.end())}
         };
+
+        if (!msg_entry.attachments.empty()) {
+            json_msg["has_attachments"] = true;
+        }
+
         transport_->SendPeerDataChannelMessage(peer_id, json_msg);
         sent = true;
       }
@@ -207,7 +244,6 @@ void MessagingService::SendPendingReadReceipts(ContactID const& peer_id) {
     transport_->SendPeerDataChannelMessage(peer_id, msg);
     LGI << "Sent pending read receipts for " << ids_to_send.size() << " messages to " << peer_id.ToString();
   } else {
-    // Re-queue if we thought we could send but failed (e.g. peer disconnected in between)
     std::lock_guard<std::recursive_mutex> const lock(receipts_mutex_);
     auto& pending = pending_read_receipts_[peer_id];
     pending.insert(pending.end(), ids_to_send.begin(), ids_to_send.end());
@@ -238,10 +274,7 @@ auto MessagingService::GetChatSummaries(std::vector<ContactID> const& peer_ids
 // --- Updates ---
 
 void MessagingService::MarkMessagesAsRead(ContactID const& peer_id, std::vector<uint64_t> const& message_ids) {
-  // 1. Update status locally for the local IDs
   history_->MarkMessagesAsRead(peer_id, message_ids);
-
-  // 2. Retrieve corresponding remote IDs to send back to the peer
   auto remote_ids = storage_->GetRemoteIds(peer_id, message_ids);
 
   if (remote_ids.empty()) {
@@ -267,7 +300,13 @@ void MessagingService::AddSystemEntry(
     std::string const& content,
     messaging::MessageDirection direction
 ) {
-  history_->AddTextEntry(peer_id, content, direction, messaging::HistoryEntryKind::systemMessage);
+  history_->AddTextEntry(
+      peer_id,
+      content,
+      {},
+      direction,
+      messaging::HistoryEntryKind::systemMessage
+  );
 }
 
 void MessagingService::AddCallEntry(
@@ -309,6 +348,7 @@ void MessagingService::OnChatMessageReceived(
     auto entry = history_->AddTextEntry(
         peer_id,
         error_msg,
+        {}, // No attachments
         messaging::MessageDirection::received,
         messaging::HistoryEntryKind::systemMessage,
         message_id  // Store the sender's ID as remote_id
@@ -327,9 +367,10 @@ void MessagingService::OnChatMessageReceived(
   auto entry = history_->AddTextEntry(
       peer_id,
       content,
+      {}, // TODO: Handle attachments parsing from payload
       messaging::MessageDirection::received,
       is_system ? messaging::HistoryEntryKind::systemMessage : messaging::HistoryEntryKind::textMessage,
-      message_id  // Store the sender's ID as remote_id
+      message_id
   );
 
   nlohmann::json const receipt = {{"type", "message_receipt"}, {"status", "delivered"}, {"message_id", message_id}};
@@ -351,7 +392,6 @@ void MessagingService::OnMessageReceipt(ContactID const& peer_id, uint64_t messa
 }
 
 void MessagingService::OnMessagesRead(ContactID const& peer_id, std::vector<uint64_t> const& message_ids) {
-  // Received read receipt contains IDs that *I* sent. So they match my local IDs.
   for (auto id : message_ids) {
     history_->UpdateMessageStatus(peer_id, id, messaging::MessageStatus::read);
   }
@@ -366,15 +406,22 @@ void MessagingService::SetMessageStatusChangedCallback(OnMessageStatusChangedCal
 }
 
 bool MessagingService::HasPendingWork(ContactID const& peer_id) {
-  // Check if we have pending read receipts
   {
     std::lock_guard<std::recursive_mutex> const lock(receipts_mutex_);
     if (pending_read_receipts_.contains(peer_id) && !pending_read_receipts_[peer_id].empty()) {
       return true;
     }
   }
-  // Check if we have pending messages in DB
   return !storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::sending).empty();
+}
+
+auto MessagingService::GenerateAttachmentId() -> std::string {
+  static std::random_device rd;
+  static std::mt19937 gen(rd());
+  static std::uniform_int_distribution<uint64_t> dis;
+  std::stringstream ss;
+  ss << std::hex << dis(gen) << dis(gen);
+  return ss.str();
 }
 
 }  // namespace eillance::services

@@ -3,10 +3,12 @@
 #include <chrono>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "eillance/identity/contact_id.hpp"
+#include "eillance/messaging/types.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/utils/time.hpp"
 
@@ -23,10 +25,11 @@ class MessageHistory {
   auto AddTextEntry(
       ContactID const& peer_id,
       std::string const& content,
+      std::vector<Attachment> const& attachments,
       MessageDirection direction,
       HistoryEntryKind kind,
       std::optional<uint64_t> remote_id = std::nullopt
-  ) const -> HistoryEntryRecord {
+  ) -> HistoryEntryRecord {
     return storage_->AddHistoryEntry({
         .id = 0,  // DB will assign ID
         .remote_id = remote_id,
@@ -38,7 +41,7 @@ class MessageHistory {
         .direction = direction,
         .status = (direction == MessageDirection::sent) ? MessageStatus::sending : MessageStatus::none,
         .is_truncated = false,
-        .data = MessageEntry{content},
+        .data = MessageEntry{content, attachments},
         .peer_id = peer_id,
     });
   }
