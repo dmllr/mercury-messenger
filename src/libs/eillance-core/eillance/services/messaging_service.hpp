@@ -22,7 +22,7 @@ struct AttachmentRequest {
 };
 
 class MessagingService {
- public:
+public:
   static constexpr uint32_t currentMessageVersion = 1;
 
   using ConnectionRequestHandler = std::function<void(ContactID const&)>;
@@ -55,9 +55,9 @@ class MessagingService {
 
   // Queries
   [[nodiscard]] auto GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t page_size) const
-      -> messaging::HistoryPage;
+  -> messaging::HistoryPage;
   [[nodiscard]] auto GetFullMessageContent(ContactID const& peer_id, std::uint64_t message_id) const
-      -> std::optional<std::string>;
+  -> std::optional<std::string>;
   [[nodiscard]] auto GetChatSummaries(std::vector<ContactID> const& peer_ids
   ) const -> std::vector<messaging::ChatSummary>;
 
@@ -74,12 +74,15 @@ class MessagingService {
       uint32_t duration
   );
 
+  void ProcessIncomingFileChunk(ContactID const& peer_id, nlohmann::json const& message);
+
   // Incoming Events
   void OnChatMessageReceived(
       ContactID const& peer_id,
       std::vector<std::byte> const& encrypted_payload,
       uint64_t message_id,
-      bool is_system
+      bool is_system,
+      std::vector<messaging::Attachment> const& attachments = {}
   );
   void OnMessageReceipt(ContactID const& peer_id, uint64_t message_id, std::string const& status);
   void OnMessagesRead(ContactID const& peer_id, std::vector<uint64_t> const& message_ids);
@@ -91,7 +94,7 @@ class MessagingService {
   void SetChatMessageReceivedCallback(OnChatMessageCallback cb);
   void SetMessageStatusChangedCallback(OnMessageStatusChangedCallback cb);
 
- private:
+private:
   // Helper to connect to a peer if not connected
   void RequestConnection(ContactID const& peer_id);
   void UpdatePeerActivity(ContactID const& peer_id);
@@ -99,6 +102,8 @@ class MessagingService {
   auto HasPendingWork(ContactID const& peer_id) -> bool;
   // Generate a unique ID for attachments
   static auto GenerateAttachmentId() -> std::string;
+
+  void ProcessOutgoingAttachments(ContactID const& peer_id, std::vector<messaging::Attachment> const& attachments);
 
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<transport::Transport> transport_;

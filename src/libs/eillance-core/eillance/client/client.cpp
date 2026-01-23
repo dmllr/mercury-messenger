@@ -296,7 +296,22 @@ void Client::ProcessDataChannelMessage(ContactID const& peer_id, Json const& mes
     auto msg_id = message["message_id"].get<uint64_t>();
     bool const is_sys = message.value("is_system", false);
     auto payload = message["payload"].get<std::vector<std::byte>>();
-    messaging_service_->OnChatMessageReceived(peer_id, payload, msg_id, is_sys);
+
+    std::vector<messaging::Attachment> attachments;
+    if (message.contains("attachments")) {
+      for (auto const& j_att : message["attachments"]) {
+        messaging::Attachment att;
+        att.id = j_att.at("id").get<std::string>();
+        att.type = j_att.at("type").get<messaging::AttachmentType>();
+        att.mime_type = j_att.value("mime", "");
+        att.size_bytes = j_att.value("size", 0ULL);
+        att.thumbnail_base64 = j_att.value("thumb", "");
+        att.is_downloaded = false; // It's a remote file
+        attachments.push_back(att);
+      }
+    }
+
+    messaging_service_->OnChatMessageReceived(peer_id, payload, msg_id, is_sys, attachments);
   } else if (type == "message_receipt") {
     messaging_service_->OnMessageReceipt(peer_id, message["message_id"], message["status"]);
   } else if (type == "message_read") {
@@ -319,6 +334,8 @@ void Client::ProcessDataChannelMessage(ContactID const& peer_id, Json const& mes
     contact_service_->OnDeviceProfileReceived(peer_id, message["profile"]);
   } else if (type == "termination") {
     transport_->RemovePeer(peer_id);
+  } else if (type == "file_chunk") {
+    messaging_service_->ProcessIncomingFileChunk(peer_id, message);
   }
 }
 

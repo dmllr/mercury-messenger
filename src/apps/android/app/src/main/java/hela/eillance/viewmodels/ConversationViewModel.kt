@@ -1,8 +1,14 @@
 package hela.eillance.viewmodels
 
 import android.app.Application
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.media.ThumbnailUtils
 import android.net.Uri
+import android.provider.MediaStore
+import android.util.Base64
 import android.util.Log
+import android.util.Size
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -14,6 +20,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.UUID
 
@@ -63,26 +70,54 @@ class ConversationViewModel(
     viewModelScope.launch(Dispatchers.IO) {
       try {
         val context = getApplication<Application>()
-        // Create attachments directory if it doesn't exist
         val attachmentsDir = File(context.filesDir, "attachments")
         if (!attachmentsDir.exists()) {
           attachmentsDir.mkdirs()
         }
 
-        // Generate a unique filename
-        val ext = if (type == AttachmentType.Image) "jpg" else "mp4" // Simple extension logic
+        val ext = if (type == AttachmentType.Image) "jpg" else "mp4"
         val fileName = "${UUID.randomUUID()}.$ext"
         val destFile = File(attachmentsDir, fileName)
 
-        // Copy file from ContentProvider to Internal Storage
         context.contentResolver.openInputStream(uri)?.use { input ->
           destFile.outputStream().use { output ->
             input.copyTo(output)
           }
         }
 
-        // Generate thumbnail (Placeholder for now, implementation omitted for brevity)
-        val thumbnailBase64 = ""
+        // Generate Thumbnail
+        val thumbnailBase64 = try {
+          val bitmap = if (type == AttachmentType.Video) {
+            // For video, createVideoThumbnail is deprecated in API 29, but simplifies this snippet.
+            // Using ThumbnailUtils for broader compatibility or ContentResolver for API 29+ is preferred.
+            // Simple fallback approach:
+            try {
+              if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                context.contentResolver.loadThumbnail(uri, Size(320, 320), null)
+              } else {
+                ThumbnailUtils.createVideoThumbnail(destFile.absolutePath, MediaStore.Images.Thumbnails.MINI_KIND)
+              }
+            } catch (e: Exception) { null }
+          } else {
+            // Image resizing
+            val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(destFile.absolutePath, options)
+            options.inSampleSize = calculateInSampleSize(options, 320, 320)
+            options.inJustDecodeBounds = false
+            BitmapFactory.decodeFile(destFile.absolutePath, options)
+          }
+
+          if (bitmap != null) {
+            val outputStream = ByteArrayOutputStream()
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 70, outputStream)
+            Base64.encodeToString(outputStream.toByteArray(), Base64.NO_WRAP)
+          } else {
+            ""
+          }
+        } catch (e: Exception) {
+          Log.w("ConversationVM", "Failed to generate thumbnail", e)
+          ""
+        }
 
         val request = AttachmentRequest(
           path = destFile.absolutePath,
@@ -90,7 +125,6 @@ class ConversationViewModel(
           thumbnail = thumbnailBase64
         )
 
-        // Send message with empty text and 1 attachment
         if (nativePtr != 0L) {
           nativeSendMessageWithAttachments(nativePtr, "", arrayOf(request))
         }
@@ -99,6 +133,19 @@ class ConversationViewModel(
         Log.e("ConversationVM", "Failed to process attachment", e)
       }
     }
+  }
+
+  private fun calculateInSampleSize(options: BitmapFactory.Options, reqWidth: Int, reqHeight: Int): Int {
+    val (height: Int, width: Int) = options.outHeight to options.outWidth
+    var inSampleSize = 1
+    if (height > reqHeight || width > reqWidth) {
+      val halfHeight: Int = height / 2
+      val halfWidth: Int = width / 2
+      while ((halfHeight / inSampleSize) >= reqHeight && (halfWidth / inSampleSize) >= reqWidth) {
+        inSampleSize *= 2
+      }
+    }
+    return inSampleSize
   }
 
   fun loadOlderMessages() {
@@ -124,7 +171,6 @@ class ConversationViewModel(
   private external fun nativeLoadFull(ptr: Long, messageId: Long)
   private external fun nativeMarkRead(ptr: Long, messageIds: LongArray)
 
-  // Factory to pass peerId
   class Factory(
     private val application: Application,
     private val peerId: String
