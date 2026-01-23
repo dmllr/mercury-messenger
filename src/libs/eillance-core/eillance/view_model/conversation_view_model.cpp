@@ -46,9 +46,7 @@ struct ConversationViewModel::Impl : public std::enable_shared_from_this<Impl> {
     return state;
   }
 
-  void SendText(std::string const& content) {
-    SendMessage(content, {});
-  }
+  void SendText(std::string const& content) { SendMessage(content, {}); }
 
   void SendMessage(std::string const& content, std::vector<services::AttachmentRequest> const& attachments) {
     // Access MessagingService directly since facade might not have the overload yet
@@ -218,7 +216,7 @@ void ConversationViewModel::SendMessage(
     std::string const& content,
     std::vector<services::AttachmentRequest> const& attachments
 ) const {
-    impl_->SendMessage(content, attachments);
+  impl_->SendMessage(content, attachments);
 }
 void ConversationViewModel::LoadOlderMessages() const { impl_->LoadOlderMessages(); }
 void ConversationViewModel::LoadFullMessage(uint64_t const message_id) const { impl_->LoadFullMessage(message_id); }

@@ -1,6 +1,9 @@
 #pragma once
 
+#include <filesystem>
+#include <fstream>
 #include <functional>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -22,7 +25,7 @@ struct AttachmentRequest {
 };
 
 class MessagingService {
-public:
+ public:
   static constexpr uint32_t currentMessageVersion = 1;
 
   using ConnectionRequestHandler = std::function<void(ContactID const&)>;
@@ -51,13 +54,13 @@ public:
   void SendPendingReadReceipts(ContactID const& peer_id);
 
   // Signal that a connection attempt finished (success or fail) to manage retry logic
-  void OnConnectionAttemptFinished(ContactID const& peer_id);
+  void OnConnectionAttemptFinished(ContactID const& peer_id) const;
 
   // Queries
   [[nodiscard]] auto GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t page_size) const
-  -> messaging::HistoryPage;
+      -> messaging::HistoryPage;
   [[nodiscard]] auto GetFullMessageContent(ContactID const& peer_id, std::uint64_t message_id) const
-  -> std::optional<std::string>;
+      -> std::optional<std::string>;
   [[nodiscard]] auto GetChatSummaries(std::vector<ContactID> const& peer_ids
   ) const -> std::vector<messaging::ChatSummary>;
 
@@ -84,8 +87,8 @@ public:
       bool is_system,
       std::vector<messaging::Attachment> const& attachments = {}
   );
-  void OnMessageReceipt(ContactID const& peer_id, uint64_t message_id, std::string const& status);
-  void OnMessagesRead(ContactID const& peer_id, std::vector<uint64_t> const& message_ids);
+  void OnMessageReceipt(ContactID const& peer_id, uint64_t message_id, std::string const& status) const;
+  void OnMessagesRead(ContactID const& peer_id, std::vector<uint64_t> const& message_ids) const;
 
   // Callbacks
   using OnChatMessageCallback = std::function<void(ContactID const& peer_id, messaging::HistoryEntryRecord const&)>;
@@ -94,7 +97,7 @@ public:
   void SetChatMessageReceivedCallback(OnChatMessageCallback cb);
   void SetMessageStatusChangedCallback(OnMessageStatusChangedCallback cb);
 
-private:
+ private:
   // Helper to connect to a peer if not connected
   void RequestConnection(ContactID const& peer_id);
   void UpdatePeerActivity(ContactID const& peer_id);
@@ -103,7 +106,32 @@ private:
   // Generate a unique ID for attachments
   static auto GenerateAttachmentId() -> std::string;
 
-  void ProcessOutgoingAttachments(ContactID const& peer_id, std::vector<messaging::Attachment> const& attachments);
+  // File Transfer State Management
+  struct TransferUploadState {
+    std::string file_path;
+    std::ifstream stream;
+    size_t sequence = 0;
+    size_t window_end = 0;
+    size_t total_size = 0;
+    std::string hash;
+  };
+
+  struct TransferDownloadState {
+    std::filesystem::path file_path;
+    std::fstream stream;
+    uint64_t total_size = 0;
+    std::string expected_hash;
+    std::filesystem::path temp_path;
+  };
+
+  // Starts or resumes an upload based on state
+  void StartUpload(ContactID const& peer_id, messaging::Attachment const& att);
+  // Sends a batch of chunks up to the window limit
+  void PumpUpload(ContactID const& peer_id, std::string const& file_id);
+  // Handles ACK from receiver to advance window
+  void ProcessFileAck(ContactID const& peer_id, std::string const& file_id, size_t next_seq);
+
+  static auto CalculateFileHash(std::filesystem::path const& path) -> std::string;
 
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<transport::Transport> transport_;
@@ -117,9 +145,17 @@ private:
   OnMessageStatusChangedCallback on_status_changed_;
 
   // Queue for read receipts that need to be sent reliably.
-  // Stores REMOTE IDs (the sender's original message_id).
   std::unordered_map<ContactID, std::vector<uint64_t>> pending_read_receipts_;
   std::recursive_mutex receipts_mutex_;
+
+  // Active File Transfers
+  std::map<std::string, TransferUploadState> active_uploads_;
+  std::map<std::string, TransferDownloadState> active_downloads_;
+  std::mutex transfers_mutex_;
+
+  // Flow control constants
+  static constexpr size_t windowSizeChunks = 32;
+  static constexpr size_t chunkSizeBytes = 16 * 1024;
 };
 
 }  // namespace eillance::services

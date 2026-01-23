@@ -434,3 +434,47 @@ TEST_F(SQLiteStorageTest, RemoteIdPersistenceAndRetrieval) {
   ASSERT_EQ(remote_ids.size(), 1);
   EXPECT_EQ(remote_ids[0], remote_id);
 }
+
+TEST_F(SQLiteStorageTest, AttachmentPersistence) {
+  storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
+
+  messaging::MessageEntry msg_data;
+  msg_data.content = "Check this file";
+  msg_data.attachments.push_back(
+      {.id = "att-uuid-1",
+       .type = messaging::AttachmentType::file,
+       .file_path = "/tmp/doc.pdf",
+       .mime_type = "application/pdf",
+       .size_bytes = 1024 * 1024,
+       .thumbnail_base64 = "thumbdata",
+       .hash = "sha256hashstring",
+       .is_downloaded = true}
+  );
+
+  auto entry = storage_->AddHistoryEntry(
+      {.kind = messaging::HistoryEntryKind::textMessage,
+       .timestamp = Time::Now(),
+       .direction = messaging::MessageDirection::sent,
+       .data = msg_data,
+       .peer_id = peer1}
+  );
+
+  // Retrieve
+  auto page = storage_->GetHistoryPage(peer1, 0, 1);
+  ASSERT_EQ(page.messages.size(), 1);
+
+  ASSERT_TRUE(std::holds_alternative<messaging::MessageEntry>(page.messages[0].data));
+  auto const& retrieved_msg = std::get<messaging::MessageEntry>(page.messages[0].data);
+
+  ASSERT_EQ(retrieved_msg.attachments.size(), 1);
+  auto const& att = retrieved_msg.attachments[0];
+
+  EXPECT_EQ(att.id, "att-uuid-1");
+  EXPECT_EQ(att.type, messaging::AttachmentType::file);
+  EXPECT_EQ(att.file_path, "/tmp/doc.pdf");
+  EXPECT_EQ(att.mime_type, "application/pdf");
+  EXPECT_EQ(att.size_bytes, 1024 * 1024);
+  EXPECT_EQ(att.thumbnail_base64, "thumbdata");
+  EXPECT_EQ(att.hash, "sha256hashstring");
+  EXPECT_TRUE(att.is_downloaded);
+}

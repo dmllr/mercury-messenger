@@ -13,11 +13,7 @@
 
 namespace eillance::messaging {
 
-enum class AttachmentType : std::uint8_t {
-  image,
-  video,
-  file
-};
+enum class AttachmentType : std::uint8_t { image, video, file };
 
 NLOHMANN_JSON_SERIALIZE_ENUM(
     AttachmentType,
@@ -35,6 +31,7 @@ struct Attachment {
   std::string mime_type;
   std::uint64_t size_bytes;
   std::string thumbnail_base64;
+  std::string hash;  // SHA-256 hash of the file content
   bool is_downloaded = false;
 };
 

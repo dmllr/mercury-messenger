@@ -305,9 +305,7 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationView
       char const* t = thumb ? env->GetStringUTFChars(thumb, nullptr) : "";
 
       atts.push_back(
-          {.file_path = p,
-           .type = static_cast<eillance::messaging::AttachmentType>(type),
-           .thumbnail_base64 = t}
+          {.file_path = p, .type = static_cast<eillance::messaging::AttachmentType>(type), .thumbnail_base64 = t}
       );
 
       env->ReleaseStringUTFChars(path, p);
@@ -660,11 +658,7 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     classref.RegisterCtor(env, "hela/eillance/ndkio/CallState", "(ZZZILjava/lang/String;I)V");
 
     // Updated HistoryEntry constructor to include attachments list
-    classref.RegisterCtor(
-        env,
-        "hela/eillance/ndkio/HistoryEntry",
-        "(JIJLjava/lang/String;IIIIIZLjava/util/List;)V"
-    );
+    classref.RegisterCtor(env, "hela/eillance/ndkio/HistoryEntry", "(JIJLjava/lang/String;IIIIIZLjava/util/List;)V");
 
     classref.RegisterCtor(env, "hela/eillance/ndkio/HistoryPage", "(Ljava/util/List;Z)V");
 

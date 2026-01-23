@@ -1,10 +1,13 @@
 package hela.eillance.viewmodels
 
 import android.app.Application
+import android.content.ContentResolver
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.media.ThumbnailUtils
 import android.net.Uri
+import android.os.Build
+import android.os.CancellationSignal
 import android.provider.MediaStore
 import android.util.Base64
 import android.util.Log
@@ -22,6 +25,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.FileOutputStream
 import java.util.UUID
 
 class ConversationViewModel(
@@ -79,43 +83,26 @@ class ConversationViewModel(
         val fileName = "${UUID.randomUUID()}.$ext"
         val destFile = File(attachmentsDir, fileName)
 
+        // Secure copy
         context.contentResolver.openInputStream(uri)?.use { input ->
-          destFile.outputStream().use { output ->
+          FileOutputStream(destFile).use { output ->
             input.copyTo(output)
           }
-        }
+        } ?: throw Exception("Failed to open input stream for $uri")
 
         // Generate Thumbnail
         val thumbnailBase64 = try {
-          val bitmap = if (type == AttachmentType.Video) {
-            // For video, createVideoThumbnail is deprecated in API 29, but simplifies this snippet.
-            // Using ThumbnailUtils for broader compatibility or ContentResolver for API 29+ is preferred.
-            // Simple fallback approach:
-            try {
-              if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                context.contentResolver.loadThumbnail(uri, Size(320, 320), null)
-              } else {
-                ThumbnailUtils.createVideoThumbnail(destFile.absolutePath, MediaStore.Images.Thumbnails.MINI_KIND)
-              }
-            } catch (e: Exception) { null }
-          } else {
-            // Image resizing
-            val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            BitmapFactory.decodeFile(destFile.absolutePath, options)
-            options.inSampleSize = calculateInSampleSize(options, 320, 320)
-            options.inJustDecodeBounds = false
-            BitmapFactory.decodeFile(destFile.absolutePath, options)
-          }
-
+          val bitmap = generateThumbnail(context.contentResolver, uri, destFile, type)
           if (bitmap != null) {
             val outputStream = ByteArrayOutputStream()
             bitmap.compress(Bitmap.CompressFormat.JPEG, 70, outputStream)
-            Base64.encodeToString(outputStream.toByteArray(), Base64.NO_WRAP)
+            val bytes = outputStream.toByteArray()
+            Base64.encodeToString(bytes, Base64.NO_WRAP)
           } else {
             ""
           }
         } catch (e: Exception) {
-          Log.w("ConversationVM", "Failed to generate thumbnail", e)
+          Log.w("ConversationVM", "Failed to generate thumbnail for $uri", e)
           ""
         }
 
@@ -132,6 +119,30 @@ class ConversationViewModel(
       } catch (e: Exception) {
         Log.e("ConversationVM", "Failed to process attachment", e)
       }
+    }
+  }
+
+  private fun generateThumbnail(resolver: ContentResolver, uri: Uri, file: File, type: AttachmentType): Bitmap? {
+    val size = Size(320, 320)
+    return try {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        resolver.loadThumbnail(uri, size, CancellationSignal())
+      } else {
+        // Fallback for older versions
+        if (type == AttachmentType.Video) {
+          ThumbnailUtils.createVideoThumbnail(file.absolutePath, MediaStore.Images.Thumbnails.MINI_KIND)
+        } else {
+          // For images, we can just decode with scaling
+          val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+          BitmapFactory.decodeFile(file.absolutePath, options)
+          options.inSampleSize = calculateInSampleSize(options, 320, 320)
+          options.inJustDecodeBounds = false
+          BitmapFactory.decodeFile(file.absolutePath, options)
+        }
+      }
+    } catch (e: Exception) {
+      Log.e("ConversationVM", "Thumbnail generation failed", e)
+      null
     }
   }
 

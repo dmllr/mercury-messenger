@@ -17,17 +17,21 @@
 
 namespace eillance::storage {
 
-class MockPersistentStorageImpl final : public PersistentStorageImpl {
+class MockPersistentStorageImpl : public PersistentStorageImpl {
   mutable std::recursive_mutex mutex_;
   std::unordered_map<std::string, std::string> settings_;
   std::unordered_map<ContactID, identity::Contact> contacts_;
   std::unordered_map<ContactID, std::vector<messaging::HistoryEntryRecord>> history_;
   std::unordered_map<uint64_t, std::string> large_messages_;
   std::atomic<uint64_t> next_history_id_{1};
+  std::string db_path_ = "mock_db_path";
 
  public:
+  explicit MockPersistentStorageImpl(std::string path = "mock_db_path")
+      : db_path_(std::move(path)) {}
+
   // --- Path ---
-  auto GetPath() const -> std::string override { return "mock_db_path"; }
+  auto GetPath() const -> std::string override { return db_path_; }
 
   // --- Settings ---
   auto GetSetting(std::string_view key) -> std::optional<std::string> override {

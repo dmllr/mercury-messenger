@@ -14,26 +14,26 @@ enable_testing()
 
 add_executable(h-e-tests
   test-account-service.cpp
-  test-backup-manager.cpp
+  test-args-parser.cpp
+  test-attachments.cpp
   test-audio-encoder.cpp
+  test-backup-manager.cpp
   test-bit-reader.cpp
   test-bot-api.cpp
   test-call-view-model.cpp
+  test-circular-buffer.cpp
   test-client-core.cpp
   test-contact-id.cpp
+  test-contact-manager.cpp
   test-contact-service.cpp
   test-contacts-view-model.cpp
   test-conversation-view-model.cpp
+  test-crypto.cpp
   test-debug-view-model.cpp
   test-delivery-service.cpp
   test-dispatch-queue.cpp
   test-event-queue.cpp
   test-h264-utils.cpp
-  test-args-parser.cpp
-  test-attachments.cpp
-  test-circular-buffer.cpp
-  test-contact-manager.cpp
-  test-crypto.cpp
   test-id-manager.cpp
   test-media-call-service.cpp
   test-message-history.cpp
@@ -42,12 +42,12 @@ add_executable(h-e-tests
   test-profile-view-model.cpp
   test-settings-manager.cpp
   test-settings-view-model.cpp
-  test-stream-source.cpp
   test-sqlite-storage.cpp
   test-stream.cpp
+  test-stream-source.cpp
+  test-time.cpp
   test-transport-peer.cpp
   test-utils-memory.cpp
-  test-time.cpp
   test-video-config.cpp
 )
 target_link_libraries(h-e-tests
