@@ -343,12 +343,44 @@ class SQLiteStorage final : public PersistentStorageImpl {
       }
     }
 
+    // 3. Insert attachments if present
+    if (auto* msg_entry = std::get_if<messaging::MessageEntry>(&entry.data)) {
+      for (auto const& att : msg_entry->attachments) {
+        SQLiteStatement const att_stmt(db_, R"SQL(
+          INSERT INTO message_attachments (
+            id, peer_id, message_id, type, file_path, mime_type, size_bytes, thumbnail_base64, is_downloaded
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+        )SQL");
+        BindText(att_stmt.Get(), 1, att.id);
+        BindText(att_stmt.Get(), 2, entry.peer_id.ToString());
+        sqlite3_bind_int64(att_stmt.Get(), 3, entry.id);
+        sqlite3_bind_int(att_stmt.Get(), 4, static_cast<int>(att.type));
+        BindText(att_stmt.Get(), 5, att.file_path);
+        BindText(att_stmt.Get(), 6, att.mime_type);
+        sqlite3_bind_int64(att_stmt.Get(), 7, att.size_bytes);
+        BindText(att_stmt.Get(), 8, att.thumbnail_base64);
+        sqlite3_bind_int(att_stmt.Get(), 9, att.is_downloaded ? 1 : 0);
+
+        if (sqlite3_step(att_stmt.Get()) != SQLITE_DONE) {
+          LGE << "Failed to insert attachment: " << sqlite3_errmsg(db_);
+          sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+          return {};
+        }
+      }
+    }
+
     sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, nullptr);
     return entry;
   }
 
   void UpdateHistoryEntry(messaging::HistoryEntryRecord const& entry) override {
     std::lock_guard const lock(mutex_);
+    char* err_msg = nullptr;
+    if (sqlite3_exec(db_, "BEGIN TRANSACTION;", nullptr, nullptr, &err_msg) != SQLITE_OK) {
+      sqlite3_free(err_msg);
+      return;
+    }
+
     SQLiteStatement const statement(db_, R"SQL(
       UPDATE
         messages
@@ -385,7 +417,26 @@ class SQLiteStorage final : public PersistentStorageImpl {
 
     BindText(statement.Get(), 6, entry.peer_id.ToString());
     sqlite3_bind_int64(statement.Get(), 7, entry.id);
-    sqlite3_step(statement.Get());
+    if (sqlite3_step(statement.Get()) != SQLITE_DONE) {
+      sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+      return;
+    }
+
+    // Update attachments (re-insert logic simplified for update scenario: mostly we update is_downloaded)
+    if (auto* msg_entry = std::get_if<messaging::MessageEntry>(&entry.data)) {
+      for (auto const& att : msg_entry->attachments) {
+        SQLiteStatement const att_update(db_, R"SQL(
+          UPDATE message_attachments SET is_downloaded = ? WHERE id = ?;
+        )SQL");
+        sqlite3_bind_int(att_update.Get(), 1, att.is_downloaded ? 1 : 0);
+        BindText(att_update.Get(), 2, att.id);
+        if (sqlite3_step(att_update.Get()) != SQLITE_DONE) {
+          // If not exists, insert? Or ignore. Assuming attachments are immutable structure-wise for now.
+        }
+      }
+    }
+
+    sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, nullptr);
   }
 
   void UpdateMessageStatus(ContactID const& peer_id, uint64_t message_id, messaging::MessageStatus new_status)
@@ -476,6 +527,30 @@ class SQLiteStorage final : public PersistentStorageImpl {
     while (sqlite3_step(statement.Get()) == SQLITE_ROW) {
       auto record = ParseHistoryEntry(statement.Get());
       record.peer_id = peer_id;
+
+      // Hydrate attachments
+      if (auto* msg_entry = std::get_if<messaging::MessageEntry>(&record.data)) {
+        SQLiteStatement const att_stmt(db_, R"SQL(
+          SELECT id, type, file_path, mime_type, size_bytes, thumbnail_base64, is_downloaded
+          FROM message_attachments
+          WHERE peer_id = ? AND message_id = ?;
+        )SQL");
+        BindText(att_stmt.Get(), 1, peer_id.ToString());
+        sqlite3_bind_int64(att_stmt.Get(), 2, record.id);
+
+        while (sqlite3_step(att_stmt.Get()) == SQLITE_ROW) {
+          msg_entry->attachments.push_back({
+              .id = ColumnString(att_stmt.Get(), 0),
+              .type = static_cast<messaging::AttachmentType>(sqlite3_column_int(att_stmt.Get(), 1)),
+              .file_path = ColumnString(att_stmt.Get(), 2),
+              .mime_type = ColumnString(att_stmt.Get(), 3),
+              .size_bytes = static_cast<uint64_t>(sqlite3_column_int64(att_stmt.Get(), 4)),
+              .thumbnail_base64 = ColumnString(att_stmt.Get(), 5),
+              .is_downloaded = (sqlite3_column_int(att_stmt.Get(), 6) != 0)
+          });
+        }
+      }
+
       page.messages.push_back(std::move(record));
     }
     std::ranges::reverse(page.messages);  // Reverse to get ascending time order for display
@@ -599,6 +674,30 @@ class SQLiteStorage final : public PersistentStorageImpl {
     while (sqlite3_step(statement.Get()) == SQLITE_ROW) {
       auto record = ParseHistoryEntry(statement.Get());
       record.peer_id = peer_id;
+
+      // Hydrate attachments for pending messages so we know what to upload
+      if (auto* msg_entry = std::get_if<messaging::MessageEntry>(&record.data)) {
+        SQLiteStatement const att_stmt(db_, R"SQL(
+          SELECT id, type, file_path, mime_type, size_bytes, thumbnail_base64, is_downloaded
+          FROM message_attachments
+          WHERE peer_id = ? AND message_id = ?;
+        )SQL");
+        BindText(att_stmt.Get(), 1, peer_id.ToString());
+        sqlite3_bind_int64(att_stmt.Get(), 2, record.id);
+
+        while (sqlite3_step(att_stmt.Get()) == SQLITE_ROW) {
+          msg_entry->attachments.push_back({
+              .id = ColumnString(att_stmt.Get(), 0),
+              .type = static_cast<messaging::AttachmentType>(sqlite3_column_int(att_stmt.Get(), 1)),
+              .file_path = ColumnString(att_stmt.Get(), 2),
+              .mime_type = ColumnString(att_stmt.Get(), 3),
+              .size_bytes = static_cast<uint64_t>(sqlite3_column_int64(att_stmt.Get(), 4)),
+              .thumbnail_base64 = ColumnString(att_stmt.Get(), 5),
+              .is_downloaded = (sqlite3_column_int(att_stmt.Get(), 6) != 0)
+          });
+        }
+      }
+
       records.push_back(std::move(record));
     }
     return records;
@@ -637,6 +736,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
     auto const* sql = R"SQL(
       BEGIN TRANSACTION;
       DELETE FROM large_messages;
+      DELETE FROM message_attachments;
       DELETE FROM messages;
       COMMIT;
     )SQL";
@@ -706,6 +806,10 @@ class SQLiteStorage final : public PersistentStorageImpl {
 
     if (user_version == 0) {
       migrations::MigrateToV0001(db_);
+      user_version = 1;
+    }
+    if (user_version == 1) {
+      migrations::MigrateToV0002(db_);
     }
   }
 

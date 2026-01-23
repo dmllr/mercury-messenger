@@ -23,9 +23,13 @@ class MessageHistoryTest : public ::testing::Test {
 };
 
 TEST_F(MessageHistoryTest, AddTextEntry) {
-  auto entry =
-      message_history_
-          ->AddTextEntry(peer1, "Hello", messaging::MessageDirection::sent, messaging::HistoryEntryKind::textMessage);
+  auto entry = message_history_->AddTextEntry(
+      peer1,
+      "Hello",
+      {},  // Attachments
+      messaging::MessageDirection::sent,
+      messaging::HistoryEntryKind::textMessage
+  );
   EXPECT_EQ(entry.kind, messaging::HistoryEntryKind::textMessage);
   EXPECT_EQ(std::get<messaging::MessageEntry>(entry.data).content, "Hello");
   EXPECT_EQ(entry.direction, messaging::MessageDirection::sent);
@@ -61,9 +65,13 @@ TEST_F(MessageHistoryTest, UpdateMessageStatus) {
     received_status = status;
   });
 
-  auto entry =
-      message_history_
-          ->AddTextEntry(peer1, "Test", messaging::MessageDirection::sent, messaging::HistoryEntryKind::textMessage);
+  auto entry = message_history_->AddTextEntry(
+      peer1,
+      "Test",
+      {},  // Attachments
+      messaging::MessageDirection::sent,
+      messaging::HistoryEntryKind::textMessage
+  );
   ASSERT_EQ(entry.status, messaging::MessageStatus::sending);
 
   message_history_->UpdateMessageStatus(peer1, entry.id, messaging::MessageStatus::delivered);
@@ -81,6 +89,7 @@ TEST_F(MessageHistoryTest, GetHistoryPage) {
     message_history_->AddTextEntry(
         peer1,
         "Message " + std::to_string(i),
+        {},  // Attachments
         messaging::MessageDirection::received,
         messaging::HistoryEntryKind::textMessage
     );
@@ -106,14 +115,25 @@ TEST_F(MessageHistoryTest, GetHistoryPage) {
 }
 
 TEST_F(MessageHistoryTest, GetChatSummaries) {
-  message_history_
-      ->AddTextEntry(peer1, "p1m1", messaging::MessageDirection::sent, messaging::HistoryEntryKind::textMessage);
+  message_history_->AddTextEntry(
+      peer1,
+      "p1m1",
+      {},  // Attachments
+      messaging::MessageDirection::sent,
+      messaging::HistoryEntryKind::textMessage
+  );
   std::this_thread::sleep_for(std::chrono::milliseconds(10));
-  message_history_
-      ->AddTextEntry(peer2, "p2m1", messaging::MessageDirection::received, messaging::HistoryEntryKind::textMessage);
+  message_history_->AddTextEntry(
+      peer2,
+      "p2m1",
+      {},  // Attachments
+      messaging::MessageDirection::received,
+      messaging::HistoryEntryKind::textMessage
+  );
   message_history_->AddTextEntry(
       peer2,
       "p2m2",
+      {},  // Attachments
       messaging::MessageDirection::received,
       messaging::HistoryEntryKind::textMessage
   );  // unread
@@ -121,6 +141,7 @@ TEST_F(MessageHistoryTest, GetChatSummaries) {
   message_history_->AddTextEntry(
       peer1,
       "p1m2",
+      {},  // Attachments
       messaging::MessageDirection::received,
       messaging::HistoryEntryKind::textMessage
   );  // unread

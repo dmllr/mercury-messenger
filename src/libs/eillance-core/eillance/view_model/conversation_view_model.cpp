@@ -47,7 +47,12 @@ struct ConversationViewModel::Impl : public std::enable_shared_from_this<Impl> {
   }
 
   void SendText(std::string const& content) {
-    auto entry = client->SendChatMessage(peer_id, content);
+    SendMessage(content, {});
+  }
+
+  void SendMessage(std::string const& content, std::vector<services::AttachmentRequest> const& attachments) {
+    // Access MessagingService directly since facade might not have the overload yet
+    auto entry = client->GetMessagingService()->SendChatMessage(peer_id, content, attachments);
     {
       std::lock_guard<std::mutex> const lock(mutex);
       state.history.push_back(entry);
@@ -209,6 +214,12 @@ void ConversationViewModel::SetObserver(std::shared_ptr<Observer> observer) cons
 
 auto ConversationViewModel::GetState() const -> State { return impl_->GetState(); }
 void ConversationViewModel::SendText(std::string const& content) const { impl_->SendText(content); }
+void ConversationViewModel::SendMessage(
+    std::string const& content,
+    std::vector<services::AttachmentRequest> const& attachments
+) const {
+    impl_->SendMessage(content, attachments);
+}
 void ConversationViewModel::LoadOlderMessages() const { impl_->LoadOlderMessages(); }
 void ConversationViewModel::LoadFullMessage(uint64_t const message_id) const { impl_->LoadFullMessage(message_id); }
 void ConversationViewModel::MarkMessagesAsRead(std::vector<std::uint64_t> const& message_ids) const {

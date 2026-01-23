@@ -67,7 +67,7 @@ class Bot::Impl {
             return;
           }
 
-          auto const& [content] = std::get<eillance::messaging::MessageEntry>(record.data);
+          auto const& [content, attachments] = std::get<eillance::messaging::MessageEntry>(record.data);
 
           // Resolve sender info
           User user;

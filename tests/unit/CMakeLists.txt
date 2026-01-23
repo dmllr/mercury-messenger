@@ -30,6 +30,7 @@ add_executable(h-e-tests
   test-event-queue.cpp
   test-h264-utils.cpp
   test-args-parser.cpp
+  test-attachments.cpp
   test-circular-buffer.cpp
   test-contact-manager.cpp
   test-crypto.cpp
