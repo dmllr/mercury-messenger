@@ -188,13 +188,6 @@ fun ConversationScreen(
     contract = ActivityResultContracts.PickMultipleVisualMedia(5)
   ) { uris ->
     if (uris.isNotEmpty()) {
-      // For MVP we just pick the first one to determine type,
-      // in real impl we'd iterate. Or the VM handles list.
-      // We assume mostly images for now or mixed.
-      // The VM logic `processAndSendAttachment` currently handles one by one or we adapt it.
-      // Let's send them one by one for simplicity in this MVP iteration
-      // OR update VM to take a list. VM has `sendImage(Uri)`.
-      // Let's iterate.
       uris.forEach { uri ->
         // Crude type detection
         val type = if (uri.toString().contains("video")) AttachmentType.Video else AttachmentType.Image

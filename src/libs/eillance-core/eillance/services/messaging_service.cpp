@@ -1,14 +1,21 @@
 #include "eillance/services/messaging_service.hpp"
 
 #include <filesystem>
+#include <fstream>
 #include <random>
 #include <stdexcept>
+#include <thread>
 
 #include "eillance/logging/logging.hpp"
 #include "eillance/services/contact_service.hpp"
 #include "eillance/utils/invariant.hpp"
 
 namespace eillance::services {
+
+namespace {
+// Chunk size for file transfer (16KB safe limit for WebRTC data channels to avoid blocking)
+constexpr size_t kFileChunkSize = 16 * 1024;
+}  // namespace
 
 MessagingService::MessagingService(
     std::shared_ptr<storage::PersistentStorage> storage,
@@ -72,16 +79,17 @@ auto MessagingService::SendChatMessage(
     std::uint64_t file_size = 0;
     std::string mime = "application/octet-stream";
 
-    // In a real implementation, we would probe mime type and size here if not provided.
-    // For now, we assume the file exists since the UI just copied it.
     try {
       file_size = std::filesystem::file_size(req.file_path);
     } catch (...) {
       LGW << "Failed to get file size for " << req.file_path;
     }
 
-    if (req.type == messaging::AttachmentType::image) mime = "image/jpeg";
-    else if (req.type == messaging::AttachmentType::video) mime = "video/mp4";
+    if (req.type == messaging::AttachmentType::image) {
+      mime = "image/jpeg";
+    } else if (req.type == messaging::AttachmentType::video) {
+      mime = "video/mp4";
+    }
 
     domain_attachments.push_back({
         .id = GenerateAttachmentId(),
@@ -138,6 +146,9 @@ void MessagingService::SendQueuedMessages(ContactID const& peer_id) {
   }
 
   auto const peer = transport_->GetPeer(peer_id);
+  // Peer object might be missing if we are sending initial contact request signaling
+  // so we check peer existence inside the loop for data channel messages.
+
   LGI << "Processing " << messages.size() << " queued message(s) for " << peer_id.ToString();
 
   for (auto const& entry : messages) {
@@ -165,7 +176,7 @@ void MessagingService::SendQueuedMessages(ContactID const& peer_id) {
       content_to_send = msg_entry.content;
     }
 
-    // Special handling for System Messages
+    // Special handling for System Messages that must be sent via Signaling (not Data Channel)
     if (entry.kind == messaging::HistoryEntryKind::systemMessage) {
       try {
         nlohmann::json content_json = nlohmann::json::parse(content_to_send);
@@ -177,16 +188,22 @@ void MessagingService::SendQueuedMessages(ContactID const& peer_id) {
               {"to", peer_id.ToString()}
           };
           if (action == "contact_request") {
-            if (content_json.contains("profile")) msg["profile"] = content_json["profile"];
-            if (content_json.contains("token")) msg["token"] = content_json["token"];
+            if (content_json.contains("profile")) {
+              msg["profile"] = content_json["profile"];
+            }
+            if (content_json.contains("token")) {
+              msg["token"] = content_json["token"];
+            }
           }
           transport_->SendSignalingMessage(msg);
           sent = true;
         }
-      } catch (...) { }
+      } catch (...) {
+        // Ignore parse errors, treat as regular message
+      }
     }
 
-    // Data Channel Logic
+    // If not sent via signaling, try Data Channel
     if (!sent && peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
       std::string payload_with_version;
       payload_with_version.reserve(sizeof(currentMessageVersion) + content_to_send.size());
@@ -205,11 +222,25 @@ void MessagingService::SendQueuedMessages(ContactID const& peer_id) {
         };
 
         if (!msg_entry.attachments.empty()) {
-            json_msg["has_attachments"] = true;
+          std::vector<nlohmann::json> att_list;
+          for (auto const& att : msg_entry.attachments) {
+            att_list.push_back({
+                {"id", att.id},
+                {"type", att.type},
+                {"mime", att.mime_type},
+                {"size", att.size_bytes},
+                {"thumb", att.thumbnail_base64}
+            });
+          }
+          json_msg["attachments"] = att_list;
         }
 
         transport_->SendPeerDataChannelMessage(peer_id, json_msg);
         sent = true;
+
+        if (!msg_entry.attachments.empty()) {
+          ProcessOutgoingAttachments(peer_id, msg_entry.attachments);
+        }
       }
     }
 
@@ -219,6 +250,54 @@ void MessagingService::SendQueuedMessages(ContactID const& peer_id) {
   }
 
   delivery_service_->ConnectionAttemptFinished(peer_id);
+}
+
+void MessagingService::ProcessOutgoingAttachments(
+    ContactID const& peer_id,
+    std::vector<messaging::Attachment> const& attachments
+) {
+  for (auto const& att : attachments) {
+    std::ifstream file(att.file_path, std::ios::binary);
+    if (!file) {
+      LGE << "Failed to open attachment file: " << att.file_path;
+      continue;
+    }
+
+    std::vector<char> buffer(kFileChunkSize);
+    size_t seq = 0;
+
+    while (file.read(buffer.data(), kFileChunkSize) || file.gcount() > 0) {
+      std::vector<std::byte> chunk_data(file.gcount());
+      std::memcpy(chunk_data.data(), buffer.data(), file.gcount());
+
+      // Base64/Hex encode the chunk because our current transport uses JSON text messages.
+      // Using Hex for simplicity/safety as per established crypto::ToHex usage.
+      std::string b64_data = crypto::ToHex(chunk_data);
+
+      nlohmann::json chunk_msg = {
+          {"type", "file_chunk"},
+          {"id", att.id},
+          {"seq", seq++},
+          {"data", b64_data},
+          {"eof", false}
+      };
+
+      transport_->SendPeerDataChannelMessage(peer_id, chunk_msg);
+
+      // Flow control: Simple sleep to prevent flooding the channel and causing SCTP buffer overflow.
+      std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+
+    // Send EOF
+    nlohmann::json eof_msg = {
+        {"type", "file_chunk"},
+        {"id", att.id},
+        {"seq", seq},
+        {"data", ""},
+        {"eof", true}
+    };
+    transport_->SendPeerDataChannelMessage(peer_id, eof_msg);
+  }
 }
 
 void MessagingService::SendPendingReadReceipts(ContactID const& peer_id) {
@@ -244,6 +323,7 @@ void MessagingService::SendPendingReadReceipts(ContactID const& peer_id) {
     transport_->SendPeerDataChannelMessage(peer_id, msg);
     LGI << "Sent pending read receipts for " << ids_to_send.size() << " messages to " << peer_id.ToString();
   } else {
+    // Re-queue if we thought we could send but failed (e.g. peer disconnected in between)
     std::lock_guard<std::recursive_mutex> const lock(receipts_mutex_);
     auto& pending = pending_read_receipts_[peer_id];
     pending.insert(pending.end(), ids_to_send.begin(), ids_to_send.end());
@@ -274,7 +354,10 @@ auto MessagingService::GetChatSummaries(std::vector<ContactID> const& peer_ids
 // --- Updates ---
 
 void MessagingService::MarkMessagesAsRead(ContactID const& peer_id, std::vector<uint64_t> const& message_ids) {
+  // 1. Update status locally for the local IDs
   history_->MarkMessagesAsRead(peer_id, message_ids);
+
+  // 2. Retrieve corresponding remote IDs to send back to the peer
   auto remote_ids = storage_->GetRemoteIds(peer_id, message_ids);
 
   if (remote_ids.empty()) {
@@ -300,13 +383,7 @@ void MessagingService::AddSystemEntry(
     std::string const& content,
     messaging::MessageDirection direction
 ) {
-  history_->AddTextEntry(
-      peer_id,
-      content,
-      {},
-      direction,
-      messaging::HistoryEntryKind::systemMessage
-  );
+  history_->AddTextEntry(peer_id, content, {}, direction, messaging::HistoryEntryKind::systemMessage);
 }
 
 void MessagingService::AddCallEntry(
@@ -325,7 +402,8 @@ void MessagingService::OnChatMessageReceived(
     ContactID const& peer_id,
     std::vector<std::byte> const& encrypted_payload,
     uint64_t message_id,
-    bool is_system
+    bool is_system,
+    std::vector<messaging::Attachment> const& attachments
 ) {
   auto peer = transport_->GetPeer(peer_id);
   if (!peer || !peer->session_cipher->IsReady()) {
@@ -348,7 +426,7 @@ void MessagingService::OnChatMessageReceived(
     auto entry = history_->AddTextEntry(
         peer_id,
         error_msg,
-        {}, // No attachments
+        {},  // No attachments for error
         messaging::MessageDirection::received,
         messaging::HistoryEntryKind::systemMessage,
         message_id  // Store the sender's ID as remote_id
@@ -367,17 +445,54 @@ void MessagingService::OnChatMessageReceived(
   auto entry = history_->AddTextEntry(
       peer_id,
       content,
-      {}, // TODO: Handle attachments parsing from payload
+      attachments,
       messaging::MessageDirection::received,
       is_system ? messaging::HistoryEntryKind::systemMessage : messaging::HistoryEntryKind::textMessage,
-      message_id
+      message_id  // Store the sender's ID as remote_id
   );
+
+  // Initialize receiving state for attachments (create directory structure)
+  if (!attachments.empty()) {
+    std::filesystem::path storage_root(storage_->GetPath());
+    std::filesystem::path attachments_dir = storage_root.parent_path() / "attachments";
+    std::filesystem::create_directories(attachments_dir);
+  }
 
   nlohmann::json const receipt = {{"type", "message_receipt"}, {"status", "delivered"}, {"message_id", message_id}};
   transport_->SendPeerDataChannelMessage(peer_id, receipt);
 
   INVARIANT(on_message_received_);
   on_message_received_(peer_id, entry);
+}
+
+void MessagingService::ProcessIncomingFileChunk(ContactID const& peer_id, nlohmann::json const& message) {
+  std::string const att_id = message["id"];
+  bool const eof = message["eof"];
+
+  std::filesystem::path storage_root(storage_->GetPath());
+  std::filesystem::path att_dir = storage_root.parent_path() / "attachments";
+  if (!std::filesystem::exists(att_dir)) {
+    std::filesystem::create_directories(att_dir);
+  }
+
+  std::filesystem::path temp_path = att_dir / (att_id + ".tmp");
+  std::filesystem::path final_path = att_dir / (att_id + ".dat");  // .dat because we don't send extension in chunk
+
+  if (eof) {
+    if (std::filesystem::exists(temp_path)) {
+      std::filesystem::rename(temp_path, final_path);
+      LGI << "File transfer complete for " << att_id;
+      // Ideally trigger UI refresh here via an event
+    }
+  } else {
+    std::string const hex_data = message["data"];
+    auto bytes = crypto::FromHex(hex_data);
+
+    std::ofstream file(temp_path, std::ios::binary | std::ios::app);
+    if (file) {
+      file.write(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+    }
+  }
 }
 
 void MessagingService::OnMessageReceipt(ContactID const& peer_id, uint64_t message_id, std::string const& status) {
@@ -392,6 +507,7 @@ void MessagingService::OnMessageReceipt(ContactID const& peer_id, uint64_t messa
 }
 
 void MessagingService::OnMessagesRead(ContactID const& peer_id, std::vector<uint64_t> const& message_ids) {
+  // Received read receipt contains IDs that *I* sent. So they match my local IDs.
   for (auto id : message_ids) {
     history_->UpdateMessageStatus(peer_id, id, messaging::MessageStatus::read);
   }
@@ -406,12 +522,14 @@ void MessagingService::SetMessageStatusChangedCallback(OnMessageStatusChangedCal
 }
 
 bool MessagingService::HasPendingWork(ContactID const& peer_id) {
+  // Check if we have pending read receipts
   {
     std::lock_guard<std::recursive_mutex> const lock(receipts_mutex_);
     if (pending_read_receipts_.contains(peer_id) && !pending_read_receipts_[peer_id].empty()) {
       return true;
     }
   }
+  // Check if we have pending messages in DB
   return !storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::sending).empty();
 }
 

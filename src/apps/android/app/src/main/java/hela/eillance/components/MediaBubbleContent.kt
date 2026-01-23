@@ -6,7 +6,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -86,11 +85,17 @@ private fun MediaItem(attachment: Attachment, onClick: () -> Unit) {
     contentAlignment = Alignment.Center
   ) {
     val file = File(attachment.path)
-    val model = if (file.exists()) {
-      file
+
+    if (file.exists()) {
+      AsyncImage(
+        model = file,
+        contentDescription = "Attachment",
+        modifier = Modifier.fillMaxSize(),
+        contentScale = ContentScale.Crop
+      )
     } else {
       // Fallback to thumbnail if file not downloaded/local yet
-      remember(attachment.thumbnail) {
+      val imageBitmap = remember(attachment.thumbnail) {
         if (!attachment.thumbnail.isNullOrEmpty()) {
           try {
             val bytes = Base64.decode(attachment.thumbnail, Base64.DEFAULT)
@@ -100,21 +105,21 @@ private fun MediaItem(attachment: Attachment, onClick: () -> Unit) {
           }
         } else null
       }
-    }
 
-    if (model != null) {
-      AsyncImage(
-        model = model,
-        contentDescription = "Attachment",
-        modifier = Modifier.fillMaxSize(),
-        contentScale = ContentScale.Crop
-      )
-    } else {
-      Box(
-        modifier = Modifier.fillMaxSize().background(Color.Gray),
-        contentAlignment = Alignment.Center
-      ) {
-        Text("Media Unavailable", color = Color.White)
+      if (imageBitmap != null) {
+        Image(
+          bitmap = imageBitmap,
+          contentDescription = "Attachment Thumbnail",
+          modifier = Modifier.fillMaxSize(),
+          contentScale = ContentScale.Crop
+        )
+      } else {
+        Box(
+          modifier = Modifier.fillMaxSize().background(Color.Gray),
+          contentAlignment = Alignment.Center
+        ) {
+          Text("Media Unavailable", color = Color.White)
+        }
       }
     }
 
