@@ -12,6 +12,7 @@ import android.provider.MediaStore
 import android.util.Base64
 import android.util.Log
 import android.util.Size
+import android.webkit.MimeTypeMap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -79,7 +80,12 @@ class ConversationViewModel(
           attachmentsDir.mkdirs()
         }
 
-        val ext = if (type == AttachmentType.Image) "jpg" else "mp4"
+        val cr = context.contentResolver
+        val detectedMime = cr.getType(uri) ?: (if (type == AttachmentType.Image) "image/jpeg" else "video/mp4")
+        
+        val ext = MimeTypeMap.getSingleton().getExtensionFromMimeType(detectedMime) 
+                  ?: (if (type == AttachmentType.Image) "jpg" else "mp4")
+                  
         val fileName = "${UUID.randomUUID()}.$ext"
         val destFile = File(attachmentsDir, fileName)
 
@@ -109,7 +115,8 @@ class ConversationViewModel(
         val request = AttachmentRequest(
           path = destFile.absolutePath,
           type = type.value,
-          thumbnail = thumbnailBase64
+          thumbnail = thumbnailBase64,
+          mimeType = detectedMime
         )
 
         if (nativePtr != 0L) {

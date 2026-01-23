@@ -22,6 +22,7 @@ struct AttachmentRequest {
   std::string file_path;
   messaging::AttachmentType type;
   std::string thumbnail_base64;
+  std::string mime_type;
 };
 
 class MessagingService {
