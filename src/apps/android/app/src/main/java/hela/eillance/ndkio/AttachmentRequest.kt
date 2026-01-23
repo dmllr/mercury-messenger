@@ -3,5 +3,6 @@ package hela.eillance.ndkio
 data class AttachmentRequest(
   val path: String,
   val type: Int,
-  val thumbnail: String
+  val thumbnail: String,
+  val mimeType: String
 )

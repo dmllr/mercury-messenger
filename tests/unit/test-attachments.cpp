@@ -47,7 +47,8 @@ class AttachmentTest : public ::testing::Test {
 
 TEST_F(AttachmentTest, SendMessageCalculatesHash) {
   std::vector<services::AttachmentRequest> attachments;
-  attachments.push_back({temp_file_path_, messaging::AttachmentType::image, "base64thumb"});
+  // Initialize with mime_type
+  attachments.push_back({temp_file_path_, messaging::AttachmentType::image, "base64thumb", "image/jpeg"});
 
   auto const record = service_->SendChatMessage(peer1, "Check this out", attachments);
 
@@ -57,9 +58,9 @@ TEST_F(AttachmentTest, SendMessageCalculatesHash) {
 
   auto const& att = entry.attachments[0];
   EXPECT_EQ(att.file_path, temp_file_path_);
-  // Ensure hash is not empty and looks like a hex string
+  EXPECT_EQ(att.mime_type, "image/jpeg"); // Check mime type
   EXPECT_FALSE(att.hash.empty());
-  EXPECT_EQ(att.hash.length(), 64);  // SHA-256 hex length
+  EXPECT_EQ(att.hash.length(), 64);
 }
 
 TEST_F(AttachmentTest, PersistenceStoresHash) {

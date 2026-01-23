@@ -363,7 +363,7 @@ TEST_F(MessagingServiceTest, FileUpload_FlowControl) {
   std::string file_path = CreateTempFile(file_size);
 
   std::vector<services::AttachmentRequest> atts;
-  atts.push_back({file_path, messaging::AttachmentType::file, ""});
+  atts.push_back({file_path, messaging::AttachmentType::file, "", "application/octet-stream"});
 
   service_->SendChatMessage(peer1, "File incoming", atts);
 
@@ -416,16 +416,14 @@ TEST_F(MessagingServiceTest, FileDownload_IntegrityCheck) {
   transport_->AddPeer(peer1, peer);
 
   std::vector<services::AttachmentRequest> atts;
-  atts.push_back({original_path.string(), messaging::AttachmentType::file, ""});
+  atts.push_back({original_path.string(), messaging::AttachmentType::file, "", "application/octet-stream"});
   service_->SendChatMessage(peer1, "Gen Hash", atts);
 
   std::string file_hash;
-  std::string file_id;
 
-  for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
+  for (auto const& msg : mock_transport_->log.sent_peer_messages | std::views::values) {
     if (msg["type"] == "chat" && msg.contains("attachments")) {
       file_hash = msg["attachments"][0]["hash"];
-      file_id = msg["attachments"][0]["id"];
     }
   }
   ASSERT_FALSE(file_hash.empty());

@@ -300,17 +300,25 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationView
       jstring path = (jstring)env->GetObjectField(obj, cls.GetField("path"));
       jint const type = env->GetIntField(obj, cls.GetField("type"));
       jstring thumb = (jstring)env->GetObjectField(obj, cls.GetField("thumbnail"));
+      jstring mime = (jstring)env->GetObjectField(obj, cls.GetField("mimeType"));
 
       char const* p = env->GetStringUTFChars(path, nullptr);
       char const* t = thumb ? env->GetStringUTFChars(thumb, nullptr) : "";
+      char const* m = mime ? env->GetStringUTFChars(mime, nullptr) : "";
 
       atts.push_back(
-          {.file_path = p, .type = static_cast<eillance::messaging::AttachmentType>(type), .thumbnail_base64 = t}
+          {.file_path = p,
+           .type = static_cast<eillance::messaging::AttachmentType>(type),
+           .thumbnail_base64 = t,
+           .mime_type = m}
       );
 
       env->ReleaseStringUTFChars(path, p);
       if (thumb) {
         env->ReleaseStringUTFChars(thumb, t);
+      }
+      if (mime) {
+        env->ReleaseStringUTFChars(mime, m);
       }
     }
   }
@@ -675,6 +683,7 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     classref.RegisterField(env, attachment_req_class, "path", "Ljava/lang/String;");
     classref.RegisterField(env, attachment_req_class, "type", "I");
     classref.RegisterField(env, attachment_req_class, "thumbnail", "Ljava/lang/String;");
+    classref.RegisterField(env, attachment_req_class, "mimeType", "Ljava/lang/String;");
 
     // Attachment
     std::string const attachment_class = "hela/eillance/ndkio/Attachment";

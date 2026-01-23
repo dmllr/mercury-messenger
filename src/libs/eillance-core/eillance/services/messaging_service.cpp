@@ -74,7 +74,7 @@ auto MessagingService::SendChatMessage(
   std::vector<messaging::Attachment> domain_attachments;
   for (auto const& req : attachments) {
     std::uint64_t file_size = 0;
-    std::string mime = "application/octet-stream";
+    std::string mime = req.mime_type;
     std::string hash;
 
     try {
@@ -85,10 +85,14 @@ auto MessagingService::SendChatMessage(
       continue;
     }
 
-    if (req.type == messaging::AttachmentType::image) {
-      mime = "image/jpeg";
-    } else if (req.type == messaging::AttachmentType::video) {
-      mime = "video/mp4";
+    if (mime.empty()) {
+      if (req.type == messaging::AttachmentType::image) {
+        mime = "image/jpeg";
+      } else if (req.type == messaging::AttachmentType::video) {
+        mime = "video/mp4";
+      } else {
+        mime = "application/octet-stream";
+      }
     }
 
     domain_attachments.push_back(
@@ -119,6 +123,7 @@ auto MessagingService::SendChatMessage(
 
   return entry;
 }
+
 
 void MessagingService::SendSystemMessage(ContactID const& peer_id, std::string const& content) {
   history_->AddTextEntry(
