@@ -156,7 +156,12 @@ void MessagingService::SendQueuedMessages(ContactID const& peer_id) {
 
     // If not sent via signaling, try Data Channel
     if (!sent && peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
-      auto encrypted = peer->session_cipher->Encrypt(content_to_send);
+      std::string payload_with_version;
+      payload_with_version.reserve(sizeof(currentMessageVersion) + content_to_send.size());
+      payload_with_version.push_back(static_cast<char>(currentMessageVersion));
+      payload_with_version.append(content_to_send);
+
+      auto encrypted = peer->session_cipher->Encrypt(payload_with_version);
       UpdatePeerActivity(peer_id);
 
       if (!encrypted.empty()) {
@@ -295,9 +300,33 @@ void MessagingService::OnChatMessageReceived(
     return;
   }
 
+  if (auto const received_version = static_cast<decltype(currentMessageVersion)>(decrypted[0]);
+      received_version > currentMessageVersion) {
+    std::string const error_msg = "Unsupported message of version " + std::to_string(received_version) +
+                                  " received, maximum supported version is " + std::to_string(currentMessageVersion) +
+                                  ", please update";
+
+    auto entry = history_->AddTextEntry(
+        peer_id,
+        error_msg,
+        messaging::MessageDirection::received,
+        messaging::HistoryEntryKind::systemMessage,
+        message_id  // Store the sender's ID as remote_id
+    );
+
+    nlohmann::json const receipt = {{"type", "message_receipt"}, {"status", "delivered"}, {"message_id", message_id}};
+    transport_->SendPeerDataChannelMessage(peer_id, receipt);
+
+    INVARIANT(on_message_received_);
+    on_message_received_(peer_id, entry);
+    return;
+  }
+
+  std::string const content = decrypted.substr(1);
+
   auto entry = history_->AddTextEntry(
       peer_id,
-      decrypted,
+      content,
       messaging::MessageDirection::received,
       is_system ? messaging::HistoryEntryKind::systemMessage : messaging::HistoryEntryKind::textMessage,
       message_id  // Store the sender's ID as remote_id
