@@ -23,6 +23,7 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
   std::unordered_map<ContactID, identity::Contact> contacts_;
   std::unordered_map<ContactID, std::vector<messaging::HistoryEntryRecord>> history_;
   std::unordered_map<uint64_t, std::string> large_messages_;
+  std::unordered_map<ContactID, std::vector<uint64_t>> pending_read_receipts_;
   std::atomic<uint64_t> next_history_id_{1};
   std::string db_path_ = "mock_db_path";
 
@@ -91,6 +92,42 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
   void RemoveContact(ContactID const& peer_id) override {
     std::lock_guard const lock(mutex_);
     contacts_.erase(peer_id);
+  }
+
+  void SetContactProfileSyncNeeded(ContactID const& peer_id, bool needed) override {
+    std::lock_guard const lock(mutex_);
+    if (auto it = contacts_.find(peer_id); it != contacts_.end()) {
+      it->second.profile_sync_needed = needed;
+    }
+  }
+
+  // --- Resilience ---
+  void AddPendingReadReceipts(ContactID const& peer_id, std::vector<uint64_t> const& message_ids) override {
+    std::lock_guard const lock(mutex_);
+    auto& pending = pending_read_receipts_[peer_id];
+    for (auto id : message_ids) {
+      if (std::find(pending.begin(), pending.end(), id) == pending.end()) {
+        pending.push_back(id);
+      }
+    }
+  }
+
+  auto GetPendingReadReceipts(ContactID const& peer_id) -> std::vector<uint64_t> override {
+    std::lock_guard const lock(mutex_);
+    if (pending_read_receipts_.contains(peer_id)) {
+      return pending_read_receipts_[peer_id];
+    }
+    return {};
+  }
+
+  void RemovePendingReadReceipts(ContactID const& peer_id, std::vector<uint64_t> const& message_ids) override {
+    std::lock_guard const lock(mutex_);
+    if (pending_read_receipts_.contains(peer_id)) {
+      auto& pending = pending_read_receipts_[peer_id];
+      for (auto id : message_ids) {
+        std::erase(pending, id);
+      }
+    }
   }
 
   // --- History ---
@@ -257,6 +294,7 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
     std::lock_guard const lock(mutex_);
     history_.clear();
     large_messages_.clear();
+    pending_read_receipts_.clear();
   }
 
   void DebugClearAllContacts() override {

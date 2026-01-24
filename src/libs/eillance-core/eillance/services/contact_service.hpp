@@ -40,9 +40,11 @@ class ContactService {
   void SetContactDisplayNameOverride(ContactID const& peer_id, std::string const& name);
   void ResetContactDisplayNameOverride(ContactID const& peer_id);
 
-  // Sends the user's profile to the specified peer via the data channel.
-  // This requires the data channel to be open.
-  void SendMyProfile(ContactID const& peer_id);
+  // Marks all confirmed contacts as needing profile sync.
+  void MarkAllContactsProfileSyncNeeded();
+
+  // Sends profile if dirty, and clears dirty flag.
+  void SyncProfile(ContactID const& peer_id);
 
   auto GenerateContactToken() -> std::vector<std::byte>;
 
@@ -87,6 +89,7 @@ class ContactService {
  private:
   void NotifyPeerListUpdate() const;
   static auto ParseDeviceProfile(nlohmann::json const& jprofile) -> Device::Profile;
+  void SendMyProfile(ContactID const& peer_id);
 
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<transport::Transport> transport_;

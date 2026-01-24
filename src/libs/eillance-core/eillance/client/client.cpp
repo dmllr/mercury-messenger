@@ -250,11 +250,9 @@ void Client::OnDataChannelOpen(ContactID const& peer_id) {
     transport_->SendPeerDataChannelMessage(peer_id, key_msg);
   }
 
-  // Sync profile info with the newly connected peer if they are a confirmed contact
-  if (contact_service_->IsConfirmed(peer_id)) {
-    // Delegate to contact service to send the profile info via data channel
-    contact_service_->SendMyProfile(peer_id);
-  }
+  // Check for any pending work (messages or profile sync)
+  messaging_service_->SendQueuedMessages(peer_id);
+  contact_service_->SyncProfile(peer_id);
 }
 
 void Client::OnFrameReceived(ContactID const& peer_id, std::vector<std::byte> const& frame) {
@@ -286,6 +284,7 @@ void Client::ProcessDataChannelMessage(ContactID const& peer_id, Json const& mes
         );
       }
       messaging_service_->SendQueuedMessages(peer_id);
+      contact_service_->SyncProfile(peer_id);
     } else {
       LGE << "Failed key exchange with " << peer_id.ToString();
     }
@@ -350,20 +349,21 @@ void Client::SetupPeerHandlers(std::shared_ptr<transport::Peer> const& peer, Con
   };
 }
 
-void Client::SendProfileInfo(ContactID const& peer_id) { contact_service_->SendMyProfile(peer_id); }
+void Client::SendProfileInfo(ContactID const& peer_id) { contact_service_->SyncProfile(peer_id); }
 
 void Client::BroadcastProfileUpdate() {
+  contact_service_->MarkAllContactsProfileSyncNeeded();
+  // Trigger work check for all contacts
   auto const contacts = contact_service_->GetContacts();
   for (auto const& contact : contacts) {
     if (contact.status == identity::ContactStatus::confirmed) {
-      auto peer = transport_->GetPeer(contact.peer_id);
-      if (peer && peer->data_channel_is_open) {
-        SendProfileInfo(contact.peer_id);
-      } else {
-        // Initiate connection if not currently connected.
-        // Once the data channel opens, OnDataChannelOpen will send profile.
-        Connect(contact.peer_id);
-      }
+      // Attempt to sync immediately if connection is alive.
+      // SyncProfile checks internal state and sends if possible.
+      contact_service_->SyncProfile(contact.peer_id);
+
+      // Ensure we attempt to connect if not already connected.
+      // If connected, Connect() returns early.
+      Connect(contact.peer_id);
     }
   }
 }
@@ -488,12 +488,12 @@ auto Client::GetPeerConnectionState(ContactID const& id) const -> transport::Pee
 void Client::DebugEraseAllHistory() const { storage_->DebugClearAllHistory(); }
 void Client::DebugEraseAllContacts() const {
   storage_->DebugClearAllContacts();
-  contact_service_->DebugClearCache();  // Added: ensure cache is cleared
+  contact_service_->DebugClearCache();
   storage_->DebugClearAllHistory();
 }
 void Client::DebugRevokeAllContactApprovals() const {
   storage_->DebugRevokeAllContactApprovals();
-  contact_service_->DebugReloadCache();  // Added: ensure cache is reloaded
+  contact_service_->DebugReloadCache();
 }
 
 void Client::SetStatusCallback(StatusCallbackFunction const& cb) {
