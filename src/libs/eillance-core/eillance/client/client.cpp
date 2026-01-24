@@ -254,6 +254,11 @@ void Client::OnDataChannelOpen(ContactID const& peer_id) {
     };
     transport_->SendPeerDataChannelMessage(peer_id, key_msg);
   }
+
+  // Sync profile info with the newly connected peer if they are a confirmed contact
+  if (contact_service_->IsConfirmed(peer_id)) {
+    SendProfileInfo(peer_id);
+  }
 }
 
 void Client::OnFrameReceived(ContactID const& peer_id, std::vector<std::byte> const& frame) {
@@ -365,6 +370,25 @@ void Client::SendProfileInfo(ContactID const& peer_id) {
   transport_->SendPeerDataChannelMessage(peer_id, msg);
 }
 
+void Client::BroadcastProfileUpdate() {
+  // Fix: Iterate over ALL contacts to ensure updates reach disconnected peers.
+  // Previously we only iterated transport peers (active connections).
+  auto const contacts = contact_service_->GetContacts();
+  for (auto const& contact : contacts) {
+    if (contact.status == identity::ContactStatus::confirmed) {
+      auto peer = transport_->GetPeer(contact.peer_id);
+      if (peer && peer->data_channel_is_open) {
+        SendProfileInfo(contact.peer_id);
+      } else {
+        // Fix: Initiate connection if not currently connected.
+        // Once the data channel opens, OnDataChannelOpen will automatically send the profile info
+        // because of the check: if (contact_service_->IsConfirmed(peer_id)) SendProfileInfo(peer_id);
+        Connect(contact.peer_id);
+      }
+    }
+  }
+}
+
 void Client::Connect(ContactID const& peer_id) {
   if (transport_->GetPeer(peer_id)) {
     return;
@@ -403,14 +427,28 @@ void Client::CheckForInactivePeers() {
 
 auto Client::GetId() const -> ContactID { return account_service_->GetId(); }
 auto Client::IdentityExists() const -> bool { return account_service_->IdentityExists(); }
-auto Client::GenerateNewIdentity() const -> std::string { return account_service_->GenerateNewIdentity(); }
+auto Client::GenerateNewIdentity() -> std::string {
+  auto mnemonic = account_service_->GenerateNewIdentity();
+  BroadcastProfileUpdate();
+  return mnemonic;
+}
 auto Client::GetMnemonic() const -> std::optional<std::string> { return account_service_->GetMnemonic(); }
-auto Client::RestoreIdentity(std::string const& m) const -> bool { return account_service_->RestoreIdentity(m); }
+auto Client::RestoreIdentity(std::string const& m) -> bool {
+  if (account_service_->RestoreIdentity(m)) {
+    BroadcastProfileUpdate();
+    return true;
+  }
+  return false;
+}
 auto Client::CreateBackup(std::string const& p, std::string const& pw) const -> bool {
   return account_service_->CreateBackup(p, pw);
 }
-auto Client::RestoreBackup(std::string const& p, std::string const& pw) const -> bool {
-  return account_service_->RestoreBackup(p, pw);
+auto Client::RestoreBackup(std::string const& p, std::string const& pw) -> bool {
+  if (account_service_->RestoreBackup(p, pw)) {
+    BroadcastProfileUpdate();
+    return true;
+  }
+  return false;
 }
 void Client::SetName(std::string const& name) const { transport_->SetName(name); }
 void Client::UpdateSignalingUrl(std::string const& url) const { account_service_->UpdateSignalingUrl(url); }
@@ -418,8 +456,9 @@ void Client::UpdateMyProfile(
     std::optional<std::string> const& n,
     std::optional<std::string> const& b,
     std::optional<std::string> const& p
-) const {
+) {
   account_service_->UpdateMyProfile(n, b, p);
+  BroadcastProfileUpdate();
 }
 auto Client::GetSettingsManager() const -> SettingsManager* { return account_service_->GetSettings(); }
 
@@ -473,7 +512,7 @@ void Client::DebugEraseAllContacts() const {
   contact_service_->DebugClearCache();  // Added: ensure cache is cleared
   storage_->DebugClearAllHistory();
 }
-void Client::DebugRevokeAllApprovals() const {
+void Client::DebugRevokeAllContactApprovals() const {
   storage_->DebugRevokeAllContactApprovals();
   contact_service_->DebugReloadCache();  // Added: ensure cache is reloaded
 }

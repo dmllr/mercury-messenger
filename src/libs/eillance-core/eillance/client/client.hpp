@@ -61,18 +61,22 @@ class Client final : public transport::TransportDelegate {
   // Identity / Account
   [[nodiscard]] auto GetId() const -> ContactID;
   [[nodiscard]] auto IdentityExists() const -> bool;
-  [[nodiscard]] auto GenerateNewIdentity() const -> std::string;
   [[nodiscard]] auto GetMnemonic() const -> std::optional<std::string>;
-  [[nodiscard]] auto RestoreIdentity(std::string const& mnemonic) const -> bool;
+
+  // Note: These modify state and trigger network calls, so they are not const
+  auto GenerateNewIdentity() -> std::string;
+  auto RestoreIdentity(std::string const& mnemonic) -> bool;
   [[nodiscard]] auto CreateBackup(std::string const& p, std::string const& pw) const -> bool;
-  auto RestoreBackup(std::string const& p, std::string const& pw) const -> bool;
+  auto RestoreBackup(std::string const& p, std::string const& pw) -> bool;
+
   void SetName(std::string const& name) const;
   void UpdateSignalingUrl(std::string const& url) const;
+
   void UpdateMyProfile(
       std::optional<std::string> const& name,
       std::optional<std::string> const& bio,
       std::optional<std::string> const& photo
-  ) const;
+  );
   [[nodiscard]] auto GetSettingsManager() const -> SettingsManager*;
 
   // Contacts
@@ -109,7 +113,7 @@ class Client final : public transport::TransportDelegate {
   // Debug
   void DebugEraseAllHistory() const;
   void DebugEraseAllContacts() const;
-  void DebugRevokeAllApprovals() const;
+  void DebugRevokeAllContactApprovals() const;
 
   // Callbacks (Deprecated access, prefer routing via ClientEventRouter)
   using StatusCallbackFunction = transport::Transport::StatusCallbackFunction;
@@ -130,6 +134,7 @@ class Client final : public transport::TransportDelegate {
   void CheckForInactivePeers();
   void ProcessDataChannelMessage(ContactID const& peer_id, Json const& message);
   void SetupPeerHandlers(std::shared_ptr<transport::Peer> const& peer, ContactID const& peer_id);
+  void BroadcastProfileUpdate();
 
   // Helpers
   static void HandleProfileInfo(ContactID const& peer_id, Json const& message);
