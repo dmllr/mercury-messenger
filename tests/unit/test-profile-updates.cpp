@@ -170,3 +170,37 @@ TEST_F(ProfileUpdatesTest, TriggerConnectForDisconnectedConfirmedPeer) {
   }
   EXPECT_TRUE(offer_sent) << "Should attempt to connect to disconnected confirmed peer on profile update";
 }
+
+// Test ensuring the confirmer sends their profile immediately upon confirmation if connection is open.
+TEST_F(ProfileUpdatesTest, ConfirmContactTriggersProfileSend) {
+  client_->UpdateMyProfile("Approver", "Bio", "");
+
+  // 1. Setup peer connection (e.g. request phase established connection)
+  client_->Connect(peer1);
+  FlushClientQueue();
+  auto peer = mock_transport_->GetPeer(peer1);
+  ASSERT_TRUE(peer);
+  peer->data_channel_is_open = true;
+
+  // Add contact in pending state (simulating request received)
+  client_->AddContact(peer1, std::nullopt);  // starts pendingApproval, simulating request
+  // Simulate receiving request to move to awaitingApproval
+  mock_storage_->UpdateContact({peer1, identity::ContactStatus::awaitingApproval});
+  client_->GetContactService()->DebugReloadCache();
+
+  mock_transport_->log.sent_peer_messages.clear();
+
+  // 2. Confirm
+  client_->ConfirmContact(peer1);
+  FlushClientQueue();
+
+  // 3. Check profile sent
+  bool profile_sent = false;
+  for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
+    if (pid == peer1 && msg["type"] == "profile_info") {
+      EXPECT_EQ(msg["display_name"], "Approver");
+      profile_sent = true;
+    }
+  }
+  EXPECT_TRUE(profile_sent);
+}

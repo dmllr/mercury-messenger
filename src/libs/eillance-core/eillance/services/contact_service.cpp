@@ -50,10 +50,6 @@ void ContactService::AddContact(ContactID const& peer_id, std::optional<std::vec
     on_contact_status_changed_(peer_id, identity::ContactStatus::pendingApproval);
 
     // Trigger delivery via messaging service
-    // MessagingService will see the pending system message and try to send it.
-    // However, since it's a contact request, MessagingService must be able to establish
-    // a connection or send it via signaling.
-    // We ensure the Client creates the peer structure correctly via the handler.
     connection_handler_(peer_id);
     messaging_service_->SendQueuedMessages(peer_id);
   }
@@ -72,7 +68,16 @@ void ContactService::ConfirmContact(ContactID const& peer_id) {
         nlohmann::json{{"action", "contact_signature"}, {"signature", crypto::ToHex(signature)}}.dump()
     );
 
+    // This system message is just for local history.
     messaging_service_->SendSystemMessage(peer_id, nlohmann::json{{"action", "send_profile"}}.dump());
+
+    // Send actual profile data now that we've confirmed the contact.
+    // If the data channel is already open, send immediately.
+    // If not, the connection_handler_ below will trigger a connect, and Client::OnDataChannelOpen
+    // will call SendMyProfile because the contact status is now confirmed.
+    if (auto peer = transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
+      SendMyProfile(peer_id);
+    }
 
     INVARIANT(on_contact_status_changed_);
     on_contact_status_changed_(peer_id, identity::ContactStatus::confirmed);
@@ -123,6 +128,22 @@ void ContactService::ResetContactDisplayNameOverride(ContactID const& peer_id) {
   }
   INVARIANT(on_contact_profile_updated_);
   on_contact_profile_updated_(peer_id);
+}
+
+void ContactService::SendMyProfile(ContactID const& peer_id) {
+  nlohmann::json msg;
+  msg["type"] = "profile_info";
+  msg["display_name"] = account_service_->GetSettings()->GetMyDisplayName().value_or("");
+  msg["bio"] = account_service_->GetSettings()->GetMyBio().value_or("");
+
+  auto photo = account_service_->GetSettings()->GetMyPhotoBase64();
+  if (photo && !photo->empty()) {
+    msg["photo"] = *photo;
+  } else {
+    msg["photo"] = nullptr;
+  }
+
+  transport_->SendPeerDataChannelMessage(peer_id, msg);
 }
 
 auto ContactService::GenerateContactToken() -> std::vector<std::byte> {
@@ -202,6 +223,16 @@ void ContactService::OnContactConfirm(ContactID const& peer_id) {
     INVARIANT(messaging_service_);
     messaging_service_->SendSystemMessage(peer_id, nlohmann::json{{"action", "send_profile"}}.dump());
     messaging_service_->SendSystemMessage(peer_id, nlohmann::json{{"action", "request_profile"}}.dump());
+
+    // Send our profile and request theirs since the channel is likely open or opening.
+    if (auto peer = transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
+      SendMyProfile(peer_id);
+      transport_->SendPeerDataChannelMessage(peer_id, {{"type", "profile_request"}});
+    } else {
+      // If not connected, request connection.
+      // Once connected, Client::OnDataChannelOpen will call SendProfileInfo.
+      connection_handler_(peer_id);
+    }
   }
 }
 
@@ -280,6 +311,9 @@ void ContactService::OnReconfirmResponse(ContactID const& peer_id, std::string c
     transport_->SendPeerDataChannelMessage(peer_id, {{"type", "profile_request"}});
     INVARIANT(messaging_service_);
     messaging_service_->SendSystemMessage(peer_id, nlohmann::json{{"action", "send_profile"}}.dump());
+
+    // Also send our profile here since re-confirm essentially means we are good to go.
+    SendMyProfile(peer_id);
   }
 }
 

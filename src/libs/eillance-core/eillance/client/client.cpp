@@ -91,11 +91,7 @@ void Client::Terminate() {
 
 void Client::Configure(Config const& config) const { media_call_service_->Configure(config); }
 
-// --- TransportDelegate Implementation ---
-
-void Client::OnPeerReady(std::shared_ptr<transport::Peer> const&) {
-  // No-op
-}
+void Client::OnPeerReady(std::shared_ptr<transport::Peer> const&) {}
 
 void Client::OnSignalingErrorForPeer(ContactID const& peer_id, std::string const& error) {
   if (error == "peer_not_found") {
@@ -162,7 +158,6 @@ void Client::ProcessPeerMessage(Json message) {
     }
 
     if (type == "offer") {
-      // Ensure media peer connection is created and tracked so it can be closed later
       transport_->CreateMediaPeerConnection(peer_id);
       peer->has_media_peer_connection = true;
 
@@ -257,7 +252,8 @@ void Client::OnDataChannelOpen(ContactID const& peer_id) {
 
   // Sync profile info with the newly connected peer if they are a confirmed contact
   if (contact_service_->IsConfirmed(peer_id)) {
-    SendProfileInfo(peer_id);
+    // Delegate to contact service to send the profile info via data channel
+    contact_service_->SendMyProfile(peer_id);
   }
 }
 
@@ -354,25 +350,9 @@ void Client::SetupPeerHandlers(std::shared_ptr<transport::Peer> const& peer, Con
   };
 }
 
-void Client::SendProfileInfo(ContactID const& peer_id) {
-  Json msg;
-  msg["type"] = "profile_info";
-  msg["display_name"] = account_service_->GetSettings()->GetMyDisplayName().value_or("");
-  msg["bio"] = account_service_->GetSettings()->GetMyBio().value_or("");
-
-  auto photo = account_service_->GetSettings()->GetMyPhotoBase64();
-  if (photo && !photo->empty()) {
-    msg["photo"] = *photo;
-  } else {
-    msg["photo"] = nullptr;
-  }
-
-  transport_->SendPeerDataChannelMessage(peer_id, msg);
-}
+void Client::SendProfileInfo(ContactID const& peer_id) { contact_service_->SendMyProfile(peer_id); }
 
 void Client::BroadcastProfileUpdate() {
-  // Fix: Iterate over ALL contacts to ensure updates reach disconnected peers.
-  // Previously we only iterated transport peers (active connections).
   auto const contacts = contact_service_->GetContacts();
   for (auto const& contact : contacts) {
     if (contact.status == identity::ContactStatus::confirmed) {
@@ -380,9 +360,8 @@ void Client::BroadcastProfileUpdate() {
       if (peer && peer->data_channel_is_open) {
         SendProfileInfo(contact.peer_id);
       } else {
-        // Fix: Initiate connection if not currently connected.
-        // Once the data channel opens, OnDataChannelOpen will automatically send the profile info
-        // because of the check: if (contact_service_->IsConfirmed(peer_id)) SendProfileInfo(peer_id);
+        // Initiate connection if not currently connected.
+        // Once the data channel opens, OnDataChannelOpen will send profile.
         Connect(contact.peer_id);
       }
     }
