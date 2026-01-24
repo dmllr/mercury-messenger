@@ -58,7 +58,7 @@ TEST_F(AttachmentTest, SendMessageCalculatesHash) {
 
   auto const& att = entry.attachments[0];
   EXPECT_EQ(att.file_path, temp_file_path_);
-  EXPECT_EQ(att.mime_type, "image/jpeg"); // Check mime type
+  EXPECT_EQ(att.mime_type, "image/jpeg");  // Check mime type
   EXPECT_FALSE(att.hash.empty());
   EXPECT_EQ(att.hash.length(), 64);
 }

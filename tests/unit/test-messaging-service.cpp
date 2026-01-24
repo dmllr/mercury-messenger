@@ -358,9 +358,9 @@ TEST_F(MessagingServiceTest, FileUpload_FlowControl) {
   peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
   transport_->AddPeer(peer1, peer);
 
-  size_t const chunk_size = 16 * 1024;
-  size_t const file_size = chunk_size * 40;
-  std::string file_path = CreateTempFile(file_size);
+  constexpr size_t chunk_size = 16 * 1024;
+  constexpr size_t file_size = chunk_size * 40;
+  std::string const file_path = CreateTempFile(file_size);
 
   std::vector<services::AttachmentRequest> atts;
   atts.push_back({file_path, messaging::AttachmentType::file, "", "application/octet-stream"});
@@ -369,7 +369,7 @@ TEST_F(MessagingServiceTest, FileUpload_FlowControl) {
 
   size_t chunk_count = 0;
   std::string file_id;
-  for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
+  for (auto const& msg : mock_transport_->log.sent_peer_messages | std::views::values) {
     if (msg["type"] == "file_chunk") {
       chunk_count++;
       file_id = msg["id"];
@@ -378,18 +378,19 @@ TEST_F(MessagingServiceTest, FileUpload_FlowControl) {
 
   EXPECT_EQ(chunk_count, 32);
 
-  nlohmann::json ack_msg = {{"type", "file_chunk"}, {"id", file_id}, {"ack_seq", 32}};
+  nlohmann::json const ack_msg = {{"type", "file_chunk"}, {"id", file_id}, {"ack_seq", 32}};
 
   service_->ProcessIncomingFileChunk(peer1, ack_msg);
 
   size_t total_chunks = 0;
   bool eof_sent = false;
-  for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
+  for (auto const& msg : mock_transport_->log.sent_peer_messages | std::views::values) {
     if (msg["type"] == "file_chunk") {
-      if (msg["eof"] == true)
+      if (msg["eof"] == true) {
         eof_sent = true;
-      else
+      } else {
         total_chunks++;
+      }
     }
   }
 
@@ -400,7 +401,7 @@ TEST_F(MessagingServiceTest, FileUpload_FlowControl) {
 TEST_F(MessagingServiceTest, FileDownload_IntegrityCheck) {
   // 1. Create a dummy file to generate a valid hash
   // Use absolute path to ensure correct file handling
-  std::filesystem::path original_path = std::filesystem::path(CreateTempFile(1024, "abcdef"));
+  std::filesystem::path const original_path = std::filesystem::path(CreateTempFile(1024, "abcdef"));
   ASSERT_TRUE(std::filesystem::exists(original_path));
   ASSERT_GT(std::filesystem::file_size(original_path), 0);
 
@@ -451,19 +452,22 @@ TEST_F(MessagingServiceTest, FileDownload_IntegrityCheck) {
   std::vector<std::byte> data_bytes(buffer.size());
   std::memcpy(data_bytes.data(), buffer.data(), buffer.size());
 
-  nlohmann::json chunk_msg =
+  nlohmann::json const chunk_msg =
       {{"type", "file_chunk"}, {"id", "recv_file_1"}, {"seq", 0}, {"data", crypto::ToHex(data_bytes)}, {"eof", false}};
   service_->ProcessIncomingFileChunk(peer1, chunk_msg);
 
-  nlohmann::json eof_msg = {{"type", "file_chunk"}, {"id", "recv_file_1"}, {"seq", 1}, {"data", ""}, {"eof", true}};
+  nlohmann::json const eof_msg =
+      {{"type", "file_chunk"}, {"id", "recv_file_1"}, {"seq", 1}, {"data", ""}, {"eof", true}};
   service_->ProcessIncomingFileChunk(peer1, eof_msg);
 
   // File should be in temp_dir/attachments/recv_file_1.dat
-  std::filesystem::path expected_path = temp_dir_ / "attachments" / "recv_file_1.dat";
+  std::filesystem::path const expected_path = temp_dir_ / "attachments" / "recv_file_1.dat";
 
   // Wait slightly for async file ops/rename to complete
   for (int i = 0; i < 10; ++i) {
-    if (std::filesystem::exists(expected_path)) break;
+    if (std::filesystem::exists(expected_path)) {
+      break;
+    }
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
   }
 
@@ -490,16 +494,17 @@ TEST_F(MessagingServiceTest, FileDownload_HashMismatch) {
 
   service_->OnChatMessageReceived(peer1, encrypted, 888, false, {att});
 
-  std::vector<std::byte> data = {std::byte{0x00}, std::byte{0x01}};
-  nlohmann::json chunk_msg =
+  std::vector<std::byte> const data = {std::byte{0x00}, std::byte{0x01}};
+  nlohmann::json const chunk_msg =
       {{"type", "file_chunk"}, {"id", "bad_hash_file"}, {"seq", 0}, {"data", crypto::ToHex(data)}, {"eof", false}};
   service_->ProcessIncomingFileChunk(peer1, chunk_msg);
 
-  nlohmann::json eof_msg = {{"type", "file_chunk"}, {"id", "bad_hash_file"}, {"seq", 1}, {"data", ""}, {"eof", true}};
+  nlohmann::json const eof_msg =
+      {{"type", "file_chunk"}, {"id", "bad_hash_file"}, {"seq", 1}, {"data", ""}, {"eof", true}};
   service_->ProcessIncomingFileChunk(peer1, eof_msg);
 
   // Verify file does NOT exist
-  std::filesystem::path expected_path = temp_dir_ / "attachments" / "bad_hash_file.dat";
+  std::filesystem::path const expected_path = temp_dir_ / "attachments" / "bad_hash_file.dat";
   // Wait to ensure deletion happened if it was going to
   std::this_thread::sleep_for(std::chrono::milliseconds(100));
   EXPECT_FALSE(std::filesystem::exists(expected_path));
