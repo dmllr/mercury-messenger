@@ -51,9 +51,11 @@ class ProfileUpdatesTest : public ::testing::Test {
 TEST_F(ProfileUpdatesTest, BroadcastOnProfileUpdate) {
   // 1. Setup a confirmed, connected peer
   client_->AddContact(peer1, std::nullopt);
-  // Simulate confirmation in storage
+
+  // Directly update storage to confirm it, ensuring the rest of the fields are compliant
+  // We use the storage interface directly to simulate the DB state change
   mock_storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
-  client_->GetContactService()->DebugReloadCache();  // Reload to pick up confirmed status
+  client_->GetContactService()->DebugReloadCache();
 
   // 2. Connect
   client_->Connect(peer1);
@@ -84,6 +86,10 @@ TEST_F(ProfileUpdatesTest, SendProfileOnConnect) {
   // 1. Setup a confirmed contact
   client_->AddContact(peer1, std::nullopt);
   mock_storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
+  client_->GetContactService()->DebugReloadCache();
+
+  // Ensure profile sync is needed (simulate dirty state)
+  storage_->SetContactProfileSyncNeeded(peer1, true);
   client_->GetContactService()->DebugReloadCache();
 
   // Set my profile

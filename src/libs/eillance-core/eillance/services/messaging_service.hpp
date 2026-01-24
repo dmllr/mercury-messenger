@@ -50,8 +50,9 @@ class MessagingService {
 
   void SendSystemMessage(ContactID const& peer_id, std::string const& content);
 
-  // Attempts to flush queued messages for a connected peer
+  // Attempts to flush queued messages and read receipts for a connected peer
   void SendQueuedMessages(ContactID const& peer_id);
+  // Sends stored pending read receipts
   void SendPendingReadReceipts(ContactID const& peer_id);
 
   // Signal that a connection attempt finished (success or fail) to manage retry logic
@@ -102,7 +103,7 @@ class MessagingService {
   // Helper to connect to a peer if not connected
   void RequestConnection(ContactID const& peer_id);
   void UpdatePeerActivity(ContactID const& peer_id);
-  // Checks both DB and pending receipts
+  // Checks DB for messages, read receipts, and contact profile sync flag
   auto HasPendingWork(ContactID const& peer_id) -> bool;
   // Generate a unique ID for attachments
   static auto GenerateAttachmentId() -> std::string;
@@ -144,10 +145,6 @@ class MessagingService {
 
   OnChatMessageCallback on_message_received_;
   OnMessageStatusChangedCallback on_status_changed_;
-
-  // Queue for read receipts that need to be sent reliably.
-  std::unordered_map<ContactID, std::vector<uint64_t>> pending_read_receipts_;
-  std::recursive_mutex receipts_mutex_;
 
   // Active File Transfers
   std::map<std::string, TransferUploadState> active_uploads_;

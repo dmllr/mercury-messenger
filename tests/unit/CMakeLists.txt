@@ -41,6 +41,7 @@ add_executable(h-e-tests
   test-packet.cpp
   test-profile-updates.cpp
   test-profile-view-model.cpp
+  test-resilience.cpp
   test-settings-manager.cpp
   test-settings-view-model.cpp
   test-sqlite-storage.cpp

@@ -31,6 +31,7 @@ struct Contact {
   std::optional<std::string> photo_base64;
   std::optional<std::vector<std::byte>> signature_from_them{};
   std::optional<std::vector<std::byte>> my_signature_for_them{};
+  bool profile_sync_needed = false;
 };
 
 struct ProfileInfo {
@@ -62,6 +63,12 @@ class PersistentStorageImpl {
   virtual auto GetContact(ContactID const& peer_id) -> std::optional<identity::Contact> = 0;
   virtual void UpdateContact(identity::Contact const& contact) = 0;
   virtual void RemoveContact(ContactID const& peer_id) = 0;
+  virtual void SetContactProfileSyncNeeded(ContactID const& peer_id, bool needed) = 0;
+
+  // --- Resilience (Pending Read Receipts) ---
+  virtual void AddPendingReadReceipts(ContactID const& peer_id, std::vector<uint64_t> const& message_ids) = 0;
+  virtual auto GetPendingReadReceipts(ContactID const& peer_id) -> std::vector<uint64_t> = 0;
+  virtual void RemovePendingReadReceipts(ContactID const& peer_id, std::vector<uint64_t> const& message_ids) = 0;
 
   // --- History ---
   virtual auto AddHistoryEntry(messaging::HistoryEntryRecord entry) -> messaging::HistoryEntryRecord = 0;
@@ -119,6 +126,20 @@ class PersistentStorage {
   [[nodiscard]] auto GetContact(ContactID const& peer_id) const { return pimpl_->GetContact(peer_id); }
   void UpdateContact(identity::Contact const& contact) const { pimpl_->UpdateContact(contact); }
   void RemoveContact(ContactID const& peer_id) const { pimpl_->RemoveContact(peer_id); }
+  void SetContactProfileSyncNeeded(ContactID const& peer_id, bool needed) const {
+    pimpl_->SetContactProfileSyncNeeded(peer_id, needed);
+  }
+
+  // --- Resilience ---
+  void AddPendingReadReceipts(ContactID const& peer_id, std::vector<uint64_t> const& message_ids) const {
+    pimpl_->AddPendingReadReceipts(peer_id, message_ids);
+  }
+  [[nodiscard]] auto GetPendingReadReceipts(ContactID const& peer_id) const {
+    return pimpl_->GetPendingReadReceipts(peer_id);
+  }
+  void RemovePendingReadReceipts(ContactID const& peer_id, std::vector<uint64_t> const& message_ids) const {
+    pimpl_->RemovePendingReadReceipts(peer_id, message_ids);
+  }
 
   // --- History ---
   [[nodiscard]] auto AddHistoryEntry(messaging::HistoryEntryRecord entry) {
