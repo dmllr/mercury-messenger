@@ -40,6 +40,10 @@ class ContactService {
   void SetContactDisplayNameOverride(ContactID const& peer_id, std::string const& name);
   void ResetContactDisplayNameOverride(ContactID const& peer_id);
 
+  // Sends the user's profile to the specified peer via the data channel.
+  // This requires the data channel to be open.
+  void SendMyProfile(ContactID const& peer_id);
+
   auto GenerateContactToken() -> std::vector<std::byte>;
 
   // Debug Actions

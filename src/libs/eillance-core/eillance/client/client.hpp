@@ -63,7 +63,7 @@ class Client final : public transport::TransportDelegate {
   [[nodiscard]] auto IdentityExists() const -> bool;
   [[nodiscard]] auto GetMnemonic() const -> std::optional<std::string>;
 
-  // Note: These modify state and trigger network calls, so they are not const
+  // Profile mutation methods are no longer const as they trigger network broadcasts
   auto GenerateNewIdentity() -> std::string;
   auto RestoreIdentity(std::string const& mnemonic) -> bool;
   [[nodiscard]] auto CreateBackup(std::string const& p, std::string const& pw) const -> bool;
@@ -71,7 +71,6 @@ class Client final : public transport::TransportDelegate {
 
   void SetName(std::string const& name) const;
   void UpdateSignalingUrl(std::string const& url) const;
-
   void UpdateMyProfile(
       std::optional<std::string> const& name,
       std::optional<std::string> const& bio,
