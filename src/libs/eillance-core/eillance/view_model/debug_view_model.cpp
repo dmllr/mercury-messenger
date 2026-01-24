@@ -17,7 +17,7 @@ void DebugViewModel::EraseAllContacts() {
 }
 
 void DebugViewModel::RevokeAllApprovals() {
-  client_->DebugRevokeAllApprovals();
+  client_->DebugRevokeAllContactApprovals();
   router_->Queue().Push(EventDebugDataReset{});
 }
 

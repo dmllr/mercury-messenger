@@ -62,7 +62,7 @@ TEST_F(DebugViewModelTest, RevokeAllApprovals) {
   // 3. Force reload the cache in ContactManager so it sees the updates
   //    (We use the newly added DebugReloadCache logic or manually trigger it via restart)
   //    Since we can't easily restart in this test structure without losing `vm_`,
-  //    we rely on the `DebugRevokeAllApprovals` calling `Reload` internally.
+  //    we rely on the `DebugRevokeAllContactApprovals` calling `Reload` internally.
   //    BUT for the PRE-condition check, we need them to be confirmed.
   //    Let's use the new `DebugReloadCache` on the service if we can access it?
   //    We can't access `contact_service_->DebugReloadCache()` because it's on the service, not client interface public.
