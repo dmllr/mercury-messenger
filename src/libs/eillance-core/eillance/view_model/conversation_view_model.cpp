@@ -135,7 +135,7 @@ struct ConversationViewModel::Impl : public std::enable_shared_from_this<Impl> {
     }
   }
 
-  void OnMessageStatusChanged(ContactID const&, uint64_t message_id, messaging::MessageStatus status) {
+  void OnMessageStatusChanged(ContactID const&, uint64_t const message_id, messaging::MessageStatus const status) {
     std::lock_guard<std::mutex> const lock(mutex);
     bool changed = false;
     for (auto& entry : state.history) {
@@ -153,23 +153,19 @@ struct ConversationViewModel::Impl : public std::enable_shared_from_this<Impl> {
   }
 
   void OnAttachmentDownloaded(std::string const& attachment_id) {
-    // When a download finishes, simply refresh the view state to pick up the file on disk.
-    // The attachment path is stable, so UI just needs to re-render to see file.exists().
     std::lock_guard<std::mutex> const lock(mutex);
     bool found = false;
-    // We could optimize by only notifying if the attachment belongs to current history,
-    // but full refresh is safe.
-    for (auto const& entry : state.history) {
+
+    for (auto& entry : state.history) {
       if (std::holds_alternative<messaging::MessageEntry>(entry.data)) {
-        auto const& msg = std::get<messaging::MessageEntry>(entry.data);
-        for (auto const& att : msg.attachments) {
+        auto& msg = std::get<messaging::MessageEntry>(entry.data);
+        for (auto& att : msg.attachments) {
           if (att.id == attachment_id) {
+            att.is_downloaded = true;  // Actual state update
             found = true;
-            break;
           }
         }
       }
-      if (found) break;
     }
 
     if (found && observer) {
@@ -177,7 +173,7 @@ struct ConversationViewModel::Impl : public std::enable_shared_from_this<Impl> {
     }
   }
 
-  void OnTransferProgress(std::string const& attachment_id, float progress) {
+  void OnTransferProgress(std::string const& attachment_id, float const progress) const {
     // Forward progress to observer directly
     std::lock_guard<std::mutex> const lock(mutex);
     if (observer) {
@@ -185,14 +181,14 @@ struct ConversationViewModel::Impl : public std::enable_shared_from_this<Impl> {
     }
   }
 
-  void LoadInitialHistory(std::shared_ptr<Impl> const&, int generation) {
-    auto page = client->GetMessageHistoryPage(peer_id, 0, kPageSize);
+  void LoadInitialHistory(std::shared_ptr<Impl> const&, int const generation) {
+    auto [messages, total_messages] = client->GetMessageHistoryPage(peer_id, 0, kPageSize);
     std::lock_guard<std::mutex> const lock(mutex);
     if (generation != load_generation) return;
 
-    state.history.assign(page.messages.begin(), page.messages.end());
+    state.history.assign(messages.begin(), messages.end());
     chat_pages_loaded = 1;
-    state.has_older_messages = (kPageSize < page.total_messages);
+    state.has_older_messages = (kPageSize < total_messages);
     if (observer) {
       observer->OnHistoryUpdated(state);
     }

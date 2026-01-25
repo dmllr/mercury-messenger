@@ -85,6 +85,11 @@ auto MessagingService::SendChatMessage(
       continue;
     }
 
+    if (hash.empty()) {
+      LGW << "Failed to calculate hash for attachment (empty result): " << req.file_path;
+      continue;
+    }
+
     if (mime.empty()) {
       if (req.type == messaging::AttachmentType::image) {
         mime = "image/jpeg";
@@ -496,9 +501,12 @@ void MessagingService::OnChatMessageReceived(
 
   std::string const content = decrypted.substr(1);
 
-  if (!attachments.empty()) {
-    std::filesystem::path storage_root(storage_->GetPath());
-    std::filesystem::path attachments_dir = storage_root.parent_path() / "attachments";
+  // Make a mutable copy of attachments to update paths
+  std::vector<messaging::Attachment> local_attachments = attachments;
+
+  if (!local_attachments.empty()) {
+    std::filesystem::path const storage_root(storage_->GetPath());
+    std::filesystem::path const attachments_dir = storage_root.parent_path() / "attachments";
 
     std::error_code ec;
     std::filesystem::create_directories(attachments_dir, ec);
@@ -506,15 +514,19 @@ void MessagingService::OnChatMessageReceived(
       LGE << "Failed to create attachments directory: " << attachments_dir.string() << " Error: " << ec.message();
     }
 
-    std::unique_lock<std::mutex> lock(transfers_mutex_);
-    for (auto const& att : attachments) {
+    std::unique_lock<std::mutex> const lock(transfers_mutex_);
+    for (auto& att : local_attachments) {
+      // Determine final path and update attachment object so it is stored correctly in history
+      std::filesystem::path final_path = attachments_dir / (att.id + ".dat");
+      att.file_path = final_path.string();
+
       if (!att.is_downloaded) {
         if (active_downloads_.contains(att.id)) {
           continue;
         }
 
         TransferDownloadState state;
-        state.file_path = attachments_dir / (att.id + ".dat");
+        state.file_path = final_path;
         state.temp_path = attachments_dir / (att.id + ".tmp");
         state.expected_hash = att.hash;
         state.total_size = att.size_bytes;
@@ -528,7 +540,12 @@ void MessagingService::OnChatMessageReceived(
           }
           ofs.close();
           // Pre-allocate
-          std::filesystem::resize_file(state.temp_path, att.size_bytes);
+          try {
+            std::filesystem::resize_file(state.temp_path, att.size_bytes);
+          } catch (std::exception const& e) {
+            // Resize is an optimization; if it fails (e.g. on some Android filesystems), we continue.
+            LGW << "Failed to resize temp file for attachment " << att.id << ": " << e.what();
+          }
         } catch (std::exception const& e) {
           LGE << "Failed to reserve space for attachment " << att.id << ": " << e.what();
           continue;
@@ -551,7 +568,7 @@ void MessagingService::OnChatMessageReceived(
   auto entry = history_->AddTextEntry(
       peer_id,
       content,
-      attachments,
+      local_attachments,
       messaging::MessageDirection::received,
       is_system ? messaging::HistoryEntryKind::systemMessage : messaging::HistoryEntryKind::textMessage,
       message_id
@@ -586,7 +603,7 @@ void MessagingService::ProcessIncomingFileChunk(ContactID const& peer_id, nlohma
   TransferDownloadState& state = itr->second;
 
   if (eof) {
-    LGI << "EOF received for file " << att_id << ". Finalizing download.";
+    LGI << "EOF received for file " << att_id << " (seq " << seq << "). Finalizing download.";
     auto const node = active_downloads_.extract(itr);
     lock.unlock();
 
@@ -595,6 +612,9 @@ void MessagingService::ProcessIncomingFileChunk(ContactID const& peer_id, nlohma
     extracted_state.stream.close();
 
     std::string calculated_hash = CalculateFileHash(extracted_state.temp_path);
+    LGI << "File " << att_id
+        << " verification: " << (calculated_hash == extracted_state.expected_hash ? "MATCH" : "MISMATCH");
+
     if (calculated_hash == extracted_state.expected_hash) {
       bool renamed = false;
       for (int i = 0; i < 20; ++i) {
@@ -604,9 +624,11 @@ void MessagingService::ProcessIncomingFileChunk(ContactID const& peer_id, nlohma
         }
         std::filesystem::rename(extracted_state.temp_path, extracted_state.file_path, ec);
         if (!ec) {
-          renamed = true;
-          LGI << "File transfer complete and verified for " << att_id;
-          break;
+          if (std::filesystem::exists(extracted_state.file_path)) {
+            renamed = true;
+            LGI << "File transfer complete. Moved to: " << extracted_state.file_path.string();
+            break;
+          }
         }
         // If rename fails, try copy
         std::filesystem::copy_file(
@@ -617,8 +639,6 @@ void MessagingService::ProcessIncomingFileChunk(ContactID const& peer_id, nlohma
         );
         if (!ec) {
           std::filesystem::remove(extracted_state.temp_path, ec);
-          renamed = true;
-          LGI << "File transfer complete (copy) for " << att_id;
           break;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
@@ -649,6 +669,9 @@ void MessagingService::ProcessIncomingFileChunk(ContactID const& peer_id, nlohma
       state.stream.seekp(static_cast<std::streamoff>(offset));
       if (!state.stream.fail()) {
         state.stream.write(reinterpret_cast<char const*>(bytes.data()), bytes.size());
+        if (state.stream.fail()) {
+          LGE << "Write failed for download " << att_id << " at offset " << offset;
+        }
       } else {
         state.stream.clear();
         LGE << "Seek failed for download " << att_id << " at offset " << offset;
@@ -715,7 +738,7 @@ void MessagingService::SetTransferProgressCallback(OnTransferProgressCallback cb
   on_transfer_progress_ = std::move(cb);
 }
 
-bool MessagingService::HasPendingWork(ContactID const& peer_id) {
+bool MessagingService::HasPendingWork(ContactID const& peer_id) const {
   // Check pending actions (read receipts, profiles, etc.)
   auto pending_actions = storage_->GetPendingActions(peer_id);
   if (!pending_actions.empty()) {
@@ -761,7 +784,9 @@ auto MessagingService::CalculateFileHash(std::filesystem::path const& path) -> s
     if (bytes_read > 0) {
       SHA256_Update(&sha256, buffer, static_cast<size_t>(bytes_read));
     }
-    if (!file) break;
+    if (!file) {
+      break;
+    }
   }
   unsigned char hash[SHA256_DIGEST_LENGTH];
   SHA256_Final(hash, &sha256);

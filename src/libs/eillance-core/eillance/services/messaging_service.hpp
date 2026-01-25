@@ -110,7 +110,7 @@ class MessagingService {
   void RequestConnection(ContactID const& peer_id);
   void UpdatePeerActivity(ContactID const& peer_id);
   // Checks DB for messages, read receipts, and contact profile sync flag
-  auto HasPendingWork(ContactID const& peer_id) -> bool;
+  auto HasPendingWork(ContactID const& peer_id) const -> bool;
   // Generate a unique ID for attachments
   static auto GenerateAttachmentId() -> std::string;
 

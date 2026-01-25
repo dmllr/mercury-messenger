@@ -312,6 +312,7 @@ void Client::ProcessDataChannelMessage(ContactID const& peer_id, Json const& mes
         att.mime_type = j_att.value("mime", "");
         att.size_bytes = j_att.value("size", 0ULL);
         att.thumbnail_base64 = j_att.value("thumb", "");
+        att.hash = j_att.value("hash", "");
         att.is_downloaded = false;  // It's a remote file
         attachments.push_back(att);
       }
