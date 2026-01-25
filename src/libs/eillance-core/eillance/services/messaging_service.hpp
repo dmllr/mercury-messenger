@@ -96,11 +96,14 @@ class MessagingService {
   using OnAttachmentDownloadedCallback =
       std::function<void(ContactID const& peer_id, std::string const& attachment_id)>;
   using OnContactRestoredCallback = std::function<void(ContactID const&)>;
+  using OnTransferProgressCallback =
+      std::function<void(ContactID const& peer_id, std::string const& attachment_id, float progress)>;
 
   void SetChatMessageReceivedCallback(OnChatMessageCallback cb);
   void SetMessageStatusChangedCallback(OnMessageStatusChangedCallback cb);
   void SetAttachmentDownloadedCallback(OnAttachmentDownloadedCallback cb);
   void SetContactRestoredCallback(OnContactRestoredCallback cb);
+  void SetTransferProgressCallback(OnTransferProgressCallback cb);
 
  private:
   // Helper to connect to a peer if not connected
@@ -150,6 +153,7 @@ class MessagingService {
   OnMessageStatusChangedCallback on_status_changed_;
   OnAttachmentDownloadedCallback on_attachment_downloaded_;
   OnContactRestoredCallback on_contact_restored_;
+  OnTransferProgressCallback on_transfer_progress_;
 
   // Active File Transfers
   std::map<std::string, TransferUploadState> active_uploads_;
@@ -158,7 +162,8 @@ class MessagingService {
 
   // Flow control constants
   static constexpr size_t windowSizeChunks = 32;
-  static constexpr size_t chunkSizeBytes = 16 * 1024;
+  // Reduced to 4KB (8KB Hex encoded) to avoid MTU/fragmentation issues on some networks
+  static constexpr size_t chunkSizeBytes = 4 * 1024;
 };
 
 }  // namespace eillance::services

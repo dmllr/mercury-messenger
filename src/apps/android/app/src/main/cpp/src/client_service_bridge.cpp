@@ -624,6 +624,12 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
         "onHistoryUpdated",
         "(Lhela/eillance/ndkio/HistoryPage;)V"
     );
+    classref.RegisterMethod(
+        env,
+        "hela/eillance/viewmodels/NativeConversationObserver",
+        "onTransferProgress",
+        "(Ljava/lang/String;F)V"
+    );
 
     classref.RegisterClass(env, "hela/eillance/viewmodels/NativeProfileObserver");
     classref.RegisterMethod(

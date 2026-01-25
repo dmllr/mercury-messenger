@@ -15,7 +15,9 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -40,6 +42,7 @@ import java.io.File
 @Composable
 fun MediaBubbleContent(
   attachments: List<Attachment>,
+  transferProgress: Map<String, Float>,
   onMediaClick: (Attachment) -> Unit
 ) {
   if (attachments.isEmpty()) return
@@ -58,7 +61,12 @@ fun MediaBubbleContent(
       modifier = Modifier.fillMaxSize()
     ) { page ->
       val attachment = attachments[page]
-      MediaItem(attachment = attachment, onClick = { onMediaClick(attachment) })
+      val progress = transferProgress[attachment.id]
+      MediaItem(
+        attachment = attachment,
+        progress = progress,
+        onClick = { if (attachment.isDownloaded) onMediaClick(attachment) }
+      )
     }
 
     // Page indicator (if more than one)
@@ -81,18 +89,18 @@ fun MediaBubbleContent(
 }
 
 @Composable
-private fun MediaItem(attachment: Attachment, onClick: () -> Unit) {
+private fun MediaItem(attachment: Attachment, progress: Float?, onClick: () -> Unit) {
   Box(
     modifier = Modifier
       .fillMaxSize()
-      .clickable(onClick = onClick),
+      .clickable(enabled = attachment.isDownloaded, onClick = onClick),
     contentAlignment = Alignment.Center
   ) {
     val file = File(attachment.path)
     val context = LocalContext.current
 
     // Try to display the image/video thumb from file if downloaded, otherwise fallback to thumb string
-    if (file.exists()) {
+    if (attachment.isDownloaded && file.exists()) {
       val model = if (attachment.type == AttachmentType.Video) {
         ImageRequest.Builder(context)
           .data(file)
@@ -110,7 +118,7 @@ private fun MediaItem(attachment: Attachment, onClick: () -> Unit) {
         contentScale = ContentScale.Crop
       )
     } else {
-      // Fallback to embedded thumbnail if file not downloaded yet (only for sender usually now)
+      // Fallback to embedded thumbnail
       val imageBitmap = remember(attachment.thumbnail) {
         if (!attachment.thumbnail.isNullOrEmpty()) {
           try {
@@ -134,13 +142,29 @@ private fun MediaItem(attachment: Attachment, onClick: () -> Unit) {
           modifier = Modifier.fillMaxSize().background(Color.Gray),
           contentAlignment = Alignment.Center
         ) {
-          Text("Loading...", color = Color.White)
+          // If no thumbnail, show icon
         }
       }
+
+      // Overlay when not downloaded or downloading
+      Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.3f)))
     }
 
-    // Play icon overlay for videos
-    if (attachment.type == AttachmentType.Video) {
+    // Overlays
+    if (progress != null) {
+      CircularProgressIndicator(
+        progress = { progress },
+        color = Color.White,
+        modifier = Modifier.size(48.dp)
+      )
+    } else if (!attachment.isDownloaded) {
+      Icon(
+        imageVector = Icons.Default.Download,
+        contentDescription = "Downloading", // Waiting to start
+        tint = Color.White.copy(alpha = 0.8f),
+        modifier = Modifier.size(48.dp)
+      )
+    } else if (attachment.type == AttachmentType.Video) {
       Icon(
         imageVector = Icons.Default.PlayCircle,
         contentDescription = "Play Video",

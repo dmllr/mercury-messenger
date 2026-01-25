@@ -1,3 +1,4 @@
+#include <map>
 #include <mutex>
 #include <variant>
 
@@ -29,6 +30,7 @@ struct MockConversationObserver : public ConversationViewModel::Observer {
   ConversationViewModel::State state;
   bool updated = false;
   std::mutex mutex;
+  std::map<std::string, float> progress_updates;
 
   void OnHistoryUpdated(ConversationViewModel::State const& s) override {
     std::lock_guard<std::mutex> const lock(mutex);
@@ -36,9 +38,20 @@ struct MockConversationObserver : public ConversationViewModel::Observer {
     updated = true;
   }
 
+  void OnTransferProgress(std::string const& attachment_id, float progress) override {
+    std::lock_guard<std::mutex> const lock(mutex);
+    progress_updates[attachment_id] = progress;
+  }
+
   auto GetState() -> ConversationViewModel::State {
     std::lock_guard<std::mutex> const lock(mutex);
     return state;
+  }
+
+  auto GetProgress(std::string const& id) -> float {
+    std::lock_guard<std::mutex> const lock(mutex);
+    if (progress_updates.count(id)) return progress_updates[id];
+    return -1.0f;
   }
 };
 
@@ -179,4 +192,24 @@ TEST_F(ConversationViewModelTest, MessageStatusUpdate) {
     }
   }
   EXPECT_TRUE(found);
+}
+
+TEST_F(ConversationViewModelTest, TransferProgressUpdates) {
+  auto observer = std::make_shared<MockConversationObserver>();
+  vm_->SetObserver(observer);
+
+  std::string att_id = "test-att-id";
+
+  // Simulate progress events
+  router_->Queue().Push(EventTransferProgress{peer1, att_id, 0.1f});
+  WaitFor([&] { return observer->GetProgress(att_id) >= 0.1f; });
+  EXPECT_NEAR(observer->GetProgress(att_id), 0.1f, 0.001f);
+
+  router_->Queue().Push(EventTransferProgress{peer1, att_id, 0.5f});
+  WaitFor([&] { return observer->GetProgress(att_id) >= 0.5f; });
+  EXPECT_NEAR(observer->GetProgress(att_id), 0.5f, 0.001f);
+
+  router_->Queue().Push(EventTransferProgress{peer1, att_id, 1.0f});
+  WaitFor([&] { return observer->GetProgress(att_id) >= 1.0f; });
+  EXPECT_NEAR(observer->GetProgress(att_id), 1.0f, 0.001f);
 }

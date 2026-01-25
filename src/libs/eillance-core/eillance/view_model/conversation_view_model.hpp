@@ -34,6 +34,7 @@ class ConversationViewModel {
     auto operator=(Observer&&) -> Observer& = delete;
     virtual ~Observer() = default;
     virtual void OnHistoryUpdated(State const& state) = 0;
+    virtual void OnTransferProgress(std::string const& attachment_id, float progress) = 0;
   };
 
   void SetObserver(std::shared_ptr<Observer> observer) const;

@@ -37,6 +37,11 @@ struct EventAttachmentDownloaded {
   ContactID peer_id;
   std::string attachment_id;
 };
+struct EventTransferProgress {
+  ContactID peer_id;
+  std::string attachment_id;
+  float progress;
+};
 struct EventPeerListUpdate {
   std::vector<Device> peers{};
 };
@@ -93,6 +98,7 @@ class ClientEventRouter {
     messaging->SetChatMessageReceivedCallback([](auto&&, auto&&) {});
     messaging->SetMessageStatusChangedCallback([](auto&&, auto, auto) {});
     messaging->SetAttachmentDownloadedCallback([](auto&&, auto&&) {});
+    messaging->SetTransferProgressCallback([](auto&&, auto&&, auto) {});
     contacts->SetContactRequestCallback([](auto&&) {});
     contacts->SetContactStatusChangedCallback([](auto&&, auto) {});
     contacts->SetContactProfileUpdatedCallback([](auto&&) {});
@@ -124,6 +130,9 @@ class ClientEventRouter {
     });
     messaging->SetAttachmentDownloadedCallback([this](auto const& peer, auto const& att_id) {
       eventQueue_.Push(EventAttachmentDownloaded{peer, att_id});
+    });
+    messaging->SetTransferProgressCallback([this](auto const& peer, auto const& att_id, float progress) {
+      eventQueue_.Push(EventTransferProgress{peer, att_id, progress});
     });
     contacts->SetContactRequestCallback([this](auto const& id) { eventQueue_.Push(EventContactRequest{id}); });
     contacts->SetContactStatusChangedCallback([this](auto const& id, auto status) {

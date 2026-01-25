@@ -33,6 +33,7 @@ add_executable(h-e-tests
   test-delivery-service.cpp
   test-dispatch-queue.cpp
   test-event-queue.cpp
+  test-file-transfer-resilience.cpp
   test-h264-utils.cpp
   test-id-manager.cpp
   test-media-call-service.cpp

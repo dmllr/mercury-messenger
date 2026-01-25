@@ -206,6 +206,21 @@ class AndroidConversationObserver final
     env->DeleteLocalRef(history_list);
     env->DeleteLocalRef(page_java);
   }
+
+  void OnTransferProgress(std::string const& attachment_id, float progress) override {
+    auto env_scope = GetEnv();
+    auto* env = env_scope.Get();
+    if ((env == nullptr) || (java_listener_ == nullptr)) {
+      return;
+    }
+
+    jstring j_att_id = env->NewStringUTF(attachment_id.c_str());
+    auto& class_refs = ClassRefs::Instance();
+    auto& listener_holder = class_refs.Class("hela/eillance/viewmodels/NativeConversationObserver");
+    jmethodID on_progress = listener_holder.GetMethod("onTransferProgress");
+    env->CallVoidMethod(java_listener_, on_progress, j_att_id, progress);
+    env->DeleteLocalRef(j_att_id);
+  }
 };
 
 class AndroidProfileObserver final
