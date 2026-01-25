@@ -60,9 +60,9 @@ void ContactService::AddContact(ContactID const& peer_id, std::optional<std::vec
     nlohmann::json content = {
         {"action", "contact_request"},
         {"profile",
-         {{"display_name", account_service_->GetSettings()->GetMyDisplayName().value_or("")},
-          {"bio", account_service_->GetSettings()->GetMyBio().value_or("")},
-          {"photo", account_service_->GetSettings()->GetMyPhotoBase64()}}},
+                   {{"display_name", account_service_->GetSettings()->GetMyDisplayName().value_or("")},
+                       {"bio", account_service_->GetSettings()->GetMyBio().value_or("")},
+                       {"photo", account_service_->GetSettings()->GetMyPhotoBase64()}}},
     };
     if (token) {
       content["token"] = crypto::ToHex(*token);
@@ -92,6 +92,9 @@ void ContactService::ConfirmContact(ContactID const& peer_id) {
         peer_id,
         nlohmann::json{{"action", "contact_signature"}, {"signature", crypto::ToHex(signature)}}.dump()
     );
+
+    // Ensure we actually send the signature message to the peer via Data Channel
+    EnqueueOrSend(peer_id, {{"type", "contact_signature"}, {"signature", crypto::ToHex(signature)}});
 
     // This system message is just for local history.
     messaging_service_->SendSystemMessage(peer_id, nlohmann::json{{"action", "send_profile"}}.dump());
@@ -236,8 +239,22 @@ void ContactService::OnContactAddRequest(
       on_contact_profile_updated_(peer_id);
     }
   } else {
+    // If the contact is already confirmed locally, it implies the peer might have lost their state (reinstall).
+    // In this case, we must help them restore the connection by sending the necessary proofs.
     if (manager_->IsConfirmedContact(peer_id)) {
       transport_->SendSignalingMessage({{"type", "contact_confirm"}, {"to", peer_id.ToString()}});
+
+      // Resend our signature so the peer can validate us and auto-confirm.
+      auto signature = account_service_->Sign(peer_id.Span());
+      EnqueueOrSend(peer_id, {{"type", "contact_signature"}, {"signature", crypto::ToHex(signature)}});
+
+      // Resend our profile.
+      SendMyProfile(peer_id);
+
+      // Ensure we are trying to connect so these messages are delivered.
+      connection_handler_(peer_id);
+      INVARIANT(messaging_service_);
+      messaging_service_->SendQueuedMessages(peer_id);
     }
   }
 }
@@ -256,6 +273,16 @@ void ContactService::OnContactConfirm(ContactID const& peer_id) {
     SyncProfile(peer_id);    // Flush actions
     EnqueueOrSend(peer_id, {{"type", "profile_request"}});
   }
+}
+
+void ContactService::OnContactRestored(ContactID const& peer_id) {
+  // Triggered when a message is successfully decrypted from a peer we didn't have in our contact list (reinstall scenario).
+  // Request their profile so the UI isn't just an ID.
+  EnqueueOrSend(peer_id, {{"type", "profile_request"}});
+
+  INVARIANT(on_contact_status_changed_);
+  // Notify UI that this peer is now confirmed.
+  on_contact_status_changed_(peer_id, identity::ContactStatus::confirmed);
 }
 
 void ContactService::OnContactRemoved(ContactID const& peer_id) {

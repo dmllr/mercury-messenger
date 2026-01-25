@@ -230,3 +230,97 @@ TEST_F(ResilienceTest, PendingActionsPersistAndSend) {
   actions = mock_storage_->GetPendingActions(peer1);
   EXPECT_TRUE(actions.empty());
 }
+
+// Test scenario: User B reinstalled (lost contact list) receiving a message from User A.
+// Expectation: B auto-creates the contact as CONFIRMED so the message is visible.
+TEST_F(ResilienceTest, ReinstallRecovery_MessageReceipt) {
+  // 1. Simulate "wipe" by removing peer1 from contacts.
+  client_->DeleteContact(peer1);
+  FlushClientQueue();
+  ASSERT_FALSE(client_->GetContactService()->GetContact(peer1));
+
+  // 2. Connect (as if A connected to B)
+  client_->Connect(peer1);
+  FlushClientQueue();
+  auto peer = mock_transport_->GetPeer(peer1);
+  ASSERT_TRUE(peer);
+
+  // 3. Simulate receiving a chat message
+  peer->data_channel_is_open = true;
+  eillance::crypto::SessionCipher other;
+  other.ComputeSharedSecret(peer->session_cipher->GetPublicKey());
+  peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
+
+  std::string plain = "Recovery Message";
+  std::string payload;
+  payload.push_back(static_cast<char>(services::MessagingService::currentMessageVersion));
+  payload.append(plain);
+  auto encrypted = other.Encrypt(payload);
+
+  nlohmann::json const chat_msg = {
+      {"type", "chat"},
+      {"message_id", 100},
+      {"is_system", false},
+      {"payload", std::vector<std::byte>(encrypted.begin(), encrypted.end())}
+  };
+
+  // CORRECT: Inject message directly into the data channel handler, mimicking WebRTC transport
+  ASSERT_TRUE(peer->on_data_channel_message);
+  peer->on_data_channel_message(chat_msg.dump());
+  FlushClientQueue();
+
+  // 4. Verify contact was auto-created and CONFIRMED
+  auto contact = client_->GetContactService()->GetContact(peer1);
+  ASSERT_TRUE(contact.has_value());
+  EXPECT_EQ(contact->status, identity::ContactStatus::confirmed);
+
+  // 5. Verify message stored
+  auto history = client_->GetMessageHistoryPage(peer1, 0, 10);
+  ASSERT_FALSE(history.messages.empty());
+  auto const& data = std::get<messaging::MessageEntry>(history.messages[0].data);
+  EXPECT_EQ(data.content, "Recovery Message");
+}
+
+// Test scenario: User B reinstalled and tries to add User A.
+// Expectation: A (confirmed) resends signature and profile, B confirms.
+TEST_F(ResilienceTest, ReinstallRecovery_ContactAdd) {
+  // 1. Ensure A is confirmed (Setup does this).
+  ASSERT_TRUE(client_->GetContactService()->IsConfirmed(peer1));
+
+  // 2. Simulate receiving "contact_request" (B adding A)
+  nlohmann::json req_msg = {
+      {"from", peer1.ToString()},
+      {"type", "contact_add_request"},
+      {"profile", {{"display_name", "Reinstalled B"}}}
+  };
+
+  mock_transport_->log.sent_signaling_messages.clear();
+  mock_transport_->log.sent_peer_messages.clear();
+
+  mock_transport_->SimulatePeerMessage(peer1, req_msg);
+  FlushClientQueue();
+
+  // 3. Verify A sends "contact_confirm" AND "contact_signature"
+  bool confirm_sent = false;
+  for (auto const& msg : mock_transport_->log.sent_signaling_messages) {
+    if (msg["type"] == "contact_confirm" && msg["to"] == peer1.ToString()) {
+      confirm_sent = true;
+    }
+  }
+  EXPECT_TRUE(confirm_sent) << "Should send confirmation via signaling";
+
+  // Simulate data channel open to flush queued signature
+  mock_transport_->delegate->OnDataChannelOpen(peer1);
+  FlushClientQueue();
+
+  bool signature_sent = false;
+  bool profile_sent = false;
+  for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
+    if (pid == peer1) {
+      if (msg["type"] == "contact_signature") signature_sent = true;
+      if (msg["type"] == "profile_info") profile_sent = true;
+    }
+  }
+  EXPECT_TRUE(signature_sent) << "Should send signature via data channel";
+  EXPECT_TRUE(profile_sent) << "Should send profile via data channel";
+}

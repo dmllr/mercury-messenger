@@ -35,6 +35,12 @@ Client::Client(std::shared_ptr<storage::PersistentStorage> storage, std::shared_
       contact_manager,
       [this](ContactID const& id) { this->Connect(id); }  // Inject connection logic
   );
+
+  // Wire auto-restored contact callback
+  messaging_service_->SetContactRestoredCallback([this](ContactID const& id) {
+    contact_service_->OnContactRestored(id);
+  });
+
   media_call_service_ = std::make_shared<services::MediaCallService>(transport_);
 
   // Wire dependencies
@@ -214,7 +220,7 @@ void Client::ProcessPeerMessage(Json message) {
     );
   }
 
-  // Contact & Profile Logic
+    // Contact & Profile Logic
   else if (type == "contact_add_request") {
     std::optional<std::string> token;
     if (message.contains("token")) {
