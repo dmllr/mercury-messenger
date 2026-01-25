@@ -97,13 +97,13 @@ auto MessagingService::SendChatMessage(
 
     domain_attachments.push_back(
         {.id = GenerateAttachmentId(),
-         .type = req.type,
-         .file_path = req.file_path,
-         .mime_type = mime,
-         .size_bytes = file_size,
-         .thumbnail_base64 = req.thumbnail_base64,
-         .hash = hash,
-         .is_downloaded = true}
+            .type = req.type,
+            .file_path = req.file_path,
+            .mime_type = mime,
+            .size_bytes = file_size,
+            .thumbnail_base64 = req.thumbnail_base64,
+            .hash = hash,
+            .is_downloaded = true}
     );
   }
 
@@ -239,8 +239,8 @@ void MessagingService::SendQueuedMessages(ContactID const& peer_id) {
                  {"type", att.type},
                  {"mime", att.mime_type},
                  {"size", att.size_bytes},
-                 // Thumbnail is no longer sent over the wire; receiver generates it from full file
-                 // {"thumb", att.thumbnail_base64},
+                    // Thumbnail is no longer sent over the wire; receiver generates it from full file
+                    // {"thumb", att.thumbnail_base64},
                  {"hash", att.hash}}
             );
           }
@@ -367,12 +367,12 @@ void MessagingService::OnConnectionAttemptFinished(ContactID const& peer_id) con
 }
 
 auto MessagingService::GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t page_size) const
-    -> messaging::HistoryPage {
+-> messaging::HistoryPage {
   return history_->GetHistoryPage(peer_id, page_index, page_size);
 }
 
 auto MessagingService::GetFullMessageContent(ContactID const& peer_id, uint64_t message_id) const
-    -> std::optional<std::string> {
+-> std::optional<std::string> {
   return history_->GetFullMessageContent(peer_id, message_id);
 }
 
@@ -433,6 +433,17 @@ void MessagingService::OnChatMessageReceived(
   auto peer = transport_->GetPeer(peer_id);
   if (!peer || !peer->session_cipher->IsReady()) {
     return;
+  }
+
+  // Resilience: Auto-create contact if it doesn't exist to ensure the message is visible.
+  // This handles scenarios where the database was wiped but the identity key persists (reinstall).
+  if (!contact_manager_->GetContact(peer_id)) {
+    LGI << "Received message from unknown peer " << peer_id.ToString() << ". Auto-restoring contact.";
+    // Cryptographic success implies we were previously confirmed. Restore status to confirmed.
+    contact_manager_->MarkAsConfirmed(peer_id);
+    if (on_contact_restored_) {
+      on_contact_restored_(peer_id);
+    }
   }
 
   UpdatePeerActivity(peer_id);
@@ -633,7 +644,7 @@ void MessagingService::ProcessIncomingFileChunk(ContactID const& peer_id, nlohma
 }
 
 void MessagingService::OnMessageReceipt(ContactID const& peer_id, uint64_t message_id, std::string const& status)
-    const {
+const {
   auto s = messaging::MessageStatus::sent;
   if (status == "delivered") {
     s = messaging::MessageStatus::delivered;
@@ -660,6 +671,10 @@ void MessagingService::SetMessageStatusChangedCallback(OnMessageStatusChangedCal
 
 void MessagingService::SetAttachmentDownloadedCallback(OnAttachmentDownloadedCallback cb) {
   on_attachment_downloaded_ = std::move(cb);
+}
+
+void MessagingService::SetContactRestoredCallback(OnContactRestoredCallback cb) {
+  on_contact_restored_ = std::move(cb);
 }
 
 bool MessagingService::HasPendingWork(ContactID const& peer_id) {

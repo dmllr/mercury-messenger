@@ -17,7 +17,7 @@
 namespace eillance::services {
 
 class ContactService {
- public:
+public:
   using ConnectionRequestHandler = std::function<void(ContactID const&)>;
 
   explicit ContactService(
@@ -67,6 +67,7 @@ class ContactService {
       nlohmann::json const& profile_json
   );
   void OnContactConfirm(ContactID const& peer_id);
+  void OnContactRestored(ContactID const& peer_id);
   void OnContactRemoved(ContactID const& peer_id);
   void OnProfileUpdate(ContactID const& peer_id, nlohmann::json const& profile_json);
   void OnReconfirmRequest(ContactID const& peer_id);
@@ -89,7 +90,7 @@ class ContactService {
   void SetPeerListUpdateCallback(OnPeerListUpdateCallback cb);
   void SetProfileReceivedCallback(OnProfileReceivedCallback cb);
 
- private:
+private:
   void NotifyPeerListUpdate() const;
   static auto ParseDeviceProfile(nlohmann::json const& jprofile) -> Device::Profile;
   void SendMyProfile(ContactID const& peer_id);

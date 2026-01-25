@@ -201,13 +201,11 @@ TEST_F(MessagingServiceTest, DownloadTriggersCallback) {
   std::memcpy(data_bytes.data(), file_content.data(), file_content.size());
   std::string data_hex = eillance::crypto::ToHex(data_bytes);
 
-  nlohmann::json chunk_msg = {
-      {"type", "file_chunk"}, {"id", "att_1"}, {"seq", 0}, {"data", data_hex}, {"eof", false}};
+  nlohmann::json chunk_msg = {{"type", "file_chunk"}, {"id", "att_1"}, {"seq", 0}, {"data", data_hex}, {"eof", false}};
   service_->ProcessIncomingFileChunk(peer1, chunk_msg);
 
   // Send EOF chunk
-  nlohmann::json eof_msg = {
-      {"type", "file_chunk"}, {"id", "att_1"}, {"seq", 1}, {"data", ""}, {"eof", true}};
+  nlohmann::json eof_msg = {{"type", "file_chunk"}, {"id", "att_1"}, {"seq", 1}, {"data", ""}, {"eof", true}};
   service_->ProcessIncomingFileChunk(peer1, eof_msg);
 
   // 3. Verify

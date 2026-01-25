@@ -93,6 +93,17 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
   void RemoveContact(ContactID const& peer_id) override {
     std::lock_guard const lock(mutex_);
     contacts_.erase(peer_id);
+
+    // FIX: Also remove associated history, large messages, and pending actions
+    // This matches the cascading delete behavior of the real SQLiteStorage implementation
+    if (auto it = history_.find(peer_id); it != history_.end()) {
+      for (auto const& entry : it->second) {
+        large_messages_.erase(entry.id);
+      }
+      history_.erase(it);
+    }
+
+    std::erase_if(pending_actions_, [&](auto const& action) { return action.peer_id == peer_id; });
   }
 
   // --- Resilience ---
