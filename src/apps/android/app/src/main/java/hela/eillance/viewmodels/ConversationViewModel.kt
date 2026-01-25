@@ -38,6 +38,10 @@ class ConversationViewModel(
   private val _interactionHistoryPage = MutableStateFlow(HistoryPage())
   val interactionHistoryPage = _interactionHistoryPage.asStateFlow()
 
+  // Map of AttachmentID -> Progress (0.0 to 1.0)
+  private val _transferProgress = MutableStateFlow<Map<String, Float>>(emptyMap())
+  val transferProgress = _transferProgress.asStateFlow()
+
   init {
     nativePtr = nativeCreate(peerId, this)
     if (nativePtr == 0L) {
@@ -55,6 +59,16 @@ class ConversationViewModel(
 
   override fun onHistoryUpdated(page: HistoryPage) {
     _interactionHistoryPage.value = page
+  }
+
+  override fun onTransferProgress(attachmentId: String, progress: Float) {
+    val currentMap = _transferProgress.value.toMutableMap()
+    if (progress >= 1.0f) {
+      currentMap.remove(attachmentId)
+    } else {
+      currentMap[attachmentId] = progress
+    }
+    _transferProgress.value = currentMap
   }
 
   fun sendMessage(message: String) {

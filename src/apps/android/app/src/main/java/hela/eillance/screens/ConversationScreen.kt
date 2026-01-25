@@ -58,6 +58,7 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -131,6 +132,7 @@ fun ConversationScreen(
 ) {
   val listState = rememberLazyListState()
   val coroutineScope = rememberCoroutineScope()
+  val transferProgress by chatVM.transferProgress.collectAsState()
 
   var previousHistorySize by remember(peerId) { mutableIntStateOf(historyPage.messages.size) }
 
@@ -277,6 +279,7 @@ fun ConversationScreen(
         historyPage = historyPage,
         listState = listState,
         chatVM = chatVM,
+        transferProgress = transferProgress,
         locale = locale,
         zoneId = zoneId,
         onSystemMessageClick = { clickedEntry ->
@@ -389,6 +392,7 @@ fun ChatHistory(
   historyPage: HistoryPage,
   listState: LazyListState,
   chatVM: ConversationViewModel,
+  transferProgress: Map<String, Float>,
   locale: Locale,
   zoneId: ZoneId,
   onSystemMessageClick: (HistoryEntry) -> Unit,
@@ -422,6 +426,7 @@ fun ChatHistory(
         HistoryEntryKind.TextMessage -> MessageBubble(
           entry = item,
           onShowMore = chatVM::loadFullMessage,
+          transferProgress = transferProgress,
           zoneId = zoneId,
           formatters = formatters,
           onMediaClick = onMediaClick
@@ -454,6 +459,7 @@ fun ChatHistory(
 fun MessageBubble(
   entry: HistoryEntry,
   onShowMore: (Long) -> Unit,
+  transferProgress: Map<String, Float>,
   zoneId: ZoneId,
   formatters: Triple<DateTimeFormatter, DateTimeFormatter, DateTimeFormatter>,
   onMediaClick: (Attachment) -> Unit
@@ -493,6 +499,7 @@ fun MessageBubble(
       if (entry.attachments.isNotEmpty()) {
         MediaBubbleContent(
           attachments = entry.attachments,
+          transferProgress = transferProgress,
           onMediaClick = onMediaClick
         )
         if (!entry.content.isNullOrBlank()) {

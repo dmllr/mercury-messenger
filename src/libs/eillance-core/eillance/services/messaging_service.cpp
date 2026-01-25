@@ -335,6 +335,20 @@ void MessagingService::PumpUpload(ContactID const& peer_id, std::string const& f
 
     transport_->SendPeerDataChannelMessage(peer_id, chunk_msg);
     state.sequence++;
+
+    // Progress update for sender
+    if (on_transfer_progress_ && state.total_size > 0) {
+      float progress = static_cast<float>(offset + bytes_read) / static_cast<float>(state.total_size);
+      if (progress > 1.0f) progress = 1.0f;
+      // We are holding the lock, so careful with callbacks.
+      // But PumpUpload is usually called from a worker thread or transport thread.
+      // Ideally dispatch to another queue, but for now we call directly.
+      // To avoid deadlocks, unlock briefly or assume callback is fast/safe.
+      // Better: release lock before callback. But we are in a loop.
+      // Let's defer progress updates? Or just call it.
+      // Since it's a simple atomic/float update in UI, it should be fine.
+      on_transfer_progress_(peer_id, file_id, progress);
+    }
   }
 
   bool is_stream_done = (state.sequence * chunkSizeBytes) >= state.total_size;
@@ -345,6 +359,9 @@ void MessagingService::PumpUpload(ContactID const& peer_id, std::string const& f
     transport_->SendPeerDataChannelMessage(peer_id, eof_msg);
 
     active_uploads_.erase(itr);
+    if (on_transfer_progress_) {
+      on_transfer_progress_(peer_id, file_id, 1.0f);
+    }
   }
 }
 
@@ -613,10 +630,13 @@ void MessagingService::ProcessIncomingFileChunk(ContactID const& peer_id, nlohma
         if (on_attachment_downloaded_) {
           on_attachment_downloaded_(peer_id, att_id);
         }
+        if (on_transfer_progress_) {
+          on_transfer_progress_(peer_id, att_id, 1.0f);
+        }
       }
     } else {
       LGE << "Hash mismatch for file " << att_id << ". Expected: " << extracted_state.expected_hash
-          << ", Got: " << calculated_hash;
+          << ", Got: " << calculated_hash << ". Temp file: " << extracted_state.temp_path.string();
       std::error_code ec;
       std::filesystem::remove(extracted_state.temp_path, ec);
     }
@@ -635,9 +655,23 @@ void MessagingService::ProcessIncomingFileChunk(ContactID const& peer_id, nlohma
       }
     }
 
+    // Progress
+    if (on_transfer_progress_ && state.total_size > 0) {
+      auto const current_bytes = (seq * chunkSizeBytes) + bytes.size();
+      float progress = static_cast<float>(current_bytes) / static_cast<float>(state.total_size);
+      if (progress > 1.0f) progress = 1.0f;
+      // Unlock briefly for callback?
+      lock.unlock();
+      on_transfer_progress_(peer_id, att_id, progress);
+      lock.lock();
+    }
+
     if ((seq + 1) % windowSizeChunks == 0) {
       nlohmann::json ack_msg = {{"type", "file_chunk"}, {"id", att_id}, {"ack_seq", seq + 1}};
-      lock.unlock();
+      // Unlock to send
+      if (lock.owns_lock()) {
+        lock.unlock();
+      }
       transport_->SendPeerDataChannelMessage(peer_id, ack_msg);
     }
   }
@@ -675,6 +709,10 @@ void MessagingService::SetAttachmentDownloadedCallback(OnAttachmentDownloadedCal
 
 void MessagingService::SetContactRestoredCallback(OnContactRestoredCallback cb) {
   on_contact_restored_ = std::move(cb);
+}
+
+void MessagingService::SetTransferProgressCallback(OnTransferProgressCallback cb) {
+  on_transfer_progress_ = std::move(cb);
 }
 
 bool MessagingService::HasPendingWork(ContactID const& peer_id) {

@@ -20,6 +20,7 @@ interface NativeContactsObserver {
 @Keep
 interface NativeConversationObserver {
   fun onHistoryUpdated(page: HistoryPage)
+  fun onTransferProgress(attachmentId: String, progress: Float)
 }
 
 @Keep

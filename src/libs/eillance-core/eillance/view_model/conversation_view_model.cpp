@@ -177,6 +177,14 @@ struct ConversationViewModel::Impl : public std::enable_shared_from_this<Impl> {
     }
   }
 
+  void OnTransferProgress(std::string const& attachment_id, float progress) {
+    // Forward progress to observer directly
+    std::lock_guard<std::mutex> const lock(mutex);
+    if (observer) {
+      observer->OnTransferProgress(attachment_id, progress);
+    }
+  }
+
   void LoadInitialHistory(std::shared_ptr<Impl> const&, int generation) {
     auto page = client->GetMessageHistoryPage(peer_id, 0, kPageSize);
     std::lock_guard<std::mutex> const lock(mutex);
@@ -219,6 +227,11 @@ ConversationViewModel::ConversationViewModel(
   Subscribe<EventAttachmentDownloaded>(queue, [impl](EventAttachmentDownloaded const& event) {
     if (event.peer_id == impl->peer_id) {
       impl->OnAttachmentDownloaded(event.attachment_id);
+    }
+  });
+  Subscribe<EventTransferProgress>(queue, [impl](EventTransferProgress const& event) {
+    if (event.peer_id == impl->peer_id) {
+      impl->OnTransferProgress(event.attachment_id, event.progress);
     }
   });
   Subscribe<EventDebugDataReset>(queue, [impl](auto const&) { impl->StartInitialLoad(); });
