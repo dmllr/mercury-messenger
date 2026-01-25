@@ -187,7 +187,8 @@ class SQLiteStorage final : public PersistentStorageImpl {
           .bio = ColumnOptionalString(statement.Get(), 4),
           .photo_base64 = ColumnOptionalString(statement.Get(), 5),
           .signature_from_them = OptionalHexToBytes(ColumnOptionalString(statement.Get(), 6)),
-          .my_signature_for_them = OptionalHexToBytes(ColumnOptionalString(statement.Get(), 7))};
+          .my_signature_for_them = OptionalHexToBytes(ColumnOptionalString(statement.Get(), 7))
+      };
     }
     return std::nullopt;
   }

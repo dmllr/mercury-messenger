@@ -36,26 +36,26 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
   auto GetPath() const -> std::string override { return db_path_; }
 
   // --- Settings ---
-  auto GetSetting(std::string_view key) -> std::optional<std::string> override {
+  auto GetSetting(std::string_view const key) -> std::optional<std::string> override {
     std::lock_guard const lock(mutex_);
-    if (auto it = settings_.find(std::string(key)); it != settings_.end()) {
-      return it->second;
+    if (auto const itr = settings_.find(std::string(key)); itr != settings_.end()) {
+      return itr->second;
     }
     return std::nullopt;
   }
 
-  void SetSetting(std::string_view key, std::string_view value) override {
+  void SetSetting(std::string_view const key, std::string_view const value) override {
     std::lock_guard const lock(mutex_);
     settings_[std::string(key)] = std::string(value);
   }
 
-  void DeleteSetting(std::string_view key) override {
+  void DeleteSetting(std::string_view const key) override {
     std::lock_guard const lock(mutex_);
     settings_.erase(std::string(key));
   }
 
   auto GetRaw(std::string const& key) -> std::optional<std::vector<std::byte>> override {
-    if (auto val = GetSetting(key)) {
+    if (auto const val = GetSetting(key)) {
       return crypto::FromHex(*val);
     }
     return std::nullopt;
@@ -71,8 +71,8 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
     std::lock_guard const lock(mutex_);
     std::vector<identity::Contact> result;
     result.reserve(contacts_.size());
-    for (auto const& pair : contacts_) {
-      result.push_back(pair.second);
+    for (auto const& contact : contacts_ | std::views::values) {
+      result.push_back(contact);
     }
     return result;
   }
@@ -170,7 +170,7 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
     std::lock_guard const lock(mutex_);
     if (auto const itr = history_.find(peer_id); itr != history_.end()) {
       for (auto& entry : itr->second) {
-        if (std::find(message_ids.begin(), message_ids.end(), entry.id) != message_ids.end()) {
+        if (std::ranges::find(message_ids, entry.id) != message_ids.end()) {
           entry.status = new_status;
         }
       }
@@ -186,8 +186,8 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
       page.total_messages = peer_history_copy.size();
 
       // Sort by timestamp descending to simulate DB query
-      std::sort(peer_history_copy.begin(), peer_history_copy.end(), [](auto const& a, auto const& b) {
-        return a.timestamp > b.timestamp;
+      std::ranges::sort(peer_history_copy, [](auto const& left, auto const& right) {
+        return left.timestamp > right.timestamp;
       });
 
       size_t const start = page_index * page_size;
@@ -204,11 +204,11 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
     return page;
   }
 
-  auto GetFullMessageContent(ContactID const& /*peer_id*/, std::uint64_t message_id)
+  auto GetFullMessageContent(ContactID const& /*peer_id*/, std::uint64_t const message_id)
       -> std::optional<std::string> override {
     std::lock_guard const lock(mutex_);
-    if (auto it = large_messages_.find(message_id); it != large_messages_.end()) {
-      return it->second;
+    if (auto const itr = large_messages_.find(message_id); itr != large_messages_.end()) {
+      return itr->second;
     }
     return std::nullopt;
   }
@@ -218,13 +218,12 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
     std::vector<messaging::ChatSummary> summaries;
 
     for (auto const& peer_id : peer_ids) {
-      if (auto it = history_.find(peer_id); it != history_.end() && !it->second.empty()) {
-        auto& peer_history = it->second;
+      if (auto const itr = history_.find(peer_id); itr != history_.end() && !itr->second.empty()) {
+        auto& peer_history = itr->second;
         // Find the last message (most recent timestamp)
-        auto last_message_it =
-            std::max_element(peer_history.begin(), peer_history.end(), [](auto const& a, auto const& b) {
-              return a.timestamp < b.timestamp;
-            });
+        auto last_message_it = std::ranges::max_element(peer_history, [](auto const& left, auto const& right) {
+          return left.timestamp < right.timestamp;
+        });
 
         uint32_t unread_count = 0;
         for (auto const& entry : peer_history) {
@@ -239,19 +238,19 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
     }
 
     // Sort summaries by timestamp of the last message, descending
-    std::sort(summaries.begin(), summaries.end(), [](auto const& a, auto const& b) {
-      return a.last_message.timestamp > b.last_message.timestamp;
+    std::ranges::sort(summaries, [](auto const& left, auto const& right) {
+      return left.last_message.timestamp > right.last_message.timestamp;
     });
 
     return summaries;
   }
 
-  auto GetMessagesWithStatus(ContactID const& peer_id, messaging::MessageStatus status)
+  auto GetMessagesWithStatus(ContactID const& peer_id, messaging::MessageStatus const status)
       -> std::vector<messaging::HistoryEntryRecord> override {
     std::lock_guard const lock(mutex_);
     std::vector<messaging::HistoryEntryRecord> records;
-    if (auto it = history_.find(peer_id); it != history_.end()) {
-      for (auto const& entry : it->second) {
+    if (auto const itr = history_.find(peer_id); itr != history_.end()) {
+      for (auto const& entry : itr->second) {
         if (entry.status == status) {
           records.push_back(entry);
         }
@@ -266,7 +265,7 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
     std::vector<uint64_t> remote_ids;
     if (auto it = history_.find(peer_id); it != history_.end()) {
       for (auto const& entry : it->second) {
-        if (std::find(local_ids.begin(), local_ids.end(), entry.id) != local_ids.end()) {
+        if (std::ranges::find(local_ids, entry.id) != local_ids.end()) {
           if (entry.remote_id) {
             remote_ids.push_back(*entry.remote_id);
           }
@@ -291,7 +290,7 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
 
   void DebugRevokeAllContactApprovals() override {
     std::lock_guard const lock(mutex_);
-    for (auto& [id, contact] : contacts_) {
+    for (auto& contact : contacts_ | std::views::values) {
       if (contact.status == identity::ContactStatus::confirmed) {
         contact.status = identity::ContactStatus::pendingApproval;
       }

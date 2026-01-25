@@ -97,8 +97,8 @@ void ContactService::ConfirmContact(ContactID const& peer_id) {
     messaging_service_->SendSystemMessage(peer_id, nlohmann::json{{"action", "send_profile"}}.dump());
 
     // Send our profile and request theirs since the channel is likely open or opening.
-    SendMyProfile(peer_id); // Queue profile
-    SyncProfile(peer_id);   // Flush actions
+    SendMyProfile(peer_id);  // Queue profile
+    SyncProfile(peer_id);    // Flush actions
 
     INVARIANT(on_contact_status_changed_);
     on_contact_status_changed_(peer_id, identity::ContactStatus::confirmed);
@@ -155,9 +155,7 @@ void ContactService::MarkAllContactsProfileSyncNeeded() {
   }
 }
 
-void ContactService::SyncProfile(ContactID const& peer_id) {
-  SendPendingActions(peer_id);
-}
+void ContactService::SyncProfile(ContactID const& peer_id) { SendPendingActions(peer_id); }
 
 void ContactService::SendMyProfile(ContactID const& peer_id) {
   nlohmann::json msg;
@@ -254,8 +252,8 @@ void ContactService::OnContactConfirm(ContactID const& peer_id) {
     messaging_service_->SendSystemMessage(peer_id, nlohmann::json{{"action", "request_profile"}}.dump());
 
     // Send our profile and request theirs since the channel is likely open or opening.
-    SendMyProfile(peer_id); // Queue profile
-    SyncProfile(peer_id);   // Flush actions
+    SendMyProfile(peer_id);  // Queue profile
+    SyncProfile(peer_id);    // Flush actions
     EnqueueOrSend(peer_id, {{"type", "profile_request"}});
   }
 }
@@ -324,10 +322,7 @@ void ContactService::OnReconfirmResponse(ContactID const& peer_id, std::string c
     auto my_sig = account_service_->Sign(peer_id.Span());
     manager_->StoreMySignatureFor(peer_id, my_sig);
 
-    EnqueueOrSend(
-        peer_id,
-        {{"type", "contact_signature"}, {"signature", crypto::ToHex(my_sig)}}
-    );
+    EnqueueOrSend(peer_id, {{"type", "contact_signature"}, {"signature", crypto::ToHex(my_sig)}});
 
     INVARIANT(on_contact_status_changed_);
     on_contact_status_changed_(peer_id, identity::ContactStatus::confirmed);
@@ -338,8 +333,8 @@ void ContactService::OnReconfirmResponse(ContactID const& peer_id, std::string c
 
     // Mark sync needed and try to sync
     manager_->ReloadContacts();
-    SendMyProfile(peer_id); // Queue
-    SyncProfile(peer_id);   // Flush
+    SendMyProfile(peer_id);  // Queue
+    SyncProfile(peer_id);    // Flush
   }
 }
 
