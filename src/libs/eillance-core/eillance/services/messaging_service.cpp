@@ -141,7 +141,23 @@ void MessagingService::SendSystemMessage(ContactID const& peer_id, std::string c
 }
 
 void MessagingService::SendQueuedMessages(ContactID const& peer_id) {
-  SendPendingReadReceipts(peer_id);
+  // Flush generic pending actions (like read receipts)
+  // Note: ContactService::SendPendingActions is also called by Client, but redundant calls are safe.
+  // We can't access ContactService here, but we rely on Client logic or the fact that if we are connected
+  // the actions will be flushed.
+  // However, read receipts are now just pending actions. Since we don't have access to flush them here directly
+  // unless we duplicate logic, we rely on the caller (Client) having called FlushPendingActions, OR
+  // we add `FlushPendingActions` logic here too since `storage_` and `transport_` are available.
+  // It is safer to flush here too to ensure timely delivery of read receipts.
+  auto actions = storage_->GetPendingActions(peer_id);
+  for (auto const& action : actions) {
+    try {
+      transport_->SendPeerDataChannelMessage(peer_id, nlohmann::json::parse(action.payload));
+      storage_->RemovePendingAction(action.id);
+    } catch (...) {
+      storage_->RemovePendingAction(action.id);
+    }
+  }
 
   auto const messages = storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::sending);
   auto const peer = transport_->GetPeer(peer_id);
@@ -352,33 +368,6 @@ void MessagingService::ProcessFileAck(ContactID const& peer_id, std::string cons
   }
 }
 
-void MessagingService::SendPendingReadReceipts(ContactID const& peer_id) {
-  auto ids_to_send = storage_->GetPendingReadReceipts(peer_id);
-
-  if (ids_to_send.empty()) {
-    return;
-  }
-
-  if (auto peer = transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
-    nlohmann::json const msg = {
-        {"type", "message_read"},
-        {"message_ids", ids_to_send},
-    };
-    transport_->SendPeerDataChannelMessage(peer_id, msg);
-    LGI << "Sent pending read receipts for " << ids_to_send.size() << " messages to " << peer_id.ToString();
-
-    // Optimistically remove from pending since SCTP handles retries if connection holds.
-    // If connection drops, we lose receipts, but re-sending read receipts is idempotent
-    // so we could be more aggressive (not delete until Ack), but current protocol has no APP-ack for read receipts.
-    // Given "Resilient" requirement: we should ideally NOT delete until we are sure.
-    // But since we don't have an Ack message, we assume transport reliability.
-    // If connection fails, the user will likely read the message again or scroll, triggering another read? No.
-    // The message is marked read locally.
-    // We remove them now to prevent sending them forever.
-    storage_->RemovePendingReadReceipts(peer_id, ids_to_send);
-  }
-}
-
 void MessagingService::OnConnectionAttemptFinished(ContactID const& peer_id) const {
   delivery_service_->ConnectionAttemptFinished(peer_id);
 }
@@ -407,10 +396,16 @@ void MessagingService::MarkMessagesAsRead(ContactID const& peer_id, std::vector<
     return;
   }
 
-  storage_->AddPendingReadReceipts(peer_id, remote_ids);
+  // Queue read receipt
+  nlohmann::json const msg = {
+      {"type", "message_read"},
+      {"message_ids", remote_ids},
+  };
+  storage_->AddPendingAction(peer_id, msg.dump());
 
   if (auto peer = transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
-    SendPendingReadReceipts(peer_id);
+    // Will flush both messages and actions
+    SendQueuedMessages(peer_id);
   } else {
     delivery_service_->AttemptDelivery(peer_id);
   }
@@ -672,17 +667,10 @@ void MessagingService::SetMessageStatusChangedCallback(OnMessageStatusChangedCal
 }
 
 bool MessagingService::HasPendingWork(ContactID const& peer_id) {
-  // Check read receipts in persistent storage
-  auto pending_receipts = storage_->GetPendingReadReceipts(peer_id);
-  if (!pending_receipts.empty()) {
+  // Check pending actions (read receipts, profiles, etc.)
+  auto pending_actions = storage_->GetPendingActions(peer_id);
+  if (!pending_actions.empty()) {
     return true;
-  }
-
-  // Check if contact has pending profile sync
-  if (auto contact = contact_manager_->GetContact(peer_id)) {
-    if (contact->profile_sync_needed) {
-      return true;
-    }
   }
 
   return !storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::sending).empty();

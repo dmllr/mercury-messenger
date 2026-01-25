@@ -23,8 +23,9 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
   std::unordered_map<ContactID, identity::Contact> contacts_;
   std::unordered_map<ContactID, std::vector<messaging::HistoryEntryRecord>> history_;
   std::unordered_map<uint64_t, std::string> large_messages_;
-  std::unordered_map<ContactID, std::vector<uint64_t>> pending_read_receipts_;
+  std::vector<PendingAction> pending_actions_;
   std::atomic<uint64_t> next_history_id_{1};
+  std::atomic<int64_t> next_action_id_{1};
   std::string db_path_ = "mock_db_path";
 
  public:
@@ -78,8 +79,8 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
 
   auto GetContact(ContactID const& peer_id) -> std::optional<identity::Contact> override {
     std::lock_guard const lock(mutex_);
-    if (auto it = contacts_.find(peer_id); it != contacts_.end()) {
-      return it->second;
+    if (auto const itr = contacts_.find(peer_id); itr != contacts_.end()) {
+      return itr->second;
     }
     return std::nullopt;
   }
@@ -94,40 +95,26 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
     contacts_.erase(peer_id);
   }
 
-  void SetContactProfileSyncNeeded(ContactID const& peer_id, bool needed) override {
-    std::lock_guard const lock(mutex_);
-    if (auto it = contacts_.find(peer_id); it != contacts_.end()) {
-      it->second.profile_sync_needed = needed;
-    }
-  }
-
   // --- Resilience ---
-  void AddPendingReadReceipts(ContactID const& peer_id, std::vector<uint64_t> const& message_ids) override {
+  void AddPendingAction(ContactID const& peer_id, std::string const& payload) override {
     std::lock_guard const lock(mutex_);
-    auto& pending = pending_read_receipts_[peer_id];
-    for (auto id : message_ids) {
-      if (std::find(pending.begin(), pending.end(), id) == pending.end()) {
-        pending.push_back(id);
-      }
-    }
+    pending_actions_.push_back({next_action_id_++, peer_id, payload});
   }
 
-  auto GetPendingReadReceipts(ContactID const& peer_id) -> std::vector<uint64_t> override {
+  auto GetPendingActions(ContactID const& peer_id) -> std::vector<PendingAction> override {
     std::lock_guard const lock(mutex_);
-    if (pending_read_receipts_.contains(peer_id)) {
-      return pending_read_receipts_[peer_id];
-    }
-    return {};
-  }
-
-  void RemovePendingReadReceipts(ContactID const& peer_id, std::vector<uint64_t> const& message_ids) override {
-    std::lock_guard const lock(mutex_);
-    if (pending_read_receipts_.contains(peer_id)) {
-      auto& pending = pending_read_receipts_[peer_id];
-      for (auto id : message_ids) {
-        std::erase(pending, id);
+    std::vector<PendingAction> result;
+    for (auto const& action : pending_actions_) {
+      if (action.peer_id == peer_id) {
+        result.push_back(action);
       }
     }
+    return result;
+  }
+
+  void RemovePendingAction(int64_t id) override {
+    std::lock_guard const lock(mutex_);
+    std::erase_if(pending_actions_, [id](auto const& action) { return action.id == id; });
   }
 
   // --- History ---
@@ -152,7 +139,7 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
 
   void UpdateHistoryEntry(messaging::HistoryEntryRecord const& entry) override {
     std::lock_guard const lock(mutex_);
-    for (auto& [peer_id, history_vec] : history_) {
+    for (auto& history_vec : history_ | std::views::values) {
       for (auto& existing_entry : history_vec) {
         if (existing_entry.id == entry.id) {
           existing_entry = entry;
@@ -165,8 +152,8 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
   void UpdateMessageStatus(ContactID const& peer_id, uint64_t message_id, messaging::MessageStatus new_status)
       override {
     std::lock_guard const lock(mutex_);
-    if (auto it = history_.find(peer_id); it != history_.end()) {
-      for (auto& entry : it->second) {
+    if (auto const itr = history_.find(peer_id); itr != history_.end()) {
+      for (auto& entry : itr->second) {
         if (entry.id == message_id) {
           entry.status = new_status;
           return;
@@ -181,8 +168,8 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
       messaging::MessageStatus new_status
   ) override {
     std::lock_guard const lock(mutex_);
-    if (auto it = history_.find(peer_id); it != history_.end()) {
-      for (auto& entry : it->second) {
+    if (auto const itr = history_.find(peer_id); itr != history_.end()) {
+      for (auto& entry : itr->second) {
         if (std::find(message_ids.begin(), message_ids.end(), entry.id) != message_ids.end()) {
           entry.status = new_status;
         }
@@ -194,8 +181,8 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
       -> messaging::HistoryPage override {
     std::lock_guard const lock(mutex_);
     messaging::HistoryPage page;
-    if (auto it = history_.find(peer_id); it != history_.end()) {
-      auto peer_history_copy = it->second;  // Copy to sort
+    if (auto const itr = history_.find(peer_id); itr != history_.end()) {
+      auto peer_history_copy = itr->second;  // Copy to sort
       page.total_messages = peer_history_copy.size();
 
       // Sort by timestamp descending to simulate DB query
@@ -294,7 +281,7 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
     std::lock_guard const lock(mutex_);
     history_.clear();
     large_messages_.clear();
-    pending_read_receipts_.clear();
+    pending_actions_.clear();
   }
 
   void DebugClearAllContacts() override {

@@ -52,8 +52,6 @@ class MessagingService {
 
   // Attempts to flush queued messages and read receipts for a connected peer
   void SendQueuedMessages(ContactID const& peer_id);
-  // Sends stored pending read receipts
-  void SendPendingReadReceipts(ContactID const& peer_id);
 
   // Signal that a connection attempt finished (success or fail) to manage retry logic
   void OnConnectionAttemptFinished(ContactID const& peer_id) const;

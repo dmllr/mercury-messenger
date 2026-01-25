@@ -14,13 +14,11 @@ inline void MigrateToV0003(sqlite3* db) {
   auto const* const schema = R"SQL(
       BEGIN TRANSACTION;
 
-      CREATE TABLE IF NOT EXISTS pending_read_receipts (
-        peer_id    TEXT NOT NULL,
-        message_id INTEGER NOT NULL,
-        PRIMARY KEY (peer_id, message_id)
+      CREATE TABLE IF NOT EXISTS pending_actions (
+        id      INTEGER PRIMARY KEY AUTOINCREMENT,
+        peer_id TEXT NOT NULL,
+        payload TEXT NOT NULL
       );
-
-      ALTER TABLE contacts ADD COLUMN profile_sync_needed INTEGER DEFAULT 0;
 
       PRAGMA user_version = 3;
       COMMIT;

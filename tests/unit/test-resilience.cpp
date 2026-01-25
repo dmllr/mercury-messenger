@@ -110,9 +110,11 @@ TEST_F(ResilienceTest, PendingReadReceiptsPersistAndSend) {
   FlushClientQueue();
 
   // 3. Verify it is pending in storage
-  auto pending = mock_storage_->GetPendingReadReceipts(peer1);
+  auto pending = mock_storage_->GetPendingActions(peer1);
   ASSERT_EQ(pending.size(), 1);
-  EXPECT_EQ(pending[0], 999);
+  nlohmann::json const json = nlohmann::json::parse(pending[0].payload);
+  EXPECT_EQ(json["type"], "message_read");
+  EXPECT_EQ(json["message_ids"][0], 999);
 
   // 4. Connect
   client_->Connect(peer1);
@@ -122,6 +124,7 @@ TEST_F(ResilienceTest, PendingReadReceiptsPersistAndSend) {
   ASSERT_TRUE(peer);
 
   // Simulate Data Channel Open (triggers queue flush)
+  mock_transport_->log.sent_peer_messages.clear();
   mock_transport_->delegate->OnDataChannelOpen(peer1);
   FlushClientQueue();
 
@@ -138,24 +141,29 @@ TEST_F(ResilienceTest, PendingReadReceiptsPersistAndSend) {
   EXPECT_TRUE(receipt_sent);
 
   // 6. Verify removed from storage (assuming optimistic removal)
-  pending = mock_storage_->GetPendingReadReceipts(peer1);
+  pending = mock_storage_->GetPendingActions(peer1);
   EXPECT_TRUE(pending.empty());
 }
 
-// Test that profile updates persist as a "dirty" flag and sync on connection
+// Test that profile updates persist as a queued action and sync on connection
 TEST_F(ResilienceTest, ProfileUpdateSyncsOnConnect) {
   // 1. Update Profile while disconnected
-  // Explicitly remove peer to simulate disconnection
   mock_transport_->RemovePeer(peer1);
   ASSERT_FALSE(mock_transport_->GetPeer(peer1));
 
   client_->UpdateMyProfile("New Name", "Bio", "");
   FlushClientQueue();
 
-  // 2. Verify contact marked dirty in storage
-  auto contact = mock_storage_->GetContact(peer1);
-  ASSERT_TRUE(contact.has_value());
-  EXPECT_TRUE(contact->profile_sync_needed);
+  // 2. Verify action queued
+  auto actions = mock_storage_->GetPendingActions(peer1);
+  ASSERT_FALSE(actions.empty());
+  bool found_profile = false;
+  for (auto const& act : actions) {
+    if (act.payload.find("profile_info") != std::string::npos) {
+      found_profile = true;
+    }
+  }
+  EXPECT_TRUE(found_profile);
 
   // 3. Connect
   client_->Connect(peer1);
@@ -176,7 +184,51 @@ TEST_F(ResilienceTest, ProfileUpdateSyncsOnConnect) {
   }
   EXPECT_TRUE(profile_sent);
 
-  // 6. Verify flag cleared
-  contact = mock_storage_->GetContact(peer1);
-  EXPECT_FALSE(contact->profile_sync_needed);
+  // 6. Verify action removed
+  actions = mock_storage_->GetPendingActions(peer1);
+  EXPECT_TRUE(actions.empty());
+}
+
+// Test that other pending actions (like handshake messages) are queued and sent
+TEST_F(ResilienceTest, PendingActionsPersistAndSend) {
+  // 1. Disconnect
+  mock_transport_->RemovePeer(peer1);
+  ASSERT_FALSE(mock_transport_->GetPeer(peer1));
+
+  // 2. Trigger an action (e.g. Reset Display Name -> profile_request)
+  client_->ResetContactDisplayNameOverride(peer1);
+  FlushClientQueue();
+
+  // 3. Verify queued in storage
+  auto actions = mock_storage_->GetPendingActions(peer1);
+  ASSERT_FALSE(actions.empty());
+  bool found_req = false;
+  for(auto const& act : actions) {
+    if (act.payload.find("profile_request") != std::string::npos) {
+      found_req = true;
+    }
+  }
+  EXPECT_TRUE(found_req);
+
+  // 4. Connect
+  client_->Connect(peer1);
+  FlushClientQueue();
+
+  // 5. Trigger Data Channel Open
+  mock_transport_->log.sent_peer_messages.clear();
+  mock_transport_->delegate->OnDataChannelOpen(peer1);
+  FlushClientQueue();
+
+  // 6. Verify sent
+  bool req_sent = false;
+  for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
+    if (pid == peer1 && msg["type"] == "profile_request") {
+      req_sent = true;
+    }
+  }
+  EXPECT_TRUE(req_sent);
+
+  // 7. Verify removed
+  actions = mock_storage_->GetPendingActions(peer1);
+  EXPECT_TRUE(actions.empty());
 }
