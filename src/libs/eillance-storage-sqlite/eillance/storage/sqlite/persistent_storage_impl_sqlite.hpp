@@ -141,8 +141,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
         bio,
         photo_base64,
         signature_from_them,
-        my_signature_for_them,
-        profile_sync_needed
+        my_signature_for_them
       FROM
         contacts;
     )SQL");
@@ -155,8 +154,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
            .bio = ColumnOptionalString(statement.Get(), 4),
            .photo_base64 = ColumnOptionalString(statement.Get(), 5),
            .signature_from_them = OptionalHexToBytes(ColumnOptionalString(statement.Get(), 6)),
-           .my_signature_for_them = OptionalHexToBytes(ColumnOptionalString(statement.Get(), 7)),
-           .profile_sync_needed = (sqlite3_column_int(statement.Get(), 8) != 0)}
+           .my_signature_for_them = OptionalHexToBytes(ColumnOptionalString(statement.Get(), 7))}
       );
     }
     return contacts;
@@ -173,8 +171,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
         bio,
         photo_base64,
         signature_from_them,
-        my_signature_for_them,
-        profile_sync_needed
+        my_signature_for_them
       FROM
         contacts
       WHERE
@@ -190,8 +187,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
           .bio = ColumnOptionalString(statement.Get(), 4),
           .photo_base64 = ColumnOptionalString(statement.Get(), 5),
           .signature_from_them = OptionalHexToBytes(ColumnOptionalString(statement.Get(), 6)),
-          .my_signature_for_them = OptionalHexToBytes(ColumnOptionalString(statement.Get(), 7)),
-          .profile_sync_needed = (sqlite3_column_int(statement.Get(), 8) != 0)};
+          .my_signature_for_them = OptionalHexToBytes(ColumnOptionalString(statement.Get(), 7))};
     }
     return std::nullopt;
   }
@@ -200,9 +196,9 @@ class SQLiteStorage final : public PersistentStorageImpl {
     std::lock_guard const lock(mutex_);
     SQLiteStatement const statement(db_, R"SQL(
       REPLACE INTO contacts
-        (peer_id, status, display_name, display_name_override, bio, photo_base64, signature_from_them, my_signature_for_them, profile_sync_needed)
+        (peer_id, status, display_name, display_name_override, bio, photo_base64, signature_from_them, my_signature_for_them)
       VALUES
-        (?, ?, ?, ?, ?, ?, ?, ?, ?);
+        (?, ?, ?, ?, ?, ?, ?, ?);
     )SQL");
     BindText(statement.Get(), 1, contact.peer_id.ToString());
     sqlite3_bind_int(statement.Get(), 2, static_cast<int>(contact.status));
@@ -212,7 +208,6 @@ class SQLiteStorage final : public PersistentStorageImpl {
     BindOptionalText(statement.Get(), 6, contact.photo_base64);
     BindOptionalText(statement.Get(), 7, OptionalBytesToHex(contact.signature_from_them));
     BindOptionalText(statement.Get(), 8, OptionalBytesToHex(contact.my_signature_for_them));
-    sqlite3_bind_int(statement.Get(), 9, contact.profile_sync_needed ? 1 : 0);
     sqlite3_step(statement.Get());
   }
 
@@ -232,9 +227,9 @@ class SQLiteStorage final : public PersistentStorageImpl {
         throw std::runtime_error(sqlite3_errmsg(db_));
       }
 
-      SQLiteStatement const receipts_stmt(db_, "DELETE FROM pending_read_receipts WHERE peer_id = ?;");
-      BindText(receipts_stmt.Get(), 1, peer_id.ToString());
-      if (sqlite3_step(receipts_stmt.Get()) != SQLITE_DONE) {
+      SQLiteStatement const actions_stmt(db_, "DELETE FROM pending_actions WHERE peer_id = ?;");
+      BindText(actions_stmt.Get(), 1, peer_id.ToString());
+      if (sqlite3_step(actions_stmt.Get()) != SQLITE_DONE) {
         throw std::runtime_error(sqlite3_errmsg(db_));
       }
 
@@ -256,67 +251,40 @@ class SQLiteStorage final : public PersistentStorageImpl {
     }
   }
 
-  void SetContactProfileSyncNeeded(ContactID const& peer_id, bool needed) override {
+  // --- Resilience ---
+  void AddPendingAction(ContactID const& peer_id, std::string const& payload) override {
     std::lock_guard const lock(mutex_);
     SQLiteStatement const statement(db_, R"SQL(
-      UPDATE contacts SET profile_sync_needed = ? WHERE peer_id = ?;
+      INSERT INTO pending_actions (peer_id, payload) VALUES (?, ?);
     )SQL");
-    sqlite3_bind_int(statement.Get(), 1, needed ? 1 : 0);
-    BindText(statement.Get(), 2, peer_id.ToString());
-    sqlite3_step(statement.Get());
+    BindText(statement.Get(), 1, peer_id.ToString());
+    BindText(statement.Get(), 2, payload);
+    if (sqlite3_step(statement.Get()) != SQLITE_DONE) {
+      LGE << "Failed to insert pending action: " << sqlite3_errmsg(db_);
+    }
   }
 
-  // --- Resilience (Pending Read Receipts) ---
-  void AddPendingReadReceipts(ContactID const& peer_id, std::vector<uint64_t> const& message_ids) override {
-    if (message_ids.empty()) return;
+  auto GetPendingActions(ContactID const& peer_id) -> std::vector<PendingAction> override {
     std::lock_guard const lock(mutex_);
-    char* err_msg = nullptr;
-    if (sqlite3_exec(db_, "BEGIN TRANSACTION;", nullptr, nullptr, &err_msg) != SQLITE_OK) {
-      sqlite3_free(err_msg);
-      return;
-    }
-
+    std::vector<PendingAction> actions;
     SQLiteStatement const statement(db_, R"SQL(
-      INSERT OR IGNORE INTO pending_read_receipts (peer_id, message_id) VALUES (?, ?);
-    )SQL");
-
-    for (auto id : message_ids) {
-      sqlite3_reset(statement.Get());
-      BindText(statement.Get(), 1, peer_id.ToString());
-      sqlite3_bind_int64(statement.Get(), 2, id);
-      if (sqlite3_step(statement.Get()) != SQLITE_DONE) {
-        // Log but continue
-      }
-    }
-
-    sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, nullptr);
-  }
-
-  auto GetPendingReadReceipts(ContactID const& peer_id) -> std::vector<uint64_t> override {
-    std::lock_guard const lock(mutex_);
-    std::vector<uint64_t> ids;
-    SQLiteStatement const statement(db_, R"SQL(
-      SELECT message_id FROM pending_read_receipts WHERE peer_id = ?;
+      SELECT id, payload FROM pending_actions WHERE peer_id = ? ORDER BY id ASC;
     )SQL");
     BindText(statement.Get(), 1, peer_id.ToString());
     while (sqlite3_step(statement.Get()) == SQLITE_ROW) {
-      ids.push_back(static_cast<uint64_t>(sqlite3_column_int64(statement.Get(), 0)));
+      actions.push_back({
+          .id = sqlite3_column_int64(statement.Get(), 0),
+          .peer_id = peer_id,
+          .payload = ColumnString(statement.Get(), 1),
+      });
     }
-    return ids;
+    return actions;
   }
 
-  void RemovePendingReadReceipts(ContactID const& peer_id, std::vector<uint64_t> const& message_ids) override {
-    if (message_ids.empty()) return;
+  void RemovePendingAction(int64_t id) override {
     std::lock_guard const lock(mutex_);
-    nlohmann::json const ids_json = message_ids;
-    std::string const query = R"SQL(
-      DELETE FROM pending_read_receipts
-      WHERE peer_id = ? AND message_id IN (SELECT value FROM json_each(?));
-    )SQL";
-
-    SQLiteStatement const statement(db_, query);
-    BindText(statement.Get(), 1, peer_id.ToString());
-    BindText(statement.Get(), 2, ids_json.dump());
+    SQLiteStatement const statement(db_, "DELETE FROM pending_actions WHERE id = ?;");
+    sqlite3_bind_int64(statement.Get(), 1, id);
     sqlite3_step(statement.Get());
   }
 
@@ -705,7 +673,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
             messages
           WHERE
             peer_id = ?
-          ORDER BY
+            ORDER BY
             timestamp DESC
           LIMIT 1;
         )SQL");
@@ -814,7 +782,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
       BEGIN TRANSACTION;
       DELETE FROM large_messages;
       DELETE FROM message_attachments;
-      DELETE FROM pending_read_receipts;
+      DELETE FROM pending_actions;
       DELETE FROM messages;
       COMMIT;
     )SQL";

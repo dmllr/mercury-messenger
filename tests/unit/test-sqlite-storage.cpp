@@ -143,6 +143,28 @@ TEST_F(SQLiteStorageTest, Contacts) {
   EXPECT_EQ(all_contacts[0].peer_id, peer2);
 }
 
+// Test suite for pending actions management
+TEST_F(SQLiteStorageTest, PendingActions) {
+  storage_->AddPendingAction(peer1, "action1");
+  storage_->AddPendingAction(peer1, "action2");
+  storage_->AddPendingAction(peer2, "action3");
+
+  auto actions1 = storage_->GetPendingActions(peer1);
+  ASSERT_EQ(actions1.size(), 2);
+  EXPECT_EQ(actions1[0].payload, "action1");
+  EXPECT_EQ(actions1[1].payload, "action2");
+
+  auto actions2 = storage_->GetPendingActions(peer2);
+  ASSERT_EQ(actions2.size(), 1);
+  EXPECT_EQ(actions2[0].payload, "action3");
+
+  // Remove action
+  storage_->RemovePendingAction(actions1[0].id);
+  actions1 = storage_->GetPendingActions(peer1);
+  ASSERT_EQ(actions1.size(), 1);
+  EXPECT_EQ(actions1[0].payload, "action2");
+}
+
 // Test suite for history management
 TEST_F(SQLiteStorageTest, History) {
   // Ensure contact exists for FK constraint

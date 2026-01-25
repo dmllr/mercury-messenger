@@ -24,6 +24,31 @@ void ContactService::SetMessagingService(MessagingService* messaging_service) {
   messaging_service_ = messaging_service;
 }
 
+void ContactService::EnqueueOrSend(ContactID const& peer_id, nlohmann::json const& msg) {
+  storage_->AddPendingAction(peer_id, msg.dump());
+  SendPendingActions(peer_id);
+}
+
+void ContactService::SendPendingActions(ContactID const& peer_id) {
+  auto peer = transport_->GetPeer(peer_id);
+  if (!peer || !peer->data_channel_is_open) {
+    connection_handler_(peer_id);
+    return;
+  }
+
+  auto actions = storage_->GetPendingActions(peer_id);
+  for (auto const& action : actions) {
+    try {
+      transport_->SendPeerDataChannelMessage(peer_id, nlohmann::json::parse(action.payload));
+      storage_->RemovePendingAction(action.id);
+    } catch (...) {
+      // Keep in DB if parsing or sending fails? Sending via transport usually doesn't throw.
+      // If parsing fails, we should remove it to avoid poison pill loop.
+      storage_->RemovePendingAction(action.id);
+    }
+  }
+}
+
 void ContactService::AddContact(ContactID const& peer_id, std::optional<std::vector<std::byte>> const& token) {
   auto const existing = manager_->GetContact(peer_id);
   if (existing && existing->status == identity::ContactStatus::awaitingApproval) {
@@ -71,14 +96,9 @@ void ContactService::ConfirmContact(ContactID const& peer_id) {
     // This system message is just for local history.
     messaging_service_->SendSystemMessage(peer_id, nlohmann::json{{"action", "send_profile"}}.dump());
 
-    // Send actual profile data now that we've confirmed the contact.
-    storage_->SetContactProfileSyncNeeded(peer_id, true);
-    manager_->ReloadContacts();  // Reflect flag change in manager cache if needed
-
-    // Attempt send if connected
-    if (auto peer = transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
-      SyncProfile(peer_id);
-    }
+    // Send our profile and request theirs since the channel is likely open or opening.
+    SendMyProfile(peer_id); // Queue profile
+    SyncProfile(peer_id);   // Flush actions
 
     INVARIANT(on_contact_status_changed_);
     on_contact_status_changed_(peer_id, identity::ContactStatus::confirmed);
@@ -91,10 +111,7 @@ void ContactService::ConfirmContact(ContactID const& peer_id) {
 
 void ContactService::BlockContact(ContactID const& peer_id, bool notify_peer) {
   if (notify_peer) {
-    if (auto peer = transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
-      nlohmann::json const msg = {{"type", "contact_removed"}};
-      transport_->SendPeerDataChannelMessage(peer_id, msg);
-    }
+    EnqueueOrSend(peer_id, {{"type", "contact_removed"}});
   }
 
   transport_->ClosePeerConnection(peer_id, "data");
@@ -124,9 +141,7 @@ void ContactService::SetContactDisplayNameOverride(ContactID const& peer_id, std
 
 void ContactService::ResetContactDisplayNameOverride(ContactID const& peer_id) {
   manager_->ResetDisplayNameOverride(peer_id);
-  if (auto peer = transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
-    transport_->SendPeerDataChannelMessage(peer_id, {{"type", "profile_request"}});
-  }
+  EnqueueOrSend(peer_id, {{"type", "profile_request"}});
   INVARIANT(on_contact_profile_updated_);
   on_contact_profile_updated_(peer_id);
 }
@@ -135,23 +150,13 @@ void ContactService::MarkAllContactsProfileSyncNeeded() {
   auto const contacts = manager_->GetContacts();
   for (auto const& contact : contacts) {
     if (contact.status == identity::ContactStatus::confirmed) {
-      storage_->SetContactProfileSyncNeeded(contact.peer_id, true);
+      SendMyProfile(contact.peer_id);
     }
   }
-  // Refresh manager's cache to reflect DB changes
-  manager_->ReloadContacts();
 }
 
 void ContactService::SyncProfile(ContactID const& peer_id) {
-  auto contact = manager_->GetContact(peer_id);
-  if (contact && contact->profile_sync_needed) {
-    if (auto peer = transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
-      SendMyProfile(peer_id);
-      storage_->SetContactProfileSyncNeeded(peer_id, false);
-      // Update cache
-      manager_->ReloadContacts();
-    }
-  }
+  SendPendingActions(peer_id);
 }
 
 void ContactService::SendMyProfile(ContactID const& peer_id) {
@@ -167,7 +172,7 @@ void ContactService::SendMyProfile(ContactID const& peer_id) {
     msg["photo"] = nullptr;
   }
 
-  transport_->SendPeerDataChannelMessage(peer_id, msg);
+  storage_->AddPendingAction(peer_id, msg.dump());
 }
 
 auto ContactService::GenerateContactToken() -> std::vector<std::byte> {
@@ -248,19 +253,10 @@ void ContactService::OnContactConfirm(ContactID const& peer_id) {
     messaging_service_->SendSystemMessage(peer_id, nlohmann::json{{"action", "send_profile"}}.dump());
     messaging_service_->SendSystemMessage(peer_id, nlohmann::json{{"action", "request_profile"}}.dump());
 
-    // Mark for sync
-    storage_->SetContactProfileSyncNeeded(peer_id, true);
-    manager_->ReloadContacts();
-
     // Send our profile and request theirs since the channel is likely open or opening.
-    if (auto peer = transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
-      SyncProfile(peer_id);
-      transport_->SendPeerDataChannelMessage(peer_id, {{"type", "profile_request"}});
-    } else {
-      // If not connected, request connection.
-      // Once connected, Client::OnDataChannelOpen will call SyncProfile.
-      connection_handler_(peer_id);
-    }
+    SendMyProfile(peer_id); // Queue profile
+    SyncProfile(peer_id);   // Flush actions
+    EnqueueOrSend(peer_id, {{"type", "profile_request"}});
   }
 }
 
@@ -316,7 +312,7 @@ void ContactService::OnReconfirmRequest(ContactID const& peer_id) {
         {"type", "reconfirm_response"},
         {"signature", crypto::ToHex(*contact->my_signature_for_them)}
     };
-    transport_->SendPeerDataChannelMessage(peer_id, resp);
+    EnqueueOrSend(peer_id, resp);
   }
 }
 
@@ -328,7 +324,7 @@ void ContactService::OnReconfirmResponse(ContactID const& peer_id, std::string c
     auto my_sig = account_service_->Sign(peer_id.Span());
     manager_->StoreMySignatureFor(peer_id, my_sig);
 
-    transport_->SendPeerDataChannelMessage(
+    EnqueueOrSend(
         peer_id,
         {{"type", "contact_signature"}, {"signature", crypto::ToHex(my_sig)}}
     );
@@ -336,14 +332,14 @@ void ContactService::OnReconfirmResponse(ContactID const& peer_id, std::string c
     INVARIANT(on_contact_status_changed_);
     on_contact_status_changed_(peer_id, identity::ContactStatus::confirmed);
 
-    transport_->SendPeerDataChannelMessage(peer_id, {{"type", "profile_request"}});
+    EnqueueOrSend(peer_id, {{"type", "profile_request"}});
     INVARIANT(messaging_service_);
     messaging_service_->SendSystemMessage(peer_id, nlohmann::json{{"action", "send_profile"}}.dump());
 
     // Mark sync needed and try to sync
-    storage_->SetContactProfileSyncNeeded(peer_id, true);
     manager_->ReloadContacts();
-    SyncProfile(peer_id);
+    SendMyProfile(peer_id); // Queue
+    SyncProfile(peer_id);   // Flush
   }
 }
 

@@ -88,14 +88,11 @@ TEST_F(ProfileUpdatesTest, SendProfileOnConnect) {
   mock_storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
   client_->GetContactService()->DebugReloadCache();
 
-  // Ensure profile sync is needed (simulate dirty state)
-  storage_->SetContactProfileSyncNeeded(peer1, true);
-  client_->GetContactService()->DebugReloadCache();
-
-  // Set my profile
+  // 2. Set my profile
+  // This will queue a profile action for the confirmed contact
   client_->UpdateMyProfile("My Name", "My Bio", "");
 
-  // 2. Connect (simulate incoming or outgoing)
+  // 3. Connect (simulate incoming or outgoing)
   client_->Connect(peer1);
   FlushClientQueue();
 
@@ -105,17 +102,12 @@ TEST_F(ProfileUpdatesTest, SendProfileOnConnect) {
   // Clear log before simulating open
   mock_transport_->log.sent_peer_messages.clear();
 
-  // 3. Simulate DataChannel open by manipulating peer state and triggering logic?
-  // Client::OnDataChannelOpen is called by transport delegate.
-  // We can simulate it via the mock transport if we had access to the delegate pointer safely.
-  // Since MockTransport has `delegate` public:
+  // 4. Simulate DataChannel open
   ASSERT_TRUE(mock_transport_->delegate);
-
-  // Trigger OnDataChannelOpen
   mock_transport_->delegate->OnDataChannelOpen(peer1);
   FlushClientQueue();
 
-  // 4. Verify profile sent
+  // 5. Verify profile sent
   bool profile_sent = false;
   for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
     if (pid == peer1 && msg["type"] == "profile_info") {

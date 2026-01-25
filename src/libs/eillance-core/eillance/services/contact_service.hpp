@@ -46,6 +46,9 @@ class ContactService {
   // Sends profile if dirty, and clears dirty flag.
   void SyncProfile(ContactID const& peer_id);
 
+  // Resiliently sends queued actions.
+  void SendPendingActions(ContactID const& peer_id);
+
   auto GenerateContactToken() -> std::vector<std::byte>;
 
   // Debug Actions
@@ -90,6 +93,7 @@ class ContactService {
   void NotifyPeerListUpdate() const;
   static auto ParseDeviceProfile(nlohmann::json const& jprofile) -> Device::Profile;
   void SendMyProfile(ContactID const& peer_id);
+  void EnqueueOrSend(ContactID const& peer_id, nlohmann::json const& msg);
 
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<transport::Transport> transport_;
