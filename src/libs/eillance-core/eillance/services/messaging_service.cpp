@@ -238,6 +238,7 @@ void MessagingService::SendQueuedMessages(ContactID const& peer_id) {
 
         if (!msg_entry.attachments.empty()) {
           std::vector<nlohmann::json> att_list;
+          att_list.reserve(msg_entry.attachments.size());
           for (auto const& att : msg_entry.attachments) {
             att_list.push_back(
                 {{"id", att.id},
@@ -297,7 +298,7 @@ void MessagingService::StartUpload(ContactID const& peer_id, messaging::Attachme
 }
 
 void MessagingService::PumpUpload(ContactID const& peer_id, std::string const& file_id) {
-  std::unique_lock<std::mutex> lock(transfers_mutex_);
+  std::unique_lock<std::mutex> const lock(transfers_mutex_);
   auto const itr = active_uploads_.find(file_id);
   if (itr == active_uploads_.end()) {
     return;
@@ -320,7 +321,7 @@ void MessagingService::PumpUpload(ContactID const& peer_id, std::string const& f
 
     std::vector<char> buffer(chunkSizeBytes);
     state.stream.read(buffer.data(), chunkSizeBytes);
-    std::streamsize bytes_read = state.stream.gcount();
+    auto const bytes_read = state.stream.gcount();
 
     if (bytes_read <= 0) {
       if (state.stream.eof()) {
@@ -334,7 +335,7 @@ void MessagingService::PumpUpload(ContactID const& peer_id, std::string const& f
 
     std::string b64_data = crypto::ToHex(chunk_data);
 
-    nlohmann::json chunk_msg =
+    nlohmann::json const chunk_msg =
         {{"type", "file_chunk"}, {"id", file_id}, {"seq", state.sequence}, {"data", b64_data}, {"eof", false}};
 
     transport_->SendPeerDataChannelMessage(peer_id, chunk_msg);
@@ -343,14 +344,9 @@ void MessagingService::PumpUpload(ContactID const& peer_id, std::string const& f
     // Progress update for sender
     if (on_transfer_progress_ && state.total_size > 0) {
       float progress = static_cast<float>(offset + bytes_read) / static_cast<float>(state.total_size);
-      if (progress > 1.0f) progress = 1.0f;
-      // We are holding the lock, so careful with callbacks.
-      // But PumpUpload is usually called from a worker thread or transport thread.
-      // Ideally dispatch to another queue, but for now we call directly.
-      // To avoid deadlocks, unlock briefly or assume callback is fast/safe.
-      // Better: release lock before callback. But we are in a loop.
-      // Let's defer progress updates? Or just call it.
-      // Since it's a simple atomic/float update in UI, it should be fine.
+      if (progress > 1.0F) {
+        progress = 1.0F;
+      }
       on_transfer_progress_(peer_id, file_id, progress);
     }
   }
@@ -358,7 +354,7 @@ void MessagingService::PumpUpload(ContactID const& peer_id, std::string const& f
   bool is_stream_done = (state.sequence * chunkSizeBytes) >= state.total_size;
 
   if (is_stream_done && state.sequence < state.window_end) {
-    nlohmann::json eof_msg =
+    nlohmann::json const eof_msg =
         {{"type", "file_chunk"}, {"id", file_id}, {"seq", state.sequence}, {"data", ""}, {"eof", true}};
     transport_->SendPeerDataChannelMessage(peer_id, eof_msg);
 
@@ -400,10 +396,10 @@ auto MessagingService::GetHistoryPage(ContactID const& peer_id, size_t page_inde
       bool entry_modified = false;
       for (auto& att : msg.attachments) {
         if (!att.is_downloaded && !att.file_path.empty()) {
-          std::error_code ec;
+          std::error_code err;
           // Check if file exists and has correct size
-          if (std::filesystem::exists(att.file_path, ec) && std::filesystem::is_regular_file(att.file_path, ec) &&
-              std::filesystem::file_size(att.file_path, ec) == att.size_bytes) {
+          if (std::filesystem::exists(att.file_path, err) && std::filesystem::is_regular_file(att.file_path, err) &&
+              std::filesystem::file_size(att.file_path, err) == att.size_bytes) {
             att.is_downloaded = true;
             entry_modified = true;
           }
@@ -534,14 +530,14 @@ void MessagingService::OnChatMessageReceived(
   std::filesystem::path const attachments_dir = storage_root.parent_path() / "attachments";
 
   if (!local_attachments.empty()) {
-    std::error_code ec;
-    std::filesystem::create_directories(attachments_dir, ec);
-    if (ec) {
-      LGE << "Failed to create attachments directory: " << attachments_dir.string() << " Error: " << ec.message();
+    std::error_code err;
+    std::filesystem::create_directories(attachments_dir, err);
+    if (err) {
+      LGE << "Failed to create attachments directory: " << attachments_dir.string() << " Error: " << err.message();
     }
 
     for (auto& att : local_attachments) {
-      std::filesystem::path final_path = attachments_dir / (att.id + ".dat");
+      std::filesystem::path const final_path = attachments_dir / (att.id + ".dat");
       att.file_path = final_path.string();
     }
   }
@@ -642,19 +638,20 @@ void MessagingService::ProcessIncomingFileChunk(ContactID const& peer_id, nlohma
     extracted_state.stream.flush();
     extracted_state.stream.close();
 
-    std::string calculated_hash = CalculateFileHash(extracted_state.temp_path);
+    std::string const calculated_hash = CalculateFileHash(extracted_state.temp_path);
     LGI << "File " << att_id
         << " verification: " << (calculated_hash == extracted_state.expected_hash ? "MATCH" : "MISMATCH");
 
     if (calculated_hash == extracted_state.expected_hash) {
       bool renamed = false;
-      for (int i = 0; i < 20; ++i) {
-        std::error_code ec;
-        if (std::filesystem::exists(extracted_state.file_path, ec)) {
-          std::filesystem::remove(extracted_state.file_path, ec);
+      constexpr auto file_operation_attempts = 20U;
+      for (int i = 0U; i < file_operation_attempts; ++i) {
+        std::error_code err;
+        if (std::filesystem::exists(extracted_state.file_path, err)) {
+          std::filesystem::remove(extracted_state.file_path, err);
         }
-        std::filesystem::rename(extracted_state.temp_path, extracted_state.file_path, ec);
-        if (!ec) {
+        std::filesystem::rename(extracted_state.temp_path, extracted_state.file_path, err);
+        if (!err) {
           if (std::filesystem::exists(extracted_state.file_path)) {
             renamed = true;
             LGI << "File transfer complete. Moved to: " << extracted_state.file_path.string();
@@ -666,10 +663,10 @@ void MessagingService::ProcessIncomingFileChunk(ContactID const& peer_id, nlohma
             extracted_state.temp_path,
             extracted_state.file_path,
             std::filesystem::copy_options::overwrite_existing,
-            ec
+            err
         );
-        if (!ec) {
-          std::filesystem::remove(extracted_state.temp_path, ec);
+        if (!err) {
+          std::filesystem::remove(extracted_state.temp_path, err);
           break;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
@@ -703,14 +700,14 @@ void MessagingService::ProcessIncomingFileChunk(ContactID const& peer_id, nlohma
           on_attachment_downloaded_(peer_id, att_id);
         }
         if (on_transfer_progress_) {
-          on_transfer_progress_(peer_id, att_id, 1.0f);
+          on_transfer_progress_(peer_id, att_id, 1.0F);
         }
       }
     } else {
       LGE << "Hash mismatch for file " << att_id << ". Expected: " << extracted_state.expected_hash
           << ", Got: " << calculated_hash << ". Temp file: " << extracted_state.temp_path.string();
-      std::error_code ec;
-      std::filesystem::remove(extracted_state.temp_path, ec);
+      std::error_code err;
+      std::filesystem::remove(extracted_state.temp_path, err);
     }
   } else {
     std::string const hex_data = message["data"];
@@ -734,7 +731,9 @@ void MessagingService::ProcessIncomingFileChunk(ContactID const& peer_id, nlohma
     if (on_transfer_progress_ && state.total_size > 0) {
       auto const current_bytes = (seq * chunkSizeBytes) + bytes.size();
       float progress = static_cast<float>(current_bytes) / static_cast<float>(state.total_size);
-      if (progress > 1.0f) progress = 1.0f;
+      if (progress > 1.0F) {
+        progress = 1.0F;
+      }
       // Unlock briefly for callback?
       lock.unlock();
       on_transfer_progress_(peer_id, att_id, progress);
@@ -742,7 +741,7 @@ void MessagingService::ProcessIncomingFileChunk(ContactID const& peer_id, nlohma
     }
 
     if ((seq + 1) % windowSizeChunks == 0) {
-      nlohmann::json ack_msg = {{"type", "file_chunk"}, {"id", att_id}, {"ack_seq", seq + 1}};
+      nlohmann::json const ack_msg = {{"type", "file_chunk"}, {"id", att_id}, {"ack_seq", seq + 1}};
       // Unlock to send
       if (lock.owns_lock()) {
         lock.unlock();
@@ -754,14 +753,14 @@ void MessagingService::ProcessIncomingFileChunk(ContactID const& peer_id, nlohma
 
 void MessagingService::OnMessageReceipt(ContactID const& peer_id, uint64_t message_id, std::string const& status)
     const {
-  auto s = messaging::MessageStatus::sent;
+  auto message_status = messaging::MessageStatus::sent;
   if (status == "delivered") {
-    s = messaging::MessageStatus::delivered;
+    message_status = messaging::MessageStatus::delivered;
   } else if (status == "read") {
-    s = messaging::MessageStatus::read;
+    message_status = messaging::MessageStatus::read;
   }
 
-  history_->UpdateMessageStatus(peer_id, message_id, s);
+  history_->UpdateMessageStatus(peer_id, message_id, message_status);
 }
 
 void MessagingService::OnMessagesRead(ContactID const& peer_id, std::vector<uint64_t> const& message_ids) const {
