@@ -390,7 +390,34 @@ void MessagingService::OnConnectionAttemptFinished(ContactID const& peer_id) con
 
 auto MessagingService::GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t page_size) const
     -> messaging::HistoryPage {
-  return history_->GetHistoryPage(peer_id, page_index, page_size);
+  auto page = history_->GetHistoryPage(peer_id, page_index, page_size);
+
+  // Resilience: Check for files that exist on disk but are marked as not downloaded in DB.
+  // This handles recovery from app crashes or interruptions during the final DB update step of a download.
+  bool any_modified = false;
+  for (auto& entry : page.messages) {
+    if (std::holds_alternative<messaging::MessageEntry>(entry.data)) {
+      auto& msg = std::get<messaging::MessageEntry>(entry.data);
+      bool entry_modified = false;
+      for (auto& att : msg.attachments) {
+        if (!att.is_downloaded && !att.file_path.empty()) {
+          std::error_code ec;
+          // Check if file exists and has correct size
+          if (std::filesystem::exists(att.file_path, ec) && std::filesystem::is_regular_file(att.file_path, ec) &&
+              std::filesystem::file_size(att.file_path, ec) == att.size_bytes) {
+            att.is_downloaded = true;
+            entry_modified = true;
+          }
+        }
+      }
+      if (entry_modified) {
+        // Fix the DB state so we don't have to check filesystem next time
+        // const_cast is safe here as MessagingService owns history_ and thread-safety is managed internally
+        const_cast<MessagingService*>(this)->history_->UpdateHistoryEntry(entry);
+      }
+    }
+  }
+  return page;
 }
 
 auto MessagingService::GetFullMessageContent(ContactID const& peer_id, uint64_t message_id) const
@@ -504,32 +531,46 @@ void MessagingService::OnChatMessageReceived(
   // Make a mutable copy of attachments to update paths
   std::vector<messaging::Attachment> local_attachments = attachments;
 
-  if (!local_attachments.empty()) {
-    std::filesystem::path const storage_root(storage_->GetPath());
-    std::filesystem::path const attachments_dir = storage_root.parent_path() / "attachments";
+  std::filesystem::path const storage_root(storage_->GetPath());
+  std::filesystem::path const attachments_dir = storage_root.parent_path() / "attachments";
 
+  if (!local_attachments.empty()) {
     std::error_code ec;
     std::filesystem::create_directories(attachments_dir, ec);
     if (ec) {
       LGE << "Failed to create attachments directory: " << attachments_dir.string() << " Error: " << ec.message();
     }
 
-    std::unique_lock<std::mutex> const lock(transfers_mutex_);
     for (auto& att : local_attachments) {
-      // Determine final path and update attachment object so it is stored correctly in history
       std::filesystem::path final_path = attachments_dir / (att.id + ".dat");
       att.file_path = final_path.string();
+    }
+  }
 
+  auto entry = history_->AddTextEntry(
+      peer_id,
+      content,
+      local_attachments,
+      messaging::MessageDirection::received,
+      is_system ? messaging::HistoryEntryKind::systemMessage : messaging::HistoryEntryKind::textMessage,
+      message_id
+  );
+
+  // Now start downloads
+  if (!local_attachments.empty()) {
+    std::unique_lock<std::mutex> const lock(transfers_mutex_);
+    for (auto const& att : local_attachments) {
       if (!att.is_downloaded) {
         if (active_downloads_.contains(att.id)) {
           continue;
         }
 
         TransferDownloadState state;
-        state.file_path = final_path;
+        state.file_path = std::filesystem::path(att.file_path);
         state.temp_path = attachments_dir / (att.id + ".tmp");
         state.expected_hash = att.hash;
         state.total_size = att.size_bytes;
+        state.message_id = entry.id;
 
         try {
           // Truncate/Create
@@ -564,15 +605,6 @@ void MessagingService::OnChatMessageReceived(
       }
     }
   }
-
-  auto entry = history_->AddTextEntry(
-      peer_id,
-      content,
-      local_attachments,
-      messaging::MessageDirection::received,
-      is_system ? messaging::HistoryEntryKind::systemMessage : messaging::HistoryEntryKind::textMessage,
-      message_id
-  );
 
   nlohmann::json const receipt = {{"type", "message_receipt"}, {"status", "delivered"}, {"message_id", message_id}};
   transport_->SendPeerDataChannelMessage(peer_id, receipt);
@@ -647,6 +679,27 @@ void MessagingService::ProcessIncomingFileChunk(ContactID const& peer_id, nlohma
       if (!renamed) {
         LGE << "Failed to move file for " << att_id << " after retries";
       } else {
+        // Update DB immediately upon success
+        if (extracted_state.message_id != 0) {
+          // Scan a small window of recent messages to find and update
+          // TODO: improve
+          for (auto [messages, total_messages] = history_->GetHistoryPage(peer_id, 0, 50); auto& rec : messages) {
+            if (rec.id == extracted_state.message_id) {
+              if (std::holds_alternative<messaging::MessageEntry>(rec.data)) {
+                for (auto& [content, attachments] = std::get<messaging::MessageEntry>(rec.data);
+                     auto& att : attachments) {
+                  if (att.id == att_id) {
+                    att.is_downloaded = true;
+                    history_->UpdateHistoryEntry(rec);
+                    break;
+                  }
+                }
+              }
+              break;
+            }
+          }
+        }
+
         if (on_attachment_downloaded_) {
           on_attachment_downloaded_(peer_id, att_id);
         }
