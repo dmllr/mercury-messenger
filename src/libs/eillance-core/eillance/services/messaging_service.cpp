@@ -416,13 +416,7 @@ void MessagingService::AddSystemEntry(
     std::string const& content,
     messaging::MessageDirection direction
 ) {
-  history_->AddTextEntry(
-      peer_id,
-      content,
-      {},
-      direction,
-      messaging::HistoryEntryKind::systemMessage
-  );
+  history_->AddTextEntry(peer_id, content, {}, direction, messaging::HistoryEntryKind::systemMessage);
 }
 
 void MessagingService::AddCallEntry(

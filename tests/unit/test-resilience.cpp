@@ -72,9 +72,7 @@ class ResilienceTest : public ::testing::Test {
     client_->Start();
   }
 
-  void TearDown() override {
-    client_->Terminate();
-  }
+  void TearDown() override { client_->Terminate(); }
 
   void FlushClientQueue() { std::this_thread::sleep_for(std::chrono::milliseconds(50)); }
 
@@ -91,15 +89,15 @@ class ResilienceTest : public ::testing::Test {
 // Test that pending read receipts persist and are sent on connection
 TEST_F(ResilienceTest, PendingReadReceiptsPersistAndSend) {
   // 1. Simulate receiving a message with remote ID
-  auto entry = mock_storage_->AddHistoryEntry({
-      .remote_id = 999,
-      .kind = messaging::HistoryEntryKind::textMessage,
-      .timestamp = Time::Now(),
-      .direction = messaging::MessageDirection::received,
-      .status = messaging::MessageStatus::delivered,
-      .data = messaging::MessageEntry{"hello"},
-      .peer_id = peer1
-  });
+  auto entry = mock_storage_->AddHistoryEntry(
+      {.remote_id = 999,
+       .kind = messaging::HistoryEntryKind::textMessage,
+       .timestamp = Time::Now(),
+       .direction = messaging::MessageDirection::received,
+       .status = messaging::MessageStatus::delivered,
+       .data = messaging::MessageEntry{"hello"},
+       .peer_id = peer1}
+  );
 
   // 2. Mark as read while disconnected
   // Explicitly remove peer to simulate disconnection, as SetUp connects it.
@@ -203,7 +201,7 @@ TEST_F(ResilienceTest, PendingActionsPersistAndSend) {
   auto actions = mock_storage_->GetPendingActions(peer1);
   ASSERT_FALSE(actions.empty());
   bool found_req = false;
-  for(auto const& act : actions) {
+  for (auto const& act : actions) {
     if (act.payload.find("profile_request") != std::string::npos) {
       found_req = true;
     }
