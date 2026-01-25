@@ -152,6 +152,31 @@ struct ConversationViewModel::Impl : public std::enable_shared_from_this<Impl> {
     }
   }
 
+  void OnAttachmentDownloaded(std::string const& attachment_id) {
+    // When a download finishes, simply refresh the view state to pick up the file on disk.
+    // The attachment path is stable, so UI just needs to re-render to see file.exists().
+    std::lock_guard<std::mutex> const lock(mutex);
+    bool found = false;
+    // We could optimize by only notifying if the attachment belongs to current history,
+    // but full refresh is safe.
+    for (auto const& entry : state.history) {
+      if (std::holds_alternative<messaging::MessageEntry>(entry.data)) {
+        auto const& msg = std::get<messaging::MessageEntry>(entry.data);
+        for (auto const& att : msg.attachments) {
+          if (att.id == attachment_id) {
+            found = true;
+            break;
+          }
+        }
+      }
+      if (found) break;
+    }
+
+    if (found && observer) {
+      observer->OnHistoryUpdated(state);
+    }
+  }
+
   void LoadInitialHistory(std::shared_ptr<Impl> const&, int generation) {
     auto page = client->GetMessageHistoryPage(peer_id, 0, kPageSize);
     std::lock_guard<std::mutex> const lock(mutex);
@@ -189,6 +214,11 @@ ConversationViewModel::ConversationViewModel(
   Subscribe<EventMessageStatusChanged>(queue, [impl](EventMessageStatusChanged const& event) {
     if (event.peer_id == impl->peer_id) {
       impl->OnMessageStatusChanged(event.peer_id, event.message_id, event.status);
+    }
+  });
+  Subscribe<EventAttachmentDownloaded>(queue, [impl](EventAttachmentDownloaded const& event) {
+    if (event.peer_id == impl->peer_id) {
+      impl->OnAttachmentDownloaded(event.attachment_id);
     }
   });
   Subscribe<EventDebugDataReset>(queue, [impl](auto const&) { impl->StartInitialLoad(); });

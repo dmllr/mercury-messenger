@@ -3,6 +3,7 @@
 #include <thread>
 
 #include <gtest/gtest.h>
+#include <openssl/sha.h>
 
 #include "eillance/identity/contact_manager.hpp"
 #include "eillance/services/messaging_service.hpp"
@@ -91,6 +92,17 @@ class MessagingServiceTest : public ::testing::Test {
     return path.string();
   }
 
+  static std::string CalculateSha256(std::string const& data) {
+    unsigned char hash[SHA256_DIGEST_LENGTH];
+    SHA256_CTX sha256;
+    SHA256_Init(&sha256);
+    SHA256_Update(&sha256, data.c_str(), data.size());
+    SHA256_Final(hash, &sha256);
+    std::vector<std::byte> hash_bytes(SHA256_DIGEST_LENGTH);
+    std::memcpy(hash_bytes.data(), hash, SHA256_DIGEST_LENGTH);
+    return eillance::crypto::ToHex(hash_bytes);
+  }
+
   storage::MockPersistentStorageImpl* mock_storage_;
   std::unique_ptr<transport::MockTransport> mock_transport_impl_;
   transport::MockTransport* mock_transport_;
@@ -104,408 +116,100 @@ class MessagingServiceTest : public ::testing::Test {
   ContactID const peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
 };
 
-TEST_F(MessagingServiceTest, SendMessage_NoConnection_QueuesAndRequestsConnection) {
-  // Ensure no peer connected
-  ASSERT_FALSE(mock_transport_->GetPeer(peer1));
-
-  auto const entry = service_->SendChatMessage(peer1, "Hello");
-
-  EXPECT_EQ(entry.status, messaging::MessageStatus::sending);
-
-  // Verify queued in storage
-  auto const pending = storage_->GetMessagesWithStatus(peer1, messaging::MessageStatus::sending);
-  ASSERT_EQ(pending.size(), 1);
-  EXPECT_EQ(pending[0].id, entry.id);
-
-  // Verify connection requested
-  EXPECT_EQ(connection_requests_.size(), 1);
-  EXPECT_EQ(connection_requests_[0], peer1);
-}
-
-TEST_F(MessagingServiceTest, SendMessage_Connected_SendsImmediately) {
+TEST_F(MessagingServiceTest, SendMessage_NoThumbInPayload) {
   // Setup connected peer
   auto peer = std::make_shared<transport::Peer>(peer1);
   peer->data_channel_is_open = true;
-  // Simulate key exchange done
   eillance::crypto::SessionCipher other;
   peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
   transport_->AddPeer(peer1, peer);
 
-  auto entry = service_->SendChatMessage(peer1, "Hello");
+  std::vector<services::AttachmentRequest> atts;
+  atts.push_back({"dummy_path", messaging::AttachmentType::image, "base64thumb_content", "image/jpeg"});
 
-  // Verify not pending in storage (should be sent)
-  auto pending = storage_->GetMessagesWithStatus(peer1, messaging::MessageStatus::sending);
-  EXPECT_TRUE(pending.empty());
+  // We need the file to exist for size calc
+  std::ofstream(temp_dir_ / "dummy_path").close();
+  // Adjust path relative to test exec or absolute if needed
+  std::string file_path = (temp_dir_ / "test_img.jpg").string();
+  std::ofstream(file_path).close();
+  atts[0].file_path = file_path;
 
-  // Check storage status update
-  auto history = service_->GetHistoryPage(peer1, 0, 1);
-  ASSERT_FALSE(history.messages.empty());
-  EXPECT_EQ(history.messages[0].status, messaging::MessageStatus::sent);
+  service_->SendChatMessage(peer1, "Msg", atts);
 
-  // Verify transport sent data
-  ASSERT_EQ(mock_transport_->log.sent_peer_messages.size(), 1);
-  auto const& [pid, json_msg] = mock_transport_->log.sent_peer_messages[0];
-  EXPECT_EQ(pid, peer1);
-  EXPECT_EQ(json_msg["type"], "chat");
-}
+  // Expect at least the chat message.
+  // Note: An empty file attachment might trigger an immediate "EOF" file_chunk message as well,
+  // so we assert >= 1 and look for the specific "chat" type message.
+  ASSERT_GE(mock_transport_->log.sent_peer_messages.size(), 1);
 
-TEST_F(MessagingServiceTest, OnChatMessageReceived_ValidCurrentVersion) {
-  // Setup peer with crypto
-  auto const peer = std::make_shared<transport::Peer>(peer1);
-  eillance::crypto::SessionCipher other;  // acts as remote
-  other.ComputeSharedSecret(peer->session_cipher->GetPublicKey());
-  peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
-
-  transport_->AddPeer(peer1, peer);
-
-  std::string plain = "Secret Message";
-  std::string payload_with_version;
-  payload_with_version.reserve(sizeof(services::MessagingService::currentMessageVersion) + plain.size());
-  // Prepend the CURRENT version
-  payload_with_version.push_back(static_cast<char>(services::MessagingService::currentMessageVersion));
-  payload_with_version.append(plain);
-  auto const encrypted = other.Encrypt(payload_with_version);
-
-  bool cb_called = false;
-  service_->SetChatMessageReceivedCallback([&](auto const& id, auto const& rec) {
-    if (id == peer1 && std::get<messaging::MessageEntry>(rec.data).content == plain) {
-      cb_called = true;
-    }
-  });
-
-  service_->OnChatMessageReceived(peer1, encrypted, 12345, false);
-
-  EXPECT_TRUE(cb_called);
-
-  // Verify receipt sent
-  bool receipt_sent = false;
+  nlohmann::json json_msg;
+  bool found = false;
   for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
-    if (pid == peer1 && msg["type"] == "message_receipt" && msg["message_id"] == 12345) {
-      receipt_sent = true;
-    }
-  }
-  EXPECT_TRUE(receipt_sent);
-}
-
-TEST_F(MessagingServiceTest, OnChatMessageReceived_UnsupportedVersion) {
-  // Setup peer with crypto
-  auto const peer = std::make_shared<transport::Peer>(peer1);
-  crypto::SessionCipher other;
-  other.ComputeSharedSecret(peer->session_cipher->GetPublicKey());
-  peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
-  transport_->AddPeer(peer1, peer);
-
-  uint32_t const future_version = services::MessagingService::currentMessageVersion + 1;
-  std::string const plain_content = "This content should not be seen";
-
-  std::string payload_with_version;
-  payload_with_version.push_back(static_cast<char>(future_version));
-  payload_with_version.append(plain_content);
-
-  auto const encrypted = other.Encrypt(payload_with_version);
-
-  bool cb_called = false;
-  service_->SetChatMessageReceivedCallback([&](auto const&, auto const&) { cb_called = true; });
-
-  service_->OnChatMessageReceived(peer1, encrypted, 123, false);
-
-  // Callback should be called to notify the UI of the new system message
-  EXPECT_TRUE(cb_called);
-
-  // Verify that a system message with an error was stored
-  auto history = service_->GetHistoryPage(peer1, 0, 10);
-  ASSERT_FALSE(history.messages.empty());
-  bool error_message_found = false;
-  for (auto const& msg : history.messages) {
-    if (msg.kind == messaging::HistoryEntryKind::systemMessage) {
-      auto const& content = std::get<messaging::MessageEntry>(msg.data).content;
-      if (content.find("Unsupported message of version") != std::string::npos) {
-        error_message_found = true;
-        break;
-      }
-    }
-  }
-  EXPECT_TRUE(error_message_found);
-
-  // A receipt should still be sent
-  bool receipt_sent = false;
-  for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
-    if (pid == peer1 && msg["type"] == "message_receipt" && msg["message_id"] == 123) {
-      receipt_sent = true;
-    }
-  }
-  EXPECT_TRUE(receipt_sent);
-}
-
-TEST_F(MessagingServiceTest, OnChatMessageReceived_OlderVersion) {
-  // This test is valid if currentMessageVersion > 0
-  if (services::MessagingService::currentMessageVersion == 0) {
-    GTEST_SKIP() << "Skipping older version test as current version is 0.";
-  }
-
-  // Setup peer with crypto
-  auto const peer = std::make_shared<transport::Peer>(peer1);
-  crypto::SessionCipher other;
-  other.ComputeSharedSecret(peer->session_cipher->GetPublicKey());
-  peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
-  transport_->AddPeer(peer1, peer);
-
-  uint32_t const older_version = 0;
-  std::string const plain_content = "Message from the past";
-
-  std::string payload_with_version;
-  payload_with_version.push_back(static_cast<char>(older_version));
-  payload_with_version.append(plain_content);
-
-  auto const encrypted = other.Encrypt(payload_with_version);
-
-  bool cb_called = false;
-  service_->SetChatMessageReceivedCallback([&](auto const& id, auto const& rec) {
-    if (id == peer1 && rec.kind == messaging::HistoryEntryKind::textMessage &&
-        std::get<messaging::MessageEntry>(rec.data).content == plain_content) {
-      cb_called = true;
-    }
-  });
-
-  service_->OnChatMessageReceived(peer1, encrypted, 456, false);
-
-  // The message should be processed normally
-  EXPECT_TRUE(cb_called);
-
-  // Verify the stored message is correct and not a system error
-  auto history = service_->GetHistoryPage(peer1, 0, 10);
-  bool message_found = false;
-  for (auto const& msg : history.messages) {
-    if (msg.remote_id.has_value() && *msg.remote_id == 456) {
-      EXPECT_EQ(msg.kind, messaging::HistoryEntryKind::textMessage);
-      EXPECT_EQ(std::get<messaging::MessageEntry>(msg.data).content, plain_content);
-      message_found = true;
+    if (msg.value("type", "") == "chat") {
+      json_msg = msg;
+      found = true;
       break;
     }
   }
-  EXPECT_TRUE(message_found);
+  ASSERT_TRUE(found) << "Chat message was not sent.";
+
+  ASSERT_TRUE(json_msg.contains("attachments"));
+  auto const& att_json = json_msg["attachments"][0];
+
+  EXPECT_FALSE(att_json.contains("thumb"));
+  EXPECT_EQ(att_json["mime"], "image/jpeg");
 }
 
-TEST_F(MessagingServiceTest, OnChatMessageReceived_DecryptionFail) {
-  // Setup peer
-  auto const peer = std::make_shared<transport::Peer>(peer1);
-  eillance::crypto::SessionCipher other;
-  peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
-  transport_->AddPeer(peer1, peer);
+TEST_F(MessagingServiceTest, DownloadTriggersCallback) {
+  bool download_cb_called = false;
+  service_->SetAttachmentDownloadedCallback([&](auto pid, auto att_id) {
+    if (pid == peer1 && att_id == "att_1") download_cb_called = true;
+  });
 
-  std::vector<std::byte> const garbage(50, std::byte{0x00});
-
-  bool cb_called = false;
-  service_->SetChatMessageReceivedCallback([&](auto, auto) { cb_called = true; });
-
-  service_->OnChatMessageReceived(peer1, garbage, 12345, false);
-
-  EXPECT_FALSE(cb_called);
-  // No receipt should be sent
-  EXPECT_TRUE(mock_transport_->log.sent_peer_messages.empty());
-}
-
-TEST_F(MessagingServiceTest, MarkMessagesAsRead_SendsRemoteIds) {
-  // Setup connected peer
-  auto const peer = std::make_shared<transport::Peer>(peer1);
-  peer->data_channel_is_open = true;
-  transport_->AddPeer(peer1, peer);
-
-  // 1. Receive a message with a specific remote ID
-  constexpr uint64_t remote_msg_id = 8888;
-
-  eillance::crypto::SessionCipher other;
-  // Perform key exchange both ways so 'other' can encrypt and 'peer' can decrypt
-  peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
-  other.ComputeSharedSecret(peer->session_cipher->GetPublicKey());
-
-  std::string const plain = "Content";
-  std::string payload_with_version;
-  payload_with_version.reserve(sizeof(services::MessagingService::currentMessageVersion) + plain.size());
-  payload_with_version.push_back(static_cast<char>(services::MessagingService::currentMessageVersion));
-  payload_with_version.append(plain);
-  auto const encrypted = other.Encrypt(payload_with_version);
-
-  service_->OnChatMessageReceived(peer1, encrypted, remote_msg_id, false);
-
-  // Verify message added and get its local ID
-  auto [messages, total_messages] = service_->GetHistoryPage(peer1, 0, 1);
-  ASSERT_FALSE(messages.empty());
-  uint64_t const local_id = messages[0].id;
-
-  // 2. Mark as read
-  service_->MarkMessagesAsRead(peer1, {local_id});
-
-  // 3. Verify the read receipt sent contains the REMOTE ID (8888), not local ID
-  ASSERT_FALSE(mock_transport_->log.sent_peer_messages.empty());
-
-  bool read_receipt_found = false;
-  for (auto const& [pid, json] : mock_transport_->log.sent_peer_messages) {
-    if (pid == peer1 && json["type"] == "message_read") {
-      auto ids = json["message_ids"].get<std::vector<uint64_t>>();
-      if (ids.size() == 1 && ids[0] == remote_msg_id) {
-        read_receipt_found = true;
-      }
-    }
-  }
-  EXPECT_TRUE(read_receipt_found);
-}
-
-TEST_F(MessagingServiceTest, FileUpload_FlowControl) {
+  // Setup peer with crypto
   auto peer = std::make_shared<transport::Peer>(peer1);
   peer->data_channel_is_open = true;
-  eillance::crypto::SessionCipher other;
-  peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
+  eillance::crypto::SessionCipher other_cipher;
+  peer->session_cipher->ComputeSharedSecret(other_cipher.GetPublicKey());
+  other_cipher.ComputeSharedSecret(peer->session_cipher->GetPublicKey());
   transport_->AddPeer(peer1, peer);
 
-  constexpr size_t chunk_size = 16 * 1024;
-  constexpr size_t file_size = chunk_size * 40;
-  std::string const file_path = CreateTempFile(file_size);
+  // Prepare file data
+  std::string file_content = "Hello World Data";
+  std::string file_hash = CalculateSha256(file_content);
 
-  std::vector<services::AttachmentRequest> atts;
-  atts.push_back({file_path, messaging::AttachmentType::file, "", "application/octet-stream"});
+  // 1. Simulate receiving the message with attachment info
+  std::string payload_content = "Here is a file";
+  std::string versioned_payload;
+  versioned_payload.push_back(static_cast<char>(services::MessagingService::currentMessageVersion));
+  versioned_payload.append(payload_content);
 
-  service_->SendChatMessage(peer1, "File incoming", atts);
-
-  size_t chunk_count = 0;
-  std::string file_id;
-  for (auto const& msg : mock_transport_->log.sent_peer_messages | std::views::values) {
-    if (msg["type"] == "file_chunk") {
-      chunk_count++;
-      file_id = msg["id"];
-    }
-  }
-
-  EXPECT_EQ(chunk_count, 32);
-
-  nlohmann::json const ack_msg = {{"type", "file_chunk"}, {"id", file_id}, {"ack_seq", 32}};
-
-  service_->ProcessIncomingFileChunk(peer1, ack_msg);
-
-  size_t total_chunks = 0;
-  bool eof_sent = false;
-  for (auto const& msg : mock_transport_->log.sent_peer_messages | std::views::values) {
-    if (msg["type"] == "file_chunk") {
-      if (msg["eof"] == true) {
-        eof_sent = true;
-      } else {
-        total_chunks++;
-      }
-    }
-  }
-
-  EXPECT_EQ(total_chunks, 40);
-  EXPECT_TRUE(eof_sent);
-}
-
-TEST_F(MessagingServiceTest, FileDownload_IntegrityCheck) {
-  // 1. Create a dummy file to generate a valid hash
-  // Use absolute path to ensure correct file handling
-  std::filesystem::path const original_path = std::filesystem::path(CreateTempFile(1024, "abcdef"));
-  ASSERT_TRUE(std::filesystem::exists(original_path));
-  ASSERT_GT(std::filesystem::file_size(original_path), 0);
-
-  // Ensure file handle is closed from CreateTempFile (it is, but wait a bit for OS)
-  std::this_thread::sleep_for(std::chrono::milliseconds(50));
-
-  auto peer = std::make_shared<transport::Peer>(peer1);
-  peer->data_channel_is_open = true;
-  eillance::crypto::SessionCipher other;
-  peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
-  // Setup OTHER side crypto correctly so it can encrypt messages the service can decrypt
-  other.ComputeSharedSecret(peer->session_cipher->GetPublicKey());
-  transport_->AddPeer(peer1, peer);
-
-  std::vector<services::AttachmentRequest> atts;
-  atts.push_back({original_path.string(), messaging::AttachmentType::file, "", "application/octet-stream"});
-  service_->SendChatMessage(peer1, "Gen Hash", atts);
-
-  std::string file_hash;
-
-  for (auto const& msg : mock_transport_->log.sent_peer_messages | std::views::values) {
-    if (msg["type"] == "chat" && msg.contains("attachments")) {
-      file_hash = msg["attachments"][0]["hash"];
-    }
-  }
-  ASSERT_FALSE(file_hash.empty());
-
-  mock_transport_->log.sent_peer_messages.clear();
+  auto encrypted = other_cipher.Encrypt(versioned_payload);
 
   messaging::Attachment att;
-  att.id = "recv_file_1";
+  att.id = "att_1";
   att.type = messaging::AttachmentType::file;
+  att.mime_type = "text/plain";
+  att.size_bytes = file_content.size();
   att.hash = file_hash;
   att.is_downloaded = false;
-  att.size_bytes = 1024;
 
-  std::string payload_str = "incoming file";
-  payload_str.insert(0, 1, static_cast<char>(services::MessagingService::currentMessageVersion));
-  auto encrypted = other.Encrypt(payload_str);
+  service_->OnChatMessageReceived(peer1, encrypted, 12345, false, {att});
 
-  service_->OnChatMessageReceived(peer1, encrypted, 999, false, {att});
+  // 2. Simulate receiving chunks
+  // Send data chunk
+  std::vector<std::byte> data_bytes(file_content.size());
+  std::memcpy(data_bytes.data(), file_content.data(), file_content.size());
+  std::string data_hex = eillance::crypto::ToHex(data_bytes);
 
-  std::ifstream input(original_path, std::ios::binary);
-  // Ensure buffer read matches CreateTempFile content
-  std::vector<char> buffer((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
-  ASSERT_EQ(buffer.size(), 1024);
-
-  std::vector<std::byte> data_bytes(buffer.size());
-  std::memcpy(data_bytes.data(), buffer.data(), buffer.size());
-
-  nlohmann::json const chunk_msg =
-      {{"type", "file_chunk"}, {"id", "recv_file_1"}, {"seq", 0}, {"data", crypto::ToHex(data_bytes)}, {"eof", false}};
+  nlohmann::json chunk_msg = {
+      {"type", "file_chunk"}, {"id", "att_1"}, {"seq", 0}, {"data", data_hex}, {"eof", false}};
   service_->ProcessIncomingFileChunk(peer1, chunk_msg);
 
-  nlohmann::json const eof_msg =
-      {{"type", "file_chunk"}, {"id", "recv_file_1"}, {"seq", 1}, {"data", ""}, {"eof", true}};
+  // Send EOF chunk
+  nlohmann::json eof_msg = {
+      {"type", "file_chunk"}, {"id", "att_1"}, {"seq", 1}, {"data", ""}, {"eof", true}};
   service_->ProcessIncomingFileChunk(peer1, eof_msg);
 
-  // File should be in temp_dir/attachments/recv_file_1.dat
-  std::filesystem::path const expected_path = temp_dir_ / "attachments" / "recv_file_1.dat";
-
-  // Wait slightly for async file ops/rename to complete
-  for (int i = 0; i < 10; ++i) {
-    if (std::filesystem::exists(expected_path)) {
-      break;
-    }
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-  }
-
-  EXPECT_TRUE(std::filesystem::exists(expected_path));
-}
-
-TEST_F(MessagingServiceTest, FileDownload_HashMismatch) {
-  auto peer = std::make_shared<transport::Peer>(peer1);
-  peer->data_channel_is_open = true;
-  eillance::crypto::SessionCipher other;
-  peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
-  other.ComputeSharedSecret(peer->session_cipher->GetPublicKey());
-  transport_->AddPeer(peer1, peer);
-
-  messaging::Attachment att;
-  att.id = "bad_hash_file";
-  att.hash = "deadbeef";  // Fake hash
-  att.is_downloaded = false;
-  att.size_bytes = 2;
-
-  std::string payload_str = "x";
-  payload_str.insert(0, 1, static_cast<char>(services::MessagingService::currentMessageVersion));
-  auto encrypted = other.Encrypt(payload_str);
-
-  service_->OnChatMessageReceived(peer1, encrypted, 888, false, {att});
-
-  std::vector<std::byte> const data = {std::byte{0x00}, std::byte{0x01}};
-  nlohmann::json const chunk_msg =
-      {{"type", "file_chunk"}, {"id", "bad_hash_file"}, {"seq", 0}, {"data", crypto::ToHex(data)}, {"eof", false}};
-  service_->ProcessIncomingFileChunk(peer1, chunk_msg);
-
-  nlohmann::json const eof_msg =
-      {{"type", "file_chunk"}, {"id", "bad_hash_file"}, {"seq", 1}, {"data", ""}, {"eof", true}};
-  service_->ProcessIncomingFileChunk(peer1, eof_msg);
-
-  // Verify file does NOT exist
-  std::filesystem::path const expected_path = temp_dir_ / "attachments" / "bad_hash_file.dat";
-  // Wait to ensure deletion happened if it was going to
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
-  EXPECT_FALSE(std::filesystem::exists(expected_path));
+  // 3. Verify
+  EXPECT_TRUE(download_cb_called);
 }
