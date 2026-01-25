@@ -8,7 +8,6 @@
 #include <mutex>
 #include <optional>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include "eillance/messaging/delivery_service.hpp"
@@ -130,6 +129,7 @@ class MessagingService {
     uint64_t total_size = 0;
     std::string expected_hash;
     std::filesystem::path temp_path;
+    uint64_t message_id = 0;
   };
 
   // Starts or resumes an upload based on state
@@ -162,7 +162,6 @@ class MessagingService {
 
   // Flow control constants
   static constexpr size_t windowSizeChunks = 32;
-  // Reduced to 4KB (8KB Hex encoded) to avoid MTU/fragmentation issues on some networks
   static constexpr size_t chunkSizeBytes = 4 * 1024;
 };
 

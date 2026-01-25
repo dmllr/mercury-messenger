@@ -58,6 +58,7 @@ class AttachmentTest : public ::testing::Test {
 
 TEST_F(AttachmentTest, SendMessageCalculatesHash) {
   std::vector<services::AttachmentRequest> attachments;
+  // Initialize with mime_type
   attachments.push_back({temp_file_path_, messaging::AttachmentType::image, "base64thumb", "image/jpeg"});
 
   auto const record = service_->SendChatMessage(peer1, "Check this out", attachments);
@@ -68,7 +69,7 @@ TEST_F(AttachmentTest, SendMessageCalculatesHash) {
 
   auto const& att = entry.attachments[0];
   EXPECT_EQ(att.file_path, temp_file_path_);
-  EXPECT_EQ(att.mime_type, "image/jpeg");
+  EXPECT_EQ(att.mime_type, "image/jpeg");  // Check mime type
   EXPECT_FALSE(att.hash.empty());
   EXPECT_EQ(att.hash.length(), 64);
 }
@@ -132,7 +133,6 @@ TEST_F(AttachmentTest, SendQueuedMessagesSerializesHash) {
 
 TEST_F(AttachmentTest, AttachmentWithComputationFailureIsSkipped) {
   // Use a non-existent file to force processing failure.
-  // std::filesystem::file_size throws if file does not exist, triggering the catch block which skips the attachment.
   std::string const bad_file = "non_existent_file_guid_12345.dat";
 
   // Ensure it doesn't exist
@@ -141,7 +141,6 @@ TEST_F(AttachmentTest, AttachmentWithComputationFailureIsSkipped) {
   }
 
   std::vector<services::AttachmentRequest> attachments;
-  // Use generic mime type to rely on file processing
   attachments.push_back({bad_file, messaging::AttachmentType::file, "", "application/octet-stream"});
 
   // We expect this to NOT add the attachment because validation/processing fails
@@ -152,4 +151,62 @@ TEST_F(AttachmentTest, AttachmentWithComputationFailureIsSkipped) {
 
   // Attachment should be skipped because file_size throws or hash calculation fails
   EXPECT_TRUE(entry.attachments.empty());
+}
+
+TEST_F(AttachmentTest, AttachmentPersistenceAcrossRestarts) {
+  // 1. Simulate receiving a message with an attachment (not yet downloaded)
+  messaging::Attachment att;
+  att.id = "restart_test_id";
+  att.type = messaging::AttachmentType::image;
+  att.size_bytes = 10;
+  att.is_downloaded = false;
+  // We need a path that exists for the fix to work.
+  // The service logic constructs path based on storage root.
+  // We must simulate the file existing at that path.
+
+  // Create dummy path structure to match service logic
+  std::filesystem::path storage_root(storage_->GetPath());
+  std::filesystem::path attachments_dir = storage_root.parent_path() / "attachments";
+  std::filesystem::create_directories(attachments_dir);
+  std::filesystem::path final_path = attachments_dir / (att.id + ".dat");
+
+  // Create the "downloaded" file manually
+  std::ofstream ofs(final_path, std::ios::binary);
+  ofs << "0123456789";  // 10 bytes
+  ofs.close();
+
+  // The entry in DB has file_path set but is_downloaded = false (initial receive state)
+  att.file_path = final_path.string();
+
+  messaging::MessageEntry msg_data;
+  msg_data.content = "Image";
+  msg_data.attachments.push_back(att);
+
+  messaging::HistoryEntryRecord record{
+      .kind = messaging::HistoryEntryKind::textMessage,
+      .timestamp = 1000,
+      .direction = messaging::MessageDirection::received,
+      .data = msg_data,
+      .peer_id = peer1
+  };
+
+  // Save to DB
+  storage_->AddHistoryEntry(record);
+
+  // 2. Restart Service (Create new instance sharing same storage)
+  auto contact_manager = std::make_shared<identity::ContactManager>(storage_);
+  auto conn_handler = [](ContactID const&) {};
+  auto new_service = std::make_unique<services::MessagingService>(storage_, transport_, contact_manager, conn_handler);
+
+  // 3. Load History
+  // GetHistoryPage should detect the file exists and update is_downloaded to true
+  auto page = new_service->GetHistoryPage(peer1, 0, 10);
+
+  ASSERT_EQ(page.messages.size(), 1);
+  auto const& loaded_msg = std::get<messaging::MessageEntry>(page.messages[0].data);
+  ASSERT_EQ(loaded_msg.attachments.size(), 1);
+
+  auto const& loaded_att = loaded_msg.attachments[0];
+  EXPECT_TRUE(loaded_att.is_downloaded) << "Attachment should be marked downloaded because file exists";
+  EXPECT_EQ(loaded_att.file_path, final_path.string());
 }
