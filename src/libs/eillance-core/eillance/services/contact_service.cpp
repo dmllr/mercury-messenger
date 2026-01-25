@@ -60,9 +60,9 @@ void ContactService::AddContact(ContactID const& peer_id, std::optional<std::vec
     nlohmann::json content = {
         {"action", "contact_request"},
         {"profile",
-                   {{"display_name", account_service_->GetSettings()->GetMyDisplayName().value_or("")},
-                       {"bio", account_service_->GetSettings()->GetMyBio().value_or("")},
-                       {"photo", account_service_->GetSettings()->GetMyPhotoBase64()}}},
+         {{"display_name", account_service_->GetSettings()->GetMyDisplayName().value_or("")},
+          {"bio", account_service_->GetSettings()->GetMyBio().value_or("")},
+          {"photo", account_service_->GetSettings()->GetMyPhotoBase64()}}},
     };
     if (token) {
       content["token"] = crypto::ToHex(*token);
@@ -276,8 +276,8 @@ void ContactService::OnContactConfirm(ContactID const& peer_id) {
 }
 
 void ContactService::OnContactRestored(ContactID const& peer_id) {
-  // Triggered when a message is successfully decrypted from a peer we didn't have in our contact list (reinstall scenario).
-  // Request their profile so the UI isn't just an ID.
+  // Triggered when a message is successfully decrypted from a peer we didn't have in our contact list (reinstall
+  // scenario). Request their profile so the UI isn't just an ID.
   EnqueueOrSend(peer_id, {{"type", "profile_request"}});
 
   INVARIANT(on_contact_status_changed_);

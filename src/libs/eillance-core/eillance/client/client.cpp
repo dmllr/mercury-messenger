@@ -220,7 +220,7 @@ void Client::ProcessPeerMessage(Json message) {
     );
   }
 
-    // Contact & Profile Logic
+  // Contact & Profile Logic
   else if (type == "contact_add_request") {
     std::optional<std::string> token;
     if (message.contains("token")) {

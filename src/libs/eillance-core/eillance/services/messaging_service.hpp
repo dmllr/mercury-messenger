@@ -26,7 +26,7 @@ struct AttachmentRequest {
 };
 
 class MessagingService {
-public:
+ public:
   static constexpr uint32_t currentMessageVersion = 1;
 
   using ConnectionRequestHandler = std::function<void(ContactID const&)>;
@@ -58,9 +58,9 @@ public:
 
   // Queries
   [[nodiscard]] auto GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t page_size) const
-  -> messaging::HistoryPage;
+      -> messaging::HistoryPage;
   [[nodiscard]] auto GetFullMessageContent(ContactID const& peer_id, std::uint64_t message_id) const
-  -> std::optional<std::string>;
+      -> std::optional<std::string>;
   [[nodiscard]] auto GetChatSummaries(std::vector<ContactID> const& peer_ids
   ) const -> std::vector<messaging::ChatSummary>;
 
@@ -93,7 +93,8 @@ public:
   // Callbacks
   using OnChatMessageCallback = std::function<void(ContactID const& peer_id, messaging::HistoryEntryRecord const&)>;
   using OnMessageStatusChangedCallback = std::function<void(ContactID const&, uint64_t, messaging::MessageStatus)>;
-  using OnAttachmentDownloadedCallback = std::function<void(ContactID const& peer_id, std::string const& attachment_id)>;
+  using OnAttachmentDownloadedCallback =
+      std::function<void(ContactID const& peer_id, std::string const& attachment_id)>;
   using OnContactRestoredCallback = std::function<void(ContactID const&)>;
 
   void SetChatMessageReceivedCallback(OnChatMessageCallback cb);
@@ -101,7 +102,7 @@ public:
   void SetAttachmentDownloadedCallback(OnAttachmentDownloadedCallback cb);
   void SetContactRestoredCallback(OnContactRestoredCallback cb);
 
-private:
+ private:
   // Helper to connect to a peer if not connected
   void RequestConnection(ContactID const& peer_id);
   void UpdatePeerActivity(ContactID const& peer_id);
