@@ -24,6 +24,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import hela.eillance.navigation.Route
 import hela.eillance.navigation.Screen
+import hela.eillance.ndkio.AttachmentType
 import hela.eillance.ndkio.CallDirection
 import hela.eillance.screens.BackupAndRestoreScreen
 import hela.eillance.screens.BetaNoticeDialog
@@ -31,6 +32,7 @@ import hela.eillance.screens.CallScreen
 import hela.eillance.screens.ContactProfileDialog
 import hela.eillance.screens.ContactsScreen
 import hela.eillance.screens.ConversationScreen
+import hela.eillance.screens.FullScreenMediaScreen
 import hela.eillance.screens.HelpScreen
 import hela.eillance.screens.IdentityScreen
 import hela.eillance.screens.IncomingCallScreen
@@ -265,7 +267,10 @@ fun MainAppContent(viewModel: MainViewModel) {
           onCheckPermissions = viewModel::checkAllPermissions,
           onBack = { navController.popBackStack() },
           onNavigateToCall = { navController.navigate(Route.Call.createRoute(it)) },
-          onShowContactProfile = { contactsVM.onShowContactProfile(it) }
+          onShowContactProfile = { contactsVM.onShowContactProfile(it) },
+          onMediaClick = { att ->
+            navController.navigate(Route.FullScreenMedia.createRoute(att.path, att.type.value))
+          }
         )
       }
 
@@ -327,6 +332,21 @@ fun MainAppContent(viewModel: MainViewModel) {
         val url = backStackEntry.arguments?.getString("url")
         if (url != null) {
           WebViewScreen(navController = navController, url = url)
+        }
+      }
+
+      composable(
+        route = Route.FullScreenMedia.route,
+        arguments = listOf(
+          navArgument("path") { type = NavType.StringType },
+          navArgument("type") { type = NavType.IntType }
+        )
+      ) { backStackEntry ->
+        val path = backStackEntry.arguments?.getString("path")
+        val typeVal = backStackEntry.arguments?.getInt("type") ?: AttachmentType.File.value
+        if (path != null) {
+          val type = AttachmentType.fromInt(typeVal)
+          FullScreenMediaScreen(path = Uri.decode(path), type = type, onBack = { navController.popBackStack() })
         }
       }
     }

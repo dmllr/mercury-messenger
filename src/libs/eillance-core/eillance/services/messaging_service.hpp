@@ -93,9 +93,11 @@ class MessagingService {
   // Callbacks
   using OnChatMessageCallback = std::function<void(ContactID const& peer_id, messaging::HistoryEntryRecord const&)>;
   using OnMessageStatusChangedCallback = std::function<void(ContactID const&, uint64_t, messaging::MessageStatus)>;
+  using OnAttachmentDownloadedCallback = std::function<void(ContactID const& peer_id, std::string const& attachment_id)>;
 
   void SetChatMessageReceivedCallback(OnChatMessageCallback cb);
   void SetMessageStatusChangedCallback(OnMessageStatusChangedCallback cb);
+  void SetAttachmentDownloadedCallback(OnAttachmentDownloadedCallback cb);
 
  private:
   // Helper to connect to a peer if not connected
@@ -143,6 +145,7 @@ class MessagingService {
 
   OnChatMessageCallback on_message_received_;
   OnMessageStatusChangedCallback on_status_changed_;
+  OnAttachmentDownloadedCallback on_attachment_downloaded_;
 
   // Active File Transfers
   std::map<std::string, TransferUploadState> active_uploads_;

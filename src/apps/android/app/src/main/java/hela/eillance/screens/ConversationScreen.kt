@@ -80,6 +80,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.os.ConfigurationCompat
 import hela.eillance.components.MediaBubbleContent
+import hela.eillance.ndkio.Attachment
 import hela.eillance.ndkio.AttachmentType
 import hela.eillance.ndkio.CallDirection
 import hela.eillance.ndkio.CallState
@@ -125,7 +126,8 @@ fun ConversationScreen(
   onCheckPermissions: () -> Unit,
   onBack: () -> Unit,
   onNavigateToCall: (String) -> Unit,
-  onShowContactProfile: (String) -> Unit
+  onShowContactProfile: (String) -> Unit,
+  onMediaClick: (Attachment) -> Unit = {}
 ) {
   val listState = rememberLazyListState()
   val coroutineScope = rememberCoroutineScope()
@@ -284,7 +286,8 @@ fun ConversationScreen(
           } else {
             systemMessageToShowDetails = clickedEntry
           }
-        }
+        },
+        onMediaClick = onMediaClick
       )
 
       when (contact?.status) {
@@ -388,7 +391,8 @@ fun ChatHistory(
   chatVM: ConversationViewModel,
   locale: Locale,
   zoneId: ZoneId,
-  onSystemMessageClick: (HistoryEntry) -> Unit
+  onSystemMessageClick: (HistoryEntry) -> Unit,
+  onMediaClick: (Attachment) -> Unit
 ) {
   val formatters = remember(locale) {
     Triple(
@@ -419,7 +423,8 @@ fun ChatHistory(
           entry = item,
           onShowMore = chatVM::loadFullMessage,
           zoneId = zoneId,
-          formatters = formatters
+          formatters = formatters,
+          onMediaClick = onMediaClick
         )
         HistoryEntryKind.VoiceCall, HistoryEntryKind.VideoCall -> CallLogBubble(
           entry = item,
@@ -450,7 +455,8 @@ fun MessageBubble(
   entry: HistoryEntry,
   onShowMore: (Long) -> Unit,
   zoneId: ZoneId,
-  formatters: Triple<DateTimeFormatter, DateTimeFormatter, DateTimeFormatter>
+  formatters: Triple<DateTimeFormatter, DateTimeFormatter, DateTimeFormatter>,
+  onMediaClick: (Attachment) -> Unit
 ) {
   val isFromMe = entry.direction == MessageDirection.Sent
   val alignment = if (isFromMe) Alignment.CenterEnd else Alignment.CenterStart
@@ -487,7 +493,7 @@ fun MessageBubble(
       if (entry.attachments.isNotEmpty()) {
         MediaBubbleContent(
           attachments = entry.attachments,
-          onMediaClick = { /* Handle fullscreen view logic later */ }
+          onMediaClick = onMediaClick
         )
         if (!entry.content.isNullOrBlank()) {
           Spacer(modifier = Modifier.height(8.dp))

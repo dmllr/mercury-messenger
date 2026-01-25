@@ -27,8 +27,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import coil.decode.VideoFrameDecoder
+import coil.request.ImageRequest
+import coil.request.videoFrameMillis
 import hela.eillance.ndkio.Attachment
 import hela.eillance.ndkio.AttachmentType
 import java.io.File
@@ -85,16 +89,28 @@ private fun MediaItem(attachment: Attachment, onClick: () -> Unit) {
     contentAlignment = Alignment.Center
   ) {
     val file = File(attachment.path)
+    val context = LocalContext.current
 
+    // Try to display the image/video thumb from file if downloaded, otherwise fallback to thumb string
     if (file.exists()) {
+      val model = if (attachment.type == AttachmentType.Video) {
+        ImageRequest.Builder(context)
+          .data(file)
+          .decoderFactory { result, options, _ -> VideoFrameDecoder(result.source, options) }
+          .videoFrameMillis(1000)
+          .build()
+      } else {
+        file
+      }
+
       AsyncImage(
-        model = file,
+        model = model,
         contentDescription = "Attachment",
         modifier = Modifier.fillMaxSize(),
         contentScale = ContentScale.Crop
       )
     } else {
-      // Fallback to thumbnail if file not downloaded/local yet
+      // Fallback to embedded thumbnail if file not downloaded yet (only for sender usually now)
       val imageBitmap = remember(attachment.thumbnail) {
         if (!attachment.thumbnail.isNullOrEmpty()) {
           try {
@@ -118,7 +134,7 @@ private fun MediaItem(attachment: Attachment, onClick: () -> Unit) {
           modifier = Modifier.fillMaxSize().background(Color.Gray),
           contentAlignment = Alignment.Center
         ) {
-          Text("Media Unavailable", color = Color.White)
+          Text("Loading...", color = Color.White)
         }
       }
     }

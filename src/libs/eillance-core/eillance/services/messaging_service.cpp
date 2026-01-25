@@ -142,13 +142,6 @@ void MessagingService::SendSystemMessage(ContactID const& peer_id, std::string c
 
 void MessagingService::SendQueuedMessages(ContactID const& peer_id) {
   // Flush generic pending actions (like read receipts)
-  // Note: ContactService::SendPendingActions is also called by Client, but redundant calls are safe.
-  // We can't access ContactService here, but we rely on Client logic or the fact that if we are connected
-  // the actions will be flushed.
-  // However, read receipts are now just pending actions. Since we don't have access to flush them here directly
-  // unless we duplicate logic, we rely on the caller (Client) having called FlushPendingActions, OR
-  // we add `FlushPendingActions` logic here too since `storage_` and `transport_` are available.
-  // It is safer to flush here too to ensure timely delivery of read receipts.
   auto actions = storage_->GetPendingActions(peer_id);
   for (auto const& action : actions) {
     try {
@@ -246,7 +239,8 @@ void MessagingService::SendQueuedMessages(ContactID const& peer_id) {
                  {"type", att.type},
                  {"mime", att.mime_type},
                  {"size", att.size_bytes},
-                 {"thumb", att.thumbnail_base64},
+                 // Thumbnail is no longer sent over the wire; receiver generates it from full file
+                 // {"thumb", att.thumbnail_base64},
                  {"hash", att.hash}}
             );
           }
@@ -604,6 +598,10 @@ void MessagingService::ProcessIncomingFileChunk(ContactID const& peer_id, nlohma
 
       if (!renamed) {
         LGE << "Failed to move file for " << att_id << " after retries";
+      } else {
+        if (on_attachment_downloaded_) {
+          on_attachment_downloaded_(peer_id, att_id);
+        }
       }
     } else {
       LGE << "Hash mismatch for file " << att_id << ". Expected: " << extracted_state.expected_hash
@@ -658,6 +656,10 @@ void MessagingService::SetChatMessageReceivedCallback(OnChatMessageCallback cb) 
 
 void MessagingService::SetMessageStatusChangedCallback(OnMessageStatusChangedCallback cb) {
   on_status_changed_ = std::move(cb);
+}
+
+void MessagingService::SetAttachmentDownloadedCallback(OnAttachmentDownloadedCallback cb) {
+  on_attachment_downloaded_ = std::move(cb);
 }
 
 bool MessagingService::HasPendingWork(ContactID const& peer_id) {
