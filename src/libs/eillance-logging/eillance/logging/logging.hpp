@@ -35,7 +35,7 @@ struct Log {
    */
   // NOLINTNEXTLINE(*-default-arguments-declarations)
   static void Initialize(plog::IAppender* appender, plog::Severity severity = logLevel) {
-    plog::init(severity, appender);
+    plog::init<logInstanceId>(severity, appender);
   }
 
   /**
@@ -50,10 +50,10 @@ struct Log {
   static void InitializeDefault(plog::Severity severity = logLevel) {
 #ifdef ANDROID
     static plog::AndroidAppender<plog::FuncMessageFormatter> default_appender{tag};
-    plog::init(severity, &default_appender);
+    plog::init<logInstanceId>(severity, &default_appender);
 #else
     static plog::ColorConsoleAppender<plog::TxtFormatter> default_appender;
-    plog::init(severity, &default_appender);
+    plog::init<logInstanceId>(severity, &default_appender);
 #endif
   }
 };
