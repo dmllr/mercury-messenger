@@ -244,8 +244,7 @@ void MessagingService::SendQueuedMessages(ContactID const& peer_id) {
                  {"type", att.type},
                  {"mime", att.mime_type},
                  {"size", att.size_bytes},
-                 // Thumbnail is no longer sent over the wire; receiver generates it from full file
-                 // {"thumb", att.thumbnail_base64},
+                 {"thumb", att.thumbnail_base64},
                  {"hash", att.hash}}
             );
           }
