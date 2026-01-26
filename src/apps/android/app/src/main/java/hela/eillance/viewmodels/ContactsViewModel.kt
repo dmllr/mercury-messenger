@@ -13,6 +13,9 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
   private val _contacts = MutableStateFlow<List<Contact>>(emptyList())
   val contacts = _contacts.asStateFlow()
 
+  private val _isLoading = MutableStateFlow(true)
+  val isLoading = _isLoading.asStateFlow()
+
   private val _showAddContactDialog = MutableStateFlow(false)
   val showAddContactDialog = _showAddContactDialog.asStateFlow()
 
@@ -37,6 +40,7 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
   // --- Observer Callback called from JNI ---
   override fun onContactsUpdated(contacts: List<Contact>) {
     _contacts.value = contacts
+    _isLoading.value = false
   }
 
   // --- Actions ---
