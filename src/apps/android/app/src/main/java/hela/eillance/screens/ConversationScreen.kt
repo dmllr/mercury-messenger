@@ -5,7 +5,6 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -40,7 +39,6 @@ import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.DoneAll
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Button
@@ -81,6 +79,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.os.ConfigurationCompat
 import hela.eillance.components.MediaBubbleContent
+import hela.eillance.components.UserAvatar
 import hela.eillance.ndkio.Attachment
 import hela.eillance.ndkio.CallDirection
 import hela.eillance.ndkio.CallState
@@ -94,7 +93,6 @@ import hela.eillance.ndkio.MessageDirection
 import hela.eillance.ndkio.MessageStatus
 import hela.eillance.ndkio.PeerConnectionState
 import hela.eillance.theme.extendedColors
-import hela.eillance.utils.rememberImageBitmapFromBase64
 import hela.eillance.viewmodels.CallViewModel
 import hela.eillance.viewmodels.ContactsViewModel
 import hela.eillance.viewmodels.ConversationViewModel
@@ -203,26 +201,10 @@ fun ConversationScreen(
             modifier = Modifier.clickable { onShowContactProfile(peerId) },
             verticalAlignment = Alignment.CenterVertically
           ) {
-            val imageBitmap = rememberImageBitmapFromBase64(contact?.photo)
-            if (imageBitmap != null) {
-              Image(
-                bitmap = imageBitmap,
-                contentDescription = "Profile Photo",
-                modifier = Modifier
-                  .size(40.dp)
-                  .clip(CircleShape),
-              )
-            } else {
-              Icon(
-                imageVector = Icons.Default.Person,
-                contentDescription = "Default Profile Icon",
-                modifier = Modifier
-                  .size(40.dp)
-                  .clip(CircleShape)
-                  .background(MaterialTheme.colorScheme.secondaryContainer)
-                  .padding(8.dp)
-              )
-            }
+            UserAvatar(
+              photoBase64 = contact?.photo,
+              modifier = Modifier.size(40.dp)
+            )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
               text = contact?.name ?: peerId,

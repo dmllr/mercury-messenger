@@ -14,6 +14,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Arrangement.spacedBy
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -67,7 +68,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -82,8 +82,8 @@ import com.google.zxing.EncodeHintType
 import com.google.zxing.qrcode.QRCodeWriter
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import hela.eillance.camera.BuildConfig
+import hela.eillance.components.UserAvatar
 import hela.eillance.ndkio.MyProfileInfo
-import hela.eillance.utils.rememberImageBitmapFromBase64
 import hela.eillance.viewmodels.ContactsViewModel
 import hela.eillance.viewmodels.DebugViewModel
 import hela.eillance.viewmodels.ProfileViewModel
@@ -193,31 +193,12 @@ private fun ProfileHeader(myProfile: MyProfileInfo, contactsVM: ContactsViewMode
     }
 
     Box(contentAlignment = Alignment.Center) {
-      Box(
-        modifier = Modifier
-          .size(120.dp)
-          .clip(CircleShape)
-          .background(MaterialTheme.colorScheme.surfaceVariant),
-        contentAlignment = Alignment.Center
-      ) {
-        val imageBitmap = rememberImageBitmapFromBase64(myProfile.myPhoto)
-
-        if (imageBitmap != null) {
-          Image(
-            bitmap = imageBitmap,
-            contentDescription = "Profile Photo",
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop
-          )
-        } else {
-          Icon(
-            imageVector = Icons.Default.Person,
-            contentDescription = "Default Profile Icon",
-            modifier = Modifier.size(72.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
-          )
-        }
-      }
+      UserAvatar(
+        photoBase64 = myProfile.myPhoto,
+        modifier = Modifier.size(120.dp),
+        fallbackBackground = MaterialTheme.colorScheme.surfaceVariant,
+        fallbackTint = MaterialTheme.colorScheme.onSurfaceVariant
+      )
 
       IconButton(
         onClick = { showQrDialog = true },
@@ -260,7 +241,7 @@ private fun ProfileHeader(myProfile: MyProfileInfo, contactsVM: ContactsViewMode
     Row(
       modifier = Modifier.padding(top = 8.dp),
       verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.spacedBy(8.dp)
+      horizontalArrangement = spacedBy(8.dp)
     ) {
       Text(
         text = "ID:",
@@ -424,6 +405,8 @@ private fun ProfileEditDialog(
         horizontalAlignment = Alignment.CenterHorizontally
       ) {
         Text("Edit Profile", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(bottom = 16.dp))
+
+        // Editable photo area
         Box(
           modifier = Modifier
             .size(150.dp)
@@ -432,26 +415,14 @@ private fun ProfileEditDialog(
             .clickable { imagePickerLauncher.launch("image/*") },
           contentAlignment = Alignment.Center
         ) {
-          val imageBitmap = rememberImageBitmapFromBase64(photoBase64)
-          if (imageBitmap != null) {
-            Image(
-              bitmap = imageBitmap,
-              contentDescription = "Profile Photo",
-              modifier = Modifier.fillMaxSize(),
-              contentScale = ContentScale.Crop
-            )
-          } else {
-            Icon(
-              imageVector = Icons.Default.Person,
-              contentDescription = "Default Profile Icon",
-              modifier = Modifier
-                .size(80.dp)
-                .background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
-                .padding(16.dp),
-              tint = MaterialTheme.colorScheme.onSecondaryContainer
-            )
-          }
+          UserAvatar(
+            photoBase64 = photoBase64,
+            modifier = Modifier.fillMaxSize(),
+            fallbackBackground = MaterialTheme.colorScheme.secondaryContainer,
+            fallbackTint = MaterialTheme.colorScheme.onSecondaryContainer
+          )
         }
+
         Text(
           "Tap to change photo",
           style = MaterialTheme.typography.bodySmall,

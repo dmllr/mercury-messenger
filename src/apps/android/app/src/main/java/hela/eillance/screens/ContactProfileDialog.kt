@@ -1,7 +1,5 @@
 package hela.eillance.screens
 
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,11 +9,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -23,8 +19,8 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -34,14 +30,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import hela.eillance.components.UserAvatar
 import hela.eillance.ndkio.Contact
-import hela.eillance.utils.rememberImageBitmapFromBase64
 
 @Composable
 fun ContactProfileDialog(
@@ -88,27 +82,11 @@ fun ContactProfileDialog(
           modifier = Modifier.padding(24.dp),
           horizontalAlignment = Alignment.CenterHorizontally
         ) {
-          val imageBitmap = rememberImageBitmapFromBase64(contact.photo)
-          if (imageBitmap != null) {
-            Image(
-              bitmap = imageBitmap,
-              contentDescription = "Profile Photo",
-              modifier = Modifier
-                .size(120.dp)
-                .clip(CircleShape),
-              contentScale = ContentScale.Crop
-            )
-          } else {
-            Icon(
-              imageVector = Icons.Default.Person,
-              contentDescription = "Default Profile Icon",
-              modifier = Modifier
-                .size(120.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.secondaryContainer)
-                .padding(24.dp)
-            )
-          }
+          UserAvatar(
+            photoBase64 = contact.photo,
+            modifier = Modifier.size(120.dp),
+            fallbackBackground = MaterialTheme.colorScheme.secondaryContainer
+          )
 
           Spacer(modifier = Modifier.height(16.dp))
 
