@@ -29,40 +29,6 @@ data class ExtendedColors(
   val offline: Color,
 )
 
-// Strict Dark Palette (High Contrast / Monochrome)
-private val StrictDarkPrimary = Color(0xFFFFFFFF)
-private val StrictDarkOnPrimary = Color(0xFF000000)
-private val StrictDarkPrimaryContainer = Color(0xFF000000)
-private val StrictDarkOnPrimaryContainer = Color(0xFFFFFFFF)
-private val StrictDarkSecondary = Color(0xFFB0B0B0)
-private val StrictDarkOnSecondary = Color(0xFF000000)
-private val StrictDarkSecondaryContainer = Color(0xFF424242)
-private val StrictDarkOnSecondaryContainer = Color(0xFFE0E0E0)
-private val StrictDarkBackground = Color(0xFF000000) // Pitch black
-private val StrictDarkSurface = Color(0xFF121212)
-private val StrictDarkSurfaceVariant = Color(0xFF1E1E1E)
-private val StrictDarkOnSurface = Color(0xFFE0E0E0)
-private val StrictDarkOnSurfaceVariant = Color(0xFFB0B0B0)
-private val StrictDarkOutline = Color(0xFF555555)
-private val StrictDarkError = Color(0xFFCF6679)
-
-// Strict Light Palette (Clean / Sharp)
-private val StrictLightPrimary = Color(0xFF000000)
-private val StrictLightOnPrimary = Color(0xFFFFFFFF)
-private val StrictLightPrimaryContainer = Color(0xFFFFFFFF)
-private val StrictLightOnPrimaryContainer = Color(0xFF000000)
-private val StrictLightSecondary = Color(0xFF424242)
-private val StrictLightOnSecondary = Color(0xFFFFFFFF)
-private val StrictLightSecondaryContainer = Color(0xFFF5F5F5)
-private val StrictLightOnSecondaryContainer = Color(0xFF121212)
-private val StrictLightBackground = Color(0xFFFFFFFF)
-private val StrictLightSurface = Color(0xFFFFFFFF)
-private val StrictLightSurfaceVariant = Color(0xFFF0F0F0)
-private val StrictLightOnSurface = Color(0xFF000000)
-private val StrictLightOnSurfaceVariant = Color(0xFF424242)
-private val StrictLightOutline = Color(0xFFBDBDBD)
-private val StrictLightError = Color(0xFFB00020)
-
 val LightExtendedColors = ExtendedColors(
   success = Color(0xFF388E3C),
   warning = Color(0xFFFFB74D),
@@ -80,39 +46,39 @@ val LocalExtendedColors = staticCompositionLocalOf {
 }
 
 private val DarkColorScheme = darkColorScheme(
-  primary = StrictDarkPrimary,
-  onPrimary = StrictDarkOnPrimary,
-  primaryContainer = StrictDarkPrimaryContainer,
-  onPrimaryContainer = StrictDarkOnPrimaryContainer,
-  secondary = StrictDarkSecondary,
-  onSecondary = StrictDarkOnSecondary,
-  secondaryContainer = StrictDarkSecondaryContainer,
-  onSecondaryContainer = StrictDarkOnSecondaryContainer,
-  background = StrictDarkBackground,
-  surface = StrictDarkSurface,
-  onSurface = StrictDarkOnSurface,
-  surfaceVariant = StrictDarkSurfaceVariant,
-  onSurfaceVariant = StrictDarkOnSurfaceVariant,
-  outline = StrictDarkOutline,
-  error = StrictDarkError
+  primary = Color(0xFFFFFFFF),
+  onPrimary = Color(0xFF000000),
+  primaryContainer = Color(0xFF000000),
+  onPrimaryContainer = Color(0xFFFFFFFF),
+  secondary = Color(0xFFB0B0B0),
+  onSecondary = Color(0xFF000000),
+  secondaryContainer = Color(0xFF424242),
+  onSecondaryContainer = Color(0xFFE0E0E0),
+  background = Color(0xFF090909),
+  surface = Color(0xFF121212),
+  onSurface = Color(0xFFE0E0E0),
+  surfaceVariant = Color(0xFF1E1E1E),
+  onSurfaceVariant = Color(0xFFB0B0B0),
+  outline = Color(0xFF555555),
+  error = Color(0xFFCF6679)
 )
 
 private val LightColorScheme = lightColorScheme(
-  primary = StrictLightPrimary,
-  onPrimary = StrictLightOnPrimary,
-  primaryContainer = StrictLightPrimaryContainer,
-  onPrimaryContainer = StrictLightOnPrimaryContainer,
-  secondary = StrictLightSecondary,
-  onSecondary = StrictLightOnSecondary,
-  secondaryContainer = StrictLightSecondaryContainer,
-  onSecondaryContainer = StrictLightOnSecondaryContainer,
-  background = StrictLightBackground,
-  surface = StrictLightSurface,
-  onSurface = StrictLightOnSurface,
-  surfaceVariant = StrictLightSurfaceVariant,
-  onSurfaceVariant = StrictLightOnSurfaceVariant,
-  outline = StrictLightOutline,
-  error = StrictLightError
+  primary = Color(0xFF000000),
+  onPrimary = Color(0xFFFFFFFF),
+  primaryContainer = Color(0xFFFFFFFF),
+  onPrimaryContainer = Color(0xFF000000),
+  secondary = Color(0xFF424242),
+  onSecondary = Color(0xFFFFFFFF),
+  secondaryContainer = Color(0xFFF5F5F5),
+  onSecondaryContainer = Color(0xFF121212),
+  background = Color(0xFFFFFFFF),
+  surface = Color(0xFFFFFFFF),
+  onSurface = Color(0xFF000000),
+  surfaceVariant = Color(0xFFF0F0F0),
+  onSurfaceVariant = Color(0xFF424242),
+  outline = Color(0xFFBDBDBD),
+  error = Color(0xFFB00020)
 )
 
 val Typography = Typography(
