@@ -9,6 +9,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
@@ -29,14 +30,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import com.google.mlkit.vision.barcode.BarcodeScannerOptions
-import com.google.mlkit.vision.barcode.BarcodeScanning
-import com.google.mlkit.vision.barcode.common.Barcode
-import com.google.mlkit.vision.common.InputImage
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.BinaryBitmap
+import com.google.zxing.DecodeHintType
+import com.google.zxing.MultiFormatReader
+import com.google.zxing.PlanarYUVLuminanceSource
+import com.google.zxing.common.HybridBinarizer
+import java.nio.ByteBuffer
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -46,7 +49,7 @@ fun QrScannerScreen(
   onClose: () -> Unit
 ) {
   val context = LocalContext.current
-  val lifecycleOwner = LocalLifecycleOwner.current
+  val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
   var hasCameraPermission by remember {
     mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
   }
@@ -82,58 +85,62 @@ fun QrScannerScreen(
             val cameraProvider = cameraProviderFuture.get()
 
             val preview = Preview.Builder().build().also {
-              it.setSurfaceProvider(previewView.surfaceProvider)
+              it.surfaceProvider = previewView.surfaceProvider
             }
 
-            val options = BarcodeScannerOptions.Builder()
-              .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
-              .build()
-            val scanner = BarcodeScanning.getClient(options)
+            // Using ZXing MultiFormatReader
+            val reader = MultiFormatReader().apply {
+              setHints(mapOf(DecodeHintType.POSSIBLE_FORMATS to listOf(BarcodeFormat.QR_CODE)))
+            }
 
             val imageAnalyzer = ImageAnalysis.Builder()
               .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
               .build()
               .also {
                 it.setAnalyzer(cameraExecutor) { imageProxy ->
-                  val mediaImage = imageProxy.image
-                  if (mediaImage != null) {
-                    val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
-                    scanner.process(image)
-                      .addOnSuccessListener { barcodes ->
-                        for (barcode in barcodes) {
-                          barcode.rawValue?.let { rawValue ->
-                            val prefix = "mercury:contact:"
-                            if (rawValue.startsWith(prefix) && qrCodeScanned.compareAndSet(false, true)) {
-                              val fullData = rawValue.substring(prefix.length)
-                              val parts = fullData.split('?', limit = 2)
-                              val peerId = parts[0]
-                              var token: String? = null
+                  if (qrCodeScanned.get()) {
+                    imageProxy.close()
+                    return@setAnalyzer
+                  }
 
-                              if (parts.size > 1) {
-                                val query = parts[1]
-                                val queryParams = query.split('&')
-                                for (param in queryParams) {
-                                  val keyValue = param.split('=', limit = 2)
-                                  if (keyValue.size == 2 && keyValue[0] == "token") {
-                                    token = keyValue[1]
-                                    break
-                                  }
-                                }
-                              }
+                  try {
+                    val rawResult = scanImage(reader, imageProxy)
+                    if (rawResult != null) {
+                      val rawValue = rawResult.text
+                      val prefix = "mercury:contact:"
+                      if (rawValue.startsWith(prefix) && qrCodeScanned.compareAndSet(false, true)) {
+                        val fullData = rawValue.substring(prefix.length)
+                        val parts = fullData.split('?', limit = 2)
+                        val peerId = parts[0]
+                        var token: String? = null
 
-                              if (peerId.isNotBlank()) {
-                                onQrCodeScanned(peerId, token)
-                              }
+                        if (parts.size > 1) {
+                          val query = parts[1]
+                          val queryParams = query.split('&')
+                          for (param in queryParams) {
+                            val keyValue = param.split('=', limit = 2)
+                            if (keyValue.size == 2 && keyValue[0] == "token") {
+                              token = keyValue[1]
+                              break
                             }
                           }
                         }
+
+                        if (peerId.isNotBlank()) {
+                          // Switch to main thread for callback
+                          previewView.post {
+                            onQrCodeScanned(peerId, token)
+                          }
+                        } else {
+                          // Reset if invalid
+                          qrCodeScanned.set(false)
+                        }
                       }
-                      .addOnFailureListener { e ->
-                        Log.e("QrScannerScreen", "Barcode scanning failed", e)
-                      }
-                      .addOnCompleteListener {
-                        imageProxy.close()
-                      }
+                    }
+                  } catch (e: Exception) {
+                    Log.e("QrScannerScreen", "Analysis failed", e)
+                  } finally {
+                    imageProxy.close()
                   }
                 }
               }
@@ -167,5 +174,52 @@ fun QrScannerScreen(
     ) {
       Icon(Icons.Default.Close, contentDescription = "Close Scanner")
     }
+  }
+}
+
+private fun scanImage(reader: MultiFormatReader, image: ImageProxy): com.google.zxing.Result? {
+  val buffer: ByteBuffer = image.planes[0].buffer
+  val width = image.width
+  val height = image.height
+  val rowStride = image.planes[0].rowStride
+  val pixelStride = image.planes[0].pixelStride
+
+  // Check if buffer is valid YUV (Y-plane)
+  if (pixelStride != 1)
+    return null
+
+  // If stride matches width, we can use the buffer directly
+  val data = if (rowStride == width) {
+    val bytes = ByteArray(buffer.remaining())
+    buffer.get(bytes)
+    bytes
+  } else {
+    // If there is padding, we must remove it
+    val bytes = ByteArray(width * height)
+    for (y in 0 until height) {
+      buffer.position(y * rowStride)
+      buffer.get(bytes, y * width, width)
+    }
+    bytes
+  }
+
+  // QR Codes are omni-directional, passing the raw Y-plane data is sufficient and performant.
+  val source = PlanarYUVLuminanceSource(
+    data,
+    width,
+    height,
+    0, 0,
+    width,
+    height,
+    false
+  )
+
+  val bitmap = BinaryBitmap(HybridBinarizer(source))
+  return try {
+    reader.decodeWithState(bitmap)
+  } catch (e: Exception) {
+    null
+  } finally {
+    reader.reset()
   }
 }
