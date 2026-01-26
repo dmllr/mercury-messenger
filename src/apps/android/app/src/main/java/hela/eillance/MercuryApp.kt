@@ -269,7 +269,7 @@ fun MainAppContent(viewModel: MainViewModel) {
           onNavigateToCall = { navController.navigate(Route.Call.createRoute(it)) },
           onShowContactProfile = { contactsVM.onShowContactProfile(it) },
           onMediaClick = { att ->
-            navController.navigate(Route.FullScreenMedia.createRoute(att.path, att.type.value))
+            navController.navigate(Route.FullScreenMedia.createRoute(att.path, att.type.value, att.mime))
           }
         )
       }
@@ -342,14 +342,25 @@ fun MainAppContent(viewModel: MainViewModel) {
           navArgument("type") {
             type = NavType.IntType
             defaultValue = AttachmentType.File.value
+          },
+          navArgument("mime") {
+            type = NavType.StringType
+            defaultValue = ""
           }
         )
       ) { backStackEntry ->
         val path = backStackEntry.arguments?.getString("path")
         val typeVal = backStackEntry.arguments?.getInt("type") ?: AttachmentType.File.value
+        val mime = backStackEntry.arguments?.getString("mime") ?: ""
+
         if (path != null) {
           val type = AttachmentType.fromInt(typeVal)
-          FullScreenMediaScreen(path = Uri.decode(path), type = type, onBack = { navController.popBackStack() })
+          FullScreenMediaScreen(
+            path = Uri.decode(path),
+            type = type,
+            mimeType = Uri.decode(mime),
+            onBack = { navController.popBackStack() }
+          )
         }
       }
     }

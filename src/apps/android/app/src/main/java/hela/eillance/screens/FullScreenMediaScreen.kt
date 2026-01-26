@@ -42,7 +42,7 @@ import java.util.Locale
 
 @kotlin.OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FullScreenMediaScreen(path: String, type: AttachmentType, onBack: () -> Unit) {
+fun FullScreenMediaScreen(path: String, type: AttachmentType, mimeType: String, onBack: () -> Unit) {
   val file = File(path)
 
   Scaffold(
@@ -75,10 +75,10 @@ fun FullScreenMediaScreen(path: String, type: AttachmentType, onBack: () -> Unit
       if (!file.exists()) {
         CircularProgressIndicator(modifier = Modifier.align(Alignment.Center), color = Color.White)
       } else {
-        // Fallback check: if type is File/Image but extension is video, force VideoPlayer to avoid image decoder errors
+        // Robust video check: explicit Type OR Mime prefix OR file extension fallback
         val isVideo = type == AttachmentType.Video ||
-            (type == AttachmentType.File &&
-                file.extension.lowercase(Locale.US) in setOf("mp4", "mkv", "webm", "avi", "mov", "3gp"))
+            mimeType.startsWith("video/") ||
+            file.extension.lowercase(Locale.ROOT) in setOf("mp4", "mkv", "webm", "avi", "mov", "3gp")
 
         if (isVideo) {
           VideoPlayer(file)
