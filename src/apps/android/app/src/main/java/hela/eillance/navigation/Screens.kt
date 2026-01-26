@@ -35,10 +35,10 @@ sealed class Route(val route: String) {
   object WebView : Route("webview/{url}") {
     fun createRoute(url: String): String = "webview/${Uri.encode(url)}"
   }
-  object FullScreenMedia : Route("media_viewer?attachments={attachments}&index={index}") {
-    fun createRoute(attachments: List<Attachment>, initialIndex: Int): String {
+  object FullScreenMedia : Route("media_viewer/{peerId}?attachments={attachments}&index={index}") {
+    fun createRoute(peerId: String, attachments: List<Attachment>, initialIndex: Int): String {
       val json = Json.encodeToString(attachments)
-      return "media_viewer?attachments=${Uri.encode(json)}&index=$initialIndex"
+      return "media_viewer/$peerId?attachments=${Uri.encode(json)}&index=$initialIndex"
     }
   }
 }
