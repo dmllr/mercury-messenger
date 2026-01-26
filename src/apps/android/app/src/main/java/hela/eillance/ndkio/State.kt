@@ -1,5 +1,7 @@
 package hela.eillance.ndkio
 
+import kotlinx.serialization.Serializable
+
 enum class MessageDirection(val value: Int) {
   Sent(0), Received(1);
   companion object { fun fromInt(value: Int) = entries.firstOrNull { it.value == value } ?: Sent }
@@ -30,11 +32,13 @@ enum class ContactStatus(val value: Int) {
   companion object { fun fromInt(value: Int) = entries.firstOrNull { it.value == value } ?: pendingApproval }
 }
 
+@Serializable
 enum class AttachmentType(val value: Int) {
   Image(0), Video(1), File(2);
   companion object { fun fromInt(value: Int) = entries.firstOrNull { it.value == value } ?: File }
 }
 
+@Serializable
 data class Attachment(
   val id: String,
   private val typeValue: Int,

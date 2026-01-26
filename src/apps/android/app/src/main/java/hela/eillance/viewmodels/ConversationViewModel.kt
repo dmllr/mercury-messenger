@@ -77,68 +77,70 @@ class ConversationViewModel(
     }
   }
 
-  fun sendImage(uri: Uri) {
-    processAndSendAttachment(uri, AttachmentType.Image)
-  }
-
-  fun sendVideo(uri: Uri) {
-    processAndSendAttachment(uri, AttachmentType.Video)
-  }
-
-  private fun processAndSendAttachment(uri: Uri, type: AttachmentType) {
+  fun sendMedia(uris: List<Uri>) {
     viewModelScope.launch(Dispatchers.IO) {
-      try {
-        val context = getApplication<Application>()
-        val attachmentsDir = File(context.filesDir, "attachments")
-        if (!attachmentsDir.exists()) {
-          attachmentsDir.mkdirs()
-        }
+      val attachmentRequests = mutableListOf<AttachmentRequest>()
+      val context = getApplication<Application>()
+      val cr = context.contentResolver
+      val attachmentsDir = File(context.filesDir, "attachments")
+      if (!attachmentsDir.exists()) {
+        attachmentsDir.mkdirs()
+      }
 
-        val cr = context.contentResolver
-        val detectedMime = cr.getType(uri) ?: (if (type == AttachmentType.Image) "image/jpeg" else "video/mp4")
-        
-        val ext = MimeTypeMap.getSingleton().getExtensionFromMimeType(detectedMime) 
-                  ?: (if (type == AttachmentType.Image) "jpg" else "mp4")
-                  
-        val fileName = "${UUID.randomUUID()}.$ext"
-        val destFile = File(attachmentsDir, fileName)
-
-        // Secure copy
-        context.contentResolver.openInputStream(uri)?.use { input ->
-          FileOutputStream(destFile).use { output ->
-            input.copyTo(output)
+      for (uri in uris) {
+        try {
+          val mimeTypeRaw = cr.getType(uri) ?: "application/octet-stream"
+          val type = when {
+            mimeTypeRaw.startsWith("video/") -> AttachmentType.Video
+            mimeTypeRaw.startsWith("image/") -> AttachmentType.Image
+            else -> AttachmentType.File
           }
-        } ?: throw Exception("Failed to open input stream for $uri")
 
-        // Generate Thumbnail
-        val thumbnailBase64 = try {
-          val bitmap = generateThumbnail(context.contentResolver, uri, destFile, type)
-          if (bitmap != null) {
-            val outputStream = ByteArrayOutputStream()
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 70, outputStream)
-            val bytes = outputStream.toByteArray()
-            Base64.encodeToString(bytes, Base64.NO_WRAP)
-          } else {
+          val ext = MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeTypeRaw)
+            ?: (if (type == AttachmentType.Image) "jpg" else if (type == AttachmentType.Video) "mp4" else "dat")
+
+          val fileName = "${UUID.randomUUID()}.$ext"
+          val destFile = File(attachmentsDir, fileName)
+
+          // Secure copy
+          context.contentResolver.openInputStream(uri)?.use { input ->
+            FileOutputStream(destFile).use { output ->
+              input.copyTo(output)
+            }
+          } ?: throw Exception("Failed to open input stream for $uri")
+
+          // Generate Thumbnail
+          val thumbnailBase64 = try {
+            val bitmap = generateThumbnail(context.contentResolver, uri, destFile, type)
+            if (bitmap != null) {
+              val outputStream = ByteArrayOutputStream()
+              bitmap.compress(Bitmap.CompressFormat.JPEG, 70, outputStream)
+              val bytes = outputStream.toByteArray()
+              Base64.encodeToString(bytes, Base64.NO_WRAP)
+            } else {
+              ""
+            }
+          } catch (e: Exception) {
+            Log.w("ConversationVM", "Failed to generate thumbnail for $uri", e)
             ""
           }
+
+          val request = AttachmentRequest(
+            path = destFile.absolutePath,
+            type = type.value,
+            thumbnail = thumbnailBase64,
+            mimeType = mimeTypeRaw
+          )
+          attachmentRequests.add(request)
+
         } catch (e: Exception) {
-          Log.w("ConversationVM", "Failed to generate thumbnail for $uri", e)
-          ""
+          Log.e("ConversationVM", "Failed to process attachment $uri", e)
         }
+      }
 
-        val request = AttachmentRequest(
-          path = destFile.absolutePath,
-          type = type.value,
-          thumbnail = thumbnailBase64,
-          mimeType = detectedMime
-        )
-
-        if (nativePtr != 0L) {
-          nativeSendMessageWithAttachments(nativePtr, "", arrayOf(request))
-        }
-
-      } catch (e: Exception) {
-        Log.e("ConversationVM", "Failed to process attachment", e)
+      if (attachmentRequests.isNotEmpty() && nativePtr != 0L) {
+        // Send all processed attachments in one message
+        nativeSendMessageWithAttachments(nativePtr, "", attachmentRequests.toTypedArray())
       }
     }
   }
@@ -152,13 +154,14 @@ class ConversationViewModel(
         // Fallback for older versions
         if (type == AttachmentType.Video) {
           ThumbnailUtils.createVideoThumbnail(file.absolutePath, MediaStore.Images.Thumbnails.MINI_KIND)
-        } else {
-          // For images, we can just decode with scaling
+        } else if (type == AttachmentType.Image) {
           val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
           BitmapFactory.decodeFile(file.absolutePath, options)
           options.inSampleSize = calculateInSampleSize(options, 320, 320)
           options.inJustDecodeBounds = false
           BitmapFactory.decodeFile(file.absolutePath, options)
+        } else {
+          null
         }
       }
     } catch (e: Exception) {

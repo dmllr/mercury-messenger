@@ -4,52 +4,90 @@ import android.net.Uri
 import android.view.ViewGroup
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
+import hela.eillance.ndkio.Attachment
 import hela.eillance.ndkio.AttachmentType
+import kotlinx.serialization.json.Json
 import java.io.File
 import java.util.Locale
 
 @kotlin.OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MediaPreviewScreen(path: String, type: AttachmentType, mimeType: String, onBack: () -> Unit) {
-  val file = File(path)
+fun MediaPreviewScreen(
+  attachmentsJson: String,
+  initialIndex: Int,
+  onBack: () -> Unit
+) {
+  val attachments = remember(attachmentsJson) {
+    try {
+      Json.decodeFromString<List<Attachment>>(attachmentsJson)
+    } catch (e: Exception) {
+      emptyList()
+    }
+  }
+
+  if (attachments.isEmpty()) {
+    onBack()
+    return
+  }
+
+  val pagerState = rememberPagerState(initialPage = initialIndex, pageCount = { attachments.size })
 
   Scaffold(
     containerColor = Color.Black,
     topBar = {
       TopAppBar(
-        title = { }, // No title for immersive feel, or could add file name
+        title = {
+          Text(
+            text = "${pagerState.currentPage + 1} / ${attachments.size}",
+            style = MaterialTheme.typography.titleMedium,
+            color = Color.White
+          )
+        },
         navigationIcon = {
           IconButton(onClick = onBack) {
             Icon(
@@ -59,9 +97,10 @@ fun MediaPreviewScreen(path: String, type: AttachmentType, mimeType: String, onB
           }
         },
         colors = TopAppBarDefaults.topAppBarColors(
-          containerColor = Color.Black,
+          containerColor = Color.Black.copy(alpha = 0.5f),
           navigationIconContentColor = Color.White,
-          actionIconContentColor = Color.White
+          actionIconContentColor = Color.White,
+          titleContentColor = Color.White
         )
       )
     }
@@ -69,22 +108,35 @@ fun MediaPreviewScreen(path: String, type: AttachmentType, mimeType: String, onB
     Box(
       modifier = Modifier
         .fillMaxSize()
-        .padding(padding)
         .background(Color.Black)
     ) {
-      if (!file.exists()) {
-        CircularProgressIndicator(modifier = Modifier.align(Alignment.Center), color = Color.White)
-      } else {
-        // Robust video check: explicit Type OR Mime prefix OR file extension fallback
-        val isVideo = type == AttachmentType.Video ||
-            mimeType.startsWith("video/") ||
-            file.extension.lowercase(Locale.ROOT) in setOf("mp4", "mkv", "webm", "avi", "mov", "3gp")
+      HorizontalPager(
+        state = pagerState,
+        modifier = Modifier.fillMaxSize(),
+        pageSpacing = 0.dp
+      ) { page ->
+        MediaPage(attachment = attachments[page])
+      }
+    }
+  }
+}
 
-        if (isVideo) {
-          VideoPlayer(file)
-        } else {
-          ZoomableImage(file)
-        }
+@Composable
+fun MediaPage(attachment: Attachment) {
+  val file = File(attachment.path)
+
+  Box(modifier = Modifier.fillMaxSize()) {
+    if (!file.exists()) {
+      CircularProgressIndicator(modifier = Modifier.align(Alignment.Center), color = Color.White)
+    } else {
+      val isVideo = attachment.type == AttachmentType.Video ||
+          attachment.mime.startsWith("video/") ||
+          file.extension.lowercase(Locale.ROOT) in setOf("mp4", "mkv", "webm", "avi", "mov", "3gp")
+
+      if (isVideo) {
+        VideoPlayer(file)
+      } else {
+        ZoomableImage(file)
       }
     }
   }
@@ -93,24 +145,68 @@ fun MediaPreviewScreen(path: String, type: AttachmentType, mimeType: String, onB
 @Composable
 fun ZoomableImage(file: File) {
   var scale by remember { mutableFloatStateOf(1f) }
-  var offsetX by remember { mutableFloatStateOf(0f) }
-  var offsetY by remember { mutableFloatStateOf(0f) }
+  var offset by remember { mutableStateOf(Offset.Zero) }
+  var size by remember { mutableStateOf(IntSize.Zero) }
 
   Box(
     modifier = Modifier
       .fillMaxSize()
+      .onSizeChanged { size = it }
       .pointerInput(Unit) {
-        detectTransformGestures { _, pan, zoom, _ ->
-          scale = maxOf(1f, minOf(scale * zoom, 5f))
-          if (scale > 1f) {
-            val maxOffsetX = (size.width * (scale - 1)) / 2
-            val maxOffsetY = (size.height * (scale - 1)) / 2
-            offsetX = maxOf(-maxOffsetX, minOf(maxOffsetX, offsetX + pan.x))
-            offsetY = maxOf(-maxOffsetY, minOf(maxOffsetY, offsetY + pan.y))
-          } else {
-            offsetX = 0f
-            offsetY = 0f
+        detectTapGestures(
+          onDoubleTap = {
+            if (scale > 1f) {
+              scale = 1f
+              offset = Offset.Zero
+            } else {
+              scale = 2.5f
+              offset = Offset.Zero
+            }
           }
+        )
+      }
+      .pointerInput(Unit) {
+        awaitEachGesture {
+          awaitFirstDown(requireUnconsumed = false)
+
+          do {
+            val event = awaitPointerEvent()
+            val canceled = event.changes.any { it.isConsumed }
+            if (!canceled) {
+              val zoomChange = event.calculateZoom()
+              val panChange = event.calculatePan()
+
+              // Determine if we should consume the event.
+              // We consume if:
+              // 1. We are actively zooming (multi-touch)
+              // 2. We are already zoomed in (scale > 1)
+              val isMultiTouch = event.changes.size > 1
+              val isZoomed = scale > 1f
+
+              if (isMultiTouch || isZoomed) {
+                // Apply transformations
+                val newScale = (scale * zoomChange).coerceIn(1f, 5f)
+                scale = newScale
+
+                val maxOffsetX = (size.width * (scale - 1)) / 2
+                val maxOffsetY = (size.height * (scale - 1)) / 2
+
+                val newX = (offset.x + panChange.x * scale).coerceIn(-maxOffsetX, maxOffsetX)
+                val newY = (offset.y + panChange.y * scale).coerceIn(-maxOffsetY, maxOffsetY)
+
+                offset = Offset(newX, newY)
+
+                // Consume the changes to prevent parent Pager from intercepting
+                event.changes.forEach {
+                  if (it.positionChanged()) {
+                    it.consume()
+                  }
+                }
+              }
+              // Else: Single touch AND scale == 1.0 -> Do NOT consume.
+              // Parent HorizontalPager will see the unconsumed event and handle the scroll.
+            }
+          } while (event.changes.any { it.pressed })
         }
       }
   ) {
@@ -119,12 +215,12 @@ fun ZoomableImage(file: File) {
       contentDescription = "Full Image",
       modifier = Modifier
         .align(Alignment.Center)
-        .graphicsLayer(
-          scaleX = scale,
-          scaleY = scale,
-          translationX = offsetX,
-          translationY = offsetY
-        ),
+        .graphicsLayer {
+          scaleX = scale
+          scaleY = scale
+          translationX = offset.x
+          translationY = offset.y
+        },
       contentScale = ContentScale.Fit
     )
   }

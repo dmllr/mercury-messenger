@@ -7,6 +7,9 @@ import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.ui.graphics.vector.ImageVector
+import hela.eillance.ndkio.Attachment
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 sealed class Screen(val route: String, val title: String? = null, val icon: ImageVector? = null) {
   object Contacts : Screen("contacts", "Contacts", Icons.Default.Contacts)
@@ -32,9 +35,10 @@ sealed class Route(val route: String) {
   object WebView : Route("webview/{url}") {
     fun createRoute(url: String): String = "webview/${Uri.encode(url)}"
   }
-  object FullScreenMedia : Route("media_viewer?path={path}&type={type}&mime={mime}") {
-    fun createRoute(path: String, type: Int, mime: String): String {
-      return "media_viewer?path=${Uri.encode(path)}&type=$type&mime=${Uri.encode(mime)}"
+  object FullScreenMedia : Route("media_viewer?attachments={attachments}&index={index}") {
+    fun createRoute(attachments: List<Attachment>, initialIndex: Int): String {
+      val json = Json.encodeToString(attachments)
+      return "media_viewer?attachments=${Uri.encode(json)}&index=$initialIndex"
     }
   }
 }
