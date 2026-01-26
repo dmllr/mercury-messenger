@@ -116,7 +116,7 @@ class MessagingServiceTest : public ::testing::Test {
   ContactID const peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
 };
 
-TEST_F(MessagingServiceTest, SendMessage_NoThumbInPayload) {
+TEST_F(MessagingServiceTest, SendMessage_ThumbInPayload) {
   // Setup connected peer
   auto peer = std::make_shared<transport::Peer>(peer1);
   peer->data_channel_is_open = true;
@@ -130,7 +130,7 @@ TEST_F(MessagingServiceTest, SendMessage_NoThumbInPayload) {
   // We need the file to exist for size calc
   std::ofstream(temp_dir_ / "dummy_path").close();
   // Adjust path relative to test exec or absolute if needed
-  std::string file_path = (temp_dir_ / "test_img.jpg").string();
+  auto const file_path = (temp_dir_ / "test_img.jpg").string();
   std::ofstream(file_path).close();
   atts[0].file_path = file_path;
 
@@ -143,7 +143,7 @@ TEST_F(MessagingServiceTest, SendMessage_NoThumbInPayload) {
 
   nlohmann::json json_msg;
   bool found = false;
-  for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
+  for (auto const& msg : mock_transport_->log.sent_peer_messages | std::views::values) {
     if (msg.value("type", "") == "chat") {
       json_msg = msg;
       found = true;
@@ -155,8 +155,8 @@ TEST_F(MessagingServiceTest, SendMessage_NoThumbInPayload) {
   ASSERT_TRUE(json_msg.contains("attachments"));
   auto const& att_json = json_msg["attachments"][0];
 
-  EXPECT_FALSE(att_json.contains("thumb"));
-  EXPECT_EQ(att_json["mime"], "image/jpeg");
+  ASSERT_TRUE(att_json.contains("thumb"));
+  ASSERT_EQ(att_json["mime"], "image/jpeg");
 }
 
 TEST_F(MessagingServiceTest, DownloadTriggersCallback) {

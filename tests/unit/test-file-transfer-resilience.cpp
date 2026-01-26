@@ -156,7 +156,7 @@ TEST_F(FileTransferResilienceTest, TransferProgressAndFileCreation) {
   EXPECT_FLOAT_EQ(progress_events.back(), 1.0f);
 
   // Verify final file exists
-  std::filesystem::path final_file = attachments_dir_ / (att_id + ".dat");
+  std::filesystem::path final_file = attachments_dir_ / (att_id + ".txt");
   ASSERT_TRUE(std::filesystem::exists(final_file));
   EXPECT_FALSE(std::filesystem::exists(temp_file));
   EXPECT_EQ(std::filesystem::file_size(final_file), file_data.size());
@@ -177,6 +177,7 @@ TEST_F(FileTransferResilienceTest, FailsGracefullyIfHashMismatch) {
   att.size_bytes = 10;
   att.hash = "deadbeef";  // Wrong hash
   att.is_downloaded = false;
+  att.mime_type = "application/octet-stream";
 
   std::string payload = "payload";
   payload.insert(0, 1, (char)services::MessagingService::currentMessageVersion);
