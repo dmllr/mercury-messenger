@@ -16,6 +16,7 @@ import androidx.camera.view.PreviewView
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
@@ -170,7 +171,10 @@ fun QrScannerScreen(
 
     IconButton(
       onClick = onClose,
-      modifier = Modifier.align(Alignment.TopStart).padding(16.dp)
+      modifier = Modifier
+        .statusBarsPadding()
+        .align(Alignment.TopStart)
+        .padding(16.dp)
     ) {
       Icon(Icons.Default.Close, contentDescription = "Close Scanner")
     }
