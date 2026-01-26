@@ -24,7 +24,6 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import hela.eillance.navigation.Route
 import hela.eillance.navigation.Screen
-import hela.eillance.ndkio.AttachmentType
 import hela.eillance.ndkio.CallDirection
 import hela.eillance.screens.BackupAndRestoreScreen
 import hela.eillance.screens.BetaNoticeDialog
@@ -268,8 +267,8 @@ fun MainAppContent(viewModel: MainViewModel) {
           onBack = { navController.popBackStack() },
           onNavigateToCall = { navController.navigate(Route.Call.createRoute(it)) },
           onShowContactProfile = { contactsVM.onShowContactProfile(it) },
-          onMediaClick = { att ->
-            navController.navigate(Route.FullScreenMedia.createRoute(att.path, att.type.value, att.mime))
+          onMediaClick = { attachments, index ->
+            navController.navigate(Route.FullScreenMedia.createRoute(attachments, index))
           }
         )
       }
@@ -338,27 +337,17 @@ fun MainAppContent(viewModel: MainViewModel) {
       composable(
         route = Route.FullScreenMedia.route,
         arguments = listOf(
-          navArgument("path") { type = NavType.StringType },
-          navArgument("type") {
-            type = NavType.IntType
-            defaultValue = AttachmentType.File.value
-          },
-          navArgument("mime") {
-            type = NavType.StringType
-            defaultValue = ""
-          }
+          navArgument("attachments") { type = NavType.StringType },
+          navArgument("index") { type = NavType.IntType; defaultValue = 0 }
         )
       ) { backStackEntry ->
-        val path = backStackEntry.arguments?.getString("path")
-        val typeVal = backStackEntry.arguments?.getInt("type") ?: AttachmentType.File.value
-        val mime = backStackEntry.arguments?.getString("mime") ?: ""
+        val attachmentsJson = backStackEntry.arguments?.getString("attachments")
+        val index = backStackEntry.arguments?.getInt("index") ?: 0
 
-        if (path != null) {
-          val type = AttachmentType.fromInt(typeVal)
+        if (attachmentsJson != null) {
           MediaPreviewScreen(
-            path = Uri.decode(path),
-            type = type,
-            mimeType = Uri.decode(mime),
+            attachmentsJson = Uri.decode(attachmentsJson),
+            initialIndex = index,
             onBack = { navController.popBackStack() }
           )
         }

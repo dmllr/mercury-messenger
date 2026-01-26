@@ -82,7 +82,6 @@ import androidx.compose.ui.unit.dp
 import androidx.core.os.ConfigurationCompat
 import hela.eillance.components.MediaBubbleContent
 import hela.eillance.ndkio.Attachment
-import hela.eillance.ndkio.AttachmentType
 import hela.eillance.ndkio.CallDirection
 import hela.eillance.ndkio.CallState
 import hela.eillance.ndkio.CallStatus
@@ -128,7 +127,7 @@ fun ConversationScreen(
   onBack: () -> Unit,
   onNavigateToCall: (String) -> Unit,
   onShowContactProfile: (String) -> Unit,
-  onMediaClick: (Attachment) -> Unit = {}
+  onMediaClick: (List<Attachment>, Int) -> Unit
 ) {
   val listState = rememberLazyListState()
   val coroutineScope = rememberCoroutineScope()
@@ -187,19 +186,12 @@ fun ConversationScreen(
     SystemMessageDetailsDialog(entry = entry, onDismiss = { systemMessageToShowDetails = null })
   }
 
-  val context = LocalContext.current
-
-
-  // Media Picker Logic
+  // Media Picker Logic - Supports multiple selection
   val mediaPicker = rememberLauncherForActivityResult(
-    contract = ActivityResultContracts.PickMultipleVisualMedia(5)
+    contract = ActivityResultContracts.PickMultipleVisualMedia(10)
   ) { uris ->
     if (uris.isNotEmpty()) {
-      uris.forEach { uri ->
-        val mimeType = context.contentResolver.getType(uri)
-        val type = if (mimeType?.startsWith("video/") == true) AttachmentType.Video else AttachmentType.Image
-        if (type == AttachmentType.Video) chatVM.sendVideo(uri) else chatVM.sendImage(uri)
-      }
+      chatVM.sendMedia(uris)
     }
   }
 
@@ -273,7 +265,6 @@ fun ConversationScreen(
         ConnectionStatusBar(contact = it)
       }
 
-      // Capture locale and time zone once for the list
       val locale = ConfigurationCompat.getLocales(LocalConfiguration.current)[0] ?: Locale.getDefault()
       val zoneId = ZoneId.systemDefault()
 
@@ -399,7 +390,7 @@ fun ChatHistory(
   locale: Locale,
   zoneId: ZoneId,
   onSystemMessageClick: (HistoryEntry) -> Unit,
-  onMediaClick: (Attachment) -> Unit
+  onMediaClick: (List<Attachment>, Int) -> Unit
 ) {
   val formatters = remember(locale) {
     Triple(
@@ -465,7 +456,7 @@ fun MessageBubble(
   transferProgress: Map<String, Float>,
   zoneId: ZoneId,
   formatters: Triple<DateTimeFormatter, DateTimeFormatter, DateTimeFormatter>,
-  onMediaClick: (Attachment) -> Unit
+  onMediaClick: (List<Attachment>, Int) -> Unit
 ) {
   val isFromMe = entry.direction == MessageDirection.Sent
   val alignment = if (isFromMe) Alignment.CenterEnd else Alignment.CenterStart
@@ -495,15 +486,18 @@ fun MessageBubble(
           )
         )
         .background(colors.first)
-        .padding(horizontal = 4.dp, vertical = 4.dp), // Reduced padding to let media take space
+        .padding(horizontal = 4.dp, vertical = 4.dp),
       horizontalAlignment = if (isFromMe) Alignment.End else Alignment.Start
     ) {
-      // Render Attachments
+      // Render Attachments using Grid logic
       if (entry.attachments.isNotEmpty()) {
         MediaBubbleContent(
           attachments = entry.attachments,
           transferProgress = transferProgress,
-          onMediaClick = onMediaClick
+          onMediaClick = { clickedAttachment ->
+            val index = entry.attachments.indexOf(clickedAttachment)
+            onMediaClick(entry.attachments, if (index != -1) index else 0)
+          }
         )
         if (!entry.content.isNullOrBlank()) {
           Spacer(modifier = Modifier.height(8.dp))

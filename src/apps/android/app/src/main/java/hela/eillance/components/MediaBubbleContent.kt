@@ -6,13 +6,16 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Download
@@ -48,64 +51,149 @@ fun MediaBubbleContent(
 ) {
   if (attachments.isEmpty()) return
 
-  val pagerState = rememberPagerState(pageCount = { attachments.size })
+  val count = attachments.size
+  val roundedShape = RoundedCornerShape(8.dp)
 
-  Box(
+  Column(
     modifier = Modifier
       .fillMaxWidth()
-      .height(200.dp) // Fixed height for the carousel
-      .clip(RoundedCornerShape(8.dp))
-      .background(Color.Black.copy(alpha = 0.1f))
+      .clip(roundedShape)
   ) {
-    HorizontalPager(
-      state = pagerState,
-      modifier = Modifier.fillMaxSize()
-    ) { page ->
-      val attachment = attachments[page]
-      val progress = transferProgress[attachment.id]
-      MediaItem(
-        attachment = attachment,
-        progress = progress,
-        onClick = { if (attachment.isDownloaded) onMediaClick(attachment) }
-      )
-    }
-
-    // Page indicator (if more than one)
-    if (attachments.size > 1) {
-      Box(
-        modifier = Modifier
-          .align(Alignment.BottomCenter)
-          .padding(8.dp)
-          .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
-          .padding(horizontal = 8.dp, vertical = 4.dp)
-      ) {
-        Text(
-          text = "${pagerState.currentPage + 1}/${attachments.size}",
-          color = Color.White,
-          style = MaterialTheme.typography.labelSmall
+    when (count) {
+      1 -> {
+        // Single Image: Full width, dynamic height (but usually constrained by bubble)
+        // We assume a standard aspect ratio for the bubble container or let it fill.
+        MediaItem(
+          attachment = attachments[0],
+          progress = transferProgress[attachments[0].id],
+          onClick = { onMediaClick(attachments[0]) },
+          modifier = Modifier.fillMaxWidth().aspectRatio(1.5f) // 3:2 landscape default
         )
+      }
+      2 -> {
+        // Two Images: Side by side
+        Row(modifier = Modifier.fillMaxWidth().height(160.dp)) {
+          MediaItem(
+            attachment = attachments[0],
+            progress = transferProgress[attachments[0].id],
+            onClick = { onMediaClick(attachments[0]) },
+            modifier = Modifier.weight(1f).fillMaxSize()
+          )
+          Spacer(modifier = Modifier.width(2.dp))
+          MediaItem(
+            attachment = attachments[1],
+            progress = transferProgress[attachments[1].id],
+            onClick = { onMediaClick(attachments[1]) },
+            modifier = Modifier.weight(1f).fillMaxSize()
+          )
+        }
+      }
+      3 -> {
+        // Three Images: One big on top, two small below
+        Column(modifier = Modifier.fillMaxWidth()) {
+          MediaItem(
+            attachment = attachments[0],
+            progress = transferProgress[attachments[0].id],
+            onClick = { onMediaClick(attachments[0]) },
+            modifier = Modifier.fillMaxWidth().height(160.dp)
+          )
+          Spacer(modifier = Modifier.height(2.dp))
+          Row(modifier = Modifier.fillMaxWidth().height(100.dp)) {
+            MediaItem(
+              attachment = attachments[1],
+              progress = transferProgress[attachments[1].id],
+              onClick = { onMediaClick(attachments[1]) },
+              modifier = Modifier.weight(1f).fillMaxSize()
+            )
+            Spacer(modifier = Modifier.width(2.dp))
+            MediaItem(
+              attachment = attachments[2],
+              progress = transferProgress[attachments[2].id],
+              onClick = { onMediaClick(attachments[2]) },
+              modifier = Modifier.weight(1f).fillMaxSize()
+            )
+          }
+        }
+      }
+      else -> {
+        // 4 or more: 2x2 Grid. The 4th item shows overlay if count > 4.
+        Column(modifier = Modifier.fillMaxWidth()) {
+          Row(modifier = Modifier.fillMaxWidth().height(120.dp)) {
+            MediaItem(
+              attachment = attachments[0],
+              progress = transferProgress[attachments[0].id],
+              onClick = { onMediaClick(attachments[0]) },
+              modifier = Modifier.weight(1f).fillMaxSize()
+            )
+            Spacer(modifier = Modifier.width(2.dp))
+            MediaItem(
+              attachment = attachments[1],
+              progress = transferProgress[attachments[1].id],
+              onClick = { onMediaClick(attachments[1]) },
+              modifier = Modifier.weight(1f).fillMaxSize()
+            )
+          }
+          Spacer(modifier = Modifier.height(2.dp))
+          Row(modifier = Modifier.fillMaxWidth().height(120.dp)) {
+            MediaItem(
+              attachment = attachments[2],
+              progress = transferProgress[attachments[2].id],
+              onClick = { onMediaClick(attachments[2]) },
+              modifier = Modifier.weight(1f).fillMaxSize()
+            )
+            Spacer(modifier = Modifier.width(2.dp))
+
+            Box(modifier = Modifier.weight(1f).fillMaxSize()) {
+              MediaItem(
+                attachment = attachments[3],
+                progress = transferProgress[attachments[3].id],
+                onClick = { onMediaClick(attachments[3]) },
+                modifier = Modifier.fillMaxSize()
+              )
+              // Overlay for remaining items
+              if (count > 4) {
+                Box(
+                  modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.5f))
+                    .clickable { onMediaClick(attachments[3]) }, // Clicking overlay opens carousel at index 3
+                  contentAlignment = Alignment.Center
+                ) {
+                  Text(
+                    text = "+${count - 4}",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = Color.White
+                  )
+                }
+              }
+            }
+          }
+        }
       }
     }
   }
 }
 
 @Composable
-private fun MediaItem(attachment: Attachment, progress: Float?, onClick: () -> Unit) {
+private fun MediaItem(
+  attachment: Attachment,
+  progress: Float?,
+  onClick: () -> Unit,
+  modifier: Modifier = Modifier
+) {
   Box(
-    modifier = Modifier
-      .fillMaxSize()
+    modifier = modifier
+      .background(Color.Black.copy(alpha = 0.1f))
       .clickable(enabled = attachment.isDownloaded, onClick = onClick),
     contentAlignment = Alignment.Center
   ) {
     val file = File(attachment.path)
     val context = LocalContext.current
 
-    // Detect if content is video based on Type, Mime, or Extension to enforce correct decoder
     val isVideo = attachment.type == AttachmentType.Video ||
         attachment.mime.startsWith("video/") ||
         file.extension.lowercase(Locale.US) in setOf("mp4", "mkv", "webm", "avi", "3gp", "mov")
 
-    // Try to display the image/video thumb from file if downloaded, otherwise fallback to thumb string
     if (attachment.isDownloaded && file.exists()) {
       val model = remember(attachment.path, isVideo) {
         if (isVideo) {
@@ -126,7 +214,7 @@ private fun MediaItem(attachment: Attachment, progress: Float?, onClick: () -> U
         contentScale = ContentScale.Crop
       )
     } else {
-      // Fallback to embedded thumbnail
+      // Fallback to thumbnail string
       val imageBitmap = remember(attachment.thumbnail) {
         if (!attachment.thumbnail.isNullOrEmpty()) {
           try {
@@ -150,34 +238,35 @@ private fun MediaItem(attachment: Attachment, progress: Float?, onClick: () -> U
           modifier = Modifier.fillMaxSize().background(Color.Gray),
           contentAlignment = Alignment.Center
         ) {
-          // If no thumbnail, show icon
+          // Placeholder
         }
       }
 
-      // Overlay when not downloaded or downloading
+      // Dim overlay when not downloaded
       Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.3f)))
     }
 
-    // Overlays
+    // Status Icons / Progress
     if (progress != null) {
       CircularProgressIndicator(
         progress = { progress },
         color = Color.White,
-        modifier = Modifier.size(48.dp)
+        modifier = Modifier.size(32.dp),
+        trackColor = Color.White.copy(alpha = 0.3f),
       )
     } else if (!attachment.isDownloaded) {
       Icon(
         imageVector = Icons.Default.Download,
-        contentDescription = "Downloading", // Waiting to start
+        contentDescription = "Downloading",
         tint = Color.White.copy(alpha = 0.8f),
-        modifier = Modifier.size(48.dp)
+        modifier = Modifier.size(32.dp)
       )
     } else if (isVideo) {
       Icon(
         imageVector = Icons.Default.PlayCircle,
         contentDescription = "Play Video",
         tint = Color.White.copy(alpha = 0.8f),
-        modifier = Modifier.size(48.dp)
+        modifier = Modifier.size(32.dp)
       )
     }
   }
