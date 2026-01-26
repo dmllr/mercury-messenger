@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Feedback
 import androidx.compose.material.icons.filled.FileCopy
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.RotateLeft
@@ -127,6 +128,7 @@ fun ProfileScreen(
   myProfile: MyProfileInfo,
   onBack: () -> Unit,
   onNavigateToSettings: () -> Unit,
+  onNavigateToBetaNotice: () -> Unit,
   onNavigateToBackupAndRestore: () -> Unit,
   onNavigateToHelp: () -> Unit
 ) {
@@ -180,6 +182,7 @@ fun ProfileScreen(
       ProfileMenu(
         onEditProfile = { showEditDialog = true },
         onNavigateToSettings = onNavigateToSettings,
+        onNavigateToBetaNotice = onNavigateToBetaNotice,
         onNavigateToBackupAndRestore = onNavigateToBackupAndRestore,
         onDebugAction = { action: DebugAction -> showDebugConfirmDialog = action },
         onNavigateToHelp = onNavigateToHelp,
@@ -299,6 +302,7 @@ private fun ProfileHeader(myProfile: MyProfileInfo, contactsVM: ContactsViewMode
 private fun ProfileMenu(
   onEditProfile: () -> Unit,
   onNavigateToSettings: () -> Unit,
+  onNavigateToBetaNotice: () -> Unit,
   onNavigateToBackupAndRestore: () -> Unit,
   onDebugAction: (DebugAction) -> Unit,
   onNavigateToHelp: () -> Unit,
@@ -320,6 +324,14 @@ private fun ProfileMenu(
       modifier = Modifier
         .clip(MaterialTheme.shapes.medium)
         .clickable(onClick = onNavigateToSettings)
+    )
+    ListItem(
+      headlineContent = { Text("Beta Notice") },
+      supportingContent = { Text("Read about current beta status") },
+      leadingContent = { Icon(Icons.Default.Info, contentDescription = "Beta Notice") },
+      modifier = Modifier
+        .clip(MaterialTheme.shapes.medium)
+        .clickable(onClick = onNavigateToBetaNotice)
     )
     ListItem(
       headlineContent = { Text("Help") },
@@ -380,6 +392,7 @@ private fun ProfileMenu(
     }
   }
 }
+
 
 @Composable
 private fun ProfileEditDialog(

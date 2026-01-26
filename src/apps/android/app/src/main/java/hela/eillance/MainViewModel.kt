@@ -1,15 +1,11 @@
 package hela.eillance
 
 import android.app.Application
-import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
-
-  private val _showBetaNotice = MutableStateFlow(false)
-  val showBetaNotice = _showBetaNotice.asStateFlow()
 
   private val _hasCallPermissions = MutableStateFlow(false)
   val hasCallPermissions = _hasCallPermissions.asStateFlow()
@@ -32,20 +28,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
   private var isEngineReady = false
 
   init {
-    checkBetaNotice()
     checkAllPermissions()
-  }
-
-  private fun checkBetaNotice() {
-    val prefs = getApplication<Application>().getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
-    val hasSeenNotice = prefs.getBoolean("has_seen_beta_notice_v1", false)
-    _showBetaNotice.value = !hasSeenNotice
-  }
-
-  fun dismissBetaNotice() {
-    val prefs = getApplication<Application>().getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
-    prefs.edit().putBoolean("has_seen_beta_notice_v1", true).apply()
-    _showBetaNotice.value = false
   }
 
   fun checkAllPermissions() {
