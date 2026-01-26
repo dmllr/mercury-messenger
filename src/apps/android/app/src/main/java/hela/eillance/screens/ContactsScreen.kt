@@ -59,6 +59,7 @@ fun ContactsScreen(
   contactsVM: ContactsViewModel,
   myProfile: MyProfileInfo,
   contacts: List<Contact>,
+  isLoading: Boolean,
   connectionState: ServiceConnectionState,
   hasCallPermissions: Boolean,
   hasNotificationPermission: Boolean,
@@ -119,21 +120,26 @@ fun ContactsScreen(
 
       val visibleContacts = contacts.filter { it.status != ContactStatus.rejected }
 
-      if (visibleContacts.isEmpty()) {
+      if (isLoading) {
         Box(
           modifier = Modifier
             .weight(1f)
             .fillMaxWidth(),
           contentAlignment = Alignment.Center
         ) {
-          if (myProfile.myId.isEmpty()) {
-            CircularProgressIndicator()
-          } else {
-            Text(
-              "No contacts yet. Add one!",
-              style = MaterialTheme.typography.bodyLarge
-            )
-          }
+          CircularProgressIndicator()
+        }
+      } else if (visibleContacts.isEmpty()) {
+        Box(
+          modifier = Modifier
+            .weight(1f)
+            .fillMaxWidth(),
+          contentAlignment = Alignment.Center
+        ) {
+          Text(
+            "No contacts yet. Add one!",
+            style = MaterialTheme.typography.bodyLarge
+          )
         }
       } else {
         val locale = ConfigurationCompat.getLocales(LocalConfiguration.current)[0] ?: Locale.getDefault()

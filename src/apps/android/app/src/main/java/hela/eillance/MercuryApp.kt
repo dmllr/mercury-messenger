@@ -26,15 +26,14 @@ import hela.eillance.navigation.Route
 import hela.eillance.navigation.Screen
 import hela.eillance.ndkio.CallDirection
 import hela.eillance.screens.BackupAndRestoreScreen
-import hela.eillance.screens.BetaNoticeDialog
 import hela.eillance.screens.CallScreen
 import hela.eillance.screens.ContactProfileDialog
 import hela.eillance.screens.ContactsScreen
 import hela.eillance.screens.ConversationScreen
-import hela.eillance.screens.MediaPreviewScreen
 import hela.eillance.screens.HelpScreen
 import hela.eillance.screens.IdentityScreen
 import hela.eillance.screens.IncomingCallScreen
+import hela.eillance.screens.MediaPreviewScreen
 import hela.eillance.screens.MnemonicDisplayScreen
 import hela.eillance.screens.ProfileScreen
 import hela.eillance.screens.QrScannerScreen
@@ -52,7 +51,6 @@ import hela.eillance.viewmodels.SettingsViewModel
 
 @Composable
 fun MercuryApp(viewModel: MainViewModel) {
-  val showBetaNotice by viewModel.showBetaNotice.collectAsState()
   val lifecycleOwner = LocalLifecycleOwner.current
 
   // Wait for the service to initialize the engine.
@@ -70,10 +68,6 @@ fun MercuryApp(viewModel: MainViewModel) {
     onDispose {
       lifecycleOwner.lifecycle.removeObserver(observer)
     }
-  }
-
-  if (showBetaNotice) {
-    BetaNoticeDialog(onDismiss = viewModel::dismissBetaNotice)
   }
 
   if (!isEngineReady) {
@@ -185,6 +179,7 @@ fun MainAppContent(viewModel: MainViewModel) {
         val settingsVM: SettingsViewModel = viewModel()
 
         val contacts by contactsVM.contacts.collectAsState()
+        val isLoading by contactsVM.isLoading.collectAsState()
         val myProfile by profileVM.myProfile.collectAsState()
         val connectionState by settingsVM.connectionState.collectAsState()
         val showAddDialog by contactsVM.showAddContactDialog.collectAsState()
@@ -215,6 +210,7 @@ fun MainAppContent(viewModel: MainViewModel) {
           contactsVM = contactsVM,
           myProfile = myProfile,
           contacts = contacts,
+          isLoading = isLoading,
           connectionState = connectionState,
           hasCallPermissions = hasCallPermissions,
           hasNotificationPermission = hasNotificationPermission,
@@ -239,6 +235,7 @@ fun MainAppContent(viewModel: MainViewModel) {
           myProfile = myProfile,
           onBack = { navController.popBackStack() },
           onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
+          onNavigateToBetaNotice = { navController.navigate(Route.WebView.createRoute("https://mercury.eillance.com/beta/")) },
           onNavigateToBackupAndRestore = { navController.navigate(Screen.BackupRestore.route) },
           onNavigateToHelp = { navController.navigate(Screen.Help.route) }
         )
