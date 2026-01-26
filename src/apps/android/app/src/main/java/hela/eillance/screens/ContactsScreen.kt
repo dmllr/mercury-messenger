@@ -1,6 +1,5 @@
 package hela.eillance.screens
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -33,21 +32,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.os.ConfigurationCompat
+import hela.eillance.components.UserAvatar
 import hela.eillance.ndkio.Contact
 import hela.eillance.ndkio.ContactStatus
 import hela.eillance.ndkio.MyProfileInfo
 import hela.eillance.ndkio.PeerConnectionState
 import hela.eillance.ndkio.ServiceConnectionState
 import hela.eillance.theme.extendedColors
-import hela.eillance.utils.rememberImageBitmapFromBase64
 import hela.eillance.viewmodels.ContactsViewModel
 import java.time.Instant
 import java.time.ZoneId
@@ -196,29 +193,11 @@ fun ContactListItem(
 
   ListItem(
     leadingContent = {
-      val imageBitmap = rememberImageBitmapFromBase64(contact.photo)
-      if (imageBitmap != null) {
-        Image(
-          bitmap = imageBitmap,
-          contentDescription = "Profile Photo",
-          modifier = Modifier
-            .size(48.dp)
-            .clip(CircleShape)
-            .clickable { onShowProfile() },
-          contentScale = ContentScale.Crop
-        )
-      } else {
-        Icon(
-          imageVector = Icons.Default.Person,
-          contentDescription = "Default Profile Icon",
-          modifier = Modifier
-            .size(48.dp)
-            .clip(CircleShape)
-            .clickable { onShowProfile() }
-            .background(MaterialTheme.colorScheme.secondaryContainer)
-            .padding(10.dp)
-        )
-      }
+      UserAvatar(
+        photoBase64 = contact.photo,
+        modifier = Modifier.size(48.dp),
+        onClick = onShowProfile
+      )
     },
     headlineContent = {
       Text(

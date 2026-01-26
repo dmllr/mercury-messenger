@@ -34,13 +34,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
+import hela.eillance.components.VideoRenderer
 import hela.eillance.ndkio.CallDirection
 import hela.eillance.ndkio.CallState
 import hela.eillance.ndkio.HistoryEntryKind
 import hela.eillance.viewmodels.CallViewModel
 import hela.eillance.webrtc.WebRtcTransport
-import org.webrtc.SurfaceViewRenderer
 
 @Composable
 fun CallScreen(
@@ -68,20 +67,12 @@ fun CallScreen(
     .background(Color.Black)) {
 
     if (isVideoCall && callState.isInCall) {
-      AndroidView(
-        factory = {
-          SurfaceViewRenderer(it).apply {
-            init(eglBaseContext, null)
-          }
-        },
+      // Remote Video (Full Screen)
+      VideoRenderer(
+        eglBaseContext = eglBaseContext,
         modifier = Modifier.fillMaxSize(),
-        update = { surfaceViewRenderer ->
-          callVM.setRemoteVideoSink(callState.peerId, surfaceViewRenderer)
-        },
-        onRelease = { surfaceViewRenderer ->
-          callVM.setRemoteVideoSink(callState.peerId, null)
-          surfaceViewRenderer.release()
-        }
+        onUpdate = { sink -> callVM.setRemoteVideoSink(callState.peerId, sink) },
+        onRelease = { callVM.setRemoteVideoSink(callState.peerId, null) }
       )
     }
 
@@ -122,24 +113,17 @@ fun CallScreen(
             .padding(16.dp),
           contentAlignment = Alignment.TopEnd
         ) {
-          AndroidView(
-            factory = {
-              SurfaceViewRenderer(it).apply {
-                init(eglBaseContext, null)
-                setMirror(true)
-              }
-            },
+          // Local Video (PIP)
+          VideoRenderer(
+            eglBaseContext = eglBaseContext,
             modifier = Modifier
               .width(120.dp)
               .aspectRatio(0.75f)
               .clip(RoundedCornerShape(16.dp)),
-            update = { surfaceViewRenderer ->
-              callVM.setLocalVideoSink(surfaceViewRenderer)
-            },
-            onRelease = { surfaceViewRenderer ->
-              callVM.setLocalVideoSink(null)
-              surfaceViewRenderer.release()
-            }
+            isMirror = true,
+            zIndex = true,
+            onUpdate = { sink -> callVM.setLocalVideoSink(sink) },
+            onRelease = { callVM.setLocalVideoSink(null) }
           )
         }
       }
