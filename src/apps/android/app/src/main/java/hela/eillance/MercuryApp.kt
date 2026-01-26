@@ -339,7 +339,10 @@ fun MainAppContent(viewModel: MainViewModel) {
         route = Route.FullScreenMedia.route,
         arguments = listOf(
           navArgument("path") { type = NavType.StringType },
-          navArgument("type") { type = NavType.IntType }
+          navArgument("type") {
+            type = NavType.IntType
+            defaultValue = AttachmentType.File.value
+          }
         )
       ) { backStackEntry ->
         val path = backStackEntry.arguments?.getString("path")

@@ -1,7 +1,8 @@
 package hela.eillance.screens
 
+import android.net.Uri
 import android.view.ViewGroup
-import android.widget.VideoView
+import androidx.annotation.OptIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Box
@@ -17,6 +18,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
@@ -27,12 +29,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.common.MediaItem
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import hela.eillance.ndkio.AttachmentType
 import java.io.File
+import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
+@kotlin.OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FullScreenMediaScreen(path: String, type: AttachmentType, onBack: () -> Unit) {
   val file = File(path)
@@ -67,7 +75,12 @@ fun FullScreenMediaScreen(path: String, type: AttachmentType, onBack: () -> Unit
       if (!file.exists()) {
         CircularProgressIndicator(modifier = Modifier.align(Alignment.Center), color = Color.White)
       } else {
-        if (type == AttachmentType.Video) {
+        // Fallback check: if type is File/Image but extension is video, force VideoPlayer to avoid image decoder errors
+        val isVideo = type == AttachmentType.Video ||
+            (type == AttachmentType.File &&
+                file.extension.lowercase(Locale.US) in setOf("mp4", "mkv", "webm", "avi", "mov", "3gp"))
+
+        if (isVideo) {
           VideoPlayer(file)
         } else {
           ZoomableImage(file)
@@ -117,18 +130,36 @@ fun ZoomableImage(file: File) {
   }
 }
 
+@OptIn(UnstableApi::class)
 @Composable
 fun VideoPlayer(file: File) {
+  val context = LocalContext.current
+
+  val exoPlayer = remember {
+    ExoPlayer.Builder(context).build()
+  }
+
+  DisposableEffect(file) {
+    val mediaItem = MediaItem.fromUri(Uri.fromFile(file))
+    exoPlayer.setMediaItem(mediaItem)
+    exoPlayer.prepare()
+    exoPlayer.playWhenReady = true
+
+    onDispose {
+      exoPlayer.release()
+    }
+  }
+
   AndroidView(
-    factory = { context ->
-      VideoView(context).apply {
+    factory = { ctx ->
+      PlayerView(ctx).apply {
+        player = exoPlayer
         layoutParams = ViewGroup.LayoutParams(
           ViewGroup.LayoutParams.MATCH_PARENT,
           ViewGroup.LayoutParams.MATCH_PARENT
         )
-        setVideoPath(file.absolutePath)
-        start()
-        setOnCompletionListener { start() } // Loop video
+        useController = true
+        setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
       }
     },
     modifier = Modifier.fillMaxSize()

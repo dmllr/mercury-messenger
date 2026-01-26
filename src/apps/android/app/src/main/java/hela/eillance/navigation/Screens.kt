@@ -32,9 +32,10 @@ sealed class Route(val route: String) {
   object WebView : Route("webview/{url}") {
     fun createRoute(url: String): String = "webview/${Uri.encode(url)}"
   }
-  object FullScreenMedia : Route("media_viewer/{path}/{type}") {
+  // Changed to query params to robustly handle encoded file paths
+  object FullScreenMedia : Route("media_viewer?path={path}&type={type}") {
     fun createRoute(path: String, type: Int): String {
-      return "media_viewer/${Uri.encode(path)}/$type"
+      return "media_viewer?path=${Uri.encode(path)}&type=$type"
     }
   }
 }
