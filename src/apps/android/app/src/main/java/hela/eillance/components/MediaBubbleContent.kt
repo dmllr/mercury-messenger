@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -184,7 +183,7 @@ private fun MediaItem(
   Box(
     modifier = modifier
       .background(Color.Black.copy(alpha = 0.1f))
-      .clickable(enabled = attachment.isDownloaded, onClick = onClick),
+      .clickable(enabled = attachment.isDownloaded || progress != null, onClick = onClick),
     contentAlignment = Alignment.Center
   ) {
     val file = File(attachment.path)

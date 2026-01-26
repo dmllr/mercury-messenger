@@ -268,7 +268,7 @@ fun MainAppContent(viewModel: MainViewModel) {
           onNavigateToCall = { navController.navigate(Route.Call.createRoute(it)) },
           onShowContactProfile = { contactsVM.onShowContactProfile(it) },
           onMediaClick = { attachments, index ->
-            navController.navigate(Route.FullScreenMedia.createRoute(attachments, index))
+            navController.navigate(Route.FullScreenMedia.createRoute(peerId, attachments, index))
           }
         )
       }
@@ -337,15 +337,18 @@ fun MainAppContent(viewModel: MainViewModel) {
       composable(
         route = Route.FullScreenMedia.route,
         arguments = listOf(
+          navArgument("peerId") { type = NavType.StringType },
           navArgument("attachments") { type = NavType.StringType },
           navArgument("index") { type = NavType.IntType; defaultValue = 0 }
         )
       ) { backStackEntry ->
+        val peerId = backStackEntry.arguments?.getString("peerId")
         val attachmentsJson = backStackEntry.arguments?.getString("attachments")
         val index = backStackEntry.arguments?.getInt("index") ?: 0
 
-        if (attachmentsJson != null) {
+        if (peerId != null && attachmentsJson != null) {
           MediaPreviewScreen(
+            peerId = peerId,
             attachmentsJson = Uri.decode(attachmentsJson),
             initialIndex = index,
             onBack = { navController.popBackStack() }

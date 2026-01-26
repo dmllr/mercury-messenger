@@ -131,6 +131,7 @@ fun ConversationScreen(
   val listState = rememberLazyListState()
   val coroutineScope = rememberCoroutineScope()
   val transferProgress by chatVM.transferProgress.collectAsState()
+  val context = LocalContext.current
 
   var previousHistorySize by remember(peerId) { mutableIntStateOf(historyPage.messages.size) }
 
@@ -267,7 +268,17 @@ fun ConversationScreen(
             systemMessageToShowDetails = clickedEntry
           }
         },
-        onMediaClick = onMediaClick
+        onMediaClick = { attachments, index ->
+          val target = attachments[index]
+          val file = java.io.File(target.path)
+          val isTransferring = transferProgress.containsKey(target.id)
+
+          if (target.isDownloaded && !file.exists() && !isTransferring) {
+            android.widget.Toast.makeText(context, "Attachment file removed", android.widget.Toast.LENGTH_SHORT).show()
+          } else {
+            onMediaClick(attachments, index)
+          }
+        }
       )
 
       when (contact?.status) {

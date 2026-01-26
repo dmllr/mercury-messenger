@@ -1,5 +1,6 @@
 package hela.eillance.screens
 
+import android.app.Application
 import android.net.Uri
 import android.view.ViewGroup
 import androidx.annotation.OptIn
@@ -26,6 +27,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -44,6 +46,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
@@ -51,6 +54,7 @@ import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import hela.eillance.ndkio.Attachment
 import hela.eillance.ndkio.AttachmentType
+import hela.eillance.viewmodels.ConversationViewModel
 import kotlinx.serialization.json.Json
 import java.io.File
 import java.util.Locale
@@ -58,10 +62,19 @@ import java.util.Locale
 @kotlin.OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MediaPreviewScreen(
+  peerId: String,
   attachmentsJson: String,
   initialIndex: Int,
   onBack: () -> Unit
 ) {
+  val context = LocalContext.current
+  val app = context.applicationContext as Application
+  val conversationVM: ConversationViewModel = viewModel(
+    factory = ConversationViewModel.Factory(app, peerId),
+    key = "MediaPreview_$peerId"
+  )
+  val transferProgress by conversationVM.transferProgress.collectAsState()
+
   val attachments = remember(attachmentsJson) {
     try {
       Json.decodeFromString<List<Attachment>>(attachmentsJson)
@@ -115,19 +128,31 @@ fun MediaPreviewScreen(
         modifier = Modifier.fillMaxSize(),
         pageSpacing = 0.dp
       ) { page ->
-        MediaPage(attachment = attachments[page])
+        MediaPage(attachment = attachments[page], progress = transferProgress[attachments[page].id])
       }
     }
   }
 }
 
 @Composable
-fun MediaPage(attachment: Attachment) {
+fun MediaPage(attachment: Attachment, progress: Float?) {
   val file = File(attachment.path)
 
   Box(modifier = Modifier.fillMaxSize()) {
     if (!file.exists()) {
-      CircularProgressIndicator(modifier = Modifier.align(Alignment.Center), color = Color.White)
+      if (progress != null) {
+        CircularProgressIndicator(
+          progress = { progress },
+          modifier = Modifier.align(Alignment.Center),
+          color = Color.White
+        )
+      } else {
+        Text(
+          text = "Image removed",
+          color = Color.White,
+          modifier = Modifier.align(Alignment.Center)
+        )
+      }
     } else {
       val isVideo = attachment.type == AttachmentType.Video ||
           attachment.mime.startsWith("video/") ||
