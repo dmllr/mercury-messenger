@@ -3,6 +3,7 @@ package hela.eillance.viewmodels
 import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
+import hela.eillance.CallService
 import hela.eillance.ndkio.Contact
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -26,6 +27,13 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
     nativePtr = nativeCreate(this)
     if (nativePtr == 0L) {
       Log.e("ContactsViewModel", "Failed to create native ContactsViewModel.")
+      _isLoading.value = false
+    } else {
+      // Ensure the engine is running. On a fresh install, the service might have
+      // initialized before identity creation, so start() wasn't called yet.
+      // Starting the engine now ensures the repository loads and notifies observers
+      // via the onContactsUpdated callback, clearing the loading state.
+      CallService.instance?.start()
     }
   }
 
