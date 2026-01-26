@@ -106,6 +106,7 @@ import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import kotlin.math.abs
 
 private val jsonParser = Json { ignoreUnknownKeys = true }
 
@@ -385,7 +386,7 @@ fun ChatHistory(
   LazyColumn(
     state = listState,
     modifier = modifier.fillMaxSize(),
-    verticalArrangement = Arrangement.spacedBy(8.dp),
+    verticalArrangement = Arrangement.spacedBy(2.dp),
     contentPadding = PaddingValues(vertical = 8.dp),
     reverseLayout = true
   ) {
@@ -397,22 +398,31 @@ fun ChatHistory(
         if (item.id != 0L) item.id else Long.MIN_VALUE + index
       }
     ) { index ->
-      val item = history[history.lastIndex - index]
-      when (item.kind) {
+      val currentItem = history[history.lastIndex - index]
+
+      val newerItem = if (index > 0) history[history.lastIndex - (index - 1)] else null
+      val olderItem = if (index < history.size - 1) history[history.lastIndex - (index + 1)] else null
+
+      val isGroupTail = !shouldGroupMessages(currentItem, newerItem)
+      val isGroupHead = !shouldGroupMessages(currentItem, olderItem)
+
+      when (currentItem.kind) {
         HistoryEntryKind.TextMessage -> MessageBubble(
-          entry = item,
+          entry = currentItem,
           onShowMore = chatVM::loadFullMessage,
           transferProgress = transferProgress,
           zoneId = zoneId,
           formatters = formatters,
-          onMediaClick = onMediaClick
+          onMediaClick = onMediaClick,
+          isGroupHead = isGroupHead,
+          isGroupTail = isGroupTail
         )
         HistoryEntryKind.VoiceCall, HistoryEntryKind.VideoCall -> CallLogBubble(
-          entry = item,
+          entry = currentItem,
           zoneId = zoneId,
           formatters = formatters
         )
-        HistoryEntryKind.SystemMessage -> SystemMessageBubble(item, onClick = onSystemMessageClick)
+        HistoryEntryKind.SystemMessage -> SystemMessageBubble(currentItem, onClick = onSystemMessageClick)
       }
     }
 
@@ -431,6 +441,19 @@ fun ChatHistory(
   }
 }
 
+// 5 minutes in microseconds
+private const val GROUPING_THRESHOLD_US = 5 * 60 * 1_000_000L
+
+private fun shouldGroupMessages(current: HistoryEntry, other: HistoryEntry?): Boolean {
+  if (other == null) return false
+  if (current.kind != other.kind) return false
+  if (current.kind != HistoryEntryKind.TextMessage) return false
+  if (current.direction != other.direction) return false
+
+  val diff = abs(current.timestamp - other.timestamp)
+  return diff <= GROUPING_THRESHOLD_US
+}
+
 @Composable
 fun MessageBubble(
   entry: HistoryEntry,
@@ -438,7 +461,9 @@ fun MessageBubble(
   transferProgress: Map<String, Float>,
   zoneId: ZoneId,
   formatters: Triple<DateTimeFormatter, DateTimeFormatter, DateTimeFormatter>,
-  onMediaClick: (List<Attachment>, Int) -> Unit
+  onMediaClick: (List<Attachment>, Int) -> Unit,
+  isGroupHead: Boolean = true,
+  isGroupTail: Boolean = true
 ) {
   val isFromMe = entry.direction == MessageDirection.Sent
   val alignment = if (isFromMe) Alignment.CenterEnd else Alignment.CenterStart
@@ -448,25 +473,33 @@ fun MessageBubble(
     MaterialTheme.colorScheme.secondaryContainer to MaterialTheme.colorScheme.onSecondaryContainer
   }
 
+  val topStartRadius = if (!isFromMe && !isGroupHead) 4.dp else 16.dp
+  val bottomStartRadius = if (!isFromMe && !isGroupTail) 4.dp else 16.dp
+  val topEndRadius = if (isFromMe && !isGroupHead) 4.dp else 16.dp
+  val bottomEndRadius = if (isFromMe && !isGroupTail) 4.dp else 16.dp
+
+  val bubbleShape = RoundedCornerShape(
+    topStart = topStartRadius,
+    topEnd = topEndRadius,
+    bottomStart = bottomStartRadius,
+    bottomEnd = bottomEndRadius
+  )
+
+  val topPadding = if (isGroupHead) 8.dp else 0.dp
+
   Box(
     modifier = Modifier
       .fillMaxWidth()
       .padding(
         start = if (isFromMe) 48.dp else 8.dp,
-        end = if (isFromMe) 8.dp else 48.dp
+        end = if (isFromMe) 8.dp else 48.dp,
+        top = topPadding
       ),
     contentAlignment = alignment
   ) {
     Column(
       modifier = Modifier
-        .clip(
-          RoundedCornerShape(
-            topStart = 16.dp,
-            topEnd = 16.dp,
-            bottomStart = if (isFromMe) 16.dp else 0.dp,
-            bottomEnd = if (isFromMe) 0.dp else 16.dp
-          )
-        )
+        .clip(bubbleShape)
         .background(colors.first)
         .padding(horizontal = 4.dp, vertical = 4.dp),
       horizontalAlignment = if (isFromMe) Alignment.End else Alignment.Start
@@ -504,31 +537,33 @@ fun MessageBubble(
         }
       }
 
-      Row(
-        modifier = Modifier.padding(top = 4.dp, end = 4.dp, bottom = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
-      ) {
-        Text(
-          text = formatTimestamp(entry.timestamp, zoneId, formatters),
-          style = MaterialTheme.typography.labelSmall,
-          color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
-        )
-        if (isFromMe) {
-          Icon(
-            imageVector = when (entry.status) {
-              MessageStatus.Read -> Icons.Filled.DoneAll
-              MessageStatus.Delivered -> Icons.Filled.Done
-              MessageStatus.Sent -> Icons.Filled.Done
-              else -> Icons.Filled.Schedule
-            },
-            contentDescription = "Message status: ${entry.status}",
-            modifier = Modifier.size(16.dp).padding(start = 4.dp),
-            tint = if (entry.status == MessageStatus.Read) {
-              MaterialTheme.extendedColors.success
-            } else {
-              MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
-            }
+      if (isGroupTail) {
+        Row(
+          modifier = Modifier.padding(top = 4.dp, end = 4.dp, bottom = 4.dp),
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          Text(
+            text = formatTimestamp(entry.timestamp, zoneId, formatters),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
           )
+          if (isFromMe) {
+            Icon(
+              imageVector = when (entry.status) {
+                MessageStatus.Read -> Icons.Filled.DoneAll
+                MessageStatus.Delivered -> Icons.Filled.Done
+                MessageStatus.Sent -> Icons.Filled.Done
+                else -> Icons.Filled.Schedule
+              },
+              contentDescription = "Message status: ${entry.status}",
+              modifier = Modifier.size(16.dp).padding(start = 4.dp),
+              tint = if (entry.status == MessageStatus.Read) {
+                MaterialTheme.extendedColors.success
+              } else {
+                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+              }
+            )
+          }
         }
       }
     }
