@@ -38,6 +38,7 @@ import coil.request.videoFrameMillis
 import hela.eillance.ndkio.Attachment
 import hela.eillance.ndkio.AttachmentType
 import java.io.File
+import java.util.Locale
 
 @Composable
 fun MediaBubbleContent(
@@ -99,16 +100,23 @@ private fun MediaItem(attachment: Attachment, progress: Float?, onClick: () -> U
     val file = File(attachment.path)
     val context = LocalContext.current
 
+    // Detect if content is video based on Type, Mime, or Extension to enforce correct decoder
+    val isVideo = attachment.type == AttachmentType.Video ||
+        attachment.mime.startsWith("video/") ||
+        file.extension.lowercase(Locale.US) in setOf("mp4", "mkv", "webm", "avi", "3gp", "mov")
+
     // Try to display the image/video thumb from file if downloaded, otherwise fallback to thumb string
     if (attachment.isDownloaded && file.exists()) {
-      val model = if (attachment.type == AttachmentType.Video) {
-        ImageRequest.Builder(context)
-          .data(file)
-          .decoderFactory { result, options, _ -> VideoFrameDecoder(result.source, options) }
-          .videoFrameMillis(1000)
-          .build()
-      } else {
-        file
+      val model = remember(attachment.path, isVideo) {
+        if (isVideo) {
+          ImageRequest.Builder(context)
+            .data(file)
+            .decoderFactory { result, options, _ -> VideoFrameDecoder(result.source, options) }
+            .videoFrameMillis(1000)
+            .build()
+        } else {
+          file
+        }
       }
 
       AsyncImage(
@@ -164,7 +172,7 @@ private fun MediaItem(attachment: Attachment, progress: Float?, onClick: () -> U
         tint = Color.White.copy(alpha = 0.8f),
         modifier = Modifier.size(48.dp)
       )
-    } else if (attachment.type == AttachmentType.Video) {
+    } else if (isVideo) {
       Icon(
         imageVector = Icons.Default.PlayCircle,
         contentDescription = "Play Video",

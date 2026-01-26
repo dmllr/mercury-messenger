@@ -187,14 +187,17 @@ fun ConversationScreen(
     SystemMessageDetailsDialog(entry = entry, onDismiss = { systemMessageToShowDetails = null })
   }
 
+  val context = LocalContext.current
+
+
   // Media Picker Logic
   val mediaPicker = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.PickMultipleVisualMedia(5)
   ) { uris ->
     if (uris.isNotEmpty()) {
       uris.forEach { uri ->
-        // Crude type detection
-        val type = if (uri.toString().contains("video")) AttachmentType.Video else AttachmentType.Image
+        val mimeType = context.contentResolver.getType(uri)
+        val type = if (mimeType?.startsWith("video/") == true) AttachmentType.Video else AttachmentType.Image
         if (type == AttachmentType.Video) chatVM.sendVideo(uri) else chatVM.sendImage(uri)
       }
     }
