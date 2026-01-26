@@ -16,6 +16,51 @@
 
 namespace eillance::services {
 
+namespace {
+auto GetExtensionForMimeType(std::string_view const mime_type) -> std::string {
+  if (mime_type == "image/jpeg" || mime_type == "image/jpg") {
+    return ".jpg";
+  }
+  if (mime_type == "image/png") {
+    return ".png";
+  }
+  if (mime_type == "image/gif") {
+    return ".gif";
+  }
+  if (mime_type == "image/webp") {
+    return ".webp";
+  }
+  if (mime_type == "video/mp4") {
+    return ".mp4";
+  }
+  if (mime_type == "video/webm") {
+    return ".webm";
+  }
+  if (mime_type == "video/quicktime") {
+    return ".mov";
+  }
+  if (mime_type == "video/x-matroska") {
+    return ".mkv";
+  }
+  if (mime_type == "audio/mpeg") {
+    return ".mp3";
+  }
+  if (mime_type == "audio/ogg") {
+    return ".ogg";
+  }
+  if (mime_type == "audio/wav") {
+    return ".wav";
+  }
+  if (mime_type == "application/pdf") {
+    return ".pdf";
+  }
+  if (mime_type == "text/plain") {
+    return ".txt";
+  }
+  return ".dat";
+}
+}  // namespace
+
 MessagingService::MessagingService(
     std::shared_ptr<storage::PersistentStorage> storage,
     std::shared_ptr<transport::Transport> transport,
@@ -48,7 +93,7 @@ void MessagingService::StartDeliveryService() { delivery_service_->Start(); }
 void MessagingService::StopDeliveryService() { delivery_service_->Stop(); }
 
 void MessagingService::RequestConnection(ContactID const& peer_id) {
-  if (auto peer = transport_->GetPeer(peer_id); peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
+  if (auto const peer = transport_->GetPeer(peer_id); peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
     SendQueuedMessages(peer_id);
   } else {
     connection_handler_(peer_id);
@@ -537,7 +582,8 @@ void MessagingService::OnChatMessageReceived(
     }
 
     for (auto& att : local_attachments) {
-      std::filesystem::path const final_path = attachments_dir / (att.id + ".dat");
+      std::string const ext = GetExtensionForMimeType(att.mime_type);
+      std::filesystem::path const final_path = attachments_dir / (att.id + ext);
       att.file_path = final_path.string();
     }
   }
@@ -679,11 +725,12 @@ void MessagingService::ProcessIncomingFileChunk(ContactID const& peer_id, nlohma
         if (extracted_state.message_id != 0) {
           // Scan a small window of recent messages to find and update
           // TODO: improve
-          for (auto [messages, total_messages] = history_->GetHistoryPage(peer_id, 0, 50); auto& rec : messages) {
+          auto [messages, total_messages] = history_->GetHistoryPage(peer_id, 0, 50);
+          for (auto& rec : messages) {
             if (rec.id == extracted_state.message_id) {
               if (std::holds_alternative<messaging::MessageEntry>(rec.data)) {
-                for (auto& [content, attachments] = std::get<messaging::MessageEntry>(rec.data);
-                     auto& att : attachments) {
+                auto& [content, attachments] = std::get<messaging::MessageEntry>(rec.data);
+                for (auto& att : attachments) {
                   if (att.id == att_id) {
                     att.is_downloaded = true;
                     history_->UpdateHistoryEntry(rec);

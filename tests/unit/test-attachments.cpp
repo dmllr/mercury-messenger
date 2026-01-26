@@ -160,6 +160,7 @@ TEST_F(AttachmentTest, AttachmentPersistenceAcrossRestarts) {
   att.type = messaging::AttachmentType::image;
   att.size_bytes = 10;
   att.is_downloaded = false;
+  att.mime_type = "image/jpeg";
   // We need a path that exists for the fix to work.
   // The service logic constructs path based on storage root.
   // We must simulate the file existing at that path.
@@ -168,7 +169,7 @@ TEST_F(AttachmentTest, AttachmentPersistenceAcrossRestarts) {
   std::filesystem::path storage_root(storage_->GetPath());
   std::filesystem::path attachments_dir = storage_root.parent_path() / "attachments";
   std::filesystem::create_directories(attachments_dir);
-  std::filesystem::path final_path = attachments_dir / (att.id + ".dat");
+  std::filesystem::path final_path = attachments_dir / (att.id + ".jpg");
 
   // Create the "downloaded" file manually
   std::ofstream ofs(final_path, std::ios::binary);
