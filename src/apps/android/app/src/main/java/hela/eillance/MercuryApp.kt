@@ -32,7 +32,7 @@ import hela.eillance.screens.CallScreen
 import hela.eillance.screens.ContactProfileDialog
 import hela.eillance.screens.ContactsScreen
 import hela.eillance.screens.ConversationScreen
-import hela.eillance.screens.FullScreenMediaScreen
+import hela.eillance.screens.MediaPreviewScreen
 import hela.eillance.screens.HelpScreen
 import hela.eillance.screens.IdentityScreen
 import hela.eillance.screens.IncomingCallScreen
@@ -355,7 +355,7 @@ fun MainAppContent(viewModel: MainViewModel) {
 
         if (path != null) {
           val type = AttachmentType.fromInt(typeVal)
-          FullScreenMediaScreen(
+          MediaPreviewScreen(
             path = Uri.decode(path),
             type = type,
             mimeType = Uri.decode(mime),
