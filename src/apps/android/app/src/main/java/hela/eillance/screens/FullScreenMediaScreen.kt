@@ -42,7 +42,7 @@ import java.util.Locale
 
 @kotlin.OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FullScreenMediaScreen(path: String, type: AttachmentType, mimeType: String, onBack: () -> Unit) {
+fun MediaPreviewScreen(path: String, type: AttachmentType, mimeType: String, onBack: () -> Unit) {
   val file = File(path)
 
   Scaffold(
