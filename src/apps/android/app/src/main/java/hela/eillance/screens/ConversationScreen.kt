@@ -1,5 +1,6 @@
 package hela.eillance.screens
 
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -274,7 +275,7 @@ fun ConversationScreen(
           val isTransferring = transferProgress.containsKey(target.id)
 
           if (target.isDownloaded && !file.exists() && !isTransferring) {
-            android.widget.Toast.makeText(context, "Attachment file removed", android.widget.Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "File removed", Toast.LENGTH_SHORT).show()
           } else {
             onMediaClick(attachments, index)
           }
