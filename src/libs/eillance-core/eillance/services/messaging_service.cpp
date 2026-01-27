@@ -164,14 +164,14 @@ auto MessagingService::SendChatMessage(
 
     domain_attachments.push_back(
         {.id = GenerateAttachmentId(),
-         .type = req.type,
-         .file_path = req.file_path,
-         .mime_type = mime,
-         .size_bytes = file_size,
-         .thumbnail_base64 = req.thumbnail_base64,
-         .hash = hash,
-         .is_downloaded = true,
-         .status = messaging::AttachmentStatus::pending}
+            .type = req.type,
+            .file_path = req.file_path,
+            .mime_type = mime,
+            .size_bytes = file_size,
+            .thumbnail_base64 = req.thumbnail_base64,
+            .hash = hash,
+            .is_downloaded = true,
+            .status = messaging::AttachmentStatus::pending}
     );
   }
 
@@ -220,7 +220,7 @@ void MessagingService::SendQueuedMessages(ContactID const& peer_id) {
     }
   }
 
-  CheckForResumableUploads(peer_id);
+  CheckForResumableTransfers(peer_id);
 
   auto const messages = storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::sending);
   auto const peer = transport_->GetPeer(peer_id);
@@ -331,7 +331,7 @@ void MessagingService::SendQueuedMessages(ContactID const& peer_id) {
   }
 }
 
-void MessagingService::CheckForResumableUploads(ContactID const& peer_id) {
+void MessagingService::CheckForResumableTransfers(ContactID const& peer_id) {
   auto pending = storage_->GetPendingAttachments(peer_id);
   for (auto const& att : pending) {
     if (att.is_downloaded) {
@@ -341,6 +341,8 @@ void MessagingService::CheckForResumableUploads(ContactID const& peer_id) {
         // Even if active, ensure we try to resume/handshake
         StartUpload(peer_id, att);
       }
+    } else {
+      ResumeTransfer(peer_id, att.id, false);
     }
   }
 }
@@ -599,7 +601,7 @@ void MessagingService::OnConnectionAttemptFinished(ContactID const& peer_id) con
 }
 
 auto MessagingService::GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t page_size) const
-    -> messaging::HistoryPage {
+-> messaging::HistoryPage {
   auto page = history_->GetHistoryPage(peer_id, page_index, page_size);
 
   bool any_modified = false;
@@ -627,7 +629,7 @@ auto MessagingService::GetHistoryPage(ContactID const& peer_id, size_t page_inde
 }
 
 auto MessagingService::GetFullMessageContent(ContactID const& peer_id, uint64_t message_id) const
-    -> std::optional<std::string> {
+-> std::optional<std::string> {
   return history_->GetFullMessageContent(peer_id, message_id);
 }
 
@@ -823,6 +825,12 @@ void MessagingService::ProcessIncomingFileChunk(ContactID const& peer_id, nlohma
   }
 
   if (type == "file_resume_request") {
+    auto att = storage_->GetAttachment(file_id);
+    if (att && att->is_downloaded) {
+      StartUpload(peer_id, *att);
+      return;
+    }
+
     {
       std::lock_guard<std::mutex> const lock(transfers_mutex_);
       if (active_uploads_.contains(file_id)) {
@@ -970,7 +978,7 @@ void MessagingService::ProcessIncomingFileChunk(ContactID const& peer_id, nlohma
 }
 
 void MessagingService::OnMessageReceipt(ContactID const& peer_id, uint64_t message_id, std::string const& status)
-    const {
+const {
   auto message_status = messaging::MessageStatus::sent;
   if (status == "delivered") {
     message_status = messaging::MessageStatus::delivered;
