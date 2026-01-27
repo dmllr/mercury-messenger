@@ -429,7 +429,8 @@ fun ChatHistory(
           isGroupHead = isGroupHead,
           isGroupTail = isGroupTail,
           onCancelTransfer = { attId -> chatVM.cancelTransfer(attId, currentItem.direction == MessageDirection.Sent) },
-          onResumeTransfer = { attId -> chatVM.resumeTransfer(attId, currentItem.direction == MessageDirection.Sent) }
+          onResumeTransfer = { attId -> chatVM.resumeTransfer(attId, currentItem.direction == MessageDirection.Sent) },
+          onDiscardTransfer = { attId -> chatVM.discardAttachment(attId) }
         )
         HistoryEntryKind.VoiceCall, HistoryEntryKind.VideoCall -> CallLogBubble(
           entry = currentItem,
@@ -479,7 +480,8 @@ fun MessageBubble(
   isGroupHead: Boolean = true,
   isGroupTail: Boolean = true,
   onCancelTransfer: (String) -> Unit,
-  onResumeTransfer: (String) -> Unit
+  onResumeTransfer: (String) -> Unit,
+  onDiscardTransfer: (String) -> Unit
 ) {
   val isFromMe = entry.direction == MessageDirection.Sent
   val alignment = if (isFromMe) Alignment.CenterEnd else Alignment.CenterStart
@@ -531,7 +533,8 @@ fun MessageBubble(
             onMediaClick(entry.attachments, if (index != -1) index else 0)
           },
           onCancel = onCancelTransfer,
-          onResume = onResumeTransfer
+          onResume = onResumeTransfer,
+          onDiscard = onDiscardTransfer
         )
         if (!entry.content.isNullOrBlank()) {
           Spacer(modifier = Modifier.height(8.dp))

@@ -50,6 +50,7 @@ class ConversationViewModel {
 
   void CancelTransfer(std::string const& attachment_id, bool is_upload) const;
   void ResumeTransfer(std::string const& attachment_id, bool is_upload) const;
+  void DiscardAttachment(std::string const& attachment_id) const;
 
  private:
   // Internal implementation that can outlive the ViewModel wrapper

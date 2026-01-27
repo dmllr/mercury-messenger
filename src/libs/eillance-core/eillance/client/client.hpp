@@ -101,6 +101,7 @@ class Client final : public transport::TransportDelegate {
   // File Transfer Control
   void CancelTransfer(ContactID const& peer_id, std::string const& attachment_id, bool is_upload) const;
   void ResumeTransfer(ContactID const& peer_id, std::string const& attachment_id, bool is_upload) const;
+  void DiscardAttachment(ContactID const& peer_id, std::string const& attachment_id) const;
 
   // Call / Connection
   void Call(ContactID const& peer_id);  // Connect data channel
