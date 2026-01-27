@@ -60,7 +60,12 @@ class MessagingService {
   void OnConnectionAttemptFinished(ContactID const& peer_id) const;
 
   // File Transfer Control
-  void CancelTransfer(ContactID const& peer_id, std::string const& attachment_id, bool is_upload);
+  void CancelTransfer(
+      ContactID const& peer_id,
+      std::string const& attachment_id,
+      bool is_upload,
+      bool notify_peer = true
+  );
   void ResumeTransfer(ContactID const& peer_id, std::string const& attachment_id, bool is_upload);
   void DiscardAttachment(ContactID const& peer_id, std::string const& attachment_id);
 
