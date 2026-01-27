@@ -67,7 +67,6 @@ fun MediaBubbleContent(
 
   if (visibleAttachments.isEmpty()) return
 
-  val count = visibleAttachments.size
   val roundedShape = RoundedCornerShape(8.dp)
 
   Column(
@@ -80,7 +79,6 @@ fun MediaBubbleContent(
       MediaItem(
         attachment = attachment,
         progress = transferProgress[attachment.id],
-        isFromMe = isFromMe,
         onClick = { onMediaClick(attachment) },
         onCancel = { onCancel(attachment.id) },
         onResume = { onResume(attachment.id) },
@@ -94,7 +92,6 @@ fun MediaBubbleContent(
 private fun MediaItem(
   attachment: Attachment,
   progress: Float?,
-  isFromMe: Boolean,
   onClick: () -> Unit,
   onCancel: () -> Unit,
   onResume: () -> Unit,
@@ -180,24 +177,16 @@ private fun MediaItem(
 
     // Status Overlays
     Box(contentAlignment = Alignment.Center) {
-      when (attachment.status) {
-        AttachmentStatus.Transferring -> {
-          if (progress != null && progress >= 0f) {
-            CircularProgressIndicator(
-              progress = progress,
-              color = Color.White,
-              modifier = Modifier.size(48.dp),
-              trackColor = Color.White.copy(alpha = 0.4f),
-              strokeWidth = 4.dp
-            )
-          } else {
-            CircularProgressIndicator(
-              color = Color.White,
-              modifier = Modifier.size(48.dp),
-              strokeWidth = 4.dp
-            )
-          }
-          // Cancel Button centered
+      if (progress != null && progress >= 0f) {
+        // Active Transfer
+        Box(contentAlignment = Alignment.Center) {
+          CircularProgressIndicator(
+            progress = { progress },
+            color = Color.White,
+            modifier = Modifier.size(48.dp),
+            trackColor = Color.White.copy(alpha = 0.4f),
+            strokeWidth = 4.dp
+          )
           IconButton(
             onClick = onCancel,
             modifier = Modifier
@@ -207,35 +196,56 @@ private fun MediaItem(
             Icon(Icons.Default.Close, contentDescription = "Cancel", tint = Color.White, modifier = Modifier.size(20.dp))
           }
         }
-        AttachmentStatus.Pending -> {
-          // Waiting / Interrupted state
-          Row(
-            modifier = Modifier
-              .background(Color.Black.copy(alpha = 0.6f), CircleShape)
-              .padding(horizontal = 12.dp, vertical = 8.dp)
-              .clickable(onClick = onCancel),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-          ) {
-            Icon(Icons.Default.Schedule, contentDescription = "Waiting", tint = Color.White, modifier = Modifier.size(20.dp))
-            Icon(Icons.Default.Close, contentDescription = "Cancel", tint = Color.White, modifier = Modifier.size(20.dp))
+      } else {
+        when (attachment.status) {
+          AttachmentStatus.Transferring -> {
+            // Indeterminate state (initializing or stalled but active)
+            Box(contentAlignment = Alignment.Center) {
+              CircularProgressIndicator(
+                color = Color.White,
+                modifier = Modifier.size(48.dp),
+                strokeWidth = 4.dp
+              )
+              IconButton(
+                onClick = onCancel,
+                modifier = Modifier
+                  .size(28.dp)
+                  .background(Color.Black.copy(alpha = 0.4f), CircleShape)
+              ) {
+                Icon(Icons.Default.Close, contentDescription = "Cancel", tint = Color.White, modifier = Modifier.size(20.dp))
+              }
+            }
           }
-        }
-        AttachmentStatus.Failed -> {
-          Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(Icons.Default.Refresh, contentDescription = "Retry", tint = Color.Red, modifier = Modifier.size(32.dp).clickable { onResume() })
-            Text("Failed", style = MaterialTheme.typography.labelSmall, color = Color.Red)
+          AttachmentStatus.Pending -> {
+            // Waiting / Interrupted state
+            Row(
+              modifier = Modifier
+                .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .clickable(onClick = onCancel),
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+              Icon(Icons.Default.Schedule, contentDescription = "Waiting", tint = Color.White, modifier = Modifier.size(20.dp))
+              Icon(Icons.Default.Close, contentDescription = "Cancel", tint = Color.White, modifier = Modifier.size(20.dp))
+            }
           }
-        }
-        AttachmentStatus.Canceled -> {
-          // Only visible for Sender (receiver filters out canceled items)
-          Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(Icons.Default.PlayArrow, contentDescription = "Resume", tint = Color.White, modifier = Modifier.size(32.dp).clickable { onResume() })
-            Text("Canceled", style = MaterialTheme.typography.labelSmall, color = Color.White)
+          AttachmentStatus.Failed -> {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+              Icon(Icons.Default.Refresh, contentDescription = "Retry", tint = Color.Red, modifier = Modifier.size(32.dp).clickable { onResume() })
+              Text("Failed", style = MaterialTheme.typography.labelSmall, color = Color.Red)
+            }
           }
-        }
-        AttachmentStatus.Done -> {
-          // Handled above (Media display)
+          AttachmentStatus.Canceled -> {
+            // Only visible for Sender (receiver filters out canceled items)
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+              Icon(Icons.Default.PlayArrow, contentDescription = "Resume", tint = Color.White, modifier = Modifier.size(32.dp).clickable { onResume() })
+              Text("Canceled", style = MaterialTheme.typography.labelSmall, color = Color.White)
+            }
+          }
+          AttachmentStatus.Done -> {
+            // Handled above (Media display)
+          }
         }
       }
     }
