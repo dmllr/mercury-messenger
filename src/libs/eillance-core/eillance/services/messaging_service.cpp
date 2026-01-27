@@ -481,7 +481,8 @@ void MessagingService::ProcessFileCancel(ContactID const& peer_id, std::string c
     std::lock_guard<std::mutex> const lock(transfers_mutex_);
     is_upload = active_uploads_.contains(file_id);
   }
-  CancelTransfer(peer_id, file_id, is_upload);
+  // Do NOT notify peer, as this was triggered by a message from them
+  CancelTransfer(peer_id, file_id, is_upload, false);
 }
 
 void MessagingService::ProcessResumeRequest(ContactID const& peer_id, std::string const& file_id) {
@@ -533,15 +534,22 @@ void MessagingService::ProcessResumeRequest(ContactID const& peer_id, std::strin
   transport_->SendPeerDataChannelMessage(peer_id, ack_msg);
 }
 
-void MessagingService::CancelTransfer(ContactID const& peer_id, std::string const& attachment_id, bool is_upload) {
+void MessagingService::CancelTransfer(
+    ContactID const& peer_id,
+    std::string const& attachment_id,
+    bool is_upload,
+    bool notify_peer
+) {
   std::lock_guard<std::mutex> const lock(transfers_mutex_);
 
   if (is_upload) {
     if (active_uploads_.contains(attachment_id)) {
       active_uploads_.erase(attachment_id);
     }
-    nlohmann::json const cancel_msg = {{"type", "file_cancel"}, {"id", attachment_id}};
-    transport_->SendPeerDataChannelMessage(peer_id, cancel_msg);
+    if (notify_peer) {
+      nlohmann::json const cancel_msg = {{"type", "file_cancel"}, {"id", attachment_id}};
+      transport_->SendPeerDataChannelMessage(peer_id, cancel_msg);
+    }
     storage_->UpdateAttachmentStatus(attachment_id, messaging::AttachmentStatus::canceled, true);
   } else {
     if (active_downloads_.contains(attachment_id)) {
@@ -551,8 +559,10 @@ void MessagingService::CancelTransfer(ContactID const& peer_id, std::string cons
       std::filesystem::remove(state.temp_path, ec);
       active_downloads_.erase(attachment_id);
     }
-    nlohmann::json const cancel_msg = {{"type", "file_cancel"}, {"id", attachment_id}};
-    transport_->SendPeerDataChannelMessage(peer_id, cancel_msg);
+    if (notify_peer) {
+      nlohmann::json const cancel_msg = {{"type", "file_cancel"}, {"id", attachment_id}};
+      transport_->SendPeerDataChannelMessage(peer_id, cancel_msg);
+    }
     storage_->UpdateAttachmentStatus(attachment_id, messaging::AttachmentStatus::canceled, false);
   }
 
@@ -575,8 +585,8 @@ void MessagingService::ResumeTransfer(ContactID const& peer_id, std::string cons
 
 void MessagingService::DiscardAttachment(ContactID const& peer_id, std::string const& attachment_id) {
   // Try to cancel any active transfer first
-  CancelTransfer(peer_id, attachment_id, true);
-  CancelTransfer(peer_id, attachment_id, false);
+  CancelTransfer(peer_id, attachment_id, true, true);
+  CancelTransfer(peer_id, attachment_id, false, true);
 
   storage_->UpdateAttachmentStatus(attachment_id, messaging::AttachmentStatus::discarded, false);
   if (on_attachment_status_changed_) {
