@@ -55,7 +55,7 @@ class FileTransferResilienceTest : public ::testing::Test {
     std::filesystem::remove_all(temp_dir_);
   }
 
-  static std::string CalculateSha256(std::string const& data) {
+  static auto CalculateSha256(std::string const& data) -> std::string {
     unsigned char hash[SHA256_DIGEST_LENGTH];
     SHA256_CTX sha256;
     SHA256_Init(&sha256);
@@ -67,9 +67,9 @@ class FileTransferResilienceTest : public ::testing::Test {
   }
 
   // Helper to convert std::string to std::vector<std::byte>
-  static std::vector<std::byte> StringToBytes(std::string const& str) {
+  static auto StringToBytes(std::string const& str) -> std::vector<std::byte> {
     std::vector<std::byte> bytes(str.size());
-    std::transform(str.begin(), str.end(), bytes.begin(), [](char c) { return static_cast<std::byte>(c); });
+    std::ranges::transform(str, bytes.begin(), [](char c) { return static_cast<std::byte>(c); });
     return bytes;
   }
 
@@ -96,20 +96,20 @@ TEST_F(FileTransferResilienceTest, TransferProgressAndFileCreation) {
 
   // Capture progress events
   std::vector<float> progress_events;
-  service_->SetTransferProgressCallback([&](auto, auto, float p) { progress_events.push_back(p); });
+  service_->SetTransferProgressCallback([&](auto, auto const&, float p) -> auto { progress_events.push_back(p); });
 
   bool completed = false;
-  service_->SetAttachmentDownloadedCallback([&](auto, auto) { completed = true; });
+  service_->SetAttachmentDownloadedCallback([&](auto, auto const&) -> auto { completed = true; });
 
   // 1. Receive Chat Message with Attachment
-  std::string content = "Here is a large file";
+  std::string const content = "Here is a large file";
   std::string versioned_payload;
   versioned_payload.push_back(static_cast<char>(services::MessagingService::currentMessageVersion));
   versioned_payload.append(content);
   auto encrypted = other_cipher.Encrypt(versioned_payload);
 
-  std::string file_data(20000, 'A');  // Larger than one chunk (16KB)
-  std::string file_hash = CalculateSha256(file_data);
+  std::string const file_data(20000, 'A');  // Larger than one chunk (16KB)
+  std::string const file_hash = CalculateSha256(file_data);
   std::string att_id = "test_file_id";
 
   messaging::Attachment att;
@@ -124,31 +124,37 @@ TEST_F(FileTransferResilienceTest, TransferProgressAndFileCreation) {
   service_->OnChatMessageReceived(peer1, encrypted, 9001, false, {att});
 
   // Verify temp file created
-  std::filesystem::path temp_file = attachments_dir_ / (att_id + ".tmp");
+  std::filesystem::path const temp_file = attachments_dir_ / (att_id + ".tmp");
   ASSERT_TRUE(std::filesystem::exists(temp_file));
   EXPECT_EQ(std::filesystem::file_size(temp_file), file_data.size());
 
   // 2. Process Chunks
   // Service uses 4KB chunks (MessagingService::chunkSizeBytes)
   // We must match this size for the offset calculation (seq * chunk_size) to align with data written.
-  size_t chunk_size = 4 * 1024;
-  size_t total_chunks = (file_data.size() + chunk_size - 1) / chunk_size;
+  constexpr auto chunk_size = services::MessagingService::chunkSizeBytes;
+  size_t const total_chunks = (file_data.size() + chunk_size - 1) / services::MessagingService::chunkSizeBytes;
 
   for (size_t seq = 0; seq < total_chunks; ++seq) {
-    size_t offset = seq * chunk_size;
-    std::string chunk = file_data.substr(offset, chunk_size);
-    nlohmann::json msg = {
+    size_t const offset = seq * chunk_size;
+    std::string const chunk = file_data.substr(offset, chunk_size);
+    nlohmann::json const msg = {
         {"type", "file_chunk"},
         {"id", att_id},
         {"seq", seq},
         {"data", eillance::crypto::ToHex(StringToBytes(chunk))},
-        {"eof", false}
+        {"eof", false},
     };
     service_->ProcessIncomingFileChunk(peer1, msg);
   }
 
   // 3. EOF
-  nlohmann::json eof_msg = {{"type", "file_chunk"}, {"id", att_id}, {"seq", 2}, {"data", ""}, {"eof", true}};
+  nlohmann::json const eof_msg = {
+    {"type", "file_chunk"},
+    {"id", att_id},
+    {"seq", 2},
+    {"data", ""},
+    {"eof", true},
+  };
   service_->ProcessIncomingFileChunk(peer1, eof_msg);
 
   // Verify completion
@@ -156,14 +162,13 @@ TEST_F(FileTransferResilienceTest, TransferProgressAndFileCreation) {
   EXPECT_FLOAT_EQ(progress_events.back(), 1.0f);
 
   // Verify final file exists
-  std::filesystem::path final_file = attachments_dir_ / (att_id + ".txt");
+  std::filesystem::path const final_file = attachments_dir_ / (att_id + ".txt");
   ASSERT_TRUE(std::filesystem::exists(final_file));
   EXPECT_FALSE(std::filesystem::exists(temp_file));
   EXPECT_EQ(std::filesystem::file_size(final_file), file_data.size());
 }
 
 TEST_F(FileTransferResilienceTest, FailsGracefullyIfHashMismatch) {
-  // Setup peer...
   auto peer = std::make_shared<transport::Peer>(peer1);
   peer->data_channel_is_open = true;
   eillance::crypto::SessionCipher other_cipher;
@@ -180,14 +185,14 @@ TEST_F(FileTransferResilienceTest, FailsGracefullyIfHashMismatch) {
   att.mime_type = "application/octet-stream";
 
   std::string payload = "payload";
-  payload.insert(0, 1, (char)services::MessagingService::currentMessageVersion);
+  payload.insert(0, 1, services::MessagingService::currentMessageVersion);
   auto encrypted = other_cipher.Encrypt(payload);
 
   service_->OnChatMessageReceived(peer1, encrypted, 9002, false, {att});
 
   // 2. Send Data
-  std::string data = "0123456789";
-  nlohmann::json chunk = {
+  std::string const data = "0123456789";
+  nlohmann::json const chunk = {
       {"type", "file_chunk"},
       {"id", "bad_hash_file"},
       {"seq", 0},
@@ -200,14 +205,14 @@ TEST_F(FileTransferResilienceTest, FailsGracefullyIfHashMismatch) {
   bool completed = false;
   service_->SetAttachmentDownloadedCallback([&](auto, auto) { completed = true; });
 
-  nlohmann::json eof = {{"type", "file_chunk"}, {"id", "bad_hash_file"}, {"seq", 1}, {"data", ""}, {"eof", true}};
+  nlohmann::json const eof = {{"type", "file_chunk"}, {"id", "bad_hash_file"}, {"seq", 1}, {"data", ""}, {"eof", true}};
   service_->ProcessIncomingFileChunk(peer1, eof);
 
   // 4. Verify
   EXPECT_FALSE(completed);  // Should not trigger callback on failure
 
-  std::filesystem::path final_file = attachments_dir_ / ("bad_hash_file.dat");
-  std::filesystem::path temp_file = attachments_dir_ / ("bad_hash_file.tmp");
+  std::filesystem::path const final_file = attachments_dir_ / ("bad_hash_file.dat");
+  std::filesystem::path const temp_file = attachments_dir_ / ("bad_hash_file.tmp");
 
   // Neither file should exist (temp is deleted on failure)
   EXPECT_FALSE(std::filesystem::exists(final_file));

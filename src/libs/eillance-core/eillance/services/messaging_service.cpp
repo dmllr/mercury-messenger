@@ -93,7 +93,8 @@ void MessagingService::StartDeliveryService() { delivery_service_->Start(); }
 void MessagingService::StopDeliveryService() { delivery_service_->Stop(); }
 
 void MessagingService::RequestConnection(ContactID const& peer_id) {
-  if (auto const peer = transport_->GetPeer(peer_id); peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
+  if (auto const peer = transport_->GetPeer(peer_id);
+      peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
     SendQueuedMessages(peer_id);
   } else {
     connection_handler_(peer_id);
@@ -836,10 +837,9 @@ void MessagingService::SetTransferProgressCallback(OnTransferProgressCallback cb
   on_transfer_progress_ = std::move(cb);
 }
 
-bool MessagingService::HasPendingWork(ContactID const& peer_id) const {
+auto MessagingService::HasPendingWork(ContactID const& peer_id) const -> bool {
   // Check pending actions (read receipts, profiles, etc.)
-  auto pending_actions = storage_->GetPendingActions(peer_id);
-  if (!pending_actions.empty()) {
+  if (auto const pending_actions = storage_->GetPendingActions(peer_id); !pending_actions.empty()) {
     return true;
   }
 
@@ -847,12 +847,12 @@ bool MessagingService::HasPendingWork(ContactID const& peer_id) const {
 }
 
 auto MessagingService::GenerateAttachmentId() -> std::string {
-  static std::random_device rd;
-  static std::mt19937 gen(rd());
+  static std::random_device random_device;
+  static std::mt19937 gen(random_device());
   static std::uniform_int_distribution<uint64_t> dis;
-  std::stringstream ss;
-  ss << std::hex << dis(gen) << dis(gen);
-  return ss.str();
+  std::stringstream sstream;
+  sstream << std::hex << dis(gen) << dis(gen);
+  return sstream.str();
 }
 
 auto MessagingService::CalculateFileHash(std::filesystem::path const& path) -> std::string {
