@@ -28,6 +28,10 @@ class MessagingService {
  public:
   static constexpr uint32_t currentMessageVersion = 1;
 
+  // Flow control constants
+  static constexpr size_t windowSizeChunks = 32;
+  static constexpr size_t chunkSizeBytes = 4ULL * 1024;
+
   using ConnectionRequestHandler = std::function<void(ContactID const&)>;
 
   explicit MessagingService(
@@ -159,10 +163,6 @@ class MessagingService {
   std::map<std::string, TransferUploadState> active_uploads_;
   std::map<std::string, TransferDownloadState> active_downloads_;
   std::mutex transfers_mutex_;
-
-  // Flow control constants
-  static constexpr size_t windowSizeChunks = 32;
-  static constexpr size_t chunkSizeBytes = 4 * 1024;
 };
 
 }  // namespace eillance::services
