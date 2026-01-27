@@ -5,6 +5,7 @@ import android.util.Base64
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,15 +16,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -75,26 +75,17 @@ fun MediaBubbleContent(
       .fillMaxWidth()
       .clip(roundedShape)
   ) {
-    // Basic single item display logic for brevity, reusing the grid logic structure from before
-    // but applying it to visibleAttachments and passing cancel/resume callbacks.
-    // Simplified to single item for brevity in this patch, assuming grid logic adapts or is similar.
-    // Ideally we iterate or use the grid logic provided in previous context.
-
-    // For this implementation, we just map 1:1 to MediaItem calls.
-    // Real implementation would re-use the 1, 2, 3, 4+ grid layout.
-    // Here we just stack them to ensure functionality is visible.
-
     visibleAttachments.forEachIndexed { index, attachment ->
-        if (index > 0) Spacer(modifier = Modifier.height(2.dp))
-        MediaItem(
-          attachment = attachment,
-          progress = transferProgress[attachment.id],
-          isFromMe = isFromMe,
-          onClick = { onMediaClick(attachment) },
-          onCancel = { onCancel(attachment.id) },
-          onResume = { onResume(attachment.id) },
-          modifier = Modifier.fillMaxWidth().aspectRatio(1.5f)
-        )
+      if (index > 0) Spacer(modifier = Modifier.height(2.dp))
+      MediaItem(
+        attachment = attachment,
+        progress = transferProgress[attachment.id],
+        isFromMe = isFromMe,
+        onClick = { onMediaClick(attachment) },
+        onCancel = { onCancel(attachment.id) },
+        onResume = { onResume(attachment.id) },
+        modifier = Modifier.fillMaxWidth().aspectRatio(1.5f)
+      )
     }
   }
 }
@@ -179,7 +170,7 @@ private fun MediaItem(
           modifier = Modifier.fillMaxSize().background(Color.Gray),
           contentAlignment = Alignment.Center
         ) {
-           // Empty placeholder
+          // Empty placeholder
         }
       }
 
@@ -188,52 +179,64 @@ private fun MediaItem(
     }
 
     // Status Overlays
-    when (attachment.status) {
-      AttachmentStatus.Transferring -> {
-        Box(contentAlignment = Alignment.Center) {
-          if (progress != null) {
+    Box(contentAlignment = Alignment.Center) {
+      when (attachment.status) {
+        AttachmentStatus.Transferring -> {
+          if (progress != null && progress >= 0f) {
             CircularProgressIndicator(
-              progress = { progress },
+              progress = progress,
               color = Color.White,
-              modifier = Modifier.size(40.dp),
-              trackColor = Color.White.copy(alpha = 0.3f),
+              modifier = Modifier.size(48.dp),
+              trackColor = Color.White.copy(alpha = 0.4f),
+              strokeWidth = 4.dp
             )
           } else {
             CircularProgressIndicator(
               color = Color.White,
-              modifier = Modifier.size(40.dp)
+              modifier = Modifier.size(48.dp),
+              strokeWidth = 4.dp
             )
           }
           // Cancel Button centered
-          IconButton(onClick = onCancel, modifier = Modifier.size(24.dp)) {
-             Icon(Icons.Default.Close, contentDescription = "Cancel", tint = Color.White)
+          IconButton(
+            onClick = onCancel,
+            modifier = Modifier
+              .size(28.dp)
+              .background(Color.Black.copy(alpha = 0.4f), CircleShape)
+          ) {
+            Icon(Icons.Default.Close, contentDescription = "Cancel", tint = Color.White, modifier = Modifier.size(20.dp))
           }
         }
-      }
-      AttachmentStatus.Pending -> {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-          CircularProgressIndicator(color = Color.White, modifier = Modifier.size(32.dp))
-          Text("Waiting...", style = MaterialTheme.typography.labelSmall, color = Color.White)
-          IconButton(onClick = onCancel) {
-             Icon(Icons.Default.Close, contentDescription = "Cancel", tint = Color.White)
+        AttachmentStatus.Pending -> {
+          // Waiting / Interrupted state
+          Row(
+            modifier = Modifier
+              .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+              .padding(horizontal = 12.dp, vertical = 8.dp)
+              .clickable(onClick = onCancel),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+          ) {
+            Icon(Icons.Default.Schedule, contentDescription = "Waiting", tint = Color.White, modifier = Modifier.size(20.dp))
+            Icon(Icons.Default.Close, contentDescription = "Cancel", tint = Color.White, modifier = Modifier.size(20.dp))
           }
         }
-      }
-      AttachmentStatus.Failed -> {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-          Icon(Icons.Default.Refresh, contentDescription = "Retry", tint = Color.Red, modifier = Modifier.size(32.dp).clickable { onResume() })
-          Text("Failed", style = MaterialTheme.typography.labelSmall, color = Color.Red)
+        AttachmentStatus.Failed -> {
+          Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(Icons.Default.Refresh, contentDescription = "Retry", tint = Color.Red, modifier = Modifier.size(32.dp).clickable { onResume() })
+            Text("Failed", style = MaterialTheme.typography.labelSmall, color = Color.Red)
+          }
         }
-      }
-      AttachmentStatus.Canceled -> {
-        // Only visible for Sender
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-          Icon(Icons.Default.PlayArrow, contentDescription = "Resume", tint = Color.White, modifier = Modifier.size(32.dp).clickable { onResume() })
-          Text("Canceled", style = MaterialTheme.typography.labelSmall, color = Color.White)
+        AttachmentStatus.Canceled -> {
+          // Only visible for Sender (receiver filters out canceled items)
+          Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(Icons.Default.PlayArrow, contentDescription = "Resume", tint = Color.White, modifier = Modifier.size(32.dp).clickable { onResume() })
+            Text("Canceled", style = MaterialTheme.typography.labelSmall, color = Color.White)
+          }
         }
-      }
-      AttachmentStatus.Done -> {
-         // Handled above (Media display)
+        AttachmentStatus.Done -> {
+          // Handled above (Media display)
+        }
       }
     }
   }
