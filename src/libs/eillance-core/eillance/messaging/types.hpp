@@ -24,6 +24,8 @@ NLOHMANN_JSON_SERIALIZE_ENUM(
     }
 )
 
+enum class AttachmentStatus : std::uint8_t { pending = 0, transferring, done, failed, canceled };
+
 struct Attachment {
   std::string id;
   AttachmentType type;
@@ -33,6 +35,7 @@ struct Attachment {
   std::string thumbnail_base64;
   std::string hash;  // SHA-256 hash of the file content
   bool is_downloaded = false;
+  AttachmentStatus status = AttachmentStatus::pending;
 };
 
 enum class MessageDirection : std::uint8_t {

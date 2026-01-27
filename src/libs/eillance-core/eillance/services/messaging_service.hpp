@@ -29,8 +29,8 @@ class MessagingService {
   static constexpr uint32_t currentMessageVersion = 1;
 
   // Flow control constants
-  static constexpr size_t windowSizeChunks = 32;
-  static constexpr size_t chunkSizeBytes = 4ULL * 1024;
+  static constexpr size_t windowSizeChunks = 64;
+  static constexpr size_t chunkSizeBytes = 16ULL * 1024;
 
   using ConnectionRequestHandler = std::function<void(ContactID const&)>;
 
@@ -58,6 +58,10 @@ class MessagingService {
 
   // Signal that a connection attempt finished (success or fail) to manage retry logic
   void OnConnectionAttemptFinished(ContactID const& peer_id) const;
+
+  // File Transfer Control
+  void CancelTransfer(ContactID const& peer_id, std::string const& attachment_id, bool is_upload);
+  void ResumeTransfer(ContactID const& peer_id, std::string const& attachment_id, bool is_upload);
 
   // Queries
   [[nodiscard]] auto GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t page_size) const
@@ -101,12 +105,15 @@ class MessagingService {
   using OnContactRestoredCallback = std::function<void(ContactID const&)>;
   using OnTransferProgressCallback =
       std::function<void(ContactID const& peer_id, std::string const& attachment_id, float progress)>;
+  using OnAttachmentStatusChangedCallback = std::function<
+      void(ContactID const& peer_id, std::string const& attachment_id, messaging::AttachmentStatus status)>;
 
   void SetChatMessageReceivedCallback(OnChatMessageCallback cb);
   void SetMessageStatusChangedCallback(OnMessageStatusChangedCallback cb);
   void SetAttachmentDownloadedCallback(OnAttachmentDownloadedCallback cb);
   void SetContactRestoredCallback(OnContactRestoredCallback cb);
   void SetTransferProgressCallback(OnTransferProgressCallback cb);
+  void SetAttachmentStatusChangedCallback(OnAttachmentStatusChangedCallback cb);
 
  private:
   // Helper to connect to a peer if not connected
@@ -117,6 +124,9 @@ class MessagingService {
   // Generate a unique ID for attachments
   static auto GenerateAttachmentId() -> std::string;
 
+  void RestoreTransfers();
+  void CheckForResumableUploads(ContactID const& peer_id);
+
   // File Transfer State Management
   struct TransferUploadState {
     std::string file_path;
@@ -125,6 +135,7 @@ class MessagingService {
     size_t window_end = 0;
     size_t total_size = 0;
     std::string hash;
+    bool paused = false;
   };
 
   struct TransferDownloadState {
@@ -134,6 +145,7 @@ class MessagingService {
     std::string expected_hash;
     std::filesystem::path temp_path;
     uint64_t message_id = 0;
+    size_t highest_seq_written = 0;
   };
 
   // Starts or resumes an upload based on state
@@ -142,6 +154,10 @@ class MessagingService {
   void PumpUpload(ContactID const& peer_id, std::string const& file_id);
   // Handles ACK from receiver to advance window
   void ProcessFileAck(ContactID const& peer_id, std::string const& file_id, size_t next_seq);
+  // Handles Cancel message
+  void ProcessFileCancel(ContactID const& peer_id, std::string const& file_id);
+  // Handles Resume Request / Info
+  void ProcessResumeRequest(ContactID const& peer_id, std::string const& file_id);
 
   static auto CalculateFileHash(std::filesystem::path const& path) -> std::string;
 
@@ -158,6 +174,7 @@ class MessagingService {
   OnAttachmentDownloadedCallback on_attachment_downloaded_;
   OnContactRestoredCallback on_contact_restored_;
   OnTransferProgressCallback on_transfer_progress_;
+  OnAttachmentStatusChangedCallback on_attachment_status_changed_;
 
   // Active File Transfers
   std::map<std::string, TransferUploadState> active_uploads_;

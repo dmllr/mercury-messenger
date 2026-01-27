@@ -314,6 +314,7 @@ void Client::ProcessDataChannelMessage(ContactID const& peer_id, Json const& mes
         att.thumbnail_base64 = j_att.value("thumb", "");
         att.hash = j_att.value("hash", "");
         att.is_downloaded = false;  // It's a remote file
+        att.status = messaging::AttachmentStatus::pending;
         attachments.push_back(att);
       }
     }
@@ -341,7 +342,7 @@ void Client::ProcessDataChannelMessage(ContactID const& peer_id, Json const& mes
     contact_service_->OnDeviceProfileReceived(peer_id, message["profile"]);
   } else if (type == "termination") {
     transport_->RemovePeer(peer_id);
-  } else if (type == "file_chunk") {
+  } else if (type == "file_chunk" || type == "file_cancel" || type == "file_resume_request") {
     messaging_service_->ProcessIncomingFileChunk(peer_id, message);
   }
 }
@@ -478,6 +479,14 @@ auto Client::GetFullMessageContent(ContactID const& id, uint64_t msg_id) const -
 }
 auto Client::GetChatSummaries(std::vector<ContactID> const& ids) const -> std::vector<messaging::ChatSummary> {
   return messaging_service_->GetChatSummaries(ids);
+}
+
+void Client::CancelTransfer(ContactID const& peer_id, std::string const& attachment_id, bool is_upload) const {
+  messaging_service_->CancelTransfer(peer_id, attachment_id, is_upload);
+}
+
+void Client::ResumeTransfer(ContactID const& peer_id, std::string const& attachment_id, bool is_upload) const {
+  messaging_service_->ResumeTransfer(peer_id, attachment_id, is_upload);
 }
 
 void Client::Call(ContactID const& id) { Connect(id); }

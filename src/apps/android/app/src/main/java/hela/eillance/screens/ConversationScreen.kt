@@ -427,7 +427,9 @@ fun ChatHistory(
           formatters = formatters,
           onMediaClick = onMediaClick,
           isGroupHead = isGroupHead,
-          isGroupTail = isGroupTail
+          isGroupTail = isGroupTail,
+          onCancelTransfer = { attId -> chatVM.cancelTransfer(attId, currentItem.direction == MessageDirection.Sent) },
+          onResumeTransfer = { attId -> chatVM.resumeTransfer(attId, currentItem.direction == MessageDirection.Sent) }
         )
         HistoryEntryKind.VoiceCall, HistoryEntryKind.VideoCall -> CallLogBubble(
           entry = currentItem,
@@ -475,7 +477,9 @@ fun MessageBubble(
   formatters: Triple<DateTimeFormatter, DateTimeFormatter, DateTimeFormatter>,
   onMediaClick: (List<Attachment>, Int) -> Unit,
   isGroupHead: Boolean = true,
-  isGroupTail: Boolean = true
+  isGroupTail: Boolean = true,
+  onCancelTransfer: (String) -> Unit,
+  onResumeTransfer: (String) -> Unit
 ) {
   val isFromMe = entry.direction == MessageDirection.Sent
   val alignment = if (isFromMe) Alignment.CenterEnd else Alignment.CenterStart
@@ -521,10 +525,13 @@ fun MessageBubble(
         MediaBubbleContent(
           attachments = entry.attachments,
           transferProgress = transferProgress,
+          isFromMe = isFromMe,
           onMediaClick = { clickedAttachment ->
             val index = entry.attachments.indexOf(clickedAttachment)
             onMediaClick(entry.attachments, if (index != -1) index else 0)
-          }
+          },
+          onCancel = onCancelTransfer,
+          onResume = onResumeTransfer
         )
         if (!entry.content.isNullOrBlank()) {
           Spacer(modifier = Modifier.height(8.dp))

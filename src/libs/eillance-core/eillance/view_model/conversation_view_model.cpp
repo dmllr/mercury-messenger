@@ -162,6 +162,28 @@ struct ConversationViewModel::Impl : public std::enable_shared_from_this<Impl> {
         for (auto& att : msg.attachments) {
           if (att.id == attachment_id) {
             att.is_downloaded = true;  // Actual state update
+            att.status = messaging::AttachmentStatus::done;
+            found = true;
+          }
+        }
+      }
+    }
+
+    if (found && observer) {
+      observer->OnHistoryUpdated(state);
+    }
+  }
+
+  void OnAttachmentStatusChanged(std::string const& attachment_id, messaging::AttachmentStatus status) {
+    std::lock_guard<std::mutex> const lock(mutex);
+    bool found = false;
+
+    for (auto& entry : state.history) {
+      if (std::holds_alternative<messaging::MessageEntry>(entry.data)) {
+        auto& msg = std::get<messaging::MessageEntry>(entry.data);
+        for (auto& att : msg.attachments) {
+          if (att.id == attachment_id) {
+            att.status = status;
             found = true;
           }
         }
@@ -230,6 +252,11 @@ ConversationViewModel::ConversationViewModel(
       impl->OnTransferProgress(event.attachment_id, event.progress);
     }
   });
+  Subscribe<EventAttachmentStatusChanged>(queue, [impl](EventAttachmentStatusChanged const& event) {
+    if (event.peer_id == impl->peer_id) {
+      impl->OnAttachmentStatusChanged(event.attachment_id, event.status);
+    }
+  });
   Subscribe<EventDebugDataReset>(queue, [impl](auto const&) { impl->StartInitialLoad(); });
 }
 
@@ -263,5 +290,13 @@ void ConversationViewModel::MarkMessagesAsRead(std::vector<std::uint64_t> const&
   impl_->MarkMessagesAsRead(message_ids);
 }
 void ConversationViewModel::AddSystemMessage(std::string const& message) const { impl_->AddSystemMessage(message); }
+
+void ConversationViewModel::CancelTransfer(std::string const& attachment_id, bool is_upload) const {
+  impl_->client->CancelTransfer(impl_->peer_id, attachment_id, is_upload);
+}
+
+void ConversationViewModel::ResumeTransfer(std::string const& attachment_id, bool is_upload) const {
+  impl_->client->ResumeTransfer(impl_->peer_id, attachment_id, is_upload);
+}
 
 }  // namespace eillance::view_model
