@@ -489,6 +489,10 @@ void Client::ResumeTransfer(ContactID const& peer_id, std::string const& attachm
   messaging_service_->ResumeTransfer(peer_id, attachment_id, is_upload);
 }
 
+void Client::DiscardAttachment(ContactID const& peer_id, std::string const& attachment_id) const {
+  messaging_service_->DiscardAttachment(peer_id, attachment_id);
+}
+
 void Client::Call(ContactID const& id) { Connect(id); }
 void Client::StartVoiceCall(ContactID const& id) const { media_call_service_->StartVoiceCall(id); }
 void Client::StartVideoCall(ContactID const& id) const { media_call_service_->StartVideoCall(id); }

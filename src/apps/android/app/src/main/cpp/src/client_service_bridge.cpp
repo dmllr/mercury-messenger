@@ -387,6 +387,18 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationView
   env->ReleaseStringUTFChars(attachment_id, chars);
 }
 
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationViewModel_nativeDiscardAttachment(
+    JNIEnv* env,
+    jobject /*instance*/,
+    jlong ptr,
+    jstring attachment_id
+) {
+  auto* vm = reinterpret_cast<eillance::view_model::ConversationViewModel*>(ptr);
+  char const* chars = env->GetStringUTFChars(attachment_id, nullptr);
+  vm->DiscardAttachment(chars);
+  env->ReleaseStringUTFChars(attachment_id, chars);
+}
+
 // Call
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_CallViewModel_nativeStartVoice(
     JNIEnv* env,

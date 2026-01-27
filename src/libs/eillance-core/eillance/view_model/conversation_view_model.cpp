@@ -299,4 +299,8 @@ void ConversationViewModel::ResumeTransfer(std::string const& attachment_id, boo
   impl_->client->ResumeTransfer(impl_->peer_id, attachment_id, is_upload);
 }
 
+void ConversationViewModel::DiscardAttachment(std::string const& attachment_id) const {
+  impl_->client->DiscardAttachment(impl_->peer_id, attachment_id);
+}
+
 }  // namespace eillance::view_model

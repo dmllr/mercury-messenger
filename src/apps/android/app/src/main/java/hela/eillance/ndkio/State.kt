@@ -40,7 +40,7 @@ enum class AttachmentType(val value: Int) {
 
 @Serializable
 enum class AttachmentStatus(val value: Int) {
-  Pending(0), Transferring(1), Done(2), Failed(3), Canceled(4);
+  Pending(0), Transferring(1), Done(2), Failed(3), Canceled(4), Discarded(5);
   companion object { fun fromInt(value: Int) = entries.firstOrNull { it.value == value } ?: Pending }
 }
 

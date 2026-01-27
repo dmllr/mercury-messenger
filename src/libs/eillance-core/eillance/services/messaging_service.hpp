@@ -62,6 +62,7 @@ class MessagingService {
   // File Transfer Control
   void CancelTransfer(ContactID const& peer_id, std::string const& attachment_id, bool is_upload);
   void ResumeTransfer(ContactID const& peer_id, std::string const& attachment_id, bool is_upload);
+  void DiscardAttachment(ContactID const& peer_id, std::string const& attachment_id);
 
   // Queries
   [[nodiscard]] auto GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t page_size) const

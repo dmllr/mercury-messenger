@@ -476,7 +476,12 @@ void MessagingService::ProcessFileAck(ContactID const& peer_id, std::string cons
 }
 
 void MessagingService::ProcessFileCancel(ContactID const& peer_id, std::string const& file_id) {
-  CancelTransfer(peer_id, file_id, false);
+  bool is_upload = false;
+  {
+    std::lock_guard<std::mutex> const lock(transfers_mutex_);
+    is_upload = active_uploads_.contains(file_id);
+  }
+  CancelTransfer(peer_id, file_id, is_upload);
 }
 
 void MessagingService::ProcessResumeRequest(ContactID const& peer_id, std::string const& file_id) {
@@ -565,6 +570,17 @@ void MessagingService::ResumeTransfer(ContactID const& peer_id, std::string cons
   } else {
     nlohmann::json const pull_msg = {{"type", "file_resume_request"}, {"id", attachment_id}};
     transport_->SendPeerDataChannelMessage(peer_id, pull_msg);
+  }
+}
+
+void MessagingService::DiscardAttachment(ContactID const& peer_id, std::string const& attachment_id) {
+  // Try to cancel any active transfer first
+  CancelTransfer(peer_id, attachment_id, true);
+  CancelTransfer(peer_id, attachment_id, false);
+
+  storage_->UpdateAttachmentStatus(attachment_id, messaging::AttachmentStatus::discarded, false);
+  if (on_attachment_status_changed_) {
+    on_attachment_status_changed_(peer_id, attachment_id, messaging::AttachmentStatus::discarded);
   }
 }
 
@@ -823,6 +839,14 @@ void MessagingService::ProcessIncomingFileChunk(ContactID const& peer_id, nlohma
   if (!active_downloads_.contains(file_id)) {
     auto att = storage_->GetAttachment(file_id);
     if (!att) return;
+
+    if (att->status == messaging::AttachmentStatus::canceled || att->status == messaging::AttachmentStatus::discarded) {
+      // Send cancel to stop sender from continuing to send chunks
+      nlohmann::json const cancel_msg = {{"type", "file_cancel"}, {"id", file_id}};
+      if (lock.owns_lock()) lock.unlock();
+      transport_->SendPeerDataChannelMessage(peer_id, cancel_msg);
+      return;
+    }
 
     std::filesystem::path const storage_root(storage_->GetPath());
     std::filesystem::path const attachments_dir = storage_root.parent_path() / "attachments";

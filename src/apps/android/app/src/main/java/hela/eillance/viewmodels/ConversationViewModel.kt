@@ -18,6 +18,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import hela.eillance.ndkio.AttachmentRequest
+import hela.eillance.ndkio.AttachmentStatus
 import hela.eillance.ndkio.AttachmentType
 import hela.eillance.ndkio.HistoryPage
 import kotlinx.coroutines.Dispatchers
@@ -59,6 +60,30 @@ class ConversationViewModel(
 
   override fun onHistoryUpdated(page: HistoryPage) {
     _interactionHistoryPage.value = page
+
+    // Clean up transfer progress map for items that are no longer transferring
+    val currentProgress = _transferProgress.value.toMutableMap()
+    if (currentProgress.isNotEmpty()) {
+      val activeAttachmentIds = mutableSetOf<String>()
+      for (msg in page.messages) {
+        // Kotlin 1.9+ smart cast might work, but using explicit checks is safer
+        // Assuming HistoryEntry has attachments directly or indirectly via data
+        // The data class for HistoryEntry has attachments list
+        for (att in msg.attachments) {
+          if (att.status == AttachmentStatus.Transferring) {
+            activeAttachmentIds.add(att.id)
+          }
+        }
+      }
+
+      val toRemove = currentProgress.keys.filter { it !in activeAttachmentIds }
+      if (toRemove.isNotEmpty()) {
+        for (id in toRemove) {
+          currentProgress.remove(id)
+        }
+        _transferProgress.value = currentProgress
+      }
+    }
   }
 
   override fun onTransferProgress(attachmentId: String, progress: Float) {
@@ -157,6 +182,12 @@ class ConversationViewModel(
     }
   }
 
+  fun discardAttachment(attachmentId: String) {
+    if (nativePtr != 0L) {
+      nativeDiscardAttachment(nativePtr, attachmentId)
+    }
+  }
+
   private fun generateThumbnail(resolver: ContentResolver, uri: Uri, file: File, type: AttachmentType): Bitmap? {
     val size = Size(320, 320)
     return try {
@@ -219,6 +250,7 @@ class ConversationViewModel(
   private external fun nativeMarkRead(ptr: Long, messageIds: LongArray)
   private external fun nativeCancelTransfer(ptr: Long, attachmentId: String, isUpload: Boolean)
   private external fun nativeResumeTransfer(ptr: Long, attachmentId: String, isUpload: Boolean)
+  private external fun nativeDiscardAttachment(ptr: Long, attachmentId: String)
 
   class Factory(
     private val application: Application,
