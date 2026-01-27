@@ -41,6 +41,7 @@ class AttachmentTest : public ::testing::Test {
   }
 
   void TearDown() override {
+    service_.reset();  // Reset service to close file handles before deletion
     std::filesystem::remove(temp_file_path_);
     // Cleanup any extra files
     std::filesystem::remove("test_bad_file");
@@ -92,10 +93,10 @@ TEST_F(AttachmentTest, PersistenceStoresHash) {
   std::ignore = storage_->AddHistoryEntry(record);
 
   // Retrieve
-  auto [messages, total_messages] = storage_->GetHistoryPage(peer1, 0, 10);
-  ASSERT_EQ(messages.size(), 1);
+  auto page = storage_->GetHistoryPage(peer1, 0, 10);
+  ASSERT_EQ(page.messages.size(), 1);
 
-  auto const& retrieved = messages[0];
+  auto const& retrieved = page.messages[0];
   ASSERT_TRUE(std::holds_alternative<messaging::MessageEntry>(retrieved.data));
   auto const& [content, attachments] = std::get<messaging::MessageEntry>(retrieved.data);
 

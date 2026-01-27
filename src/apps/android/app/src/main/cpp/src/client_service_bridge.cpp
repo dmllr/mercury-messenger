@@ -361,6 +361,32 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationView
   vm->MarkMessagesAsRead(ids);
 }
 
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationViewModel_nativeCancelTransfer(
+    JNIEnv* env,
+    jobject /*instance*/,
+    jlong ptr,
+    jstring attachment_id,
+    jboolean is_upload
+) {
+  auto* vm = reinterpret_cast<eillance::view_model::ConversationViewModel*>(ptr);
+  char const* chars = env->GetStringUTFChars(attachment_id, nullptr);
+  vm->CancelTransfer(chars, is_upload);
+  env->ReleaseStringUTFChars(attachment_id, chars);
+}
+
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationViewModel_nativeResumeTransfer(
+    JNIEnv* env,
+    jobject /*instance*/,
+    jlong ptr,
+    jstring attachment_id,
+    jboolean is_upload
+) {
+  auto* vm = reinterpret_cast<eillance::view_model::ConversationViewModel*>(ptr);
+  char const* chars = env->GetStringUTFChars(attachment_id, nullptr);
+  vm->ResumeTransfer(chars, is_upload);
+  env->ReleaseStringUTFChars(attachment_id, chars);
+}
+
 // Call
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_CallViewModel_nativeStartVoice(
     JNIEnv* env,
@@ -697,7 +723,7 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     classref.RegisterCtor(
         env,
         attachment_class,
-        "(Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;JLjava/lang/String;Z)V"
+        "(Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;JLjava/lang/String;ZI)V"
     );
 
   } catch (std::exception const& e) {

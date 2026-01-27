@@ -145,6 +145,18 @@ class ConversationViewModel(
     }
   }
 
+  fun cancelTransfer(attachmentId: String, isUpload: Boolean) {
+    if (nativePtr != 0L) {
+      nativeCancelTransfer(nativePtr, attachmentId, isUpload)
+    }
+  }
+
+  fun resumeTransfer(attachmentId: String, isUpload: Boolean) {
+    if (nativePtr != 0L) {
+      nativeResumeTransfer(nativePtr, attachmentId, isUpload)
+    }
+  }
+
   private fun generateThumbnail(resolver: ContentResolver, uri: Uri, file: File, type: AttachmentType): Bitmap? {
     val size = Size(320, 320)
     return try {
@@ -205,6 +217,8 @@ class ConversationViewModel(
   private external fun nativeLoadOlder(ptr: Long)
   private external fun nativeLoadFull(ptr: Long, messageId: Long)
   private external fun nativeMarkRead(ptr: Long, messageIds: LongArray)
+  private external fun nativeCancelTransfer(ptr: Long, attachmentId: String, isUpload: Boolean)
+  private external fun nativeResumeTransfer(ptr: Long, attachmentId: String, isUpload: Boolean)
 
   class Factory(
     private val application: Application,

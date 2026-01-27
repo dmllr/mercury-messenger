@@ -94,8 +94,6 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
     std::lock_guard const lock(mutex_);
     contacts_.erase(peer_id);
 
-    // FIX: Also remove associated history, large messages, and pending actions
-    // This matches the cascading delete behavior of the real SQLiteStorage implementation
     if (auto it = history_.find(peer_id); it != history_.end()) {
       for (auto const& entry : it->second) {
         large_messages_.erase(entry.id);
@@ -188,6 +186,40 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
     }
   }
 
+  void UpdateAttachmentStatus(std::string const& attachment_id, messaging::AttachmentStatus status, bool is_downloaded)
+      override {
+    std::lock_guard const lock(mutex_);
+    for (auto& history_vec : history_ | std::views::values) {
+      for (auto& entry : history_vec) {
+        if (auto* msg_entry = std::get_if<messaging::MessageEntry>(&entry.data)) {
+          for (auto& att : msg_entry->attachments) {
+            if (att.id == attachment_id) {
+              att.status = status;
+              att.is_downloaded = is_downloaded;
+              return;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  auto GetAttachment(std::string const& attachment_id) -> std::optional<messaging::Attachment> override {
+    std::lock_guard const lock(mutex_);
+    for (auto& history_vec : history_ | std::views::values) {
+      for (auto& entry : history_vec) {
+        if (auto* msg_entry = std::get_if<messaging::MessageEntry>(&entry.data)) {
+          for (auto& att : msg_entry->attachments) {
+            if (att.id == attachment_id) {
+              return att;
+            }
+          }
+        }
+      }
+    }
+    return std::nullopt;
+  }
+
   auto GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t page_size)
       -> messaging::HistoryPage override {
     std::lock_guard const lock(mutex_);
@@ -268,6 +300,25 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
       }
     }
     return records;
+  }
+
+  auto GetPendingAttachments(ContactID const& peer_id) -> std::vector<messaging::Attachment> override {
+    std::lock_guard const lock(mutex_);
+    std::vector<messaging::Attachment> attachments;
+    if (auto const itr = history_.find(peer_id); itr != history_.end()) {
+      for (auto const& entry : itr->second) {
+        if (auto* msg_entry = std::get_if<messaging::MessageEntry>(&entry.data)) {
+          for (auto const& att : msg_entry->attachments) {
+            if ((att.status == messaging::AttachmentStatus::pending ||
+                 att.status == messaging::AttachmentStatus::transferring) &&
+                !att.is_downloaded) {
+              attachments.push_back(att);
+            }
+          }
+        }
+      }
+    }
+    return attachments;
   }
 
   auto GetRemoteIds(ContactID const& peer_id, std::vector<uint64_t> const& local_ids)

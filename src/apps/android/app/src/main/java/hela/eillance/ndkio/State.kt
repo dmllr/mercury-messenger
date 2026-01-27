@@ -39,6 +39,12 @@ enum class AttachmentType(val value: Int) {
 }
 
 @Serializable
+enum class AttachmentStatus(val value: Int) {
+  Pending(0), Transferring(1), Done(2), Failed(3), Canceled(4);
+  companion object { fun fromInt(value: Int) = entries.firstOrNull { it.value == value } ?: Pending }
+}
+
+@Serializable
 data class Attachment(
   val id: String,
   private val typeValue: Int,
@@ -46,9 +52,11 @@ data class Attachment(
   val mime: String,
   val size: Long,
   val thumbnail: String?,
-  val isDownloaded: Boolean
+  val isDownloaded: Boolean,
+  private val statusValue: Int = AttachmentStatus.Pending.value
 ) {
   val type: AttachmentType get() = AttachmentType.fromInt(typeValue)
+  val status: AttachmentStatus get() = AttachmentStatus.fromInt(statusValue)
 }
 
 data class HistoryEntry(

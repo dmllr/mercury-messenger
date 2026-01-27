@@ -48,6 +48,9 @@ class ConversationViewModel {
   void MarkMessagesAsRead(std::vector<std::uint64_t> const& message_ids) const;
   void AddSystemMessage(std::string const& message) const;
 
+  void CancelTransfer(std::string const& attachment_id, bool is_upload) const;
+  void ResumeTransfer(std::string const& attachment_id, bool is_upload) const;
+
  private:
   // Internal implementation that can outlive the ViewModel wrapper
   struct Impl;

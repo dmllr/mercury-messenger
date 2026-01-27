@@ -63,7 +63,6 @@ class Client final : public transport::TransportDelegate {
   [[nodiscard]] auto IdentityExists() const -> bool;
   [[nodiscard]] auto GetMnemonic() const -> std::optional<std::string>;
 
-  // Profile mutation methods are no longer const as they trigger network broadcasts
   auto GenerateNewIdentity() -> std::string;
   auto RestoreIdentity(std::string const& mnemonic) -> bool;
   [[nodiscard]] auto CreateBackup(std::string const& p, std::string const& pw) const -> bool;
@@ -98,6 +97,10 @@ class Client final : public transport::TransportDelegate {
       -> std::optional<std::string>;
   [[nodiscard]] auto GetChatSummaries(std::vector<ContactID> const& peer_ids
   ) const -> std::vector<messaging::ChatSummary>;
+
+  // File Transfer Control
+  void CancelTransfer(ContactID const& peer_id, std::string const& attachment_id, bool is_upload) const;
+  void ResumeTransfer(ContactID const& peer_id, std::string const& attachment_id, bool is_upload) const;
 
   // Call / Connection
   void Call(ContactID const& peer_id);  // Connect data channel

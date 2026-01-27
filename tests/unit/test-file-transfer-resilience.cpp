@@ -149,11 +149,11 @@ TEST_F(FileTransferResilienceTest, TransferProgressAndFileCreation) {
 
   // 3. EOF
   nlohmann::json const eof_msg = {
-    {"type", "file_chunk"},
-    {"id", att_id},
-    {"seq", 2},
-    {"data", ""},
-    {"eof", true},
+      {"type", "file_chunk"},
+      {"id", att_id},
+      {"seq", 2},
+      {"data", ""},
+      {"eof", true},
   };
   service_->ProcessIncomingFileChunk(peer1, eof_msg);
 

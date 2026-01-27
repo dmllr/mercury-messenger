@@ -85,6 +85,10 @@ class PersistentStorageImpl {
       std::vector<uint64_t> const& message_ids,
       messaging::MessageStatus new_status
   ) = 0;
+  virtual void
+  UpdateAttachmentStatus(std::string const& attachment_id, messaging::AttachmentStatus status, bool is_downloaded) = 0;
+  virtual auto GetAttachment(std::string const& attachment_id) -> std::optional<messaging::Attachment> = 0;
+
   virtual auto GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t page_size)
       -> messaging::HistoryPage = 0;
   virtual auto GetFullMessageContent(ContactID const& peer_id, std::uint64_t message_id)
@@ -92,6 +96,8 @@ class PersistentStorageImpl {
   virtual auto GetChatSummaries(std::vector<ContactID> const& peer_ids) -> std::vector<messaging::ChatSummary> = 0;
   virtual auto GetMessagesWithStatus(ContactID const& peer_id, messaging::MessageStatus status)
       -> std::vector<messaging::HistoryEntryRecord> = 0;
+  // New method to find messages containing specific attachments that are pending transfer
+  virtual auto GetPendingAttachments(ContactID const& peer_id) -> std::vector<messaging::Attachment> = 0;
   virtual auto GetRemoteIds(ContactID const& peer_id, std::vector<uint64_t> const& local_ids)
       -> std::vector<uint64_t> = 0;
 
@@ -102,11 +108,8 @@ class PersistentStorageImpl {
 };
 
 // Public-facing class that uses the pimpl idiom.
-// This wrapper is instantiated in platform-specific code (which provides the impl)
-// and then passed to core components that require storage access.
 class PersistentStorage {
  public:
-  // The constructor now accepts a pre-constructed, platform-specific implementation.
   explicit PersistentStorage(std::unique_ptr<PersistentStorageImpl> pimpl)
       : pimpl_(std::move(pimpl)) {}
 
@@ -154,6 +157,13 @@ class PersistentStorage {
   ) const {
     pimpl_->UpdateMessageStatuses(peer_id, message_ids, new_status);
   }
+  void UpdateAttachmentStatus(std::string const& attachment_id, messaging::AttachmentStatus status, bool is_downloaded)
+      const {
+    pimpl_->UpdateAttachmentStatus(attachment_id, status, is_downloaded);
+  }
+  [[nodiscard]] auto GetAttachment(std::string const& attachment_id) const {
+    return pimpl_->GetAttachment(attachment_id);
+  }
   [[nodiscard]] auto GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t page_size) const {
     return pimpl_->GetHistoryPage(peer_id, page_index, page_size);
   }
@@ -165,6 +175,9 @@ class PersistentStorage {
   }
   [[nodiscard]] auto GetMessagesWithStatus(ContactID const& peer_id, messaging::MessageStatus status) const {
     return pimpl_->GetMessagesWithStatus(peer_id, status);
+  }
+  [[nodiscard]] auto GetPendingAttachments(ContactID const& peer_id) const {
+    return pimpl_->GetPendingAttachments(peer_id);
   }
   [[nodiscard]] auto GetRemoteIds(ContactID const& peer_id, std::vector<uint64_t> const& local_ids) const {
     return pimpl_->GetRemoteIds(peer_id, local_ids);

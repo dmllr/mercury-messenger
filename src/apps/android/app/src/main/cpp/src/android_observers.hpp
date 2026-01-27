@@ -160,7 +160,8 @@ class AndroidConversationObserver final
               j_mime,
               static_cast<jlong>(att.size_bytes),
               j_thumb,
-              static_cast<jboolean>(att.is_downloaded)
+              static_cast<jboolean>(att.is_downloaded),
+              static_cast<jint>(att.status)
           );
 
           env->CallBooleanMethod(j_attachments, list_add_method, j_att);
