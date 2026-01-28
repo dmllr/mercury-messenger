@@ -1,15 +1,5 @@
 add_library(eillance-core STATIC
   eillance/client/client.cpp
-  eillance/services/account_service.cpp
-  eillance/services/contact_service.cpp
-  eillance/services/messaging_service.cpp
-  eillance/services/media_call_service.cpp
-  eillance/view_model/contacts_view_model.cpp
-  eillance/view_model/conversation_view_model.cpp
-  eillance/view_model/call_view_model.cpp
-  eillance/view_model/profile_view_model.cpp
-  eillance/view_model/settings_view_model.cpp
-  eillance/view_model/debug_view_model.cpp
 )
 
 set(root "../../..")
