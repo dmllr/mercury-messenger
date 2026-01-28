@@ -164,16 +164,16 @@ class MessagingService {
         }
       }
 
-      domain_attachments.push_back({
-        .id = GenerateAttachmentId(),
-        .type = req.type,
-        .file_path = req.file_path,
-        .mime_type = mime,
-        .size_bytes = file_size,
-        .thumbnail_base64 = req.thumbnail_base64,
-        .hash = hash,
-        .is_downloaded = true,
-        .status = messaging::AttachmentStatus::pending}
+      domain_attachments.push_back(
+          {.id = GenerateAttachmentId(),
+           .type = req.type,
+           .file_path = req.file_path,
+           .mime_type = mime,
+           .size_bytes = file_size,
+           .thumbnail_base64 = req.thumbnail_base64,
+           .hash = hash,
+           .is_downloaded = true,
+           .status = messaging::AttachmentStatus::pending}
       );
     }
 

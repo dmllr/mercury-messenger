@@ -50,12 +50,12 @@ class AttachmentTest : public ::testing::Test {
   }
 
   void TearDown() override {
-    service_.reset();  // Destroy MessagingService
-    file_transfer_service_.reset(); // Destroy FileTransferService to close open file handles
+    service_.reset();                // Destroy MessagingService
+    file_transfer_service_.reset();  // Destroy FileTransferService to close open file handles
     std::filesystem::remove(temp_file_path_);
     // Cleanup any extra files
     if (std::filesystem::exists("test_bad_file")) {
-        std::filesystem::remove("test_bad_file");
+      std::filesystem::remove("test_bad_file");
     }
   }
 

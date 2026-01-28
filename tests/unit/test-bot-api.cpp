@@ -41,19 +41,28 @@ class BotApiTest : public ::testing::Test {
 
     // Fix: Set callbacks to avoid invariant violations
     client_->GetAccountService()->SetOnMyProfileUpdatedCallback([]() {});
+
+    // Contact Service
     client_->GetContactService()->SetContactRequestCallback([](auto const&) {});
     client_->GetContactService()->SetContactStatusChangedCallback([](auto const&, auto) {});
-    client_->GetContactService()->SetContactProfileUpdatedCallback([](auto const&) {});
     client_->GetContactService()->SetContactRemovedCallback([](auto const&) {});
-    client_->GetContactService()->SetPeerListUpdateCallback([](auto const&) {});
-    client_->GetContactService()->SetProfileReceivedCallback([](auto const&, auto const&) {});
+
+    // Profile Service
+    client_->GetProfileService()->SetContactProfileUpdatedCallback([](auto const&) {});
+    client_->GetProfileService()->SetPeerListUpdateCallback([](auto const&) {});
+    client_->GetProfileService()->SetProfileReceivedCallback([](auto const&, auto const&) {});
+
+    // Media
     client_->GetMediaCallService()->SetIncomingCallCallback([](auto const&, auto) {});
     client_->GetMediaCallService()->SetCallRingingCallback([](auto const&) {});
     client_->GetMediaCallService()->SetCallAcceptedCallback([](auto const&) {});
     client_->GetMediaCallService()->SetCallTerminatedCallback([](auto const&) {});
     client_->GetMediaCallService()->SetFrameReceivedCallback([](auto const&) {});
+
+    // Messaging
     client_->GetMessagingService()->SetChatMessageReceivedCallback([](auto const&, auto const&) {});
     client_->GetMessagingService()->SetMessageStatusChangedCallback([](auto const&, auto, auto) {});
+
     client_->SetStatusCallback([](auto const&, auto, auto) {});
 
     // Initialize Identity

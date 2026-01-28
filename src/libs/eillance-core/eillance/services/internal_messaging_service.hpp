@@ -12,6 +12,7 @@
 #include "eillance/services/file_transfer_service.hpp"
 #include "eillance/services/media_call_service.hpp"
 #include "eillance/services/messaging_service.hpp"
+#include "eillance/services/profile_service.hpp"
 #include "eillance/transport/transport.hpp"
 
 namespace eillance::services {
@@ -26,14 +27,16 @@ class InternalMessagingService {
       std::shared_ptr<ContactService> contact_service,
       std::shared_ptr<MessagingService> messaging_service,
       std::shared_ptr<MediaCallService> media_call_service,
-      std::shared_ptr<FileTransferService> file_transfer_service
+      std::shared_ptr<FileTransferService> file_transfer_service,
+      std::shared_ptr<ProfileService> profile_service
   )
       : transport_(std::move(transport)),
         account_service_(std::move(account_service)),
         contact_service_(std::move(contact_service)),
         messaging_service_(std::move(messaging_service)),
         media_call_service_(std::move(media_call_service)),
-        file_transfer_service_(std::move(file_transfer_service)) {}
+        file_transfer_service_(std::move(file_transfer_service)),
+        profile_service_(std::move(profile_service)) {}
 
   // Handles messages from the Signaling Server (Authentication, System status)
   void ProcessSystemMessage(std::string const& type, Json const& message) {
@@ -127,11 +130,11 @@ class InternalMessagingService {
     } else if (type == "contact_signature") {
       contact_service_->OnContactSignature(peer_id, message["signature"]);
     } else if (type == "profile_info") {
-      contact_service_->OnProfileUpdate(peer_id, message);
+      profile_service_->OnProfileUpdate(peer_id, message);
     } else if (type == "profile_request") {
-      contact_service_->SyncProfile(peer_id);
+      profile_service_->SyncProfile(peer_id);
     } else if (type == "profile") {
-      contact_service_->OnDeviceProfileReceived(peer_id, message["profile"]);
+      profile_service_->OnDeviceProfileReceived(peer_id, message["profile"]);
     } else if (type == "termination") {
       transport_->RemovePeer(peer_id);
     }
@@ -167,7 +170,7 @@ class InternalMessagingService {
 
     // Triggers
     messaging_service_->SendQueuedMessages(peer_id);
-    contact_service_->SyncProfile(peer_id);
+    profile_service_->SyncProfile(peer_id);
   }
 
   // --- Helpers for Peer Handler Setup ---
@@ -268,7 +271,7 @@ class InternalMessagingService {
       }
       // Connection fully established logic
       messaging_service_->SendQueuedMessages(peer_id);
-      contact_service_->SyncProfile(peer_id);
+      profile_service_->SyncProfile(peer_id);
     } else {
       LGE << "Failed key exchange with " << peer_id.ToString();
     }
@@ -304,6 +307,7 @@ class InternalMessagingService {
   std::shared_ptr<MessagingService> messaging_service_;
   std::shared_ptr<MediaCallService> media_call_service_;
   std::shared_ptr<FileTransferService> file_transfer_service_;
+  std::shared_ptr<ProfileService> profile_service_;
 };
 
 }  // namespace eillance::services

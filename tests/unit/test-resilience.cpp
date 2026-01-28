@@ -45,19 +45,28 @@ class ResilienceTest : public ::testing::Test {
 
     // 5. Setup dummy callbacks to satisfy invariants during operations
     client_->GetAccountService()->SetOnMyProfileUpdatedCallback([]() {});
+
+    // Contact Service
     client_->GetContactService()->SetContactRequestCallback([](auto const&) {});
     client_->GetContactService()->SetContactStatusChangedCallback([](auto const&, auto) {});
-    client_->GetContactService()->SetContactProfileUpdatedCallback([](auto const&) {});
     client_->GetContactService()->SetContactRemovedCallback([](auto const&) {});
-    client_->GetContactService()->SetPeerListUpdateCallback([](auto const&) {});
-    client_->GetContactService()->SetProfileReceivedCallback([](auto const&, auto const&) {});
+
+    // Profile Service
+    client_->GetProfileService()->SetContactProfileUpdatedCallback([](auto const&) {});
+    client_->GetProfileService()->SetPeerListUpdateCallback([](auto const&) {});
+    client_->GetProfileService()->SetProfileReceivedCallback([](auto const&, auto const&) {});
+
+    // Media
     client_->GetMediaCallService()->SetIncomingCallCallback([](auto const&, auto) {});
     client_->GetMediaCallService()->SetCallRingingCallback([](auto const&) {});
     client_->GetMediaCallService()->SetCallAcceptedCallback([](auto const&) {});
     client_->GetMediaCallService()->SetCallTerminatedCallback([](auto const&) {});
     client_->GetMediaCallService()->SetFrameReceivedCallback([](auto const&) {});
+
+    // Messaging
     client_->GetMessagingService()->SetChatMessageReceivedCallback([](auto const&, auto const&) {});
     client_->GetMessagingService()->SetMessageStatusChangedCallback([](auto const&, auto, auto) {});
+
     client_->SetStatusCallback([](auto const&, auto, auto) {});
 
     // 6. Setup Identity
@@ -123,6 +132,7 @@ TEST_F(ResilienceTest, PendingReadReceiptsPersistAndSend) {
 
   // Simulate Data Channel Open (triggers queue flush)
   mock_transport_->log.sent_peer_messages.clear();
+  // Using delegate to simulate transport event which Client listens to via InternalMessagingService
   mock_transport_->delegate->OnDataChannelOpen(peer1);
   FlushClientQueue();
 
@@ -253,7 +263,7 @@ TEST_F(ResilienceTest, ReinstallRecovery_MessageReceipt) {
 
   std::string plain = "Recovery Message";
   std::string payload;
-  payload.push_back(static_cast<char>(services::MessagingService::currentMessageVersion));
+  payload.push_back(services::MessagingService::currentMessageVersion);
   payload.append(plain);
   auto encrypted = other.Encrypt(payload);
 
@@ -275,9 +285,9 @@ TEST_F(ResilienceTest, ReinstallRecovery_MessageReceipt) {
   EXPECT_EQ(contact->status, identity::ContactStatus::confirmed);
 
   // 5. Verify message stored
-  auto history = client_->GetMessageHistoryPage(peer1, 0, 10);
-  ASSERT_FALSE(history.messages.empty());
-  auto const& data = std::get<messaging::MessageEntry>(history.messages[0].data);
+  auto [messages, total_messages] = client_->GetMessageHistoryPage(peer1, 0, 10);
+  ASSERT_FALSE(messages.empty());
+  auto const& data = std::get<messaging::MessageEntry>(messages[0].data);
   EXPECT_EQ(data.content, "Recovery Message");
 }
 
@@ -288,7 +298,7 @@ TEST_F(ResilienceTest, ReinstallRecovery_ContactAdd) {
   ASSERT_TRUE(client_->GetContactService()->IsConfirmed(peer1));
 
   // 2. Simulate receiving "contact_request" (B adding A)
-  nlohmann::json req_msg = {
+  nlohmann::json const req_msg = {
       {"from", peer1.ToString()},
       {"type", "contact_add_request"},
       {"profile", {{"display_name", "Reinstalled B"}}}
