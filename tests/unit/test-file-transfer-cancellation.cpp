@@ -8,6 +8,7 @@
 #include <nlohmann/json.hpp>
 
 #include "eillance/identity/contact_manager.hpp"
+#include "eillance/services/file_transfer_service.hpp"
 #include "eillance/services/messaging_service.hpp"
 #include "mock_persistent_storage.hpp"
 #include "mock_transport.hpp"
@@ -38,8 +39,16 @@ class FileTransferCancellationTest : public ::testing::Test {
     contact_manager_ = std::make_shared<identity::ContactManager>(storage_);
     contact_manager_->AddContact(peer1);
 
+    file_transfer_service_ = std::make_shared<services::FileTransferService>(storage_, transport_);
+
     auto conn_handler = [](ContactID const&) {};
-    service_ = std::make_unique<services::MessagingService>(storage_, transport_, contact_manager_, conn_handler);
+    service_ = std::make_unique<services::MessagingService>(
+        storage_,
+        transport_,
+        contact_manager_,
+        file_transfer_service_,
+        conn_handler
+    );
 
     // Satisfy invariants
     service_->SetMessageStatusChangedCallback([](auto, auto, auto) {});
@@ -52,6 +61,7 @@ class FileTransferCancellationTest : public ::testing::Test {
   void TearDown() override {
     service_->StopDeliveryService();
     service_.reset();
+    file_transfer_service_.reset(); // Ensure files are closed before deletion
     std::filesystem::remove_all(temp_dir_);
   }
 
@@ -63,6 +73,7 @@ class FileTransferCancellationTest : public ::testing::Test {
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<transport::Transport> transport_;
   std::shared_ptr<identity::ContactManager> contact_manager_;
+  std::shared_ptr<services::FileTransferService> file_transfer_service_;
   std::unique_ptr<services::MessagingService> service_;
 
   ContactID const peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
@@ -81,7 +92,7 @@ TEST_F(FileTransferCancellationTest, CancelUpload) {
     std::ofstream ofs(file_path, std::ios::binary);
     // Write enough data to ensure it doesn't finish in one pump
     std::string data(
-        services::MessagingService::windowSizeChunks * services::MessagingService::chunkSizeBytes * 2,
+        services::FileTransferService::windowSizeChunks * services::FileTransferService::chunkSizeBytes * 2,
         'A'
     );
     ofs << data;
@@ -135,7 +146,7 @@ TEST_F(FileTransferCancellationTest, CancelDownload) {
 
   // 2. Start Download by receiving chunk 0
   nlohmann::json chunk = {{"type", "file_chunk"}, {"id", "down_id"}, {"seq", 0}, {"data", "001122"}, {"eof", false}};
-  service_->ProcessIncomingFileChunk(peer1, chunk);
+  file_transfer_service_->ProcessMessage(peer1, chunk);
 
   // Verify temp file exists
   std::filesystem::path temp_path = attachments_dir_ / "down_id.tmp";

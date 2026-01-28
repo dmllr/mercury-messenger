@@ -8,6 +8,7 @@
 #include <openssl/sha.h>
 
 #include "eillance/identity/contact_manager.hpp"
+#include "eillance/services/file_transfer_service.hpp"
 #include "eillance/services/messaging_service.hpp"
 #include "mock_persistent_storage.hpp"
 #include "mock_transport.hpp"
@@ -38,9 +39,17 @@ class FileTransferResilienceTest : public ::testing::Test {
     contact_manager_->AddContact(peer1);
     contact_manager_->MarkAsConfirmed(peer1);
 
+    file_transfer_service_ = std::make_shared<services::FileTransferService>(storage_, transport_);
+
     auto conn_handler = [](ContactID const&) {};
 
-    service_ = std::make_unique<services::MessagingService>(storage_, transport_, contact_manager_, conn_handler);
+    service_ = std::make_unique<services::MessagingService>(
+        storage_,
+        transport_,
+        contact_manager_,
+        file_transfer_service_,
+        conn_handler
+    );
 
     // Default dummy callbacks
     service_->SetChatMessageReceivedCallback([](auto, auto) {});
@@ -52,6 +61,7 @@ class FileTransferResilienceTest : public ::testing::Test {
   void TearDown() override {
     service_->StopDeliveryService();
     service_.reset();
+    file_transfer_service_.reset(); // Ensure files are closed before deletion
     std::filesystem::remove_all(temp_dir_);
   }
 
@@ -80,6 +90,7 @@ class FileTransferResilienceTest : public ::testing::Test {
   transport::MockTransport* mock_transport_;
   std::shared_ptr<transport::Transport> transport_;
   std::shared_ptr<identity::ContactManager> contact_manager_;
+  std::shared_ptr<services::FileTransferService> file_transfer_service_;
   std::unique_ptr<services::MessagingService> service_;
 
   ContactID const peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
@@ -131,8 +142,8 @@ TEST_F(FileTransferResilienceTest, TransferProgressAndFileCreation) {
   // 2. Process Chunks
   // Service uses 4KB chunks (MessagingService::chunkSizeBytes)
   // We must match this size for the offset calculation (seq * chunk_size) to align with data written.
-  constexpr auto chunk_size = services::MessagingService::chunkSizeBytes;
-  size_t const total_chunks = (file_data.size() + chunk_size - 1) / services::MessagingService::chunkSizeBytes;
+  constexpr auto chunk_size = services::FileTransferService::chunkSizeBytes;
+  size_t const total_chunks = (file_data.size() + chunk_size - 1) / services::FileTransferService::chunkSizeBytes;
 
   for (size_t seq = 0; seq < total_chunks; ++seq) {
     size_t const offset = seq * chunk_size;
@@ -144,7 +155,7 @@ TEST_F(FileTransferResilienceTest, TransferProgressAndFileCreation) {
         {"data", eillance::crypto::ToHex(StringToBytes(chunk))},
         {"eof", false},
     };
-    service_->ProcessIncomingFileChunk(peer1, msg);
+    file_transfer_service_->ProcessMessage(peer1, msg);
   }
 
   // 3. EOF
@@ -155,7 +166,7 @@ TEST_F(FileTransferResilienceTest, TransferProgressAndFileCreation) {
       {"data", ""},
       {"eof", true},
   };
-  service_->ProcessIncomingFileChunk(peer1, eof_msg);
+  file_transfer_service_->ProcessMessage(peer1, eof_msg);
 
   // Verify completion
   EXPECT_TRUE(completed);
@@ -199,14 +210,14 @@ TEST_F(FileTransferResilienceTest, FailsGracefullyIfHashMismatch) {
       {"data", eillance::crypto::ToHex(StringToBytes(data))},
       {"eof", false}
   };
-  service_->ProcessIncomingFileChunk(peer1, chunk);
+  file_transfer_service_->ProcessMessage(peer1, chunk);
 
   // 3. Send EOF
   bool completed = false;
   service_->SetAttachmentDownloadedCallback([&](auto, auto) { completed = true; });
 
   nlohmann::json const eof = {{"type", "file_chunk"}, {"id", "bad_hash_file"}, {"seq", 1}, {"data", ""}, {"eof", true}};
-  service_->ProcessIncomingFileChunk(peer1, eof);
+  file_transfer_service_->ProcessMessage(peer1, eof);
 
   // 4. Verify
   EXPECT_FALSE(completed);  // Should not trigger callback on failure

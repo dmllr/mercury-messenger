@@ -3,6 +3,7 @@
 #include "eillance/capture/capture.hpp"
 #include "eillance/capture/config.hpp"
 #include "eillance/identity/contact_manager.hpp"
+#include "eillance/services/file_transfer_service.hpp"
 #include "eillance/services/media_call_service.hpp"
 #include "eillance/services/messaging_service.hpp"
 #include "mock_persistent_storage.hpp"
@@ -38,9 +39,16 @@ class MediaCallServiceTest : public ::testing::Test {
     auto contact_manager = std::make_shared<identity::ContactManager>(storage_);
     auto conn_handler = [](ContactID const&) {};
 
+    auto file_transfer_service = std::make_shared<services::FileTransferService>(storage_, transport_);
+
     // 3. Initialize messaging service (needed by MediaCallService)
-    messaging_service_ =
-        std::make_unique<services::MessagingService>(storage_, transport_, contact_manager, conn_handler);
+    messaging_service_ = std::make_unique<services::MessagingService>(
+        storage_,
+        transport_,
+        contact_manager,
+        file_transfer_service,
+        conn_handler
+    );
 
     // 4. Initialize MediaCallService
     service_ = std::make_unique<services::MediaCallService>(transport_);

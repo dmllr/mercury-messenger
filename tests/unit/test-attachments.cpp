@@ -6,6 +6,7 @@
 
 #include "eillance/crypto/crypto.hpp"
 #include "eillance/messaging/history.hpp"
+#include "eillance/services/file_transfer_service.hpp"
 #include "eillance/services/messaging_service.hpp"
 #include "mock_persistent_storage.hpp"
 #include "mock_transport.hpp"
@@ -31,7 +32,15 @@ class AttachmentTest : public ::testing::Test {
     auto contact_manager = std::make_shared<identity::ContactManager>(storage_);
     auto conn_handler = [](ContactID const&) {};
 
-    service_ = std::make_unique<services::MessagingService>(storage_, transport_, contact_manager, conn_handler);
+    file_transfer_service_ = std::make_shared<services::FileTransferService>(storage_, transport_);
+
+    service_ = std::make_unique<services::MessagingService>(
+        storage_,
+        transport_,
+        contact_manager,
+        file_transfer_service_,
+        conn_handler
+    );
 
     // Satisfy invariants required by MessagingService
     service_->SetMessageStatusChangedCallback([](auto, auto, auto) {});
@@ -41,16 +50,20 @@ class AttachmentTest : public ::testing::Test {
   }
 
   void TearDown() override {
-    service_.reset();  // Reset service to close file handles before deletion
+    service_.reset();  // Destroy MessagingService
+    file_transfer_service_.reset(); // Destroy FileTransferService to close open file handles
     std::filesystem::remove(temp_file_path_);
     // Cleanup any extra files
-    std::filesystem::remove("test_bad_file");
+    if (std::filesystem::exists("test_bad_file")) {
+        std::filesystem::remove("test_bad_file");
+    }
   }
 
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::unique_ptr<transport::MockTransport> mock_transport_impl_;
   transport::MockTransport* mock_transport_;
   std::shared_ptr<transport::Transport> transport_;
+  std::shared_ptr<services::FileTransferService> file_transfer_service_;
   std::unique_ptr<services::MessagingService> service_;
   std::string temp_file_path_;
 
@@ -198,7 +211,14 @@ TEST_F(AttachmentTest, AttachmentPersistenceAcrossRestarts) {
   // 2. Restart Service (Create new instance sharing same storage)
   auto contact_manager = std::make_shared<identity::ContactManager>(storage_);
   auto conn_handler = [](ContactID const&) {};
-  auto new_service = std::make_unique<services::MessagingService>(storage_, transport_, contact_manager, conn_handler);
+  auto file_transfer_service = std::make_shared<services::FileTransferService>(storage_, transport_);
+  auto new_service = std::make_unique<services::MessagingService>(
+      storage_,
+      transport_,
+      contact_manager,
+      file_transfer_service,
+      conn_handler
+  );
 
   // 3. Load History
   // GetHistoryPage should detect the file exists and update is_downloaded to true

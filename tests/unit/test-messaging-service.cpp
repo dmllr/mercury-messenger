@@ -6,6 +6,7 @@
 #include <openssl/sha.h>
 
 #include "eillance/identity/contact_manager.hpp"
+#include "eillance/services/file_transfer_service.hpp"
 #include "eillance/services/messaging_service.hpp"
 #include "mock_persistent_storage.hpp"
 #include "mock_transport.hpp"
@@ -60,7 +61,15 @@ class MessagingServiceTest : public ::testing::Test {
 
     auto conn_handler = [this](ContactID const& id) { connection_requests_.push_back(id); };
 
-    service_ = std::make_unique<services::MessagingService>(storage_, transport_, contact_manager_, conn_handler);
+    file_transfer_service_ = std::make_shared<services::FileTransferService>(storage_, transport_);
+
+    service_ = std::make_unique<services::MessagingService>(
+        storage_,
+        transport_,
+        contact_manager_,
+        file_transfer_service_,
+        conn_handler
+    );
     service_->SetChatMessageReceivedCallback([](auto, auto) {});
     service_->SetMessageStatusChangedCallback([](auto, auto, auto) {});
   }
@@ -70,6 +79,7 @@ class MessagingServiceTest : public ::testing::Test {
       service_->StopDeliveryService();
     }
     service_.reset();
+    file_transfer_service_.reset(); // Ensure files are closed before deletion
     // Release persistent storage BEFORE deleting files it might hold open (like SQLite DB)
     storage_.reset();
     // Best effort cleanup
@@ -109,6 +119,7 @@ class MessagingServiceTest : public ::testing::Test {
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<transport::Transport> transport_;
   std::shared_ptr<identity::ContactManager> contact_manager_;
+  std::shared_ptr<services::FileTransferService> file_transfer_service_;
   std::unique_ptr<services::MessagingService> service_;
   std::vector<ContactID> connection_requests_;
   std::filesystem::path temp_dir_;
@@ -202,11 +213,11 @@ TEST_F(MessagingServiceTest, DownloadTriggersCallback) {
   std::string data_hex = eillance::crypto::ToHex(data_bytes);
 
   nlohmann::json chunk_msg = {{"type", "file_chunk"}, {"id", "att_1"}, {"seq", 0}, {"data", data_hex}, {"eof", false}};
-  service_->ProcessIncomingFileChunk(peer1, chunk_msg);
+  file_transfer_service_->ProcessMessage(peer1, chunk_msg);
 
   // Send EOF chunk
   nlohmann::json eof_msg = {{"type", "file_chunk"}, {"id", "att_1"}, {"seq", 1}, {"data", ""}, {"eof", true}};
-  service_->ProcessIncomingFileChunk(peer1, eof_msg);
+  file_transfer_service_->ProcessMessage(peer1, eof_msg);
 
   // 3. Verify
   EXPECT_TRUE(download_cb_called);
