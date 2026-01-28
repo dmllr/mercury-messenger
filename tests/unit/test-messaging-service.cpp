@@ -79,7 +79,7 @@ class MessagingServiceTest : public ::testing::Test {
       service_->StopDeliveryService();
     }
     service_.reset();
-    file_transfer_service_.reset(); // Ensure files are closed before deletion
+    file_transfer_service_.reset();  // Ensure files are closed before deletion
     // Release persistent storage BEFORE deleting files it might hold open (like SQLite DB)
     storage_.reset();
     // Best effort cleanup

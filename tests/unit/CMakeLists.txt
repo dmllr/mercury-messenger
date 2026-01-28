@@ -41,6 +41,7 @@ add_executable(h-e-tests
   test-message-history.cpp
   test-messaging-service.cpp
   test-packet.cpp
+  test-profile-service.cpp
   test-profile-updates.cpp
   test-profile-view-model.cpp
   test-resilience.cpp

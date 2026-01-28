@@ -152,12 +152,8 @@ class FileTransferService {
     }
   }
 
-  void CancelTransfer(
-      ContactID const& peer_id,
-      std::string const& attachment_id,
-      bool is_upload,
-      bool notify_peer = true
-  ) {
+  void
+  CancelTransfer(ContactID const& peer_id, std::string const& attachment_id, bool is_upload, bool notify_peer = true) {
     std::lock_guard<std::mutex> const lock(transfers_mutex_);
 
     if (is_upload) {
@@ -259,9 +255,7 @@ class FileTransferService {
   using OnAttachmentStatusChangedCallback = std::function<
       void(ContactID const& peer_id, std::string const& attachment_id, messaging::AttachmentStatus status)>;
 
-  void SetAttachmentDownloadedCallback(OnAttachmentDownloadedCallback cb) {
-    on_attachment_downloaded_ = std::move(cb);
-  }
+  void SetAttachmentDownloadedCallback(OnAttachmentDownloadedCallback cb) { on_attachment_downloaded_ = std::move(cb); }
   void SetTransferProgressCallback(OnTransferProgressCallback cb) { on_transfer_progress_ = std::move(cb); }
   void SetAttachmentStatusChangedCallback(OnAttachmentStatusChangedCallback cb) {
     on_attachment_status_changed_ = std::move(cb);

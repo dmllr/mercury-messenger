@@ -98,6 +98,7 @@ class ClientEventRouter {
     auto contacts = client_->GetContactService();
     auto media = client_->GetMediaCallService();
     auto account = client_->GetAccountService();
+    auto profile = client_->GetProfileService();
 
     // NOLINTBEGIN(*-missing-std-forward)
     messaging->SetChatMessageReceivedCallback([](auto&&, auto&&) {});
@@ -105,12 +106,15 @@ class ClientEventRouter {
     messaging->SetAttachmentDownloadedCallback([](auto&&, auto&&) {});
     messaging->SetTransferProgressCallback([](auto&&, auto&&, auto) {});
     messaging->SetAttachmentStatusChangedCallback([](auto&&, auto&&, auto) {});
+
     contacts->SetContactRequestCallback([](auto&&) {});
     contacts->SetContactStatusChangedCallback([](auto&&, auto) {});
-    contacts->SetContactProfileUpdatedCallback([](auto&&) {});
     contacts->SetContactRemovedCallback([](auto&&) {});
-    contacts->SetPeerListUpdateCallback([](auto&&) {});
-    contacts->SetProfileReceivedCallback([](auto&&, auto&&) {});
+
+    profile->SetContactProfileUpdatedCallback([](auto&&) {});
+    profile->SetPeerListUpdateCallback([](auto&&) {});
+    profile->SetProfileReceivedCallback([](auto&&, auto&&) {});
+
     media->SetFrameReceivedCallback([](auto&&) {});
     media->SetIncomingCallCallback([](auto&&, auto) {});
     media->SetCallRingingCallback([](auto&&) {});
@@ -127,6 +131,7 @@ class ClientEventRouter {
     auto contacts = client_->GetContactService();
     auto media = client_->GetMediaCallService();
     auto account = client_->GetAccountService();
+    auto profile = client_->GetProfileService();
 
     messaging->SetChatMessageReceivedCallback([this](auto const& id, auto const& msg) {
       eventQueue_.Push(EventChatMessageReceived{id, msg});
@@ -143,18 +148,21 @@ class ClientEventRouter {
     messaging->SetAttachmentStatusChangedCallback([this](auto const& peer, auto const& att_id, auto status) {
       eventQueue_.Push(EventAttachmentStatusChanged{peer, att_id, status});
     });
+
     contacts->SetContactRequestCallback([this](auto const& id) { eventQueue_.Push(EventContactRequest{id}); });
     contacts->SetContactStatusChangedCallback([this](auto const& id, auto status) {
       eventQueue_.Push(EventContactStatusChanged{id, status});
     });
-    contacts->SetContactProfileUpdatedCallback([this](auto const& id) {
+    contacts->SetContactRemovedCallback([this](auto const& id) { eventQueue_.Push(EventContactRemoved{id}); });
+
+    profile->SetContactProfileUpdatedCallback([this](auto const& id) {
       eventQueue_.Push(EventContactProfileUpdated{id});
     });
-    contacts->SetContactRemovedCallback([this](auto const& id) { eventQueue_.Push(EventContactRemoved{id}); });
-    contacts->SetPeerListUpdateCallback([this](auto const& list) { eventQueue_.Push(EventPeerListUpdate{list}); });
-    contacts->SetProfileReceivedCallback([this](auto const& id, auto const& p) {
+    profile->SetPeerListUpdateCallback([this](auto const& list) { eventQueue_.Push(EventPeerListUpdate{list}); });
+    profile->SetProfileReceivedCallback([this](auto const& id, auto const& p) {
       eventQueue_.Push(EventProfileReceived{id, p});
     });
+
     media->SetFrameReceivedCallback([this](auto const& frame) { eventQueue_.Push(EventFrameReceived{frame}); });
     media->SetIncomingCallCallback([this](auto const& id, auto type) { eventQueue_.Push(EventIncomingCall{id, type}); }
     );

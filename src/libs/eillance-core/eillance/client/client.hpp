@@ -15,6 +15,7 @@
 #include "eillance/services/internal_messaging_service.hpp"
 #include "eillance/services/media_call_service.hpp"
 #include "eillance/services/messaging_service.hpp"
+#include "eillance/services/profile_service.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/transport/transport.hpp"
 #include "eillance/transport/transport_delegate.hpp"
@@ -37,21 +38,32 @@ class Client final : public transport::TransportDelegate {
 
     auto contact_manager = std::make_shared<identity::ContactManager>(storage_);
 
+    // Initialize FileTransferService
     file_transfer_service_ = std::make_shared<services::FileTransferService>(storage_, transport_);
-
-    contact_service_ = std::make_shared<services::ContactService>(
-        storage_,
-        transport_,
-        contact_manager,
-        account_service_.get(),
-        [this](ContactID const& id) { this->Connect(id); }  // Inject connection logic
-    );
 
     messaging_service_ = std::make_shared<services::MessagingService>(
         storage_,
         transport_,
         contact_manager,
         file_transfer_service_,
+        [this](ContactID const& id) { this->Connect(id); }  // Inject connection logic
+    );
+
+    profile_service_ = std::make_shared<services::ProfileService>(
+        storage_,
+        transport_,
+        contact_manager,
+        account_service_.get(),
+        messaging_service_.get(),
+        [this](ContactID const& id) { this->Connect(id); }
+    );
+
+    contact_service_ = std::make_shared<services::ContactService>(
+        storage_,
+        transport_,
+        contact_manager,
+        account_service_.get(),
+        profile_service_.get(),
         [this](ContactID const& id) { this->Connect(id); }  // Inject connection logic
     );
 
@@ -71,7 +83,8 @@ class Client final : public transport::TransportDelegate {
         contact_service_,
         messaging_service_,
         media_call_service_,
-        file_transfer_service_
+        file_transfer_service_,
+        profile_service_
     );
 
     // Wire Transport Status
@@ -112,6 +125,7 @@ class Client final : public transport::TransportDelegate {
   [[nodiscard]] auto GetFileTransferService() const -> std::shared_ptr<services::FileTransferService> {
     return file_transfer_service_;
   }
+  [[nodiscard]] auto GetProfileService() const -> std::shared_ptr<services::ProfileService> { return profile_service_; }
   [[nodiscard]] auto GetStorage() const -> std::shared_ptr<storage::PersistentStorage> { return storage_; }
 
   // --- Platform Injection ---
@@ -326,9 +340,7 @@ class Client final : public transport::TransportDelegate {
     internal_messaging_service_->ProcessSystemMessage(type, message);
   }
 
-  void OnDataChannelOpen(ContactID const& peer_id) override {
-    internal_messaging_service_->OnDataChannelOpen(peer_id);
-  }
+  void OnDataChannelOpen(ContactID const& peer_id) override { internal_messaging_service_->OnDataChannelOpen(peer_id); }
 
   void OnFrameReceived(ContactID const& peer_id, std::vector<std::byte> const& frame) override {
     media_call_service_->OnFrameReceived(peer_id, frame);
@@ -357,12 +369,12 @@ class Client final : public transport::TransportDelegate {
   }
 
   void BroadcastProfileUpdate() {
-    contact_service_->MarkAllContactsProfileSyncNeeded();
+    profile_service_->MarkAllContactsProfileSyncNeeded();
     // Trigger work check for all contacts
     auto const contacts = contact_service_->GetContacts();
     for (auto const& contact : contacts) {
       if (contact.status == identity::ContactStatus::confirmed) {
-        contact_service_->SyncProfile(contact.peer_id);
+        profile_service_->SyncProfile(contact.peer_id);
         Connect(contact.peer_id);
       }
     }
@@ -376,6 +388,7 @@ class Client final : public transport::TransportDelegate {
   std::shared_ptr<services::MessagingService> messaging_service_;
   std::shared_ptr<services::MediaCallService> media_call_service_;
   std::shared_ptr<services::FileTransferService> file_transfer_service_;
+  std::shared_ptr<services::ProfileService> profile_service_;
   std::shared_ptr<services::InternalMessagingService> internal_messaging_service_;
 
   DispatchQueue background_queue_{"ClientBgQueue", 1};

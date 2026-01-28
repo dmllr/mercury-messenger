@@ -2,6 +2,7 @@
 
 #include "eillance/services/contact_service.hpp"
 #include "eillance/services/file_transfer_service.hpp"
+#include "eillance/services/profile_service.hpp"
 #include "mock_persistent_storage.hpp"
 #include "mock_transport.hpp"
 
@@ -31,22 +32,6 @@ class ContactServiceTest : public ::testing::Test {
 
     auto contact_manager = std::make_shared<identity::ContactManager>(storage_);
 
-    contact_service_ = std::make_unique<services::ContactService>(
-        storage_,
-        transport_,
-        contact_manager,
-        account_service_.get(),
-        conn_handler
-    );
-
-    // Initialize dummy callbacks to avoid invariants
-    contact_service_->SetContactRequestCallback([](auto const&) {});
-    contact_service_->SetContactStatusChangedCallback([](auto const&, auto) {});
-    contact_service_->SetContactProfileUpdatedCallback([](auto const&) {});
-    contact_service_->SetContactRemovedCallback([](auto const&) {});
-    contact_service_->SetPeerListUpdateCallback([](auto const&) {});
-    contact_service_->SetProfileReceivedCallback([](auto const&, auto const&) {});
-
     file_transfer_service_ = std::make_shared<services::FileTransferService>(storage_, transport_);
 
     messaging_service_ = std::make_unique<services::MessagingService>(
@@ -61,12 +46,33 @@ class ContactServiceTest : public ::testing::Test {
     messaging_service_->SetChatMessageReceivedCallback([](auto const&, auto const&) {});
     messaging_service_->SetMessageStatusChangedCallback([](auto const&, auto, auto) {});
 
+    profile_service_ = std::make_unique<services::ProfileService>(
+        storage_,
+        transport_,
+        contact_manager,
+        account_service_.get(),
+        messaging_service_.get(),
+        conn_handler
+    );
+
+    contact_service_ = std::make_unique<services::ContactService>(
+        storage_,
+        transport_,
+        contact_manager,
+        account_service_.get(),
+        profile_service_.get(),
+        conn_handler
+    );
+
+    // Initialize dummy callbacks to avoid invariants
+    contact_service_->SetContactRequestCallback([](auto const&) {});
+    contact_service_->SetContactStatusChangedCallback([](auto const&, auto) {});
+    contact_service_->SetContactRemovedCallback([](auto const&) {});
+
     contact_service_->SetMessagingService(messaging_service_.get());
   }
 
-  void TearDown() override {
-      file_transfer_service_.reset();
-  }
+  void TearDown() override { file_transfer_service_.reset(); }
 
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::unique_ptr<transport::MockTransport> mock_transport_impl_;
@@ -75,6 +81,7 @@ class ContactServiceTest : public ::testing::Test {
   std::unique_ptr<services::AccountService> account_service_;
   std::shared_ptr<services::FileTransferService> file_transfer_service_;
   std::unique_ptr<services::MessagingService> messaging_service_;
+  std::unique_ptr<services::ProfileService> profile_service_;
   std::unique_ptr<services::ContactService> contact_service_;
 
   ContactID const peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
@@ -170,23 +177,4 @@ TEST_F(ContactServiceTest, UnblockContact) {
   ASSERT_TRUE(contact.has_value());
   // Should revert to awaiting approval or similar non-blocked state
   EXPECT_NE(contact->status, identity::ContactStatus::rejected);
-}
-
-TEST_F(ContactServiceTest, DeviceProfileReceived) {
-  bool profile_cb_called = false;
-  contact_service_->SetProfileReceivedCallback([&](ContactID const& id, Device::Profile const& profile) {
-    if (id == peer1 && !profile.empty()) {
-      EXPECT_EQ(profile[0].id, "0");
-      EXPECT_EQ(profile[0].name, "Back Camera");
-      profile_cb_called = true;
-    }
-  });
-
-  nlohmann::json const profile_json = {
-      {{"id", "0"}, {"name", "Back Camera"}, {"resolutions", {{{"width", 1280}, {"height", 720}}}}}
-  };
-
-  contact_service_->OnDeviceProfileReceived(peer1, profile_json);
-
-  EXPECT_TRUE(profile_cb_called);
 }
