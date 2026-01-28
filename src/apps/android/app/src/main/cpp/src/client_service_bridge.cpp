@@ -306,12 +306,12 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationView
       char const* t = thumb ? env->GetStringUTFChars(thumb, nullptr) : "";
       char const* m = mime ? env->GetStringUTFChars(mime, nullptr) : "";
 
-      atts.push_back({
-        .file_path = p,
-        .type = static_cast<eillance::messaging::AttachmentType>(type),
-        .thumbnail_base64 = t,
-        .mime_type = m
-      });
+      atts.push_back(
+          {.file_path = p,
+           .type = static_cast<eillance::messaging::AttachmentType>(type),
+           .thumbnail_base64 = t,
+           .mime_type = m}
+      );
 
       env->ReleaseStringUTFChars(path, p);
       if (thumb) {
@@ -327,7 +327,8 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationView
   env->ReleaseStringUTFChars(message, msg_chars);
 }
 
-extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationViewModel_nativeLoadOlder(JNIEnv* /*env*/, jobject /*instance*/, jlong ptr) {
+extern "C" JNIEXPORT void JNICALL
+Java_hela_eillance_viewmodels_ConversationViewModel_nativeLoadOlder(JNIEnv* /*env*/, jobject /*instance*/, jlong ptr) {
   auto* vm = reinterpret_cast<eillance::view_model::ConversationViewModel*>(ptr);
   vm->LoadOlderMessages();
 }
