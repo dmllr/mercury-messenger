@@ -124,9 +124,13 @@ class ProtocolSafetyTest : public ::testing::Test {
         file_transfer_service_,
         [](auto) {}
     );
+
     // Dummy callbacks
     messaging_service_->SetChatMessageReceivedCallback([](auto, auto) {});
     messaging_service_->SetMessageStatusChangedCallback([](auto, auto, auto) {});
+    messaging_service_->SetAttachmentStatusChangedCallback([](auto, auto, auto) {});
+    messaging_service_->SetTransferProgressCallback([](auto, auto, auto) {});
+    messaging_service_->SetAttachmentDownloadedCallback([](auto, auto) {});
 
     profile_service_ = std::make_unique<services::ProfileService>(
         storage_,
@@ -321,7 +325,8 @@ TEST_F(ProtocolSafetyTest, VerifyRealMessageSignatures) {
   // Current Hash calculation based on implementation:
   // CHAT_OUTER: {is_system:boolean,message_id:number,payload:binary,type:string}
   // CHAT_INNER: {c:string,v:number}
-  // ATT_OUTER:  {attachments:[{hash:string,id:string,mime:string,size:number,thumb:string,type:string}],is_system:boolean,message_id:number,payload:binary,type:string}
+  // ATT_OUTER:
+  // {attachments:[{hash:string,id:string,mime:string,size:number,thumb:string,type:string}],is_system:boolean,message_id:number,payload:binary,type:string}
   // ATT_INNER:  {c:string,v:number}
   // RECEIPT:    {message_id:number,status:string,type:string}
   // READ:       {message_ids:[number],type:string}

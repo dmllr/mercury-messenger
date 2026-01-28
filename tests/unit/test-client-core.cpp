@@ -101,7 +101,12 @@ TEST_F(ClientCoreTest, IncomingKeyExchangeTriggersReply) {
   // 3. Simulate receiving this message on data channel
   std::string msg_str = key_msg.dump();
   ASSERT_TRUE(peer->on_data_channel_message) << "Data channel handler not set!";
-  peer->on_data_channel_message(msg_str);
+
+  // Convert to bytes for new interface
+  std::vector<std::byte> msg_bytes(msg_str.size());
+  std::transform(msg_str.begin(), msg_str.end(), msg_bytes.begin(), [](char c) { return static_cast<std::byte>(c); });
+
+  peer->on_data_channel_message(msg_bytes);
 
   FlushClientQueue();
 

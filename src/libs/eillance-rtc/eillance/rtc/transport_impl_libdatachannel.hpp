@@ -187,6 +187,24 @@ class RtcTransport final : public transport::Transport::TransportInterface {
     }
   }
 
+  auto SendPeerDataChannelBinaryMessage(ContactID const& peer_id, std::span<std::byte const> message) const
+      -> bool override {
+    std::lock_guard<std::mutex> const lock(peersMutex_);
+    auto it = peers_.find(peer_id);
+    if (it == peers_.end() || !it->second->data_channel) {
+      return false;
+    }
+
+    auto dc = std::static_pointer_cast<::rtc::DataChannel>(it->second->data_channel);
+    if (dc && dc->isOpen()) {
+      // Assuming libdatachannel send returns boolean success/failure.
+      // If it returns void, we assume true if open.
+      // Based on libdatachannel header, send returns bool.
+      return dc->send(reinterpret_cast<std::byte const*>(message.data()), message.size());
+    }
+    return false;
+  }
+
   void AddToStream(std::shared_ptr<Peer> const& peer, bool is_adding_video) const override {
     if (peer->GetState() == Peer::State::waiting) {
       peer->SetState(is_adding_video ? Peer::State::waitingForAudio : Peer::State::waitingForVideo);
@@ -314,7 +332,15 @@ class RtcTransport final : public transport::Transport::TransportInterface {
 
         dc->onOpen([this, peer_id]() { delegate_->OnDataChannelOpen(peer_id); });
         if (peer->on_data_channel_message) {
-          dc->onMessage(nullptr, [cb = peer->on_data_channel_message](std::string const& msg) { cb(msg); });
+          dc->onMessage(nullptr, [cb = peer->on_data_channel_message](::rtc::message_variant const& msg) {
+            if (std::holds_alternative<std::string>(msg)) {
+              auto const& str = std::get<std::string>(msg);
+              cb(std::span<std::byte const>(reinterpret_cast<std::byte const*>(str.data()), str.size()));
+            } else if (std::holds_alternative<::rtc::binary>(msg)) {
+              auto const& bin = std::get<::rtc::binary>(msg);
+              cb(std::span<std::byte const>(bin));
+            }
+          });
         } else {
           LGE << "No on_message handler found for peer " << peer_id << " on new data channel.";
         }
@@ -349,7 +375,15 @@ class RtcTransport final : public transport::Transport::TransportInterface {
 
     dc->onOpen([this, peer_id]() { delegate_->OnDataChannelOpen(peer_id); });
     if (peer->on_data_channel_message) {
-      dc->onMessage(nullptr, [cb = peer->on_data_channel_message](std::string const& msg) { cb(msg); });
+      dc->onMessage(nullptr, [cb = peer->on_data_channel_message](::rtc::message_variant const& msg) {
+        if (std::holds_alternative<std::string>(msg)) {
+          auto const& str = std::get<std::string>(msg);
+          cb(std::span<std::byte const>(reinterpret_cast<std::byte const*>(str.data()), str.size()));
+        } else if (std::holds_alternative<::rtc::binary>(msg)) {
+          auto const& bin = std::get<::rtc::binary>(msg);
+          cb(std::span<std::byte const>(bin));
+        }
+      });
     }
 
     peer->data_channel = dc;

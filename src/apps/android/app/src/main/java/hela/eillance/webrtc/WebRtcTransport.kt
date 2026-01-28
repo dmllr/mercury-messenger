@@ -72,6 +72,7 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
   private external fun nativeOnSystemMessage(nativePointer: Long, type: String, message: String)
   private external fun nativeOnSignalingError(nativePointer: Long, peerId: String, error: String)
   private external fun nativeOnDataChannelMessage(nativePointer: Long, peerId: String, message: String)
+  private external fun nativeOnDataChannelMessageBinary(nativePointer: Long, peerId: String, data: ByteArray)
   private external fun nativeOnDataChannelOpen(nativePointer: Long, peerId: String)
   private external fun nativeOnPeerConnectionStateChange(nativePointer: Long, peerId: String, state: Int)
   private external fun nativeOnSignalingConnectionStateChange(nativePointer: Long, state: Int)
@@ -213,8 +214,8 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
             buffer ?: return
             val data = ByteArray(buffer.data.remaining())
             buffer.data.get(data)
-            Log.d(TAG, "Received data channel message from $peerId")
-            nativeOnDataChannelMessage(nativePointer, peerId, String(data))
+            // Use binary callback always; C++ side will determine if it's text (legacy) or binary protocol
+            nativeOnDataChannelMessageBinary(nativePointer, peerId, data)
           }
         }
         dc.registerObserver(dataChannelObserver)
@@ -226,14 +227,9 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
       }
       override fun onRenegotiationNeeded() {
         Log.i(TAG, "onRenegotiationNeeded for peer: $peerId, context: $context")
-        // The C++ layer is responsible for initiating offer/answer exchanges.
-        // If renegotiation is needed, the C++ client logic should call createOffer explicitly.
       }
 
-      override fun onTrack(transceiver: RtpTransceiver?) {
-        // This callback is for Unified Plan when a new track is added by the remote peer.
-        // We handle this in onAddTrack for simplicity with the existing stream logic.
-      }
+      override fun onTrack(transceiver: RtpTransceiver?) {}
 
       override fun onAddTrack(rtpReceiver: RtpReceiver, mediaStreams: Array<out MediaStream>) {
         rtpReceiver.track()?.let { track ->
@@ -310,8 +306,7 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
         buffer ?: return
         val data = ByteArray(buffer.data.remaining())
         buffer.data.get(data)
-        Log.d(TAG, "Received data channel message from $peerId (outgoing DC)")
-        nativeOnDataChannelMessage(nativePointer, peerId, String(data))
+        nativeOnDataChannelMessageBinary(nativePointer, peerId, data)
       }
     }
     dc.registerObserver(dataChannelObserver)
@@ -322,18 +317,35 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
     }
   }
 
-  fun sendDataChannelMessage(peerId: String, message: String) {
+  fun sendDataChannelMessage(peerId: String, message: String): Boolean {
     val dc = dataChannels[peerId]
     if (dc == null) {
       Log.e(TAG, "DataChannel for peer $peerId not found.")
-      return
+      return false
     }
     if (dc.state() == DataChannel.State.OPEN) {
       val buffer = ByteBuffer.wrap(message.toByteArray())
-      dc.send(DataChannel.Buffer(buffer, false))
-      Log.d(TAG, "Sent data channel message to $peerId")
+      return dc.send(DataChannel.Buffer(buffer, false))
     } else {
       Log.w(TAG, "Attempted to send message on non-open DataChannel for peer $peerId. State: ${dc.state()}")
+      return false
+    }
+  }
+
+  fun sendDataChannelMessageBinary(peerId: String, data: ByteArray): Boolean {
+    val dc = dataChannels[peerId]
+    if (dc == null) {
+      Log.e(TAG, "DataChannel for peer $peerId not found for binary.")
+      return false
+    }
+    if (dc.state() == DataChannel.State.OPEN) {
+      val buffer = ByteBuffer.wrap(data)
+      val result = dc.send(DataChannel.Buffer(buffer, true)) // true = binary
+      Log.d(TAG, "Sent binary data channel message to $peerId (${data.size} bytes), result=$result")
+      return result
+    } else {
+      Log.w(TAG, "Attempted to send binary message on non-open DataChannel for peer $peerId.")
+      return false
     }
   }
 
@@ -368,10 +380,8 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
     Log.d(TAG, "Creating answer for peer $peerId ($context)")
 
     // Fix for race condition: Ensure local tracks are represented by senders before creating an answer.
-    // This is necessary because the JNI calls from C++ to add tracks are asynchronous.
     if (context == "media") {
       if (localVideoTrack == null || localAudioTrack == null) {
-        // This is the responder's path, start media now if not already started.
         Log.d(TAG, "Local media not started. Starting it now before creating answer.")
         startLocalMedia()
       }

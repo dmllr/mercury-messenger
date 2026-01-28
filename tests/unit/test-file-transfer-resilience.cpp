@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <thread>
@@ -83,6 +84,29 @@ class FileTransferResilienceTest : public ::testing::Test {
     return bytes;
   }
 
+  std::vector<std::byte> CreateChunkPacket(std::string const& id, uint32_t seq, std::vector<std::byte> const& payload) {
+    std::vector<std::byte> packet;
+    packet.push_back(std::byte{0xFE});
+    packet.push_back(std::byte{0x01});  // Chunk Type
+    packet.push_back(static_cast<std::byte>(id.size()));
+    for (char c : id) packet.push_back(static_cast<std::byte>(c));
+
+    // Seq LE
+    for (int i = 0; i < 4; ++i) packet.push_back(static_cast<std::byte>((seq >> (i * 8)) & 0xFF));
+
+    packet.insert(packet.end(), payload.begin(), payload.end());
+    return packet;
+  }
+
+  std::vector<std::byte> CreateEndPacket(std::string const& id) {
+    std::vector<std::byte> packet;
+    packet.push_back(std::byte{0xFE});
+    packet.push_back(std::byte{0x06});  // End Type
+    packet.push_back(static_cast<std::byte>(id.size()));
+    for (char c : id) packet.push_back(static_cast<std::byte>(c));
+    return packet;
+  }
+
   std::filesystem::path temp_dir_;
   std::filesystem::path attachments_dir_;
   std::shared_ptr<storage::PersistentStorage> storage_;
@@ -140,34 +164,20 @@ TEST_F(FileTransferResilienceTest, TransferProgressAndFileCreation) {
   ASSERT_TRUE(std::filesystem::exists(temp_file));
   EXPECT_EQ(std::filesystem::file_size(temp_file), file_data.size());
 
-  // 2. Process Chunks
-  // Service uses 4KB chunks (MessagingService::chunkSizeBytes)
-  // We must match this size for the offset calculation (seq * chunk_size) to align with data written.
-  constexpr auto chunk_size = services::FileTransferService::chunkSizeBytes;
-  size_t const total_chunks = (file_data.size() + chunk_size - 1) / services::FileTransferService::chunkSizeBytes;
+  // 2. Process Chunks using Binary Protocol
+  constexpr auto chunk_size = services::FileTransferService::kChunkSizeBytes;
+  size_t const total_chunks = (file_data.size() + chunk_size - 1) / chunk_size;
 
   for (size_t seq = 0; seq < total_chunks; ++seq) {
     size_t const offset = seq * chunk_size;
-    std::string const chunk = file_data.substr(offset, chunk_size);
-    nlohmann::json const msg = {
-        {"type", "file_chunk"},
-        {"id", att_id},
-        {"seq", seq},
-        {"data", eillance::crypto::ToHex(StringToBytes(chunk))},
-        {"eof", false},
-    };
-    file_transfer_service_->ProcessMessage(peer1, msg);
+    std::string const chunk_str = file_data.substr(offset, chunk_size);
+    auto packet = CreateChunkPacket(att_id, seq, StringToBytes(chunk_str));
+    file_transfer_service_->ProcessBinaryMessage(peer1, packet);
   }
 
-  // 3. EOF
-  nlohmann::json const eof_msg = {
-      {"type", "file_chunk"},
-      {"id", att_id},
-      {"seq", 2},
-      {"data", ""},
-      {"eof", true},
-  };
-  file_transfer_service_->ProcessMessage(peer1, eof_msg);
+  // 3. End
+  auto end_packet = CreateEndPacket(att_id);
+  file_transfer_service_->ProcessBinaryMessage(peer1, end_packet);
 
   // Verify completion
   EXPECT_TRUE(completed);
@@ -207,21 +217,15 @@ TEST_F(FileTransferResilienceTest, FailsGracefullyIfHashMismatch) {
 
   // 2. Send Data
   std::string const data = "0123456789";
-  nlohmann::json const chunk = {
-      {"type", "file_chunk"},
-      {"id", "bad_hash_file"},
-      {"seq", 0},
-      {"data", eillance::crypto::ToHex(StringToBytes(data))},
-      {"eof", false}
-  };
-  file_transfer_service_->ProcessMessage(peer1, chunk);
+  auto chunk = CreateChunkPacket("bad_hash_file", 0, StringToBytes(data));
+  file_transfer_service_->ProcessBinaryMessage(peer1, chunk);
 
-  // 3. Send EOF
+  // 3. Send End
   bool completed = false;
   service_->SetAttachmentDownloadedCallback([&](auto, auto) { completed = true; });
 
-  nlohmann::json const eof = {{"type", "file_chunk"}, {"id", "bad_hash_file"}, {"seq", 1}, {"data", ""}, {"eof", true}};
-  file_transfer_service_->ProcessMessage(peer1, eof);
+  auto end_packet = CreateEndPacket("bad_hash_file");
+  file_transfer_service_->ProcessBinaryMessage(peer1, end_packet);
 
   // 4. Verify
   EXPECT_FALSE(completed);  // Should not trigger callback on failure
@@ -232,4 +236,48 @@ TEST_F(FileTransferResilienceTest, FailsGracefullyIfHashMismatch) {
   // Neither file should exist (temp is deleted on failure)
   EXPECT_FALSE(std::filesystem::exists(final_file));
   EXPECT_FALSE(std::filesystem::exists(temp_file));
+}
+
+TEST_F(FileTransferResilienceTest, StatusUpdateOrder_SmallFile) {
+  // Setup peer
+  auto peer = std::make_shared<transport::Peer>(peer1);
+  peer->data_channel_is_open = true;
+  eillance::crypto::SessionCipher other;
+  peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
+  transport_->AddPeer(peer1, peer);
+
+  std::vector<messaging::AttachmentStatus> status_sequence;
+  service_->SetAttachmentStatusChangedCallback([&](auto, auto, auto status) { status_sequence.push_back(status); });
+
+  // Create small file
+  std::filesystem::path file_path = temp_dir_ / "small_order_test.dat";
+  {
+    std::ofstream ofs(file_path);
+    ofs << "tiny";
+  }
+
+  std::vector<services::AttachmentRequest> atts;
+  atts.push_back({file_path.string(), messaging::AttachmentType::file, "", "text/plain"});
+
+  // Send
+  service_->SendChatMessage(peer1, "Sequence Test", atts);
+
+  // Expect sequence: Transferring -> Done
+  // If bug exists: Done -> Transferring
+  ASSERT_GE(status_sequence.size(), 2);
+
+  bool found_sequence = false;
+  for (size_t i = 0; i < status_sequence.size() - 1; ++i) {
+    if (status_sequence[i] == messaging::AttachmentStatus::transferring &&
+        status_sequence[i + 1] == messaging::AttachmentStatus::done) {
+      found_sequence = true;
+      break;
+    }
+  }
+
+  EXPECT_TRUE(found_sequence) << "Status sequence should be Transferring -> Done";
+  if (!status_sequence.empty()) {
+    EXPECT_NE(status_sequence.back(), messaging::AttachmentStatus::transferring)
+        << "Should not end in Transferring state for completed upload";
+  }
 }

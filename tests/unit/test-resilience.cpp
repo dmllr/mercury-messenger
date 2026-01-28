@@ -1,5 +1,7 @@
+#include <algorithm>
 #include <chrono>
 #include <thread>
+#include <vector>
 
 #include <gtest/gtest.h>
 #include <nlohmann/json.hpp>
@@ -26,54 +28,42 @@ class MockCapture {
 class ResilienceTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    // 1. Storage
     auto storage_impl = std::make_unique<storage::MockPersistentStorageImpl>();
     mock_storage_ = storage_impl.get();
     storage_ = std::make_shared<storage::PersistentStorage>(std::move(storage_impl));
 
-    // 2. Transport
     mock_transport_impl_ = std::make_unique<transport::MockTransport>();
     mock_transport_ = mock_transport_impl_.get();
     transport_ = std::make_shared<transport::Transport>(std::move(mock_transport_impl_));
 
-    // 3. Client
     client_ = std::make_shared<Client>(storage_, transport_);
 
-    // 4. Inject Mock Capture (to satisfy invariants)
     client_->SetVideoCapture(std::make_unique<MockCapture>());
     client_->SetAudioCapture(std::make_unique<MockCapture>());
 
-    // 5. Setup dummy callbacks to satisfy invariants during operations
     client_->GetAccountService()->SetOnMyProfileUpdatedCallback([]() {});
 
-    // Contact Service
     client_->GetContactService()->SetContactRequestCallback([](auto const&) {});
     client_->GetContactService()->SetContactStatusChangedCallback([](auto const&, auto) {});
     client_->GetContactService()->SetContactRemovedCallback([](auto const&) {});
 
-    // Profile Service
     client_->GetProfileService()->SetContactProfileUpdatedCallback([](auto const&) {});
     client_->GetProfileService()->SetPeerListUpdateCallback([](auto const&) {});
     client_->GetProfileService()->SetProfileReceivedCallback([](auto const&, auto const&) {});
 
-    // Media
     client_->GetMediaCallService()->SetIncomingCallCallback([](auto const&, auto) {});
     client_->GetMediaCallService()->SetCallRingingCallback([](auto const&) {});
     client_->GetMediaCallService()->SetCallAcceptedCallback([](auto const&) {});
     client_->GetMediaCallService()->SetCallTerminatedCallback([](auto const&) {});
     client_->GetMediaCallService()->SetFrameReceivedCallback([](auto const&) {});
 
-    // Messaging
     client_->GetMessagingService()->SetChatMessageReceivedCallback([](auto const&, auto const&) {});
     client_->GetMessagingService()->SetMessageStatusChangedCallback([](auto const&, auto, auto) {});
 
     client_->SetStatusCallback([](auto const&, auto, auto) {});
 
-    // 6. Setup Identity
     (void)client_->GetAccountService()->GenerateNewIdentity();
 
-    // 7. Setup a Confirmed Contact
-    // AddContact triggers connection logic, so peer1 becomes connected here.
     client_->AddContact(peer1, std::nullopt);
     mock_storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
     client_->GetContactService()->DebugReloadCache();
@@ -95,9 +85,7 @@ class ResilienceTest : public ::testing::Test {
   ContactID const peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
 };
 
-// Test that pending read receipts persist and are sent on connection
 TEST_F(ResilienceTest, PendingReadReceiptsPersistAndSend) {
-  // 1. Simulate receiving a message with remote ID
   auto entry = mock_storage_->AddHistoryEntry(
       {.remote_id = 999,
        .kind = messaging::HistoryEntryKind::textMessage,
@@ -108,35 +96,28 @@ TEST_F(ResilienceTest, PendingReadReceiptsPersistAndSend) {
        .peer_id = peer1}
   );
 
-  // 2. Mark as read while disconnected
-  // Explicitly remove peer to simulate disconnection, as SetUp connects it.
   mock_transport_->RemovePeer(peer1);
   ASSERT_FALSE(mock_transport_->GetPeer(peer1));
 
   client_->MarkMessagesAsRead(peer1, {entry.id});
   FlushClientQueue();
 
-  // 3. Verify pending
   auto pending = mock_storage_->GetPendingActions(peer1);
   ASSERT_EQ(pending.size(), 1);
   nlohmann::json const json = nlohmann::json::parse(pending[0].payload);
   EXPECT_EQ(json["type"], "message_read");
   EXPECT_EQ(json["message_ids"][0], 999);
 
-  // 4. Connect
   client_->Connect(peer1);
   FlushClientQueue();
 
   auto peer = mock_transport_->GetPeer(peer1);
   ASSERT_TRUE(peer);
 
-  // Simulate Data Channel Open (triggers queue flush)
   mock_transport_->log.sent_peer_messages.clear();
-  // Using delegate to simulate transport event which Client listens to via InternalMessagingService
   mock_transport_->delegate->OnDataChannelOpen(peer1);
   FlushClientQueue();
 
-  // 5. Verify receipt sent
   bool receipt_sent = false;
   for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
     if (pid == peer1 && msg["type"] == "message_read") {
@@ -148,21 +129,17 @@ TEST_F(ResilienceTest, PendingReadReceiptsPersistAndSend) {
   }
   EXPECT_TRUE(receipt_sent);
 
-  // 6. Verify removed from storage (assuming optimistic removal)
   pending = mock_storage_->GetPendingActions(peer1);
   EXPECT_TRUE(pending.empty());
 }
 
-// Test that profile updates persist as a queued action and sync on connection
 TEST_F(ResilienceTest, ProfileUpdateSyncsOnConnect) {
-  // 1. Update Profile while disconnected
   mock_transport_->RemovePeer(peer1);
   ASSERT_FALSE(mock_transport_->GetPeer(peer1));
 
   client_->UpdateMyProfile("New Name", "Bio", "");
   FlushClientQueue();
 
-  // 2. Verify action queued
   auto actions = mock_storage_->GetPendingActions(peer1);
   ASSERT_FALSE(actions.empty());
   bool found_profile = false;
@@ -173,16 +150,13 @@ TEST_F(ResilienceTest, ProfileUpdateSyncsOnConnect) {
   }
   EXPECT_TRUE(found_profile);
 
-  // 3. Connect
   client_->Connect(peer1);
   FlushClientQueue();
 
-  // 4. Simulate Data Channel Open
   mock_transport_->log.sent_peer_messages.clear();
   mock_transport_->delegate->OnDataChannelOpen(peer1);
   FlushClientQueue();
 
-  // 5. Verify profile sent
   bool profile_sent = false;
   for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
     if (pid == peer1 && msg["type"] == "profile_info") {
@@ -192,22 +166,17 @@ TEST_F(ResilienceTest, ProfileUpdateSyncsOnConnect) {
   }
   EXPECT_TRUE(profile_sent);
 
-  // 6. Verify action removed
   actions = mock_storage_->GetPendingActions(peer1);
   EXPECT_TRUE(actions.empty());
 }
 
-// Test that other pending actions (like handshake messages) are queued and sent
 TEST_F(ResilienceTest, PendingActionsPersistAndSend) {
-  // 1. Disconnect
   mock_transport_->RemovePeer(peer1);
   ASSERT_FALSE(mock_transport_->GetPeer(peer1));
 
-  // 2. Trigger an action (e.g. Reset Display Name -> profile_request)
   client_->ResetContactDisplayNameOverride(peer1);
   FlushClientQueue();
 
-  // 3. Verify queued in storage
   auto actions = mock_storage_->GetPendingActions(peer1);
   ASSERT_FALSE(actions.empty());
   bool found_req = false;
@@ -218,16 +187,13 @@ TEST_F(ResilienceTest, PendingActionsPersistAndSend) {
   }
   EXPECT_TRUE(found_req);
 
-  // 4. Connect
   client_->Connect(peer1);
   FlushClientQueue();
 
-  // 5. Trigger Data Channel Open
   mock_transport_->log.sent_peer_messages.clear();
   mock_transport_->delegate->OnDataChannelOpen(peer1);
   FlushClientQueue();
 
-  // 6. Verify sent
   bool req_sent = false;
   for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
     if (pid == peer1 && msg["type"] == "profile_request") {
@@ -236,13 +202,10 @@ TEST_F(ResilienceTest, PendingActionsPersistAndSend) {
   }
   EXPECT_TRUE(req_sent);
 
-  // 7. Verify removed
   actions = mock_storage_->GetPendingActions(peer1);
   EXPECT_TRUE(actions.empty());
 }
 
-// Test scenario: User B reinstalled (lost contact list) receiving a message from User A.
-// Expectation: B auto-creates the contact as CONFIRMED so the message is visible.
 TEST_F(ResilienceTest, ReinstallRecovery_MessageReceipt) {
   // 1. Simulate "wipe" by removing peer1 from contacts.
   client_->DeleteContact(peer1);
@@ -275,9 +238,14 @@ TEST_F(ResilienceTest, ReinstallRecovery_MessageReceipt) {
       {"payload", std::vector<std::byte>(encrypted.begin(), encrypted.end())}
   };
 
-  // CORRECT: Inject message directly into the data channel handler, mimicking WebRTC transport
   ASSERT_TRUE(peer->on_data_channel_message);
-  peer->on_data_channel_message(chat_msg.dump());
+
+  // Convert JSON to bytes for binary-capable handler
+  std::string msg_str = chat_msg.dump();
+  std::vector<std::byte> msg_bytes(msg_str.size());
+  std::transform(msg_str.begin(), msg_str.end(), msg_bytes.begin(), [](char c) { return static_cast<std::byte>(c); });
+
+  peer->on_data_channel_message(msg_bytes);
   FlushClientQueue();
 
   // 4. Verify contact was auto-created and CONFIRMED
@@ -292,13 +260,9 @@ TEST_F(ResilienceTest, ReinstallRecovery_MessageReceipt) {
   EXPECT_EQ(data.content, "Recovery Message");
 }
 
-// Test scenario: User B reinstalled and tries to add User A.
-// Expectation: A (confirmed) resends signature and profile, B confirms.
 TEST_F(ResilienceTest, ReinstallRecovery_ContactAdd) {
-  // 1. Ensure A is confirmed (Setup does this).
   ASSERT_TRUE(client_->GetContactService()->IsConfirmed(peer1));
 
-  // 2. Simulate receiving "contact_request" (B adding A)
   nlohmann::json const req_msg = {
       {"from", peer1.ToString()},
       {"type", "contact_add_request"},
@@ -311,7 +275,6 @@ TEST_F(ResilienceTest, ReinstallRecovery_ContactAdd) {
   mock_transport_->SimulatePeerMessage(peer1, req_msg);
   FlushClientQueue();
 
-  // 3. Verify A sends "contact_confirm" AND "contact_signature"
   bool confirm_sent = false;
   for (auto const& msg : mock_transport_->log.sent_signaling_messages) {
     if (msg["type"] == "contact_confirm" && msg["to"] == peer1.ToString()) {
@@ -320,7 +283,6 @@ TEST_F(ResilienceTest, ReinstallRecovery_ContactAdd) {
   }
   EXPECT_TRUE(confirm_sent) << "Should send confirmation via signaling";
 
-  // Simulate data channel open to flush queued signature
   mock_transport_->delegate->OnDataChannelOpen(peer1);
   FlushClientQueue();
 

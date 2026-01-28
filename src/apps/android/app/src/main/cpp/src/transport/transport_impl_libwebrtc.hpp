@@ -4,9 +4,11 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include <jni.h>
 #include <nlohmann/json.hpp>
+#include <span>
 
 #include "../class_refs.hpp"
 #include "../utils/jni_utils.hpp"
@@ -167,19 +169,32 @@ class AndroidRtcTransport final : public Transport::TransportInterface {
   }
 
   void SendPeerDataChannelMessage(ContactID const& peer_id, Transport::Json const& message) const override {
+    auto const msg_str = message.dump();
+    auto bytes = std::vector<std::byte>(msg_str.size());
+    std::memcpy(bytes.data(), msg_str.data(), msg_str.size());
+    SendPeerDataChannelBinaryMessage(peer_id, bytes);
+  }
+
+  auto SendPeerDataChannelBinaryMessage(ContactID const& peer_id, std::span<std::byte const> message) const
+      -> bool override {
     auto env_scope = GetEnv();
     auto* env = env_scope.Get();
     if ((env == nullptr) || (transportJavaRef_ == nullptr)) {
-      return;
+      return false;
     }
     auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcTransport");
-    auto const method = transport_holder.GetMethod("sendDataChannelMessage");
-    auto const msg_str = message.dump();
+    auto const method = transport_holder.GetMethod("sendDataChannelMessageBinary");
     auto* j_peer_id = env->NewStringUTF(peer_id.ToString().c_str());
-    auto j_msg = env->NewStringUTF(msg_str.c_str());
-    env->CallVoidMethod(transportJavaRef_, method, j_peer_id, j_msg);
+
+    jbyteArray j_bytes = env->NewByteArray(message.size());
+    env->SetByteArrayRegion(j_bytes, 0, message.size(), reinterpret_cast<jbyte const*>(message.data()));
+
+    jboolean result = env->CallBooleanMethod(transportJavaRef_, method, j_peer_id, j_bytes);
+
     env->DeleteLocalRef(j_peer_id);
-    env->DeleteLocalRef(j_msg);
+    env->DeleteLocalRef(j_bytes);
+
+    return result == JNI_TRUE;
   }
 
   void AddToStream(std::shared_ptr<Peer> const& /*peer*/, bool /*is_adding_video*/) const override {}
@@ -450,6 +465,7 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcTransport_nati
   }
 }
 
+// Deprecated in favor of binary handler, but kept for compatibility with legacy messages (if any)
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcTransport_nativeOnDataChannelMessage(
     JNIEnv* env,
     jobject,
@@ -465,15 +481,48 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcTransport_nati
     eillance::ContactID const peer_id(peer_id_chars);
     auto const* message_str(message_chars);
 
+    // Wrap string as bytes for uniform handling in core
+    auto len = std::strlen(message_str);
+    std::vector<std::byte> msg_bytes(len);
+    std::memcpy(msg_bytes.data(), message_str, len);
+
     auto peer = transport->GetPeer(peer_id);
     if (peer && peer->on_data_channel_message) {
-      peer->on_data_channel_message(message_str);
+      peer->on_data_channel_message(msg_bytes);
     } else {
       LGW << "Received DC message for peer " << peer_id_chars << " but no handler or peer found.";
     }
 
     env->ReleaseStringUTFChars(j_peer_id, peer_id_chars);
     env->ReleaseStringUTFChars(j_message, message_chars);
+  }
+}
+
+// New Binary Handler
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcTransport_nativeOnDataChannelMessageBinary(
+    JNIEnv* env,
+    jobject,
+    jlong native_ptr,
+    jstring j_peer_id,
+    jbyteArray j_data
+) {
+  auto* transport = reinterpret_cast<eillance::transport::AndroidRtcTransport*>(native_ptr);
+  if (transport != nullptr) {
+    char const* peer_id_chars = env->GetStringUTFChars(j_peer_id, nullptr);
+    eillance::ContactID const peer_id(peer_id_chars);
+
+    jsize len = env->GetArrayLength(j_data);
+    std::vector<std::byte> buffer(len);
+    env->GetByteArrayRegion(j_data, 0, len, reinterpret_cast<jbyte*>(buffer.data()));
+
+    auto peer = transport->GetPeer(peer_id);
+    if (peer && peer->on_data_channel_message) {
+      peer->on_data_channel_message(buffer);
+    } else {
+      LGW << "Received DC binary message for peer " << peer_id_chars << " but no handler or peer found.";
+    }
+
+    env->ReleaseStringUTFChars(j_peer_id, peer_id_chars);
   }
 }
 

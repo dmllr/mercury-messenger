@@ -9,6 +9,8 @@
 #include <string>
 #include <vector>
 
+#include <span>
+
 #include "eillance/transport/transport.hpp"
 
 namespace eillance::transport {
@@ -36,6 +38,7 @@ class MockTransport {
     std::vector<std::pair<ContactID, std::string>> answers;
     std::vector<Json> sent_signaling_messages;
     std::vector<std::pair<ContactID, Json>> sent_peer_messages;
+    std::vector<std::pair<ContactID, std::vector<std::byte>>> sent_binary_messages;
   };
 
   mutable CallLog log;
@@ -140,6 +143,12 @@ class MockTransport {
   void SendPeerDataChannelMessage(ContactID const& peer_id, Json const& message) const {
     std::lock_guard<std::mutex> const lock(mutex_);
     log.sent_peer_messages.emplace_back(peer_id, message);
+  }
+
+  auto SendPeerDataChannelBinaryMessage(ContactID const& peer_id, std::span<std::byte const> message) const -> bool {
+    std::lock_guard<std::mutex> const lock(mutex_);
+    log.sent_binary_messages.emplace_back(peer_id, std::vector<std::byte>(message.begin(), message.end()));
+    return true;  // Simulate success
   }
 
   void AddToStream(std::shared_ptr<Peer> const& /*peer*/, bool /*is_adding_video*/) const {}

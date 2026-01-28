@@ -5,6 +5,7 @@
 #include <vector>
 
 #include <nlohmann/json.hpp>
+#include <span>
 
 #include "eillance/logging/logging.hpp"
 #include "eillance/services/account_service.hpp"
@@ -38,7 +39,6 @@ class InternalMessagingService {
         file_transfer_service_(std::move(file_transfer_service)),
         profile_service_(std::move(profile_service)) {}
 
-  // Handles messages from the Signaling Server (Authentication, System status)
   void ProcessSystemMessage(std::string const& type, Json const& message) {
     if (type == "auth_challenge") {
       auto const challenge = message.value("challenge", "");
@@ -62,7 +62,6 @@ class InternalMessagingService {
     }
   }
 
-  // Handles Signaling messages routed from a Peer (Contact requests, SDP, ICE)
   void ProcessSignalingMessage(ContactID const& peer_id, std::string const& type, Json const& message) {
     auto const context = message.value("context", "data");
 
@@ -91,37 +90,46 @@ class InternalMessagingService {
     }
   }
 
-  // Handles messages arriving via the WebRTC Data Channel (Chat, Key Exchange, Profile Sync)
+  void SetupPeerHandlers(std::shared_ptr<transport::Peer> const& peer, ContactID const& peer_id) {
+    peer->on_data_channel_message = [this, peer_id](std::span<std::byte const> msg) {
+      if (auto p = transport_->GetPeer(peer_id)) {
+        p->last_activity_time = Time::Now();
+      }
+
+      // 0xFE is our magic byte for binary messages
+      if (!msg.empty() && msg[0] == std::byte{0xFE}) {
+        file_transfer_service_->ProcessBinaryMessage(peer_id, msg);
+        return;
+      }
+
+      // Legacy/JSON fallback
+      try {
+        std::string json_str;
+        json_str.resize(msg.size());
+        std::memcpy(json_str.data(), msg.data(), msg.size());
+        ProcessDataChannelMessage(peer_id, Json::parse(json_str));
+      } catch (...) {
+        LGE << "Failed to parse data channel message from " << peer_id.ToString();
+      }
+    };
+  }
+
+  // Handles JSON messages via Data Channel
   void ProcessDataChannelMessage(ContactID const& peer_id, Json const& message) {
     if (!message.contains("type")) return;
     std::string const type = message["type"];
 
-    // Key Exchange (E2EE Handshake)
     if (type == "key_exchange") {
       HandleKeyExchange(peer_id, message);
-      return;
-    }
-
-    // Chat
-    if (type == "chat") {
+    } else if (type == "chat") {
       HandleChatMessage(peer_id, message);
-      return;
-    }
-
-    // Receipts / Read Status
-    if (type == "message_receipt") {
+    } else if (type == "message_receipt") {
       messaging_service_->OnMessageReceipt(peer_id, message["message_id"], message["status"]);
     } else if (type == "message_read") {
       messaging_service_->OnMessagesRead(peer_id, message["message_ids"].get<std::vector<uint64_t>>());
-    }
-
-    // Calls
-    else if (type == "hangup") {
+    } else if (type == "hangup") {
       media_call_service_->Hangup(peer_id, false);
-    }
-
-    // Contact / Identity
-    else if (type == "contact_removed") {
+    } else if (type == "contact_removed") {
       contact_service_->OnContactRemoved(peer_id);
     } else if (type == "reconfirm_request") {
       contact_service_->OnReconfirmRequest(peer_id);
@@ -138,10 +146,9 @@ class InternalMessagingService {
     } else if (type == "termination") {
       transport_->RemovePeer(peer_id);
     }
-
-    // File Transfer
+    // Forward legacy file messages if any remain (though logic moved to binary)
     else if (type == "file_chunk" || type == "file_cancel" || type == "file_resume_request") {
-      file_transfer_service_->ProcessMessage(peer_id, message);
+      // file_transfer_service_->ProcessMessage(peer_id, message);
     }
   }
 
@@ -151,13 +158,10 @@ class InternalMessagingService {
 
     LGI << "Data channel with " << peer_id.ToString() << " opened.";
 
-    // Reset crypto session
     peer->session_cipher->Reset();
     peer->data_channel_is_open = true;
     peer->last_activity_time = Time::Now();
 
-    // Initiator sends key first.
-    // NOTE: In current architecture, ID comparison determines initiator for key exchange to avoid collision.
     if (account_service_->GetId() > peer_id) {
       auto my_pub_key = peer->session_cipher->GetPublicKey();
       Json const key_msg = {
@@ -168,24 +172,8 @@ class InternalMessagingService {
       transport_->SendPeerDataChannelMessage(peer_id, key_msg);
     }
 
-    // Triggers
     messaging_service_->SendQueuedMessages(peer_id);
     profile_service_->SyncProfile(peer_id);
-  }
-
-  // --- Helpers for Peer Handler Setup ---
-  void SetupPeerHandlers(std::shared_ptr<transport::Peer> const& peer, ContactID const& peer_id) {
-    peer->on_data_channel_message = [this, peer_id](std::string const& msg) {
-      try {
-        // Update activity
-        if (auto p = transport_->GetPeer(peer_id)) {
-          p->last_activity_time = Time::Now();
-        }
-        ProcessDataChannelMessage(peer_id, Json::parse(msg));
-      } catch (...) {
-        LGE << "Failed to parse data channel message from " << peer_id.ToString();
-      }
-    };
   }
 
  private:
@@ -222,13 +210,11 @@ class InternalMessagingService {
     if (type == "offer") {
       auto peer = transport_->GetPeer(peer_id);
       if (peer) {
-        // Glare resolution: if both sides offer, the one with larger ID wins the role of offerer.
         if (account_service_->GetId() > peer_id) {
           transport_->ClosePeerConnection(peer_id, "data");
           transport_->RemovePeer(peer_id);
           peer = nullptr;
         } else {
-          // We are smaller ID, we yield (ignore our own attempt or accept theirs)
           return;
         }
       }
@@ -269,7 +255,6 @@ class InternalMessagingService {
             }
         );
       }
-      // Connection fully established logic
       messaging_service_->SendQueuedMessages(peer_id);
       profile_service_->SyncProfile(peer_id);
     } else {
@@ -292,7 +277,7 @@ class InternalMessagingService {
         att.size_bytes = j_att.value("size", 0ULL);
         att.thumbnail_base64 = j_att.value("thumb", "");
         att.hash = j_att.value("hash", "");
-        att.is_downloaded = false;  // Remote file
+        att.is_downloaded = false;
         att.status = messaging::AttachmentStatus::pending;
         attachments.push_back(att);
       }
