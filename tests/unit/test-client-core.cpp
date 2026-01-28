@@ -154,15 +154,6 @@ TEST_F(ClientCoreTest, SignalingMessageProcessing_MediaOffer) {
   EXPECT_TRUE(mock_transport_->GetPeer(peer1));
 
   // It also triggers OnCallRequest, which sends a "call_ringing" system message.
-  bool ringing_sent = false;
-  for (auto const& msg : mock_transport_->log.sent_signaling_messages) {
-    // It might be sent via signaling or data channel depending on connection state.
-    // System messages are queued in messaging service.
-    // Since data channel isn't open, it might try signaling?
-    // Actually, MessagingService attempts delivery. If no DC, it waits.
-    // But for contact/call setup, some messages go via signaling directly.
-    // "call_ringing" is a system message.
-  }
   // We mainly check no crash here (invariant violation fixed).
 }
 
