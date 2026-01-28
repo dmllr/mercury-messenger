@@ -20,10 +20,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -246,14 +247,14 @@ private fun MediaItem(
     // Status Overlays
     Box(contentAlignment = Alignment.Center) {
       if (attachment.status == AttachmentStatus.Canceled) {
-        // Canceled state: Show Resume and Close options
+        // Canceled state
         Row(
           horizontalArrangement = Arrangement.spacedBy(16.dp),
           verticalAlignment = Alignment.CenterVertically
         ) {
           Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(
-              Icons.Default.PlayArrow,
+              Icons.Default.Repeat,
               contentDescription = "Resume",
               tint = Color.White,
               modifier = Modifier.size(32.dp).clickable { onResume() }
@@ -262,8 +263,8 @@ private fun MediaItem(
           }
           Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(
-              Icons.Default.Close,
-              contentDescription = "Close",
+              Icons.Default.Cancel,
+              contentDescription = "Cancel",
               tint = Color.White,
               modifier = Modifier.size(32.dp).clickable { onDiscard() }
             )
@@ -275,10 +276,10 @@ private fun MediaItem(
         Box(contentAlignment = Alignment.Center) {
           CircularProgressIndicator(
             progress = progress,
-            color = Color.White,
             modifier = Modifier.size(48.dp),
+            color = Color.White,
+            strokeWidth = 4.dp,
             trackColor = Color.White.copy(alpha = 0.4f),
-            strokeWidth = 4.dp
           )
           IconButton(
             onClick = onCancel,

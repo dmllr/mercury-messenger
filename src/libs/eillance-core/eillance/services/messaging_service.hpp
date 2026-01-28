@@ -25,7 +25,7 @@ struct AttachmentRequest {
 };
 
 class MessagingService {
-public:
+ public:
   static constexpr uint32_t currentMessageVersion = 1;
 
   // Flow control constants
@@ -71,9 +71,9 @@ public:
 
   // Queries
   [[nodiscard]] auto GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t page_size) const
-  -> messaging::HistoryPage;
+      -> messaging::HistoryPage;
   [[nodiscard]] auto GetFullMessageContent(ContactID const& peer_id, std::uint64_t message_id) const
-  -> std::optional<std::string>;
+      -> std::optional<std::string>;
   [[nodiscard]] auto GetChatSummaries(std::vector<ContactID> const& peer_ids
   ) const -> std::vector<messaging::ChatSummary>;
 
@@ -121,7 +121,7 @@ public:
   void SetTransferProgressCallback(OnTransferProgressCallback cb);
   void SetAttachmentStatusChangedCallback(OnAttachmentStatusChangedCallback cb);
 
-private:
+ private:
   // Helper to connect to a peer if not connected
   void RequestConnection(ContactID const& peer_id);
   void UpdatePeerActivity(ContactID const& peer_id);
