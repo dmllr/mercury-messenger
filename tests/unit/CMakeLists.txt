@@ -37,6 +37,7 @@ add_executable(h-e-tests
   test-file-transfer-resilience.cpp
   test-h264-utils.cpp
   test-id-manager.cpp
+  test-internal-messaging-service.cpp
   test-media-call-service.cpp
   test-message-history.cpp
   test-messaging-service.cpp

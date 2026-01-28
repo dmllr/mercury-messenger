@@ -87,7 +87,7 @@ TEST_F(AccountServiceTest, UpdateSignalingUrl) {
 
 TEST_F(AccountServiceTest, Signing) {
   // Must have identity to sign
-  service_->GenerateNewIdentity();
+  std::ignore = service_->GenerateNewIdentity();
 
   std::string message = "test message";
   std::vector<std::byte> msg_bytes(message.size());
