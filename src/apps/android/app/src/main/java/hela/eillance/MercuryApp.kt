@@ -91,7 +91,7 @@ fun MercuryApp(viewModel: MainViewModel) {
 fun IdentitySetupFlow(profileVM: ProfileViewModel) {
   val navController = rememberNavController()
   NavHost(navController = navController, startDestination = Screen.Identity.route) {
-    composable(Screen.Identity.route) { IdentityScreen(navController) }
+    composable(Screen.Identity.route) { IdentityScreen(navController, profileVM) }
     composable(Screen.MnemonicDisplay.route) { MnemonicDisplayScreen(profileVM) {
       // Upon finishing setup, profileVM state updates will trigger navigation in MercuryApp
     }}

@@ -1,5 +1,9 @@
 package hela.eillance.screens
 
+import android.net.Uri
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -8,12 +12,21 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -21,6 +34,7 @@ import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
@@ -28,13 +42,48 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import hela.eillance.navigation.Route
 import hela.eillance.navigation.Screen
+import hela.eillance.viewmodels.ProfileViewModel
+import kotlinx.coroutines.launch
 
 private const val URL_IDENTITY = "https://mercury.eillance.com/articles/cryptographic-identity/embed/"
 private const val URL_P2P = "https://mercury.eillance.com/articles/peer-to-peer-connections/embed/"
 private const val URL_E2EE = "https://mercury.eillance.com/articles/end-to-end-encryption/embed/"
 
 @Composable
-fun IdentityScreen(navController: NavController) {
+fun IdentityScreen(navController: NavController, profileVM: ProfileViewModel) {
+  val context = LocalContext.current
+  val scope = rememberCoroutineScope()
+  var showRestoreDialog by remember { mutableStateOf<Uri?>(null) }
+  var isRestoring by remember { mutableStateOf(false) }
+
+  val restoreLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.GetContent()
+  ) { uri ->
+    if (uri != null) {
+      showRestoreDialog = uri
+    }
+  }
+
+  if (showRestoreDialog != null) {
+    RestoreBackupDialog(
+      onDismiss = { showRestoreDialog = null },
+      onConfirm = { password ->
+        scope.launch {
+          isRestoring = true
+          val success = profileVM.restoreBackup(showRestoreDialog!!, password)
+          isRestoring = false
+          if (success) {
+            // Identity restored, MercuryApp will react to profileVM state change
+            showRestoreDialog = null
+          } else {
+            Toast.makeText(context, "Failed to restore backup. Check password or file.", Toast.LENGTH_LONG).show()
+          }
+        }
+      },
+      isRestoring = isRestoring
+    )
+  }
+
   Surface(modifier = Modifier.fillMaxSize()) {
     Column(
       modifier = Modifier
@@ -115,6 +164,56 @@ fun IdentityScreen(navController: NavController) {
       ) {
         Text("Restore from Recovery Phrase")
       }
+      Spacer(modifier = Modifier.height(16.dp))
+      OutlinedButton(
+        onClick = { restoreLauncher.launch("*/*") },
+        modifier = Modifier.fillMaxWidth()
+      ) {
+        Text("Restore from Backup File")
+      }
     }
   }
+}
+
+@Composable
+private fun RestoreBackupDialog(
+  onDismiss: () -> Unit,
+  onConfirm: (String) -> Unit,
+  isRestoring: Boolean
+) {
+  var password by remember { mutableStateOf("") }
+
+  AlertDialog(
+    onDismissRequest = { if (!isRestoring) onDismiss() },
+    title = { Text("Enter Backup Password") },
+    text = {
+      Column {
+        Text("Enter the password for the selected backup file to restore your data.")
+        Spacer(modifier = Modifier.height(16.dp))
+        OutlinedTextField(
+          value = password,
+          onValueChange = { password = it },
+          label = { Text("Password") },
+          visualTransformation = PasswordVisualTransformation(),
+          singleLine = true,
+          enabled = !isRestoring
+        )
+        if (isRestoring) {
+          Spacer(modifier = Modifier.height(16.dp))
+          CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
+        }
+      }
+    },
+    confirmButton = {
+      Button(
+        onClick = { onConfirm(password) },
+        enabled = password.isNotEmpty() && !isRestoring
+      ) { Text("Restore") }
+    },
+    dismissButton = {
+      if (!isRestoring) {
+        TextButton(onClick = onDismiss) { Text("Cancel") }
+      }
+    }
+  )
 }
