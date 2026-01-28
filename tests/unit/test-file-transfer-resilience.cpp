@@ -115,7 +115,9 @@ TEST_F(FileTransferResilienceTest, TransferProgressAndFileCreation) {
   // 1. Receive Chat Message with Attachment
   std::string const content = "Here is a large file";
   std::string versioned_payload;
-  versioned_payload.push_back(static_cast<char>(services::MessagingService::currentMessageVersion));
+  auto version = services::MessagingService::currentMessageVersion;
+  versioned_payload.push_back(static_cast<char>((version >> 8) & 0xFF));
+  versioned_payload.push_back(static_cast<char>(version & 0xFF));
   versioned_payload.append(content);
   auto encrypted = other_cipher.Encrypt(versioned_payload);
 
@@ -195,8 +197,11 @@ TEST_F(FileTransferResilienceTest, FailsGracefullyIfHashMismatch) {
   att.is_downloaded = false;
   att.mime_type = "application/octet-stream";
 
-  std::string payload = "payload";
-  payload.insert(0, 1, services::MessagingService::currentMessageVersion);
+  std::string payload;
+  auto version = services::MessagingService::currentMessageVersion;
+  payload.push_back(static_cast<char>((version >> 8) & 0xFF));
+  payload.push_back(static_cast<char>(version & 0xFF));
+  payload.append("payload");
   auto encrypted = other_cipher.Encrypt(payload);
 
   service_->OnChatMessageReceived(peer1, encrypted, 9002, false, {att});

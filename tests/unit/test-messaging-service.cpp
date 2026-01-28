@@ -191,7 +191,9 @@ TEST_F(MessagingServiceTest, DownloadTriggersCallback) {
   // 1. Simulate receiving the message with attachment info
   std::string payload_content = "Here is a file";
   std::string versioned_payload;
-  versioned_payload.push_back(static_cast<char>(services::MessagingService::currentMessageVersion));
+  auto version = services::MessagingService::currentMessageVersion;
+  versioned_payload.push_back(static_cast<char>((version >> 8) & 0xFF));
+  versioned_payload.push_back(static_cast<char>(version & 0xFF));
   versioned_payload.append(payload_content);
 
   auto encrypted = other_cipher.Encrypt(versioned_payload);

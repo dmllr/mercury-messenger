@@ -172,8 +172,10 @@ TEST_F(BotApiTest, MessageHandling) {
   // Simulate encrypted message arrival
   std::string const plain = "Hello Bot";
   std::string payload_with_version;
-  payload_with_version.reserve(sizeof(services::MessagingService::currentMessageVersion) + plain.size());
-  payload_with_version.push_back(static_cast<char>(services::MessagingService::currentMessageVersion));
+  auto const version = services::MessagingService::currentMessageVersion;
+  payload_with_version.reserve(sizeof(version) + plain.size());
+  payload_with_version.push_back(static_cast<char>((version >> 8) & 0xFF));
+  payload_with_version.push_back(static_cast<char>(version & 0xFF));
   payload_with_version.append(plain);
 
   auto encrypted = other.Encrypt(payload_with_version);

@@ -263,7 +263,9 @@ TEST_F(ResilienceTest, ReinstallRecovery_MessageReceipt) {
 
   std::string plain = "Recovery Message";
   std::string payload;
-  payload.push_back(services::MessagingService::currentMessageVersion);
+  auto const version = services::MessagingService::currentMessageVersion;
+  payload.push_back(static_cast<char>((version >> 8) & 0xFF));
+  payload.push_back(static_cast<char>(version & 0xFF));
   payload.append(plain);
   auto encrypted = other.Encrypt(payload);
 
