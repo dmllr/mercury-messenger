@@ -1,6 +1,8 @@
 #pragma once
 
+#include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -83,7 +85,23 @@ struct AttachmentRequest {
 
 class MessagingService {
  public:
-  static constexpr std::uint16_t currentMessageVersion = 1;
+  // Protocol Versioning Constants
+  static constexpr std::uint16_t protocolVersion = 2;
+  static constexpr std::uint16_t minSupportedVersion = 1;
+
+  // Keys used in the JSON payload
+  static constexpr auto keyVersion = "v";
+  static constexpr auto keyContent = "c";
+
+  // Helper for tests to generate exact JSON structures
+  struct Serializer {
+    static auto BuildE2EEPayload(std::string const& content) -> std::string {
+      nlohmann::json payload_json;
+      payload_json[MessagingService::keyVersion] = MessagingService::protocolVersion;
+      payload_json[MessagingService::keyContent] = content;
+      return payload_json.dump();
+    }
+  };
 
   using ConnectionRequestHandler = std::function<void(ContactID const&)>;
 
@@ -116,11 +134,7 @@ class MessagingService {
     );
   }
 
-  void StartDeliveryService() {
-    // Restore transfers logic is implicitly handled by FileTransferService via queue checks if needed,
-    // or by explicit resume requests.
-    delivery_service_->Start();
-  }
+  void StartDeliveryService() { delivery_service_->Start(); }
 
   void StopDeliveryService() { delivery_service_->Stop(); }
 
@@ -287,14 +301,12 @@ class MessagingService {
       }
 
       if (!sent && peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
-        std::string payload_with_version;
-        payload_with_version.reserve(sizeof(currentMessageVersion) + content_to_send.size());
-        // Serialize Version (Big Endian)
-        payload_with_version.push_back(static_cast<char>((currentMessageVersion >> 8) & 0xFF));
-        payload_with_version.push_back(static_cast<char>(currentMessageVersion & 0xFF));
-        payload_with_version.append(content_to_send);
+        // Construct JSON Payload for E2EE
+        nlohmann::json payload_json;
+        payload_json[keyVersion] = protocolVersion;
+        payload_json[keyContent] = content_to_send;
 
-        auto encrypted = peer->session_cipher->Encrypt(payload_with_version);
+        auto encrypted = peer->session_cipher->Encrypt(payload_json.dump());
         UpdatePeerActivity(peer_id);
 
         if (!encrypted.empty()) {
@@ -340,9 +352,6 @@ class MessagingService {
     }
 
     if (messages.empty() && !any_message_sent) {
-      // NOTE: We don't check for active uploads here because ConnectionAttemptFinished is about
-      // whether we need to keep retrying the *connection*. If uploads are active, the connection is alive.
-      // If we failed to send messages, retry. If we sent all, done.
       delivery_service_->ConnectionAttemptFinished(peer_id);
     }
   }
@@ -476,18 +485,27 @@ class MessagingService {
       return;
     }
 
-    if (decrypted.size() < sizeof(currentMessageVersion)) {
-      LGE << "Decrypted message too short to contain version header from " << peer_id.ToString();
-      return;
-    }
+    // --- JSON Protocol Handshake ---
+    std::string content;
+    try {
+      auto json_payload = nlohmann::json::parse(decrypted);
+      auto const received_version = json_payload.value(keyVersion, 0);
 
-    uint16_t const received_version = (static_cast<uint16_t>(static_cast<uint8_t>(decrypted[0])) << 8) |
-                                      static_cast<uint16_t>(static_cast<uint8_t>(decrypted[1]));
+      // 1. Check strict minimum compatibility
+      if (received_version < minSupportedVersion) {
+        throw std::runtime_error("Message version too old: " + std::to_string(received_version));
+      }
 
-    if (received_version > currentMessageVersion) {
-      std::string const error_msg = "Unsupported message of version " + std::to_string(received_version) +
-                                    " received, maximum supported version is " + std::to_string(currentMessageVersion) +
-                                    ", please update";
+      // 2. Forward compatibility:
+      // Even if received_version > protocolVersion (future app),
+      // we attempt to read 'c' (content). If the schema changed so drastically
+      // that 'c' is gone, the .at() call below will throw, handling the error gracefully.
+      content = json_payload.at(keyContent).get<std::string>();
+
+    } catch (std::exception const& e) {
+      LGE << "Failed to parse message payload from " << peer_id.ToString() << ": " << e.what();
+
+      std::string const error_msg = "Received message with unsupported format. Please update your application.";
 
       auto entry = history_->AddTextEntry(
           peer_id,
@@ -505,8 +523,6 @@ class MessagingService {
       on_message_received_(peer_id, entry);
       return;
     }
-
-    std::string const content = decrypted.substr(sizeof(currentMessageVersion));
 
     // Make a mutable copy of attachments to update paths
     std::vector<messaging::Attachment> local_attachments = attachments;

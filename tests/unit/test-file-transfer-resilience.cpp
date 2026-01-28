@@ -114,12 +114,11 @@ TEST_F(FileTransferResilienceTest, TransferProgressAndFileCreation) {
 
   // 1. Receive Chat Message with Attachment
   std::string const content = "Here is a large file";
-  std::string versioned_payload;
-  auto version = services::MessagingService::currentMessageVersion;
-  versioned_payload.push_back(static_cast<char>((version >> 8) & 0xFF));
-  versioned_payload.push_back(static_cast<char>(version & 0xFF));
-  versioned_payload.append(content);
-  auto encrypted = other_cipher.Encrypt(versioned_payload);
+  nlohmann::json payload_json;
+  payload_json[services::MessagingService::keyVersion] = services::MessagingService::protocolVersion;
+  payload_json[services::MessagingService::keyContent] = content;
+
+  auto encrypted = other_cipher.Encrypt(payload_json.dump());
 
   std::string const file_data(20000, 'A');  // Larger than one chunk (16KB)
   std::string const file_hash = CalculateSha256(file_data);
@@ -197,12 +196,12 @@ TEST_F(FileTransferResilienceTest, FailsGracefullyIfHashMismatch) {
   att.is_downloaded = false;
   att.mime_type = "application/octet-stream";
 
-  std::string payload;
-  auto version = services::MessagingService::currentMessageVersion;
-  payload.push_back(static_cast<char>((version >> 8) & 0xFF));
-  payload.push_back(static_cast<char>(version & 0xFF));
-  payload.append("payload");
-  auto encrypted = other_cipher.Encrypt(payload);
+  std::string payload_content = "payload";
+  nlohmann::json payload_json;
+  payload_json[services::MessagingService::keyVersion] = services::MessagingService::protocolVersion;
+  payload_json[services::MessagingService::keyContent] = payload_content;
+
+  auto encrypted = other_cipher.Encrypt(payload_json.dump());
 
   service_->OnChatMessageReceived(peer1, encrypted, 9002, false, {att});
 
