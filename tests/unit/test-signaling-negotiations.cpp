@@ -129,31 +129,32 @@ class ExtendedCoverageTest : public ::testing::Test {
   ContactID my_id_;
 };
 
-TEST_F(ExtendedCoverageTest, MessagingService_ReceivesFutureVersion) {
+TEST_F(ExtendedCoverageTest, MessagingService_ReceivesUnsupportedVersion) {
   // 1. Setup Peer
   ContactID const peer_id("0000000000000000000000000000000000000000000000000000000000000002");
   auto peer = std::make_shared<transport::Peer>(peer_id);
   transport_->AddPeer(peer_id, peer);
 
-  // Handshake crypto to enable decryption
   eillance::crypto::SessionCipher other;
   peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
   other.ComputeSharedSecret(peer->session_cipher->GetPublicKey());
 
-  // 2. Encrypt message with Version 255 (likely future)
-  std::string payload;
-  uint16_t future_version = 255;
-  payload.push_back(static_cast<char>((future_version >> 8) & 0xFF));
-  payload.push_back(static_cast<char>(future_version & 0xFF));
-  payload.append("Future Message");
-  auto encrypted = other.Encrypt(payload);
+  // 2. Encrypt message with very old version 0 (assuming MinSupported is 1)
+  // Logic: messaging_service checks if (v < kMinSupportedVersion) throws
+  nlohmann::json payload;
+  payload[services::MessagingService::keyVersion] = 0;
+  payload[services::MessagingService::keyContent] = "Old Message";
+
+  auto encrypted = other.Encrypt(payload.dump());
 
   bool received_system_msg = false;
   messaging_service_->SetChatMessageReceivedCallback([&](ContactID const& id,
                                                          messaging::HistoryEntryRecord const& rec) {
     if (id == peer_id && rec.kind == messaging::HistoryEntryKind::systemMessage) {
       auto const* msg = std::get_if<messaging::MessageEntry>(&rec.data);
-      if (msg && msg->content.find("Unsupported message of version 255") != std::string::npos) {
+      // Fixed string expectation to match service implementation:
+      // "Received message with unsupported format. Please update your application."
+      if (msg && msg->content.find("unsupported format") != std::string::npos) {
         received_system_msg = true;
       }
     }
@@ -165,66 +166,88 @@ TEST_F(ExtendedCoverageTest, MessagingService_ReceivesFutureVersion) {
   EXPECT_TRUE(received_system_msg);
 }
 
+TEST_F(ExtendedCoverageTest, MessagingService_FutureVersionIsCompatible) {
+  // 1. Setup Peer
+  ContactID const peer_id("0000000000000000000000000000000000000000000000000000000000000002");
+  auto peer = std::make_shared<transport::Peer>(peer_id);
+  transport_->AddPeer(peer_id, peer);
+
+  eillance::crypto::SessionCipher other;
+  peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
+  other.ComputeSharedSecret(peer->session_cipher->GetPublicKey());
+
+  // 2. Encrypt message with Version 99. The logic is forward compatible as long as keys exist.
+  nlohmann::json payload;
+  payload[services::MessagingService::keyVersion] = 99;
+  payload[services::MessagingService::keyContent] = "Future Message";
+  payload["extra_future_field"] = "something";
+
+  auto encrypted = other.Encrypt(payload.dump());
+
+  bool received_msg = false;
+  messaging_service_->SetChatMessageReceivedCallback([&](ContactID const& id,
+                                                         messaging::HistoryEntryRecord const& rec) {
+    if (id == peer_id && rec.kind == messaging::HistoryEntryKind::textMessage) {
+      auto const* msg = std::get_if<messaging::MessageEntry>(&rec.data);
+      if (msg && msg->content == "Future Message") {
+        received_msg = true;
+      }
+    }
+  });
+
+  // 3. Inject message
+  messaging_service_->OnChatMessageReceived(peer_id, encrypted, 102, false);
+
+  EXPECT_TRUE(received_msg);
+}
+
 TEST_F(ExtendedCoverageTest, Glare_WhenMyIdIsLarger_YieldsToIncoming) {
   // We want MyID > PeerID.
-  // We construct a PeerID that is all zeros, which is mathematically smaller than any random ID.
   ContactID const small_peer_id("0000000000000000000000000000000000000000000000000000000000000000");
-
   ASSERT_GT(my_id_, small_peer_id);
 
-  // 1. Simulate we started a connection (Peer exists in transport)
   auto peer = std::make_shared<transport::Peer>(small_peer_id);
   transport_->AddPeer(small_peer_id, peer);
 
-  // 2. Receive an OFFER from the smaller peer.
-  // Rule: If MyID > PeerID, we yield our role (close/remove existing peer) and accept theirs.
   nlohmann::json const offer =
       {{"from", small_peer_id.ToString()}, {"type", "offer"}, {"context", "data"}, {"sdp", "dummy_sdp"}};
 
   internal_service_->ProcessSignalingMessage(small_peer_id, "offer", offer);
 
-  // Verify we closed the old connection
   bool closed = false;
   for (auto const& [pid, ctx] : mock_transport_->log.closed_connections) {
     if (pid == small_peer_id && ctx == "data") {
       closed = true;
     }
   }
-  EXPECT_TRUE(closed) << "Should close existing connection if MyID > PeerID";
+  EXPECT_TRUE(closed);
 
-  // Verify we created an ANSWER (meaning we accepted the new offer)
   bool answer_sent = false;
   for (auto const& [pid, ctx] : mock_transport_->log.answers) {
     if (pid == small_peer_id && ctx == "data") {
       answer_sent = true;
     }
   }
-  EXPECT_TRUE(answer_sent) << "Should create answer for incoming offer";
+  EXPECT_TRUE(answer_sent);
 }
 
 TEST_F(ExtendedCoverageTest, Glare_WhenMyIdIsSmaller_IgnoresIncoming) {
-  // We want MyID < PeerID.
-  // We construct a PeerID that is max value.
   ContactID const large_peer_id("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF");
-
   ASSERT_LT(my_id_, large_peer_id);
 
-  // 1. Simulate we started a connection
   auto peer = std::make_shared<transport::Peer>(large_peer_id);
   transport_->AddPeer(large_peer_id, peer);
 
-  // 2. Receive OFFER
   nlohmann::json const offer =
       {{"from", large_peer_id.ToString()}, {"type", "offer"}, {"context", "data"}, {"sdp", "dummy_sdp"}};
 
   internal_service_->ProcessSignalingMessage(large_peer_id, "offer", offer);
 
-  // Verify NO answer sent (we ignored it)
   bool answer_sent = false;
   for (auto const& [pid, ctx] : mock_transport_->log.answers) {
     if (pid == large_peer_id) {
       answer_sent = true;
     }
   }
-  EXPECT_FALSE(answer_sent) << "Should ignore incoming offer if MyID < PeerID (we persist as caller)";
+  EXPECT_FALSE(answer_sent);
 }

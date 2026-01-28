@@ -116,7 +116,7 @@ TEST_F(ResilienceTest, PendingReadReceiptsPersistAndSend) {
   client_->MarkMessagesAsRead(peer1, {entry.id});
   FlushClientQueue();
 
-  // 3. Verify it is pending in storage
+  // 3. Verify pending
   auto pending = mock_storage_->GetPendingActions(peer1);
   ASSERT_EQ(pending.size(), 1);
   nlohmann::json const json = nlohmann::json::parse(pending[0].payload);
@@ -262,12 +262,11 @@ TEST_F(ResilienceTest, ReinstallRecovery_MessageReceipt) {
   peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
 
   std::string plain = "Recovery Message";
-  std::string payload;
-  auto const version = services::MessagingService::currentMessageVersion;
-  payload.push_back(static_cast<char>((version >> 8) & 0xFF));
-  payload.push_back(static_cast<char>(version & 0xFF));
-  payload.append(plain);
-  auto encrypted = other.Encrypt(payload);
+  nlohmann::json payload_json;
+  payload_json[services::MessagingService::keyVersion] = services::MessagingService::protocolVersion;
+  payload_json[services::MessagingService::keyContent] = plain;
+
+  auto encrypted = other.Encrypt(payload_json.dump());
 
   nlohmann::json const chat_msg = {
       {"type", "chat"},

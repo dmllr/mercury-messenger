@@ -171,14 +171,11 @@ TEST_F(BotApiTest, MessageHandling) {
 
   // Simulate encrypted message arrival
   std::string const plain = "Hello Bot";
-  std::string payload_with_version;
-  auto const version = services::MessagingService::currentMessageVersion;
-  payload_with_version.reserve(sizeof(version) + plain.size());
-  payload_with_version.push_back(static_cast<char>((version >> 8) & 0xFF));
-  payload_with_version.push_back(static_cast<char>(version & 0xFF));
-  payload_with_version.append(plain);
+  nlohmann::json payload_json;
+  payload_json[services::MessagingService::keyVersion] = services::MessagingService::protocolVersion;
+  payload_json[services::MessagingService::keyContent] = plain;
 
-  auto encrypted = other.Encrypt(payload_with_version);
+  auto encrypted = other.Encrypt(payload_json.dump());
   nlohmann::json const chat_msg = {
       {"type", "chat"},
       {"message_id", 123},

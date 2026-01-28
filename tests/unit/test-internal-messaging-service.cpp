@@ -178,14 +178,13 @@ TEST_F(InternalMessagingServiceTest, ProcessDataChannelMessage_Chat) {
   peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
   other.ComputeSharedSecret(peer->session_cipher->GetPublicKey());
 
-  // 2. Prepare Encrypted Message
+  // 2. Prepare Encrypted Message (JSON Protocol)
   std::string const content = "Hello";
-  std::string payload;
-  auto const version = services::MessagingService::currentMessageVersion;
-  payload.push_back(static_cast<char>((version >> 8) & 0xFF));
-  payload.push_back(static_cast<char>(version & 0xFF));
-  payload.append(content);
-  auto enc = other.Encrypt(payload);
+  nlohmann::json payload_json;
+  payload_json[services::MessagingService::keyVersion] = services::MessagingService::protocolVersion;
+  payload_json[services::MessagingService::keyContent] = content;
+
+  auto enc = other.Encrypt(payload_json.dump());
 
   nlohmann::json chat_msg = {{"type", "chat"}, {"message_id", 100}, {"is_system", false}, {"payload", enc}};
 

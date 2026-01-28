@@ -45,7 +45,7 @@ class BackupManager {
       return false;
     }
 
-    std::vector<unsigned char> key(kKeySize);
+    std::vector<unsigned char> key(keySize);
     if (!DeriveKey(password, salt, key)) {
       return false;
     }
@@ -144,7 +144,7 @@ class BackupManager {
     );
     backup_file.close();
 
-    std::vector<unsigned char> key(kKeySize);
+    std::vector<unsigned char> key(keySize);
     if (!DeriveKey(password, salt, key)) {
       return false;
     }
@@ -221,7 +221,7 @@ class BackupManager {
 
   std::string dbPath_;
   static constexpr int kSaltSize = 16;
-  static constexpr int kKeySize = 32;  // AES-256
+  static constexpr int keySize = 32;   // AES-256
   static constexpr int kIvSize = 12;   // GCM recommended IV size
   static constexpr int kTagSize = 16;  // GCM tag size
   static constexpr int kPbkdf2Iterations = 100000;
