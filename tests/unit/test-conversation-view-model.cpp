@@ -1,3 +1,4 @@
+#include <cstring>
 #include <map>
 #include <mutex>
 #include <variant>
@@ -236,11 +237,7 @@ TEST_F(ConversationViewModelTest, CancelTransferPropagates) {
   // Cancel transfer via VM
   vm_->CancelTransfer("cancel-test-id", false);
 
-  // Verify status update propagates back via event
-  // Client/Service logic sends EventAttachmentStatusChanged
-  // Since we use the real Client in tests (with mock transport), the logic in messaging service
-  // should trigger the callback we hooked up in ClientEventRouter.
-
+  // Wait for status change
   WaitFor([&] {
     auto s = observer->GetState();
     for (auto const& msg : s.history) {
@@ -254,50 +251,107 @@ TEST_F(ConversationViewModelTest, CancelTransferPropagates) {
     return false;
   });
 
-  // Check transport log to confirm cancel message sent
+  // Check transport log to confirm cancel message sent (Binary 0x03)
   bool cancel_sent = false;
-  for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
-    if (msg["type"] == "file_cancel" && msg["id"] == "cancel-test-id") {
-      cancel_sent = true;
+  for (auto const& msg : mock_transport_->log.sent_binary_messages | std::views::values) {
+    if (msg.size() >= 3 && msg[0] == std::byte{0xFE} && msg[1] == std::byte{0x03}) {
+      if (auto const id_len = static_cast<uint8_t>(msg[2]); msg.size() >= 3 + id_len) {
+        std::string id(id_len, '\0');
+        std::memcpy(id.data(), msg.data() + 3, id_len);
+        if (id == "cancel-test-id") {
+          cancel_sent = true;
+        }
+      }
     }
   }
-  // Might be flaky if transport isn't fully connected in test setup, but in ViewModelTest setup client starts.
-  // AddContact was called, but Connect might not have fully established a mocked peer in state ready for sending.
-  // However, MessagingService attempts to send or queues it.
+  ASSERT_TRUE(cancel_sent);
 }
 
 TEST_F(ConversationViewModelTest, ResumeTransferPropagates) {
-  auto observer = std::make_shared<MockConversationObserver>();
+  auto const observer = std::make_shared<MockConversationObserver>();
   vm_->SetObserver(observer);
 
-  // Resume download (is_upload=false)
-  vm_->ResumeTransfer("resume-test-id", false);
-
-  // Check transport log for resume request
-  // NOTE: This might require waiting a bit as Client logic runs on threads.
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
   // If connection is not open, it might be queued.
-  // The mock transport log captures sent messages.
-  // MessagingService::ResumeTransfer sends "file_resume_request".
-  // It requires connection.
-  // In ViewModelTest setup, we don't explicitly "Connect" and open data channel fully.
-  // Let's simulate connection.
+  // Connect and simulate data channel open to ensure sending
   client_->Connect(peer1);
   std::this_thread::sleep_for(std::chrono::milliseconds(50));
   // Simulate DC open
   mock_transport_->delegate->OnDataChannelOpen(peer1);
   std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-  // Now resume
+  // Resume download (is_upload=false)
   vm_->ResumeTransfer("resume-test-id", false);
   std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
   bool req_sent = false;
-  for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
-    if (msg["type"] == "file_resume_request" && msg["id"] == "resume-test-id") {
-      req_sent = true;
+  for (auto const& msg : mock_transport_->log.sent_binary_messages | std::views::values) {
+    // Check if it's a binary Resume packet (Magic 0xFE, Type 0x05)
+    if (msg.size() >= 3 && msg[0] == std::byte{0xFE} && msg[1] == std::byte{0x05}) {
+      if (auto const id_len = static_cast<uint8_t>(msg[2]); msg.size() >= 3 + id_len) {
+        std::string id(id_len, '\0');
+        std::memcpy(id.data(), msg.data() + 3, id_len);
+        if (id == "resume-test-id") {
+          req_sent = true;
+        }
+      }
     }
   }
   EXPECT_TRUE(req_sent);
+}
+
+TEST_F(ConversationViewModelTest, SendSmallAttachment_UpdatesStatusSynchronously) {
+  auto observer = std::make_shared<MockConversationObserver>();
+  vm_->SetObserver(observer);
+
+  // 1. Establish connection so upload starts immediately
+  client_->Connect(peer1);
+  // Yield to let connection setup (AddPeer etc)
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+  // Simulate Data Channel Open to enable sending
+  mock_transport_->delegate->OnDataChannelOpen(peer1);
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+  auto peer = mock_transport_->GetPeer(peer1);
+  ASSERT_TRUE(peer);
+  eillance::crypto::SessionCipher other;
+  peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
+  peer->data_channel_is_open = true;
+
+  // 2. Create small temp file
+  auto temp_path = std::filesystem::temp_directory_path() / "cvm_small.dat";
+  {
+    std::ofstream ofs(temp_path, std::ios::binary);
+    ofs << "small data";
+  }
+
+  // 3. Send
+  std::vector<services::AttachmentRequest> atts;
+  atts.push_back({temp_path.string(), messaging::AttachmentType::file, "", "application/octet-stream"});
+  vm_->SendMessage("Small File", atts);
+
+  // 4. Wait for Done status
+  bool success = false;
+  WaitFor(
+      [&] {
+        auto s = observer->GetState();
+        for (auto const& entry : s.history) {
+          if (std::holds_alternative<messaging::MessageEntry>(entry.data)) {
+            auto const& msg = std::get<messaging::MessageEntry>(entry.data);
+            if (msg.content == "Small File" && !msg.attachments.empty()) {
+              if (msg.attachments[0].status == messaging::AttachmentStatus::done) {
+                success = true;
+                return true;
+              }
+            }
+          }
+        }
+        return false;
+      },
+      std::chrono::milliseconds(2000)
+  );
+
+  EXPECT_TRUE(success) << "Attachment status should be Done for small file sent synchronously";
+
+  std::filesystem::remove(temp_path);
 }

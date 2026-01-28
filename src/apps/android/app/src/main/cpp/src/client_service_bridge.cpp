@@ -613,8 +613,11 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
         env,
         webrtc_transport_class,
         "sendDataChannelMessage",
-        "(Ljava/lang/String;Ljava/lang/String;)V"
+        "(Ljava/lang/String;Ljava/lang/String;)Z"
     );
+    // NEW: Register binary message sender
+    classref.RegisterMethod(env, webrtc_transport_class, "sendDataChannelMessageBinary", "(Ljava/lang/String;[B)Z");
+
     classref
         .RegisterMethod(env, webrtc_transport_class, "closePeerConnection", "(Ljava/lang/String;Ljava/lang/String;)V");
     classref.RegisterMethod(env, webrtc_transport_class, "createOffer", "(Ljava/lang/String;Ljava/lang/String;)V");

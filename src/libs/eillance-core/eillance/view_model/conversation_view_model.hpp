@@ -2,10 +2,12 @@
 
 #include <atomic>
 #include <chrono>
+#include <deque>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <thread>
+#include <unordered_map>
 #include <variant>
 #include <vector>
 
@@ -121,6 +123,9 @@ class ConversationViewModel {
     std::size_t chat_pages_loaded = 0;
     std::atomic<int> load_generation{0};
 
+    // Store pending status updates for attachments that might not be in history yet (race condition)
+    std::unordered_map<std::string, messaging::AttachmentStatus> pending_attachment_updates;
+
     inline static std::atomic<std::uint64_t> nextSystemMsgId{10000000000000000000ULL};
     static constexpr size_t kPageSize = 50;
 
@@ -149,12 +154,23 @@ class ConversationViewModel {
     void SendMessage(std::string const& content, std::vector<services::AttachmentRequest> const& attachments) {
       // Access MessagingService directly since facade might not have the overload yet
       auto entry = client->GetMessagingService()->SendChatMessage(peer_id, content, attachments);
-      {
-        std::lock_guard<std::mutex> const lock(mutex);
-        state.history.push_back(entry);
-        if (observer) {
-          observer->OnHistoryUpdated(state);
+
+      std::lock_guard<std::mutex> const lock(mutex);
+
+      // If we have pending updates for these attachments (e.g. upload finished synchronously), apply them now
+      if (std::holds_alternative<messaging::MessageEntry>(entry.data)) {
+        auto& msg_entry = std::get<messaging::MessageEntry>(entry.data);
+        for (auto& att : msg_entry.attachments) {
+          if (pending_attachment_updates.contains(att.id)) {
+            att.status = pending_attachment_updates[att.id];
+            pending_attachment_updates.erase(att.id);
+          }
         }
+      }
+
+      state.history.push_back(entry);
+      if (observer) {
+        observer->OnHistoryUpdated(state);
       }
     }
 
@@ -288,8 +304,16 @@ class ConversationViewModel {
         }
       }
 
-      if (found && observer) {
+      if (found) {
+        INVARIANT(observer);
         observer->OnHistoryUpdated(state);
+
+        // If we found it, remove from pending updates just in case it was stuck there
+        pending_attachment_updates.erase(attachment_id);
+      } else {
+        // Not found, buffer it. This handles the case where OnAttachmentStatusChanged fires (synchronously)
+        // inside SendMessage before the entry is pushed to history.
+        pending_attachment_updates[attachment_id] = status;
       }
     }
 
@@ -309,6 +333,20 @@ class ConversationViewModel {
       state.history.assign(messages.begin(), messages.end());
       chat_pages_loaded = 1;
       state.has_older_messages = (kPageSize < total_messages);
+
+      // Cleanup pending updates if any match loaded history (unlikely but safe)
+      for (auto& entry : state.history) {
+        if (std::holds_alternative<messaging::MessageEntry>(entry.data)) {
+          auto& msg = std::get<messaging::MessageEntry>(entry.data);
+          for (auto& att : msg.attachments) {
+            if (pending_attachment_updates.contains(att.id)) {
+              att.status = pending_attachment_updates[att.id];
+              pending_attachment_updates.erase(att.id);
+            }
+          }
+        }
+      }
+
       if (observer) {
         observer->OnHistoryUpdated(state);
       }

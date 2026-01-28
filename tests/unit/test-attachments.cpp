@@ -34,6 +34,11 @@ class AttachmentTest : public ::testing::Test {
 
     file_transfer_service_ = std::make_shared<services::FileTransferService>(storage_, transport_);
 
+    // Set callbacks on file_transfer_service_ BEFORE passing to messaging_service_
+    file_transfer_service_->SetAttachmentStatusChangedCallback([](auto, auto, auto) {});
+    file_transfer_service_->SetTransferProgressCallback([](auto, auto, auto) {});
+    file_transfer_service_->SetAttachmentDownloadedCallback([](auto, auto) {});
+
     service_ = std::make_unique<services::MessagingService>(
         storage_,
         transport_,
@@ -83,7 +88,7 @@ TEST_F(AttachmentTest, SendMessageCalculatesHash) {
 
   auto const& att = entry.attachments[0];
   EXPECT_EQ(att.file_path, temp_file_path_);
-  EXPECT_EQ(att.mime_type, "image/jpeg");  // Check mime type
+  EXPECT_EQ(att.mime_type, "image/jpeg");
   EXPECT_FALSE(att.hash.empty());
   EXPECT_EQ(att.hash.length(), 64);
 }
@@ -103,7 +108,7 @@ TEST_F(AttachmentTest, PersistenceStoresHash) {
       .peer_id = peer1
   };
 
-  std::ignore = storage_->AddHistoryEntry(record);
+  (void)storage_->AddHistoryEntry(record);
 
   // Retrieve
   auto page = storage_->GetHistoryPage(peer1, 0, 10);
@@ -157,7 +162,6 @@ TEST_F(AttachmentTest, AttachmentWithComputationFailureIsSkipped) {
   std::vector<services::AttachmentRequest> attachments;
   attachments.push_back({bad_file, messaging::AttachmentType::file, "", "application/octet-stream"});
 
-  // We expect this to NOT add the attachment because validation/processing fails
   auto const record = service_->SendChatMessage(peer1, "msg", attachments);
 
   ASSERT_TRUE(std::holds_alternative<messaging::MessageEntry>(record.data));
@@ -168,29 +172,22 @@ TEST_F(AttachmentTest, AttachmentWithComputationFailureIsSkipped) {
 }
 
 TEST_F(AttachmentTest, AttachmentPersistenceAcrossRestarts) {
-  // 1. Simulate receiving a message with an attachment (not yet downloaded)
   messaging::Attachment att;
   att.id = "restart_test_id";
   att.type = messaging::AttachmentType::image;
   att.size_bytes = 10;
   att.is_downloaded = false;
   att.mime_type = "image/jpeg";
-  // We need a path that exists for the fix to work.
-  // The service logic constructs path based on storage root.
-  // We must simulate the file existing at that path.
 
-  // Create dummy path structure to match service logic
   std::filesystem::path storage_root(storage_->GetPath());
   std::filesystem::path attachments_dir = storage_root.parent_path() / "attachments";
   std::filesystem::create_directories(attachments_dir);
   std::filesystem::path final_path = attachments_dir / (att.id + ".jpg");
 
-  // Create the "downloaded" file manually
   std::ofstream ofs(final_path, std::ios::binary);
-  ofs << "0123456789";  // 10 bytes
+  ofs << "0123456789";
   ofs.close();
 
-  // The entry in DB has file_path set but is_downloaded = false (initial receive state)
   att.file_path = final_path.string();
 
   messaging::MessageEntry msg_data;
@@ -205,13 +202,12 @@ TEST_F(AttachmentTest, AttachmentPersistenceAcrossRestarts) {
       .peer_id = peer1
   };
 
-  // Save to DB
-  storage_->AddHistoryEntry(record);
+  (void)storage_->AddHistoryEntry(record);
 
-  // 2. Restart Service (Create new instance sharing same storage)
   auto contact_manager = std::make_shared<identity::ContactManager>(storage_);
   auto conn_handler = [](ContactID const&) {};
   auto file_transfer_service = std::make_shared<services::FileTransferService>(storage_, transport_);
+
   auto new_service = std::make_unique<services::MessagingService>(
       storage_,
       transport_,
@@ -220,8 +216,6 @@ TEST_F(AttachmentTest, AttachmentPersistenceAcrossRestarts) {
       conn_handler
   );
 
-  // 3. Load History
-  // GetHistoryPage should detect the file exists and update is_downloaded to true
   auto page = new_service->GetHistoryPage(peer1, 0, 10);
 
   ASSERT_EQ(page.messages.size(), 1);

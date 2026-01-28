@@ -1,6 +1,9 @@
+#include <algorithm>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <thread>
+#include <vector>
 
 #include <gtest/gtest.h>
 #include <openssl/sha.h>
@@ -68,6 +71,9 @@ class MessagingServiceTest : public ::testing::Test {
     );
     service_->SetChatMessageReceivedCallback([](auto, auto) {});
     service_->SetMessageStatusChangedCallback([](auto, auto, auto) {});
+    service_->SetAttachmentStatusChangedCallback([](auto, auto, auto) {});
+    service_->SetTransferProgressCallback([](auto, auto, auto) {});
+    service_->SetAttachmentDownloadedCallback([](auto, auto) {});
   }
 
   void TearDown() override {
@@ -90,6 +96,27 @@ class MessagingServiceTest : public ::testing::Test {
     std::vector<std::byte> hash_bytes(SHA256_DIGEST_LENGTH);
     std::memcpy(hash_bytes.data(), hash, SHA256_DIGEST_LENGTH);
     return eillance::crypto::ToHex(hash_bytes);
+  }
+
+  // Helper to construct binary chunk
+  std::vector<std::byte> CreateChunkPacket(std::string const& id, uint32_t seq, std::vector<std::byte> const& payload) {
+    std::vector<std::byte> packet;
+    packet.push_back(std::byte{0xFE});
+    packet.push_back(std::byte{0x01});
+    packet.push_back(static_cast<std::byte>(id.size()));
+    for (char c : id) packet.push_back(static_cast<std::byte>(c));
+    for (int i = 0; i < 4; ++i) packet.push_back(static_cast<std::byte>((seq >> (i * 8)) & 0xFF));
+    packet.insert(packet.end(), payload.begin(), payload.end());
+    return packet;
+  }
+
+  std::vector<std::byte> CreateEndPacket(std::string const& id) {
+    std::vector<std::byte> packet;
+    packet.push_back(std::byte{0xFE});
+    packet.push_back(std::byte{0x06});
+    packet.push_back(static_cast<std::byte>(id.size()));
+    for (char c : id) packet.push_back(static_cast<std::byte>(c));
+    return packet;
   }
 
   storage::MockPersistentStorageImpl* mock_storage_;
@@ -154,7 +181,6 @@ TEST_F(MessagingServiceTest, DownloadTriggersCallback) {
   std::string file_content = "Hello World Data";
   std::string file_hash = CalculateSha256(file_content);
 
-  // Use new JSON format for encrypted payload
   std::string payload_content = "Here is a file";
   nlohmann::json payload_json;
   payload_json[services::MessagingService::keyVersion] = services::MessagingService::protocolVersion;
@@ -172,15 +198,15 @@ TEST_F(MessagingServiceTest, DownloadTriggersCallback) {
 
   service_->OnChatMessageReceived(peer1, encrypted, 12345, false, {att});
 
+  // Manually drive the FileTransferService via binary protocol
   std::vector<std::byte> data_bytes(file_content.size());
   std::memcpy(data_bytes.data(), file_content.data(), file_content.size());
-  std::string data_hex = eillance::crypto::ToHex(data_bytes);
 
-  nlohmann::json chunk_msg = {{"type", "file_chunk"}, {"id", "att_1"}, {"seq", 0}, {"data", data_hex}, {"eof", false}};
-  file_transfer_service_->ProcessMessage(peer1, chunk_msg);
+  auto chunk_packet = CreateChunkPacket("att_1", 0, data_bytes);
+  file_transfer_service_->ProcessBinaryMessage(peer1, chunk_packet);
 
-  nlohmann::json eof_msg = {{"type", "file_chunk"}, {"id", "att_1"}, {"seq", 1}, {"data", ""}, {"eof", true}};
-  file_transfer_service_->ProcessMessage(peer1, eof_msg);
+  auto end_packet = CreateEndPacket("att_1");
+  file_transfer_service_->ProcessBinaryMessage(peer1, end_packet);
 
   EXPECT_TRUE(download_cb_called);
 }

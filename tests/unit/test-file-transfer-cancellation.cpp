@@ -1,3 +1,4 @@
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <thread>
@@ -65,6 +66,31 @@ class FileTransferCancellationTest : public ::testing::Test {
     std::filesystem::remove_all(temp_dir_);
   }
 
+  // Helpers for binary protocol packet checks
+  bool IsBinaryPacket(std::vector<std::byte> const& data, uint8_t type, std::string const& id) {
+    if (data.size() < 3 + id.size()) return false;
+    if (data[0] != std::byte{0xFE}) return false;
+    if (data[1] != std::byte{type}) return false;
+    if (static_cast<uint8_t>(data[2]) != id.size()) return false;
+    std::string packet_id(id.size(), '\0');
+    std::memcpy(packet_id.data(), data.data() + 3, id.size());
+    return packet_id == id;
+  }
+
+  std::vector<std::byte> CreateChunkPacket(std::string const& id, uint32_t seq, std::vector<std::byte> const& payload) {
+    std::vector<std::byte> packet;
+    packet.push_back(std::byte{0xFE});
+    packet.push_back(std::byte{0x01});  // Chunk Type
+    packet.push_back(static_cast<std::byte>(id.size()));
+    for (char c : id) packet.push_back(static_cast<std::byte>(c));
+
+    // Seq LE
+    for (int i = 0; i < 4; ++i) packet.push_back(static_cast<std::byte>((seq >> (i * 8)) & 0xFF));
+
+    packet.insert(packet.end(), payload.begin(), payload.end());
+    return packet;
+  }
+
   std::filesystem::path temp_dir_;
   std::filesystem::path attachments_dir_;
   storage::MockPersistentStorageImpl* mock_storage_;
@@ -90,9 +116,9 @@ TEST_F(FileTransferCancellationTest, CancelUpload) {
   std::filesystem::path file_path = temp_dir_ / "large_file.dat";
   {
     std::ofstream ofs(file_path, std::ios::binary);
-    // Write enough data to ensure it doesn't finish in one pump
+    // Write enough data to ensure it doesn't finish immediately
     std::string data(
-        services::FileTransferService::windowSizeChunks * services::FileTransferService::chunkSizeBytes * 2,
+        services::FileTransferService::kWindowSizeChunks * services::FileTransferService::kChunkSizeBytes * 2,
         'A'
     );
     ofs << data;
@@ -108,10 +134,10 @@ TEST_F(FileTransferCancellationTest, CancelUpload) {
   // 4. Cancel
   service_->CancelTransfer(peer1, att_id, true);
 
-  // 5. Verify cancel message sent
+  // 5. Verify cancel message sent (Binary protocol: Type 0x03)
   bool cancel_sent = false;
-  for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
-    if (msg["type"] == "file_cancel" && msg["id"] == att_id) {
+  for (auto const& [pid, msg] : mock_transport_->log.sent_binary_messages) {
+    if (IsBinaryPacket(msg, 0x03, att_id)) {
       cancel_sent = true;
     }
   }
@@ -145,8 +171,10 @@ TEST_F(FileTransferCancellationTest, CancelDownload) {
   );
 
   // 2. Start Download by receiving chunk 0
-  nlohmann::json chunk = {{"type", "file_chunk"}, {"id", "down_id"}, {"seq", 0}, {"data", "001122"}, {"eof", false}};
-  file_transfer_service_->ProcessMessage(peer1, chunk);
+  std::vector<std::byte> payload = {std::byte{0x00}, std::byte{0x11}, std::byte{0x22}};
+  auto chunk = CreateChunkPacket("down_id", 0, payload);
+
+  file_transfer_service_->ProcessBinaryMessage(peer1, chunk);
 
   // Verify temp file exists
   std::filesystem::path temp_path = attachments_dir_ / "down_id.tmp";
@@ -155,10 +183,10 @@ TEST_F(FileTransferCancellationTest, CancelDownload) {
   // 3. Cancel
   service_->CancelTransfer(peer1, "down_id", false);
 
-  // 4. Verify cancel message sent
+  // 4. Verify cancel message sent (Binary Type 0x03)
   bool cancel_sent = false;
-  for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
-    if (msg["type"] == "file_cancel" && msg["id"] == "down_id") {
+  for (auto const& [pid, msg] : mock_transport_->log.sent_binary_messages) {
+    if (IsBinaryPacket(msg, 0x03, "down_id")) {
       cancel_sent = true;
     }
   }
@@ -194,15 +222,15 @@ TEST_F(FileTransferCancellationTest, ResumeSendsRequest) {
   msg_data.attachments.push_back(att);
   std::ignore = storage_->AddHistoryEntry({.data = msg_data, .peer_id = peer1});
 
-  mock_transport_->log.sent_peer_messages.clear();
+  mock_transport_->log.sent_binary_messages.clear();
 
   // 3. Resume
-  service_->ResumeTransfer(peer1, "resume_id", true);
+  service_->ResumeTransfer(peer1, "resume_id", false);
 
-  // 4. Verify resume request sent (StartUpload sends it)
+  // 4. Verify resume request sent (Binary Type 0x05)
   bool req_sent = false;
-  for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
-    if (msg["type"] == "file_resume_request" && msg["id"] == "resume_id") {
+  for (auto const& [pid, msg] : mock_transport_->log.sent_binary_messages) {
+    if (IsBinaryPacket(msg, 0x05, "resume_id")) {
       req_sent = true;
     }
   }

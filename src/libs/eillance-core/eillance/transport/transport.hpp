@@ -4,8 +4,10 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include <nlohmann/json.hpp>
+#include <span>
 
 #include "eillance/events/event_source.hpp"
 #include "eillance/identity/contact_id.hpp"
@@ -85,6 +87,10 @@ class Transport {
   void SendPeerDataChannelMessage(ContactID const& peer_id, Json const& message) const {
     self_->SendPeerDataChannelMessage(peer_id, message);
   }
+  // Updated return type
+  auto SendPeerDataChannelBinaryMessage(ContactID const& peer_id, std::span<std::byte const> message) const -> bool {
+    return self_->SendPeerDataChannelBinaryMessage(peer_id, message);
+  }
   void AddToStream(std::shared_ptr<Peer> const& peer, bool is_adding_video) const {
     self_->AddToStream(peer, is_adding_video);
   }
@@ -139,6 +145,10 @@ class Transport {
 
     virtual void CreateDataChannel(ContactID const& peer_id) = 0;
     virtual void SendPeerDataChannelMessage(ContactID const& peer_id, Json const& message) const = 0;
+
+    // Updated return type
+    virtual auto SendPeerDataChannelBinaryMessage(ContactID const& peer_id, std::span<std::byte const> message) const
+        -> bool = 0;
 
     virtual void SendSignalingMessage(Json const& message) const = 0;
 
@@ -211,6 +221,11 @@ class Transport {
     void SendSignalingMessage(Json const& message) const override { transport_->SendSignalingMessage(message); }
     void SendPeerDataChannelMessage(ContactID const& peer_id, Json const& message) const override {
       transport_->SendPeerDataChannelMessage(peer_id, message);
+    }
+    // Updated return type
+    auto SendPeerDataChannelBinaryMessage(ContactID const& peer_id, std::span<std::byte const> message) const
+        -> bool override {
+      return transport_->SendPeerDataChannelBinaryMessage(peer_id, message);
     }
     void AddToStream(std::shared_ptr<Peer> const& peer, bool is_adding_video) const override {
       transport_->AddToStream(peer, is_adding_video);

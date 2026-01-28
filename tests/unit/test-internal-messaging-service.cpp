@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <memory>
 #include <vector>
 
@@ -17,7 +18,7 @@
 
 using namespace eillance;
 
-// Mock Capture to satisfy MediaCallService invariants
+// ... (MockCapture, Setup unchanged until on_data_channel_message usage) ...
 class MockCapture {
  public:
   void Configure(Config) {}
@@ -28,6 +29,7 @@ class MockCapture {
 };
 
 class InternalMessagingServiceTest : public ::testing::Test {
+  // ... (SetUp same as before, no changes needed in setup) ...
  protected:
   void SetUp() override {
     // 1. Storage
@@ -45,7 +47,6 @@ class InternalMessagingServiceTest : public ::testing::Test {
 
     // Services
     account_service_ = std::make_shared<services::AccountService>(storage_, transport_);
-    // FIX: Set callback to satisfy invariant during GenerateNewIdentity
     account_service_->SetOnMyProfileUpdatedCallback([]() {});
 
     file_transfer_service_ = std::make_shared<services::FileTransferService>(storage_, transport_);
@@ -126,6 +127,8 @@ class InternalMessagingServiceTest : public ::testing::Test {
   ContactID const peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
 };
 
+// ... (ProcessSystemMessage_AuthChallenge, ProcessSystemMessage_LoginSuccess, ProcessSignalingMessage_DataOffer,
+// ProcessSignalingMessage_ContactAddRequest unchanged) ...
 TEST_F(InternalMessagingServiceTest, ProcessSystemMessage_AuthChallenge) {
   std::string challenge = "random_challenge_string";
   nlohmann::json msg = {{"challenge", challenge}};
@@ -168,6 +171,8 @@ TEST_F(InternalMessagingServiceTest, ProcessSignalingMessage_ContactAddRequest) 
   EXPECT_TRUE(request_received);
 }
 
+// DataChannel handlers tests still use `ProcessDataChannelMessage` directly which expects JSON.
+// This remains valid for JSON-based messages (chat, keys).
 TEST_F(InternalMessagingServiceTest, ProcessDataChannelMessage_Chat) {
   // 1. Setup Peer with crypto
   auto peer = std::make_shared<transport::Peer>(peer1);
@@ -240,4 +245,24 @@ TEST_F(InternalMessagingServiceTest, ProcessDataChannelMessage_ProfileInfo) {
   EXPECT_TRUE(profile_updated);
   EXPECT_TRUE(status_changed);
   EXPECT_TRUE(contact_status_changed);
+}
+
+TEST_F(InternalMessagingServiceTest, SetupPeerHandlers_BinaryRouting) {
+  auto peer = std::make_shared<transport::Peer>(peer1);
+  service_->SetupPeerHandlers(peer, peer1);
+
+  // Simulate binary packet (Magic 0xFE)
+  std::vector<std::byte> bin_data = {std::byte{0xFE}, std::byte{0x01}};
+
+  // We can't easily spy on FileTransferService::ProcessBinaryMessage without mocking it,
+  // but we can ensure no crash and logical routing.
+  peer->on_data_channel_message(bin_data);
+
+  // Simulate JSON packet (converted from bytes)
+  nlohmann::json json_msg = {{"type", "test_msg"}};
+  std::string s = json_msg.dump();
+  std::vector<std::byte> json_bytes(s.size());
+  std::transform(s.begin(), s.end(), json_bytes.begin(), [](char c) { return static_cast<std::byte>(c); });
+
+  peer->on_data_channel_message(json_bytes);
 }

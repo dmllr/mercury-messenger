@@ -1,5 +1,7 @@
+#include <algorithm>
 #include <chrono>
 #include <thread>
+#include <vector>
 
 #include <gtest/gtest.h>
 
@@ -22,6 +24,7 @@ class MockCapture {
 };
 
 class BotApiTest : public ::testing::Test {
+  // ... (SetUp/Teardown unchanged) ...
  protected:
   void SetUp() override {
     // Setup Core Client components
@@ -42,38 +45,31 @@ class BotApiTest : public ::testing::Test {
     // Fix: Set callbacks to avoid invariant violations
     client_->GetAccountService()->SetOnMyProfileUpdatedCallback([]() {});
 
-    // Contact Service
     client_->GetContactService()->SetContactRequestCallback([](auto const&) {});
     client_->GetContactService()->SetContactStatusChangedCallback([](auto const&, auto) {});
     client_->GetContactService()->SetContactRemovedCallback([](auto const&) {});
 
-    // Profile Service
     client_->GetProfileService()->SetContactProfileUpdatedCallback([](auto const&) {});
     client_->GetProfileService()->SetPeerListUpdateCallback([](auto const&) {});
     client_->GetProfileService()->SetProfileReceivedCallback([](auto const&, auto const&) {});
 
-    // Media
     client_->GetMediaCallService()->SetIncomingCallCallback([](auto const&, auto) {});
     client_->GetMediaCallService()->SetCallRingingCallback([](auto const&) {});
     client_->GetMediaCallService()->SetCallAcceptedCallback([](auto const&) {});
     client_->GetMediaCallService()->SetCallTerminatedCallback([](auto const&) {});
     client_->GetMediaCallService()->SetFrameReceivedCallback([](auto const&) {});
 
-    // Messaging
     client_->GetMessagingService()->SetChatMessageReceivedCallback([](auto const&, auto const&) {});
     client_->GetMessagingService()->SetMessageStatusChangedCallback([](auto const&, auto, auto) {});
 
     client_->SetStatusCallback([](auto const&, auto, auto) {});
 
-    // Initialize Identity
     (void)client_->GetAccountService()->GenerateNewIdentity();
 
-    // Start Client logic
     client_->Start();
 
-    // Setup Bot with injected Client
     mercury::bot::Bot::Options options;
-    options.identity_path = "dummy_path";  // Not used with injected client
+    options.identity_path = "dummy_path";
     options.auto_accept_contacts = true;
     options.auto_reject_calls = true;
 
@@ -100,8 +96,8 @@ class BotApiTest : public ::testing::Test {
   ContactID const peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
 };
 
+// ... (AutoAcceptContacts, AutoRejectCalls unchanged) ...
 TEST_F(BotApiTest, AutoAcceptContacts) {
-  // Simulate receiving a contact add request
   nlohmann::json req_msg = {
       {"from", peer1.ToString()},
       {"type", "contact_add_request"},
@@ -111,12 +107,10 @@ TEST_F(BotApiTest, AutoAcceptContacts) {
   mock_transport_->SimulatePeerMessage(peer1, req_msg);
   FlushClientQueue();
 
-  // Verify contact is confirmed (Auto-accept)
   auto contact = client_->GetContactService()->GetContact(peer1);
   ASSERT_TRUE(contact.has_value());
   EXPECT_EQ(contact->status, identity::ContactStatus::confirmed);
 
-  // Check that confirmation was sent
   bool confirmed = false;
   for (auto const& msg : mock_transport_->log.sent_signaling_messages) {
     if (msg["type"] == "contact_confirm" && msg["to"] == peer1.ToString()) {
@@ -127,18 +121,11 @@ TEST_F(BotApiTest, AutoAcceptContacts) {
 }
 
 TEST_F(BotApiTest, AutoRejectCalls) {
-  // Simulate incoming call
-  // This usually comes via signaling "offer" with context="media"
   nlohmann::json offer_msg =
       {{"from", peer1.ToString()}, {"type", "offer"}, {"context", "media"}, {"sdp", "dummy_sdp_media"}};
 
   mock_transport_->SimulatePeerMessage(peer1, offer_msg);
   FlushClientQueue();
-
-  // Bot logic calls client->RejectCall() -> Hangup(notify=true)
-  // Verify hangup message sent via data channel (if open) or resources cleaned
-  // Since data channel is not open in this mock scenario without extra setup,
-  // we primarily check that the transport closed the media connection.
 
   bool media_closed = false;
   for (auto const& [pid, ctx] : mock_transport_->log.closed_connections) {
@@ -156,20 +143,17 @@ TEST_F(BotApiTest, MessageHandling) {
     received_text = msg.text;
   });
 
-  // Use Client::Connect to properly setup peer handlers (including on_data_channel_message)
   client_->Connect(peer1);
   FlushClientQueue();
 
   auto peer = mock_transport_->GetPeer(peer1);
   ASSERT_TRUE(peer);
 
-  // Setup data channel and crypto manually on the created peer
   peer->data_channel_is_open = true;
   eillance::crypto::SessionCipher other;
   other.ComputeSharedSecret(peer->session_cipher->GetPublicKey());
   peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
 
-  // Simulate encrypted message arrival
   std::string const plain = "Hello Bot";
   nlohmann::json payload_json;
   payload_json[services::MessagingService::keyVersion] = services::MessagingService::protocolVersion;
@@ -183,9 +167,14 @@ TEST_F(BotApiTest, MessageHandling) {
       {"payload", std::vector<std::byte>(encrypted.begin(), encrypted.end())}
   };
 
-  // Inject via the handler that Client::Connect established
   ASSERT_TRUE(peer->on_data_channel_message);
-  peer->on_data_channel_message(chat_msg.dump());
+
+  // Convert JSON to bytes
+  std::string msg_str = chat_msg.dump();
+  std::vector<std::byte> msg_bytes(msg_str.size());
+  std::ranges::transform(msg_str, msg_bytes.begin(), [](char c) { return static_cast<std::byte>(c); });
+
+  peer->on_data_channel_message(msg_bytes);
 
   FlushClientQueue();
 
@@ -194,9 +183,7 @@ TEST_F(BotApiTest, MessageHandling) {
 }
 
 TEST_F(BotApiTest, SendMessage) {
-  // Ensure peer is a contact so sending is allowed
   client_->AddContact(peer1, std::nullopt);
-  // Ensure peer is connected so message sends immediately
   client_->Connect(peer1);
   FlushClientQueue();
 

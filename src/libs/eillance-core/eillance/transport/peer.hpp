@@ -1,10 +1,13 @@
 #pragma once
 
 #include <atomic>
+#include <functional>
 #include <mutex>
 #include <optional>
 #include <shared_mutex>
 #include <vector>
+
+#include <span>
 
 #include "eillance/crypto/crypto.hpp"
 #include "eillance/identity/contact_id.hpp"
@@ -32,7 +35,10 @@ struct Peer {
   std::atomic<Time::Unit> last_activity_time{0};
   std::atomic<bool> has_media_peer_connection{false};
   std::unique_ptr<crypto::SessionCipher> session_cipher{};
-  std::function<void(std::string const&)> on_data_channel_message;
+
+  // Callback now receives raw bytes to support binary protocols
+  std::function<void(std::span<std::byte const>)> on_data_channel_message;
+
   std::optional<std::string> pending_offer_sdp;
   std::vector<Candidate> pending_candidates{};
   // NOLINTEND(*-non-private-member-variables-in-classes)
