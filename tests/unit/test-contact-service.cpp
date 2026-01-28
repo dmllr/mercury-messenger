@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "eillance/services/contact_service.hpp"
+#include "eillance/services/file_transfer_service.hpp"
 #include "mock_persistent_storage.hpp"
 #include "mock_transport.hpp"
 
@@ -46,8 +47,15 @@ class ContactServiceTest : public ::testing::Test {
     contact_service_->SetPeerListUpdateCallback([](auto const&) {});
     contact_service_->SetProfileReceivedCallback([](auto const&, auto const&) {});
 
-    messaging_service_ =
-        std::make_unique<services::MessagingService>(storage_, transport_, contact_manager, conn_handler);
+    file_transfer_service_ = std::make_shared<services::FileTransferService>(storage_, transport_);
+
+    messaging_service_ = std::make_unique<services::MessagingService>(
+        storage_,
+        transport_,
+        contact_manager,
+        file_transfer_service_,
+        conn_handler
+    );
 
     // Initialize dummy callbacks for MessagingService
     messaging_service_->SetChatMessageReceivedCallback([](auto const&, auto const&) {});
@@ -56,11 +64,16 @@ class ContactServiceTest : public ::testing::Test {
     contact_service_->SetMessagingService(messaging_service_.get());
   }
 
+  void TearDown() override {
+      file_transfer_service_.reset();
+  }
+
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::unique_ptr<transport::MockTransport> mock_transport_impl_;
   transport::MockTransport* mock_transport_raw_{};
   std::shared_ptr<transport::Transport> transport_;
   std::unique_ptr<services::AccountService> account_service_;
+  std::shared_ptr<services::FileTransferService> file_transfer_service_;
   std::unique_ptr<services::MessagingService> messaging_service_;
   std::unique_ptr<services::ContactService> contact_service_;
 
@@ -79,6 +92,7 @@ TEST_F(ContactServiceTest, AddContact) {
   ASSERT_FALSE(history.messages.empty());
   auto const& last_msg = history.messages[0];
   EXPECT_EQ(last_msg.kind, messaging::HistoryEntryKind::systemMessage);
+  EXPECT_EQ(last_msg.direction, messaging::MessageDirection::sent);
 }
 
 TEST_F(ContactServiceTest, ReceiveContactRequest) {

@@ -11,6 +11,7 @@
 #include "eillance/logging/logging.hpp"
 #include "eillance/services/account_service.hpp"
 #include "eillance/services/contact_service.hpp"
+#include "eillance/services/file_transfer_service.hpp"
 #include "eillance/services/media_call_service.hpp"
 #include "eillance/services/messaging_service.hpp"
 #include "eillance/storage/persistent_storage.hpp"
@@ -36,6 +37,9 @@ class Client final : public transport::TransportDelegate {
     // Shared ContactManager
     auto contact_manager = std::make_shared<identity::ContactManager>(storage_);
 
+    // Initialize FileTransferService
+    file_transfer_service_ = std::make_shared<services::FileTransferService>(storage_, transport_);
+
     contact_service_ = std::make_shared<services::ContactService>(
         storage_,
         transport_,
@@ -48,6 +52,7 @@ class Client final : public transport::TransportDelegate {
         storage_,
         transport_,
         contact_manager,
+        file_transfer_service_,
         [this](ContactID const& id) { this->Connect(id); }  // Inject connection logic
     );
 
@@ -96,6 +101,9 @@ class Client final : public transport::TransportDelegate {
   }
   [[nodiscard]] auto GetMediaCallService() const -> std::shared_ptr<services::MediaCallService> {
     return media_call_service_;
+  }
+  [[nodiscard]] auto GetFileTransferService() const -> std::shared_ptr<services::FileTransferService> {
+    return file_transfer_service_;
   }
   [[nodiscard]] auto GetStorage() const -> std::shared_ptr<storage::PersistentStorage> { return storage_; }
 
@@ -484,7 +492,8 @@ class Client final : public transport::TransportDelegate {
               peer_id,
               {{"type", "key_exchange"},
                {"key", std::vector<std::byte>(my_key.begin(), my_key.end())},
-               {"is_reply", true}}
+               {"is_reply", true}
+              }
           );
         }
         messaging_service_->SendQueuedMessages(peer_id);
@@ -541,7 +550,7 @@ class Client final : public transport::TransportDelegate {
     } else if (type == "termination") {
       transport_->RemovePeer(peer_id);
     } else if (type == "file_chunk" || type == "file_cancel" || type == "file_resume_request") {
-      messaging_service_->ProcessIncomingFileChunk(peer_id, message);
+      file_transfer_service_->ProcessMessage(peer_id, message);
     }
   }
 
@@ -583,6 +592,7 @@ class Client final : public transport::TransportDelegate {
   std::shared_ptr<services::ContactService> contact_service_;
   std::shared_ptr<services::MessagingService> messaging_service_;
   std::shared_ptr<services::MediaCallService> media_call_service_;
+  std::shared_ptr<services::FileTransferService> file_transfer_service_;
 
   DispatchQueue background_queue_{"ClientBgQueue", 1};
   std::atomic<bool> is_running_{false};
