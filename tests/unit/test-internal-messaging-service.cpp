@@ -181,7 +181,9 @@ TEST_F(InternalMessagingServiceTest, ProcessDataChannelMessage_Chat) {
   // 2. Prepare Encrypted Message
   std::string const content = "Hello";
   std::string payload;
-  payload.push_back(1);  // Version
+  auto const version = services::MessagingService::currentMessageVersion;
+  payload.push_back(static_cast<char>((version >> 8) & 0xFF));
+  payload.push_back(static_cast<char>(version & 0xFF));
   payload.append(content);
   auto enc = other.Encrypt(payload);
 

@@ -48,6 +48,7 @@ add_executable(h-e-tests
   test-resilience.cpp
   test-settings-manager.cpp
   test-settings-view-model.cpp
+  test-signaling-negotiations.cpp
   test-sqlite-storage.cpp
   test-stream.cpp
   test-stream-source.cpp
