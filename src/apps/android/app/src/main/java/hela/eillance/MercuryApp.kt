@@ -126,6 +126,24 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
   val hasNotificationPermission by viewModel.hasNotificationPermission.collectAsState()
   val hasBatteryExemption by viewModel.hasBatteryExemption.collectAsState()
 
+  // -- Global State Observations --
+  val contacts by contactsVM.contacts.collectAsState()
+  val profileDialogPeerId by contactsVM.showContactProfileDialog.collectAsState()
+
+  // -- Global Dialogs --
+  profileDialogPeerId?.let { pid ->
+    contacts.find { it.peerId == pid }?.let { c ->
+      ContactProfileDialog(
+        contact = c,
+        onDismissRequest = { contactsVM.onContactProfileDialogDismiss() },
+        onOverrideSave = { name -> contactsVM.setContactDisplayNameOverride(pid, name) },
+        onOverrideReset = { contactsVM.resetContactDisplayNameOverride(pid) },
+        onRemoveRequest = { contactsVM.deleteContact(pid); contactsVM.onContactProfileDialogDismiss() },
+        onBlockRequest = { contactsVM.blockContact(pid) }
+      )
+    }
+  }
+
   // Global Navigation: Call
   LaunchedEffect(callState) {
     if (callState.isInCall || callState.isConnecting || (callState.isRinging && callState.callDirection == CallDirection.Outgoing)) {
@@ -178,11 +196,10 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
       modifier = Modifier.fillMaxSize()
     ) {
       composable(Screen.Contacts.route) {
-        val contacts by contactsVM.contacts.collectAsState()
+        val contactsList by contactsVM.contacts.collectAsState()
         val isLoading by contactsVM.isLoading.collectAsState()
         val connectionState by settingsVM.connectionState.collectAsState()
         val showAddDialog by contactsVM.showAddContactDialog.collectAsState()
-        val profileDialogPeerId by contactsVM.showContactProfileDialog.collectAsState()
 
         if (showAddDialog) {
           AddContactDialog(
@@ -192,23 +209,10 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
           )
         }
 
-        profileDialogPeerId?.let { pid ->
-          contacts.find { it.peerId == pid }?.let { c ->
-            ContactProfileDialog(
-              contact = c,
-              onDismissRequest = { contactsVM.onContactProfileDialogDismiss() },
-              onOverrideSave = { name -> contactsVM.setContactDisplayNameOverride(pid, name) },
-              onOverrideReset = { contactsVM.resetContactDisplayNameOverride(pid) },
-              onRemoveRequest = { contactsVM.deleteContact(pid); contactsVM.onContactProfileDialogDismiss() },
-              onBlockRequest = { contactsVM.blockContact(pid) }
-            )
-          }
-        }
-
         ContactsScreen(
           contactsVM = contactsVM,
           myProfile = myProfile,
-          contacts = contacts,
+          contacts = contactsList,
           isLoading = isLoading,
           connectionState = connectionState,
           hasCallPermissions = hasCallPermissions,
@@ -241,8 +245,8 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
         val app = LocalContext.current.applicationContext as Application
         val chatVM: ConversationViewModel = viewModel(factory = ConversationViewModel.Factory(app, peerId))
         val historyPage by chatVM.interactionHistoryPage.collectAsState()
-        val contacts by contactsVM.contacts.collectAsState()
-        val contact = contacts.find { it.peerId == peerId }
+        val contactsList by contactsVM.contacts.collectAsState()
+        val contact = contactsList.find { it.peerId == peerId }
 
         ConversationScreen(
           chatVM = chatVM,
