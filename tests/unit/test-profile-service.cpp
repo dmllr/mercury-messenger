@@ -20,7 +20,7 @@ class ProfileServiceTest : public ::testing::Test {
 
     account_service_ = std::make_unique<services::AccountService>(storage_, transport_);
     account_service_->SetOnMyProfileUpdatedCallback([]() {});
-    account_service_->GenerateNewIdentity();
+    std::ignore = account_service_->GenerateNewIdentity();
     account_service_->UpdateMyProfile("Test User", "", "");
 
     // Connection handler stub

@@ -66,17 +66,6 @@ class FileTransferResilienceTest : public ::testing::Test {
     std::filesystem::remove_all(temp_dir_);
   }
 
-  static auto CalculateSha256(std::string const& data) -> std::string {
-    unsigned char hash[SHA256_DIGEST_LENGTH];
-    SHA256_CTX sha256;
-    SHA256_Init(&sha256);
-    SHA256_Update(&sha256, data.c_str(), data.size());
-    SHA256_Final(hash, &sha256);
-    std::vector<std::byte> hash_bytes(SHA256_DIGEST_LENGTH);
-    std::memcpy(hash_bytes.data(), hash, SHA256_DIGEST_LENGTH);
-    return eillance::crypto::ToHex(hash_bytes);
-  }
-
   // Helper to convert std::string to std::vector<std::byte>
   static auto StringToBytes(std::string const& str) -> std::vector<std::byte> {
     std::vector<std::byte> bytes(str.size());
@@ -145,7 +134,7 @@ TEST_F(FileTransferResilienceTest, TransferProgressAndFileCreation) {
   auto encrypted = other_cipher.Encrypt(payload_json.dump());
 
   std::string const file_data(20000, 'A');  // Larger than one chunk (16KB)
-  std::string const file_hash = CalculateSha256(file_data);
+  std::string const file_hash = crypto::Sha256Hex(file_data);
   std::string att_id = "test_file_id";
 
   messaging::Attachment att;

@@ -10,7 +10,6 @@
 #include <string>
 #include <vector>
 
-#include <openssl/sha.h>
 #include <span>
 
 #include "eillance/crypto/crypto.hpp"
@@ -192,23 +191,6 @@ class FileTransferService {
     if (on_attachment_status_changed_) {
       on_attachment_status_changed_(peer_id, attachment_id, messaging::AttachmentStatus::discarded);
     }
-  }
-
-  static auto CalculateFileHash(std::filesystem::path const& path) -> std::string {
-    std::ifstream file(path, std::ios::binary);
-    if (!file) return "";
-    SHA256_CTX sha256;
-    SHA256_Init(&sha256);
-    char buffer[4096];
-    while (file.read(buffer, sizeof(buffer)) || file.gcount() > 0) {
-      SHA256_Update(&sha256, buffer, static_cast<size_t>(file.gcount()));
-      if (!file) break;
-    }
-    unsigned char hash[SHA256_DIGEST_LENGTH];
-    SHA256_Final(hash, &sha256);
-    std::vector<std::byte> hash_bytes(SHA256_DIGEST_LENGTH);
-    std::memcpy(hash_bytes.data(), hash, SHA256_DIGEST_LENGTH);
-    return crypto::ToHex(hash_bytes);
   }
 
   using OnAttachmentDownloadedCallback = std::function<void(ContactID const&, std::string const&)>;
@@ -428,7 +410,7 @@ class FileTransferService {
     active_downloads_.erase(it);
     lock.unlock();
 
-    std::string calc_hash = CalculateFileHash(temp_path);
+    std::string calc_hash = crypto::CalculateFileHash(temp_path);
     if (calc_hash == expected) {
       std::filesystem::rename(temp_path, final_path);
       storage_->UpdateAttachmentStatus(file_id, messaging::AttachmentStatus::done, true);
