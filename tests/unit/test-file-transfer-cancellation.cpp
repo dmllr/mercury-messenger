@@ -118,7 +118,7 @@ TEST_F(FileTransferCancellationTest, CancelUpload) {
     std::ofstream ofs(file_path, std::ios::binary);
     // Write enough data to ensure it doesn't finish immediately
     std::string data(
-        services::FileTransferService::kWindowSizeChunks * services::FileTransferService::kChunkSizeBytes * 2,
+        services::FileTransferService::windowSizeChunks * services::FileTransferService::chunkSizeBytes * 2,
         'A'
     );
     ofs << data;

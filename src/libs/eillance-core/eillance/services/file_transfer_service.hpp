@@ -1,6 +1,7 @@
 #pragma once
 
 #include <chrono>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -23,8 +24,8 @@ namespace eillance::services {
 
 class FileTransferService {
  public:
-  static constexpr size_t kChunkSizeBytes = 16ULL * 1024;  // 16KB per chunk
-  static constexpr size_t kWindowSizeChunks = 16;
+  static constexpr std::size_t chunkSizeBytes = 16ULL * 1024;  // 16KB per chunk
+  static constexpr std::size_t windowSizeChunks = 16;
 
   explicit FileTransferService(
       std::shared_ptr<storage::PersistentStorage> storage,
@@ -34,66 +35,72 @@ class FileTransferService {
         transport_(std::move(transport)) {}
 
   void OnConnectionReady(ContactID const& peer_id) {
-    auto pending = storage_->GetPendingAttachments(peer_id);
-    for (auto const& att : pending) {
-      if (att.is_downloaded) {
+    auto const pending_attachments = storage_->GetPendingAttachments(peer_id);
+    for (auto const& attachment : pending_attachments) {
+      if (attachment.is_downloaded) {
         // We are uploader
         std::lock_guard<std::mutex> const lock(transfers_mutex_);
-        if (!active_uploads_.contains(att.id)) {
-          StartUploadInternal(peer_id, att);
+        if (!active_uploads_.contains(attachment.id)) {
+          StartUploadInternal(peer_id, attachment);
         } else {
           // Send resume req / poke
           // This triggers the receiver to send back an ACK if they have partial data
-          // SendBinary: Type Resume (0x05)
-          SendResumeRequest(peer_id, att.id);
+          SendResumeRequest(peer_id, attachment.id);
         }
       } else {
         // We are downloader
-        ResumeTransfer(peer_id, att.id, false);
+        ResumeTransfer(peer_id, attachment.id, false);
       }
     }
   }
 
-  void QueueUpload(ContactID const& peer_id, messaging::Attachment const& att) {
+  void QueueUpload(ContactID const& peer_id, messaging::Attachment const& attachment) {
     std::lock_guard<std::mutex> const lock(transfers_mutex_);
-    StartUploadInternal(peer_id, att);
+    StartUploadInternal(peer_id, attachment);
   }
 
-  void QueueDownload(ContactID const& peer_id, messaging::Attachment const& att, uint64_t message_id) {
+  void QueueDownload(ContactID const& peer_id, messaging::Attachment const& attachment, std::uint64_t message_id) {
     std::unique_lock<std::mutex> lock(transfers_mutex_);
-    if (active_downloads_.contains(att.id)) return;
+    if (active_downloads_.contains(attachment.id)) {
+      return;
+    }
 
     std::filesystem::path const storage_root(storage_->GetPath());
     std::filesystem::path const attachments_dir = storage_root.parent_path() / "attachments";
-    // Ensure dir exists
-    std::filesystem::create_directories(attachments_dir);
+    // Ensure directory exists
+    std::error_code error_code;
+    std::filesystem::create_directories(attachments_dir, error_code);
+    if (error_code) {
+      LGE << "Failed to create attachments directory: " << error_code.message();
+      return;
+    }
 
-    std::filesystem::path const temp_path = attachments_dir / (att.id + ".tmp");
+    std::filesystem::path const temp_path = attachments_dir / (attachment.id + ".tmp");
 
     TransferDownloadState state;
-    state.file_path = std::filesystem::path(att.file_path);
+    state.file_path = std::filesystem::path(attachment.file_path);
     state.temp_path = temp_path;
-    state.expected_hash = att.hash;
-    state.total_size = att.size_bytes;
+    state.expected_hash = attachment.hash;
+    state.total_size = attachment.size_bytes;
     state.message_id = message_id;
 
     // Handle file creation and pre-allocation
     try {
       if (!std::filesystem::exists(state.temp_path)) {
-        std::ofstream ofs(state.temp_path, std::ios::binary | std::ios::out | std::ios::trunc);
-        ofs.close();
-        if (att.size_bytes > 0) {
-          std::filesystem::resize_file(state.temp_path, att.size_bytes);
+        std::ofstream output_stream(state.temp_path, std::ios::binary | std::ios::out | std::ios::trunc);
+        output_stream.close();
+        if (attachment.size_bytes > 0) {
+          std::filesystem::resize_file(state.temp_path, attachment.size_bytes);
         }
       } else {
         // If it exists, ensure it is at least the expected size
-        if (std::filesystem::file_size(state.temp_path) < att.size_bytes) {
-          std::filesystem::resize_file(state.temp_path, att.size_bytes);
+        if (std::filesystem::file_size(state.temp_path) < attachment.size_bytes) {
+          std::filesystem::resize_file(state.temp_path, attachment.size_bytes);
         }
       }
     } catch (std::exception const& e) {
-      LGE << "Failed to reserve space for attachment " << att.id << ": " << e.what();
-      // Continue anyway, it might work if we append, but we use random access so...
+      LGE << "Failed to reserve space for attachment " << attachment.id << ": " << e.what();
+      // Continue anyway, it might work if we append, but we use random access so issues may arise.
     }
 
     state.stream.open(state.temp_path, std::ios::binary | std::ios::in | std::ios::out);
@@ -104,43 +111,49 @@ class FileTransferService {
 
     // Since we pre-allocate, we cannot blindly rely on file size for resume progress in this simple version.
     // We reset to 0 to be safe and overwrite.
-    // In a production system, we'd use a bitmap or separate state file to track received chunks.
     state.highest_seq_written = 0;
     state.bytes_written = 0;
 
-    active_downloads_[att.id] = std::move(state);
+    active_downloads_[attachment.id] = std::move(state);
   }
 
-  enum class MsgType : uint8_t { Chunk = 0x01, Ack = 0x02, Cancel = 0x03, Resume = 0x05, End = 0x06 };
+  enum class MessageType : std::uint8_t { chunk = 0x01, ack = 0x02, cancel = 0x03, resume = 0x05, end = 0x06 };
 
   void ProcessBinaryMessage(ContactID const& peer_id, std::span<std::byte const> data) {
-    if (data.size() < 4) return;
-    if (data[0] != std::byte{0xFE}) return;
+    if (data.size() < headerMinSize) {
+      return;
+    }
+    if (data[0] != magicByte) {
+      return;
+    }
 
-    MsgType type = static_cast<MsgType>(data[1]);
-    uint8_t id_len = static_cast<uint8_t>(data[2]);
-    if (data.size() < 3 + id_len) return;
+    auto const type = static_cast<MessageType>(data[1]);
+    auto const id_length = static_cast<std::uint8_t>(data[2]);
+
+    if (data.size() < headerMinSize + id_length) {
+      return;
+    }
 
     std::string file_id;
-    file_id.resize(id_len);
-    std::memcpy(file_id.data(), data.data() + 3, id_len);
+    file_id.resize(id_length);
+    std::memcpy(file_id.data(), data.data() + headerMinSize, id_length);
 
-    std::span<std::byte const> payload = data.subspan(3 + id_len);
+    std::span<std::byte const> const payload = data.subspan(headerMinSize + id_length);
 
     switch (type) {
-      case MsgType::Chunk:
+      case MessageType::chunk:
         HandleChunk(peer_id, file_id, payload);
         break;
-      case MsgType::Ack:
+      case MessageType::ack:
         HandleAck(peer_id, file_id, payload);
         break;
-      case MsgType::Cancel:
+      case MessageType::cancel:
         HandleCancel(peer_id, file_id);
         break;
-      case MsgType::Resume:
+      case MessageType::resume:
         HandleResume(peer_id, file_id);
         break;
-      case MsgType::End:
+      case MessageType::end:
         HandleEnd(peer_id, file_id);
         break;
     }
@@ -156,8 +169,8 @@ class FileTransferService {
         auto& state = active_downloads_[attachment_id];
         state.stream.close();
         // Remove temp file on cancel to cleanup
-        std::error_code ec;
-        std::filesystem::remove(state.temp_path, ec);
+        std::error_code error_code;
+        std::filesystem::remove(state.temp_path, error_code);
         active_downloads_.erase(attachment_id);
       }
     }
@@ -174,10 +187,10 @@ class FileTransferService {
 
   void ResumeTransfer(ContactID const& peer_id, std::string const& attachment_id, bool is_upload) {
     if (is_upload) {
-      auto att = storage_->GetAttachment(attachment_id);
-      if (att) {
+      auto attachment = storage_->GetAttachment(attachment_id);
+      if (attachment) {
         std::lock_guard<std::mutex> const lock(transfers_mutex_);
-        StartUploadInternal(peer_id, *att);
+        StartUploadInternal(peer_id, *attachment);
       }
     } else {
       SendResumeRequest(peer_id, attachment_id);
@@ -205,12 +218,16 @@ class FileTransferService {
   }
 
  private:
+  static constexpr std::byte magicByte{0xFE};
+  static constexpr std::size_t headerMinSize = 3;
+  static constexpr std::size_t sequenceSize = 4;
+
   struct TransferUploadState {
     std::string file_path;
     std::ifstream stream;
-    size_t sequence = 0;
-    size_t window_end = kWindowSizeChunks;
-    size_t total_size = 0;
+    std::size_t sequence = 0;
+    std::size_t window_end = windowSizeChunks;
+    std::size_t total_size = 0;
     bool paused = false;
   };
 
@@ -218,40 +235,40 @@ class FileTransferService {
     std::filesystem::path file_path;
     std::fstream stream;
     std::filesystem::path temp_path;
-    uint64_t total_size = 0;
+    std::uint64_t total_size = 0;
     std::string expected_hash;
-    uint64_t message_id = 0;
-    size_t highest_seq_written = 0;
-    size_t bytes_written = 0;
+    std::uint64_t message_id = 0;
+    std::size_t highest_seq_written = 0;
+    std::size_t bytes_written = 0;
   };
 
-  void StartUploadInternal(ContactID const& peer_id, messaging::Attachment const& att) {
-    if (active_uploads_.contains(att.id)) {
-      active_uploads_[att.id].paused = false;
-      PumpUpload(peer_id, att.id, active_uploads_[att.id]);
+  void StartUploadInternal(ContactID const& peer_id, messaging::Attachment const& attachment) {
+    if (active_uploads_.contains(attachment.id)) {
+      active_uploads_[attachment.id].paused = false;
+      PumpUpload(peer_id, attachment.id, active_uploads_[attachment.id]);
     } else {
-      std::ifstream file(att.file_path, std::ios::binary);
+      std::ifstream file(attachment.file_path, std::ios::binary);
       if (!file) {
-        storage_->UpdateAttachmentStatus(att.id, messaging::AttachmentStatus::failed, true);
+        storage_->UpdateAttachmentStatus(attachment.id, messaging::AttachmentStatus::failed, true);
         return;
       }
 
       // Update status to Transferring BEFORE starting the pump.
       // If PumpUpload finishes synchronously (small files), it will trigger 'Done'.
       // Doing this first prevents 'Transferring' from overwriting 'Done'.
-      storage_->UpdateAttachmentStatus(att.id, messaging::AttachmentStatus::transferring, true);
+      storage_->UpdateAttachmentStatus(attachment.id, messaging::AttachmentStatus::transferring, true);
       INVARIANT(on_attachment_status_changed_);
-      on_attachment_status_changed_(peer_id, att.id, messaging::AttachmentStatus::transferring);
+      on_attachment_status_changed_(peer_id, attachment.id, messaging::AttachmentStatus::transferring);
 
       TransferUploadState state;
-      state.file_path = att.file_path;
+      state.file_path = attachment.file_path;
       state.stream = std::move(file);
-      state.total_size = att.size_bytes;
+      state.total_size = attachment.size_bytes;
       state.sequence = 0;
-      state.window_end = kWindowSizeChunks;
-      active_uploads_[att.id] = std::move(state);
+      state.window_end = windowSizeChunks;
+      active_uploads_[attachment.id] = std::move(state);
 
-      PumpUpload(peer_id, att.id, active_uploads_[att.id]);
+      PumpUpload(peer_id, attachment.id, active_uploads_[attachment.id]);
     }
   }
 
@@ -271,135 +288,157 @@ class FileTransferService {
   }
 
   void HandleAck(ContactID const& peer_id, std::string const& file_id, std::span<std::byte const> payload) {
-    if (payload.size() < 4) return;
-    uint32_t next_seq = 0;
-    std::memcpy(&next_seq, payload.data(), 4);
+    if (payload.size() < sequenceSize) {
+      return;
+    }
+    std::uint32_t next_seq = 0;
+    std::memcpy(&next_seq, payload.data(), sizeof(next_seq));
 
     std::lock_guard<std::mutex> const lock(transfers_mutex_);
-    auto it = active_uploads_.find(file_id);
-    if (it != active_uploads_.end()) {
-      auto& state = it->second;
-      if (next_seq > state.sequence) state.sequence = next_seq;
-      state.window_end = next_seq + kWindowSizeChunks;
+    auto iterator = active_uploads_.find(file_id);
+    if (iterator != active_uploads_.end()) {
+      auto& state = iterator->second;
+      if (next_seq > state.sequence) {
+        state.sequence = next_seq;
+      }
+      state.window_end = next_seq + windowSizeChunks;
       PumpUpload(peer_id, file_id, state);
     }
   }
 
   void PumpUpload(ContactID const& peer_id, std::string const& file_id, TransferUploadState& state) {
     while (state.sequence < state.window_end) {
-      size_t offset = state.sequence * kChunkSizeBytes;
-      if (offset >= state.total_size && state.total_size > 0) break;
+      std::size_t const offset = state.sequence * chunkSizeBytes;
+      if (offset >= state.total_size && state.total_size > 0) {
+        break;
+      }
 
       state.stream.clear();
-      state.stream.seekg(offset);
-      if (state.stream.fail()) break;
+      state.stream.seekg(static_cast<std::streamoff>(offset));
+      if (state.stream.fail()) {
+        break;
+      }
 
-      std::vector<std::byte> buffer(kChunkSizeBytes + 200);
-      size_t id_len = file_id.size();
-      buffer[0] = std::byte{0xFE};
-      buffer[1] = std::byte{static_cast<uint8_t>(MsgType::Chunk)};
-      buffer[2] = std::byte{static_cast<uint8_t>(id_len)};
-      std::memcpy(buffer.data() + 3, file_id.data(), id_len);
+      // Buffer size: Header (3 bytes + ID len) + Seq (4 bytes) + Chunk Data
+      std::size_t const id_len = file_id.size();
+      std::size_t const header_size = headerMinSize + id_len + sequenceSize;
+      std::vector<std::byte> buffer(header_size + chunkSizeBytes);
 
-      size_t header_size = 3 + id_len;
-      uint32_t seq_net = state.sequence;
-      std::memcpy(buffer.data() + header_size, &seq_net, 4);
-      header_size += 4;
+      buffer[0] = magicByte;
+      buffer[1] = static_cast<std::byte>(MessageType::chunk);
+      buffer[2] = static_cast<std::byte>(id_len);
+      std::memcpy(buffer.data() + headerMinSize, file_id.data(), id_len);
 
-      state.stream.read(reinterpret_cast<char*>(buffer.data() + header_size), kChunkSizeBytes);
-      size_t bytes_read = state.stream.gcount();
-      if (bytes_read == 0 && state.stream.eof()) break;
+      std::uint32_t const seq_net = static_cast<std::uint32_t>(state.sequence);
+      std::memcpy(buffer.data() + headerMinSize + id_len, &seq_net, sizeof(seq_net));
+
+      state.stream.read(
+          reinterpret_cast<char*>(buffer.data() + header_size),  // NOLINT(*-reinterpret-cast)
+          chunkSizeBytes
+      );
+      auto const bytes_read = static_cast<std::size_t>(state.stream.gcount());
+      if (bytes_read == 0 && state.stream.eof()) {
+        break;
+      }
 
       buffer.resize(header_size + bytes_read);
 
       if (!transport_->SendPeerDataChannelBinaryMessage(peer_id, buffer)) {
-        // Backpressure
+        // Backpressure from transport, stop pumping for now
         break;
       }
 
       if (on_transfer_progress_ && state.total_size > 0) {
-        float p = (float)(offset + bytes_read) / state.total_size;
-        on_transfer_progress_(peer_id, file_id, p > 1.0f ? 1.0f : p);
+        auto const progress = static_cast<float>(offset + bytes_read) / static_cast<float>(state.total_size);
+        on_transfer_progress_(peer_id, file_id, std::min(progress, 1.0f));
       }
 
       state.sequence++;
     }
 
-    if ((state.sequence * kChunkSizeBytes) >= state.total_size) {
+    if ((state.sequence * chunkSizeBytes) >= state.total_size) {
       if (SendEnd(peer_id, file_id)) {
         active_uploads_.erase(file_id);
         storage_->UpdateAttachmentStatus(file_id, messaging::AttachmentStatus::done, true);
-        if (on_attachment_status_changed_)
+        if (on_attachment_status_changed_) {
           on_attachment_status_changed_(peer_id, file_id, messaging::AttachmentStatus::done);
+        }
       }
     }
   }
 
   void HandleChunk(ContactID const& peer_id, std::string const& file_id, std::span<std::byte const> payload) {
-    if (payload.size() < 4) return;
-    uint32_t seq = 0;
-    std::memcpy(&seq, payload.data(), 4);
+    if (payload.size() < sequenceSize) {
+      return;
+    }
+    std::uint32_t sequence = 0;
+    std::memcpy(&sequence, payload.data(), sizeof(sequence));
 
-    std::span<std::byte const> chunk_data = payload.subspan(4);
+    std::span<std::byte const> chunk_data = payload.subspan(sequenceSize);
 
     std::unique_lock<std::mutex> lock(transfers_mutex_);
 
     if (!active_downloads_.contains(file_id)) {
-      auto att = storage_->GetAttachment(file_id);
-      if (att && att->status != messaging::AttachmentStatus::canceled) {
+      auto attachment = storage_->GetAttachment(file_id);
+      if (attachment && attachment->status != messaging::AttachmentStatus::canceled) {
         lock.unlock();
-        QueueDownload(peer_id, *att, 0);
+        QueueDownload(peer_id, *attachment, 0);
         lock.lock();
       }
     }
 
-    auto it = active_downloads_.find(file_id);
-    if (it == active_downloads_.end()) return;
+    auto iterator = active_downloads_.find(file_id);
+    if (iterator == active_downloads_.end()) {
+      return;
+    }
 
-    auto& state = it->second;
+    auto& state = iterator->second;
     if (state.stream.is_open()) {
-      size_t offset = seq * kChunkSizeBytes;
+      auto const offset = static_cast<std::streamoff>(sequence * chunkSizeBytes);
 
       // Ensure not seeking past EOF if we didn't resize correctly
       state.stream.seekp(offset);
-      state.stream.write(reinterpret_cast<char const*>(chunk_data.data()), chunk_data.size());
+      state.stream.write(
+          reinterpret_cast<char const*>(chunk_data.data()),  // NOLINT(*-reinterpret-cast)
+          static_cast<std::streamsize>(chunk_data.size())
+      );
 
-      if (seq + 1 > state.highest_seq_written) {
-        state.highest_seq_written = seq + 1;
+      if (sequence + 1 > state.highest_seq_written) {
+        state.highest_seq_written = sequence + 1;
       }
 
-      // Simple bytes written tracking for ordered delivery
-      // Since we write randomly, this is approximate, assuming reliable ordered delivery.
-      // If we get chunks out of order, this counter is insufficient for "completeness".
-      // But DataChannels are ordered. So simple addition is fine.
       state.bytes_written += chunk_data.size();
 
       if (on_transfer_progress_ && state.total_size > 0) {
-        float p = (float)state.bytes_written / state.total_size;
-        if (lock.owns_lock()) lock.unlock();
-        on_transfer_progress_(peer_id, file_id, p > 1.0f ? 1.0f : p);
+        auto const progress = static_cast<float>(state.bytes_written) / static_cast<float>(state.total_size);
+        if (lock.owns_lock()) {
+          lock.unlock();
+        }
+        on_transfer_progress_(peer_id, file_id, std::min(progress, 1.0f));
         lock.lock();
       }
 
-      if (seq % (kWindowSizeChunks / 2) == 0) {
-        SendAck(peer_id, file_id, state.highest_seq_written);
+      if (sequence % (windowSizeChunks / 2) == 0) {
+        SendAck(peer_id, file_id, static_cast<std::uint32_t>(state.highest_seq_written));
       }
     }
   }
 
   void HandleEnd(ContactID const& peer_id, std::string const& file_id) {
     std::unique_lock<std::mutex> lock(transfers_mutex_);
-    auto it = active_downloads_.find(file_id);
-    if (it == active_downloads_.end()) return;
+    auto iterator = active_downloads_.find(file_id);
+    if (iterator == active_downloads_.end()) {
+      return;
+    }
 
-    auto& state = it->second;
+    auto& state = iterator->second;
     state.stream.flush();
 
     if (state.bytes_written < state.total_size) {
       LGE << "Incomplete file received for " << file_id << ". Expected " << state.total_size << ", got "
           << state.bytes_written;
       // Just ACK highest sequence to request more
-      SendAck(peer_id, file_id, state.highest_seq_written);
+      SendAck(peer_id, file_id, static_cast<std::uint32_t>(state.highest_seq_written));
       return;
     }
 
@@ -407,23 +446,35 @@ class FileTransferService {
     auto temp_path = state.temp_path;
     auto final_path = state.file_path;
     auto expected = state.expected_hash;
-    active_downloads_.erase(it);
+    active_downloads_.erase(iterator);
     lock.unlock();
 
-    std::string calc_hash = crypto::CalculateFileHash(temp_path);
+    std::string const calc_hash = crypto::CalculateFileHash(temp_path);
     if (calc_hash == expected) {
-      std::filesystem::rename(temp_path, final_path);
-      storage_->UpdateAttachmentStatus(file_id, messaging::AttachmentStatus::done, true);
-      if (on_attachment_downloaded_) on_attachment_downloaded_(peer_id, file_id);
-      if (on_transfer_progress_) on_transfer_progress_(peer_id, file_id, 1.0f);
-      if (on_attachment_status_changed_)
-        on_attachment_status_changed_(peer_id, file_id, messaging::AttachmentStatus::done);
+      std::error_code error_code;
+      std::filesystem::rename(temp_path, final_path, error_code);
+      if (error_code) {
+        LGE << "Failed to rename temp file to final path: " << error_code.message();
+        // Fallback or error handling
+      } else {
+        storage_->UpdateAttachmentStatus(file_id, messaging::AttachmentStatus::done, true);
+        if (on_attachment_downloaded_) {
+          on_attachment_downloaded_(peer_id, file_id);
+        }
+        if (on_transfer_progress_) {
+          on_transfer_progress_(peer_id, file_id, 1.0f);
+        }
+        if (on_attachment_status_changed_) {
+          on_attachment_status_changed_(peer_id, file_id, messaging::AttachmentStatus::done);
+        }
+      }
     } else {
       LGE << "Hash mismatch for " << file_id << ". Calc: " << calc_hash << " Exp: " << expected;
       std::filesystem::remove(temp_path);
       storage_->UpdateAttachmentStatus(file_id, messaging::AttachmentStatus::failed, false);
-      if (on_attachment_status_changed_)
+      if (on_attachment_status_changed_) {
         on_attachment_status_changed_(peer_id, file_id, messaging::AttachmentStatus::failed);
+      }
     }
   }
 
@@ -431,35 +482,43 @@ class FileTransferService {
     CancelTransfer(peer_id, file_id, active_uploads_.contains(file_id), false);
   }
 
-  bool
-  SendPacket(ContactID const& peer_id, std::string const& file_id, MsgType type, std::span<std::byte const> payload) {
-    std::vector<std::byte> buf(3 + file_id.size() + payload.size());
-    buf[0] = std::byte{0xFE};
-    buf[1] = std::byte{static_cast<uint8_t>(type)};
-    buf[2] = std::byte{static_cast<uint8_t>(file_id.size())};
-    std::memcpy(buf.data() + 3, file_id.data(), file_id.size());
+  auto SendPacket(
+      ContactID const& peer_id,
+      std::string const& file_id,
+      MessageType type,
+      std::span<std::byte const> payload
+  ) -> bool {
+    std::size_t const id_len = file_id.size();
+    std::size_t const header_size = headerMinSize + id_len;
+    std::vector<std::byte> buf(header_size + payload.size());
+
+    buf[0] = magicByte;
+    buf[1] = static_cast<std::byte>(type);
+    buf[2] = static_cast<std::byte>(id_len);
+    std::memcpy(buf.data() + headerMinSize, file_id.data(), id_len);
+
     if (!payload.empty()) {
-      std::memcpy(buf.data() + 3 + file_id.size(), payload.data(), payload.size());
+      std::memcpy(buf.data() + header_size, payload.data(), payload.size());
     }
     return transport_->SendPeerDataChannelBinaryMessage(peer_id, buf);
   }
 
   void SendResumeRequest(ContactID const& peer_id, std::string const& file_id) {
-    SendPacket(peer_id, file_id, MsgType::Resume, {});
+    SendPacket(peer_id, file_id, MessageType::resume, {});
   }
 
   void SendCancel(ContactID const& peer_id, std::string const& file_id) {
-    SendPacket(peer_id, file_id, MsgType::Cancel, {});
+    SendPacket(peer_id, file_id, MessageType::cancel, {});
   }
 
-  bool SendEnd(ContactID const& peer_id, std::string const& file_id) {
-    return SendPacket(peer_id, file_id, MsgType::End, {});
+  auto SendEnd(ContactID const& peer_id, std::string const& file_id) -> bool {
+    return SendPacket(peer_id, file_id, MessageType::end, {});
   }
 
-  void SendAck(ContactID const& peer_id, std::string const& file_id, uint32_t next_seq) {
-    std::vector<std::byte> payload(4);
-    std::memcpy(payload.data(), &next_seq, 4);
-    SendPacket(peer_id, file_id, MsgType::Ack, payload);
+  void SendAck(ContactID const& peer_id, std::string const& file_id, std::uint32_t next_seq) {
+    std::vector<std::byte> payload(sizeof(next_seq));
+    std::memcpy(payload.data(), &next_seq, sizeof(next_seq));
+    SendPacket(peer_id, file_id, MessageType::ack, payload);
   }
 
   std::shared_ptr<storage::PersistentStorage> storage_;
