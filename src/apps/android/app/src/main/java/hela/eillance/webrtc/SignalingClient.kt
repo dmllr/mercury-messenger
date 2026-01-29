@@ -21,6 +21,7 @@ import java.io.EOFException
 import java.net.ConnectException
 import java.net.SocketException
 import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 import java.net.UnknownServiceException
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -36,7 +37,8 @@ class SignalingClient {
     CONNECTING,
     OPEN,
     CLOSED,
-    FAILED
+    FAILED,
+    NO_NETWORK
   }
 
   private val clientScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -61,6 +63,7 @@ class SignalingClient {
         if (!isConnected.get()) {
           Log.i(TAG, "Attempting to connect to signaling server...")
           _state.tryEmit(State.CONNECTING)
+
           val listener = object : WebSocketListener() {
             override fun onOpen(ws: WebSocket, response: Response) {
               Log.i(TAG, "Signaling connection opened.")
@@ -106,10 +109,11 @@ class SignalingClient {
             }
 
             override fun onFailure(ws: WebSocket, t: Throwable, response: Response?) {
-              logError(t) // Use the refined logging function.
+              val state = determineErrorState(t)
+              Log.e(TAG, "Signaling failure: $state. Reason: ${t.message}")
               isConnected.set(false)
               webSocket = null
-              _state.tryEmit(State.FAILED)
+              _state.tryEmit(state)
               sessionClosedSignal.complete(Unit)
             }
           }
@@ -141,9 +145,8 @@ class SignalingClient {
 
   fun send(message: JSONObject) {
     val messageString = message.toString()
-    Log.d(TAG, "Sending: $messageString")
     if (webSocket?.send(messageString) == false) {
-      Log.e(TAG, "Failed to send message: WebSocket is not open or queue is full.")
+      Log.e(TAG, "Failed to send message: WebSocket is not open.")
     }
   }
 
@@ -156,21 +159,17 @@ class SignalingClient {
     _state.tryEmit(State.CLOSED)
   }
 
-  private fun logError(t: Throwable) {
-    when (t) {
-      is SocketTimeoutException, is ConnectException, is UnknownServiceException, is SocketException, is EOFException -> {
-        Log.w(TAG, "Signaling connection failed: ${t.javaClass.simpleName}: ${t.message}")
-      }
-      else -> {
-        Log.e(TAG, "Unexpected signaling failure", t)
-      }
+  private fun determineErrorState(t: Throwable): State {
+    return when (t) {
+      is UnknownHostException, is SocketException -> State.NO_NETWORK
+      is ConnectException, is SocketTimeoutException, is UnknownServiceException, is EOFException -> State.FAILED
+      else -> State.FAILED
     }
   }
 
   companion object {
     private const val TAG = "SignalingClient"
     const val DEFAULT_SIGNALING_URL = "wss://app.hela.me:8000"
-    // const val DEFAULT_SIGNALING_URL = "ws://10.0.2.2:8000"
     private const val NORMAL_CLOSURE_STATUS = 1000
 
     private const val INITIAL_BACKOFF_MS = 2000L

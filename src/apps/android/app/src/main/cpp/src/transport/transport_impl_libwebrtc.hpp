@@ -384,16 +384,27 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcTransport_nati
   auto* transport = reinterpret_cast<eillance::transport::AndroidRtcTransport*>(native_ptr);
   if (transport != nullptr) {
     auto service_state = eillance::ServiceConnectionState::unknown;
+    // Mapping matches SignalingClient.State ordinal
+    // CONNECTING = 0
+    // OPEN = 1
+    // CLOSED = 2
+    // FAILED = 3
+    // NO_NETWORK = 4
     switch (state) {
       case 0:  // CONNECTING
-      case 1:  // OPEN
         service_state = eillance::ServiceConnectionState::establishing;
+        break;
+      case 1:  // OPEN
+        service_state = eillance::ServiceConnectionState::online;
         break;
       case 2:  // CLOSED
         service_state = eillance::ServiceConnectionState::disconnected;
         break;
       case 3:  // FAILED
         service_state = eillance::ServiceConnectionState::failure;
+        break;
+      case 4:  // NO_NETWORK
+        service_state = eillance::ServiceConnectionState::noNetwork;
         break;
       default:
         break;

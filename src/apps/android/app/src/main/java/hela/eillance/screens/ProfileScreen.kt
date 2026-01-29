@@ -63,12 +63,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -104,9 +106,12 @@ import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import hela.eillance.camera.BuildConfig
 import hela.eillance.components.UserAvatar
 import hela.eillance.ndkio.MyProfileInfo
+import hela.eillance.ndkio.ServiceConnectionState
+import hela.eillance.theme.extendedColors
 import hela.eillance.viewmodels.ContactsViewModel
 import hela.eillance.viewmodels.DebugViewModel
 import hela.eillance.viewmodels.ProfileViewModel
+import hela.eillance.viewmodels.SettingsViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -124,6 +129,7 @@ private enum class DebugAction {
 fun ProfileScreen(
   profileVM: ProfileViewModel,
   contactsVM: ContactsViewModel,
+  settingsVM: SettingsViewModel,
   debugVM: DebugViewModel,
   myProfile: MyProfileInfo,
   onBack: () -> Unit,
@@ -177,7 +183,7 @@ fun ProfileScreen(
         .verticalScroll(rememberScrollState()),
       horizontalAlignment = Alignment.CenterHorizontally
     ) {
-      ProfileHeader(myProfile = myProfile, contactsVM = contactsVM)
+      ProfileHeader(myProfile = myProfile, contactsVM = contactsVM, settingsVM = settingsVM)
       HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp, horizontal = 16.dp))
       ProfileMenu(
         onEditProfile = { showEditDialog = true },
@@ -193,8 +199,15 @@ fun ProfileScreen(
 }
 
 @Composable
-private fun ProfileHeader(myProfile: MyProfileInfo, contactsVM: ContactsViewModel) {
+private fun ProfileHeader(
+  myProfile: MyProfileInfo,
+  contactsVM: ContactsViewModel,
+  settingsVM: SettingsViewModel
+) {
   val context = LocalContext.current
+  val connectionState by settingsVM.connectionState.collectAsState()
+  val signalingUrl by settingsVM.signalingUrl.collectAsState()
+
   var showQrDialog by remember { mutableStateOf(false) }
   val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
 
@@ -262,6 +275,36 @@ private fun ProfileHeader(myProfile: MyProfileInfo, contactsVM: ContactsViewMode
       )
       Spacer(modifier = Modifier.height(16.dp))
     }
+
+    // --- Connection Status Indicator ---
+    val (statusText, statusColor) = when (connectionState) {
+      ServiceConnectionState.Online -> "Online" to MaterialTheme.extendedColors.success
+      ServiceConnectionState.Establishing -> "Connecting..." to MaterialTheme.extendedColors.warning
+      ServiceConnectionState.NoNetwork -> "No Network" to MaterialTheme.colorScheme.error
+      ServiceConnectionState.Failure -> "Server Error" to MaterialTheme.colorScheme.error
+      else -> "Disconnected" to MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+    Surface(
+      color = statusColor.copy(alpha = 0.1f),
+      shape = MaterialTheme.shapes.small,
+      modifier = Modifier.padding(bottom = 16.dp)
+    ) {
+      Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+      ) {
+        Box(modifier = Modifier.size(8.dp).background(statusColor, CircleShape))
+        Spacer(Modifier.width(8.dp))
+        Column {
+          Text(text = statusText, style = MaterialTheme.typography.labelLarge, color = statusColor)
+          if (connectionState == ServiceConnectionState.Failure && signalingUrl.isNotEmpty()) {
+            Text(text = "Server: ${signalingUrl}", style = MaterialTheme.typography.labelSmall, color = statusColor)
+          }
+        }
+      }
+    }
+    // -----------------------------------
 
     Row(
       modifier = Modifier.padding(top = 8.dp),
@@ -393,15 +436,12 @@ private fun ProfileMenu(
   }
 }
 
-// ... (rest of the file remains unchanged: ProfileEditDialog, ImageEditorDialog, etc.) ...
-
 @Composable
 private fun ProfileEditDialog(
   myProfile: MyProfileInfo,
   profileVM: ProfileViewModel,
   onDismiss: () -> Unit
 ) {
-  // ... (unchanged) ...
   var displayName by remember(myProfile.myDisplayName) { mutableStateOf(myProfile.myDisplayName ?: "") }
   var bio by remember(myProfile.myBio) { mutableStateOf(myProfile.myBio ?: "") }
   var photoBase64 by remember(myProfile.myPhoto) { mutableStateOf(myProfile.myPhoto) }
