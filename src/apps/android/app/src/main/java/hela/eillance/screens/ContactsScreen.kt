@@ -1,7 +1,16 @@
 package hela.eillance.screens
 
+import android.widget.Toast
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,6 +22,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.SignalWifiOff
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Badge
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DividerDefaults
@@ -37,6 +48,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -57,7 +69,7 @@ import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ContactsScreen(
   contactsVM: ContactsViewModel,
@@ -92,18 +104,67 @@ fun ContactsScreen(
               Icon(Icons.Default.Person, contentDescription = "Profile")
             }
             if (connectionState != ServiceConnectionState.Unknown) {
-              val dotColor = when (connectionState) {
-                ServiceConnectionState.Online -> MaterialTheme.extendedColors.success
-                ServiceConnectionState.Failure -> MaterialTheme.colorScheme.error
-                else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+              val (dotColor, icon) = when (connectionState) {
+                ServiceConnectionState.Online -> MaterialTheme.extendedColors.success to null
+                ServiceConnectionState.Establishing -> MaterialTheme.extendedColors.warning to null
+                ServiceConnectionState.NoNetwork -> Color.Transparent to Icons.Default.SignalWifiOff
+                ServiceConnectionState.Failure -> MaterialTheme.colorScheme.error to Icons.Default.Warning
+                else -> Color.Transparent to null
               }
+
+              // Tooltip / Long press hint
+              val context = LocalContext.current
+              val tooltipText = when(connectionState) {
+                ServiceConnectionState.Online -> "Connected"
+                ServiceConnectionState.Establishing -> "Connecting..."
+                ServiceConnectionState.NoNetwork -> "No Network Connection"
+                ServiceConnectionState.Failure -> "Server Connection Failed"
+                else -> "Status: ${connectionState.name}"
+              }
+
               Box(
                 modifier = Modifier
-                  .padding(bottom = 4.dp, end = 4.dp)
-                  .size(12.dp)
-                  .background(color = dotColor, shape = CircleShape)
                   .align(Alignment.BottomEnd)
-              )
+                  .padding(4.dp)
+                  .combinedClickable(
+                    onClick = {},
+                    onLongClick = {
+                      Toast.makeText(context, tooltipText, Toast.LENGTH_SHORT).show()
+                    }
+                  )
+              ) {
+                if (icon != null) {
+                  Icon(
+                    imageVector = icon,
+                    contentDescription = tooltipText,
+                    tint = if(connectionState == ServiceConnectionState.NoNetwork) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.error,
+                    modifier = Modifier
+                      .size(14.dp)
+                      .background(MaterialTheme.colorScheme.surface, CircleShape)
+                      .padding(1.dp)
+                  )
+                } else if (connectionState == ServiceConnectionState.Online || connectionState == ServiceConnectionState.Establishing) {
+                  val alpha = if (connectionState == ServiceConnectionState.Establishing) {
+                    val infiniteTransition = rememberInfiniteTransition(label = "conn")
+                    infiniteTransition.animateFloat(
+                      initialValue = 0.3f,
+                      targetValue = 1f,
+                      animationSpec = infiniteRepeatable(
+                        animation = tween(800),
+                        repeatMode = RepeatMode.Reverse
+                      ),
+                      label = "alpha"
+                    ).value
+                  } else 1f
+
+                  Box(
+                    modifier = Modifier
+                      .size(12.dp)
+                      .background(color = dotColor.copy(alpha = alpha), shape = CircleShape)
+                      .border(1.dp, MaterialTheme.colorScheme.surface, CircleShape)
+                  )
+                }
+              }
             }
           }
         },

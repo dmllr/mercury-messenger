@@ -14,11 +14,6 @@
   <string name="state_signaling_have_local_pranswer">Have Local Pranswer</string>
   <string name="state_signaling_have_remote_pranswer">Have Remote Pranswer</string>
 
-  <string name="state_service_standby">Standby</string>
-  <string name="state_service_setup">Setup</string>
-  <string name="state_service_action">Action</string>
-  <string name="state_service_failure">Failure</string>
-
   <string name="state_ice_gathering_new">New</string>
   <string name="state_ice_gathering_in_progress">In Progress</string>
   <string name="state_ice_gathering_complete">Complete</string>

@@ -385,6 +385,7 @@ class CallService : Service() {
       val contentText = when (connectionState) {
         ServiceConnectionState.Online -> "Ready"
         ServiceConnectionState.Establishing -> "Connecting..."
+        ServiceConnectionState.NoNetwork -> "Waiting for network"
         ServiceConnectionState.Failure -> "Connection failed"
         else -> "Background Service"
       }

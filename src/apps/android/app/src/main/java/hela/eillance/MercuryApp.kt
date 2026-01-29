@@ -54,8 +54,6 @@ fun MercuryApp(viewModel: MainViewModel) {
   val lifecycleOwner = LocalLifecycleOwner.current
 
   // Wait for the service to initialize the engine.
-  // We observe the static StateFlow from CallService companion to avoid issues with instance nullability
-  // during early app startup.
   val isEngineReady by CallService.isEngineReady.collectAsState()
 
   DisposableEffect(lifecycleOwner) {
@@ -80,7 +78,7 @@ fun MercuryApp(viewModel: MainViewModel) {
     val myProfile by profileVM.myProfile.collectAsState()
 
     if (myProfile.identityExists) {
-      MainAppContent(viewModel = viewModel)
+      MainAppContent(viewModel = viewModel, profileVM = profileVM)
     } else {
       IdentitySetupFlow(profileVM)
     }
@@ -108,11 +106,17 @@ fun IdentitySetupFlow(profileVM: ProfileViewModel) {
 }
 
 @Composable
-fun MainAppContent(viewModel: MainViewModel) {
+fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
   val navController = rememberNavController()
 
+  // Hoist ViewModels to share instances across the graph
   val callVM: CallViewModel = viewModel()
+  val contactsVM: ContactsViewModel = viewModel()
+  val settingsVM: SettingsViewModel = viewModel()
+  val debugVM: DebugViewModel = viewModel()
+
   val callState by callVM.callState.collectAsState()
+  val myProfile by profileVM.myProfile.collectAsState()
 
   val navigateToPeerId by viewModel.navigateToPeerId.collectAsState()
   val navigateToScanner by viewModel.navigateToScanner.collectAsState()
@@ -174,13 +178,8 @@ fun MainAppContent(viewModel: MainViewModel) {
       modifier = Modifier.fillMaxSize()
     ) {
       composable(Screen.Contacts.route) {
-        val contactsVM: ContactsViewModel = viewModel()
-        val profileVM: ProfileViewModel = viewModel()
-        val settingsVM: SettingsViewModel = viewModel()
-
         val contacts by contactsVM.contacts.collectAsState()
         val isLoading by contactsVM.isLoading.collectAsState()
-        val myProfile by profileVM.myProfile.collectAsState()
         val connectionState by settingsVM.connectionState.collectAsState()
         val showAddDialog by contactsVM.showAddContactDialog.collectAsState()
         val profileDialogPeerId by contactsVM.showContactProfileDialog.collectAsState()
@@ -223,14 +222,10 @@ fun MainAppContent(viewModel: MainViewModel) {
       }
 
       composable(Screen.Profile.route) {
-        val profileVM: ProfileViewModel = viewModel()
-        val contactsVM: ContactsViewModel = viewModel()
-        val debugVM: DebugViewModel = viewModel()
-        val myProfile by profileVM.myProfile.collectAsState()
-
         ProfileScreen(
           profileVM = profileVM,
           contactsVM = contactsVM,
+          settingsVM = settingsVM,
           debugVM = debugVM,
           myProfile = myProfile,
           onBack = { navController.popBackStack() },
@@ -245,7 +240,6 @@ fun MainAppContent(viewModel: MainViewModel) {
         val peerId = backStackEntry.arguments?.getString("peerId") ?: return@composable
         val app = LocalContext.current.applicationContext as Application
         val chatVM: ConversationViewModel = viewModel(factory = ConversationViewModel.Factory(app, peerId))
-        val contactsVM: ContactsViewModel = viewModel()
         val historyPage by chatVM.interactionHistoryPage.collectAsState()
         val contacts by contactsVM.contacts.collectAsState()
         val contact = contacts.find { it.peerId == peerId }
@@ -279,7 +273,6 @@ fun MainAppContent(viewModel: MainViewModel) {
       }
 
       composable(Screen.Settings.route) {
-        val settingsVM: SettingsViewModel = viewModel()
         SettingsScreen(
           settingsVM = settingsVM,
           onBack = { navController.popBackStack() },
@@ -288,7 +281,6 @@ fun MainAppContent(viewModel: MainViewModel) {
       }
 
       composable(Screen.BackupRestore.route) {
-        val profileVM: ProfileViewModel = viewModel()
         BackupAndRestoreScreen(
           profileVM = profileVM,
           onBack = { navController.popBackStack() },
@@ -297,12 +289,10 @@ fun MainAppContent(viewModel: MainViewModel) {
       }
 
       composable(Screen.RecoveryPhrase.route) {
-        val profileVM: ProfileViewModel = viewModel()
         RecoveryPhraseScreen(profileVM, onBack = { navController.popBackStack() })
       }
 
       composable(Screen.QrScanner.route) {
-        val contactsVM: ContactsViewModel = viewModel()
         QrScannerScreen(
           onQrCodeScanned = { peerId, token ->
             contactsVM.addContact(peerId, token)
@@ -313,7 +303,6 @@ fun MainAppContent(viewModel: MainViewModel) {
       }
 
       composable(Screen.RejectedContacts.route) {
-        val contactsVM: ContactsViewModel = viewModel()
         RejectedContactsScreen(contactsVM, onBack = { navController.popBackStack() })
       }
 
