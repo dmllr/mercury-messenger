@@ -87,17 +87,6 @@ class MessagingServiceTest : public ::testing::Test {
     std::filesystem::remove_all(temp_dir_, ec);
   }
 
-  static std::string CalculateSha256(std::string const& data) {
-    unsigned char hash[SHA256_DIGEST_LENGTH];
-    SHA256_CTX sha256;
-    SHA256_Init(&sha256);
-    SHA256_Update(&sha256, data.c_str(), data.size());
-    SHA256_Final(hash, &sha256);
-    std::vector<std::byte> hash_bytes(SHA256_DIGEST_LENGTH);
-    std::memcpy(hash_bytes.data(), hash, SHA256_DIGEST_LENGTH);
-    return eillance::crypto::ToHex(hash_bytes);
-  }
-
   // Helper to construct binary chunk
   std::vector<std::byte> CreateChunkPacket(std::string const& id, uint32_t seq, std::vector<std::byte> const& payload) {
     std::vector<std::byte> packet;
@@ -179,7 +168,7 @@ TEST_F(MessagingServiceTest, DownloadTriggersCallback) {
   transport_->AddPeer(peer1, peer);
 
   std::string file_content = "Hello World Data";
-  std::string file_hash = CalculateSha256(file_content);
+  std::string file_hash = crypto::Sha256Hex(file_content);
 
   std::string payload_content = "Here is a file";
   nlohmann::json payload_json;

@@ -14,7 +14,6 @@
 #include <openssl/kdf.h>
 #include <openssl/pem.h>
 #include <openssl/rand.h>
-#include <openssl/sha.h>
 #include <span>
 
 #include "eillance/crypto/bip39_wordlist.hpp"
@@ -74,6 +73,78 @@ using EvpPkeyPtr = std::unique_ptr<EVP_PKEY, decltype(&EVP_PKEY_free)>;
 using EvpPkeyCtxPtr = std::unique_ptr<EVP_PKEY_CTX, decltype(&EVP_PKEY_CTX_free)>;
 using BioPtr = std::unique_ptr<BIO, decltype(&BIO_free)>;
 using EvpCipherCtxPtr = std::unique_ptr<EVP_CIPHER_CTX, decltype(&EVP_CIPHER_CTX_free)>;
+using EvpMdCtxPtr = std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)>;
+
+/// @brief Calculates SHA256 hash of the given data using OpenSSL EVP API.
+[[nodiscard]] static auto Sha256(std::span<std::byte const> const data) -> std::vector<std::byte> {
+  EvpMdCtxPtr const ctx(EVP_MD_CTX_new(), EVP_MD_CTX_free);
+  if (!ctx) {
+    return {};
+  }
+
+  if (EVP_DigestInit_ex(ctx.get(), EVP_sha256(), nullptr) != 1) {
+    return {};
+  }
+
+  if (EVP_DigestUpdate(ctx.get(), data.data(), data.size()) != 1) {
+    return {};
+  }
+
+  std::vector<std::byte> hash(EVP_MD_size(EVP_sha256()));
+  unsigned int hash_len = 0;
+  // NOLINTNEXTLINE(*-reinterpret-cast)
+  if (EVP_DigestFinal_ex(ctx.get(), reinterpret_cast<unsigned char*>(hash.data()), &hash_len) != 1) {
+    return {};
+  }
+  hash.resize(hash_len);
+  return hash;
+}
+
+/// @brief Calculates SHA256 hash and returns it as a hex string.
+[[nodiscard]] static auto Sha256Hex(std::span<std::byte const> const data) -> std::string { return ToHex(Sha256(data)); }
+
+/// @brief Calculates SHA256 hash of a string view and returns it as a hex string.
+[[nodiscard]] static auto Sha256Hex(std::string_view const data) -> std::string {
+  // NOLINTNEXTLINE(*-reinterpret-cast)
+  auto const* ptr = reinterpret_cast<std::byte const*>(data.data());
+  return Sha256Hex(std::span<std::byte const>(ptr, data.size()));
+}
+
+/// @brief Calculates SHA256 hash of a file.
+[[nodiscard]] static auto CalculateFileHash(std::filesystem::path const& path) -> std::string {
+  std::ifstream file(path, std::ios::binary);
+  if (!file) {
+    return "";
+  }
+
+  EvpMdCtxPtr const ctx(EVP_MD_CTX_new(), EVP_MD_CTX_free);
+  if (!ctx) {
+    return "";
+  }
+
+  if (EVP_DigestInit_ex(ctx.get(), EVP_sha256(), nullptr) != 1) {
+    return "";
+  }
+
+  std::array<char, 4096> buffer{};
+  while (file.read(buffer.data(), buffer.size()) || file.gcount() > 0) {
+    if (EVP_DigestUpdate(ctx.get(), buffer.data(), static_cast<size_t>(file.gcount())) != 1) {
+      return "";
+    }
+    if (!file) {
+      break;
+    }
+  }
+
+  std::vector<std::byte> hash(EVP_MD_size(EVP_sha256()));
+  unsigned int hash_len = 0;
+  // NOLINTNEXTLINE(*-reinterpret-cast)
+  if (EVP_DigestFinal_ex(ctx.get(), reinterpret_cast<unsigned char*>(hash.data()), &hash_len) != 1) {
+    return "";
+  }
+  hash.resize(hash_len);
+  return ToHex(hash);
+}
 
 class Identity {
   EvpPkeyPtr pkey_;
@@ -123,20 +194,23 @@ class Identity {
     constexpr int words_count = 12;
     constexpr int bits_per_word = 11;
 
-    std::vector<uint8_t> entropy(entropy_bytes);
-    if (RAND_bytes(entropy.data(), entropy.size()) != 1) {
+    std::vector<std::byte> entropy(entropy_bytes);
+    // NOLINTNEXTLINE(*-reinterpret-cast)
+    if (RAND_bytes(reinterpret_cast<unsigned char*>(entropy.data()), entropy.size()) != 1) {
       return nullptr;
     }
 
-    auto hash = std::array<std::uint8_t, SHA256_DIGEST_LENGTH>{};
-    SHA256(entropy.data(), entropy.size(), hash.data());
-    uint8_t const checksum_byte = hash[0];
+    auto const hash = Sha256(entropy);
+    if (hash.empty()) {
+      return nullptr;
+    }
+    auto const checksum_byte = static_cast<uint8_t>(hash[0]);
 
     std::vector<bool> bits(total_bits);
     // Populate bits from entropy
     for (int i = 0; i < entropy_bytes; ++i) {
       for (int j = 0; j < 8; ++j) {
-        bits[i * 8 + j] = (((entropy[i] >> (7 - j)) & 1) != 0);
+        bits[i * 8 + j] = (((static_cast<uint8_t>(entropy[i]) >> (7 - j)) & 1) != 0);
       }
     }
     // Populate bits from checksum (first 4 bits of the hash)
@@ -157,7 +231,7 @@ class Identity {
   }
 
   static auto GenerateFromMnemonic(std::string const& mnemonic) -> std::unique_ptr<Identity> {
-    auto seed = MnemonicToSeed(mnemonic);
+    auto const seed = MnemonicToSeed(mnemonic);
     if (seed.empty()) {
       return nullptr;
     }
@@ -233,7 +307,7 @@ class Identity {
   }
 
   [[nodiscard]] auto Sign(std::span<std::byte const> message) -> std::vector<std::byte> {
-    std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)> const ctx(EVP_MD_CTX_new(), EVP_MD_CTX_free);
+    EvpMdCtxPtr const ctx(EVP_MD_CTX_new(), EVP_MD_CTX_free);
     if (!ctx) {
       return {};
     }
@@ -288,7 +362,7 @@ class Identity {
     if (!pkey) {
       return false;
     }
-    std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)> const ctx(EVP_MD_CTX_new(), EVP_MD_CTX_free);
+    EvpMdCtxPtr const ctx(EVP_MD_CTX_new(), EVP_MD_CTX_free);
     if (!ctx) {
       return false;
     }
@@ -318,7 +392,7 @@ class SessionCipher {
 
   void Reset() { sharedSecret_.clear(); }
 
-  [[nodiscard]] auto GetPublicKey() -> std::vector<std::byte> {
+  [[nodiscard]] auto GetPublicKey() const -> std::vector<std::byte> {
     size_t length = 0;  // NOLINT(*-const-correctness)
     if (EVP_PKEY_get_raw_public_key(ephemeralKey_.get(), nullptr, &length) <= 0 || length == 0) {
       return {};

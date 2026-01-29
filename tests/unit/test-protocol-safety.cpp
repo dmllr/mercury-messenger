@@ -69,18 +69,6 @@ std::string GenerateTypeSignature(nlohmann::json const& j) {
   return "unknown";
 }
 
-std::string CalculateSha256(std::string const& data) {
-  unsigned char hash[SHA256_DIGEST_LENGTH];
-  SHA256_CTX sha256;
-  SHA256_Init(&sha256);
-  SHA256_Update(&sha256, data.c_str(), data.size());
-  SHA256_Final(hash, &sha256);
-
-  std::vector<std::byte> hash_bytes(SHA256_DIGEST_LENGTH);
-  std::memcpy(hash_bytes.data(), hash, SHA256_DIGEST_LENGTH);
-  return eillance::crypto::ToHex(hash_bytes);
-}
-
 // Mock Capture to satisfy MediaCallService invariants
 class MockCapture {
  public:
@@ -319,7 +307,7 @@ TEST_F(ProtocolSafetyTest, VerifyRealMessageSignatures) {
   // Verification
   // ---------------------------------------------------------------------------------------
   std::string const final_signature_blob = combined_signatures.str();
-  std::string const current_hash = CalculateSha256(final_signature_blob);
+  std::string const current_hash = crypto::Sha256Hex(final_signature_blob);
 
   // If you change the protocol format, update this hash and the version number.
   // Current Hash calculation based on implementation:

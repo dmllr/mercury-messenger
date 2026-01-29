@@ -159,7 +159,7 @@ class MessagingService {
 
       try {
         file_size = std::filesystem::file_size(req.file_path);
-        hash = FileTransferService::CalculateFileHash(req.file_path);
+        hash = crypto::CalculateFileHash(req.file_path);
       } catch (...) {
         LGW << "Failed to process attachment file: " << req.file_path;
         continue;

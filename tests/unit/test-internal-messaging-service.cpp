@@ -89,7 +89,7 @@ class InternalMessagingServiceTest : public ::testing::Test {
     media_call_service_->SetMessagingService(messaging_service_.get());
 
     // Satisfy invariants
-    account_service_->GenerateNewIdentity();
+    std::ignore = account_service_->GenerateNewIdentity();
 
     // 4. Target
     service_ = std::make_unique<services::InternalMessagingService>(
