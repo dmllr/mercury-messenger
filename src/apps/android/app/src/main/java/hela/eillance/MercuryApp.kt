@@ -234,7 +234,7 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
           myProfile = myProfile,
           onBack = { navController.popBackStack() },
           onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
-          onNavigateToBetaNotice = { navController.navigate(Route.WebView.createRoute("https://mercury.eillance.com/beta/")) },
+          onNavigateToBetaNotice = { navController.navigate(Route.WebView.createRoute("https://mercury.eillance.com/beta?embed=1")) },
           onNavigateToBackupAndRestore = { navController.navigate(Screen.BackupRestore.route) },
           onNavigateToHelp = { navController.navigate(Screen.Help.route) }
         )
