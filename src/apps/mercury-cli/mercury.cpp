@@ -211,6 +211,8 @@ auto main(int argc, char** argv) -> int {
   client->SetVideoCapture(std::make_unique<eillance::VideoCaptureCli>());
   client->SetAudioCapture(std::make_unique<eillance::AudioCaptureCli>());
 
+  auto router = std::make_shared<eillance::view_model::ClientEventRouter>(client);
+
   // CLI Argument Handling (Backup/Restore)
   if (auto backup_path = args.Get("--backup")) {
     std::cout << "Enter password for backup: ";
@@ -269,8 +271,6 @@ auto main(int argc, char** argv) -> int {
 
   // --- ViewModel Initialization ---
   // In the new architecture, we instantiate specific ViewModels.
-  auto router = std::make_shared<eillance::view_model::ClientEventRouter>(client);
-
   auto contacts_vm = std::make_shared<eillance::view_model::ContactsViewModel>(client, router);
   auto call_vm = std::make_shared<eillance::view_model::CallViewModel>(client, router);
   auto profile_vm = std::make_shared<eillance::view_model::ProfileViewModel>(client, router);
@@ -296,6 +296,9 @@ auto main(int argc, char** argv) -> int {
     void OnSettingsUpdated(std::optional<std::string> const&, int) override { screen.Post(ftxui::Event::Custom); }
     void OnConnectionStateChanged(eillance::ServiceConnectionState) override { screen.Post(ftxui::Event::Custom); }
     void OnHistoryUpdated(eillance::view_model::ConversationViewModel::State const&) override {
+      screen.Post(ftxui::Event::Custom);
+    }
+    void OnTransferProgress(std::string const& /*attachment_id*/, float /*progress*/) override {
       screen.Post(ftxui::Event::Custom);
     }
     // Implement Profile Observer requirement if needed or just ignore for CLI main loop
