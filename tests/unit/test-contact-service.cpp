@@ -87,17 +87,27 @@ class ContactServiceTest : public ::testing::Test {
   ContactID const peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
 };
 
+TEST_F(ContactServiceTest, CannotAddSelf) {
+  auto const my_id = account_service_->GetId();
+
+  auto const result = contact_service_->AddContact(my_id, std::nullopt);
+  EXPECT_FALSE(result);
+
+  auto const contact = contact_service_->GetContact(my_id);
+  EXPECT_FALSE(contact.has_value());
+}
+
 TEST_F(ContactServiceTest, AddContact) {
   contact_service_->AddContact(peer1, std::nullopt);
 
-  auto contact = contact_service_->GetContact(peer1);
+  auto const contact = contact_service_->GetContact(peer1);
   ASSERT_TRUE(contact.has_value());
   EXPECT_EQ(contact->status, identity::ContactStatus::pendingApproval);
 
   // Verify system message was generated
-  auto history = messaging_service_->GetHistoryPage(peer1, 0, 10);
-  ASSERT_FALSE(history.messages.empty());
-  auto const& last_msg = history.messages[0];
+  auto [messages, total_messages] = messaging_service_->GetHistoryPage(peer1, 0, 10);
+  ASSERT_FALSE(messages.empty());
+  auto const& last_msg = messages[0];
   EXPECT_EQ(last_msg.kind, messaging::HistoryEntryKind::systemMessage);
   EXPECT_EQ(last_msg.direction, messaging::MessageDirection::sent);
 }
@@ -105,7 +115,9 @@ TEST_F(ContactServiceTest, AddContact) {
 TEST_F(ContactServiceTest, ReceiveContactRequest) {
   bool request_cb_called = false;
   contact_service_->SetContactRequestCallback([&](auto const& id) {
-    if (id == peer1) request_cb_called = true;
+    if (id == peer1) {
+      request_cb_called = true;
+    }
   });
 
   nlohmann::json profile;
@@ -114,7 +126,7 @@ TEST_F(ContactServiceTest, ReceiveContactRequest) {
   contact_service_->OnContactAddRequest(peer1, std::nullopt, profile);
 
   EXPECT_TRUE(request_cb_called);
-  auto contact = contact_service_->GetContact(peer1);
+  auto const contact = contact_service_->GetContact(peer1);
   ASSERT_TRUE(contact.has_value());
   EXPECT_EQ(contact->status, identity::ContactStatus::awaitingApproval);
   EXPECT_EQ(contact->display_name, "Peer One");
@@ -122,12 +134,14 @@ TEST_F(ContactServiceTest, ReceiveContactRequest) {
 
 TEST_F(ContactServiceTest, ConfirmContact) {
   // First receive a request
-  nlohmann::json profile;
+  nlohmann::json const profile;
   contact_service_->OnContactAddRequest(peer1, std::nullopt, profile);
 
   bool status_cb_called = false;
   contact_service_->SetContactStatusChangedCallback([&](auto const& id, auto status) {
-    if (id == peer1 && status == identity::ContactStatus::confirmed) status_cb_called = true;
+    if (id == peer1 && status == identity::ContactStatus::confirmed) {
+      status_cb_called = true;
+    }
   });
 
   contact_service_->ConfirmContact(peer1);
@@ -161,8 +175,10 @@ TEST_F(ContactServiceTest, BlockContact) {
 
   // Check if connections were closed
   bool closed = false;
-  for (auto const& [pid, ctx] : mock_transport_raw_->log.closed_connections) {
-    if (pid == peer1) closed = true;
+  for (auto const& pid : mock_transport_raw_->log.closed_connections | std::views::keys) {
+    if (pid == peer1) {
+      closed = true;
+    }
   }
   EXPECT_TRUE(closed);
 }

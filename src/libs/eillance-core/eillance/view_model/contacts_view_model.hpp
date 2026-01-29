@@ -60,8 +60,8 @@ class ContactsViewModel {
   [[nodiscard]] auto GetContacts() const -> std::vector<ViewContact> { return impl_->GetContacts(); }
 
   // Actions
-  void AddContact(ContactID const& peer_id, std::optional<std::vector<std::byte>> const& token) const {
-    impl_->AddContact(peer_id, token);
+  auto AddContact(ContactID const& peer_id, std::optional<std::vector<std::byte>> const& token) const -> bool {
+    return impl_->AddContact(peer_id, token);
   }
 
   void BlockContact(ContactID const& peer_id) { impl_->BlockContact(peer_id); }
@@ -106,8 +106,12 @@ class ContactsViewModel {
       return contacts;
     }
 
-    void AddContact(ContactID const& peer_id, std::optional<std::vector<std::byte>> const& token) {
+    auto AddContact(ContactID const& peer_id, std::optional<std::vector<std::byte>> const& token) -> bool {
+      if (peer_id == client->GetId()) {
+        return false;
+      }
       std::thread([self = shared_from_this(), peer_id, token]() { self->client->AddContact(peer_id, token); }).detach();
+      return true;
     }
 
     void BlockContact(ContactID const& peer_id) {

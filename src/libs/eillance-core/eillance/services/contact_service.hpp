@@ -41,11 +41,16 @@ class ContactService {
   void SetMessagingService(MessagingService* messaging_service) { messaging_service_ = messaging_service; }
 
   // Actions
-  void AddContact(ContactID const& peer_id, std::optional<std::vector<std::byte>> const& token) {
+  auto AddContact(ContactID const& peer_id, std::optional<std::vector<std::byte>> const& token) -> bool {
+    if (peer_id == account_service_->GetId()) {
+      LGW << "Attempted to add self as contact.";
+      return false;
+    }
+
     auto const existing = manager_->GetContact(peer_id);
     if (existing && existing->status == identity::ContactStatus::awaitingApproval) {
       ConfirmContact(peer_id);
-      return;
+      return true;
     }
 
     if (manager_->AddContact(peer_id)) {
@@ -70,6 +75,7 @@ class ContactService {
       connection_handler_(peer_id);
       messaging_service_->SendQueuedMessages(peer_id);
     }
+    return true;
   }
 
   void ConfirmContact(ContactID const& peer_id) {
@@ -135,24 +141,6 @@ class ContactService {
 
   void SetContactDisplayNameOverride(ContactID const& peer_id, std::string const& name) {
     manager_->SetDisplayNameOverride(peer_id, name);
-    // Profile updated event is also used to notify UI of name changes
-    // even if it's a local override
-    // We need to trigger the callback, but it's now on ProfileService?
-    // No, local override is a Contact property.
-    // However, the callback SetContactProfileUpdatedCallback is now on ProfileService.
-    // We should probably expose it here too or have ProfileService listen to ContactService events?
-    // Simplest: Call the callback if it was set on ProfileService.
-    // But ProfileService has the callback storage.
-    // Solution: ContactService operations that affect display (Override) should trigger the UI update.
-    // The previous architecture had the callback here.
-    // The previous `SetContactProfileUpdatedCallback` was moved to `ProfileService`.
-    // We need to notify ProfileService to trigger the UI update.
-    // But `ProfileService` doesn't have a public "TriggerUpdate" method.
-    // Let's assume for this refactor that `ProfileService` handles external updates,
-    // and for local overrides, we might need to invoke the callback directly if we kept it here?
-    // Actually, I moved the callback setter to ProfileService.
-    // We need a mechanism.
-    // I will add `NotifyProfileUpdated(peer_id)` to ProfileService public API.
   }
 
   void ResetContactDisplayNameOverride(ContactID const& peer_id) {
@@ -222,9 +210,6 @@ class ContactService {
         on_contact_request_(peer_id);
       } else {
         // We need to notify profile update if we updated info from request
-        // Since we don't have the callback here anymore, we can't.
-        // This is a trade-off of separation.
-        // Ideally, ProfileService should observe ContactManager changes.
       }
     } else {
       // If the contact is already confirmed locally, it implies the peer might have lost their state (reinstall).

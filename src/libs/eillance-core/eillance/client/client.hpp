@@ -214,8 +214,8 @@ class Client final : public transport::TransportDelegate {
 
   [[nodiscard]] auto GetSettingsManager() const -> SettingsManager* { return account_service_->GetSettings(); }
 
-  void AddContact(ContactID const& id, std::optional<std::vector<std::byte>> const& t) const {
-    contact_service_->AddContact(id, t);
+  auto AddContact(ContactID const& id, std::optional<std::vector<std::byte>> const& t) const -> bool {
+    return contact_service_->AddContact(id, t);
   }
   auto GenerateContactToken() const -> std::vector<std::byte> { return contact_service_->GenerateContactToken(); }
   void ConfirmContact(ContactID const& id) const { contact_service_->ConfirmContact(id); }

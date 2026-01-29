@@ -25,10 +25,13 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.os.ConfigurationCompat
+import hela.eillance.AddContactDialog
 import hela.eillance.components.UserAvatar
 import hela.eillance.ndkio.Contact
 import hela.eillance.ndkio.ContactStatus
@@ -69,7 +73,16 @@ fun ContactsScreen(
   onNavigateToProfile: () -> Unit,
   onShowContactProfile: (String) -> Unit
 ) {
+  val snackbarHostState = remember { SnackbarHostState() }
+
+  LaunchedEffect(contactsVM) {
+    contactsVM.errorMessage.collect { message ->
+      snackbarHostState.showSnackbar(message)
+    }
+  }
+
   Scaffold(
+    snackbarHost = { SnackbarHost(snackbarHostState) },
     topBar = {
       TopAppBar(
         title = { Text("Mercury") },
