@@ -111,7 +111,8 @@ class PersistentStorageImpl {
 class PersistentStorage {
  public:
   explicit PersistentStorage(std::unique_ptr<PersistentStorageImpl> pimpl)
-      : pimpl_(std::move(pimpl)) {}
+      : pimpl_(std::move(pimpl)) {
+  }
 
   ~PersistentStorage() = default;
   PersistentStorage(PersistentStorage const&) = delete;
@@ -119,34 +120,58 @@ class PersistentStorage {
   PersistentStorage(PersistentStorage&&) noexcept = default;
   auto operator=(PersistentStorage&&) noexcept -> PersistentStorage& = default;
 
-  [[nodiscard]] auto GetPath() const { return pimpl_->GetPath(); }
+  [[nodiscard]] auto GetPath() const {
+    return pimpl_->GetPath();
+  }
   // --- Settings ---
-  [[nodiscard]] auto GetSetting(std::string_view key) const { return pimpl_->GetSetting(key); }
-  void SetSetting(std::string_view key, std::string_view value) const { pimpl_->SetSetting(key, value); }
-  void DeleteSetting(std::string_view key) const { pimpl_->DeleteSetting(key); }
-  [[nodiscard]] auto GetRaw(std::string const& key) const { return pimpl_->GetRaw(key); }
+  [[nodiscard]] auto GetSetting(std::string_view key) const {
+    return pimpl_->GetSetting(key);
+  }
+  void SetSetting(std::string_view key, std::string_view value) const {
+    pimpl_->SetSetting(key, value);
+  }
+  void DeleteSetting(std::string_view key) const {
+    pimpl_->DeleteSetting(key);
+  }
+  [[nodiscard]] auto GetRaw(std::string const& key) const {
+    return pimpl_->GetRaw(key);
+  }
   [[nodiscard]] auto SetRaw(std::string const& key, std::vector<std::byte> const& value) const {
     return pimpl_->SetRaw(key, value);
   }
 
   // --- Contacts ---
-  [[nodiscard]] auto GetContacts() const { return pimpl_->GetContacts(); }
-  [[nodiscard]] auto GetContact(ContactID const& peer_id) const { return pimpl_->GetContact(peer_id); }
-  void UpdateContact(identity::Contact const& contact) const { pimpl_->UpdateContact(contact); }
-  void RemoveContact(ContactID const& peer_id) const { pimpl_->RemoveContact(peer_id); }
+  [[nodiscard]] auto GetContacts() const {
+    return pimpl_->GetContacts();
+  }
+  [[nodiscard]] auto GetContact(ContactID const& peer_id) const {
+    return pimpl_->GetContact(peer_id);
+  }
+  void UpdateContact(identity::Contact const& contact) const {
+    pimpl_->UpdateContact(contact);
+  }
+  void RemoveContact(ContactID const& peer_id) const {
+    pimpl_->RemoveContact(peer_id);
+  }
 
   // --- Resilience ---
   void AddPendingAction(ContactID const& peer_id, std::string const& payload) const {
     pimpl_->AddPendingAction(peer_id, payload);
   }
-  [[nodiscard]] auto GetPendingActions(ContactID const& peer_id) const { return pimpl_->GetPendingActions(peer_id); }
-  void RemovePendingAction(int64_t id) const { pimpl_->RemovePendingAction(id); }
+  [[nodiscard]] auto GetPendingActions(ContactID const& peer_id) const {
+    return pimpl_->GetPendingActions(peer_id);
+  }
+  void RemovePendingAction(int64_t id) const {
+    pimpl_->RemovePendingAction(id);
+  }
 
   // --- History ---
   [[nodiscard]] auto AddHistoryEntry(messaging::HistoryEntryRecord entry) {
     return pimpl_->AddHistoryEntry(std::move(entry));
   }
-  void UpdateHistoryEntry(messaging::HistoryEntryRecord const& entry) const { pimpl_->UpdateHistoryEntry(entry); }
+  void UpdateHistoryEntry(messaging::HistoryEntryRecord const& entry) const {
+    pimpl_->UpdateHistoryEntry(entry);
+  }
   void UpdateMessageStatus(ContactID const& peer_id, uint64_t message_id, messaging::MessageStatus new_status) const {
     pimpl_->UpdateMessageStatus(peer_id, message_id, new_status);
   }
@@ -184,9 +209,15 @@ class PersistentStorage {
   }
 
   // --- Debug ---
-  void DebugClearAllHistory() const { pimpl_->DebugClearAllHistory(); }
-  void DebugClearAllContacts() const { pimpl_->DebugClearAllContacts(); }
-  void DebugRevokeAllContactApprovals() const { pimpl_->DebugRevokeAllContactApprovals(); }
+  void DebugClearAllHistory() const {
+    pimpl_->DebugClearAllHistory();
+  }
+  void DebugClearAllContacts() const {
+    pimpl_->DebugClearAllContacts();
+  }
+  void DebugRevokeAllContactApprovals() const {
+    pimpl_->DebugRevokeAllContactApprovals();
+  }
 
  private:
   std::unique_ptr<PersistentStorageImpl> pimpl_{};

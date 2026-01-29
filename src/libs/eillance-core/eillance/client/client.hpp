@@ -111,11 +111,17 @@ class Client final : public transport::TransportDelegate {
   Client(Client&&) = delete;
   auto operator=(Client const&) -> Client& = delete;
   auto operator=(Client&&) -> Client& = delete;
-  ~Client() override { Terminate(); }
+  ~Client() override {
+    Terminate();
+  }
 
   // --- Service Accessors ---
-  [[nodiscard]] auto GetAccountService() const -> std::shared_ptr<services::AccountService> { return account_service_; }
-  [[nodiscard]] auto GetContactService() const -> std::shared_ptr<services::ContactService> { return contact_service_; }
+  [[nodiscard]] auto GetAccountService() const -> std::shared_ptr<services::AccountService> {
+    return account_service_;
+  }
+  [[nodiscard]] auto GetContactService() const -> std::shared_ptr<services::ContactService> {
+    return contact_service_;
+  }
   [[nodiscard]] auto GetMessagingService() const -> std::shared_ptr<services::MessagingService> {
     return messaging_service_;
   }
@@ -125,8 +131,12 @@ class Client final : public transport::TransportDelegate {
   [[nodiscard]] auto GetFileTransferService() const -> std::shared_ptr<services::FileTransferService> {
     return file_transfer_service_;
   }
-  [[nodiscard]] auto GetProfileService() const -> std::shared_ptr<services::ProfileService> { return profile_service_; }
-  [[nodiscard]] auto GetStorage() const -> std::shared_ptr<storage::PersistentStorage> { return storage_; }
+  [[nodiscard]] auto GetProfileService() const -> std::shared_ptr<services::ProfileService> {
+    return profile_service_;
+  }
+  [[nodiscard]] auto GetStorage() const -> std::shared_ptr<storage::PersistentStorage> {
+    return storage_;
+  }
 
   // --- Platform Injection ---
   template <typename T>
@@ -166,13 +176,21 @@ class Client final : public transport::TransportDelegate {
     transport_->Terminate();
   }
 
-  void Configure(Config const& config) const { media_call_service_->Configure(config); }
+  void Configure(Config const& config) const {
+    media_call_service_->Configure(config);
+  }
 
   // --- Facade Methods ---
 
-  [[nodiscard]] auto GetId() const -> ContactID { return account_service_->GetId(); }
-  [[nodiscard]] auto IdentityExists() const -> bool { return account_service_->IdentityExists(); }
-  [[nodiscard]] auto GetMnemonic() const -> std::optional<std::string> { return account_service_->GetMnemonic(); }
+  [[nodiscard]] auto GetId() const -> ContactID {
+    return account_service_->GetId();
+  }
+  [[nodiscard]] auto IdentityExists() const -> bool {
+    return account_service_->IdentityExists();
+  }
+  [[nodiscard]] auto GetMnemonic() const -> std::optional<std::string> {
+    return account_service_->GetMnemonic();
+  }
 
   auto GenerateNewIdentity() -> std::string {
     auto mnemonic = account_service_->GenerateNewIdentity();
@@ -200,8 +218,12 @@ class Client final : public transport::TransportDelegate {
     return false;
   }
 
-  void SetName(std::string const& name) const { transport_->SetName(name); }
-  void UpdateSignalingUrl(std::string const& url) const { account_service_->UpdateSignalingUrl(url); }
+  void SetName(std::string const& name) const {
+    transport_->SetName(name);
+  }
+  void UpdateSignalingUrl(std::string const& url) const {
+    account_service_->UpdateSignalingUrl(url);
+  }
 
   void UpdateMyProfile(
       std::optional<std::string> const& n,
@@ -212,23 +234,37 @@ class Client final : public transport::TransportDelegate {
     BroadcastProfileUpdate();
   }
 
-  [[nodiscard]] auto GetSettingsManager() const -> SettingsManager* { return account_service_->GetSettings(); }
+  [[nodiscard]] auto GetSettingsManager() const -> SettingsManager* {
+    return account_service_->GetSettings();
+  }
 
   auto AddContact(ContactID const& id, std::optional<std::vector<std::byte>> const& t) const -> bool {
     return contact_service_->AddContact(id, t);
   }
-  auto GenerateContactToken() const -> std::vector<std::byte> { return contact_service_->GenerateContactToken(); }
-  void ConfirmContact(ContactID const& id) const { contact_service_->ConfirmContact(id); }
-  void BlockContact(ContactID const& id, bool n) const { contact_service_->BlockContact(id, n); }
-  void DeleteContact(ContactID const& id) const { contact_service_->DeleteContact(id); }
-  void UnblockContact(ContactID const& id) const { contact_service_->UnblockContact(id); }
+  auto GenerateContactToken() const -> std::vector<std::byte> {
+    return contact_service_->GenerateContactToken();
+  }
+  void ConfirmContact(ContactID const& id) const {
+    contact_service_->ConfirmContact(id);
+  }
+  void BlockContact(ContactID const& id, bool n) const {
+    contact_service_->BlockContact(id, n);
+  }
+  void DeleteContact(ContactID const& id) const {
+    contact_service_->DeleteContact(id);
+  }
+  void UnblockContact(ContactID const& id) const {
+    contact_service_->UnblockContact(id);
+  }
   void SetContactDisplayNameOverride(ContactID const& id, std::string const& n) const {
     contact_service_->SetContactDisplayNameOverride(id, n);
   }
   void ResetContactDisplayNameOverride(ContactID const& id) const {
     contact_service_->ResetContactDisplayNameOverride(id);
   }
-  [[nodiscard]] auto GetContacts() const -> std::vector<identity::Contact> { return contact_service_->GetContacts(); }
+  [[nodiscard]] auto GetContacts() const -> std::vector<identity::Contact> {
+    return contact_service_->GetContacts();
+  }
 
   auto SendChatMessage(ContactID const& id, std::string const& msg) const -> messaging::HistoryEntryRecord {
     return messaging_service_->SendChatMessage(id, msg);
@@ -258,7 +294,9 @@ class Client final : public transport::TransportDelegate {
     messaging_service_->DiscardAttachment(peer_id, attachment_id);
   }
 
-  void Call(ContactID const& id) { Connect(id); }
+  void Call(ContactID const& id) {
+    Connect(id);
+  }
   void Connect(ContactID const& peer_id) {
     if (transport_->GetPeer(peer_id)) {
       return;
@@ -275,16 +313,28 @@ class Client final : public transport::TransportDelegate {
     transport_->CreateOffer(peer_id, "data");
   }
 
-  void StartVoiceCall(ContactID const& id) const { media_call_service_->StartVoiceCall(id); }
-  void StartVideoCall(ContactID const& id) const { media_call_service_->StartVideoCall(id); }
-  void AcceptCall(ContactID const& id, messaging::HistoryEntryKind k) const { media_call_service_->AcceptCall(id, k); }
-  void RejectCall(ContactID const& id) const { media_call_service_->RejectCall(id); }
-  void Hangup(ContactID const& id, bool n) const { media_call_service_->Hangup(id, n); }
+  void StartVoiceCall(ContactID const& id) const {
+    media_call_service_->StartVoiceCall(id);
+  }
+  void StartVideoCall(ContactID const& id) const {
+    media_call_service_->StartVideoCall(id);
+  }
+  void AcceptCall(ContactID const& id, messaging::HistoryEntryKind k) const {
+    media_call_service_->AcceptCall(id, k);
+  }
+  void RejectCall(ContactID const& id) const {
+    media_call_service_->RejectCall(id);
+  }
+  void Hangup(ContactID const& id, bool n) const {
+    media_call_service_->Hangup(id, n);
+  }
   [[nodiscard]] auto GetPeerConnectionState(ContactID const& id) const -> transport::PeerConnectionState {
     return transport_->GetPeerConnectionState(id);
   }
 
-  void DebugEraseAllHistory() const { storage_->DebugClearAllHistory(); }
+  void DebugEraseAllHistory() const {
+    storage_->DebugClearAllHistory();
+  }
   void DebugEraseAllContacts() const {
     storage_->DebugClearAllContacts();
     contact_service_->DebugClearCache();
@@ -301,7 +351,8 @@ class Client final : public transport::TransportDelegate {
   }
 
  private:
-  void OnPeerReady(std::shared_ptr<transport::Peer> const&) override {}
+  void OnPeerReady(std::shared_ptr<transport::Peer> const&) override {
+  }
 
   void OnSignalingErrorForPeer(ContactID const& peer_id, std::string const& error) override {
     if (error == "peer_not_found") {
@@ -340,7 +391,9 @@ class Client final : public transport::TransportDelegate {
     internal_messaging_service_->ProcessSystemMessage(type, message);
   }
 
-  void OnDataChannelOpen(ContactID const& peer_id) override { internal_messaging_service_->OnDataChannelOpen(peer_id); }
+  void OnDataChannelOpen(ContactID const& peer_id) override {
+    internal_messaging_service_->OnDataChannelOpen(peer_id);
+  }
 
   void OnFrameReceived(ContactID const& peer_id, std::vector<std::byte> const& frame) override {
     media_call_service_->OnFrameReceived(peer_id, frame);

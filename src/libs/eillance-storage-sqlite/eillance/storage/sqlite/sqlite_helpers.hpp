@@ -47,7 +47,9 @@ class SQLiteStatement {
     return *this;
   }
 
-  [[nodiscard]] auto Get() const -> sqlite3_stmt* { return stmt_; }
+  [[nodiscard]] auto Get() const -> sqlite3_stmt* {
+    return stmt_;
+  }
 };
 
 inline void BindText(sqlite3_stmt* stmt, int const idx, std::string const& val) {

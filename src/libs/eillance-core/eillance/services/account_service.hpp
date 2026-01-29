@@ -30,11 +30,17 @@ class AccountService {
     settings_manager_ = std::make_unique<SettingsManager>(storage_);
   }
 
-  [[nodiscard]] auto GetId() const -> ContactID { return ContactID(id_manager_->GetPublicKey()); }
+  [[nodiscard]] auto GetId() const -> ContactID {
+    return ContactID(id_manager_->GetPublicKey());
+  }
 
-  [[nodiscard]] auto IdentityExists() const -> bool { return id_manager_->IdentityExists(); }
+  [[nodiscard]] auto IdentityExists() const -> bool {
+    return id_manager_->IdentityExists();
+  }
 
-  [[nodiscard]] auto GetMnemonic() const -> std::optional<std::string> { return id_manager_->GetMnemonic(); }
+  [[nodiscard]] auto GetMnemonic() const -> std::optional<std::string> {
+    return id_manager_->GetMnemonic();
+  }
 
   // Returns new mnemonic
   [[nodiscard]] auto GenerateNewIdentity() const -> std::string {
@@ -74,7 +80,9 @@ class AccountService {
   }
 
   // Settings & Profile
-  [[nodiscard]] auto GetSettings() const -> SettingsManager* { return settings_manager_.get(); }
+  [[nodiscard]] auto GetSettings() const -> SettingsManager* {
+    return settings_manager_.get();
+  }
 
   void UpdateMyProfile(
       std::optional<std::string> const& name,
@@ -109,7 +117,9 @@ class AccountService {
 
   // Callbacks
   using OnMyProfileUpdatedCallback = std::function<void()>;
-  void SetOnMyProfileUpdatedCallback(OnMyProfileUpdatedCallback callback) { on_profile_updated_ = std::move(callback); }
+  void SetOnMyProfileUpdatedCallback(OnMyProfileUpdatedCallback callback) {
+    on_profile_updated_ = std::move(callback);
+  }
 
  private:
   std::shared_ptr<storage::PersistentStorage> storage_;

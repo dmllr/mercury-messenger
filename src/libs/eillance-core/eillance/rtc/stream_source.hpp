@@ -25,19 +25,33 @@ class StreamSource final : public Stream::Source {
   auto operator=(StreamSource const&) -> StreamSource& = delete;
   ~StreamSource() = default;
 
-  void Configure(Config config) override { capture_.Configure(config); }
+  void Configure(Config config) override {
+    capture_.Configure(config);
+  }
 
-  void Start() override { capture_.Engage(); }
+  void Start() override {
+    capture_.Engage();
+  }
 
-  void LoadNextSample() override { sample_ = capture_.FetchBuffers(); }
+  void LoadNextSample() override {
+    sample_ = capture_.FetchBuffers();
+  }
 
-  auto GetSample() -> std::vector<std::byte> override { return sample_.buffer(); }
+  auto GetSample() -> std::vector<std::byte> override {
+    return sample_.buffer();
+  }
 
-  void Stop() override { capture_.Revoke(); }
+  void Stop() override {
+    capture_.Revoke();
+  }
 
-  auto GetSampleTime() -> std::uint64_t override { return sample_.timestamp(); }
+  auto GetSampleTime() -> std::uint64_t override {
+    return sample_.timestamp();
+  }
 
-  auto GetSampleDuration() -> std::uint64_t override { return capture_.GetSampleDuration(); }
+  auto GetSampleDuration() -> std::uint64_t override {
+    return capture_.GetSampleDuration();
+  }
 };
 
 }  // namespace eillance

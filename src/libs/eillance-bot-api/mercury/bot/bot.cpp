@@ -92,12 +92,16 @@ class Bot::Impl {
 };
 
 Bot::Bot(Options options)
-    : impl_(std::make_unique<Impl>(std::move(options))) {}
+    : impl_(std::make_unique<Impl>(std::move(options))) {
+}
 
 Bot::Bot(std::shared_ptr<eillance::Client> client, Options options)
-    : impl_(std::make_unique<Impl>(std::move(client), std::move(options))) {}
+    : impl_(std::make_unique<Impl>(std::move(client), std::move(options))) {
+}
 
-Bot::~Bot() { Stop(); }
+Bot::~Bot() {
+  Stop();
+}
 
 void Bot::Start() const {
   if (!impl_->client_->IdentityExists()) {
@@ -125,8 +129,12 @@ void Bot::SendMessage(std::string const& chat_id, std::string const& text) const
   impl_->client_->SendChatMessage(peer_id, text);
 }
 
-void Bot::OnMessage(std::function<void(Message const&)> handler) const { impl_->message_handler_ = std::move(handler); }
+void Bot::OnMessage(std::function<void(Message const&)> handler) const {
+  impl_->message_handler_ = std::move(handler);
+}
 
-auto Bot::GetId() const -> std::string { return impl_->client_->GetId().ToString(); }
+auto Bot::GetId() const -> std::string {
+  return impl_->client_->GetId().ToString();
+}
 
 }  // namespace mercury::bot

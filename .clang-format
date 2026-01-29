@@ -36,6 +36,7 @@ QualifierOrder:
 AlignAfterOpenBracket: BlockIndent
 AllowAllArgumentsOnNextLine: false
 AllowAllParametersOfDeclarationOnNextLine: false
+AllowShortFunctionsOnASingleLine: None
 BinPackArguments: false
 BinPackParameters: false
 BreakInheritanceList: BeforeComma

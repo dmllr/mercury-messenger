@@ -55,24 +55,40 @@ class ContactsViewModel {
     }
   }
 
-  void SetObserver(std::shared_ptr<Observer> observer) const { impl_->SetObserver(std::move(observer)); }
+  void SetObserver(std::shared_ptr<Observer> observer) const {
+    impl_->SetObserver(std::move(observer));
+  }
 
-  [[nodiscard]] auto GetContacts() const -> std::vector<ViewContact> { return impl_->GetContacts(); }
+  [[nodiscard]] auto GetContacts() const -> std::vector<ViewContact> {
+    return impl_->GetContacts();
+  }
 
   // Actions
   auto AddContact(ContactID const& peer_id, std::optional<std::vector<std::byte>> const& token) const -> bool {
     return impl_->AddContact(peer_id, token);
   }
 
-  void BlockContact(ContactID const& peer_id) { impl_->BlockContact(peer_id); }
-  void DeleteContact(ContactID const& peer_id) { impl_->DeleteContact(peer_id); }
-  void UnblockContact(ContactID const& peer_id) { impl_->UnblockContact(peer_id); }
-  void AcceptContact(ContactID const& peer_id) { impl_->AcceptContact(peer_id); }
+  void BlockContact(ContactID const& peer_id) {
+    impl_->BlockContact(peer_id);
+  }
+  void DeleteContact(ContactID const& peer_id) {
+    impl_->DeleteContact(peer_id);
+  }
+  void UnblockContact(ContactID const& peer_id) {
+    impl_->UnblockContact(peer_id);
+  }
+  void AcceptContact(ContactID const& peer_id) {
+    impl_->AcceptContact(peer_id);
+  }
   void SetContactDisplayNameOverride(ContactID const& peer_id, std::string const& name) {
     impl_->SetContactDisplayNameOverride(peer_id, name);
   }
-  void ResetContactDisplayNameOverride(ContactID const& peer_id) { impl_->ResetContactDisplayNameOverride(peer_id); }
-  auto GenerateContactToken() -> std::vector<std::byte> { return impl_->client->GenerateContactToken(); }
+  void ResetContactDisplayNameOverride(ContactID const& peer_id) {
+    impl_->ResetContactDisplayNameOverride(peer_id);
+  }
+  auto GenerateContactToken() -> std::vector<std::byte> {
+    return impl_->client->GenerateContactToken();
+  }
 
  private:
   struct Impl : public std::enable_shared_from_this<Impl> {
@@ -85,7 +101,8 @@ class ContactsViewModel {
 
     Impl(std::shared_ptr<Client> client, std::shared_ptr<ClientEventRouter> router)
         : client(std::move(client)),
-          router(std::move(router)) {}
+          router(std::move(router)) {
+    }
 
     void SetObserver(std::shared_ptr<Observer> obs) {
       std::shared_ptr<Observer> local_obs;

@@ -36,9 +36,12 @@ class ContactService {
         manager_(std::move(contact_manager)),
         account_service_(account_service),
         profile_service_(profile_service),
-        connection_handler_(std::move(connection_handler)) {}
+        connection_handler_(std::move(connection_handler)) {
+  }
 
-  void SetMessagingService(MessagingService* messaging_service) { messaging_service_ = messaging_service; }
+  void SetMessagingService(MessagingService* messaging_service) {
+    messaging_service_ = messaging_service;
+  }
 
   // Actions
   auto AddContact(ContactID const& peer_id, std::optional<std::vector<std::byte>> const& token) -> bool {
@@ -154,11 +157,17 @@ class ContactService {
   }
 
   // Debug Actions
-  void DebugClearCache() { manager_->ClearContacts(); }
-  void DebugReloadCache() { manager_->ReloadContacts(); }
+  void DebugClearCache() {
+    manager_->ClearContacts();
+  }
+  void DebugReloadCache() {
+    manager_->ReloadContacts();
+  }
 
   // Queries
-  [[nodiscard]] auto GetContacts() const -> std::vector<identity::Contact> { return manager_->GetContacts(); }
+  [[nodiscard]] auto GetContacts() const -> std::vector<identity::Contact> {
+    return manager_->GetContacts();
+  }
   [[nodiscard]] auto GetContact(ContactID const& peer_id) const -> std::optional<identity::Contact> {
     return manager_->GetContact(peer_id);
   }
@@ -315,11 +324,15 @@ class ContactService {
   using OnContactStatusChangedCallback = std::function<void(ContactID const& peer_id, identity::ContactStatus status)>;
   using OnContactRemovedCallback = std::function<void(ContactID const& peer_id)>;
 
-  void SetContactRequestCallback(OnContactRequestCallback cb) { on_contact_request_ = std::move(cb); }
+  void SetContactRequestCallback(OnContactRequestCallback cb) {
+    on_contact_request_ = std::move(cb);
+  }
   void SetContactStatusChangedCallback(OnContactStatusChangedCallback cb) {
     on_contact_status_changed_ = std::move(cb);
   }
-  void SetContactRemovedCallback(OnContactRemovedCallback cb) { on_contact_removed_ = std::move(cb); }
+  void SetContactRemovedCallback(OnContactRemovedCallback cb) {
+    on_contact_removed_ = std::move(cb);
+  }
 
  private:
   std::shared_ptr<storage::PersistentStorage> storage_;

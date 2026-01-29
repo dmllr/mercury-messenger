@@ -32,7 +32,8 @@ class FileTransferService {
       std::shared_ptr<transport::Transport> transport
   )
       : storage_(std::move(storage)),
-        transport_(std::move(transport)) {}
+        transport_(std::move(transport)) {
+  }
 
   void OnConnectionReady(ContactID const& peer_id) {
     auto const pending_attachments = storage_->GetPendingAttachments(peer_id);
@@ -59,8 +60,8 @@ class FileTransferService {
     StartUploadInternal(peer_id, attachment);
   }
 
-  void QueueDownload(ContactID const& peer_id, messaging::Attachment const& attachment, std::uint64_t message_id) {
-    std::unique_lock<std::mutex> lock(transfers_mutex_);
+  void QueueDownload(ContactID const& /*peer_id*/, messaging::Attachment const& attachment, std::uint64_t message_id) {
+    std::unique_lock<std::mutex> const lock(transfers_mutex_);
     if (active_downloads_.contains(attachment.id)) {
       return;
     }
@@ -211,8 +212,12 @@ class FileTransferService {
   using OnAttachmentStatusChangedCallback =
       std::function<void(ContactID const&, std::string const&, messaging::AttachmentStatus)>;
 
-  void SetAttachmentDownloadedCallback(OnAttachmentDownloadedCallback cb) { on_attachment_downloaded_ = std::move(cb); }
-  void SetTransferProgressCallback(OnTransferProgressCallback cb) { on_transfer_progress_ = std::move(cb); }
+  void SetAttachmentDownloadedCallback(OnAttachmentDownloadedCallback cb) {
+    on_attachment_downloaded_ = std::move(cb);
+  }
+  void SetTransferProgressCallback(OnTransferProgressCallback cb) {
+    on_transfer_progress_ = std::move(cb);
+  }
   void SetAttachmentStatusChangedCallback(OnAttachmentStatusChangedCallback cb) {
     on_attachment_status_changed_ = std::move(cb);
   }
@@ -329,7 +334,7 @@ class FileTransferService {
       buffer[2] = static_cast<std::byte>(id_len);
       std::memcpy(buffer.data() + headerMinSize, file_id.data(), id_len);
 
-      std::uint32_t const seq_net = static_cast<std::uint32_t>(state.sequence);
+      auto const seq_net = static_cast<std::uint32_t>(state.sequence);
       std::memcpy(buffer.data() + headerMinSize + id_len, &seq_net, sizeof(seq_net));
 
       state.stream.read(
@@ -350,7 +355,7 @@ class FileTransferService {
 
       if (on_transfer_progress_ && state.total_size > 0) {
         auto const progress = static_cast<float>(offset + bytes_read) / static_cast<float>(state.total_size);
-        on_transfer_progress_(peer_id, file_id, std::min(progress, 1.0f));
+        on_transfer_progress_(peer_id, file_id, std::min(progress, 1.0F));
       }
 
       state.sequence++;
@@ -374,7 +379,7 @@ class FileTransferService {
     std::uint32_t sequence = 0;
     std::memcpy(&sequence, payload.data(), sizeof(sequence));
 
-    std::span<std::byte const> chunk_data = payload.subspan(sequenceSize);
+    std::span<std::byte const> const chunk_data = payload.subspan(sequenceSize);
 
     std::unique_lock<std::mutex> lock(transfers_mutex_);
 
@@ -394,7 +399,7 @@ class FileTransferService {
 
     auto& state = iterator->second;
     if (state.stream.is_open()) {
-      auto const offset = static_cast<std::streamoff>(sequence * chunkSizeBytes);
+      auto const offset = sequence * chunkSizeBytes;
 
       // Ensure not seeking past EOF if we didn't resize correctly
       state.stream.seekp(offset);
@@ -414,7 +419,7 @@ class FileTransferService {
         if (lock.owns_lock()) {
           lock.unlock();
         }
-        on_transfer_progress_(peer_id, file_id, std::min(progress, 1.0f));
+        on_transfer_progress_(peer_id, file_id, std::min(progress, 1.0F));
         lock.lock();
       }
 
@@ -462,7 +467,7 @@ class FileTransferService {
           on_attachment_downloaded_(peer_id, file_id);
         }
         if (on_transfer_progress_) {
-          on_transfer_progress_(peer_id, file_id, 1.0f);
+          on_transfer_progress_(peer_id, file_id, 1.0F);
         }
         if (on_attachment_status_changed_) {
           on_attachment_status_changed_(peer_id, file_id, messaging::AttachmentStatus::done);

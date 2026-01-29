@@ -33,8 +33,8 @@ class MessageDeliveryService {
   std::unordered_map<ContactID, int> retryDelaysS_{};
   std::recursive_mutex mutex_;
 
-  static constexpr int kInitialRetryDelayS = 5;
-  static constexpr int kMaxRetryDelayS = 60;
+  static constexpr int initialRetryDelayS = 5;
+  static constexpr int maxRetryDelayS = 60;
 
  public:
   MessageDeliveryService(
@@ -46,7 +46,8 @@ class MessageDeliveryService {
       : storage_(std::move(storage)),
         contactManager_(std::move(contacts)),
         connectionHandler_(std::move(handler)),
-        hasWorkCallback_(std::move(has_work_callback)) {}
+        hasWorkCallback_(std::move(has_work_callback)) {
+  }
 
   void Start() {
     if (isRunning_.exchange(true)) {
@@ -85,7 +86,7 @@ class MessageDeliveryService {
     if (has_work) {
       int& delay = retryDelaysS_[peer_id];
       if (delay == 0) {
-        delay = kInitialRetryDelayS;
+        delay = initialRetryDelayS;
       }
 
       LGI << "Connection to " << peer_id << " failed or did not clear queue. Retrying in " << delay << "s.";
@@ -93,7 +94,7 @@ class MessageDeliveryService {
       dispatchQueue_.DispatchAfter(std::chrono::seconds(delay), [this, peer_id]() { AttemptDelivery(peer_id); });
 
       // Increase delay for next time (exponential backoff).
-      delay = std::min(delay * 2, kMaxRetryDelayS);
+      delay = std::min(delay * 2, maxRetryDelayS);
     } else {
       // All messages for this peer were sent successfully. Reset backoff timer.
       retryDelaysS_.erase(peer_id);

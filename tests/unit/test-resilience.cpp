@@ -18,11 +18,18 @@ using namespace eillance;
 // Mock capture implementation for duck-typing
 class MockCapture {
  public:
-  void Configure(Config) {}
-  void Engage() {}
-  void Revoke() {}
-  auto FetchBuffers() -> Packet { return Packet(); }
-  auto GetSampleDuration() -> Time::Unit { return 10000; }
+  void Configure(Config) {
+  }
+  void Engage() {
+  }
+  void Revoke() {
+  }
+  auto FetchBuffers() -> Packet {
+    return Packet();
+  }
+  auto GetSampleDuration() -> Time::Unit {
+    return 10000;
+  }
 };
 
 class ResilienceTest : public ::testing::Test {
@@ -71,9 +78,13 @@ class ResilienceTest : public ::testing::Test {
     client_->Start();
   }
 
-  void TearDown() override { client_->Terminate(); }
+  void TearDown() override {
+    client_->Terminate();
+  }
 
-  void FlushClientQueue() { std::this_thread::sleep_for(std::chrono::milliseconds(50)); }
+  void FlushClientQueue() {
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  }
 
   storage::MockPersistentStorageImpl* mock_storage_{};
   std::unique_ptr<transport::MockTransport> mock_transport_impl_;

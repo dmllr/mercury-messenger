@@ -39,7 +39,9 @@ class AndroidRtcTransport final : public Transport::TransportInterface {
   std::unordered_map<ContactID, std::shared_ptr<Peer>> peers_;
   mutable std::mutex peersMutex_;
 
-  [[nodiscard]] auto GetEnv() const -> eillance::jni::ScopedJniEnv { return eillance::jni::ScopedJniEnv(jvm_); }
+  [[nodiscard]] auto GetEnv() const -> eillance::jni::ScopedJniEnv {
+    return eillance::jni::ScopedJniEnv(jvm_);
+  }
 
  public:
   explicit AndroidRtcTransport(JavaVM* jvm, jobject context)
@@ -68,8 +70,12 @@ class AndroidRtcTransport final : public Transport::TransportInterface {
     }
   }
 
-  void SetDelegate(TransportDelegate* delegate) override { delegate_ = delegate; }
-  auto Delegate() -> TransportDelegate* { return delegate_; }
+  void SetDelegate(TransportDelegate* delegate) override {
+    delegate_ = delegate;
+  }
+  auto Delegate() -> TransportDelegate* {
+    return delegate_;
+  }
 
   void SetStatusCallback(Transport::StatusCallbackFunction const& callback) override {
     statusCallback_ = std::make_shared<Transport::StatusCallbackFunction>(callback);
@@ -78,10 +84,17 @@ class AndroidRtcTransport final : public Transport::TransportInterface {
     INVARIANT(statusCallback_);
     (*statusCallback_)(peer_id, source, state);
   }
-  void SetName(std::string const& /*device_name*/) override {}
-  void SetId(ContactID const& id) override { id_ = id; }
-  auto GetId() const -> ContactID const& { return id_; }
-  void SetSignalingUrl(std::string const& url) override { signalingUrl_ = url; }
+  void SetName(std::string const& /*device_name*/) override {
+  }
+  void SetId(ContactID const& id) override {
+    id_ = id;
+  }
+  auto GetId() const -> ContactID const& {
+    return id_;
+  }
+  void SetSignalingUrl(std::string const& url) override {
+    signalingUrl_ = url;
+  }
 
   void Start() override {
     auto env_scope = GetEnv();
@@ -197,9 +210,14 @@ class AndroidRtcTransport final : public Transport::TransportInterface {
     return result == JNI_TRUE;
   }
 
-  void AddToStream(std::shared_ptr<Peer> const& /*peer*/, bool /*is_adding_video*/) const override {}
-  void CreateDataPeerConnection(ContactID const& peer_id) override { CreatePeerConnection(peer_id, "data"); }
-  void CreateMediaPeerConnection(ContactID const& peer_id) override { CreatePeerConnection(peer_id, "media"); }
+  void AddToStream(std::shared_ptr<Peer> const& /*peer*/, bool /*is_adding_video*/) const override {
+  }
+  void CreateDataPeerConnection(ContactID const& peer_id) override {
+    CreatePeerConnection(peer_id, "data");
+  }
+  void CreateMediaPeerConnection(ContactID const& peer_id) override {
+    CreatePeerConnection(peer_id, "media");
+  }
 
   void CreateDataChannel(ContactID const& peer_id) override {
     auto env_scope = GetEnv();

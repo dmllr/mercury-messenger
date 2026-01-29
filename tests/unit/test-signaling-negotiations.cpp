@@ -26,11 +26,18 @@ namespace {
 // Mock Capture to satisfy invariants in MediaCallService
 class MockCapture {
  public:
-  void Configure(Config) {}
-  void Engage() {}
-  void Revoke() {}
-  auto FetchBuffers() -> Packet { return Packet(); }
-  auto GetSampleDuration() -> Time::Unit { return 10000; }
+  void Configure(Config) {
+  }
+  void Engage() {
+  }
+  void Revoke() {
+  }
+  auto FetchBuffers() -> Packet {
+    return Packet();
+  }
+  auto GetSampleDuration() -> Time::Unit {
+    return 10000;
+  }
 };
 
 }  // namespace

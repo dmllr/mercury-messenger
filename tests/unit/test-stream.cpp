@@ -20,11 +20,15 @@ class MockSource : public Stream::Source {
  public:
   MockSource(Type t, std::vector<uint64_t> ts)
       : type_(t),
-        timestamps_(std::move(ts)) {}
+        timestamps_(std::move(ts)) {
+  }
 
-  void Configure(Config) override {}
-  void Start() override {}
-  void Stop() override {}
+  void Configure(Config) override {
+  }
+  void Start() override {
+  }
+  void Stop() override {
+  }
 
   void LoadNextSample() override {
     if (index_ < timestamps_.size()) {
@@ -42,7 +46,9 @@ class MockSource : public Stream::Source {
     return Time::Now() + 50000ULL;  // 50ms in microseconds
   }
 
-  auto GetSampleDuration() -> uint64_t override { return 10000; }  // 10ms
+  auto GetSampleDuration() -> uint64_t override {
+    return 10000;
+  }  // 10ms
 
   auto GetSample() -> std::vector<std::byte> override {
     // Return a dummy byte indicating source type for verification

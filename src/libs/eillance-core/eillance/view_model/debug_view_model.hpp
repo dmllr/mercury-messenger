@@ -11,7 +11,8 @@ class DebugViewModel {
  public:
   explicit DebugViewModel(std::shared_ptr<Client> client, std::shared_ptr<ClientEventRouter> router)
       : client_(std::move(client)),
-        router_(std::move(router)) {}
+        router_(std::move(router)) {
+  }
 
   void EraseAllHistory() {
     client_->DebugEraseAllHistory();

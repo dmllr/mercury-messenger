@@ -72,11 +72,18 @@ std::string GenerateTypeSignature(nlohmann::json const& j) {
 // Mock Capture to satisfy MediaCallService invariants
 class MockCapture {
  public:
-  void Configure(Config) {}
-  void Engage() {}
-  void Revoke() {}
-  auto FetchBuffers() -> Packet { return Packet(); }
-  auto GetSampleDuration() -> Time::Unit { return 10000; }
+  void Configure(Config) {
+  }
+  void Engage() {
+  }
+  void Revoke() {
+  }
+  auto FetchBuffers() -> Packet {
+    return Packet();
+  }
+  auto GetSampleDuration() -> Time::Unit {
+    return 10000;
+  }
 };
 
 }  // namespace

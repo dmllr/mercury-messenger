@@ -37,7 +37,8 @@ class ProfileService {
         manager_(std::move(contact_manager)),
         account_service_(account_service),
         messaging_service_(messaging_service),
-        connection_handler_(std::move(connection_handler)) {}
+        connection_handler_(std::move(connection_handler)) {
+  }
 
   // --- Actions ---
 
@@ -66,7 +67,9 @@ class ProfileService {
   }
 
   // Flushes pending profile actions (send/request) to the transport.
-  void SyncProfile(ContactID const& peer_id) { SendPendingActions(peer_id); }
+  void SyncProfile(ContactID const& peer_id) {
+    SendPendingActions(peer_id);
+  }
 
   // Marks all confirmed contacts as needing a profile update (e.g. after I change my name).
   void MarkAllContactsProfileSyncNeeded() {
@@ -81,9 +84,9 @@ class ProfileService {
   // --- Incoming Events ---
 
   void OnProfileUpdate(ContactID const& peer_id, nlohmann::json const& profile_json) {
-    auto get_opt = [&](char const* k) -> std::optional<std::string> {
-      if (profile_json.contains(k) && !profile_json[k].is_null()) {
-        return profile_json[k].get<std::string>();
+    auto get_opt = [&](char const* key) -> std::optional<std::string> {
+      if (profile_json.contains(key) && !profile_json[key].is_null()) {
+        return profile_json[key].get<std::string>();
       }
       return std::nullopt;
     };
@@ -140,8 +143,12 @@ class ProfileService {
   void SetContactProfileUpdatedCallback(OnContactProfileUpdatedCallback cb) {
     on_contact_profile_updated_ = std::move(cb);
   }
-  void SetPeerListUpdateCallback(OnPeerListUpdateCallback cb) { on_peer_list_update_ = std::move(cb); }
-  void SetProfileReceivedCallback(OnProfileReceivedCallback cb) { on_profile_received_ = std::move(cb); }
+  void SetPeerListUpdateCallback(OnPeerListUpdateCallback cb) {
+    on_peer_list_update_ = std::move(cb);
+  }
+  void SetProfileReceivedCallback(OnProfileReceivedCallback cb) {
+    on_profile_received_ = std::move(cb);
+  }
 
  private:
   void SendPendingActions(ContactID const& peer_id) {

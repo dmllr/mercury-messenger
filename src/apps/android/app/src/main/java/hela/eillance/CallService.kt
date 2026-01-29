@@ -148,12 +148,10 @@ class CallService : Service() {
     val builder = PhoneAccount.builder(phoneAccountHandle, "Mercury")
       .setCapabilities(PhoneAccount.CAPABILITY_SELF_MANAGED)
       .setShortDescription("Mercury Secure Call")
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-      try {
-        telecomManager.registerPhoneAccount(builder.build())
-      } catch (e: SecurityException) {
-        Log.e(TAG, "Failed to register PhoneAccount", e)
-      }
+    try {
+      telecomManager.registerPhoneAccount(builder.build())
+    } catch (e: SecurityException) {
+      Log.e(TAG, "Failed to register PhoneAccount", e)
     }
   }
 
@@ -291,8 +289,7 @@ class CallService : Service() {
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         // If we are in a call, we upgrade to MICROPHONE + CAMERA (if video) + CONNECTED_DEVICE
         val serviceType = if (inCall) {
-          // Note: In a real app, you should check runtime permissions here before applying these types
-          // to avoid a crash if the user revoked them while the app was running.
+          // TODO: check runtime permissions here before applying these types
           var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
           if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA

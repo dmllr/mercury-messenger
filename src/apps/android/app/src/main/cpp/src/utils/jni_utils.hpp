@@ -34,8 +34,12 @@ class ScopedJniEnv {
     }
   }
 
-  [[nodiscard]] auto Get() const -> JNIEnv* { return env_; }
-  [[nodiscard]] auto IsValid() const -> bool { return env_ != nullptr; }
+  [[nodiscard]] auto Get() const -> JNIEnv* {
+    return env_;
+  }
+  [[nodiscard]] auto IsValid() const -> bool {
+    return env_ != nullptr;
+  }
 };
 
 }  // namespace eillance::jni

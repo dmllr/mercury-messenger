@@ -44,7 +44,8 @@ class RtcTrack : public transport::ITrack {
   )
       : track_(std::move(track)),
         reporter_(std::move(reporter)),
-        rtp_config_(std::move(rtp_config)) {}
+        rtp_config_(std::move(rtp_config)) {
+  }
 
   void SendSample(std::vector<std::byte> const& sample, uint64_t sample_time) override {
     auto const elapsed_seconds = static_cast<double>(sample_time) / Time::uS;
@@ -55,7 +56,9 @@ class RtcTrack : public transport::ITrack {
     }
   }
 
-  [[nodiscard]] auto GetTrack() const { return track_; }
+  [[nodiscard]] auto GetTrack() const {
+    return track_;
+  }
 };
 
 namespace {
@@ -93,15 +96,21 @@ class RtcTransport final : public transport::Transport::TransportInterface {
   auto operator=(RtcTransport const&) -> RtcTransport& = delete;
   ~RtcTransport() override = default;
 
-  void SetDelegate(eillance::transport::TransportDelegate* delegate) override { delegate_ = delegate; }
+  void SetDelegate(eillance::transport::TransportDelegate* delegate) override {
+    delegate_ = delegate;
+  }
 
   void SetStatusCallback(StatusCallbackFunction const& callback) override {
     status_callback_ = std::make_shared<StatusCallbackFunction>(callback);
   }
 
-  auto GetServiceConnectionState() const -> ServiceConnectionState { return serviceConnectionState_; }
+  auto GetServiceConnectionState() const -> ServiceConnectionState {
+    return serviceConnectionState_;
+  }
 
-  void SetName(std::string const& device_name) override { deviceName_ = device_name; }
+  void SetName(std::string const& device_name) override {
+    deviceName_ = device_name;
+  }
 
   void SetId(ContactID const& id) override {
     assert(!is_logged_in_);
@@ -111,7 +120,9 @@ class RtcTransport final : public transport::Transport::TransportInterface {
     }
   }
 
-  void SetSignalingUrl(std::string const& url) override { signalingServerUrl_ = url; }
+  void SetSignalingUrl(std::string const& url) override {
+    signalingServerUrl_ = url;
+  }
 
   void Start() override {
     assert(delegate_ != nullptr && "RtcTransport delegate must be set before starting");
@@ -172,7 +183,9 @@ class RtcTransport final : public transport::Transport::TransportInterface {
     peers_.erase(peer_id);
   }
 
-  void SendSignalingMessage(Json const& message) const override { WsSendMessage(message); }
+  void SendSignalingMessage(Json const& message) const override {
+    WsSendMessage(message);
+  }
 
   void SendPeerDataChannelMessage(ContactID const& peer_id, Json const& message) const override {
     std::lock_guard<std::mutex> const lock(peersMutex_);
@@ -361,8 +374,12 @@ class RtcTransport final : public transport::Transport::TransportInterface {
     }
   }
 
-  void CreateDataPeerConnection(ContactID const& peer_id) override { CreatePeerConnection(peer_id, "data"); }
-  void CreateMediaPeerConnection(ContactID const& peer_id) override { CreatePeerConnection(peer_id, "media"); }
+  void CreateDataPeerConnection(ContactID const& peer_id) override {
+    CreatePeerConnection(peer_id, "data");
+  }
+  void CreateMediaPeerConnection(ContactID const& peer_id) override {
+    CreatePeerConnection(peer_id, "media");
+  }
 
   void CreateDataChannel(ContactID const& peer_id) override {
     auto peer = GetPeer(peer_id);

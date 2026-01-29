@@ -19,7 +19,9 @@ namespace {
 // Global flag for signal handling
 std::sig_atomic_t volatile gSignalStatus = 0;  // NOLINT(*-avoid-non-const-global-variables)
 
-void SignalHandler(int signal) { gSignalStatus = signal; }
+void SignalHandler(int signal) {
+  gSignalStatus = signal;
+}
 
 auto FormatFilenameTimestamp(std::uint64_t const ts_microseconds) -> std::string {
   std::time_t const seconds_since_epoch = ts_microseconds / 1000000ULL;

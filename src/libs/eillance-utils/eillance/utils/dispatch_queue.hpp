@@ -85,7 +85,9 @@ class DispatchQueue {
     condition_.notify_one();
   }
 
-  [[nodiscard]] auto Size() const -> std::size_t { return queue_.size(); }
+  [[nodiscard]] auto Size() const -> std::size_t {
+    return queue_.size();
+  }
 
   void RemovePending() {
     std::unique_lock<std::mutex> const lock(queueAccessMutex_);

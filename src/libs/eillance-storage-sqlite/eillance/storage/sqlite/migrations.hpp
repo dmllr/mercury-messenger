@@ -1,6 +1,6 @@
 #pragma once
 
-// NOTE: All migrations MUST be self-contained transactions.
+// IMPORTANT NOTE: All migrations MUST be self-contained transactions.
 // If a migration fails, the database must remain unchanged (atomic operation).
 // Each migration routine is responsible for executing "BEGIN TRANSACTION" at the start
 // and "COMMIT" only upon successful completion of all schema changes and data updates.

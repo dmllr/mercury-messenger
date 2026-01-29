@@ -20,7 +20,8 @@ class MessageHistory {
 
  public:
   explicit MessageHistory(std::shared_ptr<storage::PersistentStorage> storage)
-      : storage_(std::move(storage)) {}
+      : storage_(std::move(storage)) {
+  }
 
   auto AddTextEntry(
       ContactID const& peer_id,
@@ -72,7 +73,9 @@ class MessageHistory {
     onStatusChanged_ = std::move(cb);
   }
 
-  void UpdateHistoryEntry(HistoryEntryRecord const& entry) { storage_->UpdateHistoryEntry(entry); }
+  void UpdateHistoryEntry(HistoryEntryRecord const& entry) {
+    storage_->UpdateHistoryEntry(entry);
+  }
 
   void UpdateMessageStatus(ContactID const& peer_id, std::uint64_t const message_id, MessageStatus const new_status) {
     storage_->UpdateMessageStatus(peer_id, message_id, new_status);
@@ -101,8 +104,8 @@ class MessageHistory {
   auto GetChatSummaries(std::vector<std::string> const& peer_ids_str) -> std::vector<ChatSummary> {
     std::vector<ContactID> peer_ids;
     peer_ids.reserve(peer_ids_str.size());
-    for (auto const& id : peer_ids_str) {
-      peer_ids.emplace_back(id);
+    for (auto const& peer_id : peer_ids_str) {
+      peer_ids.emplace_back(peer_id);
     }
     return storage_->GetChatSummaries(peer_ids);
   }

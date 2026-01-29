@@ -134,9 +134,13 @@ class MessagingService {
     );
   }
 
-  void StartDeliveryService() { delivery_service_->Start(); }
+  void StartDeliveryService() {
+    delivery_service_->Start();
+  }
 
-  void StopDeliveryService() { delivery_service_->Stop(); }
+  void StopDeliveryService() {
+    delivery_service_->Stop();
+  }
 
   // Sending
   auto SendChatMessage(
@@ -596,12 +600,18 @@ class MessagingService {
   using OnAttachmentStatusChangedCallback = std::function<
       void(ContactID const& peer_id, std::string const& attachment_id, messaging::AttachmentStatus status)>;
 
-  void SetChatMessageReceivedCallback(OnChatMessageCallback cb) { on_message_received_ = std::move(cb); }
-  void SetMessageStatusChangedCallback(OnMessageStatusChangedCallback cb) { on_status_changed_ = std::move(cb); }
+  void SetChatMessageReceivedCallback(OnChatMessageCallback cb) {
+    on_message_received_ = std::move(cb);
+  }
+  void SetMessageStatusChangedCallback(OnMessageStatusChangedCallback cb) {
+    on_status_changed_ = std::move(cb);
+  }
   void SetAttachmentDownloadedCallback(OnAttachmentDownloadedCallback cb) {
     file_transfer_service_->SetAttachmentDownloadedCallback(std::move(cb));
   }
-  void SetContactRestoredCallback(OnContactRestoredCallback cb) { on_contact_restored_ = std::move(cb); }
+  void SetContactRestoredCallback(OnContactRestoredCallback cb) {
+    on_contact_restored_ = std::move(cb);
+  }
   void SetTransferProgressCallback(OnTransferProgressCallback cb) {
     file_transfer_service_->SetTransferProgressCallback(std::move(cb));
   }

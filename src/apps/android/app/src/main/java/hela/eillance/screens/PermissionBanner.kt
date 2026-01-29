@@ -51,10 +51,7 @@ fun CallPermissionBanner(
       Manifest.permission.RECORD_AUDIO,
       Manifest.permission.READ_PHONE_STATE // Dangerous permission, triggers "Phone" dialog
     )
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-      // Normal permission, auto-granted if in manifest, but included for consistency
-      list.add(Manifest.permission.MANAGE_OWN_CALLS)
-    }
+    list.add(Manifest.permission.MANAGE_OWN_CALLS)
     list.toTypedArray()
   }
 

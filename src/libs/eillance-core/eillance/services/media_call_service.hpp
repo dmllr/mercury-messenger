@@ -21,9 +21,12 @@ namespace eillance::services {
 class MediaCallService {
  public:
   explicit MediaCallService(std::shared_ptr<transport::Transport> transport)
-      : transport_(std::move(transport)) {}
+      : transport_(std::move(transport)) {
+  }
 
-  void SetMessagingService(MessagingService* messaging_service) { messaging_service_ = messaging_service; }
+  void SetMessagingService(MessagingService* messaging_service) {
+    messaging_service_ = messaging_service;
+  }
 
   // Media Capture Injection
   template <typename T>
@@ -49,8 +52,12 @@ class MediaCallService {
   }
 
   // Actions
-  void StartVoiceCall(ContactID const& peer_id) { StartCallInternal(peer_id, false); }
-  void StartVideoCall(ContactID const& peer_id) { StartCallInternal(peer_id, true); }
+  void StartVoiceCall(ContactID const& peer_id) {
+    StartCallInternal(peer_id, false);
+  }
+  void StartVideoCall(ContactID const& peer_id) {
+    StartCallInternal(peer_id, true);
+  }
 
   void AcceptCall(ContactID const& peer_id, messaging::HistoryEntryKind call_kind) {
     auto peer = transport_->GetPeer(peer_id);
@@ -94,7 +101,9 @@ class MediaCallService {
     on_call_accepted_(peer_id);
   }
 
-  void RejectCall(ContactID const& peer_id) { Hangup(peer_id, true); }
+  void RejectCall(ContactID const& peer_id) {
+    Hangup(peer_id, true);
+  }
 
   void Hangup(ContactID const& peer_id, bool notify_peer) {
     auto peer = transport_->GetPeer(peer_id);
@@ -191,11 +200,21 @@ class MediaCallService {
   using OnCallTerminatedCallback = std::function<void(ContactID const&)>;
   using OnFrameReceivedCallback = std::function<void(std::vector<std::byte> const&)>;
 
-  void SetIncomingCallCallback(OnIncomingCallCallback cb) { on_incoming_call_ = std::move(cb); }
-  void SetCallRingingCallback(OnCallRingingCallback cb) { on_call_ringing_ = std::move(cb); }
-  void SetCallAcceptedCallback(OnCallAcceptedCallback cb) { on_call_accepted_ = std::move(cb); }
-  void SetCallTerminatedCallback(OnCallTerminatedCallback cb) { on_call_terminated_ = std::move(cb); }
-  void SetFrameReceivedCallback(OnFrameReceivedCallback cb) { on_frame_received_ = std::move(cb); }
+  void SetIncomingCallCallback(OnIncomingCallCallback cb) {
+    on_incoming_call_ = std::move(cb);
+  }
+  void SetCallRingingCallback(OnCallRingingCallback cb) {
+    on_call_ringing_ = std::move(cb);
+  }
+  void SetCallAcceptedCallback(OnCallAcceptedCallback cb) {
+    on_call_accepted_ = std::move(cb);
+  }
+  void SetCallTerminatedCallback(OnCallTerminatedCallback cb) {
+    on_call_terminated_ = std::move(cb);
+  }
+  void SetFrameReceivedCallback(OnFrameReceivedCallback cb) {
+    on_frame_received_ = std::move(cb);
+  }
 
  private:
   void InitializeAvStream() {

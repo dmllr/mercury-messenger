@@ -84,20 +84,32 @@ class ConversationViewModel {
     virtual void OnTransferProgress(std::string const& attachment_id, float progress) = 0;
   };
 
-  void SetObserver(std::shared_ptr<Observer> observer) const { impl_->SetObserver(std::move(observer)); }
+  void SetObserver(std::shared_ptr<Observer> observer) const {
+    impl_->SetObserver(std::move(observer));
+  }
 
-  [[nodiscard]] auto GetState() const -> State { return impl_->GetState(); }
+  [[nodiscard]] auto GetState() const -> State {
+    return impl_->GetState();
+  }
 
-  void SendText(std::string const& content) const { impl_->SendText(content); }
+  void SendText(std::string const& content) const {
+    impl_->SendText(content);
+  }
   void SendMessage(std::string const& content, std::vector<services::AttachmentRequest> const& attachments) const {
     impl_->SendMessage(content, attachments);
   }
-  void LoadOlderMessages() const { impl_->LoadOlderMessages(); }
-  void LoadFullMessage(uint64_t message_id) const { impl_->LoadFullMessage(message_id); }
+  void LoadOlderMessages() const {
+    impl_->LoadOlderMessages();
+  }
+  void LoadFullMessage(uint64_t message_id) const {
+    impl_->LoadFullMessage(message_id);
+  }
   void MarkMessagesAsRead(std::vector<std::uint64_t> const& message_ids) const {
     impl_->MarkMessagesAsRead(message_ids);
   }
-  void AddSystemMessage(std::string const& message) const { impl_->AddSystemMessage(message); }
+  void AddSystemMessage(std::string const& message) const {
+    impl_->AddSystemMessage(message);
+  }
 
   void CancelTransfer(std::string const& attachment_id, bool is_upload) const {
     impl_->client->CancelTransfer(impl_->peer_id, attachment_id, is_upload);
@@ -149,7 +161,9 @@ class ConversationViewModel {
       return state;
     }
 
-    void SendText(std::string const& content) { SendMessage(content, {}); }
+    void SendText(std::string const& content) {
+      SendMessage(content, {});
+    }
 
     void SendMessage(std::string const& content, std::vector<services::AttachmentRequest> const& attachments) {
       // Access MessagingService directly since facade might not have the overload yet

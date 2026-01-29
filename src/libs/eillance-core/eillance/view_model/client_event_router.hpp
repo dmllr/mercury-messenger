@@ -88,9 +88,13 @@ class ClientEventRouter {
     AttachToClient();
   }
 
-  ~ClientEventRouter() { DetachFromClient(); }
+  ~ClientEventRouter() {
+    DetachFromClient();
+  }
 
-  auto Queue() -> EventQueue& { return eventQueue_; }
+  auto Queue() -> EventQueue& {
+    return eventQueue_;
+  }
 
   void DetachFromClient() {
     if (!client_) return;

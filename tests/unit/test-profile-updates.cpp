@@ -34,7 +34,9 @@ class ProfileUpdatesTest : public ::testing::Test {
     client_->Terminate();
   }
 
-  void FlushClientQueue() { std::this_thread::sleep_for(std::chrono::milliseconds(50)); }
+  void FlushClientQueue() {
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  }
 
   storage::MockPersistentStorageImpl* mock_storage_{};
   std::unique_ptr<transport::MockTransport> mock_transport_impl_;

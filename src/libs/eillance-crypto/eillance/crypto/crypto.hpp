@@ -49,7 +49,9 @@ constexpr auto HexCharToInt(char c) -> int {
   return hex_str;
 }
 
-[[nodiscard]] static auto ToHex(std::vector<std::byte> const& data) -> std::string { return ToHex(std::span{data}); }
+[[nodiscard]] static auto ToHex(std::vector<std::byte> const& data) -> std::string {
+  return ToHex(std::span{data});
+}
 
 /// @brief Convert a hex string to binary data
 [[nodiscard]] static auto FromHex(std::string_view hex) -> std::vector<std::byte> {
@@ -152,7 +154,8 @@ class Identity {
   EvpPkeyPtr pkey_;
 
   explicit Identity(EvpPkeyPtr pkey)
-      : pkey_(std::move(pkey)) {}
+      : pkey_(std::move(pkey)) {
+  }
 
   // Generate a 64-byte seed from a mnemonic phrase using PBKDF2, then take the first 32 bytes.
   static auto MnemonicToSeed(std::string const& mnemonic) -> std::vector<uint8_t> {
@@ -392,7 +395,9 @@ class SessionCipher {
     GenerateEphemeralKey();
   }
 
-  void Reset() { sharedSecret_.clear(); }
+  void Reset() {
+    sharedSecret_.clear();
+  }
 
   [[nodiscard]] auto GetPublicKey() const -> std::vector<std::byte> {
     size_t length = 0;  // NOLINT(*-const-correctness)
@@ -457,7 +462,9 @@ class SessionCipher {
     return true;
   }
 
-  [[nodiscard]] auto IsReady() const noexcept -> bool { return !sharedSecret_.empty(); }
+  [[nodiscard]] auto IsReady() const noexcept -> bool {
+    return !sharedSecret_.empty();
+  }
 
   [[nodiscard]] auto Encrypt(std::string const& plaintext) const -> std::vector<std::byte> {
     if (!IsReady()) {

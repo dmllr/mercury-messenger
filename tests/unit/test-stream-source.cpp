@@ -13,16 +13,24 @@ class MockCaptureImpl {
   bool configured = false;
   bool engaged = false;
 
-  void Configure(Config) { configured = true; }
-  void Engage() { engaged = true; }
-  void Revoke() { engaged = false; }
+  void Configure(Config) {
+    configured = true;
+  }
+  void Engage() {
+    engaged = true;
+  }
+  void Revoke() {
+    engaged = false;
+  }
 
   auto FetchBuffers() -> Packet {
     std::vector<std::byte> data = {std::byte{0xAA}, std::byte{0xBB}};
     return Packet(data);
   }
 
-  auto GetSampleDuration() -> Time::Unit { return 33000; }  // 33ms
+  auto GetSampleDuration() -> Time::Unit {
+    return 33000;
+  }  // 33ms
 };
 
 }  // namespace

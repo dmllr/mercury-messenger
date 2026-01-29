@@ -42,7 +42,9 @@ class SettingsViewModel {
     }
   }
 
-  void SetObserver(std::shared_ptr<Observer> observer) const { impl_->SetObserver(std::move(observer)); }
+  void SetObserver(std::shared_ptr<Observer> observer) const {
+    impl_->SetObserver(std::move(observer));
+  }
 
   struct State {
     std::optional<std::string> signaling_server_url;
@@ -50,10 +52,16 @@ class SettingsViewModel {
     ServiceConnectionState connection_state = ServiceConnectionState::unknown;
   };
 
-  [[nodiscard]] auto GetState() const -> State { return impl_->GetState(); }
+  [[nodiscard]] auto GetState() const -> State {
+    return impl_->GetState();
+  }
 
-  void UpdateSignalingUrl(std::string const& url) { impl_->UpdateSignalingUrl(url); }
-  void SetPeerInactivityTimeout(int seconds) { impl_->SetPeerInactivityTimeout(seconds); }
+  void UpdateSignalingUrl(std::string const& url) {
+    impl_->UpdateSignalingUrl(url);
+  }
+  void SetPeerInactivityTimeout(int seconds) {
+    impl_->SetPeerInactivityTimeout(seconds);
+  }
 
  private:
   struct Impl : std::enable_shared_from_this<Impl> {
@@ -66,7 +74,8 @@ class SettingsViewModel {
 
     Impl(std::shared_ptr<Client> client, std::shared_ptr<ClientEventRouter> router)
         : client(std::move(client)),
-          router(std::move(router)) {}
+          router(std::move(router)) {
+    }
 
     void SetObserver(std::shared_ptr<Observer> obs) {
       std::lock_guard<std::mutex> const lock(mutex);
