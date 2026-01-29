@@ -154,7 +154,7 @@ TEST_F(FileTransferResilienceTest, TransferProgressAndFileCreation) {
   EXPECT_EQ(std::filesystem::file_size(temp_file), file_data.size());
 
   // 2. Process Chunks using Binary Protocol
-  constexpr auto chunk_size = services::FileTransferService::kChunkSizeBytes;
+  constexpr auto chunk_size = services::FileTransferService::chunkSizeBytes;
   size_t const total_chunks = (file_data.size() + chunk_size - 1) / chunk_size;
 
   for (size_t seq = 0; seq < total_chunks; ++seq) {

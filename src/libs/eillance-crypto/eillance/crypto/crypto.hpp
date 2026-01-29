@@ -101,7 +101,9 @@ using EvpMdCtxPtr = std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)>;
 }
 
 /// @brief Calculates SHA256 hash and returns it as a hex string.
-[[nodiscard]] static auto Sha256Hex(std::span<std::byte const> const data) -> std::string { return ToHex(Sha256(data)); }
+[[nodiscard]] static auto Sha256Hex(std::span<std::byte const> const data) -> std::string {
+  return ToHex(Sha256(data));
+}
 
 /// @brief Calculates SHA256 hash of a string view and returns it as a hex string.
 [[nodiscard]] static auto Sha256Hex(std::string_view const data) -> std::string {
