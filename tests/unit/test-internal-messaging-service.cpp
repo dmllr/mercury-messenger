@@ -18,18 +18,23 @@
 
 using namespace eillance;
 
-// ... (MockCapture, Setup unchanged until on_data_channel_message usage) ...
 class MockCapture {
  public:
-  void Configure(Config) {}
-  void Engage() {}
-  void Revoke() {}
-  auto FetchBuffers() -> Packet { return Packet(); }
-  auto GetSampleDuration() -> Time::Unit { return 10000; }
+  void Configure(Config) {
+  }
+  void Engage() {
+  }
+  void Revoke() {
+  }
+  auto FetchBuffers() -> Packet {
+    return Packet();
+  }
+  auto GetSampleDuration() -> Time::Unit {
+    return 10000;
+  }
 };
 
 class InternalMessagingServiceTest : public ::testing::Test {
-  // ... (SetUp same as before, no changes needed in setup) ...
  protected:
   void SetUp() override {
     // 1. Storage
@@ -127,11 +132,9 @@ class InternalMessagingServiceTest : public ::testing::Test {
   ContactID const peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
 };
 
-// ... (ProcessSystemMessage_AuthChallenge, ProcessSystemMessage_LoginSuccess, ProcessSignalingMessage_DataOffer,
-// ProcessSignalingMessage_ContactAddRequest unchanged) ...
 TEST_F(InternalMessagingServiceTest, ProcessSystemMessage_AuthChallenge) {
   std::string challenge = "random_challenge_string";
-  nlohmann::json msg = {{"challenge", challenge}};
+  nlohmann::json const msg = {{"challenge", challenge}};
 
   service_->ProcessSystemMessage("auth_challenge", msg);
 
@@ -147,14 +150,16 @@ TEST_F(InternalMessagingServiceTest, ProcessSystemMessage_LoginSuccess) {
 
 TEST_F(InternalMessagingServiceTest, ProcessSignalingMessage_DataOffer) {
   // Ensure we are the "passive" side (smaller ID or just accepting)
-  nlohmann::json offer = {{"from", peer1.ToString()}, {"context", "data"}, {"sdp", "fake_sdp"}};
+  nlohmann::json const offer = {{"from", peer1.ToString()}, {"context", "data"}, {"sdp", "fake_sdp"}};
 
   service_->ProcessSignalingMessage(peer1, "offer", offer);
 
   // Should trigger transport to set remote description and create answer
   bool answer_created = false;
   for (auto const& [pid, ctx] : mock_transport_->log.answers) {
-    if (pid == peer1 && ctx == "data") answer_created = true;
+    if (pid == peer1 && ctx == "data") {
+      answer_created = true;
+    }
   }
   EXPECT_TRUE(answer_created);
 }
@@ -162,10 +167,12 @@ TEST_F(InternalMessagingServiceTest, ProcessSignalingMessage_DataOffer) {
 TEST_F(InternalMessagingServiceTest, ProcessSignalingMessage_ContactAddRequest) {
   bool request_received = false;
   contact_service_->SetContactRequestCallback([&](auto id) {
-    if (id == peer1) request_received = true;
+    if (id == peer1) {
+      request_received = true;
+    }
   });
 
-  nlohmann::json msg = {{"profile", {{"display_name", "Peer 1"}}}};
+  nlohmann::json const msg = {{"profile", {{"display_name", "Peer 1"}}}};
 
   service_->ProcessSignalingMessage(peer1, "contact_add_request", msg);
   EXPECT_TRUE(request_received);
@@ -191,12 +198,17 @@ TEST_F(InternalMessagingServiceTest, ProcessDataChannelMessage_Chat) {
 
   auto enc = other.Encrypt(payload_json.dump());
 
-  nlohmann::json chat_msg = {{"type", "chat"}, {"message_id", 100}, {"is_system", false}, {"payload", enc}};
+  nlohmann::json const chat_msg = {
+      {"type", "chat"},
+      {"message_id", 100},
+      {"is_system", false},
+      {"payload", enc},
+  };
 
   bool msg_received = false;
   bool contact_status_changed = false;
-  messaging_service_->SetChatMessageReceivedCallback([&](auto id, auto rec) { msg_received = id == peer1; });
-  contact_service_->SetContactStatusChangedCallback([&](auto id, auto rec) { contact_status_changed = id == peer1; });
+  messaging_service_->SetChatMessageReceivedCallback([&](auto id, auto) { msg_received = id == peer1; });
+  contact_service_->SetContactStatusChangedCallback([&](auto id, auto) { contact_status_changed = id == peer1; });
 
   service_->ProcessDataChannelMessage(peer1, chat_msg);
   EXPECT_TRUE(msg_received);
@@ -207,10 +219,10 @@ TEST_F(InternalMessagingServiceTest, ProcessDataChannelMessage_KeyExchange) {
   auto peer = std::make_shared<transport::Peer>(peer1);
   transport_->AddPeer(peer1, peer);
 
-  eillance::crypto::SessionCipher other;
+  eillance::crypto::SessionCipher const other;
   auto pub = other.GetPublicKey();
 
-  nlohmann::json key_msg = {{"type", "key_exchange"}, {"key", pub}, {"is_reply", false}};
+  nlohmann::json const key_msg = {{"type", "key_exchange"}, {"key", pub}, {"is_reply", false}};
 
   service_->ProcessDataChannelMessage(peer1, key_msg);
 
@@ -239,7 +251,7 @@ TEST_F(InternalMessagingServiceTest, ProcessDataChannelMessage_ProfileInfo) {
   // Pre-add contact so update works
   contact_service_->AddContact(peer1, std::nullopt);
 
-  nlohmann::json p_msg = {{"type", "profile_info"}, {"display_name", "New Name"}};
+  nlohmann::json const p_msg = {{"type", "profile_info"}, {"display_name", "New Name"}};
 
   service_->ProcessDataChannelMessage(peer1, p_msg);
   EXPECT_TRUE(profile_updated);
@@ -259,10 +271,10 @@ TEST_F(InternalMessagingServiceTest, SetupPeerHandlers_BinaryRouting) {
   peer->on_data_channel_message(bin_data);
 
   // Simulate JSON packet (converted from bytes)
-  nlohmann::json json_msg = {{"type", "test_msg"}};
+  nlohmann::json const json_msg = {{"type", "test_msg"}};
   std::string s = json_msg.dump();
   std::vector<std::byte> json_bytes(s.size());
-  std::transform(s.begin(), s.end(), json_bytes.begin(), [](char c) { return static_cast<std::byte>(c); });
+  std::ranges::transform(s, json_bytes.begin(), [](char c) { return static_cast<std::byte>(c); });
 
   peer->on_data_channel_message(json_bytes);
 }

@@ -15,7 +15,8 @@ class BitReader {
       : data_{data},
         size_{size},
         byteOffset_{0},
-        bitOffset_{0} {}
+        bitOffset_{0} {
+  }
 
   // Read a single bit (returns in 'bit').
   auto ReadBit(std::uint32_t& bit) -> bool {
@@ -46,7 +47,9 @@ class BitReader {
   }
 
   // Read byte and return as an unsigned integer.
-  auto ReadByte() -> std::uint32_t { return ReadBits(CHAR_BIT); }
+  auto ReadByte() -> std::uint32_t {
+    return ReadBits(CHAR_BIT);
+  }
 
   // Read an unsigned Exp-Golomb coded value.
   auto ReadUE() -> std::uint32_t {

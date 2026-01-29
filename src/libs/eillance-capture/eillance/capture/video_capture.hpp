@@ -50,7 +50,9 @@ class VideoCaptureCli {
   auto operator=(VideoCaptureCli&&) -> VideoCaptureCli& = delete;
   auto operator=(VideoCaptureCli const&) -> VideoCaptureCli& = delete;
 
-  ~VideoCaptureCli() { Revoke(); }
+  ~VideoCaptureCli() {
+    Revoke();
+  }
 
   void Engage() {
     if (captureIsRunning_) {
@@ -132,9 +134,13 @@ class VideoCaptureCli {
     cap_.release();
   }
 
-  [[nodiscard]] auto GetSampleDuration() const -> Time::Unit { return Time::uS / config_.frame_rate; }
+  [[nodiscard]] auto GetSampleDuration() const -> Time::Unit {
+    return Time::uS / config_.frame_rate;
+  }
 
-  void Configure(Config const& config) { ConfigureVideo(config.video_config); }
+  void Configure(Config const& config) {
+    ConfigureVideo(config.video_config);
+  }
 
   void ConfigureVideo(VideoConfig const& config) {  // NOLINT(*-convert-member-functions-to-static)
     TELEMETRY(LGI << "Video capture configuration event triggered: device " << config.frame_rate << "fps";)

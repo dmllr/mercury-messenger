@@ -22,8 +22,11 @@ class TestableMockStorage : public storage::MockPersistentStorageImpl {
 
  public:
   explicit TestableMockStorage(std::filesystem::path path)
-      : db_path_(std::filesystem::absolute(path).string()) {}
-  auto GetPath() const -> std::string override { return db_path_; }
+      : db_path_(std::filesystem::absolute(path).string()) {
+  }
+  auto GetPath() const -> std::string override {
+    return db_path_;
+  }
 };
 
 class MessagingServiceTest : public ::testing::Test {

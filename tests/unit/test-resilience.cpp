@@ -18,15 +18,21 @@ using namespace eillance;
 // Mock capture implementation for duck-typing
 class MockCapture {
  public:
-  void Configure(Config) {}
-  void Engage() {}
-  void Revoke() {}
-  auto FetchBuffers() -> Packet { return Packet(); }
-  auto GetSampleDuration() -> Time::Unit { return 10000; }
+  void Configure(Config) {
+  }
+  void Engage() {
+  }
+  void Revoke() {
+  }
+  auto FetchBuffers() -> Packet {
+    return Packet();
+  }
+  auto GetSampleDuration() -> Time::Unit {
+    return 10000;
+  }
 };
 
 class ResilienceTest : public ::testing::Test {
-  // ... (SetUp/Teardown unchanged) ...
  protected:
   void SetUp() override {
     auto storage_impl = std::make_unique<storage::MockPersistentStorageImpl>();
@@ -72,9 +78,13 @@ class ResilienceTest : public ::testing::Test {
     client_->Start();
   }
 
-  void TearDown() override { client_->Terminate(); }
+  void TearDown() override {
+    client_->Terminate();
+  }
 
-  void FlushClientQueue() { std::this_thread::sleep_for(std::chrono::milliseconds(50)); }
+  void FlushClientQueue() {
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  }
 
   storage::MockPersistentStorageImpl* mock_storage_{};
   std::unique_ptr<transport::MockTransport> mock_transport_impl_;
@@ -86,7 +96,6 @@ class ResilienceTest : public ::testing::Test {
   ContactID const peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
 };
 
-// ... (PendingReadReceiptsPersistAndSend, ProfileUpdateSyncsOnConnect, PendingActionsPersistAndSend unchanged) ...
 TEST_F(ResilienceTest, PendingReadReceiptsPersistAndSend) {
   auto entry = mock_storage_->AddHistoryEntry(
       {.remote_id = 999,

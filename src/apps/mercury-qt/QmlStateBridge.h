@@ -26,7 +26,9 @@ namespace {
 // Global flag for signal handling
 std::sig_atomic_t volatile gSignalStatus = 0;
 
-void SignalHandler(int signal) { gSignalStatus = signal; }
+void SignalHandler(int signal) {
+  gSignalStatus = signal;
+}
 
 std::string FormatFilenameTimestamp(Time::Unit ts_microseconds) {
   std::time_t const seconds_since_epoch = ts_microseconds / 1000000U;

@@ -10,12 +10,21 @@ class ClassHolder {
  public:
   explicit ClassHolder(jclass clazz)
       : class_(clazz),
-        ctor_(nullptr) {}
+        ctor_(nullptr) {
+  }
 
-  [[nodiscard]] [[maybe_unused]] jclass Class() const { return class_; }
-  void SetCtor(jmethodID ctor) { ctor_ = ctor; }
-  [[nodiscard]] [[maybe_unused]] jmethodID Ctor() const { return ctor_; }
-  void AddMethod(std::string const& method_name, jmethodID method_id) { methods_[method_name] = method_id; }
+  [[nodiscard]] [[maybe_unused]] jclass Class() const {
+    return class_;
+  }
+  void SetCtor(jmethodID ctor) {
+    ctor_ = ctor;
+  }
+  [[nodiscard]] [[maybe_unused]] jmethodID Ctor() const {
+    return ctor_;
+  }
+  void AddMethod(std::string const& method_name, jmethodID method_id) {
+    methods_[method_name] = method_id;
+  }
   [[nodiscard]] jmethodID GetMethod(std::string const& method_name) const {
     auto it = methods_.find(method_name);
     if (it == methods_.end()) {
@@ -23,7 +32,9 @@ class ClassHolder {
     }
     return it->second;
   }
-  void AddField(std::string const& field_name, jfieldID field_id) { fields_[field_name] = field_id; }
+  void AddField(std::string const& field_name, jfieldID field_id) {
+    fields_[field_name] = field_id;
+  }
   [[nodiscard]] jfieldID GetField(std::string const& field_name) const {
     auto it = fields_.find(field_name);
     if (it == fields_.end()) {

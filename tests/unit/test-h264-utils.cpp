@@ -14,7 +14,9 @@ class H264ParserTest : public ::testing::Test {
   std::string callbackLog_;
 
   // Helper: append a message to the callback log.
-  void Log(std::string const& message) { callbackLog_ += message + "\n"; }
+  void Log(std::string const& message) {
+    callbackLog_ += message + "\n";
+  }
 
   // Dummy SPS and PPS data.
   // SPS: Profile Baseline (66), Level 3.1 (31)

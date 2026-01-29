@@ -20,7 +20,9 @@ class AndroidObserverBase {
   JavaVM* jvm_;
   jobject java_listener_;
 
-  [[nodiscard]] auto GetEnv() const -> jni::ScopedJniEnv { return jni::ScopedJniEnv(jvm_); }
+  [[nodiscard]] auto GetEnv() const -> jni::ScopedJniEnv {
+    return jni::ScopedJniEnv(jvm_);
+  }
 
  public:
   AndroidObserverBase(JavaVM* jvm, jobject java_listener)

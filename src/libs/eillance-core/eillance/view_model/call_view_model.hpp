@@ -50,15 +50,29 @@ class CallViewModel {
     }
   }
 
-  void SetObserver(std::shared_ptr<Observer> observer) const { impl_->SetObserver(std::move(observer)); }
+  void SetObserver(std::shared_ptr<Observer> observer) const {
+    impl_->SetObserver(std::move(observer));
+  }
 
-  [[nodiscard]] auto GetState() const -> CallState { return impl_->GetState(); }
+  [[nodiscard]] auto GetState() const -> CallState {
+    return impl_->GetState();
+  }
 
-  void StartVoiceCall(ContactID const& peer_id) { impl_->StartVoiceCall(peer_id); }
-  void StartVideoCall(ContactID const& peer_id) { impl_->StartVideoCall(peer_id); }
-  void Hangup() { impl_->Hangup(); }
-  void AcceptCall() { impl_->AcceptCall(); }
-  void RejectCall() { impl_->RejectCall(); }
+  void StartVoiceCall(ContactID const& peer_id) {
+    impl_->StartVoiceCall(peer_id);
+  }
+  void StartVideoCall(ContactID const& peer_id) {
+    impl_->StartVideoCall(peer_id);
+  }
+  void Hangup() {
+    impl_->Hangup();
+  }
+  void AcceptCall() {
+    impl_->AcceptCall();
+  }
+  void RejectCall() {
+    impl_->RejectCall();
+  }
 
  private:
   struct Impl : std::enable_shared_from_this<Impl> {
@@ -71,7 +85,8 @@ class CallViewModel {
 
     Impl(std::shared_ptr<Client> client, std::shared_ptr<ClientEventRouter> router)
         : client(std::move(client)),
-          router(std::move(router)) {}
+          router(std::move(router)) {
+    }
 
     void SetObserver(std::shared_ptr<Observer> obs) {
       std::lock_guard<std::mutex> const lock(mutex);

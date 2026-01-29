@@ -24,7 +24,8 @@ struct ContactID {
   constexpr ContactID() = default;
 
   explicit ContactID(std::array<std::byte, identitySize> const& value)
-      : value_(value) {}
+      : value_(value) {
+  }
 
   // Construct from raw bytes
   explicit ContactID(std::vector<std::byte> const& vec) {
@@ -56,9 +57,13 @@ struct ContactID {
     }
   }
 
-  [[nodiscard]] auto Value() const -> std::array<std::byte, identitySize> const& { return value_; }
+  [[nodiscard]] auto Value() const -> std::array<std::byte, identitySize> const& {
+    return value_;
+  }
 
-  [[nodiscard]] auto Span() const -> std::span<std::byte const> { return value_; }
+  [[nodiscard]] auto Span() const -> std::span<std::byte const> {
+    return value_;
+  }
 
   [[nodiscard]] auto ToString() const -> std::string {
     if (IsEmpty()) {
@@ -100,7 +105,9 @@ struct ContactID {
 };
 
 // NOLINTNEXTLINE(*-identifier-naming)
-inline void to_json(nlohmann::json& json, ContactID const& cid) { json = cid.ToString(); }
+inline void to_json(nlohmann::json& json, ContactID const& cid) {
+  json = cid.ToString();
+}
 
 // NOLINTNEXTLINE(*-identifier-naming)
 inline void from_json(nlohmann::json const& json, ContactID& cid) {
@@ -112,7 +119,9 @@ inline void from_json(nlohmann::json const& json, ContactID& cid) {
   }
 }
 
-inline auto operator<<(std::ostream& oss, ContactID const& cid) -> std::ostream& { return oss << cid.ToString(); }
+inline auto operator<<(std::ostream& oss, ContactID const& cid) -> std::ostream& {
+  return oss << cid.ToString();
+}
 
 }  // namespace eillance
 

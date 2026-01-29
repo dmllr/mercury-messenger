@@ -35,7 +35,9 @@ class IdManager {
     LoadIdentity();
   }
 
-  [[nodiscard]] auto GetIdentity() const -> crypto::Identity* { return identity_.get(); }
+  [[nodiscard]] auto GetIdentity() const -> crypto::Identity* {
+    return identity_.get();
+  }
 
   [[nodiscard]] auto GetPublicKey() const -> std::vector<std::byte> {
     return identity_ ? identity_->GetPublicKey() : std::vector<std::byte>{};
@@ -45,7 +47,9 @@ class IdManager {
     return storage_->GetSetting(kMnemonicKeyFile);
   }
 
-  [[nodiscard]] auto IdentityExists() const -> bool { return identity_ != nullptr; }
+  [[nodiscard]] auto IdentityExists() const -> bool {
+    return identity_ != nullptr;
+  }
 
   auto GenerateNewIdentity() -> std::string {
     std::string mnemonic;

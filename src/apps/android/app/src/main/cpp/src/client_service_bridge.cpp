@@ -9,35 +9,37 @@
 #include "eillance/view_model/debug_view_model.hpp"
 
 namespace {
-JavaVM* java_vm = nullptr;
-std::unique_ptr<eillance::ClientEngine> client_engine{};
+JavaVM* javaVm = nullptr;
+std::unique_ptr<eillance::ClientEngine> clientEngine{};
 }  // namespace
+
+// NOLINTBEGIN(readability-identifier-naming)
 
 // --- JNI Factory Methods ---
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_initEngine(JNIEnv* env, jobject instance) {
-  if (client_engine == nullptr) {
-    client_engine = std::make_unique<eillance::ClientEngine>(java_vm, env, instance);
+  if (clientEngine == nullptr) {
+    clientEngine = std::make_unique<eillance::ClientEngine>(javaVm, env, instance);
   }
 }
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_start(JNIEnv* /*env*/, jobject /*instance*/) {
-  if (client_engine) {
-    client_engine->Start();
+  if (clientEngine) {
+    clientEngine->Start();
   }
 }
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_terminate(JNIEnv* /*env*/, jobject /*instance*/) {
-  if (client_engine) {
-    client_engine->Terminate();
-    client_engine.reset();
+  if (clientEngine) {
+    clientEngine->Terminate();
+    clientEngine.reset();
   }
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
 Java_hela_eillance_CallService_identityExists(JNIEnv* /*env*/, jobject /*instance*/) {
-  if (client_engine) {
-    return client_engine->GetClient()->IdentityExists();
+  if (clientEngine) {
+    return clientEngine->GetClient()->IdentityExists();
   }
   return false;
 }
@@ -47,9 +49,11 @@ Java_hela_eillance_CallService_identityExists(JNIEnv* /*env*/, jobject /*instanc
 // ContactsViewModel
 extern "C" JNIEXPORT jlong JNICALL
 Java_hela_eillance_viewmodels_ContactsViewModel_nativeCreate(JNIEnv* env, jobject /*instance*/, jobject observer) {
-  if (!client_engine) return 0;
-  auto vm = new eillance::view_model::ContactsViewModel(client_engine->GetClient(), client_engine->GetRouter());
-  auto android_observer = std::make_shared<eillance::AndroidContactsObserver>(java_vm, observer);
+  if (!clientEngine) {
+    return 0;
+  }
+  auto* vm = new eillance::view_model::ContactsViewModel(clientEngine->GetClient(), clientEngine->GetRouter());
+  auto android_observer = std::make_shared<eillance::AndroidContactsObserver>(javaVm, observer);
   vm->SetObserver(android_observer);
   return reinterpret_cast<jlong>(vm);
 }
@@ -67,16 +71,18 @@ extern "C" JNIEXPORT jlong JNICALL Java_hela_eillance_viewmodels_ConversationVie
     jstring peer_id,
     jobject observer
 ) {
-  if (!client_engine) return 0;
+  if (!clientEngine) {
+    return 0;
+  }
   char const* chars = env->GetStringUTFChars(peer_id, nullptr);
-  auto vm = new eillance::view_model::ConversationViewModel(
+  auto* vm = new eillance::view_model::ConversationViewModel(
       eillance::ContactID(chars),
-      client_engine->GetClient(),
-      client_engine->GetRouter()
+      clientEngine->GetClient(),
+      clientEngine->GetRouter()
   );
   env->ReleaseStringUTFChars(peer_id, chars);
 
-  auto android_observer = std::make_shared<eillance::AndroidConversationObserver>(java_vm, observer);
+  auto android_observer = std::make_shared<eillance::AndroidConversationObserver>(javaVm, observer);
   vm->SetObserver(android_observer);
   return reinterpret_cast<jlong>(vm);
 }
@@ -90,9 +96,11 @@ Java_hela_eillance_viewmodels_ConversationViewModel_nativeDestroy(JNIEnv* /*env*
 // ProfileViewModel
 extern "C" JNIEXPORT jlong JNICALL
 Java_hela_eillance_viewmodels_ProfileViewModel_nativeCreate(JNIEnv* env, jobject /*instance*/, jobject observer) {
-  if (!client_engine) return 0;
-  auto vm = new eillance::view_model::ProfileViewModel(client_engine->GetClient(), client_engine->GetRouter());
-  auto android_observer = std::make_shared<eillance::AndroidProfileObserver>(java_vm, observer);
+  if (!clientEngine) {
+    return 0;
+  }
+  auto* vm = new eillance::view_model::ProfileViewModel(clientEngine->GetClient(), clientEngine->GetRouter());
+  auto android_observer = std::make_shared<eillance::AndroidProfileObserver>(javaVm, observer);
   vm->SetObserver(android_observer);
   return reinterpret_cast<jlong>(vm);
 }
@@ -106,9 +114,11 @@ Java_hela_eillance_viewmodels_ProfileViewModel_nativeDestroy(JNIEnv* /*env*/, jo
 // CallViewModel
 extern "C" JNIEXPORT jlong JNICALL
 Java_hela_eillance_viewmodels_CallViewModel_nativeCreate(JNIEnv* env, jobject /*instance*/, jobject observer) {
-  if (!client_engine) return 0;
-  auto vm = new eillance::view_model::CallViewModel(client_engine->GetClient(), client_engine->GetRouter());
-  auto android_observer = std::make_shared<eillance::AndroidCallObserver>(java_vm, observer);
+  if (!clientEngine) {
+    return 0;
+  }
+  auto* vm = new eillance::view_model::CallViewModel(clientEngine->GetClient(), clientEngine->GetRouter());
+  auto android_observer = std::make_shared<eillance::AndroidCallObserver>(javaVm, observer);
   vm->SetObserver(android_observer);
   return reinterpret_cast<jlong>(vm);
 }
@@ -122,9 +132,11 @@ Java_hela_eillance_viewmodels_CallViewModel_nativeDestroy(JNIEnv* /*env*/, jobje
 // SettingsViewModel
 extern "C" JNIEXPORT jlong JNICALL
 Java_hela_eillance_viewmodels_SettingsViewModel_nativeCreate(JNIEnv* env, jobject /*instance*/, jobject observer) {
-  if (!client_engine) return 0;
-  auto vm = new eillance::view_model::SettingsViewModel(client_engine->GetClient(), client_engine->GetRouter());
-  auto android_observer = std::make_shared<eillance::AndroidSettingsObserver>(java_vm, observer);
+  if (!clientEngine) {
+    return 0;
+  }
+  auto* vm = new eillance::view_model::SettingsViewModel(clientEngine->GetClient(), clientEngine->GetRouter());
+  auto android_observer = std::make_shared<eillance::AndroidSettingsObserver>(javaVm, observer);
   vm->SetObserver(android_observer);
   return reinterpret_cast<jlong>(vm);
 }
@@ -138,8 +150,10 @@ Java_hela_eillance_viewmodels_SettingsViewModel_nativeDestroy(JNIEnv* /*env*/, j
 // DebugViewModel
 extern "C" JNIEXPORT jlong JNICALL
 Java_hela_eillance_viewmodels_DebugViewModel_nativeCreate(JNIEnv* /*env*/, jobject /*instance*/) {
-  if (!client_engine) return 0;
-  auto vm = new eillance::view_model::DebugViewModel(client_engine->GetClient(), client_engine->GetRouter());
+  if (!clientEngine) {
+    return 0;
+  }
+  auto* vm = new eillance::view_model::DebugViewModel(clientEngine->GetClient(), clientEngine->GetRouter());
   return reinterpret_cast<jlong>(vm);
 }
 
@@ -575,7 +589,7 @@ Java_hela_eillance_viewmodels_DebugViewModel_nativeRevokeApprovals(JNIEnv* /*env
 
 extern "C" JNIEXPORT void JNICALL
 Java_hela_eillance_CallService_configureVideoCapture(JNIEnv* env, jobject /*instance*/, jobject video_config) {
-  if (client_engine) {
+  if (clientEngine) {
     auto& video_config_holder = ClassRefs::Instance().Class("hela/eillance/ndkio/VideoConfig");
     auto conf = eillance::VideoConfig{};
     conf.camera_id = env->GetIntField(video_config, video_config_holder.GetField("cameraId"));
@@ -583,12 +597,14 @@ Java_hela_eillance_CallService_configureVideoCapture(JNIEnv* env, jobject /*inst
     conf.height = env->GetIntField(video_config, video_config_holder.GetField("height"));
     conf.frame_rate = env->GetIntField(video_config, video_config_holder.GetField("frameRate"));
     conf.bitrate = env->GetIntField(video_config, video_config_holder.GetField("bitrate"));
-    client_engine->ConfigureVideoCapture(conf);
+    clientEngine->ConfigureVideoCapture(conf);
   }
 }
 
+// NOLINTEND(readability-identifier-naming)
+
 jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
-  java_vm = vm;
+  javaVm = vm;
   JNIEnv* env = nullptr;
   if (vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) != JNI_OK) {
     return JNI_ERR;

@@ -18,7 +18,9 @@ class SettingsManager {
   }
 
   // Retrieves the custom signaling server URL. Returns an empty optional if not set.
-  [[nodiscard]] auto GetSignalingServerUrl() const -> std::optional<std::string> { return signalingServerUrl_; }
+  [[nodiscard]] auto GetSignalingServerUrl() const -> std::optional<std::string> {
+    return signalingServerUrl_;
+  }
 
   // Sets and persists the custom signaling server URL.
   void SetSignalingServerUrl(std::string const& url) {
@@ -27,9 +29,15 @@ class SettingsManager {
   }
 
   // --- User Profile ---
-  [[nodiscard]] auto GetMyDisplayName() const -> std::optional<std::string> { return myDisplayName_; }
-  [[nodiscard]] auto GetMyBio() const -> std::optional<std::string> { return myBio_; }
-  [[nodiscard]] auto GetMyPhotoBase64() const -> std::optional<std::string> { return myPhotoBase64_; }
+  [[nodiscard]] auto GetMyDisplayName() const -> std::optional<std::string> {
+    return myDisplayName_;
+  }
+  [[nodiscard]] auto GetMyBio() const -> std::optional<std::string> {
+    return myBio_;
+  }
+  [[nodiscard]] auto GetMyPhotoBase64() const -> std::optional<std::string> {
+    return myPhotoBase64_;
+  }
 
   void SetMyDisplayName(std::string const& name) {
     constexpr size_t max_name_length = 64;

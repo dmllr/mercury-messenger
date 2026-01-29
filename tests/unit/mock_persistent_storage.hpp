@@ -30,10 +30,13 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
 
  public:
   explicit MockPersistentStorageImpl(std::string path = "mock_db_path")
-      : db_path_(std::move(path)) {}
+      : db_path_(std::move(path)) {
+  }
 
   // --- Path ---
-  auto GetPath() const -> std::string override { return db_path_; }
+  auto GetPath() const -> std::string override {
+    return db_path_;
+  }
 
   // --- Settings ---
   auto GetSetting(std::string_view const key) -> std::optional<std::string> override {

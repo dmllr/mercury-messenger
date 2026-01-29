@@ -51,17 +51,24 @@ class Stream : public std::enable_shared_from_this<Stream> {
  public:
   Stream(std::shared_ptr<Source> video, std::shared_ptr<Source> audio)
       : audio_(std::move(audio)),
-        video_(std::move(video)) {}
+        video_(std::move(video)) {
+  }
   Stream(Stream const&) = delete;
   Stream(Stream&&) = delete;
   auto operator=(Stream const&) -> Stream& = delete;
   auto operator=(Stream&&) -> Stream& = delete;
 
-  auto Audio() { return audio_; }
+  auto Audio() {
+    return audio_;
+  }
 
-  auto Video() { return video_; }
+  auto Video() {
+    return video_;
+  }
 
-  ~Stream() { Stop(); }
+  ~Stream() {
+    Stop();
+  }
 
  private:
   std::function<void(Source::Type, std::uint64_t, std::vector<std::byte> const&)> sampleHandlerFunc_;
@@ -116,7 +123,9 @@ class Stream : public std::enable_shared_from_this<Stream> {
     sampleHandlerFunc_ = std::move(handler);
   }
 
-  [[nodiscard]] auto IsRunning() const -> bool { return isRunning_; }
+  [[nodiscard]] auto IsRunning() const -> bool {
+    return isRunning_;
+  }
 
   void Start() {
     if (isRunning_) {

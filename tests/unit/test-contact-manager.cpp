@@ -55,7 +55,9 @@ TEST_F(ContactManagerTest, ConfirmContact) {
   EXPECT_EQ(contact->status, identity::ContactStatus::confirmed);
 }
 
-TEST_F(ContactManagerTest, ConfirmNonExistentContact) { ASSERT_FALSE(contact_manager_->ConfirmContact(peer1)); }
+TEST_F(ContactManagerTest, ConfirmNonExistentContact) {
+  ASSERT_FALSE(contact_manager_->ConfirmContact(peer1));
+}
 
 TEST_F(ContactManagerTest, MarkAsConfirmed) {
   contact_manager_->AddContact(peer1);

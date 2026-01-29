@@ -63,17 +63,25 @@ class ClientEngine {
   ClientEngine(ClientEngine const&) = delete;
   auto operator=(ClientEngine&&) -> ClientEngine& = delete;
   auto operator=(ClientEngine const&) -> ClientEngine& = delete;
-  ~ClientEngine() { Terminate(); }
+  ~ClientEngine() {
+    Terminate();
+  }
 
-  [[nodiscard]] auto GetClient() const -> std::shared_ptr<Client> { return client_; }
-  [[nodiscard]] auto GetRouter() const -> std::shared_ptr<view_model::ClientEventRouter> { return router_; }
+  [[nodiscard]] auto GetClient() const -> std::shared_ptr<Client> {
+    return client_;
+  }
+  [[nodiscard]] auto GetRouter() const -> std::shared_ptr<view_model::ClientEventRouter> {
+    return router_;
+  }
 
   void Start() {
     client_->Start();
     LGI << "Client engine is initialized and ready.";
   }
 
-  void Terminate() { client_->Terminate(); }
+  void Terminate() {
+    client_->Terminate();
+  }
 
   void ConfigureVideoCapture(VideoConfig const& config) const {
     Config core_config;

@@ -43,7 +43,7 @@ fun WebViewScreen(navController: NavController, url: String) {
             ViewGroup.LayoutParams.MATCH_PARENT
           )
           webViewClient = WebViewClient()
-          settings.javaScriptEnabled = true
+          settings.javaScriptEnabled = false
           loadUrl(url)
         }
       },

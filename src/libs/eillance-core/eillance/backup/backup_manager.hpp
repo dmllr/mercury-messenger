@@ -19,7 +19,8 @@ namespace eillance::backup {
 class BackupManager {
  public:
   explicit BackupManager(std::string db_path)
-      : dbPath_(std::move(db_path)) {}
+      : dbPath_(std::move(db_path)) {
+  }
 
   [[nodiscard]] auto CreateBackup(std::string const& output_path, std::string const& password) const -> bool {
     if (password.empty()) {

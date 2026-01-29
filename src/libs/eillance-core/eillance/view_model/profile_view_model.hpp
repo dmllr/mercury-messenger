@@ -39,9 +39,13 @@ class ProfileViewModel {
     }
   }
 
-  void SetObserver(std::shared_ptr<Observer> observer) const { impl_->SetObserver(std::move(observer)); }
+  void SetObserver(std::shared_ptr<Observer> observer) const {
+    impl_->SetObserver(std::move(observer));
+  }
 
-  [[nodiscard]] auto GetProfile() const -> MyProfile { return impl_->GetProfile(); }
+  [[nodiscard]] auto GetProfile() const -> MyProfile {
+    return impl_->GetProfile();
+  }
 
   // Actions
   void UpdateProfile(
@@ -53,9 +57,15 @@ class ProfileViewModel {
   }
 
   // Creation/Restore
-  auto GenerateNewIdentity() -> std::string { return impl_->GenerateNewIdentity(); }
-  auto RestoreIdentity(std::string const& mnemonic) -> bool { return impl_->RestoreIdentity(mnemonic); }
-  [[nodiscard]] auto GetMnemonic() -> std::optional<std::string> { return impl_->client->GetMnemonic(); }
+  auto GenerateNewIdentity() -> std::string {
+    return impl_->GenerateNewIdentity();
+  }
+  auto RestoreIdentity(std::string const& mnemonic) -> bool {
+    return impl_->RestoreIdentity(mnemonic);
+  }
+  [[nodiscard]] auto GetMnemonic() -> std::optional<std::string> {
+    return impl_->client->GetMnemonic();
+  }
   auto CreateBackup(std::string const& path, std::string const& password) -> bool {
     return impl_->client->CreateBackup(path, password);
   }
@@ -74,7 +84,8 @@ class ProfileViewModel {
 
     Impl(std::shared_ptr<Client> client, std::shared_ptr<ClientEventRouter> router)
         : client(std::move(client)),
-          router(std::move(router)) {}
+          router(std::move(router)) {
+    }
 
     void SetObserver(std::shared_ptr<Observer> obs) {
       std::lock_guard<std::mutex> const lock(mutex);

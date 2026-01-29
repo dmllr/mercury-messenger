@@ -18,7 +18,8 @@ class Packet {
 
   /// construct from Binary pointer and size
   explicit Packet(Binary&& buffer)
-      : buffer_(std::move(buffer)) {}
+      : buffer_(std::move(buffer)) {
+  }
 
   /// construct from std::byte pointer and size
   Packet(std::byte const* data, std::uint32_t data_size) {
@@ -51,7 +52,8 @@ class Packet {
 
   /// construct from std::vector
   explicit Packet(std::vector<std::byte> const& data)
-      : buffer_(data) {}
+      : buffer_(data) {
+  }
 
   // begin method to return the iterator to the beginning of the buffer
   [[nodiscard]] auto begin() {  // NOLINT(*-identifier-naming)

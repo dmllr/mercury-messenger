@@ -56,7 +56,9 @@ class ProfileServiceTest : public ::testing::Test {
     profile_service_->SetProfileReceivedCallback([](auto const&, auto const&) {});
   }
 
-  void TearDown() override { file_transfer_service_.reset(); }
+  void TearDown() override {
+    file_transfer_service_.reset();
+  }
 
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::unique_ptr<transport::MockTransport> mock_transport_impl_;

@@ -48,10 +48,16 @@ class MockTransport {
   Transport::StatusCallbackFunction status_callback;
   std::map<ContactID, std::shared_ptr<Peer>> peers;
 
-  void SetDelegate(TransportDelegate* d) { delegate = d; }
-  void SetStatusCallback(Transport::StatusCallbackFunction const& cb) { status_callback = cb; }
-  void SetName(std::string const& /*device_name*/) {}
-  void SetId(ContactID const& /*id*/) {}
+  void SetDelegate(TransportDelegate* d) {
+    delegate = d;
+  }
+  void SetStatusCallback(Transport::StatusCallbackFunction const& cb) {
+    status_callback = cb;
+  }
+  void SetName(std::string const& /*device_name*/) {
+  }
+  void SetId(ContactID const& /*id*/) {
+  }
 
   void SetSignalingUrl(std::string const& url) {
     std::lock_guard<std::mutex> const lock(mutex_);
@@ -102,9 +108,12 @@ class MockTransport {
     return PeerConnectionState::connected;
   }
 
-  void CreateDataPeerConnection(ContactID const& /*peer_id*/) {}
-  void CreateMediaPeerConnection(ContactID const& /*peer_id*/) {}
-  void CreateDataChannel(ContactID const& /*peer_id*/) {}
+  void CreateDataPeerConnection(ContactID const& /*peer_id*/) {
+  }
+  void CreateMediaPeerConnection(ContactID const& /*peer_id*/) {
+  }
+  void CreateDataChannel(ContactID const& /*peer_id*/) {
+  }
 
   void ClosePeerConnection(ContactID const& peer_id, std::string const& context) {
     std::lock_guard<std::mutex> const lock(mutex_);
@@ -126,14 +135,16 @@ class MockTransport {
       std::string const& /*context*/,
       std::string const& /*sdp*/,
       std::string const& /*type*/
-  ) {}
+  ) {
+  }
 
   void AddRemoteCandidate(
       ContactID const& /*peer_id*/,
       std::string const& /*context*/,
       std::string const& /*candidate*/,
       std::string const& /*mid*/
-  ) {}
+  ) {
+  }
 
   void SendSignalingMessage(Json const& message) const {
     std::lock_guard<std::mutex> const lock(mutex_);
@@ -151,7 +162,8 @@ class MockTransport {
     return true;  // Simulate success
   }
 
-  void AddToStream(std::shared_ptr<Peer> const& /*peer*/, bool /*is_adding_video*/) const {}
+  void AddToStream(std::shared_ptr<Peer> const& /*peer*/, bool /*is_adding_video*/) const {
+  }
 
   auto AddVideo(ContactID const& /*peer_id*/, std::function<void(void)> const& /*on_open*/) -> std::shared_ptr<ITrack> {
     return std::make_shared<MockTrack>();

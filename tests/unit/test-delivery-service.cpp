@@ -31,7 +31,9 @@ class DeliveryServiceTest : public ::testing::Test {
         std::make_unique<messaging::MessageDeliveryService>(storage_, contact_manager_, connection_handler_);
   }
 
-  void TearDown() override { delivery_service_->Stop(); }
+  void TearDown() override {
+    delivery_service_->Stop();
+  }
 
   // Helper to wait for a certain number of connection requests with a timeout
   auto WaitForRequests(size_t count, std::chrono::milliseconds timeout = std::chrono::milliseconds(500)) -> bool {

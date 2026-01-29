@@ -287,14 +287,21 @@ auto main(int argc, char** argv) -> int {
       , public eillance::view_model::ConversationViewModel::Observer {
     ftxui::ScreenInteractive& screen;
     explicit MainObserver(ftxui::ScreenInteractive& s)
-        : screen(s) {}
+        : screen(s) {
+    }
 
     void OnContactsUpdated(std::vector<eillance::view_model::ViewContact> const&) override {
       screen.Post(ftxui::Event::Custom);
     }
-    void OnCallStateChanged(eillance::view_model::CallState const&) override { screen.Post(ftxui::Event::Custom); }
-    void OnSettingsUpdated(std::optional<std::string> const&, int) override { screen.Post(ftxui::Event::Custom); }
-    void OnConnectionStateChanged(eillance::ServiceConnectionState) override { screen.Post(ftxui::Event::Custom); }
+    void OnCallStateChanged(eillance::view_model::CallState const&) override {
+      screen.Post(ftxui::Event::Custom);
+    }
+    void OnSettingsUpdated(std::optional<std::string> const&, int) override {
+      screen.Post(ftxui::Event::Custom);
+    }
+    void OnConnectionStateChanged(eillance::ServiceConnectionState) override {
+      screen.Post(ftxui::Event::Custom);
+    }
     void OnHistoryUpdated(eillance::view_model::ConversationViewModel::State const&) override {
       screen.Post(ftxui::Event::Custom);
     }

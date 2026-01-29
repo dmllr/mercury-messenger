@@ -19,7 +19,9 @@ TEST(ContactIDTest, HexConstructorValid) {
   EXPECT_EQ(id.ToString(), hex);
 }
 
-TEST(ContactIDTest, HexConstructorInvalidLength) { EXPECT_THROW(ContactID("abc"), std::invalid_argument); }
+TEST(ContactIDTest, HexConstructorInvalidLength) {
+  EXPECT_THROW(ContactID("abc"), std::invalid_argument);
+}
 
 TEST(ContactIDTest, HexConstructorInvalidChar) {
   std::string invalid_hex(62, '0');

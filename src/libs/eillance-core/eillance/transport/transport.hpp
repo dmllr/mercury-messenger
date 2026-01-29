@@ -29,7 +29,8 @@ class Transport {
 
   template <typename T>
   explicit Transport(std::unique_ptr<T> impl)
-      : self_(new TransportModel<T>(std::move(impl))) {}
+      : self_(new TransportModel<T>(std::move(impl))) {
+  }
 
   Transport(Transport const&) = delete;
   Transport(Transport&&) noexcept = default;
@@ -37,15 +38,33 @@ class Transport {
   auto operator=(Transport&&) noexcept -> Transport& = default;
   ~Transport() = default;
 
-  void SetDelegate(transport::TransportDelegate* delegate) const { self_->SetDelegate(delegate); }
-  void SetStatusCallback(StatusCallbackFunction const& callback) const { self_->SetStatusCallback(callback); }
-  void SetName(std::string const& device_name) const { self_->SetName(device_name); }
-  void SetId(ContactID const& id) const { self_->SetId(id); }
-  void SetSignalingUrl(std::string const& url) const { self_->SetSignalingUrl(url); }
-  void Start() const { self_->Start(); }
-  void Terminate() const { self_->Terminate(); }
-  void Reconnect() const { self_->Reconnect(); }
-  void AddPeer(ContactID const& peer_id, std::shared_ptr<Peer> const& peer) const { self_->AddPeer(peer_id, peer); }
+  void SetDelegate(transport::TransportDelegate* delegate) const {
+    self_->SetDelegate(delegate);
+  }
+  void SetStatusCallback(StatusCallbackFunction const& callback) const {
+    self_->SetStatusCallback(callback);
+  }
+  void SetName(std::string const& device_name) const {
+    self_->SetName(device_name);
+  }
+  void SetId(ContactID const& id) const {
+    self_->SetId(id);
+  }
+  void SetSignalingUrl(std::string const& url) const {
+    self_->SetSignalingUrl(url);
+  }
+  void Start() const {
+    self_->Start();
+  }
+  void Terminate() const {
+    self_->Terminate();
+  }
+  void Reconnect() const {
+    self_->Reconnect();
+  }
+  void AddPeer(ContactID const& peer_id, std::shared_ptr<Peer> const& peer) const {
+    self_->AddPeer(peer_id, peer);
+  }
   [[nodiscard]] auto GetPeer(ContactID const& peer_id) const -> std::shared_ptr<Peer> {
     return self_->GetPeer(peer_id);
   }
@@ -56,13 +75,21 @@ class Transport {
   ) const -> eillance::transport::PeerConnectionState {
     return self_->GetPeerConnectionState(peer_id);
   }
-  void CreateDataPeerConnection(ContactID const& peer_id) const { self_->CreateDataPeerConnection(peer_id); }
-  void CreateMediaPeerConnection(ContactID const& peer_id) const { self_->CreateMediaPeerConnection(peer_id); }
-  void CreateDataChannel(ContactID const& peer_id) const { self_->CreateDataChannel(peer_id); }
+  void CreateDataPeerConnection(ContactID const& peer_id) const {
+    self_->CreateDataPeerConnection(peer_id);
+  }
+  void CreateMediaPeerConnection(ContactID const& peer_id) const {
+    self_->CreateMediaPeerConnection(peer_id);
+  }
+  void CreateDataChannel(ContactID const& peer_id) const {
+    self_->CreateDataChannel(peer_id);
+  }
   void ClosePeerConnection(ContactID const& peer_id, std::string const& context) const {
     self_->ClosePeerConnection(peer_id, context);
   }
-  void CreateOffer(ContactID const& peer_id, std::string const& context) const { self_->CreateOffer(peer_id, context); }
+  void CreateOffer(ContactID const& peer_id, std::string const& context) const {
+    self_->CreateOffer(peer_id, context);
+  }
   void CreateAnswer(ContactID const& peer_id, std::string const& context) const {
     self_->CreateAnswer(peer_id, context);
   }
@@ -82,8 +109,12 @@ class Transport {
   ) const {
     self_->AddRemoteCandidate(peer_id, context, candidate, mid);
   }
-  void RemovePeer(ContactID const& peer_id) const { self_->RemovePeer(peer_id); }
-  void SendSignalingMessage(Json const& message) const { self_->SendSignalingMessage(message); }
+  void RemovePeer(ContactID const& peer_id) const {
+    self_->RemovePeer(peer_id);
+  }
+  void SendSignalingMessage(Json const& message) const {
+    self_->SendSignalingMessage(message);
+  }
   void SendPeerDataChannelMessage(ContactID const& peer_id, Json const& message) const {
     self_->SendPeerDataChannelMessage(peer_id, message);
   }
@@ -165,16 +196,33 @@ class Transport {
 
    public:
     explicit TransportModel(std::unique_ptr<T> impl)
-        : transport_(std::move(impl)) {}
+        : transport_(std::move(impl)) {
+    }
 
-    void SetDelegate(transport::TransportDelegate* delegate) override { transport_->SetDelegate(delegate); }
-    void SetStatusCallback(StatusCallbackFunction const& callback) override { transport_->SetStatusCallback(callback); }
-    void SetName(std::string const& device_name) override { transport_->SetName(device_name); }
-    void SetId(ContactID const& id) override { transport_->SetId(id); }
-    void SetSignalingUrl(std::string const& url) override { transport_->SetSignalingUrl(url); }
-    void Start() override { transport_->Start(); }
-    void Terminate() override { transport_->Terminate(); }
-    void Reconnect() override { transport_->Reconnect(); }
+    void SetDelegate(transport::TransportDelegate* delegate) override {
+      transport_->SetDelegate(delegate);
+    }
+    void SetStatusCallback(StatusCallbackFunction const& callback) override {
+      transport_->SetStatusCallback(callback);
+    }
+    void SetName(std::string const& device_name) override {
+      transport_->SetName(device_name);
+    }
+    void SetId(ContactID const& id) override {
+      transport_->SetId(id);
+    }
+    void SetSignalingUrl(std::string const& url) override {
+      transport_->SetSignalingUrl(url);
+    }
+    void Start() override {
+      transport_->Start();
+    }
+    void Terminate() override {
+      transport_->Terminate();
+    }
+    void Reconnect() override {
+      transport_->Reconnect();
+    }
     void AddPeer(ContactID const& peer_id, std::shared_ptr<Peer> const& peer) override {
       transport_->AddPeer(peer_id, peer);
     }
@@ -187,11 +235,15 @@ class Transport {
     [[nodiscard]] auto GetPeerConnectionState(ContactID const& peer_id) const -> PeerConnectionState override {
       return transport_->GetPeerConnectionState(peer_id);
     }
-    void CreateDataPeerConnection(ContactID const& peer_id) override { transport_->CreateDataPeerConnection(peer_id); }
+    void CreateDataPeerConnection(ContactID const& peer_id) override {
+      transport_->CreateDataPeerConnection(peer_id);
+    }
     void CreateMediaPeerConnection(ContactID const& peer_id) override {
       transport_->CreateMediaPeerConnection(peer_id);
     }
-    void CreateDataChannel(ContactID const& peer_id) override { transport_->CreateDataChannel(peer_id); }
+    void CreateDataChannel(ContactID const& peer_id) override {
+      transport_->CreateDataChannel(peer_id);
+    }
     void ClosePeerConnection(ContactID const& peer_id, std::string const& context) override {
       transport_->ClosePeerConnection(peer_id, context);
     }
@@ -217,8 +269,12 @@ class Transport {
     ) override {
       transport_->AddRemoteCandidate(peer_id, context, candidate, mid);
     }
-    void RemovePeer(ContactID const& peer_id) override { transport_->RemovePeer(peer_id); }
-    void SendSignalingMessage(Json const& message) const override { transport_->SendSignalingMessage(message); }
+    void RemovePeer(ContactID const& peer_id) override {
+      transport_->RemovePeer(peer_id);
+    }
+    void SendSignalingMessage(Json const& message) const override {
+      transport_->SendSignalingMessage(message);
+    }
     void SendPeerDataChannelMessage(ContactID const& peer_id, Json const& message) const override {
       transport_->SendPeerDataChannelMessage(peer_id, message);
     }

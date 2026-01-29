@@ -65,7 +65,8 @@ class AudioCaptureCli {
     };
   }
 
-  void Configure(Config const& /*config*/) {}
+  void Configure(Config const& /*config*/) {
+  }
 
   void Engage() {
     encoder_.Engage();
@@ -103,7 +104,9 @@ class AudioCaptureCli {
     return combined_packet;
   }
 
-  static auto GetSampleDuration() -> Time::Unit { return AudioConfig::sampleDuration * Time::uS; }
+  static auto GetSampleDuration() -> Time::Unit {
+    return AudioConfig::sampleDuration * Time::uS;
+  }
 };
 
 }  // namespace eillance

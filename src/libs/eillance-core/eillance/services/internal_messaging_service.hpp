@@ -37,9 +37,9 @@ class InternalMessagingService {
         messaging_service_(std::move(messaging_service)),
         media_call_service_(std::move(media_call_service)),
         file_transfer_service_(std::move(file_transfer_service)),
-        profile_service_(std::move(profile_service)) {}
+        profile_service_(std::move(profile_service)) {
+  }
 
-  // ... (ProcessSystemMessage, ProcessSignalingMessage unchanged) ...
   void ProcessSystemMessage(std::string const& type, Json const& message) {
     // ...
     if (type == "auth_challenge") {
@@ -179,7 +179,6 @@ class InternalMessagingService {
   }
 
  private:
-  // ... (Private handlers unchanged) ...
   void HandleMediaSignaling(ContactID const& peer_id, std::string const& type, Json const& message) {
     auto peer = transport_->GetPeer(peer_id);
     if (!peer) {

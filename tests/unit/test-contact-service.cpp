@@ -72,7 +72,9 @@ class ContactServiceTest : public ::testing::Test {
     contact_service_->SetMessagingService(messaging_service_.get());
   }
 
-  void TearDown() override { file_transfer_service_.reset(); }
+  void TearDown() override {
+    file_transfer_service_.reset();
+  }
 
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::unique_ptr<transport::MockTransport> mock_transport_impl_;

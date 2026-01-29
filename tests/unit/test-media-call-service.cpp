@@ -14,15 +14,20 @@ using namespace eillance;
 // Mock capture implementation for duck-typing
 class MockCaptureImpl {
  public:
-  void Configure(Config) {}
-  void Engage() {}
-  void Revoke() {}
+  void Configure(Config) {
+  }
+  void Engage() {
+  }
+  void Revoke() {
+  }
   auto FetchBuffers() -> Packet {
     // Return dummy data to ensure stream has content
     std::vector<std::byte> data = {std::byte{0xAA}, std::byte{0xBB}};
     return Packet(data);
   }
-  auto GetSampleDuration() -> Time::Unit { return 10000; }
+  auto GetSampleDuration() -> Time::Unit {
+    return 10000;
+  }
 };
 
 class MediaCallServiceTest : public ::testing::Test {

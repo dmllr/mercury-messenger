@@ -70,7 +70,9 @@ class SQLiteStorage final : public PersistentStorageImpl {
     }
   }
 
-  [[nodiscard]] auto GetPath() const -> std::string override { return dbPath_.string(); }
+  [[nodiscard]] auto GetPath() const -> std::string override {
+    return dbPath_.string();
+  }
 
   // --- Settings ---
   auto GetSetting(std::string_view const key) -> std::optional<std::string> override {

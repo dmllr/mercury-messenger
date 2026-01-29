@@ -19,7 +19,9 @@ class H264Parser {
     on_configure_callback_ = std::move(callback);
   }
 
-  void Reset() { isConfigured_ = false; }
+  void Reset() {
+    isConfigured_ = false;
+  }
 
   // Processes a raw H.264 frame, which may contain one or more NAL units.
   void ProcessFrame(std::vector<std::byte> const& frame) {
