@@ -152,7 +152,7 @@ Java_hela_eillance_viewmodels_DebugViewModel_nativeDestroy(JNIEnv* /*env*/, jobj
 // --- ViewModel Method Bindings ---
 
 // Contacts
-extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ContactsViewModel_nativeAddContact(
+extern "C" JNIEXPORT jboolean JNICALL Java_hela_eillance_viewmodels_ContactsViewModel_nativeAddContact(
     JNIEnv* env,
     jobject /*instance*/,
     jlong ptr,
@@ -164,12 +164,14 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ContactsViewMode
   char const* token_chars = (token != nullptr) ? env->GetStringUTFChars(token, nullptr) : nullptr;
   auto const c_token =
       (token_chars) ? std::optional<std::vector<std::byte>>(eillance::crypto::FromHex(token_chars)) : std::nullopt;
+  bool result = false;
   try {
-    vm->AddContact(eillance::ContactID(peer_id_chars), c_token);
+    result = vm->AddContact(eillance::ContactID(peer_id_chars), c_token);
   } catch (...) {
   }
   env->ReleaseStringUTFChars(peer_id, peer_id_chars);
   if (token_chars) env->ReleaseStringUTFChars(token, token_chars);
+  return result ? JNI_TRUE : JNI_FALSE;
 }
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ContactsViewModel_nativeAcceptContact(

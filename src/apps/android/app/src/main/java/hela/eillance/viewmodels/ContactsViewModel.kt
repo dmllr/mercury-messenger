@@ -3,10 +3,14 @@ package hela.eillance.viewmodels
 import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
 import hela.eillance.CallService
 import hela.eillance.ndkio.Contact
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
 class ContactsViewModel(application: Application) : AndroidViewModel(application), NativeContactsObserver {
 
@@ -22,6 +26,9 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
 
   private val _showContactProfileDialog = MutableStateFlow<String?>(null)
   val showContactProfileDialog = _showContactProfileDialog.asStateFlow()
+
+  private val _errorMessage = MutableSharedFlow<String>()
+  val errorMessage = _errorMessage.asSharedFlow()
 
   init {
     nativePtr = nativeCreate(this)
@@ -62,8 +69,14 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
   }
 
   fun addContact(peerId: String, token: String? = null) {
-    if (nativePtr != 0L) nativeAddContact(nativePtr, peerId, token)
-    onAddContactDialogDismiss()
+    val success = if (nativePtr != 0L) nativeAddContact(nativePtr, peerId, token) else false
+    if (success) {
+      onAddContactDialogDismiss()
+    } else {
+      viewModelScope.launch {
+        _errorMessage.emit("Cannot add this contact. Ensure the ID is valid and not your own.")
+      }
+    }
   }
 
   fun onShowContactProfile(peerId: String) {
@@ -113,7 +126,7 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
   // --- JNI Definitions ---
   private external fun nativeCreate(observer: NativeContactsObserver): Long
   private external fun nativeDestroy(ptr: Long)
-  private external fun nativeAddContact(ptr: Long, peerId: String, token: String?)
+  private external fun nativeAddContact(ptr: Long, peerId: String, token: String?): Boolean
   private external fun nativeAcceptContact(ptr: Long, peerId: String)
   private external fun nativeBlockContact(ptr: Long, peerId: String)
   private external fun nativeDeleteContact(ptr: Long, peerId: String)
