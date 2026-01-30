@@ -50,6 +50,7 @@ import androidx.compose.material.icons.filled.RotateLeft
 import androidx.compose.material.icons.filled.RotateRight
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -103,6 +104,7 @@ import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.qrcode.QRCodeWriter
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
+import hela.eillance.MainViewModel
 import hela.eillance.camera.BuildConfig
 import hela.eillance.components.UserAvatar
 import hela.eillance.ndkio.MyProfileInfo
@@ -131,15 +133,18 @@ fun ProfileScreen(
   contactsVM: ContactsViewModel,
   settingsVM: SettingsViewModel,
   debugVM: DebugViewModel,
+  mainViewModel: MainViewModel, // Injected for state
   myProfile: MyProfileInfo,
   onBack: () -> Unit,
   onNavigateToSettings: () -> Unit,
   onNavigateToBetaNotice: () -> Unit,
   onNavigateToBackupAndRestore: () -> Unit,
-  onNavigateToHelp: () -> Unit
+  onNavigateToHelp: () -> Unit,
+  onNavigateToPermissionIssues: () -> Unit
 ) {
   var showEditDialog by remember { mutableStateOf(false) }
   var showDebugConfirmDialog by remember { mutableStateOf<DebugAction?>(null) }
+  val hasPermissionIssues by mainViewModel.hasPermissionIssues.collectAsState()
 
   if (showEditDialog) {
     ProfileEditDialog(
@@ -187,13 +192,15 @@ fun ProfileScreen(
       HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp, horizontal = 16.dp))
       ProfileMenu(
         myProfile = myProfile,
+        hasPermissionIssues = hasPermissionIssues,
         onEditProfile = { showEditDialog = true },
         onNavigateToSettings = onNavigateToSettings,
         onNavigateToBetaNotice = onNavigateToBetaNotice,
         onNavigateToBackupAndRestore = onNavigateToBackupAndRestore,
         onDebugAction = { action: DebugAction -> showDebugConfirmDialog = action },
         onNavigateToHelp = onNavigateToHelp,
-        onSendFeedback = { contactsVM.sendFeedback() }
+        onSendFeedback = { contactsVM.sendFeedback() },
+        onNavigateToPermissionIssues = onNavigateToPermissionIssues
       )
     }
   }
@@ -345,13 +352,15 @@ private fun ProfileHeader(
 @Composable
 private fun ProfileMenu(
   myProfile: MyProfileInfo,
+  hasPermissionIssues: Boolean,
   onEditProfile: () -> Unit,
   onNavigateToSettings: () -> Unit,
   onNavigateToBetaNotice: () -> Unit,
   onNavigateToBackupAndRestore: () -> Unit,
   onDebugAction: (DebugAction) -> Unit,
   onNavigateToHelp: () -> Unit,
-  onSendFeedback: () -> Unit
+  onSendFeedback: () -> Unit,
+  onNavigateToPermissionIssues: () -> Unit
 ) {
   Column(modifier = Modifier.padding(horizontal = 8.dp)) {
     ListItem(
@@ -371,6 +380,21 @@ private fun ProfileMenu(
         .clip(MaterialTheme.shapes.medium)
         .clickable(onClick = onEditProfile)
     )
+
+    if (hasPermissionIssues) {
+      ListItem(
+        headlineContent = { Text("Permission Issues") },
+        supportingContent = { Text("Fix issues to enable full functionality") },
+        leadingContent = { Icon(Icons.Default.Warning, contentDescription = "Issues", tint = MaterialTheme.colorScheme.error) },
+        trailingContent = {
+          Box(modifier = Modifier.size(8.dp).background(MaterialTheme.colorScheme.error, CircleShape))
+        },
+        modifier = Modifier
+          .clip(MaterialTheme.shapes.medium)
+          .clickable(onClick = onNavigateToPermissionIssues)
+      )
+    }
+
     ListItem(
       headlineContent = { Text("Settings") },
       supportingContent = { Text("Connection and application settings") },
@@ -446,6 +470,7 @@ private fun ProfileMenu(
     }
   }
 }
+
 
 @Composable
 private fun ProfileEditDialog(

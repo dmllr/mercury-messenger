@@ -35,6 +35,7 @@ import hela.eillance.screens.IdentityScreen
 import hela.eillance.screens.IncomingCallScreen
 import hela.eillance.screens.MediaPreviewScreen
 import hela.eillance.screens.MnemonicDisplayScreen
+import hela.eillance.screens.PermissionIssuesScreen
 import hela.eillance.screens.ProfileScreen
 import hela.eillance.screens.QrScannerScreen
 import hela.eillance.screens.RecoverIdentityScreen
@@ -122,10 +123,6 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
   val navigateToScanner by viewModel.navigateToScanner.collectAsState()
   val incomingCallUiVisible by viewModel.incomingCallUiVisible.collectAsState()
 
-  val hasCallPermissions by viewModel.hasCallPermissions.collectAsState()
-  val hasNotificationPermission by viewModel.hasNotificationPermission.collectAsState()
-  val hasBatteryExemption by viewModel.hasBatteryExemption.collectAsState()
-
   // -- Global State Observations --
   val contacts by contactsVM.contacts.collectAsState()
   val profileDialogPeerId by contactsVM.showContactProfileDialog.collectAsState()
@@ -211,13 +208,11 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
 
         ContactsScreen(
           contactsVM = contactsVM,
+          mainViewModel = viewModel,
           myProfile = myProfile,
           contacts = contactsList,
           isLoading = isLoading,
           connectionState = connectionState,
-          hasCallPermissions = hasCallPermissions,
-          hasNotificationPermission = hasNotificationPermission,
-          hasBatteryExemption = hasBatteryExemption,
           onCheckPermissions = viewModel::checkAllPermissions,
           onContactClick = { peerId -> viewModel.navigateToPeer(peerId) },
           onNavigateToProfile = { navController.navigate(Screen.Profile.route) },
@@ -231,12 +226,21 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
           contactsVM = contactsVM,
           settingsVM = settingsVM,
           debugVM = debugVM,
+          mainViewModel = viewModel,
           myProfile = myProfile,
           onBack = { navController.popBackStack() },
           onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
           onNavigateToBetaNotice = { navController.navigate(Route.WebView.createRoute("https://mercury.eillance.com/beta/embed/")) },
           onNavigateToBackupAndRestore = { navController.navigate(Screen.BackupRestore.route) },
-          onNavigateToHelp = { navController.navigate(Screen.Help.route) }
+          onNavigateToHelp = { navController.navigate(Screen.Help.route) },
+          onNavigateToPermissionIssues = { navController.navigate(Screen.PermissionIssues.route) }
+        )
+      }
+
+      composable(Screen.PermissionIssues.route) {
+        PermissionIssuesScreen(
+          mainViewModel = viewModel,
+          onBack = { navController.popBackStack() }
         )
       }
 
@@ -247,18 +251,18 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
         val historyPage by chatVM.interactionHistoryPage.collectAsState()
         val contactsList by contactsVM.contacts.collectAsState()
         val contact = contactsList.find { it.peerId == peerId }
+        val connectionState by settingsVM.connectionState.collectAsState()
 
         ConversationScreen(
           chatVM = chatVM,
           contactsVM = contactsVM,
           callVM = callVM,
+          mainViewModel = viewModel,
           peerId = peerId,
           contact = contact,
           historyPage = historyPage,
           callState = callState,
-          hasCallPermissions = hasCallPermissions,
-          hasNotificationPermission = hasNotificationPermission,
-          onCheckPermissions = viewModel::checkAllPermissions,
+          connectionState = connectionState,
           onBack = { navController.popBackStack() },
           onNavigateToCall = { navController.navigate(Route.Call.createRoute(it)) },
           onShowContactProfile = { contactsVM.onShowContactProfile(it) },
