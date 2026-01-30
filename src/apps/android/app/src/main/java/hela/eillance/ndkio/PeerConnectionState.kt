@@ -9,8 +9,7 @@ enum class PeerConnectionState(val value: Int) {
   Connected(2),
   Disconnected(3),
   Failed(4),
-  Closed(5),
-  Unknown(99);
+  Closed(5);
 
   companion object {
     val resourceMap = mapOf(
@@ -23,12 +22,12 @@ enum class PeerConnectionState(val value: Int) {
     )
 
     @JvmStatic
-    fun fromInt(value: Int) = entries.firstOrNull { it.value == value } ?: New
+    fun fromInt(value: Int) = entries.firstOrNull { it.value == value } ?: throw Exception("Invalid PeerConnectionState value: $value")
   }
 
   @Suppress("unused")
   fun getResourceString(context: Context): String {
-    val resourceId = resourceMap[this] ?: R.string.state_unknown
+    val resourceId = resourceMap[this] ?: throw Exception("Invalid PeerConnectionState value: $this")
     return context.getString(resourceId)
   }
 }

@@ -637,18 +637,21 @@ class MessagingService {
   }
 
   // Checks DB for messages, read receipts, and contact profile sync flag
-  auto HasPendingWork(ContactID const& peer_id) const -> bool {
+  [[nodiscard]] auto HasPendingWork(ContactID const& peer_id) const -> bool {
     // Check pending actions (read receipts, profiles, etc.)
-    if (auto const pending_actions = storage_->GetPendingActions(peer_id); !pending_actions.empty()) {
+    if (!storage_->GetPendingActions(peer_id).empty()) {
       return true;
     }
 
-    // Check for active uploads/downloads that need network
-    // Ideally check DB for 'transferring' or 'pending' attachments
-    auto pending_atts = storage_->GetPendingAttachments(peer_id);
-    if (!pending_atts.empty()) return true;
+    // Only check for 'pending' files. We ignore 'transferring' status here
+    // to prevent the Delivery Service from interpreting an active transfer as a failed connection attempt.
+    auto const attachments = storage_->GetPendingAttachments(peer_id);
+    bool const has_pending_files = std::ranges::any_of(attachments, [](auto const& att) {
+      return att.status == messaging::AttachmentStatus::pending;
+    });
 
     return !storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::sending).empty();
+    return has_pending_files || !storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::sending).empty();
   }
 
   // Generate a unique ID for attachments
