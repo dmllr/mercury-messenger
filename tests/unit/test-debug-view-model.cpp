@@ -32,8 +32,8 @@ TEST_F(DebugViewModelTest, EraseAllHistory) {
 
 TEST_F(DebugViewModelTest, EraseAllContacts) {
   // Add contacts via Client API so ContactManager is aware
-  client_->AddContact(peer1, std::nullopt);
-  client_->AddContact(peer2, std::nullopt);
+  std::ignore = client_->AddContact(peer1, std::nullopt);
+  std::ignore = client_->AddContact(peer2, std::nullopt);
 
   // Wait for async add to propagate
   WaitFor([&] { return !client_->GetContacts().empty(); });
@@ -51,8 +51,8 @@ TEST_F(DebugViewModelTest, EraseAllContacts) {
 TEST_F(DebugViewModelTest, RevokeAllApprovals) {
   // Set up confirmed contacts properly via Client/Service API
   // 1. Add contact
-  client_->AddContact(peer1, std::nullopt);
-  client_->AddContact(peer2, std::nullopt);
+  std::ignore = client_->AddContact(peer1, std::nullopt);
+  std::ignore = client_->AddContact(peer2, std::nullopt);
 
   // 2. Confirm them manually in storage to simulate a confirmed state
   //    (since full handshake requires transport interaction which MockTransport doesn't fully auto-drive here)
@@ -72,7 +72,7 @@ TEST_F(DebugViewModelTest, RevokeAllApprovals) {
   //    No, simpler: use `client_->GetContactService()->DebugReloadCache()` (casted or friend).
   //    Wait, `GetContactService()` returns shared_ptr to service. Service has `DebugReloadCache` public in the new
   //    header.
-  client_->GetContactService()->DebugReloadCache();
+  client_->GetContactService()->ReloadCache();
 
   EXPECT_TRUE(client_->GetContactService()->IsConfirmed(peer1));
   EXPECT_TRUE(client_->GetContactService()->IsConfirmed(peer2));
