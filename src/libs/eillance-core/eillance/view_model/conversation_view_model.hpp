@@ -59,6 +59,7 @@ class ConversationViewModel {
       }
     });
     Subscribe<EventDebugDataReset>(queue, [impl](auto const&) { impl->StartInitialLoad(); });
+    Subscribe<EventDataReloaded>(queue, [impl](auto const&) { impl->StartInitialLoad(); });
   }
 
   ~ConversationViewModel() {

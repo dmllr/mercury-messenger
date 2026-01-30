@@ -73,7 +73,7 @@ class ResilienceTest : public ::testing::Test {
 
     client_->AddContact(peer1, std::nullopt);
     mock_storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
-    client_->GetContactService()->DebugReloadCache();
+    client_->GetContactService()->ReloadCache();
 
     client_->Start();
   }

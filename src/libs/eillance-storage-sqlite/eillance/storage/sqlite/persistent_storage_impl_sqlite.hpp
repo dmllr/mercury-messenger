@@ -122,6 +122,9 @@ class SQLiteStorage final : public PersistentStorageImpl {
   // --- Settings ---
   auto GetSetting(std::string_view const key) -> std::optional<std::string> override {
     std::lock_guard const lock(mutex_);
+    if (!db_) {
+      return std::nullopt;
+    }
     SQLiteStatement const statement(db_, R"SQL(
         SELECT
           value
@@ -139,6 +142,9 @@ class SQLiteStorage final : public PersistentStorageImpl {
 
   void SetSetting(std::string_view const key, std::string_view const value) override {
     std::lock_guard const lock(mutex_);
+    if (!db_) {
+      return;
+    }
     SQLiteStatement const statement(db_, R"SQL(
       REPLACE INTO settings
         (key, value)
@@ -152,6 +158,9 @@ class SQLiteStorage final : public PersistentStorageImpl {
 
   void DeleteSetting(std::string_view const key) override {
     std::lock_guard const lock(mutex_);
+    if (!db_) {
+      return;
+    }
     SQLiteStatement const statement(db_, R"SQL(
       DELETE FROM
         settings
@@ -178,6 +187,9 @@ class SQLiteStorage final : public PersistentStorageImpl {
   // --- Contacts ---
   auto GetContacts() -> std::vector<identity::Contact> override {
     std::lock_guard const lock(mutex_);
+    if (!db_) {
+      return {};
+    }
     std::vector<identity::Contact> contacts;
     SQLiteStatement const statement(db_, R"SQL(
       SELECT
@@ -209,6 +221,9 @@ class SQLiteStorage final : public PersistentStorageImpl {
 
   auto GetContact(ContactID const& peer_id) -> std::optional<identity::Contact> override {
     std::lock_guard const lock(mutex_);
+    if (!db_) {
+      return std::nullopt;
+    }
     SQLiteStatement const statement(db_, R"SQL(
       SELECT
         peer_id,
@@ -242,6 +257,9 @@ class SQLiteStorage final : public PersistentStorageImpl {
 
   void UpdateContact(identity::Contact const& contact) override {
     std::lock_guard const lock(mutex_);
+    if (!db_) {
+      return;
+    }
     SQLiteStatement const statement(db_, R"SQL(
       REPLACE INTO contacts
         (peer_id, status, display_name, display_name_override, bio, photo_base64, signature_from_them, my_signature_for_them)
@@ -261,6 +279,9 @@ class SQLiteStorage final : public PersistentStorageImpl {
 
   void RemoveContact(ContactID const& peer_id) override {
     std::lock_guard const lock(mutex_);
+    if (!db_) {
+      return;
+    }
     char* err_msg = nullptr;
     if (sqlite3_exec(db_, "BEGIN TRANSACTION;", nullptr, nullptr, &err_msg) != SQLITE_OK) {
       LGE << "Failed to begin transaction for contact removal: " << ((err_msg != nullptr) ? err_msg : "Unknown error");
@@ -302,6 +323,9 @@ class SQLiteStorage final : public PersistentStorageImpl {
   // --- Resilience ---
   void AddPendingAction(ContactID const& peer_id, std::string const& payload) override {
     std::lock_guard const lock(mutex_);
+    if (!db_) {
+      return;
+    }
     SQLiteStatement const statement(db_, R"SQL(
       INSERT INTO pending_actions (peer_id, payload) VALUES (?, ?);
     )SQL");
@@ -314,6 +338,9 @@ class SQLiteStorage final : public PersistentStorageImpl {
 
   auto GetPendingActions(ContactID const& peer_id) -> std::vector<PendingAction> override {
     std::lock_guard const lock(mutex_);
+    if (!db_) {
+      return {};
+    }
     std::vector<PendingAction> actions;
     SQLiteStatement const statement(db_, R"SQL(
       SELECT id, payload FROM pending_actions WHERE peer_id = ? ORDER BY id ASC;
@@ -331,6 +358,9 @@ class SQLiteStorage final : public PersistentStorageImpl {
 
   void RemovePendingAction(int64_t id) override {
     std::lock_guard const lock(mutex_);
+    if (!db_) {
+      return;
+    }
     SQLiteStatement const statement(db_, "DELETE FROM pending_actions WHERE id = ?;");
     sqlite3_bind_int64(statement.Get(), 1, id);
     sqlite3_step(statement.Get());
@@ -339,6 +369,9 @@ class SQLiteStorage final : public PersistentStorageImpl {
   // --- History / Messages ---
   auto AddHistoryEntry(messaging::HistoryEntryRecord entry) -> messaging::HistoryEntryRecord override {
     std::lock_guard const lock(mutex_);
+    if (!db_) {
+      return {};
+    }
     char* err_msg = nullptr;
     if (sqlite3_exec(db_, "BEGIN TRANSACTION;", nullptr, nullptr, &err_msg) != SQLITE_OK) {
       LGE << "Failed to begin transaction for message insertion: "
@@ -467,6 +500,9 @@ class SQLiteStorage final : public PersistentStorageImpl {
 
   void UpdateHistoryEntry(messaging::HistoryEntryRecord const& entry) override {
     std::lock_guard const lock(mutex_);
+    if (!db_) {
+      return;
+    }
     char* err_msg = nullptr;
     if (sqlite3_exec(db_, "BEGIN TRANSACTION;", nullptr, nullptr, &err_msg) != SQLITE_OK) {
       sqlite3_free(err_msg);
@@ -535,6 +571,9 @@ class SQLiteStorage final : public PersistentStorageImpl {
   void UpdateMessageStatus(ContactID const& peer_id, uint64_t message_id, messaging::MessageStatus new_status)
       override {
     std::lock_guard const lock(mutex_);
+    if (!db_) {
+      return;
+    }
     SQLiteStatement const statement(db_, R"SQL(
       UPDATE
         messages
@@ -558,6 +597,9 @@ class SQLiteStorage final : public PersistentStorageImpl {
       return;
     }
     std::lock_guard const lock(mutex_);
+    if (!db_) {
+      return;
+    }
     nlohmann::json const ids_json = message_ids;
     std::string const query = R"SQL(
       UPDATE
@@ -578,6 +620,9 @@ class SQLiteStorage final : public PersistentStorageImpl {
   void UpdateAttachmentStatus(std::string const& attachment_id, messaging::AttachmentStatus status, bool is_downloaded)
       override {
     std::lock_guard const lock(mutex_);
+    if (!db_) {
+      return;
+    }
     SQLiteStatement const statement(db_, R"SQL(
       UPDATE
         message_attachments
@@ -595,6 +640,9 @@ class SQLiteStorage final : public PersistentStorageImpl {
 
   auto GetAttachment(std::string const& attachment_id) -> std::optional<messaging::Attachment> override {
     std::lock_guard const lock(mutex_);
+    if (!db_) {
+      return std::nullopt;
+    }
     SQLiteStatement const statement(db_, R"SQL(
       SELECT
         id,
@@ -632,6 +680,9 @@ class SQLiteStorage final : public PersistentStorageImpl {
   auto GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t page_size)
       -> messaging::HistoryPage override {
     std::lock_guard const lock(mutex_);
+    if (!db_) {
+      return {};
+    }
     messaging::HistoryPage page;
 
     {
@@ -709,6 +760,9 @@ class SQLiteStorage final : public PersistentStorageImpl {
   auto GetFullMessageContent(ContactID const& peer_id, std::uint64_t message_id)
       -> std::optional<std::string> override {
     std::lock_guard const lock(mutex_);
+    if (!db_) {
+      return std::nullopt;
+    }
     SQLiteStatement const statement(db_, R"SQL(
       SELECT
         full_content
@@ -730,6 +784,9 @@ class SQLiteStorage final : public PersistentStorageImpl {
       return {};
     }
     std::lock_guard const lock(mutex_);
+    if (!db_) {
+      return {};
+    }
     std::vector<messaging::ChatSummary> summaries;
 
     for (auto const& peer_id : peer_ids) {
@@ -801,6 +858,9 @@ class SQLiteStorage final : public PersistentStorageImpl {
   auto GetMessagesWithStatus(ContactID const& peer_id, messaging::MessageStatus status)
       -> std::vector<messaging::HistoryEntryRecord> override {
     std::lock_guard const lock(mutex_);
+    if (!db_) {
+      return {};
+    }
     std::vector<messaging::HistoryEntryRecord> records;
     SQLiteStatement const statement(db_, R"SQL(
       SELECT
@@ -856,6 +916,9 @@ class SQLiteStorage final : public PersistentStorageImpl {
 
   auto GetPendingAttachments(ContactID const& peer_id) -> std::vector<messaging::Attachment> override {
     std::lock_guard const lock(mutex_);
+    if (!db_) {
+      return {};
+    }
     std::vector<messaging::Attachment> attachments;
     SQLiteStatement const att_stmt(db_, R"SQL(
       SELECT id, type, file_path, mime_type, size_bytes, thumbnail_base64, hash, is_downloaded, status
@@ -886,6 +949,9 @@ class SQLiteStorage final : public PersistentStorageImpl {
       return {};
     }
     std::lock_guard const lock(mutex_);
+    if (!db_) {
+      return {};
+    }
     nlohmann::json const ids_json = local_ids;
     std::string const query = R"SQL(
       SELECT
@@ -910,6 +976,9 @@ class SQLiteStorage final : public PersistentStorageImpl {
   // --- Debug ---
   void DebugClearAllHistory() override {
     std::lock_guard const lock(mutex_);
+    if (!db_) {
+      return;
+    }
     auto const* sql = R"SQL(
       BEGIN TRANSACTION;
       DELETE FROM large_messages;
@@ -928,6 +997,9 @@ class SQLiteStorage final : public PersistentStorageImpl {
 
   void DebugClearAllContacts() override {
     std::lock_guard const lock(mutex_);
+    if (!db_) {
+      return;
+    }
     auto const* sql = R"SQL(
       BEGIN TRANSACTION;
       DELETE FROM contacts;
@@ -943,6 +1015,9 @@ class SQLiteStorage final : public PersistentStorageImpl {
 
   void DebugRevokeAllContactApprovals() override {
     std::lock_guard const lock(mutex_);
+    if (!db_) {
+      return;
+    }
     char* err_msg = nullptr;
     if (sqlite3_exec(db_, "BEGIN TRANSACTION;", nullptr, nullptr, &err_msg) != SQLITE_OK) {
       LGE << "Failed to begin transaction for revoking approvals: "

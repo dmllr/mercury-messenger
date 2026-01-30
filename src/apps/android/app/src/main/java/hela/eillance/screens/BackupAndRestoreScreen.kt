@@ -60,7 +60,8 @@ import java.util.Locale
 fun BackupAndRestoreScreen(
   profileVM: ProfileViewModel,
   onBack: () -> Unit,
-  onNavigateToRecoveryPhrase: () -> Unit
+  onNavigateToRecoveryPhrase: () -> Unit,
+  onRestoreSuccess: () -> Unit
 ) {
   var showBackupDialog by remember { mutableStateOf(false) }
   var showRestoreConfirmation by remember { mutableStateOf<Uri?>(null) }
@@ -125,9 +126,11 @@ fun BackupAndRestoreScreen(
       onConfirm = { password ->
         scope.launch {
           val success = profileVM.restoreBackup(uri, password)
-          snackbarHostState.showSnackbar(
-            if (success) "Restore successful. Please restart the app." else "Restore failed. Check password or file."
-          )
+          if (success) {
+            onRestoreSuccess()
+          } else {
+            snackbarHostState.showSnackbar("Restore failed. Check password or file.")
+          }
         }
       }
     )

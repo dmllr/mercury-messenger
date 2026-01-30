@@ -57,7 +57,7 @@ TEST_F(ProfileUpdatesTest, BroadcastOnProfileUpdate) {
   // Directly update storage to confirm it, ensuring the rest of the fields are compliant
   // We use the storage interface directly to simulate the DB state change
   mock_storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
-  client_->GetContactService()->DebugReloadCache();
+  client_->GetContactService()->ReloadCache();
 
   // 2. Connect
   client_->Connect(peer1);
@@ -88,7 +88,7 @@ TEST_F(ProfileUpdatesTest, SendProfileOnConnect) {
   // 1. Setup a confirmed contact
   client_->AddContact(peer1, std::nullopt);
   mock_storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
-  client_->GetContactService()->DebugReloadCache();
+  client_->GetContactService()->ReloadCache();
 
   // 2. Set my profile
   // This will queue a profile action for the confirmed contact
@@ -149,7 +149,7 @@ TEST_F(ProfileUpdatesTest, TriggerConnectForDisconnectedConfirmedPeer) {
   // 1. Add confirmed contact
   client_->AddContact(peer1, std::nullopt);
   mock_storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
-  client_->GetContactService()->DebugReloadCache();
+  client_->GetContactService()->ReloadCache();
 
   // 2. Ensure disconnected
   mock_transport_->RemovePeer(peer1);
@@ -186,7 +186,7 @@ TEST_F(ProfileUpdatesTest, ConfirmContactTriggersProfileSend) {
   client_->AddContact(peer1, std::nullopt);  // starts pendingApproval, simulating request
   // Simulate receiving request to move to awaitingApproval
   mock_storage_->UpdateContact({peer1, identity::ContactStatus::awaitingApproval});
-  client_->GetContactService()->DebugReloadCache();
+  client_->GetContactService()->ReloadCache();
 
   mock_transport_->log.sent_peer_messages.clear();
 

@@ -76,6 +76,7 @@ struct EventContactRemoved {
   ContactID peer_id;
 };
 struct EventDebugDataReset {};
+struct EventDataReloaded {};
 
 class ClientEventRouter {
   std::shared_ptr<Client> client_;
@@ -126,6 +127,7 @@ class ClientEventRouter {
     media->SetCallTerminatedCallback([](auto&&) {});
     account->SetOnMyProfileUpdatedCallback([]() {});
     client_->SetStatusCallback([](auto&&, auto, auto) {});
+    client_->SetDataReloadedCallback([]() {});
     // NOLINTEND(*-missing-std-forward)
   }
 
@@ -177,6 +179,7 @@ class ClientEventRouter {
     client_->SetStatusCallback([this](auto const& id, auto src, auto state) {
       eventQueue_.Push(EventStatusChanged{id, src, state});
     });
+    client_->SetDataReloadedCallback([this]() { eventQueue_.Push(EventDataReloaded{}); });
   }
 };
 

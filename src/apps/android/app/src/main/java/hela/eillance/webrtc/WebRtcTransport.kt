@@ -11,6 +11,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.json.JSONException
 import org.json.JSONObject
@@ -41,11 +42,11 @@ import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentHashMap
 
 class WebRtcTransport(private val context: Context, private val nativePointer: Long) {
-  private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+  private var coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
   private val eglBase: EglBase = WebRtcTransport.eglBase
   private var signalingClient = SignalingClient()
 
-  private val peerConnectionFactory: PeerConnectionFactory
+  private var peerConnectionFactory: PeerConnectionFactory? = null
   private val peerConnections = ConcurrentHashMap<String, ConcurrentHashMap<String, PeerConnection>>()
   private val dataChannels = ConcurrentHashMap<String, DataChannel>()
   private val connectionTimeoutJobs = ConcurrentHashMap<String, Job>()
@@ -79,6 +80,16 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
 
 
   init {
+    initialize()
+  }
+
+  private fun initialize() {
+    if (peerConnectionFactory != null) return
+
+    if (!coroutineScope.isActive) {
+      coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    }
+
     Log.d(TAG, "Initializing PeerConnectionFactory")
     PeerConnectionFactory.initialize(
       PeerConnectionFactory.InitializationOptions.builder(context).createInitializationOptions()
@@ -92,6 +103,7 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
   }
 
   fun connect(peerId: String, signalingUrl: String) {
+    initialize()
     this.localPeerId = peerId
     this.currentSignalingUrl = signalingUrl
     observeSignalingMessages()
@@ -109,12 +121,19 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
     }
     peerConnections.clear()
     dataChannels.clear()
-    peerConnectionFactory.dispose()
+    peerConnectionFactory?.dispose()
+    peerConnectionFactory = null
     // Do not release the singleton EGL base here, it's application-scoped.
     coroutineScope.cancel()
   }
 
   fun createPeerConnection(peerId: String, context: String) {
+    val factory = peerConnectionFactory
+    if (factory == null) {
+      Log.e(TAG, "PeerConnectionFactory is not initialized")
+      return
+    }
+
     val iceServers = listOf(
       PeerConnection.IceServer.builder("stun:stun.relay.metered.ca:80").createIceServer(),
       PeerConnection.IceServer.builder("turn:a.relay.metered.ca:80")
@@ -253,7 +272,7 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
     }
     Log.i(TAG, "Creating PeerConnection for peer $peerId, context: $context")
     val peerContextMap = peerConnections.getOrPut(peerId) { ConcurrentHashMap() }
-    val pc = peerConnectionFactory.createPeerConnection(rtcConfig, observer) ?: return
+    val pc = factory.createPeerConnection(rtcConfig, observer) ?: return
     peerContextMap[context] = pc
 
     // Start a timeout for this connection attempt.
@@ -464,6 +483,11 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
   }
 
   fun startLocalMedia() {
+    val factory = peerConnectionFactory ?: run {
+      Log.e(TAG, "PeerConnectionFactory not initialized, cannot start media")
+      return
+    }
+
     if (localVideoTrack != null || localAudioTrack != null) {
       Log.d(TAG, "Local media already started, ignoring request.")
       return
@@ -485,19 +509,19 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
         override fun onCameraClosed() { Log.i(TAG, "Camera closed") }
       }
       videoCapturer = cameraEnumerator.createCapturer(frontCamera, cameraEventsHandler)
-      videoSource = peerConnectionFactory.createVideoSource(videoCapturer!!.isScreencast)
+      videoSource = factory.createVideoSource(videoCapturer!!.isScreencast)
       val surfaceTextureHelper = SurfaceTextureHelper.create("VideoCapturerThread", eglBase.eglBaseContext)
       videoCapturer!!.initialize(surfaceTextureHelper, context, videoSource!!.capturerObserver)
       videoCapturer!!.startCapture(480, 640, 30) // TODO: Make configurable
-      localVideoTrack = peerConnectionFactory.createVideoTrack(VIDEO_TRACK_ID, videoSource).apply {
+      localVideoTrack = factory.createVideoTrack(VIDEO_TRACK_ID, videoSource).apply {
         localSink?.let { addSink(it) }
       }
     }
 
     // Audio
     val audioConstraints = MediaConstraints()
-    audioSource = peerConnectionFactory.createAudioSource(audioConstraints)
-    localAudioTrack = peerConnectionFactory.createAudioTrack(AUDIO_TRACK_ID, audioSource)
+    audioSource = factory.createAudioSource(audioConstraints)
+    localAudioTrack = factory.createAudioTrack(AUDIO_TRACK_ID, audioSource)
     Log.i(TAG, "Local media started successfully.")
   }
 

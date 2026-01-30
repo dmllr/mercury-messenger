@@ -160,7 +160,8 @@ class ContactService {
   void DebugClearCache() {
     manager_->ClearContacts();
   }
-  void DebugReloadCache() {
+  // Renamed from DebugReloadCache as it is used in RestoreBackup
+  void ReloadCache() {
     manager_->ReloadContacts();
   }
 
