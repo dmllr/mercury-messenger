@@ -70,6 +70,11 @@ class PersistentStorageImpl {
   virtual void UpdateContact(identity::Contact const& contact) = 0;
   virtual void RemoveContact(ContactID const& peer_id) = 0;
 
+  // --- Lifecycle ---
+  virtual void Close() = 0;
+  virtual auto Open() -> bool = 0;
+  virtual void Checkpoint() = 0;
+
   // --- Resilience (Pending Actions) ---
   virtual void AddPendingAction(ContactID const& peer_id, std::string const& payload) = 0;
   virtual auto GetPendingActions(ContactID const& peer_id) -> std::vector<PendingAction> = 0;
@@ -152,6 +157,16 @@ class PersistentStorage {
   }
   void RemoveContact(ContactID const& peer_id) const {
     pimpl_->RemoveContact(peer_id);
+  }
+
+  void Close() const {
+    pimpl_->Close();
+  }
+  auto Open() const -> bool {
+    return pimpl_->Open();
+  }
+  void Checkpoint() const {
+    pimpl_->Checkpoint();
   }
 
   // --- Resilience ---

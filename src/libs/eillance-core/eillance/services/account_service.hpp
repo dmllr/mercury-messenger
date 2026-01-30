@@ -63,15 +63,41 @@ class AccountService {
 
   [[nodiscard]] auto CreateBackup(std::string const& output_path, std::string const& password) const -> bool {
     INVARIANT(backup_manager_);
+    // Ensure all data in WAL is flushed to the main DB file before we read it as a binary file.
+    storage_->Checkpoint();
     return backup_manager_->CreateBackup(output_path, password);
   }
 
   auto RestoreBackup(std::string const& input_path, std::string const& password) -> bool {
     INVARIANT(backup_manager_);
-    if (backup_manager_->RestoreFromBackup(input_path, password)) {
+
+    // Close storage to release file locks and ensure SQLite sees the new file content upon reopen
+    storage_->Close();
+
+    // Delete WAL and SHM files to prevent SQLite from confusing the new DB file with old journal files
+    std::error_code ec;
+    auto const db_path = storage_->GetPath();
+    std::filesystem::remove(db_path + "-wal", ec);
+    std::filesystem::remove(db_path + "-shm", ec);
+    bool const restore_success = backup_manager_->RestoreFromBackup(input_path, password);
+
+    // Re-open the storage (this will load the new DB file if restore succeeded, or the old one if failed/untouched)
+    if (!storage_->Open()) {
+      LGE << "Failed to reopen storage after backup restore attempt.";
+      return false;
+    }
+
+    if (restore_success) {
       // Reload settings and identity after database restore
       id_manager_ = std::make_unique<identity::IdManager>(storage_);
       settings_manager_ = std::make_unique<SettingsManager>(storage_);
+
+      // Verify the restored DB actually contains a valid identity
+      if (!id_manager_->IdentityExists()) {
+        LGE << "Restored backup does not contain a valid identity.";
+        return false;
+      }
+
       INVARIANT(on_profile_updated_);
       on_profile_updated_();
       return true;

@@ -74,6 +74,51 @@ class SQLiteStorage final : public PersistentStorageImpl {
     return dbPath_.string();
   }
 
+  // --- Lifecycle ---
+
+  void Close() override {
+    std::lock_guard const lock(mutex_);
+    if (db_ != nullptr) {
+      sqlite3_close_v2(db_);
+      db_ = nullptr;
+    }
+  }
+
+  auto Open() -> bool override {
+    std::lock_guard const lock(mutex_);
+    if (db_ != nullptr) {
+      return true;
+    }
+    try {
+      if (sqlite3_open(dbPath_.string().c_str(), &db_) != SQLITE_OK) {
+        throw std::runtime_error(std::string("Failed to open database: ") +
+                                 ((db_ != nullptr) ? sqlite3_errmsg(db_) : "Unknown error"));
+      }
+      sqlite3_exec(db_, "PRAGMA journal_mode=WAL;", nullptr, nullptr, nullptr);
+      sqlite3_exec(db_, "PRAGMA foreign_keys=ON;", nullptr, nullptr, nullptr);
+      RunMigrations();
+      return true;
+    } catch (std::exception const& e) {
+      LGE << "Failed to re-open database: " << e.what();
+      if (db_ != nullptr) {
+        sqlite3_close_v2(db_);
+        db_ = nullptr;
+      }
+      return false;
+    }
+  }
+
+  void Checkpoint() override {
+    std::lock_guard const lock(mutex_);
+    if (db_ != nullptr) {
+      // TRUNCATE commits all transactions to the DB file and truncates the WAL file.
+      // This ensures the main DB file is up-to-date and safe to copy/backup.
+      if (sqlite3_wal_checkpoint_v2(db_, nullptr, SQLITE_CHECKPOINT_TRUNCATE, nullptr, nullptr) != SQLITE_OK) {
+        LGE << "Failed to checkpoint database: " << sqlite3_errmsg(db_);
+      }
+    }
+  }
+
   // --- Settings ---
   auto GetSetting(std::string_view const key) -> std::optional<std::string> override {
     std::lock_guard const lock(mutex_);
