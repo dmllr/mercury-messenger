@@ -201,8 +201,14 @@ class Client final : public transport::TransportDelegate {
   auto RestoreIdentity(std::string const& m) -> bool {
     if (account_service_->RestoreIdentity(m)) {
       BroadcastProfileUpdate();
+
+      // Resume normal operation
+      Start();
       return true;
     }
+
+    // If failed, try to resume operation with existing data
+    Start();
     return false;
   }
 
@@ -211,10 +217,33 @@ class Client final : public transport::TransportDelegate {
   }
 
   auto RestoreBackup(std::string const& p, std::string const& pw) -> bool {
-    if (account_service_->RestoreBackup(p, pw)) {
+    // 1. Stop services that might be querying the database
+    is_running_ = false; // Stop background peer check
+    messaging_service_->StopDeliveryService();
+    transport_->Terminate();
+
+    // 2. Perform Restore (Safe to close DB now)
+    bool const success = account_service_->RestoreBackup(p, pw);
+
+    if (success) {
+      // 3. Reload Caches
+      contact_service_->ReloadCache();
+
+      // 4. Notify UI ViewModels to refresh their data
+      if (on_data_reloaded_) {
+        on_data_reloaded_();
+      }
+
+      // 5. Restart Services (Crucial: sets is_running_ = true, starts background loops)
+      // This internally calls transport_->Start(), SetId, SetSignalingUrl, etc.
+      Start();
+
       BroadcastProfileUpdate();
       return true;
     }
+
+    // 6. Failure case: Resume operation with the existing database
+    Start();
     return false;
   }
 
@@ -342,12 +371,17 @@ class Client final : public transport::TransportDelegate {
   }
   void DebugRevokeAllContactApprovals() const {
     storage_->DebugRevokeAllContactApprovals();
-    contact_service_->DebugReloadCache();
+    contact_service_->ReloadCache();
   }
 
   using StatusCallbackFunction = transport::Transport::StatusCallbackFunction;
   void SetStatusCallback(StatusCallbackFunction const& cb) {
     status_callback_ = std::make_shared<StatusCallbackFunction>(cb);
+  }
+
+  using OnDataReloadedCallback = std::function<void()>;
+  void SetDataReloadedCallback(OnDataReloadedCallback cb) {
+    on_data_reloaded_ = std::move(cb);
   }
 
  private:
@@ -448,6 +482,7 @@ class Client final : public transport::TransportDelegate {
   std::atomic<bool> is_running_{false};
 
   std::shared_ptr<StatusCallbackFunction> status_callback_;
+  OnDataReloadedCallback on_data_reloaded_;
 
   static constexpr std::chrono::seconds kPeerInactivityCheckInterval{30};
 };

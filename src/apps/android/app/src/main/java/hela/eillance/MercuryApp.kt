@@ -292,7 +292,14 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
         BackupAndRestoreScreen(
           profileVM = profileVM,
           onBack = { navController.popBackStack() },
-          onNavigateToRecoveryPhrase = { navController.navigate(Screen.RecoveryPhrase.route) }
+          onNavigateToRecoveryPhrase = { navController.navigate(Screen.RecoveryPhrase.route) },
+          onRestoreSuccess = {
+            // Restore successful: The C++ engine has reloaded.
+            // Navigate to Contacts and clear the back stack to reset UI state.
+            navController.navigate(Screen.Contacts.route) {
+              popUpTo(0) // Clear entire back stack
+            }
+          }
         )
       }
 
