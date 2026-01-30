@@ -156,7 +156,7 @@ TEST_F(StreamTest, StreamStopStopsDispatching) {
 
   std::atomic<int> count = 0;
   stream->OnSample([&](auto, auto, auto) {
-    count++;
+    ++count;
     if (count == 1) {
       stream->Stop();
     }
@@ -169,4 +169,30 @@ TEST_F(StreamTest, StreamStopStopsDispatching) {
 
   // Should have processed the first one, then stopped
   EXPECT_EQ(count, 1);
+}
+
+TEST_F(StreamTest, DestructionWhileHandlerBusy) {
+  // Scenario: Handler takes time to execute. Stream is destroyed while handler is running.
+  // If variables are ordered incorrectly, this triggers "mutex destroyed while busy".
+  auto audio_source = std::make_shared<MockSource>(Stream::Source::Type::audio, std::vector<uint64_t>{});
+  auto video_source = std::make_shared<MockSource>(Stream::Source::Type::video, std::vector<uint64_t>{});
+
+  {
+    auto stream = std::make_shared<Stream>(video_source, audio_source);
+
+    // Set a handler that holds the lock for a bit
+    stream->OnSample([](auto, auto, auto) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    });
+
+    stream->Start();
+
+    // Let the stream start processing
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+    // Destructor called here. Should block until the handler finishes.
+  }
+
+  // If we reach here without a crash/TSan error, the test passes.
+  SUCCEED();
 }

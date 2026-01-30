@@ -43,7 +43,6 @@ class Stream : public std::enable_shared_from_this<Stream> {
   };
 
  private:
-  DispatchQueue dispatchQueue_ = DispatchQueue("StreamQueue", 1);
   std::shared_ptr<Source> audio_;
   std::shared_ptr<Source> video_;
   bool isRunning_{false};
@@ -73,6 +72,7 @@ class Stream : public std::enable_shared_from_this<Stream> {
  private:
   std::function<void(Source::Type, std::uint64_t, std::vector<std::byte> const&)> sampleHandlerFunc_;
   std::mutex sampleHandlerMutex_;
+  DispatchQueue dispatchQueue_ = DispatchQueue("StreamQueue", 1);
 
   [[nodiscard]] auto UnsafePrepareForSample() -> std::pair<std::shared_ptr<Source>, Source::Type> {
     std::shared_ptr<Source> src;
