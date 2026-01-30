@@ -73,7 +73,7 @@ TEST_F(AccountServiceTest, UpdateProfile) {
 }
 
 TEST_F(AccountServiceTest, UpdateSignalingUrl) {
-  std::string new_url = "wss://test.server.com";
+  std::string const new_url = "wss://test.server.com";
   service_->UpdateSignalingUrl(new_url);
 
   EXPECT_EQ(service_->GetSettings()->GetSignalingServerUrl(), new_url);
@@ -91,8 +91,32 @@ TEST_F(AccountServiceTest, Signing) {
 
   std::string message = "test message";
   std::vector<std::byte> msg_bytes(message.size());
-  std::transform(message.begin(), message.end(), msg_bytes.begin(), [](char c) { return std::byte(c); });
+  std::ranges::transform(message, msg_bytes.begin(), [](char c) { return std::byte(c); });
 
   auto signature = service_->Sign(msg_bytes);
   EXPECT_FALSE(signature.empty());
+}
+
+TEST_F(AccountServiceTest, RestoreBackupLifecycle) {
+  std::string const backup_path = "test_backup.mcr";
+  std::string const password = "password";
+
+  // Generate identity so the service is in a valid state "to be backed up".
+  std::ignore = service_->GenerateNewIdentity();
+
+  // Ensure DB file exists for BackupManager to read (even if mock storage is in memory/fake path)
+  // The MockPersistentStorage in Setup() has a path, we create a dummy file there so BackupManager doesn't bail.
+  {
+    std::ofstream db_file(storage_->GetPath(), std::ios::binary);
+    db_file << "dummy_content";
+  }
+
+  ASSERT_TRUE(service_->CreateBackup(backup_path, password));
+
+  // This verifies the Close() -> Restore() -> Open() -> Reload() flow doesn't crash
+  // and returns true if identity exists in the (mock) storage.
+  EXPECT_TRUE(service_->RestoreBackup(backup_path, password));
+
+  std::filesystem::remove(backup_path);
+  std::filesystem::remove(storage_->GetPath());
 }

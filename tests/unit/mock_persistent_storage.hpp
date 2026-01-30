@@ -107,6 +107,15 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
     std::erase_if(pending_actions_, [&](auto const& action) { return action.peer_id == peer_id; });
   }
 
+  // --- Lifecycle ---
+  void Close() override {
+  }
+  auto Open() -> bool override {
+    return true;
+  }
+  void Checkpoint() override {
+  }
+
   // --- Resilience ---
   void AddPendingAction(ContactID const& peer_id, std::string const& payload) override {
     std::lock_guard const lock(mutex_);
