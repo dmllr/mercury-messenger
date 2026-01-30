@@ -1,18 +1,26 @@
 package hela.eillance.screens
 
-import android.widget.Toast
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
+import android.Manifest
+import android.annotation.SuppressLint
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -22,8 +30,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.SignalWifiOff
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Badge
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DividerDefaults
@@ -43,6 +49,8 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,7 +60,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import androidx.core.os.ConfigurationCompat
+import hela.eillance.BannerType
+import hela.eillance.MainViewModel
+import hela.eillance.components.StatusSnackbar
 import hela.eillance.components.UserAvatar
 import hela.eillance.ndkio.Contact
 import hela.eillance.ndkio.ContactStatus
@@ -68,23 +80,29 @@ import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@SuppressLint("BatteryLife")
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ContactsScreen(
   contactsVM: ContactsViewModel,
+  mainViewModel: MainViewModel,
   myProfile: MyProfileInfo,
   contacts: List<Contact>,
   isLoading: Boolean,
   connectionState: ServiceConnectionState,
-  hasCallPermissions: Boolean,
-  hasNotificationPermission: Boolean,
-  hasBatteryExemption: Boolean,
   onCheckPermissions: () -> Unit,
   onContactClick: (String) -> Unit,
   onNavigateToProfile: () -> Unit,
   onShowContactProfile: (String) -> Unit
 ) {
   val snackbarHostState = remember { SnackbarHostState() }
+  val context = LocalContext.current
+  val bannerState by mainViewModel.permissionBannerState.collectAsState()
+  val hasPermissionIssues by mainViewModel.hasPermissionIssues.collectAsState()
+
+  // State for permissions launchers
+  val notifLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { onCheckPermissions() }
+  val callLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { onCheckPermissions() }
 
   LaunchedEffect(contactsVM) {
     contactsVM.errorMessage.collect { message ->
@@ -99,100 +117,125 @@ fun ContactsScreen(
         title = {
           Box {
             IconButton(onClick = onNavigateToProfile) {
-              if (!myProfile.myPhoto.isNullOrBlank()) {
-                UserAvatar(photoBase64 = myProfile.myPhoto)
-              } else {
-                Icon(Icons.Default.Person, contentDescription = "Profile")
-              }
-            }
-            if (connectionState != ServiceConnectionState.Unknown) {
-              val (dotColor, icon) = when (connectionState) {
-                ServiceConnectionState.Online -> MaterialTheme.extendedColors.success to null
-                ServiceConnectionState.Establishing -> MaterialTheme.extendedColors.warning to null
-                ServiceConnectionState.NoNetwork -> Color.Transparent to Icons.Default.SignalWifiOff
-                ServiceConnectionState.Failure -> MaterialTheme.colorScheme.error to Icons.Default.Warning
-                else -> Color.Transparent to null
-              }
-
-              // Tooltip / Long press hint
-              val context = LocalContext.current
-              val tooltipText = when(connectionState) {
-                ServiceConnectionState.Online -> "Connected"
-                ServiceConnectionState.Establishing -> "Connecting..."
-                ServiceConnectionState.NoNetwork -> "No Network Connection"
-                ServiceConnectionState.Failure -> "Server Connection Failed"
-                else -> "Status: ${connectionState.name}"
-              }
-
-              Box(
-                modifier = Modifier
-                  .align(Alignment.BottomEnd)
-                  .padding(4.dp)
-                  .combinedClickable(
-                    onClick = {},
-                    onLongClick = {
-                      Toast.makeText(context, tooltipText, Toast.LENGTH_SHORT).show()
-                    }
+              Box {
+                if (!myProfile.myPhoto.isNullOrBlank()) {
+                  UserAvatar(
+                    photoBase64 = myProfile.myPhoto,
+                    modifier = Modifier.size(32.dp)
                   )
-              ) {
-                if (icon != null) {
-                  Icon(
-                    imageVector = icon,
-                    contentDescription = tooltipText,
-                    tint = if(connectionState == ServiceConnectionState.NoNetwork) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.error,
-                    modifier = Modifier
-                      .size(14.dp)
-                      .background(MaterialTheme.colorScheme.surface, CircleShape)
-                      .padding(1.dp)
-                  )
-                } else if (connectionState == ServiceConnectionState.Online || connectionState == ServiceConnectionState.Establishing) {
-                  val alpha = if (connectionState == ServiceConnectionState.Establishing) {
-                    val infiniteTransition = rememberInfiniteTransition(label = "conn")
-                    infiniteTransition.animateFloat(
-                      initialValue = 0.3f,
-                      targetValue = 1f,
-                      animationSpec = infiniteRepeatable(
-                        animation = tween(800),
-                        repeatMode = RepeatMode.Reverse
-                      ),
-                      label = "alpha"
-                    ).value
-                  } else 1f
-
-                  Box(
-                    modifier = Modifier
-                      .size(12.dp)
-                      .background(color = dotColor.copy(alpha = alpha), shape = CircleShape)
-                      .border(1.dp, MaterialTheme.colorScheme.surface, CircleShape)
-                  )
+                } else {
+                  Icon(Icons.Default.Person, contentDescription = "Profile")
                 }
               }
             }
+
+            if (hasPermissionIssues) {
+              Box(
+                modifier = Modifier
+                  .align(Alignment.TopEnd)
+                  .padding(top = 8.dp, end = 8.dp)
+                  .size(10.dp)
+                  .background(MaterialTheme.colorScheme.error, CircleShape)
+                  .border(1.dp, MaterialTheme.colorScheme.surface, CircleShape)
+              )
+            }
           }
         },
-        actions = {},
         colors = TopAppBarDefaults.topAppBarColors(
           containerColor = MaterialTheme.colorScheme.primaryContainer
         )
       )
     },
     floatingActionButton = {
-      FloatingActionButton(onClick = { contactsVM.onAddContactClicked() }) {
+      FloatingActionButton(
+        onClick = { contactsVM.onAddContactClicked() }
+      ) {
         Icon(Icons.Default.Add, contentDescription = "Add Contact")
       }
     }
   ) { padding ->
-    Column(modifier = Modifier.padding(padding)) {
-      if (!hasNotificationPermission) {
-        NotificationPermissionBanner(onCheckPermissions)
-      }
+    Column(
+      modifier = Modifier
+        .fillMaxSize()
+        .padding(padding)
+    ) {
+      // Logic for banner display
+      // 1. Connection issues take priority
+      val isConnectionIssue = connectionState != ServiceConnectionState.Online &&
+          connectionState != ServiceConnectionState.Establishing &&
+          connectionState != ServiceConnectionState.Unknown
 
-      if (!hasBatteryExemption) {
-        BatteryOptimizationBanner(onCheckPermissions)
-      }
+      // 2. Permission banners only if connection is OK
+      val showPermissionBanner = !isConnectionIssue && bannerState != null
 
-      if (!hasCallPermissions) {
-        CallPermissionBanner(onCheckPermissions)
+      AnimatedVisibility(
+        visible = isConnectionIssue || showPermissionBanner,
+        enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
+        exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut()
+      ) {
+        Box(modifier = Modifier.padding(16.dp)) {
+          if (isConnectionIssue) {
+            val (msg, isError) = when (connectionState) {
+              ServiceConnectionState.NoNetwork -> "Waiting for network..." to false
+              ServiceConnectionState.Failure -> "Connection failed" to true
+              ServiceConnectionState.Disconnected -> "Disconnected" to false
+              ServiceConnectionState.InvalidToken -> "Authentication error" to true
+              else -> "Connection issue" to true
+            }
+            StatusSnackbar(text = msg, isError = isError)
+          } else {
+            when (bannerState) {
+              BannerType.Notification -> {
+                StatusSnackbar(
+                  text = "Notifications are disabled",
+                  actionLabel = "Fix it",
+                  onAction = {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                      notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    } else {
+                      openAppSettings(context)
+                    }
+                  }
+                )
+              }
+              BannerType.Battery -> {
+                StatusSnackbar(
+                  text = "Battery optimization may delay messages",
+                  actionLabel = "Fix it",
+                  onAction = {
+                    val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                      data = "package:${context.packageName}".toUri()
+                    }
+                    try {
+                      context.startActivity(intent)
+                    } catch (e: Exception) {
+                      openAppSettings(context)
+                    }
+                  },
+                  dismissLabel = "I don't care",
+                  onDismiss = { mainViewModel.ignoreBatteryOptimization() }
+                )
+              }
+              BannerType.CallPermissions -> {
+                StatusSnackbar(
+                  text = "Camera/Mic needed for calls",
+                  actionLabel = "Fix it",
+                  onAction = {
+                    callLauncher.launch(arrayOf(
+                      Manifest.permission.CAMERA,
+                      Manifest.permission.RECORD_AUDIO,
+                      Manifest.permission.READ_PHONE_STATE,
+                      Manifest.permission.MANAGE_OWN_CALLS
+                    ))
+                  },
+                  dismissLabel = "I don't care",
+                  onDismiss = { mainViewModel.ignoreCallPermissions() }
+                )
+              }
+              null -> {}
+            }
+          }
+        }
       }
 
       val visibleContacts = contacts.filter { it.status != ContactStatus.rejected }
@@ -246,6 +289,7 @@ fun ContactsScreen(
   }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ContactListItem(
   contact: Contact,
@@ -263,11 +307,9 @@ fun ContactListItem(
   val displayName = if (contact.name.isNotEmpty()) {
     contact.name
   } else {
-    // Shorten crypto ID: first 8 chars
     contact.peerId.take(8)
   }
 
-  // Last update timestamp
   val timestampText = if (contact.last_activity_timestamp > 0) {
     formatContactTimestamp(contact.last_activity_timestamp, zoneId, formatters)
   } else {
@@ -309,7 +351,6 @@ fun ContactListItem(
           }
         }
       } else {
-        // Show shortened last message if available, otherwise bio or ID if name is used
         val subText = contact.lastMessageSnippet ?: contact.bio
         if (!subText.isNullOrBlank()) {
           Text(
@@ -334,7 +375,6 @@ fun ContactListItem(
         if (contact.unreadCount > 0) {
           Badge { Text(contact.unreadCount.toString()) }
         } else if (contact.connectionState == PeerConnectionState.Connected.value) {
-          // Optionally show online indicator
           Box(modifier = Modifier.size(8.dp).background(MaterialTheme.extendedColors.success, CircleShape))
         }
       }
@@ -351,13 +391,20 @@ fun formatContactTimestamp(
 ): String {
   val messageTime = Instant.ofEpochMilli(timestamp / 1000).atZone(zoneId)
   val now = ZonedDateTime.now(zoneId)
-
   val isToday = messageTime.toLocalDate().isEqual(now.toLocalDate())
   val isYesterday = messageTime.toLocalDate().isEqual(now.toLocalDate().minusDays(1))
 
   return when {
-    isToday -> messageTime.format(formatters.first) // 10:30 AM
+    isToday -> messageTime.format(formatters.first)
     isYesterday -> "Yesterday"
-    else -> messageTime.format(formatters.second) // Jan 5
+    else -> messageTime.format(formatters.second)
   }
+}
+
+private fun openAppSettings(context: Context) {
+  val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+    data = Uri.fromParts("package", context.packageName, null)
+    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+  }
+  context.startActivity(intent)
 }

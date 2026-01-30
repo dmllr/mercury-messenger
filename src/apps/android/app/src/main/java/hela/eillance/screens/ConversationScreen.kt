@@ -1,10 +1,21 @@
 package hela.eillance.screens
 
+import android.Manifest
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -78,8 +89,12 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import androidx.core.os.ConfigurationCompat
+import hela.eillance.BannerType
+import hela.eillance.MainViewModel
 import hela.eillance.components.MediaBubbleContent
+import hela.eillance.components.StatusSnackbar
 import hela.eillance.components.UserAvatar
 import hela.eillance.ndkio.Attachment
 import hela.eillance.ndkio.CallDirection
@@ -93,6 +108,7 @@ import hela.eillance.ndkio.HistoryPage
 import hela.eillance.ndkio.MessageDirection
 import hela.eillance.ndkio.MessageStatus
 import hela.eillance.ndkio.PeerConnectionState
+import hela.eillance.ndkio.ServiceConnectionState
 import hela.eillance.theme.extendedColors
 import hela.eillance.viewmodels.CallViewModel
 import hela.eillance.viewmodels.ContactsViewModel
@@ -117,13 +133,12 @@ fun ConversationScreen(
   chatVM: ConversationViewModel,
   contactsVM: ContactsViewModel,
   callVM: CallViewModel,
+  mainViewModel: MainViewModel,
   peerId: String,
   contact: Contact?,
   historyPage: HistoryPage,
   callState: CallState,
-  hasCallPermissions: Boolean,
-  hasNotificationPermission: Boolean,
-  onCheckPermissions: () -> Unit,
+  connectionState: ServiceConnectionState,
   onBack: () -> Unit,
   onNavigateToCall: (String) -> Unit,
   onShowContactProfile: (String) -> Unit,
@@ -133,6 +148,11 @@ fun ConversationScreen(
   val coroutineScope = rememberCoroutineScope()
   val transferProgress by chatVM.transferProgress.collectAsState()
   val context = LocalContext.current
+  val bannerState by mainViewModel.permissionBannerState.collectAsState()
+
+  // State for permissions launchers
+  val notifLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { mainViewModel.checkAllPermissions() }
+  val callLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { mainViewModel.checkAllPermissions() }
 
   var previousHistorySize by remember(peerId) { mutableIntStateOf(historyPage.messages.size) }
 
@@ -239,11 +259,81 @@ fun ConversationScreen(
         .navigationBarsPadding()
         .imePadding()
     ) {
-      if (!hasNotificationPermission) {
-        NotificationPermissionBanner(onCheckPermissions)
-      }
-      if (!hasCallPermissions) {
-        CallPermissionBanner(onCheckPermissions)
+      // --- Unified Status Snackbar (Top Position) ---
+      val isConnectionIssue = connectionState != ServiceConnectionState.Online &&
+          connectionState != ServiceConnectionState.Establishing &&
+          connectionState != ServiceConnectionState.Unknown
+
+      val showPermissionBanner = !isConnectionIssue && bannerState != null
+
+      AnimatedVisibility(
+        visible = isConnectionIssue || showPermissionBanner,
+        enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
+        exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut()
+      ) {
+        Box(modifier = Modifier.padding(16.dp)) {
+          if (isConnectionIssue) {
+            val (msg, isError) = when (connectionState) {
+              ServiceConnectionState.NoNetwork -> "Waiting for network..." to false
+              ServiceConnectionState.Failure -> "Connection failed" to true
+              ServiceConnectionState.Disconnected -> "Disconnected" to false
+              ServiceConnectionState.InvalidToken -> "Authentication error" to true
+              else -> "Connection issue" to true
+            }
+            StatusSnackbar(text = msg, isError = isError)
+          } else {
+            when (bannerState) {
+              BannerType.Notification -> {
+                StatusSnackbar(
+                  text = "Notifications are disabled",
+                  actionLabel = "Fix it",
+                  onAction = {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                      notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    } else {
+                      openAppSettings(context)
+                    }
+                  }
+                )
+              }
+              BannerType.Battery -> {
+                StatusSnackbar(
+                  text = "Battery optimization may delay messages",
+                  actionLabel = "Fix it",
+                  onAction = {
+                    val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                      data = "package:${context.packageName}".toUri()
+                    }
+                    try {
+                      context.startActivity(intent)
+                    } catch (e: Exception) {
+                      openAppSettings(context)
+                    }
+                  },
+                  dismissLabel = "I don't care",
+                  onDismiss = { mainViewModel.ignoreBatteryOptimization() }
+                )
+              }
+              BannerType.CallPermissions -> {
+                StatusSnackbar(
+                  text = "Camera/Mic needed for calls",
+                  actionLabel = "Fix it",
+                  onAction = {
+                    callLauncher.launch(arrayOf(
+                      Manifest.permission.CAMERA,
+                      Manifest.permission.RECORD_AUDIO,
+                      Manifest.permission.READ_PHONE_STATE,
+                      Manifest.permission.MANAGE_OWN_CALLS
+                    ))
+                  },
+                  dismissLabel = "I don't care",
+                  onDismiss = { mainViewModel.ignoreCallPermissions() }
+                )
+              }
+              null -> {}
+            }
+          }
+        }
       }
 
       contact?.let {
@@ -862,4 +952,12 @@ fun MessageInput(
       }
     }
   }
+}
+
+private fun openAppSettings(context: Context) {
+  val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+    data = Uri.fromParts("package", context.packageName, null)
+    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+  }
+  context.startActivity(intent)
 }

@@ -8,7 +8,6 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.ui.graphics.vector.ImageVector
 import hela.eillance.ndkio.Attachment
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 sealed class Screen(val route: String, val title: String? = null, val icon: ImageVector? = null) {
@@ -23,6 +22,7 @@ sealed class Screen(val route: String, val title: String? = null, val icon: Imag
   object Help : Screen("help", "Help", Icons.AutoMirrored.Filled.Help)
   object QrScanner : Screen("qr_scanner", "Scan QR Code")
   object RejectedContacts : Screen("rejected_contacts", "Blocked Contacts")
+  object PermissionIssues : Screen("permission_issues", "Permission Issues")
 }
 
 sealed class Route(val route: String) {
