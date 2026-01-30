@@ -53,7 +53,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.os.ConfigurationCompat
-import hela.eillance.AddContactDialog
 import hela.eillance.components.UserAvatar
 import hela.eillance.ndkio.Contact
 import hela.eillance.ndkio.ContactStatus
@@ -97,11 +96,14 @@ fun ContactsScreen(
     snackbarHost = { SnackbarHost(snackbarHostState) },
     topBar = {
       TopAppBar(
-        title = { Text("Mercury") },
-        actions = {
+        title = {
           Box {
             IconButton(onClick = onNavigateToProfile) {
-              Icon(Icons.Default.Person, contentDescription = "Profile")
+              if (!myProfile.myPhoto.isNullOrBlank()) {
+                UserAvatar(photoBase64 = myProfile.myPhoto)
+              } else {
+                Icon(Icons.Default.Person, contentDescription = "Profile")
+              }
             }
             if (connectionState != ServiceConnectionState.Unknown) {
               val (dotColor, icon) = when (connectionState) {
@@ -168,6 +170,7 @@ fun ContactsScreen(
             }
           }
         },
+        actions = {},
         colors = TopAppBarDefaults.topAppBarColors(
           containerColor = MaterialTheme.colorScheme.primaryContainer
         )

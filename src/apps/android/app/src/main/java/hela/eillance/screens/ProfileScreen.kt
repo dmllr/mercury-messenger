@@ -186,6 +186,7 @@ fun ProfileScreen(
       ProfileHeader(myProfile = myProfile, contactsVM = contactsVM, settingsVM = settingsVM)
       HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp, horizontal = 16.dp))
       ProfileMenu(
+        myProfile = myProfile,
         onEditProfile = { showEditDialog = true },
         onNavigateToSettings = onNavigateToSettings,
         onNavigateToBetaNotice = onNavigateToBetaNotice,
@@ -343,6 +344,7 @@ private fun ProfileHeader(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ProfileMenu(
+  myProfile: MyProfileInfo,
   onEditProfile: () -> Unit,
   onNavigateToSettings: () -> Unit,
   onNavigateToBetaNotice: () -> Unit,
@@ -355,7 +357,16 @@ private fun ProfileMenu(
     ListItem(
       headlineContent = { Text("My Profile") },
       supportingContent = { Text("Edit your name, photo, and bio") },
-      leadingContent = { Icon(Icons.Default.Person, contentDescription = "My Profile") },
+      leadingContent = {
+        if (!myProfile.myPhoto.isNullOrBlank()) {
+          UserAvatar(
+            photoBase64 = myProfile.myPhoto,
+            modifier = Modifier.size(24.dp)
+          )
+        } else {
+          Icon(Icons.Default.Person, contentDescription = "My Profile")
+        }
+      },
       modifier = Modifier
         .clip(MaterialTheme.shapes.medium)
         .clickable(onClick = onEditProfile)
