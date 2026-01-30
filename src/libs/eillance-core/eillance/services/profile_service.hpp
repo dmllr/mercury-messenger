@@ -85,10 +85,13 @@ class ProfileService {
 
   void OnProfileUpdate(ContactID const& peer_id, nlohmann::json const& profile_json) {
     auto get_opt = [&](char const* key) -> std::optional<std::string> {
-      if (profile_json.contains(key) && !profile_json[key].is_null()) {
-        return profile_json[key].get<std::string>();
+      if (!profile_json.contains(key)) {
+        return std::nullopt;
       }
-      return std::nullopt;
+      if (profile_json[key].is_null()) {
+        return "";
+      }
+      return profile_json[key].get<std::string>();
     };
 
     auto name = get_opt("display_name");
