@@ -63,7 +63,7 @@ class RtcTrack : public transport::ITrack {
 
 namespace {
 
-auto ToEillanceState(::rtc::PeerConnection::State state) -> transport::PeerConnectionState {
+constexpr auto ToEillanceState(::rtc::PeerConnection::State const state) -> transport::PeerConnectionState {
   switch (state) {
     case ::rtc::PeerConnection::State::New:
       return transport::PeerConnectionState::newConnection;

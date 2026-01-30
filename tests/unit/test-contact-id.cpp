@@ -71,3 +71,18 @@ TEST(ContactIDTest, JsonDeserializationEmpty) {
   ContactID id = j.get<ContactID>();
   EXPECT_TRUE(id.IsEmpty());
 }
+
+TEST(ContactIDTest, RejectsInvalidStrings) {
+  EXPECT_THROW(ContactID("Undefined"), std::invalid_argument);
+  EXPECT_THROW(ContactID("null"), std::invalid_argument);
+  EXPECT_THROW(ContactID("short"), std::invalid_argument);
+}
+
+TEST(ContactIDTest, EmptyStringIsValid) {
+  // Empty string should result in an empty (zeroed) ContactID, not throw.
+  // This is used for general signaling errors not specific to a peer.
+  EXPECT_NO_THROW({
+    ContactID id("");
+    EXPECT_TRUE(id.IsEmpty());
+  });
+}
