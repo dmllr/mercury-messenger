@@ -17,7 +17,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Arrangement.spacedBy
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -29,7 +28,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -42,8 +40,8 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Feedback
-import androidx.compose.material.icons.filled.FileCopy
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.PermIdentity
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.RotateLeft
@@ -92,8 +90,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -227,7 +223,7 @@ private fun ProfileHeader(
   Column(
     modifier = Modifier
       .fillMaxWidth()
-      .padding(top = 24.dp, start = 16.dp, end = 16.dp),
+      .padding(top = 24.dp),
     horizontalAlignment = Alignment.CenterHorizontally
   ) {
     if (showQrDialog) {
@@ -307,43 +303,22 @@ private fun ProfileHeader(
         Column {
           Text(text = statusText, style = MaterialTheme.typography.labelLarge, color = statusColor)
           if (connectionState == ServiceConnectionState.Failure && signalingUrl.isNotEmpty()) {
-            Text(text = "Server: ${signalingUrl}", style = MaterialTheme.typography.labelSmall, color = statusColor)
+            Text(text = "Server: $signalingUrl", style = MaterialTheme.typography.labelSmall, color = statusColor)
           }
         }
       }
     }
     // -----------------------------------
 
-    Row(
-      modifier = Modifier.padding(top = 8.dp),
-      verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = spacedBy(8.dp)
-    ) {
-      Text(
-        text = "ID:",
-      )
-
-      Text(
-        text = formatId(myProfile.myId),
-        maxLines = 4,
-        style = MaterialTheme.typography.bodyMedium.copy(
-          fontFamily = FontFamily.Monospace,
-          fontWeight = FontWeight.Bold
-        ),
+    Row(modifier = Modifier.padding(horizontal = 8.dp)) {
+      ListItem(
+        headlineContent = { Text("My Contact ID") },
+        supportingContent = { Text(formatId(myProfile.myId)) },
+        leadingContent = { Icon(Icons.Default.PermIdentity, contentDescription = "My Contact ID") },
         modifier = Modifier
           .clip(MaterialTheme.shapes.medium)
           .clickable(onClick = copyIdToClipboard)
-          .padding(horizontal = 12.dp, vertical = 8.dp)
-          .widthIn(max = 200.dp)
       )
-
-      IconButton(onClick = copyIdToClipboard) {
-        Icon(
-          Icons.Default.FileCopy,
-          contentDescription = "Copy ID",
-          tint = MaterialTheme.colorScheme.primary
-        )
-      }
     }
   }
 }
