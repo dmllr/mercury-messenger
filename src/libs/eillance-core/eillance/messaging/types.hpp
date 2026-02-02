@@ -24,7 +24,17 @@ NLOHMANN_JSON_SERIALIZE_ENUM(
     }
 )
 
-enum class AttachmentStatus : std::uint8_t { pending = 0, transferring, done, failed, canceled, discarded, paused };
+// Added PeerCanceled to track remote cancellations distinct from local ones
+enum class AttachmentStatus : std::uint8_t {
+  pending = 0,
+  transferring,
+  done,
+  failed,
+  canceled,
+  discarded,
+  paused,
+  peerCanceled
+};
 
 struct Attachment {
   std::string id;

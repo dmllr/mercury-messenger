@@ -38,14 +38,18 @@ class FileTransferService {
   void OnConnectionReady(ContactID const& peer_id) {
     auto const pending_attachments = storage_->GetPendingAttachments(peer_id);
     for (auto const& attachment : pending_attachments) {
+      if (attachment.status == messaging::AttachmentStatus::paused ||
+          attachment.status == messaging::AttachmentStatus::canceled ||
+          attachment.status == messaging::AttachmentStatus::peerCanceled) {
+        continue;
+      }
+
       if (attachment.is_downloaded) {
         // We are uploader
         std::lock_guard<std::mutex> const lock(transfers_mutex_);
         if (!active_uploads_.contains(attachment.id)) {
           StartUploadInternal(peer_id, attachment);
         } else {
-          // Send resume req / poke
-          // This triggers the receiver to send back an ACK if they have partial data
           SendResumeRequest(peer_id, attachment.id);
         }
       } else {
@@ -68,7 +72,6 @@ class FileTransferService {
 
     std::filesystem::path const storage_root(storage_->GetPath());
     std::filesystem::path const attachments_dir = storage_root.parent_path() / "attachments";
-    // Ensure directory exists
     std::error_code error_code;
     std::filesystem::create_directories(attachments_dir, error_code);
     if (error_code) {
@@ -85,7 +88,6 @@ class FileTransferService {
     state.total_size = attachment.size_bytes;
     state.message_id = message_id;
 
-    // Handle file creation and pre-allocation
     try {
       if (!std::filesystem::exists(state.temp_path)) {
         std::ofstream output_stream(state.temp_path, std::ios::binary | std::ios::out | std::ios::trunc);
@@ -94,14 +96,12 @@ class FileTransferService {
           std::filesystem::resize_file(state.temp_path, attachment.size_bytes);
         }
       } else {
-        // If it exists, ensure it is at least the expected size
         if (std::filesystem::file_size(state.temp_path) < attachment.size_bytes) {
           std::filesystem::resize_file(state.temp_path, attachment.size_bytes);
         }
       }
     } catch (std::exception const& e) {
       LGE << "Failed to reserve space for attachment " << attachment.id << ": " << e.what();
-      // Continue anyway, it might work if we append, but we use random access so issues may arise.
     }
 
     state.stream.open(state.temp_path, std::ios::binary | std::ios::in | std::ios::out);
@@ -110,8 +110,6 @@ class FileTransferService {
       return;
     }
 
-    // Since we pre-allocate, we cannot blindly rely on file size for resume progress in this simple version.
-    // We reset to 0 to be safe and overwrite.
     state.highest_seq_written = 0;
     state.bytes_written = 0;
 
@@ -169,7 +167,6 @@ class FileTransferService {
       if (active_downloads_.contains(attachment_id)) {
         auto& state = active_downloads_[attachment_id];
         state.stream.close();
-        // Do NOT remove temp file on pause/cancel, so we can resume later.
         active_downloads_.erase(attachment_id);
       }
     }
@@ -194,9 +191,6 @@ class FileTransferService {
         StartUploadInternal(peer_id, *attachment);
       }
     } else {
-      // For download, we just send resume.
-      // Status update to 'transferring' will happen when chunks arrive or we can set it here optimistically?
-      // Better to set transferring here so UI updates immediately.
       storage_->UpdateAttachmentStatus(attachment_id, messaging::AttachmentStatus::transferring, false);
       if (on_attachment_status_changed_) {
         on_attachment_status_changed_(peer_id, attachment_id, messaging::AttachmentStatus::transferring);
@@ -206,23 +200,48 @@ class FileTransferService {
   }
 
   void DiscardAttachment(ContactID const& peer_id, std::string const& attachment_id) {
-    // Force stop everything
-    {
-        std::lock_guard<std::mutex> const lock(transfers_mutex_);
-        active_uploads_.erase(attachment_id);
-        if (active_downloads_.contains(attachment_id)) {
-            auto& state = active_downloads_[attachment_id];
-            state.stream.close();
-            std::error_code error_code;
-            std::filesystem::remove(state.temp_path, error_code);
-            active_downloads_.erase(attachment_id);
-        }
+    // "Discard" from UI now acts as "Cancel Permanently" (visible terminal state),
+    // unless it is already Canceled/PeerCanceled, in which case it acts as "Remove" (Discarded/Hidden).
+    auto attachment = storage_->GetAttachment(attachment_id);
+    bool should_hide = false;
+
+    if (attachment) {
+      if (attachment->status == messaging::AttachmentStatus::canceled ||
+          attachment->status == messaging::AttachmentStatus::peerCanceled ||
+          attachment->status == messaging::AttachmentStatus::failed) {
+        should_hide = true;
+      }
     }
 
-    SendCancel(peer_id, attachment_id);
-    storage_->UpdateAttachmentStatus(attachment_id, messaging::AttachmentStatus::discarded, false);
-    if (on_attachment_status_changed_) {
-      on_attachment_status_changed_(peer_id, attachment_id, messaging::AttachmentStatus::discarded);
+    {
+      std::lock_guard<std::mutex> const lock(transfers_mutex_);
+      active_uploads_.erase(attachment_id);
+      if (active_downloads_.contains(attachment_id)) {
+        auto& state = active_downloads_[attachment_id];
+        state.stream.close();
+        // We keep the temp file if we are just canceling (to allow future retry if we implement it),
+        // but if we are truly discarding (hiding), we should delete it.
+        if (should_hide) {
+          std::error_code error_code;
+          std::filesystem::remove(state.temp_path, error_code);
+        }
+        active_downloads_.erase(attachment_id);
+      }
+    }
+
+    if (!should_hide) {
+      // Stop transfer and mark as Canceled (Terminal, Visible)
+      SendCancel(peer_id, attachment_id);
+      storage_->UpdateAttachmentStatus(attachment_id, messaging::AttachmentStatus::canceled, false);
+      if (on_attachment_status_changed_) {
+        on_attachment_status_changed_(peer_id, attachment_id, messaging::AttachmentStatus::canceled);
+      }
+    } else {
+      // Mark as Discarded (Hidden)
+      storage_->UpdateAttachmentStatus(attachment_id, messaging::AttachmentStatus::discarded, false);
+      if (on_attachment_status_changed_) {
+        on_attachment_status_changed_(peer_id, attachment_id, messaging::AttachmentStatus::discarded);
+      }
     }
   }
 
@@ -277,9 +296,6 @@ class FileTransferService {
         return;
       }
 
-      // Update status to Transferring BEFORE starting the pump.
-      // If PumpUpload finishes synchronously (small files), it will trigger 'Done'.
-      // Doing this first prevents 'Transferring' from overwriting 'Done'.
       storage_->UpdateAttachmentStatus(attachment.id, messaging::AttachmentStatus::transferring, true);
       INVARIANT(on_attachment_status_changed_);
       on_attachment_status_changed_(peer_id, attachment.id, messaging::AttachmentStatus::transferring);
@@ -305,15 +321,11 @@ class FileTransferService {
       }
       SendAck(peer_id, file_id, state.highest_seq_written);
     } else if (active_uploads_.contains(file_id)) {
-      // Just ensure not paused and try pump
       active_uploads_[file_id].paused = false;
       PumpUpload(peer_id, file_id, active_uploads_[file_id]);
     } else {
-      // Sender side: Resume request for an inactive upload.
-      // Check storage if we have the file info.
       auto attachment = storage_->GetAttachment(file_id);
       if (attachment && attachment->status != messaging::AttachmentStatus::discarded) {
-        // Restart/Resume the upload
         StartUploadInternal(peer_id, *attachment);
       }
     }
@@ -351,7 +363,6 @@ class FileTransferService {
         break;
       }
 
-      // Buffer size: Header (3 bytes + ID len) + Seq (4 bytes) + Chunk Data
       std::size_t const id_len = file_id.size();
       std::size_t const header_size = headerMinSize + id_len + sequenceSize;
       std::vector<std::byte> buffer(header_size + chunkSizeBytes);
@@ -364,10 +375,7 @@ class FileTransferService {
       auto const seq_net = static_cast<std::uint32_t>(state.sequence);
       std::memcpy(buffer.data() + headerMinSize + id_len, &seq_net, sizeof(seq_net));
 
-      state.stream.read(
-          reinterpret_cast<char*>(buffer.data() + header_size),  // NOLINT(*-reinterpret-cast)
-          chunkSizeBytes
-      );
+      state.stream.read(reinterpret_cast<char*>(buffer.data() + header_size), chunkSizeBytes);
       auto const bytes_read = static_cast<std::size_t>(state.stream.gcount());
       if (bytes_read == 0 && state.stream.eof()) {
         break;
@@ -376,7 +384,6 @@ class FileTransferService {
       buffer.resize(header_size + bytes_read);
 
       if (!transport_->SendPeerDataChannelBinaryMessage(peer_id, buffer)) {
-        // Backpressure from transport, stop pumping for now
         break;
       }
 
@@ -412,7 +419,9 @@ class FileTransferService {
 
     if (!active_downloads_.contains(file_id)) {
       auto attachment = storage_->GetAttachment(file_id);
-      if (attachment && attachment->status != messaging::AttachmentStatus::canceled && attachment->status != messaging::AttachmentStatus::discarded) {
+      if (attachment && attachment->status != messaging::AttachmentStatus::canceled &&
+          attachment->status != messaging::AttachmentStatus::discarded &&
+          attachment->status != messaging::AttachmentStatus::peerCanceled) {
         lock.unlock();
         QueueDownload(peer_id, *attachment, 0);
         lock.lock();
@@ -428,10 +437,9 @@ class FileTransferService {
     if (state.stream.is_open()) {
       auto const offset = sequence * chunkSizeBytes;
 
-      // Ensure not seeking past EOF if we didn't resize correctly
       state.stream.seekp(offset);
       state.stream.write(
-          reinterpret_cast<char const*>(chunk_data.data()),  // NOLINT(*-reinterpret-cast)
+          reinterpret_cast<char const*>(chunk_data.data()),
           static_cast<std::streamsize>(chunk_data.size())
       );
 
@@ -467,9 +475,6 @@ class FileTransferService {
     state.stream.flush();
 
     if (state.bytes_written < state.total_size) {
-      LGE << "Incomplete file received for " << file_id << ". Expected " << state.total_size << ", got "
-          << state.bytes_written;
-      // Just ACK highest sequence to request more
       SendAck(peer_id, file_id, static_cast<std::uint32_t>(state.highest_seq_written));
       return;
     }
@@ -486,45 +491,37 @@ class FileTransferService {
       std::error_code error_code;
       std::filesystem::rename(temp_path, final_path, error_code);
       if (error_code) {
-        LGE << "Failed to rename temp file to final path: " << error_code.message();
-        // Fallback or error handling
+        LGE << "Failed to rename temp file: " << error_code.message();
       } else {
         storage_->UpdateAttachmentStatus(file_id, messaging::AttachmentStatus::done, true);
-        if (on_attachment_downloaded_) {
-          on_attachment_downloaded_(peer_id, file_id);
-        }
-        if (on_transfer_progress_) {
-          on_transfer_progress_(peer_id, file_id, 1.0F);
-        }
-        if (on_attachment_status_changed_) {
+        if (on_attachment_downloaded_) on_attachment_downloaded_(peer_id, file_id);
+        if (on_transfer_progress_) on_transfer_progress_(peer_id, file_id, 1.0F);
+        if (on_attachment_status_changed_)
           on_attachment_status_changed_(peer_id, file_id, messaging::AttachmentStatus::done);
-        }
       }
     } else {
-      LGE << "Hash mismatch for " << file_id << ". Calc: " << calc_hash << " Exp: " << expected;
+      LGE << "Hash mismatch for " << file_id;
       std::filesystem::remove(temp_path);
       storage_->UpdateAttachmentStatus(file_id, messaging::AttachmentStatus::failed, false);
-      if (on_attachment_status_changed_) {
+      if (on_attachment_status_changed_)
         on_attachment_status_changed_(peer_id, file_id, messaging::AttachmentStatus::failed);
-      }
     }
   }
 
   void HandleCancel(ContactID const& peer_id, std::string const& file_id) {
-    // Network cancel received: stop logic locally, set status to canceled
     std::lock_guard<std::mutex> const lock(transfers_mutex_);
     if (active_uploads_.contains(file_id)) {
       active_uploads_.erase(file_id);
     }
     if (active_downloads_.contains(file_id)) {
-        auto& state = active_downloads_[file_id];
-        state.stream.close();
-        active_downloads_.erase(file_id);
+      auto& state = active_downloads_[file_id];
+      state.stream.close();
+      active_downloads_.erase(file_id);
     }
-    // Remote cancellation is always terminal for current session
-    storage_->UpdateAttachmentStatus(file_id, messaging::AttachmentStatus::canceled, false);
+    // Remote cancellation sets specific status to differentiate from local cancel
+    storage_->UpdateAttachmentStatus(file_id, messaging::AttachmentStatus::peerCanceled, false);
     if (on_attachment_status_changed_) {
-      on_attachment_status_changed_(peer_id, file_id, messaging::AttachmentStatus::canceled);
+      on_attachment_status_changed_(peer_id, file_id, messaging::AttachmentStatus::peerCanceled);
     }
   }
 
@@ -534,6 +531,11 @@ class FileTransferService {
       MessageType type,
       std::span<std::byte const> payload
   ) -> bool {
+    // Check if transport is ready to avoid "DataChannel not found" logs when disconnected
+    // Note: We access transport blindly here; in a robust system we'd check connection state.
+    // However, SendPeerDataChannelBinaryMessage handles null checks internally and returns false.
+    // We suppress the desire to check state to keep dependencies simple here.
+
     std::size_t const id_len = file_id.size();
     std::size_t const header_size = headerMinSize + id_len;
     std::vector<std::byte> buf(header_size + payload.size());
