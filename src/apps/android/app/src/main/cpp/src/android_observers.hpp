@@ -67,8 +67,20 @@ class AndroidContactsObserver final
       jstring name = env->NewStringUTF(contact_cpp.display_name.c_str());
       jstring bio = contact_cpp.bio ? env->NewStringUTF(contact_cpp.bio->c_str()) : nullptr;
       jstring photo = contact_cpp.photo ? env->NewStringUTF(contact_cpp.photo->c_str()) : nullptr;
-      jstring snippet =
-          contact_cpp.last_message_snippet ? env->NewStringUTF(contact_cpp.last_message_snippet->c_str()) : nullptr;
+
+      jint lm_kind = -1;
+      jstring lm_content = nullptr;
+      jint lm_direction = -1;
+
+      if (contact_cpp.last_message) {
+        lm_kind = static_cast<jint>(contact_cpp.last_message->kind);
+        lm_direction = static_cast<jint>(contact_cpp.last_message->direction);
+
+        if (std::holds_alternative<messaging::MessageEntry>(contact_cpp.last_message->data)) {
+          auto const& txt = std::get<messaging::MessageEntry>(contact_cpp.last_message->data);
+          lm_content = env->NewStringUTF(txt.content.c_str());
+        }
+      }
 
       jobject contact_java = contact_holder.NewObject(
           env,
@@ -79,7 +91,9 @@ class AndroidContactsObserver final
           static_cast<jint>(contact_cpp.status),
           static_cast<jint>(contact_cpp.connection_state),
           static_cast<jint>(contact_cpp.unread_count),
-          snippet,
+          lm_kind,
+          lm_content,
+          lm_direction,
           static_cast<jlong>(contact_cpp.last_activity_timestamp)
       );
       env->CallBooleanMethod(contact_list, list_add_method, contact_java);
@@ -92,8 +106,8 @@ class AndroidContactsObserver final
       if (photo != nullptr) {
         env->DeleteLocalRef(photo);
       }
-      if (snippet != nullptr) {
-        env->DeleteLocalRef(snippet);
+      if (lm_content != nullptr) {
+        env->DeleteLocalRef(lm_content);
       }
       env->DeleteLocalRef(contact_java);
     }

@@ -212,22 +212,11 @@ class ContactsViewModel {
             contact.unread_count = summary.unread_count;
             contact.last_activity_timestamp = summary.last_message.timestamp;
 
-            if (std::holds_alternative<messaging::MessageEntry>(summary.last_message.data)) {
-              auto const& content = std::get<messaging::MessageEntry>(summary.last_message.data).content;
-              constexpr size_t k_snippet_length = 100;
-              contact.last_message_snippet =
-                  (content.length() > k_snippet_length) ? content.substr(0, k_snippet_length) + "..." : content;
-            } else if (std::holds_alternative<messaging::CallEntry>(summary.last_message.data)) {
-              if (summary.last_message.kind == messaging::HistoryEntryKind::videoCall) {
-                contact.last_message_snippet = "Video Call";
-              } else {
-                contact.last_message_snippet = "Voice Call";
-              }
-            }
+            contact.last_message = summary.last_message;
           } else {
             contact.unread_count = 0;
             contact.last_activity_timestamp = 0;
-            contact.last_message_snippet.reset();
+            contact.last_message.reset();
           }
         }
 

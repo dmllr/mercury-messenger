@@ -509,7 +509,8 @@ class MessagingService {
     } catch (std::exception const& e) {
       LGE << "Failed to parse message payload from " << peer_id.ToString() << ": " << e.what();
 
-      std::string const error_msg = "Received message with unsupported format. Please update your application.";
+      nlohmann::json const error_json = {{"action", "unsupported_format"}};
+      std::string const error_msg = error_json.dump();
 
       auto entry = history_->AddTextEntry(
           peer_id,

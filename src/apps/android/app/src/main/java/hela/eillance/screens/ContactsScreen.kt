@@ -68,11 +68,14 @@ import hela.eillance.components.StatusSnackbar
 import hela.eillance.components.UserAvatar
 import hela.eillance.ndkio.Contact
 import hela.eillance.ndkio.ContactStatus
+import hela.eillance.ndkio.HistoryEntryKind
+import hela.eillance.ndkio.MessageDirection
 import hela.eillance.ndkio.MyProfileInfo
 import hela.eillance.ndkio.PeerConnectionState
 import hela.eillance.ndkio.ServiceConnectionState
 import hela.eillance.theme.extendedColors
 import hela.eillance.viewmodels.ContactsViewModel
+import org.json.JSONObject
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -298,6 +301,7 @@ fun ContactListItem(
   zoneId: ZoneId,
   formatters: Triple<DateTimeFormatter, DateTimeFormatter, DateTimeFormatter>
 ) {
+  val context = LocalContext.current
   val containerColor = if (contact.status == ContactStatus.awaitingApproval) {
     MaterialTheme.colorScheme.tertiaryContainer
   } else {
@@ -351,7 +355,9 @@ fun ContactListItem(
           }
         }
       } else {
-        val subText = contact.lastMessageSnippet ?: contact.bio
+        val snippet = getSnippetText(contact, context)
+        val subText = if (snippet.isNotBlank()) snippet else contact.bio
+
         if (!subText.isNullOrBlank()) {
           Text(
             text = subText,
@@ -407,4 +413,31 @@ private fun openAppSettings(context: Context) {
     flags = Intent.FLAG_ACTIVITY_NEW_TASK
   }
   context.startActivity(intent)
+}
+
+private fun getSnippetText(contact: Contact, context: Context): String {
+    val kind = contact.lastMsgKindEnum ?: return ""
+    return when (kind) {
+        HistoryEntryKind.TextMessage -> {
+            val prefix = if (contact.lastMessageDirection == MessageDirection.Sent.value) "You: " else ""
+            prefix + (contact.lastMessageContent ?: "")
+        }
+        HistoryEntryKind.VoiceCall -> "Voice Call"
+        HistoryEntryKind.VideoCall -> "Video Call"
+        HistoryEntryKind.SystemMessage -> {
+             try {
+                 val json = JSONObject(contact.lastMessageContent ?: "{}")
+                 when (json.optString("action")) {
+                     "contact_request" -> "Contact Request"
+                     "contact_confirm" -> "Contact Confirmed"
+                     "profile_update" -> "Profile Updated"
+                     "profile_update_diff" -> "Profile Updated"
+                     "unsupported_format" -> "Unsupported Message"
+                     else -> "System Message"
+                 }
+             } catch (e: Exception) {
+                 "System Message"
+             }
+        }
+    }
 }

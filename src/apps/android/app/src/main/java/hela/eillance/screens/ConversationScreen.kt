@@ -762,9 +762,9 @@ fun SystemMessageBubble(entry: HistoryEntry, onClick: (HistoryEntry) -> Unit) {
     "contact_request_received" -> "You received a contact request." to false
     "contact_request" -> "You sent a contact request." to false
     "contact_confirm" -> {
-      if (entry.direction == MessageDirection.Sent) "You accepted the contact request." to false
-      else "Your contact request was accepted." to false
-    }
+      if (entry.direction == MessageDirection.Received) "Your contact request was accepted." else "You accepted the contact request."
+    } to false
+    "unsupported_format" -> "Message format unsupported. Update required." to false
     else -> "" to false
   }
 

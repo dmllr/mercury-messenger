@@ -91,8 +91,9 @@ class SQLiteStorage final : public PersistentStorageImpl {
     }
     try {
       if (sqlite3_open(dbPath_.string().c_str(), &db_) != SQLITE_OK) {
-        throw std::runtime_error(std::string("Failed to open database: ") +
-                                 ((db_ != nullptr) ? sqlite3_errmsg(db_) : "Unknown error"));
+        throw std::runtime_error(
+            std::string("Failed to open database: ") + ((db_ != nullptr) ? sqlite3_errmsg(db_) : "Unknown error")
+        );
       }
       sqlite3_exec(db_, "PRAGMA journal_mode=WAL;", nullptr, nullptr, nullptr);
       sqlite3_exec(db_, "PRAGMA foreign_keys=ON;", nullptr, nullptr, nullptr);
