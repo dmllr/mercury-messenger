@@ -64,6 +64,7 @@ import androidx.core.net.toUri
 import androidx.core.os.ConfigurationCompat
 import hela.eillance.BannerType
 import hela.eillance.MainViewModel
+import hela.eillance.camera.R
 import hela.eillance.components.StatusSnackbar
 import hela.eillance.components.UserAvatar
 import hela.eillance.ndkio.Contact
@@ -74,6 +75,7 @@ import hela.eillance.ndkio.MyProfileInfo
 import hela.eillance.ndkio.PeerConnectionState
 import hela.eillance.ndkio.ServiceConnectionState
 import hela.eillance.theme.extendedColors
+import hela.eillance.ui.LocalizationMapping
 import hela.eillance.viewmodels.ContactsViewModel
 import org.json.JSONObject
 import java.time.Instant
@@ -179,11 +181,11 @@ fun ContactsScreen(
         Box(modifier = Modifier.padding(16.dp)) {
           if (isConnectionIssue) {
             val (msg, isError) = when (connectionState) {
-              ServiceConnectionState.NoNetwork -> "Waiting for network..." to false
-              ServiceConnectionState.Failure -> "Connection failed" to true
-              ServiceConnectionState.Disconnected -> "Disconnected" to false
-              ServiceConnectionState.InvalidToken -> "Authentication error" to true
-              else -> "Connection issue" to true
+              ServiceConnectionState.NoNetwork -> context.getString(R.string.connection_no_network) to false
+              ServiceConnectionState.Failure -> context.getString(R.string.connection_failed) to true
+              ServiceConnectionState.Disconnected -> context.getString(R.string.connection_disconnected) to false
+              ServiceConnectionState.InvalidToken -> context.getString(R.string.connection_auth_error) to true
+              else -> context.getString(R.string.connection_issue) to true
             }
             StatusSnackbar(text = msg, isError = isError)
           } else {
@@ -260,7 +262,7 @@ fun ContactsScreen(
           contentAlignment = Alignment.Center
         ) {
           Text(
-            "No contacts yet. Add one!",
+            context.getString(R.string.contacts_empty_message),
             style = MaterialTheme.typography.bodyLarge
           )
         }
@@ -341,7 +343,7 @@ fun ContactListItem(
       if (contact.status == ContactStatus.awaitingApproval) {
         Column {
           Text(
-            text = "New Contact Request",
+            text = context.getString(R.string.sys_contact_req),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.tertiary
           )
@@ -419,24 +421,20 @@ private fun getSnippetText(contact: Contact, context: Context): String {
     val kind = contact.lastMsgKindEnum ?: return ""
     return when (kind) {
         HistoryEntryKind.TextMessage -> {
-            val prefix = if (contact.lastMessageDirection == MessageDirection.Sent.value) "You: " else ""
+            val prefix = if (contact.lastMessageDirection == MessageDirection.Sent.value)
+                context.getString(R.string.chat_you_prefix) else ""
             prefix + (contact.lastMessageContent ?: "")
         }
-        HistoryEntryKind.VoiceCall -> "Voice Call"
-        HistoryEntryKind.VideoCall -> "Video Call"
+        HistoryEntryKind.VoiceCall, HistoryEntryKind.VideoCall -> {
+            context.getString(LocalizationMapping.getCallDescriptionResId(kind, contact.lastMessageDirection))
+        }
         HistoryEntryKind.SystemMessage -> {
              try {
                  val json = JSONObject(contact.lastMessageContent ?: "{}")
-                 when (json.optString("action")) {
-                     "contact_request" -> "Contact Request"
-                     "contact_confirm" -> "Contact Confirmed"
-                     "profile_update" -> "Profile Updated"
-                     "profile_update_diff" -> "Profile Updated"
-                     "unsupported_format" -> "Unsupported Message"
-                     else -> "System Message"
-                 }
+                 val action = json.optString("action")
+                 context.getString(LocalizationMapping.getSystemMessageResId(action))
              } catch (e: Exception) {
-                 "System Message"
+                 context.getString(R.string.sys_default)
              }
         }
     }

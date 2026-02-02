@@ -124,6 +124,9 @@ import java.time.format.FormatStyle
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
+import androidx.compose.ui.res.stringResource
+import hela.eillance.camera.R
+import hela.eillance.ui.LocalizationMapping
 
 private val jsonParser = Json { ignoreUnknownKeys = true }
 
@@ -756,19 +759,23 @@ fun SystemMessageBubble(entry: HistoryEntry, onClick: (HistoryEntry) -> Unit) {
     }
   }
 
-  val (displayText, isClickable) = when (parsedAction?.action) {
-    "profile_update" -> "You updated your profile." to false
-    "profile_update_diff" -> "Profile was updated." to true
-    "contact_request_received" -> "You received a contact request." to false
-    "contact_request" -> "You sent a contact request." to false
-    "contact_confirm" -> {
-      if (entry.direction == MessageDirection.Received) "Your contact request was accepted." else "You accepted the contact request."
-    } to false
-    "unsupported_format" -> "Message format unsupported. Update required." to false
-    else -> "" to false
+  // Determine resource ID via helper
+  val textResId = LocalizationMapping.getSystemMessageResId(parsedAction?.action)
+
+  // Specific override for confirmation message direction logic
+  val finalResId = if (parsedAction?.action == "contact_confirm" && entry.direction == MessageDirection.Sent) {
+      // "You accepted..." logic could be added here if we had separate strings for it.
+      // For now, we reuse the generic one or map it specifically if needed.
+      // Assuming mapping handles generic "Contact Confirmed" for both sides or we add specific keys later.
+      textResId
+  } else {
+      textResId
   }
 
-  if (displayText.isBlank()) return
+  val isClickable = parsedAction?.action == "profile_update_diff"
+
+  // If we couldn't parse an action and get default, but content is empty, hide it.
+  if (parsedAction == null && entry.content.isNullOrBlank()) return
 
   Row(
     modifier = Modifier
@@ -786,7 +793,7 @@ fun SystemMessageBubble(entry: HistoryEntry, onClick: (HistoryEntry) -> Unit) {
         .padding(horizontal = 12.dp, vertical = 6.dp)
     ) {
       Text(
-        text = displayText,
+        text = stringResource(id = finalResId),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant
       )

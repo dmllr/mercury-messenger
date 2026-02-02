@@ -324,9 +324,9 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationView
 
       atts.push_back(
           {.file_path = p,
-              .type = static_cast<eillance::messaging::AttachmentType>(type),
-              .thumbnail_base64 = t,
-              .mime_type = m}
+           .type = static_cast<eillance::messaging::AttachmentType>(type),
+           .thumbnail_base64 = t,
+           .mime_type = m}
       );
 
       env->ReleaseStringUTFChars(path, p);
