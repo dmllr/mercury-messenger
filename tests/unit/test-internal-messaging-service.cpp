@@ -90,6 +90,7 @@ class InternalMessagingServiceTest : public ::testing::Test {
 
     // Wire up circular dependencies roughly
     messaging_service_->SetContactRestoredCallback([&](auto id) { contact_service_->OnContactRestored(id); });
+    messaging_service_->SetMessageStatusChangedCallback([](auto const&, auto, auto) {});
     contact_service_->SetMessagingService(messaging_service_.get());
     media_call_service_->SetMessagingService(messaging_service_.get());
 
@@ -216,7 +217,7 @@ TEST_F(InternalMessagingServiceTest, ProcessDataChannelMessage_Chat) {
 }
 
 TEST_F(InternalMessagingServiceTest, ProcessDataChannelMessage_KeyExchange) {
-  auto peer = std::make_shared<transport::Peer>(peer1);
+  auto const peer = std::make_shared<transport::Peer>(peer1);
   transport_->AddPeer(peer1, peer);
 
   eillance::crypto::SessionCipher const other;
@@ -243,24 +244,24 @@ TEST_F(InternalMessagingServiceTest, ProcessDataChannelMessage_ProfileInfo) {
   bool status_changed = false;
   bool contact_status_changed = false;
   profile_service_->SetContactProfileUpdatedCallback([&](auto id) { profile_updated = id == peer1; });
-  messaging_service_->SetMessageStatusChangedCallback([&](auto id, auto msg_id, auto status) {
+  messaging_service_->SetMessageStatusChangedCallback([&](auto id, auto, auto) {
     status_changed = id == peer1;
   });
-  contact_service_->SetContactStatusChangedCallback([&](auto id, auto rec) { contact_status_changed = id == peer1; });
+  contact_service_->SetContactStatusChangedCallback([&](auto id, auto) { contact_status_changed = id == peer1; });
 
   // Pre-add contact so update works
   contact_service_->AddContact(peer1, std::nullopt);
 
-  nlohmann::json const p_msg = {{"type", "profile_info"}, {"display_name", "New Name"}};
+  nlohmann::json const msg = {{"type", "profile_info"}, {"display_name", "New Name"}};
 
-  service_->ProcessDataChannelMessage(peer1, p_msg);
+  service_->ProcessDataChannelMessage(peer1, msg);
   EXPECT_TRUE(profile_updated);
   EXPECT_TRUE(status_changed);
   EXPECT_TRUE(contact_status_changed);
 }
 
 TEST_F(InternalMessagingServiceTest, SetupPeerHandlers_BinaryRouting) {
-  auto peer = std::make_shared<transport::Peer>(peer1);
+  auto const peer = std::make_shared<transport::Peer>(peer1);
   service_->SetupPeerHandlers(peer, peer1);
 
   // Simulate binary packet (Magic 0xFE)
@@ -272,9 +273,9 @@ TEST_F(InternalMessagingServiceTest, SetupPeerHandlers_BinaryRouting) {
 
   // Simulate JSON packet (converted from bytes)
   nlohmann::json const json_msg = {{"type", "test_msg"}};
-  std::string s = json_msg.dump();
-  std::vector<std::byte> json_bytes(s.size());
-  std::ranges::transform(s, json_bytes.begin(), [](char c) { return static_cast<std::byte>(c); });
+  std::string str = json_msg.dump();
+  std::vector<std::byte> json_bytes(str.size());
+  std::ranges::transform(str, json_bytes.begin(), [](char c) { return static_cast<std::byte>(c); });
 
   peer->on_data_channel_message(json_bytes);
 }
