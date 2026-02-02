@@ -193,19 +193,22 @@ tasks.register('generateTranslations', Exec) {
     description = "Generates Android string resources from .po files"
     group = "build"
 
+    def gitRoot = providers.exec {
+        commandLine 'git', 'rev-parse', '--show-toplevel'
+    }.standardOutput.asText.map { it.trim() }
+
     // Inputs: The .po directory
-    inputs.dir file("../../../../src/assets/translations")
+    inputs.dir gitRoot.map { new File(it, "src/assets/translations") }
 
     // Outputs: The Android values directories.
+    // Listing each language dir is not strictly required, but helps Gradle verify integrity.
     // Gradle checks timestamps; if inputs haven't changed, this task is SKIPPED.
     outputs.dir file("src/main/res/values")
     outputs.dir file("src/main/res/values-ja")
-    // Note: If you add more languages, you strictly don't need to list every output dir
-    // for up-to-date checks to work generally, but listing them helps Gradle verify integrity.
 
-    // Path to script relative to this build.gradle
-    def scriptPath = file("../../../../tools/translations/generate.py")
-
-    commandLine 'python3', scriptPath
+    executable 'python3'
+    doFirst {
+        args new File(gitRoot.get(), "tools/translations/generate.py").absolutePath
+    }
 }
 preBuild.dependsOn generateTranslations

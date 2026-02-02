@@ -1,8 +1,11 @@
 project(signaling-server C CXX)
 
-set(root "../..")
-set(shared_src_path "${root}/src")
-set(shared_cmake_libs_path "${shared_src_path}/cmake")
+execute_process(
+  COMMAND git rev-parse --show-toplevel
+  OUTPUT_VARIABLE REPO_ROOT
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+set(shared_cmake_libs_path "${REPO_ROOT}/src/cmake")
 
 include("${shared_cmake_libs_path}/libplog.cmake")
 

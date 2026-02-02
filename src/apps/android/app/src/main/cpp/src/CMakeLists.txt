@@ -1,4 +1,9 @@
-set(shared_libs "${CMAKE_CURRENT_LIST_DIR}/../../../../../../../lib")
+execute_process(
+  COMMAND git rev-parse --show-toplevel
+  OUTPUT_VARIABLE REPO_ROOT
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+set(shared_libs "${REPO_ROOT}/lib")
 
 add_library(lib-client-service-bridge SHARED
   client_service_bridge.cpp
