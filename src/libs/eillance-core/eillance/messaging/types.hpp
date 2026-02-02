@@ -45,6 +45,7 @@ struct Attachment {
   std::string hash;  // SHA-256 hash of the file content
   bool is_downloaded = false;
   AttachmentStatus status = AttachmentStatus::pending;
+  std::string note;
 };
 
 enum class MessageDirection : std::uint8_t {

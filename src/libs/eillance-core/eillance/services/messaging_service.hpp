@@ -31,6 +31,8 @@ namespace eillance::services {
 
 namespace {
 
+constexpr size_t kMaxAttachmentNoteLength = 120;
+
 auto GetExtensionForMimeType(std::string_view const mime_type) -> std::string {
   if (mime_type == "image/jpeg" || mime_type == "image/jpg") {
     return ".jpg";
@@ -81,6 +83,7 @@ struct AttachmentRequest {
   messaging::AttachmentType type;
   std::string thumbnail_base64;
   std::string mime_type;
+  std::string note;
 };
 
 class MessagingService {
@@ -184,6 +187,11 @@ class MessagingService {
         }
       }
 
+      std::string note = req.note;
+      if (note.length() > kMaxAttachmentNoteLength) {
+        note = note.substr(0, kMaxAttachmentNoteLength);
+      }
+
       domain_attachments.push_back(
           {.id = GenerateAttachmentId(),
            .type = req.type,
@@ -193,7 +201,8 @@ class MessagingService {
            .thumbnail_base64 = req.thumbnail_base64,
            .hash = hash,
            .is_downloaded = true,
-           .status = messaging::AttachmentStatus::pending}
+           .status = messaging::AttachmentStatus::pending,
+           .note = note}
       );
     }
 
@@ -354,7 +363,8 @@ class MessagingService {
                      {"mime", att.mime_type},
                      {"size", att.size_bytes},
                      {"thumb", att.thumbnail_base64},
-                     {"hash", att.hash}}
+                     {"hash", att.hash},
+                     {"note", att.note}}
                 );
               }
               json_msg["attachments"] = att_list;
@@ -400,34 +410,35 @@ class MessagingService {
 
     // If sender cancels upload before it's sent, we must check if we should dismiss the parent message.
     if (is_upload) {
-        auto sending_msgs = storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::sending);
-        for (auto const& entry : sending_msgs) {
-            if (!std::holds_alternative<messaging::MessageEntry>(entry.data)) continue;
-            auto const& msg = std::get<messaging::MessageEntry>(entry.data);
+      auto sending_msgs = storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::sending);
+      for (auto const& entry : sending_msgs) {
+        if (!std::holds_alternative<messaging::MessageEntry>(entry.data)) continue;
+        auto const& msg = std::get<messaging::MessageEntry>(entry.data);
 
-            bool contains_attachment = false;
-            // Check if there is any other content
-            bool has_other_content = !msg.content.empty();
+        bool contains_attachment = false;
+        // Check if there is any other content
+        bool has_other_content = !msg.content.empty();
 
-            for (auto const& att : msg.attachments) {
-                if (att.id == attachment_id) {
-                    contains_attachment = true;
-                } else {
-                    // Check other attachments
-                    auto stored = storage_->GetAttachment(att.id);
-                    if (stored && stored->status != messaging::AttachmentStatus::canceled &&
-                        stored->status != messaging::AttachmentStatus::discarded) {
-                        has_other_content = true;
-                    }
-                }
+        for (auto const& att : msg.attachments) {
+          if (att.id == attachment_id) {
+            contains_attachment = true;
+          } else {
+            // Check other attachments
+            auto stored = storage_->GetAttachment(att.id);
+            if (stored && stored->status != messaging::AttachmentStatus::canceled &&
+                stored->status != messaging::AttachmentStatus::discarded) {
+              has_other_content = true;
             }
-
-            if (contains_attachment && !has_other_content) {
-                // Dismiss the message
-                const_cast<MessagingService*>(this)->history_->UpdateMessageStatus(peer_id, entry.id, messaging::MessageStatus::none);
-                break;
-            }
+          }
         }
+
+        if (contains_attachment && !has_other_content) {
+          // Dismiss the message
+          const_cast<MessagingService*>(this)
+              ->history_->UpdateMessageStatus(peer_id, entry.id, messaging::MessageStatus::none);
+          break;
+        }
+      }
     }
   }
 
@@ -444,26 +455,22 @@ class MessagingService {
     auto attachment = storage_->GetAttachment(attachment_id);
     bool should_send_cancel = true;
     if (attachment) {
-        if (attachment->status == messaging::AttachmentStatus::canceled ||
-            attachment->status == messaging::AttachmentStatus::peerCanceled ||
-            attachment->status == messaging::AttachmentStatus::failed) {
-            should_send_cancel = false;
-        }
+      if (attachment->status == messaging::AttachmentStatus::canceled ||
+          attachment->status == messaging::AttachmentStatus::peerCanceled ||
+          attachment->status == messaging::AttachmentStatus::failed) {
+        should_send_cancel = false;
+      }
     }
 
     file_transfer_service_->DiscardAttachment(peer_id, attachment_id);
 
     if (should_send_cancel) {
-        nlohmann::json cancel_msg = {
-            {"type", "file_cancel"},
-            {"file_id", attachment_id}
-        };
-        storage_->AddPendingAction(peer_id, cancel_msg.dump());
+      nlohmann::json cancel_msg = {{"type", "file_cancel"}, {"file_id", attachment_id}};
+      storage_->AddPendingAction(peer_id, cancel_msg.dump());
 
-        if (auto const peer = transport_->GetPeer(peer_id);
-            peer && peer->data_channel_is_open) {
-            const_cast<MessagingService*>(this)->SendQueuedMessages(peer_id);
-        }
+      if (auto const peer = transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
+        const_cast<MessagingService*>(this)->SendQueuedMessages(peer_id);
+      }
     }
   }
 
@@ -473,9 +480,8 @@ class MessagingService {
     auto page = history_->GetHistoryPage(peer_id, page_index, page_size);
 
     // Filter out messages marked as None (our soft-delete flag)
-    std::erase_if(page.messages, [](auto const& entry){
-        return entry.status == messaging::MessageStatus::none &&
-               entry.kind != messaging::HistoryEntryKind::systemMessage;
+    std::erase_if(page.messages, [](auto const& entry) {
+      return entry.status == messaging::MessageStatus::none && entry.kind != messaging::HistoryEntryKind::systemMessage;
     });
 
     bool any_modified = false;

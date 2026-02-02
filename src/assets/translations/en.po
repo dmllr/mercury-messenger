@@ -66,3 +66,43 @@ msgstr "System Message"
 # Chat
 msgid "chat_you_prefix"
 msgstr "You: "
+
+# New Attachment UI
+msgid "msg_input_placeholder"
+msgstr "Message..."
+
+msgid "attach_gallery"
+msgstr "Gallery"
+
+msgid "attach_camera_photo"
+msgstr "Camera Photo"
+
+msgid "attach_camera_video"
+msgstr "Camera Video"
+
+msgid "attach_document"
+msgstr "Document"
+
+msgid "attach_file"
+msgstr "File"
+
+msgid "attachment_remove"
+msgstr "Remove"
+
+msgid "attachment_note_placeholder"
+msgstr "Add note..."
+
+msgid "note_dialog_title"
+msgstr "Attachment Note"
+
+msgid "note_dialog_hint"
+msgstr "Enter a short note (max 120 chars)"
+
+msgid "save"
+msgstr "Save"
+
+msgid "cancel"
+msgstr "Cancel"
+
+msgid "send_description"
+msgstr "Send"

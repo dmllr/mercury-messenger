@@ -30,6 +30,15 @@ import java.io.File
 import java.io.FileOutputStream
 import java.util.UUID
 
+data class DraftAttachment(
+  val uri: Uri,
+  val type: AttachmentType,
+  val mimeType: String,
+  val name: String,
+  val bitmap: Bitmap? = null, // For preview
+  var note: String = ""
+)
+
 class ConversationViewModel(
   application: Application,
   private val peerId: String
@@ -42,6 +51,10 @@ class ConversationViewModel(
   // Map of AttachmentID -> Progress (0.0 to 1.0)
   private val _transferProgress = MutableStateFlow<Map<String, Float>>(emptyMap())
   val transferProgress = _transferProgress.asStateFlow()
+
+  // Draft Attachments for the current message
+  private val _draftAttachments = MutableStateFlow<List<DraftAttachment>>(emptyList())
+  val draftAttachments = _draftAttachments.asStateFlow()
 
   init {
     nativePtr = nativeCreate(peerId, this)
@@ -66,9 +79,6 @@ class ConversationViewModel(
     if (currentProgress.isNotEmpty()) {
       val activeAttachmentIds = mutableSetOf<String>()
       for (msg in page.messages) {
-        // Kotlin 1.9+ smart cast might work, but using explicit checks is safer
-        // Assuming HistoryEntry has attachments directly or indirectly via data
-        // The data class for HistoryEntry has attachments list
         for (att in msg.attachments) {
           if (att.status == AttachmentStatus.Transferring) {
             activeAttachmentIds.add(att.id)
@@ -96,13 +106,112 @@ class ConversationViewModel(
     _transferProgress.value = currentMap
   }
 
-  fun sendMessage(message: String) {
-    if (nativePtr != 0L && message.isNotBlank()) {
-      nativeSendMessage(nativePtr, message)
+  // --- Draft Management ---
+
+  fun addDraftAttachment(uri: Uri, isCamera: Boolean = false) {
+    viewModelScope.launch(Dispatchers.IO) {
+      val context = getApplication<Application>()
+      val cr = context.contentResolver
+      val mimeTypeRaw = cr.getType(uri) ?: "application/octet-stream"
+
+      val type = when {
+        mimeTypeRaw.startsWith("video/") -> AttachmentType.Video
+        mimeTypeRaw.startsWith("image/") -> AttachmentType.Image
+        else -> AttachmentType.File
+      }
+
+      val name = queryFileName(cr, uri) ?: "attachment"
+
+      // Generate preview bitmap for images/videos
+      val preview = if (type == AttachmentType.Image) {
+        try {
+          // Downsample for preview
+          val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+          val streamCheck = cr.openInputStream(uri)
+          BitmapFactory.decodeStream(streamCheck, null, options)
+          streamCheck?.close()
+
+          options.inSampleSize = calculateInSampleSize(options, 200, 200)
+          options.inJustDecodeBounds = false
+          val streamDecode = cr.openInputStream(uri)
+          val bmp = BitmapFactory.decodeStream(streamDecode, null, options)
+          streamDecode?.close()
+          bmp
+        } catch (e: Exception) { null }
+      } else if (type == AttachmentType.Video) {
+        try {
+          // For video, we might need file path which we don't have yet for ContentUri.
+          // ThumbnailUtils requires path on older APIs. On Q+ loadThumbnail works with Uri.
+          // Simplified: null for now, or implement loadThumbnail logic
+          null
+        } catch(e: Exception) { null }
+      } else {
+        null
+      }
+
+      val draft = DraftAttachment(uri, type, mimeTypeRaw, name, preview)
+
+      // Update State
+      val current = _draftAttachments.value.toMutableList()
+      current.add(draft)
+      _draftAttachments.value = current
     }
   }
 
-  fun sendMedia(uris: List<Uri>) {
+  fun removeDraft(index: Int) {
+    val current = _draftAttachments.value.toMutableList()
+    if (index in current.indices) {
+      current.removeAt(index)
+      _draftAttachments.value = current
+    }
+  }
+
+  fun updateDraftNote(index: Int, note: String) {
+    val current = _draftAttachments.value.toMutableList()
+    if (index in current.indices) {
+      val draft = current[index]
+      // Enforce 120 char limit here as well
+      val truncated = if (note.length > 120) note.substring(0, 120) else note
+      current[index] = draft.copy(note = truncated)
+      _draftAttachments.value = current
+    }
+  }
+
+  fun clearDrafts() {
+    _draftAttachments.value = emptyList()
+  }
+
+  private fun queryFileName(resolver: ContentResolver, uri: Uri): String? {
+    val returnCursor = resolver.query(uri, null, null, null, null)
+    returnCursor?.use { cursor ->
+      val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+      if (nameIndex != -1) {
+        cursor.moveToFirst()
+        return cursor.getString(nameIndex)
+      }
+    }
+    return null
+  }
+
+  // --- Sending ---
+
+  fun sendMessage(messageText: String) {
+    val drafts = _draftAttachments.value
+    if (messageText.isBlank() && drafts.isEmpty()) return
+
+    if (drafts.isEmpty()) {
+      if (nativePtr != 0L) {
+        nativeSendMessage(nativePtr, messageText)
+      }
+    } else {
+      processAndSend(messageText, drafts)
+    }
+  }
+
+  private fun processAndSend(text: String, drafts: List<DraftAttachment>) {
+    // Clear UI drafts immediately
+    _draftAttachments.value = emptyList()
+
     viewModelScope.launch(Dispatchers.IO) {
       val attachmentRequests = mutableListOf<AttachmentRequest>()
       val context = getApplication<Application>()
@@ -112,62 +221,70 @@ class ConversationViewModel(
         attachmentsDir.mkdirs()
       }
 
-      for (uri in uris) {
+      for (draft in drafts) {
         try {
-          val mimeTypeRaw = cr.getType(uri) ?: "application/octet-stream"
-          val type = when {
-            mimeTypeRaw.startsWith("video/") -> AttachmentType.Video
-            mimeTypeRaw.startsWith("image/") -> AttachmentType.Image
-            else -> AttachmentType.File
-          }
-
-          val ext = MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeTypeRaw)
-            ?: (if (type == AttachmentType.Image) "jpg" else if (type == AttachmentType.Video) "mp4" else "dat")
+          val ext = MimeTypeMap.getSingleton().getExtensionFromMimeType(draft.mimeType)
+            ?: (if (draft.type == AttachmentType.Image) "jpg" else if (draft.type == AttachmentType.Video) "mp4" else "dat")
 
           val fileName = "${UUID.randomUUID()}.$ext"
           val destFile = File(attachmentsDir, fileName)
 
           // Secure copy
-          context.contentResolver.openInputStream(uri)?.use { input ->
+          context.contentResolver.openInputStream(draft.uri)?.use { input ->
             FileOutputStream(destFile).use { output ->
               input.copyTo(output)
             }
-          } ?: throw Exception("Failed to open input stream for $uri")
+          } ?: throw Exception("Failed to open input stream for ${draft.uri}")
 
-          // Generate Thumbnail
+          // Generate Thumbnail for Protocol
           val thumbnailBase64 = try {
-            val bitmap = generateThumbnail(context.contentResolver, uri, destFile, type)
+            val bitmap = generateThumbnail(context.contentResolver, draft.uri, destFile, draft.type)
             if (bitmap != null) {
               val outputStream = ByteArrayOutputStream()
-              bitmap.compress(Bitmap.CompressFormat.JPEG, 70, outputStream)
+              bitmap.compress(Bitmap.CompressFormat.JPEG, 60, outputStream)
               val bytes = outputStream.toByteArray()
               Base64.encodeToString(bytes, Base64.NO_WRAP)
             } else {
               ""
             }
           } catch (e: Exception) {
-            Log.w("ConversationVM", "Failed to generate thumbnail for $uri", e)
+            Log.w("ConversationVM", "Failed to generate thumbnail", e)
             ""
           }
 
           val request = AttachmentRequest(
             path = destFile.absolutePath,
-            type = type.value,
+            type = draft.type.value,
             thumbnail = thumbnailBase64,
-            mimeType = mimeTypeRaw
+            mimeType = draft.mimeType,
+            note = draft.note
           )
           attachmentRequests.add(request)
 
         } catch (e: Exception) {
-          Log.e("ConversationVM", "Failed to process attachment $uri", e)
+          Log.e("ConversationVM", "Failed to process attachment draft", e)
         }
       }
 
-      if (attachmentRequests.isNotEmpty() && nativePtr != 0L) {
-        // Send all processed attachments in one message
-        nativeSendMessageWithAttachments(nativePtr, "", attachmentRequests.toTypedArray())
+      if (nativePtr != 0L) {
+        // Even if attachment processing fails for some, send what we have.
+        // If text is present, it will send regardless.
+        nativeSendMessageWithAttachments(nativePtr, text, attachmentRequests.toTypedArray())
       }
     }
+  }
+
+  fun sendMedia(uris: List<Uri>) {
+    // Legacy direct send - map to drafts and send immediately?
+    // Or keep as direct for compatibility with existing tests?
+    // Let's reimplement using the new logic for consistency.
+    for (uri in uris) {
+      addDraftAttachment(uri)
+    }
+    // We don't trigger send automatically here anymore,
+    // user should see them in the "draft" area.
+    // However, if the intent was "Direct Share", maybe we should.
+    // For now, let's just add to drafts so user can add a note.
   }
 
   fun cancelTransfer(attachmentId: String, isUpload: Boolean) {
@@ -194,7 +311,6 @@ class ConversationViewModel(
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         resolver.loadThumbnail(uri, size, CancellationSignal())
       } else {
-        // Fallback for older versions
         if (type == AttachmentType.Video) {
           ThumbnailUtils.createVideoThumbnail(file.absolutePath, MediaStore.Images.Thumbnails.MINI_KIND)
         } else if (type == AttachmentType.Image) {

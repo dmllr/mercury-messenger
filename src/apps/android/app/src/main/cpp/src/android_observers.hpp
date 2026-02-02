@@ -167,6 +167,8 @@ class AndroidConversationObserver final
           jstring j_path = env->NewStringUTF(att.file_path.c_str());
           jstring j_mime = env->NewStringUTF(att.mime_type.c_str());
           jstring j_thumb = att.thumbnail_base64.empty() ? nullptr : env->NewStringUTF(att.thumbnail_base64.c_str());
+          // NOTE must be non-null as per Kotlin definition. NewStringUTF("") creates valid empty string object.
+          jstring j_note = env->NewStringUTF(att.note.c_str());
 
           jobject j_att = attachment_holder.NewObject(
               env,
@@ -177,7 +179,8 @@ class AndroidConversationObserver final
               static_cast<jlong>(att.size_bytes),
               j_thumb,
               static_cast<jboolean>(att.is_downloaded),
-              static_cast<jint>(att.status)
+              static_cast<jint>(att.status),
+              j_note
           );
 
           env->CallBooleanMethod(j_attachments, list_add_method, j_att);
@@ -186,6 +189,7 @@ class AndroidConversationObserver final
           env->DeleteLocalRef(j_path);
           env->DeleteLocalRef(j_mime);
           if (j_thumb) env->DeleteLocalRef(j_thumb);
+          env->DeleteLocalRef(j_note);
           env->DeleteLocalRef(j_att);
         }
       }

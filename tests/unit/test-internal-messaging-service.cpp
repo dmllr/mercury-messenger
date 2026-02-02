@@ -244,9 +244,7 @@ TEST_F(InternalMessagingServiceTest, ProcessDataChannelMessage_ProfileInfo) {
   bool status_changed = false;
   bool contact_status_changed = false;
   profile_service_->SetContactProfileUpdatedCallback([&](auto id) { profile_updated = id == peer1; });
-  messaging_service_->SetMessageStatusChangedCallback([&](auto id, auto, auto) {
-    status_changed = id == peer1;
-  });
+  messaging_service_->SetMessageStatusChangedCallback([&](auto id, auto, auto) { status_changed = id == peer1; });
   contact_service_->SetContactStatusChangedCallback([&](auto id, auto) { contact_status_changed = id == peer1; });
 
   // Pre-add contact so update works

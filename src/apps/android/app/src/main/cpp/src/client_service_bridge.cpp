@@ -317,16 +317,19 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationView
       jint const type = env->GetIntField(obj, cls.GetField("type"));
       jstring thumb = (jstring)env->GetObjectField(obj, cls.GetField("thumbnail"));
       jstring mime = (jstring)env->GetObjectField(obj, cls.GetField("mimeType"));
+      jstring note = (jstring)env->GetObjectField(obj, cls.GetField("note"));
 
       char const* p = env->GetStringUTFChars(path, nullptr);
       char const* t = thumb ? env->GetStringUTFChars(thumb, nullptr) : "";
       char const* m = mime ? env->GetStringUTFChars(mime, nullptr) : "";
+      char const* n = note ? env->GetStringUTFChars(note, nullptr) : "";
 
       atts.push_back(
           {.file_path = p,
            .type = static_cast<eillance::messaging::AttachmentType>(type),
            .thumbnail_base64 = t,
-           .mime_type = m}
+           .mime_type = m,
+           .note = n}
       );
 
       env->ReleaseStringUTFChars(path, p);
@@ -335,6 +338,9 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationView
       }
       if (mime) {
         env->ReleaseStringUTFChars(mime, m);
+      }
+      if (note) {
+        env->ReleaseStringUTFChars(note, n);
       }
     }
   }
@@ -751,6 +757,7 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     classref.RegisterField(env, attachment_req_class, "type", "I");
     classref.RegisterField(env, attachment_req_class, "thumbnail", "Ljava/lang/String;");
     classref.RegisterField(env, attachment_req_class, "mimeType", "Ljava/lang/String;");
+    classref.RegisterField(env, attachment_req_class, "note", "Ljava/lang/String;");
 
     // Attachment
     std::string const attachment_class = "hela/eillance/ndkio/Attachment";
@@ -758,7 +765,7 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     classref.RegisterCtor(
         env,
         attachment_class,
-        "(Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;JLjava/lang/String;ZI)V"
+        "(Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;JLjava/lang/String;ZILjava/lang/String;)V"
     );
 
   } catch (std::exception const& e) {

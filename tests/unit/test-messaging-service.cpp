@@ -133,7 +133,8 @@ TEST_F(MessagingServiceTest, SendMessage_ThumbInPayload) {
   transport_->AddPeer(peer1, peer);
 
   std::vector<services::AttachmentRequest> atts;
-  atts.push_back({"dummy_path", messaging::AttachmentType::image, "base64thumb_content", "image/jpeg"});
+  atts.push_back({"dummy_path", messaging::AttachmentType::image, "base64thumb_content", "image/jpeg", "This is a note"}
+  );
 
   std::ofstream(temp_dir_ / "dummy_path").close();
   auto const file_path = (temp_dir_ / "test_img.jpg").string();
@@ -155,6 +156,34 @@ TEST_F(MessagingServiceTest, SendMessage_ThumbInPayload) {
   }
   ASSERT_TRUE(found);
   ASSERT_TRUE(json_msg.contains("attachments"));
+  EXPECT_EQ(json_msg["attachments"][0]["note"], "This is a note");
+}
+
+TEST_F(MessagingServiceTest, SendMessage_NoteTruncation) {
+  auto peer = std::make_shared<transport::Peer>(peer1);
+  peer->data_channel_is_open = true;
+  eillance::crypto::SessionCipher other;
+  peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
+  transport_->AddPeer(peer1, peer);
+
+  std::string long_note(200, 'A');
+  std::vector<services::AttachmentRequest> atts;
+  auto const file_path = (temp_dir_ / "test_img.jpg").string();
+  std::ofstream(file_path).close();
+  atts.push_back({file_path, messaging::AttachmentType::image, "", "image/jpeg", long_note});
+
+  service_->SendChatMessage(peer1, "Msg", atts);
+
+  bool found = false;
+  for (auto const& msg : mock_transport_->log.sent_peer_messages | std::views::values) {
+    if (msg.value("type", "") == "chat") {
+      auto note = msg["attachments"][0]["note"].get<std::string>();
+      EXPECT_EQ(note.length(), 120);
+      found = true;
+      break;
+    }
+  }
+  ASSERT_TRUE(found);
 }
 
 TEST_F(MessagingServiceTest, DownloadTriggersCallback) {
@@ -187,8 +216,14 @@ TEST_F(MessagingServiceTest, DownloadTriggersCallback) {
   att.size_bytes = file_content.size();
   att.hash = file_hash;
   att.is_downloaded = false;
+  att.note = "Incoming note";
 
   service_->OnChatMessageReceived(peer1, encrypted, 12345, false, {att});
+
+  // Verify stored note
+  auto stored_att = mock_storage_->GetAttachment("att_1");
+  ASSERT_TRUE(stored_att.has_value());
+  EXPECT_EQ(stored_att->note, "Incoming note");
 
   // Manually drive the FileTransferService via binary protocol
   std::vector<std::byte> data_bytes(file_content.size());

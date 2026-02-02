@@ -53,7 +53,8 @@ data class Attachment(
   val size: Long,
   val thumbnail: String?,
   val isDownloaded: Boolean,
-  private val statusValue: Int = AttachmentStatus.Pending.value
+  private val statusValue: Int = AttachmentStatus.Pending.value,
+  val note: String = ""
 ) {
   val type: AttachmentType get() = AttachmentType.fromInt(typeValue)
   val status: AttachmentStatus get() = AttachmentStatus.fromInt(statusValue)
