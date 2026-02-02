@@ -8,11 +8,17 @@ add_subdirectory(eillance-capture)
 add_subdirectory(eillance-rtc)
 add_subdirectory(eillance-bot-api)
 
+execute_process(
+  COMMAND git rev-parse --show-toplevel
+  OUTPUT_VARIABLE REPO_ROOT
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+
 # === Localization Generation ===
 # Define paths relative to src/libs (where this file resides)
-set(TRANS_SCRIPT "../../tools/translations/generate.py")
-set(TRANS_INPUT "${CMAKE_CURRENT_SOURCE_DIR}/../../src/assets/translations")
-set(TRANS_OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/../apps/android/app/src/main/res/values/strings.xml")
+set(TRANS_SCRIPT "${REPO_ROOT}/tools/translations/generate.py")
+set(TRANS_INPUT "${REPO_ROOT}/src/assets/translations")
+set(TRANS_OUTPUT "${REPO_ROOT}/src/apps/android/app/src/main/res/values/strings.xml")
 
 # Find Python
 find_package(Python3 COMPONENTS Interpreter)
