@@ -24,7 +24,7 @@ NLOHMANN_JSON_SERIALIZE_ENUM(
     }
 )
 
-enum class AttachmentStatus : std::uint8_t { pending = 0, transferring, done, failed, canceled, discarded };
+enum class AttachmentStatus : std::uint8_t { pending = 0, transferring, done, failed, canceled, discarded, paused };
 
 struct Attachment {
   std::string id;

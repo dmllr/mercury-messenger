@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PlayCircle
@@ -40,6 +41,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.decode.VideoFrameDecoder
@@ -49,7 +51,6 @@ import hela.eillance.ndkio.Attachment
 import hela.eillance.ndkio.AttachmentStatus
 import hela.eillance.ndkio.AttachmentType
 import java.io.File
-import java.util.Locale
 
 @Composable
 fun MediaBubbleContent(
@@ -61,12 +62,8 @@ fun MediaBubbleContent(
   onResume: (String) -> Unit,
   onDiscard: (String) -> Unit
 ) {
-  // Filter out canceled attachments for receiver to make them "disappear"
-  // Both sides hide Discarded attachments
   val visibleAttachments = attachments.filter {
-    if (it.status == AttachmentStatus.Discarded) return@filter false
-    if (!isFromMe && it.status == AttachmentStatus.Canceled) return@filter false
-    true
+    it.status != AttachmentStatus.Discarded
   }
 
   if (visibleAttachments.isEmpty()) return
@@ -74,7 +71,6 @@ fun MediaBubbleContent(
   val count = visibleAttachments.size
   val roundedShape = RoundedCornerShape(8.dp)
 
-  // Helper to render an item at index with specific modifier
   val renderItem: @Composable (Int, Modifier) -> Unit = { index, modifier ->
     val att = visibleAttachments[index]
     MediaItem(
@@ -95,9 +91,7 @@ fun MediaBubbleContent(
       .clip(roundedShape)
   ) {
     when (count) {
-      1 -> {
-        renderItem(0, Modifier.fillMaxWidth().aspectRatio(1.5f))
-      }
+      1 -> renderItem(0, Modifier.fillMaxWidth().aspectRatio(1.5f))
       2 -> {
         Row(modifier = Modifier.fillMaxWidth().height(160.dp)) {
           renderItem(0, Modifier.weight(1f).fillMaxSize())
@@ -117,7 +111,6 @@ fun MediaBubbleContent(
         }
       }
       else -> {
-        // 4 or more
         Column(modifier = Modifier.fillMaxWidth()) {
           Row(modifier = Modifier.fillMaxWidth().height(120.dp)) {
             renderItem(0, Modifier.weight(1f).fillMaxSize())
@@ -128,10 +121,8 @@ fun MediaBubbleContent(
           Row(modifier = Modifier.fillMaxWidth().height(120.dp)) {
             renderItem(2, Modifier.weight(1f).fillMaxSize())
             Spacer(modifier = Modifier.width(2.dp))
-
             Box(modifier = Modifier.weight(1f).fillMaxSize()) {
               renderItem(3, Modifier.fillMaxSize())
-
               if (count > 4) {
                 Box(
                   modifier = Modifier
@@ -140,11 +131,7 @@ fun MediaBubbleContent(
                     .clickable { onMediaClick(visibleAttachments[3]) },
                   contentAlignment = Alignment.Center
                 ) {
-                  Text(
-                    text = "+${count - 4}",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = Color.White
-                  )
+                  Text(text = "+${count - 4}", style = MaterialTheme.typography.titleLarge, color = Color.White)
                 }
               }
             }
@@ -166,6 +153,34 @@ private fun MediaItem(
   onDiscard: () -> Unit,
   modifier: Modifier = Modifier
 ) {
+  // Sender Canceled -> No Thumbnail, just text/icon.
+  if (attachment.status == AttachmentStatus.Canceled) {
+    Box(
+      modifier = modifier
+        .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+        .padding(16.dp),
+      contentAlignment = Alignment.Center
+    ) {
+      Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Icon(
+          imageVector = Icons.Default.Block,
+          contentDescription = "Canceled",
+          tint = MaterialTheme.colorScheme.onSurfaceVariant,
+          modifier = Modifier.size(24.dp)
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+          text = "This upload was canceled by the sender",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          textAlign = TextAlign.Center
+        )
+      }
+    }
+    return
+  }
+
+  // Thumbnail or placeholder
   Box(
     modifier = modifier
       .background(Color.Black.copy(alpha = 0.1f))
@@ -177,12 +192,9 @@ private fun MediaItem(
   ) {
     val file = File(attachment.path)
     val context = LocalContext.current
+    val isVideo = attachment.type == AttachmentType.Video || attachment.mime.startsWith("video/")
 
-    val isVideo = attachment.type == AttachmentType.Video ||
-        attachment.mime.startsWith("video/") ||
-        file.extension.lowercase(Locale.US) in setOf("mp4", "mkv", "webm", "avi", "3gp", "mov")
-
-    // Content Render
+    // Content Layer
     if (attachment.status == AttachmentStatus.Done && file.exists()) {
       val model = remember(attachment.path, isVideo) {
         if (isVideo) {
@@ -191,36 +203,30 @@ private fun MediaItem(
             .decoderFactory { result, options, _ -> VideoFrameDecoder(result.source, options) }
             .videoFrameMillis(1000)
             .build()
-        } else {
-          file
-        }
+        } else file
       }
-
       AsyncImage(
         model = model,
         contentDescription = "Attachment",
         modifier = Modifier.fillMaxSize(),
         contentScale = ContentScale.Crop
       )
-
       if (isVideo) {
         Icon(
           imageVector = Icons.Default.PlayCircle,
-          contentDescription = "Play Video",
+          contentDescription = "Play",
           tint = Color.White.copy(alpha = 0.8f),
           modifier = Modifier.size(48.dp)
         )
       }
     } else {
-      // Thumbnail / Placeholder
+      // Thumbnail
       val imageBitmap = remember(attachment.thumbnail) {
         if (!attachment.thumbnail.isNullOrEmpty()) {
           try {
             val bytes = Base64.decode(attachment.thumbnail, Base64.DEFAULT)
             BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
-          } catch (e: Exception) {
-            null
-          }
+          } catch (e: Exception) { null }
         } else null
       }
 
@@ -232,43 +238,47 @@ private fun MediaItem(
           contentScale = ContentScale.Crop
         )
       } else {
-        Box(
-          modifier = Modifier.fillMaxSize().background(Color.Gray),
-          contentAlignment = Alignment.Center
-        ) {
-          // Empty placeholder
-        }
+        Box(modifier = Modifier.fillMaxSize().background(Color.Gray))
       }
-
-      // Overlay
+      // Darken overlay for non-done states
       Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.4f)))
     }
 
-    // Status Overlays
+    // Interactive Layer
     Box(contentAlignment = Alignment.Center) {
-      if (attachment.status == AttachmentStatus.Canceled) {
-        // Canceled state
+      if (attachment.status == AttachmentStatus.Paused) {
+        // Scenario 2: Receiver Paused (Resumable)
         Row(
-          horizontalArrangement = Arrangement.spacedBy(16.dp),
+          horizontalArrangement = Arrangement.spacedBy(24.dp),
           verticalAlignment = Alignment.CenterVertically
         ) {
+          // Resume
           Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(
-              Icons.Default.Repeat,
+              imageVector = Icons.Default.Repeat,
               contentDescription = "Resume",
               tint = Color.White,
-              modifier = Modifier.size(32.dp).clickable { onResume() }
+              modifier = Modifier
+                .size(36.dp)
+                .background(Color.Black.copy(alpha = 0.3f), CircleShape)
+                .clickable { onResume() }
+                .padding(6.dp)
             )
             Text("Resume", style = MaterialTheme.typography.labelSmall, color = Color.White)
           }
+          // Cancel Completely (Discard)
           Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(
-              Icons.Default.Cancel,
+              imageVector = Icons.Default.Cancel,
               contentDescription = "Cancel",
               tint = Color.White,
-              modifier = Modifier.size(32.dp).clickable { onDiscard() }
+              modifier = Modifier
+                .size(36.dp)
+                .background(Color.Black.copy(alpha = 0.3f), CircleShape)
+                .clickable { onDiscard() }
+                .padding(6.dp)
             )
-            Text("Close", style = MaterialTheme.typography.labelSmall, color = Color.White)
+            Text("Cancel", style = MaterialTheme.typography.labelSmall, color = Color.White)
           }
         }
       } else if (progress != null && progress >= 0f) {
@@ -282,36 +292,29 @@ private fun MediaItem(
             trackColor = Color.White.copy(alpha = 0.4f),
           )
           IconButton(
-            onClick = onCancel,
+            onClick = onCancel, // Sets status to Paused (download) or Canceled (upload)
             modifier = Modifier
               .size(28.dp)
               .background(Color.Black.copy(alpha = 0.4f), CircleShape)
           ) {
-            Icon(Icons.Default.Close, contentDescription = "Cancel", tint = Color.White, modifier = Modifier.size(20.dp))
+            Icon(Icons.Default.Close, contentDescription = "Pause", tint = Color.White, modifier = Modifier.size(20.dp))
           }
         }
       } else {
         when (attachment.status) {
           AttachmentStatus.Transferring -> {
-            // Indeterminate state (initializing or stalled but active)
+            // Indeterminate / Initializing
             Box(contentAlignment = Alignment.Center) {
-              CircularProgressIndicator(
-                color = Color.White,
-                modifier = Modifier.size(48.dp),
-                strokeWidth = 4.dp
-              )
+              CircularProgressIndicator(color = Color.White, modifier = Modifier.size(48.dp), strokeWidth = 4.dp)
               IconButton(
                 onClick = onCancel,
-                modifier = Modifier
-                  .size(28.dp)
-                  .background(Color.Black.copy(alpha = 0.4f), CircleShape)
+                modifier = Modifier.size(28.dp).background(Color.Black.copy(alpha = 0.4f), CircleShape)
               ) {
                 Icon(Icons.Default.Close, contentDescription = "Cancel", tint = Color.White, modifier = Modifier.size(20.dp))
               }
             }
           }
           AttachmentStatus.Pending -> {
-            // Waiting / Interrupted state
             Row(
               modifier = Modifier
                 .background(Color.Black.copy(alpha = 0.6f), CircleShape)
@@ -329,9 +332,6 @@ private fun MediaItem(
               Icon(Icons.Default.Refresh, contentDescription = "Retry", tint = Color.Red, modifier = Modifier.size(32.dp).clickable { onResume() })
               Text("Failed", style = MaterialTheme.typography.labelSmall, color = Color.Red)
             }
-          }
-          AttachmentStatus.Done -> {
-            // Handled above (Media display)
           }
           else -> {}
         }

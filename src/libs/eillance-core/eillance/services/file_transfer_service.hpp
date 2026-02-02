@@ -169,9 +169,7 @@ class FileTransferService {
       if (active_downloads_.contains(attachment_id)) {
         auto& state = active_downloads_[attachment_id];
         state.stream.close();
-        // Remove temp file on cancel to cleanup
-        std::error_code error_code;
-        std::filesystem::remove(state.temp_path, error_code);
+        // Do NOT remove temp file on pause/cancel, so we can resume later.
         active_downloads_.erase(attachment_id);
       }
     }
@@ -180,9 +178,11 @@ class FileTransferService {
       SendCancel(peer_id, attachment_id);
     }
 
-    storage_->UpdateAttachmentStatus(attachment_id, messaging::AttachmentStatus::canceled, is_upload);
+    auto const new_status = (!is_upload) ? messaging::AttachmentStatus::paused : messaging::AttachmentStatus::canceled;
+
+    storage_->UpdateAttachmentStatus(attachment_id, new_status, is_upload);
     if (on_attachment_status_changed_) {
-      on_attachment_status_changed_(peer_id, attachment_id, messaging::AttachmentStatus::canceled);
+      on_attachment_status_changed_(peer_id, attachment_id, new_status);
     }
   }
 
@@ -194,13 +194,32 @@ class FileTransferService {
         StartUploadInternal(peer_id, *attachment);
       }
     } else {
+      // For download, we just send resume.
+      // Status update to 'transferring' will happen when chunks arrive or we can set it here optimistically?
+      // Better to set transferring here so UI updates immediately.
+      storage_->UpdateAttachmentStatus(attachment_id, messaging::AttachmentStatus::transferring, false);
+      if (on_attachment_status_changed_) {
+        on_attachment_status_changed_(peer_id, attachment_id, messaging::AttachmentStatus::transferring);
+      }
       SendResumeRequest(peer_id, attachment_id);
     }
   }
 
   void DiscardAttachment(ContactID const& peer_id, std::string const& attachment_id) {
-    CancelTransfer(peer_id, attachment_id, true, true);
-    CancelTransfer(peer_id, attachment_id, false, true);
+    // Force stop everything
+    {
+        std::lock_guard<std::mutex> const lock(transfers_mutex_);
+        active_uploads_.erase(attachment_id);
+        if (active_downloads_.contains(attachment_id)) {
+            auto& state = active_downloads_[attachment_id];
+            state.stream.close();
+            std::error_code error_code;
+            std::filesystem::remove(state.temp_path, error_code);
+            active_downloads_.erase(attachment_id);
+        }
+    }
+
+    SendCancel(peer_id, attachment_id);
     storage_->UpdateAttachmentStatus(attachment_id, messaging::AttachmentStatus::discarded, false);
     if (on_attachment_status_changed_) {
       on_attachment_status_changed_(peer_id, attachment_id, messaging::AttachmentStatus::discarded);
@@ -289,6 +308,14 @@ class FileTransferService {
       // Just ensure not paused and try pump
       active_uploads_[file_id].paused = false;
       PumpUpload(peer_id, file_id, active_uploads_[file_id]);
+    } else {
+      // Sender side: Resume request for an inactive upload.
+      // Check storage if we have the file info.
+      auto attachment = storage_->GetAttachment(file_id);
+      if (attachment && attachment->status != messaging::AttachmentStatus::discarded) {
+        // Restart/Resume the upload
+        StartUploadInternal(peer_id, *attachment);
+      }
     }
   }
 
@@ -385,7 +412,7 @@ class FileTransferService {
 
     if (!active_downloads_.contains(file_id)) {
       auto attachment = storage_->GetAttachment(file_id);
-      if (attachment && attachment->status != messaging::AttachmentStatus::canceled) {
+      if (attachment && attachment->status != messaging::AttachmentStatus::canceled && attachment->status != messaging::AttachmentStatus::discarded) {
         lock.unlock();
         QueueDownload(peer_id, *attachment, 0);
         lock.lock();
@@ -484,7 +511,21 @@ class FileTransferService {
   }
 
   void HandleCancel(ContactID const& peer_id, std::string const& file_id) {
-    CancelTransfer(peer_id, file_id, active_uploads_.contains(file_id), false);
+    // Network cancel received: stop logic locally, set status to canceled
+    std::lock_guard<std::mutex> const lock(transfers_mutex_);
+    if (active_uploads_.contains(file_id)) {
+      active_uploads_.erase(file_id);
+    }
+    if (active_downloads_.contains(file_id)) {
+        auto& state = active_downloads_[file_id];
+        state.stream.close();
+        active_downloads_.erase(file_id);
+    }
+    // Remote cancellation is always terminal for current session
+    storage_->UpdateAttachmentStatus(file_id, messaging::AttachmentStatus::canceled, false);
+    if (on_attachment_status_changed_) {
+      on_attachment_status_changed_(peer_id, file_id, messaging::AttachmentStatus::canceled);
+    }
   }
 
   auto SendPacket(
