@@ -104,6 +104,7 @@ TEST_F(AttachmentTest, PersistenceStoresHash) {
       .kind = messaging::HistoryEntryKind::textMessage,
       .timestamp = 1000,
       .direction = messaging::MessageDirection::sent,
+      .status = messaging::MessageStatus::sent, // Ensure visible
       .data = msg_data,
       .peer_id = peer1
   };
@@ -194,10 +195,12 @@ TEST_F(AttachmentTest, AttachmentPersistenceAcrossRestarts) {
   msg_data.content = "Image";
   msg_data.attachments.push_back(att);
 
+  // Explicitly set status to delivered/read so it's not filtered out as "none/deleted"
   messaging::HistoryEntryRecord record{
       .kind = messaging::HistoryEntryKind::textMessage,
       .timestamp = 1000,
       .direction = messaging::MessageDirection::received,
+      .status = messaging::MessageStatus::delivered,
       .data = msg_data,
       .peer_id = peer1
   };

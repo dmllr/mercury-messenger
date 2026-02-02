@@ -437,7 +437,7 @@ class MessagingService {
     file_transfer_service_->ResumeTransfer(peer_id, attachment_id, is_upload);
   }
 
-  void DiscardAttachment(ContactID const& peer_id, std::string const& attachment_id) {
+  void DiscardAttachment(ContactID const& peer_id, std::string const& attachment_id) const {
     // Check if we need to send a reliable cancel signal.
     // We only send cancel if the attachment isn't already in a terminal/cancelled state.
     // DiscardAttachment in FTS might handle binary send, but we ensure reliability here.
@@ -454,7 +454,7 @@ class MessagingService {
     file_transfer_service_->DiscardAttachment(peer_id, attachment_id);
 
     if (should_send_cancel) {
-        nlohmann::json const cancel_msg = {
+        nlohmann::json cancel_msg = {
             {"type", "file_cancel"},
             {"file_id", attachment_id}
         };
@@ -462,7 +462,7 @@ class MessagingService {
 
         if (auto const peer = transport_->GetPeer(peer_id);
             peer && peer->data_channel_is_open) {
-            SendQueuedMessages(peer_id);
+            const_cast<MessagingService*>(this)->SendQueuedMessages(peer_id);
         }
     }
   }
@@ -658,6 +658,9 @@ class MessagingService {
         message_id
     );
 
+    // FIX: Set status to delivered so it's not filtered out as 'none' (deleted) by GetHistoryPage
+    history_->UpdateMessageStatus(peer_id, entry.id, messaging::MessageStatus::delivered);
+
     // Now start downloads
     if (!local_attachments.empty()) {
       for (auto const& att : local_attachments) {
@@ -731,7 +734,7 @@ class MessagingService {
   }
 
   void UpdatePeerActivity(ContactID const& peer_id) {
-    if (auto peer = transport_->GetPeer(peer_id)) {
+    if (auto const peer = transport_->GetPeer(peer_id)) {
       peer->last_activity_time = Time::Now();
     }
   }
@@ -743,12 +746,11 @@ class MessagingService {
       return true;
     }
 
-    // Check for 'pending' OR 'transferring' files.
-    // Including 'transferring' ensures resumption on restart.
+    // Only check for 'pending' files. We ignore 'transferring' status here
+    // to prevent the Delivery Service from interpreting an active transfer as a failed connection attempt.
     auto const attachments = storage_->GetPendingAttachments(peer_id);
     bool const has_pending_files = std::ranges::any_of(attachments, [](auto const& att) {
-      return att.status == messaging::AttachmentStatus::pending ||
-             att.status == messaging::AttachmentStatus::transferring;
+      return att.status == messaging::AttachmentStatus::pending;
     });
 
     return has_pending_files || !storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::sending).empty();
