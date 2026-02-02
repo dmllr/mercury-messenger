@@ -147,10 +147,12 @@ class InternalMessagingService {
       profile_service_->OnDeviceProfileReceived(peer_id, message["profile"]);
     } else if (type == "termination") {
       transport_->RemovePeer(peer_id);
-    }
-    // Forward legacy file messages if any remain (though logic moved to binary)
-    else if (type == "file_chunk" || type == "file_cancel" || type == "file_resume_request") {
-      // file_transfer_service_->ProcessMessage(peer_id, message);
+    } else if (type == "file_cancel") {
+      // Handle reliable file cancellation
+      std::string const file_id = message.value("file_id", "");
+      if (!file_id.empty()) {
+        file_transfer_service_->HandleCancel(peer_id, file_id);
+      }
     }
   }
 
