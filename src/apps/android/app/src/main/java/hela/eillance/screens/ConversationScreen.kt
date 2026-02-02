@@ -17,6 +17,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -36,10 +37,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -47,11 +49,16 @@ import androidx.compose.material.icons.automirrored.filled.CallMade
 import androidx.compose.material.icons.automirrored.filled.CallMissed
 import androidx.compose.material.icons.automirrored.filled.CallReceived
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.AddPhotoAlternate
+import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.DoneAll
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.SnippetFolder
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -78,9 +85,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -89,10 +100,12 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import androidx.core.os.ConfigurationCompat
 import hela.eillance.BannerType
 import hela.eillance.MainViewModel
+import hela.eillance.camera.R
 import hela.eillance.components.MediaBubbleContent
 import hela.eillance.components.StatusSnackbar
 import hela.eillance.components.UserAvatar
@@ -110,12 +123,15 @@ import hela.eillance.ndkio.MessageStatus
 import hela.eillance.ndkio.PeerConnectionState
 import hela.eillance.ndkio.ServiceConnectionState
 import hela.eillance.theme.extendedColors
+import hela.eillance.ui.LocalizationMapping
 import hela.eillance.viewmodels.CallViewModel
 import hela.eillance.viewmodels.ContactsViewModel
 import hela.eillance.viewmodels.ConversationViewModel
+import hela.eillance.viewmodels.DraftAttachment
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import java.io.File
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -124,9 +140,6 @@ import java.time.format.FormatStyle
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
-import androidx.compose.ui.res.stringResource
-import hela.eillance.camera.R
-import hela.eillance.ui.LocalizationMapping
 
 private val jsonParser = Json { ignoreUnknownKeys = true }
 
@@ -150,6 +163,7 @@ fun ConversationScreen(
   val listState = rememberLazyListState()
   val coroutineScope = rememberCoroutineScope()
   val transferProgress by chatVM.transferProgress.collectAsState()
+  val draftAttachments by chatVM.draftAttachments.collectAsState()
   val context = LocalContext.current
   val bannerState by mainViewModel.permissionBannerState.collectAsState()
 
@@ -210,15 +224,6 @@ fun ConversationScreen(
     SystemMessageDetailsDialog(entry = entry, onDismiss = { systemMessageToShowDetails = null })
   }
 
-  // Media Picker Logic - Supports multiple selection
-  val mediaPicker = rememberLauncherForActivityResult(
-    contract = ActivityResultContracts.PickMultipleVisualMedia(10)
-  ) { uris ->
-    if (uris.isNotEmpty()) {
-      chatVM.sendMedia(uris)
-    }
-  }
-
   Scaffold(
     topBar = {
       TopAppBar(
@@ -262,7 +267,7 @@ fun ConversationScreen(
         .navigationBarsPadding()
         .imePadding()
     ) {
-      // --- Unified Status Snackbar (Top Position) ---
+      // --- Unified Status Snackbar ---
       val isConnectionIssue = connectionState != ServiceConnectionState.Online &&
           connectionState != ServiceConnectionState.Establishing &&
           connectionState != ServiceConnectionState.Unknown
@@ -277,11 +282,11 @@ fun ConversationScreen(
         Box(modifier = Modifier.padding(16.dp)) {
           if (isConnectionIssue) {
             val (msg, isError) = when (connectionState) {
-              ServiceConnectionState.NoNetwork -> "Waiting for network..." to false
-              ServiceConnectionState.Failure -> "Connection failed" to true
-              ServiceConnectionState.Disconnected -> "Disconnected" to false
-              ServiceConnectionState.InvalidToken -> "Authentication error" to true
-              else -> "Connection issue" to true
+              ServiceConnectionState.NoNetwork -> stringResource(R.string.connection_no_network) to false
+              ServiceConnectionState.Failure -> stringResource(R.string.connection_failed) to true
+              ServiceConnectionState.Disconnected -> stringResource(R.string.connection_disconnected) to false
+              ServiceConnectionState.InvalidToken -> stringResource(R.string.connection_auth_error) to true
+              else -> stringResource(R.string.connection_issue) to true
             }
             StatusSnackbar(text = msg, isError = isError)
           } else {
@@ -397,17 +402,290 @@ fun ConversationScreen(
           )
         }
         else -> {
-          MessageInput(
+          MessageInputArea(
+            draftAttachments = draftAttachments,
             onSendMessage = chatVM::sendMessage,
-            onAttachMedia = {
-              mediaPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
-            }
+            onAddDraft = chatVM::addDraftAttachment,
+            onRemoveDraft = chatVM::removeDraft,
+            onUpdateNote = chatVM::updateDraftNote
           )
         }
       }
     }
   }
 }
+
+@Composable
+fun MessageInputArea(
+  draftAttachments: List<DraftAttachment>,
+  onSendMessage: (String) -> Unit,
+  onAddDraft: (Uri) -> Unit,
+  onRemoveDraft: (Int) -> Unit,
+  onUpdateNote: (Int, String) -> Unit
+) {
+  var text by remember { mutableStateOf(TextFieldValue("")) }
+  var isFocused by remember { mutableStateOf(false) }
+  val context = LocalContext.current
+
+  // Media Pickers
+  val pickMedia = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+    if (uri != null) onAddDraft(uri)
+  }
+  val pickDoc = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    if (uri != null) onAddDraft(uri)
+  }
+
+  // Camera Photo
+  var cameraPhotoUri by remember { mutableStateOf<Uri?>(null) }
+  val takePicture = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+    if (success && cameraPhotoUri != null) {
+      onAddDraft(cameraPhotoUri!!)
+    }
+  }
+
+  // Camera Video
+  var cameraVideoUri by remember { mutableStateOf<Uri?>(null) }
+  val captureVideo = rememberLauncherForActivityResult(ActivityResultContracts.CaptureVideo()) { success ->
+    if (success && cameraVideoUri != null) {
+      onAddDraft(cameraVideoUri!!)
+    }
+  }
+
+  // Define Authority based on package name to match Manifest placeholder
+  val authority = "${context.packageName}.provider"
+
+  Column {
+    // 1. Attachment Action Panel (Visible on Focus)
+    AnimatedVisibility(visible = isFocused) {
+      Row(
+        modifier = Modifier
+          .fillMaxWidth()
+          .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+          .padding(8.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly
+      ) {
+        // Gallery
+        IconButton(onClick = {
+          pickMedia.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+        }) {
+          Icon(Icons.Default.Image, contentDescription = stringResource(R.string.attach_gallery), tint = MaterialTheme.colorScheme.primary)
+        }
+
+        // Camera Photo
+        IconButton(onClick = {
+          val tmpFile = File.createTempFile("cam_photo_", ".jpg", context.cacheDir)
+          val uri = FileProvider.getUriForFile(context, authority, tmpFile)
+          cameraPhotoUri = uri
+          takePicture.launch(uri)
+        }) {
+          Icon(Icons.Default.CameraAlt, contentDescription = stringResource(R.string.attach_camera_photo), tint = MaterialTheme.colorScheme.primary)
+        }
+
+        // Camera Video (New)
+        IconButton(onClick = {
+          val tmpFile = File.createTempFile("cam_video_", ".mp4", context.cacheDir)
+          val uri = FileProvider.getUriForFile(context, authority, tmpFile)
+          cameraVideoUri = uri
+          captureVideo.launch(uri)
+        }) {
+          Icon(Icons.Default.Videocam, contentDescription = stringResource(R.string.attach_camera_video), tint = MaterialTheme.colorScheme.primary)
+        }
+
+        // Document (Readable docs)
+        IconButton(onClick = { pickDoc.launch(arrayOf("application/*", "text/*")) }) {
+          Icon(Icons.Default.Description, contentDescription = stringResource(R.string.attach_document), tint = MaterialTheme.colorScheme.primary)
+        }
+
+        // Binary File (All files)
+        IconButton(onClick = { pickDoc.launch(arrayOf("*/*")) }) {
+          Icon(Icons.Default.SnippetFolder, contentDescription = stringResource(R.string.attach_file), tint = MaterialTheme.colorScheme.primary)
+        }
+      }
+    }
+
+    // 2. Draft Attachments Preview Row
+    AnimatedVisibility(visible = draftAttachments.isNotEmpty()) {
+      LazyRow(
+        modifier = Modifier
+          .fillMaxWidth()
+          .background(MaterialTheme.colorScheme.surfaceVariant)
+          .padding(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+      ) {
+        itemsIndexed(draftAttachments) { index, draft ->
+          DraftAttachmentItem(
+            draft = draft,
+            onRemove = { onRemoveDraft(index) },
+            onNoteChange = { note -> onUpdateNote(index, note) }
+          )
+        }
+      }
+    }
+
+    // 3. Text Input & Send
+    Row(
+      modifier = Modifier
+        .fillMaxWidth()
+        .background(MaterialTheme.colorScheme.surface)
+        .padding(horizontal = 8.dp, vertical = 4.dp),
+      verticalAlignment = Alignment.CenterVertically
+    ) {
+      TextField(
+        value = text,
+        onValueChange = { text = it },
+        modifier = Modifier
+          .weight(1f)
+          .onFocusChanged { isFocused = it.isFocused },
+        placeholder = { Text(stringResource(R.string.msg_input_placeholder)) },
+        colors = TextFieldDefaults.colors(
+          focusedIndicatorColor = Color.Transparent,
+          unfocusedIndicatorColor = Color.Transparent,
+          disabledIndicatorColor = Color.Transparent
+        ),
+        keyboardOptions = KeyboardOptions(
+          capitalization = KeyboardCapitalization.Sentences,
+          keyboardType = KeyboardType.Text,
+          imeAction = ImeAction.Default
+        ),
+        maxLines = 4
+      )
+
+      val canSend = text.text.isNotBlank() || draftAttachments.isNotEmpty()
+      IconButton(
+        modifier = Modifier
+          .background(
+            if (canSend) MaterialTheme.extendedColors.success else MaterialTheme.colorScheme.surfaceVariant,
+            shape = CircleShape
+          ),
+        onClick = {
+          if (canSend) {
+            onSendMessage(text.text)
+            text = TextFieldValue("")
+          }
+        },
+        enabled = canSend
+      ) {
+        Icon(
+          Icons.AutoMirrored.Filled.Send,
+          contentDescription = stringResource(R.string.send_description),
+          tint = if (canSend) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+      }
+    }
+  }
+}
+
+@Composable
+fun DraftAttachmentItem(
+  draft: DraftAttachment,
+  onRemove: () -> Unit,
+  onNoteChange: (String) -> Unit
+) {
+  var showNoteDialog by remember { mutableStateOf(false) }
+
+  Box(
+    modifier = Modifier
+      .width(100.dp)
+      .clip(RoundedCornerShape(8.dp))
+      .background(MaterialTheme.colorScheme.surface)
+      .clickable { showNoteDialog = true }
+  ) {
+    Column {
+      Box(modifier = Modifier.height(80.dp).fillMaxWidth()) {
+        if (draft.bitmap != null) {
+          Image(
+            bitmap = draft.bitmap.asImageBitmap(),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
+          )
+        } else {
+          // File Icon placeholder
+          Icon(
+            Icons.Default.AttachFile,
+            contentDescription = null,
+            modifier = Modifier.align(Alignment.Center)
+          )
+        }
+
+        // Remove button
+        IconButton(
+          onClick = onRemove,
+          modifier = Modifier
+            .align(Alignment.TopEnd)
+            .size(24.dp)
+            .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+        ) {
+          Icon(Icons.Default.Close, contentDescription = stringResource(R.string.attachment_remove), tint = Color.White, modifier = Modifier.size(16.dp))
+        }
+      }
+
+      // Note indicator/text
+      if (draft.note.isNotEmpty()) {
+        Text(
+          text = draft.note,
+          style = MaterialTheme.typography.labelSmall,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+          modifier = Modifier.padding(4.dp)
+        )
+      } else {
+        Text(
+          text = stringResource(R.string.attachment_note_placeholder),
+          style = MaterialTheme.typography.labelSmall,
+          fontStyle = FontStyle.Italic,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          modifier = Modifier.padding(4.dp)
+        )
+      }
+    }
+  }
+
+  if (showNoteDialog) {
+    NoteEditDialog(
+      initialNote = draft.note,
+      onConfirm = {
+        onNoteChange(it)
+        showNoteDialog = false
+      },
+      onDismiss = { showNoteDialog = false }
+    )
+  }
+}
+
+@Composable
+fun NoteEditDialog(initialNote: String, onConfirm: (String) -> Unit, onDismiss: () -> Unit) {
+  var note by remember { mutableStateOf(initialNote) }
+
+  androidx.compose.material3.AlertDialog(
+    onDismissRequest = onDismiss,
+    title = { Text(stringResource(R.string.note_dialog_title)) },
+    text = {
+      Column {
+        TextField(
+          value = note,
+          onValueChange = { if (it.length <= 120) note = it },
+          placeholder = { Text(stringResource(R.string.note_dialog_hint)) },
+          modifier = Modifier.fillMaxWidth(),
+          maxLines = 3
+        )
+        Text(
+          text = "${note.length} / 120",
+          style = MaterialTheme.typography.labelSmall,
+          modifier = Modifier.align(Alignment.End).padding(top = 4.dp)
+        )
+      }
+    },
+    confirmButton = {
+      Button(onClick = { onConfirm(note) }) { Text(stringResource(R.string.save)) }
+    },
+    dismissButton = {
+      TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+    }
+  )
+}
+
+// ... (Rest of existing ConversationScreen components: ConnectionStatusBar, ChatHistory, etc. remain mostly the same) ...
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -417,10 +695,10 @@ fun ConnectionStatusBar(contact: Contact) {
   val context = LocalContext.current
 
   val (statusText, statusColor) = when (connectionState) {
-    PeerConnectionState.Connected -> "Connected" to MaterialTheme.extendedColors.success
-    PeerConnectionState.Connecting -> "Connecting..." to MaterialTheme.colorScheme.secondary
-    PeerConnectionState.Failed -> "Connection Failed" to MaterialTheme.colorScheme.error
-    else -> "Offline" to MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+    PeerConnectionState.Connected -> stringResource(R.string.state_peer_connection_connected) to MaterialTheme.extendedColors.success
+    PeerConnectionState.Connecting -> stringResource(R.string.state_peer_connection_connecting) to MaterialTheme.colorScheme.secondary
+    PeerConnectionState.Failed -> stringResource(R.string.state_peer_connection_failed) to MaterialTheme.colorScheme.error
+    else -> stringResource(R.string.state_peer_connection_disconnected) to MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
   }
 
   val height by animateDpAsState(
@@ -629,6 +907,19 @@ fun MessageBubble(
           onResume = onResumeTransfer,
           onDiscard = onDiscardTransfer
         )
+        // Show Notes for Attachments
+        entry.attachments.forEach { att ->
+          if (att.note.isNotEmpty()) {
+            Text(
+              text = att.note,
+              style = MaterialTheme.typography.bodySmall,
+              fontStyle = FontStyle.Italic,
+              color = colors.second.copy(alpha = 0.8f),
+              modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+            )
+          }
+        }
+
         if (!entry.content.isNullOrBlank()) {
           Spacer(modifier = Modifier.height(8.dp))
         }
@@ -696,24 +987,24 @@ fun CallLogBubble(
       CallStatus.Answered -> Triple(
         Icons.AutoMirrored.Filled.CallMade,
         MaterialTheme.colorScheme.primary,
-        if (entry.kind == HistoryEntryKind.VideoCall) "Outgoing video call" else "Outgoing call"
+        if (entry.kind == HistoryEntryKind.VideoCall) stringResource(R.string.call_outgoing_video) else stringResource(R.string.call_outgoing_voice)
       )
       else -> Triple(
         Icons.AutoMirrored.Filled.CallMade,
         Color.Red,
-        if (entry.kind == HistoryEntryKind.VideoCall) "Unanswered video call" else "Unanswered call"
+        if (entry.kind == HistoryEntryKind.VideoCall) stringResource(R.string.call_outgoing_video) else stringResource(R.string.call_outgoing_voice) // Simplified fallbacks
       )
     }
     CallDirection.Incoming -> when (entry.callStatus) {
       CallStatus.Answered -> Triple(
         Icons.AutoMirrored.Filled.CallReceived,
         MaterialTheme.colorScheme.primary,
-        if (entry.kind == HistoryEntryKind.VideoCall) "Incoming video call" else "Incoming call"
+        if (entry.kind == HistoryEntryKind.VideoCall) stringResource(R.string.call_incoming_video) else stringResource(R.string.call_incoming_voice)
       )
-      CallStatus.Missed -> Triple(Icons.AutoMirrored.Filled.CallMissed, Color.Red, "Missed call")
-      else -> Triple(Icons.AutoMirrored.Filled.CallReceived, Color.Red, "Rejected call")
+      CallStatus.Missed -> Triple(Icons.AutoMirrored.Filled.CallMissed, Color.Red, stringResource(R.string.call_missed))
+      else -> Triple(Icons.AutoMirrored.Filled.CallReceived, Color.Red, stringResource(R.string.call_rejected))
     }
-    null -> Triple(Icons.Default.Call, MaterialTheme.colorScheme.onSurfaceVariant, "Call")
+    null -> Triple(Icons.Default.Call, MaterialTheme.colorScheme.onSurfaceVariant, stringResource(R.string.call_generic))
   }
 
   val formattedTime = formatTimestamp(entry.timestamp, zoneId, formatters)
@@ -764,18 +1055,15 @@ fun SystemMessageBubble(entry: HistoryEntry, onClick: (HistoryEntry) -> Unit) {
 
   // Specific override for confirmation message direction logic
   val finalResId = if (parsedAction?.action == "contact_confirm" && entry.direction == MessageDirection.Sent) {
-      // "You accepted..." logic could be added here if we had separate strings for it.
-      // For now, we reuse the generic one or map it specifically if needed.
-      // Assuming mapping handles generic "Contact Confirmed" for both sides or we add specific keys later.
-      textResId
+    textResId
   } else {
-      textResId
+    textResId
   }
-
-  val isClickable = parsedAction?.action == "profile_update_diff"
 
   // If we couldn't parse an action and get default, but content is empty, hide it.
   if (parsedAction == null && entry.content.isNullOrBlank()) return
+
+  val isClickable = parsedAction?.action == "profile_update_diff"
 
   Row(
     modifier = Modifier
@@ -896,68 +1184,6 @@ fun formatTimestamp(
     isYesterday -> "Yesterday, " + messageTime.format(formatters.first)
     messageTime.year == now.year -> messageTime.format(formatters.second)
     else -> messageTime.format(formatters.third)
-  }
-}
-
-@Composable
-fun MessageInput(
-  onSendMessage: (String) -> Unit,
-  onAttachMedia: () -> Unit
-) {
-  var text by remember { mutableStateOf(TextFieldValue("")) }
-  Box {
-    Row(
-      modifier = Modifier
-        .fillMaxWidth()
-        .padding(horizontal = 8.dp, vertical = 4.dp),
-      verticalAlignment = Alignment.CenterVertically
-    ) {
-      IconButton(onClick = onAttachMedia) {
-        Icon(Icons.Default.AddPhotoAlternate, contentDescription = "Attach Media", tint = MaterialTheme.colorScheme.primary)
-      }
-      TextField(
-        value = text,
-        onValueChange = { text = it },
-        modifier = Modifier
-          .weight(1f),
-        placeholder = { Text("Message...") },
-        colors = TextFieldDefaults.colors(
-          focusedIndicatorColor = Color.Transparent,
-          unfocusedIndicatorColor = Color.Transparent,
-          disabledIndicatorColor = Color.Transparent
-        ),
-        keyboardOptions = KeyboardOptions(
-          capitalization = KeyboardCapitalization.Sentences,
-          keyboardType = KeyboardType.Text,
-          imeAction = ImeAction.Send
-        ),
-        keyboardActions = KeyboardActions(
-          onSend = {
-            if (text.text.isNotBlank()) {
-              onSendMessage(text.text)
-              text = TextFieldValue("")
-            }
-          }
-        )
-      )
-      Spacer(modifier = Modifier.width(8.dp))
-      IconButton(
-        modifier = Modifier
-          .background(MaterialTheme.extendedColors.success, shape = CircleShape),
-        onClick = {
-          if (text.text.isNotBlank()) {
-            onSendMessage(text.text)
-            text = TextFieldValue("")
-          }
-        },
-        enabled = text.text.isNotBlank()
-      ) {
-        Icon(Icons.AutoMirrored.Filled.Send,
-          contentDescription = "Send Message",
-          tint = MaterialTheme.colorScheme.onPrimary
-        )
-      }
-    }
   }
 }
 

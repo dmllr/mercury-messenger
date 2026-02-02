@@ -204,38 +204,38 @@ class FileTransferService {
     bool should_hide = false;
 
     if (attachment) {
-        if (attachment->status == messaging::AttachmentStatus::canceled ||
-            attachment->status == messaging::AttachmentStatus::peerCanceled ||
-            attachment->status == messaging::AttachmentStatus::failed) {
-            should_hide = true;
-        }
+      if (attachment->status == messaging::AttachmentStatus::canceled ||
+          attachment->status == messaging::AttachmentStatus::peerCanceled ||
+          attachment->status == messaging::AttachmentStatus::failed) {
+        should_hide = true;
+      }
     }
 
     {
-        std::lock_guard<std::mutex> const lock(transfers_mutex_);
-        active_uploads_.erase(attachment_id);
-        if (active_downloads_.contains(attachment_id)) {
-            auto& state = active_downloads_[attachment_id];
-            state.stream.close();
-            if (should_hide) {
-                std::error_code error_code;
-                std::filesystem::remove(state.temp_path, error_code);
-            }
-            active_downloads_.erase(attachment_id);
+      std::lock_guard<std::mutex> const lock(transfers_mutex_);
+      active_uploads_.erase(attachment_id);
+      if (active_downloads_.contains(attachment_id)) {
+        auto& state = active_downloads_[attachment_id];
+        state.stream.close();
+        if (should_hide) {
+          std::error_code error_code;
+          std::filesystem::remove(state.temp_path, error_code);
         }
+        active_downloads_.erase(attachment_id);
+      }
     }
 
     if (!should_hide) {
-        SendCancel(peer_id, attachment_id);
-        storage_->UpdateAttachmentStatus(attachment_id, messaging::AttachmentStatus::canceled, false);
-        if (on_attachment_status_changed_) {
-            on_attachment_status_changed_(peer_id, attachment_id, messaging::AttachmentStatus::canceled);
-        }
+      SendCancel(peer_id, attachment_id);
+      storage_->UpdateAttachmentStatus(attachment_id, messaging::AttachmentStatus::canceled, false);
+      if (on_attachment_status_changed_) {
+        on_attachment_status_changed_(peer_id, attachment_id, messaging::AttachmentStatus::canceled);
+      }
     } else {
-        storage_->UpdateAttachmentStatus(attachment_id, messaging::AttachmentStatus::discarded, false);
-        if (on_attachment_status_changed_) {
-            on_attachment_status_changed_(peer_id, attachment_id, messaging::AttachmentStatus::discarded);
-        }
+      storage_->UpdateAttachmentStatus(attachment_id, messaging::AttachmentStatus::discarded, false);
+      if (on_attachment_status_changed_) {
+        on_attachment_status_changed_(peer_id, attachment_id, messaging::AttachmentStatus::discarded);
+      }
     }
   }
 
@@ -261,15 +261,15 @@ class FileTransferService {
       active_uploads_.erase(file_id);
     }
     if (active_downloads_.contains(file_id)) {
-        auto& state = active_downloads_[file_id];
-        state.stream.close();
-        active_downloads_.erase(file_id);
+      auto& state = active_downloads_[file_id];
+      state.stream.close();
+      active_downloads_.erase(file_id);
     }
 
     // Do not overwrite Discarded status. If we already hid it, keep it hidden.
     auto attachment = storage_->GetAttachment(file_id);
     if (attachment && attachment->status == messaging::AttachmentStatus::discarded) {
-        return;
+      return;
     }
 
     storage_->UpdateAttachmentStatus(file_id, messaging::AttachmentStatus::peerCanceled, false);
@@ -393,10 +393,7 @@ class FileTransferService {
       auto const seq_net = static_cast<std::uint32_t>(state.sequence);
       std::memcpy(buffer.data() + headerMinSize + id_len, &seq_net, sizeof(seq_net));
 
-      state.stream.read(
-          reinterpret_cast<char*>(buffer.data() + header_size),
-          chunkSizeBytes
-      );
+      state.stream.read(reinterpret_cast<char*>(buffer.data() + header_size), chunkSizeBytes);
       auto const bytes_read = static_cast<std::size_t>(state.stream.gcount());
       if (bytes_read == 0 && state.stream.eof()) {
         break;
@@ -517,13 +514,15 @@ class FileTransferService {
         storage_->UpdateAttachmentStatus(file_id, messaging::AttachmentStatus::done, true);
         if (on_attachment_downloaded_) on_attachment_downloaded_(peer_id, file_id);
         if (on_transfer_progress_) on_transfer_progress_(peer_id, file_id, 1.0F);
-        if (on_attachment_status_changed_) on_attachment_status_changed_(peer_id, file_id, messaging::AttachmentStatus::done);
+        if (on_attachment_status_changed_)
+          on_attachment_status_changed_(peer_id, file_id, messaging::AttachmentStatus::done);
       }
     } else {
       LGE << "Hash mismatch for " << file_id;
       std::filesystem::remove(temp_path);
       storage_->UpdateAttachmentStatus(file_id, messaging::AttachmentStatus::failed, false);
-      if (on_attachment_status_changed_) on_attachment_status_changed_(peer_id, file_id, messaging::AttachmentStatus::failed);
+      if (on_attachment_status_changed_)
+        on_attachment_status_changed_(peer_id, file_id, messaging::AttachmentStatus::failed);
     }
   }
 

@@ -281,6 +281,7 @@ class InternalMessagingService {
         att.size_bytes = j_att.value("size", 0ULL);
         att.thumbnail_base64 = j_att.value("thumb", "");
         att.hash = j_att.value("hash", "");
+        att.note = j_att.value("note", "");
         att.is_downloaded = false;
         att.status = messaging::AttachmentStatus::pending;
         attachments.push_back(att);

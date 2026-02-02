@@ -10,3 +10,4 @@
 #include "eillance/storage/sqlite/migrations/0002_add_attachments.hpp"
 #include "eillance/storage/sqlite/migrations/0003_resilience.hpp"
 #include "eillance/storage/sqlite/migrations/0004_attachment_status.hpp"
+#include "eillance/storage/sqlite/migrations/0005_add_attachment_note.hpp"

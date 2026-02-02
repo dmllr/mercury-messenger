@@ -470,10 +470,11 @@ class SQLiteStorage final : public PersistentStorageImpl {
     // 3. Insert attachments if present
     if (auto* msg_entry = std::get_if<messaging::MessageEntry>(&entry.data)) {
       for (auto const& att : msg_entry->attachments) {
+        // v5 update: added `note` field
         SQLiteStatement const att_stmt(db_, R"SQL(
           INSERT INTO message_attachments (
-            id, peer_id, message_id, type, file_path, mime_type, size_bytes, thumbnail_base64, hash, is_downloaded, status
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            id, peer_id, message_id, type, file_path, mime_type, size_bytes, thumbnail_base64, hash, is_downloaded, status, note
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         )SQL");
         BindText(att_stmt.Get(), 1, att.id);
         BindText(att_stmt.Get(), 2, entry.peer_id.ToString());
@@ -486,6 +487,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
         BindText(att_stmt.Get(), 9, att.hash);
         sqlite3_bind_int(att_stmt.Get(), 10, att.is_downloaded ? 1 : 0);
         sqlite3_bind_int(att_stmt.Get(), 11, static_cast<int>(att.status));
+        BindText(att_stmt.Get(), 12, att.note);
 
         if (sqlite3_step(att_stmt.Get()) != SQLITE_DONE) {
           LGE << "Failed to insert attachment: " << sqlite3_errmsg(db_);
@@ -644,6 +646,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
     if (!db_) {
       return std::nullopt;
     }
+    // v5 update: select `note`
     SQLiteStatement const statement(db_, R"SQL(
       SELECT
         id,
@@ -654,7 +657,8 @@ class SQLiteStorage final : public PersistentStorageImpl {
         thumbnail_base64,
         hash,
         is_downloaded,
-        status
+        status,
+        note
       FROM
         message_attachments
       WHERE
@@ -672,7 +676,8 @@ class SQLiteStorage final : public PersistentStorageImpl {
           .thumbnail_base64 = ColumnString(statement.Get(), 5),
           .hash = ColumnString(statement.Get(), 6),
           .is_downloaded = (sqlite3_column_int(statement.Get(), 7) != 0),
-          .status = static_cast<messaging::AttachmentStatus>(sqlite3_column_int(statement.Get(), 8))
+          .status = static_cast<messaging::AttachmentStatus>(sqlite3_column_int(statement.Get(), 8)),
+          .note = ColumnString(statement.Get(), 9)
       };
     }
     return std::nullopt;
@@ -729,8 +734,9 @@ class SQLiteStorage final : public PersistentStorageImpl {
 
       // Hydrate attachments
       if (auto* msg_entry = std::get_if<messaging::MessageEntry>(&record.data)) {
+        // v5 update: select `note`
         SQLiteStatement const att_stmt(db_, R"SQL(
-          SELECT id, type, file_path, mime_type, size_bytes, thumbnail_base64, hash, is_downloaded, status
+          SELECT id, type, file_path, mime_type, size_bytes, thumbnail_base64, hash, is_downloaded, status, note
           FROM message_attachments
           WHERE peer_id = ? AND message_id = ?;
         )SQL");
@@ -747,7 +753,8 @@ class SQLiteStorage final : public PersistentStorageImpl {
                .thumbnail_base64 = ColumnString(att_stmt.Get(), 5),
                .hash = ColumnString(att_stmt.Get(), 6),
                .is_downloaded = (sqlite3_column_int(att_stmt.Get(), 7) != 0),
-               .status = static_cast<messaging::AttachmentStatus>(sqlite3_column_int(att_stmt.Get(), 8))}
+               .status = static_cast<messaging::AttachmentStatus>(sqlite3_column_int(att_stmt.Get(), 8)),
+               .note = ColumnString(att_stmt.Get(), 9)}
           );
         }
       }
@@ -758,7 +765,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
     return page;
   }
 
-  auto GetFullMessageContent(ContactID const& peer_id, std::uint64_t message_id)
+  auto GetFullMessageContent(ContactID const& peer_id, std::uint64_t const message_id)
       -> std::optional<std::string> override {
     std::lock_guard const lock(mutex_);
     if (!db_) {
@@ -887,8 +894,9 @@ class SQLiteStorage final : public PersistentStorageImpl {
 
       // Hydrate attachments for pending messages so we know what to upload
       if (auto* msg_entry = std::get_if<messaging::MessageEntry>(&record.data)) {
+        // v5 update: select `note`
         SQLiteStatement const att_stmt(db_, R"SQL(
-          SELECT id, type, file_path, mime_type, size_bytes, thumbnail_base64, hash, is_downloaded, status
+          SELECT id, type, file_path, mime_type, size_bytes, thumbnail_base64, hash, is_downloaded, status, note
           FROM message_attachments
           WHERE peer_id = ? AND message_id = ?;
         )SQL");
@@ -905,7 +913,8 @@ class SQLiteStorage final : public PersistentStorageImpl {
                .thumbnail_base64 = ColumnString(att_stmt.Get(), 5),
                .hash = ColumnString(att_stmt.Get(), 6),
                .is_downloaded = (sqlite3_column_int(att_stmt.Get(), 7) != 0),
-               .status = static_cast<messaging::AttachmentStatus>(sqlite3_column_int(att_stmt.Get(), 8))}
+               .status = static_cast<messaging::AttachmentStatus>(sqlite3_column_int(att_stmt.Get(), 8)),
+               .note = ColumnString(att_stmt.Get(), 9)}
           );
         }
       }
@@ -921,8 +930,9 @@ class SQLiteStorage final : public PersistentStorageImpl {
       return {};
     }
     std::vector<messaging::Attachment> attachments;
+    // v5 update: select `note`
     SQLiteStatement const att_stmt(db_, R"SQL(
-      SELECT id, type, file_path, mime_type, size_bytes, thumbnail_base64, hash, is_downloaded, status
+      SELECT id, type, file_path, mime_type, size_bytes, thumbnail_base64, hash, is_downloaded, status, note
       FROM message_attachments
       WHERE peer_id = ? AND (status = 0 OR status = 1) AND is_downloaded = 0; -- Pending(0) or Transferring(1) and not downloaded
     )SQL");
@@ -938,7 +948,8 @@ class SQLiteStorage final : public PersistentStorageImpl {
            .thumbnail_base64 = ColumnString(att_stmt.Get(), 5),
            .hash = ColumnString(att_stmt.Get(), 6),
            .is_downloaded = (sqlite3_column_int(att_stmt.Get(), 7) != 0),
-           .status = static_cast<messaging::AttachmentStatus>(sqlite3_column_int(att_stmt.Get(), 8))}
+           .status = static_cast<messaging::AttachmentStatus>(sqlite3_column_int(att_stmt.Get(), 8)),
+           .note = ColumnString(att_stmt.Get(), 9)}
       );
     }
     return attachments;
@@ -1069,6 +1080,9 @@ class SQLiteStorage final : public PersistentStorageImpl {
     }
     if (user_version < 4) {
       migrations::MigrateToV0004(db_);
+    }
+    if (user_version < 5) {
+      migrations::MigrateToV0005(db_);
     }
   }
 

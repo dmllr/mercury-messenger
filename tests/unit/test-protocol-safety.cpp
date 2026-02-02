@@ -227,12 +227,12 @@ TEST_F(ProtocolSafetyTest, VerifyRealMessageSignatures) {
   // ---------------------------------------------------------------------------------------
   messaging_service_->SendChatMessage(peer_id_, "Hello Protocol");
   auto msg_chat = GetLastMessageByType("chat");
-  std::string sig_chat = GenerateTypeSignature(msg_chat);
+  std::string const sig_chat = GenerateTypeSignature(msg_chat);
 
   // Decrypt inner payload to verify E2EE structure
   auto plain_chat = DecryptPayload(msg_chat);
   auto json_chat = nlohmann::json::parse(plain_chat);
-  std::string sig_chat_inner = GenerateTypeSignature(json_chat);
+  std::string const sig_chat_inner = GenerateTypeSignature(json_chat);
 
   combined_signatures << "CHAT_OUTER:" << sig_chat << "|CHAT_INNER:" << sig_chat_inner << "\n";
 
@@ -240,7 +240,7 @@ TEST_F(ProtocolSafetyTest, VerifyRealMessageSignatures) {
   // 2. Attachment Message
   // ---------------------------------------------------------------------------------------
   // Create dummy file
-  std::filesystem::path file_path = temp_dir_ / "image.jpg";
+  std::filesystem::path const file_path = temp_dir_ / "image.jpg";
   {
     std::ofstream ofs(file_path, std::ios::binary);
     ofs << "dummy_content";
@@ -252,12 +252,12 @@ TEST_F(ProtocolSafetyTest, VerifyRealMessageSignatures) {
   // Get the CHAT message explicitly. The operation also sends a 'file_resume_request'
   // which we skip here by filtering for 'chat'.
   auto msg_att = GetLastMessageByType("chat");
-  std::string sig_att = GenerateTypeSignature(msg_att);
+  std::string const sig_att = GenerateTypeSignature(msg_att);
 
   // Inner payload is just text content, attachments are outer.
   auto plain_att = DecryptPayload(msg_att);
   auto json_att = nlohmann::json::parse(plain_att);
-  std::string sig_att_inner = GenerateTypeSignature(json_att);
+  std::string const sig_att_inner = GenerateTypeSignature(json_att);
 
   combined_signatures << "ATT_OUTER:" << sig_att << "|ATT_INNER:" << sig_att_inner << "\n";
 
@@ -274,7 +274,7 @@ TEST_F(ProtocolSafetyTest, VerifyRealMessageSignatures) {
 
   messaging_service_->OnChatMessageReceived(peer_id_, encrypted, 999, false);
   auto msg_receipt = GetLastMessageByType("message_receipt");
-  std::string sig_receipt = GenerateTypeSignature(msg_receipt);
+  std::string const sig_receipt = GenerateTypeSignature(msg_receipt);
 
   combined_signatures << "RECEIPT:" << sig_receipt << "\n";
 
@@ -296,7 +296,7 @@ TEST_F(ProtocolSafetyTest, VerifyRealMessageSignatures) {
   messaging_service_->SendQueuedMessages(peer_id_);
 
   auto msg_read = GetLastMessageByType("message_read");
-  std::string sig_read = GenerateTypeSignature(msg_read);
+  std::string const sig_read = GenerateTypeSignature(msg_read);
 
   combined_signatures << "READ:" << sig_read << "\n";
 
@@ -306,7 +306,7 @@ TEST_F(ProtocolSafetyTest, VerifyRealMessageSignatures) {
   // Queue a profile send
   profile_service_->SendMyProfile(peer_id_);
   auto msg_profile = GetLastMessageByType("profile_info");
-  std::string sig_profile = GenerateTypeSignature(msg_profile);
+  std::string const sig_profile = GenerateTypeSignature(msg_profile);
 
   combined_signatures << "PROFILE:" << sig_profile << "\n";
 
@@ -327,7 +327,7 @@ TEST_F(ProtocolSafetyTest, VerifyRealMessageSignatures) {
   // READ:       {message_ids:[number],type:string}
   // PROFILE:    {bio:string,display_name:string,photo:null,type:string}  (photo is null in setup)
 
-  std::string const expected_hash = "4388c0a0c4b32bcaa2ce309f75ba7e422541dcda8fad7111caf2a2f4595385d1";
+  std::string const expected_hash = "c45456d65c143cc2282ea353a3df1c38ae71a31afc4016541ef47738e98ede5e";
 
   EXPECT_EQ(current_hash, expected_hash)
       << "\n[!] PROTOCOL SCHEMA CHANGED [!]\n"
