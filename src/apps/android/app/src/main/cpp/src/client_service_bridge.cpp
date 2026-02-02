@@ -324,9 +324,9 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationView
 
       atts.push_back(
           {.file_path = p,
-           .type = static_cast<eillance::messaging::AttachmentType>(type),
-           .thumbnail_base64 = t,
-           .mime_type = m}
+              .type = static_cast<eillance::messaging::AttachmentType>(type),
+              .thumbnail_base64 = t,
+              .mime_type = m}
       );
 
       env->ReleaseStringUTFChars(path, p);
@@ -723,14 +723,16 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
         "hela/eillance/ndkio/MyProfileInfo",
         "(Ljava/lang/String;ZLjava/lang/String;Ljava/lang/String;Ljava/lang/String;)V"
     );
+
+    // UPDATED Constructor Signature
     classref.RegisterCtor(
         env,
         "hela/eillance/ndkio/Contact",
-        "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IIILjava/lang/String;J)V"
+        "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IIIILjava/lang/String;IJ)V"
     );
+
     classref.RegisterCtor(env, "hela/eillance/ndkio/CallState", "(ZZZILjava/lang/String;I)V");
 
-    // Updated HistoryEntry constructor to include attachments list
     classref.RegisterCtor(env, "hela/eillance/ndkio/HistoryEntry", "(JIJLjava/lang/String;IIIIIZLjava/util/List;)V");
 
     classref.RegisterCtor(env, "hela/eillance/ndkio/HistoryPage", "(Ljava/util/List;Z)V");

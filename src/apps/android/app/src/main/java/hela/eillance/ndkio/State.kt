@@ -92,10 +92,13 @@ data class Contact(
   private val statusValue: Int,
   val connectionState: Int,
   val unreadCount: Int,
-  val lastMessageSnippet: String?,
+  val lastMessageKind: Int,
+  val lastMessageContent: String?,
+  val lastMessageDirection: Int,
   val last_activity_timestamp: Long
 ) {
   val status: ContactStatus get() = ContactStatus.fromInt(statusValue)
+  val lastMsgKindEnum: HistoryEntryKind? get() = if (lastMessageKind != -1) HistoryEntryKind.fromInt(lastMessageKind) else null
 }
 
 data class CallState(

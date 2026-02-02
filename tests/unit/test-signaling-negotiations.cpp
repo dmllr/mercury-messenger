@@ -159,10 +159,11 @@ TEST_F(ExtendedCoverageTest, MessagingService_ReceivesUnsupportedVersion) {
                                                          messaging::HistoryEntryRecord const& rec) {
     if (id == peer_id && rec.kind == messaging::HistoryEntryKind::systemMessage) {
       auto const* msg = std::get_if<messaging::MessageEntry>(&rec.data);
-      // Fixed string expectation to match service implementation:
-      // "Received message with unsupported format. Please update your application."
-      if (msg && msg->content.find("unsupported format") != std::string::npos) {
-        received_system_msg = true;
+      if (msg) {
+        auto j = nlohmann::json::parse(msg->content);
+        if (j.value("action", "") == "unsupported_format") {
+          received_system_msg = true;
+        }
       }
     }
   });

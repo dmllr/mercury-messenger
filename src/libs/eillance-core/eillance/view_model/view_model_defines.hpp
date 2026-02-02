@@ -21,7 +21,7 @@ struct ViewContact {
   identity::ContactStatus status;
   eillance::transport::PeerConnectionState connection_state = eillance::transport::PeerConnectionState::disconnected;
   uint32_t unread_count = 0;
-  std::optional<std::string> last_message_snippet;
+  std::optional<messaging::HistoryEntryRecord> last_message;
   uint64_t last_activity_timestamp = 0;
 };
 
