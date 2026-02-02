@@ -17,11 +17,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Block
-import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Refresh
@@ -41,7 +41,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.decode.VideoFrameDecoder
@@ -73,6 +72,19 @@ fun MediaBubbleContent(
 
   val renderItem: @Composable (Int, Modifier) -> Unit = { index, modifier ->
     val att = visibleAttachments[index]
+
+    // Check if this specific item should shrink (Text-only mode)
+    val isSenderCanceled = att.status == AttachmentStatus.Canceled && isFromMe
+    val isPeerCanceledUpload = att.status == AttachmentStatus.PeerCanceled && !isFromMe
+    val isTextOnly = isSenderCanceled || isPeerCanceledUpload
+
+    // If text only, we ignore the passed aspect ratio modifier and let it wrap
+    val finalModifier = if (isTextOnly) {
+      Modifier.fillMaxWidth().wrapContentHeight()
+    } else {
+      modifier
+    }
+
     MediaItem(
       attachment = att,
       progress = transferProgress[att.id],
@@ -81,7 +93,7 @@ fun MediaBubbleContent(
       onCancel = { onCancel(att.id) },
       onResume = { onResume(att.id) },
       onDiscard = { onDiscard(att.id) },
-      modifier = modifier
+      modifier = finalModifier
     )
   }
 
@@ -154,34 +166,29 @@ private fun MediaItem(
   modifier: Modifier = Modifier
 ) {
   // Logic for displaying Text-Only cancellation vs Thumbnail-based cancellation
-  val showThumbnail = when (attachment.status) {
-    // If I canceled my own upload, no file reached the server/peer, so showing a big thumb is confusing/wasteful
-    AttachmentStatus.Canceled -> if (isFromMe) false else true
-    // If peer canceled my download (upload for them), I don't have the file
-    AttachmentStatus.PeerCanceled -> if (!isFromMe) false else true
-    else -> true
-  }
+  val isSenderCanceled = attachment.status == AttachmentStatus.Canceled && isFromMe
+  val isPeerCanceledUpload = attachment.status == AttachmentStatus.PeerCanceled && !isFromMe
+  val showTextOnly = isSenderCanceled || isPeerCanceledUpload
 
-  if (!showThumbnail) {
+  if (showTextOnly) {
     Box(
       modifier = modifier
         .background(MaterialTheme.colorScheme.surfaceContainerHigh)
         .padding(16.dp),
       contentAlignment = Alignment.Center
     ) {
-      Column(horizontalAlignment = Alignment.CenterHorizontally) {
+      Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(
           imageVector = Icons.Default.Block,
           contentDescription = "Canceled",
           tint = MaterialTheme.colorScheme.onSurfaceVariant,
-          modifier = Modifier.size(24.dp)
+          modifier = Modifier.size(20.dp)
         )
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.width(8.dp))
         Text(
-          text = if (isFromMe) "You canceled the upload" else "Sender canceled the upload",
-          style = MaterialTheme.typography.bodySmall,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-          textAlign = TextAlign.Center
+          text = if (isSenderCanceled) "You canceled this upload" else "Sender canceled the upload",
+          style = MaterialTheme.typography.bodyMedium,
+          color = MaterialTheme.colorScheme.onSurfaceVariant
         )
       }
     }
@@ -256,37 +263,39 @@ private fun MediaItem(
     Box(contentAlignment = Alignment.Center) {
       // 1. Receiver Paused
       if (attachment.status == AttachmentStatus.Paused) {
-        Row(
-          horizontalArrangement = Arrangement.spacedBy(24.dp),
-          verticalAlignment = Alignment.CenterVertically
-        ) {
-          // Resume
-          Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(
-              imageVector = Icons.Default.Repeat,
-              contentDescription = "Resume",
-              tint = Color.White,
-              modifier = Modifier
-                .size(36.dp)
-                .background(Color.Black.copy(alpha = 0.3f), CircleShape)
-                .clickable { onResume() }
-                .padding(6.dp)
-            )
-            Text("Resume", style = MaterialTheme.typography.labelSmall, color = Color.White)
-          }
-          // Cancel (Terminal) -> onDiscard triggers Canceled state
-          Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(
-              imageVector = Icons.Default.Cancel,
-              contentDescription = "Cancel",
-              tint = Color.White,
-              modifier = Modifier
-                .size(36.dp)
-                .background(Color.Black.copy(alpha = 0.3f), CircleShape)
-                .clickable { onDiscard() }
-                .padding(6.dp)
-            )
-            Text("Cancel", style = MaterialTheme.typography.labelSmall, color = Color.White)
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+          Row(
+            horizontalArrangement = Arrangement.spacedBy(24.dp),
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            // Resume
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+              Icon(
+                imageVector = Icons.Default.Repeat,
+                contentDescription = "Resume",
+                tint = Color.White,
+                modifier = Modifier
+                  .size(36.dp)
+                  .background(Color.Black.copy(alpha = 0.3f), CircleShape)
+                  .clickable { onResume() }
+                  .padding(6.dp)
+              )
+              Text("Resume", style = MaterialTheme.typography.labelSmall, color = Color.White)
+            }
+            // Cancel -> onDiscard -> Canceled
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+              Icon(
+                imageVector = Icons.Default.Close, // Close icon used for "Cancel" action per previous context
+                contentDescription = "Cancel",
+                tint = Color.White,
+                modifier = Modifier
+                  .size(36.dp)
+                  .background(Color.Black.copy(alpha = 0.3f), CircleShape)
+                  .clickable { onDiscard() }
+                  .padding(6.dp)
+              )
+              Text("Cancel", style = MaterialTheme.typography.labelSmall, color = Color.White)
+            }
           }
         }
       }

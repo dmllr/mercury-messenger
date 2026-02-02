@@ -266,6 +266,14 @@ class ConversationViewModel {
 
     void OnMessageStatusChanged(ContactID const&, uint64_t const message_id, messaging::MessageStatus const status) {
       std::lock_guard<std::mutex> const lock(mutex);
+
+      // If status is None (0), it means the message was dismissed/deleted. Remove it from the list.
+      if (status == messaging::MessageStatus::none) {
+        std::erase_if(state.history, [message_id](auto const& e) { return e.id == message_id; });
+        if (observer) observer->OnHistoryUpdated(state);
+        return;
+      }
+
       bool changed = false;
       for (auto& entry : state.history) {
         if (entry.id == message_id) {

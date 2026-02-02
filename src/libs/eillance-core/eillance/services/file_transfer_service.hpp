@@ -200,8 +200,6 @@ class FileTransferService {
   }
 
   void DiscardAttachment(ContactID const& peer_id, std::string const& attachment_id) {
-    // "Discard" from UI now acts as "Cancel Permanently" (visible terminal state),
-    // unless it is already Canceled/PeerCanceled, in which case it acts as "Remove" (Discarded/Hidden).
     auto attachment = storage_->GetAttachment(attachment_id);
     bool should_hide = false;
 
@@ -219,8 +217,6 @@ class FileTransferService {
       if (active_downloads_.contains(attachment_id)) {
         auto& state = active_downloads_[attachment_id];
         state.stream.close();
-        // We keep the temp file if we are just canceling (to allow future retry if we implement it),
-        // but if we are truly discarding (hiding), we should delete it.
         if (should_hide) {
           std::error_code error_code;
           std::filesystem::remove(state.temp_path, error_code);
@@ -230,14 +226,12 @@ class FileTransferService {
     }
 
     if (!should_hide) {
-      // Stop transfer and mark as Canceled (Terminal, Visible)
       SendCancel(peer_id, attachment_id);
       storage_->UpdateAttachmentStatus(attachment_id, messaging::AttachmentStatus::canceled, false);
       if (on_attachment_status_changed_) {
         on_attachment_status_changed_(peer_id, attachment_id, messaging::AttachmentStatus::canceled);
       }
     } else {
-      // Mark as Discarded (Hidden)
       storage_->UpdateAttachmentStatus(attachment_id, messaging::AttachmentStatus::discarded, false);
       if (on_attachment_status_changed_) {
         on_attachment_status_changed_(peer_id, attachment_id, messaging::AttachmentStatus::discarded);
@@ -518,7 +512,7 @@ class FileTransferService {
       state.stream.close();
       active_downloads_.erase(file_id);
     }
-    // Remote cancellation sets specific status to differentiate from local cancel
+    // Remote cancellation sets specific status
     storage_->UpdateAttachmentStatus(file_id, messaging::AttachmentStatus::peerCanceled, false);
     if (on_attachment_status_changed_) {
       on_attachment_status_changed_(peer_id, file_id, messaging::AttachmentStatus::peerCanceled);
@@ -531,11 +525,6 @@ class FileTransferService {
       MessageType type,
       std::span<std::byte const> payload
   ) -> bool {
-    // Check if transport is ready to avoid "DataChannel not found" logs when disconnected
-    // Note: We access transport blindly here; in a robust system we'd check connection state.
-    // However, SendPeerDataChannelBinaryMessage handles null checks internally and returns false.
-    // We suppress the desire to check state to keep dependencies simple here.
-
     std::size_t const id_len = file_id.size();
     std::size_t const header_size = headerMinSize + id_len;
     std::vector<std::byte> buf(header_size + payload.size());

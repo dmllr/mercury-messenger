@@ -304,46 +304,70 @@ class MessagingService {
         }
       }
 
-      if (!sent && peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
-        // Construct JSON Payload for E2EE
-        nlohmann::json payload_json;
-        payload_json[keyVersion] = protocolVersion;
-        payload_json[keyContent] = content_to_send;
-
-        auto encrypted = peer->session_cipher->Encrypt(payload_json.dump());
-        UpdatePeerActivity(peer_id);
-
-        if (!encrypted.empty()) {
-          nlohmann::json json_msg = {
-              {"type", "chat"},
-              {"message_id", entry.id},
-              {"is_system", (entry.kind == messaging::HistoryEntryKind::systemMessage)},
-              {"payload", std::vector<std::byte>(encrypted.begin(), encrypted.end())}
-          };
-
-          if (!msg_entry.attachments.empty()) {
-            std::vector<nlohmann::json> att_list;
-            att_list.reserve(msg_entry.attachments.size());
-            for (auto const& att : msg_entry.attachments) {
-              att_list.push_back(
-                  {{"id", att.id},
-                   {"type", att.type},
-                   {"mime", att.mime_type},
-                   {"size", att.size_bytes},
-                   {"thumb", att.thumbnail_base64},
-                   {"hash", att.hash}}
-              );
+      // Handle Text/Attachment Messages
+      if (entry.kind == messaging::HistoryEntryKind::textMessage) {
+        // Filter out canceled attachments - Do not send metadata for them
+        std::vector<messaging::Attachment> valid_attachments;
+        for (auto const& att : msg_entry.attachments) {
+          // Double check status from storage to ensure we don't send canceled stuff
+          auto stored = storage_->GetAttachment(att.id);
+          if (stored) {
+            if (stored->status != messaging::AttachmentStatus::canceled &&
+                stored->status != messaging::AttachmentStatus::discarded &&
+                stored->status != messaging::AttachmentStatus::peerCanceled) {
+              valid_attachments.push_back(*stored);
             }
-            json_msg["attachments"] = att_list;
           }
+        }
 
-          transport_->SendPeerDataChannelMessage(peer_id, json_msg);
-          sent = true;
+        // Rule: If message has no text and all active attachments are gone -> Dismiss it
+        if (content_to_send.empty() && valid_attachments.empty()) {
+          // Mark as None so it falls out of 'sending' queue and UI removes it
+          history_->UpdateMessageStatus(peer_id, entry.id, messaging::MessageStatus::none);
+          continue;
+        }
 
-          // Delegate upload
-          if (!msg_entry.attachments.empty()) {
-            for (auto const& att : msg_entry.attachments) {
-              file_transfer_service_->QueueUpload(peer_id, att);
+        if (!sent && peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
+          // Construct JSON Payload for E2EE
+          nlohmann::json payload_json;
+          payload_json[keyVersion] = protocolVersion;
+          payload_json[keyContent] = content_to_send;
+
+          auto encrypted = peer->session_cipher->Encrypt(payload_json.dump());
+          UpdatePeerActivity(peer_id);
+
+          if (!encrypted.empty()) {
+            nlohmann::json json_msg = {
+                {"type", "chat"},
+                {"message_id", entry.id},
+                {"is_system", false},
+                {"payload", std::vector<std::byte>(encrypted.begin(), encrypted.end())}
+            };
+
+            if (!valid_attachments.empty()) {
+              std::vector<nlohmann::json> att_list;
+              att_list.reserve(valid_attachments.size());
+              for (auto const& att : valid_attachments) {
+                att_list.push_back(
+                    {{"id", att.id},
+                     {"type", att.type},
+                     {"mime", att.mime_type},
+                     {"size", att.size_bytes},
+                     {"thumb", att.thumbnail_base64},
+                     {"hash", att.hash}}
+                );
+              }
+              json_msg["attachments"] = att_list;
+            }
+
+            transport_->SendPeerDataChannelMessage(peer_id, json_msg);
+            sent = true;
+
+            // Delegate upload only for valid attachments
+            if (!valid_attachments.empty()) {
+              for (auto const& att : valid_attachments) {
+                file_transfer_service_->QueueUpload(peer_id, att);
+              }
             }
           }
         }
@@ -373,6 +397,39 @@ class MessagingService {
       bool notify_peer = true
   ) const {
     file_transfer_service_->CancelTransfer(peer_id, attachment_id, is_upload, notify_peer);
+
+    // If sender cancels upload before it's sent, we must check if we should dismiss the parent message.
+    if (is_upload) {
+      auto sending_msgs = storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::sending);
+      for (auto const& entry : sending_msgs) {
+        if (!std::holds_alternative<messaging::MessageEntry>(entry.data)) continue;
+        auto const& msg = std::get<messaging::MessageEntry>(entry.data);
+
+        bool contains_attachment = false;
+        // Check if there is any other content
+        bool has_other_content = !msg.content.empty();
+
+        for (auto const& att : msg.attachments) {
+          if (att.id == attachment_id) {
+            contains_attachment = true;
+          } else {
+            // Check other attachments
+            auto stored = storage_->GetAttachment(att.id);
+            if (stored && stored->status != messaging::AttachmentStatus::canceled &&
+                stored->status != messaging::AttachmentStatus::discarded) {
+              has_other_content = true;
+            }
+          }
+        }
+
+        if (contains_attachment && !has_other_content) {
+          // Dismiss the message
+          const_cast<MessagingService*>(this)
+              ->history_->UpdateMessageStatus(peer_id, entry.id, messaging::MessageStatus::none);
+          break;
+        }
+      }
+    }
   }
 
   void ResumeTransfer(ContactID const& peer_id, std::string const& attachment_id, bool is_upload) const {
@@ -388,19 +445,22 @@ class MessagingService {
       -> messaging::HistoryPage {
     auto page = history_->GetHistoryPage(peer_id, page_index, page_size);
 
+    // Filter out messages marked as None (our soft-delete flag)
+    std::erase_if(page.messages, [](auto const& entry) {
+      return entry.status == messaging::MessageStatus::none && entry.kind != messaging::HistoryEntryKind::systemMessage;
+    });
+
     bool any_modified = false;
     for (auto& entry : page.messages) {
       if (std::holds_alternative<messaging::MessageEntry>(entry.data)) {
         auto& msg = std::get<messaging::MessageEntry>(entry.data);
         bool entry_modified = false;
         for (auto& att : msg.attachments) {
-          // Fix: Do not automatically mark 'canceled', 'paused', or 'peerCanceled' as done,
-          // regardless of file existence (sender always has file, downloader might have partial).
+          // Fix: Do not auto-complete if status is canceled/paused
           if (att.status == messaging::AttachmentStatus::canceled ||
               att.status == messaging::AttachmentStatus::peerCanceled ||
               att.status == messaging::AttachmentStatus::paused ||
-              att.status == messaging::AttachmentStatus::discarded ||
-              att.status == messaging::AttachmentStatus::failed) {
+              att.status == messaging::AttachmentStatus::discarded) {
             continue;
           }
 
@@ -510,10 +570,7 @@ class MessagingService {
         throw std::runtime_error("Message version too old: " + std::to_string(received_version));
       }
 
-      // 2. Forward compatibility:
-      // Even if received_version > protocolVersion (future app),
-      // we attempt to read 'c' (content). If the schema changed so drastically
-      // that 'c' is gone, the .at() call below will throw, handling the error gracefully.
+      // 2. Forward compatibility
       content = json_payload.at(keyContent).get<std::string>();
 
     } catch (std::exception const& e) {
