@@ -309,7 +309,6 @@ class MessagingService {
         // Filter out canceled attachments - Do not send metadata for them
         std::vector<messaging::Attachment> valid_attachments;
         for (auto const& att : msg_entry.attachments) {
-          // Double check status from storage to ensure we don't send canceled stuff
           auto stored = storage_->GetAttachment(att.id);
           if (stored) {
             if (stored->status != messaging::AttachmentStatus::canceled &&
@@ -322,7 +321,6 @@ class MessagingService {
 
         // Rule: If message has no text and all active attachments are gone -> Dismiss it
         if (content_to_send.empty() && valid_attachments.empty()) {
-          // Mark as None so it falls out of 'sending' queue and UI removes it
           history_->UpdateMessageStatus(peer_id, entry.id, messaging::MessageStatus::none);
           continue;
         }
@@ -400,39 +398,37 @@ class MessagingService {
 
     // If sender cancels upload before it's sent, we must check if we should dismiss the parent message.
     if (is_upload) {
-      auto sending_msgs = storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::sending);
-      for (auto const& entry : sending_msgs) {
-        if (!std::holds_alternative<messaging::MessageEntry>(entry.data)) continue;
-        auto const& msg = std::get<messaging::MessageEntry>(entry.data);
+        auto sending_msgs = storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::sending);
+        for (auto const& entry : sending_msgs) {
+            if (!std::holds_alternative<messaging::MessageEntry>(entry.data)) continue;
+            auto const& msg = std::get<messaging::MessageEntry>(entry.data);
 
-        bool contains_attachment = false;
-        // Check if there is any other content
-        bool has_other_content = !msg.content.empty();
+            bool contains_attachment = false;
+            bool has_other_content = !msg.content.empty();
 
-        for (auto const& att : msg.attachments) {
-          if (att.id == attachment_id) {
-            contains_attachment = true;
-          } else {
-            // Check other attachments
-            auto stored = storage_->GetAttachment(att.id);
-            if (stored && stored->status != messaging::AttachmentStatus::canceled &&
-                stored->status != messaging::AttachmentStatus::discarded) {
-              has_other_content = true;
+            for (auto const& att : msg.attachments) {
+                if (att.id == attachment_id) {
+                    contains_attachment = true;
+                } else {
+                    auto stored = storage_->GetAttachment(att.id);
+                    if (stored && stored->status != messaging::AttachmentStatus::canceled &&
+                        stored->status != messaging::AttachmentStatus::discarded) {
+                        has_other_content = true;
+                    }
+                }
             }
-          }
-        }
 
-        if (contains_attachment && !has_other_content) {
-          // Dismiss the message
-          const_cast<MessagingService*>(this)
-              ->history_->UpdateMessageStatus(peer_id, entry.id, messaging::MessageStatus::none);
-          break;
+            if (contains_attachment && !has_other_content) {
+                const_cast<MessagingService*>(this)->history_->UpdateMessageStatus(peer_id, entry.id, messaging::MessageStatus::none);
+                break;
+            }
         }
-      }
     }
   }
 
-  void ResumeTransfer(ContactID const& peer_id, std::string const& attachment_id, bool is_upload) const {
+  // Ensure Resume triggers connection
+  void ResumeTransfer(ContactID const& peer_id, std::string const& attachment_id, bool is_upload) {
+    RequestConnection(peer_id);
     file_transfer_service_->ResumeTransfer(peer_id, attachment_id, is_upload);
   }
 
@@ -445,9 +441,9 @@ class MessagingService {
       -> messaging::HistoryPage {
     auto page = history_->GetHistoryPage(peer_id, page_index, page_size);
 
-    // Filter out messages marked as None (our soft-delete flag)
-    std::erase_if(page.messages, [](auto const& entry) {
-      return entry.status == messaging::MessageStatus::none && entry.kind != messaging::HistoryEntryKind::systemMessage;
+    std::erase_if(page.messages, [](auto const& entry){
+        return entry.status == messaging::MessageStatus::none &&
+               entry.kind != messaging::HistoryEntryKind::systemMessage;
     });
 
     bool any_modified = false;
@@ -456,7 +452,6 @@ class MessagingService {
         auto& msg = std::get<messaging::MessageEntry>(entry.data);
         bool entry_modified = false;
         for (auto& att : msg.attachments) {
-          // Fix: Do not auto-complete if status is canceled/paused
           if (att.status == messaging::AttachmentStatus::canceled ||
               att.status == messaging::AttachmentStatus::peerCanceled ||
               att.status == messaging::AttachmentStatus::paused ||
@@ -565,12 +560,10 @@ class MessagingService {
       auto json_payload = nlohmann::json::parse(decrypted);
       auto const received_version = json_payload.value(keyVersion, 0);
 
-      // 1. Check strict minimum compatibility
       if (received_version < minSupportedVersion) {
         throw std::runtime_error("Message version too old: " + std::to_string(received_version));
       }
 
-      // 2. Forward compatibility
       content = json_payload.at(keyContent).get<std::string>();
 
     } catch (std::exception const& e) {
@@ -596,7 +589,6 @@ class MessagingService {
       return;
     }
 
-    // Make a mutable copy of attachments to update paths
     std::vector<messaging::Attachment> local_attachments = attachments;
 
     std::filesystem::path const storage_root(storage_->GetPath());
@@ -626,7 +618,6 @@ class MessagingService {
         message_id
     );
 
-    // Now start downloads
     if (!local_attachments.empty()) {
       for (auto const& att : local_attachments) {
         file_transfer_service_->QueueDownload(peer_id, att, entry.id);
@@ -657,7 +648,6 @@ class MessagingService {
     }
   }
 
-  // Callbacks
   using OnChatMessageCallback = std::function<void(ContactID const& peer_id, messaging::HistoryEntryRecord const&)>;
   using OnMessageStatusChangedCallback = std::function<void(ContactID const&, uint64_t, messaging::MessageStatus)>;
   using OnAttachmentDownloadedCallback =
@@ -688,7 +678,6 @@ class MessagingService {
   }
 
  private:
-  // Helper to connect to a peer if not connected
   void RequestConnection(ContactID const& peer_id) {
     if (auto const peer = transport_->GetPeer(peer_id);
         peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
@@ -704,15 +693,11 @@ class MessagingService {
     }
   }
 
-  // Checks DB for messages, read receipts, and contact profile sync flag
   [[nodiscard]] auto HasPendingWork(ContactID const& peer_id) const -> bool {
-    // Check pending actions (read receipts, profiles, etc.)
     if (!storage_->GetPendingActions(peer_id).empty()) {
       return true;
     }
 
-    // Only check for 'pending' files. We ignore 'transferring' status here
-    // to prevent the Delivery Service from interpreting an active transfer as a failed connection attempt.
     auto const attachments = storage_->GetPendingAttachments(peer_id);
     bool const has_pending_files = std::ranges::any_of(attachments, [](auto const& att) {
       return att.status == messaging::AttachmentStatus::pending;
@@ -721,7 +706,6 @@ class MessagingService {
     return has_pending_files || !storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::sending).empty();
   }
 
-  // Generate a unique ID for attachments
   static auto GenerateAttachmentId() -> std::string {
     static std::random_device random_device;
     static std::mt19937 gen(random_device());
