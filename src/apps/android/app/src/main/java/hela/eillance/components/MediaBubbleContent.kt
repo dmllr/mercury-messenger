@@ -153,8 +153,16 @@ private fun MediaItem(
   onDiscard: () -> Unit,
   modifier: Modifier = Modifier
 ) {
-  // Sender Canceled -> No Thumbnail, just text/icon.
-  if (attachment.status == AttachmentStatus.Canceled) {
+  // Logic for displaying Text-Only cancellation vs Thumbnail-based cancellation
+  val showThumbnail = when (attachment.status) {
+    // If I canceled my own upload, no file reached the server/peer, so showing a big thumb is confusing/wasteful
+    AttachmentStatus.Canceled -> if (isFromMe) false else true
+    // If peer canceled my download (upload for them), I don't have the file
+    AttachmentStatus.PeerCanceled -> if (!isFromMe) false else true
+    else -> true
+  }
+
+  if (!showThumbnail) {
     Box(
       modifier = modifier
         .background(MaterialTheme.colorScheme.surfaceContainerHigh)
@@ -170,7 +178,7 @@ private fun MediaItem(
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-          text = "This upload was canceled by the sender",
+          text = if (isFromMe) "You canceled the upload" else "Sender canceled the upload",
           style = MaterialTheme.typography.bodySmall,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
           textAlign = TextAlign.Center
@@ -180,7 +188,7 @@ private fun MediaItem(
     return
   }
 
-  // Thumbnail or placeholder
+  // Thumbnail Container
   Box(
     modifier = modifier
       .background(Color.Black.copy(alpha = 0.1f))
@@ -246,8 +254,8 @@ private fun MediaItem(
 
     // Interactive Layer
     Box(contentAlignment = Alignment.Center) {
+      // 1. Receiver Paused
       if (attachment.status == AttachmentStatus.Paused) {
-        // Scenario 2: Receiver Paused (Resumable)
         Row(
           horizontalArrangement = Arrangement.spacedBy(24.dp),
           verticalAlignment = Alignment.CenterVertically
@@ -266,7 +274,7 @@ private fun MediaItem(
             )
             Text("Resume", style = MaterialTheme.typography.labelSmall, color = Color.White)
           }
-          // Cancel Completely (Discard)
+          // Cancel (Terminal) -> onDiscard triggers Canceled state
           Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(
               imageVector = Icons.Default.Cancel,
@@ -281,8 +289,35 @@ private fun MediaItem(
             Text("Cancel", style = MaterialTheme.typography.labelSmall, color = Color.White)
           }
         }
-      } else if (progress != null && progress >= 0f) {
-        // Active Transfer
+      }
+      // 2. Receiver Canceled (Terminal state viewed by Receiver)
+      else if (attachment.status == AttachmentStatus.Canceled && !isFromMe) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+          Icon(
+            imageVector = Icons.Default.Block,
+            contentDescription = "Canceled",
+            tint = Color.White,
+            modifier = Modifier.size(32.dp)
+          )
+          Spacer(modifier = Modifier.height(4.dp))
+          Text("You canceled the download", style = MaterialTheme.typography.labelSmall, color = Color.White)
+        }
+      }
+      // 3. Peer Canceled (Terminal state viewed by Sender)
+      else if (attachment.status == AttachmentStatus.PeerCanceled && isFromMe) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+          Icon(
+            imageVector = Icons.Default.Block,
+            contentDescription = "Canceled",
+            tint = Color.White,
+            modifier = Modifier.size(32.dp)
+          )
+          Spacer(modifier = Modifier.height(4.dp))
+          Text("Receiver canceled download", style = MaterialTheme.typography.labelSmall, color = Color.White)
+        }
+      }
+      // 4. Active Transfer
+      else if (progress != null && progress >= 0f) {
         Box(contentAlignment = Alignment.Center) {
           CircularProgressIndicator(
             progress = progress,
@@ -300,10 +335,11 @@ private fun MediaItem(
             Icon(Icons.Default.Close, contentDescription = "Pause", tint = Color.White, modifier = Modifier.size(20.dp))
           }
         }
-      } else {
+      }
+      // 5. Initial States
+      else {
         when (attachment.status) {
           AttachmentStatus.Transferring -> {
-            // Indeterminate / Initializing
             Box(contentAlignment = Alignment.Center) {
               CircularProgressIndicator(color = Color.White, modifier = Modifier.size(48.dp), strokeWidth = 4.dp)
               IconButton(

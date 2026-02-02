@@ -181,9 +181,7 @@ TEST_F(StreamTest, DestructionWhileHandlerBusy) {
     auto stream = std::make_shared<Stream>(video_source, audio_source);
 
     // Set a handler that holds the lock for a bit
-    stream->OnSample([](auto, auto, auto) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    });
+    stream->OnSample([](auto, auto, auto) { std::this_thread::sleep_for(std::chrono::milliseconds(50)); });
 
     stream->Start();
 

@@ -394,6 +394,16 @@ class MessagingService {
         auto& msg = std::get<messaging::MessageEntry>(entry.data);
         bool entry_modified = false;
         for (auto& att : msg.attachments) {
+          // Fix: Do not automatically mark 'canceled', 'paused', or 'peerCanceled' as done,
+          // regardless of file existence (sender always has file, downloader might have partial).
+          if (att.status == messaging::AttachmentStatus::canceled ||
+              att.status == messaging::AttachmentStatus::peerCanceled ||
+              att.status == messaging::AttachmentStatus::paused ||
+              att.status == messaging::AttachmentStatus::discarded ||
+              att.status == messaging::AttachmentStatus::failed) {
+            continue;
+          }
+
           if (!att.is_downloaded && !att.file_path.empty()) {
             std::error_code err;
             if (std::filesystem::exists(att.file_path, err) && std::filesystem::is_regular_file(att.file_path, err) &&
@@ -651,7 +661,6 @@ class MessagingService {
       return att.status == messaging::AttachmentStatus::pending;
     });
 
-    return !storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::sending).empty();
     return has_pending_files || !storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::sending).empty();
   }
 
