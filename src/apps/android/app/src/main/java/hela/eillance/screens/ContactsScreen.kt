@@ -430,10 +430,21 @@ private fun getSnippetText(contact: Contact, context: Context): String {
         }
         HistoryEntryKind.SystemMessage -> {
              try {
-                 val json = JSONObject(contact.lastMessageContent ?: "{}")
+                 val content = contact.lastMessageContent
+                 if (content.isNullOrBlank()) return context.getString(R.string.sys_default)
+                 val json = JSONObject(content)
                  val action = json.optString("action")
                  context.getString(LocalizationMapping.getSystemMessageResId(action))
              } catch (e: Exception) {
+                 // If JSON parsing fails (e.g. truncated message due to large payload), use Regex fallback
+                 val content = contact.lastMessageContent
+                 if (!content.isNullOrBlank()) {
+                     val match = Regex("\"action\"\\s*:\\s*\"([^\"]+)\"").find(content)
+                     val action = match?.groupValues?.get(1)
+                     if (action != null) {
+                         return context.getString(LocalizationMapping.getSystemMessageResId(action))
+                     }
+                 }
                  context.getString(R.string.sys_default)
              }
         }
