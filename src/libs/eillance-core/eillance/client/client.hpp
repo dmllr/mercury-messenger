@@ -218,7 +218,7 @@ class Client final : public transport::TransportDelegate {
 
   auto RestoreBackup(std::string const& p, std::string const& pw) -> bool {
     // 1. Stop services that might be querying the database
-    is_running_ = false; // Stop background peer check
+    is_running_ = false;  // Stop background peer check
     messaging_service_->StopDeliveryService();
     transport_->Terminate();
 
@@ -301,10 +301,12 @@ class Client final : public transport::TransportDelegate {
   void MarkMessagesAsRead(ContactID const& id, std::vector<std::uint64_t> const& mids) const {
     messaging_service_->MarkMessagesAsRead(id, mids);
   }
-  [[nodiscard]] auto GetMessageHistoryPage(ContactID const& id, size_t i, size_t s) const -> messaging::HistoryPage {
-    return messaging_service_->GetHistoryPage(id, i, s);
+  [[nodiscard]] auto GetMessageHistoryPage(ContactID const& id, size_t const page_index, size_t const page_size) const
+      -> messaging::HistoryPage {
+    return messaging_service_->GetHistoryPage(id, page_index, page_size);
   }
-  [[nodiscard]] auto GetFullMessageContent(ContactID const& id, uint64_t msg_id) const -> std::optional<std::string> {
+  [[nodiscard]] auto GetFullMessageContent(ContactID const& id, uint64_t const msg_id) const
+      -> std::optional<std::string> {
     return messaging_service_->GetFullMessageContent(id, msg_id);
   }
   [[nodiscard]] auto GetChatSummaries(std::vector<ContactID> const& ids) const -> std::vector<messaging::ChatSummary> {
@@ -323,19 +325,21 @@ class Client final : public transport::TransportDelegate {
     messaging_service_->DiscardAttachment(peer_id, attachment_id);
   }
 
-  void Call(ContactID const& id) {
+  void Call(ContactID const& id) const {
     Connect(id);
   }
-  void Connect(ContactID const& peer_id) {
-    if (transport_->GetPeer(peer_id)) {
+
+  void Connect(ContactID const& peer_id) const {
+    auto peer = transport_->GetPeer(peer_id);
+    if (peer && peer->data_channel_is_open) {
       return;
     }
 
-    auto peer = std::make_shared<transport::Peer>(peer_id);
-    transport_->AddPeer(peer_id, peer);
-
-    // Delegate setup to Internal Messaging Service
-    internal_messaging_service_->SetupPeerHandlers(peer, peer_id);
+    if (!peer) {
+      peer = std::make_shared<transport::Peer>(peer_id);
+      transport_->AddPeer(peer_id, peer);
+      internal_messaging_service_->SetupPeerHandlers(peer, peer_id);
+    }
 
     transport_->CreateDataPeerConnection(peer_id);
     transport_->CreateDataChannel(peer_id);
