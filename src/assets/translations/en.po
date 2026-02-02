@@ -1,0 +1,68 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: en\n"
+
+# App
+msgid "app_name"
+msgstr "Mercury"
+
+# Common Actions
+msgid "action_cancel"
+msgstr "Cancel"
+msgid "action_close"
+msgstr "Close"
+msgid "action_save"
+msgstr "Save"
+msgid "action_back"
+msgstr "Back"
+msgid "action_retry"
+msgstr "Retry"
+
+# Connection States
+msgid "connection_no_network"
+msgstr "Waiting for network…"
+msgid "connection_failed"
+msgstr "Connection failed"
+msgid "connection_disconnected"
+msgstr "Disconnected"
+msgid "connection_auth_error"
+msgstr "Authentication error"
+msgid "connection_issue"
+msgstr "Connection issue"
+
+# Contacts
+msgid "contacts_empty_message"
+msgstr "No contacts yet. Add one!"
+
+# Calls
+msgid "call_incoming_voice"
+msgstr "Incoming Voice Call"
+msgid "call_incoming_video"
+msgstr "Incoming Video Call"
+msgid "call_outgoing_voice"
+msgstr "Outgoing Voice Call"
+msgid "call_outgoing_video"
+msgstr "Outgoing Video Call"
+msgid "call_missed"
+msgstr "Missed Call"
+msgid "call_rejected"
+msgstr "Call Rejected"
+msgid "call_generic"
+msgstr "Call"
+
+# System Messages (Actions from Core)
+msgid "sys_contact_req"
+msgstr "Contact Request Received"
+msgid "sys_contact_confirm"
+msgstr "Contact Confirmed"
+msgid "sys_profile_update"
+msgstr "Profile Updated"
+msgid "sys_unsupported"
+msgstr "Unsupported message format. Please update app."
+msgid "sys_default"
+msgstr "System Message"
+
+# Chat
+msgid "chat_you_prefix"
+msgstr "You: "

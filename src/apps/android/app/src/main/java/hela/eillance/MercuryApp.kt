@@ -13,7 +13,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -52,7 +51,7 @@ import hela.eillance.viewmodels.SettingsViewModel
 
 @Composable
 fun MercuryApp(viewModel: MainViewModel) {
-  val lifecycleOwner = LocalLifecycleOwner.current
+  val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
 
   // Wait for the service to initialize the engine.
   val isEngineReady by CallService.isEngineReady.collectAsState()
