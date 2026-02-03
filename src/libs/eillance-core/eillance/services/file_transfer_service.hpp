@@ -48,10 +48,11 @@ class FileTransferService {
         // We are uploader
         std::lock_guard<std::mutex> const lock(transfers_mutex_);
         if (!active_uploads_.contains(attachment.id)) {
-          StartUploadInternal(peer_id, attachment);
-        } else {
-          // If already active, check if we need to wake it up or if it's just flow controlled
-          // We don't send resume blindly to avoid restarting connection logic unnecessarily
+          // Check if we should really start.
+          // If connection just established, we don't push until requested or if it was interrupted transferring.
+          // However, for robustness, Uploader stays passive in "resume" scenarios usually.
+          // We rely on "transferring" status to indicate intent, but we wait for request.
+          // EXCEPT if we are fresh sending (handled by QueueUpload).
         }
       } else {
         // We are downloader
@@ -99,8 +100,7 @@ class FileTransferService {
         pf.read(reinterpret_cast<char*>(&saved_seq), sizeof(saved_seq));
         if (pf) {
           state.highest_seq_written = saved_seq;
-          // Estimate bytes written based on sequence.
-          // Since we write sequentially in chunks, this is a safe lower bound.
+          // Estimate bytes written. Safe lower bound.
           state.bytes_written = static_cast<std::size_t>(saved_seq) * chunkSizeBytes;
         }
       }
@@ -113,7 +113,6 @@ class FileTransferService {
         if (attachment.size_bytes > 0) {
           std::filesystem::resize_file(state.temp_path, attachment.size_bytes);
         }
-        // If file was missing, reset progress
         state.highest_seq_written = 0;
         state.bytes_written = 0;
       } else {
@@ -134,7 +133,6 @@ class FileTransferService {
     active_downloads_[attachment.id] = std::move(state);
   }
 
-  // 0x04 = pause, 0x05 = resume
   enum class MessageType : std::uint8_t {
     chunk = 0x01,
     ack = 0x02,
@@ -204,11 +202,12 @@ class FileTransferService {
       if (is_upload) {
         SendCancel(peer_id, attachment_id);
       } else {
-        // If downloading and we stop, it's a pause. Sending Cancel would make the sender think we rejected it.
+        // Downloader "Cancel" acts as Pause unless Discard is called.
         SendPause(peer_id, attachment_id);
       }
     }
 
+    // Download cancellation -> Pause local state
     auto const new_status = (!is_upload) ? messaging::AttachmentStatus::paused : messaging::AttachmentStatus::canceled;
 
     storage_->UpdateAttachmentStatus(attachment_id, new_status, is_upload);
@@ -219,18 +218,21 @@ class FileTransferService {
 
   void ResumeTransfer(ContactID const& peer_id, std::string const& attachment_id, bool is_upload) {
     if (is_upload) {
-      auto attachment = storage_->GetAttachment(attachment_id);
-      if (attachment) {
-        std::lock_guard<std::mutex> const lock(transfers_mutex_);
-        StartUploadInternal(peer_id, *attachment);
+      // Sender Side Resume:
+      // We do NOT start pumping data immediately to avoid forcing data on a paused receiver.
+      // We set status to Transferring so UI reflects readiness.
+      storage_->UpdateAttachmentStatus(attachment_id, messaging::AttachmentStatus::transferring, true);
+      if (on_attachment_status_changed_) {
+        on_attachment_status_changed_(peer_id, attachment_id, messaging::AttachmentStatus::transferring);
       }
     } else {
+      // Receiver Side Resume:
       storage_->UpdateAttachmentStatus(attachment_id, messaging::AttachmentStatus::transferring, false);
       if (on_attachment_status_changed_) {
         on_attachment_status_changed_(peer_id, attachment_id, messaging::AttachmentStatus::transferring);
       }
 
-      // Check where we left off to request resume
+      // Check where we left off
       std::uint32_t start_seq = 0;
       std::filesystem::path const storage_root(storage_->GetPath());
       std::filesystem::path const progress_path =
@@ -275,6 +277,7 @@ class FileTransferService {
     }
 
     if (!should_hide) {
+      // Explicitly send CANCEL (0x03) to stop completely
       SendCancel(peer_id, attachment_id);
       storage_->UpdateAttachmentStatus(attachment_id, messaging::AttachmentStatus::canceled, false);
       if (on_attachment_status_changed_) {
@@ -315,7 +318,6 @@ class FileTransferService {
       active_downloads_.erase(file_id);
     }
 
-    // Do not overwrite Discarded status. If we already hid it, keep it hidden.
     auto attachment = storage_->GetAttachment(file_id);
     if (attachment && attachment->status == messaging::AttachmentStatus::discarded) {
       return;
@@ -361,7 +363,6 @@ class FileTransferService {
     if (active_uploads_.contains(attachment.id)) {
       auto& state = active_uploads_[attachment.id];
       if (start_sequence > 0) {
-        // Resume requested a seek
         state.sequence = start_sequence;
         state.window_end = state.sequence + windowSizeChunks;
       }
@@ -393,12 +394,8 @@ class FileTransferService {
   void HandlePause(ContactID const& peer_id, std::string const& file_id) {
     std::lock_guard<std::mutex> const lock(transfers_mutex_);
     if (active_uploads_.contains(file_id)) {
-      // Just remove it from active uploads. The state is stateless on disk,
-      // the downloader will tell us where to resume later.
       active_uploads_.erase(file_id);
     }
-
-    // Update DB to show paused state instead of canceled
     storage_->UpdateAttachmentStatus(file_id, messaging::AttachmentStatus::paused, true);
     if (on_attachment_status_changed_) {
       on_attachment_status_changed_(peer_id, file_id, messaging::AttachmentStatus::paused);
@@ -413,7 +410,7 @@ class FileTransferService {
 
     std::lock_guard<std::mutex> const lock(transfers_mutex_);
     if (active_downloads_.contains(file_id)) {
-      // Logic for reverse direction or just ignore if it's an echo
+      // Ignored for now
     } else if (active_uploads_.contains(file_id)) {
       auto& state = active_uploads_[file_id];
       if (requested_seq > 0) {
@@ -520,12 +517,23 @@ class FileTransferService {
 
     if (!active_downloads_.contains(file_id)) {
       auto attachment = storage_->GetAttachment(file_id);
-      if (attachment && attachment->status != messaging::AttachmentStatus::canceled &&
-          attachment->status != messaging::AttachmentStatus::discarded &&
-          attachment->status != messaging::AttachmentStatus::peerCanceled) {
-        lock.unlock();
-        QueueDownload(peer_id, *attachment, 0);
-        lock.lock();
+
+      if (attachment) {
+          // Guard against forced push if we paused/canceled
+          if (attachment->status == messaging::AttachmentStatus::paused ||
+              attachment->status == messaging::AttachmentStatus::canceled ||
+              attachment->status == messaging::AttachmentStatus::peerCanceled ||
+              attachment->status == messaging::AttachmentStatus::discarded) {
+              return;
+          }
+
+          if (attachment->status != messaging::AttachmentStatus::done) {
+            lock.unlock();
+            QueueDownload(peer_id, *attachment, 0);
+            lock.lock();
+          }
+      } else {
+          return;
       }
     }
 
@@ -547,9 +555,7 @@ class FileTransferService {
       if (sequence + 1 > state.highest_seq_written) {
         state.highest_seq_written = sequence + 1;
 
-        // Save progress periodically (e.g. every chunk) or rely on ACK
-        // Writing to disk on every chunk might be slow, but safe.
-        // Given 16KB chunks, it's reasonable.
+        // Save progress to disk for resume
         std::ofstream pf(state.progress_path, std::ios::binary);
         if (pf) {
             std::uint32_t const next = static_cast<std::uint32_t>(state.highest_seq_written);
@@ -584,11 +590,7 @@ class FileTransferService {
     auto& state = iterator->second;
     state.stream.flush();
 
-    // Naive check: if we wrote less than total, we missed something.
-    // However, with Seek, bytes_written accumulates even if we overwrite.
-    // Ideally we check highest_seq * chunk_size >= total_size.
     if ((state.highest_seq_written * chunkSizeBytes) < state.total_size) {
-      // We are missing data
       SendAck(peer_id, file_id, static_cast<std::uint32_t>(state.highest_seq_written));
       return;
     }

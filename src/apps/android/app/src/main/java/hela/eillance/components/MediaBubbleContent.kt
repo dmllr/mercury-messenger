@@ -29,10 +29,12 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.PlayCircleOutline
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.VideoFile
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -225,7 +227,6 @@ private fun FileAttachmentItem(
   val isDone = attachment.status == AttachmentStatus.Done
   val isCanceled = attachment.status == AttachmentStatus.Canceled || attachment.status == AttachmentStatus.PeerCanceled
 
-  // PRIORITIZE FILENAME
   val displayName = if (attachment.fileName.isNotEmpty()) {
     attachment.fileName
   } else if (attachment.note.isNotEmpty()) {
@@ -277,11 +278,11 @@ private fun FileAttachmentItem(
           color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         if (isCanceled) {
-          Text(text = " • Canceled", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+          Text(text = "Canceled", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
         } else if (isPaused) {
-          Text(text = " • Paused", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
+          Text(text = "Paused", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
         } else if (isPending) {
-          Text(text = " • Waiting", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          Text(text = "Waiting", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
       }
     }
@@ -296,9 +297,23 @@ private fun FileAttachmentItem(
           color = MaterialTheme.colorScheme.primary
         )
         IconButton(onClick = onCancel, modifier = Modifier.size(24.dp)) {
-          Icon(Icons.Default.Close, contentDescription = "Cancel", modifier = Modifier.size(16.dp))
+          val icon = if (!isFromMe) Icons.Default.Pause else Icons.Default.Close
+          Icon(icon, contentDescription = "Cancel", modifier = Modifier.size(16.dp))
         }
-      } else if (isPaused || (attachment.status == AttachmentStatus.Failed)) {
+      } else if (isPaused) {
+        Row {
+          // Only Receiver can Resume
+          if (!isFromMe) {
+            IconButton(onClick = onResume, modifier = Modifier.size(32.dp)) {
+              Icon(Icons.Default.PlayArrow, contentDescription = "Resume", tint = MaterialTheme.colorScheme.primary)
+            }
+          }
+          // Both can Cancel/Discard completely
+          IconButton(onClick = onDiscard, modifier = Modifier.size(32.dp)) {
+            Icon(Icons.Default.Close, contentDescription = "Cancel", tint = MaterialTheme.colorScheme.error)
+          }
+        }
+      } else if (attachment.status == AttachmentStatus.Failed) {
         IconButton(onClick = onResume) {
           Icon(Icons.Default.Refresh, contentDescription = "Retry", tint = MaterialTheme.colorScheme.primary)
         }
@@ -411,7 +426,6 @@ private fun MediaItem(
           contentScale = ContentScale.Crop
         )
       } else {
-        // Missing thumbnail fallback
         Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
           Icon(
             imageVector = if (isVideo) Icons.Default.VideoFile else Icons.Default.BrokenImage,
@@ -421,7 +435,6 @@ private fun MediaItem(
           )
         }
       }
-      // Darken overlay for non-done states
       Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.4f)))
     }
 
@@ -429,14 +442,27 @@ private fun MediaItem(
     Box(contentAlignment = Alignment.Center) {
       if (attachment.status == AttachmentStatus.Paused) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-          Icon(
-            imageVector = Icons.Default.Repeat,
-            contentDescription = "Resume",
-            tint = Color.White,
-            modifier = Modifier.size(32.dp).clickable { onResume() }
-          )
-          Text("Paused", style = MaterialTheme.typography.labelSmall, color = Color.White)
+          if (!isFromMe) {
+            Icon(
+              imageVector = Icons.Default.PlayCircleOutline,
+              contentDescription = "Resume",
+              tint = Color.White,
+              modifier = Modifier.size(32.dp).clickable { onResume() }
+            )
+            Text("Paused", style = MaterialTheme.typography.labelSmall, color = Color.White)
+          } else {
+            Text("Paused by Peer", style = MaterialTheme.typography.labelSmall, color = Color.White)
+          }
         }
+
+        // Cancel button for both (Sender: Cancel Upload; Receiver: Cancel Download)
+        IconButton(
+          onClick = onDiscard,
+          modifier = Modifier.align(Alignment.TopEnd).padding(4.dp)
+        ) {
+          Icon(Icons.Default.Close, contentDescription = "Cancel", tint = Color.White)
+        }
+
       } else if (progress != null && progress >= 0f) {
         Box(contentAlignment = Alignment.Center) {
           CircularProgressIndicator(
@@ -445,8 +471,10 @@ private fun MediaItem(
             color = Color.White,
             trackColor = Color.White.copy(alpha = 0.4f),
           )
+          // onCancel -> Pause (Receiver) or Cancel (Sender)
           IconButton(onClick = onCancel) {
-            Icon(Icons.Default.Close, contentDescription = "Cancel", tint = Color.White)
+            val icon = if (!isFromMe) Icons.Default.Pause else Icons.Default.Close
+            Icon(icon, contentDescription = "Cancel", tint = Color.White)
           }
         }
       } else if (attachment.status == AttachmentStatus.Pending || attachment.status == AttachmentStatus.Transferring) {
@@ -458,7 +486,6 @@ private fun MediaItem(
   }
 }
 
-// Helpers for File Icons and Names
 private fun getFileIcon(mimeType: String): ImageVector {
   return when {
     mimeType == "application/pdf" -> Icons.Default.PictureAsPdf
