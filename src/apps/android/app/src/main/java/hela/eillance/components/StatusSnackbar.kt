@@ -27,9 +27,12 @@ fun StatusSnackbar(
   onDismiss: (() -> Unit)? = null,
   isError: Boolean = false
 ) {
-  val backgroundColor = if (isError) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.inverseSurface
-  val contentColor = if (isError) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.inverseOnSurface
-  val actionColor = if (isError) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.primaryContainer
+  val backgroundColor =
+    if (isError) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.inverseSurface
+  val contentColor =
+    if (isError) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.inverseOnSurface
+  val actionColor =
+    if (isError) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.primaryContainer
 
   Row(
     modifier = Modifier

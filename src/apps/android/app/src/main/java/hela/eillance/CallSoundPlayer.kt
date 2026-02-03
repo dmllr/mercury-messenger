@@ -56,6 +56,7 @@ class CallSoundPlayer(private val context: Context) {
               .build()
           )
         }
+
         SoundState.Ringback -> {
           // Play ringback tone (standard phone ring) on voice stream
           val afd = context.resources.openRawResourceFd(R.raw.ringing) ?: return
@@ -69,6 +70,7 @@ class CallSoundPlayer(private val context: Context) {
               .build()
           )
         }
+
         SoundState.Ringing -> {
           // Play system default ringtone on the ringtone stream (loudspeaker)
           val ringtoneUri = RingtoneManager.getActualDefaultRingtoneUri(context, RingtoneManager.TYPE_RINGTONE)
@@ -87,6 +89,7 @@ class CallSoundPlayer(private val context: Context) {
             return
           }
         }
+
         SoundState.None -> return
       }
 

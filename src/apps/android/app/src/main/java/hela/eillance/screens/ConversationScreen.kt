@@ -185,8 +185,10 @@ fun ConversationScreen(
   val bannerState by mainViewModel.permissionBannerState.collectAsState()
 
   // State for permissions launchers
-  val notifLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { mainViewModel.checkAllPermissions() }
-  val callLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { mainViewModel.checkAllPermissions() }
+  val notifLauncher =
+    rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { mainViewModel.checkAllPermissions() }
+  val callLauncher =
+    rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { mainViewModel.checkAllPermissions() }
 
   var previousHistorySize by remember(peerId) { mutableIntStateOf(historyPage.messages.size) }
 
@@ -321,6 +323,7 @@ fun ConversationScreen(
                   }
                 )
               }
+
               BannerType.Battery -> {
                 StatusSnackbar(
                   text = "Battery optimization may delay messages",
@@ -339,22 +342,26 @@ fun ConversationScreen(
                   onDismiss = { mainViewModel.ignoreBatteryOptimization() }
                 )
               }
+
               BannerType.CallPermissions -> {
                 StatusSnackbar(
                   text = "Camera/Mic needed for calls",
                   actionLabel = "Fix it",
                   onAction = {
-                    callLauncher.launch(arrayOf(
-                      Manifest.permission.CAMERA,
-                      Manifest.permission.RECORD_AUDIO,
-                      Manifest.permission.READ_PHONE_STATE,
-                      Manifest.permission.MANAGE_OWN_CALLS
-                    ))
+                    callLauncher.launch(
+                      arrayOf(
+                        Manifest.permission.CAMERA,
+                        Manifest.permission.RECORD_AUDIO,
+                        Manifest.permission.READ_PHONE_STATE,
+                        Manifest.permission.MANAGE_OWN_CALLS
+                      )
+                    )
                   },
                   dismissLabel = "I don't care",
                   onDismiss = { mainViewModel.ignoreCallPermissions() }
                 )
               }
+
               null -> {}
             }
           }
@@ -416,6 +423,7 @@ fun ConversationScreen(
             }
           )
         }
+
         ContactStatus.pendingApproval -> {
           PendingApprovalBar(
             contact = contact,
@@ -426,6 +434,7 @@ fun ConversationScreen(
             onResend = { contactsVM.addContact(peerId) }
           )
         }
+
         else -> {
           MessageInputArea(
             draftAttachments = draftAttachments,
@@ -495,7 +504,11 @@ fun MessageInputArea(
         IconButton(onClick = {
           pickMedia.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
         }) {
-          Icon(Icons.Default.Image, contentDescription = stringResource(R.string.attach_gallery), tint = MaterialTheme.colorScheme.primary)
+          Icon(
+            Icons.Default.Image,
+            contentDescription = stringResource(R.string.attach_gallery),
+            tint = MaterialTheme.colorScheme.primary
+          )
         }
 
         // Camera Photo
@@ -505,7 +518,11 @@ fun MessageInputArea(
           cameraPhotoUri = uri
           takePicture.launch(uri)
         }) {
-          Icon(Icons.Default.CameraAlt, contentDescription = stringResource(R.string.attach_camera_photo), tint = MaterialTheme.colorScheme.primary)
+          Icon(
+            Icons.Default.CameraAlt,
+            contentDescription = stringResource(R.string.attach_camera_photo),
+            tint = MaterialTheme.colorScheme.primary
+          )
         }
 
         // Camera Video
@@ -515,7 +532,11 @@ fun MessageInputArea(
           cameraVideoUri = uri
           captureVideo.launch(uri)
         }) {
-          Icon(Icons.Default.Videocam, contentDescription = stringResource(R.string.attach_camera_video), tint = MaterialTheme.colorScheme.primary)
+          Icon(
+            Icons.Default.Videocam,
+            contentDescription = stringResource(R.string.attach_camera_video),
+            tint = MaterialTheme.colorScheme.primary
+          )
         }
 
         // Document (Readable docs)
@@ -523,12 +544,20 @@ fun MessageInputArea(
           // OpenMultipleDocuments takes an array of mime types in launch
           pickDocs.launch(arrayOf("application/*", "text/*"))
         }) {
-          Icon(Icons.Default.Description, contentDescription = stringResource(R.string.attach_document), tint = MaterialTheme.colorScheme.primary)
+          Icon(
+            Icons.Default.Description,
+            contentDescription = stringResource(R.string.attach_document),
+            tint = MaterialTheme.colorScheme.primary
+          )
         }
 
         // Binary File (All files)
         IconButton(onClick = { pickDocs.launch(arrayOf("*/*")) }) {
-          Icon(Icons.Default.SnippetFolder, contentDescription = stringResource(R.string.attach_file), tint = MaterialTheme.colorScheme.primary)
+          Icon(
+            Icons.Default.SnippetFolder,
+            contentDescription = stringResource(R.string.attach_file),
+            tint = MaterialTheme.colorScheme.primary
+          )
         }
       }
     }
@@ -658,7 +687,9 @@ fun DraftAttachmentEditor(
         )
       }
     ) { padding ->
-      Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+      Box(modifier = Modifier
+        .fillMaxSize()
+        .padding(padding)) {
         HorizontalPager(
           state = pagerState,
           modifier = Modifier.fillMaxSize()
@@ -743,7 +774,9 @@ fun DraftAttachmentItem(
       .clickable(onClick = onClick)
   ) {
     Column {
-      Box(modifier = Modifier.height(80.dp).fillMaxWidth()) {
+      Box(modifier = Modifier
+        .height(80.dp)
+        .fillMaxWidth()) {
         if (draft.bitmap != null) {
           Image(
             bitmap = draft.bitmap.asImageBitmap(),
@@ -777,7 +810,12 @@ fun DraftAttachmentItem(
             .size(24.dp)
             .background(Color.Black.copy(alpha = 0.5f), CircleShape)
         ) {
-          Icon(Icons.Default.Close, contentDescription = stringResource(R.string.attachment_remove), tint = Color.White, modifier = Modifier.size(16.dp))
+          Icon(
+            Icons.Default.Close,
+            contentDescription = stringResource(R.string.attachment_remove),
+            tint = Color.White,
+            modifier = Modifier.size(16.dp)
+          )
         }
       }
 
@@ -822,7 +860,9 @@ fun ConnectionStatusBar(contact: Contact) {
     PeerConnectionState.Connected -> stringResource(R.string.state_peer_connection_connected) to MaterialTheme.extendedColors.success
     PeerConnectionState.Connecting -> stringResource(R.string.state_peer_connection_connecting) to MaterialTheme.colorScheme.secondary
     PeerConnectionState.Failed -> stringResource(R.string.state_peer_connection_failed) to MaterialTheme.colorScheme.error
-    else -> stringResource(R.string.state_peer_connection_disconnected) to MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+    else -> stringResource(R.string.state_peer_connection_disconnected) to MaterialTheme.colorScheme.onSurface.copy(
+      alpha = 0.6f
+    )
   }
 
   val height by animateDpAsState(
@@ -927,11 +967,13 @@ fun ChatHistory(
           onResumeTransfer = { attId -> chatVM.resumeTransfer(attId, currentItem.direction == MessageDirection.Sent) },
           onDiscardTransfer = { attId -> chatVM.discardAttachment(attId) }
         )
+
         HistoryEntryKind.VoiceCall, HistoryEntryKind.VideoCall -> CallLogBubble(
           entry = currentItem,
           zoneId = zoneId,
           formatters = formatters
         )
+
         HistoryEntryKind.SystemMessage -> SystemMessageBubble(currentItem, onClick = onSystemMessageClick)
       }
     }
@@ -1074,7 +1116,9 @@ fun MessageBubble(
                 else -> Icons.Filled.Schedule
               },
               contentDescription = "Message status: ${entry.status}",
-              modifier = Modifier.size(16.dp).padding(start = 4.dp),
+              modifier = Modifier
+                .size(16.dp)
+                .padding(start = 4.dp),
               tint = if (entry.status == MessageStatus.Read) {
                 MaterialTheme.extendedColors.success
               } else {
@@ -1101,22 +1145,30 @@ fun CallLogBubble(
         MaterialTheme.colorScheme.primary,
         if (entry.kind == HistoryEntryKind.VideoCall) stringResource(R.string.call_outgoing_video) else stringResource(R.string.call_outgoing_voice)
       )
+
       else -> Triple(
         Icons.AutoMirrored.Filled.CallMade,
         Color.Red,
         if (entry.kind == HistoryEntryKind.VideoCall) stringResource(R.string.call_outgoing_video) else stringResource(R.string.call_outgoing_voice)
       )
     }
+
     CallDirection.Incoming -> when (entry.callStatus) {
       CallStatus.Answered -> Triple(
         Icons.AutoMirrored.Filled.CallReceived,
         MaterialTheme.colorScheme.primary,
         if (entry.kind == HistoryEntryKind.VideoCall) stringResource(R.string.call_incoming_video) else stringResource(R.string.call_incoming_voice)
       )
+
       CallStatus.Missed -> Triple(Icons.AutoMirrored.Filled.CallMissed, Color.Red, stringResource(R.string.call_missed))
       else -> Triple(Icons.AutoMirrored.Filled.CallReceived, Color.Red, stringResource(R.string.call_rejected))
     }
-    null -> Triple(Icons.Default.Call, MaterialTheme.colorScheme.onSurfaceVariant, stringResource(R.string.call_generic))
+
+    null -> Triple(
+      Icons.Default.Call,
+      MaterialTheme.colorScheme.onSurfaceVariant,
+      stringResource(R.string.call_generic)
+    )
   }
 
   val formattedTime = formatTimestamp(entry.timestamp, zoneId, formatters)

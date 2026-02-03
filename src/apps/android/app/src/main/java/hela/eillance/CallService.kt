@@ -260,7 +260,10 @@ class CallService : Service() {
     newContacts.forEach { newContact ->
       val oldUnread = oldUnreadCounts[newContact.peerId] ?: 0
       if (newContact.unreadCount > oldUnread && !MercuryApplication.isAppInForeground) {
-        showNewMessageNotification(newContact.peerId, getString(R.string.notification_new_message_from, newContact.name))
+        showNewMessageNotification(
+          newContact.peerId,
+          getString(R.string.notification_new_message_from, newContact.name)
+        )
       }
     }
   }
@@ -271,7 +274,11 @@ class CallService : Service() {
     val notification = buildForegroundServiceNotification(false, null, ServiceConnectionState.Unknown)
     try {
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-        startForeground(FOREGROUND_SERVICE_NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
+        startForeground(
+          FOREGROUND_SERVICE_NOTIFICATION_ID,
+          notification,
+          ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+        )
       } else {
         startForeground(FOREGROUND_SERVICE_NOTIFICATION_ID, notification)
       }
@@ -280,7 +287,11 @@ class CallService : Service() {
     }
   }
 
-  private fun updateForegroundServiceNotification(inCall: Boolean, peerId: String?, connectionState: ServiceConnectionState) {
+  private fun updateForegroundServiceNotification(
+    inCall: Boolean,
+    peerId: String?,
+    connectionState: ServiceConnectionState
+  ) {
     if (inCall) acquireWakeLock() else releaseWakeLock()
 
     val notification = buildForegroundServiceNotification(inCall, peerId, connectionState)
@@ -290,7 +301,8 @@ class CallService : Service() {
         // If we are in a call, we upgrade to MICROPHONE + CAMERA (if video) + CONNECTED_DEVICE
         val serviceType = if (inCall) {
           // TODO: check runtime permissions here before applying these types
-          var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+          var type =
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
           if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
           }
@@ -313,17 +325,28 @@ class CallService : Service() {
       action = ACTION_SHOW_INCOMING_CALL
       putExtra(EXTRA_PEER_ID, peerId)
     }
-    val fullScreenPendingIntent = PendingIntent.getActivity(this, 0, fullScreenIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    val fullScreenPendingIntent = PendingIntent.getActivity(
+      this,
+      0,
+      fullScreenIntent,
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
 
     val rejectIntent = Intent(this, CallService::class.java).apply { action = ACTION_REJECT_CALL }
-    val rejectPendingIntent = PendingIntent.getService(this, 1, rejectIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    val rejectPendingIntent =
+      PendingIntent.getService(this, 1, rejectIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
     val acceptIntent = Intent(this, MainActivity::class.java).apply {
       action = ACTION_ACCEPT_CALL
       putExtra(EXTRA_PEER_ID, peerId)
       flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
     }
-    val acceptPendingIntent = PendingIntent.getActivity(this, 2, acceptIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    val acceptPendingIntent = PendingIntent.getActivity(
+      this,
+      2,
+      acceptIntent,
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
 
     val builder = NotificationCompat.Builder(this, CALLS_CHANNEL_ID)
       .setSmallIcon(android.R.drawable.stat_notify_chat)
@@ -365,9 +388,18 @@ class CallService : Service() {
     notificationManager.notify(MESSAGE_NOTIFICATION_ID_BASE + peerId.hashCode(), builder.build())
   }
 
-  private fun buildForegroundServiceNotification(inCall: Boolean, peerId: String?, connectionState: ServiceConnectionState): Notification {
+  private fun buildForegroundServiceNotification(
+    inCall: Boolean,
+    peerId: String?,
+    connectionState: ServiceConnectionState
+  ): Notification {
     val notificationIntent = Intent(this, MainActivity::class.java)
-    val pendingIntent = PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    val pendingIntent = PendingIntent.getActivity(
+      this,
+      0,
+      notificationIntent,
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
     val builder = NotificationCompat.Builder(this, FOREGROUND_CHANNEL_ID)
       .setContentTitle(getString(R.string.app_name))
       .setSmallIcon(R.drawable.ic_status_standby)
@@ -375,7 +407,12 @@ class CallService : Service() {
 
     if (inCall) {
       val hangupIntent = Intent(this, CallService::class.java).apply { action = ACTION_HANGUP }
-      val hangupPendingIntent = PendingIntent.getService(this, 3, hangupIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+      val hangupPendingIntent = PendingIntent.getService(
+        this,
+        3,
+        hangupIntent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+      )
       builder.setContentText(getString(R.string.service_status_in_call_with, peerId ?: getString(R.string.unknown)))
         .addAction(0, getString(R.string.action_hangup), hangupPendingIntent)
     } else {
@@ -392,11 +429,23 @@ class CallService : Service() {
   }
 
   private fun createNotificationChannels() {
-    val foregroundChannel = NotificationChannel(FOREGROUND_CHANNEL_ID, getString(R.string.notification_channel_foreground_title), NotificationManager.IMPORTANCE_MIN)
-    val callsChannel = NotificationChannel(CALLS_CHANNEL_ID, getString(R.string.notification_channel_calls_title), NotificationManager.IMPORTANCE_HIGH).apply {
+    val foregroundChannel = NotificationChannel(
+      FOREGROUND_CHANNEL_ID,
+      getString(R.string.notification_channel_foreground_title),
+      NotificationManager.IMPORTANCE_MIN
+    )
+    val callsChannel = NotificationChannel(
+      CALLS_CHANNEL_ID,
+      getString(R.string.notification_channel_calls_title),
+      NotificationManager.IMPORTANCE_HIGH
+    ).apply {
       description = getString(R.string.notification_channel_calls_description)
     }
-    val messagesChannel = NotificationChannel(MESSAGES_CHANNEL_ID, getString(R.string.notification_channel_messages_title), NotificationManager.IMPORTANCE_DEFAULT)
+    val messagesChannel = NotificationChannel(
+      MESSAGES_CHANNEL_ID,
+      getString(R.string.notification_channel_messages_title),
+      NotificationManager.IMPORTANCE_DEFAULT
+    )
     notificationManager.createNotificationChannel(foregroundChannel)
     notificationManager.createNotificationChannel(callsChannel)
     notificationManager.createNotificationChannel(messagesChannel)
@@ -434,7 +483,10 @@ class CallService : Service() {
       extrasBundle.putParcelable(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, phoneAccountHandle)
       extrasBundle.putBundle(TelecomManager.EXTRA_OUTGOING_CALL_EXTRAS, extras)
       if (isVideo) {
-        extrasBundle.putInt(TelecomManager.EXTRA_START_CALL_WITH_VIDEO_STATE, android.telecom.VideoProfile.STATE_BIDIRECTIONAL)
+        extrasBundle.putInt(
+          TelecomManager.EXTRA_START_CALL_WITH_VIDEO_STATE,
+          android.telecom.VideoProfile.STATE_BIDIRECTIONAL
+        )
       }
       telecomManager.placeCall(uri, extrasBundle)
     } catch (e: SecurityException) {

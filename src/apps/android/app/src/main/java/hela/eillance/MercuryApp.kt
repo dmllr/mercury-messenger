@@ -94,9 +94,11 @@ fun IdentitySetupFlow(profileVM: ProfileViewModel) {
   val navController = rememberNavController()
   NavHost(navController = navController, startDestination = Screen.Identity.route) {
     composable(Screen.Identity.route) { IdentityScreen(navController, profileVM) }
-    composable(Screen.MnemonicDisplay.route) { MnemonicDisplayScreen(profileVM) {
-      // Upon finishing setup, profileVM state updates will trigger navigation in MercuryApp
-    }}
+    composable(Screen.MnemonicDisplay.route) {
+      MnemonicDisplayScreen(profileVM) {
+        // Upon finishing setup, profileVM state updates will trigger navigation in MercuryApp
+      }
+    }
     composable(Screen.RecoverIdentity.route) { RecoverIdentityScreen(navController, profileVM) }
     composable(
       route = Route.WebView.route,
@@ -248,7 +250,7 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
           onNavigateToConnections = { navController.navigate(Screen.DebugConnections.route) },
           onNavigateToUnread = { navController.navigate(Screen.DebugUnread.route) },
           onDebugAction = { action ->
-            when(action) {
+            when (action) {
               hela.eillance.screens.debug.DebugAction.ERASE_HISTORY -> debugVM.eraseAllHistory()
               hela.eillance.screens.debug.DebugAction.ERASE_CONTACTS -> debugVM.eraseAllContacts()
               hela.eillance.screens.debug.DebugAction.REVOKE_APPROVALS -> debugVM.revokeAllApprovals()

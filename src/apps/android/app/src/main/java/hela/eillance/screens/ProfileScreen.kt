@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -276,7 +275,9 @@ private fun ProfileHeader(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
       ) {
-        Box(modifier = Modifier.size(8.dp).background(statusColor, CircleShape))
+        Box(modifier = Modifier
+          .size(8.dp)
+          .background(statusColor, CircleShape))
         Spacer(Modifier.width(8.dp))
         Column {
           Text(text = statusText, style = MaterialTheme.typography.labelLarge, color = statusColor)
@@ -337,9 +338,17 @@ private fun ProfileMenu(
       ListItem(
         headlineContent = { Text("Permission Issues") },
         supportingContent = { Text("Fix issues to enable full functionality") },
-        leadingContent = { Icon(Icons.Default.Warning, contentDescription = "Issues", tint = MaterialTheme.colorScheme.error) },
+        leadingContent = {
+          Icon(
+            Icons.Default.Warning,
+            contentDescription = "Issues",
+            tint = MaterialTheme.colorScheme.error
+          )
+        },
         trailingContent = {
-          Box(modifier = Modifier.size(8.dp).background(MaterialTheme.colorScheme.error, CircleShape))
+          Box(modifier = Modifier
+            .size(8.dp)
+            .background(MaterialTheme.colorScheme.error, CircleShape))
         },
         modifier = Modifier
           .clip(MaterialTheme.shapes.medium)
@@ -395,7 +404,13 @@ private fun ProfileMenu(
       ListItem(
         headlineContent = { Text("Debug Menu") },
         supportingContent = { Text("Developer tools and diagnostics") },
-        leadingContent = { Icon(Icons.Default.BugReport, contentDescription = "Debug", tint = MaterialTheme.colorScheme.primary) },
+        leadingContent = {
+          Icon(
+            Icons.Default.BugReport,
+            contentDescription = "Debug",
+            tint = MaterialTheme.colorScheme.primary
+          )
+        },
         modifier = Modifier
           .clip(MaterialTheme.shapes.medium)
           .clickable(onClick = onNavigateToDebugMenu)
@@ -479,7 +494,11 @@ private fun ProfileEditDialog(
             .verticalScroll(rememberScrollState()),
           horizontalAlignment = Alignment.CenterHorizontally
         ) {
-          Text("Edit Profile", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(bottom = 16.dp))
+          Text(
+            "Edit Profile",
+            style = MaterialTheme.typography.headlineSmall,
+            modifier = Modifier.padding(bottom = 16.dp)
+          )
 
           Box(
             modifier = Modifier

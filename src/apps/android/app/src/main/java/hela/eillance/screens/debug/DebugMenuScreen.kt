@@ -85,18 +85,51 @@ fun DebugMenuScreen(
       )
 
       ListItem(
-        headlineContent = { Text(stringResource(id = R.string.debug_action_erase_history), color = MaterialTheme.colorScheme.error) },
-        leadingContent = { Icon(Icons.Default.DeleteForever, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+        headlineContent = {
+          Text(
+            stringResource(id = R.string.debug_action_erase_history),
+            color = MaterialTheme.colorScheme.error
+          )
+        },
+        leadingContent = {
+          Icon(
+            Icons.Default.DeleteForever,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.error
+          )
+        },
         modifier = Modifier.clickable { onDebugAction(DebugAction.ERASE_HISTORY) }
       )
       ListItem(
-        headlineContent = { Text(stringResource(id = R.string.debug_action_erase_contacts), color = MaterialTheme.colorScheme.error) },
-        leadingContent = { Icon(Icons.Default.DeleteForever, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+        headlineContent = {
+          Text(
+            stringResource(id = R.string.debug_action_erase_contacts),
+            color = MaterialTheme.colorScheme.error
+          )
+        },
+        leadingContent = {
+          Icon(
+            Icons.Default.DeleteForever,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.error
+          )
+        },
         modifier = Modifier.clickable { onDebugAction(DebugAction.ERASE_CONTACTS) }
       )
       ListItem(
-        headlineContent = { Text(stringResource(id = R.string.debug_action_revoke_approvals), color = MaterialTheme.colorScheme.error) },
-        leadingContent = { Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+        headlineContent = {
+          Text(
+            stringResource(id = R.string.debug_action_revoke_approvals),
+            color = MaterialTheme.colorScheme.error
+          )
+        },
+        leadingContent = {
+          Icon(
+            Icons.AutoMirrored.Filled.Logout,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.error
+          )
+        },
         modifier = Modifier.clickable { onDebugAction(DebugAction.REVOKE_APPROVALS) }
       )
     }

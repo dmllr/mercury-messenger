@@ -163,7 +163,8 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
         if (newState == PeerConnection.PeerConnectionState.CONNECTED ||
           newState == PeerConnection.PeerConnectionState.FAILED ||
           newState == PeerConnection.PeerConnectionState.CLOSED ||
-          newState == PeerConnection.PeerConnectionState.DISCONNECTED) {
+          newState == PeerConnection.PeerConnectionState.DISCONNECTED
+        ) {
           connectionTimeoutJobs.remove(peerId + context)?.cancel()
         }
 
@@ -183,11 +184,13 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
           nativeOnPeerConnectionStateChange(nativePointer, peerId, stateInt)
         }
       }
+
       override fun onIceConnectionChange(newState: PeerConnection.IceConnectionState?) {}
       override fun onIceConnectionReceivingChange(p0: Boolean) {}
       override fun onIceGatheringChange(newState: PeerConnection.IceGatheringState?) {
         Log.i(TAG, "onIceGatheringChange for peer $peerId ($context): $newState")
       }
+
       override fun onIceCandidate(candidate: IceCandidate?) {
         if (candidate == null) {
           Log.d(TAG, "End of ICE candidates for peer $peerId ($context)")
@@ -203,7 +206,7 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
             put("sdpMid", candidate.sdpMid)
           }
           sendSignalingMessage(candidateJson.toString())
-        } catch(e: JSONException) {
+        } catch (e: JSONException) {
           Log.e(TAG, "Failed to create ICE candidate JSON", e)
         }
         Log.d(TAG, "onIceCandidate for peer $peerId ($context): ${candidate.sdp}")
@@ -229,6 +232,7 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
               nativeOnDataChannelOpen(nativePointer, peerId)
             }
           }
+
           override fun onMessage(buffer: DataChannel.Buffer?) {
             buffer ?: return
             val data = ByteArray(buffer.data.remaining())
@@ -244,6 +248,7 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
           nativeOnDataChannelOpen(nativePointer, peerId)
         }
       }
+
       override fun onRenegotiationNeeded() {
         Log.i(TAG, "onRenegotiationNeeded for peer: $peerId, context: $context")
       }
@@ -262,6 +267,7 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
                 track.addSink(sink)
               }
             }
+
             is AudioTrack -> {
               Log.i(TAG, "Audio track received from $peerId via onAddTrack")
               track.setEnabled(true)
@@ -321,6 +327,7 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
           nativeOnDataChannelOpen(nativePointer, peerId)
         }
       }
+
       override fun onMessage(buffer: DataChannel.Buffer?) {
         buffer ?: return
         val data = ByteArray(buffer.data.remaining())
@@ -376,6 +383,7 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
         Log.d(TAG, "Offer created for $peerId. SDP: ${sdp?.description?.take(200)}...")
         if (sdp != null) pc.setLocalDescription(this, sdp)
       }
+
       override fun onSetSuccess() {
         Log.i(TAG, "Local description (offer) set successfully for $peerId")
         pc.localDescription?.let { localSdp ->
@@ -388,8 +396,14 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
           sendSignalingMessage(message.toString())
         }
       }
-      override fun onCreateFailure(s: String?) { Log.e(TAG, "createOffer failed for peer $peerId: $s") }
-      override fun onSetFailure(s: String?) { Log.e(TAG, "setLocalDescription failed for peer $peerId: $s") }
+
+      override fun onCreateFailure(s: String?) {
+        Log.e(TAG, "createOffer failed for peer $peerId: $s")
+      }
+
+      override fun onSetFailure(s: String?) {
+        Log.e(TAG, "setLocalDescription failed for peer $peerId: $s")
+      }
     }
     pc.createOffer(sdpObserver, MediaConstraints())
   }
@@ -419,6 +433,7 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
         Log.d(TAG, "Answer created for $peerId. SDP: ${sdp?.description?.take(200)}...")
         if (sdp != null) pc.setLocalDescription(this, sdp)
       }
+
       override fun onSetSuccess() {
         Log.i(TAG, "Local description (answer) set successfully for $peerId")
         pc.localDescription?.let { localSdp ->
@@ -431,8 +446,14 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
           sendSignalingMessage(message.toString())
         }
       }
-      override fun onCreateFailure(s: String?) { Log.e(TAG, "createAnswer failed for peer $peerId: $s") }
-      override fun onSetFailure(s: String?) { Log.e(TAG, "setLocalDescription failed for peer $peerId: $s") }
+
+      override fun onCreateFailure(s: String?) {
+        Log.e(TAG, "createAnswer failed for peer $peerId: $s")
+      }
+
+      override fun onSetFailure(s: String?) {
+        Log.e(TAG, "setLocalDescription failed for peer $peerId: $s")
+      }
     }
     val answerConstraints = MediaConstraints().apply {
       mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"))
@@ -443,7 +464,12 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
 
   fun setRemoteDescription(peerId: String, context: String, sdp: String, type: String) {
     Log.i(TAG, "Setting remote description for peer $peerId ($context), type: $type")
-    val pc = getPeerConnection(peerId, context) ?: run { Log.e(TAG, "PeerConnection for $peerId ($context) not found for setRemoteDescription"); return }
+    val pc = getPeerConnection(peerId, context) ?: run {
+      Log.e(
+        TAG,
+        "PeerConnection for $peerId ($context) not found for setRemoteDescription"
+      ); return
+    }
 
     // Avoid "Called in wrong state: stable" error on duplicate answers
     if (type == "answer" && pc.signalingState() == PeerConnection.SignalingState.STABLE) {
@@ -456,8 +482,11 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
       override fun onSetSuccess() {
         Log.i(TAG, "Set remote description successfully for peer $peerId.")
       }
+
       override fun onCreateFailure(s: String?) {}
-      override fun onSetFailure(s: String?) { Log.e(TAG, "Failed to set remote description for peer $peerId: $s") }
+      override fun onSetFailure(s: String?) {
+        Log.e(TAG, "Failed to set remote description for peer $peerId: $s")
+      }
     }
     val sdpType = SessionDescription.Type.fromCanonicalForm(type)
     pc.setRemoteDescription(sdpObserver, SessionDescription(sdpType, sdp))
@@ -467,7 +496,9 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
     val candidate = IceCandidate(mid, -1, candidateSdp)
     Log.d(TAG, "Adding remote ICE candidate for peer $peerId ($context): $candidateSdp")
     val pc = getPeerConnection(peerId, context)
-    if (pc == null) { Log.e(TAG, "PeerConnection for $peerId not found, cannot add remote candidate."); return }
+    if (pc == null) {
+      Log.e(TAG, "PeerConnection for $peerId not found, cannot add remote candidate."); return
+    }
     pc.addIceCandidate(candidate)
   }
 
@@ -508,12 +539,29 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
       Log.e(TAG, "No front-facing camera found.")
     } else {
       val cameraEventsHandler = object : CameraVideoCapturer.CameraEventsHandler {
-        override fun onCameraError(p0: String?) { Log.e(TAG, "Camera error: $p0") }
-        override fun onCameraDisconnected() { Log.w(TAG, "Camera disconnected") }
-        override fun onCameraFreezed(p0: String?) { Log.w(TAG, "Camera freezed: $p0") }
-        override fun onCameraOpening(p0: String?) { Log.i(TAG, "Opening camera: $p0") }
-        override fun onFirstFrameAvailable() { Log.i(TAG, "First frame available from camera") }
-        override fun onCameraClosed() { Log.i(TAG, "Camera closed") }
+        override fun onCameraError(p0: String?) {
+          Log.e(TAG, "Camera error: $p0")
+        }
+
+        override fun onCameraDisconnected() {
+          Log.w(TAG, "Camera disconnected")
+        }
+
+        override fun onCameraFreezed(p0: String?) {
+          Log.w(TAG, "Camera freezed: $p0")
+        }
+
+        override fun onCameraOpening(p0: String?) {
+          Log.i(TAG, "Opening camera: $p0")
+        }
+
+        override fun onFirstFrameAvailable() {
+          Log.i(TAG, "First frame available from camera")
+        }
+
+        override fun onCameraClosed() {
+          Log.i(TAG, "Camera closed")
+        }
       }
       videoCapturer = cameraEnumerator.createCapturer(frontCamera, cameraEventsHandler)
       videoSource = factory.createVideoSource(videoCapturer!!.isScreencast)
@@ -635,7 +683,11 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
         when (message) {
           is SignalingMessage.PeerMessage -> nativeOnPeerMessage(nativePointer, message.message.toString())
           is SignalingMessage.Error -> nativeOnSignalingError(nativePointer, message.forPeer ?: "", message.error)
-          is SignalingMessage.SystemMessage -> nativeOnSystemMessage(nativePointer, message.type, message.payload.toString())
+          is SignalingMessage.SystemMessage -> nativeOnSystemMessage(
+            nativePointer,
+            message.type,
+            message.payload.toString()
+          )
         }
       }
     }.launchIn(coroutineScope)

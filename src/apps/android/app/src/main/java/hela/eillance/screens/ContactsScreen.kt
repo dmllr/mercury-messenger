@@ -103,8 +103,10 @@ fun ContactsScreen(
   val bannerState by mainViewModel.permissionBannerState.collectAsState()
   val hasPermissionIssues by mainViewModel.hasPermissionIssues.collectAsState()
 
-  val notifLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { onCheckPermissions() }
-  val callLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { onCheckPermissions() }
+  val notifLauncher =
+    rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { onCheckPermissions() }
+  val callLauncher =
+    rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { onCheckPermissions() }
 
   LaunchedEffect(contactsVM) {
     contactsVM.errorMessage.collect { message ->
@@ -193,6 +195,7 @@ fun ContactsScreen(
                   }
                 )
               }
+
               BannerType.Battery -> {
                 StatusSnackbar(
                   text = stringResource(id = R.string.permission_banner_battery),
@@ -211,22 +214,26 @@ fun ContactsScreen(
                   onDismiss = { mainViewModel.ignoreBatteryOptimization() }
                 )
               }
+
               BannerType.CallPermissions -> {
                 StatusSnackbar(
                   text = stringResource(id = R.string.permission_banner_calls),
                   actionLabel = stringResource(id = R.string.action_fix_it),
                   onAction = {
-                    callLauncher.launch(arrayOf(
-                      Manifest.permission.CAMERA,
-                      Manifest.permission.RECORD_AUDIO,
-                      Manifest.permission.READ_PHONE_STATE,
-                      Manifest.permission.MANAGE_OWN_CALLS
-                    ))
+                    callLauncher.launch(
+                      arrayOf(
+                        Manifest.permission.CAMERA,
+                        Manifest.permission.RECORD_AUDIO,
+                        Manifest.permission.READ_PHONE_STATE,
+                        Manifest.permission.MANAGE_OWN_CALLS
+                      )
+                    )
                   },
                   dismissLabel = stringResource(id = R.string.action_ignore_permission),
                   onDismiss = { mainViewModel.ignoreCallPermissions() }
                 )
               }
+
               null -> {}
             }
           }
@@ -371,7 +378,9 @@ fun ContactListItem(
         if (contact.unreadCount > 0) {
           Badge { Text(contact.unreadCount.toString()) }
         } else if (contact.connectionState == PeerConnectionState.Connected.value) {
-          Box(modifier = Modifier.size(8.dp).background(MaterialTheme.extendedColors.success, CircleShape))
+          Box(modifier = Modifier
+            .size(8.dp)
+            .background(MaterialTheme.extendedColors.success, CircleShape))
         }
       }
     },
@@ -414,9 +423,11 @@ private fun getSnippetText(contact: Contact, context: Context): String {
         context.getString(R.string.chat_you_prefix) else ""
       prefix + (contact.lastMessageContent ?: "")
     }
+
     HistoryEntryKind.VoiceCall, HistoryEntryKind.VideoCall -> {
       context.getString(LocalizationMapping.getCallDescriptionResId(kind, contact.lastMessageDirection))
     }
+
     HistoryEntryKind.SystemMessage -> {
       val action = try {
         val content = contact.lastMessageContent

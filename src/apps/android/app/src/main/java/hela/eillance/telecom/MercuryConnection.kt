@@ -13,9 +13,9 @@ import android.telecom.TelecomManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import hela.eillance.CallService
-import hela.eillance.camera.R
 import hela.eillance.MainActivity
 import hela.eillance.MercuryApplication
+import hela.eillance.camera.R
 
 class MercuryConnection(
   private val callService: CallService,
@@ -53,15 +53,26 @@ class MercuryConnection(
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
 
-    val rejectIntent = Intent(callService, CallService::class.java).apply { action = "hela.eillance.ACTION_REJECT_CALL" }
-    val rejectPendingIntent = PendingIntent.getService(callService, 1, rejectIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    val rejectIntent =
+      Intent(callService, CallService::class.java).apply { action = "hela.eillance.ACTION_REJECT_CALL" }
+    val rejectPendingIntent = PendingIntent.getService(
+      callService,
+      1,
+      rejectIntent,
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
 
     val acceptIntent = Intent(callService, MainActivity::class.java).apply {
       action = CallService.ACTION_ACCEPT_CALL
       putExtra(CallService.EXTRA_PEER_ID, peerId)
       flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
     }
-    val acceptPendingIntent = PendingIntent.getActivity(callService, 2, acceptIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    val acceptPendingIntent = PendingIntent.getActivity(
+      callService,
+      2,
+      acceptIntent,
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
 
     val builder = NotificationCompat.Builder(callService, "incoming_calls_channel")
       .setSmallIcon(android.R.drawable.stat_notify_chat)

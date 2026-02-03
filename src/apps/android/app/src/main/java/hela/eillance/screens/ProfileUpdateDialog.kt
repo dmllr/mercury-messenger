@@ -88,10 +88,18 @@ private fun ProfileUpdateDialog(action: ProfileUpdateAction, onDismiss: () -> Un
           .padding(24.dp)
           .verticalScroll(rememberScrollState())
       ) {
-        Text(stringResource(id = R.string.profile_update_dialog_title), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(bottom = 16.dp))
+        Text(
+          stringResource(id = R.string.profile_update_dialog_title),
+          style = MaterialTheme.typography.headlineSmall,
+          modifier = Modifier.padding(bottom = 16.dp)
+        )
 
         ComparePhotos(action.old?.photo, action.new?.photo)
-        CompareField(stringResource(id = R.string.profile_update_field_display_name), action.old?.displayName, action.new?.displayName)
+        CompareField(
+          stringResource(id = R.string.profile_update_field_display_name),
+          action.old?.displayName,
+          action.new?.displayName
+        )
         CompareField(stringResource(id = R.string.profile_update_field_bio), action.old?.bio, action.new?.bio)
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -109,7 +117,11 @@ private fun ComparePhotos(oldPhoto: String?, newPhoto: String?) {
   if (oldPhoto == newPhoto) return
 
   Column(modifier = Modifier.fillMaxWidth()) {
-    Text(stringResource(id = R.string.profile_update_field_photo), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+    Text(
+      stringResource(id = R.string.profile_update_field_photo),
+      style = MaterialTheme.typography.titleMedium,
+      color = MaterialTheme.colorScheme.primary
+    )
     Spacer(Modifier.height(8.dp))
     Row(
       modifier = Modifier.fillMaxWidth(),
@@ -117,7 +129,11 @@ private fun ComparePhotos(oldPhoto: String?, newPhoto: String?) {
       verticalAlignment = Alignment.CenterVertically
     ) {
       ProfilePhoto(photoBase64 = oldPhoto, modifier = Modifier.weight(1f))
-      Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = stringResource(id = R.string.changed_to_description), modifier = Modifier.padding(horizontal = 8.dp))
+      Icon(
+        Icons.AutoMirrored.Filled.ArrowForward,
+        contentDescription = stringResource(id = R.string.changed_to_description),
+        modifier = Modifier.padding(horizontal = 8.dp)
+      )
       ProfilePhoto(photoBase64 = newPhoto, modifier = Modifier.weight(1f))
     }
     HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
@@ -150,7 +166,12 @@ private fun DiffText(label: String, value: String) {
     if (value.isNotEmpty()) {
       Text(value, style = MaterialTheme.typography.bodyMedium)
     } else {
-      Text("Not set", style = MaterialTheme.typography.bodyMedium, fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurfaceVariant)
+      Text(
+        "Not set",
+        style = MaterialTheme.typography.bodyMedium,
+        fontStyle = FontStyle.Italic,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+      )
     }
   }
 }
@@ -175,7 +196,11 @@ private fun ProfilePhoto(photoBase64: String?, modifier: Modifier = Modifier) {
         contentScale = ContentScale.Crop
       )
     } else {
-      Text(stringResource(id = R.string.no_photo), textAlign = TextAlign.Center, style = MaterialTheme.typography.bodySmall)
+      Text(
+        stringResource(id = R.string.no_photo),
+        textAlign = TextAlign.Center,
+        style = MaterialTheme.typography.bodySmall
+      )
     }
   }
 }

@@ -48,8 +48,20 @@ fun HelpScreen(navController: NavController) {
         .padding(padding)
         .padding(8.dp)
     ) {
-      HelpItem(title = stringResource(id = R.string.help_item_identity)) { navController.navigate(Route.WebView.createRoute(URL_IDENTITY)) }
-      HelpItem(title = stringResource(id = R.string.help_item_p2p)) { navController.navigate(Route.WebView.createRoute(URL_P2P)) }
+      HelpItem(title = stringResource(id = R.string.help_item_identity)) {
+        navController.navigate(
+          Route.WebView.createRoute(
+            URL_IDENTITY
+          )
+        )
+      }
+      HelpItem(title = stringResource(id = R.string.help_item_p2p)) {
+        navController.navigate(
+          Route.WebView.createRoute(
+            URL_P2P
+          )
+        )
+      }
       HelpItem(title = stringResource(id = R.string.help_item_e2ee)) {
         navController.navigate(Route.WebView.createRoute(URL_E2EE))
       }

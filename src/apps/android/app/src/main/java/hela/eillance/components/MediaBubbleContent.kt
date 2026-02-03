@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -44,8 +43,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -56,10 +55,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
-import hela.eillance.camera.R
 import coil.decode.VideoFrameDecoder
 import coil.request.ImageRequest
 import coil.request.videoFrameMillis
+import hela.eillance.camera.R
 import hela.eillance.ndkio.Attachment
 import hela.eillance.ndkio.AttachmentStatus
 import hela.eillance.ndkio.AttachmentType
@@ -160,37 +159,67 @@ private fun VisualAttachmentsGrid(
       .clip(roundedShape)
   ) {
     when (count) {
-      1 -> renderItem(0, Modifier.fillMaxWidth().aspectRatio(1.5f))
+      1 -> renderItem(0, Modifier
+        .fillMaxWidth()
+        .aspectRatio(1.5f))
       2 -> {
-        Row(modifier = Modifier.fillMaxWidth().height(160.dp)) {
-          renderItem(0, Modifier.weight(1f).fillMaxSize())
+        Row(modifier = Modifier
+          .fillMaxWidth()
+          .height(160.dp)) {
+          renderItem(0, Modifier
+            .weight(1f)
+            .fillMaxSize())
           Spacer(modifier = Modifier.width(2.dp))
-          renderItem(1, Modifier.weight(1f).fillMaxSize())
+          renderItem(1, Modifier
+            .weight(1f)
+            .fillMaxSize())
         }
       }
+
       3 -> {
         Column(modifier = Modifier.fillMaxWidth()) {
-          renderItem(0, Modifier.fillMaxWidth().height(160.dp))
+          renderItem(0, Modifier
+            .fillMaxWidth()
+            .height(160.dp))
           Spacer(modifier = Modifier.height(2.dp))
-          Row(modifier = Modifier.fillMaxWidth().height(100.dp)) {
-            renderItem(1, Modifier.weight(1f).fillMaxSize())
+          Row(modifier = Modifier
+            .fillMaxWidth()
+            .height(100.dp)) {
+            renderItem(1, Modifier
+              .weight(1f)
+              .fillMaxSize())
             Spacer(modifier = Modifier.width(2.dp))
-            renderItem(2, Modifier.weight(1f).fillMaxSize())
+            renderItem(2, Modifier
+              .weight(1f)
+              .fillMaxSize())
           }
         }
       }
+
       else -> {
         Column(modifier = Modifier.fillMaxWidth()) {
-          Row(modifier = Modifier.fillMaxWidth().height(120.dp)) {
-            renderItem(0, Modifier.weight(1f).fillMaxSize())
+          Row(modifier = Modifier
+            .fillMaxWidth()
+            .height(120.dp)) {
+            renderItem(0, Modifier
+              .weight(1f)
+              .fillMaxSize())
             Spacer(modifier = Modifier.width(2.dp))
-            renderItem(1, Modifier.weight(1f).fillMaxSize())
+            renderItem(1, Modifier
+              .weight(1f)
+              .fillMaxSize())
           }
           Spacer(modifier = Modifier.height(2.dp))
-          Row(modifier = Modifier.fillMaxWidth().height(120.dp)) {
-            renderItem(2, Modifier.weight(1f).fillMaxSize())
+          Row(modifier = Modifier
+            .fillMaxWidth()
+            .height(120.dp)) {
+            renderItem(2, Modifier
+              .weight(1f)
+              .fillMaxSize())
             Spacer(modifier = Modifier.width(2.dp))
-            Box(modifier = Modifier.weight(1f).fillMaxSize()) {
+            Box(modifier = Modifier
+              .weight(1f)
+              .fillMaxSize()) {
               renderItem(3, Modifier.fillMaxSize())
               if (count > 4) {
                 Box(
@@ -200,7 +229,11 @@ private fun VisualAttachmentsGrid(
                     .clickable { onMediaClick(attachments[3]) },
                   contentAlignment = Alignment.Center
                 ) {
-                  Text(text = stringResource(id = R.string.plus_more, count - 4), style = MaterialTheme.typography.titleLarge, color = Color.White)
+                  Text(
+                    text = stringResource(id = R.string.plus_more, count - 4),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = Color.White
+                  )
                 }
               }
             }
@@ -286,11 +319,23 @@ private fun FileAttachmentItem(
           color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         if (isCanceled) {
-          Text(text = stringResource(id = R.string.file_status_canceled), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+          Text(
+            text = stringResource(id = R.string.file_status_canceled),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.error
+          )
         } else if (isPaused) {
-          Text(text = stringResource(id = R.string.file_status_paused), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
+          Text(
+            text = stringResource(id = R.string.file_status_paused),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.tertiary
+          )
         } else if (isPending) {
-          Text(text = stringResource(id = R.string.file_status_waiting), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          Text(
+            text = stringResource(id = R.string.file_status_waiting),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+          )
         }
       }
     }
@@ -313,17 +358,29 @@ private fun FileAttachmentItem(
           // Only Receiver can Resume
           if (!isFromMe) {
             IconButton(onClick = onResume, modifier = Modifier.size(32.dp)) {
-              Icon(Icons.Default.Refresh, contentDescription = stringResource(id = R.string.action_resume), tint = MaterialTheme.colorScheme.primary)
+              Icon(
+                Icons.Default.Refresh,
+                contentDescription = stringResource(id = R.string.action_resume),
+                tint = MaterialTheme.colorScheme.primary
+              )
             }
           }
           // Both can Cancel/Discard completely
           IconButton(onClick = onDiscard, modifier = Modifier.size(32.dp)) {
-            Icon(Icons.Default.Close, contentDescription = stringResource(id = R.string.action_cancel), tint = MaterialTheme.colorScheme.error)
+            Icon(
+              Icons.Default.Close,
+              contentDescription = stringResource(id = R.string.action_cancel),
+              tint = MaterialTheme.colorScheme.error
+            )
           }
         }
       } else if (attachment.status == AttachmentStatus.Failed) {
         IconButton(onClick = onResume) {
-          Icon(Icons.Default.Refresh, contentDescription = stringResource(id = R.string.action_retry), tint = MaterialTheme.colorScheme.primary)
+          Icon(
+            Icons.Default.Refresh,
+            contentDescription = stringResource(id = R.string.action_retry),
+            tint = MaterialTheme.colorScheme.primary
+          )
         }
       } else if (isPending) {
         CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
@@ -387,7 +444,9 @@ private fun MediaItem(
           try {
             val bytes = Base64.decode(attachment.thumbnail, Base64.DEFAULT)
             BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
-          } catch (e: Exception) { null }
+          } catch (e: Exception) {
+            null
+          }
         } else null
       }
 
@@ -399,7 +458,12 @@ private fun MediaItem(
           contentScale = ContentScale.Crop
         )
       } else {
-        Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
+        Box(
+          modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surfaceVariant),
+          contentAlignment = Alignment.Center
+        ) {
           Icon(
             imageVector = if (isVideo) Icons.Default.VideoFile else Icons.Default.BrokenImage,
             contentDescription = null,
@@ -413,7 +477,9 @@ private fun MediaItem(
     // --- OVERLAY LAYER (Darkens the image for status states) ---
     // Show overlay for all non-final states
     if (attachment.status != AttachmentStatus.Done) {
-      Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)))
+      Box(modifier = Modifier
+        .fillMaxSize()
+        .background(Color.Black.copy(alpha = 0.5f)))
     }
 
     // --- INTERACTIVE / STATUS LAYER ---
@@ -431,7 +497,9 @@ private fun MediaItem(
             modifier = Modifier.size(32.dp)
           )
           Text(
-            text = if (attachment.status == AttachmentStatus.Canceled) stringResource(id = R.string.upload_canceled) else stringResource(id = R.string.download_canceled),
+            text = if (attachment.status == AttachmentStatus.Canceled) stringResource(id = R.string.upload_canceled) else stringResource(
+              id = R.string.download_canceled
+            ),
             style = MaterialTheme.typography.labelSmall,
             color = Color.White
           )
@@ -447,16 +515,28 @@ private fun MediaItem(
               imageVector = Icons.Default.Refresh,
               contentDescription = stringResource(id = R.string.action_resume),
               tint = Color.White,
-              modifier = Modifier.size(32.dp).clickable { onResume() }
+              modifier = Modifier
+                .size(32.dp)
+                .clickable { onResume() }
             )
           }
-          Text(stringResource(id = R.string.file_status_paused), style = MaterialTheme.typography.labelSmall, color = Color.White)
+          Text(
+            stringResource(id = R.string.file_status_paused),
+            style = MaterialTheme.typography.labelSmall,
+            color = Color.White
+          )
         }
         IconButton(
           onClick = onDiscard,
-          modifier = Modifier.align(Alignment.TopEnd).padding(4.dp)
+          modifier = Modifier
+            .align(Alignment.TopEnd)
+            .padding(4.dp)
         ) {
-          Icon(Icons.Default.Close, contentDescription = stringResource(id = R.string.action_cancel), tint = Color.White)
+          Icon(
+            Icons.Default.Close,
+            contentDescription = stringResource(id = R.string.action_cancel),
+            tint = Color.White
+          )
         }
       } else if (progress != null && progress >= 0f && attachment.status == AttachmentStatus.Transferring) {
         Box(
@@ -476,7 +556,9 @@ private fun MediaItem(
         }
       } else if (attachment.status == AttachmentStatus.Pending || (attachment.status == AttachmentStatus.Transferring && progress == null)) {
         CircularProgressIndicator(
-          modifier = Modifier.size(32.dp).align(Alignment.Center),
+          modifier = Modifier
+            .size(32.dp)
+            .align(Alignment.Center),
           color = Color.White
         )
       } else if (attachment.status == AttachmentStatus.Failed) {
@@ -484,14 +566,19 @@ private fun MediaItem(
           Icons.Default.Refresh,
           contentDescription = stringResource(id = R.string.action_retry),
           tint = MaterialTheme.colorScheme.error,
-          modifier = Modifier.size(32.dp).align(Alignment.Center).clickable { onResume() }
+          modifier = Modifier
+            .size(32.dp)
+            .align(Alignment.Center)
+            .clickable { onResume() }
         )
       } else if (isVideo && attachment.status == AttachmentStatus.Done) {
         Icon(
           imageVector = Icons.Default.PlayCircle,
           contentDescription = stringResource(id = R.string.action_play),
           tint = Color.White.copy(alpha = 0.8f),
-          modifier = Modifier.size(48.dp).align(Alignment.Center)
+          modifier = Modifier
+            .size(48.dp)
+            .align(Alignment.Center)
         )
       }
     }

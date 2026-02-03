@@ -94,13 +94,34 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     checkAllPermissions()
   }
 
-  fun showIncomingCallUi() { _incomingCallUiVisible.value = true }
-  fun hideIncomingCallUi() { _incomingCallUiVisible.value = false }
-  fun onScanQrClicked() { _navigateToScanner.value = true }
-  fun onScannerNavigated() { _navigateToScanner.value = false }
-  fun navigateToPeer(peerId: String) { _navigateToPeerId.value = peerId }
-  fun onNavigationHandled() { _navigateToPeerId.value = null }
-  fun onEngineReady() { isEngineReady = true }
+  fun showIncomingCallUi() {
+    _incomingCallUiVisible.value = true
+  }
+
+  fun hideIncomingCallUi() {
+    _incomingCallUiVisible.value = false
+  }
+
+  fun onScanQrClicked() {
+    _navigateToScanner.value = true
+  }
+
+  fun onScannerNavigated() {
+    _navigateToScanner.value = false
+  }
+
+  fun navigateToPeer(peerId: String) {
+    _navigateToPeerId.value = peerId
+  }
+
+  fun onNavigationHandled() {
+    _navigateToPeerId.value = null
+  }
+
+  fun onEngineReady() {
+    isEngineReady = true
+  }
+
   fun isEngineReady(): Boolean = isEngineReady
 
   companion object {
