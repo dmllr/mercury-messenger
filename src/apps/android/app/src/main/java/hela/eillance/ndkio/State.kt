@@ -4,44 +4,68 @@ import kotlinx.serialization.Serializable
 
 enum class MessageDirection(val value: Int) {
   Sent(0), Received(1);
-  companion object { fun fromInt(value: Int) = entries.firstOrNull { it.value == value } ?: Sent }
+
+  companion object {
+    fun fromInt(value: Int) = entries.firstOrNull { it.value == value } ?: Sent
+  }
 }
 
 enum class CallDirection(val value: Int) {
   Outgoing(0), Incoming(1);
-  companion object { fun fromInt(value: Int) = entries.firstOrNull { it.value == value } ?: Outgoing }
+
+  companion object {
+    fun fromInt(value: Int) = entries.firstOrNull { it.value == value } ?: Outgoing
+  }
 }
 
 enum class CallStatus(val value: Int) {
   Answered(0), Missed(1), Rejected(2), Busy(3);
-  companion object { fun fromInt(value: Int) = entries.firstOrNull { it.value == value } ?: Answered }
+
+  companion object {
+    fun fromInt(value: Int) = entries.firstOrNull { it.value == value } ?: Answered
+  }
 }
 
 enum class MessageStatus(val value: Int) {
   None(0), Sending(1), Sent(2), Delivered(3), Read(4);
-  companion object { fun fromInt(value: Int) = entries.firstOrNull { it.value == value } ?: None }
+
+  companion object {
+    fun fromInt(value: Int) = entries.firstOrNull { it.value == value } ?: None
+  }
 }
 
 enum class HistoryEntryKind(val value: Int) {
   TextMessage(0), VoiceCall(1), VideoCall(2), SystemMessage(3);
-  companion object { fun fromInt(value: Int) = entries.firstOrNull { it.value == value } ?: TextMessage }
+
+  companion object {
+    fun fromInt(value: Int) = entries.firstOrNull { it.value == value } ?: TextMessage
+  }
 }
 
 enum class ContactStatus(val value: Int) {
   pendingApproval(0), awaitingApproval(1), confirmed(2), rejected(3);
-  companion object { fun fromInt(value: Int) = entries.firstOrNull { it.value == value } ?: pendingApproval }
+
+  companion object {
+    fun fromInt(value: Int) = entries.firstOrNull { it.value == value } ?: pendingApproval
+  }
 }
 
 @Serializable
 enum class AttachmentType(val value: Int) {
   Image(0), Video(1), File(2);
-  companion object { fun fromInt(value: Int) = entries.firstOrNull { it.value == value } ?: File }
+
+  companion object {
+    fun fromInt(value: Int) = entries.firstOrNull { it.value == value } ?: File
+  }
 }
 
 @Serializable
 enum class AttachmentStatus(val value: Int) {
   Pending(0), Transferring(1), Done(2), Failed(3), Canceled(4), Discarded(5), Paused(6), PeerCanceled(7);
-  companion object { fun fromInt(value: Int) = entries.firstOrNull { it.value == value } ?: Pending }
+
+  companion object {
+    fun fromInt(value: Int) = entries.firstOrNull { it.value == value } ?: Pending
+  }
 }
 
 @Serializable

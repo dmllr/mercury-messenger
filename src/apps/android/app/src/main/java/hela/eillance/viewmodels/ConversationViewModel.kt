@@ -129,7 +129,9 @@ class ConversationViewModel(
               val bmp = BitmapFactory.decodeStream(streamDecode, null, options)
               streamDecode?.close()
               bmp
-            } catch (e: Exception) { null }
+            } catch (e: Exception) {
+              null
+            }
           } else null
 
           currentList.add(DraftAttachment(uri, type, mimeTypeRaw, name, preview))
@@ -236,7 +238,9 @@ class ConversationViewModel(
               val bytes = outputStream.toByteArray()
               Base64.encodeToString(bytes, Base64.NO_WRAP)
             } else ""
-          } catch (e: Exception) { "" }
+          } catch (e: Exception) {
+            ""
+          }
 
           val request = AttachmentRequest(
             path = destFile.absolutePath,
@@ -289,7 +293,9 @@ class ConversationViewModel(
           null
         }
       }
-    } catch (e: Exception) { null }
+    } catch (e: Exception) {
+      null
+    }
   }
 
   private fun calculateInSampleSize(options: BitmapFactory.Options, reqWidth: Int, reqHeight: Int): Int {
@@ -305,14 +311,27 @@ class ConversationViewModel(
     return inSampleSize
   }
 
-  fun loadOlderMessages() { if (nativePtr != 0L) nativeLoadOlder(nativePtr) }
-  fun loadFullMessage(messageId: Long) { if (nativePtr != 0L) nativeLoadFull(nativePtr, messageId) }
-  fun markMessagesAsRead(messageIds: List<Long>) { if (nativePtr != 0L && messageIds.isNotEmpty()) nativeMarkRead(nativePtr, messageIds.toLongArray()) }
+  fun loadOlderMessages() {
+    if (nativePtr != 0L) nativeLoadOlder(nativePtr)
+  }
+
+  fun loadFullMessage(messageId: Long) {
+    if (nativePtr != 0L) nativeLoadFull(nativePtr, messageId)
+  }
+
+  fun markMessagesAsRead(messageIds: List<Long>) {
+    if (nativePtr != 0L && messageIds.isNotEmpty()) nativeMarkRead(nativePtr, messageIds.toLongArray())
+  }
 
   private external fun nativeCreate(peerId: String, observer: NativeConversationObserver): Long
   private external fun nativeDestroy(ptr: Long)
   private external fun nativeSendMessage(ptr: Long, message: String)
-  private external fun nativeSendMessageWithAttachments(ptr: Long, message: String, attachments: Array<AttachmentRequest>)
+  private external fun nativeSendMessageWithAttachments(
+    ptr: Long,
+    message: String,
+    attachments: Array<AttachmentRequest>
+  )
+
   private external fun nativeLoadOlder(ptr: Long)
   private external fun nativeLoadFull(ptr: Long, messageId: Long)
   private external fun nativeMarkRead(ptr: Long, messageIds: LongArray)

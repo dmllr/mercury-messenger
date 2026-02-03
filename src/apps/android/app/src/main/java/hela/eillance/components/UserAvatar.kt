@@ -57,7 +57,9 @@ fun UserAvatar(
         imageVector = Icons.Default.Person,
         contentDescription = null,
         tint = fallbackTint,
-        modifier = Modifier.padding(8.dp).matchParentSize()
+        modifier = Modifier
+          .padding(8.dp)
+          .matchParentSize()
       )
     }
   }

@@ -38,12 +38,15 @@ sealed class Route(val route: String) {
   object Interaction : Route("interaction/{peerId}") {
     fun createRoute(peerId: String) = "interaction/$peerId"
   }
+
   object Call : Route("call/{peerId}") {
     fun createRoute(peerId: String) = "call/$peerId"
   }
+
   object WebView : Route("webview/{url}") {
     fun createRoute(url: String): String = "webview/${Uri.encode(url)}"
   }
+
   object FullScreenMedia : Route("media_viewer/{peerId}?attachments={attachments}&index={index}") {
     fun createRoute(peerId: String, attachments: List<Attachment>, initialIndex: Int): String {
       // Strip thumbnails to keep URL short and avoid TransactionTooLargeException and parsing issues

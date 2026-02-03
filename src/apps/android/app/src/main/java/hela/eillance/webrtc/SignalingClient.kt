@@ -88,6 +88,7 @@ class SignalingClient {
                     val forPeer = if (json.has("for_peer")) json.getString("for_peer") else null
                     SignalingMessage.Error(json.getString("error"), forPeer)
                   }
+
                   else -> SignalingMessage.SystemMessage(json.getString("type"), json)
                 }
                 clientScope.launch { _messages.emit(signalingMessage) }

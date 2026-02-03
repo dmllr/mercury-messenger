@@ -48,7 +48,9 @@ fun MnemonicDisplayScreen(
 
   Surface(modifier = Modifier.fillMaxSize()) {
     Column(
-      modifier = Modifier.fillMaxSize().padding(16.dp),
+      modifier = Modifier
+        .fillMaxSize()
+        .padding(16.dp),
       horizontalAlignment = Alignment.CenterHorizontally,
       verticalArrangement = Arrangement.Center
     ) {

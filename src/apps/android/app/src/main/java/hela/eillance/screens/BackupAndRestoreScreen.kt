@@ -287,7 +287,13 @@ private fun RestorePasswordDialog(onDismiss: () -> Unit, onConfirm: (String) -> 
 private fun ViewPhraseConfirmationDialog(onDismiss: () -> Unit, onConfirm: () -> Unit) {
   AlertDialog(
     onDismissRequest = onDismiss,
-    icon = { Icon(Icons.Default.Warning, contentDescription = stringResource(id = R.string.warning), modifier = Modifier.size(48.dp)) },
+    icon = {
+      Icon(
+        Icons.Default.Warning,
+        contentDescription = stringResource(id = R.string.warning),
+        modifier = Modifier.size(48.dp)
+      )
+    },
     title = { Text(stringResource(id = R.string.view_phrase_dialog_title)) },
     text = {
       Text(

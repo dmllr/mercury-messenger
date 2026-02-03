@@ -22,7 +22,8 @@ enum class PeerConnectionState(val value: Int) {
     )
 
     @JvmStatic
-    fun fromInt(value: Int) = entries.firstOrNull { it.value == value } ?: throw Exception("Invalid PeerConnectionState value: $value")
+    fun fromInt(value: Int) =
+      entries.firstOrNull { it.value == value } ?: throw Exception("Invalid PeerConnectionState value: $value")
   }
 
   @Suppress("unused")

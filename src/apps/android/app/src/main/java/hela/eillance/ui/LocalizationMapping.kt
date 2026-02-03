@@ -21,7 +21,7 @@ object LocalizationMapping {
   }
 
   fun getCallStatusResId(status: hela.eillance.ndkio.CallStatus): Int {
-    return when(status) {
+    return when (status) {
       hela.eillance.ndkio.CallStatus.Missed -> R.string.call_missed
       hela.eillance.ndkio.CallStatus.Rejected -> R.string.call_rejected
       else -> R.string.call_generic

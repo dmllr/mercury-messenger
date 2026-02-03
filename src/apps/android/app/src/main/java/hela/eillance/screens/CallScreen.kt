@@ -64,9 +64,11 @@ fun CallScreen(
   val isVideoCall = callState.callType == HistoryEntryKind.VideoCall
   val eglBaseContext = remember { WebRtcTransport.eglBase.eglBaseContext }
 
-  Box(modifier = Modifier
-    .fillMaxSize()
-    .background(Color.Black)) {
+  Box(
+    modifier = Modifier
+      .fillMaxSize()
+      .background(Color.Black)
+  ) {
 
     if (isVideoCall && callState.isInCall) {
       // Remote Video (Full Screen)
@@ -96,10 +98,18 @@ fun CallScreen(
         )
         if (callState.isConnecting) {
           Spacer(modifier = Modifier.padding(4.dp))
-          Text(text = stringResource(id = R.string.call_status_connecting), style = MaterialTheme.typography.bodyLarge, color = Color.White.copy(alpha = 0.7f))
+          Text(
+            text = stringResource(id = R.string.call_status_connecting),
+            style = MaterialTheme.typography.bodyLarge,
+            color = Color.White.copy(alpha = 0.7f)
+          )
         } else if (callState.isRinging && callState.callDirection == CallDirection.Outgoing) {
           Spacer(modifier = Modifier.padding(4.dp))
-          Text(text = stringResource(id = R.string.call_status_ringing), style = MaterialTheme.typography.bodyLarge, color = Color.White.copy(alpha = 0.7f))
+          Text(
+            text = stringResource(id = R.string.call_status_ringing),
+            style = MaterialTheme.typography.bodyLarge,
+            color = Color.White.copy(alpha = 0.7f)
+          )
         } else if (callState.isInCall) {
           Spacer(modifier = Modifier.padding(4.dp))
           Text(text = "00:00", style = MaterialTheme.typography.bodyLarge, color = Color.White.copy(alpha = 0.7f))
@@ -138,7 +148,12 @@ fun CallScreen(
         verticalAlignment = Alignment.CenterVertically
       ) {
         IconButton(onClick = { /* TODO */ }) {
-          Icon(Icons.Default.Mic, contentDescription = stringResource(id = R.string.action_mute), tint = Color.White, modifier = Modifier.size(32.dp))
+          Icon(
+            Icons.Default.Mic,
+            contentDescription = stringResource(id = R.string.action_mute),
+            tint = Color.White,
+            modifier = Modifier.size(32.dp)
+          )
         }
 
         FloatingActionButton(
@@ -155,7 +170,12 @@ fun CallScreen(
         }
 
         IconButton(onClick = { /* TODO */ }) {
-          Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = stringResource(id = R.string.action_speaker), tint = Color.White, modifier = Modifier.size(32.dp))
+          Icon(
+            Icons.AutoMirrored.Filled.VolumeUp,
+            contentDescription = stringResource(id = R.string.action_speaker),
+            tint = Color.White,
+            modifier = Modifier.size(32.dp)
+          )
         }
       }
     }

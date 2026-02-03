@@ -31,11 +31,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.core.net.toUri
-import hela.eillance.camera.R
 import hela.eillance.MainViewModel
+import hela.eillance.camera.R
 import hela.eillance.theme.extendedColors
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -111,12 +111,14 @@ fun PermissionIssuesScreen(
         isGranted = hasCalls,
         icon = Icons.Default.PermCameraMic,
         onFix = {
-          callLauncher.launch(arrayOf(
-            Manifest.permission.CAMERA,
-            Manifest.permission.RECORD_AUDIO,
-            Manifest.permission.READ_PHONE_STATE,
-            Manifest.permission.MANAGE_OWN_CALLS
-          ))
+          callLauncher.launch(
+            arrayOf(
+              Manifest.permission.CAMERA,
+              Manifest.permission.RECORD_AUDIO,
+              Manifest.permission.READ_PHONE_STATE,
+              Manifest.permission.MANAGE_OWN_CALLS
+            )
+          )
         }
       )
 

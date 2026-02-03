@@ -90,7 +90,9 @@ fun ConnectionDebugScreen(
         ListItem(
           headlineContent = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-              Box(modifier = Modifier.size(8.dp).background(color, CircleShape))
+              Box(modifier = Modifier
+                .size(8.dp)
+                .background(color, CircleShape))
               Spacer(Modifier.width(8.dp))
               Text(info.peerId.take(12))
             }
@@ -98,9 +100,20 @@ fun ConnectionDebugScreen(
           supportingContent = {
             Column {
               Text("State: ${info.connectionState.getResourceString(context)}")
-              val lastActivity = if (info.lastActivitySecAgo < 0) stringResource(id = R.string.debug_connections_last_activity_never) else stringResource(id = R.string.debug_connections_last_activity, info.lastActivitySecAgo)
+              val lastActivity =
+                if (info.lastActivitySecAgo < 0) stringResource(id = R.string.debug_connections_last_activity_never) else stringResource(
+                  id = R.string.debug_connections_last_activity,
+                  info.lastActivitySecAgo
+                )
               Text(lastActivity)
-              Text(stringResource(id = R.string.debug_connections_data_channel, if (info.isDataChannelOpen) stringResource(id = R.string.debug_connections_open) else stringResource(id = R.string.debug_connections_closed)))
+              Text(
+                stringResource(
+                  id = R.string.debug_connections_data_channel,
+                  if (info.isDataChannelOpen) stringResource(id = R.string.debug_connections_open) else stringResource(
+                    id = R.string.debug_connections_closed
+                  )
+                )
+              )
               Text(stringResource(id = R.string.debug_connections_media_conn, info.hasMediaConnection))
             }
           }

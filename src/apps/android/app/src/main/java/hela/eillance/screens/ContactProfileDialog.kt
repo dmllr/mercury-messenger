@@ -106,7 +106,10 @@ fun ContactProfileDialog(
           HorizontalDivider()
           Spacer(modifier = Modifier.height(16.dp))
 
-          Text(stringResource(id = R.string.contact_profile_set_alias_title), style = MaterialTheme.typography.titleMedium)
+          Text(
+            stringResource(id = R.string.contact_profile_set_alias_title),
+            style = MaterialTheme.typography.titleMedium
+          )
           Spacer(modifier = Modifier.height(8.dp))
 
           OutlinedTextField(
@@ -155,7 +158,9 @@ fun ContactProfileDialog(
               onRemoveRequest()
               onDismissRequest()
             },
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(top = 8.dp)
           ) { Text(stringResource(id = R.string.action_delete_contact)) }
         }
       }
