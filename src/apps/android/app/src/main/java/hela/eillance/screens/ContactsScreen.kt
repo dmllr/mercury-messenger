@@ -1,7 +1,6 @@
 package hela.eillance.screens
 
 import android.Manifest
-import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -29,7 +28,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Badge
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DividerDefaults
@@ -57,6 +55,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -85,7 +84,6 @@ import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
 
-@SuppressLint("BatteryLife")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ContactsScreen(
@@ -105,7 +103,6 @@ fun ContactsScreen(
   val bannerState by mainViewModel.permissionBannerState.collectAsState()
   val hasPermissionIssues by mainViewModel.hasPermissionIssues.collectAsState()
 
-  // State for permissions launchers
   val notifLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { onCheckPermissions() }
   val callLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { onCheckPermissions() }
 
@@ -123,14 +120,10 @@ fun ContactsScreen(
           Box {
             IconButton(onClick = onNavigateToProfile) {
               Box {
-                if (!myProfile.myPhoto.isNullOrBlank()) {
-                  UserAvatar(
-                    photoBase64 = myProfile.myPhoto,
-                    modifier = Modifier.size(32.dp)
-                  )
-                } else {
-                  Icon(Icons.Default.Person, contentDescription = "Profile")
-                }
+                UserAvatar(
+                  photoBase64 = myProfile.myPhoto,
+                  modifier = Modifier.size(32.dp)
+                )
               }
             }
 
@@ -155,7 +148,7 @@ fun ContactsScreen(
       FloatingActionButton(
         onClick = { contactsVM.onAddContactClicked() }
       ) {
-        Icon(Icons.Default.Add, contentDescription = "Add Contact")
+        Icon(Icons.Default.Add, contentDescription = stringResource(id = R.string.add_contact_title))
       }
     }
   ) { padding ->
@@ -164,13 +157,10 @@ fun ContactsScreen(
         .fillMaxSize()
         .padding(padding)
     ) {
-      // Logic for banner display
-      // 1. Connection issues take priority
       val isConnectionIssue = connectionState != ServiceConnectionState.Online &&
           connectionState != ServiceConnectionState.Establishing &&
           connectionState != ServiceConnectionState.Unknown
 
-      // 2. Permission banners only if connection is OK
       val showPermissionBanner = !isConnectionIssue && bannerState != null
 
       AnimatedVisibility(
@@ -192,8 +182,8 @@ fun ContactsScreen(
             when (bannerState) {
               BannerType.Notification -> {
                 StatusSnackbar(
-                  text = "Notifications are disabled",
-                  actionLabel = "Fix it",
+                  text = stringResource(id = R.string.permission_banner_notifications),
+                  actionLabel = stringResource(id = R.string.action_fix_it),
                   onAction = {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                       notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -205,8 +195,8 @@ fun ContactsScreen(
               }
               BannerType.Battery -> {
                 StatusSnackbar(
-                  text = "Battery optimization may delay messages",
-                  actionLabel = "Fix it",
+                  text = stringResource(id = R.string.permission_banner_battery),
+                  actionLabel = stringResource(id = R.string.action_fix_it),
                   onAction = {
                     val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
                       data = "package:${context.packageName}".toUri()
@@ -217,14 +207,14 @@ fun ContactsScreen(
                       openAppSettings(context)
                     }
                   },
-                  dismissLabel = "I don't care",
+                  dismissLabel = stringResource(id = R.string.action_ignore_permission),
                   onDismiss = { mainViewModel.ignoreBatteryOptimization() }
                 )
               }
               BannerType.CallPermissions -> {
                 StatusSnackbar(
-                  text = "Camera/Mic needed for calls",
-                  actionLabel = "Fix it",
+                  text = stringResource(id = R.string.permission_banner_calls),
+                  actionLabel = stringResource(id = R.string.action_fix_it),
                   onAction = {
                     callLauncher.launch(arrayOf(
                       Manifest.permission.CAMERA,
@@ -233,7 +223,7 @@ fun ContactsScreen(
                       Manifest.permission.MANAGE_OWN_CALLS
                     ))
                   },
-                  dismissLabel = "I don't care",
+                  dismissLabel = stringResource(id = R.string.action_ignore_permission),
                   onDismiss = { mainViewModel.ignoreCallPermissions() }
                 )
               }
@@ -310,14 +300,12 @@ fun ContactListItem(
     Color.Transparent
   }
 
-  val displayName = if (contact.name.isNotEmpty()) {
-    contact.name
-  } else {
+  val displayName = contact.name.ifEmpty {
     contact.peerId.take(8)
   }
 
   val timestampText = if (contact.last_activity_timestamp > 0) {
-    formatContactTimestamp(contact.last_activity_timestamp, zoneId, formatters)
+    formatContactTimestamp(contact.last_activity_timestamp, zoneId, formatters, context)
   } else {
     ""
   }
@@ -395,7 +383,8 @@ fun ContactListItem(
 fun formatContactTimestamp(
   timestamp: Long,
   zoneId: ZoneId,
-  formatters: Triple<DateTimeFormatter, DateTimeFormatter, DateTimeFormatter>
+  formatters: Triple<DateTimeFormatter, DateTimeFormatter, DateTimeFormatter>,
+  context: Context
 ): String {
   val messageTime = Instant.ofEpochMilli(timestamp / 1000).atZone(zoneId)
   val now = ZonedDateTime.now(zoneId)
@@ -404,7 +393,7 @@ fun formatContactTimestamp(
 
   return when {
     isToday -> messageTime.format(formatters.first)
-    isYesterday -> "Yesterday"
+    isYesterday -> context.getString(R.string.time_yesterday)
     else -> messageTime.format(formatters.second)
   }
 }
@@ -418,35 +407,28 @@ private fun openAppSettings(context: Context) {
 }
 
 private fun getSnippetText(contact: Contact, context: Context): String {
-    val kind = contact.lastMsgKindEnum ?: return ""
-    return when (kind) {
-        HistoryEntryKind.TextMessage -> {
-            val prefix = if (contact.lastMessageDirection == MessageDirection.Sent.value)
-                context.getString(R.string.chat_you_prefix) else ""
-            prefix + (contact.lastMessageContent ?: "")
-        }
-        HistoryEntryKind.VoiceCall, HistoryEntryKind.VideoCall -> {
-            context.getString(LocalizationMapping.getCallDescriptionResId(kind, contact.lastMessageDirection))
-        }
-        HistoryEntryKind.SystemMessage -> {
-             try {
-                 val content = contact.lastMessageContent
-                 if (content.isNullOrBlank()) return context.getString(R.string.sys_default)
-                 val json = JSONObject(content)
-                 val action = json.optString("action")
-                 context.getString(LocalizationMapping.getSystemMessageResId(action))
-             } catch (e: Exception) {
-                 // If JSON parsing fails (e.g. truncated message due to large payload), use Regex fallback
-                 val content = contact.lastMessageContent
-                 if (!content.isNullOrBlank()) {
-                     val match = Regex("\"action\"\\s*:\\s*\"([^\"]+)\"").find(content)
-                     val action = match?.groupValues?.get(1)
-                     if (action != null) {
-                         return context.getString(LocalizationMapping.getSystemMessageResId(action))
-                     }
-                 }
-                 context.getString(R.string.sys_default)
-             }
-        }
+  val kind = contact.lastMsgKindEnum ?: return ""
+  return when (kind) {
+    HistoryEntryKind.TextMessage -> {
+      val prefix = if (contact.lastMessageDirection == MessageDirection.Sent.value)
+        context.getString(R.string.chat_you_prefix) else ""
+      prefix + (contact.lastMessageContent ?: "")
     }
+    HistoryEntryKind.VoiceCall, HistoryEntryKind.VideoCall -> {
+      context.getString(LocalizationMapping.getCallDescriptionResId(kind, contact.lastMessageDirection))
+    }
+    HistoryEntryKind.SystemMessage -> {
+      val action = try {
+        val content = contact.lastMessageContent
+        if (content.isNullOrBlank()) null
+        else JSONObject(content).optString("action")
+      } catch (e: Exception) {
+        val content = contact.lastMessageContent
+        if (!content.isNullOrBlank()) {
+          Regex("\"action\"\\s*:\\s*\"([^\"]+)\"").find(content)?.groupValues?.get(1)
+        } else null
+      }
+      context.getString(LocalizationMapping.getSystemMessageResId(action))
+    }
+  }
 }

@@ -13,6 +13,7 @@ import android.telecom.TelecomManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import hela.eillance.CallService
+import hela.eillance.camera.R
 import hela.eillance.MainActivity
 import hela.eillance.MercuryApplication
 
@@ -64,14 +65,14 @@ class MercuryConnection(
 
     val builder = NotificationCompat.Builder(callService, "incoming_calls_channel")
       .setSmallIcon(android.R.drawable.stat_notify_chat)
-      .setContentTitle("Incoming Call")
+      .setContentTitle(callService.getString(R.string.notification_incoming_call_title))
       .setContentText(peerId)
       .setPriority(NotificationCompat.PRIORITY_MAX)
       .setCategory(NotificationCompat.CATEGORY_CALL)
       .setContentIntent(pendingIntent)
       .setFullScreenIntent(pendingIntent, true)
-      .addAction(0, "Reject", rejectPendingIntent)
-      .addAction(0, "Accept", acceptPendingIntent)
+      .addAction(0, callService.getString(R.string.action_reject), rejectPendingIntent)
+      .addAction(0, callService.getString(R.string.action_accept), acceptPendingIntent)
       .setAutoCancel(true)
       .setOngoing(true)
 

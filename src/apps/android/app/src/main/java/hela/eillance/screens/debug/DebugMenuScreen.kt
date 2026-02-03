@@ -21,7 +21,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import hela.eillance.camera.R
 
 enum class DebugAction {
   ERASE_HISTORY,
@@ -41,10 +43,10 @@ fun DebugMenuScreen(
   Scaffold(
     topBar = {
       TopAppBar(
-        title = { Text("Debug Menu") },
+        title = { Text(stringResource(id = R.string.screen_title_debug_menu)) },
         navigationIcon = {
           IconButton(onClick = onNavigateBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(id = R.string.action_back))
           }
         }
       )
@@ -57,43 +59,43 @@ fun DebugMenuScreen(
         .verticalScroll(rememberScrollState())
     ) {
       ListItem(
-        headlineContent = { Text("Connection Debugger") },
-        supportingContent = { Text("View peer connection states and timers") },
+        headlineContent = { Text(stringResource(id = R.string.debug_menu_connections_title)) },
+        supportingContent = { Text(stringResource(id = R.string.debug_menu_connections_description)) },
         modifier = Modifier.clickable { onNavigateToConnections() }
       )
       HorizontalDivider()
       ListItem(
-        headlineContent = { Text("Pending Actions") },
-        supportingContent = { Text("View queued system actions (JSON)") },
+        headlineContent = { Text(stringResource(id = R.string.screen_title_pending_actions)) },
+        supportingContent = { Text(stringResource(id = R.string.debug_menu_pending_actions_description)) },
         modifier = Modifier.clickable { onNavigateToPendingActions() }
       )
       HorizontalDivider()
       ListItem(
-        headlineContent = { Text("Unread Notifications") },
-        supportingContent = { Text("Check internal unread counts") },
+        headlineContent = { Text(stringResource(id = R.string.debug_menu_unread_title)) },
+        supportingContent = { Text(stringResource(id = R.string.debug_menu_unread_description)) },
         modifier = Modifier.clickable { onNavigateToUnread() }
       )
 
       HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
       Text(
-        "Destructive Actions",
+        stringResource(id = R.string.debug_menu_destructive_actions),
         style = MaterialTheme.typography.titleSmall,
         color = MaterialTheme.colorScheme.error,
         modifier = Modifier.padding(start = 16.dp, bottom = 8.dp)
       )
 
       ListItem(
-        headlineContent = { Text("Erase All History", color = MaterialTheme.colorScheme.error) },
+        headlineContent = { Text(stringResource(id = R.string.debug_action_erase_history), color = MaterialTheme.colorScheme.error) },
         leadingContent = { Icon(Icons.Default.DeleteForever, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
         modifier = Modifier.clickable { onDebugAction(DebugAction.ERASE_HISTORY) }
       )
       ListItem(
-        headlineContent = { Text("Erase All Contacts", color = MaterialTheme.colorScheme.error) },
+        headlineContent = { Text(stringResource(id = R.string.debug_action_erase_contacts), color = MaterialTheme.colorScheme.error) },
         leadingContent = { Icon(Icons.Default.DeleteForever, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
         modifier = Modifier.clickable { onDebugAction(DebugAction.ERASE_CONTACTS) }
       )
       ListItem(
-        headlineContent = { Text("Revoke All Approvals", color = MaterialTheme.colorScheme.error) },
+        headlineContent = { Text(stringResource(id = R.string.debug_action_revoke_approvals), color = MaterialTheme.colorScheme.error) },
         leadingContent = { Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
         modifier = Modifier.clickable { onDebugAction(DebugAction.REVOKE_APPROVALS) }
       )

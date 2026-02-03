@@ -44,10 +44,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import hela.eillance.camera.R
 import hela.eillance.viewmodels.ProfileViewModel
 import kotlinx.coroutines.launch
 import java.io.File
@@ -93,14 +95,14 @@ fun BackupAndRestoreScreen(
                   inputStream.copyTo(outputStream)
                 }
               }
-              snackbarHostState.showSnackbar("Backup saved successfully.")
+              snackbarHostState.showSnackbar(context.getString(R.string.backup_save_success))
             } catch (e: Exception) {
-              snackbarHostState.showSnackbar("Failed to save backup file.")
+              snackbarHostState.showSnackbar(context.getString(R.string.backup_save_fail))
             } finally {
               profileVM.deleteTempBackup(tempBackupPath)
             }
           } else {
-            snackbarHostState.showSnackbar("Backup creation failed.")
+            snackbarHostState.showSnackbar(context.getString(R.string.backup_create_fail))
           }
         }
       }
@@ -129,7 +131,7 @@ fun BackupAndRestoreScreen(
           if (success) {
             onRestoreSuccess()
           } else {
-            snackbarHostState.showSnackbar("Restore failed. Check password or file.")
+            snackbarHostState.showSnackbar(context.getString(R.string.backup_restore_fail))
           }
         }
       }
@@ -150,10 +152,10 @@ fun BackupAndRestoreScreen(
     snackbarHost = { SnackbarHost(snackbarHostState) },
     topBar = {
       TopAppBar(
-        title = { Text("Backup & Restore") },
+        title = { Text(stringResource(id = R.string.screen_title_backup_restore)) },
         navigationIcon = {
           IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(id = R.string.action_back))
           }
         }
       )
@@ -165,35 +167,35 @@ fun BackupAndRestoreScreen(
         .padding(padding)
         .padding(16.dp)
     ) {
-      Text("Create Full Backup", style = MaterialTheme.typography.titleLarge)
+      Text(stringResource(id = R.string.backup_create_title), style = MaterialTheme.typography.titleLarge)
       Text(
-        "Create an encrypted backup of your identity, contacts, and message history. Keep the backup file and your password safe.",
+        stringResource(id = R.string.backup_create_description),
         style = MaterialTheme.typography.bodyMedium,
         modifier = Modifier.padding(top = 4.dp, bottom = 16.dp)
       )
       Button(onClick = { showBackupDialog = true }) {
         Icon(Icons.Default.Save, contentDescription = null)
         Spacer(Modifier.width(8.dp))
-        Text("Create Encrypted Backup")
+        Text(stringResource(id = R.string.backup_create_button))
       }
 
       HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
 
-      Text("Restore Full Backup", style = MaterialTheme.typography.titleLarge)
+      Text(stringResource(id = R.string.backup_restore_title), style = MaterialTheme.typography.titleLarge)
       Text(
-        "Restore from an encrypted backup file. This will overwrite all current data on this device.",
+        stringResource(id = R.string.backup_restore_description),
         style = MaterialTheme.typography.bodyMedium,
         modifier = Modifier.padding(top = 4.dp, bottom = 16.dp)
       )
       Button(onClick = { restoreLauncher.launch("*/*") }) {
-        Text("Restore from Backup File")
+        Text(stringResource(id = R.string.backup_restore_button))
       }
 
       HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
 
-      Text("View Recovery Phrase", style = MaterialTheme.typography.titleLarge)
+      Text(stringResource(id = R.string.backup_view_phrase_title), style = MaterialTheme.typography.titleLarge)
       Text(
-        "Display the 12-word phrase used to recover your identity only. Do this in a private location.",
+        stringResource(id = R.string.backup_view_phrase_description),
         style = MaterialTheme.typography.bodyMedium,
         modifier = Modifier.padding(top = 4.dp, bottom = 16.dp)
       )
@@ -201,7 +203,7 @@ fun BackupAndRestoreScreen(
         onClick = { showViewPhraseDialog = true },
         colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.secondary)
       ) {
-        Text("Show Recovery Phrase")
+        Text(stringResource(id = R.string.backup_view_phrase_button))
       }
     }
   }
@@ -216,12 +218,12 @@ private fun BackupPasswordDialog(onDismiss: () -> Unit, onConfirm: (String) -> U
   Dialog(onDismissRequest = onDismiss) {
     Card {
       Column(modifier = Modifier.padding(24.dp)) {
-        Text("Set Backup Password", style = MaterialTheme.typography.headlineSmall)
+        Text(stringResource(id = R.string.backup_password_dialog_title), style = MaterialTheme.typography.headlineSmall)
         Spacer(modifier = Modifier.height(16.dp))
         OutlinedTextField(
           value = password,
           onValueChange = { password = it },
-          label = { Text("Password") },
+          label = { Text(stringResource(id = R.string.password_label)) },
           visualTransformation = PasswordVisualTransformation(),
           singleLine = true
         )
@@ -229,7 +231,7 @@ private fun BackupPasswordDialog(onDismiss: () -> Unit, onConfirm: (String) -> U
         OutlinedTextField(
           value = confirmPassword,
           onValueChange = { confirmPassword = it },
-          label = { Text("Confirm Password") },
+          label = { Text(stringResource(id = R.string.password_confirm_label)) },
           visualTransformation = PasswordVisualTransformation(),
           singleLine = true,
           isError = confirmPassword.isNotEmpty() && password != confirmPassword
@@ -239,9 +241,9 @@ private fun BackupPasswordDialog(onDismiss: () -> Unit, onConfirm: (String) -> U
           modifier = Modifier.fillMaxWidth(),
           horizontalArrangement = Arrangement.End
         ) {
-          TextButton(onClick = onDismiss) { Text("Cancel") }
+          TextButton(onClick = onDismiss) { Text(stringResource(id = R.string.action_cancel)) }
           Button(onClick = { onConfirm(password); onDismiss() }, enabled = isMatch) {
-            Text("Create")
+            Text(stringResource(id = R.string.action_create))
           }
         }
       }
@@ -255,15 +257,15 @@ private fun RestorePasswordDialog(onDismiss: () -> Unit, onConfirm: (String) -> 
 
   AlertDialog(
     onDismissRequest = onDismiss,
-    title = { Text("Enter Backup Password") },
+    title = { Text(stringResource(id = R.string.restore_password_dialog_title)) },
     text = {
       Column {
-        Text("Enter the password for the selected backup file to restore your data.")
+        Text(stringResource(id = R.string.restore_password_dialog_prompt))
         Spacer(modifier = Modifier.height(16.dp))
         OutlinedTextField(
           value = password,
           onValueChange = { password = it },
-          label = { Text("Password") },
+          label = { Text(stringResource(id = R.string.password_label)) },
           visualTransformation = PasswordVisualTransformation(),
           singleLine = true
         )
@@ -273,10 +275,10 @@ private fun RestorePasswordDialog(onDismiss: () -> Unit, onConfirm: (String) -> 
       Button(
         onClick = { onConfirm(password); onDismiss() },
         enabled = password.isNotEmpty()
-      ) { Text("Restore") }
+      ) { Text(stringResource(id = R.string.action_restore)) }
     },
     dismissButton = {
-      TextButton(onClick = onDismiss) { Text("Cancel") }
+      TextButton(onClick = onDismiss) { Text(stringResource(id = R.string.action_cancel)) }
     }
   )
 }
@@ -285,11 +287,11 @@ private fun RestorePasswordDialog(onDismiss: () -> Unit, onConfirm: (String) -> 
 private fun ViewPhraseConfirmationDialog(onDismiss: () -> Unit, onConfirm: () -> Unit) {
   AlertDialog(
     onDismissRequest = onDismiss,
-    icon = { Icon(Icons.Default.Warning, contentDescription = "Warning", modifier = Modifier.size(48.dp)) },
-    title = { Text("Reveal Recovery Phrase?") },
+    icon = { Icon(Icons.Default.Warning, contentDescription = stringResource(id = R.string.warning), modifier = Modifier.size(48.dp)) },
+    title = { Text(stringResource(id = R.string.view_phrase_dialog_title)) },
     text = {
       Text(
-        "Anyone who sees your recovery phrase can steal your identity. \n\nAre you sure you want to proceed?",
+        stringResource(id = R.string.view_phrase_dialog_prompt),
         textAlign = TextAlign.Center
       )
     },
@@ -301,13 +303,13 @@ private fun ViewPhraseConfirmationDialog(onDismiss: () -> Unit, onConfirm: () ->
         Row(verticalAlignment = Alignment.CenterVertically) {
           Icon(Icons.Default.Visibility, contentDescription = null)
           Spacer(Modifier.width(8.dp))
-          Text("Show Phrase")
+          Text(stringResource(id = R.string.action_show_phrase))
         }
       }
     },
     dismissButton = {
       TextButton(onClick = onDismiss) {
-        Text("Cancel")
+        Text(stringResource(id = R.string.action_cancel))
       }
     }
   )

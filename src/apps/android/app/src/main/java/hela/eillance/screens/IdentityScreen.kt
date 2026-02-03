@@ -29,6 +29,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
@@ -40,6 +41,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import hela.eillance.camera.R
 import hela.eillance.navigation.Route
 import hela.eillance.navigation.Screen
 import hela.eillance.viewmodels.ProfileViewModel
@@ -76,7 +78,7 @@ fun IdentityScreen(navController: NavController, profileVM: ProfileViewModel) {
             // Identity restored, MercuryApp will react to profileVM state change
             showRestoreDialog = null
           } else {
-            Toast.makeText(context, "Failed to restore backup. Check password or file.", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, context.getString(R.string.backup_restore_fail), Toast.LENGTH_LONG).show()
           }
         }
       },
@@ -92,7 +94,7 @@ fun IdentityScreen(navController: NavController, profileVM: ProfileViewModel) {
       horizontalAlignment = Alignment.CenterHorizontally,
       verticalArrangement = Arrangement.Center
     ) {
-      Text("Welcome to Mercury", style = MaterialTheme.typography.headlineLarge)
+      Text(stringResource(id = R.string.identity_welcome_title), style = MaterialTheme.typography.headlineLarge)
       Spacer(modifier = Modifier.height(16.dp))
 
       val linkStyle = SpanStyle(
@@ -101,7 +103,7 @@ fun IdentityScreen(navController: NavController, profileVM: ProfileViewModel) {
       )
 
       val annotatedText = buildAnnotatedString {
-        append("Mercury provides you with a secure ")
+        append(stringResource(id = R.string.identity_description_part1))
         withLink(
           link = LinkAnnotation.Clickable(
             tag = URL_IDENTITY,
@@ -111,9 +113,9 @@ fun IdentityScreen(navController: NavController, profileVM: ProfileViewModel) {
             }
           )
         ) {
-          append("cryptographic identity")
+          append(stringResource(id = R.string.identity_description_link1))
         }
-        append(". Your messages are protected with ")
+        append(stringResource(id = R.string.identity_description_part2))
         withLink(
           link = LinkAnnotation.Clickable(
             tag = URL_E2EE,
@@ -123,9 +125,9 @@ fun IdentityScreen(navController: NavController, profileVM: ProfileViewModel) {
             }
           )
         ) {
-          append("end-to-end encryption")
+          append(stringResource(id = R.string.identity_description_link2))
         }
-        append(" and sent directly between devices via ")
+        append(stringResource(id = R.string.identity_description_part3))
         withLink(
           link = LinkAnnotation.Clickable(
             tag = URL_P2P,
@@ -135,9 +137,9 @@ fun IdentityScreen(navController: NavController, profileVM: ProfileViewModel) {
             }
           )
         ) {
-          append("peer-to-peer")
+          append(stringResource(id = R.string.identity_description_link3))
         }
-        append(" connections.")
+        append(stringResource(id = R.string.identity_description_part4))
       }
 
       SelectionContainer {
@@ -155,21 +157,21 @@ fun IdentityScreen(navController: NavController, profileVM: ProfileViewModel) {
         onClick = { navController.navigate(Screen.MnemonicDisplay.route) },
         modifier = Modifier.fillMaxWidth()
       ) {
-        Text("Create New Identity")
+        Text(stringResource(id = R.string.identity_action_create))
       }
       Spacer(modifier = Modifier.height(16.dp))
       OutlinedButton(
         onClick = { navController.navigate(Screen.RecoverIdentity.route) },
         modifier = Modifier.fillMaxWidth()
       ) {
-        Text("Restore from Recovery Phrase")
+        Text(stringResource(id = R.string.identity_action_recover_phrase))
       }
       Spacer(modifier = Modifier.height(16.dp))
       OutlinedButton(
         onClick = { restoreLauncher.launch("*/*") },
         modifier = Modifier.fillMaxWidth()
       ) {
-        Text("Restore from Backup File")
+        Text(stringResource(id = R.string.backup_restore_button))
       }
     }
   }
@@ -185,15 +187,15 @@ private fun RestoreBackupDialog(
 
   AlertDialog(
     onDismissRequest = { if (!isRestoring) onDismiss() },
-    title = { Text("Enter Backup Password") },
+    title = { Text(stringResource(id = R.string.restore_password_dialog_title)) },
     text = {
       Column {
-        Text("Enter the password for the selected backup file to restore your data.")
+        Text(stringResource(id = R.string.restore_password_dialog_prompt))
         Spacer(modifier = Modifier.height(16.dp))
         OutlinedTextField(
           value = password,
           onValueChange = { password = it },
-          label = { Text("Password") },
+          label = { Text(stringResource(id = R.string.password_label)) },
           visualTransformation = PasswordVisualTransformation(),
           singleLine = true,
           enabled = !isRestoring
@@ -208,11 +210,11 @@ private fun RestoreBackupDialog(
       Button(
         onClick = { onConfirm(password) },
         enabled = password.isNotEmpty() && !isRestoring
-      ) { Text("Restore") }
+      ) { Text(stringResource(id = R.string.action_restore)) }
     },
     dismissButton = {
       if (!isRestoring) {
-        TextButton(onClick = onDismiss) { Text("Cancel") }
+        TextButton(onClick = onDismiss) { Text(stringResource(id = R.string.action_cancel)) }
       }
     }
   )

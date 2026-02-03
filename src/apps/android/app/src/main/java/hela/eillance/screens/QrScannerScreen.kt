@@ -31,9 +31,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import hela.eillance.camera.R
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.BinaryBitmap
 import com.google.zxing.DecodeHintType
@@ -155,7 +157,7 @@ fun QrScannerScreen(
                 imageAnalyzer
               )
             } catch (e: Exception) {
-              Toast.makeText(context, "Failed to start camera: ${e.message}", Toast.LENGTH_LONG).show()
+              Toast.makeText(context, context.getString(R.string.qr_camera_fail, e.message), Toast.LENGTH_LONG).show()
             }
           }, ContextCompat.getMainExecutor(ctx))
           previewView
@@ -166,7 +168,7 @@ fun QrScannerScreen(
         }
       )
     } else {
-      Text("Camera permission is required to scan QR codes.", modifier = Modifier.align(Alignment.Center))
+      Text(stringResource(id = R.string.qr_permission_required), modifier = Modifier.align(Alignment.Center))
     }
 
     IconButton(
@@ -176,7 +178,7 @@ fun QrScannerScreen(
         .align(Alignment.TopStart)
         .padding(16.dp)
     ) {
-      Icon(Icons.Default.Close, contentDescription = "Close Scanner")
+      Icon(Icons.Default.Close, contentDescription = stringResource(id = R.string.qr_action_close))
     }
   }
 }

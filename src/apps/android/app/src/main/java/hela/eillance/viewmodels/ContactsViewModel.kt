@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import hela.eillance.CallService
+import hela.eillance.camera.R
 import hela.eillance.ndkio.Contact
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -74,7 +75,7 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
       onAddContactDialogDismiss()
     } else {
       viewModelScope.launch {
-        _errorMessage.emit("Cannot add this contact. Ensure the ID is valid and not your own.")
+        _errorMessage.emit(getApplication<Application>().getString(R.string.contact_add_error))
       }
     }
   }

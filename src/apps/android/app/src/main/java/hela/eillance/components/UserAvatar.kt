@@ -17,7 +17,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import hela.eillance.camera.R
 import hela.eillance.utils.rememberImageBitmapFromBase64
 
 @Composable
@@ -27,7 +29,7 @@ fun UserAvatar(
   shape: Shape = CircleShape,
   fallbackTint: Color = MaterialTheme.colorScheme.onSecondaryContainer,
   fallbackBackground: Color = MaterialTheme.colorScheme.secondaryContainer,
-  contentDescription: String? = "User Avatar",
+  contentDescription: String? = stringResource(R.string.user_avatar_content_description),
   onClick: (() -> Unit)? = null
 ) {
   val imageBitmap = rememberImageBitmapFromBase64(photoBase64)

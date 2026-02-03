@@ -43,10 +43,12 @@ import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
+import hela.eillance.camera.R
 import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
@@ -105,7 +107,7 @@ fun MediaPreviewScreen(
           IconButton(onClick = onBack) {
             Icon(
               imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-              contentDescription = "Back"
+              contentDescription = stringResource(id = R.string.action_back)
             )
           }
         },
@@ -148,7 +150,7 @@ fun MediaPage(attachment: Attachment, progress: Float?) {
         )
       } else {
         Text(
-          text = "Image removed",
+          text = stringResource(id = R.string.media_preview_removed),
           color = Color.White,
           modifier = Modifier.align(Alignment.Center)
         )
@@ -237,7 +239,7 @@ fun ZoomableImage(file: File) {
   ) {
     AsyncImage(
       model = file,
-      contentDescription = "Full Image",
+      contentDescription = stringResource(id = R.string.media_preview_full_image_description),
       modifier = Modifier
         .align(Alignment.Center)
         .graphicsLayer {

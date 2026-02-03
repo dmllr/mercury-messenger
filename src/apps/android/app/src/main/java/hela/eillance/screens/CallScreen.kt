@@ -32,8 +32,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import hela.eillance.camera.R
 import hela.eillance.components.VideoRenderer
 import hela.eillance.ndkio.CallDirection
 import hela.eillance.ndkio.CallState
@@ -94,10 +96,10 @@ fun CallScreen(
         )
         if (callState.isConnecting) {
           Spacer(modifier = Modifier.padding(4.dp))
-          Text(text = "Connecting...", style = MaterialTheme.typography.bodyLarge, color = Color.White.copy(alpha = 0.7f))
+          Text(text = stringResource(id = R.string.call_status_connecting), style = MaterialTheme.typography.bodyLarge, color = Color.White.copy(alpha = 0.7f))
         } else if (callState.isRinging && callState.callDirection == CallDirection.Outgoing) {
           Spacer(modifier = Modifier.padding(4.dp))
-          Text(text = "Ringing...", style = MaterialTheme.typography.bodyLarge, color = Color.White.copy(alpha = 0.7f))
+          Text(text = stringResource(id = R.string.call_status_ringing), style = MaterialTheme.typography.bodyLarge, color = Color.White.copy(alpha = 0.7f))
         } else if (callState.isInCall) {
           Spacer(modifier = Modifier.padding(4.dp))
           Text(text = "00:00", style = MaterialTheme.typography.bodyLarge, color = Color.White.copy(alpha = 0.7f))
@@ -136,7 +138,7 @@ fun CallScreen(
         verticalAlignment = Alignment.CenterVertically
       ) {
         IconButton(onClick = { /* TODO */ }) {
-          Icon(Icons.Default.Mic, contentDescription = "Mute", tint = Color.White, modifier = Modifier.size(32.dp))
+          Icon(Icons.Default.Mic, contentDescription = stringResource(id = R.string.action_mute), tint = Color.White, modifier = Modifier.size(32.dp))
         }
 
         FloatingActionButton(
@@ -146,14 +148,14 @@ fun CallScreen(
         ) {
           Icon(
             Icons.Default.CallEnd,
-            contentDescription = "Hang Up",
+            contentDescription = stringResource(id = R.string.action_hangup),
             tint = Color.White,
             modifier = Modifier.size(36.dp)
           )
         }
 
         IconButton(onClick = { /* TODO */ }) {
-          Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = "Speaker", tint = Color.White, modifier = Modifier.size(32.dp))
+          Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = stringResource(id = R.string.action_speaker), tint = Color.White, modifier = Modifier.size(32.dp))
         }
       }
     }

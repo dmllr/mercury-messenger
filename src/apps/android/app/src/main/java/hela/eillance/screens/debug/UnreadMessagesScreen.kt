@@ -21,7 +21,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import hela.eillance.camera.R
 import hela.eillance.ndkio.DebugUnreadInfo
+import androidx.compose.ui.res.stringResource
 import hela.eillance.viewmodels.DebugViewModel
 import java.util.Date
 
@@ -40,10 +42,10 @@ fun UnreadMessagesScreen(
   Scaffold(
     topBar = {
       TopAppBar(
-        title = { Text("Unread Messages") },
+        title = { Text(stringResource(id = R.string.screen_title_unread_messages)) },
         navigationIcon = {
           IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(id = R.string.action_back))
           }
         }
       )
@@ -52,14 +54,14 @@ fun UnreadMessagesScreen(
     LazyColumn(modifier = Modifier.padding(padding)) {
       if (infos.isEmpty()) {
         item {
-          Text("No unread messages found.", modifier = Modifier.padding(16.dp))
+          Text(stringResource(id = R.string.debug_unread_empty), modifier = Modifier.padding(16.dp))
         }
       }
       items(infos) { info ->
         ListItem(
           headlineContent = { Text(info.peerId) },
           supportingContent = { Text("Last Msg: ${Date(info.lastMsgTimestamp / 1000)}") },
-          trailingContent = { Text("${info.count} unread") }
+          trailingContent = { Text(stringResource(id = R.string.debug_unread_count, info.count)) }
         )
         HorizontalDivider()
       }

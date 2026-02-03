@@ -17,8 +17,10 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import hela.eillance.camera.R
 import hela.eillance.navigation.Route
 
 private const val URL_IDENTITY = "https://mercury.eillance.com/articles/cryptographic-identity/embed/"
@@ -31,10 +33,10 @@ fun HelpScreen(navController: NavController) {
   Scaffold(
     topBar = {
       TopAppBar(
-        title = { Text("Help") },
+        title = { Text(stringResource(id = R.string.screen_title_help)) },
         navigationIcon = {
           IconButton(onClick = { navController.popBackStack() }) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(id = R.string.action_back))
           }
         }
       )
@@ -46,9 +48,9 @@ fun HelpScreen(navController: NavController) {
         .padding(padding)
         .padding(8.dp)
     ) {
-      HelpItem(title = "What is a Cryptographic Identity?") { navController.navigate(Route.WebView.createRoute(URL_IDENTITY)) }
-      HelpItem(title = "The Power of Peer-to-Peer") { navController.navigate(Route.WebView.createRoute(URL_P2P)) }
-      HelpItem(title = "Securing the Conversation: End-to-End Encryption") {
+      HelpItem(title = stringResource(id = R.string.help_item_identity)) { navController.navigate(Route.WebView.createRoute(URL_IDENTITY)) }
+      HelpItem(title = stringResource(id = R.string.help_item_p2p)) { navController.navigate(Route.WebView.createRoute(URL_P2P)) }
+      HelpItem(title = stringResource(id = R.string.help_item_e2ee)) {
         navController.navigate(Route.WebView.createRoute(URL_E2EE))
       }
     }
