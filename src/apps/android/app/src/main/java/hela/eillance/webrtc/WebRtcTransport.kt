@@ -444,6 +444,13 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
   fun setRemoteDescription(peerId: String, context: String, sdp: String, type: String) {
     Log.i(TAG, "Setting remote description for peer $peerId ($context), type: $type")
     val pc = getPeerConnection(peerId, context) ?: run { Log.e(TAG, "PeerConnection for $peerId ($context) not found for setRemoteDescription"); return }
+
+    // Avoid "Called in wrong state: stable" error on duplicate answers
+    if (type == "answer" && pc.signalingState() == PeerConnection.SignalingState.STABLE) {
+      Log.w(TAG, "Ignoring answer for $peerId ($context) because signaling state is already STABLE.")
+      return
+    }
+
     val sdpObserver = object : SdpObserver {
       override fun onCreateSuccess(sdp: SessionDescription?) {}
       override fun onSetSuccess() {
