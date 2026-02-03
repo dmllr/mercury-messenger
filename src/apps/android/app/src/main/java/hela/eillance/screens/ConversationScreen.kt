@@ -411,7 +411,7 @@ fun ConversationScreen(
           MessageInputArea(
             draftAttachments = draftAttachments,
             onSendMessage = chatVM::sendMessage,
-            onAddDraft = chatVM::addDraftAttachment,
+            onAddDrafts = chatVM::addDraftAttachments,
             onRemoveDraft = chatVM::removeDraft,
             onUpdateNote = chatVM::updateDraftNote
           )
@@ -425,7 +425,7 @@ fun ConversationScreen(
 fun MessageInputArea(
   draftAttachments: List<DraftAttachment>,
   onSendMessage: (String) -> Unit,
-  onAddDraft: (Uri) -> Unit,
+  onAddDrafts: (List<Uri>) -> Unit,
   onRemoveDraft: (Int) -> Unit,
   onUpdateNote: (Int, String) -> Unit
 ) {
@@ -434,18 +434,18 @@ fun MessageInputArea(
   val context = LocalContext.current
 
   // Media Pickers
-  val pickMedia = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-    if (uri != null) onAddDraft(uri)
+  val pickMedia = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris ->
+    if (uris.isNotEmpty()) onAddDrafts(uris)
   }
-  val pickDoc = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-    if (uri != null) onAddDraft(uri)
+  val pickDocs = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+    if (uris.isNotEmpty()) onAddDrafts(uris)
   }
 
-  // Camera Photo
+  // Camera Photo (Camera returns only one at a time usually)
   var cameraPhotoUri by remember { mutableStateOf<Uri?>(null) }
   val takePicture = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
     if (success && cameraPhotoUri != null) {
-      onAddDraft(cameraPhotoUri!!)
+      onAddDrafts(listOf(cameraPhotoUri!!))
     }
   }
 
@@ -453,7 +453,7 @@ fun MessageInputArea(
   var cameraVideoUri by remember { mutableStateOf<Uri?>(null) }
   val captureVideo = rememberLauncherForActivityResult(ActivityResultContracts.CaptureVideo()) { success ->
     if (success && cameraVideoUri != null) {
-      onAddDraft(cameraVideoUri!!)
+      onAddDrafts(listOf(cameraVideoUri!!))
     }
   }
 
@@ -498,12 +498,15 @@ fun MessageInputArea(
         }
 
         // Document (Readable docs)
-        IconButton(onClick = { pickDoc.launch(arrayOf("application/*", "text/*")) }) {
+        IconButton(onClick = {
+          // OpenMultipleDocuments takes an array of mime types in launch
+          pickDocs.launch(arrayOf("application/*", "text/*"))
+        }) {
           Icon(Icons.Default.Description, contentDescription = stringResource(R.string.attach_document), tint = MaterialTheme.colorScheme.primary)
         }
 
         // Binary File (All files)
-        IconButton(onClick = { pickDoc.launch(arrayOf("*/*")) }) {
+        IconButton(onClick = { pickDocs.launch(arrayOf("*/*")) }) {
           Icon(Icons.Default.SnippetFolder, contentDescription = stringResource(R.string.attach_file), tint = MaterialTheme.colorScheme.primary)
         }
       }
