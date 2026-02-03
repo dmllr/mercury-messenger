@@ -191,7 +191,7 @@ private fun ProfilePhoto(photoBase64: String?, modifier: Modifier = Modifier) {
     if (imageBitmap != null) {
       Image(
         bitmap = imageBitmap,
-        contentDescription = "Profile Photo",
+        contentDescription = stringResource(id = R.string.profile_update_field_photo),
         modifier = Modifier.matchParentSize(),
         contentScale = ContentScale.Crop
       )

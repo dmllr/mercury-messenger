@@ -386,7 +386,7 @@ private fun FileAttachmentItem(
         CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
       } else if (!isDone && !isCanceled) {
         if (!isFromMe && !attachment.isDownloaded) {
-          Icon(Icons.Default.Download, contentDescription = "Downloading", tint = MaterialTheme.colorScheme.secondary)
+          Icon(Icons.Default.Download, contentDescription = stringResource(id = R.string.file_status_downloading), tint = MaterialTheme.colorScheme.secondary)
         }
       }
     }

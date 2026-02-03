@@ -126,8 +126,8 @@ fun SettingsScreen(
       )
 
       ListItem(
-        headlineContent = { Text("Blocked Contacts") },
-        supportingContent = { Text("View and manage contacts you have blocked") },
+        headlineContent = { Text(stringResource(id = R.string.settings_blocked_contacts_title)) },
+        supportingContent = { Text(stringResource(id = R.string.settings_blocked_contacts_description)) },
         modifier = Modifier
           .clip(MaterialTheme.shapes.medium)
           .clickable { navController.navigate(Screen.RejectedContacts.route) }

@@ -112,7 +112,11 @@ fun CallScreen(
           )
         } else if (callState.isInCall) {
           Spacer(modifier = Modifier.padding(4.dp))
-          Text(text = "00:00", style = MaterialTheme.typography.bodyLarge, color = Color.White.copy(alpha = 0.7f))
+          Text(
+            text = stringResource(id = R.string.call_timer_placeholder),
+            style = MaterialTheme.typography.bodyLarge,
+            color = Color.White.copy(alpha = 0.7f)
+          )
         }
       }
 
