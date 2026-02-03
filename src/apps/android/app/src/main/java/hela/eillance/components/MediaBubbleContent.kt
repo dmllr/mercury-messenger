@@ -339,11 +339,8 @@ private fun MediaItem(
   onDiscard: () -> Unit,
   modifier: Modifier = Modifier
 ) {
-  val isSenderCanceled = attachment.status == AttachmentStatus.Canceled && isFromMe
-  val isPeerCanceledUpload = attachment.status == AttachmentStatus.PeerCanceled && !isFromMe
-  val isCanceled = isSenderCanceled || isPeerCanceledUpload
+  val isCanceled = attachment.status == AttachmentStatus.Canceled || attachment.status == AttachmentStatus.PeerCanceled
 
-  // Thumbnail Container
   Box(
     modifier = modifier
       .background(MaterialTheme.colorScheme.surfaceContainerHigh)
@@ -357,7 +354,7 @@ private fun MediaItem(
     val context = LocalContext.current
     val isVideo = attachment.type == AttachmentType.Video || attachment.mime.startsWith("video/")
 
-    // Content Layer
+    // --- BASE LAYER (Thumbnail/Image/Video) ---
     if (attachment.status == AttachmentStatus.Done && file.exists()) {
       val model = remember(attachment.path, isVideo) {
         if (isVideo) {
@@ -374,16 +371,8 @@ private fun MediaItem(
         modifier = Modifier.fillMaxSize(),
         contentScale = ContentScale.Crop
       )
-      if (isVideo) {
-        Icon(
-          imageVector = Icons.Default.PlayCircle,
-          contentDescription = "Play",
-          tint = Color.White.copy(alpha = 0.8f),
-          modifier = Modifier.size(48.dp)
-        )
-      }
     } else {
-      // Thumbnail or Placeholder
+      // Show thumbnail if available, otherwise placeholder
       val imageBitmap = remember(attachment.thumbnail) {
         if (!attachment.thumbnail.isNullOrEmpty()) {
           try {
@@ -410,29 +399,40 @@ private fun MediaItem(
           )
         }
       }
-      Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.4f)))
     }
 
-    // Interactive/Status Layer
-    Box(contentAlignment = Alignment.Center) {
+    // --- OVERLAY LAYER (Darkens the image for status states) ---
+    // Show overlay for all non-final states
+    if (attachment.status != AttachmentStatus.Done) {
+      Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)))
+    }
+
+    // --- INTERACTIVE / STATUS LAYER ---
+    Box(modifier = Modifier.fillMaxSize()) {
       if (isCanceled) {
-        // Overlay for canceled state - kept inside the grid
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(
+          modifier = Modifier.align(Alignment.Center),
+          horizontalAlignment = Alignment.CenterHorizontally,
+          verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
           Icon(
             imageVector = Icons.Default.Block,
             contentDescription = "Canceled",
             tint = Color.White,
             modifier = Modifier.size(32.dp)
           )
-          Spacer(modifier = Modifier.height(4.dp))
           Text(
-            text = if (isSenderCanceled) "Upload Canceled" else "Download Canceled",
+            text = if (attachment.status == AttachmentStatus.Canceled) "Upload Canceled" else "Download Canceled",
             style = MaterialTheme.typography.labelSmall,
             color = Color.White
           )
         }
       } else if (attachment.status == AttachmentStatus.Paused) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(
+          modifier = Modifier.align(Alignment.Center),
+          horizontalAlignment = Alignment.CenterHorizontally,
+          verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
           if (!isFromMe) {
             Icon(
               imageVector = Icons.Default.PlayCircleOutline,
@@ -445,33 +445,47 @@ private fun MediaItem(
             Text("Paused by Peer", style = MaterialTheme.typography.labelSmall, color = Color.White)
           }
         }
-
-        // Cancel button for both (Sender: Cancel Upload; Receiver: Cancel Download)
         IconButton(
           onClick = onDiscard,
           modifier = Modifier.align(Alignment.TopEnd).padding(4.dp)
         ) {
           Icon(Icons.Default.Close, contentDescription = "Cancel", tint = Color.White)
         }
-
-      } else if (progress != null && progress >= 0f) {
-        Box(contentAlignment = Alignment.Center) {
+      } else if (progress != null && progress >= 0f && attachment.status == AttachmentStatus.Transferring) {
+        Box(
+          modifier = Modifier.align(Alignment.Center),
+          contentAlignment = Alignment.Center
+        ) {
           CircularProgressIndicator(
             progress = { progress },
             modifier = Modifier.size(48.dp),
             color = Color.White,
             trackColor = Color.White.copy(alpha = 0.4f),
           )
-          // onCancel -> Pause (Receiver) or Cancel (Sender)
           IconButton(onClick = onCancel) {
             val icon = if (!isFromMe) Icons.Default.Pause else Icons.Default.Close
             Icon(icon, contentDescription = "Cancel", tint = Color.White)
           }
         }
-      } else if (attachment.status == AttachmentStatus.Pending || attachment.status == AttachmentStatus.Transferring) {
-        CircularProgressIndicator(modifier = Modifier.size(32.dp), color = Color.White)
+      } else if (attachment.status == AttachmentStatus.Pending || (attachment.status == AttachmentStatus.Transferring && progress == null)) {
+        CircularProgressIndicator(
+          modifier = Modifier.size(32.dp).align(Alignment.Center),
+          color = Color.White
+        )
       } else if (attachment.status == AttachmentStatus.Failed) {
-        Icon(Icons.Default.Refresh, contentDescription = "Retry", tint = Color.Red, modifier = Modifier.size(32.dp).clickable { onResume() })
+        Icon(
+          Icons.Default.Refresh,
+          contentDescription = "Retry",
+          tint = MaterialTheme.colorScheme.error,
+          modifier = Modifier.size(32.dp).align(Alignment.Center).clickable { onResume() }
+        )
+      } else if (isVideo && attachment.status == AttachmentStatus.Done) {
+        Icon(
+          imageVector = Icons.Default.PlayCircle,
+          contentDescription = "Play",
+          tint = Color.White.copy(alpha = 0.8f),
+          modifier = Modifier.size(48.dp).align(Alignment.Center)
+        )
       }
     }
   }
