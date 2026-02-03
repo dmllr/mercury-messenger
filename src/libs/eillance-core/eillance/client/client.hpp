@@ -19,9 +19,9 @@
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/transport/transport.hpp"
 #include "eillance/transport/transport_delegate.hpp"
-#include "eillance/view_model/view_model_defines.hpp"
 #include "eillance/utils/dispatch_queue.hpp"
 #include "eillance/utils/invariant.hpp"
+#include "eillance/view_model/view_model_defines.hpp"
 
 namespace eillance {
 
@@ -336,10 +336,17 @@ class Client final : public transport::TransportDelegate {
       return;
     }
 
+    // Avoid overwriting a connection that is already establishing (glare condition).
+    // If we re-create the PeerConnection while it is in 'connecting' state,
+    // we may kill the valid one or confuse the transport layer.
+    if (transport_->GetPeerConnectionState(peer_id) == transport::PeerConnectionState::connecting) {
+      return;
+    }
+
     if (!peer) {
-      peer = std::make_shared<transport::Peer>(peer_id);
-      transport_->AddPeer(peer_id, peer);
-      internal_messaging_service_->SetupPeerHandlers(peer, peer_id);
+      auto const new_peer = std::make_shared<transport::Peer>(peer_id);
+      transport_->AddPeer(peer_id, new_peer);
+      internal_messaging_service_->SetupPeerHandlers(new_peer, peer_id);
     }
 
     transport_->CreateDataPeerConnection(peer_id);
