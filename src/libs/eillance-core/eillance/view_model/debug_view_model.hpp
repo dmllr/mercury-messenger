@@ -1,14 +1,16 @@
 #pragma once
 
 #include <memory>
+#include <vector>
 
 #include "client_event_router.hpp"
 #include "eillance/client/client.hpp"
+#include "view_model_defines.hpp"
 
 namespace eillance::view_model {
 
 class DebugViewModel {
- public:
+public:
   explicit DebugViewModel(std::shared_ptr<Client> client, std::shared_ptr<ClientEventRouter> router)
       : client_(std::move(client)),
         router_(std::move(router)) {
@@ -29,7 +31,19 @@ class DebugViewModel {
     router_->Queue().Push(EventDebugDataReset{});
   }
 
- private:
+  [[nodiscard]] auto GetPendingActions() const -> std::vector<DebugPendingAction> {
+    return client_->GetAllPendingActions();
+  }
+
+  [[nodiscard]] auto GetConnectionInfo() const -> std::vector<DebugConnectionInfo> {
+    return client_->GetConnectionDebugInfo();
+  }
+
+  [[nodiscard]] auto GetUnreadInfo() const -> std::vector<DebugUnreadInfo> {
+    return client_->GetAllUnreadInfo();
+  }
+
+private:
   std::shared_ptr<Client> client_;
   std::shared_ptr<ClientEventRouter> router_;
 };

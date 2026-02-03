@@ -597,6 +597,85 @@ Java_hela_eillance_viewmodels_DebugViewModel_nativeRevokeApprovals(JNIEnv* /*env
   vm->RevokeAllApprovals();
 }
 
+extern "C" JNIEXPORT jobject JNICALL
+Java_hela_eillance_viewmodels_DebugViewModel_nativeGetPendingActions(JNIEnv* env, jobject /*instance*/, jlong ptr) {
+  auto* vm = reinterpret_cast<eillance::view_model::DebugViewModel*>(ptr);
+  auto actions = vm->GetPendingActions();
+
+  auto& class_refs = ClassRefs::Instance();
+  auto& list_holder = class_refs.Class("java/util/ArrayList");
+  jobject j_list = list_holder.NewObject(env);
+  jmethodID list_add = list_holder.GetMethod("add");
+
+  auto& item_cls = class_refs.Class("hela/eillance/ndkio/DebugPendingAction");
+
+  for (auto const& action : actions) {
+    jstring j_peer = env->NewStringUTF(action.peer_id.ToString().c_str());
+    jstring j_payload = env->NewStringUTF(action.payload.c_str());
+    jobject j_item = item_cls.NewObject(env, j_peer, (jlong)action.id, j_payload);
+
+    env->CallBooleanMethod(j_list, list_add, j_item);
+
+    env->DeleteLocalRef(j_peer);
+    env->DeleteLocalRef(j_payload);
+    env->DeleteLocalRef(j_item);
+  }
+  return j_list;
+}
+
+extern "C" JNIEXPORT jobject JNICALL
+Java_hela_eillance_viewmodels_DebugViewModel_nativeGetConnectionInfo(JNIEnv* env, jobject /*instance*/, jlong ptr) {
+  auto* vm = reinterpret_cast<eillance::view_model::DebugViewModel*>(ptr);
+  auto infos = vm->GetConnectionInfo();
+
+  auto& class_refs = ClassRefs::Instance();
+  auto& list_holder = class_refs.Class("java/util/ArrayList");
+  jobject j_list = list_holder.NewObject(env);
+  jmethodID list_add = list_holder.GetMethod("add");
+
+  auto& item_cls = class_refs.Class("hela/eillance/ndkio/DebugConnectionInfo");
+
+  for (auto const& info : infos) {
+    jstring j_peer = env->NewStringUTF(info.peer_id.ToString().c_str());
+    jobject j_item = item_cls.NewObject(
+        env,
+        j_peer,
+        (jint)info.state,
+        (jlong)info.last_activity_sec_ago,
+        (jboolean)info.is_data_channel_open,
+        (jboolean)info.has_media_connection
+    );
+
+    env->CallBooleanMethod(j_list, list_add, j_item);
+    env->DeleteLocalRef(j_peer);
+    env->DeleteLocalRef(j_item);
+  }
+  return j_list;
+}
+
+extern "C" JNIEXPORT jobject JNICALL
+Java_hela_eillance_viewmodels_DebugViewModel_nativeGetUnreadInfo(JNIEnv* env, jobject /*instance*/, jlong ptr) {
+  auto* vm = reinterpret_cast<eillance::view_model::DebugViewModel*>(ptr);
+  auto infos = vm->GetUnreadInfo();
+
+  auto& class_refs = ClassRefs::Instance();
+  auto& list_holder = class_refs.Class("java/util/ArrayList");
+  jobject j_list = list_holder.NewObject(env);
+  jmethodID list_add = list_holder.GetMethod("add");
+
+  auto& item_cls = class_refs.Class("hela/eillance/ndkio/DebugUnreadInfo");
+
+  for (auto const& info : infos) {
+    jstring j_peer = env->NewStringUTF(info.peer_id.ToString().c_str());
+    jobject j_item = item_cls.NewObject(env, j_peer, (jint)info.count, (jlong)info.last_msg_timestamp);
+
+    env->CallBooleanMethod(j_list, list_add, j_item);
+    env->DeleteLocalRef(j_peer);
+    env->DeleteLocalRef(j_item);
+  }
+  return j_list;
+}
+
 // --- Global Setup ---
 
 extern "C" JNIEXPORT void JNICALL
@@ -709,6 +788,19 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
         attachment_class,
         "(Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;JLjava/lang/String;ZILjava/lang/String;Ljava/lang/String;)V"
     );
+
+    // Register Debug DTOs
+    std::string const debug_action_class = "hela/eillance/ndkio/DebugPendingAction";
+    classref.RegisterClass(env, debug_action_class);
+    classref.RegisterCtor(env, debug_action_class, "(Ljava/lang/String;JLjava/lang/String;)V");
+
+    std::string const debug_conn_class = "hela/eillance/ndkio/DebugConnectionInfo";
+    classref.RegisterClass(env, debug_conn_class);
+    classref.RegisterCtor(env, debug_conn_class, "(Ljava/lang/String;IJZZ)V");
+
+    std::string const debug_unread_class = "hela/eillance/ndkio/DebugUnreadInfo";
+    classref.RegisterClass(env, debug_unread_class);
+    classref.RegisterCtor(env, debug_unread_class, "(Ljava/lang/String;IJ)V");
 
   } catch (std::exception const& e) {
     LGE << "JNI_OnLoad failed: " << e.what();

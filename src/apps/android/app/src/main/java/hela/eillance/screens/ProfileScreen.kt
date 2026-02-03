@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -35,10 +36,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Help
-import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Feedback
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PermIdentity
@@ -116,12 +116,6 @@ import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import kotlin.math.min
 
-private enum class DebugAction {
-  ERASE_HISTORY,
-  ERASE_CONTACTS,
-  REVOKE_APPROVALS
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(
@@ -129,17 +123,17 @@ fun ProfileScreen(
   contactsVM: ContactsViewModel,
   settingsVM: SettingsViewModel,
   debugVM: DebugViewModel,
-  mainViewModel: MainViewModel, // Injected for state
+  mainViewModel: MainViewModel,
   myProfile: MyProfileInfo,
   onBack: () -> Unit,
   onNavigateToSettings: () -> Unit,
   onNavigateToBetaNotice: () -> Unit,
   onNavigateToBackupAndRestore: () -> Unit,
   onNavigateToHelp: () -> Unit,
-  onNavigateToPermissionIssues: () -> Unit
+  onNavigateToPermissionIssues: () -> Unit,
+  onNavigateToDebugMenu: () -> Unit // New callback
 ) {
   var showEditDialog by remember { mutableStateOf(false) }
-  var showDebugConfirmDialog by remember { mutableStateOf<DebugAction?>(null) }
   val hasPermissionIssues by mainViewModel.hasPermissionIssues.collectAsState()
 
   if (showEditDialog) {
@@ -147,21 +141,6 @@ fun ProfileScreen(
       myProfile = myProfile,
       profileVM = profileVM,
       onDismiss = { showEditDialog = false }
-    )
-  }
-
-  showDebugConfirmDialog?.let { action ->
-    DebugConfirmDialog(
-      action = action,
-      onConfirm = { confirmedAction ->
-        when (confirmedAction) {
-          DebugAction.ERASE_HISTORY -> debugVM.eraseAllHistory()
-          DebugAction.ERASE_CONTACTS -> debugVM.eraseAllContacts()
-          DebugAction.REVOKE_APPROVALS -> debugVM.revokeAllApprovals()
-        }
-        showDebugConfirmDialog = null
-      },
-      onDismiss = { showDebugConfirmDialog = null }
     )
   }
 
@@ -193,10 +172,10 @@ fun ProfileScreen(
         onNavigateToSettings = onNavigateToSettings,
         onNavigateToBetaNotice = onNavigateToBetaNotice,
         onNavigateToBackupAndRestore = onNavigateToBackupAndRestore,
-        onDebugAction = { action: DebugAction -> showDebugConfirmDialog = action },
         onNavigateToHelp = onNavigateToHelp,
         onSendFeedback = { contactsVM.sendFeedback() },
-        onNavigateToPermissionIssues = onNavigateToPermissionIssues
+        onNavigateToPermissionIssues = onNavigateToPermissionIssues,
+        onNavigateToDebugMenu = onNavigateToDebugMenu
       )
     }
   }
@@ -280,7 +259,6 @@ private fun ProfileHeader(
       Spacer(modifier = Modifier.height(16.dp))
     }
 
-    // --- Connection Status Indicator ---
     val (statusText, statusColor) = when (connectionState) {
       ServiceConnectionState.Online -> "Online" to MaterialTheme.extendedColors.success
       ServiceConnectionState.Establishing -> "Connecting..." to MaterialTheme.extendedColors.warning
@@ -308,7 +286,6 @@ private fun ProfileHeader(
         }
       }
     }
-    // -----------------------------------
 
     Row(modifier = Modifier.padding(horizontal = 8.dp)) {
       ListItem(
@@ -332,10 +309,10 @@ private fun ProfileMenu(
   onNavigateToSettings: () -> Unit,
   onNavigateToBetaNotice: () -> Unit,
   onNavigateToBackupAndRestore: () -> Unit,
-  onDebugAction: (DebugAction) -> Unit,
   onNavigateToHelp: () -> Unit,
   onSendFeedback: () -> Unit,
-  onNavigateToPermissionIssues: () -> Unit
+  onNavigateToPermissionIssues: () -> Unit,
+  onNavigateToDebugMenu: () -> Unit
 ) {
   Column(modifier = Modifier.padding(horizontal = 8.dp)) {
     ListItem(
@@ -415,32 +392,13 @@ private fun ProfileMenu(
       Spacer(modifier = Modifier.height(16.dp))
       HorizontalDivider(modifier = Modifier.padding(horizontal = 8.dp))
       Spacer(modifier = Modifier.height(8.dp))
-      Text(
-        "Debug Options",
-        style = MaterialTheme.typography.titleSmall,
-        modifier = Modifier.padding(start = 16.dp, bottom = 8.dp),
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-      )
       ListItem(
-        headlineContent = { Text("Erase all conversation history", color = MaterialTheme.colorScheme.error) },
-        leadingContent = { Icon(Icons.Default.DeleteForever, contentDescription = "Erase History", tint = MaterialTheme.colorScheme.error) },
+        headlineContent = { Text("Debug Menu") },
+        supportingContent = { Text("Developer tools and diagnostics") },
+        leadingContent = { Icon(Icons.Default.BugReport, contentDescription = "Debug", tint = MaterialTheme.colorScheme.primary) },
         modifier = Modifier
           .clip(MaterialTheme.shapes.medium)
-          .clickable { onDebugAction(DebugAction.ERASE_HISTORY) }
-      )
-      ListItem(
-        headlineContent = { Text("Erase contact list", color = MaterialTheme.colorScheme.error) },
-        leadingContent = { Icon(Icons.Default.DeleteForever, contentDescription = "Erase Contacts", tint = MaterialTheme.colorScheme.error) },
-        modifier = Modifier
-          .clip(MaterialTheme.shapes.medium)
-          .clickable { onDebugAction(DebugAction.ERASE_CONTACTS) }
-      )
-      ListItem(
-        headlineContent = { Text("Revoke contact approvals/accepts", color = MaterialTheme.colorScheme.error) },
-        leadingContent = { Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "Revoke Approvals", tint = MaterialTheme.colorScheme.error) },
-        modifier = Modifier
-          .clip(MaterialTheme.shapes.medium)
-          .clickable { onDebugAction(DebugAction.REVOKE_APPROVALS) }
+          .clickable(onClick = onNavigateToDebugMenu)
       )
     }
   }
@@ -456,7 +414,6 @@ private fun ProfileEditDialog(
   var bio by remember(myProfile.myBio) { mutableStateOf(myProfile.myBio ?: "") }
   var photoBase64 by remember(myProfile.myPhoto) { mutableStateOf(myProfile.myPhoto) }
 
-  // State for image editor
   var rawSelectedImage by remember { mutableStateOf<Bitmap?>(null) }
   var showImageEditor by remember { mutableStateOf(false) }
 
@@ -669,7 +626,6 @@ fun ImageEditorDialog(
           Canvas(modifier = Modifier.fillMaxSize()) {
             withTransform({
               translate(left = center.x + offset.x, top = center.y + offset.y)
-              // Explicitly set pivot = Offset.Zero so that it matches the Matrix transformations
               scale(scale, scale, pivot = Offset.Zero)
               rotate(rotation, pivot = Offset.Zero)
               translate(left = -imageBitmap.width / 2f, top = -imageBitmap.height / 2f)
@@ -751,19 +707,13 @@ private fun performCrop(
   val canvas = android.graphics.Canvas(output)
   val matrix = Matrix()
 
-  // 1. Center the bitmap at origin (0,0)
   matrix.postTranslate(-original.width / 2f, -original.height / 2f)
-
-  // 2. Rotate
   matrix.postRotate(visualRotation)
 
-  // 3. Scale
-  // Convert screen scale to target scale based on ratio
   val ratio = targetSize.toFloat() / visualMaskDiameter
   val finalScale = visualScale * ratio
   matrix.postScale(finalScale, finalScale)
 
-  // 4. Move to target center with scaled offset
   matrix.postTranslate(
     (targetSize / 2f) + (visualOffset.x * ratio),
     (targetSize / 2f) + (visualOffset.y * ratio)
@@ -773,45 +723,6 @@ private fun performCrop(
   canvas.drawBitmap(original, matrix, paint)
 
   return output
-}
-
-@Composable
-private fun DebugConfirmDialog(
-  action: DebugAction,
-  onConfirm: (DebugAction) -> Unit,
-  onDismiss: () -> Unit
-) {
-  val (title, text) = when (action) {
-    DebugAction.ERASE_HISTORY -> "Erase History?" to "This will permanently delete all message and call history for all contacts. This action cannot be undone."
-    DebugAction.ERASE_CONTACTS -> "Erase Contacts?" to "This will permanently delete all contacts and all associated conversation history. This action cannot be undone."
-    DebugAction.REVOKE_APPROVALS -> "Revoke Approvals?" to "This will reset the status of all 'confirmed' contacts back to 'pending'. You will need to re-confirm them."
-  }
-
-  Dialog(onDismissRequest = onDismiss) {
-    Card(shape = MaterialTheme.shapes.large) {
-      Column(modifier = Modifier.padding(24.dp)) {
-        Text(title, style = MaterialTheme.typography.headlineSmall)
-        Spacer(modifier = Modifier.height(16.dp))
-        Text(text, style = MaterialTheme.typography.bodyMedium)
-        Spacer(modifier = Modifier.height(24.dp))
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.End
-        ) {
-          TextButton(onClick = onDismiss) {
-            Text("Cancel")
-          }
-          Spacer(modifier = Modifier.width(8.dp))
-          Button(
-            onClick = { onConfirm(action) },
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-          ) {
-            Text("Confirm")
-          }
-        }
-      }
-    }
-  }
 }
 
 private fun formatId(id: String): String {

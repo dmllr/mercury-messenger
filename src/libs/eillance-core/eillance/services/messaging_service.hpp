@@ -534,7 +534,10 @@ class MessagingService {
     if (!local_attachments.empty()) {
       std::error_code err;
       std::filesystem::create_directories(attachments_dir, err);
-      if (err) LGE << "Failed to create attachments directory: " << attachments_dir.string() << " Error: " << err.message();
+      if (err) {
+        LGE << "Failed to create attachments directory: " << attachments_dir.string()
+                     << " Error: " << err.message();
+      }
 
       for (auto& att : local_attachments) {
         // Resolve filename: Use provided name or ID+Ext if missing
@@ -544,7 +547,7 @@ class MessagingService {
         }
 
         // Handle collision
-        std::filesystem::path final_path = ResolvePathConflict(attachments_dir, filename);
+        std::filesystem::path const final_path = ResolvePathConflict(attachments_dir, filename);
 
         att.file_path = final_path.string();
         att.status = messaging::AttachmentStatus::pending;
