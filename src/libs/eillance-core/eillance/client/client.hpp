@@ -19,6 +19,7 @@
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/transport/transport.hpp"
 #include "eillance/transport/transport_delegate.hpp"
+#include "eillance/view_model/view_model_defines.hpp"
 #include "eillance/utils/dispatch_queue.hpp"
 #include "eillance/utils/invariant.hpp"
 
@@ -330,7 +331,7 @@ class Client final : public transport::TransportDelegate {
   }
 
   void Connect(ContactID const& peer_id) const {
-    auto peer = transport_->GetPeer(peer_id);
+    auto const peer = transport_->GetPeer(peer_id);
     if (peer && peer->data_channel_is_open) {
       return;
     }
@@ -376,6 +377,70 @@ class Client final : public transport::TransportDelegate {
   void DebugRevokeAllContactApprovals() const {
     storage_->DebugRevokeAllContactApprovals();
     contact_service_->ReloadCache();
+  }
+
+  // --- Debug Facade Methods ---
+
+  [[nodiscard]] auto GetAllPendingActions() const -> std::vector<view_model::DebugPendingAction> {
+    std::vector<view_model::DebugPendingAction> result;
+    auto contacts = contact_service_->GetContacts();
+    for (auto const& contact : contacts) {
+      auto actions = storage_->GetPendingActions(contact.peer_id);
+      for (auto const& action : actions) {
+        result.push_back({action.peer_id, action.id, action.payload});
+      }
+    }
+    return result;
+  }
+
+  [[nodiscard]] auto GetConnectionDebugInfo() const -> std::vector<view_model::DebugConnectionInfo> {
+    std::vector<view_model::DebugConnectionInfo> result;
+    auto now = Time::Now();
+    auto peers = transport_->GetPeers();
+
+    // Also include contacts that are not in Transport (disconnected)
+    auto contacts = contact_service_->GetContacts();
+    for (auto const& contact : contacts) {
+      if (!peers.contains(contact.peer_id)) {
+        result.push_back({contact.peer_id, transport::PeerConnectionState::disconnected, -1, false, false});
+      }
+    }
+
+    for (auto const& [id, peer] : peers) {
+      // Update existing entry if found (priority to active peer state)
+      std::erase_if(result, [&](auto const& item) { return item.peer_id == id; });
+
+      int64_t const ago =
+          std::chrono::duration_cast<std::chrono::seconds>(std::chrono::microseconds(now - peer->last_activity_time.load()))
+              .count();
+
+      view_model::DebugConnectionInfo const info{
+          id,
+          transport_->GetPeerConnectionState(id),
+          ago,
+          peer->data_channel_is_open.load(),
+          peer->has_media_peer_connection.load()};
+
+      result.push_back(info);
+    }
+    return result;
+  }
+
+  [[nodiscard]] auto GetAllUnreadInfo() const -> std::vector<view_model::DebugUnreadInfo> {
+    std::vector<view_model::DebugUnreadInfo> result;
+    auto contacts = contact_service_->GetContacts();
+    std::vector<ContactID> ids;
+    for (auto const& c : contacts) {
+      ids.push_back(c.peer_id);
+    }
+
+    auto summaries = messaging_service_->GetChatSummaries(ids);
+    for (auto const& s : summaries) {
+      if (s.unread_count > 0) {
+        result.push_back({s.peer_id, s.unread_count, s.last_message.timestamp});
+      }
+    }
+    return result;
   }
 
   using StatusCallbackFunction = transport::Transport::StatusCallbackFunction;

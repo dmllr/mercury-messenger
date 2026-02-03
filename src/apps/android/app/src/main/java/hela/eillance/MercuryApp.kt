@@ -42,6 +42,10 @@ import hela.eillance.screens.RecoveryPhraseScreen
 import hela.eillance.screens.RejectedContactsScreen
 import hela.eillance.screens.SettingsScreen
 import hela.eillance.screens.WebViewScreen
+import hela.eillance.screens.debug.ConnectionDebugScreen
+import hela.eillance.screens.debug.DebugMenuScreen
+import hela.eillance.screens.debug.PendingActionsScreen
+import hela.eillance.screens.debug.UnreadMessagesScreen
 import hela.eillance.viewmodels.CallViewModel
 import hela.eillance.viewmodels.ContactsViewModel
 import hela.eillance.viewmodels.ConversationViewModel
@@ -232,8 +236,37 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
           onNavigateToBetaNotice = { navController.navigate(Route.WebView.createRoute("https://mercury.eillance.com/beta/embed/")) },
           onNavigateToBackupAndRestore = { navController.navigate(Screen.BackupRestore.route) },
           onNavigateToHelp = { navController.navigate(Screen.Help.route) },
-          onNavigateToPermissionIssues = { navController.navigate(Screen.PermissionIssues.route) }
+          onNavigateToPermissionIssues = { navController.navigate(Screen.PermissionIssues.route) },
+          onNavigateToDebugMenu = { navController.navigate(Screen.DebugMenu.route) }
         )
+      }
+
+      composable(Screen.DebugMenu.route) {
+        DebugMenuScreen(
+          onNavigateBack = { navController.popBackStack() },
+          onNavigateToPendingActions = { navController.navigate(Screen.DebugPendingActions.route) },
+          onNavigateToConnections = { navController.navigate(Screen.DebugConnections.route) },
+          onNavigateToUnread = { navController.navigate(Screen.DebugUnread.route) },
+          onDebugAction = { action ->
+            when(action) {
+              hela.eillance.screens.debug.DebugAction.ERASE_HISTORY -> debugVM.eraseAllHistory()
+              hela.eillance.screens.debug.DebugAction.ERASE_CONTACTS -> debugVM.eraseAllContacts()
+              hela.eillance.screens.debug.DebugAction.REVOKE_APPROVALS -> debugVM.revokeAllApprovals()
+            }
+          }
+        )
+      }
+
+      composable(Screen.DebugPendingActions.route) {
+        PendingActionsScreen(debugVM = debugVM, onBack = { navController.popBackStack() })
+      }
+
+      composable(Screen.DebugConnections.route) {
+        ConnectionDebugScreen(debugVM = debugVM, onBack = { navController.popBackStack() })
+      }
+
+      composable(Screen.DebugUnread.route) {
+        UnreadMessagesScreen(debugVM = debugVM, onBack = { navController.popBackStack() })
       }
 
       composable(Screen.PermissionIssues.route) {
