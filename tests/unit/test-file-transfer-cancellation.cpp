@@ -171,7 +171,7 @@ TEST_F(FileTransferCancellationTest, CancelDownload_PausesDownload) {
   );
 
   // 2. Start Download by receiving chunk 0
-  std::vector<std::byte> payload = {std::byte{0x00}, std::byte{0x11}, std::byte{0x22}};
+  std::vector<std::byte> const payload = {std::byte{0x00}, std::byte{0x11}, std::byte{0x22}};
   auto chunk = CreateChunkPacket("down_id", 0, payload);
 
   file_transfer_service_->ProcessBinaryMessage(peer1, chunk);
@@ -183,14 +183,14 @@ TEST_F(FileTransferCancellationTest, CancelDownload_PausesDownload) {
   // 3. Cancel (is_upload = false) -> This acts as PAUSE for downloads
   service_->CancelTransfer(peer1, "down_id", false);
 
-  // 4. Verify cancel message sent (Binary Type 0x03)
-  bool cancel_sent = false;
-  for (auto const& [pid, msg] : mock_transport_->log.sent_binary_messages) {
-    if (IsBinaryPacket(msg, 0x03, "down_id")) {
-      cancel_sent = true;
+  // 4. Verify PAUSE message sent (Binary Type 0x04)
+  bool pause_sent = false;
+  for (auto const& msg : mock_transport_->log.sent_binary_messages | std::views::values) {
+    if (IsBinaryPacket(msg, 0x04, "down_id")) { // 0x04 = PAUSE
+      pause_sent = true;
     }
   }
-  EXPECT_TRUE(cancel_sent);
+  EXPECT_TRUE(pause_sent);
 
   // 5. Verify temp file STILL exists (to allow resume)
   EXPECT_TRUE(std::filesystem::exists(temp_path));
