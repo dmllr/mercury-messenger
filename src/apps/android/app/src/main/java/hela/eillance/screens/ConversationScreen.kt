@@ -28,19 +28,25 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -54,6 +60,7 @@ import androidx.compose.material.icons.filled.AudioFile
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.DoneAll
@@ -74,6 +81,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -87,6 +95,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -102,8 +111,14 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.FileProvider
 import androidx.core.os.ConfigurationCompat
+import coil.compose.AsyncImage
+import coil.decode.VideoFrameDecoder
+import coil.request.ImageRequest
+import coil.request.videoFrameMillis
 import hela.eillance.BannerType
 import hela.eillance.MainViewModel
 import hela.eillance.camera.R
@@ -425,6 +440,7 @@ fun ConversationScreen(
   }
 }
 
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun MessageInputArea(
   draftAttachments: List<DraftAttachment>,
@@ -435,6 +451,7 @@ fun MessageInputArea(
 ) {
   var text by remember { mutableStateOf(TextFieldValue("")) }
   var isFocused by remember { mutableStateOf(false) }
+  var selectedDraftIndex by remember { mutableStateOf<Int?>(null) }
   val context = LocalContext.current
 
   // Media Pickers
@@ -529,7 +546,7 @@ fun MessageInputArea(
           DraftAttachmentItem(
             draft = draft,
             onRemove = { onRemoveDraft(index) },
-            onNoteChange = { note -> onUpdateNote(index, note) }
+            onClick = { selectedDraftIndex = index }
           )
         }
       }
@@ -586,22 +603,144 @@ fun MessageInputArea(
       }
     }
   }
+
+  // Full-Screen Draft Editor / Preview
+  if (selectedDraftIndex != null && draftAttachments.isNotEmpty()) {
+    val safeIndex = selectedDraftIndex!!.coerceIn(0, draftAttachments.lastIndex)
+    DraftAttachmentEditor(
+      drafts = draftAttachments,
+      initialIndex = safeIndex,
+      onDismiss = { selectedDraftIndex = null },
+      onRemove = { index ->
+        onRemoveDraft(index)
+        if (draftAttachments.isEmpty()) {
+          selectedDraftIndex = null
+        }
+      },
+      onNoteChange = onUpdateNote
+    )
+  }
+}
+
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
+@Composable
+fun DraftAttachmentEditor(
+  drafts: List<DraftAttachment>,
+  initialIndex: Int,
+  onDismiss: () -> Unit,
+  onRemove: (Int) -> Unit,
+  onNoteChange: (Int, String) -> Unit
+) {
+  val pagerState = rememberPagerState(initialPage = initialIndex, pageCount = { drafts.size })
+  val context = LocalContext.current
+
+  Dialog(
+    onDismissRequest = onDismiss,
+    properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+  ) {
+    Scaffold(
+      containerColor = Color.Black,
+      contentWindowInsets = WindowInsets.systemBars.union(WindowInsets.ime),
+      topBar = {
+        TopAppBar(
+          title = { Text("${pagerState.currentPage + 1} / ${drafts.size}", color = Color.White) },
+          navigationIcon = {
+            IconButton(onClick = onDismiss) {
+              Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
+            }
+          },
+          actions = {
+            IconButton(onClick = { onRemove(pagerState.currentPage) }) {
+              Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color.White)
+            }
+          },
+          colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Black.copy(alpha = 0.5f))
+        )
+      }
+    ) { padding ->
+      Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+        HorizontalPager(
+          state = pagerState,
+          modifier = Modifier.fillMaxSize()
+        ) { page ->
+          val draft = drafts[page]
+          Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            val isVideo = draft.mimeType.startsWith("video/")
+            val isImage = draft.mimeType.startsWith("image/")
+
+            if (isImage || isVideo) {
+              val model = if (isVideo) {
+                ImageRequest.Builder(context)
+                  .data(draft.uri)
+                  .decoderFactory { result, options, _ -> VideoFrameDecoder(result.source, options) }
+                  .videoFrameMillis(1000)
+                  .build()
+              } else draft.uri
+
+              AsyncImage(
+                model = model,
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize()
+              )
+            } else {
+              Icon(
+                imageVector = getDraftIcon(draft.mimeType),
+                contentDescription = null,
+                tint = Color.Gray,
+                modifier = Modifier.size(120.dp)
+              )
+            }
+          }
+        }
+
+        // Note Editor Overlay with Gradient
+        Box(
+          modifier = Modifier
+            .align(Alignment.BottomCenter)
+            .fillMaxWidth()
+            .background(
+              Brush.verticalGradient(
+                colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.9f))
+              )
+            )
+            .padding(16.dp)
+            .padding(bottom = 16.dp) // Extra padding for gesture bar area
+        ) {
+          TextField(
+            value = drafts[pagerState.currentPage].note,
+            onValueChange = { onNoteChange(pagerState.currentPage, it) },
+            placeholder = { Text(stringResource(R.string.attachment_note_placeholder), color = Color.LightGray) },
+            colors = TextFieldDefaults.colors(
+              focusedContainerColor = Color.Transparent,
+              unfocusedContainerColor = Color.Transparent,
+              focusedTextColor = Color.White,
+              unfocusedTextColor = Color.White,
+              cursorColor = MaterialTheme.colorScheme.primary,
+              focusedIndicatorColor = Color.White.copy(alpha = 0.5f),
+              unfocusedIndicatorColor = Color.White.copy(alpha = 0.3f)
+            ),
+            modifier = Modifier.fillMaxWidth(),
+            maxLines = 4
+          )
+        }
+      }
+    }
+  }
 }
 
 @Composable
 fun DraftAttachmentItem(
   draft: DraftAttachment,
   onRemove: () -> Unit,
-  onNoteChange: (String) -> Unit
+  onClick: () -> Unit
 ) {
-  var showNoteDialog by remember { mutableStateOf(false) }
-
   Box(
     modifier = Modifier
       .width(100.dp)
       .clip(RoundedCornerShape(8.dp))
       .background(MaterialTheme.colorScheme.surface)
-      .clickable { showNoteDialog = true }
+      .clickable(onClick = onClick)
   ) {
     Column {
       Box(modifier = Modifier.height(80.dp).fillMaxWidth()) {
@@ -670,49 +809,6 @@ fun DraftAttachmentItem(
       }
     }
   }
-
-  if (showNoteDialog) {
-    NoteEditDialog(
-      initialNote = draft.note,
-      onConfirm = {
-        onNoteChange(it)
-        showNoteDialog = false
-      },
-      onDismiss = { showNoteDialog = false }
-    )
-  }
-}
-
-@Composable
-fun NoteEditDialog(initialNote: String, onConfirm: (String) -> Unit, onDismiss: () -> Unit) {
-  var note by remember { mutableStateOf(initialNote) }
-
-  androidx.compose.material3.AlertDialog(
-    onDismissRequest = onDismiss,
-    title = { Text(stringResource(R.string.note_dialog_title)) },
-    text = {
-      Column {
-        TextField(
-          value = note,
-          onValueChange = { if (it.length <= 120) note = it },
-          placeholder = { Text(stringResource(R.string.note_dialog_hint)) },
-          modifier = Modifier.fillMaxWidth(),
-          maxLines = 3
-        )
-        Text(
-          text = "${note.length} / 120",
-          style = MaterialTheme.typography.labelSmall,
-          modifier = Modifier.align(Alignment.End).padding(top = 4.dp)
-        )
-      }
-    },
-    confirmButton = {
-      Button(onClick = { onConfirm(note) }) { Text(stringResource(R.string.save)) }
-    },
-    dismissButton = {
-      TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
-    }
-  )
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -935,18 +1031,6 @@ fun MessageBubble(
           onResume = onResumeTransfer,
           onDiscard = onDiscardTransfer
         )
-        // Show Notes for Attachments
-        entry.attachments.forEach { att ->
-          if (att.note.isNotEmpty()) {
-            Text(
-              text = att.note,
-              style = MaterialTheme.typography.bodySmall,
-              fontStyle = FontStyle.Italic,
-              color = colors.second.copy(alpha = 0.8f),
-              modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-            )
-          }
-        }
 
         if (!entry.content.isNullOrBlank()) {
           Spacer(modifier = Modifier.height(8.dp))
