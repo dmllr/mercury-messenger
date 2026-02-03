@@ -446,7 +446,6 @@ private fun ProfileMenu(
   }
 }
 
-
 @Composable
 private fun ProfileEditDialog(
   myProfile: MyProfileInfo,
