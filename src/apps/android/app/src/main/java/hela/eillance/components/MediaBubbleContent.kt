@@ -341,37 +341,12 @@ private fun MediaItem(
 ) {
   val isSenderCanceled = attachment.status == AttachmentStatus.Canceled && isFromMe
   val isPeerCanceledUpload = attachment.status == AttachmentStatus.PeerCanceled && !isFromMe
-  val showTextOnly = isSenderCanceled || isPeerCanceledUpload
-
-  if (showTextOnly) {
-    Box(
-      modifier = modifier
-        .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-        .padding(16.dp),
-      contentAlignment = Alignment.Center
-    ) {
-      Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(
-          imageVector = Icons.Default.Block,
-          contentDescription = "Canceled",
-          tint = MaterialTheme.colorScheme.onSurfaceVariant,
-          modifier = Modifier.size(20.dp)
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-          text = if (isSenderCanceled) "Upload canceled" else "Download canceled",
-          style = MaterialTheme.typography.bodyMedium,
-          color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-      }
-    }
-    return
-  }
+  val isCanceled = isSenderCanceled || isPeerCanceledUpload
 
   // Thumbnail Container
   Box(
     modifier = modifier
-      .background(Color.Black.copy(alpha = 0.1f))
+      .background(MaterialTheme.colorScheme.surfaceContainerHigh)
       .clickable(
         enabled = attachment.status == AttachmentStatus.Done,
         onClick = onClick
@@ -438,9 +413,25 @@ private fun MediaItem(
       Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.4f)))
     }
 
-    // Interactive Layer
+    // Interactive/Status Layer
     Box(contentAlignment = Alignment.Center) {
-      if (attachment.status == AttachmentStatus.Paused) {
+      if (isCanceled) {
+        // Overlay for canceled state - kept inside the grid
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+          Icon(
+            imageVector = Icons.Default.Block,
+            contentDescription = "Canceled",
+            tint = Color.White,
+            modifier = Modifier.size(32.dp)
+          )
+          Spacer(modifier = Modifier.height(4.dp))
+          Text(
+            text = if (isSenderCanceled) "Upload Canceled" else "Download Canceled",
+            style = MaterialTheme.typography.labelSmall,
+            color = Color.White
+          )
+        }
+      } else if (attachment.status == AttachmentStatus.Paused) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
           if (!isFromMe) {
             Icon(

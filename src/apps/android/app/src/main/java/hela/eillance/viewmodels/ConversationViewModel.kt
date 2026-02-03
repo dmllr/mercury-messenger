@@ -98,41 +98,46 @@ class ConversationViewModel(
 
   // --- Draft Management ---
 
-  fun addDraftAttachment(uri: Uri, isCamera: Boolean = false) {
+  fun addDraftAttachments(uris: List<Uri>) {
     viewModelScope.launch(Dispatchers.IO) {
       val context = getApplication<Application>()
       val cr = context.contentResolver
-      val mimeTypeRaw = cr.getType(uri) ?: "application/octet-stream"
+      val currentList = _draftAttachments.value.toMutableList()
 
-      val type = when {
-        mimeTypeRaw.startsWith("video/") -> AttachmentType.Video
-        mimeTypeRaw.startsWith("image/") -> AttachmentType.Image
-        else -> AttachmentType.File
-      }
-
-      val name = queryFileName(cr, uri) ?: "file_${System.currentTimeMillis()}"
-
-      val preview = if (type == AttachmentType.Image) {
+      for (uri in uris) {
         try {
-          val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-          val streamCheck = cr.openInputStream(uri)
-          BitmapFactory.decodeStream(streamCheck, null, options)
-          streamCheck?.close()
+          val mimeTypeRaw = cr.getType(uri) ?: "application/octet-stream"
 
-          options.inSampleSize = calculateInSampleSize(options, 200, 200)
-          options.inJustDecodeBounds = false
-          val streamDecode = cr.openInputStream(uri)
-          val bmp = BitmapFactory.decodeStream(streamDecode, null, options)
-          streamDecode?.close()
-          bmp
-        } catch (e: Exception) { null }
-      } else null
+          val type = when {
+            mimeTypeRaw.startsWith("video/") -> AttachmentType.Video
+            mimeTypeRaw.startsWith("image/") -> AttachmentType.Image
+            else -> AttachmentType.File
+          }
 
-      val draft = DraftAttachment(uri, type, mimeTypeRaw, name, preview)
+          val name = queryFileName(cr, uri) ?: "file_${System.currentTimeMillis()}"
 
-      val current = _draftAttachments.value.toMutableList()
-      current.add(draft)
-      _draftAttachments.value = current
+          val preview = if (type == AttachmentType.Image) {
+            try {
+              val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+              val streamCheck = cr.openInputStream(uri)
+              BitmapFactory.decodeStream(streamCheck, null, options)
+              streamCheck?.close()
+
+              options.inSampleSize = calculateInSampleSize(options, 200, 200)
+              options.inJustDecodeBounds = false
+              val streamDecode = cr.openInputStream(uri)
+              val bmp = BitmapFactory.decodeStream(streamDecode, null, options)
+              streamDecode?.close()
+              bmp
+            } catch (e: Exception) { null }
+          } else null
+
+          currentList.add(DraftAttachment(uri, type, mimeTypeRaw, name, preview))
+        } catch (e: Exception) {
+          Log.e("ConversationVM", "Failed to add draft $uri", e)
+        }
+      }
+      _draftAttachments.value = currentList
     }
   }
 
@@ -251,12 +256,6 @@ class ConversationViewModel(
       if (nativePtr != 0L) {
         nativeSendMessageWithAttachments(nativePtr, text, attachmentRequests.toTypedArray())
       }
-    }
-  }
-
-  fun sendMedia(uris: List<Uri>) {
-    for (uri in uris) {
-      addDraftAttachment(uri)
     }
   }
 
