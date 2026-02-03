@@ -157,7 +157,7 @@ class AndroidConversationObserver final
       auto const* call_entry = std::get_if<messaging::CallEntry>(&entry_cpp.data);
 
       jstring content = content_str ? env->NewStringUTF(content_str->c_str()) : nullptr;
-      jint duration = call_entry ? static_cast<jint>(call_entry->duration_seconds) : 0;
+      jint const duration = call_entry ? static_cast<jint>(call_entry->duration_seconds) : 0;
 
       // Handle Attachments
       jobject j_attachments = list_holder.NewObject(env);
@@ -167,8 +167,8 @@ class AndroidConversationObserver final
           jstring j_path = env->NewStringUTF(att.file_path.c_str());
           jstring j_mime = env->NewStringUTF(att.mime_type.c_str());
           jstring j_thumb = att.thumbnail_base64.empty() ? nullptr : env->NewStringUTF(att.thumbnail_base64.c_str());
-          // NOTE must be non-null as per Kotlin definition. NewStringUTF("") creates valid empty string object.
           jstring j_note = env->NewStringUTF(att.note.c_str());
+          jstring j_name = env->NewStringUTF(att.file_name.c_str());
 
           jobject j_att = attachment_holder.NewObject(
               env,
@@ -180,7 +180,8 @@ class AndroidConversationObserver final
               j_thumb,
               static_cast<jboolean>(att.is_downloaded),
               static_cast<jint>(att.status),
-              j_note
+              j_note,
+              j_name
           );
 
           env->CallBooleanMethod(j_attachments, list_add_method, j_att);

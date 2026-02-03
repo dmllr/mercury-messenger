@@ -46,6 +46,7 @@ struct Attachment {
   bool is_downloaded = false;
   AttachmentStatus status = AttachmentStatus::pending;
   std::string note;
+  std::string file_name; // Original filename (e.g., "report.pdf")
 };
 
 enum class MessageDirection : std::uint8_t {

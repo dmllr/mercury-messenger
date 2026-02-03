@@ -1,6 +1,7 @@
 package hela.eillance.components
 
 import android.graphics.BitmapFactory
+import android.text.format.Formatter
 import android.util.Base64
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -17,16 +18,22 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
+import androidx.compose.material.icons.filled.AudioFile
 import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.BrokenImage
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Repeat
-import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.VideoFile
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -39,8 +46,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.decode.VideoFrameDecoder
@@ -67,24 +77,66 @@ fun MediaBubbleContent(
 
   if (visibleAttachments.isEmpty()) return
 
-  val count = visibleAttachments.size
+  // Split into Visuals (Image/Video) and Files (Docs/Binary)
+  val (visuals, files) = visibleAttachments.partition {
+    it.type == AttachmentType.Image || it.type == AttachmentType.Video
+  }
+
+  Column(modifier = Modifier.fillMaxWidth()) {
+    // 1. Render Visuals Grid
+    if (visuals.isNotEmpty()) {
+      VisualAttachmentsGrid(
+        attachments = visuals,
+        transferProgress = transferProgress,
+        isFromMe = isFromMe,
+        onMediaClick = onMediaClick,
+        onCancel = onCancel,
+        onResume = onResume,
+        onDiscard = onDiscard
+      )
+    }
+
+    // 2. Render Files List
+    if (files.isNotEmpty()) {
+      // Add spacer if we have both types
+      if (visuals.isNotEmpty()) {
+        Spacer(modifier = Modifier.height(4.dp))
+      }
+      Column(
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = Modifier.fillMaxWidth()
+      ) {
+        files.forEach { file ->
+          FileAttachmentItem(
+            attachment = file,
+            progress = transferProgress[file.id],
+            isFromMe = isFromMe,
+            onClick = { onMediaClick(file) },
+            onCancel = { onCancel(file.id) },
+            onResume = { onResume(file.id) },
+            onDiscard = { onDiscard(file.id) }
+          )
+        }
+      }
+    }
+  }
+}
+
+@Composable
+private fun VisualAttachmentsGrid(
+  attachments: List<Attachment>,
+  transferProgress: Map<String, Float>,
+  isFromMe: Boolean,
+  onMediaClick: (Attachment) -> Unit,
+  onCancel: (String) -> Unit,
+  onResume: (String) -> Unit,
+  onDiscard: (String) -> Unit
+) {
+  val count = attachments.size
   val roundedShape = RoundedCornerShape(8.dp)
 
   val renderItem: @Composable (Int, Modifier) -> Unit = { index, modifier ->
-    val att = visibleAttachments[index]
-
-    // Check if this specific item should shrink (Text-only mode)
-    val isSenderCanceled = att.status == AttachmentStatus.Canceled && isFromMe
-    val isPeerCanceledUpload = att.status == AttachmentStatus.PeerCanceled && !isFromMe
-    val isTextOnly = isSenderCanceled || isPeerCanceledUpload
-
-    // If text only, we ignore the passed aspect ratio modifier and let it wrap
-    val finalModifier = if (isTextOnly) {
-      Modifier.fillMaxWidth().wrapContentHeight()
-    } else {
-      modifier
-    }
-
+    val att = attachments[index]
     MediaItem(
       attachment = att,
       progress = transferProgress[att.id],
@@ -93,7 +145,7 @@ fun MediaBubbleContent(
       onCancel = { onCancel(att.id) },
       onResume = { onResume(att.id) },
       onDiscard = { onDiscard(att.id) },
-      modifier = finalModifier
+      modifier = modifier
     )
   }
 
@@ -140,7 +192,7 @@ fun MediaBubbleContent(
                   modifier = Modifier
                     .fillMaxSize()
                     .background(Color.Black.copy(alpha = 0.5f))
-                    .clickable { onMediaClick(visibleAttachments[3]) },
+                    .clickable { onMediaClick(attachments[3]) },
                   contentAlignment = Alignment.Center
                 ) {
                   Text(text = "+${count - 4}", style = MaterialTheme.typography.titleLarge, color = Color.White)
@@ -148,6 +200,113 @@ fun MediaBubbleContent(
               }
             }
           }
+        }
+      }
+    }
+  }
+}
+
+@Composable
+private fun FileAttachmentItem(
+  attachment: Attachment,
+  progress: Float?,
+  isFromMe: Boolean,
+  onClick: () -> Unit,
+  onCancel: () -> Unit,
+  onResume: () -> Unit,
+  onDiscard: () -> Unit
+) {
+  val context = LocalContext.current
+  val icon = getFileIcon(attachment.mime)
+  val fileSizeStr = Formatter.formatShortFileSize(context, attachment.size)
+  val isTransferring = attachment.status == AttachmentStatus.Transferring
+  val isPending = attachment.status == AttachmentStatus.Pending
+  val isPaused = attachment.status == AttachmentStatus.Paused
+  val isDone = attachment.status == AttachmentStatus.Done
+  val isCanceled = attachment.status == AttachmentStatus.Canceled || attachment.status == AttachmentStatus.PeerCanceled
+
+  // PRIORITIZE FILENAME
+  val displayName = if (attachment.fileName.isNotEmpty()) {
+    attachment.fileName
+  } else if (attachment.note.isNotEmpty()) {
+    attachment.note
+  } else {
+    getGenericFileName(attachment.mime)
+  }
+
+  Row(
+    modifier = Modifier
+      .fillMaxWidth()
+      .clip(RoundedCornerShape(8.dp))
+      .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+      .clickable(enabled = isDone, onClick = onClick)
+      .padding(8.dp),
+    verticalAlignment = Alignment.CenterVertically
+  ) {
+    // File Icon
+    Box(
+      modifier = Modifier
+        .size(40.dp)
+        .background(MaterialTheme.colorScheme.surface, CircleShape),
+      contentAlignment = Alignment.Center
+    ) {
+      Icon(
+        imageVector = icon,
+        contentDescription = null,
+        tint = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.size(24.dp)
+      )
+    }
+
+    Spacer(modifier = Modifier.width(12.dp))
+
+    // Info
+    Column(modifier = Modifier.weight(1f)) {
+      Text(
+        text = displayName,
+        style = MaterialTheme.typography.bodyMedium,
+        fontWeight = FontWeight.Medium,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        color = MaterialTheme.colorScheme.onSurface
+      )
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+          text = fileSizeStr,
+          style = MaterialTheme.typography.labelSmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        if (isCanceled) {
+          Text(text = " • Canceled", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+        } else if (isPaused) {
+          Text(text = " • Paused", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
+        } else if (isPending) {
+          Text(text = " • Waiting", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+      }
+    }
+
+    // Action Button
+    Box(contentAlignment = Alignment.Center) {
+      if (isTransferring && progress != null) {
+        CircularProgressIndicator(
+          progress = { progress },
+          modifier = Modifier.size(32.dp),
+          strokeWidth = 3.dp,
+          color = MaterialTheme.colorScheme.primary
+        )
+        IconButton(onClick = onCancel, modifier = Modifier.size(24.dp)) {
+          Icon(Icons.Default.Close, contentDescription = "Cancel", modifier = Modifier.size(16.dp))
+        }
+      } else if (isPaused || (attachment.status == AttachmentStatus.Failed)) {
+        IconButton(onClick = onResume) {
+          Icon(Icons.Default.Refresh, contentDescription = "Retry", tint = MaterialTheme.colorScheme.primary)
+        }
+      } else if (isPending) {
+        CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+      } else if (!isDone && !isCanceled) {
+        if (!isFromMe && !attachment.isDownloaded) {
+          Icon(Icons.Default.Download, contentDescription = "Downloading", tint = MaterialTheme.colorScheme.secondary)
         }
       }
     }
@@ -165,7 +324,6 @@ private fun MediaItem(
   onDiscard: () -> Unit,
   modifier: Modifier = Modifier
 ) {
-  // Logic for displaying Text-Only cancellation vs Thumbnail-based cancellation
   val isSenderCanceled = attachment.status == AttachmentStatus.Canceled && isFromMe
   val isPeerCanceledUpload = attachment.status == AttachmentStatus.PeerCanceled && !isFromMe
   val showTextOnly = isSenderCanceled || isPeerCanceledUpload
@@ -186,7 +344,7 @@ private fun MediaItem(
         )
         Spacer(modifier = Modifier.width(8.dp))
         Text(
-          text = if (isSenderCanceled) "You canceled this upload" else "Sender canceled the upload",
+          text = if (isSenderCanceled) "Upload canceled" else "Download canceled",
           style = MaterialTheme.typography.bodyMedium,
           color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -235,7 +393,7 @@ private fun MediaItem(
         )
       }
     } else {
-      // Thumbnail
+      // Thumbnail or Placeholder
       val imageBitmap = remember(attachment.thumbnail) {
         if (!attachment.thumbnail.isNullOrEmpty()) {
           try {
@@ -253,7 +411,15 @@ private fun MediaItem(
           contentScale = ContentScale.Crop
         )
       } else {
-        Box(modifier = Modifier.fillMaxSize().background(Color.Gray))
+        // Missing thumbnail fallback
+        Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
+          Icon(
+            imageVector = if (isVideo) Icons.Default.VideoFile else Icons.Default.BrokenImage,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(32.dp)
+          )
+        }
       }
       // Darken overlay for non-done states
       Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.4f)))
@@ -261,126 +427,55 @@ private fun MediaItem(
 
     // Interactive Layer
     Box(contentAlignment = Alignment.Center) {
-      // 1. Receiver Paused
       if (attachment.status == AttachmentStatus.Paused) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-          Row(
-            horizontalArrangement = Arrangement.spacedBy(24.dp),
-            verticalAlignment = Alignment.CenterVertically
-          ) {
-            // Resume
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-              Icon(
-                imageVector = Icons.Default.Repeat,
-                contentDescription = "Resume",
-                tint = Color.White,
-                modifier = Modifier
-                  .size(36.dp)
-                  .background(Color.Black.copy(alpha = 0.3f), CircleShape)
-                  .clickable { onResume() }
-                  .padding(6.dp)
-              )
-              Text("Resume", style = MaterialTheme.typography.labelSmall, color = Color.White)
-            }
-            // Cancel -> onDiscard -> Canceled
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-              Icon(
-                imageVector = Icons.Default.Close, // Close icon used for "Cancel" action per previous context
-                contentDescription = "Cancel",
-                tint = Color.White,
-                modifier = Modifier
-                  .size(36.dp)
-                  .background(Color.Black.copy(alpha = 0.3f), CircleShape)
-                  .clickable { onDiscard() }
-                  .padding(6.dp)
-              )
-              Text("Cancel", style = MaterialTheme.typography.labelSmall, color = Color.White)
-            }
-          }
-        }
-      }
-      // 2. Receiver Canceled (Terminal state viewed by Receiver)
-      else if (attachment.status == AttachmentStatus.Canceled && !isFromMe) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
           Icon(
-            imageVector = Icons.Default.Block,
-            contentDescription = "Canceled",
+            imageVector = Icons.Default.Repeat,
+            contentDescription = "Resume",
             tint = Color.White,
-            modifier = Modifier.size(32.dp)
+            modifier = Modifier.size(32.dp).clickable { onResume() }
           )
-          Spacer(modifier = Modifier.height(4.dp))
-          Text("You canceled the download", style = MaterialTheme.typography.labelSmall, color = Color.White)
+          Text("Paused", style = MaterialTheme.typography.labelSmall, color = Color.White)
         }
-      }
-      // 3. Peer Canceled (Terminal state viewed by Sender)
-      else if (attachment.status == AttachmentStatus.PeerCanceled && isFromMe) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-          Icon(
-            imageVector = Icons.Default.Block,
-            contentDescription = "Canceled",
-            tint = Color.White,
-            modifier = Modifier.size(32.dp)
-          )
-          Spacer(modifier = Modifier.height(4.dp))
-          Text("Receiver canceled download", style = MaterialTheme.typography.labelSmall, color = Color.White)
-        }
-      }
-      // 4. Active Transfer
-      else if (progress != null && progress >= 0f) {
+      } else if (progress != null && progress >= 0f) {
         Box(contentAlignment = Alignment.Center) {
           CircularProgressIndicator(
-            progress = progress,
+            progress = { progress },
             modifier = Modifier.size(48.dp),
             color = Color.White,
-            strokeWidth = 4.dp,
             trackColor = Color.White.copy(alpha = 0.4f),
           )
-          IconButton(
-            onClick = onCancel, // Sets status to Paused (download) or Canceled (upload)
-            modifier = Modifier
-              .size(28.dp)
-              .background(Color.Black.copy(alpha = 0.4f), CircleShape)
-          ) {
-            Icon(Icons.Default.Close, contentDescription = "Pause", tint = Color.White, modifier = Modifier.size(20.dp))
+          IconButton(onClick = onCancel) {
+            Icon(Icons.Default.Close, contentDescription = "Cancel", tint = Color.White)
           }
         }
-      }
-      // 5. Initial States
-      else {
-        when (attachment.status) {
-          AttachmentStatus.Transferring -> {
-            Box(contentAlignment = Alignment.Center) {
-              CircularProgressIndicator(color = Color.White, modifier = Modifier.size(48.dp), strokeWidth = 4.dp)
-              IconButton(
-                onClick = onCancel,
-                modifier = Modifier.size(28.dp).background(Color.Black.copy(alpha = 0.4f), CircleShape)
-              ) {
-                Icon(Icons.Default.Close, contentDescription = "Cancel", tint = Color.White, modifier = Modifier.size(20.dp))
-              }
-            }
-          }
-          AttachmentStatus.Pending -> {
-            Row(
-              modifier = Modifier
-                .background(Color.Black.copy(alpha = 0.6f), CircleShape)
-                .padding(horizontal = 12.dp, vertical = 8.dp)
-                .clickable(onClick = onCancel),
-              verticalAlignment = Alignment.CenterVertically,
-              horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-              Icon(Icons.Default.Schedule, contentDescription = "Waiting", tint = Color.White, modifier = Modifier.size(20.dp))
-              Icon(Icons.Default.Close, contentDescription = "Cancel", tint = Color.White, modifier = Modifier.size(20.dp))
-            }
-          }
-          AttachmentStatus.Failed -> {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-              Icon(Icons.Default.Refresh, contentDescription = "Retry", tint = Color.Red, modifier = Modifier.size(32.dp).clickable { onResume() })
-              Text("Failed", style = MaterialTheme.typography.labelSmall, color = Color.Red)
-            }
-          }
-          else -> {}
-        }
+      } else if (attachment.status == AttachmentStatus.Pending || attachment.status == AttachmentStatus.Transferring) {
+        CircularProgressIndicator(modifier = Modifier.size(32.dp), color = Color.White)
+      } else if (attachment.status == AttachmentStatus.Failed) {
+        Icon(Icons.Default.Refresh, contentDescription = "Retry", tint = Color.Red, modifier = Modifier.size(32.dp).clickable { onResume() })
       }
     }
+  }
+}
+
+// Helpers for File Icons and Names
+private fun getFileIcon(mimeType: String): ImageVector {
+  return when {
+    mimeType == "application/pdf" -> Icons.Default.PictureAsPdf
+    mimeType.startsWith("audio/") -> Icons.Default.AudioFile
+    mimeType.startsWith("video/") -> Icons.Default.VideoFile
+    mimeType.startsWith("image/") -> Icons.Default.Image
+    mimeType.contains("word") || mimeType.contains("document") || mimeType.contains("text") -> Icons.Default.Description
+    else -> Icons.AutoMirrored.Filled.InsertDriveFile
+  }
+}
+
+private fun getGenericFileName(mimeType: String): String {
+  return when {
+    mimeType == "application/pdf" -> "PDF Document"
+    mimeType.startsWith("audio/") -> "Audio File"
+    mimeType.startsWith("video/") -> "Video"
+    mimeType.startsWith("image/") -> "Image"
+    else -> "File Attachment"
   }
 }

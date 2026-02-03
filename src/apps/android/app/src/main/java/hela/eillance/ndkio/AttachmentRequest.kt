@@ -5,5 +5,6 @@ data class AttachmentRequest(
   val type: Int,
   val thumbnail: String,
   val mimeType: String,
-  val note: String = ""
+  val note: String = "",
+  val fileName: String = ""
 )

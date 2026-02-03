@@ -12,7 +12,6 @@ import android.provider.MediaStore
 import android.util.Base64
 import android.util.Log
 import android.util.Size
-import android.webkit.MimeTypeMap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -28,14 +27,13 @@ import kotlinx.coroutines.launch
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
-import java.util.UUID
 
 data class DraftAttachment(
   val uri: Uri,
   val type: AttachmentType,
   val mimeType: String,
-  val name: String,
-  val bitmap: Bitmap? = null, // For preview
+  val name: String, // Original filename
+  val bitmap: Bitmap? = null,
   var note: String = ""
 )
 
@@ -48,19 +46,14 @@ class ConversationViewModel(
   private val _interactionHistoryPage = MutableStateFlow(HistoryPage())
   val interactionHistoryPage = _interactionHistoryPage.asStateFlow()
 
-  // Map of AttachmentID -> Progress (0.0 to 1.0)
   private val _transferProgress = MutableStateFlow<Map<String, Float>>(emptyMap())
   val transferProgress = _transferProgress.asStateFlow()
 
-  // Draft Attachments for the current message
   private val _draftAttachments = MutableStateFlow<List<DraftAttachment>>(emptyList())
   val draftAttachments = _draftAttachments.asStateFlow()
 
   init {
     nativePtr = nativeCreate(peerId, this)
-    if (nativePtr == 0L) {
-      Log.e("ConversationViewModel", "Failed to create native ConversationViewModel for $peerId")
-    }
   }
 
   override fun onCleared() {
@@ -74,7 +67,6 @@ class ConversationViewModel(
   override fun onHistoryUpdated(page: HistoryPage) {
     _interactionHistoryPage.value = page
 
-    // Clean up transfer progress map for items that are no longer transferring
     val currentProgress = _transferProgress.value.toMutableMap()
     if (currentProgress.isNotEmpty()) {
       val activeAttachmentIds = mutableSetOf<String>()
@@ -88,9 +80,7 @@ class ConversationViewModel(
 
       val toRemove = currentProgress.keys.filter { it !in activeAttachmentIds }
       if (toRemove.isNotEmpty()) {
-        for (id in toRemove) {
-          currentProgress.remove(id)
-        }
+        for (id in toRemove) currentProgress.remove(id)
         _transferProgress.value = currentProgress
       }
     }
@@ -120,12 +110,10 @@ class ConversationViewModel(
         else -> AttachmentType.File
       }
 
-      val name = queryFileName(cr, uri) ?: "attachment"
+      val name = queryFileName(cr, uri) ?: "file_${System.currentTimeMillis()}"
 
-      // Generate preview bitmap for images/videos
       val preview = if (type == AttachmentType.Image) {
         try {
-          // Downsample for preview
           val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
           val streamCheck = cr.openInputStream(uri)
           BitmapFactory.decodeStream(streamCheck, null, options)
@@ -138,20 +126,10 @@ class ConversationViewModel(
           streamDecode?.close()
           bmp
         } catch (e: Exception) { null }
-      } else if (type == AttachmentType.Video) {
-        try {
-          // For video, we might need file path which we don't have yet for ContentUri.
-          // ThumbnailUtils requires path on older APIs. On Q+ loadThumbnail works with Uri.
-          // Simplified: null for now, or implement loadThumbnail logic
-          null
-        } catch(e: Exception) { null }
-      } else {
-        null
-      }
+      } else null
 
       val draft = DraftAttachment(uri, type, mimeTypeRaw, name, preview)
 
-      // Update State
       val current = _draftAttachments.value.toMutableList()
       current.add(draft)
       _draftAttachments.value = current
@@ -170,7 +148,6 @@ class ConversationViewModel(
     val current = _draftAttachments.value.toMutableList()
     if (index in current.indices) {
       val draft = current[index]
-      // Enforce 120 char limit here as well
       val truncated = if (note.length > 120) note.substring(0, 120) else note
       current[index] = draft.copy(note = truncated)
       _draftAttachments.value = current
@@ -193,6 +170,20 @@ class ConversationViewModel(
     return null
   }
 
+  private fun resolveUniqueFile(dir: File, fileName: String): File {
+    var file = File(dir, fileName)
+    if (!file.exists()) return file
+
+    val name = file.nameWithoutExtension
+    val ext = file.extension
+    var counter = 1
+    while (file.exists()) {
+      file = File(dir, "$name($counter).$ext")
+      counter++
+    }
+    return file
+  }
+
   // --- Sending ---
 
   fun sendMessage(messageText: String) {
@@ -209,34 +200,29 @@ class ConversationViewModel(
   }
 
   private fun processAndSend(text: String, drafts: List<DraftAttachment>) {
-    // Clear UI drafts immediately
     _draftAttachments.value = emptyList()
 
     viewModelScope.launch(Dispatchers.IO) {
       val attachmentRequests = mutableListOf<AttachmentRequest>()
       val context = getApplication<Application>()
-      val cr = context.contentResolver
-      val attachmentsDir = File(context.filesDir, "attachments")
-      if (!attachmentsDir.exists()) {
-        attachmentsDir.mkdirs()
-      }
+
+      // Use cacheDir for sending to avoid duplicating storage permanently.
+      // C++ will read from here. Android OS cleans this up eventually.
+      val cacheDir = context.cacheDir
+      if (!cacheDir.exists()) cacheDir.mkdirs()
 
       for (draft in drafts) {
         try {
-          val ext = MimeTypeMap.getSingleton().getExtensionFromMimeType(draft.mimeType)
-            ?: (if (draft.type == AttachmentType.Image) "jpg" else if (draft.type == AttachmentType.Video) "mp4" else "dat")
+          // Resolve unique filename in cache to prevent collisions for this batch
+          val destFile = resolveUniqueFile(cacheDir, draft.name)
 
-          val fileName = "${UUID.randomUUID()}.$ext"
-          val destFile = File(attachmentsDir, fileName)
-
-          // Secure copy
+          // Copy content to cache so C++ ifstream can read it (C++ cannot read content:// Uris directly)
           context.contentResolver.openInputStream(draft.uri)?.use { input ->
             FileOutputStream(destFile).use { output ->
               input.copyTo(output)
             }
           } ?: throw Exception("Failed to open input stream for ${draft.uri}")
 
-          // Generate Thumbnail for Protocol
           val thumbnailBase64 = try {
             val bitmap = generateThumbnail(context.contentResolver, draft.uri, destFile, draft.type)
             if (bitmap != null) {
@@ -244,20 +230,16 @@ class ConversationViewModel(
               bitmap.compress(Bitmap.CompressFormat.JPEG, 60, outputStream)
               val bytes = outputStream.toByteArray()
               Base64.encodeToString(bytes, Base64.NO_WRAP)
-            } else {
-              ""
-            }
-          } catch (e: Exception) {
-            Log.w("ConversationVM", "Failed to generate thumbnail", e)
-            ""
-          }
+            } else ""
+          } catch (e: Exception) { "" }
 
           val request = AttachmentRequest(
             path = destFile.absolutePath,
             type = draft.type.value,
             thumbnail = thumbnailBase64,
             mimeType = draft.mimeType,
-            note = draft.note
+            note = draft.note,
+            fileName = draft.name // Pass the original filename to be sent in protocol
           )
           attachmentRequests.add(request)
 
@@ -267,42 +249,27 @@ class ConversationViewModel(
       }
 
       if (nativePtr != 0L) {
-        // Even if attachment processing fails for some, send what we have.
-        // If text is present, it will send regardless.
         nativeSendMessageWithAttachments(nativePtr, text, attachmentRequests.toTypedArray())
       }
     }
   }
 
   fun sendMedia(uris: List<Uri>) {
-    // Legacy direct send - map to drafts and send immediately?
-    // Or keep as direct for compatibility with existing tests?
-    // Let's reimplement using the new logic for consistency.
     for (uri in uris) {
       addDraftAttachment(uri)
     }
-    // We don't trigger send automatically here anymore,
-    // user should see them in the "draft" area.
-    // However, if the intent was "Direct Share", maybe we should.
-    // For now, let's just add to drafts so user can add a note.
   }
 
   fun cancelTransfer(attachmentId: String, isUpload: Boolean) {
-    if (nativePtr != 0L) {
-      nativeCancelTransfer(nativePtr, attachmentId, isUpload)
-    }
+    if (nativePtr != 0L) nativeCancelTransfer(nativePtr, attachmentId, isUpload)
   }
 
   fun resumeTransfer(attachmentId: String, isUpload: Boolean) {
-    if (nativePtr != 0L) {
-      nativeResumeTransfer(nativePtr, attachmentId, isUpload)
-    }
+    if (nativePtr != 0L) nativeResumeTransfer(nativePtr, attachmentId, isUpload)
   }
 
   fun discardAttachment(attachmentId: String) {
-    if (nativePtr != 0L) {
-      nativeDiscardAttachment(nativePtr, attachmentId)
-    }
+    if (nativePtr != 0L) nativeDiscardAttachment(nativePtr, attachmentId)
   }
 
   private fun generateThumbnail(resolver: ContentResolver, uri: Uri, file: File, type: AttachmentType): Bitmap? {
@@ -323,10 +290,7 @@ class ConversationViewModel(
           null
         }
       }
-    } catch (e: Exception) {
-      Log.e("ConversationVM", "Thumbnail generation failed", e)
-      null
-    }
+    } catch (e: Exception) { null }
   }
 
   private fun calculateInSampleSize(options: BitmapFactory.Options, reqWidth: Int, reqHeight: Int): Int {
@@ -342,21 +306,10 @@ class ConversationViewModel(
     return inSampleSize
   }
 
-  fun loadOlderMessages() {
-    if (nativePtr != 0L) nativeLoadOlder(nativePtr)
-  }
+  fun loadOlderMessages() { if (nativePtr != 0L) nativeLoadOlder(nativePtr) }
+  fun loadFullMessage(messageId: Long) { if (nativePtr != 0L) nativeLoadFull(nativePtr, messageId) }
+  fun markMessagesAsRead(messageIds: List<Long>) { if (nativePtr != 0L && messageIds.isNotEmpty()) nativeMarkRead(nativePtr, messageIds.toLongArray()) }
 
-  fun loadFullMessage(messageId: Long) {
-    if (nativePtr != 0L) nativeLoadFull(nativePtr, messageId)
-  }
-
-  fun markMessagesAsRead(messageIds: List<Long>) {
-    if (nativePtr != 0L && messageIds.isNotEmpty()) {
-      nativeMarkRead(nativePtr, messageIds.toLongArray())
-    }
-  }
-
-  // --- JNI Definitions ---
   private external fun nativeCreate(peerId: String, observer: NativeConversationObserver): Long
   private external fun nativeDestroy(ptr: Long)
   private external fun nativeSendMessage(ptr: Long, message: String)
