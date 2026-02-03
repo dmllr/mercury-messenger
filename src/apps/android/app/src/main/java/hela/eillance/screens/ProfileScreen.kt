@@ -446,8 +446,6 @@ private fun ProfileMenu(
   }
 }
 
-// ... (Rest of the file remains unchanged: ProfileEditDialog, ImageEditorDialog, DebugConfirmDialog, formatId, generateQrCodeBitmap, QrCodeDialog)
-
 @Composable
 private fun ProfileEditDialog(
   myProfile: MyProfileInfo,
