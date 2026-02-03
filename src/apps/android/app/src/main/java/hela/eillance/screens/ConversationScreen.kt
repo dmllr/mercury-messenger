@@ -104,6 +104,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -265,15 +266,15 @@ fun ConversationScreen(
         },
         navigationIcon = {
           IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(id = R.string.action_back))
           }
         },
         actions = {
           IconButton(onClick = { callVM.startVoiceCall(peerId) }) {
-            Icon(Icons.Default.Call, contentDescription = "Voice Call")
+            Icon(Icons.Default.Call, contentDescription = stringResource(id = R.string.action_voice_call))
           }
           IconButton(onClick = { callVM.startVideoCall(peerId) }) {
-            Icon(Icons.Default.Videocam, contentDescription = "Video Call")
+            Icon(Icons.Default.Videocam, contentDescription = stringResource(id = R.string.action_video_call))
           }
         }
       )
@@ -312,8 +313,8 @@ fun ConversationScreen(
             when (bannerState) {
               BannerType.Notification -> {
                 StatusSnackbar(
-                  text = "Notifications are disabled",
-                  actionLabel = "Fix it",
+                  text = stringResource(id = R.string.permission_banner_notifications),
+                  actionLabel = stringResource(id = R.string.action_fix_it),
                   onAction = {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                       notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -326,7 +327,7 @@ fun ConversationScreen(
 
               BannerType.Battery -> {
                 StatusSnackbar(
-                  text = "Battery optimization may delay messages",
+                  text = stringResource(id = R.string.permission_banner_battery),
                   actionLabel = "Fix it",
                   onAction = {
                     val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
@@ -338,14 +339,14 @@ fun ConversationScreen(
                       openAppSettings(context)
                     }
                   },
-                  dismissLabel = "I don't care",
+                  dismissLabel = stringResource(id = R.string.action_ignore_permission),
                   onDismiss = { mainViewModel.ignoreBatteryOptimization() }
                 )
               }
 
               BannerType.CallPermissions -> {
                 StatusSnackbar(
-                  text = "Camera/Mic needed for calls",
+                  text = stringResource(id = R.string.permission_banner_calls),
                   actionLabel = "Fix it",
                   onAction = {
                     callLauncher.launch(
@@ -357,7 +358,7 @@ fun ConversationScreen(
                       )
                     )
                   },
-                  dismissLabel = "I don't care",
+                  dismissLabel = stringResource(id = R.string.action_ignore_permission),
                   onDismiss = { mainViewModel.ignoreCallPermissions() }
                 )
               }
@@ -404,9 +405,9 @@ fun ConversationScreen(
             // Files: Open via Intent
             val file = File(target.path)
             if (target.isDownloaded && file.exists()) {
-              openFile(context, target.path, target.mime)
+              openFile(context, file, target.mime)
             } else {
-              Toast.makeText(context, "File not downloaded", Toast.LENGTH_SHORT).show()
+              Toast.makeText(context, R.string.toast_file_not_downloaded, Toast.LENGTH_SHORT).show()
             }
           }
         }
@@ -672,15 +673,15 @@ fun DraftAttachmentEditor(
       contentWindowInsets = WindowInsets.systemBars.union(WindowInsets.ime),
       topBar = {
         TopAppBar(
-          title = { Text("${pagerState.currentPage + 1} / ${drafts.size}", color = Color.White) },
+          title = { Text(stringResource(id = R.string.attachment_editor_pager_indicator, pagerState.currentPage + 1, drafts.size), color = Color.White) },
           navigationIcon = {
             IconButton(onClick = onDismiss) {
-              Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
+              Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(id = R.string.action_back), tint = Color.White)
             }
           },
           actions = {
             IconButton(onClick = { onRemove(pagerState.currentPage) }) {
-              Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color.White)
+              Icon(Icons.Default.Delete, contentDescription = stringResource(id = R.string.action_delete), tint = Color.White)
             }
           },
           colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Black.copy(alpha = 0.5f))
@@ -824,7 +825,7 @@ fun DraftAttachmentItem(
         Text(
           text = draft.name,
           style = MaterialTheme.typography.labelSmall,
-          fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+          fontWeight = FontWeight.Bold,
           maxLines = 1,
           overflow = TextOverflow.Ellipsis
         )
@@ -898,12 +899,9 @@ fun ConnectionStatusBar(contact: Contact) {
         }
       } else {
         Column(verticalArrangement = Arrangement.Center) {
-          Text("Connection Details", style = MaterialTheme.typography.titleSmall)
+          Text(stringResource(id = R.string.debug_connections_details_title), style = MaterialTheme.typography.titleSmall)
           Spacer(Modifier.height(4.dp))
-          Text(
-            "Status: ${connectionState.getResourceString(context)}",
-            style = MaterialTheme.typography.bodyMedium
-          )
+          Text(stringResource(id = R.string.debug_connections_status, connectionState.getResourceString(context)), style = MaterialTheme.typography.bodyMedium)
         }
       }
     }
@@ -986,7 +984,7 @@ fun ChatHistory(
             .fillMaxWidth()
             .padding(horizontal = 8.dp)
         ) {
-          Text("Load Older Messages")
+          Text(stringResource(id = R.string.action_load_older_messages))
         }
       }
     }
@@ -1092,7 +1090,7 @@ fun MessageBubble(
             onClick = { onShowMore(entry.id) },
             contentPadding = PaddingValues(top = 8.dp, bottom = 0.dp)
           ) {
-            Text("Show more")
+            Text(stringResource(id = R.string.action_show_more))
           }
         }
       }
@@ -1115,7 +1113,7 @@ fun MessageBubble(
                 MessageStatus.Sent -> Icons.Filled.Done
                 else -> Icons.Filled.Schedule
               },
-              contentDescription = "Message status: ${entry.status}",
+              contentDescription = stringResource(id = R.string.message_status_description, entry.status),
               modifier = Modifier
                 .size(16.dp)
                 .padding(start = 4.dp),
@@ -1176,8 +1174,8 @@ fun CallLogBubble(
   val duration = entry.durationSeconds
   val durationText = if (entry.callStatus == CallStatus.Answered && duration > 0) {
     val minutes = TimeUnit.SECONDS.toMinutes(duration.toLong())
-    val seconds = duration - TimeUnit.MINUTES.toSeconds(minutes)
-    ", $minutes min $seconds sec"
+    val seconds = duration - TimeUnit.MINUTES.toSeconds(duration.toLong() - TimeUnit.MINUTES.toSeconds(minutes))
+    stringResource(id = R.string.call_duration_format, minutes, seconds)
   } else ""
 
   Row(
@@ -1272,7 +1270,7 @@ private fun PendingApprovalBar(
       horizontalAlignment = Alignment.CenterHorizontally
     ) {
       Text(
-        text = "Waiting for ${contact.name} to approve your request.",
+        text = stringResource(id = R.string.contact_approval_waiting_for_peer, contact.name),
         style = MaterialTheme.typography.titleMedium,
         textAlign = TextAlign.Center
       )
@@ -1281,8 +1279,8 @@ private fun PendingApprovalBar(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceEvenly
       ) {
-        OutlinedButton(onClick = onCancel) { Text("Cancel Request") }
-        Button(onClick = onResend) { Text("Resend Request") }
+        OutlinedButton(onClick = onCancel) { Text(stringResource(id = R.string.action_cancel_request)) }
+        Button(onClick = onResend) { Text(stringResource(id = R.string.action_resend_request)) }
       }
     }
   }
@@ -1305,7 +1303,7 @@ private fun ApprovalRequestBar(
       horizontalAlignment = Alignment.CenterHorizontally
     ) {
       Text(
-        text = "${contact.name} would like to connect.",
+        text = stringResource(id = R.string.contact_approval_request_from_peer, contact.name),
         style = MaterialTheme.typography.titleMedium,
         textAlign = TextAlign.Center
       )
@@ -1324,13 +1322,14 @@ private fun ApprovalRequestBar(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceEvenly
       ) {
-        OutlinedButton(onClick = onReject) { Text("Reject") }
-        Button(onClick = onApprove) { Text("Approve Contact") }
+        OutlinedButton(onClick = onReject) { Text(stringResource(id = R.string.action_reject)) }
+        Button(onClick = onApprove) { Text(stringResource(id = R.string.action_approve_contact)) }
       }
     }
   }
 }
 
+@Composable
 fun formatTimestamp(
   timestamp: Long,
   zoneId: ZoneId,
@@ -1344,14 +1343,13 @@ fun formatTimestamp(
 
   return when {
     isToday -> messageTime.format(formatters.first)
-    isYesterday -> "Yesterday, " + messageTime.format(formatters.first)
+    isYesterday -> stringResource(R.string.time_yesterday_with_time, messageTime.format(formatters.first))
     messageTime.year == now.year -> messageTime.format(formatters.second)
     else -> messageTime.format(formatters.third)
   }
 }
 
-private fun openFile(context: Context, path: String, mimeType: String) {
-  val file = File(path)
+private fun openFile(context: Context, file: File, mimeType: String) {
   if (!file.exists()) return
   val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
   val intent = Intent(Intent.ACTION_VIEW).apply {
@@ -1361,7 +1359,7 @@ private fun openFile(context: Context, path: String, mimeType: String) {
   try {
     context.startActivity(intent)
   } catch (e: ActivityNotFoundException) {
-    Toast.makeText(context, "No app found to open this file", Toast.LENGTH_SHORT).show()
+    Toast.makeText(context, context.getString(R.string.toast_no_app_for_file), Toast.LENGTH_SHORT).show()
   }
 }
 

@@ -63,7 +63,7 @@ fun PendingActionsScreen(
           supportingContent = {
             Text(action.payload, style = MaterialTheme.typography.bodySmall, maxLines = 10)
           },
-          overlineContent = { Text("ID: ${action.id}") }
+          overlineContent = { Text(stringResource(id = R.string.debug_pending_action_id, action.id)) }
         )
         HorizontalDivider()
       }

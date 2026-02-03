@@ -89,6 +89,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -101,6 +102,7 @@ import com.google.zxing.qrcode.QRCodeWriter
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import hela.eillance.MainViewModel
 import hela.eillance.camera.BuildConfig
+import hela.eillance.camera.R
 import hela.eillance.components.UserAvatar
 import hela.eillance.ndkio.MyProfileInfo
 import hela.eillance.ndkio.ServiceConnectionState
@@ -146,10 +148,10 @@ fun ProfileScreen(
   Scaffold(
     topBar = {
       TopAppBar(
-        title = { Text("Profile") },
+        title = { Text(stringResource(id = R.string.screen_title_profile)) },
         navigationIcon = {
           IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(id = R.string.action_back))
           }
         }
       )
@@ -194,8 +196,8 @@ private fun ProfileHeader(
   val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
 
   val copyIdToClipboard: () -> Unit = {
-    clipboardManager.setPrimaryClip(ClipData.newPlainText("User ID", myProfile.myId))
-    Toast.makeText(context, "ID copied to clipboard", Toast.LENGTH_SHORT).show()
+    clipboardManager.setPrimaryClip(ClipData.newPlainText(context.getString(R.string.profile_my_id_title), myProfile.myId))
+    Toast.makeText(context, context.getString(R.string.profile_id_copied_toast), Toast.LENGTH_SHORT).show()
   }
 
   Column(
@@ -259,11 +261,11 @@ private fun ProfileHeader(
     }
 
     val (statusText, statusColor) = when (connectionState) {
-      ServiceConnectionState.Online -> "Online" to MaterialTheme.extendedColors.success
-      ServiceConnectionState.Establishing -> "Connecting..." to MaterialTheme.extendedColors.warning
-      ServiceConnectionState.NoNetwork -> "No Network" to MaterialTheme.colorScheme.error
-      ServiceConnectionState.Failure -> "Server Error" to MaterialTheme.colorScheme.error
-      else -> "Disconnected" to MaterialTheme.colorScheme.onSurfaceVariant
+      ServiceConnectionState.Online -> stringResource(id = R.string.service_connection_state_online) to MaterialTheme.extendedColors.success
+      ServiceConnectionState.Establishing -> stringResource(id = R.string.service_connection_state_establishing) to MaterialTheme.extendedColors.warning
+      ServiceConnectionState.NoNetwork -> stringResource(id = R.string.status_no_network) to MaterialTheme.colorScheme.error
+      ServiceConnectionState.Failure -> stringResource(id = R.string.status_server_error) to MaterialTheme.colorScheme.error
+      else -> stringResource(id = R.string.service_connection_state_disconnected) to MaterialTheme.colorScheme.onSurfaceVariant
     }
 
     Surface(
@@ -282,7 +284,7 @@ private fun ProfileHeader(
         Column {
           Text(text = statusText, style = MaterialTheme.typography.labelLarge, color = statusColor)
           if (connectionState == ServiceConnectionState.Failure && signalingUrl.isNotEmpty()) {
-            Text(text = "Server: $signalingUrl", style = MaterialTheme.typography.labelSmall, color = statusColor)
+            Text(text = stringResource(id = R.string.status_server_url, signalingUrl), style = MaterialTheme.typography.labelSmall, color = statusColor)
           }
         }
       }
@@ -290,9 +292,9 @@ private fun ProfileHeader(
 
     Row(modifier = Modifier.padding(horizontal = 8.dp)) {
       ListItem(
-        headlineContent = { Text("My Contact ID") },
+        headlineContent = { Text(stringResource(id = R.string.profile_my_id_title)) },
         supportingContent = { Text(formatId(myProfile.myId)) },
-        leadingContent = { Icon(Icons.Default.PermIdentity, contentDescription = "My Contact ID") },
+        leadingContent = { Icon(Icons.Default.PermIdentity, contentDescription = stringResource(id = R.string.profile_my_id_title)) },
         modifier = Modifier
           .clip(MaterialTheme.shapes.medium)
           .clickable(onClick = copyIdToClipboard)
@@ -317,8 +319,8 @@ private fun ProfileMenu(
 ) {
   Column(modifier = Modifier.padding(horizontal = 8.dp)) {
     ListItem(
-      headlineContent = { Text("My Profile") },
-      supportingContent = { Text("Edit your name, photo, and bio") },
+      headlineContent = { Text(stringResource(id = R.string.profile_menu_my_profile_title)) },
+      supportingContent = { Text(stringResource(id = R.string.profile_menu_my_profile_description)) },
       leadingContent = {
         if (!myProfile.myPhoto.isNullOrBlank()) {
           UserAvatar(
@@ -326,7 +328,7 @@ private fun ProfileMenu(
             modifier = Modifier.size(24.dp)
           )
         } else {
-          Icon(Icons.Default.Person, contentDescription = "My Profile")
+          Icon(Icons.Default.Person, contentDescription = stringResource(id = R.string.profile_menu_my_profile_title))
         }
       },
       modifier = Modifier
@@ -336,12 +338,12 @@ private fun ProfileMenu(
 
     if (hasPermissionIssues) {
       ListItem(
-        headlineContent = { Text("Permission Issues") },
-        supportingContent = { Text("Fix issues to enable full functionality") },
+        headlineContent = { Text(stringResource(id = R.string.screen_title_permission_issues)) },
+        supportingContent = { Text(stringResource(id = R.string.profile_menu_permission_issues_description)) },
         leadingContent = {
           Icon(
             Icons.Default.Warning,
-            contentDescription = "Issues",
+            contentDescription = stringResource(id = R.string.profile_menu_permission_issues_icon_description),
             tint = MaterialTheme.colorScheme.error
           )
         },
@@ -357,41 +359,41 @@ private fun ProfileMenu(
     }
 
     ListItem(
-      headlineContent = { Text("Settings") },
-      supportingContent = { Text("Connection and application settings") },
-      leadingContent = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
+      headlineContent = { Text(stringResource(id = R.string.screen_title_settings)) },
+      supportingContent = { Text(stringResource(id = R.string.profile_menu_settings_description)) },
+      leadingContent = { Icon(Icons.Default.Settings, contentDescription = stringResource(id = R.string.screen_title_settings)) },
       modifier = Modifier
         .clip(MaterialTheme.shapes.medium)
         .clickable(onClick = onNavigateToSettings)
     )
     ListItem(
-      headlineContent = { Text("Beta Notice") },
-      supportingContent = { Text("Read about current beta status") },
-      leadingContent = { Icon(Icons.Default.Info, contentDescription = "Beta Notice") },
+      headlineContent = { Text(stringResource(id = R.string.profile_menu_beta_title)) },
+      supportingContent = { Text(stringResource(id = R.string.profile_menu_beta_description)) },
+      leadingContent = { Icon(Icons.Default.Info, contentDescription = stringResource(id = R.string.profile_menu_beta_title)) },
       modifier = Modifier
         .clip(MaterialTheme.shapes.medium)
         .clickable(onClick = onNavigateToBetaNotice)
     )
     ListItem(
-      headlineContent = { Text("Help") },
-      supportingContent = { Text("Learn more about Mercury") },
-      leadingContent = { Icon(Icons.AutoMirrored.Filled.Help, contentDescription = "Help") },
+      headlineContent = { Text(stringResource(id = R.string.screen_title_help)) },
+      supportingContent = { Text(stringResource(id = R.string.profile_menu_help_description)) },
+      leadingContent = { Icon(Icons.AutoMirrored.Filled.Help, contentDescription = stringResource(id = R.string.screen_title_help)) },
       modifier = Modifier
         .clip(MaterialTheme.shapes.medium)
         .clickable(onClick = onNavigateToHelp)
     )
     ListItem(
-      headlineContent = { Text("Send Feedback") },
-      supportingContent = { Text("Report bugs or send comments") },
-      leadingContent = { Icon(Icons.Default.Feedback, contentDescription = "Send Feedback") },
+      headlineContent = { Text(stringResource(id = R.string.profile_menu_feedback_title)) },
+      supportingContent = { Text(stringResource(id = R.string.profile_menu_feedback_description)) },
+      leadingContent = { Icon(Icons.Default.Feedback, contentDescription = stringResource(id = R.string.profile_menu_feedback_title)) },
       modifier = Modifier
         .clip(MaterialTheme.shapes.medium)
         .clickable(onClick = onSendFeedback)
     )
     ListItem(
-      headlineContent = { Text("Backup & Restore") },
-      supportingContent = { Text("Create encrypted backups or restore your data") },
-      leadingContent = { Icon(Icons.Filled.Save, contentDescription = "Backup") },
+      headlineContent = { Text(stringResource(id = R.string.screen_title_backup_restore)) },
+      supportingContent = { Text(stringResource(id = R.string.profile_menu_backup_description)) },
+      leadingContent = { Icon(Icons.Filled.Save, contentDescription = stringResource(id = R.string.screen_title_backup_restore)) },
       modifier = Modifier
         .clip(MaterialTheme.shapes.medium)
         .clickable(onClick = onNavigateToBackupAndRestore)
@@ -402,12 +404,12 @@ private fun ProfileMenu(
       HorizontalDivider(modifier = Modifier.padding(horizontal = 8.dp))
       Spacer(modifier = Modifier.height(8.dp))
       ListItem(
-        headlineContent = { Text("Debug Menu") },
-        supportingContent = { Text("Developer tools and diagnostics") },
+        headlineContent = { Text(stringResource(id = R.string.profile_menu_debug_title)) },
+        supportingContent = { Text(stringResource(id = R.string.profile_menu_debug_description)) },
         leadingContent = {
           Icon(
             Icons.Default.BugReport,
-            contentDescription = "Debug",
+            contentDescription = stringResource(id = R.string.profile_menu_debug_title),
             tint = MaterialTheme.colorScheme.primary
           )
         },
@@ -450,12 +452,12 @@ private fun ProfileEditDialog(
                 showImageEditor = true
               }
             } else {
-              snackbarHostState.showSnackbar("Failed to decode image.")
+              snackbarHostState.showSnackbar(context.getString(R.string.profile_edit_image_decode_fail))
             }
           }
         } catch (e: Exception) {
           e.printStackTrace()
-          snackbarHostState.showSnackbar("Failed to load image.")
+          snackbarHostState.showSnackbar(context.getString(R.string.profile_edit_image_load_fail))
         }
       }
     }
@@ -495,7 +497,7 @@ private fun ProfileEditDialog(
           horizontalAlignment = Alignment.CenterHorizontally
         ) {
           Text(
-            "Edit Profile",
+            stringResource(id = R.string.profile_edit_dialog_title),
             style = MaterialTheme.typography.headlineSmall,
             modifier = Modifier.padding(bottom = 16.dp)
           )
@@ -517,7 +519,7 @@ private fun ProfileEditDialog(
           }
 
           Text(
-            "Tap to change photo",
+            stringResource(id = R.string.profile_edit_change_photo_prompt),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 4.dp)
@@ -528,7 +530,7 @@ private fun ProfileEditDialog(
           OutlinedTextField(
             value = displayName,
             onValueChange = { if (it.length <= 64) displayName = it },
-            label = { Text("Display Name") },
+            label = { Text(stringResource(id = R.string.profile_edit_display_name_label)) },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words)
@@ -539,7 +541,7 @@ private fun ProfileEditDialog(
           OutlinedTextField(
             value = bio,
             onValueChange = { if (it.length <= 300) bio = it },
-            label = { Text("Short Bio") },
+            label = { Text(stringResource(id = R.string.profile_edit_bio_label)) },
             modifier = Modifier
               .fillMaxWidth()
               .height(120.dp),
@@ -554,14 +556,14 @@ private fun ProfileEditDialog(
             horizontalArrangement = Arrangement.End
           ) {
             TextButton(onClick = onDismiss) {
-              Text("Cancel")
+              Text(stringResource(id = R.string.action_cancel))
             }
             Spacer(modifier = Modifier.width(8.dp))
             Button(onClick = {
               profileVM.updateMyProfile(displayName, bio, photoBase64)
               onDismiss()
             }) {
-              Text("Save")
+              Text(stringResource(id = R.string.action_save))
             }
           }
         }
@@ -588,10 +590,10 @@ fun ImageEditorDialog(
     Scaffold(
       topBar = {
         TopAppBar(
-          title = { Text("Edit Photo", color = Color.White) },
+          title = { Text(stringResource(id = R.string.photo_editor_title), color = Color.White) },
           navigationIcon = {
             IconButton(onClick = onDismiss) {
-              Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+              Icon(Icons.Default.Close, contentDescription = stringResource(id = R.string.action_close), tint = Color.White)
             }
           },
           actions = {},
@@ -679,8 +681,8 @@ fun ImageEditorDialog(
               .align(Alignment.TopEnd)
               .padding(16.dp)
           ) {
-            Icon(Icons.Default.Check, contentDescription = "Save", tint = MaterialTheme.colorScheme.onPrimary)
-            Text("Apply")
+            Icon(Icons.Default.Check, contentDescription = stringResource(id = R.string.action_save), tint = MaterialTheme.colorScheme.onPrimary)
+            Text(stringResource(id = R.string.action_apply))
           }
 
           // Rotation controls at the bottom
@@ -696,7 +698,7 @@ fun ImageEditorDialog(
                 .size(56.dp)
                 .background(Color.DarkGray.copy(alpha = 0.8f), CircleShape)
             ) {
-              Icon(Icons.Default.RotateLeft, contentDescription = "Rotate Left", tint = Color.White)
+              Icon(Icons.Default.RotateLeft, contentDescription = stringResource(id = R.string.action_rotate_left), tint = Color.White)
             }
             IconButton(
               onClick = { rotation += 90f },
@@ -704,7 +706,7 @@ fun ImageEditorDialog(
                 .size(56.dp)
                 .background(Color.DarkGray.copy(alpha = 0.8f), CircleShape)
             ) {
-              Icon(Icons.Default.RotateRight, contentDescription = "Rotate Right", tint = Color.White)
+              Icon(Icons.Default.RotateRight, contentDescription = stringResource(id = R.string.action_rotate_right), tint = Color.White)
             }
           }
         }
@@ -793,14 +795,14 @@ private fun QrCodeDialog(profileId: String, contactsVM: ContactsViewModel, onDis
           val qrBitmap = remember(qrContent) { generateQrCodeBitmap(qrContent!!) }
           Image(
             bitmap = qrBitmap,
-            contentDescription = "Profile ID QR Code",
+            contentDescription = stringResource(id = R.string.profile_qr_code_description),
             modifier = Modifier.size(256.dp)
           )
         } else {
           CircularProgressIndicator(modifier = Modifier.size(256.dp))
         }
         Spacer(Modifier.height(16.dp))
-        TextButton(onClick = onDismiss) { Text("Close") }
+        TextButton(onClick = onDismiss) { Text(stringResource(id = R.string.action_close)) }
       }
     }
   }
