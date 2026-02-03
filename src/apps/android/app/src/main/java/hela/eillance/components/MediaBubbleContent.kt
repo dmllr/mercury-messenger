@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -43,6 +44,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -141,6 +143,7 @@ private fun VisualAttachmentsGrid(
     val att = attachments[index]
     MediaItem(
       attachment = att,
+      note = att.note,
       progress = transferProgress[att.id],
       isFromMe = isFromMe,
       onClick = { onMediaClick(att) },
@@ -227,11 +230,8 @@ private fun FileAttachmentItem(
   val isDone = attachment.status == AttachmentStatus.Done
   val isCanceled = attachment.status == AttachmentStatus.Canceled || attachment.status == AttachmentStatus.PeerCanceled
 
-  val displayName = attachment.fileName.ifEmpty {
-    attachment.note.ifEmpty {
-      getGenericFileName(attachment.mime)
-    }
-  }
+  val hasNote = attachment.note.isNotEmpty()
+  val displayName = attachment.fileName.ifEmpty { getGenericFileName(attachment.mime) }
 
   Row(
     modifier = Modifier
@@ -269,6 +269,15 @@ private fun FileAttachmentItem(
         overflow = TextOverflow.Ellipsis,
         color = MaterialTheme.colorScheme.onSurface
       )
+      if (hasNote) {
+        Text(
+          text = attachment.note,
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis
+        )
+      }
       Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
           text = fileSizeStr,
@@ -330,6 +339,7 @@ private fun FileAttachmentItem(
 @Composable
 private fun MediaItem(
   attachment: Attachment,
+  note: String,
   progress: Float?,
   isFromMe: Boolean,
   onClick: () -> Unit,
@@ -482,6 +492,29 @@ private fun MediaItem(
           contentDescription = stringResource(id = R.string.action_play),
           tint = Color.White.copy(alpha = 0.8f),
           modifier = Modifier.size(48.dp).align(Alignment.Center)
+        )
+      }
+    }
+
+    // --- NOTE OVERLAY LAYER ---
+    if (note.isNotEmpty() && attachment.status != AttachmentStatus.Canceled && attachment.status != AttachmentStatus.Failed) {
+      Box(
+        modifier = Modifier
+          .align(Alignment.BottomCenter)
+          .fillMaxWidth()
+          .background(
+            Brush.verticalGradient(
+              colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f))
+            )
+          )
+          .padding(start = 8.dp, end = 8.dp, bottom = 8.dp, top = 24.dp)
+      ) {
+        Text(
+          text = note,
+          style = MaterialTheme.typography.bodySmall,
+          color = Color.White,
+          maxLines = 2,
+          overflow = TextOverflow.Ellipsis
         )
       }
     }

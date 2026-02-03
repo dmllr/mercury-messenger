@@ -12,6 +12,8 @@ import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
@@ -36,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -48,12 +51,12 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
-import hela.eillance.camera.R
 import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
+import hela.eillance.camera.R
 import hela.eillance.ndkio.Attachment
 import hela.eillance.ndkio.AttachmentType
 import hela.eillance.viewmodels.ConversationViewModel
@@ -131,6 +134,29 @@ fun MediaPreviewScreen(
         pageSpacing = 0.dp
       ) { page ->
         MediaPage(attachment = attachments[page], progress = transferProgress[attachments[page].id])
+      }
+
+      // Note Overlay
+      val currentAttachment = attachments[pagerState.currentPage]
+      if (currentAttachment.note.isNotEmpty()) {
+        Box(
+          modifier = Modifier
+            .align(Alignment.BottomCenter)
+            .fillMaxWidth()
+            .background(
+              Brush.verticalGradient(
+                colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.8f))
+              )
+            )
+            .padding(16.dp)
+            .padding(bottom = 24.dp)
+        ) {
+          Text(
+            text = currentAttachment.note,
+            style = MaterialTheme.typography.bodyLarge,
+            color = Color.White
+          )
+        }
       }
     }
   }
