@@ -1,6 +1,7 @@
 package hela.eillance.screens
 
 import android.Manifest
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -49,7 +50,7 @@ import androidx.compose.material.icons.automirrored.filled.CallMade
 import androidx.compose.material.icons.automirrored.filled.CallMissed
 import androidx.compose.material.icons.automirrored.filled.CallReceived
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.AudioFile
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
@@ -88,6 +89,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -101,7 +103,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
-import androidx.core.net.toUri
 import androidx.core.os.ConfigurationCompat
 import hela.eillance.BannerType
 import hela.eillance.MainViewModel
@@ -110,6 +111,7 @@ import hela.eillance.components.MediaBubbleContent
 import hela.eillance.components.StatusSnackbar
 import hela.eillance.components.UserAvatar
 import hela.eillance.ndkio.Attachment
+import hela.eillance.ndkio.AttachmentType
 import hela.eillance.ndkio.CallDirection
 import hela.eillance.ndkio.CallState
 import hela.eillance.ndkio.CallStatus
@@ -310,7 +312,7 @@ fun ConversationScreen(
                   actionLabel = "Fix it",
                   onAction = {
                     val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                      data = "package:${context.packageName}".toUri()
+                      data = Uri.fromParts("package", context.packageName, null)
                     }
                     try {
                       context.startActivity(intent)
@@ -369,13 +371,17 @@ fun ConversationScreen(
         },
         onMediaClick = { attachments, index ->
           val target = attachments[index]
-          val file = java.io.File(target.path)
-          val isTransferring = transferProgress.containsKey(target.id)
-
-          if (target.isDownloaded && !file.exists() && !isTransferring) {
-            Toast.makeText(context, "File removed", Toast.LENGTH_SHORT).show()
-          } else {
+          if (target.type == AttachmentType.Image || target.type == AttachmentType.Video) {
+            // Visuals: Open internal viewer
             onMediaClick(attachments, index)
+          } else {
+            // Files: Open via Intent
+            val file = File(target.path)
+            if (target.isDownloaded && file.exists()) {
+              openFile(context, target.path, target.mime)
+            } else {
+              Toast.makeText(context, "File not downloaded", Toast.LENGTH_SHORT).show()
+            }
           }
         }
       )
@@ -451,7 +457,7 @@ fun MessageInputArea(
     }
   }
 
-  // Define Authority based on package name to match Manifest placeholder
+  // Define Authority dynamically based on package name
   val authority = "${context.packageName}.provider"
 
   Column {
@@ -481,7 +487,7 @@ fun MessageInputArea(
           Icon(Icons.Default.CameraAlt, contentDescription = stringResource(R.string.attach_camera_photo), tint = MaterialTheme.colorScheme.primary)
         }
 
-        // Camera Video (New)
+        // Camera Video
         IconButton(onClick = {
           val tmpFile = File.createTempFile("cam_video_", ".mp4", context.cacheDir)
           val uri = FileProvider.getUriForFile(context, authority, tmpFile)
@@ -600,12 +606,21 @@ fun DraftAttachmentItem(
             modifier = Modifier.fillMaxSize()
           )
         } else {
-          // File Icon placeholder
-          Icon(
-            Icons.Default.AttachFile,
-            contentDescription = null,
-            modifier = Modifier.align(Alignment.Center)
-          )
+          // File Icon placeholder based on mime type
+          val icon = getDraftIcon(draft.mimeType)
+          Box(
+            modifier = Modifier
+              .fillMaxSize()
+              .background(MaterialTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center
+          ) {
+            Icon(
+              imageVector = icon,
+              contentDescription = null,
+              tint = MaterialTheme.colorScheme.onSurfaceVariant,
+              modifier = Modifier.size(32.dp)
+            )
+          }
         }
 
         // Remove button
@@ -620,23 +635,31 @@ fun DraftAttachmentItem(
         }
       }
 
-      // Note indicator/text
-      if (draft.note.isNotEmpty()) {
+      // Filename (Truncated) + Note
+      Column(modifier = Modifier.padding(4.dp)) {
         Text(
-          text = draft.note,
+          text = draft.name,
           style = MaterialTheme.typography.labelSmall,
+          fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
           maxLines = 1,
-          overflow = TextOverflow.Ellipsis,
-          modifier = Modifier.padding(4.dp)
+          overflow = TextOverflow.Ellipsis
         )
-      } else {
-        Text(
-          text = stringResource(R.string.attachment_note_placeholder),
-          style = MaterialTheme.typography.labelSmall,
-          fontStyle = FontStyle.Italic,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-          modifier = Modifier.padding(4.dp)
-        )
+        if (draft.note.isNotEmpty()) {
+          Text(
+            text = draft.note,
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            color = MaterialTheme.colorScheme.primary
+          )
+        } else {
+          Text(
+            text = stringResource(R.string.attachment_note_placeholder),
+            style = MaterialTheme.typography.labelSmall,
+            fontStyle = FontStyle.Italic,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+          )
+        }
       }
     }
   }
@@ -684,7 +707,6 @@ fun NoteEditDialog(initialNote: String, onConfirm: (String) -> Unit, onDismiss: 
     }
   )
 }
-
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -892,7 +914,7 @@ fun MessageBubble(
         .padding(horizontal = 4.dp, vertical = 4.dp),
       horizontalAlignment = if (isFromMe) Alignment.End else Alignment.Start
     ) {
-      // Render Attachments using Grid logic
+      // Render Attachments
       if (entry.attachments.isNotEmpty()) {
         MediaBubbleContent(
           attachments = entry.attachments,
@@ -991,7 +1013,7 @@ fun CallLogBubble(
       else -> Triple(
         Icons.AutoMirrored.Filled.CallMade,
         Color.Red,
-        if (entry.kind == HistoryEntryKind.VideoCall) stringResource(R.string.call_outgoing_video) else stringResource(R.string.call_outgoing_voice) // Simplified fallbacks
+        if (entry.kind == HistoryEntryKind.VideoCall) stringResource(R.string.call_outgoing_video) else stringResource(R.string.call_outgoing_voice)
       )
     }
     CallDirection.Incoming -> when (entry.callStatus) {
@@ -1059,7 +1081,6 @@ fun SystemMessageBubble(entry: HistoryEntry, onClick: (HistoryEntry) -> Unit) {
     textResId
   }
 
-  // If we couldn't parse an action and get default, but content is empty, hide it.
   if (parsedAction == null && entry.content.isNullOrBlank()) return
 
   val isClickable = parsedAction?.action == "profile_update_diff"
@@ -1186,10 +1207,35 @@ fun formatTimestamp(
   }
 }
 
+private fun openFile(context: Context, path: String, mimeType: String) {
+  val file = File(path)
+  if (!file.exists()) return
+  val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
+  val intent = Intent(Intent.ACTION_VIEW).apply {
+    setDataAndType(uri, mimeType)
+    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+  }
+  try {
+    context.startActivity(intent)
+  } catch (e: ActivityNotFoundException) {
+    Toast.makeText(context, "No app found to open this file", Toast.LENGTH_SHORT).show()
+  }
+}
+
 private fun openAppSettings(context: Context) {
   val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
     data = Uri.fromParts("package", context.packageName, null)
     flags = Intent.FLAG_ACTIVITY_NEW_TASK
   }
   context.startActivity(intent)
+}
+
+private fun getDraftIcon(mimeType: String): ImageVector {
+  return when {
+    mimeType == "application/pdf" -> Icons.Default.Description
+    mimeType.startsWith("audio/") -> Icons.Default.AudioFile
+    mimeType.startsWith("video/") -> Icons.Default.Videocam
+    mimeType.startsWith("image/") -> Icons.Default.Image
+    else -> Icons.Default.SnippetFolder
+  }
 }

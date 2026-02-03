@@ -327,7 +327,7 @@ TEST_F(ProtocolSafetyTest, VerifyRealMessageSignatures) {
   // READ:       {message_ids:[number],type:string}
   // PROFILE:    {bio:string,display_name:string,photo:null,type:string}  (photo is null in setup)
 
-  std::string const expected_hash = "c45456d65c143cc2282ea353a3df1c38ae71a31afc4016541ef47738e98ede5e";
+  std::string const expected_hash = "0fddf0b6a0f74000affdab3862424247c84c737e9948eff6487411ad364d2c6d";
 
   EXPECT_EQ(current_hash, expected_hash)
       << "\n[!] PROTOCOL SCHEMA CHANGED [!]\n"
