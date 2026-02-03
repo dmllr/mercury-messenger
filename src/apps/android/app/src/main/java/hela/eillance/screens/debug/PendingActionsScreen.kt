@@ -22,7 +22,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.material3.Icon
 import androidx.compose.ui.unit.dp
+import hela.eillance.camera.R
 import hela.eillance.ndkio.DebugPendingAction
+import androidx.compose.ui.res.stringResource
 import hela.eillance.viewmodels.DebugViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -40,10 +42,10 @@ fun PendingActionsScreen(
   Scaffold(
     topBar = {
       TopAppBar(
-        title = { Text("Pending Actions") },
+        title = { Text(stringResource(id = R.string.screen_title_pending_actions)) },
         navigationIcon = {
           IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(id = R.string.action_back))
           }
         }
       )
@@ -52,7 +54,7 @@ fun PendingActionsScreen(
     LazyColumn(modifier = Modifier.padding(padding)) {
       if (actions.isEmpty()) {
         item {
-          Text("No pending actions.", modifier = Modifier.padding(16.dp))
+          Text(stringResource(id = R.string.debug_pending_actions_empty), modifier = Modifier.padding(16.dp))
         }
       }
       items(actions) { action ->

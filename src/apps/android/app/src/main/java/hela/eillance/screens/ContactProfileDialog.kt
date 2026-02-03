@@ -30,10 +30,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import hela.eillance.camera.R
 import hela.eillance.components.UserAvatar
 import hela.eillance.ndkio.Contact
 
@@ -64,11 +66,11 @@ fun ContactProfileDialog(
           IconButton(onClick = onDismissRequest) {
             Icon(
               Icons.AutoMirrored.Filled.ArrowBack,
-              contentDescription = "Close"
+              contentDescription = stringResource(id = R.string.action_close)
             )
           }
           Text(
-            text = "Contact Info",
+            text = stringResource(id = R.string.contact_profile_title),
             style = MaterialTheme.typography.titleLarge,
             modifier = Modifier.weight(1f),
             textAlign = TextAlign.Center
@@ -104,13 +106,13 @@ fun ContactProfileDialog(
           HorizontalDivider()
           Spacer(modifier = Modifier.height(16.dp))
 
-          Text("Set Local Alias", style = MaterialTheme.typography.titleMedium)
+          Text(stringResource(id = R.string.contact_profile_set_alias_title), style = MaterialTheme.typography.titleMedium)
           Spacer(modifier = Modifier.height(8.dp))
 
           OutlinedTextField(
             value = overrideName,
             onValueChange = { overrideName = it },
-            label = { Text("Local name for this contact") },
+            label = { Text(stringResource(id = R.string.contact_profile_alias_label)) },
             singleLine = true,
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words)
           )
@@ -123,7 +125,7 @@ fun ContactProfileDialog(
               onOverrideReset()
               onDismissRequest()
             }) {
-              Text("Reset")
+              Text(stringResource(id = R.string.action_reset))
             }
             Button(
               onClick = {
@@ -132,7 +134,7 @@ fun ContactProfileDialog(
               },
               enabled = overrideName.isNotBlank()
             ) {
-              Text("Save Alias")
+              Text(stringResource(id = R.string.action_save_alias))
             }
           }
 
@@ -147,18 +149,14 @@ fun ContactProfileDialog(
             },
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
             modifier = Modifier.fillMaxWidth()
-          ) {
-            Text("Block Contact")
-          }
+          ) { Text(stringResource(id = R.string.action_block_contact)) }
           OutlinedButton(
             onClick = {
               onRemoveRequest()
               onDismissRequest()
             },
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-          ) {
-            Text("Delete Contact")
-          }
+          ) { Text(stringResource(id = R.string.action_delete_contact)) }
         }
       }
     }

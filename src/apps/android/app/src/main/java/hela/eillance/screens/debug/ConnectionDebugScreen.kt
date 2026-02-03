@@ -32,7 +32,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import hela.eillance.camera.R
 import hela.eillance.ndkio.DebugConnectionInfo
 import hela.eillance.ndkio.PeerConnectionState
 import hela.eillance.viewmodels.DebugViewModel
@@ -57,15 +59,15 @@ fun ConnectionDebugScreen(
   Scaffold(
     topBar = {
       TopAppBar(
-        title = { Text("Connections") },
+        title = { Text(stringResource(id = R.string.screen_title_connections)) },
         navigationIcon = {
           IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(id = R.string.action_back))
           }
         },
         actions = {
           IconButton(onClick = { refresh() }) {
-            Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+            Icon(Icons.Default.Refresh, contentDescription = stringResource(id = R.string.action_refresh))
           }
         }
       )
@@ -74,7 +76,7 @@ fun ConnectionDebugScreen(
     LazyColumn(modifier = Modifier.padding(padding)) {
       if (infos.isEmpty()) {
         item {
-          Text("No peers found.", modifier = Modifier.padding(16.dp))
+          Text(stringResource(id = R.string.debug_connections_empty), modifier = Modifier.padding(16.dp))
         }
       }
       items(infos) { info ->
@@ -96,9 +98,10 @@ fun ConnectionDebugScreen(
           supportingContent = {
             Column {
               Text("State: ${info.connectionState.getResourceString(context)}")
-              Text("Last Activity: ${if (info.lastActivitySecAgo < 0) "Never" else "${info.lastActivitySecAgo}s ago"}")
-              Text("Data Channel: ${if (info.isDataChannelOpen) "OPEN" else "CLOSED"}")
-              Text("Media Conn: ${info.hasMediaConnection}")
+              val lastActivity = if (info.lastActivitySecAgo < 0) stringResource(id = R.string.debug_connections_last_activity_never) else stringResource(id = R.string.debug_connections_last_activity, info.lastActivitySecAgo)
+              Text(lastActivity)
+              Text(stringResource(id = R.string.debug_connections_data_channel, if (info.isDataChannelOpen) stringResource(id = R.string.debug_connections_open) else stringResource(id = R.string.debug_connections_closed)))
+              Text(stringResource(id = R.string.debug_connections_media_conn, info.hasMediaConnection))
             }
           }
         )

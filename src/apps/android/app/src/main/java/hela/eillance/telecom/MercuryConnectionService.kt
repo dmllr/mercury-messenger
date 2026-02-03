@@ -6,6 +6,7 @@ import android.telecom.ConnectionService
 import android.telecom.PhoneAccountHandle
 import android.telecom.TelecomManager
 import android.util.Log
+import hela.eillance.camera.R
 import hela.eillance.CallService
 
 class MercuryConnectionService : ConnectionService() {
@@ -58,7 +59,7 @@ class MercuryConnectionService : ConnectionService() {
     if (peerId.isNullOrEmpty()) {
       Log.e(TAG, "Failed to determine peerId for connection")
       return Connection.createFailedConnection(
-        android.telecom.DisconnectCause(android.telecom.DisconnectCause.ERROR, "Unknown Peer")
+        android.telecom.DisconnectCause(android.telecom.DisconnectCause.ERROR, getString(R.string.telecom_error_unknown_peer))
       )
     }
 
@@ -66,7 +67,7 @@ class MercuryConnectionService : ConnectionService() {
     if (service == null) {
       Log.e(TAG, "CallService instance is not available. Cannot create connection.")
       return Connection.createFailedConnection(
-        android.telecom.DisconnectCause(android.telecom.DisconnectCause.ERROR, "Service Disconnected")
+        android.telecom.DisconnectCause(android.telecom.DisconnectCause.ERROR, getString(R.string.telecom_error_service_disconnected))
       )
     }
 

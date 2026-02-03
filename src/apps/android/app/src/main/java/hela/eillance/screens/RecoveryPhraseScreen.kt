@@ -25,9 +25,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import hela.eillance.camera.R
 import hela.eillance.viewmodels.ProfileViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -38,10 +40,10 @@ fun RecoveryPhraseScreen(profileVM: ProfileViewModel, onBack: () -> Unit) {
   Scaffold(
     topBar = {
       TopAppBar(
-        title = { Text("Recovery Phrase") },
+        title = { Text(stringResource(id = R.string.screen_title_recovery_phrase)) },
         navigationIcon = {
           IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(id = R.string.action_back))
           }
         }
       )
@@ -56,20 +58,20 @@ fun RecoveryPhraseScreen(profileVM: ProfileViewModel, onBack: () -> Unit) {
     ) {
       Icon(
         imageVector = Icons.Default.Warning,
-        contentDescription = "Warning",
+        contentDescription = stringResource(id = R.string.warning),
         tint = MaterialTheme.colorScheme.error,
         modifier = Modifier.size(48.dp)
       )
       Spacer(modifier = Modifier.height(16.dp))
       Text(
-        "Do Not Share This Phrase",
+        stringResource(id = R.string.recovery_phrase_warning_title),
         style = MaterialTheme.typography.headlineSmall,
         textAlign = TextAlign.Center,
         color = MaterialTheme.colorScheme.error
       )
       Spacer(modifier = Modifier.height(8.dp))
       Text(
-        "Anyone with these words can take control of your identity. Keep them secret and secure.",
+        stringResource(id = R.string.recovery_phrase_warning_description),
         style = MaterialTheme.typography.bodyMedium,
         textAlign = TextAlign.Center
       )
@@ -88,7 +90,7 @@ fun RecoveryPhraseScreen(profileVM: ProfileViewModel, onBack: () -> Unit) {
           )
         }
       } else {
-        Text("Could not retrieve recovery phrase. It may not have been stored correctly.")
+        Text(stringResource(id = R.string.recovery_phrase_error_retrieval))
       }
     }
   }

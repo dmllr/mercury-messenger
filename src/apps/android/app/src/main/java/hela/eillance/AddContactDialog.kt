@@ -19,6 +19,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import hela.eillance.camera.R
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -31,15 +33,15 @@ fun AddContactDialog(
 
   AlertDialog(
     onDismissRequest = onDismissRequest,
-    title = { Text("Add Contact") },
+    title = { Text(stringResource(id = R.string.add_contact_title)) },
     text = {
       Column {
-        Text("Enter the Peer ID below, or scan their QR code.")
+        Text(stringResource(id = R.string.add_contact_prompt))
         Spacer(Modifier.height(16.dp))
         TextField(
           value = peerId,
           onValueChange = { peerId = it },
-          label = { Text("Peer ID") },
+          label = { Text(stringResource(id = R.string.add_contact_peer_id_label)) },
           singleLine = true,
           modifier = Modifier.fillMaxWidth()
         )
@@ -48,9 +50,9 @@ fun AddContactDialog(
           onClick = onScanQrCode,
           modifier = Modifier.fillMaxWidth()
         ) {
-          Icon(Icons.Default.QrCodeScanner, contentDescription = "Scan QR Code")
+          Icon(Icons.Default.QrCodeScanner, contentDescription = stringResource(id = R.string.add_contact_scan_qr))
           Spacer(modifier = Modifier.width(8.dp))
-          Text("Scan QR Code")
+          Text(stringResource(id = R.string.add_contact_scan_qr))
         }
       }
     },
@@ -62,12 +64,12 @@ fun AddContactDialog(
           }
         }
       ) {
-        Text("Add")
+        Text(stringResource(id = R.string.action_add))
       }
     },
     dismissButton = {
       TextButton(onClick = onDismissRequest) {
-        Text("Cancel")
+        Text(stringResource(id = R.string.action_cancel))
       }
     }
   )

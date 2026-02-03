@@ -33,9 +33,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import hela.eillance.camera.R
 import hela.eillance.components.UserAvatar
 import hela.eillance.theme.extendedColors
 
@@ -95,7 +97,7 @@ fun IncomingCallScreen(
         Spacer(modifier = Modifier.height(24.dp))
 
         Text(
-          text = callerName ?: "Unknown",
+          text = callerName ?: stringResource(id = R.string.unknown),
           style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
           color = MaterialTheme.colorScheme.onBackground
         )
@@ -103,7 +105,7 @@ fun IncomingCallScreen(
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-          text = "Mercury Audio Call",
+          text = stringResource(id = R.string.call_type_mercury_audio),
           style = MaterialTheme.typography.bodyLarge,
           color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
         )
@@ -135,13 +137,13 @@ fun IncomingCallScreen(
           ) {
             Icon(
               Icons.Default.CallEnd,
-              contentDescription = "Reject",
+              contentDescription = stringResource(id = R.string.action_reject),
               tint = Color.White,
               modifier = Modifier.size(32.dp)
             )
           }
           Spacer(modifier = Modifier.height(8.dp))
-          Text("Decline", style = MaterialTheme.typography.labelLarge)
+          Text(stringResource(id = R.string.action_decline), style = MaterialTheme.typography.labelLarge)
         }
 
         // Accept Button
@@ -153,13 +155,13 @@ fun IncomingCallScreen(
           ) {
             Icon(
               Icons.Default.Call,
-              contentDescription = "Accept",
+              contentDescription = stringResource(id = R.string.action_accept),
               tint = Color.White,
               modifier = Modifier.size(32.dp)
             )
           }
           Spacer(modifier = Modifier.height(8.dp))
-          Text("Accept", style = MaterialTheme.typography.labelLarge)
+          Text(stringResource(id = R.string.action_accept), style = MaterialTheme.typography.labelLarge)
         }
       }
     }

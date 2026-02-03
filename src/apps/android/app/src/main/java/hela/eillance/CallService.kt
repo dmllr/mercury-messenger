@@ -144,10 +144,10 @@ class CallService : Service() {
 
   private fun registerPhoneAccount() {
     val componentName = ComponentName(this, MercuryConnectionService::class.java)
-    phoneAccountHandle = PhoneAccountHandle(componentName, "Mercury")
-    val builder = PhoneAccount.builder(phoneAccountHandle, "Mercury")
+    phoneAccountHandle = PhoneAccountHandle(componentName, getString(R.string.telecom_account_name))
+    val builder = PhoneAccount.builder(phoneAccountHandle, getString(R.string.telecom_account_name))
       .setCapabilities(PhoneAccount.CAPABILITY_SELF_MANAGED)
-      .setShortDescription("Mercury Secure Call")
+      .setShortDescription(getString(R.string.telecom_account_description))
     try {
       telecomManager.registerPhoneAccount(builder.build())
     } catch (e: SecurityException) {
@@ -260,7 +260,7 @@ class CallService : Service() {
     newContacts.forEach { newContact ->
       val oldUnread = oldUnreadCounts[newContact.peerId] ?: 0
       if (newContact.unreadCount > oldUnread && !MercuryApplication.isAppInForeground) {
-        showNewMessageNotification(newContact.peerId, "New message from ${newContact.name}")
+        showNewMessageNotification(newContact.peerId, getString(R.string.notification_new_message_from, newContact.name))
       }
     }
   }
@@ -327,13 +327,13 @@ class CallService : Service() {
 
     val builder = NotificationCompat.Builder(this, CALLS_CHANNEL_ID)
       .setSmallIcon(android.R.drawable.stat_notify_chat)
-      .setContentTitle("Incoming Call")
+      .setContentTitle(getString(R.string.notification_incoming_call_title))
       .setContentText(peerId)
       .setPriority(NotificationCompat.PRIORITY_MAX)
       .setCategory(NotificationCompat.CATEGORY_CALL)
       .setFullScreenIntent(fullScreenPendingIntent, true)
-      .addAction(0, "Reject", rejectPendingIntent)
-      .addAction(0, "Accept", acceptPendingIntent)
+      .addAction(0, getString(R.string.action_reject), rejectPendingIntent)
+      .addAction(0, getString(R.string.action_accept), acceptPendingIntent)
       .setAutoCancel(true)
       .setOngoing(true)
 
@@ -376,15 +376,15 @@ class CallService : Service() {
     if (inCall) {
       val hangupIntent = Intent(this, CallService::class.java).apply { action = ACTION_HANGUP }
       val hangupPendingIntent = PendingIntent.getService(this, 3, hangupIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-      builder.setContentText("In call with ${peerId ?: "Unknown"}")
-        .addAction(0, "Hang Up", hangupPendingIntent)
+      builder.setContentText(getString(R.string.service_status_in_call_with, peerId ?: getString(R.string.unknown)))
+        .addAction(0, getString(R.string.action_hangup), hangupPendingIntent)
     } else {
       val contentText = when (connectionState) {
-        ServiceConnectionState.Online -> "Ready"
-        ServiceConnectionState.Establishing -> "Connecting..."
-        ServiceConnectionState.NoNetwork -> "Waiting for network"
-        ServiceConnectionState.Failure -> "Connection failed"
-        else -> "Background Service"
+        ServiceConnectionState.Online -> getString(R.string.service_status_ready)
+        ServiceConnectionState.Establishing -> getString(R.string.service_status_connecting)
+        ServiceConnectionState.NoNetwork -> getString(R.string.service_status_no_network)
+        ServiceConnectionState.Failure -> getString(R.string.service_status_connection_failed)
+        else -> getString(R.string.service_status_background)
       }
       builder.setContentText(contentText)
     }
@@ -392,11 +392,11 @@ class CallService : Service() {
   }
 
   private fun createNotificationChannels() {
-    val foregroundChannel = NotificationChannel(FOREGROUND_CHANNEL_ID, "Foreground Service", NotificationManager.IMPORTANCE_MIN)
-    val callsChannel = NotificationChannel(CALLS_CHANNEL_ID, "Incoming Calls", NotificationManager.IMPORTANCE_HIGH).apply {
-      description = "Notifications for incoming calls"
+    val foregroundChannel = NotificationChannel(FOREGROUND_CHANNEL_ID, getString(R.string.notification_channel_foreground_title), NotificationManager.IMPORTANCE_MIN)
+    val callsChannel = NotificationChannel(CALLS_CHANNEL_ID, getString(R.string.notification_channel_calls_title), NotificationManager.IMPORTANCE_HIGH).apply {
+      description = getString(R.string.notification_channel_calls_description)
     }
-    val messagesChannel = NotificationChannel(MESSAGES_CHANNEL_ID, "New Messages", NotificationManager.IMPORTANCE_DEFAULT)
+    val messagesChannel = NotificationChannel(MESSAGES_CHANNEL_ID, getString(R.string.notification_channel_messages_title), NotificationManager.IMPORTANCE_DEFAULT)
     notificationManager.createNotificationChannel(foregroundChannel)
     notificationManager.createNotificationChannel(callsChannel)
     notificationManager.createNotificationChannel(messagesChannel)

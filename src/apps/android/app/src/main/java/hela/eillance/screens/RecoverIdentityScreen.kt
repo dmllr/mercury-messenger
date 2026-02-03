@@ -27,8 +27,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import hela.eillance.camera.R
 import hela.eillance.viewmodels.ProfileViewModel
 import kotlinx.coroutines.launch
 
@@ -42,14 +44,16 @@ fun RecoverIdentityScreen(
   var error by remember { mutableStateOf<String?>(null) }
   var isLoading by remember { mutableStateOf(false) }
   val scope = rememberCoroutineScope()
+  val errorWordCount = stringResource(id = R.string.recover_error_word_count)
+  val errorInvalid = stringResource(id = R.string.recover_error_invalid)
 
   Scaffold(
     topBar = {
       TopAppBar(
-        title = { Text("Recover Identity") },
+        title = { Text(stringResource(id = R.string.screen_title_recover_identity)) },
         navigationIcon = {
           IconButton(onClick = { navController.popBackStack() }) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(id = R.string.action_back))
           }
         }
       )
@@ -62,12 +66,12 @@ fun RecoverIdentityScreen(
         .padding(16.dp),
       horizontalAlignment = Alignment.CenterHorizontally
     ) {
-      Text("Enter your 12-word recovery phrase below, separated by spaces.")
+      Text(stringResource(id = R.string.recover_prompt))
       Spacer(modifier = Modifier.height(16.dp))
       OutlinedTextField(
         value = mnemonic,
         onValueChange = { mnemonic = it; error = null },
-        label = { Text("Recovery Phrase") },
+        label = { Text(stringResource(id = R.string.screen_title_recovery_phrase)) },
         modifier = Modifier
           .fillMaxWidth()
           .height(120.dp),
@@ -82,12 +86,12 @@ fun RecoverIdentityScreen(
             error = null
             val words = mnemonic.trim().split(Regex("\\s+"))
             if (words.size != 12) {
-              error = "Please enter exactly 12 words."
+              error = errorWordCount
               isLoading = false
             } else {
               val success = profileVM.restoreIdentity(mnemonic.trim())
               if (!success) {
-                error = "Invalid recovery phrase. Please check the words and try again."
+                error = errorInvalid
                 isLoading = false
               }
               // On success, the MainViewModel state will change, and the NavHost in MercuryApp will automatically switch screens.
@@ -100,7 +104,7 @@ fun RecoverIdentityScreen(
         if (isLoading) {
           CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
         } else {
-          Text("Recover")
+          Text(stringResource(id = R.string.action_recover))
         }
       }
     }

@@ -21,6 +21,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import hela.eillance.camera.R
 import hela.eillance.ndkio.ContactStatus
 import hela.eillance.viewmodels.ContactsViewModel
 
@@ -33,10 +35,10 @@ fun RejectedContactsScreen(contactsVM: ContactsViewModel, onBack: () -> Unit) {
   Scaffold(
     topBar = {
       TopAppBar(
-        title = { Text("Blocked Contacts") },
+        title = { Text(stringResource(id = R.string.screen_title_rejected_contacts)) },
         navigationIcon = {
           IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(id = R.string.action_back))
           }
         }
       )
@@ -47,9 +49,7 @@ fun RejectedContactsScreen(contactsVM: ContactsViewModel, onBack: () -> Unit) {
         modifier = Modifier
           .fillMaxSize()
           .padding(padding), contentAlignment = Alignment.Center
-      ) {
-        Text("No contacts have been blocked.")
-      }
+      ) { Text(stringResource(id = R.string.rejected_contacts_empty)) }
     } else {
       LazyColumn(modifier = Modifier.padding(padding)) {
         items(rejectedContacts, key = { it.peerId }) { contact ->
@@ -57,9 +57,7 @@ fun RejectedContactsScreen(contactsVM: ContactsViewModel, onBack: () -> Unit) {
             headlineContent = { Text(contact.name) },
             supportingContent = { Text(contact.peerId) },
             trailingContent = {
-              Button(onClick = { contactsVM.unblockContact(contact.peerId) }) {
-                Text("Unblock")
-              }
+              Button(onClick = { contactsVM.unblockContact(contact.peerId) }) { Text(stringResource(id = R.string.action_unblock)) }
             }
           )
           HorizontalDivider()

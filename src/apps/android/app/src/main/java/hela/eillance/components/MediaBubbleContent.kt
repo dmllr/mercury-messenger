@@ -49,10 +49,12 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import hela.eillance.camera.R
 import coil.decode.VideoFrameDecoder
 import coil.request.ImageRequest
 import coil.request.videoFrameMillis
@@ -195,7 +197,7 @@ private fun VisualAttachmentsGrid(
                     .clickable { onMediaClick(attachments[3]) },
                   contentAlignment = Alignment.Center
                 ) {
-                  Text(text = "+${count - 4}", style = MaterialTheme.typography.titleLarge, color = Color.White)
+                  Text(text = stringResource(id = R.string.plus_more, count - 4), style = MaterialTheme.typography.titleLarge, color = Color.White)
                 }
               }
             }
@@ -275,11 +277,11 @@ private fun FileAttachmentItem(
           color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         if (isCanceled) {
-          Text(text = "Canceled", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+          Text(text = stringResource(id = R.string.file_status_canceled), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
         } else if (isPaused) {
-          Text(text = "Paused", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
+          Text(text = stringResource(id = R.string.file_status_paused), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
         } else if (isPending) {
-          Text(text = "Waiting", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          Text(text = stringResource(id = R.string.file_status_waiting), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
       }
     }
@@ -295,24 +297,24 @@ private fun FileAttachmentItem(
         )
         IconButton(onClick = onCancel, modifier = Modifier.size(24.dp)) {
           val icon = if (!isFromMe) Icons.Default.Pause else Icons.Default.Close
-          Icon(icon, contentDescription = "Cancel", modifier = Modifier.size(16.dp))
+          Icon(icon, contentDescription = stringResource(id = R.string.action_cancel), modifier = Modifier.size(16.dp))
         }
       } else if (isPaused) {
         Row {
           // Only Receiver can Resume
           if (!isFromMe) {
             IconButton(onClick = onResume, modifier = Modifier.size(32.dp)) {
-              Icon(Icons.Default.Refresh, contentDescription = "Resume", tint = MaterialTheme.colorScheme.primary)
+              Icon(Icons.Default.Refresh, contentDescription = stringResource(id = R.string.action_resume), tint = MaterialTheme.colorScheme.primary)
             }
           }
           // Both can Cancel/Discard completely
           IconButton(onClick = onDiscard, modifier = Modifier.size(32.dp)) {
-            Icon(Icons.Default.Close, contentDescription = "Cancel", tint = MaterialTheme.colorScheme.error)
+            Icon(Icons.Default.Close, contentDescription = stringResource(id = R.string.action_cancel), tint = MaterialTheme.colorScheme.error)
           }
         }
       } else if (attachment.status == AttachmentStatus.Failed) {
         IconButton(onClick = onResume) {
-          Icon(Icons.Default.Refresh, contentDescription = "Retry", tint = MaterialTheme.colorScheme.primary)
+          Icon(Icons.Default.Refresh, contentDescription = stringResource(id = R.string.action_retry), tint = MaterialTheme.colorScheme.primary)
         }
       } else if (isPending) {
         CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
@@ -364,7 +366,7 @@ private fun MediaItem(
       }
       AsyncImage(
         model = model,
-        contentDescription = "Attachment",
+        contentDescription = stringResource(id = R.string.attachment_content_description),
         modifier = Modifier.fillMaxSize(),
         contentScale = ContentScale.Crop
       )
@@ -382,7 +384,7 @@ private fun MediaItem(
       if (imageBitmap != null) {
         Image(
           bitmap = imageBitmap,
-          contentDescription = "Thumbnail",
+          contentDescription = stringResource(id = R.string.thumbnail_content_description),
           modifier = Modifier.fillMaxSize(),
           contentScale = ContentScale.Crop
         )
@@ -414,12 +416,12 @@ private fun MediaItem(
         ) {
           Icon(
             imageVector = Icons.Default.Block,
-            contentDescription = "Canceled",
+            contentDescription = stringResource(id = R.string.file_status_canceled),
             tint = Color.White,
             modifier = Modifier.size(32.dp)
           )
           Text(
-            text = if (attachment.status == AttachmentStatus.Canceled) "Upload Canceled" else "Download Canceled",
+            text = if (attachment.status == AttachmentStatus.Canceled) stringResource(id = R.string.upload_canceled) else stringResource(id = R.string.download_canceled),
             style = MaterialTheme.typography.labelSmall,
             color = Color.White
           )
@@ -433,18 +435,18 @@ private fun MediaItem(
           if (!isFromMe) {
             Icon(
               imageVector = Icons.Default.Refresh,
-              contentDescription = "Resume",
+              contentDescription = stringResource(id = R.string.action_resume),
               tint = Color.White,
               modifier = Modifier.size(32.dp).clickable { onResume() }
             )
           }
-          Text("Paused", style = MaterialTheme.typography.labelSmall, color = Color.White)
+          Text(stringResource(id = R.string.file_status_paused), style = MaterialTheme.typography.labelSmall, color = Color.White)
         }
         IconButton(
           onClick = onDiscard,
           modifier = Modifier.align(Alignment.TopEnd).padding(4.dp)
         ) {
-          Icon(Icons.Default.Close, contentDescription = "Cancel", tint = Color.White)
+          Icon(Icons.Default.Close, contentDescription = stringResource(id = R.string.action_cancel), tint = Color.White)
         }
       } else if (progress != null && progress >= 0f && attachment.status == AttachmentStatus.Transferring) {
         Box(
@@ -459,7 +461,7 @@ private fun MediaItem(
           )
           IconButton(onClick = onCancel) {
             val icon = if (!isFromMe) Icons.Default.Pause else Icons.Default.Close
-            Icon(icon, contentDescription = "Cancel", tint = Color.White)
+            Icon(icon, contentDescription = stringResource(id = R.string.action_cancel), tint = Color.White)
           }
         }
       } else if (attachment.status == AttachmentStatus.Pending || (attachment.status == AttachmentStatus.Transferring && progress == null)) {
@@ -470,14 +472,14 @@ private fun MediaItem(
       } else if (attachment.status == AttachmentStatus.Failed) {
         Icon(
           Icons.Default.Refresh,
-          contentDescription = "Retry",
+          contentDescription = stringResource(id = R.string.action_retry),
           tint = MaterialTheme.colorScheme.error,
           modifier = Modifier.size(32.dp).align(Alignment.Center).clickable { onResume() }
         )
       } else if (isVideo && attachment.status == AttachmentStatus.Done) {
         Icon(
           imageVector = Icons.Default.PlayCircle,
-          contentDescription = "Play",
+          contentDescription = stringResource(id = R.string.action_play),
           tint = Color.White.copy(alpha = 0.8f),
           modifier = Modifier.size(48.dp).align(Alignment.Center)
         )
@@ -497,12 +499,13 @@ private fun getFileIcon(mimeType: String): ImageVector {
   }
 }
 
+@Composable
 private fun getGenericFileName(mimeType: String): String {
   return when {
-    mimeType == "application/pdf" -> "PDF Document"
-    mimeType.startsWith("audio/") -> "Audio File"
-    mimeType.startsWith("video/") -> "Video"
-    mimeType.startsWith("image/") -> "Image"
-    else -> "File Attachment"
+    mimeType == "application/pdf" -> stringResource(id = R.string.file_type_pdf)
+    mimeType.startsWith("audio/") -> stringResource(id = R.string.file_type_audio)
+    mimeType.startsWith("video/") -> stringResource(id = R.string.file_type_video)
+    mimeType.startsWith("image/") -> stringResource(id = R.string.file_type_image)
+    else -> stringResource(id = R.string.file_type_generic)
   }
 }

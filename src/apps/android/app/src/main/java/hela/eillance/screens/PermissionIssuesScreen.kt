@@ -31,8 +31,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.net.toUri
+import hela.eillance.camera.R
 import hela.eillance.MainViewModel
 import hela.eillance.theme.extendedColors
 
@@ -58,10 +60,10 @@ fun PermissionIssuesScreen(
   Scaffold(
     topBar = {
       TopAppBar(
-        title = { Text("Permission Issues") },
+        title = { Text(stringResource(id = R.string.screen_title_permission_issues)) },
         navigationIcon = {
           IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(id = R.string.action_back))
           }
         }
       )
@@ -73,8 +75,8 @@ fun PermissionIssuesScreen(
         .padding(padding)
     ) {
       PermissionItem(
-        title = "Notifications",
-        description = "Required to receive messages when the app is in background.",
+        title = stringResource(id = R.string.permission_notifications_title),
+        description = stringResource(id = R.string.permission_notifications_description),
         isGranted = hasNotif,
         icon = Icons.Default.Notifications,
         onFix = {
@@ -87,8 +89,8 @@ fun PermissionIssuesScreen(
       )
       HorizontalDivider()
       PermissionItem(
-        title = "Battery Optimization",
-        description = "Disabling optimization ensures messages are delivered instantly.",
+        title = stringResource(id = R.string.permission_battery_title),
+        description = stringResource(id = R.string.permission_battery_description),
         isGranted = hasBattery,
         icon = Icons.Default.BatteryAlert,
         onFix = {
@@ -104,8 +106,8 @@ fun PermissionIssuesScreen(
       )
       HorizontalDivider()
       PermissionItem(
-        title = "Calls (Camera & Mic)",
-        description = "Required to make and receive voice and video calls.",
+        title = stringResource(id = R.string.permission_calls_title),
+        description = stringResource(id = R.string.permission_calls_description),
         isGranted = hasCalls,
         icon = Icons.Default.PermCameraMic,
         onFix = {
@@ -122,11 +124,11 @@ fun PermissionIssuesScreen(
 
       // Reset ignored preferences
       ListItem(
-        headlineContent = { Text("Reset Ignored Warnings") },
-        supportingContent = { Text("Show permission banners again on the contacts screen.") },
+        headlineContent = { Text(stringResource(id = R.string.permission_reset_ignored_title)) },
+        supportingContent = { Text(stringResource(id = R.string.permission_reset_ignored_description)) },
         trailingContent = {
           Button(onClick = { mainViewModel.resetIgnoredPermissions() }) {
-            Text("Reset")
+            Text(stringResource(id = R.string.action_reset))
           }
         }
       )
@@ -154,7 +156,7 @@ private fun PermissionItem(
     },
     trailingContent = {
       if (!isGranted) {
-        Button(onClick = onFix) { Text("Fix") }
+        Button(onClick = onFix) { Text(stringResource(id = R.string.action_fix_it)) }
       }
     }
   )

@@ -30,10 +30,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import hela.eillance.camera.R
 import hela.eillance.ndkio.HistoryEntry
 import hela.eillance.utils.rememberImageBitmapFromBase64
 import kotlinx.serialization.SerialName
@@ -86,15 +88,15 @@ private fun ProfileUpdateDialog(action: ProfileUpdateAction, onDismiss: () -> Un
           .padding(24.dp)
           .verticalScroll(rememberScrollState())
       ) {
-        Text("Profile Updated", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(bottom = 16.dp))
+        Text(stringResource(id = R.string.profile_update_dialog_title), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(bottom = 16.dp))
 
         ComparePhotos(action.old?.photo, action.new?.photo)
-        CompareField("Display Name", action.old?.displayName, action.new?.displayName)
-        CompareField("Bio", action.old?.bio, action.new?.bio)
+        CompareField(stringResource(id = R.string.profile_update_field_display_name), action.old?.displayName, action.new?.displayName)
+        CompareField(stringResource(id = R.string.profile_update_field_bio), action.old?.bio, action.new?.bio)
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
           TextButton(onClick = onDismiss) {
-            Text("Close")
+            Text(stringResource(id = R.string.action_close))
           }
         }
       }
@@ -107,7 +109,7 @@ private fun ComparePhotos(oldPhoto: String?, newPhoto: String?) {
   if (oldPhoto == newPhoto) return
 
   Column(modifier = Modifier.fillMaxWidth()) {
-    Text("Photo", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+    Text(stringResource(id = R.string.profile_update_field_photo), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
     Spacer(Modifier.height(8.dp))
     Row(
       modifier = Modifier.fillMaxWidth(),
@@ -115,7 +117,7 @@ private fun ComparePhotos(oldPhoto: String?, newPhoto: String?) {
       verticalAlignment = Alignment.CenterVertically
     ) {
       ProfilePhoto(photoBase64 = oldPhoto, modifier = Modifier.weight(1f))
-      Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "changed to", modifier = Modifier.padding(horizontal = 8.dp))
+      Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = stringResource(id = R.string.changed_to_description), modifier = Modifier.padding(horizontal = 8.dp))
       ProfilePhoto(photoBase64 = newPhoto, modifier = Modifier.weight(1f))
     }
     HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
@@ -131,8 +133,8 @@ private fun CompareField(label: String, oldValue: String?, newValue: String?) {
   Column(modifier = Modifier.fillMaxWidth()) {
     Text(label, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
     Spacer(Modifier.height(8.dp))
-    DiffText(label = "From", value = old)
-    DiffText(label = "To", value = new)
+    DiffText(label = stringResource(id = R.string.from_label), value = old)
+    DiffText(label = stringResource(id = R.string.to_label), value = new)
     HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
   }
 }
@@ -173,7 +175,7 @@ private fun ProfilePhoto(photoBase64: String?, modifier: Modifier = Modifier) {
         contentScale = ContentScale.Crop
       )
     } else {
-      Text("No Photo", textAlign = TextAlign.Center, style = MaterialTheme.typography.bodySmall)
+      Text(stringResource(id = R.string.no_photo), textAlign = TextAlign.Center, style = MaterialTheme.typography.bodySmall)
     }
   }
 }

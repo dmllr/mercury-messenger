@@ -28,10 +28,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import hela.eillance.camera.R
 import hela.eillance.navigation.Screen
 import hela.eillance.viewmodels.SettingsViewModel
 
@@ -49,10 +51,10 @@ fun SettingsScreen(
   Scaffold(
     topBar = {
       TopAppBar(
-        title = { Text("Settings") },
+        title = { Text(stringResource(id = R.string.screen_title_settings)) },
         navigationIcon = {
           IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(id = R.string.action_back))
           }
         }
       )
@@ -66,7 +68,7 @@ fun SettingsScreen(
     ) {
       // Group Title
       Text(
-        "Connection settings",
+        stringResource(id = R.string.settings_group_connection),
         style = MaterialTheme.typography.titleMedium,
         color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.padding(bottom = 8.dp)
@@ -76,14 +78,14 @@ fun SettingsScreen(
       OutlinedTextField(
         value = signalingUrl,
         onValueChange = settingsVM::onSignalingUrlChange,
-        label = { Text("Custom server URL") },
-        placeholder = { Text("wss://example.com:8000") },
+        label = { Text(stringResource(id = R.string.settings_server_url_label)) },
+        placeholder = { Text(stringResource(id = R.string.settings_server_url_placeholder)) },
         modifier = Modifier.fillMaxWidth(),
         singleLine = true
       )
       Spacer(modifier = Modifier.height(4.dp))
       Text(
-        "Leave empty to use the default server. Reconnects automatically on save.",
+        stringResource(id = R.string.settings_server_url_description),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant
       )
@@ -102,14 +104,14 @@ fun SettingsScreen(
             }
           }
         },
-        label = { Text("Peer Inactivity Timeout (s)") },
+        label = { Text(stringResource(id = R.string.settings_peer_timeout_label)) },
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
       )
       Spacer(modifier = Modifier.height(4.dp))
       Text(
-        "Seconds of inactivity before disconnecting a peer connection. Default is 120s.",
+        stringResource(id = R.string.settings_peer_timeout_description),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant
       )
@@ -117,7 +119,7 @@ fun SettingsScreen(
       HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
       Text(
-        "Privacy",
+        stringResource(id = R.string.settings_group_privacy),
         style = MaterialTheme.typography.titleMedium,
         color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.padding(bottom = 8.dp)
@@ -138,11 +140,11 @@ fun SettingsScreen(
       Button(
         onClick = {
           settingsVM.saveSettings()
-          Toast.makeText(context, "Settings Saved. Reconnecting...", Toast.LENGTH_SHORT).show()
+          Toast.makeText(context, context.getString(R.string.settings_saved_toast), Toast.LENGTH_SHORT).show()
         },
         modifier = Modifier.align(Alignment.End)
       ) {
-        Text("Save")
+        Text(stringResource(id = R.string.action_save))
       }
     }
   }
