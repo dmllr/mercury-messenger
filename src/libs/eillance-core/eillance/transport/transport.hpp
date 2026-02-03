@@ -25,9 +25,6 @@ class Transport {
   struct TransportInterface;
 
   template <typename T>
-  class TransportModel;
-
-  template <typename T>
   explicit Transport(std::unique_ptr<T> impl)
       : self_(new TransportModel<T>(std::move(impl))) {
   }
@@ -118,7 +115,6 @@ class Transport {
   void SendPeerDataChannelMessage(ContactID const& peer_id, Json const& message) const {
     self_->SendPeerDataChannelMessage(peer_id, message);
   }
-  // Updated return type
   auto SendPeerDataChannelBinaryMessage(ContactID const& peer_id, std::span<std::byte const> message) const -> bool {
     return self_->SendPeerDataChannelBinaryMessage(peer_id, message);
   }
@@ -176,13 +172,9 @@ class Transport {
 
     virtual void CreateDataChannel(ContactID const& peer_id) = 0;
     virtual void SendPeerDataChannelMessage(ContactID const& peer_id, Json const& message) const = 0;
-
-    // Updated return type
     virtual auto SendPeerDataChannelBinaryMessage(ContactID const& peer_id, std::span<std::byte const> message) const
         -> bool = 0;
-
     virtual void SendSignalingMessage(Json const& message) const = 0;
-
     virtual void AddToStream(std::shared_ptr<Peer> const& peer, bool is_adding_video) const = 0;
     virtual auto AddVideo(ContactID const& peer_id, std::function<void(void)> const& on_open)
         -> std::shared_ptr<ITrack> = 0;
@@ -278,7 +270,6 @@ class Transport {
     void SendPeerDataChannelMessage(ContactID const& peer_id, Json const& message) const override {
       transport_->SendPeerDataChannelMessage(peer_id, message);
     }
-    // Updated return type
     auto SendPeerDataChannelBinaryMessage(ContactID const& peer_id, std::span<std::byte const> message) const
         -> bool override {
       return transport_->SendPeerDataChannelBinaryMessage(peer_id, message);
