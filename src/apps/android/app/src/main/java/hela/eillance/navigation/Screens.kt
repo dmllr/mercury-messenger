@@ -46,7 +46,9 @@ sealed class Route(val route: String) {
   }
   object FullScreenMedia : Route("media_viewer/{peerId}?attachments={attachments}&index={index}") {
     fun createRoute(peerId: String, attachments: List<Attachment>, initialIndex: Int): String {
-      val json = Json.encodeToString(attachments)
+      // Strip thumbnails to keep URL short and avoid TransactionTooLargeException and parsing issues
+      val lightweightAttachments = attachments.map { it.copy(thumbnail = null) }
+      val json = Json.encodeToString(lightweightAttachments)
       return "media_viewer/$peerId?attachments=${Uri.encode(json)}&index=$initialIndex"
     }
   }

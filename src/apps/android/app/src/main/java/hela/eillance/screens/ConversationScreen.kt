@@ -372,8 +372,12 @@ fun ConversationScreen(
         onMediaClick = { attachments, index ->
           val target = attachments[index]
           if (target.type == AttachmentType.Image || target.type == AttachmentType.Video) {
-            // Visuals: Open internal viewer
-            onMediaClick(attachments, index)
+            // Visuals: Open internal viewer with only visual items
+            val visuals = attachments.filter { it.type == AttachmentType.Image || it.type == AttachmentType.Video }
+            val visualIndex = visuals.indexOf(target)
+            if (visualIndex != -1) {
+              onMediaClick(visuals, visualIndex)
+            }
           } else {
             // Files: Open via Intent
             val file = File(target.path)
