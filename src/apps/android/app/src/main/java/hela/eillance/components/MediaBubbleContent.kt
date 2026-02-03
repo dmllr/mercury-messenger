@@ -31,9 +31,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PictureAsPdf
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlayCircle
-import androidx.compose.material.icons.filled.PlayCircleOutline
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.VideoFile
 import androidx.compose.material3.CircularProgressIndicator
@@ -227,12 +225,10 @@ private fun FileAttachmentItem(
   val isDone = attachment.status == AttachmentStatus.Done
   val isCanceled = attachment.status == AttachmentStatus.Canceled || attachment.status == AttachmentStatus.PeerCanceled
 
-  val displayName = if (attachment.fileName.isNotEmpty()) {
-    attachment.fileName
-  } else if (attachment.note.isNotEmpty()) {
-    attachment.note
-  } else {
-    getGenericFileName(attachment.mime)
+  val displayName = attachment.fileName.ifEmpty {
+    attachment.note.ifEmpty {
+      getGenericFileName(attachment.mime)
+    }
   }
 
   Row(
@@ -274,6 +270,7 @@ private fun FileAttachmentItem(
       Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
           text = fileSizeStr,
+          modifier = Modifier.padding(end = 8.dp),
           style = MaterialTheme.typography.labelSmall,
           color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -305,7 +302,7 @@ private fun FileAttachmentItem(
           // Only Receiver can Resume
           if (!isFromMe) {
             IconButton(onClick = onResume, modifier = Modifier.size(32.dp)) {
-              Icon(Icons.Default.PlayArrow, contentDescription = "Resume", tint = MaterialTheme.colorScheme.primary)
+              Icon(Icons.Default.Refresh, contentDescription = "Resume", tint = MaterialTheme.colorScheme.primary)
             }
           }
           // Both can Cancel/Discard completely
@@ -435,15 +432,13 @@ private fun MediaItem(
         ) {
           if (!isFromMe) {
             Icon(
-              imageVector = Icons.Default.PlayCircleOutline,
+              imageVector = Icons.Default.Refresh,
               contentDescription = "Resume",
               tint = Color.White,
               modifier = Modifier.size(32.dp).clickable { onResume() }
             )
-            Text("Paused", style = MaterialTheme.typography.labelSmall, color = Color.White)
-          } else {
-            Text("Paused by Peer", style = MaterialTheme.typography.labelSmall, color = Color.White)
           }
+          Text("Paused", style = MaterialTheme.typography.labelSmall, color = Color.White)
         }
         IconButton(
           onClick = onDiscard,
