@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -60,6 +61,7 @@ import androidx.compose.material.icons.filled.AudioFile
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Done
@@ -100,9 +102,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -184,6 +188,19 @@ fun ConversationScreen(
   val draftAttachments by chatVM.draftAttachments.collectAsState()
   val context = LocalContext.current
   val bannerState by mainViewModel.permissionBannerState.collectAsState()
+  val clipboardManager = LocalClipboardManager.current
+
+  // Selection State
+  var selectedMessageIds by remember { mutableStateOf(emptySet<Long>()) }
+  val selectionMode = selectedMessageIds.isNotEmpty()
+
+  // Handle Back press to clear selection
+  BackHandler(enabled = selectionMode) {
+    selectedMessageIds = emptySet()
+  }
+
+  val locale = ConfigurationCompat.getLocales(LocalConfiguration.current)[0] ?: Locale.getDefault()
+  val zoneId = ZoneId.systemDefault()
 
   // State for permissions launchers
   val notifLauncher =
@@ -246,38 +263,85 @@ fun ConversationScreen(
 
   Scaffold(
     topBar = {
-      TopAppBar(
-        title = {
-          Row(
-            modifier = Modifier.clickable { onShowContactProfile(peerId) },
-            verticalAlignment = Alignment.CenterVertically
-          ) {
-            UserAvatar(
-              photoBase64 = contact?.photo,
-              modifier = Modifier.size(40.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-              text = contact?.name ?: peerId,
-              maxLines = 1,
-              overflow = TextOverflow.Ellipsis
-            )
+      if (selectionMode) {
+        SelectionTopBar(
+          count = selectedMessageIds.size,
+          onClear = { selectedMessageIds = emptySet() },
+          onCopy = {
+            val selectedMsgs = historyPage.messages
+              .filter { it.id in selectedMessageIds }
+              .sortedBy { it.timestamp }
+
+            if (selectedMsgs.isNotEmpty()) {
+              val directions = selectedMsgs.map { it.direction }.toSet()
+              val isConversation = directions.size > 1
+              val sb = StringBuilder()
+
+              val dateTimeFormatter = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.SHORT, FormatStyle.SHORT)
+                .withLocale(locale)
+                .withZone(zoneId)
+
+              selectedMsgs.forEachIndexed { index, msg ->
+                val content = msg.content
+                // Only copy if there is text content; attachment-only messages are skipped in text copy.
+                if (!content.isNullOrBlank()) {
+                  if (sb.isNotEmpty()) sb.append("\n")
+
+                  if (isConversation) {
+                    val name = if (msg.direction == MessageDirection.Sent) {
+                      context.getString(R.string.chat_you_prefix).trimEnd(' ', ':')
+                    } else {
+                      contact?.name ?: peerId
+                    }
+                    val time = dateTimeFormatter.format(Instant.ofEpochMilli(msg.timestamp / 1000))
+                    sb.append("[$time] $name: $content")
+                  } else {
+                    sb.append(content)
+                  }
+                }
+              }
+
+              if (sb.isNotEmpty()) {
+                clipboardManager.setText(AnnotatedString(sb.toString()))
+              }
+            }
+            selectedMessageIds = emptySet()
           }
-        },
-        navigationIcon = {
-          IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(id = R.string.action_back))
+        )
+      } else {
+        TopAppBar(
+          title = {
+            Row(
+              modifier = Modifier.clickable { onShowContactProfile(peerId) },
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              UserAvatar(
+                photoBase64 = contact?.photo,
+                modifier = Modifier.size(40.dp)
+              )
+              Spacer(modifier = Modifier.width(8.dp))
+              Text(
+                text = contact?.name ?: peerId,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+              )
+            }
+          },
+          navigationIcon = {
+            IconButton(onClick = onBack) {
+              Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(id = R.string.action_back))
+            }
+          },
+          actions = {
+            IconButton(onClick = { callVM.startVoiceCall(peerId) }) {
+              Icon(Icons.Default.Call, contentDescription = stringResource(id = R.string.action_voice_call))
+            }
+            IconButton(onClick = { callVM.startVideoCall(peerId) }) {
+              Icon(Icons.Default.Videocam, contentDescription = stringResource(id = R.string.action_video_call))
+            }
           }
-        },
-        actions = {
-          IconButton(onClick = { callVM.startVoiceCall(peerId) }) {
-            Icon(Icons.Default.Call, contentDescription = stringResource(id = R.string.action_voice_call))
-          }
-          IconButton(onClick = { callVM.startVideoCall(peerId) }) {
-            Icon(Icons.Default.Videocam, contentDescription = stringResource(id = R.string.action_video_call))
-          }
-        }
-      )
+        )
+      }
     }
   ) { padding ->
     Column(
@@ -373,9 +437,6 @@ fun ConversationScreen(
         ConnectionStatusBar(contact = it)
       }
 
-      val locale = ConfigurationCompat.getLocales(LocalConfiguration.current)[0] ?: Locale.getDefault()
-      val zoneId = ZoneId.systemDefault()
-
       ChatHistory(
         modifier = Modifier.weight(1f),
         historyPage = historyPage,
@@ -384,6 +445,15 @@ fun ConversationScreen(
         transferProgress = transferProgress,
         locale = locale,
         zoneId = zoneId,
+        selectedMessageIds = selectedMessageIds,
+        selectionMode = selectionMode,
+        onToggleSelection = { id ->
+          selectedMessageIds = if (id in selectedMessageIds) {
+            selectedMessageIds - id
+          } else {
+            selectedMessageIds + id
+          }
+        },
         onSystemMessageClick = { clickedEntry ->
           if (clickedEntry.isTruncated) {
             tappedTruncatedMessageId = clickedEntry.id
@@ -448,6 +518,36 @@ fun ConversationScreen(
       }
     }
   }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SelectionTopBar(
+  count: Int,
+  onClear: () -> Unit,
+  onCopy: () -> Unit
+) {
+  TopAppBar(
+    title = {
+      Text(
+        text = stringResource(id = R.string.selected_count, count),
+        style = MaterialTheme.typography.titleMedium
+      )
+    },
+    navigationIcon = {
+      IconButton(onClick = onClear) {
+        Icon(Icons.Default.Close, contentDescription = stringResource(id = R.string.action_close))
+      }
+    },
+    actions = {
+      IconButton(onClick = onCopy) {
+        Icon(Icons.Default.ContentCopy, contentDescription = stringResource(id = R.string.action_copy))
+      }
+    },
+    colors = TopAppBarDefaults.topAppBarColors(
+      containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+    )
+  )
 }
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
@@ -917,6 +1017,9 @@ fun ChatHistory(
   transferProgress: Map<String, Float>,
   locale: Locale,
   zoneId: ZoneId,
+  selectedMessageIds: Set<Long>,
+  selectionMode: Boolean,
+  onToggleSelection: (Long) -> Unit,
   onSystemMessageClick: (HistoryEntry) -> Unit,
   onMediaClick: (List<Attachment>, Int) -> Unit
 ) {
@@ -963,7 +1066,10 @@ fun ChatHistory(
           isGroupTail = isGroupTail,
           onCancelTransfer = { attId -> chatVM.cancelTransfer(attId, currentItem.direction == MessageDirection.Sent) },
           onResumeTransfer = { attId -> chatVM.resumeTransfer(attId, currentItem.direction == MessageDirection.Sent) },
-          onDiscardTransfer = { attId -> chatVM.discardAttachment(attId) }
+          onDiscardTransfer = { attId -> chatVM.discardAttachment(attId) },
+          isSelected = selectedMessageIds.contains(currentItem.id),
+          selectionMode = selectionMode,
+          onToggleSelection = { onToggleSelection(currentItem.id) }
         )
 
         HistoryEntryKind.VoiceCall, HistoryEntryKind.VideoCall -> CallLogBubble(
@@ -1004,6 +1110,7 @@ private fun shouldGroupMessages(current: HistoryEntry, other: HistoryEntry?): Bo
   return diff <= GROUPING_THRESHOLD_US
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MessageBubble(
   entry: HistoryEntry,
@@ -1016,7 +1123,10 @@ fun MessageBubble(
   isGroupTail: Boolean = true,
   onCancelTransfer: (String) -> Unit,
   onResumeTransfer: (String) -> Unit,
-  onDiscardTransfer: (String) -> Unit
+  onDiscardTransfer: (String) -> Unit,
+  isSelected: Boolean = false,
+  selectionMode: Boolean = false,
+  onToggleSelection: () -> Unit = {}
 ) {
   val isFromMe = entry.direction == MessageDirection.Sent
   val alignment = if (isFromMe) Alignment.CenterEnd else Alignment.CenterStart
@@ -1043,6 +1153,15 @@ fun MessageBubble(
   Box(
     modifier = Modifier
       .fillMaxWidth()
+      .combinedClickable(
+        onClick = {
+          if (selectionMode) onToggleSelection()
+        },
+        onLongClick = {
+          onToggleSelection()
+        }
+      )
+      .background(if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent)
       .padding(
         start = if (isFromMe) 48.dp else 8.dp,
         end = if (isFromMe) 8.dp else 48.dp,
@@ -1063,6 +1182,7 @@ fun MessageBubble(
           attachments = entry.attachments,
           transferProgress = transferProgress,
           isFromMe = isFromMe,
+          selectionMode = selectionMode,
           onMediaClick = { clickedAttachment ->
             val index = entry.attachments.indexOf(clickedAttachment)
             onMediaClick(entry.attachments, if (index != -1) index else 0)
@@ -1087,7 +1207,7 @@ fun MessageBubble(
         )
         if (entry.isTruncated) {
           TextButton(
-            onClick = { onShowMore(entry.id) },
+            onClick = { if (!selectionMode) onShowMore(entry.id) else onToggleSelection() },
             contentPadding = PaddingValues(top = 8.dp, bottom = 0.dp)
           ) {
             Text(stringResource(id = R.string.action_show_more))

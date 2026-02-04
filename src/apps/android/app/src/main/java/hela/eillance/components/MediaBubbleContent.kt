@@ -69,6 +69,7 @@ fun MediaBubbleContent(
   attachments: List<Attachment>,
   transferProgress: Map<String, Float>,
   isFromMe: Boolean,
+  selectionMode: Boolean = false,
   onMediaClick: (Attachment) -> Unit,
   onCancel: (String) -> Unit,
   onResume: (String) -> Unit,
@@ -92,6 +93,7 @@ fun MediaBubbleContent(
         attachments = visuals,
         transferProgress = transferProgress,
         isFromMe = isFromMe,
+        selectionMode = selectionMode,
         onMediaClick = onMediaClick,
         onCancel = onCancel,
         onResume = onResume,
@@ -114,6 +116,7 @@ fun MediaBubbleContent(
             attachment = file,
             progress = transferProgress[file.id],
             isFromMe = isFromMe,
+            selectionMode = selectionMode,
             onClick = { onMediaClick(file) },
             onCancel = { onCancel(file.id) },
             onResume = { onResume(file.id) },
@@ -130,6 +133,7 @@ private fun VisualAttachmentsGrid(
   attachments: List<Attachment>,
   transferProgress: Map<String, Float>,
   isFromMe: Boolean,
+  selectionMode: Boolean,
   onMediaClick: (Attachment) -> Unit,
   onCancel: (String) -> Unit,
   onResume: (String) -> Unit,
@@ -145,6 +149,7 @@ private fun VisualAttachmentsGrid(
       note = att.note,
       progress = transferProgress[att.id],
       isFromMe = isFromMe,
+      selectionMode = selectionMode,
       onClick = { onMediaClick(att) },
       onCancel = { onCancel(att.id) },
       onResume = { onResume(att.id) },
@@ -226,7 +231,7 @@ private fun VisualAttachmentsGrid(
                   modifier = Modifier
                     .fillMaxSize()
                     .background(Color.Black.copy(alpha = 0.5f))
-                    .clickable { onMediaClick(attachments[3]) },
+                    .clickable(enabled = !selectionMode) { onMediaClick(attachments[3]) },
                   contentAlignment = Alignment.Center
                 ) {
                   Text(
@@ -249,6 +254,7 @@ private fun FileAttachmentItem(
   attachment: Attachment,
   progress: Float?,
   isFromMe: Boolean,
+  selectionMode: Boolean,
   onClick: () -> Unit,
   onCancel: () -> Unit,
   onResume: () -> Unit,
@@ -271,7 +277,7 @@ private fun FileAttachmentItem(
       .fillMaxWidth()
       .clip(RoundedCornerShape(8.dp))
       .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-      .clickable(enabled = isDone, onClick = onClick)
+      .clickable(enabled = isDone && !selectionMode, onClick = onClick)
       .padding(8.dp),
     verticalAlignment = Alignment.CenterVertically
   ) {
@@ -399,6 +405,7 @@ private fun MediaItem(
   note: String,
   progress: Float?,
   isFromMe: Boolean,
+  selectionMode: Boolean,
   onClick: () -> Unit,
   onCancel: () -> Unit,
   onResume: () -> Unit,
@@ -411,7 +418,7 @@ private fun MediaItem(
     modifier = modifier
       .background(MaterialTheme.colorScheme.surfaceContainerHigh)
       .clickable(
-        enabled = attachment.status == AttachmentStatus.Done,
+        enabled = attachment.status == AttachmentStatus.Done && !selectionMode,
         onClick = onClick
       ),
     contentAlignment = Alignment.Center
