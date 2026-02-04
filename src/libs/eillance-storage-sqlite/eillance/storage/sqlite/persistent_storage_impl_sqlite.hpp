@@ -161,59 +161,71 @@ class SQLiteStorage final : public PersistentStorageImpl {
   // --- Contacts ---
   // ... (Contact methods remain unchanged) ...
   auto GetContacts() -> std::vector<identity::Contact> override {
-      // ... implementation matches previous paste ...
-      std::lock_guard const lock(mutex_);
-      if (!db_) return {};
-      std::vector<identity::Contact> contacts;
-      SQLiteStatement const statement(db_, "SELECT peer_id, status, display_name, display_name_override, bio, photo_base64, signature_from_them, my_signature_for_them FROM contacts;");
-      while (sqlite3_step(statement.Get()) == SQLITE_ROW) {
-        contacts.push_back({
-            .peer_id = ContactID(ColumnString(statement.Get(), 0)),
-            .status = static_cast<identity::ContactStatus>(sqlite3_column_int(statement.Get(), 1)),
-            .display_name = ColumnOptionalString(statement.Get(), 2),
-            .display_name_override = ColumnOptionalString(statement.Get(), 3),
-            .bio = ColumnOptionalString(statement.Get(), 4),
-            .photo_base64 = ColumnOptionalString(statement.Get(), 5),
-            .signature_from_them = OptionalHexToBytes(ColumnOptionalString(statement.Get(), 6)),
-            .my_signature_for_them = OptionalHexToBytes(ColumnOptionalString(statement.Get(), 7))
-        });
-      }
-      return contacts;
+    // ... implementation matches previous paste ...
+    std::lock_guard const lock(mutex_);
+    if (!db_) return {};
+    std::vector<identity::Contact> contacts;
+    SQLiteStatement const statement(
+        db_,
+        "SELECT peer_id, status, display_name, display_name_override, bio, photo_base64, signature_from_them, "
+        "my_signature_for_them FROM contacts;"
+    );
+    while (sqlite3_step(statement.Get()) == SQLITE_ROW) {
+      contacts.push_back(
+          {.peer_id = ContactID(ColumnString(statement.Get(), 0)),
+           .status = static_cast<identity::ContactStatus>(sqlite3_column_int(statement.Get(), 1)),
+           .display_name = ColumnOptionalString(statement.Get(), 2),
+           .display_name_override = ColumnOptionalString(statement.Get(), 3),
+           .bio = ColumnOptionalString(statement.Get(), 4),
+           .photo_base64 = ColumnOptionalString(statement.Get(), 5),
+           .signature_from_them = OptionalHexToBytes(ColumnOptionalString(statement.Get(), 6)),
+           .my_signature_for_them = OptionalHexToBytes(ColumnOptionalString(statement.Get(), 7))}
+      );
+    }
+    return contacts;
   }
 
   auto GetContact(ContactID const& peer_id) -> std::optional<identity::Contact> override {
-      std::lock_guard const lock(mutex_);
-      if (!db_) return std::nullopt;
-      SQLiteStatement const statement(db_, "SELECT peer_id, status, display_name, display_name_override, bio, photo_base64, signature_from_them, my_signature_for_them FROM contacts WHERE peer_id = ?;");
-      BindText(statement.Get(), 1, peer_id.ToString());
-      if (sqlite3_step(statement.Get()) == SQLITE_ROW) {
-        return identity::Contact{
-            .peer_id = ContactID(ColumnString(statement.Get(), 0)),
-            .status = static_cast<identity::ContactStatus>(sqlite3_column_int(statement.Get(), 1)),
-            .display_name = ColumnOptionalString(statement.Get(), 2),
-            .display_name_override = ColumnOptionalString(statement.Get(), 3),
-            .bio = ColumnOptionalString(statement.Get(), 4),
-            .photo_base64 = ColumnOptionalString(statement.Get(), 5),
-            .signature_from_them = OptionalHexToBytes(ColumnOptionalString(statement.Get(), 6)),
-            .my_signature_for_them = OptionalHexToBytes(ColumnOptionalString(statement.Get(), 7))
-        };
-      }
-      return std::nullopt;
+    std::lock_guard const lock(mutex_);
+    if (!db_) return std::nullopt;
+    SQLiteStatement const statement(
+        db_,
+        "SELECT peer_id, status, display_name, display_name_override, bio, photo_base64, signature_from_them, "
+        "my_signature_for_them FROM contacts WHERE peer_id = ?;"
+    );
+    BindText(statement.Get(), 1, peer_id.ToString());
+    if (sqlite3_step(statement.Get()) == SQLITE_ROW) {
+      return identity::Contact{
+          .peer_id = ContactID(ColumnString(statement.Get(), 0)),
+          .status = static_cast<identity::ContactStatus>(sqlite3_column_int(statement.Get(), 1)),
+          .display_name = ColumnOptionalString(statement.Get(), 2),
+          .display_name_override = ColumnOptionalString(statement.Get(), 3),
+          .bio = ColumnOptionalString(statement.Get(), 4),
+          .photo_base64 = ColumnOptionalString(statement.Get(), 5),
+          .signature_from_them = OptionalHexToBytes(ColumnOptionalString(statement.Get(), 6)),
+          .my_signature_for_them = OptionalHexToBytes(ColumnOptionalString(statement.Get(), 7))
+      };
+    }
+    return std::nullopt;
   }
 
   void UpdateContact(identity::Contact const& contact) override {
-      std::lock_guard const lock(mutex_);
-      if (!db_) return;
-      SQLiteStatement const statement(db_, "REPLACE INTO contacts (peer_id, status, display_name, display_name_override, bio, photo_base64, signature_from_them, my_signature_for_them) VALUES (?, ?, ?, ?, ?, ?, ?, ?);");
-      BindText(statement.Get(), 1, contact.peer_id.ToString());
-      sqlite3_bind_int(statement.Get(), 2, static_cast<int>(contact.status));
-      BindOptionalText(statement.Get(), 3, contact.display_name);
-      BindOptionalText(statement.Get(), 4, contact.display_name_override);
-      BindOptionalText(statement.Get(), 5, contact.bio);
-      BindOptionalText(statement.Get(), 6, contact.photo_base64);
-      BindOptionalText(statement.Get(), 7, OptionalBytesToHex(contact.signature_from_them));
-      BindOptionalText(statement.Get(), 8, OptionalBytesToHex(contact.my_signature_for_them));
-      sqlite3_step(statement.Get());
+    std::lock_guard const lock(mutex_);
+    if (!db_) return;
+    SQLiteStatement const statement(
+        db_,
+        "REPLACE INTO contacts (peer_id, status, display_name, display_name_override, bio, photo_base64, "
+        "signature_from_them, my_signature_for_them) VALUES (?, ?, ?, ?, ?, ?, ?, ?);"
+    );
+    BindText(statement.Get(), 1, contact.peer_id.ToString());
+    sqlite3_bind_int(statement.Get(), 2, static_cast<int>(contact.status));
+    BindOptionalText(statement.Get(), 3, contact.display_name);
+    BindOptionalText(statement.Get(), 4, contact.display_name_override);
+    BindOptionalText(statement.Get(), 5, contact.bio);
+    BindOptionalText(statement.Get(), 6, contact.photo_base64);
+    BindOptionalText(statement.Get(), 7, OptionalBytesToHex(contact.signature_from_them));
+    BindOptionalText(statement.Get(), 8, OptionalBytesToHex(contact.my_signature_for_them));
+    sqlite3_step(statement.Get());
   }
 
   void RemoveContact(ContactID const& peer_id) override {
@@ -237,32 +249,32 @@ class SQLiteStorage final : public PersistentStorageImpl {
   // --- Resilience ---
   // ... (Pending actions methods match previous paste) ...
   void AddPendingAction(ContactID const& peer_id, std::string const& payload) override {
-      std::lock_guard const lock(mutex_);
-      if (!db_) return;
-      SQLiteStatement const statement(db_, "INSERT INTO pending_actions (peer_id, payload) VALUES (?, ?);");
-      BindText(statement.Get(), 1, peer_id.ToString());
-      BindText(statement.Get(), 2, payload);
-      sqlite3_step(statement.Get());
+    std::lock_guard const lock(mutex_);
+    if (!db_) return;
+    SQLiteStatement const statement(db_, "INSERT INTO pending_actions (peer_id, payload) VALUES (?, ?);");
+    BindText(statement.Get(), 1, peer_id.ToString());
+    BindText(statement.Get(), 2, payload);
+    sqlite3_step(statement.Get());
   }
 
   auto GetPendingActions(ContactID const& peer_id) -> std::vector<PendingAction> override {
-      std::lock_guard const lock(mutex_);
-      if (!db_) return {};
-      std::vector<PendingAction> actions;
-      SQLiteStatement const statement(db_, "SELECT id, payload FROM pending_actions WHERE peer_id = ? ORDER BY id ASC;");
-      BindText(statement.Get(), 1, peer_id.ToString());
-      while (sqlite3_step(statement.Get()) == SQLITE_ROW) {
-          actions.push_back({sqlite3_column_int64(statement.Get(), 0), peer_id, ColumnString(statement.Get(), 1)});
-      }
-      return actions;
+    std::lock_guard const lock(mutex_);
+    if (!db_) return {};
+    std::vector<PendingAction> actions;
+    SQLiteStatement const statement(db_, "SELECT id, payload FROM pending_actions WHERE peer_id = ? ORDER BY id ASC;");
+    BindText(statement.Get(), 1, peer_id.ToString());
+    while (sqlite3_step(statement.Get()) == SQLITE_ROW) {
+      actions.push_back({sqlite3_column_int64(statement.Get(), 0), peer_id, ColumnString(statement.Get(), 1)});
+    }
+    return actions;
   }
 
   void RemovePendingAction(int64_t id) override {
-      std::lock_guard const lock(mutex_);
-      if (!db_) return;
-      SQLiteStatement const statement(db_, "DELETE FROM pending_actions WHERE id = ?;");
-      sqlite3_bind_int64(statement.Get(), 1, id);
-      sqlite3_step(statement.Get());
+    std::lock_guard const lock(mutex_);
+    if (!db_) return;
+    SQLiteStatement const statement(db_, "DELETE FROM pending_actions WHERE id = ?;");
+    sqlite3_bind_int64(statement.Get(), 1, id);
+    sqlite3_step(statement.Get());
   }
 
   // --- History / Messages ---
@@ -399,65 +411,83 @@ class SQLiteStorage final : public PersistentStorageImpl {
   }
 
   void UpdateHistoryEntry(messaging::HistoryEntryRecord const& entry) override {
-      // ... implementation matches previous paste, ensuring attachments are updated if re-processed ...
-      std::lock_guard const lock(mutex_);
-      if (!db_) return;
-      sqlite3_exec(db_, "BEGIN TRANSACTION;", nullptr, nullptr, nullptr);
-      // ... (Update message table - same as before) ...
-      SQLiteStatement const statement(db_, "UPDATE messages SET kind=?, timestamp=?, direction=?, status=?, content=? WHERE peer_id=? AND id=?;");
-      sqlite3_bind_int(statement.Get(), 1, static_cast<int>(entry.kind));
-      sqlite3_bind_int64(statement.Get(), 2, entry.timestamp);
-      sqlite3_bind_int(statement.Get(), 3, static_cast<int>(entry.direction));
-      sqlite3_bind_int(statement.Get(), 4, static_cast<int>(entry.status));
-      if (auto* msg = std::get_if<messaging::MessageEntry>(&entry.data)) { BindText(statement.Get(), 5, msg->content); }
-      else { BindText(statement.Get(), 5, ""); }
-      BindText(statement.Get(), 6, entry.peer_id.ToString());
-      sqlite3_bind_int64(statement.Get(), 7, entry.id);
-      sqlite3_step(statement.Get());
+    // ... implementation matches previous paste, ensuring attachments are updated if re-processed ...
+    std::lock_guard const lock(mutex_);
+    if (!db_) return;
+    sqlite3_exec(db_, "BEGIN TRANSACTION;", nullptr, nullptr, nullptr);
+    // ... (Update message table - same as before) ...
+    SQLiteStatement const statement(
+        db_,
+        "UPDATE messages SET kind=?, timestamp=?, direction=?, status=?, content=? WHERE peer_id=? AND id=?;"
+    );
+    sqlite3_bind_int(statement.Get(), 1, static_cast<int>(entry.kind));
+    sqlite3_bind_int64(statement.Get(), 2, entry.timestamp);
+    sqlite3_bind_int(statement.Get(), 3, static_cast<int>(entry.direction));
+    sqlite3_bind_int(statement.Get(), 4, static_cast<int>(entry.status));
+    if (auto* msg = std::get_if<messaging::MessageEntry>(&entry.data)) {
+      BindText(statement.Get(), 5, msg->content);
+    } else {
+      BindText(statement.Get(), 5, "");
+    }
+    BindText(statement.Get(), 6, entry.peer_id.ToString());
+    sqlite3_bind_int64(statement.Get(), 7, entry.id);
+    sqlite3_step(statement.Get());
 
-      if (auto* msg_entry = std::get_if<messaging::MessageEntry>(&entry.data)) {
-        for (auto const& att : msg_entry->attachments) {
-          SQLiteStatement const att_update(db_, "UPDATE message_attachments SET is_downloaded = ?, status = ? WHERE id = ?;");
-          sqlite3_bind_int(att_update.Get(), 1, att.is_downloaded ? 1 : 0);
-          sqlite3_bind_int(att_update.Get(), 2, static_cast<int>(att.status));
-          BindText(att_update.Get(), 3, att.id);
-          sqlite3_step(att_update.Get());
-        }
+    if (auto* msg_entry = std::get_if<messaging::MessageEntry>(&entry.data)) {
+      for (auto const& att : msg_entry->attachments) {
+        SQLiteStatement const att_update(
+            db_,
+            "UPDATE message_attachments SET is_downloaded = ?, status = ? WHERE id = ?;"
+        );
+        sqlite3_bind_int(att_update.Get(), 1, att.is_downloaded ? 1 : 0);
+        sqlite3_bind_int(att_update.Get(), 2, static_cast<int>(att.status));
+        BindText(att_update.Get(), 3, att.id);
+        sqlite3_step(att_update.Get());
       }
-      sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, nullptr);
+    }
+    sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, nullptr);
   }
 
   // ... (UpdateMessageStatus, UpdateMessageStatuses, UpdateAttachmentStatus remain same) ...
-  void UpdateMessageStatus(ContactID const& peer_id, uint64_t message_id, messaging::MessageStatus new_status) override {
-      std::lock_guard const lock(mutex_);
-      if (!db_) return;
-      SQLiteStatement const s(db_, "UPDATE messages SET status=? WHERE peer_id=? AND id=?;");
-      sqlite3_bind_int(s.Get(), 1, static_cast<int>(new_status));
-      BindText(s.Get(), 2, peer_id.ToString());
-      sqlite3_bind_int64(s.Get(), 3, message_id);
-      sqlite3_step(s.Get());
+  void UpdateMessageStatus(ContactID const& peer_id, uint64_t message_id, messaging::MessageStatus new_status)
+      override {
+    std::lock_guard const lock(mutex_);
+    if (!db_) return;
+    SQLiteStatement const s(db_, "UPDATE messages SET status=? WHERE peer_id=? AND id=?;");
+    sqlite3_bind_int(s.Get(), 1, static_cast<int>(new_status));
+    BindText(s.Get(), 2, peer_id.ToString());
+    sqlite3_bind_int64(s.Get(), 3, message_id);
+    sqlite3_step(s.Get());
   }
 
-  void UpdateMessageStatuses(ContactID const& peer_id, std::vector<uint64_t> const& message_ids, messaging::MessageStatus new_status) override {
-      if (message_ids.empty()) return;
-      std::lock_guard const lock(mutex_);
-      if (!db_) return;
-      nlohmann::json const ids_json = message_ids;
-      SQLiteStatement const s(db_, "UPDATE messages SET status=? WHERE peer_id=? AND id IN (SELECT value FROM json_each(?));");
-      sqlite3_bind_int(s.Get(), 1, static_cast<int>(new_status));
-      BindText(s.Get(), 2, peer_id.ToString());
-      BindText(s.Get(), 3, ids_json.dump());
-      sqlite3_step(s.Get());
+  void UpdateMessageStatuses(
+      ContactID const& peer_id,
+      std::vector<uint64_t> const& message_ids,
+      messaging::MessageStatus new_status
+  ) override {
+    if (message_ids.empty()) return;
+    std::lock_guard const lock(mutex_);
+    if (!db_) return;
+    nlohmann::json const ids_json = message_ids;
+    SQLiteStatement const s(
+        db_,
+        "UPDATE messages SET status=? WHERE peer_id=? AND id IN (SELECT value FROM json_each(?));"
+    );
+    sqlite3_bind_int(s.Get(), 1, static_cast<int>(new_status));
+    BindText(s.Get(), 2, peer_id.ToString());
+    BindText(s.Get(), 3, ids_json.dump());
+    sqlite3_step(s.Get());
   }
 
-  void UpdateAttachmentStatus(std::string const& attachment_id, messaging::AttachmentStatus status, bool is_downloaded) override {
-      std::lock_guard const lock(mutex_);
-      if (!db_) return;
-      SQLiteStatement const s(db_, "UPDATE message_attachments SET status=?, is_downloaded=? WHERE id=?;");
-      sqlite3_bind_int(s.Get(), 1, static_cast<int>(status));
-      sqlite3_bind_int(s.Get(), 2, is_downloaded ? 1 : 0);
-      BindText(s.Get(), 3, attachment_id);
-      sqlite3_step(s.Get());
+  void UpdateAttachmentStatus(std::string const& attachment_id, messaging::AttachmentStatus status, bool is_downloaded)
+      override {
+    std::lock_guard const lock(mutex_);
+    if (!db_) return;
+    SQLiteStatement const s(db_, "UPDATE message_attachments SET status=?, is_downloaded=? WHERE id=?;");
+    sqlite3_bind_int(s.Get(), 1, static_cast<int>(status));
+    sqlite3_bind_int(s.Get(), 2, is_downloaded ? 1 : 0);
+    BindText(s.Get(), 3, attachment_id);
+    sqlite3_step(s.Get());
   }
 
   auto GetAttachment(std::string const& attachment_id) -> std::optional<messaging::Attachment> override {
@@ -498,7 +528,8 @@ class SQLiteStorage final : public PersistentStorageImpl {
           .is_downloaded = (sqlite3_column_int(statement.Get(), 7) != 0),
           .status = static_cast<messaging::AttachmentStatus>(sqlite3_column_int(statement.Get(), 8)),
           .note = ColumnString(statement.Get(), 9),
-          .file_name = ColumnString(statement.Get(), 10)};
+          .file_name = ColumnString(statement.Get(), 10)
+      };
     }
     return std::nullopt;
   }
@@ -564,46 +595,56 @@ class SQLiteStorage final : public PersistentStorageImpl {
   }
 
   // ... (GetFullMessageContent, GetChatSummaries remain same) ...
-  auto GetFullMessageContent(ContactID const& peer_id, std::uint64_t message_id) -> std::optional<std::string> override {
-      std::lock_guard const lock(mutex_);
-      if (!db_) return std::nullopt;
-      SQLiteStatement const s(db_, "SELECT full_content FROM large_messages WHERE peer_id=? AND message_id=?;");
-      BindText(s.Get(), 1, peer_id.ToString());
-      sqlite3_bind_int64(s.Get(), 2, message_id);
-      if (sqlite3_step(s.Get()) == SQLITE_ROW) return ColumnString(s.Get(), 0);
-      return std::nullopt;
+  auto GetFullMessageContent(ContactID const& peer_id, std::uint64_t message_id)
+      -> std::optional<std::string> override {
+    std::lock_guard const lock(mutex_);
+    if (!db_) return std::nullopt;
+    SQLiteStatement const s(db_, "SELECT full_content FROM large_messages WHERE peer_id=? AND message_id=?;");
+    BindText(s.Get(), 1, peer_id.ToString());
+    sqlite3_bind_int64(s.Get(), 2, message_id);
+    if (sqlite3_step(s.Get()) == SQLITE_ROW) return ColumnString(s.Get(), 0);
+    return std::nullopt;
   }
 
   auto GetChatSummaries(std::vector<ContactID> const& peer_ids) -> std::vector<messaging::ChatSummary> override {
-     // ... same as previous paste ...
-     if (peer_ids.empty()) return {};
-     std::lock_guard const lock(mutex_);
-     if (!db_) return {};
-     std::vector<messaging::ChatSummary> summaries;
-     for (auto const& peer_id : peer_ids) {
-        messaging::ChatSummary summary;
-        summary.peer_id = peer_id;
-        summary.unread_count = 0;
-        {
-          SQLiteStatement const s(db_, "SELECT COUNT(*) FROM messages WHERE peer_id=? AND direction=? AND status!=? AND kind=?;");
-          BindText(s.Get(), 1, peer_id.ToString());
-          sqlite3_bind_int(s.Get(), 2, static_cast<int>(messaging::MessageDirection::received));
-          sqlite3_bind_int(s.Get(), 3, static_cast<int>(messaging::MessageStatus::read));
-          sqlite3_bind_int(s.Get(), 4, static_cast<int>(messaging::HistoryEntryKind::textMessage));
-          if (sqlite3_step(s.Get()) == SQLITE_ROW) summary.unread_count = sqlite3_column_int(s.Get(), 0);
+    // ... same as previous paste ...
+    if (peer_ids.empty()) return {};
+    std::lock_guard const lock(mutex_);
+    if (!db_) return {};
+    std::vector<messaging::ChatSummary> summaries;
+    for (auto const& peer_id : peer_ids) {
+      messaging::ChatSummary summary;
+      summary.peer_id = peer_id;
+      summary.unread_count = 0;
+      {
+        SQLiteStatement const s(
+            db_,
+            "SELECT COUNT(*) FROM messages WHERE peer_id=? AND direction=? AND status!=? AND kind=?;"
+        );
+        BindText(s.Get(), 1, peer_id.ToString());
+        sqlite3_bind_int(s.Get(), 2, static_cast<int>(messaging::MessageDirection::received));
+        sqlite3_bind_int(s.Get(), 3, static_cast<int>(messaging::MessageStatus::read));
+        sqlite3_bind_int(s.Get(), 4, static_cast<int>(messaging::HistoryEntryKind::textMessage));
+        if (sqlite3_step(s.Get()) == SQLITE_ROW) summary.unread_count = sqlite3_column_int(s.Get(), 0);
+      }
+      {
+        SQLiteStatement const s(
+            db_,
+            "SELECT id, remote_id, kind, timestamp, direction, status, is_truncated, content FROM messages WHERE "
+            "peer_id=? ORDER BY timestamp DESC LIMIT 1;"
+        );
+        BindText(s.Get(), 1, peer_id.ToString());
+        if (sqlite3_step(s.Get()) == SQLITE_ROW) {
+          summary.last_message = ParseHistoryEntry(s.Get());
+          summary.last_message.peer_id = peer_id;
+          summaries.push_back(summary);
         }
-        {
-          SQLiteStatement const s(db_, "SELECT id, remote_id, kind, timestamp, direction, status, is_truncated, content FROM messages WHERE peer_id=? ORDER BY timestamp DESC LIMIT 1;");
-          BindText(s.Get(), 1, peer_id.ToString());
-          if (sqlite3_step(s.Get()) == SQLITE_ROW) {
-             summary.last_message = ParseHistoryEntry(s.Get());
-             summary.last_message.peer_id = peer_id;
-             summaries.push_back(summary);
-          }
-        }
-     }
-     std::ranges::sort(summaries, [](auto const& a, auto const& b) { return a.last_message.timestamp > b.last_message.timestamp; });
-     return summaries;
+      }
+    }
+    std::ranges::sort(summaries, [](auto const& a, auto const& b) {
+      return a.last_message.timestamp > b.last_message.timestamp;
+    });
+    return summaries;
   }
 
   auto GetMessagesWithStatus(ContactID const& peer_id, messaging::MessageStatus status)
@@ -688,36 +729,50 @@ class SQLiteStorage final : public PersistentStorageImpl {
   }
 
   // ... (GetRemoteIds, Debug methods remain same) ...
-  auto GetRemoteIds(ContactID const& peer_id, std::vector<uint64_t> const& local_ids) -> std::vector<uint64_t> override {
-      if (local_ids.empty()) return {};
-      std::lock_guard const lock(mutex_);
-      if (!db_) return {};
-      nlohmann::json const ids_json = local_ids;
-      SQLiteStatement const s(db_, "SELECT remote_id FROM messages WHERE peer_id=? AND id IN (SELECT value FROM json_each(?)) AND remote_id IS NOT NULL;");
-      BindText(s.Get(), 1, peer_id.ToString());
-      BindText(s.Get(), 2, ids_json.dump());
-      std::vector<uint64_t> r_ids;
-      while (sqlite3_step(s.Get()) == SQLITE_ROW) { r_ids.push_back(static_cast<uint64_t>(sqlite3_column_int64(s.Get(), 0))); }
-      return r_ids;
+  auto GetRemoteIds(ContactID const& peer_id, std::vector<uint64_t> const& local_ids)
+      -> std::vector<uint64_t> override {
+    if (local_ids.empty()) return {};
+    std::lock_guard const lock(mutex_);
+    if (!db_) return {};
+    nlohmann::json const ids_json = local_ids;
+    SQLiteStatement const s(
+        db_,
+        "SELECT remote_id FROM messages WHERE peer_id=? AND id IN (SELECT value FROM json_each(?)) AND remote_id IS "
+        "NOT NULL;"
+    );
+    BindText(s.Get(), 1, peer_id.ToString());
+    BindText(s.Get(), 2, ids_json.dump());
+    std::vector<uint64_t> r_ids;
+    while (sqlite3_step(s.Get()) == SQLITE_ROW) {
+      r_ids.push_back(static_cast<uint64_t>(sqlite3_column_int64(s.Get(), 0)));
+    }
+    return r_ids;
   }
 
   void DebugClearAllHistory() override {
-      std::lock_guard const lock(mutex_);
-      if (!db_) return;
-      sqlite3_exec(db_, "BEGIN TRANSACTION; DELETE FROM large_messages; DELETE FROM message_attachments; DELETE FROM pending_actions; DELETE FROM messages; COMMIT;", nullptr, nullptr, nullptr);
+    std::lock_guard const lock(mutex_);
+    if (!db_) return;
+    sqlite3_exec(
+        db_,
+        "BEGIN TRANSACTION; DELETE FROM large_messages; DELETE FROM message_attachments; DELETE FROM pending_actions; "
+        "DELETE FROM messages; COMMIT;",
+        nullptr,
+        nullptr,
+        nullptr
+    );
   }
   void DebugClearAllContacts() override {
-      std::lock_guard const lock(mutex_);
-      if (!db_) return;
-      sqlite3_exec(db_, "BEGIN TRANSACTION; DELETE FROM contacts; COMMIT;", nullptr, nullptr, nullptr);
+    std::lock_guard const lock(mutex_);
+    if (!db_) return;
+    sqlite3_exec(db_, "BEGIN TRANSACTION; DELETE FROM contacts; COMMIT;", nullptr, nullptr, nullptr);
   }
   void DebugRevokeAllContactApprovals() override {
-      std::lock_guard const lock(mutex_);
-      if (!db_) return;
-      SQLiteStatement const s(db_, "UPDATE contacts SET status=? WHERE status=?;");
-      sqlite3_bind_int(s.Get(), 1, static_cast<int>(identity::ContactStatus::pendingApproval));
-      sqlite3_bind_int(s.Get(), 2, static_cast<int>(identity::ContactStatus::confirmed));
-      sqlite3_step(s.Get());
+    std::lock_guard const lock(mutex_);
+    if (!db_) return;
+    SQLiteStatement const s(db_, "UPDATE contacts SET status=? WHERE status=?;");
+    sqlite3_bind_int(s.Get(), 1, static_cast<int>(identity::ContactStatus::pendingApproval));
+    sqlite3_bind_int(s.Get(), 2, static_cast<int>(identity::ContactStatus::confirmed));
+    sqlite3_step(s.Get());
   }
 
  private:

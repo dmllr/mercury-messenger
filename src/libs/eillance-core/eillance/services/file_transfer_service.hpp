@@ -94,11 +94,11 @@ class FileTransferService {
 
     // Try to recover state
     if (std::filesystem::exists(progress_path)) {
-      std::ifstream pf(progress_path, std::ios::binary);
-      if (pf) {
+      std::ifstream part_file(progress_path, std::ios::binary);
+      if (part_file) {
         std::uint32_t saved_seq = 0;
-        pf.read(reinterpret_cast<char*>(&saved_seq), sizeof(saved_seq));
-        if (pf) {
+        part_file.read(reinterpret_cast<char*>(&saved_seq), sizeof(saved_seq));
+        if (part_file) {
           state.highest_seq_written = saved_seq;
           // Estimate bytes written. Safe lower bound.
           state.bytes_written = static_cast<std::size_t>(saved_seq) * chunkSizeBytes;
@@ -185,8 +185,12 @@ class FileTransferService {
     }
   }
 
-  void
-  CancelTransfer(ContactID const& peer_id, std::string const& attachment_id, bool is_upload, bool notify_peer = true) {
+  void CancelTransfer(
+      ContactID const& peer_id,
+      std::string const& attachment_id,
+      bool const is_upload,
+      bool const notify_peer = true
+  ) {
     std::lock_guard<std::mutex> const lock(transfers_mutex_);
     if (is_upload) {
       active_uploads_.erase(attachment_id);
@@ -216,7 +220,7 @@ class FileTransferService {
     }
   }
 
-  void ResumeTransfer(ContactID const& peer_id, std::string const& attachment_id, bool is_upload) {
+  void ResumeTransfer(ContactID const& peer_id, std::string const& attachment_id, bool const is_upload) {
     if (is_upload) {
       // Sender Side Resume:
       // We do NOT start pumping data immediately to avoid forcing data on a paused receiver.
@@ -239,9 +243,9 @@ class FileTransferService {
           storage_root.parent_path() / "attachments" / (attachment_id + ".progress");
 
       if (std::filesystem::exists(progress_path)) {
-        std::ifstream pf(progress_path, std::ios::binary);
-        if (pf) {
-          pf.read(reinterpret_cast<char*>(&start_seq), sizeof(start_seq));
+        std::ifstream part_file(progress_path, std::ios::binary);
+        if (part_file) {
+          part_file.read(reinterpret_cast<char*>(&start_seq), sizeof(start_seq));
         }
       }
 
@@ -402,7 +406,7 @@ class FileTransferService {
     }
   }
 
-  void HandleResume(ContactID const& peer_id, std::string const& file_id, std::span<std::byte const> payload) {
+  void HandleResume(ContactID const& peer_id, std::string const& file_id, std::span<std::byte const> const payload) {
     std::uint32_t requested_seq = 0;
     if (payload.size() >= sizeof(requested_seq)) {
       std::memcpy(&requested_seq, payload.data(), sizeof(requested_seq));
@@ -519,31 +523,30 @@ class FileTransferService {
       auto attachment = storage_->GetAttachment(file_id);
 
       if (attachment) {
-          // Guard against forced push if we paused/canceled
-          if (attachment->status == messaging::AttachmentStatus::paused ||
-              attachment->status == messaging::AttachmentStatus::canceled ||
-              attachment->status == messaging::AttachmentStatus::peerCanceled ||
-              attachment->status == messaging::AttachmentStatus::discarded) {
-              return;
-          }
-
-          if (attachment->status != messaging::AttachmentStatus::done) {
-            lock.unlock();
-            QueueDownload(peer_id, *attachment, 0);
-            lock.lock();
-          }
-      } else {
+        // Guard against forced push if we paused/canceled
+        if (attachment->status == messaging::AttachmentStatus::paused ||
+            attachment->status == messaging::AttachmentStatus::canceled ||
+            attachment->status == messaging::AttachmentStatus::peerCanceled ||
+            attachment->status == messaging::AttachmentStatus::discarded) {
           return;
+        }
+
+        if (attachment->status != messaging::AttachmentStatus::done) {
+          lock.unlock();
+          QueueDownload(peer_id, *attachment, 0);
+          lock.lock();
+        }
+      } else {
+        return;
       }
     }
 
-    auto iterator = active_downloads_.find(file_id);
-    if (iterator == active_downloads_.end()) {
+    auto const it = active_downloads_.find(file_id);
+    if (it == active_downloads_.end()) {
       return;
     }
 
-    auto& state = iterator->second;
-    if (state.stream.is_open()) {
+    if (auto& state = it->second; state.stream.is_open()) {
       auto const offset = sequence * chunkSizeBytes;
 
       state.stream.seekp(offset);
@@ -556,10 +559,9 @@ class FileTransferService {
         state.highest_seq_written = sequence + 1;
 
         // Save progress to disk for resume
-        std::ofstream pf(state.progress_path, std::ios::binary);
-        if (pf) {
-            std::uint32_t const next = static_cast<std::uint32_t>(state.highest_seq_written);
-            pf.write(reinterpret_cast<char const*>(&next), sizeof(next));
+        if (std::ofstream file_part(state.progress_path, std::ios::binary); file_part) {
+          auto const next = static_cast<std::uint32_t>(state.highest_seq_written);
+          file_part.write(reinterpret_cast<char const*>(&next), sizeof(next));
         }
       }
 
@@ -582,7 +584,7 @@ class FileTransferService {
 
   void HandleEnd(ContactID const& peer_id, std::string const& file_id) {
     std::unique_lock<std::mutex> lock(transfers_mutex_);
-    auto iterator = active_downloads_.find(file_id);
+    auto const iterator = active_downloads_.find(file_id);
     if (iterator == active_downloads_.end()) {
       return;
     }
@@ -596,16 +598,15 @@ class FileTransferService {
     }
 
     state.stream.close();
-    auto temp_path = state.temp_path;
-    auto final_path = state.file_path;
-    auto expected = state.expected_hash;
-    auto progress_path = state.progress_path;
+    auto const temp_path = state.temp_path;
+    auto const final_path = state.file_path;
+    auto const expected = state.expected_hash;
+    auto const progress_path = state.progress_path;
 
     active_downloads_.erase(iterator);
     lock.unlock();
 
-    std::string const calc_hash = crypto::CalculateFileHash(temp_path);
-    if (calc_hash == expected) {
+    if (auto const calc_hash = crypto::CalculateFileHash(temp_path); calc_hash == expected) {
       std::error_code error_code;
       std::filesystem::rename(temp_path, final_path, error_code);
       std::filesystem::remove(progress_path, error_code);
@@ -613,18 +614,24 @@ class FileTransferService {
         LGE << "Failed to rename temp file: " << error_code.message();
       } else {
         storage_->UpdateAttachmentStatus(file_id, messaging::AttachmentStatus::done, true);
-        if (on_attachment_downloaded_) on_attachment_downloaded_(peer_id, file_id);
-        if (on_transfer_progress_) on_transfer_progress_(peer_id, file_id, 1.0F);
-        if (on_attachment_status_changed_)
+        if (on_attachment_downloaded_) {
+          on_attachment_downloaded_(peer_id, file_id);
+        }
+        if (on_transfer_progress_) {
+          on_transfer_progress_(peer_id, file_id, 1.0F);
+        }
+        if (on_attachment_status_changed_) {
           on_attachment_status_changed_(peer_id, file_id, messaging::AttachmentStatus::done);
+        }
       }
     } else {
       LGE << "Hash mismatch for " << file_id;
       std::filesystem::remove(temp_path);
       std::filesystem::remove(progress_path);
       storage_->UpdateAttachmentStatus(file_id, messaging::AttachmentStatus::failed, false);
-      if (on_attachment_status_changed_)
+      if (on_attachment_status_changed_) {
         on_attachment_status_changed_(peer_id, file_id, messaging::AttachmentStatus::failed);
+      }
     }
   }
 

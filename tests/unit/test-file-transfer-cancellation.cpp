@@ -186,7 +186,7 @@ TEST_F(FileTransferCancellationTest, CancelDownload_PausesDownload) {
   // 4. Verify PAUSE message sent (Binary Type 0x04)
   bool pause_sent = false;
   for (auto const& msg : mock_transport_->log.sent_binary_messages | std::views::values) {
-    if (IsBinaryPacket(msg, 0x04, "down_id")) { // 0x04 = PAUSE
+    if (IsBinaryPacket(msg, 0x04, "down_id")) {  // 0x04 = PAUSE
       pause_sent = true;
     }
   }

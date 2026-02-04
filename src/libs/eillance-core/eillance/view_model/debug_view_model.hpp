@@ -10,7 +10,7 @@
 namespace eillance::view_model {
 
 class DebugViewModel {
-public:
+ public:
   explicit DebugViewModel(std::shared_ptr<Client> client, std::shared_ptr<ClientEventRouter> router)
       : client_(std::move(client)),
         router_(std::move(router)) {
@@ -43,7 +43,7 @@ public:
     return client_->GetAllUnreadInfo();
   }
 
-private:
+ private:
   std::shared_ptr<Client> client_;
   std::shared_ptr<ClientEventRouter> router_;
 };
