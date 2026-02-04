@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -118,6 +119,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.os.ConfigurationCompat
 import coil.compose.AsyncImage
@@ -550,6 +552,8 @@ fun SelectionTopBar(
   )
 }
 
+private enum class CameraAction { Photo, Video }
+
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun MessageInputArea(
@@ -591,6 +595,47 @@ fun MessageInputArea(
   // Define Authority dynamically based on package name
   val authority = "${context.packageName}.provider"
 
+  var pendingCameraAction by remember { mutableStateOf<CameraAction?>(null) }
+
+  val launchCameraPhoto = {
+    val tmpFile = File.createTempFile("cam_photo_", ".jpg", context.cacheDir)
+    val uri = FileProvider.getUriForFile(context, authority, tmpFile)
+    cameraPhotoUri = uri
+    takePicture.launch(uri)
+  }
+
+  val launchCameraVideo = {
+    val tmpFile = File.createTempFile("cam_video_", ".mp4", context.cacheDir)
+    val uri = FileProvider.getUriForFile(context, authority, tmpFile)
+    cameraVideoUri = uri
+    captureVideo.launch(uri)
+  }
+
+  val permissionLauncher = rememberLauncherForActivityResult(
+    ActivityResultContracts.RequestPermission()
+  ) { isGranted ->
+    if (isGranted) {
+      when (pendingCameraAction) {
+        CameraAction.Photo -> launchCameraPhoto()
+        CameraAction.Video -> launchCameraVideo()
+        null -> {}
+      }
+    }
+    pendingCameraAction = null
+  }
+
+  fun checkAndLaunch(action: CameraAction) {
+    if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+      when (action) {
+        CameraAction.Photo -> launchCameraPhoto()
+        CameraAction.Video -> launchCameraVideo()
+      }
+    } else {
+      pendingCameraAction = action
+      permissionLauncher.launch(Manifest.permission.CAMERA)
+    }
+  }
+
   Column {
     // 1. Attachment Action Panel (Visible on Focus)
     AnimatedVisibility(visible = isFocused) {
@@ -613,12 +658,7 @@ fun MessageInputArea(
         }
 
         // Camera Photo
-        IconButton(onClick = {
-          val tmpFile = File.createTempFile("cam_photo_", ".jpg", context.cacheDir)
-          val uri = FileProvider.getUriForFile(context, authority, tmpFile)
-          cameraPhotoUri = uri
-          takePicture.launch(uri)
-        }) {
+        IconButton(onClick = { checkAndLaunch(CameraAction.Photo) }) {
           Icon(
             Icons.Default.CameraAlt,
             contentDescription = stringResource(R.string.attach_camera_photo),
@@ -627,12 +667,7 @@ fun MessageInputArea(
         }
 
         // Camera Video
-        IconButton(onClick = {
-          val tmpFile = File.createTempFile("cam_video_", ".mp4", context.cacheDir)
-          val uri = FileProvider.getUriForFile(context, authority, tmpFile)
-          cameraVideoUri = uri
-          captureVideo.launch(uri)
-        }) {
+        IconButton(onClick = { checkAndLaunch(CameraAction.Video) }) {
           Icon(
             Icons.Default.Videocam,
             contentDescription = stringResource(R.string.attach_camera_video),
