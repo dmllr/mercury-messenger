@@ -82,16 +82,19 @@ private class ConnectionSession(
       isDisposed = true
     }
     cancelTimeout()
-    try {
-      dataChannel?.unregisterObserver()
-      dataChannel?.dispose()
-    } catch (e: Exception) {
-      Log.w("WebRtcTransport", "Error disposing DataChannel", e)
-    }
-    try {
-      pc.close()
-    } catch (e: Exception) {
-      Log.w("WebRtcTransport", "Error closing PeerConnection", e)
+    // Offload blocking cleanup to IO thread to avoid ANRs on the main thread
+    scope.launch(Dispatchers.IO) {
+      try {
+        dataChannel?.unregisterObserver()
+        dataChannel?.dispose()
+      } catch (e: Exception) {
+        Log.w("WebRtcTransport", "Error disposing DataChannel", e)
+      }
+      try {
+        pc.close()
+      } catch (e: Exception) {
+        Log.w("WebRtcTransport", "Error closing PeerConnection", e)
+      }
     }
   }
 }
