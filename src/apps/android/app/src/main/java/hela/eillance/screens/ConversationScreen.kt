@@ -18,6 +18,8 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
@@ -232,17 +234,6 @@ fun ConversationScreen(
       }
     }
     previousHistorySize = historyPage.messages.size
-  }
-
-  // Mark messages as read
-  LaunchedEffect(historyPage.messages) {
-    val unreadMessageIds = historyPage.messages
-      .filter { it.kind == HistoryEntryKind.TextMessage && it.direction == MessageDirection.Received && it.status != MessageStatus.Read }
-      .map { it.id }
-
-    if (unreadMessageIds.isNotEmpty()) {
-      chatVM.markMessagesAsRead(unreadMessageIds)
-    }
   }
 
   // Logic to handle tapping "Read more" on a truncated message
@@ -1089,6 +1080,13 @@ fun ChatHistory(
       val isGroupTail = !shouldGroupMessages(currentItem, newerItem)
       val isGroupHead = !shouldGroupMessages(currentItem, olderItem)
 
+      // Mark as read when rendered, including System Messages
+      if (currentItem.direction == MessageDirection.Received && currentItem.status != MessageStatus.Read) {
+        LaunchedEffect(currentItem.id) {
+          chatVM.onMessageShown(currentItem.id)
+        }
+      }
+
       when (currentItem.kind) {
         HistoryEntryKind.TextMessage -> MessageBubble(
           entry = currentItem,
@@ -1103,6 +1101,7 @@ fun ChatHistory(
           onResumeTransfer = { attId -> chatVM.resumeTransfer(attId, currentItem.direction == MessageDirection.Sent) },
           onDiscardTransfer = { attId -> chatVM.discardAttachment(attId) },
           isSelected = selectedMessageIds.contains(currentItem.id),
+          isUnread = currentItem.direction == MessageDirection.Received && currentItem.status != MessageStatus.Read,
           selectionMode = selectionMode,
           onToggleSelection = { onToggleSelection(currentItem.id) }
         )
@@ -1110,10 +1109,15 @@ fun ChatHistory(
         HistoryEntryKind.VoiceCall, HistoryEntryKind.VideoCall -> CallLogBubble(
           entry = currentItem,
           zoneId = zoneId,
-          formatters = formatters
+          formatters = formatters,
+          isUnread = currentItem.direction == MessageDirection.Received && currentItem.status != MessageStatus.Read
         )
 
-        HistoryEntryKind.SystemMessage -> SystemMessageBubble(currentItem, onClick = onSystemMessageClick)
+        HistoryEntryKind.SystemMessage -> SystemMessageBubble(
+          entry = currentItem,
+          onClick = onSystemMessageClick,
+          isUnread = currentItem.direction == MessageDirection.Received && currentItem.status != MessageStatus.Read
+        )
       }
     }
 
@@ -1160,6 +1164,7 @@ fun MessageBubble(
   onResumeTransfer: (String) -> Unit,
   onDiscardTransfer: (String) -> Unit,
   isSelected: Boolean = false,
+  isUnread: Boolean = false,
   selectionMode: Boolean = false,
   onToggleSelection: () -> Unit = {}
 ) {
@@ -1204,83 +1209,105 @@ fun MessageBubble(
       ),
     contentAlignment = alignment
   ) {
-    Column(
-      modifier = Modifier
-        .clip(bubbleShape)
-        .background(colors.first)
-        .padding(horizontal = 4.dp, vertical = 4.dp),
-      horizontalAlignment = if (isFromMe) Alignment.End else Alignment.Start
-    ) {
-      // Render Attachments
-      if (entry.attachments.isNotEmpty()) {
-        MediaBubbleContent(
-          attachments = entry.attachments,
-          transferProgress = transferProgress,
-          isFromMe = isFromMe,
-          selectionMode = selectionMode,
-          onMediaClick = { clickedAttachment ->
-            val index = entry.attachments.indexOf(clickedAttachment)
-            onMediaClick(entry.attachments, if (index != -1) index else 0)
-          },
-          onCancel = onCancelTransfer,
-          onResume = onResumeTransfer,
-          onDiscard = onDiscardTransfer
-        )
-
-        if (!entry.content.isNullOrBlank()) {
-          Spacer(modifier = Modifier.height(8.dp))
-        }
-      }
-
-      // Render Text
-      if (!entry.content.isNullOrBlank()) {
-        Text(
-          text = entry.content,
-          color = colors.second,
-          style = MaterialTheme.typography.bodyLarge,
-          modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-        )
-        if (entry.isTruncated) {
-          TextButton(
-            onClick = { if (!selectionMode) onShowMore(entry.id) else onToggleSelection() },
-            contentPadding = PaddingValues(top = 8.dp, bottom = 0.dp)
-          ) {
-            Text(stringResource(id = R.string.action_show_more))
-          }
-        }
-      }
-
-      if (isGroupTail) {
-        Row(
-          modifier = Modifier.padding(top = 4.dp, end = 4.dp, bottom = 4.dp),
-          verticalAlignment = Alignment.CenterVertically
-        ) {
-          Text(
-            text = formatTimestamp(entry.timestamp, zoneId, formatters),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+    val bubbleContent = @Composable {
+      Column(
+        modifier = Modifier
+          .clip(bubbleShape)
+          .background(colors.first)
+          .padding(horizontal = 4.dp, vertical = 4.dp),
+        horizontalAlignment = if (isFromMe) Alignment.End else Alignment.Start
+      ) {
+        // Render Attachments
+        if (entry.attachments.isNotEmpty()) {
+          MediaBubbleContent(
+            attachments = entry.attachments,
+            transferProgress = transferProgress,
+            isFromMe = isFromMe,
+            selectionMode = selectionMode,
+            onMediaClick = { clickedAttachment ->
+              val index = entry.attachments.indexOf(clickedAttachment)
+              onMediaClick(entry.attachments, if (index != -1) index else 0)
+            },
+            onCancel = onCancelTransfer,
+            onResume = onResumeTransfer,
+            onDiscard = onDiscardTransfer
           )
-          if (isFromMe) {
-            Icon(
-              imageVector = when (entry.status) {
-                MessageStatus.Read -> Icons.Filled.DoneAll
-                MessageStatus.Delivered -> Icons.Filled.Done
-                MessageStatus.Sent -> Icons.Filled.Done
-                else -> Icons.Filled.Schedule
-              },
-              contentDescription = stringResource(id = R.string.message_status_description, entry.status),
-              modifier = Modifier
-                .size(16.dp)
-                .padding(start = 4.dp),
-              tint = if (entry.status == MessageStatus.Read) {
-                MaterialTheme.extendedColors.success
-              } else {
-                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
-              }
+
+          if (!entry.content.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(8.dp))
+          }
+        }
+
+        // Render Text
+        if (!entry.content.isNullOrBlank()) {
+          Text(
+            text = entry.content,
+            color = colors.second,
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+          )
+          if (entry.isTruncated) {
+            TextButton(
+              onClick = { if (!selectionMode) onShowMore(entry.id) else onToggleSelection() },
+              contentPadding = PaddingValues(top = 8.dp, bottom = 0.dp)
+            ) {
+              Text(stringResource(id = R.string.action_show_more))
+            }
+          }
+        }
+
+        if (isGroupTail) {
+          Row(
+            modifier = Modifier.padding(top = 4.dp, end = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Text(
+              text = formatTimestamp(entry.timestamp, zoneId, formatters),
+              style = MaterialTheme.typography.labelSmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
             )
+            if (isFromMe) {
+              Icon(
+                imageVector = when (entry.status) {
+                  MessageStatus.Read -> Icons.Filled.DoneAll
+                  MessageStatus.Delivered -> Icons.Filled.Done
+                  MessageStatus.Sent -> Icons.Filled.Done
+                  else -> Icons.Filled.Schedule
+                },
+                contentDescription = stringResource(id = R.string.message_status_description, entry.status),
+                modifier = Modifier
+                  .size(16.dp)
+                  .padding(start = 4.dp),
+                tint = if (entry.status == MessageStatus.Read) {
+                  MaterialTheme.extendedColors.success
+                } else {
+                  MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                }
+              )
+            }
           }
         }
       }
+    }
+
+    if (!isFromMe) {
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        bubbleContent()
+        AnimatedVisibility(
+          visible = isUnread,
+          enter = scaleIn() + fadeIn(),
+          exit = scaleOut() + fadeOut()
+        ) {
+          Box(
+            modifier = Modifier
+              .padding(start = 8.dp)
+              .size(4.dp)
+              .background(MaterialTheme.colorScheme.primary, CircleShape)
+          )
+        }
+      }
+    } else {
+      bubbleContent()
     }
   }
 }
@@ -1289,7 +1316,8 @@ fun MessageBubble(
 fun CallLogBubble(
   entry: HistoryEntry,
   zoneId: ZoneId,
-  formatters: Triple<DateTimeFormatter, DateTimeFormatter, DateTimeFormatter>
+  formatters: Triple<DateTimeFormatter, DateTimeFormatter, DateTimeFormatter>,
+  isUnread: Boolean = false
 ) {
   val (icon, color, text) = when (entry.callDirection) {
     CallDirection.Outgoing -> when (entry.callStatus) {
@@ -1351,11 +1379,23 @@ fun CallLogBubble(
       style = MaterialTheme.typography.bodySmall,
       color = MaterialTheme.colorScheme.onSurfaceVariant
     )
+    AnimatedVisibility(
+      visible = isUnread,
+      enter = scaleIn() + fadeIn(),
+      exit = scaleOut() + fadeOut()
+    ) {
+      Box(
+        modifier = Modifier
+          .padding(start = 8.dp)
+          .size(4.dp)
+          .background(MaterialTheme.colorScheme.primary, CircleShape)
+      )
+    }
   }
 }
 
 @Composable
-fun SystemMessageBubble(entry: HistoryEntry, onClick: (HistoryEntry) -> Unit) {
+fun SystemMessageBubble(entry: HistoryEntry, onClick: (HistoryEntry) -> Unit, isUnread: Boolean = false) {
   val parsedAction = remember(entry.content, entry.isTruncated) {
     entry.content?.let { content ->
       try {
@@ -1388,7 +1428,8 @@ fun SystemMessageBubble(entry: HistoryEntry, onClick: (HistoryEntry) -> Unit) {
       .clip(MaterialTheme.shapes.small)
       .clickable(enabled = isClickable) { onClick(entry) }
       .padding(horizontal = 16.dp),
-    horizontalArrangement = Arrangement.Center
+    horizontalArrangement = Arrangement.Center,
+    verticalAlignment = Alignment.CenterVertically
   ) {
     Box(
       modifier = Modifier
@@ -1400,6 +1441,18 @@ fun SystemMessageBubble(entry: HistoryEntry, onClick: (HistoryEntry) -> Unit) {
         text = stringResource(id = finalResId),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant
+      )
+    }
+    AnimatedVisibility(
+      visible = isUnread,
+      enter = scaleIn() + fadeIn(),
+      exit = scaleOut() + fadeOut()
+    ) {
+      Box(
+        modifier = Modifier
+          .padding(start = 8.dp)
+          .size(6.dp)
+          .background(MaterialTheme.colorScheme.primary, CircleShape)
       )
     }
   }

@@ -21,6 +21,8 @@ import hela.eillance.ndkio.AttachmentStatus
 import hela.eillance.ndkio.AttachmentType
 import hela.eillance.ndkio.HistoryPage
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -51,6 +53,37 @@ class ConversationViewModel(
 
   private val _draftAttachments = MutableStateFlow<List<DraftAttachment>>(emptyList())
   val draftAttachments = _draftAttachments.asStateFlow()
+
+  private val readQueue = mutableSetOf<Long>()
+  private var readDebounceJob: Job? = null
+
+  /**
+   * Called when a message is rendered on screen.
+   * Skip memory-only IDs (fake IDs generated for ephemeral system messages).
+   */
+  fun onMessageShown(messageId: Long) {
+    // Memory-only IDs are high values (>= 10^18) or negative when interpreted as Long.
+    // Real DB IDs are positive sequential integers.
+    if (messageId !in 0..1_000_000_000_000_000L) return
+
+    synchronized(readQueue) {
+      readQueue.add(messageId)
+    }
+
+    if (readDebounceJob?.isActive != true) {
+      readDebounceJob = viewModelScope.launch(Dispatchers.IO) {
+        delay(250)
+        val ids = synchronized(readQueue) {
+          val ids = readQueue.toList()
+          readQueue.clear()
+          ids
+        }
+        if (ids.isNotEmpty()) {
+          markMessagesAsRead(ids)
+        }
+      }
+    }
+  }
 
   init {
     nativePtr = nativeCreate(peerId, this)
