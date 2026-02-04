@@ -318,7 +318,7 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationView
       jstring thumb = (jstring)env->GetObjectField(obj, cls.GetField("thumbnail"));
       jstring mime = (jstring)env->GetObjectField(obj, cls.GetField("mimeType"));
       jstring note = (jstring)env->GetObjectField(obj, cls.GetField("note"));
-      jstring name = (jstring)env->GetObjectField(obj, cls.GetField("fileName")); // New field
+      jstring name = (jstring)env->GetObjectField(obj, cls.GetField("fileName"));  // New field
 
       char const* p = env->GetStringUTFChars(path, nullptr);
       char const* t = thumb ? env->GetStringUTFChars(thumb, nullptr) : "";
@@ -718,46 +718,106 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     classref.RegisterMethod(env, webrtc_transport_class, "reconnect", "(Ljava/lang/String;)V");
     classref.RegisterMethod(env, webrtc_transport_class, "getPeerConnectionState", "(Ljava/lang/String;)I");
     classref.RegisterMethod(env, webrtc_transport_class, "sendSignalingMessage", "(Ljava/lang/String;)V");
-    classref.RegisterMethod(env, webrtc_transport_class, "sendDataChannelMessage", "(Ljava/lang/String;Ljava/lang/String;)Z");
+    classref.RegisterMethod(
+        env,
+        webrtc_transport_class,
+        "sendDataChannelMessage",
+        "(Ljava/lang/String;Ljava/lang/String;)Z"
+    );
     classref.RegisterMethod(env, webrtc_transport_class, "sendDataChannelMessageBinary", "(Ljava/lang/String;[B)Z");
-    classref.RegisterMethod(env, webrtc_transport_class, "closePeerConnection", "(Ljava/lang/String;Ljava/lang/String;)V");
+    classref
+        .RegisterMethod(env, webrtc_transport_class, "closePeerConnection", "(Ljava/lang/String;Ljava/lang/String;)V");
     classref.RegisterMethod(env, webrtc_transport_class, "createOffer", "(Ljava/lang/String;Ljava/lang/String;)V");
     classref.RegisterMethod(env, webrtc_transport_class, "createAnswer", "(Ljava/lang/String;Ljava/lang/String;)V");
-    classref.RegisterMethod(env, webrtc_transport_class, "setRemoteDescription", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
-    classref.RegisterMethod(env, webrtc_transport_class, "addRemoteCandidate", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
+    classref.RegisterMethod(
+        env,
+        webrtc_transport_class,
+        "setRemoteDescription",
+        "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V"
+    );
+    classref.RegisterMethod(
+        env,
+        webrtc_transport_class,
+        "addRemoteCandidate",
+        "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V"
+    );
     classref.RegisterMethod(env, webrtc_transport_class, "addVideoTrack", "(Ljava/lang/String;)V");
     classref.RegisterMethod(env, webrtc_transport_class, "addAudioTrack", "(Ljava/lang/String;)V");
-    classref.RegisterMethod(env, webrtc_transport_class, "createPeerConnection", "(Ljava/lang/String;Ljava/lang/String;)V");
+    classref
+        .RegisterMethod(env, webrtc_transport_class, "createPeerConnection", "(Ljava/lang/String;Ljava/lang/String;)V");
     classref.RegisterMethod(env, webrtc_transport_class, "createDataChannel", "(Ljava/lang/String;)V");
     classref.RegisterMethod(env, webrtc_transport_class, "nativeOnSignalingConnectionStateChange", "(JI)V");
 
     classref.RegisterClass(env, "hela/eillance/CallService");
-    classref.RegisterMethod(env, "hela/eillance/CallService", "setWebRtcTransport", "(Lhela/eillance/webrtc/WebRtcTransport;)V");
+    classref.RegisterMethod(
+        env,
+        "hela/eillance/CallService",
+        "setWebRtcTransport",
+        "(Lhela/eillance/webrtc/WebRtcTransport;)V"
+    );
 
     // Register ViewModel Observers
     classref.RegisterClass(env, "hela/eillance/viewmodels/NativeContactsObserver");
-    classref.RegisterMethod(env, "hela/eillance/viewmodels/NativeContactsObserver", "onContactsUpdated", "(Ljava/util/List;)V");
+    classref.RegisterMethod(
+        env,
+        "hela/eillance/viewmodels/NativeContactsObserver",
+        "onContactsUpdated",
+        "(Ljava/util/List;)V"
+    );
 
     classref.RegisterClass(env, "hela/eillance/viewmodels/NativeConversationObserver");
-    classref.RegisterMethod(env, "hela/eillance/viewmodels/NativeConversationObserver", "onHistoryUpdated", "(Lhela/eillance/ndkio/HistoryPage;)V");
-    classref.RegisterMethod(env, "hela/eillance/viewmodels/NativeConversationObserver", "onTransferProgress", "(Ljava/lang/String;F)V");
+    classref.RegisterMethod(
+        env,
+        "hela/eillance/viewmodels/NativeConversationObserver",
+        "onHistoryUpdated",
+        "(Lhela/eillance/ndkio/HistoryPage;)V"
+    );
+    classref.RegisterMethod(
+        env,
+        "hela/eillance/viewmodels/NativeConversationObserver",
+        "onTransferProgress",
+        "(Ljava/lang/String;F)V"
+    );
 
     classref.RegisterClass(env, "hela/eillance/viewmodels/NativeProfileObserver");
-    classref.RegisterMethod(env, "hela/eillance/viewmodels/NativeProfileObserver", "onProfileUpdated", "(Lhela/eillance/ndkio/MyProfileInfo;)V");
+    classref.RegisterMethod(
+        env,
+        "hela/eillance/viewmodels/NativeProfileObserver",
+        "onProfileUpdated",
+        "(Lhela/eillance/ndkio/MyProfileInfo;)V"
+    );
 
     classref.RegisterClass(env, "hela/eillance/viewmodels/NativeCallObserver");
-    classref.RegisterMethod(env, "hela/eillance/viewmodels/NativeCallObserver", "onCallStateChanged", "(Lhela/eillance/ndkio/CallState;)V");
+    classref.RegisterMethod(
+        env,
+        "hela/eillance/viewmodels/NativeCallObserver",
+        "onCallStateChanged",
+        "(Lhela/eillance/ndkio/CallState;)V"
+    );
 
     classref.RegisterClass(env, "hela/eillance/viewmodels/NativeSettingsObserver");
-    classref.RegisterMethod(env, "hela/eillance/viewmodels/NativeSettingsObserver", "onSettingsUpdated", "(Ljava/lang/String;I)V");
+    classref.RegisterMethod(
+        env,
+        "hela/eillance/viewmodels/NativeSettingsObserver",
+        "onSettingsUpdated",
+        "(Ljava/lang/String;I)V"
+    );
     classref.RegisterMethod(env, "hela/eillance/viewmodels/NativeSettingsObserver", "onConnectionStateChanged", "(I)V");
 
     // DTOs
     classref.RegisterCtor(env, "java/util/ArrayList", "()V");
     classref.RegisterMethod(env, "java/util/ArrayList", "add", "(Ljava/lang/Object;)Z");
 
-    classref.RegisterCtor(env, "hela/eillance/ndkio/MyProfileInfo", "(Ljava/lang/String;ZLjava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
-    classref.RegisterCtor(env, "hela/eillance/ndkio/Contact", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IIIILjava/lang/String;IJ)V");
+    classref.RegisterCtor(
+        env,
+        "hela/eillance/ndkio/MyProfileInfo",
+        "(Ljava/lang/String;ZLjava/lang/String;Ljava/lang/String;Ljava/lang/String;)V"
+    );
+    classref.RegisterCtor(
+        env,
+        "hela/eillance/ndkio/Contact",
+        "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IIIILjava/lang/String;IJ)V"
+    );
     classref.RegisterCtor(env, "hela/eillance/ndkio/CallState", "(ZZZILjava/lang/String;I)V");
     classref.RegisterCtor(env, "hela/eillance/ndkio/HistoryEntry", "(JIJLjava/lang/String;IIIIIZLjava/util/List;)V");
     classref.RegisterCtor(env, "hela/eillance/ndkio/HistoryPage", "(Ljava/util/List;Z)V");
@@ -777,7 +837,7 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     classref.RegisterField(env, attachment_req_class, "thumbnail", "Ljava/lang/String;");
     classref.RegisterField(env, attachment_req_class, "mimeType", "Ljava/lang/String;");
     classref.RegisterField(env, attachment_req_class, "note", "Ljava/lang/String;");
-    classref.RegisterField(env, attachment_req_class, "fileName", "Ljava/lang/String;"); // New Field
+    classref.RegisterField(env, attachment_req_class, "fileName", "Ljava/lang/String;");  // New Field
 
     // Attachment
     std::string const attachment_class = "hela/eillance/ndkio/Attachment";
@@ -785,7 +845,8 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     classref.RegisterCtor(
         env,
         attachment_class,
-        "(Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;JLjava/lang/String;ZILjava/lang/String;Ljava/lang/String;)V"
+        "(Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;JLjava/lang/String;ZILjava/lang/String;Ljava/lang/"
+        "String;)V"
     );
 
     // Register Debug DTOs

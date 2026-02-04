@@ -417,16 +417,18 @@ class Client final : public transport::TransportDelegate {
       // Update existing entry if found (priority to active peer state)
       std::erase_if(result, [&](auto const& item) { return item.peer_id == id; });
 
-      int64_t const ago =
-          std::chrono::duration_cast<std::chrono::seconds>(std::chrono::microseconds(now - peer->last_activity_time.load()))
-              .count();
+      int64_t const ago = std::chrono::duration_cast<std::chrono::seconds>(
+                              std::chrono::microseconds(now - peer->last_activity_time.load())
+      )
+                              .count();
 
       view_model::DebugConnectionInfo const info{
           id,
           transport_->GetPeerConnectionState(id),
           ago,
           peer->data_channel_is_open.load(),
-          peer->has_media_peer_connection.load()};
+          peer->has_media_peer_connection.load()
+      };
 
       result.push_back(info);
     }

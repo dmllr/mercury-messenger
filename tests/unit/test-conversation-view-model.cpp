@@ -252,8 +252,8 @@ TEST_F(ConversationViewModelTest, CancelTransferPropagates) {
   // The original test context implies we want to test cancellation.
   // Let's fix it to test Download Cancellation which maps to Pause.
 
-  entry.direction = messaging::MessageDirection::received; // Force download scenario
-  mock_storage_->UpdateHistoryEntry(entry); // Update DB state just in case
+  entry.direction = messaging::MessageDirection::received;  // Force download scenario
+  mock_storage_->UpdateHistoryEntry(entry);                 // Update DB state just in case
 
   // Cancel transfer via VM.
   // vm_->CancelTransfer("cancel-test-id", false); // false = not upload = download
@@ -277,7 +277,7 @@ TEST_F(ConversationViewModelTest, CancelTransferPropagates) {
   // Check transport log to confirm PAUSE message sent (Binary 0x04)
   bool pause_sent = false;
   for (auto const& msg : mock_transport_->log.sent_binary_messages | std::views::values) {
-    if (msg.size() >= 3 && msg[0] == std::byte{0xFE} && msg[1] == std::byte{0x04}) { // 0x04 = PAUSE
+    if (msg.size() >= 3 && msg[0] == std::byte{0xFE} && msg[1] == std::byte{0x04}) {  // 0x04 = PAUSE
       if (auto const id_len = static_cast<uint8_t>(msg[2]); msg.size() >= 3 + id_len) {
         std::string id(id_len, '\0');
         std::memcpy(id.data(), msg.data() + 3, id_len);
