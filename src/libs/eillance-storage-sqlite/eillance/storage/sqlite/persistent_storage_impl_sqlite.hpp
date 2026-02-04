@@ -594,7 +594,6 @@ class SQLiteStorage final : public PersistentStorageImpl {
     return page;
   }
 
-  // ... (GetFullMessageContent, GetChatSummaries remain same) ...
   auto GetFullMessageContent(ContactID const& peer_id, std::uint64_t message_id)
       -> std::optional<std::string> override {
     std::lock_guard const lock(mutex_);
@@ -607,7 +606,6 @@ class SQLiteStorage final : public PersistentStorageImpl {
   }
 
   auto GetChatSummaries(std::vector<ContactID> const& peer_ids) -> std::vector<messaging::ChatSummary> override {
-    // ... same as previous paste ...
     if (peer_ids.empty()) return {};
     std::lock_guard const lock(mutex_);
     if (!db_) return {};
