@@ -50,28 +50,17 @@ TEST_F(DebugViewModelTest, EraseAllContacts) {
 
 TEST_F(DebugViewModelTest, RevokeAllApprovals) {
   // Set up confirmed contacts properly via Client/Service API
-  // 1. Add contact
+
+  // Add contact
   std::ignore = client_->AddContact(peer1, std::nullopt);
   std::ignore = client_->AddContact(peer2, std::nullopt);
 
-  // 2. Confirm them manually in storage to simulate a confirmed state
-  //    (since full handshake requires transport interaction which MockTransport doesn't fully auto-drive here)
+  // Confirm them manually in storage to simulate a confirmed state
+  // (since full handshake requires transport interaction which MockTransport doesn't fully auto-drive here)
   mock_storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
   mock_storage_->UpdateContact({peer2, identity::ContactStatus::confirmed});
 
-  // 3. Force reload the cache in ContactManager so it sees the updates
-  //    (We use the newly added DebugReloadCache logic or manually trigger it via restart)
-  //    Since we can't easily restart in this test structure without losing `vm_`,
-  //    we rely on the `DebugRevokeAllContactApprovals` calling `Reload` internally.
-  //    BUT for the PRE-condition check, we need them to be confirmed.
-  //    Let's use the new `DebugReloadCache` on the service if we can access it?
-  //    We can't access `contact_service_->DebugReloadCache()` because it's on the service, not client interface public.
-  //    Actually, `AddContact` added them as `pending`.
-  //    We can use `client_->ConfirmContact(peer1)` but that expects `awaitingApproval`.
-  //    Let's just re-create the client/vm to reload from storage for the setup phase?
-  //    No, simpler: use `client_->GetContactService()->DebugReloadCache()` (casted or friend).
-  //    Wait, `GetContactService()` returns shared_ptr to service. Service has `DebugReloadCache` public in the new
-  //    header.
+  // Force reload the cache in ContactManager so it sees the updates
   client_->GetContactService()->ReloadCache();
 
   EXPECT_TRUE(client_->GetContactService()->IsConfirmed(peer1));
@@ -81,12 +70,12 @@ TEST_F(DebugViewModelTest, RevokeAllApprovals) {
   vm_->RevokeAllApprovals();
 
   // Verify status change
-  auto c1 = client_->GetContactService()->GetContact(peer1);
-  auto c2 = client_->GetContactService()->GetContact(peer2);
+  auto contact1 = client_->GetContactService()->GetContact(peer1);
+  auto contact2 = client_->GetContactService()->GetContact(peer2);
 
-  ASSERT_TRUE(c1);
-  ASSERT_TRUE(c2);
+  ASSERT_TRUE(contact1);
+  ASSERT_TRUE(contact2);
   // MockPersistentStorage sets it to pendingApproval in DebugRevokeAllContactApprovals
-  EXPECT_EQ(c1->status, identity::ContactStatus::pendingApproval);
-  EXPECT_EQ(c2->status, identity::ContactStatus::pendingApproval);
+  EXPECT_EQ(contact1->status, identity::ContactStatus::pendingApproval);
+  EXPECT_EQ(contact2->status, identity::ContactStatus::pendingApproval);
 }

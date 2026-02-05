@@ -51,27 +51,27 @@ class ProfileUpdatesTest : public ::testing::Test {
 
 // Test that updating my profile triggers a broadcast to connected, confirmed peers.
 TEST_F(ProfileUpdatesTest, BroadcastOnProfileUpdate) {
-  // 1. Setup a confirmed, connected peer
-  client_->AddContact(peer1, std::nullopt);
+  // Setup a confirmed, connected peer
+  std::ignore = client_->AddContact(peer1, std::nullopt);
 
   // Directly update storage to confirm it, ensuring the rest of the fields are compliant
   // We use the storage interface directly to simulate the DB state change
   mock_storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
   client_->GetContactService()->ReloadCache();
 
-  // 2. Connect
+  // Connect
   client_->Connect(peer1);
   FlushClientQueue();
   auto peer = mock_transport_->GetPeer(peer1);
   ASSERT_TRUE(peer);
   peer->data_channel_is_open = true;
 
-  // 3. Update my profile
+  // Update my profile
   mock_transport_->log.sent_peer_messages.clear();  // Clear history
   client_->UpdateMyProfile("New Name", "New Bio", "NewPhoto");
   FlushClientQueue();
 
-  // 4. Verify "profile_info" message was sent
+  // Verify "profile_info" message was sent
   bool profile_sent = false;
   for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
     if (pid == peer1 && msg["type"] == "profile_info") {
@@ -85,31 +85,30 @@ TEST_F(ProfileUpdatesTest, BroadcastOnProfileUpdate) {
 
 // Test that profile info is sent immediately upon DataChannel open for confirmed contacts.
 TEST_F(ProfileUpdatesTest, SendProfileOnConnect) {
-  // 1. Setup a confirmed contact
-  client_->AddContact(peer1, std::nullopt);
+  // Setup a confirmed contact
+  std::ignore = client_->AddContact(peer1, std::nullopt);
   mock_storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
   client_->GetContactService()->ReloadCache();
 
-  // 2. Set my profile
-  // This will queue a profile action for the confirmed contact
+  // Set my profile. This will queue a profile action for the confirmed contact
   client_->UpdateMyProfile("My Name", "My Bio", "");
 
-  // 3. Connect (simulate incoming or outgoing)
+  // Connect (simulate incoming or outgoing)
   client_->Connect(peer1);
   FlushClientQueue();
 
-  auto peer = mock_transport_->GetPeer(peer1);
+  auto const peer = mock_transport_->GetPeer(peer1);
   ASSERT_TRUE(peer);
 
   // Clear log before simulating open
   mock_transport_->log.sent_peer_messages.clear();
 
-  // 4. Simulate DataChannel open
+  // Simulate DataChannel open
   ASSERT_TRUE(mock_transport_->delegate);
   mock_transport_->delegate->OnDataChannelOpen(peer1);
   FlushClientQueue();
 
-  // 5. Verify profile sent
+  // Verify profile sent
   bool profile_sent = false;
   for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
     if (pid == peer1 && msg["type"] == "profile_info") {
@@ -122,19 +121,19 @@ TEST_F(ProfileUpdatesTest, SendProfileOnConnect) {
 
 // Test that profile is NOT sent on connect if contact is not confirmed (e.g. pending).
 TEST_F(ProfileUpdatesTest, NoProfileSendForPendingContact) {
-  // 1. Add contact but do NOT confirm (remains pendingApproval)
-  client_->AddContact(peer1, std::nullopt);
+  // Add contact but do NOT confirm (remains pendingApproval)
+  std::ignore = client_->AddContact(peer1, std::nullopt);
 
   client_->Connect(peer1);
   FlushClientQueue();
   mock_transport_->log.sent_peer_messages.clear();
 
-  // 2. Trigger OnDataChannelOpen
+  // Trigger OnDataChannelOpen
   ASSERT_TRUE(mock_transport_->delegate);
   mock_transport_->delegate->OnDataChannelOpen(peer1);
   FlushClientQueue();
 
-  // 3. Verify NO profile sent
+  // Verify NO profile sent
   bool profile_sent = false;
   for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
     if (pid == peer1 && msg["type"] == "profile_info") {
@@ -146,27 +145,29 @@ TEST_F(ProfileUpdatesTest, NoProfileSendForPendingContact) {
 
 // Test that updating profile triggers connection attempt for disconnected confirmed contacts.
 TEST_F(ProfileUpdatesTest, TriggerConnectForDisconnectedConfirmedPeer) {
-  // 1. Add confirmed contact
-  client_->AddContact(peer1, std::nullopt);
+  // Add confirmed contact
+  std::ignore = client_->AddContact(peer1, std::nullopt);
   mock_storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
   client_->GetContactService()->ReloadCache();
 
-  // 2. Ensure disconnected
+  // Ensure disconnected
   mock_transport_->RemovePeer(peer1);
   ASSERT_FALSE(mock_transport_->GetPeer(peer1));
   mock_transport_->log.offers.clear();
 
-  // 3. Update Profile
+  // Update Profile
   client_->UpdateMyProfile("Conn Name", "Conn Bio", "NewPhoto");
   FlushClientQueue();
 
-  // 4. Verify connection attempt
+  // Verify connection attempt
   // Connect() should have created the peer and sent an offer
   ASSERT_TRUE(mock_transport_->GetPeer(peer1));
 
   bool offer_sent = false;
   for (auto const& [pid, ctx] : mock_transport_->log.offers) {
-    if (pid == peer1 && ctx == "data") offer_sent = true;
+    if (pid == peer1 && ctx == "data") {
+      offer_sent = true;
+    }
   }
   EXPECT_TRUE(offer_sent) << "Should attempt to connect to disconnected confirmed peer on profile update";
 }
@@ -175,26 +176,26 @@ TEST_F(ProfileUpdatesTest, TriggerConnectForDisconnectedConfirmedPeer) {
 TEST_F(ProfileUpdatesTest, ConfirmContactTriggersProfileSend) {
   client_->UpdateMyProfile("Approver", "Bio", "");
 
-  // 1. Setup peer connection (e.g. request phase established connection)
+  // Setup peer connection (e.g. request phase established connection)
   client_->Connect(peer1);
   FlushClientQueue();
-  auto peer = mock_transport_->GetPeer(peer1);
+  auto const peer = mock_transport_->GetPeer(peer1);
   ASSERT_TRUE(peer);
   peer->data_channel_is_open = true;
 
   // Add contact in pending state (simulating request received)
-  client_->AddContact(peer1, std::nullopt);  // starts pendingApproval, simulating request
+  std::ignore = client_->AddContact(peer1, std::nullopt);  // starts pendingApproval, simulating request
   // Simulate receiving request to move to awaitingApproval
   mock_storage_->UpdateContact({peer1, identity::ContactStatus::awaitingApproval});
   client_->GetContactService()->ReloadCache();
 
   mock_transport_->log.sent_peer_messages.clear();
 
-  // 2. Confirm
+  // Confirm
   client_->ConfirmContact(peer1);
   FlushClientQueue();
 
-  // 3. Check profile sent
+  // Check profile sent
   bool profile_sent = false;
   for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
     if (pid == peer1 && msg["type"] == "profile_info") {

@@ -37,17 +37,17 @@ class MockCapture {
 class InternalMessagingServiceTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    // 1. Storage
+    // Storage
     auto storage_impl = std::make_unique<storage::MockPersistentStorageImpl>();
     mock_storage_ = storage_impl.get();
     storage_ = std::make_shared<storage::PersistentStorage>(std::move(storage_impl));
 
-    // 2. Transport
+    // Transport
     mock_transport_impl_ = std::make_unique<transport::MockTransport>();
     mock_transport_ = mock_transport_impl_.get();
     transport_ = std::make_shared<transport::Transport>(std::move(mock_transport_impl_));
 
-    // 3. Dependencies
+    // Dependencies
     contact_manager_ = std::make_shared<identity::ContactManager>(storage_);
 
     // Services
@@ -102,7 +102,7 @@ class InternalMessagingServiceTest : public ::testing::Test {
     // Satisfy invariants
     std::ignore = account_service_->GenerateNewIdentity();
 
-    // 4. Target
+    // Target
     service_ = std::make_unique<services::InternalMessagingService>(
         transport_,
         account_service_,
@@ -187,7 +187,7 @@ TEST_F(InternalMessagingServiceTest, ProcessSignalingMessage_ContactAddRequest) 
 // DataChannel handlers tests still use `ProcessDataChannelMessage` directly which expects JSON.
 // This remains valid for JSON-based messages (chat, keys).
 TEST_F(InternalMessagingServiceTest, ProcessDataChannelMessage_Chat) {
-  // 1. Setup Peer with crypto
+  // Setup Peer with crypto
   auto peer = std::make_shared<transport::Peer>(peer1);
   transport_->AddPeer(peer1, peer);
 
@@ -196,7 +196,7 @@ TEST_F(InternalMessagingServiceTest, ProcessDataChannelMessage_Chat) {
   peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
   other.ComputeSharedSecret(peer->session_cipher->GetPublicKey());
 
-  // 2. Prepare Encrypted Message (JSON Protocol)
+  // Prepare Encrypted Message (JSON Protocol)
   std::string const content = "Hello";
   nlohmann::json payload_json;
   payload_json[services::MessagingService::keyVersion] = services::MessagingService::protocolVersion;

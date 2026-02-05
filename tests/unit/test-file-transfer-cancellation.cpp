@@ -106,32 +106,32 @@ class FileTransferCancellationTest : public ::testing::Test {
 };
 
 TEST_F(FileTransferCancellationTest, CancelUpload) {
-  // 1. Setup connected peer
+  // Setup connected peer
   auto peer = std::make_shared<transport::Peer>(peer1);
   peer->data_channel_is_open = true;
   peer->session_cipher->ComputeSharedSecret(eillance::crypto::SessionCipher().GetPublicKey());
   transport_->AddPeer(peer1, peer);
 
-  // 2. Create file to upload
-  std::filesystem::path file_path = temp_dir_ / "large_file.dat";
+  // Create file to upload
+  std::filesystem::path const file_path = temp_dir_ / "large_file.dat";
   {
     std::ofstream ofs(file_path, std::ios::binary);
     // Write enough data to ensure it doesn't finish immediately
-    std::string data(
+    std::string const data(
         services::FileTransferService::windowSizeChunks * services::FileTransferService::chunkSizeBytes * 2,
         'A'
     );
     ofs << data;
   }
 
-  // 3. Start Upload
+  // Start Upload
   std::vector<services::AttachmentRequest> attachments;
   attachments.push_back({file_path.string(), messaging::AttachmentType::file, "", "application/octet-stream"});
 
   auto record = service_->SendChatMessage(peer1, "File", attachments);
-  std::string att_id = std::get<messaging::MessageEntry>(record.data).attachments[0].id;
+  std::string const att_id = std::get<messaging::MessageEntry>(record.data).attachments[0].id;
 
-  // 4. Cancel
+  // Cancel
   service_->CancelTransfer(peer1, att_id, true);
 
   // 5. Verify cancel message sent (Binary protocol: Type 0x03)
@@ -143,14 +143,14 @@ TEST_F(FileTransferCancellationTest, CancelUpload) {
   }
   EXPECT_TRUE(cancel_sent);
 
-  // 6. Verify DB status
+  // Verify DB status
   auto att_db = storage_->GetAttachment(att_id);
   ASSERT_TRUE(att_db.has_value());
   EXPECT_EQ(att_db->status, messaging::AttachmentStatus::canceled);
 }
 
 TEST_F(FileTransferCancellationTest, CancelDownload_PausesDownload) {
-  // 1. Mock DB state for incoming attachment
+  // Mock DB state for incoming attachment
   messaging::Attachment att;
   att.id = "down_id";
   att.type = messaging::AttachmentType::file;
@@ -170,20 +170,20 @@ TEST_F(FileTransferCancellationTest, CancelDownload_PausesDownload) {
        .peer_id = peer1}
   );
 
-  // 2. Start Download by receiving chunk 0
+  // Start Download by receiving chunk 0
   std::vector<std::byte> const payload = {std::byte{0x00}, std::byte{0x11}, std::byte{0x22}};
   auto chunk = CreateChunkPacket("down_id", 0, payload);
 
   file_transfer_service_->ProcessBinaryMessage(peer1, chunk);
 
   // Verify temp file exists
-  std::filesystem::path temp_path = attachments_dir_ / "down_id.tmp";
+  std::filesystem::path const temp_path = attachments_dir_ / "down_id.tmp";
   ASSERT_TRUE(std::filesystem::exists(temp_path));
 
-  // 3. Cancel (is_upload = false) -> This acts as PAUSE for downloads
+  // Cancel (is_upload = false) -> This acts as PAUSE for downloads
   service_->CancelTransfer(peer1, "down_id", false);
 
-  // 4. Verify PAUSE message sent (Binary Type 0x04)
+  // Verify PAUSE message sent (Binary Type 0x04)
   bool pause_sent = false;
   for (auto const& msg : mock_transport_->log.sent_binary_messages | std::views::values) {
     if (IsBinaryPacket(msg, 0x04, "down_id")) {  // 0x04 = PAUSE
@@ -192,22 +192,22 @@ TEST_F(FileTransferCancellationTest, CancelDownload_PausesDownload) {
   }
   EXPECT_TRUE(pause_sent);
 
-  // 5. Verify temp file STILL exists (to allow resume)
+  // Verify temp file STILL exists (to allow resume)
   EXPECT_TRUE(std::filesystem::exists(temp_path));
 
-  // 6. Verify DB status is PAUSED
+  // Verify DB status is PAUSED
   auto att_db = storage_->GetAttachment("down_id");
   ASSERT_TRUE(att_db.has_value());
   EXPECT_EQ(att_db->status, messaging::AttachmentStatus::paused);
 }
 
 TEST_F(FileTransferCancellationTest, ResumeSendsRequest) {
-  // 1. Setup peer
-  auto peer = std::make_shared<transport::Peer>(peer1);
+  // Setup peer
+  auto const peer = std::make_shared<transport::Peer>(peer1);
   peer->data_channel_is_open = true;
   transport_->AddPeer(peer1, peer);
 
-  // 2. Setup attachment in DB (upload)
+  // Setup attachment in DB (upload)
   messaging::Attachment att;
   att.id = "resume_id";
   att.is_downloaded = true;  // upload
@@ -224,12 +224,12 @@ TEST_F(FileTransferCancellationTest, ResumeSendsRequest) {
 
   mock_transport_->log.sent_binary_messages.clear();
 
-  // 3. Resume
+  // Resume
   service_->ResumeTransfer(peer1, "resume_id", false);
 
-  // 4. Verify resume request sent (Binary Type 0x05)
+  // Verify resume request sent (Binary Type 0x05)
   bool req_sent = false;
-  for (auto const& [pid, msg] : mock_transport_->log.sent_binary_messages) {
+  for (auto const& msg : mock_transport_->log.sent_binary_messages | std::views::values) {
     if (IsBinaryPacket(msg, 0x05, "resume_id")) {
       req_sent = true;
     }

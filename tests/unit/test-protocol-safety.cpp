@@ -91,11 +91,11 @@ class MockCapture {
 class ProtocolSafetyTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    // 1. Setup Temp Directory for File operations
+    // Setup Temp Directory for File operations
     temp_dir_ = std::filesystem::temp_directory_path() / "protocol_safety_tests";
     std::filesystem::create_directories(temp_dir_);
 
-    // 2. Setup Services
+    // Setup Services
     auto storage_impl = std::make_unique<storage::MockPersistentStorageImpl>();
     mock_storage_ = storage_impl.get();
     storage_ = std::make_shared<storage::PersistentStorage>(std::move(storage_impl));
@@ -108,7 +108,7 @@ class ProtocolSafetyTest : public ::testing::Test {
     account_service_ = std::make_unique<services::AccountService>(storage_, transport_);
     // Prevent invariant crash
     account_service_->SetOnMyProfileUpdatedCallback([]() {});
-    (void)account_service_->GenerateNewIdentity();
+    std::ignore = account_service_->GenerateNewIdentity();
 
     file_transfer_service_ = std::make_shared<services::FileTransferService>(storage_, transport_);
 
@@ -136,7 +136,7 @@ class ProtocolSafetyTest : public ::testing::Test {
         [](auto) {}
     );
 
-    // 3. Establish a valid peer connection with crypto
+    // Establish a valid peer connection with crypto
     contact_manager_->AddContact(peer_id_);
     auto peer = std::make_shared<transport::Peer>(peer_id_);
     transport_->AddPeer(peer_id_, peer);
@@ -222,9 +222,7 @@ class ProtocolSafetyTest : public ::testing::Test {
 TEST_F(ProtocolSafetyTest, VerifyRealMessageSignatures) {
   std::stringstream combined_signatures;
 
-  // ---------------------------------------------------------------------------------------
-  // 1. Text Message (Encrypted)
-  // ---------------------------------------------------------------------------------------
+  // Text Message (Encrypted)
   messaging_service_->SendChatMessage(peer_id_, "Hello Protocol");
   auto msg_chat = GetLastMessageByType("chat");
   std::string const sig_chat = GenerateTypeSignature(msg_chat);
@@ -236,10 +234,8 @@ TEST_F(ProtocolSafetyTest, VerifyRealMessageSignatures) {
 
   combined_signatures << "CHAT_OUTER:" << sig_chat << "|CHAT_INNER:" << sig_chat_inner << "\n";
 
-  // ---------------------------------------------------------------------------------------
-  // 2. Attachment Message
-  // ---------------------------------------------------------------------------------------
-  // Create dummy file
+  // Attachment Message
+  //   Create dummy file
   std::filesystem::path const file_path = temp_dir_ / "image.jpg";
   {
     std::ofstream ofs(file_path, std::ios::binary);
@@ -249,24 +245,22 @@ TEST_F(ProtocolSafetyTest, VerifyRealMessageSignatures) {
   atts.push_back({file_path.string(), messaging::AttachmentType::image, "thumb_base64", "image/jpeg"});
 
   messaging_service_->SendChatMessage(peer_id_, "File Attached", atts);
-  // Get the CHAT message explicitly. The operation also sends a 'file_resume_request'
-  // which we skip here by filtering for 'chat'.
+  //   Get the CHAT message explicitly. The operation also sends a 'file_resume_request'
+  //   which we skip here by filtering for 'chat'.
   auto msg_att = GetLastMessageByType("chat");
   std::string const sig_att = GenerateTypeSignature(msg_att);
 
-  // Inner payload is just text content, attachments are outer.
+  //   Inner payload is just text content, attachments are outer.
   auto plain_att = DecryptPayload(msg_att);
   auto json_att = nlohmann::json::parse(plain_att);
   std::string const sig_att_inner = GenerateTypeSignature(json_att);
 
   combined_signatures << "ATT_OUTER:" << sig_att << "|ATT_INNER:" << sig_att_inner << "\n";
 
-  // ---------------------------------------------------------------------------------------
-  // 3. Message Receipt (Delivery)
-  // ---------------------------------------------------------------------------------------
-  // Simulate receiving a message to trigger receipt
-  // We manually construct the event to trigger the service logic
-  // (OnChatMessageReceived calls SendPeerDataChannelMessage)
+  // Message Receipt (Delivery)
+  //   Simulate receiving a message to trigger receipt
+  //   We manually construct the event to trigger the service logic
+  //   (OnChatMessageReceived calls SendPeerDataChannelMessage)
   nlohmann::json payload;
   payload[services::MessagingService::keyVersion] = services::MessagingService::protocolVersion;
   payload[services::MessagingService::keyContent] = "Incoming";
@@ -278,10 +272,8 @@ TEST_F(ProtocolSafetyTest, VerifyRealMessageSignatures) {
 
   combined_signatures << "RECEIPT:" << sig_receipt << "\n";
 
-  // ---------------------------------------------------------------------------------------
-  // 4. Message Read Status
-  // ---------------------------------------------------------------------------------------
-  // Mock DB needs to know about the message to map IDs
+  // Message Read Status
+  //   Mock DB needs to know about the message to map IDs
   auto entry = mock_storage_->AddHistoryEntry(
       {.remote_id = 999,
        .kind = messaging::HistoryEntryKind::textMessage,
@@ -292,7 +284,7 @@ TEST_F(ProtocolSafetyTest, VerifyRealMessageSignatures) {
   );
 
   messaging_service_->MarkMessagesAsRead(peer_id_, {entry.id});
-  // MarkMessagesAsRead queues the action. We must flush the queue.
+  //   MarkMessagesAsRead queues the action. We must flush the queue.
   messaging_service_->SendQueuedMessages(peer_id_);
 
   auto msg_read = GetLastMessageByType("message_read");
@@ -300,19 +292,32 @@ TEST_F(ProtocolSafetyTest, VerifyRealMessageSignatures) {
 
   combined_signatures << "READ:" << sig_read << "\n";
 
-  // ---------------------------------------------------------------------------------------
-  // 5. Profile Update
-  // ---------------------------------------------------------------------------------------
-  // Queue a profile send
+  // Profile Update
+  //   Queue a profile send
   profile_service_->SendMyProfile(peer_id_);
   auto msg_profile = GetLastMessageByType("profile_info");
   std::string const sig_profile = GenerateTypeSignature(msg_profile);
 
   combined_signatures << "PROFILE:" << sig_profile << "\n";
 
-  // ---------------------------------------------------------------------------------------
+  // System Message via Data Channel
+  //   Queue a generic system message (e.g. call_request) that should go over data channel
+  messaging_service_->SendSystemMessage(peer_id_, R"({"action": "call_request"})");
+  //   Flush queue
+  messaging_service_->SendQueuedMessages(peer_id_);
+
+  //   It should be sent as 'chat' type with is_system=true
+  auto msg_sys = GetLastMessageByType("chat");
+  std::string const sig_sys = GenerateTypeSignature(msg_sys);
+
+  //   Inner payload structure
+  auto plain_sys = DecryptPayload(msg_sys);
+  auto json_sys = nlohmann::json::parse(plain_sys);
+  std::string const sig_sys_inner = GenerateTypeSignature(json_sys);
+
+  combined_signatures << "SYS_OUTER:" << sig_sys << "|SYS_INNER:" << sig_sys_inner << "\n";
+
   // Verification
-  // ---------------------------------------------------------------------------------------
   std::string const final_signature_blob = combined_signatures.str();
   std::string const current_hash = crypto::Sha256Hex(final_signature_blob);
 
@@ -321,13 +326,15 @@ TEST_F(ProtocolSafetyTest, VerifyRealMessageSignatures) {
   // CHAT_OUTER: {is_system:boolean,message_id:number,payload:binary,type:string}
   // CHAT_INNER: {c:string,v:number}
   // ATT_OUTER:
-  // {attachments:[{hash:string,id:string,mime:string,size:number,thumb:string,type:string}],is_system:boolean,message_id:number,payload:binary,type:string}
+  // {attachments:[{file_name:string,hash:string,id:string,mime:string,note:string,size:number,thumb:string,type:number}],is_system:boolean,message_id:number,payload:binary,type:string}
   // ATT_INNER:  {c:string,v:number}
   // RECEIPT:    {message_id:number,status:string,type:string}
   // READ:       {message_ids:[number],type:string}
-  // PROFILE:    {bio:string,display_name:string,photo:null,type:string}  (photo is null in setup)
+  // PROFILE:    {bio:string,display_name:string,photo:null,type:string}
+  // SYS_OUTER:  {is_system:boolean,message_id:number,payload:binary,type:string}
+  // SYS_INNER:  {c:string,v:number}
 
-  std::string const expected_hash = "0fddf0b6a0f74000affdab3862424247c84c737e9948eff6487411ad364d2c6d";
+  std::string const expected_hash = "f7dae8a6b699a76919a46bb7c4d298127c9697ac30e11a663a3dbb6715433c1b";
 
   EXPECT_EQ(current_hash, expected_hash)
       << "\n[!] PROTOCOL SCHEMA CHANGED [!]\n"

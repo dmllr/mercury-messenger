@@ -277,6 +277,7 @@ class MessagingService {
         content_to_send = content;
       }
 
+      // Signaling Path (Bootstrapping System Messages)
       if (entry.kind == messaging::HistoryEntryKind::systemMessage) {
         try {
           nlohmann::json content_json = nlohmann::json::parse(content_to_send);
@@ -298,7 +299,8 @@ class MessagingService {
         }
       }
 
-      if (entry.kind == messaging::HistoryEntryKind::textMessage) {
+      // Data Channel Path (Text OR System messages not sent via signaling)
+      if (!sent) {
         std::vector<messaging::Attachment> valid_attachments;
         for (auto const& att : attachments) {
           if (auto stored = storage_->GetAttachment(att.id)) {
@@ -315,7 +317,7 @@ class MessagingService {
           continue;
         }
 
-        if (!sent && peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
+        if (peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
           nlohmann::json payload_json;
           payload_json[keyVersion] = protocolVersion;
           payload_json[keyContent] = content_to_send;
@@ -327,7 +329,7 @@ class MessagingService {
             nlohmann::json json_msg = {
                 {"type", "chat"},
                 {"message_id", entry.id},
-                {"is_system", false},
+                {"is_system", (entry.kind == messaging::HistoryEntryKind::systemMessage)},
                 {"payload", std::vector<std::byte>(encrypted.begin(), encrypted.end())}
             };
 
@@ -361,12 +363,8 @@ class MessagingService {
         }
       }
 
-      if (sent) {
-        // IMPORTANT: We do NOT update status to 'sent'.
-        // We stay in 'sending' until a 'delivered' receipt is received from the peer.
-        // If we update to 'sent', the delivery service considers the work done and won't retry.
-        // By leaving it 'sending', the DeliveryService will detect pending work and retry logic will kick in.
-      }
+      // IMPORTANT: We do NOT update status to 'sent'.
+      // We stay in 'sending' until a 'delivered' receipt is received from the peer.
     }
 
     // Always signal the delivery service that we finished an attempt.

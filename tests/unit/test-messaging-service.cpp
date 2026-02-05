@@ -286,3 +286,28 @@ TEST_F(MessagingServiceTest, OnReceipt_UpdatesStatus) {
   auto [messages, total_messages] = service_->GetHistoryPage(peer1, 0, 1);
   EXPECT_EQ(messages[0].status, messaging::MessageStatus::delivered);
 }
+
+TEST_F(MessagingServiceTest, SystemMessage_SentReliablyViaDataChannel) {
+  auto const peer = std::make_shared<transport::Peer>(peer1);
+  peer->data_channel_is_open = true;
+  eillance::crypto::SessionCipher const other;
+  peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
+  transport_->AddPeer(peer1, peer);
+
+  service_->SendSystemMessage(peer1, R"({"action": "profile_update_diff"})");
+
+  auto history = service_->GetHistoryPage(peer1, 0, 1);
+  ASSERT_FALSE(history.messages.empty());
+  EXPECT_EQ(history.messages[0].kind, messaging::HistoryEntryKind::systemMessage);
+  EXPECT_EQ(history.messages[0].status, messaging::MessageStatus::sending);
+
+  bool sent_as_chat = false;
+  for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
+    if (pid == peer1 && msg.value("type", "") == "chat") {
+      if (msg.value("is_system", false)) {
+        sent_as_chat = true;
+      }
+    }
+  }
+  EXPECT_TRUE(sent_as_chat) << "System message should be sent as 'chat' with is_system=true";
+}

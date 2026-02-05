@@ -218,18 +218,18 @@ TEST_F(ResilienceTest, PendingActionsPersistAndSend) {
 }
 
 TEST_F(ResilienceTest, ReinstallRecovery_MessageReceipt) {
-  // 1. Simulate "wipe" by removing peer1 from contacts.
+  // Simulate "wipe" by removing peer1 from contacts.
   client_->DeleteContact(peer1);
   FlushClientQueue();
   ASSERT_FALSE(client_->GetContactService()->GetContact(peer1));
 
-  // 2. Connect (as if A connected to B)
+  // Connect (as if A connected to B)
   client_->Connect(peer1);
   FlushClientQueue();
   auto peer = mock_transport_->GetPeer(peer1);
   ASSERT_TRUE(peer);
 
-  // 3. Simulate receiving a chat message
+  // Simulate receiving a chat message
   peer->data_channel_is_open = true;
   eillance::crypto::SessionCipher other;
   other.ComputeSharedSecret(peer->session_cipher->GetPublicKey());
@@ -259,12 +259,12 @@ TEST_F(ResilienceTest, ReinstallRecovery_MessageReceipt) {
   peer->on_data_channel_message(msg_bytes);
   FlushClientQueue();
 
-  // 4. Verify contact was auto-created and CONFIRMED
+  // Verify contact was auto-created and CONFIRMED
   auto contact = client_->GetContactService()->GetContact(peer1);
   ASSERT_TRUE(contact.has_value());
   EXPECT_EQ(contact->status, identity::ContactStatus::confirmed);
 
-  // 5. Verify message stored
+  // Verify message stored
   auto [messages, total_messages] = client_->GetMessageHistoryPage(peer1, 0, 10);
   ASSERT_FALSE(messages.empty());
   auto const& data = std::get<messaging::MessageEntry>(messages[0].data);
@@ -314,9 +314,8 @@ TEST_F(ResilienceTest, ReinstallRecovery_ContactAdd) {
 }
 
 TEST_F(ResilienceTest, MessageRedeliveryDeduplication) {
-  // 1. Simulate sender sending message
+  // Simulate sender sending message
   // We manually inject the incoming message to receiver logic
-
   std::string content = "Unique Content";
   nlohmann::json payload;
   payload[services::MessagingService::keyVersion] = services::MessagingService::protocolVersion;

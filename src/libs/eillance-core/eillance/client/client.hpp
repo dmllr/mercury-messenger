@@ -218,24 +218,24 @@ class Client final : public transport::TransportDelegate {
   }
 
   auto RestoreBackup(std::string const& p, std::string const& pw) -> bool {
-    // 1. Stop services that might be querying the database
+    // Stop services that might be querying the database
     is_running_ = false;  // Stop background peer check
     messaging_service_->StopDeliveryService();
     transport_->Terminate();
 
-    // 2. Perform Restore (Safe to close DB now)
+    // Perform Restore (Safe to close DB now)
     bool const success = account_service_->RestoreBackup(p, pw);
 
     if (success) {
-      // 3. Reload Caches
+      // Reload Caches
       contact_service_->ReloadCache();
 
-      // 4. Notify UI ViewModels to refresh their data
+      // Notify UI ViewModels to refresh their data
       if (on_data_reloaded_) {
         on_data_reloaded_();
       }
 
-      // 5. Restart Services (Crucial: sets is_running_ = true, starts background loops)
+      // Restart Services (Crucial: sets is_running_ = true, starts background loops)
       // This internally calls transport_->Start(), SetId, SetSignalingUrl, etc.
       Start();
 
@@ -243,7 +243,7 @@ class Client final : public transport::TransportDelegate {
       return true;
     }
 
-    // 6. Failure case: Resume operation with the existing database
+    // Failure case: Resume operation with the existing database
     Start();
     return false;
   }

@@ -45,17 +45,17 @@ class MockCapture {
 class ExtendedCoverageTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    // 1. Storage
+    // Storage
     auto storage_impl = std::make_unique<storage::MockPersistentStorageImpl>();
     mock_storage_ = storage_impl.get();
     storage_ = std::make_shared<storage::PersistentStorage>(std::move(storage_impl));
 
-    // 2. Transport
+    // Transport
     mock_transport_impl_ = std::make_unique<transport::MockTransport>();
     mock_transport_ = mock_transport_impl_.get();
     transport_ = std::make_shared<transport::Transport>(std::move(mock_transport_impl_));
 
-    // 3. Dependencies
+    // Dependencies
     contact_manager_ = std::make_shared<identity::ContactManager>(storage_);
 
     // Services
@@ -102,7 +102,7 @@ class ExtendedCoverageTest : public ::testing::Test {
         conn_handler
     );
 
-    // 4. Target: Internal Messaging Service
+    // Target: Internal Messaging Service
     internal_service_ = std::make_unique<services::InternalMessagingService>(
         transport_,
         account_service_,
@@ -137,7 +137,7 @@ class ExtendedCoverageTest : public ::testing::Test {
 };
 
 TEST_F(ExtendedCoverageTest, MessagingService_ReceivesUnsupportedVersion) {
-  // 1. Setup Peer
+  // Setup Peer
   ContactID const peer_id("0000000000000000000000000000000000000000000000000000000000000002");
   auto peer = std::make_shared<transport::Peer>(peer_id);
   transport_->AddPeer(peer_id, peer);
@@ -146,13 +146,13 @@ TEST_F(ExtendedCoverageTest, MessagingService_ReceivesUnsupportedVersion) {
   peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
   other.ComputeSharedSecret(peer->session_cipher->GetPublicKey());
 
-  // 2. Encrypt message with very old version 0 (assuming MinSupported is 1)
+  // Encrypt message with very old version 0 (assuming MinSupported is 1)
   // Logic: messaging_service checks if (v < kMinSupportedVersion) throws
   nlohmann::json payload;
   payload[services::MessagingService::keyVersion] = 0;
   payload[services::MessagingService::keyContent] = "Old Message";
 
-  auto encrypted = other.Encrypt(payload.dump());
+  auto const encrypted = other.Encrypt(payload.dump());
 
   bool received_system_msg = false;
   messaging_service_->SetChatMessageReceivedCallback([&](ContactID const& id,
@@ -168,14 +168,14 @@ TEST_F(ExtendedCoverageTest, MessagingService_ReceivesUnsupportedVersion) {
     }
   });
 
-  // 3. Inject message
+  // Inject message
   messaging_service_->OnChatMessageReceived(peer_id, encrypted, 101, false);
 
   EXPECT_TRUE(received_system_msg);
 }
 
 TEST_F(ExtendedCoverageTest, MessagingService_FutureVersionIsCompatible) {
-  // 1. Setup Peer
+  // Setup Peer
   ContactID const peer_id("0000000000000000000000000000000000000000000000000000000000000002");
   auto peer = std::make_shared<transport::Peer>(peer_id);
   transport_->AddPeer(peer_id, peer);
@@ -184,13 +184,13 @@ TEST_F(ExtendedCoverageTest, MessagingService_FutureVersionIsCompatible) {
   peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
   other.ComputeSharedSecret(peer->session_cipher->GetPublicKey());
 
-  // 2. Encrypt message with Version 99. The logic is forward compatible as long as keys exist.
+  // Encrypt message with Version 99. The logic is forward compatible as long as keys exist.
   nlohmann::json payload;
   payload[services::MessagingService::keyVersion] = 99;
   payload[services::MessagingService::keyContent] = "Future Message";
   payload["extra_future_field"] = "something";
 
-  auto encrypted = other.Encrypt(payload.dump());
+  auto const encrypted = other.Encrypt(payload.dump());
 
   bool received_msg = false;
   messaging_service_->SetChatMessageReceivedCallback([&](ContactID const& id,
@@ -203,7 +203,7 @@ TEST_F(ExtendedCoverageTest, MessagingService_FutureVersionIsCompatible) {
     }
   });
 
-  // 3. Inject message
+  // Inject message
   messaging_service_->OnChatMessageReceived(peer_id, encrypted, 102, false);
 
   EXPECT_TRUE(received_msg);
@@ -243,7 +243,7 @@ TEST_F(ExtendedCoverageTest, Glare_WhenMyIdIsSmaller_IgnoresIncoming) {
   ContactID const large_peer_id("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF");
   ASSERT_LT(my_id_, large_peer_id);
 
-  auto peer = std::make_shared<transport::Peer>(large_peer_id);
+  auto const peer = std::make_shared<transport::Peer>(large_peer_id);
   transport_->AddPeer(large_peer_id, peer);
 
   nlohmann::json const offer =

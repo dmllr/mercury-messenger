@@ -33,12 +33,12 @@ class MockCaptureImpl {
 class MediaCallServiceTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    // 1. Setup transport
+    // Setup transport
     mock_transport_impl_ = std::make_unique<transport::MockTransport>();
     mock_transport_raw_ = mock_transport_impl_.get();
     transport_ = std::make_shared<transport::Transport>(std::move(mock_transport_impl_));
 
-    // 2. Setup messaging dependencies
+    // Setup messaging dependencies
     auto storage_impl = std::make_unique<storage::MockPersistentStorageImpl>();
     storage_ = std::make_shared<storage::PersistentStorage>(std::move(storage_impl));
     auto contact_manager = std::make_shared<identity::ContactManager>(storage_);
@@ -46,7 +46,7 @@ class MediaCallServiceTest : public ::testing::Test {
 
     auto file_transfer_service = std::make_shared<services::FileTransferService>(storage_, transport_);
 
-    // 3. Initialize messaging service (needed by MediaCallService)
+    // Initialize messaging service (needed by MediaCallService)
     messaging_service_ = std::make_unique<services::MessagingService>(
         storage_,
         transport_,
@@ -56,16 +56,16 @@ class MediaCallServiceTest : public ::testing::Test {
     );
     messaging_service_->SetChatMessageReceivedCallback([](auto const&, auto const&) {});
 
-    // 4. Initialize MediaCallService
+    // Initialize MediaCallService
     service_ = std::make_unique<services::MediaCallService>(transport_);
     service_->SetMessagingService(messaging_service_.get());
 
-    // 5. Initialize Capture (needed for av_stream_ invariant)
+    // Initialize Capture (needed for av_stream_ invariant)
     service_->SetVideoCapture(std::make_unique<MockCaptureImpl>());
     service_->SetAudioCapture(std::make_unique<MockCaptureImpl>());
     service_->Configure({});
 
-    // 6. Set dummy callbacks
+    // Set dummy callbacks
     service_->SetIncomingCallCallback([](auto const&, auto) {});
     service_->SetCallAcceptedCallback([](auto const&) {});
     service_->SetCallTerminatedCallback([](auto const&) {});

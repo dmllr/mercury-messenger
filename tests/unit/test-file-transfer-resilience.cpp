@@ -125,7 +125,7 @@ TEST_F(FileTransferResilienceTest, TransferProgressAndFileCreation) {
   bool completed = false;
   service_->SetAttachmentDownloadedCallback([&](auto, auto const&) -> auto { completed = true; });
 
-  // 1. Receive Chat Message with Attachment
+  // Receive Chat Message with Attachment
   std::string const content = "Here is a large file";
   nlohmann::json payload_json;
   payload_json[services::MessagingService::keyVersion] = services::MessagingService::protocolVersion;
@@ -153,7 +153,7 @@ TEST_F(FileTransferResilienceTest, TransferProgressAndFileCreation) {
   ASSERT_TRUE(std::filesystem::exists(temp_file));
   EXPECT_EQ(std::filesystem::file_size(temp_file), file_data.size());
 
-  // 2. Process Chunks using Binary Protocol
+  // Process Chunks using Binary Protocol
   constexpr auto chunk_size = services::FileTransferService::chunkSizeBytes;
   size_t const total_chunks = (file_data.size() + chunk_size - 1) / chunk_size;
 
@@ -164,7 +164,7 @@ TEST_F(FileTransferResilienceTest, TransferProgressAndFileCreation) {
     file_transfer_service_->ProcessBinaryMessage(peer1, packet);
   }
 
-  // 3. End
+  // End
   auto end_packet = CreateEndPacket(att_id);
   file_transfer_service_->ProcessBinaryMessage(peer1, end_packet);
 
@@ -182,11 +182,11 @@ TEST_F(FileTransferResilienceTest, TransferProgressAndFileCreation) {
 TEST_F(FileTransferResilienceTest, FailsGracefullyIfHashMismatch) {
   auto peer = std::make_shared<transport::Peer>(peer1);
   peer->data_channel_is_open = true;
-  eillance::crypto::SessionCipher other_cipher;
+  eillance::crypto::SessionCipher const other_cipher;
   peer->session_cipher->ComputeSharedSecret(other_cipher.GetPublicKey());
   transport_->AddPeer(peer1, peer);
 
-  // 1. Receive Chat Message
+  // Receive Chat Message
   messaging::Attachment att;
   att.id = "bad_hash_file";
   att.type = messaging::AttachmentType::file;
@@ -204,19 +204,19 @@ TEST_F(FileTransferResilienceTest, FailsGracefullyIfHashMismatch) {
 
   service_->OnChatMessageReceived(peer1, encrypted, 9002, false, {att});
 
-  // 2. Send Data
+  // Send Data
   std::string const data = "0123456789";
   auto chunk = CreateChunkPacket("bad_hash_file", 0, StringToBytes(data));
   file_transfer_service_->ProcessBinaryMessage(peer1, chunk);
 
-  // 3. Send End
+  // Send End
   bool completed = false;
   service_->SetAttachmentDownloadedCallback([&](auto, auto) { completed = true; });
 
   auto end_packet = CreateEndPacket("bad_hash_file");
   file_transfer_service_->ProcessBinaryMessage(peer1, end_packet);
 
-  // 4. Verify
+  // Verify
   EXPECT_FALSE(completed);  // Should not trigger callback on failure
 
   std::filesystem::path const final_file = attachments_dir_ / ("bad_hash_file.dat");
@@ -231,7 +231,7 @@ TEST_F(FileTransferResilienceTest, StatusUpdateOrder_SmallFile) {
   // Setup peer
   auto peer = std::make_shared<transport::Peer>(peer1);
   peer->data_channel_is_open = true;
-  eillance::crypto::SessionCipher other;
+  eillance::crypto::SessionCipher const other;
   peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
   transport_->AddPeer(peer1, peer);
 
@@ -239,7 +239,7 @@ TEST_F(FileTransferResilienceTest, StatusUpdateOrder_SmallFile) {
   service_->SetAttachmentStatusChangedCallback([&](auto, auto, auto status) { status_sequence.push_back(status); });
 
   // Create small file
-  std::filesystem::path file_path = temp_dir_ / "small_order_test.dat";
+  std::filesystem::path const file_path = temp_dir_ / "small_order_test.dat";
   {
     std::ofstream ofs(file_path);
     ofs << "tiny";
