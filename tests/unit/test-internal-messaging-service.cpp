@@ -287,3 +287,22 @@ TEST_F(InternalMessagingServiceTest, SetupPeerHandlers_BinaryRouting) {
 
   peer->on_data_channel_message(json_bytes);
 }
+
+TEST_F(InternalMessagingServiceTest, UnsuspendAndDeliver_RateLimited) {
+  auto const peer = std::make_shared<transport::Peer>(peer1);
+  service_->SetupPeerHandlers(peer, peer1);
+
+  // Use an empty binary packet (or minimal valid) to trigger the handler
+  std::vector<std::byte> msg = {std::byte{0xFE}, std::byte{0x00}};
+
+  // Check initial count
+  EXPECT_EQ(mock_storage_->unsuspend_call_count, 0);
+
+  // 1. First packet should trigger unsuspend
+  peer->on_data_channel_message(msg);
+  EXPECT_EQ(mock_storage_->unsuspend_call_count, 1);
+
+  // 2. Immediate second packet should be rate-limited and NOT trigger unsuspend
+  peer->on_data_channel_message(msg);
+  EXPECT_EQ(mock_storage_->unsuspend_call_count, 1);
+}
