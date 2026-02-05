@@ -301,10 +301,67 @@ TEST_F(ResilienceTest, ReinstallRecovery_ContactAdd) {
   bool profile_sent = false;
   for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
     if (pid == peer1) {
-      if (msg["type"] == "contact_signature") signature_sent = true;
-      if (msg["type"] == "profile_info") profile_sent = true;
+      if (msg["type"] == "contact_signature") {
+        signature_sent = true;
+      }
+      if (msg["type"] == "profile_info") {
+        profile_sent = true;
+      }
     }
   }
   EXPECT_TRUE(signature_sent) << "Should send signature via data channel";
   EXPECT_TRUE(profile_sent) << "Should send profile via data channel";
+}
+
+TEST_F(ResilienceTest, MessageRedeliveryDeduplication) {
+  // 1. Simulate sender sending message
+  // We manually inject the incoming message to receiver logic
+
+  std::string content = "Unique Content";
+  nlohmann::json payload;
+  payload[services::MessagingService::keyVersion] = services::MessagingService::protocolVersion;
+  payload[services::MessagingService::keyContent] = content;
+
+  // Setup crypto context
+  auto const peer = mock_transport_->GetPeer(peer1);
+  eillance::crypto::SessionCipher other;
+  peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
+  other.ComputeSharedSecret(peer->session_cipher->GetPublicKey());
+
+  auto const encrypted = other.Encrypt(payload.dump());
+  constexpr uint64_t msg_id = 9999;
+
+  // First Delivery
+  client_->GetMessagingService()->OnChatMessageReceived(peer1, encrypted, msg_id, false);
+
+  // Check History
+  auto page = client_->GetMessageHistoryPage(peer1, 0, 10);
+  ASSERT_EQ(page.messages.size(), 2);
+  ASSERT_EQ(page.messages[0].kind, messaging::HistoryEntryKind::systemMessage);
+  ASSERT_EQ(page.messages[1].kind, messaging::HistoryEntryKind::textMessage);
+  ASSERT_EQ(page.messages[1].remote_id, msg_id);
+
+  // Clear transport log to check for receipt
+  mock_transport_->log.sent_peer_messages.clear();
+
+  // Second Delivery (Duplicate)
+  client_->GetMessagingService()->OnChatMessageReceived(peer1, encrypted, msg_id, false);
+
+  // Check History - Should still be 1text message
+  page = client_->GetMessageHistoryPage(peer1, 0, 10);
+  ASSERT_EQ(page.messages.size(), 2);
+  ASSERT_EQ(page.messages[0].kind, messaging::HistoryEntryKind::systemMessage);
+  ASSERT_EQ(page.messages[1].kind, messaging::HistoryEntryKind::textMessage);
+  ASSERT_EQ(page.messages[1].remote_id, msg_id);
+
+  // Check Receipt Sent
+  bool receipt_sent = false;
+  for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
+    if (pid == peer1 && msg.value("type", "") == "message_receipt") {
+      if (msg.value("message_id", 0ULL) == msg_id) {
+        receipt_sent = true;
+      }
+    }
+  }
+  EXPECT_TRUE(receipt_sent);
 }

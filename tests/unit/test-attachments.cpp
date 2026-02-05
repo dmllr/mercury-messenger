@@ -104,7 +104,7 @@ TEST_F(AttachmentTest, PersistenceStoresHash) {
       .kind = messaging::HistoryEntryKind::textMessage,
       .timestamp = 1000,
       .direction = messaging::MessageDirection::sent,
-      .status = messaging::MessageStatus::sent,  // Ensure visible
+      .status = messaging::MessageStatus::delivered,  // Ensure visible
       .data = msg_data,
       .peer_id = peer1
   };

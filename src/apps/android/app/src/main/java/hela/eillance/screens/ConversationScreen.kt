@@ -1271,7 +1271,7 @@ fun MessageBubble(
                 imageVector = when (entry.status) {
                   MessageStatus.Read -> Icons.Filled.DoneAll
                   MessageStatus.Delivered -> Icons.Filled.Done
-                  MessageStatus.Sent -> Icons.Filled.Done
+                  MessageStatus.Sending -> Icons.Filled.Schedule
                   else -> Icons.Filled.Schedule
                 },
                 contentDescription = stringResource(id = R.string.message_status_description, entry.status),

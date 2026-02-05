@@ -31,6 +31,11 @@ class MessageHistory {
       HistoryEntryKind kind,
       std::optional<uint64_t> remote_id = std::nullopt
   ) -> HistoryEntryRecord {
+    // Received messages are by definition delivered. Sent messages start as sending.
+    // We avoid MessageStatus::none for received messages to ensure they are visible in history queries immediately.
+    MessageStatus const initial_status =
+        (direction == MessageDirection::sent) ? MessageStatus::sending : MessageStatus::delivered;
+
     return storage_->AddHistoryEntry({
         .id = 0,  // DB will assign ID
         .remote_id = remote_id,
@@ -40,7 +45,7 @@ class MessageHistory {
                 .count()
         ),
         .direction = direction,
-        .status = (direction == MessageDirection::sent) ? MessageStatus::sending : MessageStatus::none,
+        .status = initial_status,
         .is_truncated = false,
         .data = MessageEntry{content, attachments},
         .peer_id = peer_id,

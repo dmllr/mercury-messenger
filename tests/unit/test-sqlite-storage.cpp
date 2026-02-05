@@ -309,7 +309,7 @@ TEST_F(SQLiteStorageTest, ChatSummaries) {
       {.kind = messaging::HistoryEntryKind::textMessage,
        .timestamp = base_time + 300,
        .direction = messaging::MessageDirection::sent,
-       .status = messaging::MessageStatus::sent,
+       .status = messaging::MessageStatus::delivered,
        .data = messaging::MessageEntry{"p1m3"},
        .peer_id = peer1}
   );

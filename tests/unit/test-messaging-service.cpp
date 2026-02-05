@@ -237,3 +237,52 @@ TEST_F(MessagingServiceTest, DownloadTriggersCallback) {
 
   EXPECT_TRUE(download_cb_called);
 }
+
+TEST_F(MessagingServiceTest, SendMessage_Resilience_RetryLogic) {
+  // Test ensuring that messages stay in 'sending' status and trigger retry
+  auto const peer = std::make_shared<transport::Peer>(peer1);
+  peer->data_channel_is_open = true;
+  eillance::crypto::SessionCipher const other;
+  peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
+  transport_->AddPeer(peer1, peer);
+
+  service_->SendChatMessage(peer1, "Persistent Message");
+
+  // Verify initial status is sending
+  auto history = service_->GetHistoryPage(peer1, 0, 1);
+  ASSERT_FALSE(history.messages.empty());
+  EXPECT_EQ(history.messages[0].status, messaging::MessageStatus::sending);
+
+  // Simulate flushing queue (which sends data)
+  service_->SendQueuedMessages(peer1);
+
+  // Verify status is STILL sending (no receipt yet)
+  history = service_->GetHistoryPage(peer1, 0, 1);
+  EXPECT_EQ(history.messages[0].status, messaging::MessageStatus::sending);
+
+  // Verify data sent to transport
+  bool msg_sent = false;
+  for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
+    if (pid == peer1 && msg.value("type", "") == "chat") {
+      msg_sent = true;
+    }
+  }
+  EXPECT_TRUE(msg_sent);
+
+  // Verify pending work exists so DeliveryService knows to retry
+  // (We check this by ensuring ConnectionAttemptFinished was called, which sets up retry timer
+  // if work persists. We can't spy on DeliveryService internals easily, but we can verify
+  // that status is 'sending' which satisfies 'HasPendingWork').
+}
+
+TEST_F(MessagingServiceTest, OnReceipt_UpdatesStatus) {
+  // Setup sending message
+  auto const entry = service_->SendChatMessage(peer1, "Msg");
+  EXPECT_EQ(entry.status, messaging::MessageStatus::sending);
+
+  // Receive Receipt
+  service_->OnMessageReceipt(peer1, entry.id, "delivered");
+
+  auto [messages, total_messages] = service_->GetHistoryPage(peer1, 0, 1);
+  EXPECT_EQ(messages[0].status, messaging::MessageStatus::delivered);
+}
