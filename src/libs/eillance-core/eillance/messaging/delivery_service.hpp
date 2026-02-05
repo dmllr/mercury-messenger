@@ -1,5 +1,3 @@
-#pragma once
-
 #include <algorithm>
 #include <functional>
 #include <memory>
@@ -77,8 +75,8 @@ class MessageDeliveryService {
     if (hasWorkCallback_) {
       has_work = hasWorkCallback_(peer_id);
     } else {
-      // Fallback to default check if no callback provided
-      has_work = !storage_->GetMessagesWithStatus(peer_id, MessageStatus::sending).empty();
+      // Fallback: Check pending actions directly
+      has_work = !storage_->GetPendingActions(peer_id).empty();
     }
 
     // Check if there are more messages to send. If so, it means the connection
@@ -114,7 +112,7 @@ class MessageDeliveryService {
       if (hasWorkCallback_) {
         has_work = hasWorkCallback_(peer_id);
       } else {
-        has_work = !storage_->GetMessagesWithStatus(peer_id, MessageStatus::sending).empty();
+        has_work = !storage_->GetPendingActions(peer_id).empty();
       }
 
       // Prevent connection attempts when there's nothing to do.

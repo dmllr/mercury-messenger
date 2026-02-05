@@ -145,24 +145,37 @@ TEST_F(SQLiteStorageTest, Contacts) {
 
 // Test suite for pending actions management
 TEST_F(SQLiteStorageTest, PendingActions) {
-  storage_->AddPendingAction(peer1, "action1");
-  storage_->AddPendingAction(peer1, "action2");
-  storage_->AddPendingAction(peer2, "action3");
+  uint64_t const ts = Time::Now();
+  storage_->AddPendingAction(peer1, "action1", ts, 100);
+  storage_->AddPendingAction(peer1, "action2", ts + 100, 101);
+  storage_->AddPendingAction(peer2, "action3", ts + 200, std::nullopt);
 
   auto actions1 = storage_->GetPendingActions(peer1);
   ASSERT_EQ(actions1.size(), 2);
   EXPECT_EQ(actions1[0].payload, "action1");
+  EXPECT_EQ(actions1[0].created_at, ts);
+  EXPECT_EQ(actions1[0].ref_id, 100);
+
   EXPECT_EQ(actions1[1].payload, "action2");
+  EXPECT_EQ(actions1[1].created_at, ts + 100);
+  EXPECT_EQ(actions1[1].ref_id, 101);
 
   auto actions2 = storage_->GetPendingActions(peer2);
   ASSERT_EQ(actions2.size(), 1);
   EXPECT_EQ(actions2[0].payload, "action3");
+  EXPECT_EQ(actions2[0].created_at, ts + 200);
+  EXPECT_FALSE(actions2[0].ref_id.has_value());
 
-  // Remove action
+  // Remove action by ID
   storage_->RemovePendingAction(actions1[0].id);
   actions1 = storage_->GetPendingActions(peer1);
   ASSERT_EQ(actions1.size(), 1);
   EXPECT_EQ(actions1[0].payload, "action2");
+
+  // Remove action by RefID
+  storage_->RemovePendingActionByRefId(peer1, 101);
+  actions1 = storage_->GetPendingActions(peer1);
+  EXPECT_TRUE(actions1.empty());
 }
 
 // Test suite for history management

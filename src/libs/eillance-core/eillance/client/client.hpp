@@ -362,8 +362,7 @@ class Client final : public transport::TransportDelegate {
     // If we re-create the PeerConnection while it is in 'connecting' state,
     // we may kill the valid one or confuse the transport layer.
     auto const state = transport_->GetPeerConnectionState(peer_id);
-    if (state == transport::PeerConnectionState::connecting ||
-        state == transport::PeerConnectionState::newConnection) {
+    if (state == transport::PeerConnectionState::connecting || state == transport::PeerConnectionState::newConnection) {
       return;
     }
 

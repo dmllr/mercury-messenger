@@ -200,6 +200,10 @@ class MessagingService {
         messaging::HistoryEntryKind::textMessage
     );
 
+    // Queue action for unified delivery
+    nlohmann::json action = {{"type", "chat"}, {"message_id", entry.id}};
+    storage_->AddPendingAction(peer_id, action.dump(), Time::Now(), entry.id);
+
     if (auto const peer = transport_->GetPeer(peer_id);
         peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
       SendQueuedMessages(peer_id);
@@ -223,6 +227,13 @@ class MessagingService {
     INVARIANT(on_message_received_);
     on_message_received_(peer_id, entry);
 
+    // Queue for delivery
+    // Note: Some system messages like "contact_request" are handled via signaling path
+    // inside ProcessChatAction, but we still queue them as a "chat" type action
+    // to unify the delivery retry logic.
+    nlohmann::json action_payload = {{"type", "chat"}, {"message_id", entry.id}};
+    storage_->AddPendingAction(peer_id, action_payload.dump(), Time::Now(), entry.id);
+
     if (auto peer = transport_->GetPeer(peer_id);
         peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
       SendQueuedMessages(peer_id);
@@ -233,140 +244,62 @@ class MessagingService {
 
   // Attempts to flush queued messages
   void SendQueuedMessages(ContactID const& peer_id) {
-    // Flush generic pending actions
-    for (auto actions = storage_->GetPendingActions(peer_id); auto const& action : actions) {
-      try {
-        transport_->SendPeerDataChannelMessage(peer_id, nlohmann::json::parse(action.payload));
-        storage_->RemovePendingAction(action.id);
-      } catch (...) {
-        storage_->RemovePendingAction(action.id);
-      }
-    }
+    auto const peer = transport_->GetPeer(peer_id);
+    // Ensure we have a valid secure channel before attempting to send encrypted data
+    bool const can_send_encrypted = peer && peer->data_channel_is_open && peer->session_cipher->IsReady();
 
+    // Check for pending transfers (resume if needed)
     file_transfer_service_->OnConnectionReady(peer_id);
 
-    auto const messages = storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::sending);
-    auto const peer = transport_->GetPeer(peer_id);
+    auto pending_actions = storage_->GetPendingActions(peer_id);
+    if (pending_actions.empty()) return;
 
-    LGI << "Processing " << messages.size() << " queued message(s) for " << peer_id.ToString();
+    LGI << "Processing " << pending_actions.size() << " pending actions for " << peer_id.ToString();
 
-    for (auto const& entry : messages) {
-      bool sent = false;
+    for (auto const& action : pending_actions) {
+      bool success = false;
+      bool remove_on_success = true;
 
-      if (entry.kind != messaging::HistoryEntryKind::textMessage &&
-          entry.kind != messaging::HistoryEntryKind::systemMessage) {
-        continue;
-      }
+      try {
+        auto json_action = nlohmann::json::parse(action.payload);
+        std::string type = json_action.value("type", "");
 
-      if (!std::holds_alternative<messaging::MessageEntry>(entry.data)) {
-        continue;
-      }
+        if (type == "chat") {
+          // Chat messages (Text + System)
+          // Default behavior is to keep them until Receipt/Ack.
+          // However, signaling messages (fire-and-forget) will flip this flag inside ProcessChatAction.
+          remove_on_success = false;
 
-      std::string content_to_send;
-      auto const& [content, attachments] = std::get<messaging::MessageEntry>(entry.data);
+          // We attempt to process even if encryption channel isn't ready IF it might be a signaling message.
+          // ProcessChatAction checks for signaling types first.
+          uint64_t msg_id = json_action.value("message_id", 0ULL);
 
-      if (entry.is_truncated) {
-        if (auto full = history_->GetFullMessageContent(peer_id, entry.id)) {
-          content_to_send = *full;
+          bool should_remove = false;
+          success = ProcessChatAction(peer_id, msg_id, peer, should_remove);
+
+          if (should_remove) {
+            remove_on_success = true;
+          }
         } else {
-          continue;
-        }
-      } else {
-        content_to_send = content;
-      }
-
-      // Signaling Path (Bootstrapping System Messages)
-      if (entry.kind == messaging::HistoryEntryKind::systemMessage) {
-        try {
-          nlohmann::json content_json = nlohmann::json::parse(content_to_send);
-          std::string const action = content_json.value("action", "");
-
-          if (action == "contact_request" || action == "contact_confirm") {
-            nlohmann::json msg = {
-                {"type", action == "contact_request" ? "contact_add_request" : "contact_confirm"},
-                {"to", peer_id.ToString()}
-            };
-            if (action == "contact_request") {
-              if (content_json.contains("profile")) msg["profile"] = content_json["profile"];
-              if (content_json.contains("token")) msg["token"] = content_json["token"];
-            }
-            transport_->SendSignalingMessage(msg);
-            sent = true;
-          }
-        } catch (...) {
-        }
-      }
-
-      // Data Channel Path (Text OR System messages not sent via signaling)
-      if (!sent) {
-        std::vector<messaging::Attachment> valid_attachments;
-        for (auto const& att : attachments) {
-          if (auto stored = storage_->GetAttachment(att.id)) {
-            if (stored->status != messaging::AttachmentStatus::canceled &&
-                stored->status != messaging::AttachmentStatus::discarded &&
-                stored->status != messaging::AttachmentStatus::peerCanceled) {
-              valid_attachments.push_back(*stored);
-            }
+          // Generic actions (Receipts, Profile, etc.)
+          if (peer && peer->data_channel_is_open) {
+            transport_->SendPeerDataChannelMessage(peer_id, json_action);
+            success = true;
           }
         }
-
-        if (content_to_send.empty() && valid_attachments.empty()) {
-          history_->UpdateMessageStatus(peer_id, entry.id, messaging::MessageStatus::none);
-          continue;
-        }
-
-        if (peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
-          nlohmann::json payload_json;
-          payload_json[keyVersion] = protocolVersion;
-          payload_json[keyContent] = content_to_send;
-
-          auto encrypted = peer->session_cipher->Encrypt(payload_json.dump());
-          UpdatePeerActivity(peer_id);
-
-          if (!encrypted.empty()) {
-            nlohmann::json json_msg = {
-                {"type", "chat"},
-                {"message_id", entry.id},
-                {"is_system", (entry.kind == messaging::HistoryEntryKind::systemMessage)},
-                {"payload", std::vector<std::byte>(encrypted.begin(), encrypted.end())}
-            };
-
-            if (!valid_attachments.empty()) {
-              std::vector<nlohmann::json> att_list;
-              att_list.reserve(valid_attachments.size());
-              for (auto const& att : valid_attachments) {
-                att_list.push_back(
-                    {{"id", att.id},
-                     {"type", att.type},
-                     {"mime", att.mime_type},
-                     {"size", att.size_bytes},
-                     {"thumb", att.thumbnail_base64},
-                     {"hash", att.hash},
-                     {"note", att.note},
-                     {"name", att.file_name}}  // Transmit filename
-                );
-              }
-              json_msg["attachments"] = att_list;
-            }
-
-            transport_->SendPeerDataChannelMessage(peer_id, json_msg);
-            sent = true;
-
-            if (!valid_attachments.empty()) {
-              for (auto const& att : valid_attachments) {
-                file_transfer_service_->QueueUpload(peer_id, att);
-              }
-            }
-          }
-        }
+      } catch (std::exception const& e) {
+        LGE << "Failed to process pending action " << action.id << ": " << e.what();
+        // Malformed action, remove it to avoid blocking queue
+        storage_->RemovePendingAction(action.id);
+        continue;
       }
 
-      // IMPORTANT: We do NOT update status to 'sent'.
-      // We stay in 'sending' until a 'delivered' receipt is received from the peer.
+      if (success && remove_on_success) {
+        storage_->RemovePendingAction(action.id);
+      }
     }
 
     // Always signal the delivery service that we finished an attempt.
-    // If messages are still 'sending' (which they are until acked), DS will schedule a retry.
     delivery_service_->ConnectionAttemptFinished(peer_id);
   }
 
@@ -403,6 +336,8 @@ class MessagingService {
         }
         if (contains_attachment && !has_other_content) {
           history_->UpdateMessageStatus(peer_id, entry.id, messaging::MessageStatus::none);
+          // Also remove pending action for this message
+          storage_->RemovePendingActionByRefId(peer_id, entry.id);
           break;
         }
       }
@@ -649,6 +584,9 @@ class MessagingService {
       return;
     }
     history_->UpdateMessageStatus(peer_id, message_id, message_status);
+
+    // Receipt received, we can remove the pending action for this message
+    storage_->RemovePendingActionByRefId(peer_id, message_id);
   }
 
   void OnMessagesRead(ContactID const& peer_id, std::vector<uint64_t> const& message_ids) const {
@@ -704,11 +642,12 @@ class MessagingService {
     if (!storage_->GetPendingActions(peer_id).empty()) {
       return true;
     }
+    // Still check file transfers state for resumed downloads/uploads that might not have a pending metadata action
     auto const attachments = storage_->GetPendingAttachments(peer_id);
-    bool const has_pending_files = std::ranges::any_of(attachments, [](auto const& att) {
-      return att.status == messaging::AttachmentStatus::pending;
+    return std::ranges::any_of(attachments, [](auto const& att) {
+      return att.status == messaging::AttachmentStatus::pending ||
+             att.status == messaging::AttachmentStatus::transferring;
     });
-    return has_pending_files || !storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::sending).empty();
   }
   static auto GenerateAttachmentId() -> std::string {
     static std::random_device random_device;
@@ -717,6 +656,157 @@ class MessagingService {
     std::stringstream sstream;
     sstream << std::hex << dis(gen) << dis(gen);
     return sstream.str();
+  }
+
+  // Returns true if processed successfully (sent or invalidated).
+  // Sets remove_action to true if the action should be removed from queue immediately.
+  bool ProcessChatAction(
+      ContactID const& peer_id,
+      uint64_t msg_id,
+      std::shared_ptr<transport::Peer> const& peer,
+      bool& remove_action
+  ) {
+    remove_action = false;
+
+    // Load message from DB to ensure we have latest content/status
+    auto messages = storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::sending);
+    std::optional<messaging::HistoryEntryRecord> entry;
+    for (auto const& m : messages) {
+      if (m.id == msg_id) {
+        entry = m;
+        break;
+      }
+    }
+
+    if (!entry) {
+      // Message not found or status changed. Consume action.
+      remove_action = true;
+      return true;
+    }
+
+    if (entry->kind != messaging::HistoryEntryKind::textMessage &&
+        entry->kind != messaging::HistoryEntryKind::systemMessage) {
+      remove_action = true;
+      return true;
+    }
+
+    if (!std::holds_alternative<messaging::MessageEntry>(entry->data)) {
+      remove_action = true;
+      return true;
+    }
+
+    auto const& [content, attachments] = std::get<messaging::MessageEntry>(entry->data);
+    std::string content_to_send;
+
+    if (entry->is_truncated) {
+      if (auto full = history_->GetFullMessageContent(peer_id, entry->id)) {
+        content_to_send = *full;
+      } else {
+        // Lost content? Remove action to avoid block.
+        remove_action = true;
+        return true;
+      }
+    } else {
+      content_to_send = content;
+    }
+
+    // Signaling Path (Bootstrapping System Messages)
+    // Legacy support for specific system messages that go via signaling
+    if (entry->kind == messaging::HistoryEntryKind::systemMessage) {
+      try {
+        nlohmann::json content_json = nlohmann::json::parse(content_to_send);
+        std::string const action = content_json.value("action", "");
+
+        if (action == "contact_request" || action == "contact_confirm") {
+          nlohmann::json msg = {
+              {"type", action == "contact_request" ? "contact_add_request" : "contact_confirm"},
+              {"to", peer_id.ToString()}
+          };
+          if (action == "contact_request") {
+            if (content_json.contains("profile")) msg["profile"] = content_json["profile"];
+            if (content_json.contains("token")) msg["token"] = content_json["token"];
+          }
+          transport_->SendSignalingMessage(msg);
+
+          // Signaling messages are fire-and-forget, remove from queue immediately
+          remove_action = true;
+          return true;
+        }
+      } catch (...) {
+      }
+    }
+
+    // Data Channel Path
+    // Requires encrypted connection
+    if (!peer || !peer->data_channel_is_open || !peer->session_cipher->IsReady()) {
+      return false;
+    }
+
+    std::vector<messaging::Attachment> valid_attachments;
+    for (auto const& att : attachments) {
+      if (auto stored = storage_->GetAttachment(att.id)) {
+        if (stored->status != messaging::AttachmentStatus::canceled &&
+            stored->status != messaging::AttachmentStatus::discarded &&
+            stored->status != messaging::AttachmentStatus::peerCanceled) {
+          valid_attachments.push_back(*stored);
+        }
+      }
+    }
+
+    if (content_to_send.empty() && valid_attachments.empty()) {
+      history_->UpdateMessageStatus(peer_id, entry->id, messaging::MessageStatus::none);
+      remove_action = true;
+      return true;
+    }
+
+    nlohmann::json payload_json;
+    payload_json[keyVersion] = protocolVersion;
+    payload_json[keyContent] = content_to_send;
+
+    auto encrypted = peer->session_cipher->Encrypt(payload_json.dump());
+    UpdatePeerActivity(peer_id);
+
+    if (!encrypted.empty()) {
+      nlohmann::json json_msg = {
+          {"type", "chat"},
+          {"message_id", entry->id},
+          {"is_system", (entry->kind == messaging::HistoryEntryKind::systemMessage)},
+          {"payload", std::vector<std::byte>(encrypted.begin(), encrypted.end())}
+      };
+
+      if (!valid_attachments.empty()) {
+        std::vector<nlohmann::json> att_list;
+        att_list.reserve(valid_attachments.size());
+        for (auto const& att : valid_attachments) {
+          att_list.push_back(
+              {{"id", att.id},
+               {"type", att.type},
+               {"mime", att.mime_type},
+               {"size", att.size_bytes},
+               {"thumb", att.thumbnail_base64},
+               {"hash", att.hash},
+               {"note", att.note},
+               {"name", att.file_name}}
+          );
+        }
+        json_msg["attachments"] = att_list;
+      }
+
+      transport_->SendPeerDataChannelMessage(peer_id, json_msg);
+
+      // Trigger uploads
+      if (!valid_attachments.empty()) {
+        for (auto const& att : valid_attachments) {
+          file_transfer_service_->QueueUpload(peer_id, att);
+        }
+      }
+
+      // Sent successfully. Waiting for receipt, so do NOT remove action.
+      remove_action = false;
+      return true;
+    }
+
+    return false;  // Encryption failed? Retry?
   }
 
   std::shared_ptr<storage::PersistentStorage> storage_;

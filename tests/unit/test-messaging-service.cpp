@@ -6,6 +6,7 @@
 #include <vector>
 
 #include <gtest/gtest.h>
+#include <nlohmann/json.hpp>
 #include <openssl/sha.h>
 
 #include "eillance/identity/contact_manager.hpp"
@@ -236,6 +237,119 @@ TEST_F(MessagingServiceTest, DownloadTriggersCallback) {
   file_transfer_service_->ProcessBinaryMessage(peer1, end_packet);
 
   EXPECT_TRUE(download_cb_called);
+}
+
+TEST_F(MessagingServiceTest, SendMessage_UnifiedDeliveryQueue) {
+  // Setup: No peer connected initially.
+  // 1. Send Chat Message
+  auto const entry = service_->SendChatMessage(peer1, "Queued Message");
+  EXPECT_EQ(entry.status, messaging::MessageStatus::sending);
+
+  // Verify Pending Action Created with ref_id
+  auto actions = mock_storage_->GetPendingActions(peer1);
+  ASSERT_EQ(actions.size(), 1);
+  EXPECT_EQ(actions[0].ref_id, entry.id);
+  auto json_action = nlohmann::json::parse(actions[0].payload);
+  EXPECT_EQ(json_action["type"], "chat");
+  EXPECT_EQ(json_action["message_id"], entry.id);
+
+  // 2. Connect Peer
+  auto peer = std::make_shared<transport::Peer>(peer1);
+  peer->data_channel_is_open = true;
+  eillance::crypto::SessionCipher other;
+  peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
+  transport_->AddPeer(peer1, peer);
+
+  // 3. Trigger queue flush
+  service_->SendQueuedMessages(peer1);
+
+  // 4. Verify message sent
+  bool msg_sent = false;
+  for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
+    if (pid == peer1 && msg.value("type", "") == "chat") {
+      msg_sent = true;
+    }
+  }
+  EXPECT_TRUE(msg_sent);
+
+  // 5. Verify Pending Action Still Exists (Waiting for Receipt)
+  actions = mock_storage_->GetPendingActions(peer1);
+  EXPECT_EQ(actions.size(), 1);
+
+  // 6. Simulate Receipt
+  service_->OnMessageReceipt(peer1, entry.id, "delivered");
+
+  // 7. Verify Pending Action Removed
+  actions = mock_storage_->GetPendingActions(peer1);
+  EXPECT_TRUE(actions.empty());
+}
+
+TEST_F(MessagingServiceTest, SendSystemMessage_UnifiedDelivery) {
+  // Send system message
+  service_->SendSystemMessage(peer1, R"({"action": "custom_sys"})");
+
+  auto actions = mock_storage_->GetPendingActions(peer1);
+  ASSERT_EQ(actions.size(), 1);
+  auto json = nlohmann::json::parse(actions[0].payload);
+  EXPECT_EQ(json["type"], "chat");
+
+  // Connect and flush
+  auto peer = std::make_shared<transport::Peer>(peer1);
+  peer->data_channel_is_open = true;
+  eillance::crypto::SessionCipher other;
+  peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
+  transport_->AddPeer(peer1, peer);
+
+  service_->SendQueuedMessages(peer1);
+
+  // Verify sent as is_system=true
+  bool sys_sent = false;
+  for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
+    if (pid == peer1 && msg.value("is_system", false)) {
+      sys_sent = true;
+    }
+  }
+  EXPECT_TRUE(sys_sent);
+}
+
+TEST_F(MessagingServiceTest, MarkAsRead_UnifiedDelivery) {
+  // Add a received message first
+  auto entry = mock_storage_->AddHistoryEntry(
+      {.remote_id = 12345,
+       .kind = messaging::HistoryEntryKind::textMessage,
+       .timestamp = Time::Now(),
+       .direction = messaging::MessageDirection::received,
+       .peer_id = peer1}
+  );
+
+  service_->MarkMessagesAsRead(peer1, {entry.id});
+
+  // Verify pending action
+  auto actions = mock_storage_->GetPendingActions(peer1);
+  ASSERT_EQ(actions.size(), 1);
+  auto json = nlohmann::json::parse(actions[0].payload);
+  EXPECT_EQ(json["type"], "message_read");
+  EXPECT_EQ(json["message_ids"][0], 12345);
+
+  // Connect and Flush
+  auto peer = std::make_shared<transport::Peer>(peer1);
+  peer->data_channel_is_open = true;
+  transport_->AddPeer(peer1, peer);
+
+  service_->SendQueuedMessages(peer1);
+
+  // Verify sent
+  bool read_sent = false;
+  for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
+    if (pid == peer1 && msg["type"] == "message_read") {
+      read_sent = true;
+    }
+  }
+  EXPECT_TRUE(read_sent);
+
+  // Verify action removed immediately (fire-and-forget logic for reads)
+  actions = mock_storage_->GetPendingActions(peer1);
+  EXPECT_TRUE(actions.empty());
 }
 
 TEST_F(MessagingServiceTest, SendMessage_Resilience_RetryLogic) {

@@ -117,9 +117,14 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
   }
 
   // --- Resilience ---
-  void AddPendingAction(ContactID const& peer_id, std::string const& payload) override {
+  void AddPendingAction(
+      ContactID const& peer_id,
+      std::string const& payload,
+      uint64_t timestamp,
+      std::optional<int64_t> ref_id
+  ) override {
     std::lock_guard const lock(mutex_);
-    pending_actions_.push_back({next_action_id_++, peer_id, payload});
+    pending_actions_.push_back({next_action_id_++, peer_id, payload, timestamp, ref_id});
   }
 
   auto GetPendingActions(ContactID const& peer_id) -> std::vector<PendingAction> override {
@@ -136,6 +141,13 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
   void RemovePendingAction(int64_t id) override {
     std::lock_guard const lock(mutex_);
     std::erase_if(pending_actions_, [id](auto const& action) { return action.id == id; });
+  }
+
+  void RemovePendingActionByRefId(ContactID const& peer_id, int64_t ref_id) override {
+    std::lock_guard const lock(mutex_);
+    std::erase_if(pending_actions_, [&](auto const& action) {
+      return action.peer_id == peer_id && action.ref_id.has_value() && action.ref_id.value() == ref_id;
+    });
   }
 
   // --- History ---
