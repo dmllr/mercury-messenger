@@ -1,6 +1,8 @@
 #pragma once
 
+#include <map>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -19,7 +21,7 @@
 namespace eillance::services {
 
 class InternalMessagingService {
- public:
+public:
   using Json = nlohmann::json;
 
   InternalMessagingService(
@@ -187,7 +189,7 @@ class InternalMessagingService {
     profile_service_->SyncProfile(peer_id);
   }
 
- private:
+private:
   void HandleMediaSignaling(ContactID const& peer_id, std::string const& type, Json const& message) {
     auto peer = transport_->GetPeer(peer_id);
     if (!peer) {
@@ -239,16 +241,41 @@ class InternalMessagingService {
         auto const sdp = message["sdp"].get<std::string>();
         transport_->SetRemoteDescription(peer_id, "data", sdp, "offer");
         transport_->CreateAnswer(peer_id, "data");
+
+        // Apply buffered candidates if any
+        {
+          std::lock_guard<std::mutex> const lock(early_candidates_mutex_);
+          if (early_candidates_.count(peer_id)) {
+            LGI << "Applying " << early_candidates_[peer_id].size() << " early candidates for " << peer_id.ToString();
+            for (auto const& cand : early_candidates_[peer_id]) {
+              transport_->AddRemoteCandidate(
+                  peer_id,
+                  "data",
+                  cand["candidate"].get<std::string>(),
+                  cand["sdpMid"].get<std::string>()
+              );
+            }
+            early_candidates_.erase(peer_id);
+          }
+        }
       }
     } else if (type == "answer") {
       transport_->SetRemoteDescription(peer_id, "data", message["sdp"].get<std::string>(), "answer");
     } else if (type == "candidate") {
-      transport_->AddRemoteCandidate(
-          peer_id,
-          "data",
-          message["candidate"].get<std::string>(),
-          message["sdpMid"].get<std::string>()
-      );
+      auto peer = transport_->GetPeer(peer_id);
+      if (peer) {
+        transport_->AddRemoteCandidate(
+            peer_id,
+            "data",
+            message["candidate"].get<std::string>(),
+            message["sdpMid"].get<std::string>()
+        );
+      } else {
+        // Buffer candidate if peer not ready (Offer race condition)
+        std::lock_guard<std::mutex> const lock(early_candidates_mutex_);
+        early_candidates_[peer_id].push_back(message);
+        LGI << "Buffered early ICE candidate from " << peer_id.ToString();
+      }
     }
   }
 
@@ -308,6 +335,10 @@ class InternalMessagingService {
   std::shared_ptr<MediaCallService> media_call_service_;
   std::shared_ptr<FileTransferService> file_transfer_service_;
   std::shared_ptr<ProfileService> profile_service_;
+
+  // Buffer for ICE candidates that arrive before the Offer is processed
+  std::map<ContactID, std::vector<Json>> early_candidates_;
+  std::mutex early_candidates_mutex_;
 };
 
 }  // namespace eillance::services
