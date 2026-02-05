@@ -60,7 +60,14 @@ fun UnreadMessagesScreen(
       items(infos) { info ->
         ListItem(
           headlineContent = { Text(info.peerId) },
-          supportingContent = { Text(stringResource(id = R.string.debug_unread_last_message, Date(info.lastMsgTimestamp / 1000).toString())) },
+          supportingContent = {
+            Text(
+              stringResource(
+                id = R.string.debug_unread_last_message,
+                Date(info.lastMsgTimestamp / 1000).toString()
+              )
+            )
+          },
           trailingContent = { Text(stringResource(id = R.string.debug_unread_count, info.count)) }
         )
         HorizontalDivider()
