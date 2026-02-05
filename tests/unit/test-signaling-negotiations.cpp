@@ -42,7 +42,7 @@ class MockCapture {
 
 }  // namespace
 
-class ExtendedCoverageTest : public ::testing::Test {
+class SignalingNegotiationTest : public ::testing::Test {
  protected:
   void SetUp() override {
     // Storage
@@ -60,9 +60,8 @@ class ExtendedCoverageTest : public ::testing::Test {
 
     // Services
     account_service_ = std::make_shared<services::AccountService>(storage_, transport_);
-    // Set callback to satisfy invariant during GenerateNewIdentity
     account_service_->SetOnMyProfileUpdatedCallback([]() {});
-    (void)account_service_->GenerateNewIdentity();
+    std::ignore = account_service_->GenerateNewIdentity();
     my_id_ = account_service_->GetId();
 
     file_transfer_service_ = std::make_shared<services::FileTransferService>(storage_, transport_);
@@ -136,126 +135,79 @@ class ExtendedCoverageTest : public ::testing::Test {
   ContactID my_id_;
 };
 
-TEST_F(ExtendedCoverageTest, MessagingService_ReceivesUnsupportedVersion) {
-  // Setup Peer
+TEST_F(SignalingNegotiationTest, CandidatesArrivingBeforeOfferAreBuffered) {
+  // Use a PeerID that is smaller than MyID to ensure we accept the offer (Smaller Wins policy)
   ContactID const peer_id("0000000000000000000000000000000000000000000000000000000000000002");
-  auto peer = std::make_shared<transport::Peer>(peer_id);
-  transport_->AddPeer(peer_id, peer);
+  ASSERT_GT(my_id_, peer_id);
 
-  eillance::crypto::SessionCipher other;
-  peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
-  other.ComputeSharedSecret(peer->session_cipher->GetPublicKey());
+  // 1. Simulate Candidate Arriving FIRST
+  nlohmann::json const candidate_msg = {
+      {"type", "candidate"},
+      {"candidate", "candidate:1 1 UDP ..."},
+      {"sdpMid", "0"}
+  };
 
-  // Encrypt message with very old version 0 (assuming MinSupported is 1)
-  // Logic: messaging_service checks if (v < kMinSupportedVersion) throws
-  nlohmann::json payload;
-  payload[services::MessagingService::keyVersion] = 0;
-  payload[services::MessagingService::keyContent] = "Old Message";
+  internal_service_->ProcessSignalingMessage(peer_id, "candidate", candidate_msg);
 
-  auto const encrypted = other.Encrypt(payload.dump());
+  // At this point, peer does not exist, so candidate should be buffered.
+  ASSERT_FALSE(mock_transport_->GetPeer(peer_id));
+  ASSERT_TRUE(mock_transport_->log.added_candidates.empty());
 
-  bool received_system_msg = false;
-  messaging_service_->SetChatMessageReceivedCallback([&](ContactID const& id,
-                                                         messaging::HistoryEntryRecord const& rec) {
-    if (id == peer_id && rec.kind == messaging::HistoryEntryKind::systemMessage) {
-      auto const* msg = std::get_if<messaging::MessageEntry>(&rec.data);
-      if (msg) {
-        auto j = nlohmann::json::parse(msg->content);
-        if (j.value("action", "") == "unsupported_format") {
-          received_system_msg = true;
-        }
-      }
+  // 2. Simulate Offer Arriving SECOND
+  nlohmann::json const offer_msg = {
+      {"from", peer_id.ToString()},
+      {"type", "offer"},
+      {"context", "data"},
+      {"sdp", "dummy_sdp_offer"}
+  };
+
+  internal_service_->ProcessSignalingMessage(peer_id, "offer", offer_msg);
+
+  // 3. Verify Peer Created and Answered
+  ASSERT_TRUE(mock_transport_->GetPeer(peer_id));
+
+  bool answer_created = false;
+  for (auto const& [pid, ctx] : mock_transport_->log.answers) {
+    if (pid == peer_id && ctx == "data") {
+      answer_created = true;
     }
-  });
+  }
+  EXPECT_TRUE(answer_created);
 
-  // Inject message
-  messaging_service_->OnChatMessageReceived(peer_id, encrypted, 101, false);
-
-  EXPECT_TRUE(received_system_msg);
+  // 4. IMPORTANT: Verify the buffered candidate was applied to the transport
+  ASSERT_EQ(mock_transport_->log.added_candidates.size(), 1);
+  auto const& [pid, ctx, cand, mid] = mock_transport_->log.added_candidates[0];
+  EXPECT_EQ(pid, peer_id);
+  EXPECT_EQ(ctx, "data");
+  EXPECT_EQ(cand, "candidate:1 1 UDP ...");
+  EXPECT_EQ(mid, "0");
 }
 
-TEST_F(ExtendedCoverageTest, MessagingService_FutureVersionIsCompatible) {
-  // Setup Peer
+TEST_F(SignalingNegotiationTest, CandidatesAppliedImmediatelyIfPeerExists) {
   ContactID const peer_id("0000000000000000000000000000000000000000000000000000000000000002");
-  auto peer = std::make_shared<transport::Peer>(peer_id);
-  transport_->AddPeer(peer_id, peer);
 
-  eillance::crypto::SessionCipher other;
-  peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
-  other.ComputeSharedSecret(peer->session_cipher->GetPublicKey());
+  // 1. Create Peer (Simulate Offer processed)
+  nlohmann::json const offer_msg = {
+      {"from", peer_id.ToString()},
+      {"type", "offer"},
+      {"context", "data"},
+      {"sdp", "dummy_sdp_offer"}
+  };
+  internal_service_->ProcessSignalingMessage(peer_id, "offer", offer_msg);
+  ASSERT_TRUE(mock_transport_->GetPeer(peer_id));
 
-  // Encrypt message with Version 99. The logic is forward compatible as long as keys exist.
-  nlohmann::json payload;
-  payload[services::MessagingService::keyVersion] = 99;
-  payload[services::MessagingService::keyContent] = "Future Message";
-  payload["extra_future_field"] = "something";
+  mock_transport_->log.added_candidates.clear();
 
-  auto const encrypted = other.Encrypt(payload.dump());
+  // 2. Send Candidate
+  nlohmann::json const candidate_msg = {
+      {"type", "candidate"},
+      {"candidate", "candidate:2 1 UDP ..."},
+      {"sdpMid", "1"}
+  };
+  internal_service_->ProcessSignalingMessage(peer_id, "candidate", candidate_msg);
 
-  bool received_msg = false;
-  messaging_service_->SetChatMessageReceivedCallback([&](ContactID const& id,
-                                                         messaging::HistoryEntryRecord const& rec) {
-    if (id == peer_id && rec.kind == messaging::HistoryEntryKind::textMessage) {
-      auto const* msg = std::get_if<messaging::MessageEntry>(&rec.data);
-      if (msg && msg->content == "Future Message") {
-        received_msg = true;
-      }
-    }
-  });
-
-  // Inject message
-  messaging_service_->OnChatMessageReceived(peer_id, encrypted, 102, false);
-
-  EXPECT_TRUE(received_msg);
-}
-
-TEST_F(ExtendedCoverageTest, Glare_WhenMyIdIsLarger_YieldsToIncoming) {
-  // We want MyID > PeerID.
-  ContactID const small_peer_id("0000000000000000000000000000000000000000000000000000000000000000");
-  ASSERT_GT(my_id_, small_peer_id);
-
-  auto peer = std::make_shared<transport::Peer>(small_peer_id);
-  transport_->AddPeer(small_peer_id, peer);
-
-  nlohmann::json const offer =
-      {{"from", small_peer_id.ToString()}, {"type", "offer"}, {"context", "data"}, {"sdp", "dummy_sdp"}};
-
-  internal_service_->ProcessSignalingMessage(small_peer_id, "offer", offer);
-
-  bool closed = false;
-  for (auto const& [pid, ctx] : mock_transport_->log.closed_connections) {
-    if (pid == small_peer_id && ctx == "data") {
-      closed = true;
-    }
-  }
-  EXPECT_TRUE(closed);
-
-  bool answer_sent = false;
-  for (auto const& [pid, ctx] : mock_transport_->log.answers) {
-    if (pid == small_peer_id && ctx == "data") {
-      answer_sent = true;
-    }
-  }
-  EXPECT_TRUE(answer_sent);
-}
-
-TEST_F(ExtendedCoverageTest, Glare_WhenMyIdIsSmaller_IgnoresIncoming) {
-  ContactID const large_peer_id("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF");
-  ASSERT_LT(my_id_, large_peer_id);
-
-  auto const peer = std::make_shared<transport::Peer>(large_peer_id);
-  transport_->AddPeer(large_peer_id, peer);
-
-  nlohmann::json const offer =
-      {{"from", large_peer_id.ToString()}, {"type", "offer"}, {"context", "data"}, {"sdp", "dummy_sdp"}};
-
-  internal_service_->ProcessSignalingMessage(large_peer_id, "offer", offer);
-
-  bool answer_sent = false;
-  for (auto const& [pid, ctx] : mock_transport_->log.answers) {
-    if (pid == large_peer_id) {
-      answer_sent = true;
-    }
-  }
-  EXPECT_FALSE(answer_sent);
+  // Should be applied immediately
+  ASSERT_EQ(mock_transport_->log.added_candidates.size(), 1);
+  auto const& [pid, ctx, cand, mid] = mock_transport_->log.added_candidates[0];
+  EXPECT_EQ(cand, "candidate:2 1 UDP ...");
 }

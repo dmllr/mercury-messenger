@@ -39,6 +39,8 @@ class MockTransport {
     std::vector<Json> sent_signaling_messages;
     std::vector<std::pair<ContactID, Json>> sent_peer_messages;
     std::vector<std::pair<ContactID, std::vector<std::byte>>> sent_binary_messages;
+    // Log added candidates: {PeerID, Context, CandidateSDP, SDP_MID}
+    std::vector<std::tuple<ContactID, std::string, std::string, std::string>> added_candidates;
   };
 
   mutable CallLog log;
@@ -139,11 +141,13 @@ class MockTransport {
   }
 
   void AddRemoteCandidate(
-      ContactID const& /*peer_id*/,
-      std::string const& /*context*/,
-      std::string const& /*candidate*/,
-      std::string const& /*mid*/
+      ContactID const& peer_id,
+      std::string const& context,
+      std::string const& candidate,
+      std::string const& mid
   ) {
+    std::lock_guard<std::mutex> const lock(mutex_);
+    log.added_candidates.emplace_back(peer_id, context, candidate, mid);
   }
 
   void SendSignalingMessage(Json const& message) const {
