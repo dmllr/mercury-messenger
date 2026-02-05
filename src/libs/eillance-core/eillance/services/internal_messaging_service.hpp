@@ -4,6 +4,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -17,6 +18,7 @@
 #include "eillance/services/messaging_service.hpp"
 #include "eillance/services/profile_service.hpp"
 #include "eillance/transport/transport.hpp"
+#include "eillance/utils/time.hpp"
 
 namespace eillance::services {
 
@@ -99,8 +101,21 @@ public:
         p->last_activity_time = Time::Now();
       }
 
-      // Activity triggers unsuspension of any stale pending actions
-      messaging_service_->UnsuspendAndDeliver(peer_id);
+      // Activity triggers unsuspension of any stale pending actions.
+      // Rate-limited to avoid database thrashing during high-frequency transfers.
+      bool should_unsuspend = false;
+      {
+        auto const now = Time::Now();
+        std::lock_guard<std::mutex> const lock(unsuspend_mutex_);
+        if (now - last_unsuspend_times_[peer_id] >= kUnsuspendInterval) {
+          last_unsuspend_times_[peer_id] = now;
+          should_unsuspend = true;
+        }
+      }
+
+      if (should_unsuspend) {
+        messaging_service_->UnsuspendAndDeliver(peer_id);
+      }
 
       // 0xFE is our magic byte for binary messages
       if (!msg.empty() && msg[0] == std::byte{0xFE}) {
@@ -174,6 +189,10 @@ public:
 
     // Channel open is a strong signal of activity
     messaging_service_->UnsuspendAndDeliver(peer_id);
+    {
+      std::lock_guard<std::mutex> const lock(unsuspend_mutex_);
+      last_unsuspend_times_[peer_id] = Time::Now();
+    }
 
     if (account_service_->GetId() > peer_id) {
       auto my_pub_key = peer->session_cipher->GetPublicKey();
@@ -339,6 +358,10 @@ private:
   // Buffer for ICE candidates that arrive before the Offer is processed
   std::map<ContactID, std::vector<Json>> early_candidates_;
   std::mutex early_candidates_mutex_;
+
+  std::unordered_map<ContactID, Time::Unit> last_unsuspend_times_;
+  std::mutex unsuspend_mutex_;
+  static constexpr Time::Unit kUnsuspendInterval = 5 * Time::uS;
 };
 
 }  // namespace eillance::services

@@ -224,7 +224,7 @@ class MessagingService {
     INVARIANT(on_message_received_);
     on_message_received_(peer_id, entry);
 
-    nlohmann::json action_payload = {{"type", "chat"}, {"message_id", entry.id}};
+    nlohmann::json const action_payload = {{"type", "chat"}, {"message_id", entry.id}};
     storage_->AddPendingAction(peer_id, action_payload.dump(), Time::Now(), entry.id);
 
     if (auto peer = transport_->GetPeer(peer_id);
@@ -258,7 +258,7 @@ class MessagingService {
 
       try {
         auto json_action = nlohmann::json::parse(action.payload);
-        std::string type = json_action.value("type", "");
+        std::string const type = json_action.value("type", "");
 
         if (type == "chat") {
           remove_on_success = false;
