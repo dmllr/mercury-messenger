@@ -6,6 +6,7 @@
 #include <vector>
 
 #include <gtest/gtest.h>
+#include <nlohmann/json.hpp>
 
 #include "eillance/identity/contact_manager.hpp"
 #include "eillance/messaging/delivery_service.hpp"
@@ -42,7 +43,7 @@ class DeliveryServiceTest : public ::testing::Test {
   }
 
   void AddPendingMessage(ContactID const& peer_id) {
-    mock_storage_impl_->AddHistoryEntry(  //
+    auto entry = mock_storage_impl_->AddHistoryEntry(  //
         {.kind = messaging::HistoryEntryKind::textMessage,
          .timestamp = Time::Now(),
          .direction = messaging::MessageDirection::sent,
@@ -50,6 +51,10 @@ class DeliveryServiceTest : public ::testing::Test {
          .data = messaging::MessageEntry{"test payload"},
          .peer_id = peer_id}
     );
+
+    // Also add Pending Action to satisfy HasPendingWork logic
+    nlohmann::json action = {{"type", "chat"}, {"message_id", entry.id}};
+    mock_storage_impl_->AddPendingAction(peer_id, action.dump(), Time::Now(), entry.id);
   }
 
   storage::MockPersistentStorageImpl* mock_storage_impl_{};

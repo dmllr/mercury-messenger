@@ -47,7 +47,9 @@ namespace eillance::storage {
 struct PendingAction {
   int64_t id;
   ContactID peer_id;
-  std::string payload;  // JSON content
+  std::string payload;            // JSON content
+  uint64_t created_at;            // Timestamp (microseconds)
+  std::optional<int64_t> ref_id;  // Reference ID (e.g. message_id), optional
 };
 
 // The abstract interface for platform-specific storage implementations.
@@ -76,9 +78,15 @@ class PersistentStorageImpl {
   virtual void Checkpoint() = 0;
 
   // --- Resilience (Pending Actions) ---
-  virtual void AddPendingAction(ContactID const& peer_id, std::string const& payload) = 0;
+  virtual void AddPendingAction(
+      ContactID const& peer_id,
+      std::string const& payload,
+      uint64_t timestamp,
+      std::optional<int64_t> ref_id
+  ) = 0;
   virtual auto GetPendingActions(ContactID const& peer_id) -> std::vector<PendingAction> = 0;
   virtual void RemovePendingAction(int64_t id) = 0;
+  virtual void RemovePendingActionByRefId(ContactID const& peer_id, int64_t ref_id) = 0;
 
   // --- History ---
   virtual auto AddHistoryEntry(messaging::HistoryEntryRecord entry) -> messaging::HistoryEntryRecord = 0;
@@ -170,14 +178,22 @@ class PersistentStorage {
   }
 
   // --- Resilience ---
-  void AddPendingAction(ContactID const& peer_id, std::string const& payload) const {
-    pimpl_->AddPendingAction(peer_id, payload);
+  void AddPendingAction(
+      ContactID const& peer_id,
+      std::string const& payload,
+      uint64_t timestamp = 0,
+      std::optional<int64_t> ref_id = std::nullopt
+  ) const {
+    pimpl_->AddPendingAction(peer_id, payload, timestamp, ref_id);
   }
   [[nodiscard]] auto GetPendingActions(ContactID const& peer_id) const {
     return pimpl_->GetPendingActions(peer_id);
   }
   void RemovePendingAction(int64_t id) const {
     pimpl_->RemovePendingAction(id);
+  }
+  void RemovePendingActionByRefId(ContactID const& peer_id, int64_t ref_id) const {
+    pimpl_->RemovePendingActionByRefId(peer_id, ref_id);
   }
 
   // --- History ---

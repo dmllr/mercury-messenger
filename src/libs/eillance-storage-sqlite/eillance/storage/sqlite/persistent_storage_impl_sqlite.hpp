@@ -243,12 +243,26 @@ class SQLiteStorage final : public PersistentStorageImpl {
   }
 
   // --- Resilience ---
-  void AddPendingAction(ContactID const& peer_id, std::string const& payload) override {
+  void AddPendingAction(
+      ContactID const& peer_id,
+      std::string const& payload,
+      uint64_t timestamp,
+      std::optional<int64_t> ref_id
+  ) override {
     std::lock_guard const lock(mutex_);
     if (!db_) return;
-    SQLiteStatement const statement(db_, "INSERT INTO pending_actions (peer_id, payload) VALUES (?, ?);");
+    SQLiteStatement const statement(
+        db_,
+        "INSERT INTO pending_actions (peer_id, payload, created_at, ref_id) VALUES (?, ?, ?, ?);"
+    );
     BindText(statement.Get(), 1, peer_id.ToString());
     BindText(statement.Get(), 2, payload);
+    sqlite3_bind_int64(statement.Get(), 3, static_cast<sqlite3_int64>(timestamp));
+    if (ref_id) {
+      sqlite3_bind_int64(statement.Get(), 4, static_cast<sqlite3_int64>(*ref_id));
+    } else {
+      sqlite3_bind_null(statement.Get(), 4);
+    }
     sqlite3_step(statement.Get());
   }
 
@@ -256,10 +270,21 @@ class SQLiteStorage final : public PersistentStorageImpl {
     std::lock_guard const lock(mutex_);
     if (!db_) return {};
     std::vector<PendingAction> actions;
-    SQLiteStatement const statement(db_, "SELECT id, payload FROM pending_actions WHERE peer_id = ? ORDER BY id ASC;");
+    // Order by ID ASC to preserve FIFO
+    SQLiteStatement const statement(
+        db_,
+        "SELECT id, payload, created_at, ref_id FROM pending_actions WHERE peer_id = ? ORDER BY id ASC;"
+    );
     BindText(statement.Get(), 1, peer_id.ToString());
     while (sqlite3_step(statement.Get()) == SQLITE_ROW) {
-      actions.push_back({sqlite3_column_int64(statement.Get(), 0), peer_id, ColumnString(statement.Get(), 1)});
+      int64_t id = sqlite3_column_int64(statement.Get(), 0);
+      std::string payload = ColumnString(statement.Get(), 1);
+      uint64_t created = static_cast<uint64_t>(sqlite3_column_int64(statement.Get(), 2));
+      std::optional<int64_t> ref;
+      if (sqlite3_column_type(statement.Get(), 3) != SQLITE_NULL) {
+        ref = sqlite3_column_int64(statement.Get(), 3);
+      }
+      actions.push_back({id, peer_id, payload, created, ref});
     }
     return actions;
   }
@@ -269,6 +294,15 @@ class SQLiteStorage final : public PersistentStorageImpl {
     if (!db_) return;
     SQLiteStatement const statement(db_, "DELETE FROM pending_actions WHERE id = ?;");
     sqlite3_bind_int64(statement.Get(), 1, id);
+    sqlite3_step(statement.Get());
+  }
+
+  void RemovePendingActionByRefId(ContactID const& peer_id, int64_t ref_id) override {
+    std::lock_guard const lock(mutex_);
+    if (!db_) return;
+    SQLiteStatement const statement(db_, "DELETE FROM pending_actions WHERE peer_id = ? AND ref_id = ?;");
+    BindText(statement.Get(), 1, peer_id.ToString());
+    sqlite3_bind_int64(statement.Get(), 2, ref_id);
     sqlite3_step(statement.Get());
   }
 
@@ -778,6 +812,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
     if (user_version < 4) migrations::MigrateToV0004(db_);
     if (user_version < 5) migrations::MigrateToV0005(db_);
     if (user_version < 6) migrations::MigrateToV0006(db_);
+    if (user_version < 7) migrations::MigrateToV0007(db_);
   }
 
   static auto ParseHistoryEntry(sqlite3_stmt* stmt) -> messaging::HistoryEntryRecord {
