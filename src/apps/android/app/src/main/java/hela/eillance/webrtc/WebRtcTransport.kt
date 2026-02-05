@@ -259,7 +259,11 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
         }
       }
 
-      override fun onStandardizedIceConnectionChange(newState: PeerConnection.IceConnectionState?) {}
+      override fun onStandardizedIceConnectionChange(newState: PeerConnection.IceConnectionState?) {
+        if (!isCurrentSession()) return
+        Log.i(TAG, "onStandardizedIceConnectionChange for peer $peerId ($context): $newState")
+      }
+
       override fun onIceConnectionChange(newState: PeerConnection.IceConnectionState?) {}
       override fun onIceConnectionReceivingChange(p0: Boolean) {}
       override fun onIceGatheringChange(newState: PeerConnection.IceGatheringState?) {
@@ -286,6 +290,7 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
         } catch (e: JSONException) {
           Log.e(TAG, "Failed to create ICE candidate JSON", e)
         }
+        Log.d(TAG, "onIceCandidate for peer $peerId ($context): ${candidate.sdp}")
       }
 
       override fun onIceCandidatesRemoved(p0: Array<out IceCandidate>?) {}
@@ -304,7 +309,7 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
           override fun onStateChange() {
             Log.i(TAG, "Incoming data channel state for $peerId changed to: ${dc.state()}")
             if (dc.state() == DataChannel.State.OPEN) {
-              createdSession?.cancelTimeout() // Ensure timeout is cancelled on DC Open
+              createdSession?.cancelTimeout()
               nativeOnDataChannelOpen(nativePointer, peerId)
             }
           }
@@ -388,7 +393,8 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
       override fun onStateChange() {
         Log.i(TAG, "Outgoing data channel state for $peerId changed to: ${dc.state()}")
         if (dc.state() == DataChannel.State.OPEN) {
-          getSession(peerId, "data")?.cancelTimeout() // Cancel timeout
+          // Cancel timeout as we are connected
+          getSession(peerId, "data")?.cancelTimeout()
           nativeOnDataChannelOpen(nativePointer, peerId)
         }
       }
@@ -436,6 +442,7 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
 
   fun createOffer(peerId: String, context: String) {
     val session = getSession(peerId, context) ?: return
+    Log.d(TAG, "Creating offer for peer $peerId ($context)")
     val sdpObserver = object : SdpObserver {
       override fun onCreateSuccess(sdp: SessionDescription?) {
         if (sdp != null) session.pc.setLocalDescription(this, sdp)
@@ -466,6 +473,7 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
 
   fun createAnswer(peerId: String, context: String) {
     val session = getSession(peerId, context) ?: return
+    Log.d(TAG, "Creating answer for peer $peerId ($context)")
 
     if (context == "media") {
       if (localVideoTrack == null || localAudioTrack == null) {
@@ -513,27 +521,36 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
 
   fun setRemoteDescription(peerId: String, context: String, sdp: String, type: String) {
     val session = getSession(peerId, context) ?: run {
+      Log.e(TAG, "Session for $peerId ($context) not found for setRemoteDescription")
       return
     }
 
+    // Race Detection:
+    // If we receive an ANSWER but we are already STABLE, it implies we might have
+    // accepted a "ghost" answer previously (stale packet).
+    // If the ufrags differ, the connection is corrupted. We must fail fast to trigger retry.
     if (type == "answer" && session.pc.signalingState() == PeerConnection.SignalingState.STABLE) {
       val currentRemoteSdp = session.pc.remoteDescription?.description ?: ""
       val currentUfrag = extractIceUfrag(currentRemoteSdp)
       val newUfrag = extractIceUfrag(sdp)
 
       if (currentUfrag != null && newUfrag != null && currentUfrag != newUfrag) {
-        Log.e(TAG, "Ghost Answer detected! Ufrag mismatch. Restarting.")
+        Log.e(TAG, "Ghost Answer detected! Ufrag mismatch ($currentUfrag vs $newUfrag). Restarting.")
+        // Dispose locally and force a failure state to native, prompting core to reconnect
         session.dispose()
         nativeOnPeerConnectionStateChange(nativePointer, peerId, PeerConnectionState.Failed.value)
         return
       } else {
+        Log.w(TAG, "Ignoring duplicate answer for $peerId ($context).")
         return
       }
     }
 
     val sdpObserver = object : SdpObserver {
       override fun onCreateSuccess(sdp: SessionDescription?) {}
-      override fun onSetSuccess() {}
+      override fun onSetSuccess() {
+        Log.i(TAG, "Set remote description successfully for peer $peerId.")
+      }
       override fun onCreateFailure(s: String?) {}
       override fun onSetFailure(s: String?) {
         Log.e(TAG, "Failed to set remote description for peer $peerId: $s")
@@ -546,6 +563,7 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
   fun addRemoteCandidate(peerId: String, context: String, candidateSdp: String, mid: String) {
     val session = getSession(peerId, context) ?: return
     val candidate = IceCandidate(mid, -1, candidateSdp)
+    Log.d(TAG, "Adding remote ICE candidate for peer $peerId ($context)")
     session.pc.addIceCandidate(candidate)
   }
 
