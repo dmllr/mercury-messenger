@@ -97,8 +97,8 @@ TEST_F(ConversationViewModelTest, SendMessage) {
       auto const& data = std::get<messaging::MessageEntry>(msg.data);
       if (data.content == "Hello World") {
         EXPECT_EQ(msg.direction, messaging::MessageDirection::sent);
-        // Accept either sending or sent, as it races with the delivery service
-        EXPECT_TRUE(msg.status == messaging::MessageStatus::sending || msg.status == messaging::MessageStatus::sent);
+        // Expect Sending, never Sent
+        EXPECT_EQ(msg.status, messaging::MessageStatus::sending);
         found = true;
         break;
       }

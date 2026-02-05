@@ -332,7 +332,12 @@ class Client final : public transport::TransportDelegate {
 
   void Connect(ContactID const& peer_id) const {
     auto const peer = transport_->GetPeer(peer_id);
+    // Even if data channel is open, we might need to flush pending messages that
+    // are stuck in 'sending' state but not yet acknowledged (redelivery).
+    // The previous check `if (peer && peer->data_channel_is_open) return;` prevented retries.
+    // Now we allow calling Connect() -> SendQueuedMessages() even if open to trigger retransmission loop.
     if (peer && peer->data_channel_is_open) {
+      messaging_service_->SendQueuedMessages(peer_id);
       return;
     }
 

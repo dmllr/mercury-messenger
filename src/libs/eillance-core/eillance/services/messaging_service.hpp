@@ -4,19 +4,13 @@
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
 #include <functional>
-#include <map>
 #include <memory>
-#include <mutex>
 #include <optional>
 #include <random>
 #include <string>
-#include <thread>
 #include <variant>
 #include <vector>
-
-#include <openssl/sha.h>
 
 #include "eillance/crypto/crypto.hpp"
 #include "eillance/logging/logging.hpp"
@@ -171,12 +165,13 @@ class MessagingService {
       }
 
       if (mime.empty()) {
-        if (req.type == messaging::AttachmentType::image)
+        if (req.type == messaging::AttachmentType::image) {
           mime = "image/jpeg";
-        else if (req.type == messaging::AttachmentType::video)
+        } else if (req.type == messaging::AttachmentType::video) {
           mime = "video/mp4";
-        else
+        } else {
           mime = "application/octet-stream";
+        }
       }
 
       std::string note = req.note;
@@ -207,7 +202,7 @@ class MessagingService {
         messaging::HistoryEntryKind::textMessage
     );
 
-    if (auto peer = transport_->GetPeer(peer_id);
+    if (auto const peer = transport_->GetPeer(peer_id);
         peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
       SendQueuedMessages(peer_id);
     } else {
@@ -218,13 +213,17 @@ class MessagingService {
   }
 
   void SendSystemMessage(ContactID const& peer_id, std::string const& content) {
-    history_->AddTextEntry(
+    auto const entry = history_->AddTextEntry(
         peer_id,
         content,
         {},
         messaging::MessageDirection::sent,
         messaging::HistoryEntryKind::systemMessage
     );
+
+    // Notify UI immediately about new system message
+    INVARIANT(on_message_received_);
+    on_message_received_(peer_id, entry);
 
     if (auto peer = transport_->GetPeer(peer_id);
         peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
@@ -252,7 +251,6 @@ class MessagingService {
     auto const peer = transport_->GetPeer(peer_id);
 
     LGI << "Processing " << messages.size() << " queued message(s) for " << peer_id.ToString();
-    bool any_message_sent = false;
 
     for (auto const& entry : messages) {
       bool sent = false;
@@ -267,7 +265,7 @@ class MessagingService {
       }
 
       std::string content_to_send;
-      auto const& msg_entry = std::get<messaging::MessageEntry>(entry.data);
+      auto const& [content, attachments] = std::get<messaging::MessageEntry>(entry.data);
 
       if (entry.is_truncated) {
         if (auto full = history_->GetFullMessageContent(peer_id, entry.id)) {
@@ -276,7 +274,7 @@ class MessagingService {
           continue;
         }
       } else {
-        content_to_send = msg_entry.content;
+        content_to_send = content;
       }
 
       if (entry.kind == messaging::HistoryEntryKind::systemMessage) {
@@ -302,9 +300,8 @@ class MessagingService {
 
       if (entry.kind == messaging::HistoryEntryKind::textMessage) {
         std::vector<messaging::Attachment> valid_attachments;
-        for (auto const& att : msg_entry.attachments) {
-          auto stored = storage_->GetAttachment(att.id);
-          if (stored) {
+        for (auto const& att : attachments) {
+          if (auto stored = storage_->GetAttachment(att.id)) {
             if (stored->status != messaging::AttachmentStatus::canceled &&
                 stored->status != messaging::AttachmentStatus::discarded &&
                 stored->status != messaging::AttachmentStatus::peerCanceled) {
@@ -365,14 +362,16 @@ class MessagingService {
       }
 
       if (sent) {
-        history_->UpdateMessageStatus(peer_id, entry.id, messaging::MessageStatus::sent);
-        any_message_sent = true;
+        // IMPORTANT: We do NOT update status to 'sent'.
+        // We stay in 'sending' until a 'delivered' receipt is received from the peer.
+        // If we update to 'sent', the delivery service considers the work done and won't retry.
+        // By leaving it 'sending', the DeliveryService will detect pending work and retry logic will kick in.
       }
     }
 
-    if (messages.empty() && !any_message_sent) {
-      delivery_service_->ConnectionAttemptFinished(peer_id);
-    }
+    // Always signal the delivery service that we finished an attempt.
+    // If messages are still 'sending' (which they are until acked), DS will schedule a retry.
+    delivery_service_->ConnectionAttemptFinished(peer_id);
   }
 
   void OnConnectionAttemptFinished(ContactID const& peer_id) const {
@@ -382,43 +381,45 @@ class MessagingService {
   void CancelTransfer(
       ContactID const& peer_id,
       std::string const& attachment_id,
-      bool is_upload,
-      bool notify_peer = true
+      bool const is_upload,
+      bool const notify_peer = true
   ) const {
     file_transfer_service_->CancelTransfer(peer_id, attachment_id, is_upload, notify_peer);
     if (is_upload) {
       auto sending_msgs = storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::sending);
       for (auto const& entry : sending_msgs) {
-        if (!std::holds_alternative<messaging::MessageEntry>(entry.data)) continue;
-        auto const& msg = std::get<messaging::MessageEntry>(entry.data);
+        if (!std::holds_alternative<messaging::MessageEntry>(entry.data)) {
+          continue;
+        }
+        auto const& [content, attachments] = std::get<messaging::MessageEntry>(entry.data);
         bool contains_attachment = false;
-        bool has_other_content = !msg.content.empty();
-        for (auto const& att : msg.attachments) {
-          if (att.id == attachment_id)
+        bool has_other_content = !content.empty();
+        for (auto const& att : attachments) {
+          if (att.id == attachment_id) {
             contains_attachment = true;
-          else {
-            auto stored = storage_->GetAttachment(att.id);
-            if (stored && stored->status != messaging::AttachmentStatus::canceled &&
-                stored->status != messaging::AttachmentStatus::discarded)
+          } else {
+            if (auto stored = storage_->GetAttachment(att.id);
+                stored && stored->status != messaging::AttachmentStatus::canceled &&
+                stored->status != messaging::AttachmentStatus::discarded) {
               has_other_content = true;
+            }
           }
         }
         if (contains_attachment && !has_other_content) {
-          const_cast<MessagingService*>(this)
-              ->history_->UpdateMessageStatus(peer_id, entry.id, messaging::MessageStatus::none);
+          history_->UpdateMessageStatus(peer_id, entry.id, messaging::MessageStatus::none);
           break;
         }
       }
     }
   }
 
-  void ResumeTransfer(ContactID const& peer_id, std::string const& attachment_id, bool is_upload) {
+  void ResumeTransfer(ContactID const& peer_id, std::string const& attachment_id, bool const is_upload) {
     RequestConnection(peer_id);
     file_transfer_service_->ResumeTransfer(peer_id, attachment_id, is_upload);
   }
 
-  void DiscardAttachment(ContactID const& peer_id, std::string const& attachment_id) const {
-    auto attachment = storage_->GetAttachment(attachment_id);
+  void DiscardAttachment(ContactID const& peer_id, std::string const& attachment_id) {
+    auto const attachment = storage_->GetAttachment(attachment_id);
     bool should_send_cancel = true;
     if (attachment) {
       if (attachment->status == messaging::AttachmentStatus::canceled ||
@@ -431,43 +432,46 @@ class MessagingService {
     file_transfer_service_->DiscardAttachment(peer_id, attachment_id);
 
     if (should_send_cancel) {
-      nlohmann::json cancel_msg = {{"type", "file_cancel"}, {"file_id", attachment_id}};
+      nlohmann::json const cancel_msg = {{"type", "file_cancel"}, {"file_id", attachment_id}};
       storage_->AddPendingAction(peer_id, cancel_msg.dump());
       if (auto const peer = transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
-        const_cast<MessagingService*>(this)->SendQueuedMessages(peer_id);
+        SendQueuedMessages(peer_id);
       }
     }
   }
 
-  [[nodiscard]] auto GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t page_size) const
+  [[nodiscard]] auto GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t const page_size) const
       -> messaging::HistoryPage {
     auto page = history_->GetHistoryPage(peer_id, page_index, page_size);
     std::erase_if(page.messages, [](auto const& entry) {
       return entry.status == messaging::MessageStatus::none && entry.kind != messaging::HistoryEntryKind::systemMessage;
     });
 
-    bool any_modified = false;
     for (auto& entry : page.messages) {
       if (std::holds_alternative<messaging::MessageEntry>(entry.data)) {
-        auto& msg = std::get<messaging::MessageEntry>(entry.data);
+        auto& [content, attachments] = std::get<messaging::MessageEntry>(entry.data);
         bool entry_modified = false;
-        for (auto& att : msg.attachments) {
+        for (auto& att : attachments) {
           if (att.status == messaging::AttachmentStatus::canceled ||
               att.status == messaging::AttachmentStatus::peerCanceled ||
-              att.status == messaging::AttachmentStatus::paused || att.status == messaging::AttachmentStatus::discarded)
+              att.status == messaging::AttachmentStatus::paused ||
+              att.status == messaging::AttachmentStatus::discarded) {
             continue;
+          }
 
           if (!att.is_downloaded && !att.file_path.empty()) {
-            std::error_code err;
-            if (std::filesystem::exists(att.file_path, err) && std::filesystem::is_regular_file(att.file_path, err) &&
-                std::filesystem::file_size(att.file_path, err) == att.size_bytes) {
+            if (std::error_code err; std::filesystem::exists(att.file_path, err) &&
+                                     std::filesystem::is_regular_file(att.file_path, err) &&
+                                     std::filesystem::file_size(att.file_path, err) == att.size_bytes) {
               att.is_downloaded = true;
               att.status = messaging::AttachmentStatus::done;
               entry_modified = true;
             }
           }
         }
-        if (entry_modified) const_cast<MessagingService*>(this)->history_->UpdateHistoryEntry(entry);
+        if (entry_modified) {
+          history_->UpdateHistoryEntry(entry);
+        }
       }
     }
     return page;
@@ -485,25 +489,34 @@ class MessagingService {
   void MarkMessagesAsRead(ContactID const& peer_id, std::vector<std::uint64_t> const& message_ids) {
     history_->MarkMessagesAsRead(peer_id, message_ids);
     auto remote_ids = storage_->GetRemoteIds(peer_id, message_ids);
-    if (remote_ids.empty()) return;
+    if (remote_ids.empty()) {
+      return;
+    }
     nlohmann::json const msg = {{"type", "message_read"}, {"message_ids", remote_ids}};
     storage_->AddPendingAction(peer_id, msg.dump());
-    if (auto peer = transport_->GetPeer(peer_id); peer && peer->data_channel_is_open)
+    if (auto const peer = transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
       SendQueuedMessages(peer_id);
-    else
+    } else {
       delivery_service_->AttemptDelivery(peer_id);
+    }
   }
 
-  void AddSystemEntry(ContactID const& peer_id, std::string const& content, messaging::MessageDirection direction) {
-    history_->AddTextEntry(peer_id, content, {}, direction, messaging::HistoryEntryKind::systemMessage);
+  void
+  AddSystemEntry(ContactID const& peer_id, std::string const& content, messaging::MessageDirection const direction) {
+    auto const entry =
+        history_->AddTextEntry(peer_id, content, {}, direction, messaging::HistoryEntryKind::systemMessage);
+
+    // Notify UI immediately
+    INVARIANT(on_message_received_);
+    on_message_received_(peer_id, entry);
   }
 
   void AddCallEntry(
       ContactID const& peer_id,
-      messaging::HistoryEntryKind kind,
-      messaging::CallDirection direction,
-      messaging::CallStatus status,
-      uint32_t duration
+      messaging::HistoryEntryKind const kind,
+      messaging::CallDirection const direction,
+      messaging::CallStatus const status,
+      uint32_t const duration
   ) {
     history_->AddCallEntry(peer_id, kind, direction, status, duration);
   }
@@ -516,14 +529,38 @@ class MessagingService {
       std::vector<messaging::Attachment> const& attachments = {}
   ) {
     auto peer = transport_->GetPeer(peer_id);
-    if (!peer || !peer->session_cipher->IsReady()) return;
+    if (!peer || !peer->session_cipher->IsReady()) {
+      return;
+    }
 
     if (!contact_manager_->GetContact(peer_id)) {
       LGI << "Received message from unknown peer " << peer_id.ToString() << ". Auto-restoring contact.";
       contact_manager_->MarkAsConfirmed(peer_id);
-      if (on_contact_restored_) on_contact_restored_(peer_id);
+      if (on_contact_restored_) {
+        on_contact_restored_(peer_id);
+      }
     }
     UpdatePeerActivity(peer_id);
+
+    // Deduplication check: Do not re-add message if we already have it.
+    // Just send the receipt again to confirm delivery to the sender.
+    {
+      constexpr auto page_size = 50U;  // TODO align with system-wide page size
+      auto [messages, total_messages] = history_->GetHistoryPage(peer_id, 0, page_size);
+      for (auto const& h_entry : messages) {
+        if (h_entry.remote_id.has_value() && h_entry.remote_id.value() == message_id) {
+          LGI << "Duplicate message received from " << peer_id.ToString() << " (ID: " << message_id
+              << "). Sending receipt and ignoring.";
+          nlohmann::json const receipt = {
+              {"type", "message_receipt"},
+              {"status", "delivered"},
+              {"message_id", message_id}
+          };
+          transport_->SendPeerDataChannelMessage(peer_id, receipt);
+          return;
+        }
+      }
+    }
 
     auto decrypted = peer->session_cipher->Decrypt({encrypted_payload.begin(), encrypted_payload.end()});
     if (decrypted.empty()) {
@@ -534,9 +571,9 @@ class MessagingService {
     std::string content;
     try {
       auto json_payload = nlohmann::json::parse(decrypted);
-      auto const received_version = json_payload.value(keyVersion, 0);
-      if (received_version < minSupportedVersion)
+      if (auto const received_version = json_payload.value(keyVersion, 0); received_version < minSupportedVersion) {
         throw std::runtime_error("Message version too old: " + std::to_string(received_version));
+      }
       content = json_payload.at(keyContent).get<std::string>();
     } catch (std::exception const& e) {
       LGE << "Failed to parse message payload from " << peer_id.ToString() << ": " << e.what();
@@ -547,7 +584,7 @@ class MessagingService {
           {},
           messaging::MessageDirection::received,
           messaging::HistoryEntryKind::systemMessage,
-          message_id
+          std::make_optional(message_id)
       );
       nlohmann::json const receipt = {{"type", "message_receipt"}, {"status", "delivered"}, {"message_id", message_id}};
       transport_->SendPeerDataChannelMessage(peer_id, receipt);
@@ -582,16 +619,15 @@ class MessagingService {
       }
     }
 
+    // Pass the remote_id to AddTextEntry to ensure deduplication works next time
     auto entry = history_->AddTextEntry(
         peer_id,
         content,
         local_attachments,
         messaging::MessageDirection::received,
         is_system ? messaging::HistoryEntryKind::systemMessage : messaging::HistoryEntryKind::textMessage,
-        message_id
+        std::make_optional(message_id)  // Ensure persistence of remote ID
     );
-
-    history_->UpdateMessageStatus(peer_id, entry.id, messaging::MessageStatus::delivered);
 
     if (!local_attachments.empty()) {
       for (auto const& att : local_attachments) {
@@ -607,15 +643,22 @@ class MessagingService {
   }
 
   void OnMessageReceipt(ContactID const& peer_id, uint64_t message_id, std::string const& status) const {
-    auto message_status = messaging::MessageStatus::sent;
-    if (status == "delivered")
+    auto message_status = messaging::MessageStatus::sending;
+    if (status == "delivered") {
       message_status = messaging::MessageStatus::delivered;
-    else if (status == "read")
+    } else if (status == "read") {
       message_status = messaging::MessageStatus::read;
+    } else {
+      // Unknown receipt status or just "sent" confirmation
+      return;
+    }
     history_->UpdateMessageStatus(peer_id, message_id, message_status);
   }
+
   void OnMessagesRead(ContactID const& peer_id, std::vector<uint64_t> const& message_ids) const {
-    for (auto id : message_ids) history_->UpdateMessageStatus(peer_id, id, messaging::MessageStatus::read);
+    for (auto id : message_ids) {
+      history_->UpdateMessageStatus(peer_id, id, messaging::MessageStatus::read);
+    }
   }
 
   using OnChatMessageCallback = std::function<void(ContactID const& peer_id, messaging::HistoryEntryRecord const&)>;
@@ -650,16 +693,21 @@ class MessagingService {
  private:
   void RequestConnection(ContactID const& peer_id) {
     if (auto const peer = transport_->GetPeer(peer_id);
-        peer && peer->data_channel_is_open && peer->session_cipher->IsReady())
+        peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
       SendQueuedMessages(peer_id);
-    else
+    } else {
       connection_handler_(peer_id);
+    }
   }
   void UpdatePeerActivity(ContactID const& peer_id) {
-    if (auto const peer = transport_->GetPeer(peer_id)) peer->last_activity_time = Time::Now();
+    if (auto const peer = transport_->GetPeer(peer_id)) {
+      peer->last_activity_time = Time::Now();
+    }
   }
   [[nodiscard]] auto HasPendingWork(ContactID const& peer_id) const -> bool {
-    if (!storage_->GetPendingActions(peer_id).empty()) return true;
+    if (!storage_->GetPendingActions(peer_id).empty()) {
+      return true;
+    }
     auto const attachments = storage_->GetPendingAttachments(peer_id);
     bool const has_pending_files = std::ranges::any_of(attachments, [](auto const& att) {
       return att.status == messaging::AttachmentStatus::pending;

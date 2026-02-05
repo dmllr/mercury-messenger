@@ -69,7 +69,6 @@ enum class CallStatus : std::uint8_t {
 enum class MessageStatus : std::uint8_t {
   none,
   sending,
-  sent,
   delivered,
   read,
 };
@@ -109,7 +108,6 @@ NLOHMANN_JSON_SERIALIZE_ENUM(
     {
         {MessageStatus::none, "none"},
         {MessageStatus::sending, "sending"},
-        {MessageStatus::sent, "sent"},
         {MessageStatus::delivered, "delivered"},
         {MessageStatus::read, "read"},
     }
@@ -139,10 +137,10 @@ using HistoryEntryData = std::variant<MessageEntry, CallEntry>;
 
 struct HistoryEntryRecord {
   std::uint64_t id{};
-  std::optional<std::uint64_t> remote_id;
-  HistoryEntryKind kind;
+  std::optional<std::uint64_t> remote_id{};
+  HistoryEntryKind kind{};
   Time::Unit timestamp{};
-  MessageDirection direction;
+  MessageDirection direction{};
   MessageStatus status = MessageStatus::none;
   bool is_truncated = false;
   HistoryEntryData data;

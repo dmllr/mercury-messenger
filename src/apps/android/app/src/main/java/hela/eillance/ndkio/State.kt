@@ -27,7 +27,7 @@ enum class CallStatus(val value: Int) {
 }
 
 enum class MessageStatus(val value: Int) {
-  None(0), Sending(1), Sent(2), Delivered(3), Read(4);
+  None(0), Sending(1), Delivered(2), Read(3);
 
   companion object {
     fun fromInt(value: Int) = entries.firstOrNull { it.value == value } ?: None

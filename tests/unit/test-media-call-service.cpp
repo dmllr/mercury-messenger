@@ -54,6 +54,7 @@ class MediaCallServiceTest : public ::testing::Test {
         file_transfer_service,
         conn_handler
     );
+    messaging_service_->SetChatMessageReceivedCallback([](auto const&, auto const&) {});
 
     // 4. Initialize MediaCallService
     service_ = std::make_unique<services::MediaCallService>(transport_);

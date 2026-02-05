@@ -66,6 +66,11 @@ class InternalMessagingServiceTest : public ::testing::Test {
         conn_handler
     );
 
+    // Initialize dummy callbacks for MessagingService
+    messaging_service_->SetChatMessageReceivedCallback([](auto const&, auto const&) {});
+    messaging_service_->SetMessageStatusChangedCallback([](auto const&, auto, auto) {});
+    messaging_service_->SetChatMessageReceivedCallback([](auto const&, auto const&) {});
+
     media_call_service_ = std::make_shared<services::MediaCallService>(transport_);
     media_call_service_->SetVideoCapture(std::make_unique<MockCapture>());
     media_call_service_->SetAudioCapture(std::make_unique<MockCapture>());
@@ -241,10 +246,15 @@ TEST_F(InternalMessagingServiceTest, ProcessDataChannelMessage_KeyExchange) {
 
 TEST_F(InternalMessagingServiceTest, ProcessDataChannelMessage_ProfileInfo) {
   bool profile_updated = false;
-  bool status_changed = false;
+  bool message_received = false;
   bool contact_status_changed = false;
+
   profile_service_->SetContactProfileUpdatedCallback([&](auto id) { profile_updated = id == peer1; });
-  messaging_service_->SetMessageStatusChangedCallback([&](auto id, auto, auto) { status_changed = id == peer1; });
+  messaging_service_->SetChatMessageReceivedCallback([&](auto id, auto const& rec) {
+    if (id == peer1 && rec.kind == messaging::HistoryEntryKind::systemMessage) {
+      message_received = true;
+    }
+  });
   contact_service_->SetContactStatusChangedCallback([&](auto id, auto) { contact_status_changed = id == peer1; });
 
   // Pre-add contact so update works
@@ -254,7 +264,7 @@ TEST_F(InternalMessagingServiceTest, ProcessDataChannelMessage_ProfileInfo) {
 
   service_->ProcessDataChannelMessage(peer1, msg);
   EXPECT_TRUE(profile_updated);
-  EXPECT_TRUE(status_changed);
+  EXPECT_TRUE(message_received);
   EXPECT_TRUE(contact_status_changed);
 }
 
