@@ -124,14 +124,14 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
       std::optional<int64_t> ref_id
   ) override {
     std::lock_guard const lock(mutex_);
-    pending_actions_.push_back({next_action_id_++, peer_id, payload, timestamp, ref_id});
+    pending_actions_.push_back({next_action_id_++, peer_id, payload, timestamp, ref_id, false, timestamp});
   }
 
   auto GetPendingActions(ContactID const& peer_id) -> std::vector<PendingAction> override {
     std::lock_guard const lock(mutex_);
     std::vector<PendingAction> result;
     for (auto const& action : pending_actions_) {
-      if (action.peer_id == peer_id) {
+      if (action.peer_id == peer_id && !action.is_suspended) {
         result.push_back(action);
       }
     }
@@ -148,6 +148,25 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
     std::erase_if(pending_actions_, [&](auto const& action) {
       return action.peer_id == peer_id && action.ref_id.has_value() && action.ref_id.value() == ref_id;
     });
+  }
+
+  void SuspendTimedOutActions(uint64_t threshold_timestamp) override {
+    std::lock_guard const lock(mutex_);
+    for (auto& action : pending_actions_) {
+      if (!action.is_suspended && action.window_start_at < threshold_timestamp) {
+        action.is_suspended = true;
+      }
+    }
+  }
+
+  void UnsuspendActionsForPeer(ContactID const& peer_id, uint64_t new_window_start) override {
+    std::lock_guard const lock(mutex_);
+    for (auto& action : pending_actions_) {
+      if (action.peer_id == peer_id && action.is_suspended) {
+        action.is_suspended = false;
+        action.window_start_at = new_window_start;
+      }
+    }
   }
 
   // --- History ---

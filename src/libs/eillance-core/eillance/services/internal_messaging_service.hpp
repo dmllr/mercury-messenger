@@ -41,7 +41,6 @@ class InternalMessagingService {
   }
 
   void ProcessSystemMessage(std::string const& type, Json const& message) {
-    // ...
     if (type == "auth_challenge") {
       auto const challenge = message.value("challenge", "");
       if (!challenge.empty()) {
@@ -97,6 +96,9 @@ class InternalMessagingService {
       if (auto p = transport_->GetPeer(peer_id)) {
         p->last_activity_time = Time::Now();
       }
+
+      // Activity triggers unsuspension of any stale pending actions
+      messaging_service_->UnsuspendAndDeliver(peer_id);
 
       // 0xFE is our magic byte for binary messages
       if (!msg.empty() && msg[0] == std::byte{0xFE}) {
@@ -158,13 +160,18 @@ class InternalMessagingService {
 
   void OnDataChannelOpen(ContactID const& peer_id) {
     auto peer = transport_->GetPeer(peer_id);
-    if (!peer) return;
+    if (!peer) {
+      return;
+    }
 
     LGI << "Data channel with " << peer_id.ToString() << " opened.";
 
     peer->session_cipher->Reset();
     peer->data_channel_is_open = true;
     peer->last_activity_time = Time::Now();
+
+    // Channel open is a strong signal of activity
+    messaging_service_->UnsuspendAndDeliver(peer_id);
 
     if (account_service_->GetId() > peer_id) {
       auto my_pub_key = peer->session_cipher->GetPublicKey();
@@ -247,7 +254,9 @@ class InternalMessagingService {
 
   void HandleKeyExchange(ContactID const& peer_id, Json const& message) {
     auto const peer = transport_->GetPeer(peer_id);
-    if (!peer) return;
+    if (!peer) {
+      return;
+    }
 
     auto pub_key = message["key"].get<std::vector<std::byte>>();
     if (peer->session_cipher->ComputeSharedSecret(pub_key)) {
@@ -267,9 +276,9 @@ class InternalMessagingService {
   }
 
   void HandleChatMessage(ContactID const& peer_id, Json const& message) {
-    auto msg_id = message["message_id"].get<uint64_t>();
+    auto const msg_id = message["message_id"].get<uint64_t>();
     bool const is_sys = message.value("is_system", false);
-    auto payload = message["payload"].get<std::vector<std::byte>>();
+    auto const payload = message["payload"].get<std::vector<std::byte>>();
 
     std::vector<messaging::Attachment> attachments;
     if (message.contains("attachments")) {

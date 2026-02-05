@@ -9,6 +9,7 @@
 #include "eillance/capture/config.hpp"
 #include "eillance/client/client.hpp"
 #include "eillance/utils/packet.hpp"
+#include "eillance/utils/time.hpp"
 #include "eillance/view_model/client_event_router.hpp"
 #include "mock_persistent_storage.hpp"
 #include "mock_transport.hpp"
@@ -71,9 +72,17 @@ class ResilienceTest : public ::testing::Test {
 
     (void)client_->GetAccountService()->GenerateNewIdentity();
 
-    client_->AddContact(peer1, std::nullopt);
+    // Establish a confirmed contact context
+    std::ignore = client_->AddContact(peer1, std::nullopt);
     mock_storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
     client_->GetContactService()->ReloadCache();
+
+    // Clear side-effects from AddContact (e.g. the initial contact_request action)
+    // to ensure tests start with an empty pending queue.
+    auto pending = mock_storage_->GetPendingActions(peer1);
+    for (auto const& action : pending) {
+      mock_storage_->RemovePendingAction(action.id);
+    }
 
     client_->Start();
   }
@@ -84,6 +93,18 @@ class ResilienceTest : public ::testing::Test {
 
   void FlushClientQueue() {
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  }
+
+  // Helper to wait for a condition to be true (polling with timeout)
+  template <typename Func>
+  static void WaitFor(Func condition, std::chrono::milliseconds timeout = std::chrono::milliseconds(2000)) {
+    auto const start = std::chrono::steady_clock::now();
+    while (!condition()) {
+      if (std::chrono::steady_clock::now() - start > timeout) {
+        break;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
   }
 
   storage::MockPersistentStorageImpl* mock_storage_{};
@@ -326,6 +347,8 @@ TEST_F(ResilienceTest, MessageRedeliveryDeduplication) {
   eillance::crypto::SessionCipher other;
   peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
   other.ComputeSharedSecret(peer->session_cipher->GetPublicKey());
+  // Ensure the peer is considered "open" so receipt can be sent
+  peer->data_channel_is_open = true;
 
   auto const encrypted = other.Encrypt(payload.dump());
   constexpr uint64_t msg_id = 9999;
@@ -363,4 +386,59 @@ TEST_F(ResilienceTest, MessageRedeliveryDeduplication) {
     }
   }
   EXPECT_TRUE(receipt_sent);
+}
+
+TEST_F(ResilienceTest, SuspensionTimeout) {
+  // Add a pending action with a very old timestamp (older than 2 days)
+  uint64_t const old_time = Time::Now() - (48 * 3600 * 1000000ULL + 1000ULL);
+  mock_storage_->AddPendingAction(peer1, "old_action", old_time, std::nullopt);
+
+  // Verify it exists initially
+  auto actions = mock_storage_->GetPendingActions(peer1);
+  ASSERT_EQ(actions.size(), 1);
+
+  // Trigger suspension check logic manually
+  // threshold = Now - 2 days
+  uint64_t const threshold = Time::Now() - (48 * 3600 * 1000000ULL);
+  mock_storage_->SuspendTimedOutActions(threshold);
+
+  // Verify it is suspended (filtered out)
+  actions = mock_storage_->GetPendingActions(peer1);
+  EXPECT_TRUE(actions.empty());
+}
+
+TEST_F(ResilienceTest, UnsuspensionOnConnect) {
+  // Setup suspended action
+  // Use absolute small timestamp to guarantee it is older than threshold
+  constexpr uint64_t old_time = 1000;
+  mock_storage_->AddPendingAction(peer1, R"({"type": "test_suspend"})", old_time, std::nullopt);
+
+  // Manually suspend it to simulate expired state
+  // Threshold 2000 > 1000, so it will suspend
+  mock_storage_->SuspendTimedOutActions(2000);
+
+  // Verify it is suspended (should not be returned)
+  ASSERT_TRUE(mock_storage_->GetPendingActions(peer1).empty());
+
+  // Connect
+  client_->Connect(peer1);
+  FlushClientQueue();
+  mock_transport_->log.sent_peer_messages.clear();
+
+  // Simulate DataChannel open which triggers UnsuspendAndDeliver
+  mock_transport_->delegate->OnDataChannelOpen(peer1);
+  FlushClientQueue();
+
+  // Action should have been unsuspended and sent
+  bool action_sent = false;
+  for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
+    if (pid == peer1 && msg.value("type", "") == "test_suspend") {
+      action_sent = true;
+    }
+  }
+  ASSERT_TRUE(action_sent) << "Action was not sent after unsuspension";
+
+  // And removed from pending
+  auto const pending = mock_storage_->GetPendingActions(peer1);
+  EXPECT_TRUE(pending.empty()) << "Action remained in pending queue after send";
 }
