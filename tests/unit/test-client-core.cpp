@@ -62,7 +62,7 @@ class ClientCoreTest : public ::testing::Test {
 };
 
 TEST_F(ClientCoreTest, ConnectSequence) {
-  // 1. Initiate connection
+  // Initiate connection
   client_->Connect(peer1);
   FlushClientQueue();
 
@@ -78,20 +78,20 @@ TEST_F(ClientCoreTest, ConnectSequence) {
 }
 
 TEST_F(ClientCoreTest, IncomingKeyExchangeTriggersReply) {
-  // 1. Connect to setup the peer internally in Client
+  // Connect to setup the peer internally in Client
   client_->Connect(peer1);
   FlushClientQueue();
 
   auto peer = mock_transport_->GetPeer(peer1);
   ASSERT_TRUE(peer);
 
-  // 2. Simulate Data Channel Opening manually
+  // Simulate Data Channel Opening manually
   // This triggers Client::OnDataChannelOpen which resets the cipher and sends our key.
   // We want to test the RECEPTION of a peer key.
   peer->data_channel_is_open = true;
 
   // Create a valid peer public key
-  crypto::SessionCipher peer_cipher;
+  crypto::SessionCipher const peer_cipher;
   auto peer_pub_key = peer_cipher.GetPublicKey();
 
   nlohmann::json const key_msg = {
@@ -100,7 +100,7 @@ TEST_F(ClientCoreTest, IncomingKeyExchangeTriggersReply) {
       {"is_reply", false}
   };
 
-  // 3. Simulate receiving this message on data channel
+  // Simulate receiving this message on data channel
   std::string msg_str = key_msg.dump();
   ASSERT_TRUE(peer->on_data_channel_message) << "Data channel handler not set!";
 
@@ -129,7 +129,7 @@ TEST_F(ClientCoreTest, IncomingKeyExchangeTriggersReply) {
 
 TEST_F(ClientCoreTest, SignalingMessageProcessing_Offer) {
   // Simulate receiving an OFFER via signaling
-  nlohmann::json offer_msg =
+  nlohmann::json const offer_msg =
       {{"from", peer1.ToString()}, {"type", "offer"}, {"context", "data"}, {"sdp", "dummy_sdp_offer"}};
 
   mock_transport_->SimulatePeerMessage(peer1, offer_msg);
@@ -147,7 +147,7 @@ TEST_F(ClientCoreTest, SignalingMessageProcessing_Offer) {
 
 TEST_F(ClientCoreTest, SignalingMessageProcessing_MediaOffer) {
   // Simulate receiving a MEDIA OFFER
-  nlohmann::json offer_msg = {
+  nlohmann::json const offer_msg = {
       {"from", peer1.ToString()},
       {"type", "offer"},
       {"context", "media"},
@@ -165,7 +165,7 @@ TEST_F(ClientCoreTest, SignalingMessageProcessing_MediaOffer) {
 }
 
 TEST_F(ClientCoreTest, ContactRequestProcessing) {
-  nlohmann::json req_msg = {
+  nlohmann::json const req_msg = {
       {"from", peer1.ToString()},
       {"type", "contact_add_request"},
       {"profile", {{"display_name", "Peer One"}}}

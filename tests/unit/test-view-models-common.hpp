@@ -34,31 +34,31 @@ class MockCapture {
 class ViewModelTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    // 1. Storage
+    // Storage
     auto storage_impl = std::make_unique<storage::MockPersistentStorageImpl>();
     mock_storage_ = storage_impl.get();
     storage_ = std::make_shared<storage::PersistentStorage>(std::move(storage_impl));
 
-    // 2. Transport
+    // Transport
     auto transport_impl = std::make_unique<transport::MockTransport>();
     mock_transport_ = transport_impl.get();
     transport_ = std::make_shared<transport::Transport>(std::move(transport_impl));
 
-    // 3. Client
+    // Client
     client_ = std::make_shared<Client>(storage_, transport_);
 
-    // 4. Inject Mock Capture
+    // Inject Mock Capture
     client_->SetVideoCapture(std::make_unique<MockCapture>());
     client_->SetAudioCapture(std::make_unique<MockCapture>());
 
-    // 5. Router
+    // Router
     router_ = std::make_shared<view_model::ClientEventRouter>(client_);
 
-    // 6. Identity
+    // Identity
     (void)client_->GetAccountService()->GenerateNewIdentity();
     client_->GetAccountService()->UpdateMyProfile("Test User", "Bio", "");
 
-    // 7. Start Client
+    // Start Client
     client_->Start();
   }
 

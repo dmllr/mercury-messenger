@@ -323,46 +323,46 @@ TEST_F(ConversationViewModelTest, ResumeTransferPropagates) {
 }
 
 TEST_F(ConversationViewModelTest, SendSmallAttachment_UpdatesStatusSynchronously) {
-  auto observer = std::make_shared<MockConversationObserver>();
+  auto const observer = std::make_shared<MockConversationObserver>();
   vm_->SetObserver(observer);
 
-  // 1. Establish connection so upload starts immediately
+  // Establish connection so upload starts immediately
   client_->Connect(peer1);
-  // Yield to let connection setup (AddPeer etc)
+  // Yield to let connection setup (AddPeer etc.)
   std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
   // Simulate Data Channel Open to enable sending
   mock_transport_->delegate->OnDataChannelOpen(peer1);
   std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-  auto peer = mock_transport_->GetPeer(peer1);
+  auto const peer = mock_transport_->GetPeer(peer1);
   ASSERT_TRUE(peer);
-  eillance::crypto::SessionCipher other;
+  eillance::crypto::SessionCipher const other;
   peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
   peer->data_channel_is_open = true;
 
-  // 2. Create small temp file
-  auto temp_path = std::filesystem::temp_directory_path() / "cvm_small.dat";
+  // Create small temp file
+  auto const temp_path = std::filesystem::temp_directory_path() / "cvm_small.dat";
   {
     std::ofstream ofs(temp_path, std::ios::binary);
     ofs << "small data";
   }
 
-  // 3. Send
+  // Send
   std::vector<services::AttachmentRequest> atts;
   atts.push_back({temp_path.string(), messaging::AttachmentType::file, "", "application/octet-stream"});
   vm_->SendMessage("Small File", atts);
 
-  // 4. Wait for Done status
+  // Wait for Done status
   bool success = false;
   WaitFor(
       [&] {
-        auto s = observer->GetState();
-        for (auto const& entry : s.history) {
+        auto state = observer->GetState();
+        for (auto const& entry : state.history) {
           if (std::holds_alternative<messaging::MessageEntry>(entry.data)) {
-            auto const& msg = std::get<messaging::MessageEntry>(entry.data);
-            if (msg.content == "Small File" && !msg.attachments.empty()) {
-              if (msg.attachments[0].status == messaging::AttachmentStatus::done) {
+            auto const& [content, attachments] = std::get<messaging::MessageEntry>(entry.data);
+            if (content == "Small File" && !attachments.empty()) {
+              if (attachments[0].status == messaging::AttachmentStatus::done) {
                 success = true;
                 return true;
               }
