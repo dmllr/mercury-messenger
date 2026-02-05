@@ -101,6 +101,23 @@ class Client final : public transport::TransportDelegate {
           transport_->ClosePeerConnection(peer_id, "media");
           transport_->RemovePeer(peer_id);
         }
+      } else if (source == EventSource::system) {
+        auto const state = static_cast<ServiceConnectionState>(state_val);
+        // Fast Fail: If signaling dies, immediately abort any pending connection attempts.
+        // This prevents connections from hanging in 'NEW' state until the 30s timeout.
+        if (state == ServiceConnectionState::failure || state == ServiceConnectionState::noNetwork ||
+            state == ServiceConnectionState::disconnected) {
+          for (auto const& [id, peer] : transport_->GetPeers()) {
+            auto const pc_state = transport_->GetPeerConnectionState(id);
+            if (pc_state == transport::PeerConnectionState::newConnection ||
+                pc_state == transport::PeerConnectionState::connecting) {
+              LGI << "Aborting pending connection to " << id.ToString() << " due to signaling failure.";
+              messaging_service_->OnConnectionAttemptFinished(id);
+              transport_->ClosePeerConnection(id, "data");
+              transport_->ClosePeerConnection(id, "media");
+            }
+          }
+        }
       }
 
       INVARIANT(status_callback_);
@@ -344,7 +361,9 @@ class Client final : public transport::TransportDelegate {
     // Avoid overwriting a connection that is already establishing (glare condition).
     // If we re-create the PeerConnection while it is in 'connecting' state,
     // we may kill the valid one or confuse the transport layer.
-    if (transport_->GetPeerConnectionState(peer_id) == transport::PeerConnectionState::connecting) {
+    auto const state = transport_->GetPeerConnectionState(peer_id);
+    if (state == transport::PeerConnectionState::connecting ||
+        state == transport::PeerConnectionState::newConnection) {
       return;
     }
 
