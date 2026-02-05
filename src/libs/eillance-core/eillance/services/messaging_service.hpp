@@ -143,8 +143,6 @@ class MessagingService {
       return {};
     }
 
-    RequestConnection(peer_id);
-
     std::vector<messaging::Attachment> domain_attachments;
     for (auto const& req : attachments) {
       std::uint64_t file_size = 0;
