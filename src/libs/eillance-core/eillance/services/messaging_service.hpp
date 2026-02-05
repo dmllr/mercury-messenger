@@ -224,7 +224,7 @@ class MessagingService {
     INVARIANT(on_message_received_);
     on_message_received_(peer_id, entry);
 
-    nlohmann::json const action_payload = {{"type", "chat"}, {"message_id", entry.id}};
+    nlohmann::json action_payload = {{"type", "chat"}, {"message_id", entry.id}};
     storage_->AddPendingAction(peer_id, action_payload.dump(), Time::Now(), entry.id);
 
     if (auto peer = transport_->GetPeer(peer_id);
@@ -271,8 +271,15 @@ class MessagingService {
         } else {
           // Generic actions (Receipts, Profile, etc.)
           if (peer && peer->data_channel_is_open) {
-            transport_->SendPeerDataChannelMessage(peer_id, json_action);
-            success = true;
+            if (transport_->SendPeerDataChannelMessage(peer_id, json_action)) {
+              success = true;
+            } else {
+              // Sending failed: likely DataChannel state mismatch
+              peer->data_channel_is_open = false;
+              LGI << "Failed to send action via DataChannel to " << peer_id.ToString() << ". Marking as closed.";
+              // Break loop to prevent further failures and avoid tight retry loops if transport is dead
+              break;
+            }
           }
         }
       } catch (std::exception const& e) {
@@ -759,16 +766,19 @@ class MessagingService {
         json_msg["attachments"] = att_list;
       }
 
-      transport_->SendPeerDataChannelMessage(peer_id, json_msg);
-
-      if (!valid_attachments.empty()) {
-        for (auto const& att : valid_attachments) {
-          file_transfer_service_->QueueUpload(peer_id, att);
+      if (transport_->SendPeerDataChannelMessage(peer_id, json_msg)) {
+        if (!valid_attachments.empty()) {
+          for (auto const& att : valid_attachments) {
+            file_transfer_service_->QueueUpload(peer_id, att);
+          }
         }
+        remove_action = false;  // Keep pending until receipt
+        return true;
+      } else {
+        // Send failed (DC closed). Do not remove action.
+        peer->data_channel_is_open = false;
+        return false;
       }
-
-      remove_action = false;
-      return true;
     }
 
     return false;

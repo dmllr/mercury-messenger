@@ -181,11 +181,11 @@ class AndroidRtcTransport final : public Transport::TransportInterface {
     env->DeleteLocalRef(j_msg);
   }
 
-  void SendPeerDataChannelMessage(ContactID const& peer_id, Transport::Json const& message) const override {
+  auto SendPeerDataChannelMessage(ContactID const& peer_id, Transport::Json const& message) const -> bool override {
     auto const msg_str = message.dump();
     auto bytes = std::vector<std::byte>(msg_str.size());
     std::memcpy(bytes.data(), msg_str.data(), msg_str.size());
-    SendPeerDataChannelBinaryMessage(peer_id, bytes);
+    return SendPeerDataChannelBinaryMessage(peer_id, bytes);
   }
 
   auto SendPeerDataChannelBinaryMessage(ContactID const& peer_id, std::span<std::byte const> message) const
@@ -494,7 +494,6 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcTransport_nati
   }
 }
 
-// Deprecated in favor of binary handler, but kept for compatibility with legacy messages (if any)
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcTransport_nativeOnDataChannelMessage(
     JNIEnv* env,
     jobject,
@@ -527,7 +526,6 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcTransport_nati
   }
 }
 
-// New Binary Handler
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcTransport_nativeOnDataChannelMessageBinary(
     JNIEnv* env,
     jobject,

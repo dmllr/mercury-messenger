@@ -187,17 +187,18 @@ class RtcTransport final : public transport::Transport::TransportInterface {
     WsSendMessage(message);
   }
 
-  void SendPeerDataChannelMessage(ContactID const& peer_id, Json const& message) const override {
+  auto SendPeerDataChannelMessage(ContactID const& peer_id, Json const& message) const -> bool override {
     std::lock_guard<std::mutex> const lock(peersMutex_);
     auto it = peers_.find(peer_id);
     if (it == peers_.end() || !it->second->data_channel) {
-      return;
+      return false;
     }
 
     auto dc = std::static_pointer_cast<::rtc::DataChannel>(it->second->data_channel);
     if (dc && dc->isOpen()) {
-      dc->send(message.dump());
+      return dc->send(message.dump());
     }
+    return false;
   }
 
   auto SendPeerDataChannelBinaryMessage(ContactID const& peer_id, std::span<std::byte const> message) const

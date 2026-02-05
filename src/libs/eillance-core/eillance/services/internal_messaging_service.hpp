@@ -23,7 +23,7 @@
 namespace eillance::services {
 
 class InternalMessagingService {
-public:
+ public:
   using Json = nlohmann::json;
 
   InternalMessagingService(
@@ -208,7 +208,7 @@ public:
     profile_service_->SyncProfile(peer_id);
   }
 
-private:
+ private:
   void HandleMediaSignaling(ContactID const& peer_id, std::string const& type, Json const& message) {
     auto peer = transport_->GetPeer(peer_id);
     if (!peer) {

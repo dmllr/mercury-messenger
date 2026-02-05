@@ -112,8 +112,8 @@ class Transport {
   void SendSignalingMessage(Json const& message) const {
     self_->SendSignalingMessage(message);
   }
-  void SendPeerDataChannelMessage(ContactID const& peer_id, Json const& message) const {
-    self_->SendPeerDataChannelMessage(peer_id, message);
+  auto SendPeerDataChannelMessage(ContactID const& peer_id, Json const& message) const -> bool {
+    return self_->SendPeerDataChannelMessage(peer_id, message);
   }
   auto SendPeerDataChannelBinaryMessage(ContactID const& peer_id, std::span<std::byte const> message) const -> bool {
     return self_->SendPeerDataChannelBinaryMessage(peer_id, message);
@@ -171,7 +171,7 @@ class Transport {
     ) = 0;
 
     virtual void CreateDataChannel(ContactID const& peer_id) = 0;
-    virtual void SendPeerDataChannelMessage(ContactID const& peer_id, Json const& message) const = 0;
+    virtual auto SendPeerDataChannelMessage(ContactID const& peer_id, Json const& message) const -> bool = 0;
     virtual auto SendPeerDataChannelBinaryMessage(ContactID const& peer_id, std::span<std::byte const> message) const
         -> bool = 0;
     virtual void SendSignalingMessage(Json const& message) const = 0;
@@ -267,8 +267,8 @@ class Transport {
     void SendSignalingMessage(Json const& message) const override {
       transport_->SendSignalingMessage(message);
     }
-    void SendPeerDataChannelMessage(ContactID const& peer_id, Json const& message) const override {
-      transport_->SendPeerDataChannelMessage(peer_id, message);
+    auto SendPeerDataChannelMessage(ContactID const& peer_id, Json const& message) const -> bool override {
+      return transport_->SendPeerDataChannelMessage(peer_id, message);
     }
     auto SendPeerDataChannelBinaryMessage(ContactID const& peer_id, std::span<std::byte const> message) const
         -> bool override {
