@@ -42,7 +42,7 @@ class ProfileService {
 
   // --- Actions ---
 
-  // Sends my profile to the peer. Queues the action if not connected.
+  // Sends my profile to the peer. Queues the action.
   void SendMyProfile(ContactID const& peer_id) {
     nlohmann::json msg;
     msg["type"] = "profile_info";
@@ -57,18 +57,18 @@ class ProfileService {
     }
 
     storage_->AddPendingAction(peer_id, msg.dump());
-    SendPendingActions(peer_id);
+    messaging_service_->SendQueuedMessages(peer_id);
   }
 
   // Requests the peer to send their profile.
   void RequestProfile(ContactID const& peer_id) {
     storage_->AddPendingAction(peer_id, nlohmann::json{{"type", "profile_request"}}.dump());
-    SendPendingActions(peer_id);
+    messaging_service_->SendQueuedMessages(peer_id);
   }
 
-  // Flushes pending profile actions (send/request) to the transport.
+  // Flushes pending profile actions. In unified system, this just calls the central flush.
   void SyncProfile(ContactID const& peer_id) {
-    SendPendingActions(peer_id);
+    messaging_service_->SendQueuedMessages(peer_id);
   }
 
   // Marks all confirmed contacts as needing a profile update (e.g. after I change my name).
@@ -154,24 +154,6 @@ class ProfileService {
   }
 
  private:
-  void SendPendingActions(ContactID const& peer_id) {
-    auto peer = transport_->GetPeer(peer_id);
-    if (!peer || !peer->data_channel_is_open) {
-      connection_handler_(peer_id);
-      return;
-    }
-
-    auto actions = storage_->GetPendingActions(peer_id);
-    for (auto const& action : actions) {
-      try {
-        transport_->SendPeerDataChannelMessage(peer_id, nlohmann::json::parse(action.payload));
-        storage_->RemovePendingAction(action.id);
-      } catch (...) {
-        storage_->RemovePendingAction(action.id);
-      }
-    }
-  }
-
   void NotifyPeerListUpdate() const {
     INVARIANT(on_peer_list_update_);
     std::vector<Device> list;

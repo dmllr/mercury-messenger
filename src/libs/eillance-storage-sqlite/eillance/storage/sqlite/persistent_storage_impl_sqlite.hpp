@@ -112,8 +112,6 @@ class SQLiteStorage final : public PersistentStorageImpl {
   void Checkpoint() override {
     std::lock_guard const lock(mutex_);
     if (db_ != nullptr) {
-      // TRUNCATE commits all transactions to the DB file and truncates the WAL file.
-      // This ensures the main DB file is up-to-date and safe to copy/backup.
       if (sqlite3_wal_checkpoint_v2(db_, nullptr, SQLITE_CHECKPOINT_TRUNCATE, nullptr, nullptr) != SQLITE_OK) {
         LGE << "Failed to checkpoint database: " << sqlite3_errmsg(db_);
       }
@@ -228,7 +226,6 @@ class SQLiteStorage final : public PersistentStorageImpl {
   void RemoveContact(ContactID const& peer_id) override {
     std::lock_guard const lock(mutex_);
     if (!db_) return;
-    char* err_msg = nullptr;
     sqlite3_exec(db_, "BEGIN TRANSACTION;", nullptr, nullptr, nullptr);
     SQLiteStatement const m_stmt(db_, "DELETE FROM messages WHERE peer_id = ?;");
     BindText(m_stmt.Get(), 1, peer_id.ToString());
@@ -253,7 +250,8 @@ class SQLiteStorage final : public PersistentStorageImpl {
     if (!db_) return;
     SQLiteStatement const statement(
         db_,
-        "INSERT INTO pending_actions (peer_id, payload, created_at, ref_id) VALUES (?, ?, ?, ?);"
+        "INSERT INTO pending_actions (peer_id, payload, created_at, ref_id, is_suspended, window_start_at) VALUES (?, "
+        "?, ?, ?, 0, ?);"
     );
     BindText(statement.Get(), 1, peer_id.ToString());
     BindText(statement.Get(), 2, payload);
@@ -263,6 +261,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
     } else {
       sqlite3_bind_null(statement.Get(), 4);
     }
+    sqlite3_bind_int64(statement.Get(), 5, static_cast<sqlite3_int64>(timestamp));
     sqlite3_step(statement.Get());
   }
 
@@ -270,10 +269,11 @@ class SQLiteStorage final : public PersistentStorageImpl {
     std::lock_guard const lock(mutex_);
     if (!db_) return {};
     std::vector<PendingAction> actions;
-    // Order by ID ASC to preserve FIFO
+    // Filter suspended actions
     SQLiteStatement const statement(
         db_,
-        "SELECT id, payload, created_at, ref_id FROM pending_actions WHERE peer_id = ? ORDER BY id ASC;"
+        "SELECT id, payload, created_at, ref_id, is_suspended, window_start_at FROM pending_actions WHERE peer_id = ? "
+        "AND is_suspended = 0 ORDER BY id ASC;"
     );
     BindText(statement.Get(), 1, peer_id.ToString());
     while (sqlite3_step(statement.Get()) == SQLITE_ROW) {
@@ -284,7 +284,9 @@ class SQLiteStorage final : public PersistentStorageImpl {
       if (sqlite3_column_type(statement.Get(), 3) != SQLITE_NULL) {
         ref = sqlite3_column_int64(statement.Get(), 3);
       }
-      actions.push_back({id, peer_id, payload, created, ref});
+      bool suspended = sqlite3_column_int(statement.Get(), 4) != 0;
+      uint64_t win_start = static_cast<uint64_t>(sqlite3_column_int64(statement.Get(), 5));
+      actions.push_back({id, peer_id, payload, created, ref, suspended, win_start});
     }
     return actions;
   }
@@ -303,6 +305,29 @@ class SQLiteStorage final : public PersistentStorageImpl {
     SQLiteStatement const statement(db_, "DELETE FROM pending_actions WHERE peer_id = ? AND ref_id = ?;");
     BindText(statement.Get(), 1, peer_id.ToString());
     sqlite3_bind_int64(statement.Get(), 2, ref_id);
+    sqlite3_step(statement.Get());
+  }
+
+  void SuspendTimedOutActions(uint64_t threshold_timestamp) override {
+    std::lock_guard const lock(mutex_);
+    if (!db_) return;
+    SQLiteStatement const statement(
+        db_,
+        "UPDATE pending_actions SET is_suspended = 1 WHERE is_suspended = 0 AND window_start_at < ?;"
+    );
+    sqlite3_bind_int64(statement.Get(), 1, static_cast<sqlite3_int64>(threshold_timestamp));
+    sqlite3_step(statement.Get());
+  }
+
+  void UnsuspendActionsForPeer(ContactID const& peer_id, uint64_t new_window_start) override {
+    std::lock_guard const lock(mutex_);
+    if (!db_) return;
+    SQLiteStatement const statement(
+        db_,
+        "UPDATE pending_actions SET is_suspended = 0, window_start_at = ? WHERE peer_id = ? AND is_suspended = 1;"
+    );
+    sqlite3_bind_int64(statement.Get(), 1, static_cast<sqlite3_int64>(new_window_start));
+    BindText(statement.Get(), 2, peer_id.ToString());
     sqlite3_step(statement.Get());
   }
 
@@ -620,7 +645,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
     return page;
   }
 
-  auto GetFullMessageContent(ContactID const& peer_id, std::uint64_t message_id)
+  auto GetFullMessageContent(ContactID const& peer_id, std::uint64_t const message_id)
       -> std::optional<std::string> override {
     std::lock_guard const lock(mutex_);
     if (!db_) return std::nullopt;
@@ -671,7 +696,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
     return summaries;
   }
 
-  auto GetMessagesWithStatus(ContactID const& peer_id, messaging::MessageStatus status)
+  auto GetMessagesWithStatus(ContactID const& peer_id, messaging::MessageStatus const status)
       -> std::vector<messaging::HistoryEntryRecord> override {
     std::lock_guard const lock(mutex_);
     if (!db_) {
@@ -754,9 +779,9 @@ class SQLiteStorage final : public PersistentStorageImpl {
 
   auto GetRemoteIds(ContactID const& peer_id, std::vector<uint64_t> const& local_ids)
       -> std::vector<uint64_t> override {
-    if (local_ids.empty()) return {};
     std::lock_guard const lock(mutex_);
-    if (!db_) return {};
+    std::vector<uint64_t> remote_ids;
+    if (local_ids.empty()) return {};
     nlohmann::json const ids_json = local_ids;
     SQLiteStatement const s(
         db_,
@@ -765,13 +790,13 @@ class SQLiteStorage final : public PersistentStorageImpl {
     );
     BindText(s.Get(), 1, peer_id.ToString());
     BindText(s.Get(), 2, ids_json.dump());
-    std::vector<uint64_t> r_ids;
     while (sqlite3_step(s.Get()) == SQLITE_ROW) {
-      r_ids.push_back(static_cast<uint64_t>(sqlite3_column_int64(s.Get(), 0)));
+      remote_ids.push_back(static_cast<uint64_t>(sqlite3_column_int64(s.Get(), 0)));
     }
-    return r_ids;
+    return remote_ids;
   }
 
+  // --- Debug ---
   void DebugClearAllHistory() override {
     std::lock_guard const lock(mutex_);
     if (!db_) return;
@@ -784,11 +809,13 @@ class SQLiteStorage final : public PersistentStorageImpl {
         nullptr
     );
   }
+
   void DebugClearAllContacts() override {
     std::lock_guard const lock(mutex_);
     if (!db_) return;
     sqlite3_exec(db_, "BEGIN TRANSACTION; DELETE FROM contacts; COMMIT;", nullptr, nullptr, nullptr);
   }
+
   void DebugRevokeAllContactApprovals() override {
     std::lock_guard const lock(mutex_);
     if (!db_) return;
@@ -813,6 +840,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
     if (user_version < 5) migrations::MigrateToV0005(db_);
     if (user_version < 6) migrations::MigrateToV0006(db_);
     if (user_version < 7) migrations::MigrateToV0007(db_);
+    if (user_version < 8) migrations::MigrateToV0008(db_);
   }
 
   static auto ParseHistoryEntry(sqlite3_stmt* stmt) -> messaging::HistoryEntryRecord {

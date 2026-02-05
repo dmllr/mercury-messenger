@@ -261,6 +261,11 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
         }
       }
 
+      override fun onStandardizedIceConnectionChange(newState: PeerConnection.IceConnectionState?) {
+        if (!isCurrentSession()) return
+        Log.i(TAG, "onStandardizedIceConnectionChange for peer $peerId ($context): $newState")
+      }
+
       override fun onIceConnectionChange(newState: PeerConnection.IceConnectionState?) {}
       override fun onIceConnectionReceivingChange(p0: Boolean) {}
       override fun onIceGatheringChange(newState: PeerConnection.IceGatheringState?) {

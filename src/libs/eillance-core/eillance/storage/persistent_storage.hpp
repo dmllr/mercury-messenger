@@ -50,6 +50,8 @@ struct PendingAction {
   std::string payload;            // JSON content
   uint64_t created_at;            // Timestamp (microseconds)
   std::optional<int64_t> ref_id;  // Reference ID (e.g. message_id), optional
+  bool is_suspended = false;
+  uint64_t window_start_at = 0;
 };
 
 // The abstract interface for platform-specific storage implementations.
@@ -87,6 +89,10 @@ class PersistentStorageImpl {
   virtual auto GetPendingActions(ContactID const& peer_id) -> std::vector<PendingAction> = 0;
   virtual void RemovePendingAction(int64_t id) = 0;
   virtual void RemovePendingActionByRefId(ContactID const& peer_id, int64_t ref_id) = 0;
+
+  // Suspension Logic
+  virtual void SuspendTimedOutActions(uint64_t threshold_timestamp) = 0;
+  virtual void UnsuspendActionsForPeer(ContactID const& peer_id, uint64_t new_window_start) = 0;
 
   // --- History ---
   virtual auto AddHistoryEntry(messaging::HistoryEntryRecord entry) -> messaging::HistoryEntryRecord = 0;
@@ -194,6 +200,13 @@ class PersistentStorage {
   }
   void RemovePendingActionByRefId(ContactID const& peer_id, int64_t ref_id) const {
     pimpl_->RemovePendingActionByRefId(peer_id, ref_id);
+  }
+
+  void SuspendTimedOutActions(uint64_t threshold_timestamp) const {
+    pimpl_->SuspendTimedOutActions(threshold_timestamp);
+  }
+  void UnsuspendActionsForPeer(ContactID const& peer_id, uint64_t new_window_start) const {
+    pimpl_->UnsuspendActionsForPeer(peer_id, new_window_start);
   }
 
   // --- History ---

@@ -44,7 +44,6 @@ auto GetExtensionForMimeType(std::string_view const mime_type) -> std::string {
   return ".dat";
 }
 
-// Ensure unique filename by appending (1), (2) etc.
 auto ResolvePathConflict(std::filesystem::path const& dir, std::string const& filename) -> std::filesystem::path {
   std::filesystem::path candidate = dir / filename;
   if (!std::filesystem::exists(candidate)) {
@@ -73,7 +72,7 @@ struct AttachmentRequest {
   std::string thumbnail_base64;
   std::string mime_type;
   std::string note;
-  std::string file_name;  // Original name
+  std::string file_name;
 };
 
 class MessagingService {
@@ -83,7 +82,6 @@ class MessagingService {
   static constexpr auto keyVersion = "v";
   static constexpr auto keyContent = "c";
 
-  // Helper for tests to generate exact JSON structures
   struct Serializer {
     static auto BuildE2EEPayload(std::string const& content) -> std::string {
       nlohmann::json payload_json;
@@ -188,7 +186,7 @@ class MessagingService {
            .is_downloaded = true,
            .status = messaging::AttachmentStatus::pending,
            .note = note,
-           .file_name = req.file_name}  // Persist filename
+           .file_name = req.file_name}
       );
     }
 
@@ -223,14 +221,9 @@ class MessagingService {
         messaging::HistoryEntryKind::systemMessage
     );
 
-    // Notify UI immediately about new system message
     INVARIANT(on_message_received_);
     on_message_received_(peer_id, entry);
 
-    // Queue for delivery
-    // Note: Some system messages like "contact_request" are handled via signaling path
-    // inside ProcessChatAction, but we still queue them as a "chat" type action
-    // to unify the delivery retry logic.
     nlohmann::json action_payload = {{"type", "chat"}, {"message_id", entry.id}};
     storage_->AddPendingAction(peer_id, action_payload.dump(), Time::Now(), entry.id);
 
@@ -242,13 +235,16 @@ class MessagingService {
     }
   }
 
+  void UnsuspendAndDeliver(ContactID const& peer_id) {
+    LGI << "Unsuspending pending actions for peer " << peer_id;
+    storage_->UnsuspendActionsForPeer(peer_id, Time::Now());
+    SendQueuedMessages(peer_id);
+  }
+
   // Attempts to flush queued messages
   void SendQueuedMessages(ContactID const& peer_id) {
     auto const peer = transport_->GetPeer(peer_id);
-    // Ensure we have a valid secure channel before attempting to send encrypted data
-    bool const can_send_encrypted = peer && peer->data_channel_is_open && peer->session_cipher->IsReady();
 
-    // Check for pending transfers (resume if needed)
     file_transfer_service_->OnConnectionReady(peer_id);
 
     auto pending_actions = storage_->GetPendingActions(peer_id);
@@ -265,18 +261,10 @@ class MessagingService {
         std::string type = json_action.value("type", "");
 
         if (type == "chat") {
-          // Chat messages (Text + System)
-          // Default behavior is to keep them until Receipt/Ack.
-          // However, signaling messages (fire-and-forget) will flip this flag inside ProcessChatAction.
           remove_on_success = false;
-
-          // We attempt to process even if encryption channel isn't ready IF it might be a signaling message.
-          // ProcessChatAction checks for signaling types first.
-          uint64_t msg_id = json_action.value("message_id", 0ULL);
-
+          uint64_t const msg_id = json_action.value("message_id", 0ULL);
           bool should_remove = false;
           success = ProcessChatAction(peer_id, msg_id, peer, should_remove);
-
           if (should_remove) {
             remove_on_success = true;
           }
@@ -289,7 +277,6 @@ class MessagingService {
         }
       } catch (std::exception const& e) {
         LGE << "Failed to process pending action " << action.id << ": " << e.what();
-        // Malformed action, remove it to avoid blocking queue
         storage_->RemovePendingAction(action.id);
         continue;
       }
@@ -299,7 +286,6 @@ class MessagingService {
       }
     }
 
-    // Always signal the delivery service that we finished an attempt.
     delivery_service_->ConnectionAttemptFinished(peer_id);
   }
 
@@ -336,7 +322,6 @@ class MessagingService {
         }
         if (contains_attachment && !has_other_content) {
           history_->UpdateMessageStatus(peer_id, entry.id, messaging::MessageStatus::none);
-          // Also remove pending action for this message
           storage_->RemovePendingActionByRefId(peer_id, entry.id);
           break;
         }
@@ -437,7 +422,6 @@ class MessagingService {
     auto const entry =
         history_->AddTextEntry(peer_id, content, {}, direction, messaging::HistoryEntryKind::systemMessage);
 
-    // Notify UI immediately
     INVARIANT(on_message_received_);
     on_message_received_(peer_id, entry);
   }
@@ -487,7 +471,8 @@ class MessagingService {
               {"status", "delivered"},
               {"message_id", message_id}
           };
-          transport_->SendPeerDataChannelMessage(peer_id, receipt);
+          storage_->AddPendingAction(peer_id, receipt.dump());
+          SendQueuedMessages(peer_id);
           return;
         }
       }
@@ -518,7 +503,8 @@ class MessagingService {
           std::make_optional(message_id)
       );
       nlohmann::json const receipt = {{"type", "message_receipt"}, {"status", "delivered"}, {"message_id", message_id}};
-      transport_->SendPeerDataChannelMessage(peer_id, receipt);
+      storage_->AddPendingAction(peer_id, receipt.dump());
+      SendQueuedMessages(peer_id);
       INVARIANT(on_message_received_);
       on_message_received_(peer_id, entry);
       return;
@@ -536,28 +522,23 @@ class MessagingService {
       }
 
       for (auto& att : local_attachments) {
-        // Resolve filename: Use provided name or ID+Ext if missing
         std::string filename = att.file_name;
         if (filename.empty()) {
           filename = att.id + GetExtensionForMimeType(att.mime_type);
         }
-
-        // Handle collision
         std::filesystem::path const final_path = ResolvePathConflict(attachments_dir, filename);
-
         att.file_path = final_path.string();
         att.status = messaging::AttachmentStatus::pending;
       }
     }
 
-    // Pass the remote_id to AddTextEntry to ensure deduplication works next time
     auto entry = history_->AddTextEntry(
         peer_id,
         content,
         local_attachments,
         messaging::MessageDirection::received,
         is_system ? messaging::HistoryEntryKind::systemMessage : messaging::HistoryEntryKind::textMessage,
-        std::make_optional(message_id)  // Ensure persistence of remote ID
+        std::make_optional(message_id)
     );
 
     if (!local_attachments.empty()) {
@@ -567,7 +548,8 @@ class MessagingService {
     }
 
     nlohmann::json const receipt = {{"type", "message_receipt"}, {"status", "delivered"}, {"message_id", message_id}};
-    transport_->SendPeerDataChannelMessage(peer_id, receipt);
+    storage_->AddPendingAction(peer_id, receipt.dump());
+    SendQueuedMessages(peer_id);
 
     INVARIANT(on_message_received_);
     on_message_received_(peer_id, entry);
@@ -580,12 +562,9 @@ class MessagingService {
     } else if (status == "read") {
       message_status = messaging::MessageStatus::read;
     } else {
-      // Unknown receipt status or just "sent" confirmation
       return;
     }
     history_->UpdateMessageStatus(peer_id, message_id, message_status);
-
-    // Receipt received, we can remove the pending action for this message
     storage_->RemovePendingActionByRefId(peer_id, message_id);
   }
 
@@ -642,7 +621,6 @@ class MessagingService {
     if (!storage_->GetPendingActions(peer_id).empty()) {
       return true;
     }
-    // Still check file transfers state for resumed downloads/uploads that might not have a pending metadata action
     auto const attachments = storage_->GetPendingAttachments(peer_id);
     return std::ranges::any_of(attachments, [](auto const& att) {
       return att.status == messaging::AttachmentStatus::pending ||
@@ -658,8 +636,6 @@ class MessagingService {
     return sstream.str();
   }
 
-  // Returns true if processed successfully (sent or invalidated).
-  // Sets remove_action to true if the action should be removed from queue immediately.
   bool ProcessChatAction(
       ContactID const& peer_id,
       uint64_t msg_id,
@@ -668,7 +644,6 @@ class MessagingService {
   ) {
     remove_action = false;
 
-    // Load message from DB to ensure we have latest content/status
     auto messages = storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::sending);
     std::optional<messaging::HistoryEntryRecord> entry;
     for (auto const& m : messages) {
@@ -679,7 +654,6 @@ class MessagingService {
     }
 
     if (!entry) {
-      // Message not found or status changed. Consume action.
       remove_action = true;
       return true;
     }
@@ -702,7 +676,6 @@ class MessagingService {
       if (auto full = history_->GetFullMessageContent(peer_id, entry->id)) {
         content_to_send = *full;
       } else {
-        // Lost content? Remove action to avoid block.
         remove_action = true;
         return true;
       }
@@ -710,8 +683,6 @@ class MessagingService {
       content_to_send = content;
     }
 
-    // Signaling Path (Bootstrapping System Messages)
-    // Legacy support for specific system messages that go via signaling
     if (entry->kind == messaging::HistoryEntryKind::systemMessage) {
       try {
         nlohmann::json content_json = nlohmann::json::parse(content_to_send);
@@ -727,8 +698,6 @@ class MessagingService {
             if (content_json.contains("token")) msg["token"] = content_json["token"];
           }
           transport_->SendSignalingMessage(msg);
-
-          // Signaling messages are fire-and-forget, remove from queue immediately
           remove_action = true;
           return true;
         }
@@ -736,8 +705,6 @@ class MessagingService {
       }
     }
 
-    // Data Channel Path
-    // Requires encrypted connection
     if (!peer || !peer->data_channel_is_open || !peer->session_cipher->IsReady()) {
       return false;
     }
@@ -794,19 +761,17 @@ class MessagingService {
 
       transport_->SendPeerDataChannelMessage(peer_id, json_msg);
 
-      // Trigger uploads
       if (!valid_attachments.empty()) {
         for (auto const& att : valid_attachments) {
           file_transfer_service_->QueueUpload(peer_id, att);
         }
       }
 
-      // Sent successfully. Waiting for receipt, so do NOT remove action.
       remove_action = false;
       return true;
     }
 
-    return false;  // Encryption failed? Retry?
+    return false;
   }
 
   std::shared_ptr<storage::PersistentStorage> storage_;

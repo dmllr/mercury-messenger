@@ -69,14 +69,10 @@ class ContactService {
       }
 
       INVARIANT(messaging_service_);
-      messaging_service_->AddSystemEntry(peer_id, content.dump(), messaging::MessageDirection::sent);
+      messaging_service_->SendSystemMessage(peer_id, content.dump());
 
       INVARIANT(on_contact_status_changed_);
       on_contact_status_changed_(peer_id, identity::ContactStatus::pendingApproval);
-
-      // Trigger delivery via messaging service
-      connection_handler_(peer_id);
-      messaging_service_->SendQueuedMessages(peer_id);
     }
     return true;
   }
@@ -94,24 +90,21 @@ class ContactService {
           nlohmann::json{{"action", "contact_signature"}, {"signature", crypto::ToHex(signature)}}.dump()
       );
 
-      // Ensure we actually send the signature message to the peer via Data Channel
       storage_->AddPendingAction(
           peer_id,
           nlohmann::json{{"type", "contact_signature"}, {"signature", crypto::ToHex(signature)}}.dump()
       );
-      // Flush this action
-      profile_service_->SyncProfile(peer_id);
 
       // This system message is just for local history.
       messaging_service_->SendSystemMessage(peer_id, nlohmann::json{{"action", "send_profile"}}.dump());
 
       // Send our profile and request theirs
-      profile_service_->SendMyProfile(peer_id);  // Queue profile and flush
+      profile_service_->SendMyProfile(peer_id);  // Queues profile action
 
       INVARIANT(on_contact_status_changed_);
       on_contact_status_changed_(peer_id, identity::ContactStatus::confirmed);
 
-      // Ensure connection and flush queue to send the "contact_confirm" signaling message immediately
+      // Ensure connection and flush queue.
       connection_handler_(peer_id);
       messaging_service_->SendQueuedMessages(peer_id);
     }
@@ -120,7 +113,9 @@ class ContactService {
   void BlockContact(ContactID const& peer_id, bool notify_peer) {
     if (notify_peer) {
       storage_->AddPendingAction(peer_id, nlohmann::json{{"type", "contact_removed"}}.dump());
-      profile_service_->SyncProfile(peer_id);
+      if (messaging_service_) {
+        messaging_service_->SendQueuedMessages(peer_id);
+      }
     }
 
     transport_->ClosePeerConnection(peer_id, "data");
@@ -160,7 +155,6 @@ class ContactService {
   void DebugClearCache() {
     manager_->ClearContacts();
   }
-  // Renamed from DebugReloadCache as it is used in RestoreBackup
   void ReloadCache() {
     manager_->ReloadContacts();
   }
@@ -218,26 +212,20 @@ class ContactService {
       if (status == identity::RequestStatus::New) {
         INVARIANT(on_contact_request_);
         on_contact_request_(peer_id);
-      } else {
-        // We need to notify profile update if we updated info from request
       }
     } else {
-      // If the contact is already confirmed locally, it implies the peer might have lost their state (reinstall).
-      // In this case, we must help them restore the connection by sending the necessary proofs.
+      // Reinstall recovery: If contact already confirmed, resend proofs.
       if (manager_->IsConfirmedContact(peer_id)) {
         transport_->SendSignalingMessage({{"type", "contact_confirm"}, {"to", peer_id.ToString()}});
 
-        // Resend our signature so the peer can validate us and auto-confirm.
-        auto signature = account_service_->Sign(peer_id.Span());
+        auto const signature = account_service_->Sign(peer_id.Span());
         storage_->AddPendingAction(
             peer_id,
             nlohmann::json{{"type", "contact_signature"}, {"signature", crypto::ToHex(signature)}}.dump()
         );
 
-        // Resend our profile.
         profile_service_->SendMyProfile(peer_id);
 
-        // Ensure we are trying to connect so these messages are delivered.
         connection_handler_(peer_id);
         INVARIANT(messaging_service_);
         messaging_service_->SendQueuedMessages(peer_id);
@@ -254,19 +242,14 @@ class ContactService {
       messaging_service_->SendSystemMessage(peer_id, nlohmann::json{{"action", "send_profile"}}.dump());
       messaging_service_->SendSystemMessage(peer_id, nlohmann::json{{"action", "request_profile"}}.dump());
 
-      // Send our profile and request theirs since the channel is likely open or opening.
       profile_service_->SendMyProfile(peer_id);
       profile_service_->RequestProfile(peer_id);
     }
   }
 
   void OnContactRestored(ContactID const& peer_id) {
-    // Triggered when a message is successfully decrypted from a peer we didn't have in our contact list (reinstall
-    // scenario). Request their profile so the UI isn't just an ID.
     profile_service_->RequestProfile(peer_id);
-
     INVARIANT(on_contact_status_changed_);
-    // Notify UI that this peer is now confirmed.
     on_contact_status_changed_(peer_id, identity::ContactStatus::confirmed);
   }
 
@@ -283,7 +266,8 @@ class ContactService {
           {"signature", crypto::ToHex(*contact->my_signature_for_them)}
       };
       storage_->AddPendingAction(peer_id, resp.dump());
-      profile_service_->SyncProfile(peer_id);
+      INVARIANT(messaging_service_);
+      messaging_service_->SendQueuedMessages(peer_id);
     }
   }
 
@@ -307,7 +291,6 @@ class ContactService {
       INVARIANT(messaging_service_);
       messaging_service_->SendSystemMessage(peer_id, nlohmann::json{{"action", "send_profile"}}.dump());
 
-      // Mark sync needed and try to sync
       manager_->ReloadContacts();
       profile_service_->SendMyProfile(peer_id);
     }

@@ -1,17 +1,19 @@
+#pragma once
+
 #include <algorithm>
+#include <chrono>
 #include <functional>
 #include <memory>
 #include <mutex>
-#include <string>
 #include <unordered_map>
 #include <unordered_set>
 
 #include "eillance/identity/contact_id.hpp"
 #include "eillance/identity/contact_manager.hpp"
 #include "eillance/logging/logging.hpp"
-#include "eillance/messaging/history.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/utils/dispatch_queue.hpp"
+#include "eillance/utils/time.hpp"
 
 namespace eillance::messaging {
 
@@ -33,6 +35,8 @@ class MessageDeliveryService {
 
   static constexpr int initialRetryDelayS = 5;
   static constexpr int maxRetryDelayS = 60;
+  static constexpr uint64_t kSuspensionThresholdUs = 48 * 3600 * 1000000ULL;  // 2 days
+  static constexpr std::chrono::hours kSuspensionCheckInterval{1};
 
  public:
   MessageDeliveryService(
@@ -52,7 +56,12 @@ class MessageDeliveryService {
       return;  // Already running.
     }
     // On start, check for any messages that were queued while offline.
-    dispatchQueue_.Dispatch([this] { CheckForAllQueuedMessages(); });
+    dispatchQueue_.Dispatch([this] {
+      CheckForSuspensions();
+      CheckForAllQueuedMessages();
+    });
+
+    ScheduleSuspensionCheck();
   }
 
   void Stop() {
@@ -134,8 +143,32 @@ class MessageDeliveryService {
     }
     auto const all_contacts = contactManager_->GetContacts();
     for (auto const& contact : all_contacts) {
-      AttemptDelivery(contact.peer_id);
+      // Skip blocked/rejected contacts.
+      if (contact.status != identity::ContactStatus::rejected) {
+        AttemptDelivery(contact.peer_id);
+      }
     }
+  }
+
+  void CheckForSuspensions() {
+    if (!isRunning_) {
+      return;
+    }
+
+    if (auto const now = Time::Now(); now > kSuspensionThresholdUs) {
+      uint64_t const threshold = now - kSuspensionThresholdUs;
+      storage_->SuspendTimedOutActions(threshold);
+    }
+  }
+
+  void ScheduleSuspensionCheck() {
+    if (!isRunning_) {
+      return;
+    }
+    dispatchQueue_.DispatchAfter(kSuspensionCheckInterval, [this] {
+      CheckForSuspensions();
+      ScheduleSuspensionCheck();
+    });
   }
 };
 

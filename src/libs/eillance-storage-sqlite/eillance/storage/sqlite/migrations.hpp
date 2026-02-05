@@ -13,3 +13,4 @@
 #include "eillance/storage/sqlite/migrations/0005_add_attachment_note.hpp"
 #include "eillance/storage/sqlite/migrations/0006_add_filename.hpp"
 #include "eillance/storage/sqlite/migrations/0007_pending_actions_v2.hpp"
+#include "eillance/storage/sqlite/migrations/0008_suspend_actions.hpp"
