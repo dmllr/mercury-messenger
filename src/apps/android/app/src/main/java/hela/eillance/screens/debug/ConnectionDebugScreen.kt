@@ -90,9 +90,11 @@ fun ConnectionDebugScreen(
         ListItem(
           headlineContent = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-              Box(modifier = Modifier
-                .size(8.dp)
-                .background(color, CircleShape))
+              Box(
+                modifier = Modifier
+                  .size(8.dp)
+                  .background(color, CircleShape)
+              )
               Spacer(Modifier.width(8.dp))
               Text(info.peerId.take(12))
             }

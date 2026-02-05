@@ -164,67 +164,96 @@ private fun VisualAttachmentsGrid(
       .clip(roundedShape)
   ) {
     when (count) {
-      1 -> renderItem(0, Modifier
-        .fillMaxWidth()
-        .aspectRatio(1.5f))
-      2 -> {
-        Row(modifier = Modifier
+      1 -> renderItem(
+        0, Modifier
           .fillMaxWidth()
-          .height(160.dp)) {
-          renderItem(0, Modifier
-            .weight(1f)
-            .fillMaxSize())
+          .aspectRatio(1.5f)
+      )
+
+      2 -> {
+        Row(
+          modifier = Modifier
+            .fillMaxWidth()
+            .height(160.dp)
+        ) {
+          renderItem(
+            0, Modifier
+              .weight(1f)
+              .fillMaxSize()
+          )
           Spacer(modifier = Modifier.width(2.dp))
-          renderItem(1, Modifier
-            .weight(1f)
-            .fillMaxSize())
+          renderItem(
+            1, Modifier
+              .weight(1f)
+              .fillMaxSize()
+          )
         }
       }
 
       3 -> {
         Column(modifier = Modifier.fillMaxWidth()) {
-          renderItem(0, Modifier
-            .fillMaxWidth()
-            .height(160.dp))
+          renderItem(
+            0, Modifier
+              .fillMaxWidth()
+              .height(160.dp)
+          )
           Spacer(modifier = Modifier.height(2.dp))
-          Row(modifier = Modifier
-            .fillMaxWidth()
-            .height(100.dp)) {
-            renderItem(1, Modifier
-              .weight(1f)
-              .fillMaxSize())
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .height(100.dp)
+          ) {
+            renderItem(
+              1, Modifier
+                .weight(1f)
+                .fillMaxSize()
+            )
             Spacer(modifier = Modifier.width(2.dp))
-            renderItem(2, Modifier
-              .weight(1f)
-              .fillMaxSize())
+            renderItem(
+              2, Modifier
+                .weight(1f)
+                .fillMaxSize()
+            )
           }
         }
       }
 
       else -> {
         Column(modifier = Modifier.fillMaxWidth()) {
-          Row(modifier = Modifier
-            .fillMaxWidth()
-            .height(120.dp)) {
-            renderItem(0, Modifier
-              .weight(1f)
-              .fillMaxSize())
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .height(120.dp)
+          ) {
+            renderItem(
+              0, Modifier
+                .weight(1f)
+                .fillMaxSize()
+            )
             Spacer(modifier = Modifier.width(2.dp))
-            renderItem(1, Modifier
-              .weight(1f)
-              .fillMaxSize())
+            renderItem(
+              1, Modifier
+                .weight(1f)
+                .fillMaxSize()
+            )
           }
           Spacer(modifier = Modifier.height(2.dp))
-          Row(modifier = Modifier
-            .fillMaxWidth()
-            .height(120.dp)) {
-            renderItem(2, Modifier
-              .weight(1f)
-              .fillMaxSize())
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .height(120.dp)
+          ) {
+            renderItem(
+              2, Modifier
+                .weight(1f)
+                .fillMaxSize()
+            )
             Spacer(modifier = Modifier.width(2.dp))
-            Box(modifier = Modifier
-              .weight(1f)
-              .fillMaxSize()) {
+            Box(
+              modifier = Modifier
+                .weight(1f)
+                .fillMaxSize()
+            ) {
               renderItem(3, Modifier.fillMaxSize())
               if (count > 4) {
                 Box(
@@ -392,7 +421,11 @@ private fun FileAttachmentItem(
         CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
       } else if (!isDone && !isCanceled) {
         if (!isFromMe && !attachment.isDownloaded) {
-          Icon(Icons.Default.Download, contentDescription = stringResource(id = R.string.file_status_downloading), tint = MaterialTheme.colorScheme.secondary)
+          Icon(
+            Icons.Default.Download,
+            contentDescription = stringResource(id = R.string.file_status_downloading),
+            tint = MaterialTheme.colorScheme.secondary
+          )
         }
       }
     }
@@ -484,9 +517,11 @@ private fun MediaItem(
     // --- OVERLAY LAYER (Darkens the image for status states) ---
     // Show overlay for all non-final states
     if (attachment.status != AttachmentStatus.Done) {
-      Box(modifier = Modifier
-        .fillMaxSize()
-        .background(Color.Black.copy(alpha = 0.5f)))
+      Box(
+        modifier = Modifier
+          .fillMaxSize()
+          .background(Color.Black.copy(alpha = 0.5f))
+      )
     }
 
     // --- INTERACTIVE / STATUS LAYER ---
