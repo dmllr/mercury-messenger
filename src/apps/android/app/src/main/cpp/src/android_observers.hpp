@@ -5,12 +5,12 @@
 
 #include <jni.h>
 
-#include "class_refs.hpp"
 #include "eillance/view_model/call_view_model.hpp"
 #include "eillance/view_model/contacts_view_model.hpp"
 #include "eillance/view_model/conversation_view_model.hpp"
 #include "eillance/view_model/profile_view_model.hpp"
 #include "eillance/view_model/settings_view_model.hpp"
+#include "utils/class_refs.hpp"
 #include "utils/jni_utils.hpp"
 
 namespace eillance {
