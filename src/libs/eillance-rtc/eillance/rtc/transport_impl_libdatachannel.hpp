@@ -12,6 +12,7 @@
 #include <thread>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 #include <nlohmann/json.hpp>
 #include <rtc/rtc.hpp>
@@ -211,9 +212,6 @@ class RtcTransport final : public transport::Transport::TransportInterface {
 
     auto dc = std::static_pointer_cast<::rtc::DataChannel>(it->second->data_channel);
     if (dc && dc->isOpen()) {
-      // Assuming libdatachannel send returns boolean success/failure.
-      // If it returns void, we assume true if open.
-      // Based on libdatachannel header, send returns bool.
       return dc->send(reinterpret_cast<std::byte const*>(message.data()), message.size());
     }
     return false;
@@ -290,33 +288,26 @@ class RtcTransport final : public transport::Transport::TransportInterface {
       }
     });
 
-    peer_connection->onLocalDescription([this, peer_id, context](::rtc::Description const& description) {
-      LGD << "Local SDP (" << description.typeString() << ") for " << peer_id << " context " << context << ":\n"
-          << std::string(description);
-      Json message = {{"type", description.typeString()}, {"sdp", std::string(description)}, {"context", context}};
-      message["to"] = peer_id;
-      WsSendMessage(message);
-    });
+    peer_connection->onGatheringStateChange([this, peer_id, context](::rtc::PeerConnection::GatheringState state) {
+      if (state == ::rtc::PeerConnection::GatheringState::Complete) {
+        auto peer = GetPeer(peer_id);
+        if (!peer) return;
 
-    peer_connection->onLocalCandidate([this, peer_id, context](::rtc::Candidate const& candidate) {
-      Json message = {
-          {"type", "candidate"},
-          {"candidate", std::string(candidate)},
-          {"sdpMid", candidate.mid()},
-          {"context", context}
-      };
-      message["to"] = peer_id;
-      WsSendMessage(message);
-    });
+        auto pc = (context == "data") ? std::static_pointer_cast<::rtc::PeerConnection>(peer->data_peer_connection)
+                                      : std::static_pointer_cast<::rtc::PeerConnection>(peer->media_peer_connection);
+        if (!pc) return;
 
-    peer_connection->onIceStateChange([this, peer_id](::rtc::PeerConnection::IceState state) {
-      LGI << "ICE State: " << static_cast<int>(state);
-      ReportPeerStateChange(peer_id, EventSource::iceState, static_cast<int>(state));
-    });
-
-    peer_connection->onGatheringStateChange([this, peer_id](::rtc::PeerConnection::GatheringState state) {
-      LGI << "Gathering State: " << static_cast<int>(state);
-      ReportPeerStateChange(peer_id, EventSource::gatheringState, static_cast<int>(state));
+        if (auto localDesc = pc->localDescription()) {
+          LGI << "ICE Gathering complete for " << peer_id << ". Sending " << localDesc->typeString();
+          Json message = {
+              {"type", localDesc->typeString()},
+              {"sdp", std::string(*localDesc)},
+              {"context", context},
+              {"to", peer_id.ToString()}
+          };
+          WsSendMessage(message);
+        }
+      }
     });
 
     peer_connection->onSignalingStateChange([this, peer_id](::rtc::PeerConnection::SignalingState state) {
@@ -355,8 +346,6 @@ class RtcTransport final : public transport::Transport::TransportInterface {
               cb(std::span<std::byte const>(bin));
             }
           });
-        } else {
-          LGE << "No on_message handler found for peer " << peer_id << " on new data channel.";
         }
         peer->data_channel = dc;
       });
@@ -427,6 +416,8 @@ class RtcTransport final : public transport::Transport::TransportInterface {
     auto pc = (context == "data") ? std::static_pointer_cast<::rtc::PeerConnection>(peer->data_peer_connection)
                                   : std::static_pointer_cast<::rtc::PeerConnection>(peer->media_peer_connection);
     if (pc) {
+      // In Full ICE mode, we set local description immediately to trigger gathering.
+      // We rely on onGatheringStateChange(Complete) to send the SDP.
       pc->setLocalDescription();
     }
   }
@@ -457,22 +448,6 @@ class RtcTransport final : public transport::Transport::TransportInterface {
                                   : std::static_pointer_cast<::rtc::PeerConnection>(peer->media_peer_connection);
     if (pc) {
       pc->setRemoteDescription(::rtc::Description(sdp, type));
-    }
-  }
-  void AddRemoteCandidate(
-      ContactID const& peer_id,
-      std::string const& context,
-      std::string const& candidate,
-      std::string const& mid
-  ) override {
-    auto peer = GetPeer(peer_id);
-    if (!peer) {
-      return;
-    }
-    auto pc = (context == "data") ? std::static_pointer_cast<::rtc::PeerConnection>(peer->data_peer_connection)
-                                  : std::static_pointer_cast<::rtc::PeerConnection>(peer->media_peer_connection);
-    if (pc) {
-      pc->addRemoteCandidate(::rtc::Candidate(candidate, mid));
     }
   }
 

@@ -135,35 +135,25 @@ class SignalingNegotiationTest : public ::testing::Test {
   ContactID my_id_;
 };
 
-TEST_F(SignalingNegotiationTest, CandidatesArrivingBeforeOfferAreBuffered) {
-  // Use a PeerID that is smaller than MyID to ensure we accept the offer (Smaller Wins policy)
+// With Full ICE, we no longer test for isolated candidate message processing
+// or candidate buffering, as candidates must arrive bundled in the Offer/Answer.
+
+TEST_F(SignalingNegotiationTest, OfferTriggersPeerCreationAndAnswer) {
+  // Use a PeerID that is smaller than MyID to ensure we accept the offer
   ContactID const peer_id("0000000000000000000000000000000000000000000000000000000000000002");
   ASSERT_GT(my_id_, peer_id);
 
-  // 1. Simulate Candidate Arriving FIRST
-  nlohmann::json const candidate_msg = {
-      {"type", "candidate"},
-      {"candidate", "candidate:1 1 UDP ..."},
-      {"sdpMid", "0"}
-  };
-
-  internal_service_->ProcessSignalingMessage(peer_id, "candidate", candidate_msg);
-
-  // At this point, peer does not exist, so candidate should be buffered.
-  ASSERT_FALSE(mock_transport_->GetPeer(peer_id));
-  ASSERT_TRUE(mock_transport_->log.added_candidates.empty());
-
-  // 2. Simulate Offer Arriving SECOND
+  // Simulate Offer Arriving with bundled candidates (implicit in SDP)
   nlohmann::json const offer_msg = {
       {"from", peer_id.ToString()},
       {"type", "offer"},
       {"context", "data"},
-      {"sdp", "dummy_sdp_offer"}
+      {"sdp", "dummy_sdp_offer_with_candidates"}
   };
 
   internal_service_->ProcessSignalingMessage(peer_id, "offer", offer_msg);
 
-  // 3. Verify Peer Created and Answered
+  // Verify Peer Created and Answered
   ASSERT_TRUE(mock_transport_->GetPeer(peer_id));
 
   bool answer_created = false;
@@ -173,41 +163,24 @@ TEST_F(SignalingNegotiationTest, CandidatesArrivingBeforeOfferAreBuffered) {
     }
   }
   EXPECT_TRUE(answer_created);
-
-  // 4. IMPORTANT: Verify the buffered candidate was applied to the transport
-  ASSERT_EQ(mock_transport_->log.added_candidates.size(), 1);
-  auto const& [pid, ctx, cand, mid] = mock_transport_->log.added_candidates[0];
-  EXPECT_EQ(pid, peer_id);
-  EXPECT_EQ(ctx, "data");
-  EXPECT_EQ(cand, "candidate:1 1 UDP ...");
-  EXPECT_EQ(mid, "0");
 }
 
-TEST_F(SignalingNegotiationTest, CandidatesAppliedImmediatelyIfPeerExists) {
+TEST_F(SignalingNegotiationTest, AnswerDoesNotRecreatePeer) {
   ContactID const peer_id("0000000000000000000000000000000000000000000000000000000000000002");
 
-  // 1. Create Peer (Simulate Offer processed)
-  nlohmann::json const offer_msg = {
-      {"from", peer_id.ToString()},
-      {"type", "offer"},
-      {"context", "data"},
-      {"sdp", "dummy_sdp_offer"}
-  };
-  internal_service_->ProcessSignalingMessage(peer_id, "offer", offer_msg);
-  ASSERT_TRUE(mock_transport_->GetPeer(peer_id));
+  // Create peer initially (simulating we sent the offer)
+  auto peer = std::make_shared<transport::Peer>(peer_id);
+  mock_transport_->AddPeer(peer_id, peer);
 
-  mock_transport_->log.added_candidates.clear();
+  nlohmann::json const answer_msg =
+      {{"from", peer_id.ToString()}, {"type", "answer"}, {"context", "data"}, {"sdp", "dummy_sdp_answer"}};
 
-  // 2. Send Candidate
-  nlohmann::json const candidate_msg = {
-      {"type", "candidate"},
-      {"candidate", "candidate:2 1 UDP ..."},
-      {"sdpMid", "1"}
-  };
-  internal_service_->ProcessSignalingMessage(peer_id, "candidate", candidate_msg);
+  internal_service_->ProcessSignalingMessage(peer_id, "answer", answer_msg);
 
-  // Should be applied immediately
-  ASSERT_EQ(mock_transport_->log.added_candidates.size(), 1);
-  auto const& [pid, ctx, cand, mid] = mock_transport_->log.added_candidates[0];
-  EXPECT_EQ(cand, "candidate:2 1 UDP ...");
+  // Should NOT create new offer or answer
+  EXPECT_TRUE(mock_transport_->log.answers.empty());
+  EXPECT_TRUE(mock_transport_->log.offers.empty());
+
+  // Should set remote description
+  // Note: MockTransport::SetRemoteDescription log check would confirm this
 }

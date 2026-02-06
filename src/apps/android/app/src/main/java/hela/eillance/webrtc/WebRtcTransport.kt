@@ -3,16 +3,17 @@ package hela.eillance.webrtc
 import android.content.Context
 import android.util.Log
 import hela.eillance.ndkio.PeerConnectionState
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import org.json.JSONException
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 import org.webrtc.AudioSource
 import org.webrtc.AudioTrack
@@ -38,99 +39,73 @@ import org.webrtc.VideoSource
 import org.webrtc.VideoTrack
 import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentHashMap
-import java.util.regex.Pattern
+import kotlin.coroutines.resume
 
 /**
- * Encapsulates the lifecycle of a single PeerConnection attempt.
- * Ensures the timeout job is strictly bound to this specific instance.
+ * Represents a WebRTC session (Data or Media) with a peer.
  */
 private class ConnectionSession(
   val peerId: String,
   val context: String,
-  val pc: PeerConnection,
-  private val scope: CoroutineScope,
-  private val onTimeout: (ConnectionSession) -> Unit
+  val pc: PeerConnection
 ) {
   var dataChannel: DataChannel? = null
-  private var timeoutJob: Job? = null
-  private var isDisposed = false
 
-  fun startTimeout(ms: Long) {
-    timeoutJob = scope.launch {
-      delay(ms)
-      synchronized(this@ConnectionSession) {
-        if (isDisposed) return@launch
-        val state = pc.connectionState()
-        // FIX: Also check if DataChannel is OPEN. If data is flowing, we are connected,
-        // regardless of what the ICE/DTLS state machine reports.
-        val isDataChannelOpen = dataChannel?.state() == DataChannel.State.OPEN
+  // Signal to synchronize Vanilla ICE gathering.
+  // Using var to allow resetting for renegotiation.
+  var iceGatheringComplete: CompletableDeferred<Unit>? = null
 
-        if (state != PeerConnection.PeerConnectionState.CONNECTED &&
-          state != PeerConnection.PeerConnectionState.CLOSED &&
-          !isDataChannelOpen
-        ) {
-          Log.w("WebRtcTransport", "Session $peerId ($context) timed out. State: $state. Closing.")
-          onTimeout(this@ConnectionSession)
-        }
-      }
-    }
-  }
-
-  fun cancelTimeout() {
-    timeoutJob?.cancel()
-    timeoutJob = null
-  }
+  // Used to prevent operations on closed sessions
+  @Volatile
+  var isDisposed = false
 
   fun dispose() {
-    synchronized(this) {
-      if (isDisposed) return
-      isDisposed = true
+    if (isDisposed) return
+    isDisposed = true
+
+    try {
+      dataChannel?.unregisterObserver()
+      dataChannel?.dispose()
+    } catch (e: Exception) {
+      Log.w("WebRtcTransport", "Error disposing DataChannel for $peerId ($context)", e)
     }
-    cancelTimeout()
-    scope.launch(Dispatchers.IO) {
-      try {
-        dataChannel?.unregisterObserver()
-        dataChannel?.dispose()
-      } catch (e: Exception) {
-        Log.w("WebRtcTransport", "Error disposing DataChannel", e)
-      }
-      try {
-        pc.close()
-      } catch (e: Exception) {
-        Log.w("WebRtcTransport", "Error closing PeerConnection", e)
-      }
+    try {
+      pc.close()
+    } catch (e: Exception) {
+      Log.w("WebRtcTransport", "Error closing PeerConnection for $peerId ($context)", e)
     }
   }
 }
 
 class WebRtcTransport(private val context: Context, private val nativePointer: Long) {
-  private var coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-  private val eglBase: EglBase = WebRtcTransport.eglBase
+  private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+  private val eglBase: EglBase = Companion.eglBase
   private var signalingClient = SignalingClient()
 
   private var peerConnectionFactory: PeerConnectionFactory? = null
 
-  // Map of active sessions. Replacing the inner map value automatically orphans the old session.
+  // Thread-safe session management
   private val sessions = ConcurrentHashMap<String, ConcurrentHashMap<String, ConnectionSession>>()
+  // Mutex for synchronizing access to peer connection creation/deletion
+  private val sessionMutex = Mutex()
 
-  // Local media resources
+  // Local Media Resources
   private var localVideoTrack: VideoTrack? = null
   private var localAudioTrack: AudioTrack? = null
   private var videoCapturer: VideoCapturer? = null
   private var videoSource: VideoSource? = null
   private var audioSource: AudioSource? = null
-
-  // Sinks for rendering video
   private var localSink: VideoSink? = null
+
   private val remoteSinks = ConcurrentHashMap<String, VideoSink>()
   private val remoteVideoTracks = ConcurrentHashMap<String, VideoTrack>()
 
   private var localPeerId: String? = null
   private var currentSignalingUrl: String = ""
-
   private var isObservingMessages = false
   private var isObservingSignalingState = false
 
+  // JNI Callbacks
   private external fun nativeOnPeerMessage(nativePointer: Long, message: String)
   private external fun nativeOnSystemMessage(nativePointer: Long, type: String, message: String)
   private external fun nativeOnSignalingError(nativePointer: Long, peerId: String, error: String)
@@ -141,22 +116,22 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
   private external fun nativeOnSignalingConnectionStateChange(nativePointer: Long, state: Int)
 
   init {
-    initialize()
+    initializeFactory()
   }
 
-  private fun initialize() {
+  private fun initializeFactory() {
     if (peerConnectionFactory != null) return
-
-    if (!coroutineScope.isActive) {
-      coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    }
-
     Log.d(TAG, "Initializing PeerConnectionFactory")
+
     PeerConnectionFactory.initialize(
-      PeerConnectionFactory.InitializationOptions.builder(context).createInitializationOptions()
+      PeerConnectionFactory.InitializationOptions.builder(context)
+        .setEnableInternalTracer(false)
+        .createInitializationOptions()
     )
+
     val videoEncoderFactory = DefaultVideoEncoderFactory(eglBase.eglBaseContext, true, true)
     val videoDecoderFactory = DefaultVideoDecoderFactory(eglBase.eglBaseContext)
+
     peerConnectionFactory = PeerConnectionFactory.builder()
       .setVideoEncoderFactory(videoEncoderFactory)
       .setVideoDecoderFactory(videoDecoderFactory)
@@ -164,7 +139,7 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
   }
 
   fun connect(peerId: String, signalingUrl: String) {
-    initialize()
+    initializeFactory()
     this.localPeerId = peerId
     this.currentSignalingUrl = signalingUrl
     observeSignalingMessages()
@@ -173,31 +148,42 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
   }
 
   fun terminate() {
+    Log.i(TAG, "Terminating WebRtcTransport")
     signalingClient.disconnect()
     stopLocalMedia()
+
     sessions.values.forEach { contextMap ->
-      contextMap.values.forEach { session ->
-        session.dispose()
-      }
+      contextMap.values.forEach { it.dispose() }
     }
     sessions.clear()
+
     peerConnectionFactory?.dispose()
     peerConnectionFactory = null
   }
 
+  fun reconnect(newUrl: String) {
+    scope.launch {
+      localPeerId?.let { peerId ->
+        currentSignalingUrl = newUrl
+        signalingClient.disconnect()
+        signalingClient = SignalingClient()
+        isObservingMessages = false
+        isObservingSignalingState = false
+        connect(peerId, newUrl)
+      }
+    }
+  }
+
   fun createPeerConnection(peerId: String, context: String) {
-    val factory = peerConnectionFactory
-    if (factory == null) {
-      Log.e(TAG, "PeerConnectionFactory is not initialized")
+    val factory = peerConnectionFactory ?: run {
+      Log.e(TAG, "Factory null in createPeerConnection")
       return
     }
 
-    // Prepare the map entry
-    val peerContextMap = sessions.getOrPut(peerId) { ConcurrentHashMap() }
+    // Cleanup existing session if any
+    sessions[peerId]?.remove(context)?.dispose()
 
-    // Clean up any existing session for this context.
-    peerContextMap.remove(context)?.dispose()
-
+    // STUN/TURN servers
     val iceServers = listOf(
       PeerConnection.IceServer.builder("stun:stun.relay.metered.ca:80").createIceServer(),
       PeerConnection.IceServer.builder("turn:a.relay.metered.ca:80")
@@ -207,44 +193,27 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
       PeerConnection.IceServer.builder("turn:a.relay.metered.ca:443")
         .setUsername("49880a0f046c8990b1990b35")
         .setPassword("qZCNW/57EB8GwO3A")
-        .createIceServer()
+        .createIceServer(),
+      PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer()
     )
 
+    // Configuration for Vanilla ICE (Bundle candidates in SDP)
+    // We use GATHER_ONCE to ensure we get a complete set before sending.
     val rtcConfig = RTCConfiguration(iceServers).apply {
       sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
       iceTransportsType = PeerConnection.IceTransportsType.ALL
+      bundlePolicy = PeerConnection.BundlePolicy.MAXBUNDLE
+      rtcpMuxPolicy = PeerConnection.RtcpMuxPolicy.REQUIRE
+      continualGatheringPolicy = PeerConnection.ContinualGatheringPolicy.GATHER_ONCE
     }
 
-    // Mutable holder for the session to be captured by the observer
-    var createdSession: ConnectionSession? = null
-
     val observer = object : PeerConnection.Observer {
-      private fun isCurrentSession(): Boolean {
-        val activeSession = sessions[peerId]?.get(context)
-        return activeSession != null && activeSession === createdSession
-      }
-
-      override fun onSignalingChange(newState: PeerConnection.SignalingState?) {
-        if (!isCurrentSession()) return
-        Log.i(TAG, "onSignalingChange for peer $peerId ($context): $newState")
+      override fun onSignalingChange(state: PeerConnection.SignalingState?) {
+        Log.d(TAG, "onSignalingChange ($peerId:$context): $state")
       }
 
       override fun onConnectionChange(newState: PeerConnection.PeerConnectionState?) {
-        if (!isCurrentSession()) {
-          Log.w(TAG, "Ignoring onConnectionChange ($newState) for ghost session $peerId ($context)")
-          return
-        }
-
-        Log.i(TAG, "onConnectionChange for peer $peerId ($context): $newState")
-
-        if (newState == PeerConnection.PeerConnectionState.CONNECTED ||
-          newState == PeerConnection.PeerConnectionState.FAILED ||
-          newState == PeerConnection.PeerConnectionState.CLOSED ||
-          newState == PeerConnection.PeerConnectionState.DISCONNECTED
-        ) {
-          createdSession?.cancelTimeout()
-        }
-
+        Log.i(TAG, "onConnectionChange ($peerId:$context): $newState")
         if (context == "data") {
           val stateInt = when (newState) {
             PeerConnection.PeerConnectionState.NEW -> PeerConnectionState.New.value
@@ -259,368 +228,352 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
         }
       }
 
-      override fun onStandardizedIceConnectionChange(newState: PeerConnection.IceConnectionState?) {
-        if (!isCurrentSession()) return
-        Log.i(TAG, "onStandardizedIceConnectionChange for peer $peerId ($context): $newState")
-      }
+      override fun onIceConnectionChange(state: PeerConnection.IceConnectionState?) {}
+      override fun onStandardizedIceConnectionChange(state: PeerConnection.IceConnectionState?) {}
+      override fun onIceConnectionReceivingChange(receiving: Boolean) {}
 
-      override fun onIceConnectionChange(newState: PeerConnection.IceConnectionState?) {}
-      override fun onIceConnectionReceivingChange(p0: Boolean) {}
-      override fun onIceGatheringChange(newState: PeerConnection.IceGatheringState?) {
-        if (!isCurrentSession()) return
-        Log.i(TAG, "onIceGatheringChange for peer $peerId ($context): $newState")
+      override fun onIceGatheringChange(state: PeerConnection.IceGatheringState?) {
+        Log.i(TAG, "onIceGatheringChange ($peerId:$context): $state")
+        if (state == PeerConnection.IceGatheringState.COMPLETE) {
+          // Signal the coroutine waiting in createOffer/createAnswer
+          val session = getSession(peerId, context)
+          session?.iceGatheringComplete?.complete(Unit)
+        }
       }
 
       override fun onIceCandidate(candidate: IceCandidate?) {
-        if (!isCurrentSession()) return
-        if (candidate == null) {
-          Log.d(TAG, "End of ICE candidates for peer $peerId ($context)")
-          return
-        }
-        try {
-          val candidateJson = JSONObject().apply {
-            put("type", "candidate")
-            put("to", peerId)
-            put("context", context)
-            put("candidate", candidate.sdp)
-            put("sdpMLineIndex", candidate.sdpMLineIndex)
-            put("sdpMid", candidate.sdpMid)
-          }
-          sendSignalingMessage(candidateJson.toString())
-        } catch (e: JSONException) {
-          Log.e(TAG, "Failed to create ICE candidate JSON", e)
-        }
-        Log.d(TAG, "onIceCandidate for peer $peerId ($context): ${candidate.sdp}")
+        // Vanilla ICE: We do NOT send candidates individually.
+        // We wait for gathering to complete and send the full SDP.
       }
 
-      override fun onIceCandidatesRemoved(p0: Array<out IceCandidate>?) {}
+      override fun onIceCandidatesRemoved(candidates: Array<out IceCandidate>?) {}
       override fun onAddStream(stream: MediaStream?) {}
-      override fun onRemoveStream(p0: MediaStream?) {}
+      override fun onRemoveStream(stream: MediaStream?) {}
+      override fun onRenegotiationNeeded() {}
 
       override fun onDataChannel(dc: DataChannel?) {
-        if (!isCurrentSession()) return
         dc ?: return
-        Log.i(TAG, "onDataChannel received for label: ${dc.label()} from $peerId")
-
-        createdSession?.dataChannel = dc
-
-        val dataChannelObserver = object : DataChannel.Observer {
-          override fun onBufferedAmountChange(p0: Long) {}
-          override fun onStateChange() {
-            Log.i(TAG, "Incoming data channel state for $peerId changed to: ${dc.state()}")
-            if (dc.state() == DataChannel.State.OPEN) {
-              createdSession?.cancelTimeout()
-              nativeOnDataChannelOpen(nativePointer, peerId)
-            }
-          }
-
-          override fun onMessage(buffer: DataChannel.Buffer?) {
-            buffer ?: return
-            val data = ByteArray(buffer.data.remaining())
-            buffer.data.get(data)
-            nativeOnDataChannelMessageBinary(nativePointer, peerId, data)
-          }
-        }
-        dc.registerObserver(dataChannelObserver)
-
-        if (dc.state() == DataChannel.State.OPEN) {
-          createdSession?.cancelTimeout()
-          nativeOnDataChannelOpen(nativePointer, peerId)
-        }
-      }
-
-      override fun onRenegotiationNeeded() {
-        if (!isCurrentSession()) return
-        Log.i(TAG, "onRenegotiationNeeded for peer: $peerId, context: $context")
+        Log.i(TAG, "onDataChannel received ($peerId)")
+        val session = getSession(peerId, context) ?: return
+        setupDataChannel(peerId, dc, session)
       }
 
       override fun onTrack(transceiver: RtpTransceiver?) {}
-
-      override fun onAddTrack(rtpReceiver: RtpReceiver, mediaStreams: Array<out MediaStream>) {
-        if (!isCurrentSession()) return
-        rtpReceiver.track()?.let { track ->
-          Log.i(TAG, "onAddTrack: Received ${track.kind()} track from $peerId")
-          when (track) {
-            is VideoTrack -> {
-              remoteVideoTracks[peerId] = track
-              remoteSinks[peerId]?.let { sink ->
-                track.addSink(sink)
-              }
-            }
-            is AudioTrack -> {
-              track.setEnabled(true)
-            }
+      override fun onAddTrack(receiver: RtpReceiver, streams: Array<out MediaStream>) {
+        receiver.track()?.let { track ->
+          if (track is VideoTrack) {
+            remoteVideoTracks[peerId] = track
+            remoteSinks[peerId]?.let { sink -> track.addSink(sink) }
+          } else if (track is AudioTrack) {
+            track.setEnabled(true)
           }
         }
       }
     }
 
-    Log.i(TAG, "Creating PeerConnection for peer $peerId, context: $context")
     val pc = factory.createPeerConnection(rtcConfig, observer) ?: return
+    val session = ConnectionSession(peerId, context, pc)
 
-    val session = ConnectionSession(peerId, context, pc, coroutineScope) { s ->
-      s.dispose()
-    }
-
-    createdSession = session
-    peerContextMap[context] = session
-
-    session.startTimeout(CONNECTION_TIMEOUT_MS)
-  }
-
-  fun closePeerConnection(peerId: String, context: String) {
-    Log.i(TAG, "Closing peer connection for peer $peerId ($context)")
-    sessions[peerId]?.remove(context)?.dispose()
-
-    if (sessions[peerId]?.isEmpty() == true) {
-      sessions.remove(peerId)
-    }
-
-    if (context == "media") {
-      remoteVideoTracks.remove(peerId)?.dispose()
-      remoteSinks.remove(peerId)
-    }
-  }
-
-  fun createDataChannel(peerId: String) {
-    val session = getSession(peerId, "data") ?: return
-    Log.d(TAG, "Creating data channel for peer: $peerId")
-    val dc = session.pc.createDataChannel("data", DataChannel.Init())
-    session.dataChannel = dc
-
-    val dataChannelObserver = object : DataChannel.Observer {
-      override fun onBufferedAmountChange(p0: Long) {}
-      override fun onStateChange() {
-        Log.i(TAG, "Outgoing data channel state for $peerId changed to: ${dc.state()}")
-        if (dc.state() == DataChannel.State.OPEN) {
-          // Cancel timeout as we are connected
-          getSession(peerId, "data")?.cancelTimeout()
-          nativeOnDataChannelOpen(nativePointer, peerId)
-        }
-      }
-
-      override fun onMessage(buffer: DataChannel.Buffer?) {
-        buffer ?: return
-        val data = ByteArray(buffer.data.remaining())
-        buffer.data.get(data)
-        nativeOnDataChannelMessageBinary(nativePointer, peerId, data)
-      }
-    }
-    dc.registerObserver(dataChannelObserver)
-
-    if (dc.state() == DataChannel.State.OPEN) {
-      session.cancelTimeout()
-      nativeOnDataChannelOpen(nativePointer, peerId)
-    }
-  }
-
-  fun sendDataChannelMessage(peerId: String, message: String): Boolean {
-    val dc = sessions[peerId]?.get("data")?.dataChannel
-    if (dc == null) {
-      Log.e(TAG, "DataChannel for peer $peerId not found.")
-      return false
-    }
-    if (dc.state() == DataChannel.State.OPEN) {
-      val buffer = ByteBuffer.wrap(message.toByteArray())
-      return dc.send(DataChannel.Buffer(buffer, false))
-    }
-    return false
-  }
-
-  fun sendDataChannelMessageBinary(peerId: String, data: ByteArray): Boolean {
-    val dc = sessions[peerId]?.get("data")?.dataChannel
-    if (dc == null) {
-      Log.e(TAG, "DataChannel for peer $peerId not found for binary.")
-      return false
-    }
-    if (dc.state() == DataChannel.State.OPEN) {
-      val buffer = ByteBuffer.wrap(data)
-      return dc.send(DataChannel.Buffer(buffer, true))
-    }
-    return false
+    sessions.getOrPut(peerId) { ConcurrentHashMap() }[context] = session
   }
 
   fun createOffer(peerId: String, context: String) {
     val session = getSession(peerId, context) ?: return
-    Log.d(TAG, "Creating offer for peer $peerId ($context)")
-    val sdpObserver = object : SdpObserver {
-      override fun onCreateSuccess(sdp: SessionDescription?) {
-        if (sdp != null) session.pc.setLocalDescription(this, sdp)
-      }
 
-      override fun onSetSuccess() {
-        session.pc.localDescription?.let { localSdp ->
-          val message = JSONObject().apply {
-            put("type", localSdp.type.canonicalForm())
-            put("sdp", localSdp.description)
-            put("to", peerId)
-            put("context", context)
+    scope.launch {
+      Log.i(TAG, "Creating OFFER for $peerId ($context)")
+
+      // Reset gathering signal for new negotiation
+      session.iceGatheringComplete = CompletableDeferred()
+
+      val constraints = MediaConstraints()
+      val offerSdp = suspendCancellableCoroutine<SessionDescription?> { cont ->
+        session.pc.createOffer(object : SdpObserver {
+          override fun onCreateSuccess(sdp: SessionDescription?) { cont.resume(sdp) }
+          override fun onSetSuccess() {}
+          override fun onCreateFailure(s: String?) {
+            Log.e(TAG, "createOffer failed: $s")
+            cont.resume(null)
           }
-          sendSignalingMessage(message.toString())
+          override fun onSetFailure(s: String?) {}
+        }, constraints)
+      } ?: return@launch
+
+      // Set Local Description to trigger ICE Gathering
+      val setSuccess = suspendCancellableCoroutine<Boolean> { cont ->
+        session.pc.setLocalDescription(object : SdpObserver {
+          override fun onCreateSuccess(sdp: SessionDescription?) {}
+          override fun onSetSuccess() { cont.resume(true) }
+          override fun onCreateFailure(s: String?) {
+            Log.e(TAG, "setLocalDescription (offer) failed: $s")
+            cont.resume(false)
+          }
+          override fun onSetFailure(s: String?) {
+            Log.e(TAG, "setLocalDescription (offer) setFail: $s")
+            cont.resume(false)
+          }
+        }, offerSdp)
+      }
+
+      if (setSuccess) {
+        Log.i(TAG, "Offer set as local description. Waiting for ICE gathering...")
+
+        // Wait for gathering to complete (Vanilla ICE)
+        // Timeout ensures we don't hang forever if network is flaky
+        withTimeoutOrNull(GATHERING_TIMEOUT_MS) {
+          session.iceGatheringComplete?.await()
         }
-      }
 
-      override fun onCreateFailure(s: String?) {
-        Log.e(TAG, "createOffer failed for peer $peerId: $s")
-      }
+        // Get the updated SDP which now contains the candidates
+        val finalSdp = session.pc.localDescription ?: offerSdp
 
-      override fun onSetFailure(s: String?) {
-        Log.e(TAG, "setLocalDescription failed for peer $peerId: $s")
+        Log.i(TAG, "Sending OFFER with bundled candidates for $peerId")
+        val message = JSONObject().apply {
+          put("type", "offer")
+          put("sdp", finalSdp.description)
+          put("to", peerId)
+          put("context", context)
+        }
+        sendSignalingMessage(message.toString())
       }
     }
-    session.pc.createOffer(sdpObserver, MediaConstraints())
   }
 
   fun createAnswer(peerId: String, context: String) {
     val session = getSession(peerId, context) ?: return
-    Log.d(TAG, "Creating answer for peer $peerId ($context)")
 
-    if (context == "media") {
-      if (localVideoTrack == null || localAudioTrack == null) {
-        startLocalMedia()
-      }
-      if (localAudioTrack != null && session.pc.senders.none { it.track()?.id() == AUDIO_TRACK_ID }) {
-        session.pc.addTrack(localAudioTrack, listOf(MEDIA_STREAM_ID))
-      }
-      if (localVideoTrack != null && session.pc.senders.none { it.track()?.id() == VIDEO_TRACK_ID }) {
-        session.pc.addTrack(localVideoTrack, listOf(MEDIA_STREAM_ID))
-      }
-    }
+    scope.launch {
+      Log.i(TAG, "Creating ANSWER for $peerId ($context)")
 
-    val sdpObserver = object : SdpObserver {
-      override fun onCreateSuccess(sdp: SessionDescription?) {
-        if (sdp != null) session.pc.setLocalDescription(this, sdp)
+      session.iceGatheringComplete = CompletableDeferred()
+
+      if (context == "media") {
+        ensureLocalMediaAttached(session)
       }
 
-      override fun onSetSuccess() {
-        session.pc.localDescription?.let { localSdp ->
-          val message = JSONObject().apply {
-            put("type", localSdp.type.canonicalForm())
-            put("sdp", localSdp.description)
-            put("to", peerId)
-            put("context", context)
+      val constraints = MediaConstraints().apply {
+        mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"))
+        mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveVideo", "true"))
+      }
+
+      val answerSdp = suspendCancellableCoroutine<SessionDescription?> { cont ->
+        session.pc.createAnswer(object : SdpObserver {
+          override fun onCreateSuccess(sdp: SessionDescription?) { cont.resume(sdp) }
+          override fun onSetSuccess() {}
+          override fun onCreateFailure(s: String?) {
+            Log.e(TAG, "createAnswer failed: $s")
+            cont.resume(null)
           }
-          sendSignalingMessage(message.toString())
+          override fun onSetFailure(s: String?) {}
+        }, constraints)
+      } ?: return@launch
+
+      val setSuccess = suspendCancellableCoroutine<Boolean> { cont ->
+        session.pc.setLocalDescription(object : SdpObserver {
+          override fun onCreateSuccess(sdp: SessionDescription?) {}
+          override fun onSetSuccess() { cont.resume(true) }
+          override fun onCreateFailure(s: String?) {
+            Log.e(TAG, "setLocalDescription (answer) failed: $s")
+            cont.resume(false)
+          }
+          override fun onSetFailure(s: String?) {
+            Log.e(TAG, "setLocalDescription (answer) setFail: $s")
+            cont.resume(false)
+          }
+        }, answerSdp)
+      }
+
+      if (setSuccess) {
+        Log.i(TAG, "Answer set as local description. Waiting for ICE gathering...")
+
+        withTimeoutOrNull(GATHERING_TIMEOUT_MS) {
+          session.iceGatheringComplete?.await()
         }
-      }
 
-      override fun onCreateFailure(s: String?) {
-        Log.e(TAG, "createAnswer failed for peer $peerId: $s")
-      }
+        val finalSdp = session.pc.localDescription ?: answerSdp
 
-      override fun onSetFailure(s: String?) {
-        Log.e(TAG, "setLocalDescription failed for peer $peerId: $s")
+        Log.i(TAG, "Sending ANSWER with bundled candidates for $peerId")
+        val message = JSONObject().apply {
+          put("type", "answer")
+          put("sdp", finalSdp.description)
+          put("to", peerId)
+          put("context", context)
+        }
+        sendSignalingMessage(message.toString())
       }
     }
-    val answerConstraints = MediaConstraints().apply {
-      mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"))
-      mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveVideo", "true"))
-    }
-    session.pc.createAnswer(sdpObserver, answerConstraints)
   }
 
   fun setRemoteDescription(peerId: String, context: String, sdp: String, type: String) {
     val session = getSession(peerId, context) ?: run {
-      Log.e(TAG, "Session for $peerId ($context) not found for setRemoteDescription")
+      Log.w(TAG, "Session not found for setRemoteDescription: $peerId ($context)")
       return
     }
 
-    // Race Detection:
-    // If we receive an ANSWER but we are already STABLE, it implies we might have
-    // accepted a "ghost" answer previously (stale packet).
-    // If the ufrags differ, the connection is corrupted. We must fail fast to trigger retry.
-    if (type == "answer" && session.pc.signalingState() == PeerConnection.SignalingState.STABLE) {
-      val currentRemoteSdp = session.pc.remoteDescription?.description ?: ""
-      val currentUfrag = extractIceUfrag(currentRemoteSdp)
-      val newUfrag = extractIceUfrag(sdp)
+    if (session.isDisposed) {
+      Log.w(TAG, "Session disposed, ignoring setRemoteDescription for $peerId")
+      return
+    }
 
-      if (currentUfrag != null && newUfrag != null && currentUfrag != newUfrag) {
-        Log.e(TAG, "Ghost Answer detected! Ufrag mismatch ($currentUfrag vs $newUfrag). Restarting.")
-        // Dispose locally and force a failure state to native, prompting core to reconnect
-        session.dispose()
-        nativeOnPeerConnectionStateChange(nativePointer, peerId, PeerConnectionState.Failed.value)
-        return
-      } else {
-        Log.w(TAG, "Ignoring duplicate answer for $peerId ($context).")
+    Log.d(TAG, "Setting Remote Description ($type) for $peerId")
+
+    val canonicalType = when(type.lowercase()) {
+      "offer" -> SessionDescription.Type.OFFER
+      "answer" -> SessionDescription.Type.ANSWER
+      "pranswer" -> SessionDescription.Type.PRANSWER
+      else -> {
+        Log.e(TAG, "Invalid SDP type: $type")
         return
       }
     }
 
-    val sdpObserver = object : SdpObserver {
+    // Ensure valid SDP string
+    if (sdp.isBlank()) {
+      Log.e(TAG, "Remote SDP is empty for $peerId")
+      return
+    }
+
+    val sdpObj = SessionDescription(canonicalType, sdp)
+
+    session.pc.setRemoteDescription(object : SdpObserver {
       override fun onCreateSuccess(sdp: SessionDescription?) {}
       override fun onSetSuccess() {
-        Log.i(TAG, "Set remote description successfully for peer $peerId.")
+        Log.i(TAG, "Remote description ($type) set successfully for $peerId")
       }
-      override fun onCreateFailure(s: String?) {}
+      override fun onCreateFailure(s: String?) {
+        Log.e(TAG, "Failed to create remote desc (unexpected): $s")
+      }
       override fun onSetFailure(s: String?) {
         Log.e(TAG, "Failed to set remote description for peer $peerId: $s")
       }
+    }, sdpObj)
+  }
+
+  fun createDataChannel(peerId: String) {
+    val session = getSession(peerId, "data") ?: return
+    Log.i(TAG, "Creating DataChannel for $peerId")
+
+    val init = DataChannel.Init()
+    val dc = session.pc.createDataChannel("data", init)
+    setupDataChannel(peerId, dc, session)
+  }
+
+  private fun setupDataChannel(peerId: String, dc: DataChannel, session: ConnectionSession) {
+    session.dataChannel = dc
+    dc.registerObserver(object : DataChannel.Observer {
+      override fun onBufferedAmountChange(amount: Long) {}
+      override fun onStateChange() {
+        Log.i(TAG, "DataChannel state changed: ${dc.state()}")
+        if (dc.state() == DataChannel.State.OPEN) {
+          nativeOnDataChannelOpen(nativePointer, peerId)
+        }
+      }
+      override fun onMessage(buffer: DataChannel.Buffer) {
+        val data = ByteArray(buffer.data.remaining())
+        buffer.data.get(data)
+        if (buffer.binary) {
+          nativeOnDataChannelMessageBinary(nativePointer, peerId, data)
+        } else {
+          nativeOnDataChannelMessage(nativePointer, peerId, String(data))
+        }
+      }
+    })
+
+    // Check immediate open state
+    if (dc.state() == DataChannel.State.OPEN) {
+      nativeOnDataChannelOpen(nativePointer, peerId)
     }
-    val sdpType = SessionDescription.Type.fromCanonicalForm(type)
-    session.pc.setRemoteDescription(sdpObserver, SessionDescription(sdpType, sdp))
   }
 
-  fun addRemoteCandidate(peerId: String, context: String, candidateSdp: String, mid: String) {
-    val session = getSession(peerId, context) ?: return
-    val candidate = IceCandidate(mid, -1, candidateSdp)
-    Log.d(TAG, "Adding remote ICE candidate for peer $peerId ($context)")
-    session.pc.addIceCandidate(candidate)
+  // --- Helpers ---
+
+  private fun getSession(peerId: String, context: String): ConnectionSession? {
+    return sessions[peerId]?.get(context)
   }
 
-  fun addVideoTrack(peerId: String) {
-    val session = getSession(peerId, "media") ?: return
-    if (localVideoTrack == null) startLocalMedia()
-    localVideoTrack?.let {
-      session.pc.addTrack(it, listOf(MEDIA_STREAM_ID))
-    }
-  }
+  private fun ensureLocalMediaAttached(session: ConnectionSession) {
+    if (localVideoTrack == null || localAudioTrack == null) startLocalMedia()
 
-  fun addAudioTrack(peerId: String) {
-    val session = getSession(peerId, "media") ?: return
-    if (localAudioTrack == null) startLocalMedia()
-    localAudioTrack?.let {
-      session.pc.addTrack(it, listOf(MEDIA_STREAM_ID))
-    }
-  }
+    val senders = session.pc.senders
 
-  fun startLocalMedia() {
-    val factory = peerConnectionFactory ?: return
-    if (localVideoTrack != null || localAudioTrack != null) return
-
-    val cameraEnumerator = Camera2Enumerator(context)
-    val frontCamera = cameraEnumerator.deviceNames.firstOrNull { cameraEnumerator.isFrontFacing(it) }
-
-    if (frontCamera != null) {
-      videoCapturer = cameraEnumerator.createCapturer(frontCamera, null)
-      videoSource = factory.createVideoSource(videoCapturer!!.isScreencast)
-      val surfaceTextureHelper = SurfaceTextureHelper.create("VideoCapturerThread", eglBase.eglBaseContext)
-      videoCapturer!!.initialize(surfaceTextureHelper, context, videoSource!!.capturerObserver)
-      videoCapturer!!.startCapture(480, 640, 30)
-      localVideoTrack = factory.createVideoTrack(VIDEO_TRACK_ID, videoSource).apply {
-        localSink?.let { addSink(it) }
+    localAudioTrack?.let { track ->
+      if (senders.none { it.track()?.id() == AUDIO_TRACK_ID }) {
+        session.pc.addTrack(track, listOf(MEDIA_STREAM_ID))
       }
     }
 
-    val audioConstraints = MediaConstraints()
-    audioSource = factory.createAudioSource(audioConstraints)
-    localAudioTrack = factory.createAudioTrack(AUDIO_TRACK_ID, audioSource)
+    localVideoTrack?.let { track ->
+      if (senders.none { it.track()?.id() == VIDEO_TRACK_ID }) {
+        session.pc.addTrack(track, listOf(MEDIA_STREAM_ID))
+      }
+    }
+  }
+
+  // --- Media Management ---
+
+  fun startLocalMedia() {
+    if (peerConnectionFactory == null) initializeFactory()
+    if (localVideoTrack != null || localAudioTrack != null) return
+
+    try {
+      val enumerator = Camera2Enumerator(context)
+      val deviceName = enumerator.deviceNames.firstOrNull { enumerator.isFrontFacing(it) }
+        ?: enumerator.deviceNames.firstOrNull()
+
+      if (deviceName != null) {
+        videoCapturer = enumerator.createCapturer(deviceName, null)
+        val factory = peerConnectionFactory!!
+        val source = factory.createVideoSource(videoCapturer!!.isScreencast)
+        videoSource = source
+
+        val surfaceHelper = SurfaceTextureHelper.create("CaptureThread", eglBase.eglBaseContext)
+        videoCapturer!!.initialize(surfaceHelper, context, source.capturerObserver)
+        videoCapturer!!.startCapture(640, 480, 30) // Standard resolution
+
+        localVideoTrack = factory.createVideoTrack(VIDEO_TRACK_ID, source)
+        localSink?.let { localVideoTrack?.addSink(it) }
+      }
+
+      val audioConstraints = MediaConstraints()
+      audioSource = peerConnectionFactory!!.createAudioSource(audioConstraints)
+      localAudioTrack = peerConnectionFactory!!.createAudioTrack(AUDIO_TRACK_ID, audioSource)
+
+    } catch (e: Exception) {
+      Log.e(TAG, "Failed to start local media", e)
+    }
   }
 
   fun stopLocalMedia() {
-    localVideoTrack?.let {
-      localSink?.let { sink -> it.removeSink(sink) }
-      it.dispose()
+    try {
+      localVideoTrack?.let {
+        localSink?.let { sink -> it.removeSink(sink) }
+        it.dispose()
+      }
       localVideoTrack = null
+
+      videoCapturer?.stopCapture()
+      videoCapturer?.dispose()
+      videoCapturer = null
+
+      videoSource?.dispose()
+      videoSource = null
+
+      localAudioTrack?.dispose()
+      localAudioTrack = null
+
+      audioSource?.dispose()
+      audioSource = null
+    } catch (e: Exception) {
+      Log.e(TAG, "Error stopping media", e)
     }
-    videoCapturer?.stopCapture()
-    videoCapturer?.dispose()
-    videoCapturer = null
-    videoSource?.dispose()
-    videoSource = null
-    localAudioTrack?.dispose()
-    localAudioTrack = null
-    audioSource?.dispose()
-    audioSource = null
+  }
+
+  fun addVideoTrack(peerId: String) {
+    getSession(peerId, "media")?.let { ensureLocalMediaAttached(it) }
+  }
+
+  fun addAudioTrack(peerId: String) {
+    getSession(peerId, "media")?.let { ensureLocalMediaAttached(it) }
   }
 
   fun setLocalSink(sink: VideoSink?) {
@@ -630,41 +583,57 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
   }
 
   fun setRemoteSink(peerId: String, sink: VideoSink?) {
-    remoteSinks[peerId]?.let { oldSink ->
-      remoteVideoTracks[peerId]?.removeSink(oldSink)
-    }
-    if (sink == null) {
-      remoteSinks.remove(peerId)
-    } else {
+    val track = remoteVideoTracks[peerId] ?: return
+    val oldSink = remoteSinks[peerId]
+
+    if (oldSink != null) track.removeSink(oldSink)
+
+    if (sink != null) {
       remoteSinks[peerId] = sink
-      remoteVideoTracks[peerId]?.let { track ->
-        track.addSink(sink)
-      }
+      track.addSink(sink)
+    } else {
+      remoteSinks.remove(peerId)
     }
   }
+
+  fun closePeerConnection(peerId: String, context: String) {
+    sessions[peerId]?.remove(context)?.dispose()
+    if (context == "media") {
+      remoteVideoTracks.remove(peerId)
+      remoteSinks.remove(peerId)
+    }
+  }
+
+  fun removePeer(peerId: String) {
+    sessions.remove(peerId)?.values?.forEach { it.dispose() }
+  }
+
+  // --- Signaling ---
 
   fun sendSignalingMessage(message: String) {
     signalingClient.send(JSONObject(message))
   }
 
-  fun reconnect(newUrl: String) {
-    coroutineScope.launch {
-      localPeerId?.let { peerId ->
-        Log.i(TAG, "Reconnecting signaling client to new URL: $newUrl")
-        this@WebRtcTransport.currentSignalingUrl = newUrl
-        signalingClient.disconnect()
-        signalingClient = SignalingClient()
-        isObservingMessages = false
-        isObservingSignalingState = false
-        observeSignalingMessages()
-        observeSignalingState()
-        signalingClient.connect(peerId, newUrl)
-      }
+  fun sendDataChannelMessage(peerId: String, message: String): Boolean {
+    val dc = getSession(peerId, "data")?.dataChannel ?: return false
+    if (dc.state() == DataChannel.State.OPEN) {
+      val buffer = ByteBuffer.wrap(message.toByteArray())
+      return dc.send(DataChannel.Buffer(buffer, false))
     }
+    return false
+  }
+
+  fun sendDataChannelMessageBinary(peerId: String, data: ByteArray): Boolean {
+    val dc = getSession(peerId, "data")?.dataChannel ?: return false
+    if (dc.state() == DataChannel.State.OPEN) {
+      val buffer = ByteBuffer.wrap(data)
+      return dc.send(DataChannel.Buffer(buffer, true))
+    }
+    return false
   }
 
   fun getPeerConnectionState(peerId: String): Int {
-    val state = sessions[peerId]?.get("data")?.pc?.connectionState()
+    val state = getSession(peerId, "data")?.pc?.connectionState()
     return when (state) {
       PeerConnection.PeerConnectionState.NEW -> PeerConnectionState.New.ordinal
       PeerConnection.PeerConnectionState.CONNECTING -> PeerConnectionState.Connecting.ordinal
@@ -676,44 +645,28 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
     }
   }
 
-  private fun getSession(peerId: String, context: String): ConnectionSession? {
-    return sessions[peerId]?.get(context)
-  }
-
-  private fun extractIceUfrag(sdp: String): String? {
-    val matcher = Pattern.compile("a=ice-ufrag:(\\S+)").matcher(sdp)
-    return if (matcher.find()) matcher.group(1) else null
-  }
-
   private fun observeSignalingMessages() {
     if (isObservingMessages) return
     isObservingMessages = true
-
     signalingClient.messages.onEach { message ->
-      coroutineScope.launch {
+      scope.launch {
         when (message) {
           is SignalingMessage.PeerMessage -> nativeOnPeerMessage(nativePointer, message.message.toString())
           is SignalingMessage.Error -> nativeOnSignalingError(nativePointer, message.forPeer ?: "", message.error)
-          is SignalingMessage.SystemMessage -> nativeOnSystemMessage(
-            nativePointer,
-            message.type,
-            message.payload.toString()
-          )
+          is SignalingMessage.SystemMessage -> nativeOnSystemMessage(nativePointer, message.type, message.payload.toString())
         }
       }
-    }.launchIn(coroutineScope)
+    }.launchIn(scope)
   }
 
   private fun observeSignalingState() {
     if (isObservingSignalingState) return
     isObservingSignalingState = true
-
     signalingClient.state.onEach { state ->
-      coroutineScope.launch {
-        Log.d(TAG, "Signaling client state changed: $state")
+      scope.launch {
         nativeOnSignalingConnectionStateChange(nativePointer, state.ordinal)
       }
-    }.launchIn(coroutineScope)
+    }.launchIn(scope)
   }
 
   companion object {
@@ -721,11 +674,8 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
     private const val MEDIA_STREAM_ID = "ARDAMS"
     private const val VIDEO_TRACK_ID = "ARDAMSv0"
     private const val AUDIO_TRACK_ID = "ARDAMSa0"
-    private const val CONNECTION_TIMEOUT_MS = 30_000L
+    private const val GATHERING_TIMEOUT_MS = 5000L // 5s wait for candidates
 
-    val eglBase: EglBase by lazy {
-      Log.d(TAG, "Creating singleton EglBase.")
-      EglBase.create()
-    }
+    val eglBase: EglBase by lazy { EglBase.create() }
   }
 }

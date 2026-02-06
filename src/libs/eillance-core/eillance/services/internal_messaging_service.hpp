@@ -76,8 +76,8 @@ class InternalMessagingService {
       return;
     }
 
-    // Data Signaling (SDP/ICE)
-    if (type == "offer" || type == "answer" || type == "candidate") {
+    // Data Signaling (SDP)
+    if (type == "offer" || type == "answer") {
       HandleDataSignaling(peer_id, type, message);
       return;
     }
@@ -228,10 +228,6 @@ class InternalMessagingService {
       );
       transport_->SetRemoteDescription(peer_id, "media", sdp, "offer");
 
-    } else if (type == "candidate") {
-      auto const candidate_str = message["candidate"].get<std::string>();
-      auto const mid = message["sdpMid"].get<std::string>();
-      transport_->AddRemoteCandidate(peer_id, "media", candidate_str, mid);
     } else if (type == "answer") {
       auto const sdp = message["sdp"].get<std::string>();
       transport_->SetRemoteDescription(peer_id, "media", sdp, type);
@@ -260,41 +256,9 @@ class InternalMessagingService {
         auto const sdp = message["sdp"].get<std::string>();
         transport_->SetRemoteDescription(peer_id, "data", sdp, "offer");
         transport_->CreateAnswer(peer_id, "data");
-
-        // Apply buffered candidates if any
-        {
-          std::lock_guard<std::mutex> const lock(early_candidates_mutex_);
-          if (early_candidates_.count(peer_id)) {
-            LGI << "Applying " << early_candidates_[peer_id].size() << " early candidates for " << peer_id.ToString();
-            for (auto const& cand : early_candidates_[peer_id]) {
-              transport_->AddRemoteCandidate(
-                  peer_id,
-                  "data",
-                  cand["candidate"].get<std::string>(),
-                  cand["sdpMid"].get<std::string>()
-              );
-            }
-            early_candidates_.erase(peer_id);
-          }
-        }
       }
     } else if (type == "answer") {
       transport_->SetRemoteDescription(peer_id, "data", message["sdp"].get<std::string>(), "answer");
-    } else if (type == "candidate") {
-      auto peer = transport_->GetPeer(peer_id);
-      if (peer) {
-        transport_->AddRemoteCandidate(
-            peer_id,
-            "data",
-            message["candidate"].get<std::string>(),
-            message["sdpMid"].get<std::string>()
-        );
-      } else {
-        // Buffer candidate if peer not ready (Offer race condition)
-        std::lock_guard<std::mutex> const lock(early_candidates_mutex_);
-        early_candidates_[peer_id].push_back(message);
-        LGI << "Buffered early ICE candidate from " << peer_id.ToString();
-      }
     }
   }
 
@@ -354,10 +318,6 @@ class InternalMessagingService {
   std::shared_ptr<MediaCallService> media_call_service_;
   std::shared_ptr<FileTransferService> file_transfer_service_;
   std::shared_ptr<ProfileService> profile_service_;
-
-  // Buffer for ICE candidates that arrive before the Offer is processed
-  std::map<ContactID, std::vector<Json>> early_candidates_;
-  std::mutex early_candidates_mutex_;
 
   std::unordered_map<ContactID, Time::Unit> last_unsuspend_times_;
   std::mutex unsuspend_mutex_;

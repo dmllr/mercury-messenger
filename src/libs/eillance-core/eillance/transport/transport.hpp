@@ -98,14 +98,6 @@ class Transport {
   ) const {
     self_->SetRemoteDescription(peer_id, context, sdp, type);
   }
-  void AddRemoteCandidate(
-      ContactID const& peer_id,
-      std::string const& context,
-      std::string const& candidate,
-      std::string const& mid
-  ) const {
-    self_->AddRemoteCandidate(peer_id, context, candidate, mid);
-  }
   void RemovePeer(ContactID const& peer_id) const {
     self_->RemovePeer(peer_id);
   }
@@ -162,12 +154,6 @@ class Transport {
         std::string const& context,
         std::string const& sdp,
         std::string const& type
-    ) = 0;
-    virtual void AddRemoteCandidate(
-        ContactID const& peer_id,
-        std::string const& context,
-        std::string const& candidate,
-        std::string const& mid
     ) = 0;
 
     virtual void CreateDataChannel(ContactID const& peer_id) = 0;
@@ -252,14 +238,6 @@ class Transport {
         std::string const& type
     ) override {
       transport_->SetRemoteDescription(peer_id, context, sdp, type);
-    }
-    void AddRemoteCandidate(
-        ContactID const& peer_id,
-        std::string const& context,
-        std::string const& candidate,
-        std::string const& mid
-    ) override {
-      transport_->AddRemoteCandidate(peer_id, context, candidate, mid);
     }
     void RemovePeer(ContactID const& peer_id) override {
       transport_->RemovePeer(peer_id);
