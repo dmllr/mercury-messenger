@@ -7,38 +7,19 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBars
-import androidx.compose.foundation.layout.union
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.AudioFile
 import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.SnippetFolder
@@ -47,12 +28,9 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -60,31 +38,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
-import coil.compose.AsyncImage
-import coil.decode.VideoFrameDecoder
-import coil.request.ImageRequest
-import coil.request.videoFrameMillis
 import hela.eillance.camera.R
 import hela.eillance.theme.extendedColors
 import hela.eillance.viewmodels.DraftAttachment
@@ -92,7 +56,7 @@ import java.io.File
 
 private enum class CameraAction { Photo, Video }
 
-@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MessageInputArea(
   draftAttachments: List<DraftAttachment>,
@@ -318,234 +282,5 @@ fun MessageInputArea(
       },
       onNoteChange = onUpdateNote
     )
-  }
-}
-
-@Composable
-fun DraftAttachmentItem(
-  draft: DraftAttachment,
-  onRemove: () -> Unit,
-  onClick: () -> Unit
-) {
-  Box(
-    modifier = Modifier
-      .width(100.dp)
-      .clip(RoundedCornerShape(8.dp))
-      .background(MaterialTheme.colorScheme.surface)
-      .clickable(onClick = onClick)
-  ) {
-    Column {
-      Box(
-        modifier = Modifier
-          .height(80.dp)
-          .fillMaxWidth()
-      ) {
-        if (draft.bitmap != null) {
-          Image(
-            bitmap = draft.bitmap.asImageBitmap(),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize()
-          )
-        } else {
-          val icon = getDraftIcon(draft.mimeType)
-          Box(
-            modifier = Modifier
-              .fillMaxSize()
-              .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentAlignment = Alignment.Center
-          ) {
-            Icon(
-              imageVector = icon,
-              contentDescription = null,
-              tint = MaterialTheme.colorScheme.onSurfaceVariant,
-              modifier = Modifier.size(32.dp)
-            )
-          }
-        }
-
-        IconButton(
-          onClick = onRemove,
-          modifier = Modifier
-            .align(Alignment.TopEnd)
-            .size(24.dp)
-            .background(Color.Black.copy(alpha = 0.5f), CircleShape)
-        ) {
-          Icon(
-            Icons.Default.Close,
-            contentDescription = stringResource(R.string.attachment_remove),
-            tint = Color.White,
-            modifier = Modifier.size(16.dp)
-          )
-        }
-      }
-
-      Column(modifier = Modifier.padding(4.dp)) {
-        Text(
-          text = draft.name,
-          style = MaterialTheme.typography.labelSmall,
-          fontWeight = FontWeight.Bold,
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis
-        )
-        if (draft.note.isNotEmpty()) {
-          Text(
-            text = draft.note,
-            style = MaterialTheme.typography.labelSmall,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            color = MaterialTheme.colorScheme.primary
-          )
-        } else {
-          Text(
-            text = stringResource(R.string.attachment_note_placeholder),
-            style = MaterialTheme.typography.labelSmall,
-            fontStyle = FontStyle.Italic,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-          )
-        }
-      }
-    }
-  }
-}
-
-@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
-@Composable
-fun DraftAttachmentEditor(
-  drafts: List<DraftAttachment>,
-  initialIndex: Int,
-  onDismiss: () -> Unit,
-  onRemove: (Int) -> Unit,
-  onNoteChange: (Int, String) -> Unit
-) {
-  val pagerState = rememberPagerState(initialPage = initialIndex, pageCount = { drafts.size })
-  val context = LocalContext.current
-
-  Dialog(
-    onDismissRequest = onDismiss,
-    properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
-  ) {
-    Scaffold(
-      containerColor = Color.Black,
-      contentWindowInsets = WindowInsets.systemBars.union(WindowInsets.ime),
-      topBar = {
-        TopAppBar(
-          title = {
-            Text(
-              stringResource(
-                id = R.string.attachment_editor_pager_indicator,
-                pagerState.currentPage + 1,
-                drafts.size
-              ), color = Color.White
-            )
-          },
-          navigationIcon = {
-            IconButton(onClick = onDismiss) {
-              Icon(
-                Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = stringResource(id = R.string.action_back),
-                tint = Color.White
-              )
-            }
-          },
-          actions = {
-            IconButton(onClick = { onRemove(pagerState.currentPage) }) {
-              Icon(
-                Icons.Default.Delete,
-                contentDescription = stringResource(id = R.string.action_delete),
-                tint = Color.White
-              )
-            }
-          },
-          colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Black.copy(alpha = 0.5f))
-        )
-      }
-    ) { padding ->
-      Box(
-        modifier = Modifier
-          .fillMaxSize()
-          .padding(padding)
-      ) {
-        HorizontalPager(
-          state = pagerState,
-          modifier = Modifier.fillMaxSize()
-        ) { page ->
-          val draft = drafts[page]
-          Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            val isVideo = draft.mimeType.startsWith("video/")
-            val isImage = draft.mimeType.startsWith("image/")
-
-            if (isImage || isVideo) {
-              val model = if (isVideo) {
-                ImageRequest.Builder(context)
-                  .data(draft.uri)
-                  .decoderFactory { result, options, _ -> VideoFrameDecoder(result.source, options) }
-                  .videoFrameMillis(1000)
-                  .build()
-              } else draft.uri
-
-              AsyncImage(
-                model = model,
-                contentDescription = null,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier.fillMaxSize()
-              )
-            } else {
-              Icon(
-                imageVector = getDraftIcon(draft.mimeType),
-                contentDescription = null,
-                tint = Color.Gray,
-                modifier = Modifier.size(120.dp)
-              )
-            }
-          }
-        }
-
-        Box(
-          modifier = Modifier
-            .align(Alignment.BottomCenter)
-            .fillMaxWidth()
-            .background(
-              Brush.verticalGradient(
-                colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.9f))
-              )
-            )
-            .padding(16.dp)
-            .padding(bottom = 16.dp)
-        ) {
-          TextField(
-            value = drafts[pagerState.currentPage].note,
-            onValueChange = { onNoteChange(pagerState.currentPage, it) },
-            placeholder = {
-              Text(
-                stringResource(R.string.attachment_note_placeholder),
-                color = Color.LightGray
-              )
-            },
-            colors = TextFieldDefaults.colors(
-              focusedContainerColor = Color.Transparent,
-              unfocusedContainerColor = Color.Transparent,
-              focusedTextColor = Color.White,
-              unfocusedTextColor = Color.White,
-              cursorColor = MaterialTheme.colorScheme.primary,
-              focusedIndicatorColor = Color.White.copy(alpha = 0.5f),
-              unfocusedIndicatorColor = Color.White.copy(alpha = 0.3f)
-            ),
-            modifier = Modifier.fillMaxWidth(),
-            maxLines = 4
-          )
-        }
-      }
-    }
-  }
-}
-
-private fun getDraftIcon(mimeType: String): ImageVector {
-  return when {
-    mimeType == "application/pdf" -> Icons.Default.Description
-    mimeType.startsWith("audio/") -> Icons.Default.AudioFile
-    mimeType.startsWith("video/") -> Icons.Default.Videocam
-    mimeType.startsWith("image/") -> Icons.Default.Image
-    else -> Icons.Default.SnippetFolder
   }
 }
