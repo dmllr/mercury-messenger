@@ -6,9 +6,12 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <random>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <variant>
 #include <vector>
 
@@ -76,7 +79,7 @@ struct AttachmentRequest {
 };
 
 class MessagingService {
- public:
+public:
   static constexpr std::uint16_t protocolVersion = 2;
   static constexpr std::uint16_t minSupportedVersion = 1;
   static constexpr auto keyVersion = "v";
@@ -118,7 +121,13 @@ class MessagingService {
         storage_,
         contact_manager_,
         [this](ContactID const& peer_id) { RequestConnection(peer_id); },
-        [this](ContactID const& peer_id) { return HasPendingWork(peer_id); }
+        [this](ContactID const& peer_id) { return HasPendingWork(peer_id); },
+        [this](ContactID const& peer_id) {
+          if (auto p = transport_->GetPeer(peer_id)) {
+            return p->data_channel_is_open.load();
+          }
+          return false;
+        }
     );
   }
 
@@ -177,16 +186,16 @@ class MessagingService {
 
       domain_attachments.push_back(
           {.id = GenerateAttachmentId(),
-           .type = req.type,
-           .file_path = req.file_path,
-           .mime_type = mime,
-           .size_bytes = file_size,
-           .thumbnail_base64 = req.thumbnail_base64,
-           .hash = hash,
-           .is_downloaded = true,
-           .status = messaging::AttachmentStatus::pending,
-           .note = note,
-           .file_name = req.file_name}
+              .type = req.type,
+              .file_path = req.file_path,
+              .mime_type = mime,
+              .size_bytes = file_size,
+              .thumbnail_base64 = req.thumbnail_base64,
+              .hash = hash,
+              .is_downloaded = true,
+              .status = messaging::AttachmentStatus::pending,
+              .note = note,
+              .file_name = req.file_name}
       );
     }
 
@@ -224,7 +233,7 @@ class MessagingService {
     INVARIANT(on_message_received_);
     on_message_received_(peer_id, entry);
 
-    nlohmann::json action_payload = {{"type", "chat"}, {"message_id", entry.id}};
+    nlohmann::json const action_payload = {{"type", "chat"}, {"message_id", entry.id}};
     storage_->AddPendingAction(peer_id, action_payload.dump(), Time::Now(), entry.id);
 
     if (auto peer = transport_->GetPeer(peer_id);
@@ -236,13 +245,30 @@ class MessagingService {
   }
 
   void UnsuspendAndDeliver(ContactID const& peer_id) {
-    LGI << "Unsuspending pending actions for peer " << peer_id;
+    // Only log if suspensions were actually processed
     storage_->UnsuspendActionsForPeer(peer_id, Time::Now());
     SendQueuedMessages(peer_id);
   }
 
   // Attempts to flush queued messages
   void SendQueuedMessages(ContactID const& peer_id) {
+    {
+      std::lock_guard<std::recursive_mutex> const lock(flushing_mutex_);
+      if (flushing_peers_.contains(peer_id)) {
+        return;
+      }
+      flushing_peers_.insert(peer_id);
+    }
+
+    struct ScopedFlushGuard {
+      MessagingService& svc;
+      ContactID pid;
+      ~ScopedFlushGuard() {
+        std::lock_guard<std::recursive_mutex> const lock(svc.flushing_mutex_);
+        svc.flushing_peers_.erase(pid);
+      }
+    } guard{*this, peer_id};
+
     auto const peer = transport_->GetPeer(peer_id);
 
     file_transfer_service_->OnConnectionReady(peer_id);
@@ -250,9 +276,17 @@ class MessagingService {
     auto pending_actions = storage_->GetPendingActions(peer_id);
     if (pending_actions.empty()) return;
 
-    LGI << "Processing " << pending_actions.size() << " pending actions for " << peer_id.ToString();
+    auto const now = Time::Now();
 
     for (auto const& action : pending_actions) {
+      // Debounce check: if this action ID was successfully sent recently, skip it.
+      if (WasSentRecently(action.id, now)) {
+        continue;
+      }
+
+      // Log only if we are actually processing it
+      LGI << "Processing pending action " << action.id << " for " << peer_id.ToString();
+
       bool success = false;
       bool remove_on_success = true;
 
@@ -288,8 +322,14 @@ class MessagingService {
         continue;
       }
 
-      if (success && remove_on_success) {
-        storage_->RemovePendingAction(action.id);
+      if (success) {
+        if (remove_on_success) {
+          storage_->RemovePendingAction(action.id);
+        } else {
+          // If we are not removing it (e.g. waiting for receipt), mark it as sent recently
+          // so we don't spam the network on the next immediate flush call.
+          MarkAsSent(action.id, now);
+        }
       }
     }
 
@@ -364,7 +404,7 @@ class MessagingService {
   }
 
   [[nodiscard]] auto GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t const page_size) const
-      -> messaging::HistoryPage {
+  -> messaging::HistoryPage {
     auto page = history_->GetHistoryPage(peer_id, page_index, page_size);
     std::erase_if(page.messages, [](auto const& entry) {
       return entry.status == messaging::MessageStatus::none && entry.kind != messaging::HistoryEntryKind::systemMessage;
@@ -401,7 +441,7 @@ class MessagingService {
   }
 
   [[nodiscard]] auto GetFullMessageContent(ContactID const& peer_id, std::uint64_t message_id) const
-      -> std::optional<std::string> {
+  -> std::optional<std::string> {
     return history_->GetFullMessageContent(peer_id, message_id);
   }
   [[nodiscard]] auto GetChatSummaries(std::vector<ContactID> const& peer_ids
@@ -610,7 +650,7 @@ class MessagingService {
     file_transfer_service_->SetAttachmentStatusChangedCallback(std::move(cb));
   }
 
- private:
+private:
   void RequestConnection(ContactID const& peer_id) {
     if (auto const peer = transport_->GetPeer(peer_id);
         peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
@@ -774,13 +814,40 @@ class MessagingService {
         }
         remove_action = false;  // Keep pending until receipt
         return true;
-      } else {
-        // Send failed (DC closed). Do not remove action.
-        peer->data_channel_is_open = false;
-        return false;
       }
+
+      // Send failed (DC closed). Do not remove action.
+      peer->data_channel_is_open = false;
+      return false;
     }
 
+    return false;
+  }
+
+  void MarkAsSent(int64_t action_id, Time::Unit timestamp) {
+    std::lock_guard<std::mutex> const lock(sent_cache_mutex_);
+    sent_actions_cache_[action_id] = timestamp;
+
+    // Cleanup old entries periodically (every 100 insertions/updates)
+    if (sent_actions_cache_.size() > cachedActionsSize) {
+      for (auto it = sent_actions_cache_.begin(); it != sent_actions_cache_.end();) {
+        if (timestamp - it->second > debounceTime) {
+          it = sent_actions_cache_.erase(it);
+        } else {
+          ++it;
+        }
+      }
+    }
+  }
+
+  auto WasSentRecently(int64_t action_id, Time::Unit current_time) -> bool {
+    std::lock_guard<std::mutex> const lock(sent_cache_mutex_);
+    if (sent_actions_cache_.contains(action_id)) {
+      if (current_time - sent_actions_cache_[action_id] < debounceTime) {
+        return true;
+      }
+      sent_actions_cache_.erase(action_id);
+    }
     return false;
   }
 
@@ -794,6 +861,17 @@ class MessagingService {
   OnChatMessageCallback on_message_received_;
   OnMessageStatusChangedCallback on_status_changed_;
   OnContactRestoredCallback on_contact_restored_;
+
+  // Guard to prevent concurrent processing of the queue for the same peer
+  std::unordered_set<ContactID> flushing_peers_;
+  std::recursive_mutex flushing_mutex_;
+
+  // Debouncing cache for sent actions
+  std::unordered_map<int64_t, Time::Unit> sent_actions_cache_;
+  std::mutex sent_cache_mutex_;
+
+  static constexpr std::size_t cachedActionsSize = 100;
+  static constexpr Time::Unit debounceTime = 2000000; // 2 seconds
 };
 
 }  // namespace eillance::services

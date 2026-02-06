@@ -23,7 +23,7 @@
 namespace eillance::services {
 
 class InternalMessagingService {
- public:
+public:
   using Json = nlohmann::json;
 
   InternalMessagingService(
@@ -101,36 +101,43 @@ class InternalMessagingService {
         p->last_activity_time = Time::Now();
       }
 
-      // Activity triggers unsuspension of any stale pending actions.
-      // Rate-limited to avoid database thrashing during high-frequency transfers.
-      bool should_unsuspend = false;
-      {
-        auto const now = Time::Now();
-        std::lock_guard<std::mutex> const lock(unsuspend_mutex_);
-        if (now - last_unsuspend_times_[peer_id] >= kUnsuspendInterval) {
-          last_unsuspend_times_[peer_id] = now;
-          should_unsuspend = true;
+      // Process the message FIRST.
+      // This ensures that if it's a receipt, the pending action is removed from DB
+      // BEFORE we check the queue for pending work. This prevents resending the
+      // message that was just acked.
+      bool processed = false;
+      if (!msg.empty() && msg[0] == std::byte{0xFE}) {
+        file_transfer_service_->ProcessBinaryMessage(peer_id, msg);
+        processed = true;
+      } else {
+        try {
+          std::string json_str;
+          json_str.resize(msg.size());
+          std::memcpy(json_str.data(), msg.data(), msg.size());
+          ProcessDataChannelMessage(peer_id, Json::parse(json_str));
+          processed = true;
+        } catch (...) {
+          LGE << "Failed to parse data channel message from " << peer_id.ToString();
         }
       }
 
-      if (should_unsuspend) {
-        messaging_service_->UnsuspendAndDeliver(peer_id);
-      }
+      // Activity triggers unsuspension of any stale pending actions.
+      // Rate-limited to avoid database thrashing during high-frequency transfers.
+      if (processed) {
+        bool should_unsuspend = false;
+        {
+          auto const now = Time::Now();
+          std::lock_guard<std::mutex> const lock(unsuspend_mutex_);
+          if (now - last_unsuspend_times_[peer_id] >= kUnsuspendInterval) {
+            last_unsuspend_times_[peer_id] = now;
+            should_unsuspend = true;
+          }
+        }
 
-      // 0xFE is our magic byte for binary messages
-      if (!msg.empty() && msg[0] == std::byte{0xFE}) {
-        file_transfer_service_->ProcessBinaryMessage(peer_id, msg);
-        return;
-      }
-
-      // Legacy/JSON fallback
-      try {
-        std::string json_str;
-        json_str.resize(msg.size());
-        std::memcpy(json_str.data(), msg.data(), msg.size());
-        ProcessDataChannelMessage(peer_id, Json::parse(json_str));
-      } catch (...) {
-        LGE << "Failed to parse data channel message from " << peer_id.ToString();
+        if (should_unsuspend) {
+          // UnsuspendAndDeliver calls SendQueuedMessages internally.
+          messaging_service_->UnsuspendAndDeliver(peer_id);
+        }
       }
     };
   }
@@ -185,8 +192,6 @@ class InternalMessagingService {
     peer->data_channel_is_open = true;
     peer->last_activity_time = Time::Now();
 
-    // Channel open is a strong signal of activity
-    messaging_service_->UnsuspendAndDeliver(peer_id);
     {
       std::lock_guard<std::mutex> const lock(unsuspend_mutex_);
       last_unsuspend_times_[peer_id] = Time::Now();
@@ -202,11 +207,12 @@ class InternalMessagingService {
       transport_->SendPeerDataChannelMessage(peer_id, key_msg);
     }
 
-    messaging_service_->SendQueuedMessages(peer_id);
-    profile_service_->SyncProfile(peer_id);
+    // Trigger queue processing once.
+    // UnsuspendAndDeliver calls SendQueuedMessages internally.
+    messaging_service_->UnsuspendAndDeliver(peer_id);
   }
 
- private:
+private:
   void HandleMediaSignaling(ContactID const& peer_id, std::string const& type, Json const& message) {
     auto peer = transport_->GetPeer(peer_id);
     if (!peer) {
@@ -276,8 +282,8 @@ class InternalMessagingService {
             }
         );
       }
+      // Key exchange successful - safe to send data now
       messaging_service_->SendQueuedMessages(peer_id);
-      profile_service_->SyncProfile(peer_id);
     } else {
       LGE << "Failed key exchange with " << peer_id.ToString();
     }
