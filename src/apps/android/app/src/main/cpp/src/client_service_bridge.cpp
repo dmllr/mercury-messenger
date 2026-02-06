@@ -176,15 +176,18 @@ extern "C" JNIEXPORT jboolean JNICALL Java_hela_eillance_viewmodels_ContactsView
   auto* vm = reinterpret_cast<eillance::view_model::ContactsViewModel*>(ptr);
   char const* peer_id_chars = env->GetStringUTFChars(peer_id, nullptr);
   char const* token_chars = (token != nullptr) ? env->GetStringUTFChars(token, nullptr) : nullptr;
-  auto const c_token =
-      (token_chars) ? std::optional<std::vector<std::byte>>(eillance::crypto::FromHex(token_chars)) : std::nullopt;
+  auto const c_token = ((token_chars) != nullptr)
+                           ? std::optional<std::vector<std::byte>>(eillance::crypto::FromHex(token_chars))
+                           : std::nullopt;
   bool result = false;
   try {
     result = vm->AddContact(eillance::ContactID(peer_id_chars), c_token);
   } catch (...) {
   }
   env->ReleaseStringUTFChars(peer_id, peer_id_chars);
-  if (token_chars) env->ReleaseStringUTFChars(token, token_chars);
+  if (token_chars != nullptr) {
+    env->ReleaseStringUTFChars(token, token_chars);
+  }
   return result ? JNI_TRUE : JNI_FALSE;
 }
 
@@ -278,7 +281,7 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ContactsViewMode
 extern "C" JNIEXPORT jstring JNICALL
 Java_hela_eillance_viewmodels_ContactsViewModel_nativeGenerateToken(JNIEnv* env, jobject /*instance*/, jlong ptr) {
   auto* vm = reinterpret_cast<eillance::view_model::ContactsViewModel*>(ptr);
-  std::vector<std::byte> token = vm->GenerateContactToken();
+  auto const token = vm->GenerateContactToken();
   return env->NewStringUTF(eillance::crypto::ToHex(token).c_str());
 }
 
@@ -676,8 +679,6 @@ Java_hela_eillance_viewmodels_DebugViewModel_nativeGetUnreadInfo(JNIEnv* env, jo
   return j_list;
 }
 
-// --- Global Setup ---
-
 extern "C" JNIEXPORT void JNICALL
 Java_hela_eillance_CallService_configureVideoCapture(JNIEnv* env, jobject /*instance*/, jobject video_config) {
   if (clientEngine) {
@@ -693,6 +694,8 @@ Java_hela_eillance_CallService_configureVideoCapture(JNIEnv* env, jobject /*inst
 }
 
 // NOLINTEND(readability-identifier-naming)
+
+// --- Global Setup ---
 
 jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
   javaVm = vm;

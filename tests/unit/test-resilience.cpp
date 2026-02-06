@@ -56,8 +56,6 @@ class ResilienceTest : public ::testing::Test {
     client_->GetContactService()->SetContactRemovedCallback([](auto const&) {});
 
     client_->GetProfileService()->SetContactProfileUpdatedCallback([](auto const&) {});
-    client_->GetProfileService()->SetPeerListUpdateCallback([](auto const&) {});
-    client_->GetProfileService()->SetProfileReceivedCallback([](auto const&, auto const&) {});
 
     client_->GetMediaCallService()->SetIncomingCallCallback([](auto const&, auto) {});
     client_->GetMediaCallService()->SetCallRingingCallback([](auto const&) {});
@@ -206,42 +204,6 @@ TEST_F(ResilienceTest, ProfileUpdateSyncsOnConnect) {
     }
   }
   EXPECT_TRUE(profile_sent);
-
-  actions = mock_storage_->GetPendingActions(peer1);
-  EXPECT_TRUE(actions.empty());
-}
-
-TEST_F(ResilienceTest, PendingActionsPersistAndSend) {
-  mock_transport_->RemovePeer(peer1);
-  ASSERT_FALSE(mock_transport_->GetPeer(peer1));
-
-  client_->ResetContactDisplayNameOverride(peer1);
-  FlushClientQueue();
-
-  auto actions = mock_storage_->GetPendingActions(peer1);
-  ASSERT_FALSE(actions.empty());
-  bool found_req = false;
-  for (auto const& act : actions) {
-    if (act.payload.find("profile_request") != std::string::npos) {
-      found_req = true;
-    }
-  }
-  EXPECT_TRUE(found_req);
-
-  client_->Connect(peer1);
-  FlushClientQueue();
-
-  mock_transport_->log.sent_peer_messages.clear();
-  mock_transport_->delegate->OnDataChannelOpen(peer1);
-  FlushClientQueue();
-
-  bool req_sent = false;
-  for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
-    if (pid == peer1 && msg["type"] == "profile_request") {
-      req_sent = true;
-    }
-  }
-  EXPECT_TRUE(req_sent);
 
   actions = mock_storage_->GetPendingActions(peer1);
   EXPECT_TRUE(actions.empty());

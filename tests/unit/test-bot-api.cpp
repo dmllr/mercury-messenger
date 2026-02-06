@@ -56,8 +56,6 @@ class BotApiTest : public ::testing::Test {
     client_->GetContactService()->SetContactRemovedCallback([](auto const&) {});
 
     client_->GetProfileService()->SetContactProfileUpdatedCallback([](auto const&) {});
-    client_->GetProfileService()->SetPeerListUpdateCallback([](auto const&) {});
-    client_->GetProfileService()->SetProfileReceivedCallback([](auto const&, auto const&) {});
 
     client_->GetMediaCallService()->SetIncomingCallCallback([](auto const&, auto) {});
     client_->GetMediaCallService()->SetCallRingingCallback([](auto const&) {});

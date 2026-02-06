@@ -10,7 +10,6 @@ enum class ServiceConnectionState : std::uint8_t {
   online,
   failure,
   disconnected,
-  invalidToken,
   noNetwork,
 };
 

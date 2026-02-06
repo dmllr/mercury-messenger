@@ -358,9 +358,6 @@ auto main(int argc, char** argv) -> int {
               case eillance::messaging::MessageStatus::sending:
                 suffix = " (sending...)";
                 break;
-              case eillance::messaging::MessageStatus::sent:
-                suffix = " (sent)";
-                break;
               case eillance::messaging::MessageStatus::delivered:
                 suffix = " (delivered)";
                 break;

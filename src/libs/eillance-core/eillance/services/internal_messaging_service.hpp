@@ -162,8 +162,6 @@ class InternalMessagingService {
       profile_service_->OnProfileUpdate(peer_id, message);
     } else if (type == "profile_request") {
       profile_service_->SyncProfile(peer_id);
-    } else if (type == "profile") {
-      profile_service_->OnDeviceProfileReceived(peer_id, message["profile"]);
     } else if (type == "termination") {
       transport_->RemovePeer(peer_id);
     } else if (type == "file_cancel") {

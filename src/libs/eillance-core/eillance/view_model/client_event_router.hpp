@@ -4,7 +4,6 @@
 #include <utility>
 
 #include "eillance/client/client.hpp"
-#include "eillance/client/device.hpp"
 #include "eillance/utils/event_queue.hpp"
 
 namespace eillance::view_model {
@@ -12,10 +11,6 @@ namespace eillance::view_model {
 // Events for the internal bus
 struct EventFrameReceived {
   std::vector<std::byte> frame{};
-};
-struct EventProfileReceived {
-  ContactID peer_id;
-  Device::Profile profile{};
 };
 struct EventChatMessageReceived {
   ContactID peer_id;
@@ -46,9 +41,6 @@ struct EventAttachmentStatusChanged {
   ContactID peer_id;
   std::string attachment_id;
   messaging::AttachmentStatus status;
-};
-struct EventPeerListUpdate {
-  std::vector<Device> peers{};
 };
 struct EventStatusChanged {
   ContactID peer_id;
@@ -117,8 +109,6 @@ class ClientEventRouter {
     contacts->SetContactRemovedCallback([](auto&&) {});
 
     profile->SetContactProfileUpdatedCallback([](auto&&) {});
-    profile->SetPeerListUpdateCallback([](auto&&) {});
-    profile->SetProfileReceivedCallback([](auto&&, auto&&) {});
 
     media->SetFrameReceivedCallback([](auto&&) {});
     media->SetIncomingCallCallback([](auto&&, auto) {});
@@ -163,10 +153,6 @@ class ClientEventRouter {
 
     profile->SetContactProfileUpdatedCallback([this](auto const& id) {
       eventQueue_.Push(EventContactProfileUpdated{id});
-    });
-    profile->SetPeerListUpdateCallback([this](auto const& list) { eventQueue_.Push(EventPeerListUpdate{list}); });
-    profile->SetProfileReceivedCallback([this](auto const& id, auto const& p) {
-      eventQueue_.Push(EventProfileReceived{id, p});
     });
 
     media->SetFrameReceivedCallback([this](auto const& frame) { eventQueue_.Push(EventFrameReceived{frame}); });

@@ -7,7 +7,6 @@
 #include <unordered_map>
 #include <vector>
 
-#include "eillance/client/device.hpp"
 #include "eillance/identity/contact_manager.hpp"
 #include "eillance/logging/logging.hpp"
 #include "eillance/services/account_service.hpp"
