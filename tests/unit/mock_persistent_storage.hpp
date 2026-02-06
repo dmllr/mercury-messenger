@@ -29,6 +29,9 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
   std::string db_path_ = "mock_db_path";
 
  public:
+  // Public counter for testing rate-limiting or call frequency
+  std::atomic<int> unsuspend_call_count{0};
+
   explicit MockPersistentStorageImpl(std::string path = "mock_db_path")
       : db_path_(std::move(path)) {
   }
@@ -160,6 +163,7 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
   }
 
   void UnsuspendActionsForPeer(ContactID const& peer_id, uint64_t new_window_start) override {
+    ++unsuspend_call_count;
     std::lock_guard const lock(mutex_);
     for (auto& action : pending_actions_) {
       if (action.peer_id == peer_id && action.is_suspended) {

@@ -301,30 +301,6 @@ class AndroidRtcTransport final : public Transport::TransportInterface {
     env->DeleteLocalRef(j_type);
   }
 
-  void AddRemoteCandidate(
-      ContactID const& peer_id,
-      std::string const& context,
-      std::string const& candidate,
-      std::string const& mid
-  ) override {
-    auto env_scope = GetEnv();
-    auto* env = env_scope.Get();
-    if ((env == nullptr) || (transportJavaRef_ == nullptr)) {
-      return;
-    }
-    auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcTransport");
-    auto* method_id = transport_holder.GetMethod("addRemoteCandidate");
-    auto* j_peer_id = env->NewStringUTF(peer_id.ToString().c_str());
-    auto* j_context = env->NewStringUTF(context.c_str());
-    auto* j_candidate = env->NewStringUTF(candidate.c_str());
-    auto* j_mid = env->NewStringUTF(mid.c_str());
-    env->CallVoidMethod(transportJavaRef_, method_id, j_peer_id, j_context, j_candidate, j_mid);
-    env->DeleteLocalRef(j_peer_id);
-    env->DeleteLocalRef(j_context);
-    env->DeleteLocalRef(j_candidate);
-    env->DeleteLocalRef(j_mid);
-  }
-
   auto AddVideo(ContactID const& peer_id, std::function<void(void)> const& /*on_open*/)
       -> std::shared_ptr<ITrack> override {
     auto env_scope = GetEnv();

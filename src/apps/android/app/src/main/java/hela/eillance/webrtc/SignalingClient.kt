@@ -23,6 +23,7 @@ import java.net.SocketException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import java.net.UnknownServiceException
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -51,13 +52,14 @@ class SignalingClient {
   private val _state = MutableSharedFlow<State>(replay = 1)
   val state: SharedFlow<State> = _state
 
+  private val messageQueue = ConcurrentLinkedQueue<String>()
+
   fun connect(peerId: String, signalingUrl: String) {
     Log.i(TAG, "Connect called. Starting connection manager coroutine.")
     clientScope.launch {
       var currentBackoffMs = INITIAL_BACKOFF_MS
       _state.tryEmit(State.CONNECTING)
       while (isActive) {
-        // This signal will complete when the current websocket session is over.
         val sessionClosedSignal = CompletableDeferred<Unit>()
 
         if (!isConnected.get()) {
@@ -69,13 +71,23 @@ class SignalingClient {
               Log.i(TAG, "Signaling connection opened.")
               webSocket = ws
               isConnected.set(true)
-              currentBackoffMs = INITIAL_BACKOFF_MS // Reset backoff on success.
+              currentBackoffMs = INITIAL_BACKOFF_MS
               _state.tryEmit(State.OPEN)
+
+              // Send login
               val loginMessage = JSONObject().apply {
                 put("type", "login")
                 put("id", peerId)
               }
-              send(loginMessage)
+              ws.send(loginMessage.toString())
+
+              // Flush queue
+              while (!messageQueue.isEmpty()) {
+                val msg = messageQueue.poll()
+                if (msg != null) {
+                    ws.send(msg)
+                }
+              }
             }
 
             override fun onMessage(ws: WebSocket, text: String) {
@@ -121,7 +133,7 @@ class SignalingClient {
 
           val client = OkHttpClient.Builder()
             .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(0, TimeUnit.SECONDS) // Let WebSocket manage its own keep-alive.
+            .readTimeout(0, TimeUnit.SECONDS)
             .pingInterval(20, TimeUnit.SECONDS)
             .build()
 
@@ -131,10 +143,8 @@ class SignalingClient {
           client.newWebSocket(request, listener)
         }
 
-        // Suspend the coroutine here until the session is closed or fails.
         sessionClosedSignal.await()
 
-        // If the app is still running, schedule a reconnect attempt.
         if (isActive) {
           Log.i(TAG, "Will attempt to reconnect in ${currentBackoffMs / 1000} seconds.")
           delay(currentBackoffMs)
@@ -146,18 +156,26 @@ class SignalingClient {
 
   fun send(message: JSONObject) {
     val messageString = message.toString()
-    if (webSocket?.send(messageString) == false) {
-      Log.e(TAG, "Failed to send message: WebSocket is not open.")
+    val ws = webSocket
+    if (isConnected.get() && ws != null) {
+        if (!ws.send(messageString)) {
+             Log.e(TAG, "Failed to send message immediately, queuing.")
+             messageQueue.add(messageString)
+        }
+    } else {
+        Log.i(TAG, "Signaling not connected, queuing message: $messageString")
+        messageQueue.add(messageString)
     }
   }
 
   fun disconnect() {
-    Log.i(TAG, "Disconnect called. Closing WebSocket and canceling scope.")
-    clientScope.cancel() // Stop all coroutines, including the reconnection loop.
+    Log.i(TAG, "Disconnect called.")
+    clientScope.cancel()
     webSocket?.close(NORMAL_CLOSURE_STATUS, "Client disconnected")
     webSocket = null
     isConnected.set(false)
     _state.tryEmit(State.CLOSED)
+    messageQueue.clear()
   }
 
   private fun determineErrorState(t: Throwable): State {

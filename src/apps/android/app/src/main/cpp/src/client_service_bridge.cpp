@@ -735,12 +735,6 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
         "setRemoteDescription",
         "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V"
     );
-    classref.RegisterMethod(
-        env,
-        webrtc_transport_class,
-        "addRemoteCandidate",
-        "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V"
-    );
     classref.RegisterMethod(env, webrtc_transport_class, "addVideoTrack", "(Ljava/lang/String;)V");
     classref.RegisterMethod(env, webrtc_transport_class, "addAudioTrack", "(Ljava/lang/String;)V");
     classref

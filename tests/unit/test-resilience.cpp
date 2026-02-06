@@ -166,6 +166,7 @@ TEST_F(ResilienceTest, PendingReadReceiptsPersistAndSend) {
 }
 
 TEST_F(ResilienceTest, ProfileUpdateSyncsOnConnect) {
+  // Ensure peer is disconnected so update queues instead of sends immediately
   mock_transport_->RemovePeer(peer1);
   ASSERT_FALSE(mock_transport_->GetPeer(peer1));
 
@@ -173,7 +174,15 @@ TEST_F(ResilienceTest, ProfileUpdateSyncsOnConnect) {
   FlushClientQueue();
 
   auto actions = mock_storage_->GetPendingActions(peer1);
-  ASSERT_FALSE(actions.empty());
+
+  // The test failed here previously. We must ensure that UpdateMyProfile actually queues an action.
+  // ProfileService::MarkAllContactsProfileSyncNeeded iterates confirmed contacts and calls SendMyProfile.
+  // SendMyProfile calls AddPendingAction.
+  // If this fails, it means either the contact isn't seen as confirmed or the loop failed.
+  // In SetUp, we marked peer1 as confirmed.
+
+  ASSERT_FALSE(actions.empty()) << "Profile update action was not queued";
+
   bool found_profile = false;
   for (auto const& act : actions) {
     if (act.payload.find("profile_info") != std::string::npos) {
