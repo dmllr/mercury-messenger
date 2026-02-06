@@ -23,7 +23,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.AudioFile
-import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.BrokenImage
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Description
@@ -146,7 +145,6 @@ private fun VisualAttachmentsGrid(
     val att = attachments[index]
     MediaItem(
       attachment = att,
-      note = att.note,
       progress = transferProgress[att.id],
       isFromMe = isFromMe,
       selectionMode = selectionMode,
@@ -279,48 +277,45 @@ private fun VisualAttachmentsGrid(
 }
 
 @Composable
-private fun FileAttachmentItem(
+private fun AttachmentInfoRow(
   attachment: Attachment,
   progress: Float?,
   isFromMe: Boolean,
-  selectionMode: Boolean,
-  onClick: () -> Unit,
   onCancel: () -> Unit,
   onResume: () -> Unit,
-  onDiscard: () -> Unit
+  onDiscard: () -> Unit,
+  textColor: Color,
+  subTextColor: Color,
+  iconTint: Color,
+  iconBackground: Color,
+  modifier: Modifier = Modifier
 ) {
   val context = LocalContext.current
   val icon = getFileIcon(attachment.mime)
   val fileSizeStr = Formatter.formatShortFileSize(context, attachment.size)
-  val isTransferring = attachment.status == AttachmentStatus.Transferring
-  val isPending = attachment.status == AttachmentStatus.Pending
-  val isPaused = attachment.status == AttachmentStatus.Paused
   val isDone = attachment.status == AttachmentStatus.Done
   val isCanceled = attachment.status == AttachmentStatus.Canceled || attachment.status == AttachmentStatus.PeerCanceled
+  val isPaused = attachment.status == AttachmentStatus.Paused
+  val isPending = attachment.status == AttachmentStatus.Pending
 
   val hasNote = attachment.note.isNotEmpty()
   val displayName = attachment.fileName.ifEmpty { getGenericFileName(attachment.mime) }
 
   Row(
-    modifier = Modifier
-      .fillMaxWidth()
-      .clip(RoundedCornerShape(8.dp))
-      .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-      .clickable(enabled = isDone && !selectionMode, onClick = onClick)
-      .padding(8.dp),
+    modifier = modifier,
     verticalAlignment = Alignment.CenterVertically
   ) {
     // File Icon
     Box(
       modifier = Modifier
         .size(40.dp)
-        .background(MaterialTheme.colorScheme.surface, CircleShape),
+        .background(iconBackground, CircleShape),
       contentAlignment = Alignment.Center
     ) {
       Icon(
         imageVector = icon,
         contentDescription = null,
-        tint = MaterialTheme.colorScheme.primary,
+        tint = iconTint,
         modifier = Modifier.size(24.dp)
       )
     }
@@ -335,107 +330,93 @@ private fun FileAttachmentItem(
         fontWeight = FontWeight.Medium,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
-        color = MaterialTheme.colorScheme.onSurface
+        color = textColor
       )
       if (hasNote) {
         Text(
           text = attachment.note,
           style = MaterialTheme.typography.bodySmall,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          color = subTextColor,
           maxLines = 1,
           overflow = TextOverflow.Ellipsis
         )
       }
       Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(
-          text = fileSizeStr,
-          modifier = Modifier.padding(end = 8.dp),
-          style = MaterialTheme.typography.labelSmall,
-          color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        if (isCanceled) {
-          Text(
-            text = stringResource(id = R.string.file_status_canceled),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.error
-          )
-        } else if (isPaused) {
-          Text(
-            text = stringResource(id = R.string.file_status_paused),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.tertiary
-          )
-        } else if (isPending) {
-          Text(
-            text = stringResource(id = R.string.file_status_waiting),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-          )
+        // Status Row (Size | Status)
+        // During transfer show size, or special status text if paused/canceled
+        val statusText = when {
+          isCanceled -> stringResource(id = R.string.file_status_canceled)
+          isPaused -> stringResource(id = R.string.file_status_paused)
+          isPending -> stringResource(id = R.string.file_status_waiting)
+          else -> fileSizeStr
         }
+
+        val statusColor = if (isCanceled) MaterialTheme.colorScheme.error else subTextColor
+
+        Text(
+          text = statusText,
+          style = MaterialTheme.typography.labelSmall,
+          color = statusColor
+        )
       }
     }
 
     // Action Button
-    Box(contentAlignment = Alignment.Center) {
-      if (isTransferring && progress != null) {
-        CircularProgressIndicator(
-          progress = { progress },
-          modifier = Modifier.size(32.dp),
-          strokeWidth = 3.dp,
-          color = MaterialTheme.colorScheme.primary
-        )
-        IconButton(onClick = onCancel, modifier = Modifier.size(24.dp)) {
-          val icon = if (!isFromMe) Icons.Default.Pause else Icons.Default.Close
-          Icon(icon, contentDescription = stringResource(id = R.string.action_cancel), modifier = Modifier.size(16.dp))
-        }
-      } else if (isPaused) {
-        Row {
-          // Only Receiver can Resume
-          if (!isFromMe) {
-            IconButton(onClick = onResume, modifier = Modifier.size(32.dp)) {
-              Icon(
-                Icons.Default.Refresh,
-                contentDescription = stringResource(id = R.string.action_resume),
-                tint = MaterialTheme.colorScheme.primary
-              )
-            }
-          }
-          // Both can Cancel/Discard completely
-          IconButton(onClick = onDiscard, modifier = Modifier.size(32.dp)) {
-            Icon(
-              Icons.Default.Close,
-              contentDescription = stringResource(id = R.string.action_cancel),
-              tint = MaterialTheme.colorScheme.error
-            )
-          }
-        }
-      } else if (attachment.status == AttachmentStatus.Failed) {
-        IconButton(onClick = onResume) {
-          Icon(
-            Icons.Default.Refresh,
-            contentDescription = stringResource(id = R.string.action_retry),
-            tint = MaterialTheme.colorScheme.primary
-          )
-        }
-      } else if (isPending) {
-        CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-      } else if (!isDone && !isCanceled) {
-        if (!isFromMe && !attachment.isDownloaded) {
-          Icon(
-            Icons.Default.Download,
-            contentDescription = stringResource(id = R.string.file_status_downloading),
-            tint = MaterialTheme.colorScheme.secondary
-          )
-        }
-      }
+    // We only show controls if not done, or if needed to retry/resume
+    if (!isDone) {
+      Spacer(modifier = Modifier.width(8.dp))
+      TransferControl(
+        attachment = attachment,
+        progress = progress,
+        isFromMe = isFromMe,
+        onCancel = onCancel,
+        onResume = onResume,
+        onDiscard = onDiscard,
+        tint = iconTint
+      )
     }
+  }
+}
+
+@Composable
+private fun FileAttachmentItem(
+  attachment: Attachment,
+  progress: Float?,
+  isFromMe: Boolean,
+  selectionMode: Boolean,
+  onClick: () -> Unit,
+  onCancel: () -> Unit,
+  onResume: () -> Unit,
+  onDiscard: () -> Unit
+) {
+  val isDone = attachment.status == AttachmentStatus.Done
+
+  Box(
+    modifier = Modifier
+      .fillMaxWidth()
+      .clip(RoundedCornerShape(8.dp))
+      .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+      .clickable(enabled = isDone && !selectionMode, onClick = onClick)
+      .padding(8.dp)
+  ) {
+    AttachmentInfoRow(
+      attachment = attachment,
+      progress = progress,
+      isFromMe = isFromMe,
+      onCancel = onCancel,
+      onResume = onResume,
+      onDiscard = onDiscard,
+      textColor = MaterialTheme.colorScheme.onSurface,
+      subTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+      iconTint = MaterialTheme.colorScheme.primary,
+      iconBackground = MaterialTheme.colorScheme.surface
+    )
   }
 }
 
 @Composable
 private fun MediaItem(
   attachment: Attachment,
-  note: String,
   progress: Float?,
   isFromMe: Boolean,
   selectionMode: Boolean,
@@ -445,23 +426,23 @@ private fun MediaItem(
   onDiscard: () -> Unit,
   modifier: Modifier = Modifier
 ) {
-  val isCanceled = attachment.status == AttachmentStatus.Canceled || attachment.status == AttachmentStatus.PeerCanceled
+  val isDone = attachment.status == AttachmentStatus.Done
+  val isVideo = attachment.type == AttachmentType.Video || attachment.mime.startsWith("video/")
 
   Box(
     modifier = modifier
       .background(MaterialTheme.colorScheme.surfaceContainerHigh)
       .clickable(
-        enabled = attachment.status == AttachmentStatus.Done && !selectionMode,
+        enabled = isDone && !selectionMode,
         onClick = onClick
       ),
     contentAlignment = Alignment.Center
   ) {
     val file = File(attachment.path)
     val context = LocalContext.current
-    val isVideo = attachment.type == AttachmentType.Video || attachment.mime.startsWith("video/")
 
     // --- BASE LAYER (Thumbnail/Image/Video) ---
-    if (attachment.status == AttachmentStatus.Done && file.exists()) {
+    if (isDone && file.exists()) {
       val model = remember(attachment.path, isVideo) {
         if (isVideo) {
           ImageRequest.Builder(context)
@@ -515,136 +496,126 @@ private fun MediaItem(
     }
 
     // --- OVERLAY LAYER (Darkens the image for status states) ---
-    // Show overlay for all non-final states
-    if (attachment.status != AttachmentStatus.Done) {
+    if (!isDone) {
       Box(
         modifier = Modifier
           .fillMaxSize()
-          .background(Color.Black.copy(alpha = 0.5f))
+          .background(Color.Black.copy(alpha = 0.3f))
       )
     }
 
-    // --- INTERACTIVE / STATUS LAYER ---
-    Box(modifier = Modifier.fillMaxSize()) {
-      if (isCanceled) {
-        Column(
-          modifier = Modifier.align(Alignment.Center),
-          horizontalAlignment = Alignment.CenterHorizontally,
-          verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-          Icon(
-            imageVector = Icons.Default.Block,
-            contentDescription = stringResource(id = R.string.file_status_canceled),
-            tint = Color.White,
-            modifier = Modifier.size(32.dp)
+    // --- CENTER PLAY ICON (Only for Video & Done) ---
+    if (isVideo && isDone) {
+      Icon(
+        imageVector = Icons.Default.PlayCircle,
+        contentDescription = stringResource(id = R.string.action_play),
+        tint = Color.White.copy(alpha = 0.8f),
+        modifier = Modifier.size(48.dp)
+      )
+    }
+
+    // --- BOTTOM OVERLAY (File Info & Controls) ---
+    // Always visible to show file type icon, name, status, etc.
+    Box(
+      modifier = Modifier
+        .align(Alignment.BottomCenter)
+        .fillMaxWidth()
+        .background(
+          Brush.verticalGradient(
+            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.8f))
           )
-          Text(
-            text = if (attachment.status == AttachmentStatus.Canceled) stringResource(id = R.string.upload_canceled) else stringResource(
-              id = R.string.download_canceled
-            ),
-            style = MaterialTheme.typography.labelSmall,
-            color = Color.White
-          )
-        }
-      } else if (attachment.status == AttachmentStatus.Paused) {
-        Column(
-          modifier = Modifier.align(Alignment.Center),
-          horizontalAlignment = Alignment.CenterHorizontally,
-          verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-          if (!isFromMe) {
+        )
+        .padding(8.dp)
+    ) {
+      AttachmentInfoRow(
+        attachment = attachment,
+        progress = progress,
+        isFromMe = isFromMe,
+        onCancel = onCancel,
+        onResume = onResume,
+        onDiscard = onDiscard,
+        textColor = Color.White,
+        subTextColor = Color.White.copy(alpha = 0.8f),
+        iconTint = Color.White,
+        iconBackground = Color.White.copy(alpha = 0.2f)
+      )
+    }
+  }
+}
+
+@Composable
+private fun TransferControl(
+  attachment: Attachment,
+  progress: Float?,
+  isFromMe: Boolean,
+  onCancel: () -> Unit,
+  onResume: () -> Unit,
+  onDiscard: () -> Unit,
+  tint: Color
+) {
+  val isTransferring = attachment.status == AttachmentStatus.Transferring
+  val isPaused = attachment.status == AttachmentStatus.Paused
+  val isPending = attachment.status == AttachmentStatus.Pending
+  val isDone = attachment.status == AttachmentStatus.Done
+  val isFailed = attachment.status == AttachmentStatus.Failed
+  val isCanceled = attachment.status == AttachmentStatus.Canceled || attachment.status == AttachmentStatus.PeerCanceled
+
+  Box(contentAlignment = Alignment.Center) {
+    if (isTransferring && progress != null) {
+      CircularProgressIndicator(
+        progress = { progress },
+        modifier = Modifier.size(32.dp),
+        strokeWidth = 3.dp,
+        color = tint,
+        trackColor = tint.copy(alpha = 0.3f)
+      )
+      IconButton(onClick = onCancel, modifier = Modifier.size(24.dp)) {
+        val icon = if (!isFromMe) Icons.Default.Pause else Icons.Default.Close
+        Icon(
+          icon,
+          contentDescription = stringResource(id = R.string.action_cancel),
+          modifier = Modifier.size(16.dp),
+          tint = tint
+        )
+      }
+    } else if (isPaused) {
+      Row {
+        if (!isFromMe) {
+          IconButton(onClick = onResume, modifier = Modifier.size(32.dp)) {
             Icon(
-              imageVector = Icons.Default.Refresh,
+              Icons.Default.Refresh,
               contentDescription = stringResource(id = R.string.action_resume),
-              tint = Color.White,
-              modifier = Modifier
-                .size(32.dp)
-                .clickable { onResume() }
+              tint = tint
             )
           }
-          Text(
-            stringResource(id = R.string.file_status_paused),
-            style = MaterialTheme.typography.labelSmall,
-            color = Color.White
-          )
         }
-        IconButton(
-          onClick = onDiscard,
-          modifier = Modifier
-            .align(Alignment.TopEnd)
-            .padding(4.dp)
-        ) {
+        IconButton(onClick = onDiscard, modifier = Modifier.size(32.dp)) {
           Icon(
             Icons.Default.Close,
             contentDescription = stringResource(id = R.string.action_cancel),
-            tint = Color.White
+            tint = MaterialTheme.colorScheme.error
           )
         }
-      } else if (progress != null && progress >= 0f && attachment.status == AttachmentStatus.Transferring) {
-        Box(
-          modifier = Modifier.align(Alignment.Center),
-          contentAlignment = Alignment.Center
-        ) {
-          CircularProgressIndicator(
-            progress = { progress },
-            modifier = Modifier.size(48.dp),
-            color = Color.White,
-            trackColor = Color.White.copy(alpha = 0.4f),
-          )
-          IconButton(onClick = onCancel) {
-            val icon = if (!isFromMe) Icons.Default.Pause else Icons.Default.Close
-            Icon(icon, contentDescription = stringResource(id = R.string.action_cancel), tint = Color.White)
-          }
-        }
-      } else if (attachment.status == AttachmentStatus.Pending || (attachment.status == AttachmentStatus.Transferring && progress == null)) {
-        CircularProgressIndicator(
-          modifier = Modifier
-            .size(32.dp)
-            .align(Alignment.Center),
-          color = Color.White
-        )
-      } else if (attachment.status == AttachmentStatus.Failed) {
+      }
+    } else if (isFailed) {
+      IconButton(onClick = onResume, modifier = Modifier.size(32.dp)) {
         Icon(
           Icons.Default.Refresh,
           contentDescription = stringResource(id = R.string.action_retry),
-          tint = MaterialTheme.colorScheme.error,
-          modifier = Modifier
-            .size(32.dp)
-            .align(Alignment.Center)
-            .clickable { onResume() }
-        )
-      } else if (isVideo && attachment.status == AttachmentStatus.Done) {
-        Icon(
-          imageVector = Icons.Default.PlayCircle,
-          contentDescription = stringResource(id = R.string.action_play),
-          tint = Color.White.copy(alpha = 0.8f),
-          modifier = Modifier
-            .size(48.dp)
-            .align(Alignment.Center)
+          tint = tint
         )
       }
-    }
-
-    // --- NOTE OVERLAY LAYER ---
-    if (note.isNotEmpty() && attachment.status != AttachmentStatus.Canceled && attachment.status != AttachmentStatus.Failed) {
-      Box(
-        modifier = Modifier
-          .align(Alignment.BottomCenter)
-          .fillMaxWidth()
-          .background(
-            Brush.verticalGradient(
-              colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f))
-            )
+    } else if (isPending) {
+      CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp, color = tint)
+    } else if (!isDone && !isCanceled) {
+      if (!isFromMe && !attachment.isDownloaded) {
+        IconButton(onClick = onResume, modifier = Modifier.size(32.dp)) {
+          Icon(
+            Icons.Default.Download,
+            contentDescription = stringResource(id = R.string.file_status_downloading),
+            tint = tint
           )
-          .padding(start = 8.dp, end = 8.dp, bottom = 8.dp, top = 24.dp)
-      ) {
-        Text(
-          text = note,
-          style = MaterialTheme.typography.bodySmall,
-          color = Color.White,
-          maxLines = 2,
-          overflow = TextOverflow.Ellipsis
-        )
+        }
       }
     }
   }
