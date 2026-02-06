@@ -9,14 +9,14 @@
 #include <jni.h>
 #include <sys/system_properties.h>
 
-#include "class_refs.hpp"
 #include "eillance/capture/video_config.hpp"
 #include "eillance/client/client.hpp"
 #include "eillance/logging/logging.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/storage/sqlite/persistent_storage_impl_sqlite.hpp"
 #include "eillance/view_model/client_event_router.hpp"
-#include "transport/transport_impl_libwebrtc.hpp"
+#include "transport_impl_libwebrtc.hpp"
+#include "utils/class_refs.hpp"
 
 namespace eillance {
 

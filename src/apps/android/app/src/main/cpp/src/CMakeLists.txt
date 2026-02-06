@@ -6,7 +6,15 @@ execute_process(
 set(shared_libs "${REPO_ROOT}/lib")
 
 add_library(lib-client-service-bridge SHARED
-  client_service_bridge.cpp
+  bridge_main.cpp
+  bridge_context.cpp
+  bridge_contacts.cpp
+  bridge_conversation.cpp
+  bridge_profile.cpp
+  bridge_call.cpp
+  bridge_settings.cpp
+  bridge_debug.cpp
+  bridge_webrtc.cpp
 )
 target_compile_features(lib-client-service-bridge PUBLIC cxx_std_20)
 target_link_libraries(lib-client-service-bridge
