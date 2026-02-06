@@ -10,7 +10,6 @@
 
 #include <nlohmann/json.hpp>
 
-#include "eillance/client/device.hpp"
 #include "eillance/identity/contact_manager.hpp"
 #include "eillance/services/account_service.hpp"
 #include "eillance/services/messaging_service.hpp"
@@ -126,60 +125,14 @@ class ProfileService {
     on_contact_profile_updated_(peer_id);
   }
 
-  void OnDeviceProfileReceived(ContactID const& peer_id, nlohmann::json const& profile_json) {
-    auto profile = ParseDeviceProfile(profile_json);
-    {
-      std::lock_guard<std::mutex> const lock(online_peers_mutex_);
-      online_peers_[peer_id].id = peer_id.ToString();
-      online_peers_[peer_id].profile = profile;
-    }
-    NotifyPeerListUpdate();
-    INVARIANT(on_profile_received_);
-    on_profile_received_(peer_id, profile);
-  }
-
   // --- Callbacks ---
   using OnContactProfileUpdatedCallback = std::function<void(ContactID const& peer_id)>;
-  using OnPeerListUpdateCallback = std::function<void(std::vector<Device> const&)>;
-  using OnProfileReceivedCallback = std::function<void(ContactID const&, Device::Profile const&)>;
 
   void SetContactProfileUpdatedCallback(OnContactProfileUpdatedCallback cb) {
     on_contact_profile_updated_ = std::move(cb);
   }
-  void SetPeerListUpdateCallback(OnPeerListUpdateCallback cb) {
-    on_peer_list_update_ = std::move(cb);
-  }
-  void SetProfileReceivedCallback(OnProfileReceivedCallback cb) {
-    on_profile_received_ = std::move(cb);
-  }
 
  private:
-  void NotifyPeerListUpdate() const {
-    INVARIANT(on_peer_list_update_);
-    std::vector<Device> list;
-    {
-      std::lock_guard<std::mutex> const lock(online_peers_mutex_);
-      for (auto const& pair : online_peers_) {
-        list.push_back(pair.second);
-      }
-    }
-    on_peer_list_update_(list);
-  }
-
-  static auto ParseDeviceProfile(nlohmann::json const& jprofile) -> Device::Profile {
-    Device::Profile profile;
-    for (auto const& cam_item : jprofile) {
-      Device::Camera camera;
-      camera.id = cam_item.at("id").get<std::string>();
-      camera.name = cam_item.at("name").get<std::string>();
-      for (auto const& res_item : cam_item.at("resolutions")) {
-        camera.resolutions.push_back({res_item.at("width").get<uint16_t>(), res_item.at("height").get<uint16_t>()});
-      }
-      profile.push_back(camera);
-    }
-    return profile;
-  }
-
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<transport::Transport> transport_;
   std::shared_ptr<identity::ContactManager> manager_;
@@ -188,12 +141,7 @@ class ProfileService {
   MessagingService* messaging_service_;
   ConnectionRequestHandler connection_handler_;
 
-  std::unordered_map<ContactID, Device> online_peers_;
-  mutable std::mutex online_peers_mutex_;
-
   OnContactProfileUpdatedCallback on_contact_profile_updated_;
-  OnPeerListUpdateCallback on_peer_list_update_;
-  OnProfileReceivedCallback on_profile_received_;
 };
 
 }  // namespace eillance::services

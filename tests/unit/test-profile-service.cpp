@@ -52,8 +52,6 @@ class ProfileServiceTest : public ::testing::Test {
     );
 
     profile_service_->SetContactProfileUpdatedCallback([](auto const&) {});
-    profile_service_->SetPeerListUpdateCallback([](auto const&) {});
-    profile_service_->SetProfileReceivedCallback([](auto const&, auto const&) {});
   }
 
   void TearDown() override {
@@ -71,25 +69,6 @@ class ProfileServiceTest : public ::testing::Test {
 
   ContactID const peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
 };
-
-TEST_F(ProfileServiceTest, DeviceProfileReceived) {
-  bool profile_cb_called = false;
-  profile_service_->SetProfileReceivedCallback([&](ContactID const& id, Device::Profile const& profile) {
-    if (id == peer1 && !profile.empty()) {
-      EXPECT_EQ(profile[0].id, "0");
-      EXPECT_EQ(profile[0].name, "Back Camera");
-      profile_cb_called = true;
-    }
-  });
-
-  nlohmann::json const profile_json = {
-      {{"id", "0"}, {"name", "Back Camera"}, {"resolutions", {{{"width", 1280}, {"height", 720}}}}}
-  };
-
-  profile_service_->OnDeviceProfileReceived(peer1, profile_json);
-
-  EXPECT_TRUE(profile_cb_called);
-}
 
 TEST_F(ProfileServiceTest, UpdateProfileTriggersSystemMessage) {
   bool update_cb_called = false;

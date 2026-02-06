@@ -32,9 +32,9 @@ class ClientEngine {
     jobject file_object = env->CallObjectMethod(context, get_files_dir_method);
 
     jmethodID get_path_method = class_refs.Class("java/io/File").GetMethod("getPath");
-    auto path_jstring = (jstring)env->CallObjectMethod(file_object, get_path_method);
+    auto* path_jstring = (jstring)env->CallObjectMethod(file_object, get_path_method);
     char const* path_chars = env->GetStringUTFChars(path_jstring, nullptr);
-    std::filesystem::path db_path = std::filesystem::path(path_chars) / "mercury.db";
+    std::filesystem::path const db_path = std::filesystem::path(path_chars) / "mercury.db";
     env->ReleaseStringUTFChars(path_jstring, path_chars);
 
     auto storage = std::make_shared<storage::PersistentStorage>(std::make_unique<storage::SQLiteStorage>(db_path));

@@ -161,6 +161,7 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
     peerConnectionFactory = null
   }
 
+  @Suppress("unused")
   fun reconnect(newUrl: String) {
     scope.launch {
       localPeerId?.let { peerId ->
@@ -174,6 +175,7 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
     }
   }
 
+  @Suppress("unused")
   fun createPeerConnection(peerId: String, context: String) {
     val factory = peerConnectionFactory ?: run {
       Log.e(TAG, "Factory null in createPeerConnection")
@@ -277,6 +279,7 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
     sessions.getOrPut(peerId) { ConcurrentHashMap() }[context] = session
   }
 
+  @Suppress("unused")
   fun createOffer(peerId: String, context: String) {
     val session = getSession(peerId, context) ?: return
 
@@ -339,6 +342,7 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
     }
   }
 
+  @Suppress("unused")
   fun createAnswer(peerId: String, context: String) {
     val session = getSession(peerId, context) ?: return
 
@@ -449,6 +453,7 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
     }, sdpObj)
   }
 
+  @Suppress("unused")
   fun createDataChannel(peerId: String) {
     val session = getSession(peerId, "data") ?: return
     Log.i(TAG, "Creating DataChannel for $peerId")
@@ -614,6 +619,7 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
     signalingClient.send(JSONObject(message))
   }
 
+  @Suppress("unused")
   fun sendDataChannelMessage(peerId: String, message: String): Boolean {
     val dc = getSession(peerId, "data")?.dataChannel ?: return false
     if (dc.state() == DataChannel.State.OPEN) {
@@ -623,6 +629,7 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
     return false
   }
 
+  @Suppress("unused")
   fun sendDataChannelMessageBinary(peerId: String, data: ByteArray): Boolean {
     val dc = getSession(peerId, "data")?.dataChannel ?: return false
     if (dc.state() == DataChannel.State.OPEN) {
@@ -632,6 +639,7 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
     return false
   }
 
+  @Suppress("unused")
   fun getPeerConnectionState(peerId: String): Int {
     val state = getSession(peerId, "data")?.pc?.connectionState()
     return when (state) {
