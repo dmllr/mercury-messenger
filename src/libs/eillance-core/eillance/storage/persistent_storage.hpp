@@ -1,132 +1,14 @@
 #pragma once
 
-#include <cstddef>
-#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
-#include <variant>
 #include <vector>
 
-#include <nlohmann/json.hpp>
-
-#include "eillance/identity/contact_id.hpp"
-#include "eillance/messaging/types.hpp"
-#include "eillance/utils/time.hpp"
-
-namespace eillance::identity {
-
-enum class ContactStatus : std::uint8_t {
-  pendingApproval,   // We sent a request, waiting for them to confirm.
-  awaitingApproval,  // They sent a request, we need to confirm.
-  confirmed,
-  rejected,
-};
-
-struct Contact {
-  ContactID peer_id;
-  ContactStatus status;
-  std::optional<std::string> display_name;
-  std::optional<std::string> display_name_override;
-  std::optional<std::string> bio;
-  std::optional<std::string> photo_base64;
-  std::optional<std::vector<std::byte>> signature_from_them{};
-  std::optional<std::vector<std::byte>> my_signature_for_them{};
-};
-
-struct ProfileInfo {
-  std::string display_name;
-  std::string bio;
-  std::string photo_base64;
-};
-
-}  // namespace eillance::identity
+#include "eillance/storage/persistent_storage_interface.hpp"
 
 namespace eillance::storage {
 
-struct PendingAction {
-  int64_t id;
-  ContactID peer_id;
-  std::string payload;            // JSON content
-  uint64_t created_at;            // Timestamp (microseconds)
-  std::optional<int64_t> ref_id;  // Reference ID (e.g. message_id), optional
-  bool is_suspended = false;
-  uint64_t window_start_at = 0;
-};
-
-// The abstract interface for platform-specific storage implementations.
-// Core depends on this, but implementations will live in platform-specific projects.
-class PersistentStorageImpl {
- public:
-  virtual ~PersistentStorageImpl() = default;
-
-  [[nodiscard]] virtual auto GetPath() const -> std::string = 0;
-  // --- Settings ---
-  virtual auto GetSetting(std::string_view key) -> std::optional<std::string> = 0;
-  virtual void SetSetting(std::string_view key, std::string_view value) = 0;
-  virtual void DeleteSetting(std::string_view key) = 0;
-  virtual auto GetRaw(std::string const& key) -> std::optional<std::vector<std::byte>> = 0;
-  virtual auto SetRaw(std::string const& key, std::vector<std::byte> const& value) -> bool = 0;
-
-  // --- Contacts ---
-  virtual auto GetContacts() -> std::vector<identity::Contact> = 0;
-  virtual auto GetContact(ContactID const& peer_id) -> std::optional<identity::Contact> = 0;
-  virtual void UpdateContact(identity::Contact const& contact) = 0;
-  virtual void RemoveContact(ContactID const& peer_id) = 0;
-
-  // --- Lifecycle ---
-  virtual void Close() = 0;
-  virtual auto Open() -> bool = 0;
-  virtual void Checkpoint() = 0;
-
-  // --- Resilience (Pending Actions) ---
-  virtual void AddPendingAction(
-      ContactID const& peer_id,
-      std::string const& payload,
-      uint64_t timestamp,
-      std::optional<int64_t> ref_id
-  ) = 0;
-  virtual auto GetPendingActions(ContactID const& peer_id) -> std::vector<PendingAction> = 0;
-  virtual void RemovePendingAction(int64_t id) = 0;
-  virtual void RemovePendingActionByRefId(ContactID const& peer_id, int64_t ref_id) = 0;
-
-  // Suspension Logic
-  virtual void SuspendTimedOutActions(uint64_t threshold_timestamp) = 0;
-  virtual void UnsuspendActionsForPeer(ContactID const& peer_id, uint64_t new_window_start) = 0;
-
-  // --- History ---
-  virtual auto AddHistoryEntry(messaging::HistoryEntryRecord entry) -> messaging::HistoryEntryRecord = 0;
-  virtual void UpdateHistoryEntry(messaging::HistoryEntryRecord const& entry) = 0;
-  virtual void
-  UpdateMessageStatus(ContactID const& peer_id, uint64_t message_id, messaging::MessageStatus new_status) = 0;
-  virtual void UpdateMessageStatuses(
-      ContactID const& peer_id,
-      std::vector<uint64_t> const& message_ids,
-      messaging::MessageStatus new_status
-  ) = 0;
-  virtual void
-  UpdateAttachmentStatus(std::string const& attachment_id, messaging::AttachmentStatus status, bool is_downloaded) = 0;
-  virtual auto GetAttachment(std::string const& attachment_id) -> std::optional<messaging::Attachment> = 0;
-
-  virtual auto GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t page_size)
-      -> messaging::HistoryPage = 0;
-  virtual auto GetFullMessageContent(ContactID const& peer_id, std::uint64_t message_id)
-      -> std::optional<std::string> = 0;
-  virtual auto GetChatSummaries(std::vector<ContactID> const& peer_ids) -> std::vector<messaging::ChatSummary> = 0;
-  virtual auto GetMessagesWithStatus(ContactID const& peer_id, messaging::MessageStatus status)
-      -> std::vector<messaging::HistoryEntryRecord> = 0;
-  // New method to find messages containing specific attachments that are pending transfer
-  virtual auto GetPendingAttachments(ContactID const& peer_id) -> std::vector<messaging::Attachment> = 0;
-  virtual auto GetRemoteIds(ContactID const& peer_id, std::vector<uint64_t> const& local_ids)
-      -> std::vector<uint64_t> = 0;
-
-  // --- Debug ---
-  virtual void DebugClearAllHistory() = 0;
-  virtual void DebugClearAllContacts() = 0;
-  virtual void DebugRevokeAllContactApprovals() = 0;
-};
-
-// Public-facing class that uses the pimpl idiom.
 class PersistentStorage {
  public:
   explicit PersistentStorage(std::unique_ptr<PersistentStorageImpl> pimpl)
