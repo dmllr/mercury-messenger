@@ -20,11 +20,13 @@ namespace eillance::messaging {
 class MessageDeliveryService {
   using ConnectionRequestHandler = std::function<void(ContactID const&)>;
   using HasWorkCallback = std::function<bool(ContactID const&)>;
+  using IsConnectedCallback = std::function<bool(ContactID const&)>;
 
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<identity::ContactManager> contactManager_;
   ConnectionRequestHandler connectionHandler_;
   HasWorkCallback hasWorkCallback_;
+  IsConnectedCallback isConnectedCallback_;
   DispatchQueue dispatchQueue_{"DeliveryService", 1};
   std::atomic<bool> isRunning_{false};
 
@@ -43,12 +45,14 @@ class MessageDeliveryService {
       std::shared_ptr<storage::PersistentStorage> storage,
       std::shared_ptr<identity::ContactManager> contacts,
       ConnectionRequestHandler handler,
-      HasWorkCallback has_work_callback = nullptr
+      HasWorkCallback has_work_callback = nullptr,
+      IsConnectedCallback is_connected_callback = nullptr
   )
       : storage_(std::move(storage)),
         contactManager_(std::move(contacts)),
         connectionHandler_(std::move(handler)),
-        hasWorkCallback_(std::move(has_work_callback)) {
+        hasWorkCallback_(std::move(has_work_callback)),
+        isConnectedCallback_(std::move(is_connected_callback)) {
   }
 
   void Start() {
@@ -88,9 +92,17 @@ class MessageDeliveryService {
       has_work = !storage_->GetPendingActions(peer_id).empty();
     }
 
-    // Check if there are more messages to send. If so, it means the connection
-    // likely failed, and we should schedule a retry.
+    // Check if there are more messages to send.
     if (has_work) {
+      // If we are already connected, we assume the transport is healthy and processing
+      // the queue (e.g., waiting for ACKs). We do NOT schedule a retry loop here,
+      // as that causes duplicate sends and tight loops.
+      if (isConnectedCallback_ && isConnectedCallback_(peer_id)) {
+        retryDelaysS_.erase(peer_id);
+        return;
+      }
+
+      // If not connected, or check not provided, we schedule a retry with backoff.
       int& delay = retryDelaysS_[peer_id];
       if (delay == 0) {
         delay = initialRetryDelayS;
