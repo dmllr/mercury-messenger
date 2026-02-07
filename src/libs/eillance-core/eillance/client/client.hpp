@@ -341,6 +341,10 @@ class Client final : public transport::TransportDelegate {
   void DiscardAttachment(ContactID const& peer_id, std::string const& attachment_id) const {
     messaging_service_->DiscardAttachment(peer_id, attachment_id);
   }
+  
+  [[nodiscard]] auto GetAttachment(std::string const& attachment_id) const -> std::optional<messaging::Attachment> {
+    return storage_->GetAttachment(attachment_id);
+  }
 
   void Call(ContactID const& id) const {
     Connect(id);

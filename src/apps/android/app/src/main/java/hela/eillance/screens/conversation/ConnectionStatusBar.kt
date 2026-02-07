@@ -44,6 +44,7 @@ fun ConnectionStatusBar(contact: Contact) {
   val (statusText, statusColor) = when (connectionState) {
     PeerConnectionState.Connected -> stringResource(R.string.state_peer_connection_connected) to MaterialTheme.extendedColors.success
     PeerConnectionState.Connecting -> stringResource(R.string.state_peer_connection_connecting) to MaterialTheme.colorScheme.secondary
+    PeerConnectionState.New -> stringResource(R.string.state_peer_connection_connecting) to MaterialTheme.colorScheme.secondary
     PeerConnectionState.Failed -> stringResource(R.string.state_peer_connection_failed) to MaterialTheme.colorScheme.error
     else -> stringResource(R.string.state_peer_connection_disconnected) to MaterialTheme.colorScheme.onSurface.copy(
       alpha = 0.6f

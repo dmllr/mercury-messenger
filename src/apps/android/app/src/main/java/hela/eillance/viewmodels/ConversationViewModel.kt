@@ -19,6 +19,7 @@ import androidx.lifecycle.viewModelScope
 import hela.eillance.ndkio.AttachmentRequest
 import hela.eillance.ndkio.AttachmentStatus
 import hela.eillance.ndkio.AttachmentType
+import hela.eillance.ndkio.Attachment
 import hela.eillance.ndkio.HistoryPage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -308,6 +309,10 @@ class ConversationViewModel(
     if (nativePtr != 0L) nativeDiscardAttachment(nativePtr, attachmentId)
   }
 
+  fun getAttachment(attachmentId: String): Attachment? {
+    return if (nativePtr != 0L) nativeGetAttachment(nativePtr, attachmentId) else null
+  }
+
   private fun generateThumbnail(resolver: ContentResolver, uri: Uri, file: File, type: AttachmentType): Bitmap? {
     val size = Size(320, 320)
     return try {
@@ -371,6 +376,7 @@ class ConversationViewModel(
   private external fun nativeCancelTransfer(ptr: Long, attachmentId: String, isUpload: Boolean)
   private external fun nativeResumeTransfer(ptr: Long, attachmentId: String, isUpload: Boolean)
   private external fun nativeDiscardAttachment(ptr: Long, attachmentId: String)
+  private external fun nativeGetAttachment(ptr: Long, attachmentId: String): Attachment?
 
   class Factory(
     private val application: Application,
