@@ -127,10 +127,6 @@ msgstr "Unsupported message format. Please update app."
 msgid "sys_default"
 msgstr "System Message"
 
-# Chat
-msgid "chat_you_prefix"
-msgstr "You: "
-
 # New Attachment UI
 msgid "msg_input_placeholder"
 msgstr "Message..."

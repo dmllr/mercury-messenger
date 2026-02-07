@@ -204,11 +204,7 @@ fun ConversationScreen(
                   if (sb.isNotEmpty()) sb.append("\n")
 
                   if (isConversation) {
-                    val name = if (msg.direction == MessageDirection.Sent) {
-                      context.getString(R.string.chat_you_prefix).trimEnd(' ', ':')
-                    } else {
-                      contact?.name ?: peerId
-                    }
+                    val name = contact?.name ?: peerId
                     val time =
                       dateTimeFormatter.format(Instant.ofEpochMilli(msg.timestamp / 1000))
                     sb.append("[$time] $name: $content")
