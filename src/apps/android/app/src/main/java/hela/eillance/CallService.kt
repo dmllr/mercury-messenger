@@ -26,6 +26,7 @@ import hela.eillance.ndkio.AttachmentType
 import hela.eillance.ndkio.CallDirection
 import hela.eillance.ndkio.CallState
 import hela.eillance.ndkio.Contact
+import hela.eillance.ndkio.HistoryEntry
 import hela.eillance.ndkio.ServiceConnectionState
 import hela.eillance.ndkio.VideoConfig
 import hela.eillance.telecom.MercuryConnection
@@ -267,31 +268,14 @@ class CallService : Service() {
         val showContent = prefs.getBoolean("show_notifications_content", true)
         val displayName = newContact.name.ifEmpty { newContact.peerId.take(8) }
 
-        val notificationContent = if (showContent) {
-          val text = newContact.lastMessageContent
-          if (!text.isNullOrBlank()) {
-            text
-          } else if (newContact.lastMessageAttachmentType == AttachmentType.Image.value) {
-            getString(R.string.notification_image)
-          } else if (newContact.lastMessageAttachmentType == AttachmentType.Video.value) {
-            getString(R.string.notification_video)
-          } else if (newContact.lastMessageAttachmentType == AttachmentType.File.value) {
-            getString(R.string.notification_file)
-          } else {
-            getString(R.string.notification_new_message)
-          }
-        } else {
-          getString(R.string.notification_new_message)
-        }
-
-        val imagePath = if (showContent && newContact.lastMessageAttachmentType == AttachmentType.Image.value)
-          newContact.lastMessageAttachmentPath else null
+        // Fetch actual unread messages from history
+        val unreadMessages = backgroundContactsVM?.getUnreadMessages(newContact.peerId) ?: emptyList()
 
         showNewMessageNotification(
           newContact.peerId,
           displayName,
-          notificationContent,
-          imagePath
+          unreadMessages,
+          showContent
         )
       }
     }
@@ -395,7 +379,7 @@ class CallService : Service() {
     }
   }
 
-  private fun showNewMessageNotification(peerId: String, title: String, content: String, imagePath: String?) {
+  private fun showNewMessageNotification(peerId: String, title: String, messages: List<HistoryEntry>, showContent: Boolean) {
     val intent = Intent(this, MainActivity::class.java).apply {
       flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
       putExtra(EXTRA_PEER_ID, peerId)
@@ -406,23 +390,67 @@ class CallService : Service() {
       intent,
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
-    val person = Person.Builder().setName(title).build()
+    
+    val me = Person.Builder().setName(getString(R.string.app_name)).build()
+    val sender = Person.Builder().setName(title).build()
+    val style = NotificationCompat.MessagingStyle(me)
 
-    val message = NotificationCompat.MessagingStyle.Message(content, System.currentTimeMillis(), person)
+    if (messages.isNotEmpty()) {
+      messages.forEach { msg ->
+        var text: CharSequence = ""
+        var dataUri: Uri? = null
+        var dataMime: String? = null
 
-    if (imagePath != null) {
-      val file = File(imagePath)
-      if (file.exists()) {
-        val uri = FileProvider.getUriForFile(this, "${packageName}.provider", file)
-        message.setData("image/", uri)
+        if (showContent) {
+          if (!msg.content.isNullOrBlank()) {
+            text = msg.content
+          } else if (msg.attachments.isNotEmpty()) {
+            val att = msg.attachments.first()
+            val typeText = when (att.type) {
+              AttachmentType.Image -> getString(R.string.file_type_image)
+              AttachmentType.Video -> getString(R.string.file_type_video)
+              AttachmentType.File -> {
+                if (att.mime.startsWith("audio/")) getString(R.string.file_type_audio)
+                else if (att.mime == "application/pdf") getString(R.string.file_type_pdf)
+                else getString(R.string.file_type_generic)
+              }
+            }
+            text = "[$typeText]"
+
+            // Try to show image thumbnail
+            if (att.type == AttachmentType.Image) {
+              val file = File(att.path)
+              if (att.isDownloaded && file.exists()) {
+                dataUri = FileProvider.getUriForFile(this, "${packageName}.provider", file)
+                dataMime = att.mime
+              } else if (!att.thumbnail.isNullOrEmpty()) {
+                try {
+                  val bytes = android.util.Base64.decode(att.thumbnail, android.util.Base64.DEFAULT)
+                  val cacheFile = File(cacheDir, "thumb_${att.id}.jpg")
+                  cacheFile.writeBytes(bytes)
+                  dataUri = FileProvider.getUriForFile(this, "${packageName}.provider", cacheFile)
+                  dataMime = "image/jpeg"
+                } catch (_: Exception) {}
+              }
+            }
+          } else {
+            text = getString(R.string.notification_new_message)
+          }
+        } else {
+          getString(R.string.notification_new_message)
+        }
+        // Using timestamp / 1000 because HistoryEntry is in microseconds, standard Java time is ms
+        style.addMessage(text, msg.timestamp / 1000, sender)
       }
+    } else {
+        // Fallback
+        style.addMessage(getString(R.string.notification_new_message), System.currentTimeMillis(), sender)
     }
 
-    val messagingStyle = NotificationCompat.MessagingStyle(person)
-      .addMessage(message)
     val builder = NotificationCompat.Builder(this, MESSAGES_CHANNEL_ID)
       .setSmallIcon(android.R.drawable.stat_notify_chat)
-      .setStyle(messagingStyle)
+      .setStyle(style)
+      .setShowWhen(false)
       .setContentIntent(pendingIntent)
       .setAutoCancel(true)
     notificationManager.notify(MESSAGE_NOTIFICATION_ID_BASE + peerId.hashCode(), builder.build())
