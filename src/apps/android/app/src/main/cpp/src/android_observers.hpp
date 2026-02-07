@@ -16,7 +16,7 @@
 namespace eillance {
 
 class AndroidObserverBase {
- protected:
+protected:
   JavaVM* jvm_;
   jobject java_listener_;
 
@@ -24,7 +24,7 @@ class AndroidObserverBase {
     return jni::ScopedJniEnv(jvm_);
   }
 
- public:
+public:
   AndroidObserverBase(JavaVM* jvm, jobject java_listener)
       : jvm_(jvm) {
     auto env_scope = GetEnv();
@@ -45,8 +45,8 @@ class AndroidObserverBase {
 
 class AndroidContactsObserver final
     : public AndroidObserverBase
-    , public view_model::ContactsViewModel::Observer {
- public:
+        , public view_model::ContactsViewModel::Observer {
+public:
   using AndroidObserverBase::AndroidObserverBase;
 
   void OnContactsUpdated(std::vector<view_model::ViewContact> const& contacts) override {
@@ -71,10 +71,12 @@ class AndroidContactsObserver final
       jint lm_kind = -1;
       jstring lm_content = nullptr;
       jint lm_direction = -1;
+      jint lm_status = 0;
 
       if (contact_cpp.last_message) {
         lm_kind = static_cast<jint>(contact_cpp.last_message->kind);
         lm_direction = static_cast<jint>(contact_cpp.last_message->direction);
+        lm_status = static_cast<jint>(contact_cpp.last_message->status);
 
         if (std::holds_alternative<messaging::MessageEntry>(contact_cpp.last_message->data)) {
           auto const& txt = std::get<messaging::MessageEntry>(contact_cpp.last_message->data);
@@ -94,6 +96,7 @@ class AndroidContactsObserver final
           lm_kind,
           lm_content,
           lm_direction,
+          lm_status,
           static_cast<jlong>(contact_cpp.last_activity_timestamp)
       );
       env->CallBooleanMethod(contact_list, list_add_method, contact_java);
@@ -121,8 +124,8 @@ class AndroidContactsObserver final
 
 class AndroidConversationObserver final
     : public AndroidObserverBase
-    , public view_model::ConversationViewModel::Observer {
- public:
+        , public view_model::ConversationViewModel::Observer {
+public:
   using AndroidObserverBase::AndroidObserverBase;
 
   void OnHistoryUpdated(view_model::ConversationViewModel::State const& state) override {
@@ -247,8 +250,8 @@ class AndroidConversationObserver final
 
 class AndroidProfileObserver final
     : public AndroidObserverBase
-    , public view_model::ProfileViewModel::Observer {
- public:
+        , public view_model::ProfileViewModel::Observer {
+public:
   using AndroidObserverBase::AndroidObserverBase;
 
   void OnProfileUpdated(view_model::MyProfile const& profile) override {
@@ -282,8 +285,8 @@ class AndroidProfileObserver final
 
 class AndroidCallObserver final
     : public AndroidObserverBase
-    , public view_model::CallViewModel::Observer {
- public:
+        , public view_model::CallViewModel::Observer {
+public:
   using AndroidObserverBase::AndroidObserverBase;
 
   void OnCallStateChanged(view_model::CallState const& call_state) override {
@@ -318,8 +321,8 @@ class AndroidCallObserver final
 
 class AndroidSettingsObserver final
     : public AndroidObserverBase
-    , public view_model::SettingsViewModel::Observer {
- public:
+        , public view_model::SettingsViewModel::Observer {
+public:
   using AndroidObserverBase::AndroidObserverBase;
 
   void OnSettingsUpdated(std::optional<std::string> const& signaling_url, int timeout) override {
