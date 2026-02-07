@@ -6,9 +6,16 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Done
+import androidx.compose.material.icons.filled.DoneAll
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Badge
+import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
@@ -26,6 +33,7 @@ import hela.eillance.ndkio.Contact
 import hela.eillance.ndkio.ContactStatus
 import hela.eillance.ndkio.HistoryEntryKind
 import hela.eillance.ndkio.MessageDirection
+import hela.eillance.ndkio.MessageStatus
 import hela.eillance.ndkio.PeerConnectionState
 import hela.eillance.theme.extendedColors
 import hela.eillance.ui.LocalizationMapping
@@ -97,11 +105,44 @@ fun ContactListItem(
         }
       } else {
         val snippet = getSnippetText(contact, context)
-        val subText = if (snippet.isNotBlank()) snippet else contact.bio
+        if (snippet.isNotBlank()) {
+          Row(verticalAlignment = Alignment.CenterVertically) {
+            if (contact.lastMessageDirection == MessageDirection.Sent.value &&
+              contact.lastMsgKindEnum == HistoryEntryKind.TextMessage
+            ) {
+              val statusIcon = when (contact.lastMsgStatusEnum) {
+                MessageStatus.Read -> Icons.Filled.DoneAll
+                MessageStatus.Delivered -> Icons.Filled.Done
+                MessageStatus.Sending -> Icons.Filled.Schedule
+                else -> Icons.Filled.Schedule
+              }
+              val statusTint = if (contact.lastMsgStatusEnum == MessageStatus.Read) {
+                MaterialTheme.extendedColors.success
+              } else {
+                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+              }
 
-        if (!subText.isNullOrBlank()) {
+              Icon(
+                imageVector = statusIcon,
+                contentDescription = null,
+                modifier = Modifier
+                  .size(16.dp)
+                  .padding(end = 4.dp),
+                tint = statusTint
+              )
+            }
+
+            Text(
+              text = snippet,
+              style = MaterialTheme.typography.bodyMedium,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis,
+              color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+          }
+        } else if (!contact.bio.isNullOrBlank()) {
           Text(
-            text = subText,
+            text = contact.bio,
             style = MaterialTheme.typography.bodyMedium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -157,9 +198,7 @@ private fun getSnippetText(contact: Contact, context: Context): String {
   val kind = contact.lastMsgKindEnum ?: return ""
   return when (kind) {
     HistoryEntryKind.TextMessage -> {
-      val prefix = if (contact.lastMessageDirection == MessageDirection.Sent.value)
-        context.getString(R.string.chat_you_prefix) else ""
-      prefix + (contact.lastMessageContent ?: "")
+      contact.lastMessageContent ?: ""
     }
 
     HistoryEntryKind.VoiceCall, HistoryEntryKind.VideoCall -> {
