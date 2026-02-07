@@ -20,7 +20,9 @@ import android.telecom.TelecomManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.Person
+import androidx.core.content.FileProvider
 import hela.eillance.camera.R
+import hela.eillance.ndkio.AttachmentType
 import hela.eillance.ndkio.CallDirection
 import hela.eillance.ndkio.CallState
 import hela.eillance.ndkio.Contact
@@ -41,6 +43,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.webrtc.VideoSink
+import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 
 class CallService : Service() {
@@ -260,9 +263,35 @@ class CallService : Service() {
     newContacts.forEach { newContact ->
       val oldUnread = oldUnreadCounts[newContact.peerId] ?: 0
       if (newContact.unreadCount > oldUnread && !MercuryApplication.isAppInForeground) {
+        val prefs = getSharedPreferences("mercury_prefs", Context.MODE_PRIVATE)
+        val showContent = prefs.getBoolean("show_notifications_content", true)
+        val displayName = newContact.name.ifEmpty { newContact.peerId.take(8) }
+
+        val notificationContent = if (showContent) {
+          val text = newContact.lastMessageContent
+          if (!text.isNullOrBlank()) {
+            text
+          } else if (newContact.lastMessageAttachmentType == AttachmentType.Image.value) {
+            getString(R.string.notification_image)
+          } else if (newContact.lastMessageAttachmentType == AttachmentType.Video.value) {
+            getString(R.string.notification_video)
+          } else if (newContact.lastMessageAttachmentType == AttachmentType.File.value) {
+            getString(R.string.notification_file)
+          } else {
+            getString(R.string.notification_new_message)
+          }
+        } else {
+          getString(R.string.notification_new_message)
+        }
+
+        val imagePath = if (showContent && newContact.lastMessageAttachmentType == AttachmentType.Image.value)
+          newContact.lastMessageAttachmentPath else null
+
         showNewMessageNotification(
           newContact.peerId,
-          getString(R.string.notification_new_message_from, newContact.name)
+          displayName,
+          notificationContent,
+          imagePath
         )
       }
     }
@@ -366,7 +395,7 @@ class CallService : Service() {
     }
   }
 
-  private fun showNewMessageNotification(peerId: String, content: String) {
+  private fun showNewMessageNotification(peerId: String, title: String, content: String, imagePath: String?) {
     val intent = Intent(this, MainActivity::class.java).apply {
       flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
       putExtra(EXTRA_PEER_ID, peerId)
@@ -377,9 +406,20 @@ class CallService : Service() {
       intent,
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
-    val person = Person.Builder().setName(peerId).build()
+    val person = Person.Builder().setName(title).build()
+
+    val message = NotificationCompat.MessagingStyle.Message(content, System.currentTimeMillis(), person)
+
+    if (imagePath != null) {
+      val file = File(imagePath)
+      if (file.exists()) {
+        val uri = FileProvider.getUriForFile(this, "${packageName}.provider", file)
+        message.setData("image/", uri)
+      }
+    }
+
     val messagingStyle = NotificationCompat.MessagingStyle(person)
-      .addMessage(content, System.currentTimeMillis(), person)
+      .addMessage(message)
     val builder = NotificationCompat.Builder(this, MESSAGES_CHANNEL_ID)
       .setSmallIcon(android.R.drawable.stat_notify_chat)
       .setStyle(messagingStyle)
