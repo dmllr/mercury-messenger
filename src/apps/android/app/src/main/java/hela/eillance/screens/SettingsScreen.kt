@@ -20,6 +20,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -47,6 +48,7 @@ fun SettingsScreen(
   val context = LocalContext.current
   val signalingUrl by settingsVM.signalingUrl.collectAsState()
   val peerInactivityTimeout by settingsVM.peerInactivityTimeout.collectAsState()
+  val showNotificationContent by settingsVM.showNotificationContent.collectAsState()
 
   Scaffold(
     topBar = {
@@ -114,6 +116,23 @@ fun SettingsScreen(
         stringResource(id = R.string.settings_peer_timeout_description),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant
+      )
+
+      HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
+      Text(
+        stringResource(id = R.string.settings_group_notifications),
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(bottom = 8.dp)
+      )
+
+      ListItem(
+        headlineContent = { Text(stringResource(id = R.string.settings_show_content_title)) },
+        supportingContent = { Text(stringResource(id = R.string.settings_show_content_description)) },
+        trailingContent = {
+          Switch(checked = showNotificationContent, onCheckedChange = settingsVM::onShowNotificationContentChange)
+        }
       )
 
       HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))

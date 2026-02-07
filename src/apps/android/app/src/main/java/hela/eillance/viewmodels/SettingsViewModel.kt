@@ -1,6 +1,7 @@
 package hela.eillance.viewmodels
 
 import android.app.Application
+import android.content.Context
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import hela.eillance.ndkio.ServiceConnectionState
@@ -18,6 +19,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
   private val _peerInactivityTimeout = MutableStateFlow(120)
   val peerInactivityTimeout = _peerInactivityTimeout.asStateFlow()
+
+  private val prefs = application.getSharedPreferences("mercury_prefs", Context.MODE_PRIVATE)
+  private val _showNotificationContent = MutableStateFlow(prefs.getBoolean("show_notifications_content", true))
+  val showNotificationContent = _showNotificationContent.asStateFlow()
 
   init {
     nativePtr = nativeCreate(this)
@@ -49,6 +54,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
   fun onPeerInactivityTimeoutChange(newValue: Int) {
     _peerInactivityTimeout.value = newValue
+  }
+
+  fun onShowNotificationContentChange(enabled: Boolean) {
+    _showNotificationContent.value = enabled
+    prefs.edit().putBoolean("show_notifications_content", enabled).apply()
   }
 
   fun saveSettings() {

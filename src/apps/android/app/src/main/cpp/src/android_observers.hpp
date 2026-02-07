@@ -72,6 +72,8 @@ public:
       jstring lm_content = nullptr;
       jint lm_direction = -1;
       jint lm_status = 0;
+      jstring lm_att_path = nullptr;
+      jint lm_att_type = -1;
 
       if (contact_cpp.last_message) {
         lm_kind = static_cast<jint>(contact_cpp.last_message->kind);
@@ -81,6 +83,10 @@ public:
         if (std::holds_alternative<messaging::MessageEntry>(contact_cpp.last_message->data)) {
           auto const& txt = std::get<messaging::MessageEntry>(contact_cpp.last_message->data);
           lm_content = env->NewStringUTF(txt.content.c_str());
+          if (!txt.attachments.empty()) {
+            lm_att_path = env->NewStringUTF(txt.attachments.front().file_path.c_str());
+            lm_att_type = static_cast<jint>(txt.attachments.front().type);
+          }
         }
       }
 
@@ -97,7 +103,9 @@ public:
           lm_content,
           lm_direction,
           lm_status,
-          static_cast<jlong>(contact_cpp.last_activity_timestamp)
+          static_cast<jlong>(contact_cpp.last_activity_timestamp),
+          lm_att_path,
+          lm_att_type
       );
       env->CallBooleanMethod(contact_list, list_add_method, contact_java);
 
@@ -111,6 +119,9 @@ public:
       }
       if (lm_content != nullptr) {
         env->DeleteLocalRef(lm_content);
+      }
+      if (lm_att_path != nullptr) {
+        env->DeleteLocalRef(lm_att_path);
       }
       env->DeleteLocalRef(contact_java);
     }
