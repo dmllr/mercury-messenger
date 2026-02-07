@@ -42,6 +42,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import androidx.compose.ui.res.stringResource
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -63,8 +64,8 @@ fun ContactListItem(
     contact.peerId.take(8)
   }
 
-  val timestampText = if (contact.last_activity_timestamp > 0) {
-    formatContactTimestamp(contact.last_activity_timestamp, zoneId, formatters, context)
+  val timestampText = if (contact.lastActivityTimestamp > 0) {
+    formatContactTimestamp(contact.lastActivityTimestamp, zoneId, formatters, context)
   } else {
     ""
   }
@@ -90,7 +91,7 @@ fun ContactListItem(
       if (contact.status == ContactStatus.awaitingApproval) {
         Column {
           Text(
-            text = context.getString(R.string.sys_contact_req),
+            text = stringResource(R.string.sys_contact_req),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.tertiary
           )
