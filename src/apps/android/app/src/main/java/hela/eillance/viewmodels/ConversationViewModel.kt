@@ -16,10 +16,10 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import hela.eillance.ndkio.Attachment
 import hela.eillance.ndkio.AttachmentRequest
 import hela.eillance.ndkio.AttachmentStatus
 import hela.eillance.ndkio.AttachmentType
-import hela.eillance.ndkio.Attachment
 import hela.eillance.ndkio.HistoryPage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -54,6 +54,9 @@ class ConversationViewModel(
 
   private val _draftAttachments = MutableStateFlow<List<DraftAttachment>>(emptyList())
   val draftAttachments = _draftAttachments.asStateFlow()
+
+  private val _messageText = MutableStateFlow("")
+  val messageText = _messageText.asStateFlow()
 
   private val readQueue = mutableSetOf<Long>()
   private var readDebounceJob: Job? = null
@@ -225,6 +228,10 @@ class ConversationViewModel(
     return file
   }
 
+  fun updateMessageText(text: String) {
+    _messageText.value = text
+  }
+
   // --- Sending ---
 
   fun sendMessage(messageText: String) {
@@ -235,6 +242,7 @@ class ConversationViewModel(
       if (nativePtr != 0L) {
         nativeSendMessage(nativePtr, messageText)
       }
+      _messageText.value = ""
     } else {
       processAndSend(messageText, drafts)
     }
@@ -242,6 +250,7 @@ class ConversationViewModel(
 
   private fun processAndSend(text: String, drafts: List<DraftAttachment>) {
     _draftAttachments.value = emptyList()
+    _messageText.value = ""
 
     viewModelScope.launch(Dispatchers.IO) {
       val attachmentRequests = mutableListOf<AttachmentRequest>()

@@ -91,6 +91,7 @@ fun ContactsScreen(
   val context = LocalContext.current
   val bannerState by mainViewModel.permissionBannerState.collectAsState()
   val hasPermissionIssues by mainViewModel.hasPermissionIssues.collectAsState()
+  val pendingShare by mainViewModel.pendingShare.collectAsState()
 
   val notifLauncher =
     rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { onCheckPermissions() }
@@ -134,8 +135,11 @@ fun ContactsScreen(
             Spacer(modifier = Modifier.width(8.dp))
 
             Text(
-//              text = stringResource(id = R.string.app_name),
-              text = "\uD835\uDCDC\uD835\uDCEE\uD835\uDCFB\uD835\uDCEC\uD835\uDCFE\uD835\uDCFB\uD835\uDD02",
+              text = if (pendingShare != null) {
+                stringResource(id = R.string.share_with)
+              } else {
+                "\uD835\uDCDC\uD835\uDCEE\uD835\uDCFB\uD835\uDCEC\uD835\uDCFE\uD835\uDCFB\uD835\uDD02"
+              },
               style = MaterialTheme.typography.titleLarge,
               fontWeight = FontWeight.Bold
             )

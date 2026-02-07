@@ -94,6 +94,7 @@ fun ConversationScreen(
   val coroutineScope = rememberCoroutineScope()
   val transferProgress by chatVM.transferProgress.collectAsState()
   val draftAttachments by chatVM.draftAttachments.collectAsState()
+  val messageText by chatVM.messageText.collectAsState()
   val context = LocalContext.current
   val bannerState by mainViewModel.permissionBannerState.collectAsState()
   val clipboardManager = LocalClipboardManager.current
@@ -130,6 +131,19 @@ fun ConversationScreen(
   ) {
     if ((callState.isConnecting || callState.isRinging || callState.isInCall) && callState.peerId == peerId) {
       onNavigateToCall(peerId)
+    }
+  }
+
+  // Handle Shared Content
+  LaunchedEffect(peerId) {
+    val pendingShare = mainViewModel.consumePendingShareContent()
+    if (pendingShare != null) {
+      if (!pendingShare.text.isNullOrBlank()) {
+        chatVM.updateMessageText(pendingShare.text)
+      }
+      if (pendingShare.uris.isNotEmpty()) {
+        chatVM.addDraftAttachments(pendingShare.uris)
+      }
     }
   }
 
@@ -390,6 +404,8 @@ fun ConversationScreen(
 
         else -> {
           MessageInputArea(
+            inputValue = messageText,
+            onInputValueChange = chatVM::updateMessageText,
             draftAttachments = draftAttachments,
             onSendMessage = chatVM::sendMessage,
             onAddDrafts = chatVM::addDraftAttachments,
