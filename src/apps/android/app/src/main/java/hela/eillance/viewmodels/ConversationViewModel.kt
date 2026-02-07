@@ -29,7 +29,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.security.MessageDigest
 
 data class DraftAttachment(
   val uri: Uri,
@@ -214,9 +216,23 @@ class ConversationViewModel(
     return null
   }
 
-  private fun resolveUniqueFile(dir: File, fileName: String): File {
+  private fun resolveUniqueFile(dir: File, fileName: String, contentResolver: ContentResolver, sourceUri: Uri): File {
     var file = File(dir, fileName)
     if (!file.exists()) return file
+
+    // Deduplication check: If name exists, check if content is identical
+    try {
+      val sourceSize = contentResolver.openFileDescriptor(sourceUri, "r")?.use { it.statSize } ?: -1L
+      if (sourceSize != -1L && file.length() == sourceSize) {
+        val sourceHash = calculateStreamHash(contentResolver.openInputStream(sourceUri))
+        val targetHash = calculateStreamHash(FileInputStream(file))
+        if (sourceHash != null && sourceHash == targetHash) {
+          return file // Reuse existing file
+        }
+      }
+    } catch (e: Exception) {
+      Log.w("ConversationVM", "Deduplication check failed, falling back to rename", e)
+    }
 
     val name = file.nameWithoutExtension
     val ext = file.extension
@@ -226,6 +242,23 @@ class ConversationViewModel(
       counter++
     }
     return file
+  }
+
+  private fun calculateStreamHash(inputStream: java.io.InputStream?): String? {
+    inputStream ?: return null
+    return try {
+      val digest = MessageDigest.getInstance("SHA-256")
+      val buffer = ByteArray(8192)
+      var bytesRead: Int
+      inputStream.use { stream ->
+        while (stream.read(buffer).also { bytesRead = it } != -1) {
+          digest.update(buffer, 0, bytesRead)
+        }
+      }
+      digest.digest().joinToString("") { "%02x".format(it) }
+    } catch (e: Exception) {
+      null
+    }
   }
 
   fun updateMessageText(text: String) {
@@ -256,22 +289,22 @@ class ConversationViewModel(
       val attachmentRequests = mutableListOf<AttachmentRequest>()
       val context = getApplication<Application>()
 
-      // Use cacheDir for sending to avoid duplicating storage permanently.
-      // C++ will read from here. Android OS cleans this up eventually.
-      val cacheDir = context.cacheDir
-      if (!cacheDir.exists()) cacheDir.mkdirs()
+      // Use persistent attachments directory
+      val attachmentsDir = File(context.filesDir, "attachments")
+      if (!attachmentsDir.exists()) attachmentsDir.mkdirs()
 
       for (draft in drafts) {
         try {
-          // Resolve unique filename in cache to prevent collisions for this batch
-          val destFile = resolveUniqueFile(cacheDir, draft.name)
+          val destFile = resolveUniqueFile(attachmentsDir, draft.name, context.contentResolver, draft.uri)
 
-          // Copy content to cache so C++ ifstream can read it (C++ cannot read content:// Uris directly)
-          context.contentResolver.openInputStream(draft.uri)?.use { input ->
-            FileOutputStream(destFile).use { output ->
-              input.copyTo(output)
-            }
-          } ?: throw Exception("Failed to open input stream for ${draft.uri}")
+          // Only copy if we aren't reusing an existing file
+          if (!destFile.exists() || destFile.length() == 0L) {
+            context.contentResolver.openInputStream(draft.uri)?.use { input ->
+              FileOutputStream(destFile).use { output ->
+                input.copyTo(output)
+              }
+            } ?: throw Exception("Failed to open input stream for ${draft.uri}")
+          }
 
           val thumbnailBase64 = try {
             val bitmap = generateThumbnail(context.contentResolver, draft.uri, destFile, draft.type)
