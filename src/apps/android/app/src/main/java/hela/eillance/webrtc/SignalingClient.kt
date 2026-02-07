@@ -85,7 +85,7 @@ class SignalingClient {
               while (!messageQueue.isEmpty()) {
                 val msg = messageQueue.poll()
                 if (msg != null) {
-                    ws.send(msg)
+                  ws.send(msg)
                 }
               }
             }
@@ -158,13 +158,13 @@ class SignalingClient {
     val messageString = message.toString()
     val ws = webSocket
     if (isConnected.get() && ws != null) {
-        if (!ws.send(messageString)) {
-             Log.e(TAG, "Failed to send message immediately, queuing.")
-             messageQueue.add(messageString)
-        }
-    } else {
-        Log.i(TAG, "Signaling not connected, queuing message: $messageString")
+      if (!ws.send(messageString)) {
+        Log.e(TAG, "Failed to send message immediately, queuing.")
         messageQueue.add(messageString)
+      }
+    } else {
+      Log.i(TAG, "Signaling not connected, queuing message: $messageString")
+      messageQueue.add(messageString)
     }
   }
 

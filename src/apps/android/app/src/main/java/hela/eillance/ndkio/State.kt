@@ -122,7 +122,7 @@ data class Contact(
   val lastMessageContent: String?,
   val lastMessageDirection: Int,
   val lastMessageStatus: Int,
-  val last_activity_timestamp: Long
+  val lastActivityTimestamp: Long
 ) {
   val status: ContactStatus get() = ContactStatus.fromInt(statusValue)
   val lastMsgKindEnum: HistoryEntryKind? get() = if (lastMessageKind != -1) HistoryEntryKind.fromInt(lastMessageKind) else null

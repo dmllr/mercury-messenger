@@ -12,7 +12,6 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 import org.webrtc.AudioSource
@@ -86,6 +85,7 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
 
   // Thread-safe session management
   private val sessions = ConcurrentHashMap<String, ConcurrentHashMap<String, ConnectionSession>>()
+
   // Mutex for synchronizing access to peer connection creation/deletion
   private val sessionMutex = Mutex()
 
@@ -184,7 +184,7 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
 
     // Cleanup existing session if any
     sessions[peerId]?.remove(context)?.dispose()
-    
+
     // Immediately report 'New' state to avoid "Disconnected" flicker in UI.
     // PeerConnectionState.New (0) maps to "Connecting" in the UI layer.
     if (context == "data") {
@@ -298,12 +298,16 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
       val constraints = MediaConstraints()
       val offerSdp = suspendCancellableCoroutine<SessionDescription?> { cont ->
         session.pc.createOffer(object : SdpObserver {
-          override fun onCreateSuccess(sdp: SessionDescription?) { cont.resume(sdp) }
+          override fun onCreateSuccess(sdp: SessionDescription?) {
+            cont.resume(sdp)
+          }
+
           override fun onSetSuccess() {}
           override fun onCreateFailure(s: String?) {
             Log.e(TAG, "createOffer failed: $s")
             cont.resume(null)
           }
+
           override fun onSetFailure(s: String?) {}
         }, constraints)
       } ?: return@launch
@@ -312,11 +316,15 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
       val setSuccess = suspendCancellableCoroutine<Boolean> { cont ->
         session.pc.setLocalDescription(object : SdpObserver {
           override fun onCreateSuccess(sdp: SessionDescription?) {}
-          override fun onSetSuccess() { cont.resume(true) }
+          override fun onSetSuccess() {
+            cont.resume(true)
+          }
+
           override fun onCreateFailure(s: String?) {
             Log.e(TAG, "setLocalDescription (offer) failed: $s")
             cont.resume(false)
           }
+
           override fun onSetFailure(s: String?) {
             Log.e(TAG, "setLocalDescription (offer) setFail: $s")
             cont.resume(false)
@@ -368,12 +376,16 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
 
       val answerSdp = suspendCancellableCoroutine<SessionDescription?> { cont ->
         session.pc.createAnswer(object : SdpObserver {
-          override fun onCreateSuccess(sdp: SessionDescription?) { cont.resume(sdp) }
+          override fun onCreateSuccess(sdp: SessionDescription?) {
+            cont.resume(sdp)
+          }
+
           override fun onSetSuccess() {}
           override fun onCreateFailure(s: String?) {
             Log.e(TAG, "createAnswer failed: $s")
             cont.resume(null)
           }
+
           override fun onSetFailure(s: String?) {}
         }, constraints)
       } ?: return@launch
@@ -381,11 +393,15 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
       val setSuccess = suspendCancellableCoroutine<Boolean> { cont ->
         session.pc.setLocalDescription(object : SdpObserver {
           override fun onCreateSuccess(sdp: SessionDescription?) {}
-          override fun onSetSuccess() { cont.resume(true) }
+          override fun onSetSuccess() {
+            cont.resume(true)
+          }
+
           override fun onCreateFailure(s: String?) {
             Log.e(TAG, "setLocalDescription (answer) failed: $s")
             cont.resume(false)
           }
+
           override fun onSetFailure(s: String?) {
             Log.e(TAG, "setLocalDescription (answer) setFail: $s")
             cont.resume(false)
@@ -427,7 +443,7 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
 
     Log.d(TAG, "Setting Remote Description ($type) for $peerId")
 
-    val canonicalType = when(type.lowercase()) {
+    val canonicalType = when (type.lowercase()) {
       "offer" -> SessionDescription.Type.OFFER
       "answer" -> SessionDescription.Type.ANSWER
       "pranswer" -> SessionDescription.Type.PRANSWER
@@ -450,9 +466,11 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
       override fun onSetSuccess() {
         Log.i(TAG, "Remote description ($type) set successfully for $peerId")
       }
+
       override fun onCreateFailure(s: String?) {
         Log.e(TAG, "Failed to create remote desc (unexpected): $s")
       }
+
       override fun onSetFailure(s: String?) {
         Log.e(TAG, "Failed to set remote description for peer $peerId: $s")
       }
@@ -479,6 +497,7 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
           nativeOnDataChannelOpen(nativePointer, peerId)
         }
       }
+
       override fun onMessage(buffer: DataChannel.Buffer) {
         val data = ByteArray(buffer.data.remaining())
         buffer.data.get(data)
@@ -667,7 +686,11 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
         when (message) {
           is SignalingMessage.PeerMessage -> nativeOnPeerMessage(nativePointer, message.message.toString())
           is SignalingMessage.Error -> nativeOnSignalingError(nativePointer, message.forPeer ?: "", message.error)
-          is SignalingMessage.SystemMessage -> nativeOnSystemMessage(nativePointer, message.type, message.payload.toString())
+          is SignalingMessage.SystemMessage -> nativeOnSystemMessage(
+            nativePointer,
+            message.type,
+            message.payload.toString()
+          )
         }
       }
     }.launchIn(scope)
