@@ -329,6 +329,9 @@ class Client final : public transport::TransportDelegate {
   [[nodiscard]] auto GetChatSummaries(std::vector<ContactID> const& ids) const -> std::vector<messaging::ChatSummary> {
     return messaging_service_->GetChatSummaries(ids);
   }
+  [[nodiscard]] auto GetUnreadMessages(ContactID const& id) const -> std::vector<messaging::HistoryEntryRecord> {
+    return messaging_service_->GetUnreadMessages(id);
+  }
 
   void CancelTransfer(ContactID const& peer_id, std::string const& attachment_id, bool is_upload) const {
     messaging_service_->CancelTransfer(peer_id, attachment_id, is_upload);

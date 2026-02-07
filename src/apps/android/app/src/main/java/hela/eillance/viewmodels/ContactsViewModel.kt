@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import hela.eillance.CallService
 import hela.eillance.camera.R
 import hela.eillance.ndkio.Contact
+import hela.eillance.ndkio.HistoryEntry
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -124,6 +125,10 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
     addContact(feedbackId)
   }
 
+  fun getUnreadMessages(peerId: String): List<HistoryEntry> {
+    return if (nativePtr != 0L) nativeGetUnreadMessages(nativePtr, peerId) else emptyList()
+  }
+
   // --- JNI Definitions ---
   private external fun nativeCreate(observer: NativeContactsObserver): Long
   private external fun nativeDestroy(ptr: Long)
@@ -135,4 +140,5 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
   private external fun nativeSetDisplayName(ptr: Long, peerId: String, name: String)
   private external fun nativeResetDisplayName(ptr: Long, peerId: String)
   private external fun nativeGenerateToken(ptr: Long): String
+  private external fun nativeGetUnreadMessages(ptr: Long, peerId: String): List<HistoryEntry>
 }

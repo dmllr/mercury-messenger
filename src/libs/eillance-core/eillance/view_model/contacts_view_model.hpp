@@ -63,6 +63,10 @@ class ContactsViewModel {
   [[nodiscard]] auto GetContacts() const -> std::vector<ViewContact> {
     return impl_->GetContacts();
   }
+  
+  [[nodiscard]] auto GetUnreadMessages(ContactID const& peer_id) const -> std::vector<messaging::HistoryEntryRecord> {
+    return impl_->client->GetUnreadMessages(peer_id);
+  }
 
   // Actions
   auto AddContact(ContactID const& peer_id, std::optional<std::vector<std::byte>> const& token) const -> bool {

@@ -449,6 +449,13 @@ public:
     return history_->GetChatSummaries(peer_ids);
   }
 
+  [[nodiscard]] auto GetUnreadMessages(ContactID const& peer_id) const -> std::vector<messaging::HistoryEntryRecord> {
+    auto messages = storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::delivered);
+    std::erase_if(messages, [](auto const& msg) { return msg.direction != messaging::MessageDirection::received; });
+    std::ranges::sort(messages, {}, &messaging::HistoryEntryRecord::timestamp);
+    return messages;
+  }
+
   void MarkMessagesAsRead(ContactID const& peer_id, std::vector<std::uint64_t> const& message_ids) {
     history_->MarkMessagesAsRead(peer_id, message_ids);
     auto remote_ids = storage_->GetRemoteIds(peer_id, message_ids);
