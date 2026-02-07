@@ -1,9 +1,12 @@
 package hela.eillance.screens
 
 import android.app.Application
+import android.graphics.BitmapFactory
 import android.net.Uri
+import android.util.Base64
 import android.view.ViewGroup
 import androidx.annotation.OptIn
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -29,6 +32,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -40,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
@@ -133,7 +138,12 @@ fun MediaPreviewScreen(
         modifier = Modifier.fillMaxSize(),
         pageSpacing = 0.dp
       ) { page ->
-        MediaPage(attachment = attachments[page], progress = transferProgress[attachments[page].id])
+        MediaPage(
+          attachment = attachments[page],
+          progress = transferProgress[attachments[page].id],
+          vm = conversationVM,
+          isVisible = pagerState.currentPage == page
+        )
       }
 
       // Note Overlay
@@ -163,11 +173,52 @@ fun MediaPreviewScreen(
 }
 
 @Composable
-fun MediaPage(attachment: Attachment, progress: Float?) {
-  val file = File(attachment.path)
+fun MediaPage(
+  attachment: Attachment,
+  progress: Float?,
+  vm: ConversationViewModel,
+  isVisible: Boolean
+) {
+  var currentAttachment by remember { mutableStateOf(attachment) }
+
+  // If the thumbnail was stripped during navigation (to avoid TransactionTooLargeException),
+  // fetch the full attachment details from the database.
+  LaunchedEffect(attachment.id) {
+    if (currentAttachment.thumbnail.isNullOrEmpty()) {
+      val fullData = vm.getAttachment(attachment.id)
+      if (fullData != null) {
+        currentAttachment = fullData
+      }
+    }
+  }
+
+  val file = File(currentAttachment.path)
 
   Box(modifier = Modifier.fillMaxSize()) {
+    // Show thumbnail background if file is missing or loading
+    val imageBitmap = remember(currentAttachment.thumbnail) {
+      if (!currentAttachment.thumbnail.isNullOrEmpty()) {
+        try {
+          val bytes = Base64.decode(currentAttachment.thumbnail, Base64.DEFAULT)
+          BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+        } catch (e: Exception) {
+          null
+        }
+      } else null
+    }
+
     if (!file.exists()) {
+      if (imageBitmap != null) {
+        Image(
+          bitmap = imageBitmap,
+          contentDescription = null,
+          modifier = Modifier
+            .fillMaxSize()
+            .graphicsLayer { alpha = 0.7f },
+          contentScale = ContentScale.Crop
+        )
+      }
+
       if (progress != null) {
         CircularProgressIndicator(
           progress = { progress },
@@ -175,19 +226,35 @@ fun MediaPage(attachment: Attachment, progress: Float?) {
           color = Color.White
         )
       } else {
+        val errorText = when (currentAttachment.type) {
+          AttachmentType.Image -> stringResource(R.string.media_error_image)
+          AttachmentType.Video -> stringResource(R.string.media_error_video)
+          else -> stringResource(R.string.media_error_file)
+        }
+
+        // Dark overlay to make text readable over thumbnail
+        Box(
+          modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.3f))
+        )
+
         Text(
-          text = stringResource(id = R.string.media_preview_removed),
+          text = errorText,
           color = Color.White,
-          modifier = Modifier.align(Alignment.Center)
+          style = MaterialTheme.typography.bodyLarge,
+          modifier = Modifier
+            .align(Alignment.Center)
+            .padding(16.dp)
         )
       }
     } else {
-      val isVideo = attachment.type == AttachmentType.Video ||
-          attachment.mime.startsWith("video/") ||
+      val isVideo = currentAttachment.type == AttachmentType.Video ||
+          currentAttachment.mime.startsWith("video/") ||
           file.extension.lowercase(Locale.ROOT) in setOf("mp4", "mkv", "webm", "avi", "mov", "3gp")
 
       if (isVideo) {
-        VideoPlayer(file)
+        VideoPlayer(file, isVisible)
       } else {
         ZoomableImage(file)
       }
@@ -281,7 +348,7 @@ fun ZoomableImage(file: File) {
 
 @OptIn(UnstableApi::class)
 @Composable
-fun VideoPlayer(file: File) {
+fun VideoPlayer(file: File, isPlaying: Boolean) {
   val context = LocalContext.current
 
   val exoPlayer = remember {
@@ -292,11 +359,14 @@ fun VideoPlayer(file: File) {
     val mediaItem = MediaItem.fromUri(Uri.fromFile(file))
     exoPlayer.setMediaItem(mediaItem)
     exoPlayer.prepare()
-    exoPlayer.playWhenReady = true
 
     onDispose {
       exoPlayer.release()
     }
+  }
+
+  LaunchedEffect(isPlaying) {
+    exoPlayer.playWhenReady = isPlaying
   }
 
   AndroidView(

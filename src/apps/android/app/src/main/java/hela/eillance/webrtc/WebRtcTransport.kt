@@ -184,6 +184,12 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
 
     // Cleanup existing session if any
     sessions[peerId]?.remove(context)?.dispose()
+    
+    // Immediately report 'New' state to avoid "Disconnected" flicker in UI.
+    // PeerConnectionState.New (0) maps to "Connecting" in the UI layer.
+    if (context == "data") {
+      nativeOnPeerConnectionStateChange(nativePointer, peerId, PeerConnectionState.New.value)
+    }
 
     // STUN/TURN servers
     val iceServers = listOf(
@@ -682,7 +688,7 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
     private const val MEDIA_STREAM_ID = "ARDAMS"
     private const val VIDEO_TRACK_ID = "ARDAMSv0"
     private const val AUDIO_TRACK_ID = "ARDAMSa0"
-    private const val GATHERING_TIMEOUT_MS = 5000L // 5s wait for candidates
+    private const val GATHERING_TIMEOUT_MS = 1500L // Reduced wait for candidates
 
     val eglBase: EglBase by lazy { EglBase.create() }
   }

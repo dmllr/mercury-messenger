@@ -181,4 +181,42 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationView
   env->ReleaseStringUTFChars(attachment_id, chars);
 }
 
+extern "C" JNIEXPORT jobject JNICALL Java_hela_eillance_viewmodels_ConversationViewModel_nativeGetAttachment(
+    JNIEnv* env,
+    jobject /*instance*/,
+    jlong ptr,
+    jstring attachment_id
+) {
+  auto* vm = reinterpret_cast<eillance::view_model::ConversationViewModel*>(ptr);
+  // We need to access the client from the VM pointer, but VM wraps it. 
+  // Since we don't have direct access to Client from VM pointer in C++ easily without a getter,
+  // we rely on the global engine instance which is the source of truth anyway.
+  if (!g_clientEngine) return nullptr;
+
+  char const* chars = env->GetStringUTFChars(attachment_id, nullptr);
+  auto attachment_opt = g_clientEngine->GetClient()->GetAttachment(chars);
+  env->ReleaseStringUTFChars(attachment_id, chars);
+
+  if (!attachment_opt) return nullptr;
+
+  auto const& att = *attachment_opt;
+  auto& class_refs = ClassRefs::Instance();
+  auto& attachment_holder = class_refs.Class("hela/eillance/ndkio/Attachment");
+
+  jstring j_id = env->NewStringUTF(att.id.c_str());
+  jstring j_path = env->NewStringUTF(att.file_path.c_str());
+  jstring j_mime = env->NewStringUTF(att.mime_type.c_str());
+  jstring j_thumb = att.thumbnail_base64.empty() ? nullptr : env->NewStringUTF(att.thumbnail_base64.c_str());
+  jstring j_note = env->NewStringUTF(att.note.c_str());
+  jstring j_name = env->NewStringUTF(att.file_name.c_str());
+
+  return attachment_holder.NewObject(
+      env, j_id, static_cast<jint>(att.type), j_path, j_mime,
+      static_cast<jlong>(att.size_bytes), j_thumb,
+      static_cast<jboolean>(att.is_downloaded),
+      static_cast<jint>(att.status),
+      j_note, j_name
+  );
+}
+
 // NOLINTEND(readability-identifier-naming)
