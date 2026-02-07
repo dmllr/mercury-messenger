@@ -45,7 +45,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
@@ -59,13 +58,14 @@ private enum class CameraAction { Photo, Video }
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MessageInputArea(
+  inputValue: String,
+  onInputValueChange: (String) -> Unit,
   draftAttachments: List<DraftAttachment>,
   onSendMessage: (String) -> Unit,
   onAddDrafts: (List<Uri>) -> Unit,
   onRemoveDraft: (Int) -> Unit,
   onUpdateNote: (Int, String) -> Unit
 ) {
-  var text by remember { mutableStateOf(TextFieldValue("")) }
   var isFocused by remember { mutableStateOf(false) }
   var selectedDraftIndex by remember { mutableStateOf<Int?>(null) }
   val context = LocalContext.current
@@ -225,8 +225,8 @@ fun MessageInputArea(
       verticalAlignment = Alignment.CenterVertically
     ) {
       TextField(
-        value = text,
-        onValueChange = { text = it },
+        value = inputValue,
+        onValueChange = onInputValueChange,
         modifier = Modifier
           .weight(1f)
           .onFocusChanged { isFocused = it.isFocused },
@@ -244,7 +244,7 @@ fun MessageInputArea(
         maxLines = 4
       )
 
-      val canSend = text.text.isNotBlank() || draftAttachments.isNotEmpty()
+      val canSend = inputValue.isNotBlank() || draftAttachments.isNotEmpty()
       IconButton(
         modifier = Modifier
           .background(
@@ -253,8 +253,7 @@ fun MessageInputArea(
           ),
         onClick = {
           if (canSend) {
-            onSendMessage(text.text)
-            text = TextFieldValue("")
+            onSendMessage(inputValue)
           }
         },
         enabled = canSend

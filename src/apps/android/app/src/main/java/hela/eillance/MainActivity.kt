@@ -23,6 +23,7 @@ class MainActivity : ComponentActivity() {
 
     configureWindowForLockScreen()
     handleIntent(intent)
+    viewModel.handleShareIntent(intent)
 
     // Start service immediately.
     startService()
@@ -67,6 +68,7 @@ class MainActivity : ComponentActivity() {
     super.onNewIntent(intent)
     setIntent(intent)
     handleIntent(intent)
+    viewModel.handleShareIntent(intent)
   }
 
   private fun handleIntent(intent: Intent?) {
