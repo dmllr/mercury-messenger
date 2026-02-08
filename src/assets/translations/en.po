@@ -74,6 +74,8 @@ msgid "action_resend_request"
 msgstr "Resend Request"
 msgid "action_approve_contact"
 msgstr "Approve Contact"
+msgid "action_mark_read"
+msgstr "Mark as read"
 
 # Connection States
 msgid "connection_no_network"

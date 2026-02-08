@@ -40,6 +40,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -163,6 +164,17 @@ class CallService : Service() {
     when (intent?.action) {
       ACTION_REJECT_CALL -> rejectCall()
       ACTION_HANGUP -> hangup()
+      ACTION_MARK_READ -> {
+        val peerId = intent.getStringExtra(EXTRA_PEER_ID)
+        if (peerId != null) {
+          serviceScope.launch {
+            // Wait for engine init if necessary
+            CallService.isEngineReady.first { it }
+            backgroundContactsVM?.markAllAsRead(peerId)
+            notificationManager.cancel(MESSAGE_NOTIFICATION_ID_BASE + peerId.hashCode())
+          }
+        }
+      }
     }
     return START_STICKY
   }
@@ -390,7 +402,7 @@ class CallService : Service() {
       intent,
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
-    
+
     val me = Person.Builder().setName(getString(R.string.app_name)).build()
     val sender = Person.Builder().setName(title).build()
     val style = NotificationCompat.MessagingStyle(me)
@@ -443,15 +455,32 @@ class CallService : Service() {
         style.addMessage(text, msg.timestamp / 1000, sender)
       }
     } else {
-        // Fallback
-        style.addMessage(getString(R.string.notification_new_message), System.currentTimeMillis(), sender)
+      // Fallback
+      style.addMessage(getString(R.string.notification_new_message), System.currentTimeMillis(), sender)
     }
+
+    val markReadIntent = Intent(this, CallService::class.java).apply {
+      action = ACTION_MARK_READ
+      putExtra(EXTRA_PEER_ID, peerId)
+    }
+    val markReadPendingIntent = PendingIntent.getService(
+      this,
+      peerId.hashCode(),
+      markReadIntent,
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+    val markReadAction = NotificationCompat.Action.Builder(
+      0,
+      getString(R.string.action_mark_read),
+      markReadPendingIntent
+    ).build()
 
     val builder = NotificationCompat.Builder(this, MESSAGES_CHANNEL_ID)
       .setSmallIcon(android.R.drawable.stat_notify_chat)
       .setStyle(style)
       .setShowWhen(false)
       .setContentIntent(pendingIntent)
+      .addAction(markReadAction)
       .setAutoCancel(true)
     notificationManager.notify(MESSAGE_NOTIFICATION_ID_BASE + peerId.hashCode(), builder.build())
   }
@@ -588,6 +617,7 @@ class CallService : Service() {
     const val ACTION_ACCEPT_CALL = "hela.eillance.ACTION_ACCEPT_CALL"
     private const val ACTION_REJECT_CALL = "hela.eillance.ACTION_REJECT_CALL"
     const val ACTION_SHOW_INCOMING_CALL = "hela.eillance.ACTION_SHOW_INCOMING_CALL"
+    private const val ACTION_MARK_READ = "hela.eillance.ACTION_MARK_READ"
     const val EXTRA_PEER_ID = "hela.eillance.EXTRA_PEER_ID"
   }
 }
