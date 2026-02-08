@@ -16,7 +16,7 @@
 namespace eillance::view_model {
 
 class ContactsViewModel {
- public:
+public:
   // Observer interface for contact list updates
   struct Observer {
     Observer() = default;
@@ -63,7 +63,7 @@ class ContactsViewModel {
   [[nodiscard]] auto GetContacts() const -> std::vector<ViewContact> {
     return impl_->GetContacts();
   }
-  
+
   [[nodiscard]] auto GetUnreadMessages(ContactID const& peer_id) const -> std::vector<messaging::HistoryEntryRecord> {
     return impl_->client->GetUnreadMessages(peer_id);
   }
@@ -94,8 +94,11 @@ class ContactsViewModel {
   auto GenerateContactToken() -> std::vector<std::byte> {
     return impl_->client->GenerateContactToken();
   }
+  void MarkAllAsRead(ContactID const& peer_id) {
+    impl_->MarkAllAsRead(peer_id);
+  }
 
- private:
+private:
   struct Impl : public std::enable_shared_from_this<Impl> {
     std::shared_ptr<Client> client;
     std::shared_ptr<ClientEventRouter> router;
@@ -172,6 +175,21 @@ class ContactsViewModel {
       }).detach();
     }
 
+    void MarkAllAsRead(ContactID const& peer_id) {
+      std::thread([self = shared_from_this(), peer_id]() {
+        auto unread = self->client->GetUnreadMessages(peer_id);
+        std::vector<std::uint64_t> ids;
+        ids.reserve(unread.size());
+        for (auto const& msg : unread) {
+          ids.push_back(msg.id);
+        }
+        if (!ids.empty()) {
+          self->client->MarkMessagesAsRead(peer_id, ids);
+          self->DoUpdateContactsList();
+        }
+      }).detach();
+    }
+
     void UpdateContactsList() {
       std::thread([self = shared_from_this()]() { self->DoUpdateContactsList(); }).detach();
     }
@@ -194,12 +212,12 @@ class ContactsViewModel {
 
           temp_contacts.push_back(
               {.peer_id = contact.peer_id,
-               .display_name = display_name,
-               .bio = contact.bio,
-               .photo = contact.photo_base64,
-               .status = contact.status,
-               .connection_state = client->GetPeerConnectionState(contact.peer_id),
-               .unread_count = 0}
+                  .display_name = display_name,
+                  .bio = contact.bio,
+                  .photo = contact.photo_base64,
+                  .status = contact.status,
+                  .connection_state = client->GetPeerConnectionState(contact.peer_id),
+                  .unread_count = 0}
           );
           contact_ids.push_back(contact.peer_id);
         }

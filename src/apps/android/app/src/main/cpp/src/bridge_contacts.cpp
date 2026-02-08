@@ -38,8 +38,8 @@ extern "C" JNIEXPORT jboolean JNICALL Java_hela_eillance_viewmodels_ContactsView
   char const* peer_id_chars = env->GetStringUTFChars(peer_id, nullptr);
   char const* token_chars = (token != nullptr) ? env->GetStringUTFChars(token, nullptr) : nullptr;
   auto const c_token = ((token_chars) != nullptr)
-                           ? std::optional<std::vector<std::byte>>(eillance::crypto::FromHex(token_chars))
-                           : std::nullopt;
+                       ? std::optional<std::vector<std::byte>>(eillance::crypto::FromHex(token_chars))
+                       : std::nullopt;
   bool result = false;
   try {
     result = vm->AddContact(eillance::ContactID(peer_id_chars), c_token);
@@ -144,6 +144,18 @@ Java_hela_eillance_viewmodels_ContactsViewModel_nativeGenerateToken(JNIEnv* env,
   auto* vm = reinterpret_cast<eillance::view_model::ContactsViewModel*>(ptr);
   auto const token = vm->GenerateContactToken();
   return env->NewStringUTF(eillance::crypto::ToHex(token).c_str());
+}
+
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ContactsViewModel_nativeMarkAllAsRead(
+    JNIEnv* env,
+    jobject /*instance*/,
+    jlong ptr,
+    jstring peer_id
+) {
+  auto* vm = reinterpret_cast<eillance::view_model::ContactsViewModel*>(ptr);
+  char const* chars = env->GetStringUTFChars(peer_id, nullptr);
+  vm->MarkAllAsRead(eillance::ContactID(chars));
+  env->ReleaseStringUTFChars(peer_id, chars);
 }
 
 extern "C" JNIEXPORT jobject JNICALL Java_hela_eillance_viewmodels_ContactsViewModel_nativeGetUnreadMessages(

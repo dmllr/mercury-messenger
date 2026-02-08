@@ -129,6 +129,10 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
     return if (nativePtr != 0L) nativeGetUnreadMessages(nativePtr, peerId) else emptyList()
   }
 
+  fun markAllAsRead(peerId: String) {
+    if (nativePtr != 0L) nativeMarkAllAsRead(nativePtr, peerId)
+  }
+
   // --- JNI Definitions ---
   private external fun nativeCreate(observer: NativeContactsObserver): Long
   private external fun nativeDestroy(ptr: Long)
@@ -141,4 +145,5 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
   private external fun nativeResetDisplayName(ptr: Long, peerId: String)
   private external fun nativeGenerateToken(ptr: Long): String
   private external fun nativeGetUnreadMessages(ptr: Long, peerId: String): List<HistoryEntry>
+  private external fun nativeMarkAllAsRead(ptr: Long, peerId: String)
 }
