@@ -16,6 +16,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -114,6 +115,13 @@ fun IdentitySetupFlow(profileVM: ProfileViewModel) {
 @Composable
 fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
   val navController = rememberNavController()
+
+  // Helper to prevent double-pop blank screen issues
+  fun NavController.safePopBackStack() {
+    if (currentBackStackEntry?.lifecycle?.currentState == Lifecycle.State.RESUMED) {
+      popBackStack()
+    }
+  }
 
   // Hoist ViewModels to share instances across the graph
   val callVM: CallViewModel = viewModel()
@@ -231,7 +239,11 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
           connectionState = connectionState,
           onCheckPermissions = viewModel::checkAllPermissions,
           onContactClick = { peerId -> viewModel.navigateToPeer(peerId) },
-          onNavigateToProfile = { navController.navigate(Screen.Profile.route) },
+          onNavigateToProfile = {
+            navController.navigate(Screen.Profile.route) {
+              launchSingleTop = true
+            }
+          },
           onShowContactProfile = contactsVM::onShowContactProfile
         )
       }
@@ -244,7 +256,7 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
           debugVM = debugVM,
           mainViewModel = viewModel,
           myProfile = myProfile,
-          onBack = { navController.popBackStack() },
+          onBack = { navController.safePopBackStack() },
           onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
           onNavigateToBetaNotice = { navController.navigate(Route.WebView.createRoute("https://mercury.eillance.com/beta/embed/")) },
           onNavigateToBackupAndRestore = { navController.navigate(Screen.BackupRestore.route) },
@@ -256,7 +268,7 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
 
       composable(Screen.DebugMenu.route) {
         DebugMenuScreen(
-          onNavigateBack = { navController.popBackStack() },
+          onNavigateBack = { navController.safePopBackStack() },
           onNavigateToPendingActions = { navController.navigate(Screen.DebugPendingActions.route) },
           onNavigateToConnections = { navController.navigate(Screen.DebugConnections.route) },
           onNavigateToUnread = { navController.navigate(Screen.DebugUnread.route) },
@@ -271,21 +283,21 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
       }
 
       composable(Screen.DebugPendingActions.route) {
-        PendingActionsScreen(debugVM = debugVM, onBack = { navController.popBackStack() })
+        PendingActionsScreen(debugVM = debugVM, onBack = { navController.safePopBackStack() })
       }
 
       composable(Screen.DebugConnections.route) {
-        ConnectionDebugScreen(debugVM = debugVM, onBack = { navController.popBackStack() })
+        ConnectionDebugScreen(debugVM = debugVM, onBack = { navController.safePopBackStack() })
       }
 
       composable(Screen.DebugUnread.route) {
-        UnreadMessagesScreen(debugVM = debugVM, onBack = { navController.popBackStack() })
+        UnreadMessagesScreen(debugVM = debugVM, onBack = { navController.safePopBackStack() })
       }
 
       composable(Screen.PermissionIssues.route) {
         PermissionIssuesScreen(
           mainViewModel = viewModel,
-          onBack = { navController.popBackStack() }
+          onBack = { navController.safePopBackStack() }
         )
       }
 
@@ -308,7 +320,7 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
           historyPage = historyPage,
           callState = callState,
           connectionState = connectionState,
-          onBack = { navController.popBackStack() },
+          onBack = { navController.safePopBackStack() },
           onNavigateToCall = { navController.navigate(Route.Call.createRoute(it)) },
           onShowContactProfile = { contactsVM.onShowContactProfile(it) },
           onMediaClick = { attachments, index ->
@@ -321,14 +333,14 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
         CallScreen(
           callVM = callVM,
           callState = callState,
-          onNavigateBack = { navController.popBackStack() }
+          onNavigateBack = { navController.safePopBackStack() }
         )
       }
 
       composable(Screen.Settings.route) {
         SettingsScreen(
           settingsVM = settingsVM,
-          onBack = { navController.popBackStack() },
+          onBack = { navController.safePopBackStack() },
           navController = navController
         )
       }
@@ -336,7 +348,7 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
       composable(Screen.BackupRestore.route) {
         BackupAndRestoreScreen(
           profileVM = profileVM,
-          onBack = { navController.popBackStack() },
+          onBack = { navController.safePopBackStack() },
           onNavigateToRecoveryPhrase = { navController.navigate(Screen.RecoveryPhrase.route) },
           onRestoreSuccess = {
             // Restore successful: The C++ engine has reloaded.
@@ -349,21 +361,21 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
       }
 
       composable(Screen.RecoveryPhrase.route) {
-        RecoveryPhraseScreen(profileVM, onBack = { navController.popBackStack() })
+        RecoveryPhraseScreen(profileVM, onBack = { navController.safePopBackStack() })
       }
 
       composable(Screen.QrScanner.route) {
         QrScannerScreen(
           onQrCodeScanned = { peerId, token ->
             contactsVM.addContact(peerId, token)
-            navController.popBackStack()
+            navController.safePopBackStack()
           },
-          onClose = { navController.popBackStack() }
+          onClose = { navController.safePopBackStack() }
         )
       }
 
       composable(Screen.RejectedContacts.route) {
-        RejectedContactsScreen(contactsVM, onBack = { navController.popBackStack() })
+        RejectedContactsScreen(contactsVM, onBack = { navController.safePopBackStack() })
       }
 
       composable(Screen.Help.route) {
@@ -397,7 +409,7 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
             peerId = peerId,
             attachmentsJson = Uri.decode(attachmentsJson),
             initialIndex = index,
-            onBack = { navController.popBackStack() }
+            onBack = { navController.safePopBackStack() }
           )
         }
       }

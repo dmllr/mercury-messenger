@@ -17,13 +17,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -109,40 +106,37 @@ fun ContactsScreen(
     topBar = {
       TopAppBar(
         title = {
-          Row(verticalAlignment = Alignment.CenterVertically) {
-            Box {
-              IconButton(onClick = onNavigateToProfile) {
-                Box {
-                  UserAvatar(
-                    photoBase64 = myProfile.myPhoto,
-                    modifier = Modifier.size(32.dp)
-                  )
-                }
-              }
-
-              if (hasPermissionIssues) {
-                Box(
-                  modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 8.dp, end = 8.dp)
-                    .size(10.dp)
-                    .background(MaterialTheme.colorScheme.error, CircleShape)
-                    .border(1.dp, MaterialTheme.colorScheme.surface, CircleShape)
+          Text(
+            text = if (pendingShare != null) {
+              stringResource(id = R.string.share_with)
+            } else {
+              "\uD835\uDCDC\uD835\uDCEE\uD835\uDCFB\uD835\uDCEC\uD835\uDCFE\uD835\uDCFB\uD835\uDD02"
+            },
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold
+          )
+        },
+        actions = {
+          Box {
+            IconButton(onClick = onNavigateToProfile) {
+              Box {
+                UserAvatar(
+                  photoBase64 = myProfile.myPhoto,
+                  modifier = Modifier.size(32.dp)
                 )
               }
             }
 
-            Spacer(modifier = Modifier.width(8.dp))
-
-            Text(
-              text = if (pendingShare != null) {
-                stringResource(id = R.string.share_with)
-              } else {
-                "\uD835\uDCDC\uD835\uDCEE\uD835\uDCFB\uD835\uDCEC\uD835\uDCFE\uD835\uDCFB\uD835\uDD02"
-              },
-              style = MaterialTheme.typography.titleLarge,
-              fontWeight = FontWeight.Bold
-            )
+            if (hasPermissionIssues) {
+              Box(
+                modifier = Modifier
+                  .align(Alignment.TopEnd)
+                  .padding(top = 8.dp, end = 8.dp)
+                  .size(10.dp)
+                  .background(MaterialTheme.colorScheme.error, CircleShape)
+                  .border(1.dp, MaterialTheme.colorScheme.surface, CircleShape)
+              )
+            }
           }
         },
         colors = TopAppBarDefaults.topAppBarColors(
