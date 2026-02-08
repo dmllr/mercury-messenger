@@ -126,6 +126,7 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
 
   val navigateToPeerId by viewModel.navigateToPeerId.collectAsState()
   val navigateToScanner by viewModel.navigateToScanner.collectAsState()
+  val navigateToContacts by viewModel.navigateToContacts.collectAsState()
   val incomingCallUiVisible by viewModel.incomingCallUiVisible.collectAsState()
 
   // -- Global State Observations --
@@ -160,6 +161,16 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
     // Orchestrate incoming call UI visibility
     if (!callState.isRinging) {
       viewModel.hideIncomingCallUi()
+    }
+  }
+
+  // Global Navigation: Contacts (for Share reset)
+  LaunchedEffect(navigateToContacts) {
+    if (navigateToContacts) {
+      navController.navigate(Screen.Contacts.route) {
+        popUpTo(0)
+      }
+      viewModel.onContactsNavigated()
     }
   }
 

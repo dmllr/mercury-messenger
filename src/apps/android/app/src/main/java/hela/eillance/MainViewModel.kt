@@ -48,6 +48,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
   private val _navigateToScanner = MutableStateFlow(false)
   val navigateToScanner = _navigateToScanner.asStateFlow()
 
+  private val _navigateToContacts = MutableStateFlow(false)
+  val navigateToContacts = _navigateToContacts.asStateFlow()
+
   private val _pendingShare = MutableStateFlow<SharedContent?>(null)
   val pendingShare = _pendingShare.asStateFlow()
 
@@ -121,6 +124,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     _navigateToScanner.value = false
   }
 
+  fun onContactsNavigated() {
+    _navigateToContacts.value = false
+  }
+
   fun navigateToPeer(peerId: String) {
     _navigateToPeerId.value = peerId
   }
@@ -153,6 +160,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
           text = text,
           uris = if (uri != null) listOf(uri) else emptyList()
         )
+        _navigateToContacts.value = true
       }
     } else if (Intent.ACTION_SEND_MULTIPLE == action && type != null) {
       val text = intent.getStringExtra(Intent.EXTRA_TEXT)
@@ -168,6 +176,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
           text = text,
           uris = uris ?: emptyList()
         )
+        _navigateToContacts.value = true
       }
     }
   }
