@@ -1,7 +1,14 @@
 package hela.eillance.screens.conversation
 
+import android.util.Patterns
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextDecoration
 import hela.eillance.camera.R
 import java.time.Instant
 import java.time.ZoneId
@@ -29,5 +36,28 @@ fun formatTimestamp(
 
     messageTime.year == now.year -> messageTime.format(formatters.second)
     else -> messageTime.format(formatters.third)
+  }
+}
+
+fun buildMessageContent(content: String): AnnotatedString {
+  return buildAnnotatedString {
+    append(content)
+    val matcher = Patterns.WEB_URL.matcher(content)
+    while (matcher.find()) {
+      val start = matcher.start()
+      val end = matcher.end()
+      val url = content.substring(start, end)
+      val finalUrl = if (url.startsWith("http://") || url.startsWith("https://")) url else "https://$url"
+      addLink(
+        LinkAnnotation.Url(
+          url = finalUrl,
+          styles = TextLinkStyles(
+            style = SpanStyle(textDecoration = TextDecoration.Underline)
+          )
+        ),
+        start,
+        end
+      )
+    }
   }
 }
