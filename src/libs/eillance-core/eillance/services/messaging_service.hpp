@@ -79,7 +79,7 @@ struct AttachmentRequest {
 };
 
 class MessagingService {
-public:
+ public:
   static constexpr std::uint16_t protocolVersion = 2;
   static constexpr std::uint16_t minSupportedVersion = 1;
   static constexpr auto keyVersion = "v";
@@ -186,16 +186,16 @@ public:
 
       domain_attachments.push_back(
           {.id = GenerateAttachmentId(),
-              .type = req.type,
-              .file_path = req.file_path,
-              .mime_type = mime,
-              .size_bytes = file_size,
-              .thumbnail_base64 = req.thumbnail_base64,
-              .hash = hash,
-              .is_downloaded = true,
-              .status = messaging::AttachmentStatus::pending,
-              .note = note,
-              .file_name = req.file_name}
+           .type = req.type,
+           .file_path = req.file_path,
+           .mime_type = mime,
+           .size_bytes = file_size,
+           .thumbnail_base64 = req.thumbnail_base64,
+           .hash = hash,
+           .is_downloaded = true,
+           .status = messaging::AttachmentStatus::pending,
+           .note = note,
+           .file_name = req.file_name}
       );
     }
 
@@ -404,7 +404,7 @@ public:
   }
 
   [[nodiscard]] auto GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t const page_size) const
-  -> messaging::HistoryPage {
+      -> messaging::HistoryPage {
     auto page = history_->GetHistoryPage(peer_id, page_index, page_size);
     std::erase_if(page.messages, [](auto const& entry) {
       return entry.status == messaging::MessageStatus::none && entry.kind != messaging::HistoryEntryKind::systemMessage;
@@ -441,7 +441,7 @@ public:
   }
 
   [[nodiscard]] auto GetFullMessageContent(ContactID const& peer_id, std::uint64_t message_id) const
-  -> std::optional<std::string> {
+      -> std::optional<std::string> {
     return history_->GetFullMessageContent(peer_id, message_id);
   }
   [[nodiscard]] auto GetChatSummaries(std::vector<ContactID> const& peer_ids
@@ -454,6 +454,16 @@ public:
     std::erase_if(messages, [](auto const& msg) { return msg.direction != messaging::MessageDirection::received; });
     std::ranges::sort(messages, {}, &messaging::HistoryEntryRecord::timestamp);
     return messages;
+  }
+
+  // New Search Methods
+  [[nodiscard]] auto SearchMessages(ContactID const& peer_id, std::string const& query) const
+      -> std::vector<messaging::HistoryEntryRecord> {
+    return history_->SearchMessages(peer_id, query);
+  }
+
+  [[nodiscard]] auto SearchAllMessages(std::string const& query) const -> std::vector<messaging::HistoryEntryRecord> {
+    return history_->SearchAllMessages(query);
   }
 
   void MarkMessagesAsRead(ContactID const& peer_id, std::vector<std::uint64_t> const& message_ids) {
@@ -657,7 +667,7 @@ public:
     file_transfer_service_->SetAttachmentStatusChangedCallback(std::move(cb));
   }
 
-private:
+ private:
   void RequestConnection(ContactID const& peer_id) {
     if (auto const peer = transport_->GetPeer(peer_id);
         peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
@@ -878,7 +888,7 @@ private:
   std::mutex sent_cache_mutex_;
 
   static constexpr std::size_t cachedActionsSize = 100;
-  static constexpr Time::Unit debounceTime = 2000000; // 2 seconds
+  static constexpr Time::Unit debounceTime = 2000000;  // 2 seconds
 };
 
 }  // namespace eillance::services

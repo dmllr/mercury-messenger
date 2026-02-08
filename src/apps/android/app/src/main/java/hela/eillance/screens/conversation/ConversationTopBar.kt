@@ -10,6 +10,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -69,7 +70,8 @@ fun ConversationDefaultTopBar(
   onBack: () -> Unit,
   onShowContactProfile: (String) -> Unit,
   onStartVoiceCall: () -> Unit,
-  onStartVideoCall: () -> Unit
+  onStartVideoCall: () -> Unit,
+  onSearchClick: () -> Unit
 ) {
   TopAppBar(
     title = {
@@ -98,6 +100,9 @@ fun ConversationDefaultTopBar(
       }
     },
     actions = {
+      IconButton(onClick = onSearchClick) {
+         Icon(Icons.Default.Search, contentDescription = stringResource(R.string.action_search))
+      }
       IconButton(onClick = onStartVoiceCall) {
         Icon(
           Icons.Default.Call,

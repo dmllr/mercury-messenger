@@ -38,8 +38,8 @@ extern "C" JNIEXPORT jboolean JNICALL Java_hela_eillance_viewmodels_ContactsView
   char const* peer_id_chars = env->GetStringUTFChars(peer_id, nullptr);
   char const* token_chars = (token != nullptr) ? env->GetStringUTFChars(token, nullptr) : nullptr;
   auto const c_token = ((token_chars) != nullptr)
-                       ? std::optional<std::vector<std::byte>>(eillance::crypto::FromHex(token_chars))
-                       : std::nullopt;
+                           ? std::optional<std::vector<std::byte>>(eillance::crypto::FromHex(token_chars))
+                           : std::nullopt;
   bool result = false;
   try {
     result = vm->AddContact(eillance::ContactID(peer_id_chars), c_token);
@@ -158,17 +158,8 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ContactsViewMode
   env->ReleaseStringUTFChars(peer_id, chars);
 }
 
-extern "C" JNIEXPORT jobject JNICALL Java_hela_eillance_viewmodels_ContactsViewModel_nativeGetUnreadMessages(
-    JNIEnv* env,
-    jobject /*instance*/,
-    jlong ptr,
-    jstring peer_id
-) {
-  auto* vm = reinterpret_cast<eillance::view_model::ContactsViewModel*>(ptr);
-  char const* chars = env->GetStringUTFChars(peer_id, nullptr);
-  auto messages = vm->GetUnreadMessages(eillance::ContactID(chars));
-  env->ReleaseStringUTFChars(peer_id, chars);
-
+static jobject
+ConvertHistoryEntries(JNIEnv* env, std::vector<eillance::messaging::HistoryEntryRecord> const& messages) {
   auto& class_refs = ClassRefs::Instance();
   auto& list_holder = class_refs.Class("java/util/ArrayList");
   jobject history_list = list_holder.NewObject(env);
@@ -186,7 +177,9 @@ extern "C" JNIEXPORT jobject JNICALL Java_hela_eillance_viewmodels_ContactsViewM
       attachments_ptr = &msg.attachments;
     }
 
+    auto const* call_entry = std::get_if<eillance::messaging::CallEntry>(&entry_cpp.data);
     jstring content = content_str ? env->NewStringUTF(content_str->c_str()) : nullptr;
+    jint const duration = call_entry ? static_cast<jint>(call_entry->duration_seconds) : 0;
 
     jobject j_attachments = list_holder.NewObject(env);
     if (attachments_ptr && !attachments_ptr->empty()) {
@@ -213,9 +206,13 @@ extern "C" JNIEXPORT jobject JNICALL Java_hela_eillance_viewmodels_ContactsViewM
         );
 
         env->CallBooleanMethod(j_attachments, list_add_method, j_att);
-        env->DeleteLocalRef(j_id); env->DeleteLocalRef(j_path); env->DeleteLocalRef(j_mime);
+        env->DeleteLocalRef(j_id);
+        env->DeleteLocalRef(j_path);
+        env->DeleteLocalRef(j_mime);
         if (j_thumb) env->DeleteLocalRef(j_thumb);
-        env->DeleteLocalRef(j_note); env->DeleteLocalRef(j_name); env->DeleteLocalRef(j_att);
+        env->DeleteLocalRef(j_note);
+        env->DeleteLocalRef(j_name);
+        env->DeleteLocalRef(j_att);
       }
     }
 
@@ -226,24 +223,80 @@ extern "C" JNIEXPORT jobject JNICALL Java_hela_eillance_viewmodels_ContactsViewM
         static_cast<jlong>(entry_cpp.timestamp),
         content,
         static_cast<jint>(entry_cpp.direction),
-        0, // duration
-        -1, // call direction
-        -1, // call status
+        duration,
+        (call_entry != nullptr) ? static_cast<jint>(call_entry->call_direction) : -1,
+        (call_entry != nullptr) ? static_cast<jint>(call_entry->call_status) : -1,
         static_cast<jint>(entry_cpp.status),
         static_cast<jboolean>(entry_cpp.is_truncated),
         j_attachments
     );
 
     env->CallBooleanMethod(history_list, list_add_method, entry_java);
-
     if (content != nullptr) {
       env->DeleteLocalRef(content);
     }
     env->DeleteLocalRef(j_attachments);
     env->DeleteLocalRef(entry_java);
   }
-
   return history_list;
+}
+
+extern "C" JNIEXPORT jobject JNICALL Java_hela_eillance_viewmodels_ContactsViewModel_nativeGetUnreadMessages(
+    JNIEnv* env,
+    jobject /*instance*/,
+    jlong ptr,
+    jstring peer_id
+) {
+  auto* vm = reinterpret_cast<eillance::view_model::ContactsViewModel*>(ptr);
+  char const* chars = env->GetStringUTFChars(peer_id, nullptr);
+  auto messages = vm->GetUnreadMessages(eillance::ContactID(chars));
+  env->ReleaseStringUTFChars(peer_id, chars);
+  return ConvertHistoryEntries(env, messages);
+}
+
+extern "C" JNIEXPORT jobject JNICALL Java_hela_eillance_viewmodels_ContactsViewModel_nativeSearchAllMessages(
+    JNIEnv* env,
+    jobject /*instance*/,
+    jlong /*ptr*/,
+    jstring query
+) {
+  if (!g_clientEngine) return nullptr;
+  char const* chars = env->GetStringUTFChars(query, nullptr);
+  auto messages = g_clientEngine->GetClient()->SearchAllMessages(chars);
+  env->ReleaseStringUTFChars(query, chars);
+
+  // Convert to GlobalSearchResult list
+  auto& class_refs = ClassRefs::Instance();
+  auto& list_holder = class_refs.Class("java/util/ArrayList");
+  jobject result_list = list_holder.NewObject(env);
+  jmethodID list_add_method = list_holder.GetMethod("add");
+  auto& search_result_holder = class_refs.Class("hela/eillance/ndkio/GlobalSearchResult");
+
+  // We can reuse ConvertHistoryEntries logic but we need to wrap each entry
+  // since GlobalSearchResult expects (String peerId, HistoryEntry entry).
+  // Instead of full duplication, let's just get the HistoryEntry objects one by one using a temporary vector.
+
+  for (auto const& msg : messages) {
+    // Create single-item vector to reuse conversion logic (inefficient but reuses code)
+    std::vector<eillance::messaging::HistoryEntryRecord> single_vec = {msg};
+    jobject single_list = ConvertHistoryEntries(env, single_vec);  // ArrayList<HistoryEntry>
+
+    // Get the item
+    jmethodID get_method = list_holder.GetMethod("get");
+    jobject entry_java = env->CallObjectMethod(single_list, get_method, 0);
+
+    jstring peer_id = env->NewStringUTF(msg.peer_id.ToString().c_str());
+    jobject global_result = search_result_holder.NewObject(env, peer_id, entry_java);
+
+    env->CallBooleanMethod(result_list, list_add_method, global_result);
+
+    env->DeleteLocalRef(single_list);
+    env->DeleteLocalRef(entry_java);
+    env->DeleteLocalRef(peer_id);
+    env->DeleteLocalRef(global_result);
+  }
+
+  return result_list;
 }
 
 // NOLINTEND(readability-identifier-naming)

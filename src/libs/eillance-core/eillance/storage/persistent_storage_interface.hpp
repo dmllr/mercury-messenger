@@ -79,6 +79,11 @@ class PersistentStorageImpl {
   virtual auto GetRemoteIds(ContactID const& peer_id, std::vector<uint64_t> const& local_ids)
       -> std::vector<uint64_t> = 0;
 
+  // --- Search ---
+  virtual auto SearchMessages(ContactID const& peer_id, std::string const& query)
+      -> std::vector<messaging::HistoryEntryRecord> = 0;
+  virtual auto SearchAllMessages(std::string const& query) -> std::vector<messaging::HistoryEntryRecord> = 0;
+
   // --- Debug ---
   virtual void DebugClearAllHistory() = 0;
   virtual void DebugClearAllContacts() = 0;

@@ -18,12 +18,32 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.DividerDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -32,14 +52,21 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.core.os.ConfigurationCompat
@@ -63,6 +90,7 @@ import hela.eillance.screens.conversation.ConversationDefaultTopBar
 import hela.eillance.screens.conversation.MessageInputArea
 import hela.eillance.screens.conversation.PendingApprovalBar
 import hela.eillance.screens.conversation.SelectionTopBar
+import hela.eillance.screens.conversation.formatTimestamp
 import hela.eillance.viewmodels.CallViewModel
 import hela.eillance.viewmodels.ContactsViewModel
 import hela.eillance.viewmodels.ConversationViewModel
@@ -74,6 +102,7 @@ import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConversationScreen(
   chatVM: ConversationViewModel,
@@ -103,13 +132,37 @@ fun ConversationScreen(
   var selectedMessageIds by remember { mutableStateOf(emptySet<Long>()) }
   val selectionMode = selectedMessageIds.isNotEmpty()
 
-  // Handle Back press to clear selection
-  BackHandler(enabled = selectionMode) {
-    selectedMessageIds = emptySet()
+  // Search State
+  var isSearchActive by rememberSaveable { mutableStateOf(false) }
+  var searchQuery by rememberSaveable { mutableStateOf("") }
+  val searchResults by chatVM.searchResults.collectAsState()
+  val focusRequester = remember { FocusRequester() }
+  val focusManager = LocalFocusManager.current
+
+  // Handle Back press to clear selection or search
+  BackHandler(enabled = selectionMode || isSearchActive) {
+    if (selectionMode) {
+      selectedMessageIds = emptySet()
+    } else {
+      isSearchActive = false
+      searchQuery = ""
+      chatVM.search(searchQuery)
+    }
+  }
+
+  LaunchedEffect(isSearchActive) {
+    if (isSearchActive) focusRequester.requestFocus() else focusManager.clearFocus()
   }
 
   val locale = ConfigurationCompat.getLocales(LocalConfiguration.current)[0] ?: Locale.getDefault()
   val zoneId = ZoneId.systemDefault()
+  val formatters = remember(locale) {
+    Triple(
+      DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(locale),
+      DateTimeFormatter.ofPattern("MMM d, HH:mm", locale),
+      DateTimeFormatter.ofLocalizedDateTime(FormatStyle.SHORT, FormatStyle.SHORT).withLocale(locale)
+    )
+  }
 
   // State for permissions launchers
   val notifLauncher =
@@ -149,7 +202,7 @@ fun ConversationScreen(
 
   // Scroll to bottom when new messages arrive
   LaunchedEffect(historyPage.messages.size) {
-    if (historyPage.messages.size > previousHistorySize) {
+    if (!isSearchActive && historyPage.messages.size > previousHistorySize) {
       if (listState.firstVisibleItemIndex < 3) {
         coroutineScope.launch {
           listState.animateScrollToItem(0)
@@ -179,7 +232,55 @@ fun ConversationScreen(
 
   Scaffold(
     topBar = {
-      if (selectionMode) {
+      if (isSearchActive) {
+        TopAppBar(
+           title = {
+             TextField(
+               value = searchQuery,
+               onValueChange = {
+                 searchQuery = it
+                 chatVM.search(it)
+               },
+               placeholder = { Text(stringResource(R.string.search_hint)) },
+               modifier = Modifier
+                 .fillMaxWidth()
+                 .focusRequester(focusRequester),
+               colors = TextFieldDefaults.colors(
+                 focusedContainerColor = Color.Transparent,
+                 unfocusedContainerColor = Color.Transparent,
+                 focusedIndicatorColor = Color.Transparent,
+                 unfocusedIndicatorColor = Color.Transparent
+               ),
+               singleLine = true,
+               keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+               keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() })
+             )
+           },
+           navigationIcon = {
+             IconButton(onClick = {
+               isSearchActive = false
+               searchQuery = ""
+               chatVM.search("")
+             }) {
+               Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
+             }
+           },
+           actions = {
+             if (searchQuery.isNotEmpty()) {
+               IconButton(onClick = {
+                 searchQuery = ""
+                 chatVM.search("")
+                 focusRequester.requestFocus()
+               }) {
+                 Icon(Icons.Default.Close, contentDescription = stringResource(R.string.action_close))
+               }
+             }
+           },
+           colors = TopAppBarDefaults.topAppBarColors(
+             containerColor = MaterialTheme.colorScheme.surfaceContainer
+           )
+        )
+      } else if (selectionMode) {
         SelectionTopBar(
           count = selectedMessageIds.size,
           onClear = { selectedMessageIds = emptySet() },
@@ -228,7 +329,8 @@ fun ConversationScreen(
           onBack = onBack,
           onShowContactProfile = onShowContactProfile,
           onStartVoiceCall = { callVM.startVoiceCall(peerId) },
-          onStartVideoCall = { callVM.startVideoCall(peerId) }
+          onStartVideoCall = { callVM.startVideoCall(peerId) },
+          onSearchClick = { isSearchActive = true }
         )
       }
     }
@@ -240,174 +342,214 @@ fun ConversationScreen(
         .navigationBarsPadding()
         .imePadding()
     ) {
-      val isConnectionIssue = connectionState != ServiceConnectionState.Online &&
-          connectionState != ServiceConnectionState.Establishing &&
-          connectionState != ServiceConnectionState.Unknown
-
-      val showPermissionBanner = !isConnectionIssue && bannerState != null
-
-      AnimatedVisibility(
-        visible = isConnectionIssue || showPermissionBanner,
-        enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
-        exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut()
-      ) {
-        Box(modifier = Modifier.padding(16.dp)) {
-          if (isConnectionIssue) {
-            val (msg, isError) = when (connectionState) {
-              ServiceConnectionState.NoNetwork -> stringResource(R.string.connection_no_network) to false
-              ServiceConnectionState.Failure -> stringResource(R.string.connection_failed) to true
-              ServiceConnectionState.Disconnected -> stringResource(R.string.connection_disconnected) to false
-              ServiceConnectionState.InvalidToken -> stringResource(R.string.connection_auth_error) to true
-              else -> stringResource(R.string.connection_issue) to true
+      if (isSearchActive) {
+         if (searchResults.isEmpty() && searchQuery.isNotEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+              Text(stringResource(R.string.search_no_results))
             }
-            StatusSnackbar(text = msg, isError = isError)
-          } else {
-            when (bannerState) {
-              BannerType.Notification -> {
-                StatusSnackbar(
-                  text = stringResource(id = R.string.permission_banner_notifications),
-                  actionLabel = stringResource(id = R.string.action_fix_it),
-                  onAction = {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                      notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                    } else {
-                      openAppSettings(context)
-                    }
-                  }
-                )
-              }
-
-              BannerType.Battery -> {
-                StatusSnackbar(
-                  text = stringResource(id = R.string.permission_banner_battery),
-                  actionLabel = "Fix it",
-                  onAction = {
-                    val intent =
-                      Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                        data = Uri.fromParts("package", context.packageName, null)
-                      }
-                    try {
-                      context.startActivity(intent)
-                    } catch (e: Exception) {
-                      openAppSettings(context)
-                    }
-                  },
-                  dismissLabel = stringResource(id = R.string.action_ignore_permission),
-                  onDismiss = { mainViewModel.ignoreBatteryOptimization() }
-                )
-              }
-
-              BannerType.CallPermissions -> {
-                StatusSnackbar(
-                  text = stringResource(id = R.string.permission_banner_calls),
-                  actionLabel = "Fix it",
-                  onAction = {
-                    callLauncher.launch(
-                      arrayOf(
-                        Manifest.permission.CAMERA,
-                        Manifest.permission.RECORD_AUDIO,
-                        Manifest.permission.READ_PHONE_STATE,
-                        Manifest.permission.MANAGE_OWN_CALLS
-                      )
-                    )
-                  },
-                  dismissLabel = stringResource(id = R.string.action_ignore_permission),
-                  onDismiss = { mainViewModel.ignoreCallPermissions() }
-                )
-              }
-
-              null -> {}
+         } else {
+            LazyColumn(modifier = Modifier.weight(1f)) {
+               items(searchResults) { msg ->
+                 val isFromMe = msg.direction == MessageDirection.Sent
+                 Column(
+                   modifier = Modifier
+                     .fillMaxWidth()
+                     .padding(16.dp)
+                 ) {
+                   Row(verticalAlignment = Alignment.CenterVertically) {
+                     Text(
+                       text = if (isFromMe) stringResource(R.string.me) else contact?.name ?: peerId,
+                       style = MaterialTheme.typography.titleSmall,
+                       fontWeight = FontWeight.Bold,
+                       color = if (isFromMe) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                     )
+                     Text(
+                       text = " • " + formatTimestamp(msg.timestamp, zoneId, formatters),
+                       style = MaterialTheme.typography.labelSmall,
+                       color = MaterialTheme.colorScheme.onSurfaceVariant,
+                       modifier = Modifier.padding(start = 8.dp)
+                     )
+                   }
+                   Text(
+                     text = msg.content ?: "",
+                     style = MaterialTheme.typography.bodyMedium,
+                     modifier = Modifier.padding(top = 4.dp)
+                   )
+                 }
+                 HorizontalDivider(color = DividerDefaults.color.copy(alpha = 0.5f))
+               }
             }
-          }
-        }
-      }
+         }
+      } else {
+        val isConnectionIssue = connectionState != ServiceConnectionState.Online &&
+            connectionState != ServiceConnectionState.Establishing &&
+            connectionState != ServiceConnectionState.Unknown
 
-      contact?.let {
-        ConnectionStatusBar(contact = it)
-      }
+        val showPermissionBanner = !isConnectionIssue && bannerState != null
 
-      ChatHistory(
-        modifier = Modifier.weight(1f),
-        historyPage = historyPage,
-        listState = listState,
-        chatVM = chatVM,
-        transferProgress = transferProgress,
-        locale = locale,
-        zoneId = zoneId,
-        selectedMessageIds = selectedMessageIds,
-        selectionMode = selectionMode,
-        onToggleSelection = { id ->
-          selectedMessageIds = if (id in selectedMessageIds) {
-            selectedMessageIds - id
-          } else {
-            selectedMessageIds + id
-          }
-        },
-        onSystemMessageClick = { clickedEntry ->
-          if (clickedEntry.isTruncated) {
-            tappedTruncatedMessageId = clickedEntry.id
-            chatVM.loadFullMessage(clickedEntry.id)
-          } else {
-            systemMessageToShowDetails = clickedEntry
-          }
-        },
-        onMediaClick = { attachments, index ->
-          val target = attachments[index]
-          if (target.type == AttachmentType.Image || target.type == AttachmentType.Video) {
-            val visuals =
-              attachments.filter { it.type == AttachmentType.Image || it.type == AttachmentType.Video }
-            val visualIndex = visuals.indexOf(target)
-            if (visualIndex != -1) {
-              onMediaClick(visuals, visualIndex)
-            }
-          } else {
-            val file = File(target.path)
-            if (target.isDownloaded && file.exists()) {
-              openFile(context, file, target.mime)
+        AnimatedVisibility(
+          visible = isConnectionIssue || showPermissionBanner,
+          enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
+          exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut()
+        ) {
+          Box(modifier = Modifier.padding(16.dp)) {
+            if (isConnectionIssue) {
+              val (msg, isError) = when (connectionState) {
+                ServiceConnectionState.NoNetwork -> stringResource(R.string.connection_no_network) to false
+                ServiceConnectionState.Failure -> stringResource(R.string.connection_failed) to true
+                ServiceConnectionState.Disconnected -> stringResource(R.string.connection_disconnected) to false
+                ServiceConnectionState.InvalidToken -> stringResource(R.string.connection_auth_error) to true
+                else -> stringResource(R.string.connection_issue) to true
+              }
+              StatusSnackbar(text = msg, isError = isError)
             } else {
-              Toast.makeText(
-                context,
-                R.string.toast_file_not_downloaded,
-                Toast.LENGTH_SHORT
-              ).show()
+              when (bannerState) {
+                BannerType.Notification -> {
+                  StatusSnackbar(
+                    text = stringResource(id = R.string.permission_banner_notifications),
+                    actionLabel = stringResource(id = R.string.action_fix_it),
+                    onAction = {
+                      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                      } else {
+                        openAppSettings(context)
+                      }
+                    }
+                  )
+                }
+
+                BannerType.Battery -> {
+                  StatusSnackbar(
+                    text = stringResource(id = R.string.permission_banner_battery),
+                    actionLabel = "Fix it",
+                    onAction = {
+                      val intent =
+                        Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                          data = Uri.fromParts("package", context.packageName, null)
+                        }
+                      try {
+                        context.startActivity(intent)
+                      } catch (e: Exception) {
+                        openAppSettings(context)
+                      }
+                    },
+                    dismissLabel = stringResource(id = R.string.action_ignore_permission),
+                    onDismiss = { mainViewModel.ignoreBatteryOptimization() }
+                  )
+                }
+
+                BannerType.CallPermissions -> {
+                  StatusSnackbar(
+                    text = stringResource(id = R.string.permission_banner_calls),
+                    actionLabel = "Fix it",
+                    onAction = {
+                      callLauncher.launch(
+                        arrayOf(
+                          Manifest.permission.CAMERA,
+                          Manifest.permission.RECORD_AUDIO,
+                          Manifest.permission.READ_PHONE_STATE,
+                          Manifest.permission.MANAGE_OWN_CALLS
+                        )
+                      )
+                    },
+                    dismissLabel = stringResource(id = R.string.action_ignore_permission),
+                    onDismiss = { mainViewModel.ignoreCallPermissions() }
+                  )
+                }
+
+                null -> {}
+              }
             }
           }
         }
-      )
 
-      when (contact?.status) {
-        ContactStatus.awaitingApproval -> {
-          ApprovalRequestBar(
-            contact = contact,
-            onApprove = { contactsVM.acceptContact(peerId) },
-            onReject = {
-              contactsVM.blockContact(peerId)
-              onBack()
+        contact?.let {
+          ConnectionStatusBar(contact = it)
+        }
+
+        ChatHistory(
+          modifier = Modifier.weight(1f),
+          historyPage = historyPage,
+          listState = listState,
+          chatVM = chatVM,
+          transferProgress = transferProgress,
+          locale = locale,
+          zoneId = zoneId,
+          selectedMessageIds = selectedMessageIds,
+          selectionMode = selectionMode,
+          onToggleSelection = { id ->
+            selectedMessageIds = if (id in selectedMessageIds) {
+              selectedMessageIds - id
+            } else {
+              selectedMessageIds + id
             }
-          )
-        }
+          },
+          onSystemMessageClick = { clickedEntry ->
+            if (clickedEntry.isTruncated) {
+              tappedTruncatedMessageId = clickedEntry.id
+              chatVM.loadFullMessage(clickedEntry.id)
+            } else {
+              systemMessageToShowDetails = clickedEntry
+            }
+          },
+          onMediaClick = { attachments, index ->
+            val target = attachments[index]
+            if (target.type == AttachmentType.Image || target.type == AttachmentType.Video) {
+              val visuals =
+                attachments.filter { it.type == AttachmentType.Image || it.type == AttachmentType.Video }
+              val visualIndex = visuals.indexOf(target)
+              if (visualIndex != -1) {
+                onMediaClick(visuals, visualIndex)
+              }
+            } else {
+              val file = File(target.path)
+              if (target.isDownloaded && file.exists()) {
+                openFile(context, file, target.mime)
+              } else {
+                Toast.makeText(
+                  context,
+                  R.string.toast_file_not_downloaded,
+                  Toast.LENGTH_SHORT
+                ).show()
+              }
+            }
+          }
+        )
 
-        ContactStatus.pendingApproval -> {
-          PendingApprovalBar(
-            contact = contact,
-            onCancel = {
-              contactsVM.blockContact(peerId)
-              onBack()
-            },
-            onResend = { contactsVM.addContact(peerId) }
-          )
-        }
+        when (contact?.status) {
+          ContactStatus.awaitingApproval -> {
+            ApprovalRequestBar(
+              contact = contact,
+              onApprove = { contactsVM.acceptContact(peerId) },
+              onReject = {
+                contactsVM.blockContact(peerId)
+                onBack()
+              }
+            )
+          }
 
-        else -> {
-          MessageInputArea(
-            inputValue = messageText,
-            onInputValueChange = chatVM::updateMessageText,
-            draftAttachments = draftAttachments,
-            onSendMessage = chatVM::sendMessage,
-            onAddDrafts = chatVM::addDraftAttachments,
-            onRemoveDraft = chatVM::removeDraft,
-            onUpdateNote = chatVM::updateDraftNote
-          )
+          ContactStatus.pendingApproval -> {
+            PendingApprovalBar(
+              contact = contact,
+              onCancel = {
+                contactsVM.blockContact(peerId)
+                onBack()
+              },
+              onResend = { contactsVM.addContact(peerId) }
+            )
+          }
+
+          else -> {
+            MessageInputArea(
+              inputValue = messageText,
+              onInputValueChange = chatVM::updateMessageText,
+              draftAttachments = draftAttachments,
+              onSendMessage = chatVM::sendMessage,
+              onAddDrafts = chatVM::addDraftAttachments,
+              onRemoveDraft = chatVM::removeDraft,
+              onUpdateNote = chatVM::updateDraftNote
+            )
+          }
         }
       }
     }
