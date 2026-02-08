@@ -425,3 +425,16 @@ TEST_F(MessagingServiceTest, SystemMessage_SentReliablyViaDataChannel) {
   }
   EXPECT_TRUE(sent_as_chat) << "System message should be sent as 'chat' with is_system=true";
 }
+
+TEST_F(MessagingServiceTest, SearchMessagesFacade) {
+  service_->SendChatMessage(peer1, "Apple Pie");
+  service_->SendChatMessage(peer1, "Banana Bread");
+
+  auto res1 = service_->SearchMessages(peer1, "Apple");
+  ASSERT_EQ(res1.size(), 1);
+  EXPECT_EQ(std::get<messaging::MessageEntry>(res1[0].data).content, "Apple Pie");
+
+  auto res2 = service_->SearchAllMessages("Bread");
+  ASSERT_EQ(res2.size(), 1);
+  EXPECT_EQ(std::get<messaging::MessageEntry>(res2[0].data).content, "Banana Bread");
+}

@@ -118,6 +118,14 @@ class MessageHistory {
   auto GetChatSummaries(std::vector<ContactID> const& peer_ids) -> std::vector<ChatSummary> {
     return storage_->GetChatSummaries(peer_ids);
   }
+
+  auto SearchMessages(ContactID const& peer_id, std::string const& query) -> std::vector<HistoryEntryRecord> {
+    return storage_->SearchMessages(peer_id, query);
+  }
+
+  auto SearchAllMessages(std::string const& query) -> std::vector<HistoryEntryRecord> {
+    return storage_->SearchAllMessages(query);
+  }
 };
 
 }  // namespace eillance::messaging

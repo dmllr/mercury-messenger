@@ -7,12 +7,15 @@ import androidx.lifecycle.viewModelScope
 import hela.eillance.CallService
 import hela.eillance.camera.R
 import hela.eillance.ndkio.Contact
+import hela.eillance.ndkio.GlobalSearchResult
 import hela.eillance.ndkio.HistoryEntry
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class ContactsViewModel(application: Application) : AndroidViewModel(application), NativeContactsObserver {
 
@@ -31,6 +34,9 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
 
   private val _errorMessage = MutableSharedFlow<String>()
   val errorMessage = _errorMessage.asSharedFlow()
+
+  private val _searchResults = MutableStateFlow<List<GlobalSearchResult>>(emptyList())
+  val searchResults = _searchResults.asStateFlow()
 
   init {
     nativePtr = nativeCreate(this)
@@ -133,6 +139,19 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
     if (nativePtr != 0L) nativeMarkAllAsRead(nativePtr, peerId)
   }
 
+  fun searchAllMessages(query: String) {
+    if (query.isBlank()) {
+      _searchResults.value = emptyList()
+      return
+    }
+    viewModelScope.launch {
+      val results = withContext(Dispatchers.IO) {
+        if (nativePtr != 0L) nativeSearchAllMessages(nativePtr, query) else emptyList()
+      }
+      _searchResults.value = results
+    }
+  }
+
   // --- JNI Definitions ---
   private external fun nativeCreate(observer: NativeContactsObserver): Long
   private external fun nativeDestroy(ptr: Long)
@@ -146,4 +165,5 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
   private external fun nativeGenerateToken(ptr: Long): String
   private external fun nativeGetUnreadMessages(ptr: Long, peerId: String): List<HistoryEntry>
   private external fun nativeMarkAllAsRead(ptr: Long, peerId: String)
+  private external fun nativeSearchAllMessages(ptr: Long, query: String): List<GlobalSearchResult>
 }

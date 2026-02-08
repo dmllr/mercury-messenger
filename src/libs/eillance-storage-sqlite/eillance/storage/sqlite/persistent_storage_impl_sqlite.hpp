@@ -36,6 +36,73 @@ auto OptionalBytesToHex(std::optional<std::vector<std::byte>> const& bytes) -> s
   return crypto::ToHex(*bytes);
 }
 
+void RegisterCustomLower(sqlite3* db) {
+  sqlite3_create_function(
+      db,
+      "lower",
+      1,
+      SQLITE_UTF8 | SQLITE_DETERMINISTIC,
+      nullptr,
+      [](sqlite3_context* ctx, int argc, sqlite3_value** argv) {
+        if (argc == 0 || sqlite3_value_type(argv[0]) == SQLITE_NULL) {
+          sqlite3_result_null(ctx);
+          return;
+        }
+        auto const* text = reinterpret_cast<unsigned char const*>(sqlite3_value_text(argv[0]));
+        int const len = sqlite3_value_bytes(argv[0]);
+
+        std::string out;
+        out.reserve(len);
+
+        for (int i = 0; i < len;) {
+          unsigned char c = text[i];
+          if (c < 0x80) {
+            // ASCII
+            if (c >= 'A' && c <= 'Z') {
+              out.push_back(static_cast<char>(c + 32));
+            } else {
+              out.push_back(static_cast<char>(c));
+            }
+            i++;
+          } else if ((c & 0xE0) == 0xC0) {
+            // 2-byte sequence (Latin-1, Cyrillic, Greek, etc.)
+            if (i + 1 >= len) {
+              out.push_back(static_cast<char>(c));
+              i++;
+              continue;
+            }
+            uint32_t wc = ((c & 0x1F) << 6) | (text[i + 1] & 0x3F);
+
+            // Basic Case Folding for common ranges
+            // Latin-1 Supplement (U+00C0..U+00DE) -> +0x20, exclude multiplication sign 0xD7
+            if (wc >= 0xC0 && wc <= 0xDE && wc != 0xD7) wc += 0x20;
+            // Cyrillic (U+0410..U+042F) -> +0x20
+            else if (wc >= 0x410 && wc <= 0x42F) wc += 0x20;
+            // Greek (U+0391..U+03A9) -> +0x20
+            else if (wc >= 0x391 && wc <= 0x3A9) wc += 0x20;
+
+            out.push_back(static_cast<char>(0xC0 | (wc >> 6)));
+            out.push_back(static_cast<char>(0x80 | (wc & 0x3F)));
+            i += 2;
+          } else {
+            // 3 or 4 byte sequences (Asian scripts, Emoji, etc. - mostly caseless)
+            // Just copy them
+            int seq_len = 1;
+            if ((c & 0xF0) == 0xE0) seq_len = 3;
+            else if ((c & 0xF8) == 0xF0) seq_len = 4;
+
+            for (int k = 0; k < seq_len && i < len; ++k) {
+              out.push_back(static_cast<char>(text[i++]));
+            }
+          }
+        }
+        sqlite3_result_text(ctx, out.c_str(), static_cast<int>(out.size()), SQLITE_TRANSIENT);
+      },
+      nullptr,
+      nullptr
+  );
+}
+
 }  // namespace
 
 class SQLiteStorage final : public PersistentStorageImpl {
@@ -51,6 +118,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
       if (sqlite3_open(dbPath_.string().c_str(), &db_) != SQLITE_OK) {
         throw std::runtime_error(std::string("Failed to open database: ") + sqlite3_errmsg(db_));
       }
+      RegisterCustomLower(db_);
       sqlite3_exec(db_, "PRAGMA journal_mode=WAL;", nullptr, nullptr, nullptr);
       sqlite3_exec(db_, "PRAGMA foreign_keys=ON;", nullptr, nullptr, nullptr);
       RunMigrations();
@@ -95,6 +163,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
             std::string("Failed to open database: ") + ((db_ != nullptr) ? sqlite3_errmsg(db_) : "Unknown error")
         );
       }
+      RegisterCustomLower(db_);
       sqlite3_exec(db_, "PRAGMA journal_mode=WAL;", nullptr, nullptr, nullptr);
       sqlite3_exec(db_, "PRAGMA foreign_keys=ON;", nullptr, nullptr, nullptr);
       RunMigrations();
@@ -796,6 +865,84 @@ class SQLiteStorage final : public PersistentStorageImpl {
     return remote_ids;
   }
 
+  // --- Search ---
+  auto SearchMessages(ContactID const& peer_id, std::string const& query)
+      -> std::vector<messaging::HistoryEntryRecord> override {
+    std::lock_guard const lock(mutex_);
+    if (!db_) return {};
+
+    std::string const pattern = "%" + query + "%";
+
+    // Search both standard content and large messages (full_content).
+    // Restrict to text and system messages.
+    SQLiteStatement const statement(
+        db_,
+        R"SQL(
+      SELECT m.id, m.remote_id, m.kind, m.timestamp, m.direction, m.status, m.is_truncated,
+             CASE WHEN m.is_truncated = 1 THEN lm.full_content ELSE m.content END
+      FROM messages m
+      LEFT JOIN large_messages lm ON m.peer_id = lm.peer_id AND m.id = lm.message_id
+      WHERE m.peer_id = ?
+        AND (m.kind = 0 OR m.kind = 3)
+        AND (
+          (m.is_truncated = 0 AND lower(m.content) LIKE lower(?))
+          OR
+          (m.is_truncated = 1 AND lower(lm.full_content) LIKE lower(?))
+        )
+      ORDER BY m.timestamp DESC;
+    )SQL"
+    );
+
+    BindText(statement.Get(), 1, peer_id.ToString());
+    BindText(statement.Get(), 2, pattern);
+    BindText(statement.Get(), 3, pattern);
+
+    std::vector<messaging::HistoryEntryRecord> results;
+    while (sqlite3_step(statement.Get()) == SQLITE_ROW) {
+      auto record = ParseHistoryEntry(statement.Get());
+      record.peer_id = peer_id;
+      results.push_back(std::move(record));
+    }
+    return results;
+  }
+
+  auto SearchAllMessages(std::string const& query) -> std::vector<messaging::HistoryEntryRecord> override {
+    std::lock_guard const lock(mutex_);
+    if (!db_) return {};
+
+    std::string const pattern = "%" + query + "%";
+
+    SQLiteStatement const statement(
+        db_,
+        R"SQL(
+      SELECT m.id, m.remote_id, m.kind, m.timestamp, m.direction, m.status, m.is_truncated,
+             CASE WHEN m.is_truncated = 1 THEN lm.full_content ELSE m.content END,
+             m.peer_id
+      FROM messages m
+      LEFT JOIN large_messages lm ON m.peer_id = lm.peer_id AND m.id = lm.message_id
+      WHERE (m.kind = 0 OR m.kind = 3)
+        AND (
+          (m.is_truncated = 0 AND lower(m.content) LIKE lower(?))
+          OR
+          (m.is_truncated = 1 AND lower(lm.full_content) LIKE lower(?))
+        )
+      ORDER BY m.timestamp DESC;
+    )SQL"
+    );
+
+    BindText(statement.Get(), 1, pattern);
+    BindText(statement.Get(), 2, pattern);
+
+    std::vector<messaging::HistoryEntryRecord> results;
+    while (sqlite3_step(statement.Get()) == SQLITE_ROW) {
+      auto record = ParseHistoryEntry(statement.Get());
+      // The 9th column (index 8) is peer_id
+      record.peer_id = ContactID(ColumnString(statement.Get(), 8));
+      results.push_back(std::move(record));
+    }
+    return results;
+  }
+
   // --- Debug ---
   void DebugClearAllHistory() override {
     std::lock_guard const lock(mutex_);
@@ -833,6 +980,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
       user_version = sqlite3_column_int(get_version_stmt.Get(), 0);
     }
 
+    // NOLINTBEGIN(*-braces-around-statements)
     if (user_version < 1) migrations::MigrateToV0001(db_);
     if (user_version < 2) migrations::MigrateToV0002(db_);
     if (user_version < 3) migrations::MigrateToV0003(db_);
@@ -841,6 +989,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
     if (user_version < 6) migrations::MigrateToV0006(db_);
     if (user_version < 7) migrations::MigrateToV0007(db_);
     if (user_version < 8) migrations::MigrateToV0008(db_);
+    // NOLINTEND(*-braces-around-statements)
   }
 
   static auto ParseHistoryEntry(sqlite3_stmt* stmt) -> messaging::HistoryEntryRecord {

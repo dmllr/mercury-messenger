@@ -134,6 +134,14 @@ class PersistentStorage {
     return pimpl_->GetRemoteIds(peer_id, local_ids);
   }
 
+  // --- Search ---
+  [[nodiscard]] auto SearchMessages(ContactID const& peer_id, std::string const& query) const {
+    return pimpl_->SearchMessages(peer_id, query);
+  }
+  [[nodiscard]] auto SearchAllMessages(std::string const& query) const {
+    return pimpl_->SearchAllMessages(query);
+  }
+
   // --- Debug ---
   void DebugClearAllHistory() const {
     pimpl_->DebugClearAllHistory();

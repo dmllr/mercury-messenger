@@ -158,6 +158,7 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     // DTOs
     classref.RegisterCtor(env, "java/util/ArrayList", "()V");
     classref.RegisterMethod(env, "java/util/ArrayList", "add", "(Ljava/lang/Object;)Z");
+    classref.RegisterMethod(env, "java/util/ArrayList", "get", "(I)Ljava/lang/Object;");
 
     classref.RegisterCtor(
         env,
@@ -167,11 +168,17 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     classref.RegisterCtor(
         env,
         "hela/eillance/ndkio/Contact",
-        "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IIIILjava/lang/String;IIJLjava/lang/String;I)V"
+        "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IIIILjava/lang/String;IIJLjava/lang/"
+        "String;I)V"
     );
     classref.RegisterCtor(env, "hela/eillance/ndkio/CallState", "(ZZZILjava/lang/String;I)V");
     classref.RegisterCtor(env, "hela/eillance/ndkio/HistoryEntry", "(JIJLjava/lang/String;IIIIIZLjava/util/List;)V");
     classref.RegisterCtor(env, "hela/eillance/ndkio/HistoryPage", "(Ljava/util/List;Z)V");
+    classref.RegisterCtor(
+        env,
+        "hela/eillance/ndkio/GlobalSearchResult",
+        "(Ljava/lang/String;Lhela/eillance/ndkio/HistoryEntry;)V"
+    );
 
     std::string const video_config_class = "hela/eillance/ndkio/VideoConfig";
     classref.RegisterClass(env, video_config_class);

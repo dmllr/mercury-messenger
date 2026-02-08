@@ -150,3 +150,8 @@ data class MyProfileInfo(
   val myBio: String? = null,
   val myPhoto: String? = null,
 )
+
+data class GlobalSearchResult(
+  val peerId: String,
+  val entry: HistoryEntry
+)

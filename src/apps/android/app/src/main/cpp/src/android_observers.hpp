@@ -16,7 +16,7 @@
 namespace eillance {
 
 class AndroidObserverBase {
-protected:
+ protected:
   JavaVM* jvm_;
   jobject java_listener_;
 
@@ -24,7 +24,7 @@ protected:
     return jni::ScopedJniEnv(jvm_);
   }
 
-public:
+ public:
   AndroidObserverBase(JavaVM* jvm, jobject java_listener)
       : jvm_(jvm) {
     auto env_scope = GetEnv();
@@ -45,8 +45,8 @@ public:
 
 class AndroidContactsObserver final
     : public AndroidObserverBase
-        , public view_model::ContactsViewModel::Observer {
-public:
+    , public view_model::ContactsViewModel::Observer {
+ public:
   using AndroidObserverBase::AndroidObserverBase;
 
   void OnContactsUpdated(std::vector<view_model::ViewContact> const& contacts) override {
@@ -135,8 +135,8 @@ public:
 
 class AndroidConversationObserver final
     : public AndroidObserverBase
-        , public view_model::ConversationViewModel::Observer {
-public:
+    , public view_model::ConversationViewModel::Observer {
+ public:
   using AndroidObserverBase::AndroidObserverBase;
 
   void OnHistoryUpdated(view_model::ConversationViewModel::State const& state) override {
@@ -261,8 +261,8 @@ public:
 
 class AndroidProfileObserver final
     : public AndroidObserverBase
-        , public view_model::ProfileViewModel::Observer {
-public:
+    , public view_model::ProfileViewModel::Observer {
+ public:
   using AndroidObserverBase::AndroidObserverBase;
 
   void OnProfileUpdated(view_model::MyProfile const& profile) override {
@@ -296,8 +296,8 @@ public:
 
 class AndroidCallObserver final
     : public AndroidObserverBase
-        , public view_model::CallViewModel::Observer {
-public:
+    , public view_model::CallViewModel::Observer {
+ public:
   using AndroidObserverBase::AndroidObserverBase;
 
   void OnCallStateChanged(view_model::CallState const& call_state) override {
@@ -332,8 +332,8 @@ public:
 
 class AndroidSettingsObserver final
     : public AndroidObserverBase
-        , public view_model::SettingsViewModel::Observer {
-public:
+    , public view_model::SettingsViewModel::Observer {
+ public:
   using AndroidObserverBase::AndroidObserverBase;
 
   void OnSettingsUpdated(std::optional<std::string> const& signaling_url, int timeout) override {

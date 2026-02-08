@@ -464,7 +464,7 @@ TEST_F(SQLiteStorageTest, RemoteIdPersistenceAndRetrieval) {
   ASSERT_TRUE(page.messages[0].remote_id.has_value());
   EXPECT_EQ(*page.messages[0].remote_id, remote_id);
 
-  std::vector<uint64_t> local_ids = {entry.id};
+  std::vector<uint64_t> const local_ids = {entry.id};
   auto remote_ids = storage_->GetRemoteIds(peer1, local_ids);
   ASSERT_EQ(remote_ids.size(), 1);
   EXPECT_EQ(remote_ids[0], remote_id);
@@ -512,4 +512,169 @@ TEST_F(SQLiteStorageTest, AttachmentPersistence) {
   EXPECT_EQ(att.thumbnail_base64, "thumbdata");
   EXPECT_EQ(att.hash, "sha256hashstring");
   EXPECT_TRUE(att.is_downloaded);
+}
+
+// --- Search Tests ---
+
+TEST_F(SQLiteStorageTest, SearchSinglePeer) {
+  storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
+
+  storage_->AddHistoryEntry(
+      {.kind = messaging::HistoryEntryKind::textMessage,
+       .timestamp = 100,
+       .direction = messaging::MessageDirection::sent,
+       .data = messaging::MessageEntry{"apple banana"},
+       .peer_id = peer1}
+  );
+
+  storage_->AddHistoryEntry(
+      {.kind = messaging::HistoryEntryKind::textMessage,
+       .timestamp = 200,
+       .direction = messaging::MessageDirection::received,
+       .data = messaging::MessageEntry{"cherry date"},
+       .peer_id = peer1}
+  );
+
+  storage_->AddHistoryEntry(
+      {.kind = messaging::HistoryEntryKind::textMessage,
+       .timestamp = 300,
+       .direction = messaging::MessageDirection::sent,
+       .data = messaging::MessageEntry{"banana elderberry"},
+       .peer_id = peer1}
+  );
+
+  auto results = storage_->SearchMessages(peer1, "banana");
+  ASSERT_EQ(results.size(), 2);
+  // Expect sorted by timestamp DESC
+  EXPECT_EQ(std::get<messaging::MessageEntry>(results[0].data).content, "banana elderberry");
+  EXPECT_EQ(std::get<messaging::MessageEntry>(results[1].data).content, "apple banana");
+
+  auto results2 = storage_->SearchMessages(peer1, "Cherry");
+  ASSERT_EQ(results2.size(), 1);
+  EXPECT_EQ(std::get<messaging::MessageEntry>(results2[0].data).content, "cherry date");
+
+  auto results3 = storage_->SearchMessages(peer1, "missing");
+  EXPECT_TRUE(results3.empty());
+}
+
+TEST_F(SQLiteStorageTest, SearchLargeMessage) {
+  storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
+
+  std::string const long_msg = std::string(3000, 'x') + "secret" + std::string(100, 'y');
+  storage_->AddHistoryEntry(
+      {.kind = messaging::HistoryEntryKind::textMessage,
+       .timestamp = 100,
+       .direction = messaging::MessageDirection::sent,
+       .data = messaging::MessageEntry{long_msg},
+       .peer_id = peer1}
+  );
+
+  // Verify it was truncated
+  auto page = storage_->GetHistoryPage(peer1, 0, 1);
+  ASSERT_EQ(page.messages.size(), 1);
+  EXPECT_TRUE(page.messages[0].is_truncated);
+
+  // Search for term in the truncated part (assuming 'x' is at start)
+  auto res1 = storage_->SearchMessages(peer1, "xxx");
+  ASSERT_EQ(res1.size(), 1);
+
+  // Search for term in the extended part
+  auto res2 = storage_->SearchMessages(peer1, "secret");
+  ASSERT_EQ(res2.size(), 1);
+  // Verify full content is returned in search result for context
+  EXPECT_EQ(std::get<messaging::MessageEntry>(res2[0].data).content, long_msg);
+}
+
+TEST_F(SQLiteStorageTest, SearchAllPeers) {
+  storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
+  storage_->UpdateContact({peer2, identity::ContactStatus::confirmed});
+
+  storage_->AddHistoryEntry(
+      {.kind = messaging::HistoryEntryKind::textMessage,
+       .timestamp = 100,
+       .direction = messaging::MessageDirection::sent,
+       .data = messaging::MessageEntry{"common term p1"},
+       .peer_id = peer1}
+  );
+
+  storage_->AddHistoryEntry(
+      {.kind = messaging::HistoryEntryKind::textMessage,
+       .timestamp = 200,
+       .direction = messaging::MessageDirection::sent,
+       .data = messaging::MessageEntry{"common term p2"},
+       .peer_id = peer2}
+  );
+
+  storage_->AddHistoryEntry(
+      {.kind = messaging::HistoryEntryKind::textMessage,
+       .timestamp = 300,
+       .direction = messaging::MessageDirection::sent,
+       .data = messaging::MessageEntry{"unique p1"},
+       .peer_id = peer1}
+  );
+
+  auto results = storage_->SearchAllMessages("common");
+  ASSERT_EQ(results.size(), 2);
+  // Sorted DESC
+  EXPECT_EQ(results[0].peer_id, peer2);
+  EXPECT_EQ(results[1].peer_id, peer1);
+
+  auto res_p1 = storage_->SearchAllMessages("unique");
+  ASSERT_EQ(res_p1.size(), 1);
+  EXPECT_EQ(res_p1[0].peer_id, peer1);
+}
+
+TEST_F(SQLiteStorageTest, SearchFiltersNonText) {
+  storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
+
+  storage_->AddHistoryEntry(
+      {.kind = messaging::HistoryEntryKind::textMessage,
+       .timestamp = 100,
+       .direction = messaging::MessageDirection::sent,
+       .data = messaging::MessageEntry{"hello"},
+       .peer_id = peer1}
+  );
+
+  // Call entry - content is JSON in DB
+  storage_->AddHistoryEntry(
+      {.kind = messaging::HistoryEntryKind::voiceCall,
+       .timestamp = 200,
+       .direction = messaging::MessageDirection::sent,
+       .data = messaging::CallEntry{},
+       .peer_id = peer1}
+  );
+
+  // Searching for "hello" should find text
+  auto res1 = storage_->SearchMessages(peer1, "hello");
+  ASSERT_EQ(res1.size(), 1);
+
+  // Searching for JSON keys (e.g. "duration") should NOT find the call,
+  // as query restricts to text/system messages.
+  auto res2 = storage_->SearchMessages(peer1, "duration");
+  EXPECT_TRUE(res2.empty());
+}
+
+TEST_F(SQLiteStorageTest, SearchCaseInsensitive) {
+  storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
+
+  storage_->AddHistoryEntry(
+      {.kind = messaging::HistoryEntryKind::textMessage,
+       .timestamp = 100,
+       .direction = messaging::MessageDirection::sent,
+       .data = messaging::MessageEntry{"MixedCase Message"},
+       .peer_id = peer1}
+  );
+
+  // Lowercase query finding mixed case content
+  auto res1 = storage_->SearchMessages(peer1, "mixedcase");
+  ASSERT_EQ(res1.size(), 1);
+  EXPECT_EQ(std::get<messaging::MessageEntry>(res1[0].data).content, "MixedCase Message");
+
+  // Uppercase query finding mixed case content
+  auto res2 = storage_->SearchMessages(peer1, "MESSAGE");
+  ASSERT_EQ(res2.size(), 1);
+
+  // Mixed case query finding mixed case content
+  auto res3 = storage_->SearchMessages(peer1, "mIxEdCaSe");
+  ASSERT_EQ(res3.size(), 1);
 }

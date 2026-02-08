@@ -20,6 +20,7 @@ import hela.eillance.ndkio.Attachment
 import hela.eillance.ndkio.AttachmentRequest
 import hela.eillance.ndkio.AttachmentStatus
 import hela.eillance.ndkio.AttachmentType
+import hela.eillance.ndkio.HistoryEntry
 import hela.eillance.ndkio.HistoryPage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -27,6 +28,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileInputStream
@@ -59,6 +61,9 @@ class ConversationViewModel(
 
   private val _messageText = MutableStateFlow("")
   val messageText = _messageText.asStateFlow()
+
+  private val _searchResults = MutableStateFlow<List<HistoryEntry>>(emptyList())
+  val searchResults = _searchResults.asStateFlow()
 
   private val readQueue = mutableSetOf<Long>()
   private var readDebounceJob: Job? = null
@@ -403,6 +408,19 @@ class ConversationViewModel(
     if (nativePtr != 0L && messageIds.isNotEmpty()) nativeMarkRead(nativePtr, messageIds.toLongArray())
   }
 
+  fun search(query: String) {
+    if (query.isBlank()) {
+      _searchResults.value = emptyList()
+      return
+    }
+    viewModelScope.launch {
+       val results = withContext(Dispatchers.IO) {
+          if (nativePtr != 0L) nativeSearchMessages(nativePtr, peerId, query) else emptyList()
+       }
+       _searchResults.value = results
+    }
+  }
+
   private external fun nativeCreate(peerId: String, observer: NativeConversationObserver): Long
   private external fun nativeDestroy(ptr: Long)
   private external fun nativeSendMessage(ptr: Long, message: String)
@@ -419,6 +437,7 @@ class ConversationViewModel(
   private external fun nativeResumeTransfer(ptr: Long, attachmentId: String, isUpload: Boolean)
   private external fun nativeDiscardAttachment(ptr: Long, attachmentId: String)
   private external fun nativeGetAttachment(ptr: Long, attachmentId: String): Attachment?
+  private external fun nativeSearchMessages(ptr: Long, peerId: String, query: String): List<HistoryEntry>
 
   class Factory(
     private val application: Application,

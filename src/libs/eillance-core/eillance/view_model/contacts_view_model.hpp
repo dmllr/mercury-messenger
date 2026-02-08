@@ -16,7 +16,7 @@
 namespace eillance::view_model {
 
 class ContactsViewModel {
-public:
+ public:
   // Observer interface for contact list updates
   struct Observer {
     Observer() = default;
@@ -98,7 +98,7 @@ public:
     impl_->MarkAllAsRead(peer_id);
   }
 
-private:
+ private:
   struct Impl : public std::enable_shared_from_this<Impl> {
     std::shared_ptr<Client> client;
     std::shared_ptr<ClientEventRouter> router;
@@ -212,12 +212,12 @@ private:
 
           temp_contacts.push_back(
               {.peer_id = contact.peer_id,
-                  .display_name = display_name,
-                  .bio = contact.bio,
-                  .photo = contact.photo_base64,
-                  .status = contact.status,
-                  .connection_state = client->GetPeerConnectionState(contact.peer_id),
-                  .unread_count = 0}
+               .display_name = display_name,
+               .bio = contact.bio,
+               .photo = contact.photo_base64,
+               .status = contact.status,
+               .connection_state = client->GetPeerConnectionState(contact.peer_id),
+               .unread_count = 0}
           );
           contact_ids.push_back(contact.peer_id);
         }

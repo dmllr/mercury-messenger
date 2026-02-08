@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <cstddef>
 #include <memory>
 #include <mutex>
@@ -27,6 +28,12 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
   std::atomic<uint64_t> next_history_id_{1};
   std::atomic<int64_t> next_action_id_{1};
   std::string db_path_ = "mock_db_path";
+
+  static auto ToLower(std::string const& str) -> std::string {
+    std::string lower = str;
+    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return std::tolower(c); });
+    return lower;
+  }
 
  public:
   // Public counter for testing rate-limiting or call frequency
@@ -382,6 +389,57 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
       }
     }
     return remote_ids;
+  }
+
+  // --- Search ---
+  auto SearchMessages(ContactID const& peer_id, std::string const& query)
+      -> std::vector<messaging::HistoryEntryRecord> override {
+    std::lock_guard const lock(mutex_);
+    std::vector<messaging::HistoryEntryRecord> results;
+    std::string const query_lower = ToLower(query);
+
+    if (auto const itr = history_.find(peer_id); itr != history_.end()) {
+      for (auto const& entry : itr->second) {
+        if (entry.kind != messaging::HistoryEntryKind::textMessage &&
+            entry.kind != messaging::HistoryEntryKind::systemMessage) {
+          continue;
+        }
+        std::string content;
+        if (entry.is_truncated) {
+          if (auto const full = large_messages_.find(entry.id); full != large_messages_.end()) {
+            content = full->second;
+          } else if (auto* msg = std::get_if<messaging::MessageEntry>(&entry.data)) {
+            content = msg->content;
+          }
+        } else if (auto* msg = std::get_if<messaging::MessageEntry>(&entry.data)) {
+          content = msg->content;
+        }
+
+        if (ToLower(content).find(query_lower) != std::string::npos) {
+          auto record = entry;
+          // Ensure returned record has full content for display context
+          if (entry.is_truncated) {
+            std::get<messaging::MessageEntry>(record.data).content = content;
+          }
+          results.push_back(record);
+        }
+      }
+    }
+    // Sort descending by timestamp
+    std::ranges::sort(results, [](auto const& left, auto const& right) { return left.timestamp > right.timestamp; });
+    return results;
+  }
+
+  auto SearchAllMessages(std::string const& query) -> std::vector<messaging::HistoryEntryRecord> override {
+    std::lock_guard const lock(mutex_);
+    std::vector<messaging::HistoryEntryRecord> results;
+    for (auto const& peer_id : history_ | std::views::keys) {
+      auto peer_results = SearchMessages(peer_id, query);
+      results.insert(results.end(), peer_results.begin(), peer_results.end());
+    }
+    // Global sort descending
+    std::ranges::sort(results, [](auto const& left, auto const& right) { return left.timestamp > right.timestamp; });
+    return results;
   }
 
   // --- Debug ---

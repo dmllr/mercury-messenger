@@ -333,6 +333,16 @@ class Client final : public transport::TransportDelegate {
     return messaging_service_->GetUnreadMessages(id);
   }
 
+  // --- Search Facade ---
+  [[nodiscard]] auto SearchMessages(ContactID const& peer_id, std::string const& query) const
+      -> std::vector<messaging::HistoryEntryRecord> {
+    return messaging_service_->SearchMessages(peer_id, query);
+  }
+
+  [[nodiscard]] auto SearchAllMessages(std::string const& query) const -> std::vector<messaging::HistoryEntryRecord> {
+    return messaging_service_->SearchAllMessages(query);
+  }
+
   void CancelTransfer(ContactID const& peer_id, std::string const& attachment_id, bool is_upload) const {
     messaging_service_->CancelTransfer(peer_id, attachment_id, is_upload);
   }
@@ -344,7 +354,7 @@ class Client final : public transport::TransportDelegate {
   void DiscardAttachment(ContactID const& peer_id, std::string const& attachment_id) const {
     messaging_service_->DiscardAttachment(peer_id, attachment_id);
   }
-  
+
   [[nodiscard]] auto GetAttachment(std::string const& attachment_id) const -> std::optional<messaging::Attachment> {
     return storage_->GetAttachment(attachment_id);
   }
