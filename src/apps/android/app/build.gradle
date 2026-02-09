@@ -5,8 +5,10 @@ plugins {
     id 'kotlin-parcelize'
 }
 
+def repoRoot = ['git', 'rev-parse', '--show-toplevel'].execute().text.trim()
+
 Properties keystoreProps = new Properties()
-def keystoreConfigFile = file('keystore.config')
+def keystoreConfigFile = new File(repoRoot, 'keystore.config')
 
 if (keystoreConfigFile.exists()) {
     keystoreProps.load(new FileInputStream(keystoreConfigFile))
@@ -14,7 +16,7 @@ if (keystoreConfigFile.exists()) {
     throw new GradleException("""
         Keystore configuration file 'keystore.config' not found. 
         
-        Please create a file named 'keystore.config' in the root of your module directory.
+        Please create a file named 'keystore.config' in the root of the repository.
         
         Add the following properties to the file, replacing the placeholders with your actual keystore information:
         
@@ -26,7 +28,7 @@ if (keystoreConfigFile.exists()) {
 }
 
 Properties versionProps = new Properties()
-def versionPropsFile = file('version.properties')
+def versionPropsFile = new File(repoRoot, 'version.properties')
 if (versionPropsFile.exists()) {
     versionProps.load(new FileInputStream(versionPropsFile))
 }
