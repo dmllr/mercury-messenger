@@ -15,6 +15,7 @@
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/storage/sqlite/migrations.hpp"
 #include "eillance/storage/sqlite/sqlite_helpers.hpp"
+#include "eillance/utils/invariant.hpp"
 
 namespace eillance::storage {
 
@@ -190,7 +191,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
   // --- Settings ---
   auto GetSetting(std::string_view const key) -> std::optional<std::string> override {
     std::lock_guard const lock(mutex_);
-    if (!db_) return std::nullopt;
+    INVARIANT(db_);
     SQLiteStatement const statement(db_, "SELECT value FROM settings WHERE key = ?;");
     BindText(statement.Get(), 1, std::string(key));
     if (sqlite3_step(statement.Get()) == SQLITE_ROW) return ColumnString(statement.Get(), 0);
@@ -199,7 +200,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
 
   void SetSetting(std::string_view const key, std::string_view const value) override {
     std::lock_guard const lock(mutex_);
-    if (!db_) return;
+    INVARIANT(db_);
     SQLiteStatement const statement(db_, "REPLACE INTO settings (key, value) VALUES (?, ?);");
     BindText(statement.Get(), 1, std::string(key));
     BindText(statement.Get(), 2, std::string(value));
@@ -208,14 +209,16 @@ class SQLiteStorage final : public PersistentStorageImpl {
 
   void DeleteSetting(std::string_view const key) override {
     std::lock_guard const lock(mutex_);
-    if (!db_) return;
+    INVARIANT(db_);
     SQLiteStatement const statement(db_, "DELETE FROM settings WHERE key = ?;");
     BindText(statement.Get(), 1, std::string(key));
     sqlite3_step(statement.Get());
   }
 
   auto GetRaw(std::string const& key) -> std::optional<std::vector<std::byte>> override {
-    if (auto const val = GetSetting(key)) return crypto::FromHex(*val);
+    if (auto const val = GetSetting(key)) {
+      return crypto::FromHex(*val);
+    }
     return std::nullopt;
   }
 
@@ -227,7 +230,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
   // --- Contacts ---
   auto GetContacts() -> std::vector<identity::Contact> override {
     std::lock_guard const lock(mutex_);
-    if (!db_) return {};
+    INVARIANT(db_);
     std::vector<identity::Contact> contacts;
     SQLiteStatement const statement(
         db_,
@@ -251,7 +254,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
 
   auto GetContact(ContactID const& peer_id) -> std::optional<identity::Contact> override {
     std::lock_guard const lock(mutex_);
-    if (!db_) return std::nullopt;
+    INVARIANT(db_);
     SQLiteStatement const statement(
         db_,
         "SELECT peer_id, status, display_name, display_name_override, bio, photo_base64, signature_from_them, "
@@ -275,7 +278,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
 
   void UpdateContact(identity::Contact const& contact) override {
     std::lock_guard const lock(mutex_);
-    if (!db_) return;
+    INVARIANT(db_);
     SQLiteStatement const statement(
         db_,
         "REPLACE INTO contacts (peer_id, status, display_name, display_name_override, bio, photo_base64, "
@@ -294,7 +297,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
 
   void RemoveContact(ContactID const& peer_id) override {
     std::lock_guard const lock(mutex_);
-    if (!db_) return;
+    INVARIANT(db_);
     sqlite3_exec(db_, "BEGIN TRANSACTION;", nullptr, nullptr, nullptr);
     SQLiteStatement const m_stmt(db_, "DELETE FROM messages WHERE peer_id = ?;");
     BindText(m_stmt.Get(), 1, peer_id.ToString());
@@ -316,7 +319,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
       std::optional<int64_t> ref_id
   ) override {
     std::lock_guard const lock(mutex_);
-    if (!db_) return;
+    INVARIANT(db_);
     SQLiteStatement const statement(
         db_,
         "INSERT INTO pending_actions (peer_id, payload, created_at, ref_id, is_suspended, window_start_at) VALUES (?, "
@@ -336,7 +339,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
 
   auto GetPendingActions(ContactID const& peer_id) -> std::vector<PendingAction> override {
     std::lock_guard const lock(mutex_);
-    if (!db_) return {};
+    INVARIANT(db_);
     std::vector<PendingAction> actions;
     // Filter suspended actions
     SQLiteStatement const statement(
@@ -362,7 +365,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
 
   void RemovePendingAction(int64_t id) override {
     std::lock_guard const lock(mutex_);
-    if (!db_) return;
+    INVARIANT(db_);
     SQLiteStatement const statement(db_, "DELETE FROM pending_actions WHERE id = ?;");
     sqlite3_bind_int64(statement.Get(), 1, id);
     sqlite3_step(statement.Get());
@@ -370,7 +373,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
 
   void RemovePendingActionByRefId(ContactID const& peer_id, int64_t ref_id) override {
     std::lock_guard const lock(mutex_);
-    if (!db_) return;
+    INVARIANT(db_);
     SQLiteStatement const statement(db_, "DELETE FROM pending_actions WHERE peer_id = ? AND ref_id = ?;");
     BindText(statement.Get(), 1, peer_id.ToString());
     sqlite3_bind_int64(statement.Get(), 2, ref_id);
@@ -379,7 +382,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
 
   void SuspendTimedOutActions(uint64_t threshold_timestamp) override {
     std::lock_guard const lock(mutex_);
-    if (!db_) return;
+    INVARIANT(db_);
     SQLiteStatement const statement(
         db_,
         "UPDATE pending_actions SET is_suspended = 1 WHERE is_suspended = 0 AND window_start_at < ?;"
@@ -390,7 +393,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
 
   void UnsuspendActionsForPeer(ContactID const& peer_id, uint64_t new_window_start) override {
     std::lock_guard const lock(mutex_);
-    if (!db_) return;
+    INVARIANT(db_);
     SQLiteStatement const statement(
         db_,
         "UPDATE pending_actions SET is_suspended = 0, window_start_at = ? WHERE peer_id = ? AND is_suspended = 1;"
@@ -403,9 +406,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
   // --- History / Messages ---
   auto AddHistoryEntry(messaging::HistoryEntryRecord entry) -> messaging::HistoryEntryRecord override {
     std::lock_guard const lock(mutex_);
-    if (!db_) {
-      return {};
-    }
+    INVARIANT(db_);
     char* err_msg = nullptr;
     if (sqlite3_exec(db_, "BEGIN TRANSACTION;", nullptr, nullptr, &err_msg) != SQLITE_OK) {
       LGE << "Failed to begin transaction for message insertion: "
@@ -535,7 +536,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
 
   void UpdateHistoryEntry(messaging::HistoryEntryRecord const& entry) override {
     std::lock_guard const lock(mutex_);
-    if (!db_) return;
+    INVARIANT(db_);
     sqlite3_exec(db_, "BEGIN TRANSACTION;", nullptr, nullptr, nullptr);
     SQLiteStatement const statement(
         db_,
@@ -572,7 +573,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
   void UpdateMessageStatus(ContactID const& peer_id, uint64_t message_id, messaging::MessageStatus new_status)
       override {
     std::lock_guard const lock(mutex_);
-    if (!db_) return;
+    INVARIANT(db_);
     SQLiteStatement const s(db_, "UPDATE messages SET status=? WHERE peer_id=? AND id=?;");
     sqlite3_bind_int(s.Get(), 1, static_cast<int>(new_status));
     BindText(s.Get(), 2, peer_id.ToString());
@@ -587,7 +588,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
   ) override {
     if (message_ids.empty()) return;
     std::lock_guard const lock(mutex_);
-    if (!db_) return;
+    INVARIANT(db_);
     nlohmann::json const ids_json = message_ids;
     SQLiteStatement const s(
         db_,
@@ -602,7 +603,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
   void UpdateAttachmentStatus(std::string const& attachment_id, messaging::AttachmentStatus status, bool is_downloaded)
       override {
     std::lock_guard const lock(mutex_);
-    if (!db_) return;
+    INVARIANT(db_);
     SQLiteStatement const s(db_, "UPDATE message_attachments SET status=?, is_downloaded=? WHERE id=?;");
     sqlite3_bind_int(s.Get(), 1, static_cast<int>(status));
     sqlite3_bind_int(s.Get(), 2, is_downloaded ? 1 : 0);
@@ -612,9 +613,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
 
   auto GetAttachment(std::string const& attachment_id) -> std::optional<messaging::Attachment> override {
     std::lock_guard const lock(mutex_);
-    if (!db_) {
-      return std::nullopt;
-    }
+    INVARIANT(db_);
     // v6 update: select `file_name`
     SQLiteStatement const statement(db_, R"SQL(
       SELECT
@@ -657,9 +656,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
   auto GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t page_size)
       -> messaging::HistoryPage override {
     std::lock_guard const lock(mutex_);
-    if (!db_) {
-      return {};
-    }
+    INVARIANT(db_);
     messaging::HistoryPage page;
 
     {
@@ -717,7 +714,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
   auto GetFullMessageContent(ContactID const& peer_id, std::uint64_t const message_id)
       -> std::optional<std::string> override {
     std::lock_guard const lock(mutex_);
-    if (!db_) return std::nullopt;
+    INVARIANT(db_);
     SQLiteStatement const s(db_, "SELECT full_content FROM large_messages WHERE peer_id=? AND message_id=?;");
     BindText(s.Get(), 1, peer_id.ToString());
     sqlite3_bind_int64(s.Get(), 2, message_id);
@@ -728,7 +725,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
   auto GetChatSummaries(std::vector<ContactID> const& peer_ids) -> std::vector<messaging::ChatSummary> override {
     if (peer_ids.empty()) return {};
     std::lock_guard const lock(mutex_);
-    if (!db_) return {};
+    INVARIANT(db_);
     std::vector<messaging::ChatSummary> summaries;
     for (auto const& peer_id : peer_ids) {
       messaging::ChatSummary summary;
@@ -768,9 +765,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
   auto GetMessagesWithStatus(ContactID const& peer_id, messaging::MessageStatus const status)
       -> std::vector<messaging::HistoryEntryRecord> override {
     std::lock_guard const lock(mutex_);
-    if (!db_) {
-      return {};
-    }
+    INVARIANT(db_);
     std::vector<messaging::HistoryEntryRecord> records;
     SQLiteStatement const statement(db_, R"SQL(
       SELECT id, remote_id, kind, timestamp, direction, status, is_truncated, content
@@ -816,9 +811,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
 
   auto GetPendingAttachments(ContactID const& peer_id) -> std::vector<messaging::Attachment> override {
     std::lock_guard const lock(mutex_);
-    if (!db_) {
-      return {};
-    }
+    INVARIANT(db_);
     std::vector<messaging::Attachment> attachments;
     // v6 update: select `file_name`
     SQLiteStatement const att_stmt(db_, R"SQL(
@@ -850,7 +843,9 @@ class SQLiteStorage final : public PersistentStorageImpl {
       -> std::vector<uint64_t> override {
     std::lock_guard const lock(mutex_);
     std::vector<uint64_t> remote_ids;
-    if (local_ids.empty()) return {};
+    if (local_ids.empty()) {
+      return {};
+    }
     nlohmann::json const ids_json = local_ids;
     SQLiteStatement const s(
         db_,
@@ -869,7 +864,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
   auto SearchMessages(ContactID const& peer_id, std::string const& query)
       -> std::vector<messaging::HistoryEntryRecord> override {
     std::lock_guard const lock(mutex_);
-    if (!db_) return {};
+    INVARIANT(db_);
 
     std::string const pattern = "%" + query + "%";
 
@@ -908,7 +903,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
 
   auto SearchAllMessages(std::string const& query) -> std::vector<messaging::HistoryEntryRecord> override {
     std::lock_guard const lock(mutex_);
-    if (!db_) return {};
+    INVARIANT(db_);
 
     std::string const pattern = "%" + query + "%";
 
@@ -946,7 +941,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
   // --- Debug ---
   void DebugClearAllHistory() override {
     std::lock_guard const lock(mutex_);
-    if (!db_) return;
+    INVARIANT(db_);
     sqlite3_exec(
         db_,
         "BEGIN TRANSACTION; DELETE FROM large_messages; DELETE FROM message_attachments; DELETE FROM pending_actions; "
@@ -959,13 +954,13 @@ class SQLiteStorage final : public PersistentStorageImpl {
 
   void DebugClearAllContacts() override {
     std::lock_guard const lock(mutex_);
-    if (!db_) return;
+    INVARIANT(db_);
     sqlite3_exec(db_, "BEGIN TRANSACTION; DELETE FROM contacts; COMMIT;", nullptr, nullptr, nullptr);
   }
 
   void DebugRevokeAllContactApprovals() override {
     std::lock_guard const lock(mutex_);
-    if (!db_) return;
+    INVARIANT(db_);
     SQLiteStatement const s(db_, "UPDATE contacts SET status=? WHERE status=?;");
     sqlite3_bind_int(s.Get(), 1, static_cast<int>(identity::ContactStatus::pendingApproval));
     sqlite3_bind_int(s.Get(), 2, static_cast<int>(identity::ContactStatus::confirmed));
