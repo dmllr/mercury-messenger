@@ -173,7 +173,7 @@ class ConversationViewModel(
               val bmp = BitmapFactory.decodeStream(streamDecode, null, options)
               streamDecode?.close()
               bmp
-            } catch (e: Exception) {
+            } catch (_: Exception) {
               null
             }
           } else null
@@ -204,11 +204,6 @@ class ConversationViewModel(
       _draftAttachments.value = current
     }
   }
-
-  fun clearDrafts() {
-    _draftAttachments.value = emptyList()
-  }
-
   private fun queryFileName(resolver: ContentResolver, uri: Uri): String? {
     val returnCursor = resolver.query(uri, null, null, null, null)
     returnCursor?.use { cursor ->
@@ -261,7 +256,7 @@ class ConversationViewModel(
         }
       }
       digest.digest().joinToString("") { "%02x".format(it) }
-    } catch (e: Exception) {
+    } catch (_: Exception) {
       null
     }
   }
@@ -319,7 +314,7 @@ class ConversationViewModel(
               val bytes = outputStream.toByteArray()
               Base64.encodeToString(bytes, Base64.NO_WRAP)
             } else ""
-          } catch (e: Exception) {
+          } catch (_: Exception) {
             ""
           }
 
@@ -360,6 +355,7 @@ class ConversationViewModel(
     return if (nativePtr != 0L) nativeGetAttachment(nativePtr, attachmentId) else null
   }
 
+  @Suppress("DEPRECATION")
   private fun generateThumbnail(resolver: ContentResolver, uri: Uri, file: File, type: AttachmentType): Bitmap? {
     val size = Size(320, 320)
     return try {
@@ -378,7 +374,7 @@ class ConversationViewModel(
           null
         }
       }
-    } catch (e: Exception) {
+    } catch (_: Exception) {
       null
     }
   }
@@ -414,10 +410,10 @@ class ConversationViewModel(
       return
     }
     viewModelScope.launch {
-       val results = withContext(Dispatchers.IO) {
-          if (nativePtr != 0L) nativeSearchMessages(nativePtr, peerId, query) else emptyList()
-       }
-       _searchResults.value = results
+      val results = withContext(Dispatchers.IO) {
+        if (nativePtr != 0L) nativeSearchMessages(nativePtr, peerId, query) else emptyList()
+      }
+      _searchResults.value = results
     }
   }
 

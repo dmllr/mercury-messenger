@@ -2,6 +2,7 @@ package hela.eillance.screens
 
 import android.Manifest
 import android.content.ActivityNotFoundException
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -59,12 +60,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -126,7 +127,7 @@ fun ConversationScreen(
   val messageText by chatVM.messageText.collectAsState()
   val context = LocalContext.current
   val bannerState by mainViewModel.permissionBannerState.collectAsState()
-  val clipboardManager = LocalClipboardManager.current
+  val clipboard = LocalClipboard.current
 
   // Selection State
   var selectedMessageIds by remember { mutableStateOf(emptySet<Long>()) }
@@ -234,51 +235,51 @@ fun ConversationScreen(
     topBar = {
       if (isSearchActive) {
         TopAppBar(
-           title = {
-             TextField(
-               value = searchQuery,
-               onValueChange = {
-                 searchQuery = it
-                 chatVM.search(it)
-               },
-               placeholder = { Text(stringResource(R.string.search_hint)) },
-               modifier = Modifier
-                 .fillMaxWidth()
-                 .focusRequester(focusRequester),
-               colors = TextFieldDefaults.colors(
-                 focusedContainerColor = Color.Transparent,
-                 unfocusedContainerColor = Color.Transparent,
-                 focusedIndicatorColor = Color.Transparent,
-                 unfocusedIndicatorColor = Color.Transparent
-               ),
-               singleLine = true,
-               keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-               keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() })
-             )
-           },
-           navigationIcon = {
-             IconButton(onClick = {
-               isSearchActive = false
-               searchQuery = ""
-               chatVM.search("")
-             }) {
-               Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
-             }
-           },
-           actions = {
-             if (searchQuery.isNotEmpty()) {
-               IconButton(onClick = {
-                 searchQuery = ""
-                 chatVM.search("")
-                 focusRequester.requestFocus()
-               }) {
-                 Icon(Icons.Default.Close, contentDescription = stringResource(R.string.action_close))
-               }
-             }
-           },
-           colors = TopAppBarDefaults.topAppBarColors(
-             containerColor = MaterialTheme.colorScheme.surfaceContainer
-           )
+          title = {
+            TextField(
+              value = searchQuery,
+              onValueChange = {
+                searchQuery = it
+                chatVM.search(it)
+              },
+              placeholder = { Text(stringResource(R.string.search_hint)) },
+              modifier = Modifier
+                .fillMaxWidth()
+                .focusRequester(focusRequester),
+              colors = TextFieldDefaults.colors(
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent,
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent
+              ),
+              singleLine = true,
+              keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+              keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() })
+            )
+          },
+          navigationIcon = {
+            IconButton(onClick = {
+              isSearchActive = false
+              searchQuery = ""
+              chatVM.search("")
+            }) {
+              Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
+            }
+          },
+          actions = {
+            if (searchQuery.isNotEmpty()) {
+              IconButton(onClick = {
+                searchQuery = ""
+                chatVM.search("")
+                focusRequester.requestFocus()
+              }) {
+                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.action_close))
+              }
+            }
+          },
+          colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer
+          )
         )
       } else if (selectionMode) {
         SelectionTopBar(
@@ -316,7 +317,10 @@ fun ConversationScreen(
               }
 
               if (sb.isNotEmpty()) {
-                clipboardManager.setText(AnnotatedString(sb.toString()))
+                coroutineScope.launch {
+                  val clipData = ClipData.newPlainText("Mercury Chat", sb.toString())
+                  clipboard.setClipEntry(ClipEntry(clipData))
+                }
               }
             }
             selectedMessageIds = emptySet()
@@ -343,43 +347,43 @@ fun ConversationScreen(
         .imePadding()
     ) {
       if (isSearchActive) {
-         if (searchResults.isEmpty() && searchQuery.isNotEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-              Text(stringResource(R.string.search_no_results))
+        if (searchResults.isEmpty() && searchQuery.isNotEmpty()) {
+          Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(stringResource(R.string.search_no_results))
+          }
+        } else {
+          LazyColumn(modifier = Modifier.weight(1f)) {
+            items(searchResults) { msg ->
+              val isFromMe = msg.direction == MessageDirection.Sent
+              Column(
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .padding(16.dp)
+              ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                  Text(
+                    text = if (isFromMe) stringResource(R.string.me) else contact?.name ?: peerId,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isFromMe) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                  )
+                  Text(
+                    text = " ΓÇó " + formatTimestamp(msg.timestamp, zoneId, formatters),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 8.dp)
+                  )
+                }
+                Text(
+                  text = msg.content ?: "",
+                  style = MaterialTheme.typography.bodyMedium,
+                  modifier = Modifier.padding(top = 4.dp)
+                )
+              }
+              HorizontalDivider(color = DividerDefaults.color.copy(alpha = 0.5f))
             }
-         } else {
-            LazyColumn(modifier = Modifier.weight(1f)) {
-               items(searchResults) { msg ->
-                 val isFromMe = msg.direction == MessageDirection.Sent
-                 Column(
-                   modifier = Modifier
-                     .fillMaxWidth()
-                     .padding(16.dp)
-                 ) {
-                   Row(verticalAlignment = Alignment.CenterVertically) {
-                     Text(
-                       text = if (isFromMe) stringResource(R.string.me) else contact?.name ?: peerId,
-                       style = MaterialTheme.typography.titleSmall,
-                       fontWeight = FontWeight.Bold,
-                       color = if (isFromMe) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                     )
-                     Text(
-                       text = " • " + formatTimestamp(msg.timestamp, zoneId, formatters),
-                       style = MaterialTheme.typography.labelSmall,
-                       color = MaterialTheme.colorScheme.onSurfaceVariant,
-                       modifier = Modifier.padding(start = 8.dp)
-                     )
-                   }
-                   Text(
-                     text = msg.content ?: "",
-                     style = MaterialTheme.typography.bodyMedium,
-                     modifier = Modifier.padding(top = 4.dp)
-                   )
-                 }
-                 HorizontalDivider(color = DividerDefaults.color.copy(alpha = 0.5f))
-               }
-            }
-         }
+          }
+        }
       } else {
         val isConnectionIssue = connectionState != ServiceConnectionState.Online &&
             connectionState != ServiceConnectionState.Establishing &&
@@ -429,7 +433,7 @@ fun ConversationScreen(
                         }
                       try {
                         context.startActivity(intent)
-                      } catch (e: Exception) {
+                      } catch (_: Exception) {
                         openAppSettings(context)
                       }
                     },
@@ -565,7 +569,7 @@ private fun openFile(context: Context, file: File, mimeType: String) {
   }
   try {
     context.startActivity(intent)
-  } catch (e: ActivityNotFoundException) {
+  } catch (_: ActivityNotFoundException) {
     Toast.makeText(context, context.getString(R.string.toast_no_app_for_file), Toast.LENGTH_SHORT)
       .show()
   }

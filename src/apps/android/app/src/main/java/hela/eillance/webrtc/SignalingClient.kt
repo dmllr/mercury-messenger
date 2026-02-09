@@ -18,7 +18,6 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.json.JSONObject
 import java.io.EOFException
-import java.net.ConnectException
 import java.net.SocketException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
@@ -67,9 +66,9 @@ class SignalingClient {
           _state.tryEmit(State.CONNECTING)
 
           val listener = object : WebSocketListener() {
-            override fun onOpen(ws: WebSocket, response: Response) {
+            override fun onOpen(webSocket: WebSocket, response: Response) {
               Log.i(TAG, "Signaling connection opened.")
-              webSocket = ws
+              this@SignalingClient.webSocket = webSocket
               isConnected.set(true)
               currentBackoffMs = INITIAL_BACKOFF_MS
               _state.tryEmit(State.OPEN)
@@ -79,18 +78,18 @@ class SignalingClient {
                 put("type", "login")
                 put("id", peerId)
               }
-              ws.send(loginMessage.toString())
+              webSocket.send(loginMessage.toString())
 
               // Flush queue
               while (!messageQueue.isEmpty()) {
                 val msg = messageQueue.poll()
                 if (msg != null) {
-                  ws.send(msg)
+                  webSocket.send(msg)
                 }
               }
             }
 
-            override fun onMessage(ws: WebSocket, text: String) {
+            override fun onMessage(webSocket: WebSocket, text: String) {
               Log.d(TAG, "Received: $text")
               try {
                 val json = JSONObject(text)
@@ -109,23 +108,23 @@ class SignalingClient {
               }
             }
 
-            override fun onClosing(ws: WebSocket, code: Int, reason: String) {
+            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
               Log.w(TAG, "Signaling connection closing: $code - $reason")
             }
 
-            override fun onClosed(ws: WebSocket, code: Int, reason: String) {
+            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
               Log.i(TAG, "Signaling connection closed.")
               isConnected.set(false)
-              webSocket = null
+              this@SignalingClient.webSocket = null
               _state.tryEmit(State.CLOSED)
               sessionClosedSignal.complete(Unit)
             }
 
-            override fun onFailure(ws: WebSocket, t: Throwable, response: Response?) {
+            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
               val state = determineErrorState(t)
               Log.e(TAG, "Signaling failure: $state. Reason: ${t.message}")
               isConnected.set(false)
-              webSocket = null
+              this@SignalingClient.webSocket = null
               _state.tryEmit(state)
               sessionClosedSignal.complete(Unit)
             }
@@ -188,7 +187,7 @@ class SignalingClient {
           State.FAILED
         }
       }
-      is ConnectException, is SocketTimeoutException, is UnknownServiceException, is EOFException -> State.FAILED
+      is SocketTimeoutException, is UnknownServiceException, is EOFException -> State.FAILED
       else -> State.FAILED
     }
   }

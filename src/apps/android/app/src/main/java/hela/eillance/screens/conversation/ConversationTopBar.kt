@@ -101,7 +101,7 @@ fun ConversationDefaultTopBar(
     },
     actions = {
       IconButton(onClick = onSearchClick) {
-         Icon(Icons.Default.Search, contentDescription = stringResource(R.string.action_search))
+        Icon(Icons.Default.Search, contentDescription = stringResource(R.string.action_search))
       }
       IconButton(onClick = onStartVoiceCall) {
         Icon(
