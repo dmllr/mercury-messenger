@@ -213,8 +213,15 @@ tasks.register('generateTranslations', Exec) {
     // Outputs: The Android values directories.
     // Listing each language dir is not strictly required, but helps Gradle verify integrity.
     // Gradle checks timestamps; if inputs haven't changed, this task is SKIPPED.
-    outputs.dir file("src/main/res/values")
-    outputs.dir file("src/main/res/values-ja")
+    outputs.dir file("values")
+    outputs.dir file("values-ar")
+    outputs.dir file("values-de")
+    outputs.dir file("values-es")
+    outputs.dir file("values-fr")
+    outputs.dir file("values-ja")
+    outputs.dir file("values-pt")
+    outputs.dir file("values-ru")
+    outputs.dir file("values-zh")
 
     executable 'python3'
     doFirst {
