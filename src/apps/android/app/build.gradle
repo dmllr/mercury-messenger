@@ -5,7 +5,17 @@ plugins {
     id 'kotlin-parcelize'
 }
 
-def repoRoot = ['git', 'rev-parse', '--show-toplevel'].execute().text.trim()
+def findGitRoot = { startDir ->
+    def dir = startDir
+    while (dir != null && !new File(dir, '.git').exists()) {
+        dir = dir.getParentFile()
+    }
+    if (dir == null) {
+        throw new GradleException("Could not find .git root from " + startDir)
+    }
+    return dir
+}
+def repoRoot = findGitRoot(project.projectDir)
 
 Properties keystoreProps = new Properties()
 def keystoreConfigFile = new File(repoRoot, 'keystore.config')
