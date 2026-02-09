@@ -17,6 +17,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -109,6 +110,7 @@ fun ConversationScreen(
   chatVM: ConversationViewModel,
   contactsVM: ContactsViewModel,
   callVM: CallViewModel,
+  targetMessageId: Long?,
   mainViewModel: MainViewModel,
   peerId: String,
   contact: Contact?,
@@ -128,6 +130,7 @@ fun ConversationScreen(
   val context = LocalContext.current
   val bannerState by mainViewModel.permissionBannerState.collectAsState()
   val clipboard = LocalClipboard.current
+  var scrollToMessageId by remember { mutableStateOf(targetMessageId) }
 
   // Selection State
   var selectedMessageIds by remember { mutableStateOf(emptySet<Long>()) }
@@ -188,6 +191,13 @@ fun ConversationScreen(
     }
   }
 
+  LaunchedEffect(targetMessageId) {
+    targetMessageId?.let { msgId ->
+      chatVM.loadUpToMessage(msgId)
+      scrollToMessageId = msgId
+    }
+  }
+
   // Handle Shared Content
   LaunchedEffect(peerId) {
     val pendingShare = mainViewModel.consumePendingShareContent()
@@ -211,6 +221,22 @@ fun ConversationScreen(
       }
     }
     previousHistorySize = historyPage.messages.size
+  }
+
+  LaunchedEffect(scrollToMessageId, historyPage) {
+    scrollToMessageId?.let { targetId ->
+      // Wait for composition to settle if data just updated
+      kotlinx.coroutines.delay(50)
+      val historyIndex = historyPage.messages.indexOfFirst { it.id == targetId }
+      if (historyIndex != -1) {
+        val lazyColumnIndex = historyPage.messages.lastIndex - historyIndex
+        // Ensure index is valid for the current list state
+        if (lazyColumnIndex in 0 until historyPage.messages.size) {
+          listState.scrollToItem(lazyColumnIndex)
+          scrollToMessageId = null
+        }
+      }
+    }
   }
 
   // Logic to handle tapping "Read more" on a truncated message
@@ -358,6 +384,13 @@ fun ConversationScreen(
               Column(
                 modifier = Modifier
                   .fillMaxWidth()
+                  .clickable {
+                    isSearchActive = false
+                    searchQuery = ""
+                    chatVM.search("")
+                    chatVM.loadUpToMessage(msg.id)
+                    scrollToMessageId = msg.id
+                  }
                   .padding(16.dp)
               ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -368,7 +401,7 @@ fun ConversationScreen(
                     color = if (isFromMe) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                   )
                   Text(
-                    text = " ΓÇó " + formatTimestamp(msg.timestamp, zoneId, formatters),
+                    text = " * " + formatTimestamp(msg.timestamp, zoneId, formatters),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(start = 8.dp)

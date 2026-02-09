@@ -42,7 +42,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
   private val _incomingCallUiVisible = MutableStateFlow(false)
   val incomingCallUiVisible = _incomingCallUiVisible.asStateFlow()
 
-  private val _navigateToPeerId = MutableStateFlow<String?>(null)
+  private val _navigateToPeerId = MutableStateFlow<Pair<String, Long?>?>(null)
   val navigateToPeerId = _navigateToPeerId.asStateFlow()
 
   private val _navigateToScanner = MutableStateFlow(false)
@@ -128,8 +128,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     _navigateToContacts.value = false
   }
 
-  fun navigateToPeer(peerId: String) {
-    _navigateToPeerId.value = peerId
+  fun navigateToPeer(peerId: String, messageId: Long? = null) {
+    _navigateToPeerId.value = peerId to messageId
   }
 
   fun onNavigationHandled() {

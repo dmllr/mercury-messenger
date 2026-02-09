@@ -386,7 +386,12 @@ class CallService : Service() {
     }
   }
 
-  private fun showNewMessageNotification(peerId: String, title: String, messages: List<HistoryEntry>, showContent: Boolean) {
+  private fun showNewMessageNotification(
+    peerId: String,
+    title: String,
+    messages: List<HistoryEntry>,
+    showContent: Boolean
+  ) {
     val intent = Intent(this, MainActivity::class.java).apply {
       flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
       putExtra(EXTRA_PEER_ID, peerId)

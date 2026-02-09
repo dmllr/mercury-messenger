@@ -234,29 +234,10 @@ TEST_F(ConversationViewModelTest, CancelTransferPropagates) {
   router_->Queue().Push(EventChatMessageReceived{peer1, entry});
   WaitFor([&] { return !observer->GetState().history.empty(); });
 
-  // Cancel transfer via VM. Since direction is Received (default in MockStorage add if not set,
-  // or explicit in AddHistoryEntry above if specified? Ah, wait, Test AddHistoryEntry above didn't specify direction.
-  // MockPersistentStorageImpl defaults? No, it's a struct.
-  // Actually, wait, `messaging::MessageDirection` default?
-  // Checking mock_persistent_storage.hpp: AddHistoryEntry uses what's passed.
-  // The test code above: `.data = msg_data, .peer_id = peer1`. Missing direction.
-  // Wait, `HistoryEntryRecord` has no default for direction.
-  // In `test-conversation-view-model.cpp` lines 246:
-  // auto entry = mock_storage_->AddHistoryEntry({.data = msg_data, .peer_id = peer1});
-  // This constructs HistoryEntryRecord. Aggregate init.
-  // Missing fields get default initialized. `direction` is enum class MessageDirection : uint8_t. Default 0 (sent).
-  // If it's SENT, `CancelTransfer` logic will call `SendCancel` (0x03).
-  // BUT the test failed saying it expected true but got false.
-  // Let's explicitly set direction to RECEIVED to test download cancellation (Pause).
-  // OR set to SENT to test upload cancellation (Cancel).
-  // The original test context implies we want to test cancellation.
-  // Let's fix it to test Download Cancellation which maps to Pause.
-
   entry.direction = messaging::MessageDirection::received;  // Force download scenario
   mock_storage_->UpdateHistoryEntry(entry);                 // Update DB state just in case
 
   // Cancel transfer via VM.
-  // vm_->CancelTransfer("cancel-test-id", false); // false = not upload = download
   vm_->CancelTransfer("cancel-test-id", false);
 
   // Wait for status change
@@ -377,4 +358,102 @@ TEST_F(ConversationViewModelTest, SendSmallAttachment_UpdatesStatusSynchronously
   EXPECT_TRUE(success) << "Attachment status should be Done for small file sent synchronously";
 
   std::filesystem::remove(temp_path);
+}
+
+TEST_F(ConversationViewModelTest, LoadUpToMessage) {
+  auto observer = std::make_shared<MockConversationObserver>();
+
+  // Create 150 messages in mock storage
+  uint64_t target_id = 0;
+  for (int i = 0; i < 150; ++i) {
+    auto entry = mock_storage_->AddHistoryEntry(
+        {.kind = messaging::HistoryEntryKind::textMessage,
+         .timestamp = Time::Now() + i,
+         .direction = messaging::MessageDirection::sent,
+         .status = messaging::MessageStatus::delivered,
+         .data = messaging::MessageEntry{"Message " + std::to_string(i)},
+         .peer_id = peer1}
+    );
+    if (i == 20) {  // Deep in history
+      target_id = entry.id;
+    }
+  }
+
+  // Re-initialize VM to simulate fresh entry
+  auto vm = std::make_shared<ConversationViewModel>(peer1, client_, router_);
+  vm->SetObserver(observer);
+  WaitFor([&] { return observer->GetState().history.size() > 0; });
+
+  // Initially, it should only load 50 messages
+  auto initial_state = observer->GetState();
+  EXPECT_EQ(initial_state.history.size(), 50);
+
+  // Call LoadUpToMessage
+  vm->LoadUpToMessage(target_id);
+
+  // Wait for history to expand to include target_id
+  WaitFor([&] {
+    auto s = observer->GetState();
+    for (auto const& msg : s.history) {
+      if (msg.id == target_id) return true;
+    }
+    return false;
+  });
+
+  auto final_state = observer->GetState();
+  bool found = false;
+  for (auto const& msg : final_state.history) {
+    if (msg.id == target_id) {
+      found = true;
+      break;
+    }
+  }
+  EXPECT_TRUE(found);
+  EXPECT_GT(final_state.history.size(), 50);
+}
+
+TEST_F(ConversationViewModelTest, LoadUpToMessage_OverridesInitialLoad) {
+  auto observer = std::make_shared<MockConversationObserver>();
+
+  // Setup: Create messages
+  uint64_t target_id = 0;
+  for (int i = 0; i < 60; ++i) {
+    auto entry = mock_storage_->AddHistoryEntry(
+        {.kind = messaging::HistoryEntryKind::textMessage,
+         .timestamp = Time::Now() + i,
+         .direction = messaging::MessageDirection::sent,
+         .status = messaging::MessageStatus::delivered,
+         .data = messaging::MessageEntry{"msg"},
+         .peer_id = peer1}
+    );
+    if (i == 5) target_id = entry.id;  // Older message, not in first page of 50
+  }
+
+  // Re-create VM. This triggers StartInitialLoad in a thread.
+  auto vm = std::make_shared<ConversationViewModel>(peer1, client_, router_);
+  vm->SetObserver(observer);
+
+  // Immediately request loading specific message.
+  // This should increment load_generation, causing the StartInitialLoad to abort
+  // when/if it tries to apply results.
+  vm->LoadUpToMessage(target_id);
+
+  // Wait for update containing the target
+  WaitFor([&] {
+    auto s = observer->GetState();
+    for (auto const& msg : s.history) {
+      if (msg.id == target_id) return true;
+    }
+    return false;
+  });
+
+  // Verify we have the message
+  auto final_state = observer->GetState();
+  bool present = false;
+  for (auto const& msg : final_state.history) {
+    if (msg.id == target_id) present = true;
+  }
+  EXPECT_TRUE(present);
+  // Ensure we have loaded enough history
+  EXPECT_GT(final_state.history.size(), 50);
 }

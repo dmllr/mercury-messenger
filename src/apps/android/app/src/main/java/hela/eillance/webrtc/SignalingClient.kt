@@ -187,6 +187,7 @@ class SignalingClient {
           State.FAILED
         }
       }
+
       is SocketTimeoutException, is UnknownServiceException, is EOFException -> State.FAILED
       else -> State.FAILED
     }
