@@ -35,8 +35,9 @@ sealed class Screen(val route: String, val icon: ImageVector? = null) {
 }
 
 sealed class Route(val route: String) {
-  object Interaction : Route("interaction/{peerId}") {
-    fun createRoute(peerId: String) = "interaction/$peerId"
+  object Interaction : Route("interaction/{peerId}?messageId={messageId}") {
+    fun createRoute(peerId: String, messageId: Long? = null) =
+      if (messageId != null) "interaction/$peerId?messageId=$messageId" else "interaction/$peerId"
   }
 
   object Call : Route("call/{peerId}") {

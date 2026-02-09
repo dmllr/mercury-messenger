@@ -102,6 +102,9 @@ class ConversationViewModel {
   void LoadOlderMessages() const {
     impl_->LoadOlderMessages();
   }
+  void LoadUpToMessage(uint64_t message_id) const {
+    impl_->LoadUpToMessage(message_id);
+  }
   void LoadFullMessage(uint64_t message_id) const {
     impl_->LoadFullMessage(message_id);
   }
@@ -207,6 +210,47 @@ class ConversationViewModel {
         if (observer) {
           observer->OnHistoryUpdated(state);
         }
+      }
+    }
+
+    void LoadUpToMessage(uint64_t message_id) {
+      std::lock_guard<std::mutex> const lock(mutex);
+
+      // Invalidate any pending initial load to prevent it from overwriting our work
+      load_generation++;
+
+      bool found = false;
+      for (auto const& msg : state.history) {
+        if (msg.id == message_id) {
+          found = true;
+          break;
+        }
+      }
+
+      // If history is empty, reset pager to ensure we fetch from start
+      if (state.history.empty()) {
+        state.has_older_messages = true;
+        chat_pages_loaded = 0;
+      }
+
+      while (!found && state.has_older_messages) {
+        auto page = client->GetMessageHistoryPage(peer_id, chat_pages_loaded, kPageSize);
+        if (page.messages.empty()) {
+          state.has_older_messages = false;
+          break;
+        }
+        for (auto& message : std::ranges::reverse_view(page.messages)) {
+          state.history.push_front(message);
+          if (message.id == message_id) {
+            found = true;
+          }
+        }
+        chat_pages_loaded++;
+        state.has_older_messages = (chat_pages_loaded * kPageSize) < page.total_messages;
+      }
+
+      if (observer) {
+        observer->OnHistoryUpdated(state);
       }
     }
 

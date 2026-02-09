@@ -204,6 +204,7 @@ class ConversationViewModel(
       _draftAttachments.value = current
     }
   }
+
   private fun queryFileName(resolver: ContentResolver, uri: Uri): String? {
     val returnCursor = resolver.query(uri, null, null, null, null)
     returnCursor?.use { cursor ->
@@ -417,6 +418,12 @@ class ConversationViewModel(
     }
   }
 
+  fun loadUpToMessage(messageId: Long) {
+    viewModelScope.launch(Dispatchers.IO) {
+      if (nativePtr != 0L) nativeLoadUpTo(nativePtr, messageId)
+    }
+  }
+
   private external fun nativeCreate(peerId: String, observer: NativeConversationObserver): Long
   private external fun nativeDestroy(ptr: Long)
   private external fun nativeSendMessage(ptr: Long, message: String)
@@ -427,6 +434,7 @@ class ConversationViewModel(
   )
 
   private external fun nativeLoadOlder(ptr: Long)
+  private external fun nativeLoadUpTo(ptr: Long, messageId: Long)
   private external fun nativeLoadFull(ptr: Long, messageId: Long)
   private external fun nativeMarkRead(ptr: Long, messageIds: LongArray)
   private external fun nativeCancelTransfer(ptr: Long, attachmentId: String, isUpload: Boolean)

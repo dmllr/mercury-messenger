@@ -100,7 +100,7 @@ fun ContactsScreen(
   isLoading: Boolean,
   connectionState: ServiceConnectionState,
   onCheckPermissions: () -> Unit,
-  onContactClick: (String) -> Unit,
+  onContactClick: (String, Long?) -> Unit,
   onNavigateToProfile: () -> Unit,
   onShowContactProfile: (String) -> Unit
 ) {
@@ -291,7 +291,7 @@ fun ContactsScreen(
               Column(
                 modifier = Modifier
                   .fillMaxWidth()
-                  .clickable { onContactClick(result.peerId) }
+                  .clickable { onContactClick(result.peerId, result.entry.id) }
                   .padding(16.dp)
               ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -437,7 +437,7 @@ fun ContactsScreen(
             items(visibleContacts, key = { it.peerId }) { contact ->
               ContactListItem(
                 contact = contact,
-                onClick = { onContactClick(contact.peerId) },
+                onClick = { onContactClick(contact.peerId, null) },
                 onShowProfile = { onShowContactProfile(contact.peerId) },
                 zoneId = zoneId,
                 formatters = formatters

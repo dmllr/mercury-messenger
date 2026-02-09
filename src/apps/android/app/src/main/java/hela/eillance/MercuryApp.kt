@@ -185,9 +185,9 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
 
   // Global Navigation: Chat
   LaunchedEffect(navigateToPeerId) {
-    navigateToPeerId?.let { peerId ->
+    navigateToPeerId?.let { (peerId, msgId) ->
       if (!callState.isConnecting && !callState.isInCall && !callState.isRinging) {
-        navController.navigate(Route.Interaction.createRoute(peerId)) {
+        navController.navigate(Route.Interaction.createRoute(peerId, msgId)) {
           launchSingleTop = true
         }
       }
@@ -239,7 +239,7 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
           isLoading = isLoading,
           connectionState = connectionState,
           onCheckPermissions = viewModel::checkAllPermissions,
-          onContactClick = { peerId -> viewModel.navigateToPeer(peerId) },
+          onContactClick = { peerId, msgId -> viewModel.navigateToPeer(peerId, msgId) },
           onNavigateToProfile = {
             navController.navigate(Screen.Profile.route) {
               launchSingleTop = true
@@ -302,8 +302,16 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
         )
       }
 
-      composable(Route.Interaction.route) { backStackEntry ->
+      composable(
+        route = Route.Interaction.route,
+        arguments = listOf(
+          navArgument("peerId") { type = NavType.StringType },
+          navArgument("messageId") { type = NavType.StringType; nullable = true; defaultValue = null }
+        )
+      ) { backStackEntry ->
         val peerId = backStackEntry.arguments?.getString("peerId") ?: return@composable
+        val messageIdStr = backStackEntry.arguments?.getString("messageId")
+        val messageId = messageIdStr?.toLongOrNull()
         val app = LocalContext.current.applicationContext as Application
         val chatVM: ConversationViewModel = viewModel(factory = ConversationViewModel.Factory(app, peerId))
         val historyPage by chatVM.interactionHistoryPage.collectAsState()
@@ -315,6 +323,7 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
           chatVM = chatVM,
           contactsVM = contactsVM,
           callVM = callVM,
+          targetMessageId = messageId,
           mainViewModel = viewModel,
           peerId = peerId,
           contact = contact,

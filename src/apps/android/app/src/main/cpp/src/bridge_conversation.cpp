@@ -115,6 +115,16 @@ Java_hela_eillance_viewmodels_ConversationViewModel_nativeLoadOlder(JNIEnv* /*en
   vm->LoadOlderMessages();
 }
 
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationViewModel_nativeLoadUpTo(
+    JNIEnv* /*env*/,
+    jobject /*instance*/,
+    jlong ptr,
+    jlong msg_id
+) {
+  auto* vm = reinterpret_cast<eillance::view_model::ConversationViewModel*>(ptr);
+  vm->LoadUpToMessage(static_cast<uint64_t>(msg_id));
+}
+
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationViewModel_nativeLoadFull(
     JNIEnv* /*env*/,
     jobject /*instance*/,
