@@ -20,7 +20,6 @@ import android.telecom.TelecomManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.Person
-import androidx.core.content.FileProvider
 import hela.eillance.camera.R
 import hela.eillance.ndkio.AttachmentType
 import hela.eillance.ndkio.CallDirection
@@ -28,7 +27,6 @@ import hela.eillance.ndkio.CallState
 import hela.eillance.ndkio.Contact
 import hela.eillance.ndkio.HistoryEntry
 import hela.eillance.ndkio.ServiceConnectionState
-import hela.eillance.ndkio.VideoConfig
 import hela.eillance.telecom.MercuryConnection
 import hela.eillance.telecom.MercuryConnectionService
 import hela.eillance.viewmodels.CallViewModel
@@ -48,14 +46,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.webrtc.VideoSink
-import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 
 class CallService : Service() {
 
-  inner class CallServiceBinder : android.os.Binder() {
-    fun getService(): CallService = this@CallService
-  }
+  class CallServiceBinder : android.os.Binder()
 
   private val binder = CallServiceBinder()
   private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -191,7 +186,7 @@ class CallService : Service() {
     _isEngineReady.value = false
     soundPlayer.stop()
 
-    val shutdownJob = serviceScope.launch(Dispatchers.IO) {
+    serviceScope.launch(Dispatchers.IO) {
       engineMutex.withLock {
         terminate()
       }
@@ -326,9 +321,9 @@ class CallService : Service() {
     try {
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         val serviceType = if (inCall) {
-          var type =
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+          var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
           if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
             type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
           }
           type
@@ -409,13 +404,9 @@ class CallService : Service() {
 
     if (messages.isNotEmpty()) {
       messages.forEach { msg ->
-        var text: CharSequence = ""
-        var dataUri: Uri? = null
-        var dataMime: String? = null
-
-        if (showContent) {
+        val text = if (showContent) {
           if (!msg.content.isNullOrBlank()) {
-            text = msg.content
+            msg.content
           } else if (msg.attachments.isNotEmpty()) {
             val att = msg.attachments.first()
             val typeText = when (att.type) {
@@ -427,26 +418,9 @@ class CallService : Service() {
                 else getString(R.string.file_type_generic)
               }
             }
-            text = "[$typeText]"
-
-            // Try to show image thumbnail
-            if (att.type == AttachmentType.Image) {
-              val file = File(att.path)
-              if (att.isDownloaded && file.exists()) {
-                dataUri = FileProvider.getUriForFile(this, "${packageName}.provider", file)
-                dataMime = att.mime
-              } else if (!att.thumbnail.isNullOrEmpty()) {
-                try {
-                  val bytes = android.util.Base64.decode(att.thumbnail, android.util.Base64.DEFAULT)
-                  val cacheFile = File(cacheDir, "thumb_${att.id}.jpg")
-                  cacheFile.writeBytes(bytes)
-                  dataUri = FileProvider.getUriForFile(this, "${packageName}.provider", cacheFile)
-                  dataMime = "image/jpeg"
-                } catch (_: Exception) {}
-              }
-            }
+            "[$typeText]"
           } else {
-            text = getString(R.string.notification_new_message)
+            getString(R.string.notification_new_message)
           }
         } else {
           getString(R.string.notification_new_message)
@@ -595,7 +569,6 @@ class CallService : Service() {
   external fun start()
   private external fun terminate()
   external fun identityExists(): Boolean
-  external fun configureVideoCapture(config: VideoConfig)
 
   companion object {
     var instance: CallService? = null

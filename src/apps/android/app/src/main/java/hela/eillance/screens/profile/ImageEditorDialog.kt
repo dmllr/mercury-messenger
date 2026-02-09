@@ -14,10 +14,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.RotateLeft
+import androidx.compose.material.icons.automirrored.filled.RotateRight
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.RotateLeft
-import androidx.compose.material.icons.filled.RotateRight
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -194,7 +194,7 @@ fun ImageEditorDialog(
                 .background(Color.DarkGray.copy(alpha = 0.8f), CircleShape)
             ) {
               Icon(
-                Icons.Default.RotateLeft,
+                Icons.AutoMirrored.Filled.RotateLeft,
                 contentDescription = stringResource(id = R.string.action_rotate_left),
                 tint = Color.White
               )
@@ -206,7 +206,7 @@ fun ImageEditorDialog(
                 .background(Color.DarkGray.copy(alpha = 0.8f), CircleShape)
             ) {
               Icon(
-                Icons.Default.RotateRight,
+                Icons.AutoMirrored.Filled.RotateRight,
                 contentDescription = stringResource(id = R.string.action_rotate_right),
                 tint = Color.White
               )

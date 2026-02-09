@@ -22,13 +22,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -326,7 +324,7 @@ fun ContactsScreen(
         // Global Error Snackbar (from ViewModel events)
         val globalError by contactsVM.errorMessage.collectAsState(initial = null)
         if (globalError != null) {
-           StatusSnackbar(text = globalError!!, isError = true)
+          StatusSnackbar(text = globalError!!, isError = true)
         }
 
         val isConnectionIssue = connectionState != ServiceConnectionState.Online &&
@@ -343,11 +341,11 @@ fun ContactsScreen(
           Box(modifier = Modifier.padding(16.dp)) {
             if (isConnectionIssue) {
               val (msg, isError) = when (connectionState) {
-                ServiceConnectionState.NoNetwork -> context.getString(R.string.connection_no_network) to false
-                ServiceConnectionState.Failure -> context.getString(R.string.connection_failed) to true
-                ServiceConnectionState.Disconnected -> context.getString(R.string.connection_disconnected) to false
-                ServiceConnectionState.InvalidToken -> context.getString(R.string.connection_auth_error) to true
-                else -> context.getString(R.string.connection_issue) to true
+                ServiceConnectionState.NoNetwork -> stringResource(R.string.connection_no_network) to false
+                ServiceConnectionState.Failure -> stringResource(R.string.connection_failed) to true
+                ServiceConnectionState.Disconnected -> stringResource(R.string.connection_disconnected) to false
+                ServiceConnectionState.InvalidToken -> stringResource(R.string.connection_auth_error) to true
+                else -> stringResource(R.string.connection_issue) to true
               }
               StatusSnackbar(text = msg, isError = isError)
             } else {
@@ -377,7 +375,7 @@ fun ContactsScreen(
                         }
                       try {
                         context.startActivity(intent)
-                      } catch (e: Exception) {
+                      } catch (_: Exception) {
                         openAppSettings(context)
                       }
                     },
