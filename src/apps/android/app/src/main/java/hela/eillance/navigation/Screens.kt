@@ -8,6 +8,7 @@ import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.ui.graphics.vector.ImageVector
 import hela.eillance.camera.R
 import hela.eillance.ndkio.Attachment
@@ -17,6 +18,7 @@ sealed class Screen(val route: String, @StringRes val titleResId: Int? = null, v
   object Contacts : Screen("contacts", R.string.screen_title_contacts, Icons.Default.Contacts)
   object Profile : Screen("profile", R.string.screen_title_profile, Icons.Default.Person)
   object Settings : Screen("settings", R.string.screen_title_settings, Icons.Default.Settings)
+  object ConnectionSettings : Screen("connection_settings", R.string.settings_group_connection, Icons.Default.Wifi)
   object BackupRestore : Screen("backup_restore", R.string.screen_title_backup_restore)
   object Identity : Screen("identity")
   object MnemonicDisplay : Screen("mnemonic_display")

@@ -78,12 +78,47 @@ class SettingsManager {
     storage_->SetSetting(kPeerInactivityTimeoutKey, std::to_string(timeout.count()));
   }
 
+  // --- Custom ICE Servers ---
+  [[nodiscard]] auto GetCustomStun() const -> std::optional<std::string> {
+    return customStun_;
+  }
+  [[nodiscard]] auto GetCustomTurn() const -> std::optional<std::string> {
+    return customTurn_;
+  }
+  [[nodiscard]] auto GetCustomTurnUser() const -> std::optional<std::string> {
+    return customTurnUser_;
+  }
+  [[nodiscard]] auto GetCustomTurnPass() const -> std::optional<std::string> {
+    return customTurnPass_;
+  }
+
+  void SetCustomIceConfig(
+      std::string const& stun,
+      std::string const& turn,
+      std::string const& user,
+      std::string const& pass
+  ) {
+    customStun_ = stun;
+    customTurn_ = turn;
+    customTurnUser_ = user;
+    customTurnPass_ = pass;
+
+    storage_->SetSetting(kCustomStunKey, stun);
+    storage_->SetSetting(kCustomTurnKey, turn);
+    storage_->SetSetting(kCustomTurnUserKey, user);
+    storage_->SetSetting(kCustomTurnPassKey, pass);
+  }
+
  private:
   void Load() {
     signalingServerUrl_ = storage_->GetSetting(kSignalingServerUrlKey);
     myDisplayName_ = storage_->GetSetting(kMyDisplayNameKey);
     myBio_ = storage_->GetSetting(kMyBioKey);
     myPhotoBase64_ = storage_->GetSetting(kMyPhotoBase64Key);
+    customStun_ = storage_->GetSetting(kCustomStunKey);
+    customTurn_ = storage_->GetSetting(kCustomTurnKey);
+    customTurnUser_ = storage_->GetSetting(kCustomTurnUserKey);
+    customTurnPass_ = storage_->GetSetting(kCustomTurnPassKey);
   }
 
   static constexpr auto kSignalingServerUrlKey = "signaling_server_url";
@@ -91,6 +126,10 @@ class SettingsManager {
   static constexpr auto kMyBioKey = "my_bio";
   static constexpr auto kMyPhotoBase64Key = "my_photo_base64";
   static constexpr auto kPeerInactivityTimeoutKey = "peer_inactivity_timeout";
+  static constexpr auto kCustomStunKey = "custom_ice_stun";
+  static constexpr auto kCustomTurnKey = "custom_ice_turn";
+  static constexpr auto kCustomTurnUserKey = "custom_ice_turn_user";
+  static constexpr auto kCustomTurnPassKey = "custom_ice_turn_pass";
 
   std::shared_ptr<storage::PersistentStorage> storage_;
 
@@ -99,6 +138,10 @@ class SettingsManager {
   std::optional<std::string> myDisplayName_;
   std::optional<std::string> myBio_;
   std::optional<std::string> myPhotoBase64_;
+  std::optional<std::string> customStun_;
+  std::optional<std::string> customTurn_;
+  std::optional<std::string> customTurnUser_;
+  std::optional<std::string> customTurnPass_;
 };
 
 }  // namespace eillance

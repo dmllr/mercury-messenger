@@ -137,6 +137,11 @@ fun ContactsScreen(
     contactsVM.searchAllMessages("")
   }
 
+  val hasConnectionIssues = connectionState == ServiceConnectionState.Failure ||
+      connectionState == ServiceConnectionState.Disconnected ||
+      connectionState == ServiceConnectionState.NoNetwork ||
+      connectionState == ServiceConnectionState.InvalidToken
+
   LaunchedEffect(isSearchActive) {
     if (isSearchActive) {
       focusRequester.requestFocus()
@@ -223,7 +228,7 @@ fun ContactsScreen(
                 }
               }
 
-              if (hasPermissionIssues) {
+              if (hasPermissionIssues || hasConnectionIssues) {
                 Box(
                   modifier = Modifier
                     .align(Alignment.TopEnd)
@@ -318,6 +323,12 @@ fun ContactsScreen(
           }
         }
       } else {
+        // Global Error Snackbar (from ViewModel events)
+        val globalError by contactsVM.errorMessage.collectAsState(initial = null)
+        if (globalError != null) {
+           StatusSnackbar(text = globalError!!, isError = true)
+        }
+
         val isConnectionIssue = connectionState != ServiceConnectionState.Online &&
             connectionState != ServiceConnectionState.Establishing &&
             connectionState != ServiceConnectionState.Unknown

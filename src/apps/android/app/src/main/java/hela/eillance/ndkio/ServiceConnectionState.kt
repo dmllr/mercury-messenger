@@ -20,7 +20,7 @@ enum class ServiceConnectionState(val value: Int) {
       Failure to R.string.service_connection_state_failure,
       Disconnected to R.string.service_connection_state_disconnected,
       InvalidToken to R.string.service_connection_state_invalid_token,
-      NoNetwork to R.string.service_connection_state_failure
+      NoNetwork to R.string.connection_no_network
     )
 
     @JvmStatic
@@ -29,7 +29,6 @@ enum class ServiceConnectionState(val value: Int) {
 
   @Suppress("unused")
   fun getResourceString(context: Context): String {
-    if (this == NoNetwork) return "Waiting for network"
     val resourceId = resourceMap[this] ?: R.string.service_connection_state_unknown
     return context.getString(resourceId)
   }

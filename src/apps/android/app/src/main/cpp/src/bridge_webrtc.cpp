@@ -202,6 +202,13 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcTransport_nati
           {"is_reply", false}
       };
       transport->SendPeerDataChannelMessage(peer_id, key_exchange_message);
+
+      // Force UI to show Connected state when Data Channel opens, regardless of ICE state
+      transport->ReportStateChange(
+          peer_id,
+          eillance::EventSource::peerConnectionState,
+          static_cast<int>(eillance::transport::PeerConnectionState::connected)
+      );
     }
 
     env->ReleaseStringUTFChars(j_peer_id, peer_id_chars);

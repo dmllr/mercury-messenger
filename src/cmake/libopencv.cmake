@@ -54,7 +54,7 @@ import_remote(
   "https://github.com/opencv/opencv.git"
   TAG "${OpenCV_VERSION}"
   DST "${CMAKE_SOURCE_DIR}/_imported"
-  PATCH "${CMAKE_CURRENT_LIST_DIR}/patches/libopencv.patch"
+#  PATCH "${CMAKE_CURRENT_LIST_DIR}/patches/libopencv.patch"
   ALIAS libopencv
 )
 

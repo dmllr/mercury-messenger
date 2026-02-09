@@ -25,6 +25,7 @@ namespace eillance::services {
 class InternalMessagingService {
  public:
   using Json = nlohmann::json;
+  using IceConfigCallback = std::function<void(Json const&)>;
 
   InternalMessagingService(
       std::shared_ptr<transport::Transport> transport,
@@ -42,6 +43,10 @@ class InternalMessagingService {
         media_call_service_(std::move(media_call_service)),
         file_transfer_service_(std::move(file_transfer_service)),
         profile_service_(std::move(profile_service)) {
+  }
+
+  void SetServerIceConfigCallback(IceConfigCallback cb) {
+    ice_config_callback_ = std::move(cb);
   }
 
   void ProcessSystemMessage(std::string const& type, Json const& message) {
@@ -62,6 +67,10 @@ class InternalMessagingService {
       }
     } else if (type == "login_success") {
       messaging_service_->StartDeliveryService();
+    } else if (type == "ice_servers") {
+      if (message.contains("servers") && ice_config_callback_) {
+        ice_config_callback_(message["servers"]);
+      }
     } else {
       LGW << "Received unknown system message of type: " << type;
     }
@@ -322,6 +331,8 @@ class InternalMessagingService {
   std::shared_ptr<MediaCallService> media_call_service_;
   std::shared_ptr<FileTransferService> file_transfer_service_;
   std::shared_ptr<ProfileService> profile_service_;
+
+  IceConfigCallback ice_config_callback_;
 
   std::unordered_map<ContactID, Time::Unit> last_unsuspend_times_;
   std::mutex unsuspend_mutex_;

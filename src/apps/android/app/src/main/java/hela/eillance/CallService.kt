@@ -38,7 +38,10 @@ import hela.eillance.webrtc.WebRtcTransport
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -74,6 +77,10 @@ class CallService : Service() {
   private val soundPlayer: CallSoundPlayer by lazy { CallSoundPlayer(this) }
   private lateinit var phoneAccountHandle: PhoneAccountHandle
   private val activeTelecomConnections = ConcurrentHashMap<String, MercuryConnection>()
+
+  // Global error stream for UI to consume
+  private val _errorEvents = MutableSharedFlow<String>()
+  val errorEvents: SharedFlow<String> = _errorEvents.asSharedFlow()
 
   override fun onBind(intent: Intent?): IBinder = binder
 
@@ -184,20 +191,11 @@ class CallService : Service() {
     _isEngineReady.value = false
     soundPlayer.stop()
 
-    // We must launch a blocking run or a separate scope to ensure terminate happens,
-    // but since we are in onDestroy, the process might be dying.
-    // Ideally, we block briefly to ensure clean C++ shutdown.
-    // However, on Android, it's often safer to let the OS kill the process if we are going down,
-    // to avoid the exact race condition you saw.
-    // We try to clean up if possible.
     val shutdownJob = serviceScope.launch(Dispatchers.IO) {
       engineMutex.withLock {
         terminate()
       }
     }
-
-    // We can't easily wait for this job in onDestroy without blocking UI thread potentially.
-    // But since serviceScope is Supervisor + Main, we just let it trigger.
 
     releaseWakeLock()
     super.onDestroy()
@@ -206,6 +204,12 @@ class CallService : Service() {
   @Suppress("unused")
   fun setWebRtcTransport(transport: WebRtcTransport) {
     webRtcTransport = transport
+    // Attach error listener to propagate transport errors to UI
+    webRtcTransport?.onError = { errorMessage ->
+      serviceScope.launch {
+        _errorEvents.emit(errorMessage)
+      }
+    }
   }
 
   private fun handleCallStateChange(callState: CallState) {
@@ -294,8 +298,6 @@ class CallService : Service() {
   }
 
   private fun startForegroundService() {
-    // Initial start: We are NOT in a call, so we use CONNECTED_DEVICE.
-    // This avoids the SecurityException because we don't need RECORD_AUDIO yet.
     val notification = buildForegroundServiceNotification(false, null, ServiceConnectionState.Unknown)
     try {
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -323,9 +325,7 @@ class CallService : Service() {
 
     try {
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-        // If we are in a call, we upgrade to MICROPHONE + CAMERA (if video) + CONNECTED_DEVICE
         val serviceType = if (inCall) {
-          // TODO: check runtime permissions here before applying these types
           var type =
             ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
           if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -602,7 +602,6 @@ class CallService : Service() {
       private set
 
     // Flag to signal engine readiness, exposed statically so UI can observe it
-    // even before Service instance is fully attached/observed via other means.
     private val _isEngineReady = MutableStateFlow(false)
     val isEngineReady = _isEngineReady.asStateFlow()
 

@@ -27,6 +27,7 @@ import hela.eillance.navigation.Screen
 import hela.eillance.ndkio.CallDirection
 import hela.eillance.screens.BackupAndRestoreScreen
 import hela.eillance.screens.CallScreen
+import hela.eillance.screens.ConnectionSettingsScreen
 import hela.eillance.screens.ContactProfileDialog
 import hela.eillance.screens.ContactsScreen
 import hela.eillance.screens.ConversationScreen
@@ -342,6 +343,13 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
           settingsVM = settingsVM,
           onBack = { navController.safePopBackStack() },
           navController = navController
+        )
+      }
+
+      composable(Screen.ConnectionSettings.route) {
+        ConnectionSettingsScreen(
+          settingsVM = settingsVM,
+          onBack = { navController.safePopBackStack() }
         )
       }
 

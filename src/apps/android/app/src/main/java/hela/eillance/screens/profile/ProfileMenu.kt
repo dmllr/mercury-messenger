@@ -37,6 +37,7 @@ import hela.eillance.ndkio.MyProfileInfo
 fun ProfileMenu(
   myProfile: MyProfileInfo,
   hasPermissionIssues: Boolean,
+  hasConnectionIssues: Boolean,
   onEditProfile: () -> Unit,
   onNavigateToSettings: () -> Unit,
   onNavigateToBetaNotice: () -> Unit,
@@ -68,7 +69,7 @@ fun ProfileMenu(
         .clickable(onClick = onEditProfile)
     )
 
-    if (hasPermissionIssues) {
+    if (hasPermissionIssues || hasConnectionIssues) {
       ListItem(
         headlineContent = { Text(stringResource(id = R.string.screen_title_permission_issues)) },
         supportingContent = { Text(stringResource(id = R.string.profile_menu_permission_issues_description)) },

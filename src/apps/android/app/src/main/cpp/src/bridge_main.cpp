@@ -73,6 +73,7 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     classref.RegisterMethod(env, webrtc_transport_class, "connect", "(Ljava/lang/String;Ljava/lang/String;)V");
     classref.RegisterMethod(env, webrtc_transport_class, "terminate", "()V");
     classref.RegisterMethod(env, webrtc_transport_class, "reconnect", "(Ljava/lang/String;)V");
+    classref.RegisterMethod(env, webrtc_transport_class, "updateIceServers", "(Ljava/lang/String;)V");
     classref.RegisterMethod(env, webrtc_transport_class, "getPeerConnectionState", "(Ljava/lang/String;)I");
     classref.RegisterMethod(env, webrtc_transport_class, "sendSignalingMessage", "(Ljava/lang/String;)V");
     classref.RegisterMethod(
@@ -151,7 +152,7 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
         env,
         "hela/eillance/viewmodels/NativeSettingsObserver",
         "onSettingsUpdated",
-        "(Ljava/lang/String;I)V"
+        "(Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V"
     );
     classref.RegisterMethod(env, "hela/eillance/viewmodels/NativeSettingsObserver", "onConnectionStateChanged", "(I)V");
 

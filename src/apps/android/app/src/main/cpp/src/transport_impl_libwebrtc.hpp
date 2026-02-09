@@ -137,6 +137,19 @@ class AndroidRtcTransport final : public Transport::TransportInterface {
     env->DeleteLocalRef(j_url);
   }
 
+  void SetIceServers(std::string const& json_config) override {
+    auto env_scope = GetEnv();
+    auto* env = env_scope.Get();
+    if ((env == nullptr) || (transportJavaRef_ == nullptr)) {
+      return;
+    }
+    auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcTransport");
+    jmethodID const method = transport_holder.GetMethod("updateIceServers");
+    auto* j_json = env->NewStringUTF(json_config.c_str());
+    env->CallVoidMethod(transportJavaRef_, method, j_json);
+    env->DeleteLocalRef(j_json);
+  }
+
   void AddPeer(ContactID const& peer_id, std::shared_ptr<Peer> const& peer) override {
     std::lock_guard<std::mutex> const lock(peersMutex_);
     peers_.emplace(peer_id, peer);
@@ -158,6 +171,11 @@ class AndroidRtcTransport final : public Transport::TransportInterface {
   auto GetPeerConnectionState(ContactID const& peer_id) const -> eillance::transport::PeerConnectionState override {
     auto env_scope = GetEnv();
     auto* env = env_scope.Get();
+
+    if (auto peer = GetPeer(peer_id); peer && peer->data_channel_is_open) {
+      return eillance::transport::PeerConnectionState::connected;
+    }
+
     if ((env == nullptr) || (transportJavaRef_ == nullptr)) {
       return eillance::transport::PeerConnectionState::closed;
     }

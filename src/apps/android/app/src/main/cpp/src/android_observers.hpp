@@ -336,7 +336,14 @@ class AndroidSettingsObserver final
  public:
   using AndroidObserverBase::AndroidObserverBase;
 
-  void OnSettingsUpdated(std::optional<std::string> const& signaling_url, int timeout) override {
+  void OnSettingsUpdated(
+      std::optional<std::string> const& signaling_url,
+      int timeout,
+      std::optional<std::string> const& custom_stun,
+      std::optional<std::string> const& custom_turn,
+      std::optional<std::string> const& custom_turn_user,
+      std::optional<std::string> const& custom_turn_pass
+  ) override {
     auto env_scope = GetEnv();
     auto* env = env_scope.Get();
     if ((env == nullptr) || (java_listener_ == nullptr)) {
@@ -344,15 +351,30 @@ class AndroidSettingsObserver final
     }
 
     jstring url_str = signaling_url ? env->NewStringUTF(signaling_url->c_str()) : nullptr;
+    jstring stun_str = custom_stun ? env->NewStringUTF(custom_stun->c_str()) : nullptr;
+    jstring turn_str = custom_turn ? env->NewStringUTF(custom_turn->c_str()) : nullptr;
+    jstring user_str = custom_turn_user ? env->NewStringUTF(custom_turn_user->c_str()) : nullptr;
+    jstring pass_str = custom_turn_pass ? env->NewStringUTF(custom_turn_pass->c_str()) : nullptr;
 
     auto& class_refs = ClassRefs::Instance();
     auto& listener_holder = class_refs.Class("hela/eillance/viewmodels/NativeSettingsObserver");
     jmethodID on_update = listener_holder.GetMethod("onSettingsUpdated");
-    env->CallVoidMethod(java_listener_, on_update, url_str, static_cast<jint>(timeout));
+    env->CallVoidMethod(
+        java_listener_,
+        on_update,
+        url_str,
+        static_cast<jint>(timeout),
+        stun_str,
+        turn_str,
+        user_str,
+        pass_str
+    );
 
-    if (url_str != nullptr) {
-      env->DeleteLocalRef(url_str);
-    }
+    if (url_str) env->DeleteLocalRef(url_str);
+    if (stun_str) env->DeleteLocalRef(stun_str);
+    if (turn_str) env->DeleteLocalRef(turn_str);
+    if (user_str) env->DeleteLocalRef(user_str);
+    if (pass_str) env->DeleteLocalRef(pass_str);
   }
 
   void OnConnectionStateChanged(ServiceConnectionState state) override {

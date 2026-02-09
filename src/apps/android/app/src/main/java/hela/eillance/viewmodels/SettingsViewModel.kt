@@ -20,6 +20,18 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
   private val _peerInactivityTimeout = MutableStateFlow(120)
   val peerInactivityTimeout = _peerInactivityTimeout.asStateFlow()
 
+  private val _customStun = MutableStateFlow("")
+  val customStun = _customStun.asStateFlow()
+
+  private val _customTurn = MutableStateFlow("")
+  val customTurn = _customTurn.asStateFlow()
+
+  private val _customTurnUser = MutableStateFlow("")
+  val customTurnUser = _customTurnUser.asStateFlow()
+
+  private val _customTurnPass = MutableStateFlow("")
+  val customTurnPass = _customTurnPass.asStateFlow()
+
   private val prefs = application.getSharedPreferences("mercury_prefs", Context.MODE_PRIVATE)
   private val _showNotificationContent = MutableStateFlow(prefs.getBoolean("show_notifications_content", true))
   val showNotificationContent = _showNotificationContent.asStateFlow()
@@ -39,9 +51,20 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     super.onCleared()
   }
 
-  override fun onSettingsUpdated(signalingUrl: String?, timeout: Int) {
+  override fun onSettingsUpdated(
+    signalingUrl: String?,
+    timeout: Int,
+    customStun: String?,
+    customTurn: String?,
+    customTurnUser: String?,
+    customTurnPass: String?
+  ) {
     _signalingUrl.value = signalingUrl ?: ""
     _peerInactivityTimeout.value = timeout
+    _customStun.value = customStun ?: ""
+    _customTurn.value = customTurn ?: ""
+    _customTurnUser.value = customTurnUser ?: ""
+    _customTurnPass.value = customTurnPass ?: ""
   }
 
   override fun onConnectionStateChanged(state: Int) {
@@ -56,6 +79,22 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     _peerInactivityTimeout.value = newValue
   }
 
+  fun onCustomStunChange(newValue: String) {
+    _customStun.value = newValue
+  }
+
+  fun onCustomTurnChange(newValue: String) {
+    _customTurn.value = newValue
+  }
+
+  fun onCustomTurnUserChange(newValue: String) {
+    _customTurnUser.value = newValue
+  }
+
+  fun onCustomTurnPassChange(newValue: String) {
+    _customTurnPass.value = newValue
+  }
+
   fun onShowNotificationContentChange(enabled: Boolean) {
     _showNotificationContent.value = enabled
     prefs.edit().putBoolean("show_notifications_content", enabled).apply()
@@ -65,6 +104,13 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     if (nativePtr != 0L) {
       nativeUpdateUrl(nativePtr, _signalingUrl.value)
       nativeSetTimeout(nativePtr, _peerInactivityTimeout.value)
+      nativeUpdateIceConfig(
+        nativePtr,
+        _customStun.value,
+        _customTurn.value,
+        _customTurnUser.value,
+        _customTurnPass.value
+      )
     }
   }
 
@@ -72,4 +118,5 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
   private external fun nativeDestroy(ptr: Long)
   private external fun nativeUpdateUrl(ptr: Long, url: String)
   private external fun nativeSetTimeout(ptr: Long, seconds: Int)
+  private external fun nativeUpdateIceConfig(ptr: Long, stun: String, turn: String, user: String, pass: String)
 }

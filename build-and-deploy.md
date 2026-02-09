@@ -23,18 +23,18 @@ The native C++ applications can be built and deployed using the following comman
 This single command configures the project, builds the `mercury-server`, strips the binary for size, and deploys it to the target machine via `scp`.
 
 ```shell
-docker run --rm -v ${PWD}:/workspace -v ${HOME}/.ssh:/workspace/.ssh -w /workspace mercury-devenv bash -c "cmake -GNinja -DCMAKE_BUILD_TYPE=Release -B build && cmake --build build --target mercury-server --config Release && strip build/bin/mercury-server && chmod 400 /workspace/.ssh/vm0.ssh.key && scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i /workspace/.ssh/vm0.ssh.key build/bin/mercury-server ubuntu@vm0.hela.me:/var/app/signaling-server/"
+docker run --rm -v ${PWD}:/workspace -v ${HOME}/.ssh:/workspace/.ssh -w /workspace mercury-devenv bash -c "git config --global --add safe.directory /workspace && cmake -GNinja -DCMAKE_BUILD_TYPE=Release -B build-deploy && cmake --build build-deploy --target mercury-server --config Release && strip build-deploy/bin/mercury-server && chmod 400 /workspace/.ssh/vm0.ssh.key && scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i /workspace/.ssh/vm0.ssh.key build-deploy/bin/mercury-server ubuntu@vm0.hela.me:/var/app/signaling-server/"
 ```
 
 ### Manual Build Steps
 
 #### 1. CMake Configure
 
-This step generates the build files inside a `build` directory. It only needs to be run once unless you change the `CMakeLists.txt` files.
+This step generates the build files inside a `build-deploy` directory. It only needs to be run once unless you change the `CMakeLists.txt` files.
 
 ```shell
 docker run --rm -v ${PWD}:/workspace -w /workspace mercury-devenv \
-  cmake -GNinja -DCMAKE_BUILD_TYPE=Release -B build
+  git config --global --add safe.directory /workspace && cmake -GNinja -DCMAKE_BUILD_TYPE=Release -B build-deploy
 ```
 
 #### 2. Build
@@ -43,17 +43,17 @@ This command compiles all native targets (`mercury-server` and `mercury-cli`).
 
 ```shell
 docker run --rm -v ${PWD}:/workspace -w /workspace mercury-devenv \
-  cmake --build build --config Release
+  cmake --build build-deploy --config Release
 ```
 
-The compiled binaries will be located at `build/bin/`.
+The compiled binaries will be located at `build-deploy/bin/`.
 
 #### 3. Deploy
 
 Use `scp` to copy the `mercury-server` binary to your deployment machine. This example requires you to have SSH keys configured.
 
 ```shell
-docker run --rm -v ${PWD}:/workspace -v ${HOME}/.ssh:/workspace/.ssh -w /workspace mercury-devenv bash -c "chmod 400 /workspace/.ssh/vm0.ssh.key && scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i /workspace/.ssh/vm0.ssh.key build/bin/mercury-server ubuntu@vm0.hela.me:/var/app/signaling-server/"
+docker run --rm -v ${PWD}:/workspace -v ${HOME}/.ssh:/workspace/.ssh -w /workspace mercury-devenv bash -c "chmod 400 /workspace/.ssh/vm0.ssh.key && scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i /workspace/.ssh/vm0.ssh.key build-deploy/bin/mercury-server ubuntu@vm0.hela.me:/var/app/signaling-server/"
 ```
 
 ### Running the Server

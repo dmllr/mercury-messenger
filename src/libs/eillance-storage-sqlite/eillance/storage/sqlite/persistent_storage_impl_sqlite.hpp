@@ -78,9 +78,11 @@ void RegisterCustomLower(sqlite3* db) {
             // Latin-1 Supplement (U+00C0..U+00DE) -> +0x20, exclude multiplication sign 0xD7
             if (wc >= 0xC0 && wc <= 0xDE && wc != 0xD7) wc += 0x20;
             // Cyrillic (U+0410..U+042F) -> +0x20
-            else if (wc >= 0x410 && wc <= 0x42F) wc += 0x20;
+            else if (wc >= 0x410 && wc <= 0x42F)
+              wc += 0x20;
             // Greek (U+0391..U+03A9) -> +0x20
-            else if (wc >= 0x391 && wc <= 0x3A9) wc += 0x20;
+            else if (wc >= 0x391 && wc <= 0x3A9)
+              wc += 0x20;
 
             out.push_back(static_cast<char>(0xC0 | (wc >> 6)));
             out.push_back(static_cast<char>(0x80 | (wc & 0x3F)));
@@ -89,8 +91,10 @@ void RegisterCustomLower(sqlite3* db) {
             // 3 or 4 byte sequences (Asian scripts, Emoji, etc. - mostly caseless)
             // Just copy them
             int seq_len = 1;
-            if ((c & 0xF0) == 0xE0) seq_len = 3;
-            else if ((c & 0xF8) == 0xF0) seq_len = 4;
+            if ((c & 0xF0) == 0xE0)
+              seq_len = 3;
+            else if ((c & 0xF8) == 0xF0)
+              seq_len = 4;
 
             for (int k = 0; k < seq_len && i < len; ++k) {
               out.push_back(static_cast<char>(text[i++]));

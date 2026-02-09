@@ -59,6 +59,9 @@ class Transport {
   void Reconnect() const {
     self_->Reconnect();
   }
+  void SetIceServers(std::string const& json_config) const {
+    self_->SetIceServers(json_config);
+  }
   void AddPeer(ContactID const& peer_id, std::shared_ptr<Peer> const& peer) const {
     self_->AddPeer(peer_id, peer);
   }
@@ -136,6 +139,7 @@ class Transport {
     virtual void Start() = 0;
     virtual void Terminate() = 0;
     virtual void Reconnect() = 0;
+    virtual void SetIceServers(std::string const& json_config) = 0;
 
     virtual void AddPeer(ContactID const& peer_id, std::shared_ptr<Peer> const& peer) = 0;
     [[nodiscard]] virtual auto GetPeer(ContactID const& peer_id) const -> std::shared_ptr<Peer> = 0;
@@ -200,6 +204,9 @@ class Transport {
     }
     void Reconnect() override {
       transport_->Reconnect();
+    }
+    void SetIceServers(std::string const& json_config) override {
+      transport_->SetIceServers(json_config);
     }
     void AddPeer(ContactID const& peer_id, std::shared_ptr<Peer> const& peer) override {
       transport_->AddPeer(peer_id, peer);

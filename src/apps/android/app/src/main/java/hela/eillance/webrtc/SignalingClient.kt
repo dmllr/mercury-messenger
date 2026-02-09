@@ -180,7 +180,14 @@ class SignalingClient {
 
   private fun determineErrorState(t: Throwable): State {
     return when (t) {
-      is UnknownHostException, is SocketException -> State.NO_NETWORK
+      is UnknownHostException -> State.NO_NETWORK
+      is SocketException -> {
+        if (t.message?.contains("Network is unreachable", ignoreCase = true) == true) {
+          State.NO_NETWORK
+        } else {
+          State.FAILED
+        }
+      }
       is ConnectException, is SocketTimeoutException, is UnknownServiceException, is EOFException -> State.FAILED
       else -> State.FAILED
     }

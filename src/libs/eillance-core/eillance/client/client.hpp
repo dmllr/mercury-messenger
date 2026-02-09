@@ -122,6 +122,11 @@ class Client final : public transport::TransportDelegate {
       INVARIANT(status_callback_);
       (*status_callback_)(peer_id, source, state_val);
     });
+
+    internal_messaging_service_->SetServerIceConfigCallback([this](Json const& config) {
+      server_ice_config_ = config;
+      ReevaluateIceConfiguration();
+    });
   }
 
   Client(Client const&) = delete;
@@ -175,6 +180,8 @@ class Client final : public transport::TransportDelegate {
     if (is_running_.exchange(true)) {
       return;
     }
+
+    ReevaluateIceConfiguration();
 
     if (auto url = account_service_->GetSettings()->GetSignalingServerUrl()) {
       transport_->SetSignalingUrl(*url);
@@ -278,6 +285,12 @@ class Client final : public transport::TransportDelegate {
   ) {
     account_service_->UpdateMyProfile(n, b, p);
     BroadcastProfileUpdate();
+  }
+
+  void
+  UpdateIceConfig(std::string const& stun, std::string const& turn, std::string const& user, std::string const& pass) {
+    account_service_->GetSettings()->SetCustomIceConfig(stun, turn, user, pass);
+    ReevaluateIceConfiguration();
   }
 
   [[nodiscard]] auto GetSettingsManager() const -> SettingsManager* {
@@ -563,7 +576,7 @@ class Client final : public transport::TransportDelegate {
     for (auto const& [id, peer] : transport_->GetPeers()) {
       if (!peer->has_media_peer_connection &&
           transport_->GetPeerConnectionState(id) == transport::PeerConnectionState::connected) {
-        if ((now - peer->last_activity_time.load()) > timeout) {
+        if ((now - peer->last_activity_time.load()) > static_cast<uint64_t>(timeout)) {
           LGI << "Peer " << id.ToString() << " inactive. Closing.";
           transport_->ClosePeerConnection(id, "data");
         }
@@ -584,6 +597,35 @@ class Client final : public transport::TransportDelegate {
     }
   }
 
+  void ReevaluateIceConfiguration() {
+    Json final_config = Json::array();
+
+    auto* settings = account_service_->GetSettings();
+    if (auto stun = settings->GetCustomStun(); stun && !stun->empty()) {
+      final_config.push_back({{"urls", std::vector<std::string>{*stun}}});
+    }
+    if (auto turn = settings->GetCustomTurn(); turn && !turn->empty()) {
+      Json turn_server;
+      turn_server["urls"] = std::vector<std::string>{*turn};
+      if (auto user = settings->GetCustomTurnUser(); user && !user->empty()) {
+        turn_server["username"] = *user;
+      }
+      if (auto pass = settings->GetCustomTurnPass(); pass && !pass->empty()) {
+        turn_server["credential"] = *pass;
+      }
+      final_config.push_back(turn_server);
+    }
+
+    // If no custom servers, use dynamic config from server
+    if (final_config.empty() && !server_ice_config_.empty()) {
+      final_config = server_ice_config_;
+    }
+
+    if (!final_config.empty()) {
+      transport_->SetIceServers(final_config.dump());
+    }
+  }
+
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<transport::Transport> transport_;
 
@@ -600,6 +642,8 @@ class Client final : public transport::TransportDelegate {
 
   std::shared_ptr<StatusCallbackFunction> status_callback_;
   OnDataReloadedCallback on_data_reloaded_;
+
+  Json server_ice_config_{Json::array()};
 
   static constexpr std::chrono::seconds kPeerInactivityCheckInterval{30};
 };
