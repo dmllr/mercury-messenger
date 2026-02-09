@@ -35,6 +35,14 @@ interface NativeCallObserver {
 
 @Keep
 interface NativeSettingsObserver {
-  fun onSettingsUpdated(signalingUrl: String?, timeout: Int)
+  fun onSettingsUpdated(
+    signalingUrl: String?,
+    timeout: Int,
+    customStun: String?,
+    customTurn: String?,
+    customTurnUser: String?,
+    customTurnPass: String?
+  )
+
   fun onConnectionStateChanged(state: Int)
 }

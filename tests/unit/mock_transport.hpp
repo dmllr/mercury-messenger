@@ -77,6 +77,10 @@ class MockTransport {
     log.starts.emplace_back("Reconnect");
   }
 
+  void SetIceServers(std::string const& /*json_config*/) {
+    // No-op for mock
+  }
+
   void AddPeer(ContactID const& peer_id, std::shared_ptr<Peer> const& peer) {
     std::lock_guard<std::mutex> const lock(mutex_);
     peers[peer_id] = peer;

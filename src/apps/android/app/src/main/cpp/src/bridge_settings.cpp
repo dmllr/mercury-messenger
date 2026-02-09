@@ -47,4 +47,27 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_SettingsViewMode
   vm->SetPeerInactivityTimeout(seconds);
 }
 
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_SettingsViewModel_nativeUpdateIceConfig(
+    JNIEnv* env,
+    jobject /*instance*/,
+    jlong ptr,
+    jstring stun,
+    jstring turn,
+    jstring user,
+    jstring pass
+) {
+  auto* vm = reinterpret_cast<eillance::view_model::SettingsViewModel*>(ptr);
+  char const* s = env->GetStringUTFChars(stun, nullptr);
+  char const* t = env->GetStringUTFChars(turn, nullptr);
+  char const* u = env->GetStringUTFChars(user, nullptr);
+  char const* p = env->GetStringUTFChars(pass, nullptr);
+
+  vm->UpdateIceConfig(s, t, u, p);
+
+  env->ReleaseStringUTFChars(stun, s);
+  env->ReleaseStringUTFChars(turn, t);
+  env->ReleaseStringUTFChars(user, u);
+  env->ReleaseStringUTFChars(pass, p);
+}
+
 // NOLINTEND(readability-identifier-naming)

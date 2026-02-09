@@ -57,6 +57,19 @@ class SignalingServer {
     wss->onClosed([this, wss, peer_id]() { HandleDisconnection(wss.get(), *peer_id); });
   }
 
+  void SendIceServers(std::shared_ptr<rtc::WebSocket> const& wss) {
+    Json const servers = {
+        {{"urls", std::vector<std::string>{"stun:stun.l.google.com:19302"}}},
+        {{"urls", std::vector<std::string>{"stun:stun.relay.metered.ca:80"}}},
+        {{"urls", std::vector<std::string>{"turn:a.relay.metered.ca:80"}},
+         {"username", "49880a0f046c8990b1990b35"},
+         {"credential", "qZCNW/57EB8GwO3A"}}
+    };
+
+    Json const msg = {{"type", "ice_servers"}, {"servers", servers}};
+    wss->send(msg.dump());
+  }
+
   void HandleMessage(std::shared_ptr<rtc::WebSocket> const& wss, std::string const& msg, PeerId& peer_id) {
     try {
       LGV << "<< " << msg;
@@ -119,6 +132,8 @@ class SignalingServer {
 
             Json const success_msg = {{"type", "login_success"}};
             wss->send(success_msg.dump());
+
+            SendIceServers(wss);
 
           } else {
             LGE << "Authentication failed for peer " << claimed_id;

@@ -50,6 +50,13 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
       // via the onContactsUpdated callback, clearing the loading state.
       CallService.instance?.start()
     }
+
+    // Listen for global errors reported by CallService (e.g., Transport parsing errors)
+    viewModelScope.launch {
+      CallService.instance?.errorEvents?.collect { error ->
+        _errorMessage.emit(error)
+      }
+    }
   }
 
   override fun onCleared() {

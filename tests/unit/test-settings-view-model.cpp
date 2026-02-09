@@ -10,6 +10,11 @@ class SettingsViewModelTest : public ViewModelTest {
     vm_ = std::make_shared<SettingsViewModel>(client_, router_);
   }
 
+  void TearDown() override {
+    vm_.reset();
+    ViewModelTest::TearDown();
+  }
+
   std::shared_ptr<SettingsViewModel> vm_;
 };
 
@@ -20,7 +25,14 @@ struct MockSettingsObserver : public SettingsViewModel::Observer {
   bool updated = false;
   std::mutex mutex;
 
-  void OnSettingsUpdated(std::optional<std::string> const& url, int t) override {
+  void OnSettingsUpdated(
+      std::optional<std::string> const& url,
+      int t,
+      std::optional<std::string> const& custom_stun,
+      std::optional<std::string> const& custom_turn,
+      std::optional<std::string> const& custom_turn_user,
+      std::optional<std::string> const& custom_turn_pass
+  ) override {
     std::lock_guard<std::mutex> const lock(mutex);
     signaling_url = url;
     timeout = t;
@@ -105,6 +117,8 @@ TEST_F(SettingsViewModelTest, ConnectionStateChange) {
     return observer->connection_state == ServiceConnectionState::online;
   });
 
-  std::lock_guard<std::mutex> const lock(observer->mutex);
-  EXPECT_EQ(observer->connection_state, ServiceConnectionState::online);
+  {
+    std::lock_guard<std::mutex> const lock(observer->mutex);
+    EXPECT_EQ(observer->connection_state, ServiceConnectionState::online);
+  }
 }

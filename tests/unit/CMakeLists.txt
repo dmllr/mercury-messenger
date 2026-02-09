@@ -47,6 +47,7 @@ add_executable(h-e-tests
   test-profile-view-model.cpp
   test-protocol-safety.cpp
   test-resilience.cpp
+  test-rtc-transport.cpp
   test-settings-manager.cpp
   test-settings-view-model.cpp
   test-signaling-negotiations.cpp

@@ -84,13 +84,17 @@ constexpr auto ToEillanceState(::rtc::PeerConnection::State const state) -> tran
 
 }  // namespace
 
-class RtcTransport final : public transport::Transport::TransportInterface {
+class RtcTransport : public transport::Transport::TransportInterface {
  public:
   using Json = nlohmann::json;
   using Peer = transport::Peer;  // Alias for convenience
   using StatusCallbackFunction = eillance::transport::Transport::StatusCallbackFunction;
 
-  RtcTransport() = default;
+  RtcTransport() {
+    // Default fallback config
+    rtcConfig_.iceServers.emplace_back("stun:stun.relay.metered.ca:80");
+  }
+
   RtcTransport(RtcTransport&&) = delete;
   RtcTransport(RtcTransport const&) = delete;
   auto operator=(RtcTransport&&) -> RtcTransport& = delete;
@@ -150,6 +154,63 @@ class RtcTransport final : public transport::Transport::TransportInterface {
       if (ws_->isOpen()) {
         ws_->close();
       }
+    }
+  }
+
+  // Parses JSON array of ICE servers (e.g. [{"urls": ...}, ...])
+  void SetIceServers(std::string const& json_config) override {
+    try {
+      auto json = Json::parse(json_config);
+      if (!json.is_array()) {
+        LGE << "ICE Configuration must be a JSON array. Got: " << json_config;
+        return;
+      }
+
+      ::rtc::Configuration new_config;
+      for (auto const& entry : json) {
+        if (!entry.contains("urls")) continue;
+
+        auto urls_entry = entry["urls"];
+        std::string url;
+
+        // Handle both single string and array of strings for "urls"
+        if (urls_entry.is_array() && !urls_entry.empty()) {
+          url = urls_entry[0].get<std::string>();
+        } else if (urls_entry.is_string()) {
+          url = urls_entry.get<std::string>();
+        }
+
+        if (url.empty()) continue;
+
+        if (url.rfind("turn", 0) == 0) {  // Starts with "turn"
+          std::string username = entry.value("username", "");
+          std::string credential = entry.value("credential", "");
+          // libdatachannel format for TURN: "turn:username:password@host:port"
+          // We need to parse and reconstruct if username/pass are separate
+          if (!username.empty() && !credential.empty()) {
+            // Basic reconstruction assuming standard URI format
+            auto scheme_end = url.find(":");
+            if (scheme_end != std::string::npos) {
+              std::string host_part = url.substr(scheme_end + 1);
+              new_config.iceServers.emplace_back("turn:" + username + ":" + credential + "@" + host_part);
+            } else {
+              new_config.iceServers.emplace_back(url);
+            }
+          } else {
+            new_config.iceServers.emplace_back(url);
+          }
+        } else {
+          new_config.iceServers.emplace_back(url);
+        }
+      }
+
+      if (!new_config.iceServers.empty()) {
+        std::lock_guard<std::mutex> const lock(configMutex_);
+        rtcConfig_ = new_config;
+        LGI << "Updated ICE Configuration with " << rtcConfig_.iceServers.size() << " servers.";
+      }
+    } catch (std::exception const& e) {
+      LGE << "Failed to parse ICE configuration: " << e.what();
     }
   }
 
@@ -232,7 +293,12 @@ class RtcTransport final : public transport::Transport::TransportInterface {
   }
 
   void CreatePeerConnection(ContactID const& peer_id, std::string const& context) {
-    auto peer_connection = std::make_shared<::rtc::PeerConnection>(RtcConfiguration::Config());
+    ::rtc::Configuration config;
+    {
+      std::lock_guard<std::mutex> const lock(configMutex_);
+      config = rtcConfig_;
+    }
+    auto peer_connection = std::make_shared<::rtc::PeerConnection>(config);
 
     peer_connection->onStateChange([this, peer_id, context, pc_sptr = peer_connection](
                                        ::rtc::PeerConnection::State state
@@ -416,8 +482,6 @@ class RtcTransport final : public transport::Transport::TransportInterface {
     auto pc = (context == "data") ? std::static_pointer_cast<::rtc::PeerConnection>(peer->data_peer_connection)
                                   : std::static_pointer_cast<::rtc::PeerConnection>(peer->media_peer_connection);
     if (pc) {
-      // In Full ICE mode, we set local description immediately to trigger gathering.
-      // We rely on onGatheringStateChange(Complete) to send the SDP.
       pc->setLocalDescription();
     }
   }
@@ -491,7 +555,6 @@ class RtcTransport final : public transport::Transport::TransportInterface {
     waitBeforeReconnect_ = minWaitBeforeReconnect;
     Login();
 
-    // Flush any messages that were queued while the connection was opening
     std::lock_guard<std::mutex> const lock(messageQueueMutex_);
     if (!message_queue_.empty()) {
       LGI << "Flushing " << message_queue_.size() << " queued signaling messages.";
@@ -698,22 +761,8 @@ class RtcTransport final : public transport::Transport::TransportInterface {
   std::string signalingServerUrl_;
   transport::TransportDelegate* delegate_{nullptr};
 
-  class RtcConfiguration {
-   public:
-    static auto Config() -> ::rtc::Configuration& {
-      static ::rtc::Configuration rtc_config = CreateRtcConfiguration();
-      return rtc_config;
-    }
-
-   private:
-    static auto CreateRtcConfiguration() -> ::rtc::Configuration {
-      ::rtc::Configuration config;
-      config.iceServers.emplace_back("stun:stun.relay.metered.ca:80");
-      config.iceServers.emplace_back("turn:49880a0f046c8990b1990b35:qZCNW/57EB8GwO3A@a.relay.metered.ca:80");
-      config.iceServers.emplace_back("turn:49880a0f046c8990b1990b35:qZCNW/57EB8GwO3A@a.relay.metered.ca:443");
-      return config;
-    }
-  };
+  ::rtc::Configuration rtcConfig_;
+  std::mutex configMutex_;
 };
 
 }  // namespace eillance::rtc

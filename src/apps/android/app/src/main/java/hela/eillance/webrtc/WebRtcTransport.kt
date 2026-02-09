@@ -13,6 +13,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withTimeoutOrNull
+import org.json.JSONArray
 import org.json.JSONObject
 import org.webrtc.AudioSource
 import org.webrtc.AudioTrack
@@ -105,6 +106,15 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
   private var isObservingMessages = false
   private var isObservingSignalingState = false
 
+  // ICE Servers config
+  private var currentIceServers: List<PeerConnection.IceServer> = listOf(
+    PeerConnection.IceServer.builder("stun:stun.relay.metered.ca:80").createIceServer(),
+    PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer()
+  )
+
+  // Callback to report non-fatal errors to UI/Service
+  var onError: ((String) -> Unit)? = null
+
   // JNI Callbacks
   private external fun nativeOnPeerMessage(nativePointer: Long, message: String)
   private external fun nativeOnSystemMessage(nativePointer: Long, type: String, message: String)
@@ -176,6 +186,52 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
   }
 
   @Suppress("unused")
+  fun updateIceServers(jsonConfig: String) {
+    try {
+      val servers = mutableListOf<PeerConnection.IceServer>()
+      val jsonArray = JSONArray(jsonConfig)
+      for (i in 0 until jsonArray.length()) {
+        val entry = jsonArray.optJSONObject(i)
+        if (entry == null) {
+          // Skip non-object entries (e.g. nested arrays from bad server config)
+          continue
+        }
+
+        if (!entry.has("urls")) continue
+
+        try {
+          // Handle "urls" which can be a String or an Array of Strings
+          val urls = mutableListOf<String>()
+          val urlsObj = entry.get("urls")
+          if (urlsObj is JSONArray) {
+            for (j in 0 until urlsObj.length()) {
+              urls.add(urlsObj.getString(j))
+            }
+          } else {
+            urls.add(urlsObj.toString())
+          }
+
+          val builder = PeerConnection.IceServer.builder(urls)
+          if (entry.has("username")) {
+            builder.setUsername(entry.getString("username"))
+          }
+          if (entry.has("credential")) {
+            builder.setPassword(entry.getString("credential"))
+          }
+          servers.add(builder.createIceServer())
+        } catch (e: Exception) {
+          Log.w(TAG, "Skipping invalid ICE server entry at index $i", e)
+        }
+      }
+      currentIceServers = servers
+      Log.i(TAG, "Updated ICE servers configuration with ${servers.size} servers.")
+    } catch (e: Exception) {
+      Log.e(TAG, "Failed to parse ICE configuration: $jsonConfig", e)
+      onError?.invoke("Connection Configuration Error: Failed to parse server settings.")
+    }
+  }
+
+  @Suppress("unused")
   fun createPeerConnection(peerId: String, context: String) {
     val factory = peerConnectionFactory ?: run {
       Log.e(TAG, "Factory null in createPeerConnection")
@@ -191,23 +247,9 @@ class WebRtcTransport(private val context: Context, private val nativePointer: L
       nativeOnPeerConnectionStateChange(nativePointer, peerId, PeerConnectionState.New.value)
     }
 
-    // STUN/TURN servers
-    val iceServers = listOf(
-      PeerConnection.IceServer.builder("stun:stun.relay.metered.ca:80").createIceServer(),
-      PeerConnection.IceServer.builder("turn:a.relay.metered.ca:80")
-        .setUsername("49880a0f046c8990b1990b35")
-        .setPassword("qZCNW/57EB8GwO3A")
-        .createIceServer(),
-      PeerConnection.IceServer.builder("turn:a.relay.metered.ca:443")
-        .setUsername("49880a0f046c8990b1990b35")
-        .setPassword("qZCNW/57EB8GwO3A")
-        .createIceServer(),
-      PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer()
-    )
-
     // Configuration for Vanilla ICE (Bundle candidates in SDP)
     // We use GATHER_ONCE to ensure we get a complete set before sending.
-    val rtcConfig = RTCConfiguration(iceServers).apply {
+    val rtcConfig = RTCConfiguration(currentIceServers).apply {
       sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
       iceTransportsType = PeerConnection.IceTransportsType.ALL
       bundlePolicy = PeerConnection.BundlePolicy.MAXBUNDLE

@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import hela.eillance.MainViewModel
 import hela.eillance.camera.R
 import hela.eillance.ndkio.MyProfileInfo
+import hela.eillance.ndkio.ServiceConnectionState
 import hela.eillance.screens.profile.ProfileEditDialog
 import hela.eillance.screens.profile.ProfileHeader
 import hela.eillance.screens.profile.ProfileMenu
@@ -54,6 +55,12 @@ fun ProfileScreen(
 ) {
   var showEditDialog by remember { mutableStateOf(false) }
   val hasPermissionIssues by mainViewModel.hasPermissionIssues.collectAsState()
+  val connectionState by settingsVM.connectionState.collectAsState()
+
+  val hasConnectionIssues = connectionState == ServiceConnectionState.Failure ||
+      connectionState == ServiceConnectionState.Disconnected ||
+      connectionState == ServiceConnectionState.NoNetwork ||
+      connectionState == ServiceConnectionState.InvalidToken
 
   if (showEditDialog) {
     ProfileEditDialog(
@@ -94,6 +101,7 @@ fun ProfileScreen(
       ProfileMenu(
         myProfile = myProfile,
         hasPermissionIssues = hasPermissionIssues,
+        hasConnectionIssues = hasConnectionIssues,
         onEditProfile = { showEditDialog = true },
         onNavigateToSettings = onNavigateToSettings,
         onNavigateToBetaNotice = onNavigateToBetaNotice,
