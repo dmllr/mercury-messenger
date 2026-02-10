@@ -12,13 +12,31 @@
 #include <plog/Log.h>
 
 constexpr auto logInstanceId = 454;
-// NOLINTBEGIN(*-pro-type-reinterpret-cast,*-lambda-function-name)
+// NOLINTBEGIN(*-pro-type-reinterpret-cast,*-lambda-function-name,*-avoid-do-while)
+#if defined(DEBUG) || !defined(NDEBUG)
 #define LGV PLOG_(logInstanceId, plog::verbose)
 #define LGD PLOG_(logInstanceId, plog::debug)
 #define LGI PLOG_(logInstanceId, plog::info)
 #define LGW PLOG_(logInstanceId, plog::warning)
 #define LGE PLOG_(logInstanceId, plog::error)
-// NOLINTEND(*-pro-type-reinterpret-cast,*-lambda-function-name)
+#else
+#define LGV \
+  do {      \
+  } while (0)
+#define LGD \
+  do {      \
+  } while (0)
+#define LGI \
+  do {      \
+  } while (0)
+#define LGW \
+  do {      \
+  } while (0)
+#define LGE \
+  do {      \
+  } while (0)
+#endif
+// NOLINTEND(*-pro-type-reinterpret-cast,*-lambda-function-name,*-avoid-do-while)
 
 struct Log {
   static constexpr auto tag = "eillance";
