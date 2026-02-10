@@ -23,9 +23,14 @@ namespace eillance {
 class ClientEngine {
   std::shared_ptr<Client> client_;
   std::shared_ptr<view_model::ClientEventRouter> router_;
+  JavaVM* jvm_;
+  jobject service_ref_;
 
  public:
   ClientEngine(JavaVM* jvm, JNIEnv* env, jobject context) {
+    jvm_ = jvm;
+    service_ref_ = env->NewGlobalRef(context);
+
     auto& class_refs = ClassRefs::Instance();
     // Get the app's private files directory for the database
     jmethodID get_files_dir_method = class_refs.Class("android/content/Context").GetMethod("getFilesDir");
@@ -41,7 +46,18 @@ class ClientEngine {
 
     auto rtc_transport_impl = std::make_unique<transport::AndroidRtcTransport>(jvm, context);
     auto transport = std::make_shared<transport::Transport>(std::move(rtc_transport_impl));
-    client_ = std::make_shared<Client>(storage, transport);
+
+    // Pass a fatal error callback to the Client
+    client_ = std::make_shared<Client>(storage, transport, [this]() {
+      jni::ScopedJniEnv env_scope(jvm_);
+      if (auto* env = env_scope.Get()) {
+        auto& cls = ClassRefs::Instance().Class("hela/eillance/CallService");
+        jmethodID method = cls.GetMethod("onNativeCoreCrash");
+        // Call into Java to trigger restart logic
+        env->CallVoidMethod(service_ref_, method);
+      }
+    });
+
     router_ = std::make_shared<view_model::ClientEventRouter>(client_);
 
     std::string device_name;
@@ -64,6 +80,10 @@ class ClientEngine {
   auto operator=(ClientEngine&&) -> ClientEngine& = delete;
   auto operator=(ClientEngine const&) -> ClientEngine& = delete;
   ~ClientEngine() {
+    if (service_ref_) {
+      jni::ScopedJniEnv env_scope(jvm_);
+      if (auto* env = env_scope.Get()) env->DeleteGlobalRef(service_ref_);
+    }
     Terminate();
   }
 

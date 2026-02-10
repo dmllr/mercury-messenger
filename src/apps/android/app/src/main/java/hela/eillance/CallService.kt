@@ -20,6 +20,7 @@ import android.telecom.TelecomManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.Person
+import androidx.annotation.Keep
 import hela.eillance.camera.R
 import hela.eillance.ndkio.AttachmentType
 import hela.eillance.ndkio.CallDirection
@@ -42,6 +43,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -77,6 +79,10 @@ class CallService : Service() {
   private val _errorEvents = MutableSharedFlow<String>()
   val errorEvents: SharedFlow<String> = _errorEvents.asSharedFlow()
 
+  // Core Health State
+  private val _isCoreUnresponsive = MutableStateFlow(false)
+  val isCoreUnresponsive = _isCoreUnresponsive.asStateFlow()
+
   override fun onBind(intent: Intent?): IBinder = binder
 
   override fun onCreate() {
@@ -95,6 +101,7 @@ class CallService : Service() {
           }
           setupBackgroundObservers()
           _isEngineReady.value = true
+          startWatchdog()
         } catch (e: Exception) {
           Log.e(TAG, "Failed to initialize engine", e)
         }
@@ -102,6 +109,47 @@ class CallService : Service() {
     }
 
     startForegroundService()
+  }
+
+  private fun startWatchdog() {
+    serviceScope.launch(Dispatchers.IO) {
+      while (true) {
+        kotlinx.coroutines.delay(10000) // Check every 10 seconds
+        if (_isEngineReady.value) {
+          val isAlive = try {
+            withTimeout(2000) { nativePing() }
+          } catch (e: Exception) {
+            Log.e(TAG, "Core ping failed or timed out", e)
+            false
+          }
+
+          if (!isAlive) {
+            Log.e(TAG, "Core detected as unresponsive.")
+            _isCoreUnresponsive.value = true
+          } else {
+            _isCoreUnresponsive.value = false
+          }
+        }
+      }
+    }
+  }
+
+  fun restartCore() {
+    serviceScope.launch(Dispatchers.IO) {
+      engineMutex.withLock {
+        Log.w(TAG, "Restarting Core...")
+        nativeRestart()
+        _isCoreUnresponsive.value = false
+        _errorEvents.emit(getString(R.string.core_reset_success))
+      }
+    }
+  }
+
+  // Called from C++ when the internal watchdog detects a hang
+  @Keep
+  fun onNativeCoreCrash() {
+    Log.e(TAG, "Native Core reported a fatal error. Initiating auto-restart.")
+    restartCore()
   }
 
   private fun setupBackgroundObservers() {
@@ -574,6 +622,8 @@ class CallService : Service() {
   external fun start()
   private external fun terminate()
   external fun identityExists(): Boolean
+  private external fun nativePing(): Boolean
+  private external fun nativeRestart()
 
   companion object {
     var instance: CallService? = null

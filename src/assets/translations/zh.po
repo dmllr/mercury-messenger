@@ -662,3 +662,13 @@ msgid "search_hint"
 msgstr "搜索..."
 msgid "search_no_results"
 msgstr "未找到结果。"
+
+# Watchdog
+msgid "core_error_unresponsive"
+msgstr "核心服务未响应"
+msgid "action_reset_core"
+msgstr "重置核心"
+msgid "core_reset_success"
+msgstr "核心服务已成功重启"
+msgid "core_auto_restart"
+msgstr "核心服务已自动重启"

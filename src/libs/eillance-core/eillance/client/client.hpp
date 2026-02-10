@@ -27,10 +27,16 @@ namespace eillance {
 class Client final : public transport::TransportDelegate {
  public:
   using Json = nlohmann::json;
+  using FatalErrorCallback = std::function<void()>;
 
-  explicit Client(std::shared_ptr<storage::PersistentStorage> storage, std::shared_ptr<transport::Transport> transport)
+  explicit Client(
+      std::shared_ptr<storage::PersistentStorage> storage,
+      std::shared_ptr<transport::Transport> transport,
+      FatalErrorCallback on_fatal_error = nullptr
+  )
       : storage_(std::move(storage)),
-        transport_(std::move(transport)) {
+        transport_(std::move(transport)),
+        on_fatal_error_(std::move(on_fatal_error)) {
     transport_->SetDelegate(this);
 
     // Initialize Services
@@ -190,6 +196,8 @@ class Client final : public transport::TransportDelegate {
     transport_->SetId(account_service_->GetId());
     transport_->Start();
     messaging_service_->StartDeliveryService();
+
+    StartWatchdog();
 
     background_queue_.Dispatch([this] { CheckForInactivePeers(); });
   }
@@ -588,6 +596,36 @@ class Client final : public transport::TransportDelegate {
     background_queue_.DispatchAfter(kPeerInactivityCheckInterval, [this] { CheckForInactivePeers(); });
   }
 
+  void StartWatchdog() {
+    last_heartbeat_ = Time::Now();
+    watchdog_running_ = true;
+    watchdog_thread_ = std::thread([this] {
+      while (watchdog_running_) {
+        std::this_thread::sleep_for(std::chrono::seconds(5));
+        if (!watchdog_running_) break;
+
+        auto const now = Time::Now();
+
+        // Post a task to the main queue to update the heartbeat.
+        // If the queue is deadlocked, this task will never run.
+        background_queue_.Dispatch([this] { last_heartbeat_ = Time::Now(); });
+
+        // Check if the last heartbeat is stale (older than 15 seconds)
+        if (now > last_heartbeat_.load() + 15000000) {
+          LGE << "Core Watchdog: Main queue stalled. Triggering fatal error.";
+          if (on_fatal_error_) on_fatal_error_();
+          // Sleep to prevent spamming the restart signal while tearing down
+          std::this_thread::sleep_for(std::chrono::seconds(10));
+        }
+      }
+    });
+  }
+
+  void StopWatchdog() {
+    watchdog_running_ = false;
+    if (watchdog_thread_.joinable()) watchdog_thread_.join();
+  }
+
   void BroadcastProfileUpdate() {
     profile_service_->MarkAllContactsProfileSyncNeeded();
     // Trigger work check for all contacts
@@ -645,6 +683,12 @@ class Client final : public transport::TransportDelegate {
 
   std::shared_ptr<StatusCallbackFunction> status_callback_;
   OnDataReloadedCallback on_data_reloaded_;
+
+  // Watchdog
+  std::thread watchdog_thread_;
+  std::atomic<bool> watchdog_running_{false};
+  std::atomic<uint64_t> last_heartbeat_{0};
+  FatalErrorCallback on_fatal_error_;
 
   Json server_ice_config_{Json::array()};
 

@@ -137,6 +137,7 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
   val navigateToScanner by viewModel.navigateToScanner.collectAsState()
   val navigateToContacts by viewModel.navigateToContacts.collectAsState()
   val incomingCallUiVisible by viewModel.incomingCallUiVisible.collectAsState()
+  val isCoreUnresponsive by viewModel.isCoreUnresponsive.collectAsState()
 
   // -- Global State Observations --
   val contacts by contactsVM.contacts.collectAsState()
@@ -238,6 +239,8 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
           contacts = contactsList,
           isLoading = isLoading,
           connectionState = connectionState,
+          isCoreUnresponsive = isCoreUnresponsive,
+          onResetCore = viewModel::resetCore,
           onCheckPermissions = viewModel::checkAllPermissions,
           onContactClick = { peerId, msgId -> viewModel.navigateToPeer(peerId, msgId) },
           onNavigateToProfile = {
