@@ -253,7 +253,7 @@ CheckOptions:
   - key: readability-identifier-naming.VariableCase
     value: lower_case
   - key: readability-identifier-length.IgnoredVariableNames
-    value: "^(it|x|y)$"
+    value: "^(id|it|x|y)$"
   - key: readability-identifier-length.IgnoredParameterNames
     value: "^(id|cb|x|y)$"
   - key: readability-function-size.LineThreshold
