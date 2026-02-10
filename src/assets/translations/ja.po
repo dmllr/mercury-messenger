@@ -662,3 +662,13 @@ msgid "search_hint"
 msgstr "検索..."
 msgid "search_no_results"
 msgstr "結果が見つかりません。"
+
+# Watchdog
+msgid "core_error_unresponsive"
+msgstr "コアサービスが応答していません"
+msgid "action_reset_core"
+msgstr "コアをリセット"
+msgid "core_reset_success"
+msgstr "コアサービスが正常に再起動しました"
+msgid "core_auto_restart"
+msgstr "コアサービスが自動的に再起動しました"

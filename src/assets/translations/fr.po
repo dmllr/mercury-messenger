@@ -662,3 +662,13 @@ msgid "search_hint"
 msgstr "Rechercher..."
 msgid "search_no_results"
 msgstr "Aucun résultat trouvé."
+
+# Watchdog
+msgid "core_error_unresponsive"
+msgstr "Les services principaux ne répondent pas"
+msgid "action_reset_core"
+msgstr "Réinitialiser le noyau"
+msgid "core_reset_success"
+msgstr "Services principaux redémarrés avec succès"
+msgid "core_auto_restart"
+msgstr "Services principaux redémarrés automatiquement"

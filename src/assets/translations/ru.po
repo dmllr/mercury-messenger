@@ -662,3 +662,13 @@ msgid "search_hint"
 msgstr "Поиск..."
 msgid "search_no_results"
 msgstr "Ничего не найдено."
+
+# Watchdog
+msgid "core_error_unresponsive"
+msgstr "Основные сервисы не отвечают"
+msgid "action_reset_core"
+msgstr "Сбросить ядро"
+msgid "core_reset_success"
+msgstr "Сервисы успешно перезапущены"
+msgid "core_auto_restart"
+msgstr "Ядро автоматически перезапущено"

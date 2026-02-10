@@ -99,6 +99,8 @@ fun ContactsScreen(
   contacts: List<Contact>,
   isLoading: Boolean,
   connectionState: ServiceConnectionState,
+  isCoreUnresponsive: Boolean,
+  onResetCore: () -> Unit,
   onCheckPermissions: () -> Unit,
   onContactClick: (String, Long?) -> Unit,
   onNavigateToProfile: () -> Unit,
@@ -327,19 +329,27 @@ fun ContactsScreen(
           StatusSnackbar(text = globalError!!, isError = true)
         }
 
-        val isConnectionIssue = connectionState != ServiceConnectionState.Online &&
-            connectionState != ServiceConnectionState.Establishing &&
-            connectionState != ServiceConnectionState.Unknown
+        val isConnectionIssue = !isCoreUnresponsive &&
+            (connectionState != ServiceConnectionState.Online &&
+                connectionState != ServiceConnectionState.Establishing &&
+                connectionState != ServiceConnectionState.Unknown)
 
-        val showPermissionBanner = !isConnectionIssue && bannerState != null
+        val showPermissionBanner = !isCoreUnresponsive && !isConnectionIssue && bannerState != null
 
         AnimatedVisibility(
-          visible = isConnectionIssue || showPermissionBanner,
+          visible = isCoreUnresponsive || isConnectionIssue || showPermissionBanner,
           enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
           exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut()
         ) {
           Box(modifier = Modifier.padding(16.dp)) {
-            if (isConnectionIssue) {
+            if (isCoreUnresponsive) {
+              StatusSnackbar(
+                text = stringResource(R.string.core_error_unresponsive),
+                actionLabel = stringResource(R.string.action_reset_core),
+                onAction = onResetCore,
+                isError = true
+              )
+            } else if (isConnectionIssue) {
               val (msg, isError) = when (connectionState) {
                 ServiceConnectionState.NoNetwork -> stringResource(R.string.connection_no_network) to false
                 ServiceConnectionState.Failure -> stringResource(R.string.connection_failed) to true

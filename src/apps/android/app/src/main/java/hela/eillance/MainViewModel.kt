@@ -72,6 +72,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
   }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
+  // Monitor Core Health. Defaults to false if service isn't bound yet.
+  // The UI observes this to show the "Reset" banner.
+  val isCoreUnresponsive: StateFlow<Boolean> = CallService.instance?.isCoreUnresponsive
+    ?: MutableStateFlow(false)
+
   // Computed state for the profile "Red Dot" (issues exist, even if ignored)
   val hasPermissionIssues: StateFlow<Boolean> = combine(
     _hasNotificationPermission,
@@ -185,6 +190,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val content = _pendingShare.value
     _pendingShare.value = null
     return content
+  }
+
+  fun resetCore() {
+    CallService.instance?.restartCore()
   }
 
   companion object {

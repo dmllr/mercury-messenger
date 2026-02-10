@@ -49,6 +49,21 @@ Java_hela_eillance_CallService_configureVideoCapture(JNIEnv* env, jobject /*inst
   }
 }
 
+extern "C" JNIEXPORT jboolean JNICALL Java_hela_eillance_CallService_nativePing(JNIEnv* /*env*/, jobject /*instance*/) {
+  // Simple liveliness check. If g_clientEngine is null, the core is down.
+  return g_clientEngine != nullptr;
+}
+
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_nativeRestart(JNIEnv* env, jobject instance) {
+  if (g_clientEngine) {
+    g_clientEngine->Terminate();
+    g_clientEngine.reset();
+  }
+  // Re-initialize and start
+  g_clientEngine = std::make_unique<eillance::ClientEngine>(g_javaVm, env, instance);
+  g_clientEngine->Start();
+}
+
 // NOLINTEND(readability-identifier-naming)
 
 jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
