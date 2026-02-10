@@ -533,20 +533,23 @@ class Client final : public transport::TransportDelegate {
   }
 
   void OnLoginSuccess() override {
-    if (status_callback_) {
-      (*status_callback_)(ContactID(), EventSource::system, static_cast<int>(ServiceConnectionState::online));
-    }
+    INVARIANT(status_callback_);
+    (*status_callback_)(ContactID(), EventSource::system, static_cast<int>(ServiceConnectionState::online));
     // internal_messaging_service now handles login_success logic (starting delivery service)
     internal_messaging_service_->ProcessSystemMessage("login_success", {});
   }
 
   void ProcessPeerMessage(Json message) override {
     auto const from_it = message.find("from");
-    if (from_it == message.end()) return;
+    if (from_it == message.end()) {
+      return;
+    }
 
     ContactID const peer_id(from_it->get<std::string>());
     auto const type_it = message.find("type");
-    if (type_it == message.end()) return;
+    if (type_it == message.end()) {
+      return;
+    }
 
     internal_messaging_service_->ProcessSignalingMessage(peer_id, type_it->get<std::string>(), message);
   }
