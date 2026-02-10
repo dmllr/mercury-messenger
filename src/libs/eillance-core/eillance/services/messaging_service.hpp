@@ -208,7 +208,7 @@ class MessagingService {
     );
 
     // Queue action for unified delivery
-    nlohmann::json action = {{"type", "chat"}, {"message_id", entry.id}};
+    nlohmann::json const action = {{"type", "chat"}, {"message_id", entry.id}};
     storage_->AddPendingAction(peer_id, action.dump(), Time::Now(), entry.id);
 
     if (auto const peer = transport_->GetPeer(peer_id);

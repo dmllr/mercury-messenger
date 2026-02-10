@@ -68,7 +68,6 @@ target_link_libraries(h-e-tests
   eillance-h264
   eillance-bot-api
 )
-file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/../files" DESTINATION "${CMAKE_BINARY_DIR}/bin")
 
 include(GoogleTest)
 gtest_discover_tests(h-e-tests)
