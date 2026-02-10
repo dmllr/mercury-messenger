@@ -18,11 +18,13 @@
 // In release builds, they are hints to the optimizer that the condition is always true.
 #if defined(DEBUG) || !defined(NDEBUG)
 // NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
-#define INVARIANT(condition)                                     \
-  do { /* NOLINT(*-avoid-do-while) */                            \
-    if (!(condition)) {                                          \
-      throw std::logic_error("Invariant violated: " #condition); \
-    }                                                            \
+#define INVARIANT(condition)                                                                       \
+  do { /* NOLINT(*-avoid-do-while) */                                                              \
+    if (!(condition)) {                                                                            \
+      /* NOLINTNEXTLINE(*-vararg) */                                                               \
+      std::printf("%s:%d in %s(): Invariant violation " #condition, __FILE__, __LINE__, __func__); \
+      throw std::logic_error("Invariant violated: " #condition);                                   \
+    }                                                                                              \
   } while (0)
 #else
 #define INVARIANT(condition)          \
