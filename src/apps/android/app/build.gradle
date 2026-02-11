@@ -230,9 +230,13 @@ tasks.register('generateTranslations', Exec) {
     outputs.dir file("values-de")
     outputs.dir file("values-es")
     outputs.dir file("values-fr")
+    outputs.dir file("values-id")
+    outputs.dir file("values-it")
     outputs.dir file("values-ja")
+    outputs.dir file("values-ko")
     outputs.dir file("values-pt")
     outputs.dir file("values-ru")
+    outputs.dir file("values-tr")
     outputs.dir file("values-zh")
 
     executable 'python3'
