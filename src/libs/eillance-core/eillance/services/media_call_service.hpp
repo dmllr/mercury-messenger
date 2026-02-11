@@ -46,9 +46,10 @@ class MediaCallService {
   }
 
   void Configure(Config const& config) {
-    INVARIANT(av_stream_);
-    av_stream_->Video()->Configure(config);
-    av_stream_->Audio()->Configure(config);
+    if (av_stream_) {
+      av_stream_->Video()->Configure(config);
+      av_stream_->Audio()->Configure(config);
+    }
   }
 
   // Actions
@@ -73,8 +74,9 @@ class MediaCallService {
 
     // Set up local media
     bool const is_video = (call_kind == messaging::HistoryEntryKind::videoCall);
-    INVARIANT(av_stream_);
-    av_stream_->Start();
+    if (av_stream_) {
+      av_stream_->Start();
+    }
 
     if (!peer->has_media_peer_connection) {
       transport_->CreateMediaPeerConnection(peer_id);
@@ -97,8 +99,9 @@ class MediaCallService {
 
     transport_->CreateOffer(peer_id, "media");
 
-    INVARIANT(on_call_accepted_);
-    on_call_accepted_(peer_id);
+    if (on_call_accepted_) {
+      on_call_accepted_(peer_id);
+    }
   }
 
   void RejectCall(ContactID const& peer_id) {
@@ -116,8 +119,9 @@ class MediaCallService {
         peer->has_media_peer_connection = false;
         peer->audio = nullptr;
         peer->video = nullptr;
-        INVARIANT(av_stream_);
-        av_stream_->Stop();
+        if (av_stream_) {
+          av_stream_->Stop();
+        }
       }
 
       if (notify_peer && peer->data_channel_is_open) {
@@ -125,19 +129,22 @@ class MediaCallService {
       }
     }
 
-    INVARIANT(on_call_terminated_);
-    on_call_terminated_(peer_id);
+    if (on_call_terminated_) {
+      on_call_terminated_(peer_id);
+    }
   }
 
   // Incoming Events
   void OnFrameReceived(ContactID const& /*peer_id*/, std::vector<std::byte> const& frame) {
-    INVARIANT(on_frame_received_);
-    on_frame_received_(frame);
+    if (on_frame_received_) {
+      on_frame_received_(frame);
+    }
   }
 
   void OnCallRequest(ContactID const& peer_id, messaging::HistoryEntryKind kind) {
-    INVARIANT(on_incoming_call_);
-    on_incoming_call_(peer_id, kind);
+    if (on_incoming_call_) {
+      on_incoming_call_(peer_id, kind);
+    }
 
     // Auto-respond with "ringing"
     INVARIANT(messaging_service_);
@@ -146,18 +153,21 @@ class MediaCallService {
   }
 
   void OnCallRinging(ContactID const& peer_id) {
-    INVARIANT(on_call_ringing_);
-    on_call_ringing_(peer_id);
+    if (on_call_ringing_) {
+      on_call_ringing_(peer_id);
+    }
   }
 
   void OnCallAccepted(ContactID const& peer_id, messaging::HistoryEntryKind kind) {
-    INVARIANT(on_call_accepted_);
-    on_call_accepted_(peer_id);
+    if (on_call_accepted_) {
+      on_call_accepted_(peer_id);
+    }
 
     bool const is_video = (kind == messaging::HistoryEntryKind::videoCall);
 
-    INVARIANT(av_stream_);
-    av_stream_->Start();
+    if (av_stream_) {
+      av_stream_->Start();
+    }
 
     auto peer = transport_->GetPeer(peer_id);
     if (!peer) {
@@ -239,6 +249,37 @@ class MediaCallService {
     INVARIANT(messaging_service_);
     nlohmann::json const msg = {{"action", "call_request"}, {"kind", call_kind}};
     messaging_service_->SendSystemMessage(peer_id, msg.dump());
+
+    auto peer = transport_->GetPeer(peer_id);
+    if (!peer) {
+      peer = std::make_shared<transport::Peer>(peer_id);
+      transport_->AddPeer(peer_id, peer);
+    }
+
+    if (av_stream_) {
+      av_stream_->Start();
+    }
+
+    if (!peer->has_media_peer_connection) {
+      transport_->CreateMediaPeerConnection(peer_id);
+      peer->has_media_peer_connection = true;
+    }
+
+    peer->audio = transport_->AddAudio(peer_id, [this, peer_id]() {
+      if (auto p = transport_->GetPeer(peer_id)) {
+        transport_->AddToStream(p, false);
+      }
+    });
+
+    if (is_video) {
+      peer->video = transport_->AddVideo(peer_id, [this, peer_id]() {
+        if (auto p = transport_->GetPeer(peer_id)) {
+          transport_->AddToStream(p, true);
+        }
+      });
+    }
+
+    transport_->CreateOffer(peer_id, "media");
   }
 
   void SendSampleToPeers(std::vector<std::byte> const& sample, Stream::Source::Type type, uint64_t time) const {
