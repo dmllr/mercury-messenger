@@ -35,6 +35,7 @@ object LocalizationMapping {
       "profile_update", "profile_update_diff", "send_profile" -> R.string.sys_profile_update
       "unsupported_format" -> R.string.sys_unsupported
       "call_request" -> R.string.call_generic
+      "call_accept" -> R.string.call_generic
       "call_missed" -> R.string.call_missed
       "call_rejected" -> R.string.call_rejected
       else -> R.string.sys_default
