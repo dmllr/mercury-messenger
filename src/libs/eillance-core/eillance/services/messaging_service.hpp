@@ -207,7 +207,6 @@ class MessagingService {
         messaging::HistoryEntryKind::textMessage
     );
 
-    // Queue action for unified delivery
     nlohmann::json const action = {{"type", "chat"}, {"message_id", entry.id}};
     storage_->AddPendingAction(peer_id, action.dump(), Time::Now(), entry.id);
 
@@ -221,7 +220,7 @@ class MessagingService {
     return entry;
   }
 
-  void SendSystemMessage(ContactID const& peer_id, std::string const& content) {
+  void SendSystemMessage(ContactID const& peer_id, std::string const& content, bool persist = true) {
     auto const entry = history_->AddTextEntry(
         peer_id,
         content,
@@ -233,24 +232,34 @@ class MessagingService {
     INVARIANT(on_message_received_);
     on_message_received_(peer_id, entry);
 
-    nlohmann::json const action_payload = {{"type", "chat"}, {"message_id", entry.id}};
-    storage_->AddPendingAction(peer_id, action_payload.dump(), Time::Now(), entry.id);
-
-    if (auto peer = transport_->GetPeer(peer_id);
-        peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
-      SendQueuedMessages(peer_id);
+    if (persist) {
+      nlohmann::json const action_payload = {{"type", "chat"}, {"message_id", entry.id}};
+      storage_->AddPendingAction(peer_id, action_payload.dump(), Time::Now(), entry.id);
     } else {
-      delivery_service_->AttemptDelivery(peer_id);
+      // Ephemeral: try sending immediately if possible
+      if (auto const peer = transport_->GetPeer(peer_id);
+          peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
+        // Construct and send packet manually for ephemeral
+        bool should_remove = false;  // dummy
+        ProcessChatAction(peer_id, entry.id, peer, should_remove);
+      }
+    }
+
+    if (persist) {
+      if (auto peer = transport_->GetPeer(peer_id);
+          peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
+        SendQueuedMessages(peer_id);
+      } else {
+        delivery_service_->AttemptDelivery(peer_id);
+      }
     }
   }
 
   void UnsuspendAndDeliver(ContactID const& peer_id) {
-    // Only log if suspensions were actually processed
     storage_->UnsuspendActionsForPeer(peer_id, Time::Now());
     SendQueuedMessages(peer_id);
   }
 
-  // Attempts to flush queued messages
   void SendQueuedMessages(ContactID const& peer_id) {
     {
       std::lock_guard<std::recursive_mutex> const lock(flushing_mutex_);
@@ -279,12 +288,10 @@ class MessagingService {
     auto const now = Time::Now();
 
     for (auto const& action : pending_actions) {
-      // Debounce check: if this action ID was successfully sent recently, skip it.
       if (WasSentRecently(action.id, now)) {
         continue;
       }
 
-      // Log only if we are actually processing it
       LGI << "Processing pending action " << action.id << " for " << peer_id.ToString();
 
       bool success = false;
@@ -303,15 +310,11 @@ class MessagingService {
             remove_on_success = true;
           }
         } else {
-          // Generic actions (Receipts, Profile, etc.)
           if (peer && peer->data_channel_is_open) {
             if (transport_->SendPeerDataChannelMessage(peer_id, json_action)) {
               success = true;
             } else {
-              // Sending failed: likely DataChannel state mismatch
               peer->data_channel_is_open = false;
-              LGI << "Failed to send action via DataChannel to " << peer_id.ToString() << ". Marking as closed.";
-              // Break loop to prevent further failures and avoid tight retry loops if transport is dead
               break;
             }
           }
@@ -326,8 +329,6 @@ class MessagingService {
         if (remove_on_success) {
           storage_->RemovePendingAction(action.id);
         } else {
-          // If we are not removing it (e.g. waiting for receipt), mark it as sent recently
-          // so we don't spam the network on the next immediate flush call.
           MarkAsSent(action.id, now);
         }
       }
@@ -456,7 +457,6 @@ class MessagingService {
     return messages;
   }
 
-  // New Search Methods
   [[nodiscard]] auto SearchMessages(ContactID const& peer_id, std::string const& query) const
       -> std::vector<messaging::HistoryEntryRecord> {
     return history_->SearchMessages(peer_id, query);
@@ -513,7 +513,6 @@ class MessagingService {
     }
 
     if (!contact_manager_->GetContact(peer_id)) {
-      LGI << "Received message from unknown peer " << peer_id.ToString() << ". Auto-restoring contact.";
       contact_manager_->MarkAsConfirmed(peer_id);
       if (on_contact_restored_) {
         on_contact_restored_(peer_id);
@@ -521,15 +520,11 @@ class MessagingService {
     }
     UpdatePeerActivity(peer_id);
 
-    // Deduplication check: Do not re-add message if we already have it.
-    // Just send the receipt again to confirm delivery to the sender.
     {
-      constexpr auto page_size = 50U;  // TODO align with system-wide page size
+      constexpr auto page_size = 50U;
       auto [messages, total_messages] = history_->GetHistoryPage(peer_id, 0, page_size);
       for (auto const& h_entry : messages) {
         if (h_entry.remote_id.has_value() && h_entry.remote_id.value() == message_id) {
-          LGI << "Duplicate message received from " << peer_id.ToString() << " (ID: " << message_id
-              << "). Sending receipt and ignoring.";
           nlohmann::json const receipt = {
               {"type", "message_receipt"},
               {"status", "delivered"},
@@ -556,7 +551,6 @@ class MessagingService {
       }
       content = json_payload.at(keyContent).get<std::string>();
     } catch (std::exception const& e) {
-      LGE << "Failed to parse message payload from " << peer_id.ToString() << ": " << e.what();
       nlohmann::json const error_json = {{"action", "unsupported_format"}};
       auto entry = history_->AddTextEntry(
           peer_id,
@@ -581,10 +575,6 @@ class MessagingService {
     if (!local_attachments.empty()) {
       std::error_code err;
       std::filesystem::create_directories(attachments_dir, err);
-      if (err) {
-        LGE << "Failed to create attachments directory: " << attachments_dir.string() << " Error: " << err.message();
-      }
-
       for (auto& att : local_attachments) {
         std::string filename = att.file_name;
         if (filename.empty()) {
@@ -722,12 +712,6 @@ class MessagingService {
       return true;
     }
 
-    if (entry->kind != messaging::HistoryEntryKind::textMessage &&
-        entry->kind != messaging::HistoryEntryKind::systemMessage) {
-      remove_action = true;
-      return true;
-    }
-
     if (!std::holds_alternative<messaging::MessageEntry>(entry->data)) {
       remove_action = true;
       return true;
@@ -829,11 +813,10 @@ class MessagingService {
             file_transfer_service_->QueueUpload(peer_id, att);
           }
         }
-        remove_action = false;  // Keep pending until receipt
+        remove_action = false;
         return true;
       }
 
-      // Send failed (DC closed). Do not remove action.
       peer->data_channel_is_open = false;
       return false;
     }
@@ -845,7 +828,6 @@ class MessagingService {
     std::lock_guard<std::mutex> const lock(sent_cache_mutex_);
     sent_actions_cache_[action_id] = timestamp;
 
-    // Cleanup old entries periodically (every 100 insertions/updates)
     if (sent_actions_cache_.size() > cachedActionsSize) {
       for (auto it = sent_actions_cache_.begin(); it != sent_actions_cache_.end();) {
         if (timestamp - it->second > debounceTime) {
@@ -879,11 +861,9 @@ class MessagingService {
   OnMessageStatusChangedCallback on_status_changed_;
   OnContactRestoredCallback on_contact_restored_;
 
-  // Guard to prevent concurrent processing of the queue for the same peer
   std::unordered_set<ContactID> flushing_peers_;
   std::recursive_mutex flushing_mutex_;
 
-  // Debouncing cache for sent actions
   std::unordered_map<int64_t, Time::Unit> sent_actions_cache_;
   std::mutex sent_cache_mutex_;
 

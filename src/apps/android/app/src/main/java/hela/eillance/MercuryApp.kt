@@ -205,10 +205,16 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
   }
 
   if (callState.isRinging && callState.callDirection == CallDirection.Incoming && incomingCallUiVisible) {
+    val callerContact = contacts.find { it.peerId == callState.peerId }
+    val callerName = callerContact?.name
+    val callerPhoto = callerContact?.photo
+
     IncomingCallScreen(
       callerId = callState.peerId,
-      callerName = null, // TODO: Fetch name/photo
-      callerPhoto = null,
+      callerName = callerName,
+      callerPhoto = callerPhoto,
+      callType = callState.callType,
+      callVM = callVM,
       onAccept = { callVM.acceptCall() },
       onReject = { callVM.rejectCall() }
     )
@@ -343,9 +349,16 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
       }
 
       composable(Route.Call.route) {
+        // Resolve contact info for active call
+        val activeContact = contacts.find { it.peerId == callState.peerId }
+        val contactName = activeContact?.name
+        val contactPhoto = activeContact?.photo
+
         CallScreen(
           callVM = callVM,
           callState = callState,
+          contactName = contactName,
+          contactPhoto = contactPhoto,
           onNavigateBack = { navController.safePopBackStack() }
         )
       }

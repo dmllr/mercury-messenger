@@ -17,6 +17,16 @@
 
 namespace eillance::transport {
 
+enum class ConnectionContext { Data, Media };
+
+inline auto ToString(ConnectionContext ctx) -> std::string {
+  return ctx == ConnectionContext::Media ? "media" : "data";
+}
+
+inline auto ToContext(std::string_view str) -> ConnectionContext {
+  return str == "media" ? ConnectionContext::Media : ConnectionContext::Data;
+}
+
 class Transport {
  public:
   using Json = nlohmann::json;
@@ -75,27 +85,34 @@ class Transport {
   ) const -> eillance::transport::PeerConnectionState {
     return self_->GetPeerConnectionState(peer_id);
   }
+
+  void EnsurePeerConnection(ContactID const& peer_id, ConnectionContext context) const {
+    self_->EnsurePeerConnection(peer_id, context);
+  }
+
+  // Deprecated shim: routes to EnsurePeerConnection with context
   void CreateDataPeerConnection(ContactID const& peer_id) const {
-    self_->CreateDataPeerConnection(peer_id);
+    self_->EnsurePeerConnection(peer_id, ConnectionContext::Data);
   }
   void CreateMediaPeerConnection(ContactID const& peer_id) const {
-    self_->CreateMediaPeerConnection(peer_id);
+    self_->EnsurePeerConnection(peer_id, ConnectionContext::Media);
   }
+
   void CreateDataChannel(ContactID const& peer_id) const {
     self_->CreateDataChannel(peer_id);
   }
-  void ClosePeerConnection(ContactID const& peer_id, std::string const& context) const {
+  void ClosePeerConnection(ContactID const& peer_id, ConnectionContext context) const {
     self_->ClosePeerConnection(peer_id, context);
   }
-  void CreateOffer(ContactID const& peer_id, std::string const& context) const {
+  void CreateOffer(ContactID const& peer_id, ConnectionContext context) const {
     self_->CreateOffer(peer_id, context);
   }
-  void CreateAnswer(ContactID const& peer_id, std::string const& context) const {
+  void CreateAnswer(ContactID const& peer_id, ConnectionContext context) const {
     self_->CreateAnswer(peer_id, context);
   }
   void SetRemoteDescription(
       ContactID const& peer_id,
-      std::string const& context,
+      ConnectionContext context,
       std::string const& sdp,
       std::string const& type
   ) const {
@@ -148,14 +165,13 @@ class Transport {
     [[nodiscard]] virtual auto GetPeerConnectionState(ContactID const& peer_id
     ) const -> eillance::transport::PeerConnectionState = 0;
 
-    virtual void CreateDataPeerConnection(ContactID const& peer_id) = 0;
-    virtual void CreateMediaPeerConnection(ContactID const& peer_id) = 0;
-    virtual void ClosePeerConnection(ContactID const& peer_id, std::string const& context) = 0;
-    virtual void CreateOffer(ContactID const& peer_id, std::string const& context) = 0;
-    virtual void CreateAnswer(ContactID const& peer_id, std::string const& context) = 0;
+    virtual void EnsurePeerConnection(ContactID const& peer_id, ConnectionContext context) = 0;
+    virtual void ClosePeerConnection(ContactID const& peer_id, ConnectionContext context) = 0;
+    virtual void CreateOffer(ContactID const& peer_id, ConnectionContext context) = 0;
+    virtual void CreateAnswer(ContactID const& peer_id, ConnectionContext context) = 0;
     virtual void SetRemoteDescription(
         ContactID const& peer_id,
-        std::string const& context,
+        ConnectionContext context,
         std::string const& sdp,
         std::string const& type
     ) = 0;
@@ -220,27 +236,24 @@ class Transport {
     [[nodiscard]] auto GetPeerConnectionState(ContactID const& peer_id) const -> PeerConnectionState override {
       return transport_->GetPeerConnectionState(peer_id);
     }
-    void CreateDataPeerConnection(ContactID const& peer_id) override {
-      transport_->CreateDataPeerConnection(peer_id);
-    }
-    void CreateMediaPeerConnection(ContactID const& peer_id) override {
-      transport_->CreateMediaPeerConnection(peer_id);
+    void EnsurePeerConnection(ContactID const& peer_id, ConnectionContext context) override {
+      transport_->EnsurePeerConnection(peer_id, context);
     }
     void CreateDataChannel(ContactID const& peer_id) override {
       transport_->CreateDataChannel(peer_id);
     }
-    void ClosePeerConnection(ContactID const& peer_id, std::string const& context) override {
+    void ClosePeerConnection(ContactID const& peer_id, ConnectionContext context) override {
       transport_->ClosePeerConnection(peer_id, context);
     }
-    void CreateOffer(ContactID const& peer_id, std::string const& context) override {
+    void CreateOffer(ContactID const& peer_id, ConnectionContext context) override {
       transport_->CreateOffer(peer_id, context);
     }
-    void CreateAnswer(ContactID const& peer_id, std::string const& context) override {
+    void CreateAnswer(ContactID const& peer_id, ConnectionContext context) override {
       transport_->CreateAnswer(peer_id, context);
     }
     void SetRemoteDescription(
         ContactID const& peer_id,
-        std::string const& context,
+        ConnectionContext context,
         std::string const& sdp,
         std::string const& type
     ) override {

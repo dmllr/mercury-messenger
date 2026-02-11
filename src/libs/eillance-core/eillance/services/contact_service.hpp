@@ -112,13 +112,13 @@ class ContactService {
   void BlockContact(ContactID const& peer_id, bool notify_peer) {
     if (notify_peer) {
       storage_->AddPendingAction(peer_id, nlohmann::json{{"type", "contact_removed"}}.dump());
-      if (messaging_service_) {
+      if (messaging_service_ != nullptr) {
         messaging_service_->SendQueuedMessages(peer_id);
       }
     }
 
-    transport_->ClosePeerConnection(peer_id, "data");
-    transport_->ClosePeerConnection(peer_id, "media");
+    transport_->ClosePeerConnection(peer_id, transport::ConnectionContext::Data);
+    transport_->ClosePeerConnection(peer_id, transport::ConnectionContext::Media);
     transport_->RemovePeer(peer_id);
 
     manager_->BlockContact(peer_id);

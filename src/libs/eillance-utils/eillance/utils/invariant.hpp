@@ -37,3 +37,5 @@
 
 // NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
 #define INVARIANT_NOT_NULL(arg) INVARIANT((arg) != nullptr)
+// NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
+#define INVARIANT_UNREACHABLE() INVARIANT(false)

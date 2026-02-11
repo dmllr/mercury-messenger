@@ -1,5 +1,3 @@
-#pragma once
-
 #include <map>
 #include <memory>
 #include <mutex>
@@ -77,21 +75,12 @@ class InternalMessagingService {
   }
 
   void ProcessSignalingMessage(ContactID const& peer_id, std::string const& type, Json const& message) {
-    auto const context = message.value("context", "data");
-
-    // Media Signaling
-    if (context == "media") {
-      HandleMediaSignaling(peer_id, type, message);
-      return;
-    }
-
-    // Data Signaling (SDP)
+    // SDP Signaling (Unified)
     if (type == "offer" || type == "answer") {
-      HandleDataSignaling(peer_id, type, message);
+      HandleSdp(peer_id, type, message);
       return;
     }
 
-    // Contact & Profile Signaling
     if (type == "contact_add_request") {
       std::optional<std::string> token;
       if (message.contains("token")) {
@@ -101,6 +90,8 @@ class InternalMessagingService {
       contact_service_->OnContactAddRequest(peer_id, token, profile);
     } else if (type == "contact_confirm") {
       contact_service_->OnContactConfirm(peer_id);
+    } else if (type == "hangup") {
+      media_call_service_->Hangup(peer_id, false);
     }
   }
 
@@ -110,10 +101,6 @@ class InternalMessagingService {
         p->last_activity_time = Time::Now();
       }
 
-      // Process the message FIRST.
-      // This ensures that if it's a receipt, the pending action is removed from DB
-      // BEFORE we check the queue for pending work. This prevents resending the
-      // message that was just acked.
       bool processed = false;
       if (!msg.empty() && msg[0] == std::byte{0xFE}) {
         file_transfer_service_->ProcessBinaryMessage(peer_id, msg);
@@ -130,8 +117,6 @@ class InternalMessagingService {
         }
       }
 
-      // Activity triggers unsuspension of any stale pending actions.
-      // Rate-limited to avoid database thrashing during high-frequency transfers.
       if (processed) {
         bool should_unsuspend = false;
         {
@@ -142,16 +127,13 @@ class InternalMessagingService {
             should_unsuspend = true;
           }
         }
-
         if (should_unsuspend) {
-          // UnsuspendAndDeliver calls SendQueuedMessages internally.
           messaging_service_->UnsuspendAndDeliver(peer_id);
         }
       }
     };
   }
 
-  // Handles JSON messages via Data Channel
   void ProcessDataChannelMessage(ContactID const& peer_id, Json const& message) {
     if (!message.contains("type")) return;
     std::string const type = message["type"];
@@ -166,6 +148,10 @@ class InternalMessagingService {
       messaging_service_->OnMessagesRead(peer_id, message["message_ids"].get<std::vector<uint64_t>>());
     } else if (type == "hangup") {
       media_call_service_->Hangup(peer_id, false);
+    } else if (type == "call_accept") {
+      // Handled by Transport
+    } else if (type == "call_ringing") {
+      media_call_service_->OnCallRinging(peer_id);
     } else if (type == "contact_removed") {
       contact_service_->OnContactRemoved(peer_id);
     } else if (type == "reconfirm_request") {
@@ -181,7 +167,6 @@ class InternalMessagingService {
     } else if (type == "termination") {
       transport_->RemovePeer(peer_id);
     } else if (type == "file_cancel") {
-      // Handle reliable file cancellation
       std::string const file_id = message.value("file_id", "");
       if (!file_id.empty()) {
         file_transfer_service_->HandleCancel(peer_id, file_id);
@@ -216,62 +201,56 @@ class InternalMessagingService {
       transport_->SendPeerDataChannelMessage(peer_id, key_msg);
     }
 
-    // Trigger queue processing once.
-    // UnsuspendAndDeliver calls SendQueuedMessages internally.
     messaging_service_->UnsuspendAndDeliver(peer_id);
   }
 
  private:
-  void HandleMediaSignaling(ContactID const& peer_id, std::string const& type, Json const& message) {
+  void HandleSdp(ContactID const& peer_id, std::string const& type, Json const& message) {
+    auto context = transport::ToContext(message.value("context", "data"));
+
     auto peer = transport_->GetPeer(peer_id);
     if (!peer) {
-      peer = std::make_shared<transport::Peer>(peer_id);
-      transport_->AddPeer(peer_id, peer);
+      if (type == "offer") {
+        peer = std::make_shared<transport::Peer>(peer_id);
+        transport_->AddPeer(peer_id, peer);
+      } else {
+        // Generally this shouldn't happen.
+        INVARIANT_UNREACHABLE();
+      }
+    }
+
+    // Essential the case where peers created via MediaCallService
+    if (peer && !peer->on_data_channel_message) {
+      SetupPeerHandlers(peer, peer_id);
     }
 
     if (type == "offer") {
-      transport_->CreateMediaPeerConnection(peer_id);
-      peer->has_media_peer_connection = true;
+      // Context-aware connection setup
+      transport_->EnsurePeerConnection(peer_id, context);
+
+      // IMPORTANT: Do NOT CreateDataChannel here.
+      // We are the Answerer. The Offerer creates the channel.
+      // We will receive it via the onDataChannel event in the transport layer.
 
       auto const sdp = message["sdp"].get<std::string>();
       bool const is_video = sdp.find("m=video") != std::string::npos;
-      media_call_service_->OnCallRequest(
-          peer_id,
-          is_video ? messaging::HistoryEntryKind::videoCall : messaging::HistoryEntryKind::voiceCall
-      );
-      transport_->SetRemoteDescription(peer_id, "media", sdp, "offer");
+      bool const is_audio = sdp.find("m=audio") != std::string::npos;
 
-    } else if (type == "answer") {
-      auto const sdp = message["sdp"].get<std::string>();
-      transport_->SetRemoteDescription(peer_id, "media", sdp, type);
-    }
-  }
-
-  void HandleDataSignaling(ContactID const& peer_id, std::string const& type, Json const& message) {
-    if (type == "offer") {
-      auto peer = transport_->GetPeer(peer_id);
-      if (peer) {
-        if (account_service_->GetId() > peer_id) {
-          transport_->ClosePeerConnection(peer_id, "data");
-          transport_->RemovePeer(peer_id);
-          peer = nullptr;
-        } else {
-          return;
-        }
+      if (context == transport::ConnectionContext::Media && (is_video || is_audio)) {
+        peer->has_media_peer_connection = true;
+        media_call_service_->OnCallRequest(
+            peer_id,
+            is_video ? messaging::HistoryEntryKind::videoCall : messaging::HistoryEntryKind::voiceCall
+        );
+        transport_->SetRemoteDescription(peer_id, context, sdp, "offer");
+      } else {
+        // Data-only offer (connection establishment). Auto-answer.
+        transport_->SetRemoteDescription(peer_id, context, sdp, "offer");
+        transport_->CreateAnswer(peer_id, context);
       }
 
-      if (!peer) {
-        peer = std::make_shared<transport::Peer>(peer_id);
-        transport_->AddPeer(peer_id, peer);
-        SetupPeerHandlers(peer, peer_id);
-        transport_->CreateDataPeerConnection(peer_id);
-
-        auto const sdp = message["sdp"].get<std::string>();
-        transport_->SetRemoteDescription(peer_id, "data", sdp, "offer");
-        transport_->CreateAnswer(peer_id, "data");
-      }
     } else if (type == "answer") {
-      transport_->SetRemoteDescription(peer_id, "data", message["sdp"].get<std::string>(), "answer");
+      transport_->SetRemoteDescription(peer_id, context, message["sdp"].get<std::string>(), "answer");
     }
   }
 
@@ -291,7 +270,6 @@ class InternalMessagingService {
             }
         );
       }
-      // Key exchange successful - safe to send data now
       messaging_service_->SendQueuedMessages(peer_id);
     } else {
       LGE << "Failed key exchange with " << peer_id.ToString();

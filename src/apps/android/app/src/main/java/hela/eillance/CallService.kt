@@ -1,5 +1,6 @@
 package hela.eillance
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -8,7 +9,10 @@ import android.app.Service
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.media.AudioAttributes
+import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -18,15 +22,17 @@ import android.telecom.PhoneAccount
 import android.telecom.PhoneAccountHandle
 import android.telecom.TelecomManager
 import android.util.Log
+import androidx.annotation.Keep
 import androidx.core.app.NotificationCompat
 import androidx.core.app.Person
-import androidx.annotation.Keep
+import androidx.core.content.ContextCompat
 import hela.eillance.camera.R
 import hela.eillance.ndkio.AttachmentType
 import hela.eillance.ndkio.CallDirection
 import hela.eillance.ndkio.CallState
 import hela.eillance.ndkio.Contact
 import hela.eillance.ndkio.HistoryEntry
+import hela.eillance.ndkio.HistoryEntryKind
 import hela.eillance.ndkio.ServiceConnectionState
 import hela.eillance.telecom.MercuryConnection
 import hela.eillance.telecom.MercuryConnectionService
@@ -37,16 +43,17 @@ import hela.eillance.webrtc.WebRtcTransport
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeout
 import org.webrtc.VideoSink
 import java.util.concurrent.ConcurrentHashMap
 
@@ -114,7 +121,7 @@ class CallService : Service() {
   private fun startWatchdog() {
     serviceScope.launch(Dispatchers.IO) {
       while (true) {
-        kotlinx.coroutines.delay(10000) // Check every 10 seconds
+        delay(10000) // Check every 10 seconds
         if (_isEngineReady.value) {
           val isAlive = try {
             withTimeout(2000) { nativePing() }
@@ -138,6 +145,8 @@ class CallService : Service() {
     serviceScope.launch(Dispatchers.IO) {
       engineMutex.withLock {
         Log.w(TAG, "Restarting Core...")
+        // Ensure media is stopped before restarting core to prevent lingering resources
+        stopLocalMedia()
         nativeRestart()
         _isCoreUnresponsive.value = false
         _errorEvents.emit(getString(R.string.core_reset_success))
@@ -192,7 +201,7 @@ class CallService : Service() {
     backgroundCallVM?.hangup()
   }
 
-  fun startLocalMedia() = webRtcTransport?.startLocalMedia()
+  fun startLocalMedia(isVideo: Boolean) = webRtcTransport?.startLocalMedia(isVideo)
   fun stopLocalMedia() = webRtcTransport?.stopLocalMedia()
   fun setLocalVideoSink(sink: VideoSink?) = webRtcTransport?.setLocalSink(sink)
   fun setRemoteVideoSink(peerId: String, sink: VideoSink?) = webRtcTransport?.setRemoteSink(peerId, sink)
@@ -260,6 +269,16 @@ class CallService : Service() {
     soundPlayer.updateCallState(callState)
     checkForIncomingCall(lastKnownCallState, callState)
     updateForegroundServiceNotification(callState.isInCall, callState.peerId, ServiceConnectionState.Online)
+
+    // Check for transition from Active -> Inactive to stop media
+    val wasActive = lastKnownCallState?.let { it.isConnecting || it.isRinging || it.isInCall } ?: false
+    val isActive = callState.isConnecting || callState.isRinging || callState.isInCall
+
+    if (wasActive && !isActive) {
+      Log.i(TAG, "Call session ended. Stopping local media.")
+      stopLocalMedia()
+    }
+
     lastKnownCallState = callState
   }
 
@@ -371,8 +390,14 @@ class CallService : Service() {
         val serviceType = if (inCall) {
           var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
           if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
-            type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+              type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+            }
+            val isVideo = lastKnownCallState?.callType == HistoryEntryKind.VideoCall
+            val hasCamera = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+            if (isVideo && hasCamera) {
+              type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+            }
           }
           type
         } else {
@@ -423,6 +448,7 @@ class CallService : Service() {
       .setPriority(NotificationCompat.PRIORITY_MAX)
       .setCategory(NotificationCompat.CATEGORY_CALL)
       .setFullScreenIntent(fullScreenPendingIntent, true)
+      .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
       .addAction(0, getString(R.string.action_reject), rejectPendingIntent)
       .addAction(0, getString(R.string.action_accept), acceptPendingIntent)
       .setAutoCancel(true)
@@ -478,11 +504,9 @@ class CallService : Service() {
         } else {
           getString(R.string.notification_new_message)
         }
-        // Using timestamp / 1000 because HistoryEntry is in microseconds, standard Java time is ms
         style.addMessage(text, msg.timestamp / 1000, sender)
       }
     } else {
-      // Fallback
       style.addMessage(getString(R.string.notification_new_message), System.currentTimeMillis(), sender)
     }
 
@@ -558,12 +582,19 @@ class CallService : Service() {
       getString(R.string.notification_channel_foreground_title),
       NotificationManager.IMPORTANCE_MIN
     )
+    // IMPORTANT: High importance + Sound + Vibration for calls
     val callsChannel = NotificationChannel(
       CALLS_CHANNEL_ID,
       getString(R.string.notification_channel_calls_title),
       NotificationManager.IMPORTANCE_HIGH
     ).apply {
       description = getString(R.string.notification_channel_calls_description)
+      setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE), AudioAttributes.Builder()
+        .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+        .build())
+      enableVibration(true)
+      lockscreenVisibility = Notification.VISIBILITY_PUBLIC
     }
     val messagesChannel = NotificationChannel(
       MESSAGES_CHANNEL_ID,
@@ -629,7 +660,6 @@ class CallService : Service() {
     var instance: CallService? = null
       private set
 
-    // Flag to signal engine readiness, exposed statically so UI can observe it
     private val _isEngineReady = MutableStateFlow(false)
     val isEngineReady = _isEngineReady.asStateFlow()
 

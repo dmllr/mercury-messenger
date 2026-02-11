@@ -39,20 +39,26 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import hela.eillance.camera.R
 import hela.eillance.components.UserAvatar
+import hela.eillance.ndkio.HistoryEntryKind
 import hela.eillance.theme.extendedColors
+import hela.eillance.viewmodels.CallViewModel
 
 @Composable
 fun IncomingCallScreen(
   callerId: String,
   callerName: String?,
   callerPhoto: String?,
+  callType: HistoryEntryKind,
+  callVM: CallViewModel,
   onAccept: () -> Unit,
   onReject: () -> Unit
 ) {
+  val isVideoCall = callType == HistoryEntryKind.VideoCall
+
   Box(
     modifier = Modifier
       .fillMaxSize()
-      .background(MaterialTheme.colorScheme.background)
+      .background(Color.Black)
   ) {
     // Background pulsing effect for the avatar
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
@@ -99,15 +105,16 @@ fun IncomingCallScreen(
         Text(
           text = callerName ?: stringResource(id = R.string.unknown),
           style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-          color = MaterialTheme.colorScheme.onBackground
+          color = Color.White
         )
 
         Spacer(modifier = Modifier.height(8.dp))
 
+        val callTypeRes = if (isVideoCall) R.string.call_incoming_video else R.string.call_incoming_voice
         Text(
-          text = stringResource(id = R.string.call_type_mercury_audio),
+          text = stringResource(id = callTypeRes),
           style = MaterialTheme.typography.bodyLarge,
-          color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+          color = Color.White.copy(alpha = 0.8f)
         )
 
         if (callerName != null && callerId != callerName) {
@@ -115,7 +122,7 @@ fun IncomingCallScreen(
           Text(
             text = callerId,
             fontSize = 14.sp,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+            color = Color.White.copy(alpha = 0.6f)
           )
         }
       }
@@ -143,7 +150,11 @@ fun IncomingCallScreen(
             )
           }
           Spacer(modifier = Modifier.height(8.dp))
-          Text(stringResource(id = R.string.action_decline), style = MaterialTheme.typography.labelLarge)
+          Text(
+            stringResource(id = R.string.action_decline),
+            style = MaterialTheme.typography.labelLarge,
+            color = Color.White
+          )
         }
 
         // Accept Button
@@ -161,7 +172,11 @@ fun IncomingCallScreen(
             )
           }
           Spacer(modifier = Modifier.height(8.dp))
-          Text(stringResource(id = R.string.action_accept), style = MaterialTheme.typography.labelLarge)
+          Text(
+            stringResource(id = R.string.action_accept),
+            style = MaterialTheme.typography.labelLarge,
+            color = Color.White
+          )
         }
       }
     }

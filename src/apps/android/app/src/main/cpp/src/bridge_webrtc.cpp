@@ -15,13 +15,21 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcTransport_nati
     jobject,
     jlong native_ptr,
     jstring j_peer_id,
+    jint context_val,
     jint state
 ) {
   auto* transport = reinterpret_cast<eillance::transport::AndroidRtcTransport*>(native_ptr);
   if (transport != nullptr) {
     char const* peer_id_chars = env->GetStringUTFChars(j_peer_id, nullptr);
     eillance::ContactID const peer_id(peer_id_chars);
-    transport->ReportStateChange(peer_id, eillance::EventSource::peerConnectionState, state);
+    auto const context = static_cast<eillance::transport::ConnectionContext>(context_val);
+
+    if (context == eillance::transport::ConnectionContext::Media) {
+      transport->ReportStateChange(peer_id, eillance::EventSource::mediaConnectionState, state);
+    } else {
+      transport->ReportStateChange(peer_id, eillance::EventSource::peerConnectionState, state);
+    }
+
     env->ReleaseStringUTFChars(j_peer_id, peer_id_chars);
   }
 }

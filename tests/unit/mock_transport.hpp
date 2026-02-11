@@ -112,31 +112,30 @@ class MockTransport {
     return PeerConnectionState::connected;
   }
 
-  void CreateDataPeerConnection(ContactID const& /*peer_id*/) {
+  void EnsurePeerConnection(ContactID const& /*peer_id*/, ConnectionContext /*context*/) {
   }
-  void CreateMediaPeerConnection(ContactID const& /*peer_id*/) {
-  }
+
   void CreateDataChannel(ContactID const& /*peer_id*/) {
   }
 
-  void ClosePeerConnection(ContactID const& peer_id, std::string const& context) {
+  void ClosePeerConnection(ContactID const& peer_id, ConnectionContext context) {
     std::lock_guard<std::mutex> const lock(mutex_);
-    log.closed_connections.emplace_back(peer_id, context);
+    log.closed_connections.emplace_back(peer_id, ToString(context));
   }
 
-  void CreateOffer(ContactID const& peer_id, std::string const& context) {
+  void CreateOffer(ContactID const& peer_id, ConnectionContext context) {
     std::lock_guard<std::mutex> const lock(mutex_);
-    log.offers.emplace_back(peer_id, context);
+    log.offers.emplace_back(peer_id, ToString(context));
   }
 
-  void CreateAnswer(ContactID const& peer_id, std::string const& context) {
+  void CreateAnswer(ContactID const& peer_id, ConnectionContext context) {
     std::lock_guard<std::mutex> const lock(mutex_);
-    log.answers.emplace_back(peer_id, context);
+    log.answers.emplace_back(peer_id, ToString(context));
   }
 
   void SetRemoteDescription(
       ContactID const& /*peer_id*/,
-      std::string const& /*context*/,
+      ConnectionContext /*context*/,
       std::string const& /*sdp*/,
       std::string const& /*type*/
   ) {

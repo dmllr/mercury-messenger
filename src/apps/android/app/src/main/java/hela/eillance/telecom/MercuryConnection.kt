@@ -14,7 +14,6 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import hela.eillance.CallService
 import hela.eillance.MainActivity
-import hela.eillance.MercuryApplication
 import hela.eillance.camera.R
 
 class MercuryConnection(
@@ -39,7 +38,6 @@ class MercuryConnection(
   override fun onShowIncomingCallUi() {
     Log.i(TAG, "onShowIncomingCallUi for $peerId")
 
-    // Create the Intent for the Incoming Call UI.
     val fullScreenIntent = Intent(callService, MainActivity::class.java).apply {
       flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
       action = CallService.ACTION_SHOW_INCOMING_CALL
@@ -90,10 +88,13 @@ class MercuryConnection(
     val notificationManager = callService.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     notificationManager.notify(CallService.INCOMING_CALL_NOTIFICATION_ID, builder.build())
 
-    // If the app is already in the foreground, we want to show the call screen immediately
-    // rather than waiting for the user to tap the heads-up notification.
-    if (MercuryApplication.isAppInForeground) {
+    // Forcibly launch the activity to ensure the incoming call screen is shown immediately
+    // rather than waiting for user interaction, effectively waking the screen.
+    // As a self-managed ConnectionService in a ringing state, we are permitted to start activities.
+    try {
       callService.startActivity(fullScreenIntent)
+    } catch (e: Exception) {
+      Log.e(TAG, "Failed to start activity for incoming call", e)
     }
   }
 

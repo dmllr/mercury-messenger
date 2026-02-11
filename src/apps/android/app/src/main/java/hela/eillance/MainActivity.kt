@@ -4,7 +4,9 @@ import android.app.KeyguardManager
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -41,10 +43,22 @@ class MainActivity : ComponentActivity() {
   }
 
   private fun configureWindowForLockScreen() {
-    setShowWhenLocked(true)
-    setTurnScreenOn(true)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+      setShowWhenLocked(true)
+      setTurnScreenOn(true)
+    } else {
+      @Suppress("DEPRECATION")
+      window.addFlags(
+        WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+            WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+      )
+    }
+
     val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
-    keyguardManager.requestDismissKeyguard(this, null)
+    if (keyguardManager.isKeyguardLocked) {
+      keyguardManager.requestDismissKeyguard(this, null)
+    }
   }
 
   override fun onStart() {
@@ -77,10 +91,7 @@ class MainActivity : ComponentActivity() {
     val isShowIncomingCall = intent?.action == CallService.ACTION_SHOW_INCOMING_CALL
 
     if (isAcceptAction && peerId != null) {
-      // In new architecture, we might just navigate. Acceptance is handled by CallService/Notification action directly if possible,
-      // or we instruct VM here. But MainViewModel doesn't have CallVM access directly.
-      // We rely on the UI layer (MercuryApp) to see the state.
-      // Actually, if we accepted via notification action, the Service handled it. We just need to navigate to call screen.
+      CallService.instance?.acceptCall()
       viewModel.navigateToPeer(peerId)
     } else if (isShowIncomingCall && peerId != null) {
       configureWindowForLockScreen()
