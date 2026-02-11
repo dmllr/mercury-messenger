@@ -5,6 +5,7 @@ import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -70,6 +71,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.os.ConfigurationCompat
 import hela.eillance.BannerType
@@ -168,11 +170,34 @@ fun ConversationScreen(
     )
   }
 
-  // State for permissions launchers
+  // State for permissions launchers (Banner)
   val notifLauncher =
     rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { mainViewModel.checkAllPermissions() }
-  val callLauncher =
+  val bannerCallLauncher =
     rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { mainViewModel.checkAllPermissions() }
+
+  // State for Call Action permissions
+  val requestVoiceCallPermission = rememberLauncherForActivityResult(
+    ActivityResultContracts.RequestPermission()
+  ) { isGranted ->
+    if (isGranted) {
+      callVM.startVoiceCall(peerId)
+    } else {
+      Toast.makeText(context, R.string.call_perm_mic_required, Toast.LENGTH_SHORT).show()
+    }
+  }
+
+  val requestVideoCallPermission = rememberLauncherForActivityResult(
+    ActivityResultContracts.RequestMultiplePermissions()
+  ) { permissions ->
+    val cam = permissions[Manifest.permission.CAMERA] ?: false
+    val mic = permissions[Manifest.permission.RECORD_AUDIO] ?: false
+    if (cam && mic) {
+      callVM.startVideoCall(peerId)
+    } else {
+      Toast.makeText(context, R.string.call_perm_cam_mic_required, Toast.LENGTH_SHORT).show()
+    }
+  }
 
   var previousHistorySize by remember(peerId) { mutableIntStateOf(historyPage.messages.size) }
 
@@ -358,8 +383,24 @@ fun ConversationScreen(
           contact = contact,
           onBack = onBack,
           onShowContactProfile = onShowContactProfile,
-          onStartVoiceCall = { callVM.startVoiceCall(peerId) },
-          onStartVideoCall = { callVM.startVideoCall(peerId) },
+          onStartVoiceCall = {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+              callVM.startVoiceCall(peerId)
+            } else {
+              requestVoiceCallPermission.launch(Manifest.permission.RECORD_AUDIO)
+            }
+          },
+          onStartVideoCall = {
+            val cam = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+            val mic = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+            if (cam && mic) {
+              callVM.startVideoCall(peerId)
+            } else {
+              requestVideoCallPermission.launch(
+                arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
+              )
+            }
+          },
           onSearchClick = { isSearchActive = true }
         )
       }
@@ -480,7 +521,7 @@ fun ConversationScreen(
                     text = stringResource(id = R.string.permission_banner_calls),
                     actionLabel = "Fix it",
                     onAction = {
-                      callLauncher.launch(
+                      bannerCallLauncher.launch(
                         arrayOf(
                           Manifest.permission.CAMERA,
                           Manifest.permission.RECORD_AUDIO,

@@ -1,5 +1,7 @@
 package hela.eillance.screens
 
+import android.Manifest
+import android.content.pm.PackageManager
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -28,15 +30,20 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import hela.eillance.camera.R
 import hela.eillance.components.UserAvatar
 import hela.eillance.ndkio.HistoryEntryKind
@@ -53,7 +60,25 @@ fun IncomingCallScreen(
   onAccept: () -> Unit,
   onReject: () -> Unit
 ) {
+  val context = LocalContext.current
   val isVideoCall = callType == HistoryEntryKind.VideoCall
+
+  val micGranted by remember {
+    mutableStateOf(
+      ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+    )
+  }
+  val cameraGranted by remember {
+    mutableStateOf(
+      ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+    )
+  }
+
+  // Can accept if we have at least Microphone permission (since audio is minimum req)
+  val canAccept = micGranted
+
+  // Warning if it's a video call but we lack camera (will fallback to audio-only on our side)
+  val showCameraWarning = isVideoCall && !cameraGranted
 
   Box(
     modifier = Modifier
@@ -127,6 +152,37 @@ fun IncomingCallScreen(
         }
       }
 
+      // Permission Warnings
+      if (!micGranted) {
+        Box(
+          modifier = Modifier
+            .padding(horizontal = 32.dp)
+            .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.8f), MaterialTheme.shapes.medium)
+            .padding(16.dp)
+        ) {
+          Text(
+            text = stringResource(id = R.string.incoming_call_mic_missing),
+            color = MaterialTheme.colorScheme.onErrorContainer,
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center
+          )
+        }
+      } else if (showCameraWarning) {
+        Box(
+          modifier = Modifier
+            .padding(horizontal = 32.dp)
+            .background(MaterialTheme.extendedColors.warning.copy(alpha = 0.8f), MaterialTheme.shapes.medium)
+            .padding(16.dp)
+        ) {
+          Text(
+            text = stringResource(id = R.string.incoming_call_cam_missing),
+            color = Color.Black,
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center
+          )
+        }
+      }
+
       // Actions
       Row(
         modifier = Modifier
@@ -159,15 +215,20 @@ fun IncomingCallScreen(
 
         // Accept Button
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
+          val containerColor = if (canAccept) MaterialTheme.extendedColors.success else Color.Gray.copy(alpha = 0.5f)
           IconButton(
-            onClick = onAccept,
+            onClick = { if (canAccept) onAccept() },
             modifier = Modifier.size(72.dp),
-            colors = IconButtonDefaults.iconButtonColors(containerColor = MaterialTheme.extendedColors.success)
+            enabled = canAccept,
+            colors = IconButtonDefaults.iconButtonColors(
+              containerColor = containerColor,
+              disabledContainerColor = Color.Gray.copy(alpha = 0.3f)
+            )
           ) {
             Icon(
               Icons.Default.Call,
               contentDescription = stringResource(id = R.string.action_accept),
-              tint = Color.White,
+              tint = if (canAccept) Color.White else Color.White.copy(alpha = 0.5f),
               modifier = Modifier.size(32.dp)
             )
           }
@@ -175,7 +236,7 @@ fun IncomingCallScreen(
           Text(
             stringResource(id = R.string.action_accept),
             style = MaterialTheme.typography.labelLarge,
-            color = Color.White
+            color = if (canAccept) Color.White else Color.White.copy(alpha = 0.5f)
           )
         }
       }
