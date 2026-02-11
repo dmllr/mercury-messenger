@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import hela.eillance.CallService
 import hela.eillance.ndkio.CallState
+import hela.eillance.ndkio.HistoryEntryKind
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.webrtc.VideoSink
@@ -44,6 +45,7 @@ class CallViewModel(application: Application) : AndroidViewModel(application), N
     if (target.isNotEmpty() && nativePtr != 0L) {
       // Trigger Telecom in CallService (Android specific), then call native
       callService?.startVoiceCallViaTelecom(target)
+      callService?.startLocalMedia(false)
       nativeStartVoice(nativePtr, target)
     }
   }
@@ -52,24 +54,27 @@ class CallViewModel(application: Application) : AndroidViewModel(application), N
     val target = peerId ?: _callState.value.peerId
     if (target.isNotEmpty() && nativePtr != 0L) {
       callService?.startVideoCallViaTelecom(target)
+      callService?.startLocalMedia(true)
       nativeStartVideo(nativePtr, target)
     }
   }
 
   fun hangup() {
     if (nativePtr != 0L) nativeHangup(nativePtr)
+    stopCallMedia()
   }
 
   fun acceptCall() {
-    if (nativePtr != 0L) nativeAccept(nativePtr)
+    if (nativePtr != 0L) {
+      val isVideo = _callState.value.callType == HistoryEntryKind.VideoCall
+      callService?.startLocalMedia(isVideo)
+      nativeAccept(nativePtr)
+    }
   }
 
   fun rejectCall() {
     if (nativePtr != 0L) nativeReject(nativePtr)
-  }
-
-  fun startCallMedia() {
-    callService?.startLocalMedia()
+    stopCallMedia()
   }
 
   fun stopCallMedia() {

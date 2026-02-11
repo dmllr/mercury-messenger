@@ -50,7 +50,6 @@ Java_hela_eillance_CallService_configureVideoCapture(JNIEnv* env, jobject /*inst
 }
 
 extern "C" JNIEXPORT jboolean JNICALL Java_hela_eillance_CallService_nativePing(JNIEnv* /*env*/, jobject /*instance*/) {
-  // Simple liveliness check. If g_clientEngine is null, the core is down.
   return g_clientEngine != nullptr;
 }
 
@@ -59,7 +58,6 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_nativeRestart(J
     g_clientEngine->Terminate();
     g_clientEngine.reset();
   }
-  // Re-initialize and start
   g_clientEngine = std::make_unique<eillance::ClientEngine>(g_javaVm, env, instance);
   g_clientEngine->Start();
 }
@@ -98,20 +96,20 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
         "(Ljava/lang/String;Ljava/lang/String;)Z"
     );
     classref.RegisterMethod(env, webrtc_transport_class, "sendDataChannelMessageBinary", "(Ljava/lang/String;[B)Z");
-    classref
-        .RegisterMethod(env, webrtc_transport_class, "closePeerConnection", "(Ljava/lang/String;Ljava/lang/String;)V");
-    classref.RegisterMethod(env, webrtc_transport_class, "createOffer", "(Ljava/lang/String;Ljava/lang/String;)V");
-    classref.RegisterMethod(env, webrtc_transport_class, "createAnswer", "(Ljava/lang/String;Ljava/lang/String;)V");
+
+    classref.RegisterMethod(env, webrtc_transport_class, "closePeerConnection", "(Ljava/lang/String;I)V");
+    classref.RegisterMethod(env, webrtc_transport_class, "createOffer", "(Ljava/lang/String;I)V");
+    classref.RegisterMethod(env, webrtc_transport_class, "createAnswer", "(Ljava/lang/String;I)V");
     classref.RegisterMethod(
         env,
         webrtc_transport_class,
         "setRemoteDescription",
-        "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V"
+        "(Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;)V"
     );
-    classref.RegisterMethod(env, webrtc_transport_class, "addVideoTrack", "(Ljava/lang/String;)V");
-    classref.RegisterMethod(env, webrtc_transport_class, "addAudioTrack", "(Ljava/lang/String;)V");
-    classref
-        .RegisterMethod(env, webrtc_transport_class, "createPeerConnection", "(Ljava/lang/String;Ljava/lang/String;)V");
+    classref.RegisterMethod(env, webrtc_transport_class, "addVideoTrack", "(Ljava/lang/String;I)V");
+    classref.RegisterMethod(env, webrtc_transport_class, "addAudioTrack", "(Ljava/lang/String;I)V");
+    classref.RegisterMethod(env, webrtc_transport_class, "createPeerConnection", "(Ljava/lang/String;I)V");
+
     classref.RegisterMethod(env, webrtc_transport_class, "createDataChannel", "(Ljava/lang/String;)V");
     classref.RegisterMethod(env, webrtc_transport_class, "nativeOnSignalingConnectionStateChange", "(JI)V");
 
@@ -123,7 +121,6 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
         "(Lhela/eillance/webrtc/WebRtcTransport;)V"
     );
 
-    // Register ViewModel Observers
     classref.RegisterClass(env, "hela/eillance/viewmodels/NativeContactsObserver");
     classref.RegisterMethod(
         env,
@@ -171,7 +168,6 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     );
     classref.RegisterMethod(env, "hela/eillance/viewmodels/NativeSettingsObserver", "onConnectionStateChanged", "(I)V");
 
-    // DTOs
     classref.RegisterCtor(env, "java/util/ArrayList", "()V");
     classref.RegisterMethod(env, "java/util/ArrayList", "add", "(Ljava/lang/Object;)Z");
     classref.RegisterMethod(env, "java/util/ArrayList", "get", "(I)Ljava/lang/Object;");
@@ -204,7 +200,6 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     classref.RegisterField(env, video_config_class, "frameRate", "I");
     classref.RegisterField(env, video_config_class, "bitrate", "I");
 
-    // AttachmentRequest
     std::string const attachment_req_class = "hela/eillance/ndkio/AttachmentRequest";
     classref.RegisterClass(env, attachment_req_class);
     classref.RegisterField(env, attachment_req_class, "path", "Ljava/lang/String;");
@@ -214,7 +209,6 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     classref.RegisterField(env, attachment_req_class, "note", "Ljava/lang/String;");
     classref.RegisterField(env, attachment_req_class, "fileName", "Ljava/lang/String;");
 
-    // Attachment
     std::string const attachment_class = "hela/eillance/ndkio/Attachment";
     classref.RegisterClass(env, attachment_class);
     classref.RegisterCtor(
@@ -224,7 +218,6 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
         "String;)V"
     );
 
-    // Register Debug DTOs
     std::string const debug_action_class = "hela/eillance/ndkio/DebugPendingAction";
     classref.RegisterClass(env, debug_action_class);
     classref.RegisterCtor(env, debug_action_class, "(Ljava/lang/String;JLjava/lang/String;)V");

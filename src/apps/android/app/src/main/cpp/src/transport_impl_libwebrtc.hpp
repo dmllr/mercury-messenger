@@ -59,7 +59,6 @@ class AndroidRtcTransport final : public Transport::TransportInterface {
     transportJavaRef_ = env->NewGlobalRef(transport_local_ref);
     env->DeleteLocalRef(transport_local_ref);
 
-    // Pass the created WebRtcTransport object back to the CallService
     auto& call_service_holder = ClassRefs::Instance().Class("hela/eillance/CallService");
     jmethodID const set_transport_method = call_service_holder.GetMethod("setWebRtcTransport");
     env->CallVoidMethod(context, set_transport_method, transportJavaRef_);
@@ -232,11 +231,18 @@ class AndroidRtcTransport final : public Transport::TransportInterface {
 
   void AddToStream(std::shared_ptr<Peer> const& /*peer*/, bool /*is_adding_video*/) const override {
   }
-  void CreateDataPeerConnection(ContactID const& peer_id) override {
-    CreatePeerConnection(peer_id, "data");
-  }
-  void CreateMediaPeerConnection(ContactID const& peer_id) override {
-    CreatePeerConnection(peer_id, "media");
+
+  void EnsurePeerConnection(ContactID const& peer_id, ConnectionContext context) override {
+    auto env_scope = GetEnv();
+    auto* env = env_scope.Get();
+    if ((env == nullptr) || (transportJavaRef_ == nullptr)) {
+      return;
+    }
+    auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcTransport");
+    auto* create_pc_method = transport_holder.GetMethod("createPeerConnection");
+    auto* j_peer_id = env->NewStringUTF(peer_id.ToString().c_str());
+    env->CallVoidMethod(transportJavaRef_, create_pc_method, j_peer_id, static_cast<jint>(context));
+    env->DeleteLocalRef(j_peer_id);
   }
 
   void CreateDataChannel(ContactID const& peer_id) override {
@@ -252,7 +258,13 @@ class AndroidRtcTransport final : public Transport::TransportInterface {
     env->DeleteLocalRef(j_peer_id);
   }
 
-  void ClosePeerConnection(ContactID const& peer_id, std::string const& context) override {
+  void ClosePeerConnection(ContactID const& peer_id, ConnectionContext context) override {
+    if (context == ConnectionContext::Data) {
+      if (auto peer = GetPeer(peer_id)) {
+        peer->data_channel_is_open = false;
+      }
+    }
+
     auto env_scope = GetEnv();
     auto* env = env_scope.Get();
     if ((env == nullptr) || (transportJavaRef_ == nullptr)) {
@@ -261,13 +273,11 @@ class AndroidRtcTransport final : public Transport::TransportInterface {
     auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcTransport");
     jmethodID const close_pc_method = transport_holder.GetMethod("closePeerConnection");
     auto* j_peer_id = env->NewStringUTF(peer_id.ToString().c_str());
-    auto j_context = env->NewStringUTF(context.c_str());
-    env->CallVoidMethod(transportJavaRef_, close_pc_method, j_peer_id, j_context);
+    env->CallVoidMethod(transportJavaRef_, close_pc_method, j_peer_id, static_cast<jint>(context));
     env->DeleteLocalRef(j_peer_id);
-    env->DeleteLocalRef(j_context);
   }
 
-  void CreateOffer(ContactID const& peer_id, std::string const& context) override {
+  void CreateOffer(ContactID const& peer_id, ConnectionContext context) override {
     auto env_scope = GetEnv();
     auto* env = env_scope.Get();
     if ((env == nullptr) || (transportJavaRef_ == nullptr)) {
@@ -276,13 +286,11 @@ class AndroidRtcTransport final : public Transport::TransportInterface {
     auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcTransport");
     auto* mid = transport_holder.GetMethod("createOffer");
     auto* j_peer_id = env->NewStringUTF(peer_id.ToString().c_str());
-    auto j_context = env->NewStringUTF(context.c_str());
-    env->CallVoidMethod(transportJavaRef_, mid, j_peer_id, j_context);
+    env->CallVoidMethod(transportJavaRef_, mid, j_peer_id, static_cast<jint>(context));
     env->DeleteLocalRef(j_peer_id);
-    env->DeleteLocalRef(j_context);
   }
 
-  void CreateAnswer(ContactID const& peer_id, std::string const& context) override {
+  void CreateAnswer(ContactID const& peer_id, ConnectionContext context) override {
     auto env_scope = GetEnv();
     auto* env = env_scope.Get();
     if ((env == nullptr) || (transportJavaRef_ == nullptr)) {
@@ -291,15 +299,13 @@ class AndroidRtcTransport final : public Transport::TransportInterface {
     auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcTransport");
     auto* mid = transport_holder.GetMethod("createAnswer");
     auto* j_peer_id = env->NewStringUTF(peer_id.ToString().c_str());
-    auto j_context = env->NewStringUTF(context.c_str());
-    env->CallVoidMethod(transportJavaRef_, mid, j_peer_id, j_context);
+    env->CallVoidMethod(transportJavaRef_, mid, j_peer_id, static_cast<jint>(context));
     env->DeleteLocalRef(j_peer_id);
-    env->DeleteLocalRef(j_context);
   }
 
   void SetRemoteDescription(
       ContactID const& peer_id,
-      std::string const& context,
+      ConnectionContext context,
       std::string const& sdp,
       std::string const& type
   ) override {
@@ -311,12 +317,10 @@ class AndroidRtcTransport final : public Transport::TransportInterface {
     auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcTransport");
     auto* mid = transport_holder.GetMethod("setRemoteDescription");
     auto* j_peer_id = env->NewStringUTF(peer_id.ToString().c_str());
-    auto* j_context = env->NewStringUTF(context.c_str());
     auto* j_sdp = env->NewStringUTF(sdp.c_str());
     auto* j_type = env->NewStringUTF(type.c_str());
-    env->CallVoidMethod(transportJavaRef_, mid, j_peer_id, j_context, j_sdp, j_type);
+    env->CallVoidMethod(transportJavaRef_, mid, j_peer_id, static_cast<jint>(context), j_sdp, j_type);
     env->DeleteLocalRef(j_peer_id);
-    env->DeleteLocalRef(j_context);
     env->DeleteLocalRef(j_sdp);
     env->DeleteLocalRef(j_type);
   }
@@ -328,10 +332,13 @@ class AndroidRtcTransport final : public Transport::TransportInterface {
     if (!env || (transportJavaRef_ == nullptr)) {
       return nullptr;
     }
+    // Ensures media peer connection exists
+    EnsurePeerConnection(peer_id, ConnectionContext::Media);
+
     auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcTransport");
     auto* mid = transport_holder.GetMethod("addVideoTrack");
     auto* j_peer_id = env->NewStringUTF(peer_id.ToString().c_str());
-    env->CallVoidMethod(transportJavaRef_, mid, j_peer_id);
+    env->CallVoidMethod(transportJavaRef_, mid, j_peer_id, static_cast<jint>(ConnectionContext::Media));
     env->DeleteLocalRef(j_peer_id);
     return std::make_shared<AndroidRtcTrack>();
   }
@@ -343,29 +350,16 @@ class AndroidRtcTransport final : public Transport::TransportInterface {
     if (!env || (transportJavaRef_ == nullptr)) {
       return nullptr;
     }
+    // Ensures media peer connection exists
+    EnsurePeerConnection(peer_id, ConnectionContext::Media);
+
     auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcTransport");
     auto* mid = transport_holder.GetMethod("addAudioTrack");
     auto* j_peer_id = env->NewStringUTF(peer_id.ToString().c_str());
-    env->CallVoidMethod(transportJavaRef_, mid, j_peer_id);
+    env->CallVoidMethod(transportJavaRef_, mid, j_peer_id, static_cast<jint>(ConnectionContext::Media));
     env->DeleteLocalRef(j_peer_id);
 
     return std::make_shared<AndroidRtcTrack>();
-  }
-
- private:
-  void CreatePeerConnection(ContactID const& peer_id, std::string const& context) {
-    auto env_scope = GetEnv();
-    auto* env = env_scope.Get();
-    if ((env == nullptr) || (transportJavaRef_ == nullptr)) {
-      return;
-    }
-    auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcTransport");
-    auto* create_pc_method = transport_holder.GetMethod("createPeerConnection");
-    auto* j_peer_id = env->NewStringUTF(peer_id.ToString().c_str());
-    auto* j_context = env->NewStringUTF(context.c_str());
-    env->CallVoidMethod(transportJavaRef_, create_pc_method, j_peer_id, j_context);
-    env->DeleteLocalRef(j_peer_id);
-    env->DeleteLocalRef(j_context);
   }
 };
 

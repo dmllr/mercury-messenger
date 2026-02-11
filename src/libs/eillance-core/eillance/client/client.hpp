@@ -39,12 +39,8 @@ class Client final : public transport::TransportDelegate {
         on_fatal_error_(std::move(on_fatal_error)) {
     transport_->SetDelegate(this);
 
-    // Initialize Services
     account_service_ = std::make_shared<services::AccountService>(storage_, transport_);
-
     auto contact_manager = std::make_shared<identity::ContactManager>(storage_);
-
-    // Initialize FileTransferService
     file_transfer_service_ = std::make_shared<services::FileTransferService>(storage_, transport_);
 
     messaging_service_ = std::make_shared<services::MessagingService>(
@@ -52,7 +48,7 @@ class Client final : public transport::TransportDelegate {
         transport_,
         contact_manager,
         file_transfer_service_,
-        [this](ContactID const& id) { this->Connect(id); }  // Inject connection logic
+        [this](ContactID const& id) { this->Connect(id); }
     );
 
     profile_service_ = std::make_shared<services::ProfileService>(
@@ -70,19 +66,17 @@ class Client final : public transport::TransportDelegate {
         contact_manager,
         account_service_.get(),
         profile_service_.get(),
-        [this](ContactID const& id) { this->Connect(id); }  // Inject connection logic
+        [this](ContactID const& id) { this->Connect(id); }
     );
 
     media_call_service_ = std::make_shared<services::MediaCallService>(transport_);
 
-    // Wire dependencies
     messaging_service_->SetContactRestoredCallback([this](ContactID const& id) {
       contact_service_->OnContactRestored(id);
     });
     contact_service_->SetMessagingService(messaging_service_.get());
     media_call_service_->SetMessagingService(messaging_service_.get());
 
-    // Initialize Internal Messaging Service (Protocol Handler)
     internal_messaging_service_ = std::make_shared<services::InternalMessagingService>(
         transport_,
         account_service_,
@@ -93,33 +87,50 @@ class Client final : public transport::TransportDelegate {
         profile_service_
     );
 
-    // Wire Transport Status
     transport_->SetStatusCallback([this](ContactID const& peer_id, EventSource const source, int state_val) {
       if (source == EventSource::peerConnectionState) {
+        // Data Connection State
         auto const state = static_cast<transport::PeerConnectionState>(state_val);
         if (state == transport::PeerConnectionState::failed || state == transport::PeerConnectionState::closed ||
             state == transport::PeerConnectionState::disconnected) {
-          media_call_service_->OnMediaPeerConnectionStateChange(peer_id, state);
+          // If data connection dies, we mark the delivery attempt as finished so it can retry later
           messaging_service_->OnConnectionAttemptFinished(peer_id);
+          transport_->ClosePeerConnection(peer_id, transport::ConnectionContext::Data);
 
-          transport_->ClosePeerConnection(peer_id, "data");
-          transport_->ClosePeerConnection(peer_id, "media");
-          transport_->RemovePeer(peer_id);
+          // If Media is active, we MUST NOT remove the peer or close media.
+          bool media_active = false;
+          if (auto peer = transport_->GetPeer(peer_id)) {
+            media_active = peer->has_media_peer_connection;
+          }
+
+          if (media_active) {
+            LGI << "Data connection lost for " << peer_id.ToString() << " but media is active. Reconnecting data.";
+            Connect(peer_id);
+          } else {
+            // Also close media if data dies (optional policy, but usually safer when no call is active)
+            media_call_service_->OnMediaPeerConnectionStateChange(peer_id, state);
+            transport_->ClosePeerConnection(peer_id, transport::ConnectionContext::Media);
+            transport_->RemovePeer(peer_id);
+          }
+        }
+      } else if (source == EventSource::mediaConnectionState) {
+        // Media Connection State
+        auto const state = static_cast<transport::PeerConnectionState>(state_val);
+        media_call_service_->OnMediaPeerConnectionStateChange(peer_id, state);
+        if (state == transport::PeerConnectionState::failed || state == transport::PeerConnectionState::closed) {
+          transport_->ClosePeerConnection(peer_id, transport::ConnectionContext::Media);
         }
       } else if (source == EventSource::system) {
         auto const state = static_cast<ServiceConnectionState>(state_val);
-        // Fast Fail: If signaling dies, immediately abort any pending connection attempts.
-        // This prevents connections from hanging in 'NEW' state until the 30s timeout.
         if (state == ServiceConnectionState::failure || state == ServiceConnectionState::noNetwork ||
             state == ServiceConnectionState::disconnected) {
           for (auto const& [id, peer] : transport_->GetPeers()) {
             auto const pc_state = transport_->GetPeerConnectionState(id);
             if (pc_state == transport::PeerConnectionState::newConnection ||
                 pc_state == transport::PeerConnectionState::connecting) {
-              LGI << "Aborting pending connection to " << id.ToString() << " due to signaling failure.";
               messaging_service_->OnConnectionAttemptFinished(id);
-              transport_->ClosePeerConnection(id, "data");
-              transport_->ClosePeerConnection(id, "media");
+              transport_->ClosePeerConnection(id, transport::ConnectionContext::Data);
+              transport_->ClosePeerConnection(id, transport::ConnectionContext::Media);
             }
           }
         }
@@ -143,7 +154,6 @@ class Client final : public transport::TransportDelegate {
     Terminate();
   }
 
-  // --- Service Accessors ---
   [[nodiscard]] auto GetAccountService() const -> std::shared_ptr<services::AccountService> {
     return account_service_;
   }
@@ -166,7 +176,6 @@ class Client final : public transport::TransportDelegate {
     return storage_;
   }
 
-  // --- Platform Injection ---
   template <typename T>
   void SetVideoCapture(std::unique_ptr<T> impl) {
     media_call_service_->SetVideoCapture(std::move(impl));
@@ -177,7 +186,6 @@ class Client final : public transport::TransportDelegate {
     media_call_service_->SetAudioCapture(std::move(impl));
   }
 
-  // --- Lifecycle ---
   void Start() {
     if (!account_service_->IdentityExists()) {
       LGE << "Client started without an identity.";
@@ -212,8 +220,6 @@ class Client final : public transport::TransportDelegate {
     media_call_service_->Configure(config);
   }
 
-  // --- Facade Methods ---
-
   [[nodiscard]] auto GetId() const -> ContactID {
     return account_service_->GetId();
   }
@@ -233,13 +239,9 @@ class Client final : public transport::TransportDelegate {
   auto RestoreIdentity(std::string const& m) -> bool {
     if (account_service_->RestoreIdentity(m)) {
       BroadcastProfileUpdate();
-
-      // Resume normal operation
       Start();
       return true;
     }
-
-    // If failed, try to resume operation with existing data
     Start();
     return false;
   }
@@ -249,32 +251,21 @@ class Client final : public transport::TransportDelegate {
   }
 
   auto RestoreBackup(std::string const& p, std::string const& pw) -> bool {
-    // Stop services that might be querying the database
-    is_running_ = false;  // Stop background peer check
+    is_running_ = false;
     messaging_service_->StopDeliveryService();
     transport_->Terminate();
 
-    // Perform Restore (Safe to close DB now)
     bool const success = account_service_->RestoreBackup(p, pw);
 
     if (success) {
-      // Reload Caches
       contact_service_->ReloadCache();
-
-      // Notify UI ViewModels to refresh their data
       if (on_data_reloaded_) {
         on_data_reloaded_();
       }
-
-      // Restart Services (Crucial: sets is_running_ = true, starts background loops)
-      // This internally calls transport_->Start(), SetId, SetSignalingUrl, etc.
       Start();
-
       BroadcastProfileUpdate();
       return true;
     }
-
-    // Failure case: Resume operation with the existing database
     Start();
     return false;
   }
@@ -354,7 +345,6 @@ class Client final : public transport::TransportDelegate {
     return messaging_service_->GetUnreadMessages(id);
   }
 
-  // --- Search Facade ---
   [[nodiscard]] auto SearchMessages(ContactID const& peer_id, std::string const& query) const
       -> std::vector<messaging::HistoryEntryRecord> {
     return messaging_service_->SearchMessages(peer_id, query);
@@ -386,18 +376,11 @@ class Client final : public transport::TransportDelegate {
 
   void Connect(ContactID const& peer_id) const {
     auto const peer = transport_->GetPeer(peer_id);
-    // Even if data channel is open, we might need to flush pending messages that
-    // are stuck in 'sending' state but not yet acknowledged (redelivery).
-    // The previous check `if (peer && peer->data_channel_is_open) return;` prevented retries.
-    // Now we allow calling Connect() -> SendQueuedMessages() even if open to trigger retransmission loop.
     if (peer && peer->data_channel_is_open) {
       messaging_service_->SendQueuedMessages(peer_id);
       return;
     }
 
-    // Avoid overwriting a connection that is already establishing (glare condition).
-    // If we re-create the PeerConnection while it is in 'connecting' state,
-    // we may kill the valid one or confuse the transport layer.
     auto const state = transport_->GetPeerConnectionState(peer_id);
     if (state == transport::PeerConnectionState::connecting || state == transport::PeerConnectionState::newConnection) {
       return;
@@ -407,11 +390,14 @@ class Client final : public transport::TransportDelegate {
       auto const new_peer = std::make_shared<transport::Peer>(peer_id);
       transport_->AddPeer(peer_id, new_peer);
       internal_messaging_service_->SetupPeerHandlers(new_peer, peer_id);
+    } else if (!peer->on_data_channel_message) {
+      // Ensure handlers are set up if peer exists but unconfigured (e.g. created by MediaCallService)
+      internal_messaging_service_->SetupPeerHandlers(peer, peer_id);
     }
 
-    transport_->CreateDataPeerConnection(peer_id);
+    transport_->EnsurePeerConnection(peer_id, transport::ConnectionContext::Data);
     transport_->CreateDataChannel(peer_id);
-    transport_->CreateOffer(peer_id, "data");
+    transport_->CreateOffer(peer_id, transport::ConnectionContext::Data);
   }
 
   void StartVoiceCall(ContactID const& id) const {
@@ -446,8 +432,6 @@ class Client final : public transport::TransportDelegate {
     contact_service_->ReloadCache();
   }
 
-  // --- Debug Facade Methods ---
-
   [[nodiscard]] auto GetAllPendingActions() const -> std::vector<view_model::DebugPendingAction> {
     std::vector<view_model::DebugPendingAction> result;
     auto contacts = contact_service_->GetContacts();
@@ -465,7 +449,6 @@ class Client final : public transport::TransportDelegate {
     auto now = Time::Now();
     auto peers = transport_->GetPeers();
 
-    // Also include contacts that are not in Transport (disconnected)
     auto contacts = contact_service_->GetContacts();
     for (auto const& contact : contacts) {
       if (!peers.contains(contact.peer_id)) {
@@ -474,7 +457,6 @@ class Client final : public transport::TransportDelegate {
     }
 
     for (auto const& [id, peer] : peers) {
-      // Update existing entry if found (priority to active peer state)
       std::erase_if(result, [&](auto const& item) { return item.peer_id == id; });
 
       int64_t const ago = std::chrono::duration_cast<std::chrono::seconds>(
@@ -531,7 +513,8 @@ class Client final : public transport::TransportDelegate {
       LGW << "Connection attempt failed for peer " << peer_id.ToString() << " (not online).";
       messaging_service_->OnConnectionAttemptFinished(peer_id);
       if (transport_->GetPeer(peer_id)) {
-        transport_->ClosePeerConnection(peer_id, "data");
+        transport_->ClosePeerConnection(peer_id, transport::ConnectionContext::Data);
+        transport_->ClosePeerConnection(peer_id, transport::ConnectionContext::Media);
       }
     }
   }
@@ -543,22 +526,15 @@ class Client final : public transport::TransportDelegate {
   void OnLoginSuccess() override {
     INVARIANT(status_callback_);
     (*status_callback_)(ContactID(), EventSource::system, static_cast<int>(ServiceConnectionState::online));
-    // internal_messaging_service now handles login_success logic (starting delivery service)
     internal_messaging_service_->ProcessSystemMessage("login_success", {});
   }
 
   void ProcessPeerMessage(Json message) override {
     auto const from_it = message.find("from");
-    if (from_it == message.end()) {
-      return;
-    }
-
+    if (from_it == message.end()) return;
     ContactID const peer_id(from_it->get<std::string>());
     auto const type_it = message.find("type");
-    if (type_it == message.end()) {
-      return;
-    }
-
+    if (type_it == message.end()) return;
     internal_messaging_service_->ProcessSignalingMessage(peer_id, type_it->get<std::string>(), message);
   }
 
@@ -575,9 +551,7 @@ class Client final : public transport::TransportDelegate {
   }
 
   void CheckForInactivePeers() {
-    if (!is_running_) {
-      return;
-    }
+    if (!is_running_) return;
     auto const now = Time::Now();
     auto const timeout = std::chrono::duration_cast<std::chrono::microseconds>(
                              account_service_->GetSettings()->GetPeerInactivityTimeout()
@@ -585,15 +559,24 @@ class Client final : public transport::TransportDelegate {
                              .count();
 
     for (auto const& [id, peer] : transport_->GetPeers()) {
-      if (!peer->has_media_peer_connection &&
-          transport_->GetPeerConnectionState(id) == transport::PeerConnectionState::connected) {
+      bool const is_data_connected =
+          transport_->GetPeerConnectionState(id) == transport::PeerConnectionState::connected;
+
+      if (peer->has_media_peer_connection) {
+        // Prolong the session activity to prevent timeout.
+        peer->last_activity_time = now;
+        // Ensure Data Channel is kept alive/reconnected while media is active.
+        if (!peer->data_channel_is_open) {
+          Connect(id);
+        }
+      } else if (is_data_connected) {
         if ((now - peer->last_activity_time.load()) > static_cast<uint64_t>(timeout)) {
           LGI << "Peer " << id.ToString() << " inactive. Closing.";
-          transport_->ClosePeerConnection(id, "data");
+          transport_->ClosePeerConnection(id, transport::ConnectionContext::Data);
         }
       }
     }
-    background_queue_.DispatchAfter(kPeerInactivityCheckInterval, [this] { CheckForInactivePeers(); });
+    background_queue_.DispatchAfter(peerInactivityCheckInterval, [this] { CheckForInactivePeers(); });
   }
 
   void StartWatchdog() {
@@ -603,18 +586,11 @@ class Client final : public transport::TransportDelegate {
       while (watchdog_running_) {
         std::this_thread::sleep_for(std::chrono::seconds(5));
         if (!watchdog_running_) break;
-
         auto const now = Time::Now();
-
-        // Post a task to the main queue to update the heartbeat.
-        // If the queue is deadlocked, this task will never run.
         background_queue_.Dispatch([this] { last_heartbeat_ = Time::Now(); });
-
-        // Check if the last heartbeat is stale (older than 15 seconds)
         if (now > last_heartbeat_.load() + 15000000) {
           LGE << "Core Watchdog: Main queue stalled. Triggering fatal error.";
           if (on_fatal_error_) on_fatal_error_();
-          // Sleep to prevent spamming the restart signal while tearing down
           std::this_thread::sleep_for(std::chrono::seconds(10));
         }
       }
@@ -628,7 +604,6 @@ class Client final : public transport::TransportDelegate {
 
   void BroadcastProfileUpdate() {
     profile_service_->MarkAllContactsProfileSyncNeeded();
-    // Trigger work check for all contacts
     auto const contacts = contact_service_->GetContacts();
     for (auto const& contact : contacts) {
       if (contact.status == identity::ContactStatus::confirmed) {
@@ -640,7 +615,6 @@ class Client final : public transport::TransportDelegate {
 
   void ReevaluateIceConfiguration() {
     Json final_config = Json::array();
-
     auto* settings = account_service_->GetSettings();
     if (auto stun = settings->GetCustomStun(); stun && !stun->empty()) {
       final_config.push_back({{"urls", std::vector<std::string>{*stun}}});
@@ -656,12 +630,9 @@ class Client final : public transport::TransportDelegate {
       }
       final_config.push_back(turn_server);
     }
-
-    // If no custom servers, use dynamic config from server
     if (final_config.empty() && !server_ice_config_.empty()) {
       final_config = server_ice_config_;
     }
-
     if (!final_config.empty()) {
       transport_->SetIceServers(final_config.dump());
     }
@@ -684,7 +655,6 @@ class Client final : public transport::TransportDelegate {
   std::shared_ptr<StatusCallbackFunction> status_callback_;
   OnDataReloadedCallback on_data_reloaded_;
 
-  // Watchdog
   std::thread watchdog_thread_;
   std::atomic<bool> watchdog_running_{false};
   std::atomic<uint64_t> last_heartbeat_{0};
@@ -692,7 +662,7 @@ class Client final : public transport::TransportDelegate {
 
   Json server_ice_config_{Json::array()};
 
-  static constexpr std::chrono::seconds kPeerInactivityCheckInterval{30};
+  static constexpr std::chrono::seconds peerInactivityCheckInterval{20};
 };
 
 }  // namespace eillance

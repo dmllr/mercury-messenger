@@ -39,6 +39,8 @@ class CallViewModel {
         if (state == transport::PeerConnectionState::closed || state == transport::PeerConnectionState::disconnected ||
             state == transport::PeerConnectionState::failed) {
           impl->OnCallTerminated(event.peer_id);
+        } else if (state == transport::PeerConnectionState::connected) {
+          impl->OnCallConnected(event.peer_id);
         }
       }
     });
@@ -230,6 +232,25 @@ class CallViewModel {
       {
         std::lock_guard<std::mutex> const lock(mutex);
         if ((state.is_connecting || state.is_ringing) && state.peer_id == peer_id) {
+          state.is_connecting = false;
+          state.is_ringing = false;
+          state.is_in_call = true;
+          should_notify = true;
+        }
+      }
+      if (should_notify) {
+        Notify();
+      }
+    }
+
+    void OnCallConnected(ContactID const& peer_id) {
+      bool should_notify = false;
+      {
+        std::lock_guard<std::mutex> const lock(mutex);
+        // Only transition to InCall automatically for Outgoing calls.
+        // Incoming calls must wait for explicit Accept action from the user.
+        if ((state.is_connecting || state.is_ringing) && state.peer_id == peer_id &&
+            state.call_direction == messaging::CallDirection::outgoing) {
           state.is_connecting = false;
           state.is_ringing = false;
           state.is_in_call = true;
