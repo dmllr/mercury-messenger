@@ -119,7 +119,7 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
 
   // Helper to prevent double-pop blank screen issues
   fun NavController.safePopBackStack() {
-    if (currentBackStackEntry?.lifecycle?.currentState == Lifecycle.State.RESUMED) {
+    if (currentBackStackEntry?.lifecycle?.currentState?.isAtLeast(Lifecycle.State.STARTED) == true) {
       popBackStack()
     }
   }
