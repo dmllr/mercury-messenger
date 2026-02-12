@@ -17,7 +17,7 @@ namespace eillance {
 class Stream : public std::enable_shared_from_this<Stream> {
  public:
   // Using alias to avoid redundant namespace qualification
-  using Peer = eillance::transport::Peer;
+  using Peer = transport::Peer;
 
   class Source {
    public:

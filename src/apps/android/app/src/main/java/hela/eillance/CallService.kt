@@ -41,6 +41,7 @@ import hela.eillance.viewmodels.ContactsViewModel
 import hela.eillance.viewmodels.SettingsViewModel
 import hela.eillance.webrtc.WebRtcDataTransport
 import hela.eillance.webrtc.WebRtcMediaTransport
+import org.json.JSONObject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -250,7 +251,15 @@ class CallService : Service() {
   fun setWebRtcMediaTransport(transport: WebRtcMediaTransport) {
     mediaTransport = transport
     mediaTransport?.onSendSignalingMessage = { msg ->
-      dataTransport?.sendSignalingMessage(msg)
+      try {
+        val json = JSONObject(msg)
+        val peerId = json.optString("to")
+        if (!peerId.isNullOrEmpty()) {
+          dataTransport?.sendDataChannelMessage(peerId, msg)
+        }
+      } catch (e: Exception) {
+        Log.e(TAG, "Failed to route media signaling message", e)
+      }
     }
   }
 

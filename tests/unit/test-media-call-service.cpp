@@ -23,7 +23,7 @@ class MockCaptureImpl {
   }
   auto FetchBuffers() -> Packet {
     // Return dummy data to ensure stream has content
-    std::vector<std::byte> data = {std::byte{0xAA}, std::byte{0xBB}};
+    std::vector<std::byte> const data = {std::byte{0xAA}, std::byte{0xBB}};
     return Packet(data);
   }
   auto GetSampleDuration() -> Time::Unit {
@@ -55,6 +55,10 @@ class MediaCallServiceTest : public ::testing::Test {
 
     auto file_transfer_service = std::make_shared<services::FileTransferService>(storage_, data_transport_);
 
+    account_service_ = std::make_unique<services::AccountService>(storage_, data_transport_);
+    account_service_->SetOnMyProfileUpdatedCallback([]() {});
+    std::ignore = account_service_->GenerateNewIdentity();
+
     // Initialize messaging service (needed by MediaCallService)
     messaging_service_ = std::make_unique<services::MessagingService>(
         storage_,
@@ -66,8 +70,12 @@ class MediaCallServiceTest : public ::testing::Test {
     messaging_service_->SetChatMessageReceivedCallback([](auto const&, auto const&) {});
 
     // Initialize MediaCallService with split transports
-    service_ = std::make_unique<services::MediaCallService>(data_transport_, media_transport_);
-    service_->SetMessagingService(messaging_service_.get());
+    service_ =
+        std::make_unique<services::MediaCallService>(storage_, data_transport_, media_transport_, account_service_);
+    service_->SetMessagingService(messaging_service_);
+
+    // FIX: Set connection handler to prevent std::bad_function_call in StartVoiceCall
+    service_->SetConnectionHandler([](ContactID const&) {});
 
     // Initialize Capture (needed for av_stream_ invariant)
     service_->SetVideoCapture(std::make_unique<MockCaptureImpl>());
@@ -79,6 +87,7 @@ class MediaCallServiceTest : public ::testing::Test {
     service_->SetCallAcceptedCallback([](auto const&) {});
     service_->SetCallTerminatedCallback([](auto const&) {});
     service_->SetCallRingingCallback([](auto const&) {});
+    account_service_->SetOnMyProfileUpdatedCallback([]() {});
   }
 
   std::shared_ptr<transport::MockCallLog> mock_log_;
@@ -92,17 +101,27 @@ class MediaCallServiceTest : public ::testing::Test {
   std::shared_ptr<transport::MediaTransport> media_transport_;
 
   std::shared_ptr<storage::PersistentStorage> storage_;
-  std::unique_ptr<services::MessagingService> messaging_service_;
+  std::shared_ptr<services::AccountService> account_service_;
+  std::shared_ptr<services::MessagingService> messaging_service_;
   std::unique_ptr<services::MediaCallService> service_;
 
   ContactID const peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
 };
 
 TEST_F(MediaCallServiceTest, StartVoiceCall) {
+  // Setup peer with open data channel to allow call flow to proceed
+  auto peer = std::make_shared<transport::Peer>(peer1);
+  peer->data_channel_is_open = true;
+  data_transport_->AddPeer(peer1, peer);
+
   service_->StartVoiceCall(peer1);
 
+  // Simulate media transport connection success (transitions to MediaConnected -> Negotiating)
+  // This triggers SendCallRequest which adds the system message
+  service_->OnMediaPeerConnectionStateChange(peer1, transport::PeerConnectionState::connected);
+
   // Verify that a system message was added to history
-  auto history = messaging_service_->GetHistoryPage(peer1, 0, 10);
+  auto const history = messaging_service_->GetHistoryPage(peer1, 0, 10);
   ASSERT_FALSE(history.messages.empty());
   auto const& entry = history.messages[0];
   EXPECT_EQ(entry.kind, messaging::HistoryEntryKind::systemMessage);
@@ -115,24 +134,48 @@ TEST_F(MediaCallServiceTest, StartVoiceCall) {
 
 TEST_F(MediaCallServiceTest, AcceptCall) {
   // We need a peer to exist in transport
-  auto peer = std::make_shared<transport::Peer>(peer1);
+  auto const peer = std::make_shared<transport::Peer>(peer1);
+  // Allow sending messages
+  peer->data_channel_is_open = true;
   data_transport_->AddPeer(peer1, peer);
+
+  // 1. Simulate Incoming Call Request
+  service_->OnCallRequest(peer1, "call_id_1", messaging::HistoryEntryKind::voiceCall);
+
+  // 2. Simulate Media Connection Establishment (Transitions to Ringing)
+  // In a real app, Client receives the transport callback and forwards it.
+  // Here we call the service method directly to simulate that event.
+  service_->OnMediaPeerConnectionStateChange(peer1, transport::PeerConnectionState::connected);
 
   bool accepted_cb = false;
   service_->SetCallAcceptedCallback([&](auto const& id) {
-    if (id == peer1) accepted_cb = true;
+    if (id == peer1) {
+      accepted_cb = true;
+    }
   });
 
-  service_->AcceptCall(peer1, messaging::HistoryEntryKind::voiceCall);
+  // 3. Accept the call
+  service_->AcceptCall(peer1);
 
   EXPECT_TRUE(accepted_cb);
   EXPECT_TRUE(peer->has_media_peer_connection);
 
   // Verify system message sent (call_accept)
   auto history = messaging_service_->GetHistoryPage(peer1, 0, 10);
+  // History will contain [0]=Accept, [1]=Request (from OnCallRequest entry)
   ASSERT_FALSE(history.messages.empty());
-  auto const& data = std::get<messaging::MessageEntry>(history.messages[0].data);
-  EXPECT_NE(data.content.find("call_accept"), std::string::npos);
+
+  bool found_accept = false;
+  for (auto const& msg : history.messages) {
+    if (std::holds_alternative<messaging::MessageEntry>(msg.data)) {
+      auto const& content = std::get<messaging::MessageEntry>(msg.data).content;
+      if (content.find("call_accept") != std::string::npos) {
+        found_accept = true;
+        break;
+      }
+    }
+  }
+  EXPECT_TRUE(found_accept);
 }
 
 TEST_F(MediaCallServiceTest, Hangup) {
@@ -142,9 +185,14 @@ TEST_F(MediaCallServiceTest, Hangup) {
   peer->data_channel_is_open = true;  // allow sending hangup message
   data_transport_->AddPeer(peer1, peer);
 
+  // 1. Establish a call session so Hangup has something to terminate
+  service_->StartVoiceCall(peer1);
+
   bool terminated_cb = false;
   service_->SetCallTerminatedCallback([&](auto const& id) {
-    if (id == peer1) terminated_cb = true;
+    if (id == peer1) {
+      terminated_cb = true;
+    }
   });
 
   service_->Hangup(peer1, true);  // notify_peer = true
@@ -155,28 +203,38 @@ TEST_F(MediaCallServiceTest, Hangup) {
   // Verify media transport closed connection
   bool media_closed = false;
   for (auto const& [pid, ctx] : mock_log_->closed_connections) {
-    if (pid == peer1 && ctx == "media") media_closed = true;
+    if (pid == peer1 && ctx == "media") {
+      media_closed = true;
+    }
   }
   EXPECT_TRUE(media_closed);
 
   // Verify hangup message sent via data transport
   bool hangup_sent = false;
   for (auto const& [pid, msg] : mock_log_->sent_peer_messages) {
-    if (pid == peer1 && msg["type"] == "hangup") hangup_sent = true;
+    if (pid == peer1 && msg["type"] == "hangup") {
+      hangup_sent = true;
+    }
   }
   EXPECT_TRUE(hangup_sent);
 }
 
 TEST_F(MediaCallServiceTest, MediaSampleRouting) {
-  // Setup peer in Ready state with tracks
+  // Setup peer in Ready state
   auto peer = std::make_shared<transport::Peer>(peer1);
   peer->SetState(transport::Peer::State::ready);
   data_transport_->AddPeer(peer1, peer);
 
-  // Accept call to initialize tracks
-  service_->AcceptCall(peer1, messaging::HistoryEntryKind::videoCall);
+  // 1. Simulate Incoming Call
+  service_->OnCallRequest(peer1, "call_id_123", messaging::HistoryEntryKind::videoCall);
 
-  // Verify tracks are created
+  // 2. Simulate Media Connect -> Ringing
+  service_->OnMediaPeerConnectionStateChange(peer1, transport::PeerConnectionState::connected);
+
+  // 3. Accept Call -> Active
+  service_->AcceptCall(peer1);
+
+  // Verify tracks are created and attached
   auto video_track = std::dynamic_pointer_cast<transport::MockTrack>(peer->video);
   auto audio_track = std::dynamic_pointer_cast<transport::MockTrack>(peer->audio);
   ASSERT_NE(video_track, nullptr);
@@ -187,7 +245,9 @@ TEST_F(MediaCallServiceTest, MediaSampleRouting) {
   auto start = std::chrono::steady_clock::now();
   while (video_track->samples.empty() && audio_track->samples.empty()) {
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    if (std::chrono::steady_clock::now() - start > std::chrono::milliseconds(3000)) break;
+    if (std::chrono::steady_clock::now() - start > std::chrono::milliseconds(3000)) {
+      break;
+    }
   }
 
   // The mocks should have received samples. We check that AT LEAST ONE has samples

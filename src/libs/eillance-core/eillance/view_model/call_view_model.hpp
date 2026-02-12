@@ -160,20 +160,18 @@ class CallViewModel {
 
     void AcceptCall() {
       ContactID peer_id;
-      auto call_kind = messaging::HistoryEntryKind::voiceCall;
       {
         std::lock_guard<std::mutex> const lock(mutex);
         if (!state.is_ringing) {
           return;
         }
         peer_id = state.peer_id;
-        call_kind = state.call_type;
         state.is_connecting = false;
         state.is_in_call = true;
         state.is_ringing = false;
       }
       if (!peer_id.IsEmpty()) {
-        client->AcceptCall(peer_id, call_kind);
+        client->AcceptCall(peer_id);
       }
       Notify();
     }
@@ -245,15 +243,14 @@ class CallViewModel {
 
     void OnCallConnected(ContactID const& peer_id) {
       bool should_notify = false;
+      // We no longer automatically transition to InCall here.
+      // We wait for Accepted or Ringing updates from MediaCallService logic.
       {
         std::lock_guard<std::mutex> const lock(mutex);
-        // Only transition to InCall automatically for Outgoing calls.
-        // Incoming calls must wait for explicit Accept action from the user.
         if ((state.is_connecting || state.is_ringing) && state.peer_id == peer_id &&
             state.call_direction == messaging::CallDirection::outgoing) {
           state.is_connecting = false;
-          state.is_ringing = false;
-          state.is_in_call = true;
+          state.is_ringing = true;  // Connected -> Ringing (waiting for accept)
           should_notify = true;
         }
       }

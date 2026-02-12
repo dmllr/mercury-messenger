@@ -205,8 +205,12 @@ auto main(int argc, char** argv) -> int {
   auto storage_impl = std::make_unique<eillance::storage::SQLiteStorage>(config_path / "mercury.db");
   auto storage = std::make_shared<eillance::storage::PersistentStorage>(std::move(storage_impl));
 
-  auto data_transport = std::make_shared<eillance::transport::DataTransport>(std::move(std::make_unique<eillance::rtc::RtcDataTransport>()));
-  auto media_transport = std::make_shared<eillance::transport::MediaTransport>(std::move(std::make_unique<eillance::rtc::RtcMediaTransport>()));
+  auto data_transport =
+      std::make_shared<eillance::transport::DataTransport>(std::move(std::make_unique<eillance::rtc::RtcDataTransport>()
+      ));
+  auto media_transport = std::make_shared<eillance::transport::MediaTransport>(
+      std::move(std::make_unique<eillance::rtc::RtcMediaTransport>())
+  );
   auto client = std::make_shared<eillance::Client>(storage, data_transport, media_transport);
 
   client->SetVideoCapture(std::make_unique<eillance::VideoCaptureCli>());
@@ -297,13 +301,9 @@ auto main(int argc, char** argv) -> int {
     void OnCallStateChanged(eillance::view_model::CallState const&) override {
       screen.Post(ftxui::Event::Custom);
     }
-    void OnSettingsUpdated(
-        const std::optional<std::string>&,
-        int,
-        const std::optional<std::string>&,
-        const std::optional<std::string>&,
-        const std::optional<std::string>&,
-        const std::optional<std::string>&) override {
+    void
+    OnSettingsUpdated(std::optional<std::string> const&, int, std::optional<std::string> const&, std::optional<std::string> const&, std::optional<std::string> const&, std::optional<std::string> const&)
+        override {
       screen.Post(ftxui::Event::Custom);
     }
     void OnConnectionStateChanged(eillance::ServiceConnectionState) override {

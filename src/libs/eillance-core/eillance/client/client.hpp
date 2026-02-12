@@ -59,8 +59,8 @@ class Client final : public transport::TransportDelegate {
         storage_,
         data_transport_,
         contact_manager,
-        account_service_.get(),
-        messaging_service_.get(),
+        account_service_,
+        messaging_service_,
         [this](ContactID const& id) { this->Connect(id); }
     );
 
@@ -68,18 +68,20 @@ class Client final : public transport::TransportDelegate {
         storage_,
         data_transport_,
         contact_manager,
-        account_service_.get(),
-        profile_service_.get(),
+        account_service_,
+        profile_service_,
         [this](ContactID const& id) { this->Connect(id); }
     );
 
-    media_call_service_ = std::make_shared<services::MediaCallService>(data_transport_, media_transport_);
+    media_call_service_ =
+        std::make_shared<services::MediaCallService>(storage_, data_transport_, media_transport_, account_service_);
 
     messaging_service_->SetContactRestoredCallback([this](ContactID const& id) {
       contact_service_->OnContactRestored(id);
     });
-    contact_service_->SetMessagingService(messaging_service_.get());
-    media_call_service_->SetMessagingService(messaging_service_.get());
+    contact_service_->SetMessagingService(messaging_service_);
+    media_call_service_->SetMessagingService(messaging_service_);
+    media_call_service_->SetConnectionHandler([this](ContactID const& id) { this->Connect(id); });
 
     internal_messaging_service_ = std::make_shared<services::InternalMessagingService>(
         data_transport_,
@@ -408,8 +410,8 @@ class Client final : public transport::TransportDelegate {
   void StartVideoCall(ContactID const& id) const {
     media_call_service_->StartVideoCall(id);
   }
-  void AcceptCall(ContactID const& id, messaging::HistoryEntryKind k) const {
-    media_call_service_->AcceptCall(id, k);
+  void AcceptCall(ContactID const& id) const {
+    media_call_service_->AcceptCall(id);
   }
   void RejectCall(ContactID const& id) const {
     media_call_service_->RejectCall(id);
@@ -543,6 +545,7 @@ class Client final : public transport::TransportDelegate {
 
   void OnDataChannelOpen(ContactID const& peer_id) override {
     internal_messaging_service_->OnDataChannelOpen(peer_id);
+    media_call_service_->OnDataChannelOpen(peer_id);
   }
 
   void OnFrameReceived(ContactID const& peer_id, std::vector<std::byte> const& frame) override {

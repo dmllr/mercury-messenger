@@ -51,8 +51,8 @@ class ContactServiceTest : public ::testing::Test {
         storage_,
         transport_,
         contact_manager,
-        account_service_.get(),
-        messaging_service_.get(),
+        account_service_,
+        messaging_service_,
         conn_handler
     );
 
@@ -60,8 +60,8 @@ class ContactServiceTest : public ::testing::Test {
         storage_,
         transport_,
         contact_manager,
-        account_service_.get(),
-        profile_service_.get(),
+        account_service_,
+        profile_service_,
         conn_handler
     );
 
@@ -70,7 +70,7 @@ class ContactServiceTest : public ::testing::Test {
     contact_service_->SetContactStatusChangedCallback([](auto const&, auto) {});
     contact_service_->SetContactRemovedCallback([](auto const&) {});
 
-    contact_service_->SetMessagingService(messaging_service_.get());
+    contact_service_->SetMessagingService(messaging_service_);
   }
 
   void TearDown() override {
@@ -82,10 +82,10 @@ class ContactServiceTest : public ::testing::Test {
   std::unique_ptr<transport::MockDataTransport> mock_transport_impl_;
   transport::MockDataTransport* mock_transport_raw_{};
   std::shared_ptr<transport::DataTransport> transport_;
-  std::unique_ptr<services::AccountService> account_service_;
+  std::shared_ptr<services::AccountService> account_service_;
   std::shared_ptr<services::FileTransferService> file_transfer_service_;
-  std::unique_ptr<services::MessagingService> messaging_service_;
-  std::unique_ptr<services::ProfileService> profile_service_;
+  std::shared_ptr<services::MessagingService> messaging_service_;
+  std::shared_ptr<services::ProfileService> profile_service_;
   std::unique_ptr<services::ContactService> contact_service_;
 
   ContactID const peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");

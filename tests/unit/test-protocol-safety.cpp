@@ -132,8 +132,8 @@ class ProtocolSafetyTest : public ::testing::Test {
         storage_,
         transport_,
         contact_manager_,
-        account_service_.get(),
-        messaging_service_.get(),
+        account_service_,
+        messaging_service_,
         [](auto) {}
     );
 
@@ -208,10 +208,10 @@ class ProtocolSafetyTest : public ::testing::Test {
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<transport::DataTransport> transport_;
   std::shared_ptr<identity::ContactManager> contact_manager_;
-  std::unique_ptr<services::AccountService> account_service_;
+  std::shared_ptr<services::AccountService> account_service_;
   std::shared_ptr<services::FileTransferService> file_transfer_service_;
-  std::unique_ptr<services::MessagingService> messaging_service_;
-  std::unique_ptr<services::ProfileService> profile_service_;
+  std::shared_ptr<services::MessagingService> messaging_service_;
+  std::shared_ptr<services::ProfileService> profile_service_;
 
   eillance::crypto::SessionCipher test_verifier_cipher_;
   ContactID const peer_id_ = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
