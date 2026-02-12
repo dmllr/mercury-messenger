@@ -94,8 +94,6 @@ class InternalMessagingService {
       contact_service_->OnContactAddRequest(peer_id, token, profile);
     } else if (type == "contact_confirm") {
       contact_service_->OnContactConfirm(peer_id);
-    } else if (type == "hangup") {
-      media_call_service_->Hangup(peer_id, false);
     }
   }
 
