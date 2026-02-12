@@ -257,7 +257,7 @@ TEST_F(ConversationViewModelTest, CancelTransferPropagates) {
 
   // Check transport log to confirm PAUSE message sent (Binary 0x04)
   bool pause_sent = false;
-  for (auto const& msg : mock_transport_->log.sent_binary_messages | std::views::values) {
+  for (auto const& msg : mock_transport_->CallLog()->sent_binary_messages | std::views::values) {
     if (msg.size() >= 3 && msg[0] == std::byte{0xFE} && msg[1] == std::byte{0x04}) {  // 0x04 = PAUSE
       if (auto const id_len = static_cast<uint8_t>(msg[2]); msg.size() >= 3 + id_len) {
         std::string id(id_len, '\0');
@@ -288,7 +288,7 @@ TEST_F(ConversationViewModelTest, ResumeTransferPropagates) {
   std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
   bool req_sent = false;
-  for (auto const& msg : mock_transport_->log.sent_binary_messages | std::views::values) {
+  for (auto const& msg : mock_transport_->CallLog()->sent_binary_messages | std::views::values) {
     // Check if it's a binary Resume packet (Magic 0xFE, Type 0x05)
     if (msg.size() >= 3 && msg[0] == std::byte{0xFE} && msg[1] == std::byte{0x05}) {
       if (auto const id_len = static_cast<uint8_t>(msg[2]); msg.size() >= 3 + id_len) {

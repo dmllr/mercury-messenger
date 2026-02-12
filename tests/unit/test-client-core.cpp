@@ -6,8 +6,9 @@
 
 #include "eillance/client/client.hpp"
 #include "eillance/view_model/client_event_router.hpp"
+#include "mock_data_transport.hpp"
+#include "mock_media_transport.hpp"
 #include "mock_persistent_storage.hpp"
-#include "mock_transport.hpp"
 
 using namespace eillance;
 
@@ -20,11 +21,15 @@ class ClientCoreTest : public ::testing::Test {
     storage_ = std::make_shared<storage::PersistentStorage>(std::move(storage_impl));
 
     // Setup transport
-    mock_transport_impl_ = std::make_unique<transport::MockTransport>();
+    mock_log_ = std::make_shared<transport::MockCallLog>();
+    mock_transport_impl_ = std::make_unique<transport::MockDataTransport>(mock_log_);
     mock_transport_ = mock_transport_impl_.get();
-    transport_ = std::make_shared<transport::Transport>(std::move(mock_transport_impl_));
+    transport_ = std::make_shared<transport::DataTransport>(std::move(mock_transport_impl_));
 
-    client_ = std::make_shared<Client>(storage_, transport_);
+    auto media_transport_impl = std::make_unique<transport::MockMediaTransport>(mock_log_);
+    auto media_transport = std::make_shared<transport::MediaTransport>(std::move(media_transport_impl));
+
+    client_ = std::make_shared<Client>(storage_, transport_, media_transport);
 
     // Initialize Event Router to attach callbacks and satisfy invariants
     router_ = std::make_shared<view_model::ClientEventRouter>(client_);
@@ -50,10 +55,11 @@ class ClientCoreTest : public ::testing::Test {
   }
 
   storage::MockPersistentStorageImpl* mock_storage_{};
-  std::unique_ptr<transport::MockTransport> mock_transport_impl_;
-  transport::MockTransport* mock_transport_{};
+  std::shared_ptr<transport::MockCallLog> mock_log_;
+  std::unique_ptr<transport::MockDataTransport> mock_transport_impl_;
+  transport::MockDataTransport* mock_transport_{};
   std::shared_ptr<storage::PersistentStorage> storage_;
-  std::shared_ptr<transport::Transport> transport_;
+  std::shared_ptr<transport::DataTransport> transport_;
   std::shared_ptr<Client> client_;
   std::shared_ptr<view_model::ClientEventRouter> router_;
   ContactID my_id_;
@@ -71,7 +77,7 @@ TEST_F(ClientCoreTest, ConnectSequence) {
 
   // Verify CreateOffer called
   bool offer_created = false;
-  for (auto const& [id, ctx] : mock_transport_->log.offers) {
+  for (auto const& [id, ctx] : mock_transport_->CallLog()->offers) {
     if (id == peer1 && ctx == "data") offer_created = true;
   }
   EXPECT_TRUE(offer_created);
@@ -119,7 +125,7 @@ TEST_F(ClientCoreTest, IncomingKeyExchangeTriggersReply) {
   // Note: Client::Connect might have already sent an initial key exchange.
   // We look for one with "is_reply": true.
   bool reply_sent = false;
-  for (auto const& [id, msg] : mock_transport_->log.sent_peer_messages) {
+  for (auto const& [id, msg] : mock_transport_->CallLog()->sent_peer_messages) {
     if (id == peer1 && msg["type"] == "key_exchange" && msg["is_reply"] == true) {
       reply_sent = true;
     }
@@ -139,7 +145,7 @@ TEST_F(ClientCoreTest, SignalingMessageProcessing_Offer) {
   EXPECT_TRUE(mock_transport_->GetPeer(peer1));
 
   bool answer_created = false;
-  for (auto const& [id, ctx] : mock_transport_->log.answers) {
+  for (auto const& [id, ctx] : mock_transport_->CallLog()->answers) {
     if (id == peer1 && ctx == "data") answer_created = true;
   }
   EXPECT_TRUE(answer_created);

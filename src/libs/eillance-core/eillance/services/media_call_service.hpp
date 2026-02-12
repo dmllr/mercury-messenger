@@ -13,15 +13,20 @@
 #include "eillance/rtc/stream.hpp"
 #include "eillance/rtc/stream_source.hpp"
 #include "eillance/services/messaging_service.hpp"
-#include "eillance/transport/transport.hpp"
+#include "eillance/transport/data_transport.hpp"
+#include "eillance/transport/media_transport.hpp"
 #include "eillance/utils/invariant.hpp"
 
 namespace eillance::services {
 
 class MediaCallService {
  public:
-  explicit MediaCallService(std::shared_ptr<transport::Transport> transport)
-      : transport_(std::move(transport)) {
+  explicit MediaCallService(
+      std::shared_ptr<transport::DataTransport> data_transport,
+      std::shared_ptr<transport::MediaTransport> media_transport
+  )
+      : data_transport_(std::move(data_transport)),
+        media_transport_(std::move(media_transport)) {
   }
 
   void SetMessagingService(MessagingService* messaging_service) {
@@ -59,14 +64,14 @@ class MediaCallService {
   }
 
   void AcceptCall(ContactID const& peer_id, messaging::HistoryEntryKind call_kind) {
-    auto peer = transport_->GetPeer(peer_id);
+    auto peer = data_transport_->GetPeer(peer_id);
     if (!peer) {
       LGW << "Cannot accept call from " << peer_id.ToString() << ", peer object not found.";
       return;
     }
 
     if (peer->data_channel_is_open) {
-      if (!transport_->SendPeerDataChannelMessage(peer_id, {{"type", "call_accept"}})) {
+      if (!data_transport_->SendJson(peer_id, {{"type", "call_accept"}})) {
         LGW << "Failed to send call_accept to " << peer_id;
       }
     }
@@ -80,24 +85,24 @@ class MediaCallService {
       av_stream_->Start();
     }
 
-    transport_->EnsurePeerConnection(peer_id, transport::ConnectionContext::Media);
+    media_transport_->Connect(peer_id);
     peer->has_media_peer_connection = true;
 
-    peer->audio = transport_->AddAudio(peer_id, [this, peer_id]() -> void {
-      if (auto p = transport_->GetPeer(peer_id)) {
-        transport_->AddToStream(p, false);
+    peer->audio = media_transport_->AddAudio(peer_id, [this, peer_id]() -> void {
+      if (auto p = data_transport_->GetPeer(peer_id)) {
+        media_transport_->AttachToPeer(peer_id, p);
       }
     });
 
     if (is_video) {
-      peer->video = transport_->AddVideo(peer_id, [this, peer_id]() -> void {
-        if (auto p = transport_->GetPeer(peer_id)) {
-          transport_->AddToStream(p, true);
+      peer->video = media_transport_->AddVideo(peer_id, [this, peer_id]() -> void {
+        if (auto p = data_transport_->GetPeer(peer_id)) {
+          media_transport_->AttachToPeer(peer_id, p);
         }
       });
     }
 
-    transport_->CreateAnswer(peer_id, transport::ConnectionContext::Media);
+    media_transport_->CreateAnswer(peer_id);
 
     if (on_call_accepted_) {
       on_call_accepted_(peer_id);
@@ -109,11 +114,11 @@ class MediaCallService {
   }
 
   void Hangup(ContactID const& peer_id, bool notify_peer) {
-    auto peer = transport_->GetPeer(peer_id);
+    auto peer = data_transport_->GetPeer(peer_id);
     if (peer) {
       if (notify_peer) {
         if (peer->data_channel_is_open) {
-          if (!transport_->SendPeerDataChannelMessage(peer_id, {{"type", "hangup"}})) {
+          if (!data_transport_->SendJson(peer_id, {{"type", "hangup"}})) {
             LGW << "Hangup: Failed to send hangup message to " << peer_id << " (transport returned false)";
           } else {
             LGI << "Hangup: Sent hangup notification to " << peer_id;
@@ -134,7 +139,7 @@ class MediaCallService {
           av_stream_->Stop();
         }
 
-        transport_->ClosePeerConnection(peer_id, transport::ConnectionContext::Media);
+        media_transport_->Disconnect(peer_id);
         LGI << "Hangup: Closed media connection for " << peer_id;
       }
     } else {
@@ -158,8 +163,8 @@ class MediaCallService {
     }
 
     // Auto-respond with "ringing" directly if P2P is established.
-    if (auto peer = transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
-      transport_->SendPeerDataChannelMessage(peer_id, {{"type", "call_ringing"}});
+    if (auto peer = data_transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
+      data_transport_->SendJson(peer_id, {{"type", "call_ringing"}});
     }
   }
 
@@ -180,27 +185,27 @@ class MediaCallService {
       av_stream_->Start();
     }
 
-    auto peer = transport_->GetPeer(peer_id);
+    auto peer = data_transport_->GetPeer(peer_id);
     if (!peer) return;
 
-    transport_->EnsurePeerConnection(peer_id, transport::ConnectionContext::Media);
+    media_transport_->Connect(peer_id);
     peer->has_media_peer_connection = true;
 
-    peer->audio = transport_->AddAudio(peer_id, [this, peer_id]() -> void {
-      if (auto p = transport_->GetPeer(peer_id)) {
-        transport_->AddToStream(p, false);
+    peer->audio = media_transport_->AddAudio(peer_id, [this, peer_id]() -> void {
+      if (auto p = data_transport_->GetPeer(peer_id)) {
+        media_transport_->AttachToPeer(peer_id, p);
       }
     });
 
     if (is_video) {
-      peer->video = transport_->AddVideo(peer_id, [this, peer_id]() -> void {
-        if (auto p = transport_->GetPeer(peer_id)) {
-          transport_->AddToStream(p, true);
+      peer->video = media_transport_->AddVideo(peer_id, [this, peer_id]() -> void {
+        if (auto p = data_transport_->GetPeer(peer_id)) {
+          media_transport_->AttachToPeer(peer_id, p);
         }
       });
     }
 
-    transport_->CreateOffer(peer_id, transport::ConnectionContext::Media);
+    media_transport_->CreateOffer(peer_id);
   }
 
   void OnMediaPeerConnectionStateChange(ContactID const& peer_id, transport::PeerConnectionState state) {
@@ -255,38 +260,38 @@ class MediaCallService {
     nlohmann::json const msg = {{"action", "call_request"}, {"kind", call_kind}};
     messaging_service_->AddSystemEntry(peer_id, msg.dump(), messaging::MessageDirection::sent);
 
-    auto peer = transport_->GetPeer(peer_id);
+    auto peer = data_transport_->GetPeer(peer_id);
     if (!peer) {
       peer = std::make_shared<transport::Peer>(peer_id);
-      transport_->AddPeer(peer_id, peer);
+      data_transport_->AddPeer(peer_id, peer);
     }
 
     if (av_stream_) {
       av_stream_->Start();
     }
 
-    transport_->EnsurePeerConnection(peer_id, transport::ConnectionContext::Media);
+    media_transport_->Connect(peer_id);
     peer->has_media_peer_connection = true;
 
-    peer->audio = transport_->AddAudio(peer_id, [this, peer_id]() -> void {
-      if (auto p = transport_->GetPeer(peer_id)) {
-        transport_->AddToStream(p, false);
+    peer->audio = media_transport_->AddAudio(peer_id, [this, peer_id]() -> void {
+      if (auto p = data_transport_->GetPeer(peer_id)) {
+        media_transport_->AttachToPeer(peer_id, p);
       }
     });
 
     if (is_video) {
-      peer->video = transport_->AddVideo(peer_id, [this, peer_id]() -> void {
-        if (auto p = transport_->GetPeer(peer_id)) {
-          transport_->AddToStream(p, true);
+      peer->video = media_transport_->AddVideo(peer_id, [this, peer_id]() -> void {
+        if (auto p = data_transport_->GetPeer(peer_id)) {
+          media_transport_->AttachToPeer(peer_id, p);
         }
       });
     }
 
-    transport_->CreateOffer(peer_id, transport::ConnectionContext::Media);
+    media_transport_->CreateOffer(peer_id);
   }
 
   void SendSampleToPeers(std::vector<std::byte> const& sample, Stream::Source::Type type, uint64_t time) const {
-    for (auto const& [id, peer] : transport_->GetPeers()) {
+    for (auto const& [id, peer] : data_transport_->GetPeers()) {
       if (peer->has_media_peer_connection) {
         if (auto track = (type == Stream::Source::Type::video) ? peer->video : peer->audio) {
           track->SendSample(sample, time);
@@ -295,7 +300,8 @@ class MediaCallService {
     }
   }
 
-  std::shared_ptr<transport::Transport> transport_;
+  std::shared_ptr<transport::DataTransport> data_transport_;
+  std::shared_ptr<transport::MediaTransport> media_transport_;
   MessagingService* messaging_service_{nullptr};
 
   std::unique_ptr<Capture> video_capture_;

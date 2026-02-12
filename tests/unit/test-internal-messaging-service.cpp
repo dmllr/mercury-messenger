@@ -13,8 +13,9 @@
 #include "eillance/services/media_call_service.hpp"
 #include "eillance/services/messaging_service.hpp"
 #include "eillance/services/profile_service.hpp"
+#include "mock_data_transport.hpp"
+#include "mock_media_transport.hpp"
 #include "mock_persistent_storage.hpp"
-#include "mock_transport.hpp"
 
 using namespace eillance;
 
@@ -43,9 +44,13 @@ class InternalMessagingServiceTest : public ::testing::Test {
     storage_ = std::make_shared<storage::PersistentStorage>(std::move(storage_impl));
 
     // Transport
-    mock_transport_impl_ = std::make_unique<transport::MockTransport>();
+    mock_log_ = std::make_shared<transport::MockCallLog>();
+    mock_transport_impl_ = std::make_unique<transport::MockDataTransport>(mock_log_);
     mock_transport_ = mock_transport_impl_.get();
-    transport_ = std::make_shared<transport::Transport>(std::move(mock_transport_impl_));
+    transport_ = std::make_shared<transport::DataTransport>(std::move(mock_transport_impl_));
+
+    auto media_transport_impl = std::make_unique<transport::MockMediaTransport>(mock_log_);
+    media_transport_ = std::make_shared<transport::MediaTransport>(std::move(media_transport_impl));
 
     // Dependencies
     contact_manager_ = std::make_shared<identity::ContactManager>(storage_);
@@ -71,7 +76,7 @@ class InternalMessagingServiceTest : public ::testing::Test {
     messaging_service_->SetMessageStatusChangedCallback([](auto const&, auto, auto) {});
     messaging_service_->SetChatMessageReceivedCallback([](auto const&, auto const&) {});
 
-    media_call_service_ = std::make_shared<services::MediaCallService>(transport_);
+    media_call_service_ = std::make_shared<services::MediaCallService>(transport_, media_transport_);
     media_call_service_->SetVideoCapture(std::make_unique<MockCapture>());
     media_call_service_->SetAudioCapture(std::make_unique<MockCapture>());
 
@@ -105,6 +110,7 @@ class InternalMessagingServiceTest : public ::testing::Test {
     // Target
     service_ = std::make_unique<services::InternalMessagingService>(
         transport_,
+        media_transport_,
         account_service_,
         contact_service_,
         messaging_service_,
@@ -120,10 +126,12 @@ class InternalMessagingServiceTest : public ::testing::Test {
   }
 
   storage::MockPersistentStorageImpl* mock_storage_;
-  std::unique_ptr<transport::MockTransport> mock_transport_impl_;
-  transport::MockTransport* mock_transport_;
+  std::shared_ptr<transport::MockCallLog> mock_log_;
+  std::unique_ptr<transport::MockDataTransport> mock_transport_impl_;
+  transport::MockDataTransport* mock_transport_;
   std::shared_ptr<storage::PersistentStorage> storage_;
-  std::shared_ptr<transport::Transport> transport_;
+  std::shared_ptr<transport::DataTransport> transport_;
+  std::shared_ptr<transport::MediaTransport> media_transport_;
   std::shared_ptr<identity::ContactManager> contact_manager_;
 
   std::shared_ptr<services::AccountService> account_service_;
@@ -144,8 +152,8 @@ TEST_F(InternalMessagingServiceTest, ProcessSystemMessage_AuthChallenge) {
 
   service_->ProcessSystemMessage("auth_challenge", msg);
 
-  ASSERT_EQ(mock_transport_->log.sent_signaling_messages.size(), 1);
-  auto sent = mock_transport_->log.sent_signaling_messages[0];
+  ASSERT_EQ(mock_transport_->CallLog()->sent_signaling_messages.size(), 1);
+  auto sent = mock_transport_->CallLog()->sent_signaling_messages[0];
   EXPECT_EQ(sent["type"], "auth_response");
   EXPECT_FALSE(sent["signature"].get<std::string>().empty());
 }
@@ -162,7 +170,7 @@ TEST_F(InternalMessagingServiceTest, ProcessSignalingMessage_DataOffer) {
 
   // Should trigger transport to set remote description and create answer
   bool answer_created = false;
-  for (auto const& [pid, ctx] : mock_transport_->log.answers) {
+  for (auto const& [pid, ctx] : mock_transport_->CallLog()->answers) {
     if (pid == peer1 && ctx == "data") {
       answer_created = true;
     }
@@ -236,7 +244,7 @@ TEST_F(InternalMessagingServiceTest, ProcessDataChannelMessage_KeyExchange) {
 
   // Should send reply
   bool reply_sent = false;
-  for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
+  for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
     if (pid == peer1 && msg["type"] == "key_exchange" && msg["is_reply"] == true) {
       reply_sent = true;
     }

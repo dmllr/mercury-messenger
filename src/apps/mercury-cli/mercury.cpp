@@ -19,7 +19,7 @@
 #include "eillance/events/service_connection_state.hpp"
 #include "eillance/identity/contact_id.hpp"
 #include "eillance/logging/logging.hpp"
-#include "eillance/rtc/transport_impl_libdatachannel.hpp"
+#include "eillance/rtc/data_transport_impl_libdatachannel.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/storage/sqlite/persistent_storage_impl_sqlite.hpp"
 #include "eillance/transport/peer_connection_state.hpp"

@@ -11,8 +11,8 @@
 #include "eillance/identity/contact_manager.hpp"
 #include "eillance/services/file_transfer_service.hpp"
 #include "eillance/services/messaging_service.hpp"
+#include "mock_data_transport.hpp"
 #include "mock_persistent_storage.hpp"
-#include "mock_transport.hpp"
 
 using namespace eillance;
 
@@ -33,9 +33,10 @@ class FileTransferCancellationTest : public ::testing::Test {
     mock_storage_ = storage_impl.get();
     storage_ = std::make_shared<storage::PersistentStorage>(std::move(storage_impl));
 
-    mock_transport_impl_ = std::make_unique<transport::MockTransport>();
+    mock_log_ = std::make_shared<transport::MockCallLog>();
+    mock_transport_impl_ = std::make_unique<transport::MockDataTransport>(mock_log_);
     mock_transport_ = mock_transport_impl_.get();
-    transport_ = std::make_shared<transport::Transport>(std::move(mock_transport_impl_));
+    transport_ = std::make_shared<transport::DataTransport>(std::move(mock_transport_impl_));
 
     contact_manager_ = std::make_shared<identity::ContactManager>(storage_);
     contact_manager_->AddContact(peer1);
@@ -82,10 +83,14 @@ class FileTransferCancellationTest : public ::testing::Test {
     packet.push_back(std::byte{0xFE});
     packet.push_back(std::byte{0x01});  // Chunk Type
     packet.push_back(static_cast<std::byte>(id.size()));
-    for (char c : id) packet.push_back(static_cast<std::byte>(c));
+    for (char c : id) {
+      packet.push_back(static_cast<std::byte>(c));
+    }
 
     // Seq LE
-    for (int i = 0; i < 4; ++i) packet.push_back(static_cast<std::byte>((seq >> (i * 8)) & 0xFF));
+    for (int i = 0; i < 4; ++i) {
+      packet.push_back(static_cast<std::byte>((seq >> (i * 8)) & 0xFF));
+    }
 
     packet.insert(packet.end(), payload.begin(), payload.end());
     return packet;
@@ -94,10 +99,11 @@ class FileTransferCancellationTest : public ::testing::Test {
   std::filesystem::path temp_dir_;
   std::filesystem::path attachments_dir_;
   storage::MockPersistentStorageImpl* mock_storage_;
-  std::unique_ptr<transport::MockTransport> mock_transport_impl_;
-  transport::MockTransport* mock_transport_;
+  std::shared_ptr<transport::MockCallLog> mock_log_;
+  std::unique_ptr<transport::MockDataTransport> mock_transport_impl_;
+  transport::MockDataTransport* mock_transport_;
   std::shared_ptr<storage::PersistentStorage> storage_;
-  std::shared_ptr<transport::Transport> transport_;
+  std::shared_ptr<transport::DataTransport> transport_;
   std::shared_ptr<identity::ContactManager> contact_manager_;
   std::shared_ptr<services::FileTransferService> file_transfer_service_;
   std::unique_ptr<services::MessagingService> service_;
@@ -136,7 +142,7 @@ TEST_F(FileTransferCancellationTest, CancelUpload) {
 
   // 5. Verify cancel message sent (Binary protocol: Type 0x03)
   bool cancel_sent = false;
-  for (auto const& [pid, msg] : mock_transport_->log.sent_binary_messages) {
+  for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_binary_messages) {
     if (IsBinaryPacket(msg, 0x03, att_id)) {
       cancel_sent = true;
     }
@@ -185,7 +191,7 @@ TEST_F(FileTransferCancellationTest, CancelDownload_PausesDownload) {
 
   // Verify PAUSE message sent (Binary Type 0x04)
   bool pause_sent = false;
-  for (auto const& msg : mock_transport_->log.sent_binary_messages | std::views::values) {
+  for (auto const& msg : mock_transport_->CallLog()->sent_binary_messages | std::views::values) {
     if (IsBinaryPacket(msg, 0x04, "down_id")) {  // 0x04 = PAUSE
       pause_sent = true;
     }
@@ -222,14 +228,14 @@ TEST_F(FileTransferCancellationTest, ResumeSendsRequest) {
   msg_data.attachments.push_back(att);
   std::ignore = storage_->AddHistoryEntry({.data = msg_data, .peer_id = peer1});
 
-  mock_transport_->log.sent_binary_messages.clear();
+  mock_transport_->CallLog()->sent_binary_messages.clear();
 
   // Resume
   service_->ResumeTransfer(peer1, "resume_id", false);
 
   // Verify resume request sent (Binary Type 0x05)
   bool req_sent = false;
-  for (auto const& msg : mock_transport_->log.sent_binary_messages | std::views::values) {
+  for (auto const& msg : mock_transport_->CallLog()->sent_binary_messages | std::views::values) {
     if (IsBinaryPacket(msg, 0x05, "resume_id")) {
       req_sent = true;
     }

@@ -21,7 +21,7 @@
 #include "eillance/messaging/history.hpp"
 #include "eillance/services/file_transfer_service.hpp"
 #include "eillance/storage/persistent_storage.hpp"
-#include "eillance/transport/transport.hpp"
+#include "eillance/transport/data_transport.hpp"
 #include "eillance/utils/invariant.hpp"
 
 namespace eillance::services {
@@ -98,7 +98,7 @@ class MessagingService {
 
   explicit MessagingService(
       std::shared_ptr<storage::PersistentStorage> storage,
-      std::shared_ptr<transport::Transport> transport,
+      std::shared_ptr<transport::DataTransport> transport,
       std::shared_ptr<identity::ContactManager> contact_manager,
       std::shared_ptr<FileTransferService> file_transfer_service,
       ConnectionRequestHandler connection_handler
@@ -239,8 +239,7 @@ class MessagingService {
       // Ephemeral: try sending immediately if possible
       if (auto const peer = transport_->GetPeer(peer_id);
           peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
-        // Construct and send packet manually for ephemeral
-        bool should_remove = false;  // dummy
+        bool should_remove = false;
         ProcessChatAction(peer_id, entry.id, peer, should_remove);
       }
     }
@@ -311,7 +310,7 @@ class MessagingService {
           }
         } else {
           if (peer && peer->data_channel_is_open) {
-            if (transport_->SendPeerDataChannelMessage(peer_id, json_action)) {
+            if (transport_->SendJson(peer_id, json_action)) {
               success = true;
             } else {
               peer->data_channel_is_open = false;
@@ -550,7 +549,7 @@ class MessagingService {
         throw std::runtime_error("Message version too old: " + std::to_string(received_version));
       }
       content = json_payload.at(keyContent).get<std::string>();
-    } catch (std::exception const& e) {
+    } catch (std::exception const&) {
       nlohmann::json const error_json = {{"action", "unsupported_format"}};
       auto entry = history_->AddTextEntry(
           peer_id,
@@ -807,7 +806,7 @@ class MessagingService {
         json_msg["attachments"] = att_list;
       }
 
-      if (transport_->SendPeerDataChannelMessage(peer_id, json_msg)) {
+      if (transport_->SendJson(peer_id, json_msg)) {
         if (!valid_attachments.empty()) {
           for (auto const& att : valid_attachments) {
             file_transfer_service_->QueueUpload(peer_id, att);
@@ -851,7 +850,7 @@ class MessagingService {
   }
 
   std::shared_ptr<storage::PersistentStorage> storage_;
-  std::shared_ptr<transport::Transport> transport_;
+  std::shared_ptr<transport::DataTransport> transport_;
   std::shared_ptr<identity::ContactManager> contact_manager_;
   std::shared_ptr<FileTransferService> file_transfer_service_;
   ConnectionRequestHandler connection_handler_;

@@ -11,8 +11,9 @@
 #include "eillance/utils/packet.hpp"
 #include "eillance/utils/time.hpp"
 #include "eillance/view_model/client_event_router.hpp"
+#include "mock_data_transport.hpp"
+#include "mock_media_transport.hpp"
 #include "mock_persistent_storage.hpp"
-#include "mock_transport.hpp"
 
 using namespace eillance;
 
@@ -40,11 +41,15 @@ class ResilienceTest : public ::testing::Test {
     mock_storage_ = storage_impl.get();
     storage_ = std::make_shared<storage::PersistentStorage>(std::move(storage_impl));
 
-    mock_transport_impl_ = std::make_unique<transport::MockTransport>();
+    mock_log_ = std::make_shared<transport::MockCallLog>();
+    mock_transport_impl_ = std::make_unique<transport::MockDataTransport>(mock_log_);
     mock_transport_ = mock_transport_impl_.get();
-    transport_ = std::make_shared<transport::Transport>(std::move(mock_transport_impl_));
+    transport_ = std::make_shared<transport::DataTransport>(std::move(mock_transport_impl_));
 
-    client_ = std::make_shared<Client>(storage_, transport_);
+    auto media_transport_impl = std::make_unique<transport::MockMediaTransport>(mock_log_);
+    auto media_transport = std::make_shared<transport::MediaTransport>(std::move(media_transport_impl));
+
+    client_ = std::make_shared<Client>(storage_, transport_, media_transport);
 
     client_->SetVideoCapture(std::make_unique<MockCapture>());
     client_->SetAudioCapture(std::make_unique<MockCapture>());
@@ -106,10 +111,11 @@ class ResilienceTest : public ::testing::Test {
   }
 
   storage::MockPersistentStorageImpl* mock_storage_{};
-  std::unique_ptr<transport::MockTransport> mock_transport_impl_;
-  transport::MockTransport* mock_transport_{};
+  std::shared_ptr<transport::MockCallLog> mock_log_;
+  std::unique_ptr<transport::MockDataTransport> mock_transport_impl_;
+  transport::MockDataTransport* mock_transport_{};
   std::shared_ptr<storage::PersistentStorage> storage_;
-  std::shared_ptr<transport::Transport> transport_;
+  std::shared_ptr<transport::DataTransport> transport_;
   std::shared_ptr<Client> client_;
 
   ContactID const peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
@@ -144,12 +150,12 @@ TEST_F(ResilienceTest, PendingReadReceiptsPersistAndSend) {
   auto peer = mock_transport_->GetPeer(peer1);
   ASSERT_TRUE(peer);
 
-  mock_transport_->log.sent_peer_messages.clear();
+  mock_transport_->CallLog()->sent_peer_messages.clear();
   mock_transport_->delegate->OnDataChannelOpen(peer1);
   FlushClientQueue();
 
   bool receipt_sent = false;
-  for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
+  for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
     if (pid == peer1 && msg["type"] == "message_read") {
       auto ids = msg["message_ids"].get<std::vector<uint64_t>>();
       if (ids.size() == 1 && ids[0] == 999) {
@@ -192,12 +198,12 @@ TEST_F(ResilienceTest, ProfileUpdateSyncsOnConnect) {
   client_->Connect(peer1);
   FlushClientQueue();
 
-  mock_transport_->log.sent_peer_messages.clear();
+  mock_transport_->CallLog()->sent_peer_messages.clear();
   mock_transport_->delegate->OnDataChannelOpen(peer1);
   FlushClientQueue();
 
   bool profile_sent = false;
-  for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
+  for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
     if (pid == peer1 && msg["type"] == "profile_info") {
       EXPECT_EQ(msg["display_name"], "New Name");
       profile_sent = true;
@@ -272,14 +278,14 @@ TEST_F(ResilienceTest, ReinstallRecovery_ContactAdd) {
       {"profile", {{"display_name", "Reinstalled B"}}}
   };
 
-  mock_transport_->log.sent_signaling_messages.clear();
-  mock_transport_->log.sent_peer_messages.clear();
+  mock_transport_->CallLog()->sent_signaling_messages.clear();
+  mock_transport_->CallLog()->sent_peer_messages.clear();
 
   mock_transport_->SimulatePeerMessage(peer1, req_msg);
   FlushClientQueue();
 
   bool confirm_sent = false;
-  for (auto const& msg : mock_transport_->log.sent_signaling_messages) {
+  for (auto const& msg : mock_transport_->CallLog()->sent_signaling_messages) {
     if (msg["type"] == "contact_confirm" && msg["to"] == peer1.ToString()) {
       confirm_sent = true;
     }
@@ -291,7 +297,7 @@ TEST_F(ResilienceTest, ReinstallRecovery_ContactAdd) {
 
   bool signature_sent = false;
   bool profile_sent = false;
-  for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
+  for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
     if (pid == peer1) {
       if (msg["type"] == "contact_signature") {
         signature_sent = true;
@@ -335,7 +341,7 @@ TEST_F(ResilienceTest, MessageRedeliveryDeduplication) {
   ASSERT_EQ(page.messages[1].remote_id, msg_id);
 
   // Clear transport log to check for receipt
-  mock_transport_->log.sent_peer_messages.clear();
+  mock_transport_->CallLog()->sent_peer_messages.clear();
 
   // Second Delivery (Duplicate)
   client_->GetMessagingService()->OnChatMessageReceived(peer1, encrypted, msg_id, false);
@@ -349,7 +355,7 @@ TEST_F(ResilienceTest, MessageRedeliveryDeduplication) {
 
   // Check Receipt Sent
   bool receipt_sent = false;
-  for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
+  for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
     if (pid == peer1 && msg.value("type", "") == "message_receipt") {
       if (msg.value("message_id", 0ULL) == msg_id) {
         receipt_sent = true;
@@ -394,7 +400,7 @@ TEST_F(ResilienceTest, UnsuspensionOnConnect) {
   // Connect
   client_->Connect(peer1);
   FlushClientQueue();
-  mock_transport_->log.sent_peer_messages.clear();
+  mock_transport_->CallLog()->sent_peer_messages.clear();
 
   // Simulate DataChannel open which triggers UnsuspendAndDeliver
   mock_transport_->delegate->OnDataChannelOpen(peer1);
@@ -402,7 +408,7 @@ TEST_F(ResilienceTest, UnsuspensionOnConnect) {
 
   // Action should have been unsuspended and sent
   bool action_sent = false;
-  for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
+  for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
     if (pid == peer1 && msg.value("type", "") == "test_suspend") {
       action_sent = true;
     }

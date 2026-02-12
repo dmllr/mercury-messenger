@@ -9,7 +9,7 @@
 #include "eillance/client/settings_manager.hpp"
 #include "eillance/identity/id_manager.hpp"
 #include "eillance/storage/persistent_storage.hpp"
-#include "eillance/transport/transport.hpp"
+#include "eillance/transport/data_transport.hpp"
 #include "eillance/utils/invariant.hpp"
 
 namespace eillance::services {
@@ -18,7 +18,7 @@ class AccountService {
  public:
   explicit AccountService(
       std::shared_ptr<storage::PersistentStorage> storage,
-      std::shared_ptr<transport::Transport> transport
+      std::shared_ptr<transport::DataTransport> transport
   )
       : storage_(std::move(storage)),
         transport_(std::move(transport)) {
@@ -149,7 +149,7 @@ class AccountService {
 
  private:
   std::shared_ptr<storage::PersistentStorage> storage_;
-  std::shared_ptr<transport::Transport> transport_;
+  std::shared_ptr<transport::DataTransport> transport_;
 
   std::unique_ptr<identity::IdManager> id_manager_;
   std::unique_ptr<SettingsManager> settings_manager_;

@@ -4,13 +4,14 @@
 
 #include <jni.h>
 
+#include "data_transport_impl_libwebrtc.hpp"
 #include "eillance/identity/contact_id.hpp"
 #include "eillance/logging/logging.hpp"
-#include "transport_impl_libwebrtc.hpp"
+#include "media_transport_impl_libwebrtc.hpp"
 
 // NOLINTBEGIN(readability-identifier-naming)
 
-extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcTransport_nativeOnPeerConnectionStateChange(
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcDataTransport_nativeOnPeerConnectionStateChange(
     JNIEnv* env,
     jobject,
     jlong native_ptr,
@@ -18,47 +19,55 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcTransport_nati
     jint context_val,
     jint state
 ) {
-  auto* transport = reinterpret_cast<eillance::transport::AndroidRtcTransport*>(native_ptr);
+  auto* transport = reinterpret_cast<eillance::transport::AndroidDataTransport*>(native_ptr);
   if (transport != nullptr) {
     char const* peer_id_chars = env->GetStringUTFChars(j_peer_id, nullptr);
     eillance::ContactID const peer_id(peer_id_chars);
-    auto const context = static_cast<eillance::transport::ConnectionContext>(context_val);
-
-    if (context == eillance::transport::ConnectionContext::Media) {
-      transport->ReportStateChange(peer_id, eillance::EventSource::mediaConnectionState, state);
-    } else {
-      transport->ReportStateChange(peer_id, eillance::EventSource::peerConnectionState, state);
-    }
-
+    transport->ReportStateChange(peer_id, eillance::EventSource::peerConnectionState, state);
     env->ReleaseStringUTFChars(j_peer_id, peer_id_chars);
   }
 }
 
-extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcTransport_nativeOnSignalingConnectionStateChange(
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcMediaTransport_nativeOnPeerConnectionStateChange(
+    JNIEnv* env,
+    jobject,
+    jlong native_ptr,
+    jstring j_peer_id,
+    jint context_val,
+    jint state
+) {
+  auto* transport = reinterpret_cast<eillance::transport::AndroidMediaTransport*>(native_ptr);
+  if (transport != nullptr) {
+    char const* peer_id_chars = env->GetStringUTFChars(j_peer_id, nullptr);
+    eillance::ContactID const peer_id(peer_id_chars);
+    transport->ReportStateChange(peer_id, eillance::EventSource::mediaConnectionState, state);
+    env->ReleaseStringUTFChars(j_peer_id, peer_id_chars);
+  }
+}
+
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcDataTransport_nativeOnSignalingConnectionStateChange(
     JNIEnv* /*env*/,
     jobject,
     jlong native_ptr,
     jint state
 ) {
-  auto* transport = reinterpret_cast<eillance::transport::AndroidRtcTransport*>(native_ptr);
+  auto* transport = reinterpret_cast<eillance::transport::AndroidDataTransport*>(native_ptr);
   if (transport != nullptr) {
     auto service_state = eillance::ServiceConnectionState::unknown;
-    // Mapping matches SignalingClient.State ordinal
-    // CONNECTING = 0, OPEN = 1, CLOSED = 2, FAILED = 3, NO_NETWORK = 4
     switch (state) {
-      case 0:  // CONNECTING
+      case 0:
         service_state = eillance::ServiceConnectionState::establishing;
         break;
-      case 1:  // OPEN
+      case 1:
         service_state = eillance::ServiceConnectionState::online;
         break;
-      case 2:  // CLOSED
+      case 2:
         service_state = eillance::ServiceConnectionState::disconnected;
         break;
-      case 3:  // FAILED
+      case 3:
         service_state = eillance::ServiceConnectionState::failure;
         break;
-      case 4:  // NO_NETWORK
+      case 4:
         service_state = eillance::ServiceConnectionState::noNetwork;
         break;
       default:
@@ -71,9 +80,13 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcTransport_nati
   }
 }
 
-extern "C" JNIEXPORT void JNICALL
-Java_hela_eillance_webrtc_WebRtcTransport_nativeOnPeerMessage(JNIEnv* env, jobject, jlong native_ptr, jstring message) {
-  auto* transport = reinterpret_cast<eillance::transport::AndroidRtcTransport*>(native_ptr);
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcDataTransport_nativeOnPeerMessage(
+    JNIEnv* env,
+    jobject,
+    jlong native_ptr,
+    jstring message
+) {
+  auto* transport = reinterpret_cast<eillance::transport::AndroidDataTransport*>(native_ptr);
   if ((transport != nullptr) && (transport->Delegate() != nullptr)) {
     char const* msg_chars = env->GetStringUTFChars(message, nullptr);
     try {
@@ -86,14 +99,14 @@ Java_hela_eillance_webrtc_WebRtcTransport_nativeOnPeerMessage(JNIEnv* env, jobje
   }
 }
 
-extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcTransport_nativeOnSystemMessage(
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcDataTransport_nativeOnSystemMessage(
     JNIEnv* env,
     jobject,
     jlong native_ptr,
     jstring type,
     jstring message
 ) {
-  auto* transport = reinterpret_cast<eillance::transport::AndroidRtcTransport*>(native_ptr);
+  auto* transport = reinterpret_cast<eillance::transport::AndroidDataTransport*>(native_ptr);
   if ((transport != nullptr) && (transport->Delegate() != nullptr)) {
     char const* type_chars = env->GetStringUTFChars(type, nullptr);
     std::string const type_str(type_chars);
@@ -112,14 +125,14 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcTransport_nati
   }
 }
 
-extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcTransport_nativeOnSignalingError(
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcDataTransport_nativeOnSignalingError(
     JNIEnv* env,
     jobject,
     jlong native_ptr,
     jstring peer_id,
     jstring error
 ) {
-  auto* transport = reinterpret_cast<eillance::transport::AndroidRtcTransport*>(native_ptr);
+  auto* transport = reinterpret_cast<eillance::transport::AndroidDataTransport*>(native_ptr);
   if ((transport != nullptr) && (transport->Delegate() != nullptr)) {
     char const* peer_id_chars = env->GetStringUTFChars(peer_id, nullptr);
     char const* error_chars = env->GetStringUTFChars(error, nullptr);
@@ -129,14 +142,14 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcTransport_nati
   }
 }
 
-extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcTransport_nativeOnDataChannelMessage(
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcDataTransport_nativeOnDataChannelMessage(
     JNIEnv* env,
     jobject,
     jlong native_ptr,
     jstring j_peer_id,
     jstring j_message
 ) {
-  auto* transport = reinterpret_cast<eillance::transport::AndroidRtcTransport*>(native_ptr);
+  auto* transport = reinterpret_cast<eillance::transport::AndroidDataTransport*>(native_ptr);
   if (transport != nullptr) {
     char const* peer_id_chars = env->GetStringUTFChars(j_peer_id, nullptr);
     char const* message_chars = env->GetStringUTFChars(j_message, nullptr);
@@ -151,8 +164,6 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcTransport_nati
     auto peer = transport->GetPeer(peer_id);
     if (peer && peer->on_data_channel_message) {
       peer->on_data_channel_message(msg_bytes);
-    } else {
-      LGW << "Received DC message for peer " << peer_id_chars << " but no handler or peer found.";
     }
 
     env->ReleaseStringUTFChars(j_peer_id, peer_id_chars);
@@ -160,14 +171,14 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcTransport_nati
   }
 }
 
-extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcTransport_nativeOnDataChannelMessageBinary(
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcDataTransport_nativeOnDataChannelMessageBinary(
     JNIEnv* env,
     jobject,
     jlong native_ptr,
     jstring j_peer_id,
     jbyteArray j_data
 ) {
-  auto* transport = reinterpret_cast<eillance::transport::AndroidRtcTransport*>(native_ptr);
+  auto* transport = reinterpret_cast<eillance::transport::AndroidDataTransport*>(native_ptr);
   if (transport != nullptr) {
     char const* peer_id_chars = env->GetStringUTFChars(j_peer_id, nullptr);
     eillance::ContactID const peer_id(peer_id_chars);
@@ -179,46 +190,23 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcTransport_nati
     auto peer = transport->GetPeer(peer_id);
     if (peer && peer->on_data_channel_message) {
       peer->on_data_channel_message(buffer);
-    } else {
-      LGW << "Received DC binary message for peer " << peer_id_chars << " but no handler or peer found.";
     }
 
     env->ReleaseStringUTFChars(j_peer_id, peer_id_chars);
   }
 }
 
-extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcTransport_nativeOnDataChannelOpen(
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcDataTransport_nativeOnDataChannelOpen(
     JNIEnv* env,
     jobject,
     jlong native_ptr,
     jstring j_peer_id
 ) {
-  auto* transport = reinterpret_cast<eillance::transport::AndroidRtcTransport*>(native_ptr);
-  if (transport != nullptr) {
+  auto* transport = reinterpret_cast<eillance::transport::AndroidDataTransport*>(native_ptr);
+  if (transport != nullptr && transport->Delegate() != nullptr) {
     char const* peer_id_chars = env->GetStringUTFChars(j_peer_id, nullptr);
-
     eillance::ContactID const peer_id(peer_id_chars);
-    auto peer = transport->GetPeer(peer_id);
-
-    if (peer) {
-      LGI << "Data channel with " << peer_id_chars << " opened.";
-      peer->data_channel_is_open = true;
-      auto my_pub_key = peer->session_cipher->GetPublicKey();
-      nlohmann::json const key_exchange_message = {
-          {"type", "key_exchange"},
-          {"key", std::vector<std::byte>(my_pub_key.begin(), my_pub_key.end())},
-          {"is_reply", false}
-      };
-      transport->SendPeerDataChannelMessage(peer_id, key_exchange_message);
-
-      // Force UI to show Connected state when Data Channel opens, regardless of ICE state
-      transport->ReportStateChange(
-          peer_id,
-          eillance::EventSource::peerConnectionState,
-          static_cast<int>(eillance::transport::PeerConnectionState::connected)
-      );
-    }
-
+    transport->Delegate()->OnDataChannelOpen(peer_id);
     env->ReleaseStringUTFChars(j_peer_id, peer_id_chars);
   }
 }

@@ -9,8 +9,9 @@
 
 #include "eillance/client/client.hpp"
 #include "eillance/view_model/client_event_router.hpp"
+#include "mock_data_transport.hpp"
+#include "mock_media_transport.hpp"
 #include "mock_persistent_storage.hpp"
-#include "mock_transport.hpp"
 
 using namespace eillance;
 
@@ -39,13 +40,21 @@ class ViewModelTest : public ::testing::Test {
     mock_storage_ = storage_impl.get();
     storage_ = std::make_shared<storage::PersistentStorage>(std::move(storage_impl));
 
-    // Transport
-    auto transport_impl = std::make_unique<transport::MockTransport>();
-    mock_transport_ = transport_impl.get();
-    transport_ = std::make_shared<transport::Transport>(std::move(transport_impl));
+    // Shared Transport Log
+    mock_log_ = std::make_shared<transport::MockCallLog>();
+
+    // Transports
+    auto data_transport_impl = std::make_unique<transport::MockDataTransport>(mock_log_);
+    mock_transport_ = data_transport_impl.get();  // Kept for legacy tests accessing data transport via this pointer
+    mock_data_transport_ = data_transport_impl.get();
+    auto data_transport = std::make_shared<transport::DataTransport>(std::move(data_transport_impl));
+
+    auto media_transport_impl = std::make_unique<transport::MockMediaTransport>(mock_log_);
+    mock_media_transport_ = media_transport_impl.get();
+    auto media_transport = std::make_shared<transport::MediaTransport>(std::move(media_transport_impl));
 
     // Client
-    client_ = std::make_shared<Client>(storage_, transport_);
+    client_ = std::make_shared<Client>(storage_, data_transport, media_transport);
 
     // Inject Mock Capture
     client_->SetVideoCapture(std::make_unique<MockCapture>());
@@ -74,8 +83,6 @@ class ViewModelTest : public ::testing::Test {
     }
   }
 
-  // Helper to wait for a condition to be true (polling with timeout)
-  // Increased timeout to 3000ms to handle async DB/Network simulation latency in tests
   template <typename Func>
   static void WaitFor(Func condition, std::chrono::milliseconds timeout = std::chrono::milliseconds(3000)) {
     auto const start = std::chrono::steady_clock::now();
@@ -88,9 +95,11 @@ class ViewModelTest : public ::testing::Test {
   }
 
   storage::MockPersistentStorageImpl* mock_storage_{};
-  transport::MockTransport* mock_transport_{};
+  std::shared_ptr<transport::MockCallLog> mock_log_;
+  transport::MockDataTransport* mock_transport_{};  // Alias for mock_data_transport_
+  transport::MockDataTransport* mock_data_transport_{};
+  transport::MockMediaTransport* mock_media_transport_{};
   std::shared_ptr<storage::PersistentStorage> storage_;
-  std::shared_ptr<transport::Transport> transport_;
   std::shared_ptr<Client> client_;
   std::shared_ptr<view_model::ClientEventRouter> router_;
 

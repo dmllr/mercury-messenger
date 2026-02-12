@@ -12,8 +12,8 @@
 #include "eillance/identity/contact_manager.hpp"
 #include "eillance/services/file_transfer_service.hpp"
 #include "eillance/services/messaging_service.hpp"
+#include "mock_data_transport.hpp"
 #include "mock_persistent_storage.hpp"
-#include "mock_transport.hpp"
 
 using namespace eillance;
 
@@ -54,9 +54,10 @@ class MessagingServiceTest : public ::testing::Test {
     mock_storage_ = storage_impl.get();
     storage_ = std::make_shared<storage::PersistentStorage>(std::move(storage_impl));
 
-    mock_transport_impl_ = std::make_unique<transport::MockTransport>();
+    mock_log_ = std::make_shared<transport::MockCallLog>();
+    mock_transport_impl_ = std::make_unique<transport::MockDataTransport>(mock_log_);
     mock_transport_ = mock_transport_impl_.get();
-    transport_ = std::make_shared<transport::Transport>(std::move(mock_transport_impl_));
+    transport_ = std::make_shared<transport::DataTransport>(std::move(mock_transport_impl_));
 
     contact_manager_ = std::make_shared<identity::ContactManager>(storage_);
     contact_manager_->AddContact(peer1);
@@ -113,10 +114,11 @@ class MessagingServiceTest : public ::testing::Test {
   }
 
   storage::MockPersistentStorageImpl* mock_storage_;
-  std::unique_ptr<transport::MockTransport> mock_transport_impl_;
-  transport::MockTransport* mock_transport_;
+  std::shared_ptr<transport::MockCallLog> mock_log_;
+  std::unique_ptr<transport::MockDataTransport> mock_transport_impl_;
+  transport::MockDataTransport* mock_transport_;
   std::shared_ptr<storage::PersistentStorage> storage_;
-  std::shared_ptr<transport::Transport> transport_;
+  std::shared_ptr<transport::DataTransport> transport_;
   std::shared_ptr<identity::ContactManager> contact_manager_;
   std::shared_ptr<services::FileTransferService> file_transfer_service_;
   std::unique_ptr<services::MessagingService> service_;
@@ -144,11 +146,11 @@ TEST_F(MessagingServiceTest, SendMessage_ThumbInPayload) {
 
   service_->SendChatMessage(peer1, "Msg", atts);
 
-  ASSERT_GE(mock_transport_->log.sent_peer_messages.size(), 1);
+  ASSERT_GE(mock_transport_->CallLog()->sent_peer_messages.size(), 1);
 
   nlohmann::json json_msg;
   bool found = false;
-  for (auto const& msg : mock_transport_->log.sent_peer_messages | std::views::values) {
+  for (auto const& msg : mock_transport_->CallLog()->sent_peer_messages | std::views::values) {
     if (msg.value("type", "") == "chat") {
       json_msg = msg;
       found = true;
@@ -176,7 +178,7 @@ TEST_F(MessagingServiceTest, SendMessage_NoteTruncation) {
   service_->SendChatMessage(peer1, "Msg", atts);
 
   bool found = false;
-  for (auto const& msg : mock_transport_->log.sent_peer_messages | std::views::values) {
+  for (auto const& msg : mock_transport_->CallLog()->sent_peer_messages | std::views::values) {
     if (msg.value("type", "") == "chat") {
       auto note = msg["attachments"][0]["note"].get<std::string>();
       EXPECT_EQ(note.length(), 120);
@@ -265,7 +267,7 @@ TEST_F(MessagingServiceTest, SendMessage_UnifiedDeliveryQueue) {
 
   // 4. Verify message sent
   bool msg_sent = false;
-  for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
+  for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
     if (pid == peer1 && msg.value("type", "") == "chat") {
       msg_sent = true;
     }
@@ -304,7 +306,7 @@ TEST_F(MessagingServiceTest, SendSystemMessage_UnifiedDelivery) {
 
   // Verify sent as is_system=true
   bool sys_sent = false;
-  for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
+  for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
     if (pid == peer1 && msg.value("is_system", false)) {
       sys_sent = true;
     }
@@ -340,7 +342,7 @@ TEST_F(MessagingServiceTest, MarkAsRead_UnifiedDelivery) {
 
   // Verify sent
   bool read_sent = false;
-  for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
+  for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
     if (pid == peer1 && msg["type"] == "message_read") {
       read_sent = true;
     }
@@ -376,7 +378,7 @@ TEST_F(MessagingServiceTest, SendMessage_Resilience_RetryLogic) {
 
   // Verify data sent to transport
   bool msg_sent = false;
-  for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
+  for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
     if (pid == peer1 && msg.value("type", "") == "chat") {
       msg_sent = true;
     }
@@ -416,7 +418,7 @@ TEST_F(MessagingServiceTest, SystemMessage_SentReliablyViaDataChannel) {
   EXPECT_EQ(history.messages[0].status, messaging::MessageStatus::sending);
 
   bool sent_as_chat = false;
-  for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
+  for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
     if (pid == peer1 && msg.value("type", "") == "chat") {
       if (msg.value("is_system", false)) {
         sent_as_chat = true;

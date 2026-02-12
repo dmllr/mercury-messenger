@@ -14,7 +14,7 @@
 #include "eillance/services/account_service.hpp"
 #include "eillance/services/messaging_service.hpp"
 #include "eillance/storage/persistent_storage.hpp"
-#include "eillance/transport/transport.hpp"
+#include "eillance/transport/data_transport.hpp"
 #include "eillance/utils/invariant.hpp"
 
 namespace eillance::services {
@@ -25,7 +25,7 @@ class ProfileService {
 
   explicit ProfileService(
       std::shared_ptr<storage::PersistentStorage> storage,
-      std::shared_ptr<transport::Transport> transport,
+      std::shared_ptr<transport::DataTransport> transport,
       std::shared_ptr<identity::ContactManager> contact_manager,
       AccountService* account_service,
       MessagingService* messaging_service,
@@ -134,7 +134,7 @@ class ProfileService {
 
  private:
   std::shared_ptr<storage::PersistentStorage> storage_;
-  std::shared_ptr<transport::Transport> transport_;
+  std::shared_ptr<transport::DataTransport> transport_;
   std::shared_ptr<identity::ContactManager> manager_;
 
   AccountService* account_service_;

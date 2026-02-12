@@ -6,8 +6,9 @@
 #include "eillance/services/file_transfer_service.hpp"
 #include "eillance/services/media_call_service.hpp"
 #include "eillance/services/messaging_service.hpp"
+#include "mock_data_transport.hpp"
+#include "mock_media_transport.hpp"
 #include "mock_persistent_storage.hpp"
-#include "mock_transport.hpp"
 
 using namespace eillance;
 
@@ -33,10 +34,18 @@ class MockCaptureImpl {
 class MediaCallServiceTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    // Setup transport
-    mock_transport_impl_ = std::make_unique<transport::MockTransport>();
-    mock_transport_raw_ = mock_transport_impl_.get();
-    transport_ = std::make_shared<transport::Transport>(std::move(mock_transport_impl_));
+    // Shared Log
+    mock_log_ = std::make_shared<transport::MockCallLog>();
+
+    // Setup Data Transport
+    mock_data_transport_impl_ = std::make_unique<transport::MockDataTransport>(mock_log_);
+    mock_data_transport_raw_ = mock_data_transport_impl_.get();
+    data_transport_ = std::make_shared<transport::DataTransport>(std::move(mock_data_transport_impl_));
+
+    // Setup Media Transport
+    mock_media_transport_impl_ = std::make_unique<transport::MockMediaTransport>(mock_log_);
+    mock_media_transport_raw_ = mock_media_transport_impl_.get();
+    media_transport_ = std::make_shared<transport::MediaTransport>(std::move(mock_media_transport_impl_));
 
     // Setup messaging dependencies
     auto storage_impl = std::make_unique<storage::MockPersistentStorageImpl>();
@@ -44,20 +53,20 @@ class MediaCallServiceTest : public ::testing::Test {
     auto contact_manager = std::make_shared<identity::ContactManager>(storage_);
     auto conn_handler = [](ContactID const&) {};
 
-    auto file_transfer_service = std::make_shared<services::FileTransferService>(storage_, transport_);
+    auto file_transfer_service = std::make_shared<services::FileTransferService>(storage_, data_transport_);
 
     // Initialize messaging service (needed by MediaCallService)
     messaging_service_ = std::make_unique<services::MessagingService>(
         storage_,
-        transport_,
+        data_transport_,
         contact_manager,
         file_transfer_service,
         conn_handler
     );
     messaging_service_->SetChatMessageReceivedCallback([](auto const&, auto const&) {});
 
-    // Initialize MediaCallService
-    service_ = std::make_unique<services::MediaCallService>(transport_);
+    // Initialize MediaCallService with split transports
+    service_ = std::make_unique<services::MediaCallService>(data_transport_, media_transport_);
     service_->SetMessagingService(messaging_service_.get());
 
     // Initialize Capture (needed for av_stream_ invariant)
@@ -72,9 +81,16 @@ class MediaCallServiceTest : public ::testing::Test {
     service_->SetCallRingingCallback([](auto const&) {});
   }
 
-  std::unique_ptr<transport::MockTransport> mock_transport_impl_;
-  transport::MockTransport* mock_transport_raw_{};
-  std::shared_ptr<transport::Transport> transport_;
+  std::shared_ptr<transport::MockCallLog> mock_log_;
+
+  std::unique_ptr<transport::MockDataTransport> mock_data_transport_impl_;
+  transport::MockDataTransport* mock_data_transport_raw_{};
+  std::shared_ptr<transport::DataTransport> data_transport_;
+
+  std::unique_ptr<transport::MockMediaTransport> mock_media_transport_impl_;
+  transport::MockMediaTransport* mock_media_transport_raw_{};
+  std::shared_ptr<transport::MediaTransport> media_transport_;
+
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::unique_ptr<services::MessagingService> messaging_service_;
   std::unique_ptr<services::MediaCallService> service_;
@@ -100,7 +116,7 @@ TEST_F(MediaCallServiceTest, StartVoiceCall) {
 TEST_F(MediaCallServiceTest, AcceptCall) {
   // We need a peer to exist in transport
   auto peer = std::make_shared<transport::Peer>(peer1);
-  transport_->AddPeer(peer1, peer);
+  data_transport_->AddPeer(peer1, peer);
 
   bool accepted_cb = false;
   service_->SetCallAcceptedCallback([&](auto const& id) {
@@ -124,7 +140,7 @@ TEST_F(MediaCallServiceTest, Hangup) {
   // Simulate active media connection
   peer->has_media_peer_connection = true;
   peer->data_channel_is_open = true;  // allow sending hangup message
-  transport_->AddPeer(peer1, peer);
+  data_transport_->AddPeer(peer1, peer);
 
   bool terminated_cb = false;
   service_->SetCallTerminatedCallback([&](auto const& id) {
@@ -136,16 +152,16 @@ TEST_F(MediaCallServiceTest, Hangup) {
   EXPECT_TRUE(terminated_cb);
   EXPECT_FALSE(peer->has_media_peer_connection);
 
-  // Verify transport closed media connection
+  // Verify media transport closed connection
   bool media_closed = false;
-  for (auto const& [pid, ctx] : mock_transport_raw_->log.closed_connections) {
+  for (auto const& [pid, ctx] : mock_log_->closed_connections) {
     if (pid == peer1 && ctx == "media") media_closed = true;
   }
   EXPECT_TRUE(media_closed);
 
-  // Verify hangup message sent
+  // Verify hangup message sent via data transport
   bool hangup_sent = false;
-  for (auto const& [pid, msg] : mock_transport_raw_->log.sent_peer_messages) {
+  for (auto const& [pid, msg] : mock_log_->sent_peer_messages) {
     if (pid == peer1 && msg["type"] == "hangup") hangup_sent = true;
   }
   EXPECT_TRUE(hangup_sent);
@@ -155,7 +171,7 @@ TEST_F(MediaCallServiceTest, MediaSampleRouting) {
   // Setup peer in Ready state with tracks
   auto peer = std::make_shared<transport::Peer>(peer1);
   peer->SetState(transport::Peer::State::ready);
-  transport_->AddPeer(peer1, peer);
+  data_transport_->AddPeer(peer1, peer);
 
   // Accept call to initialize tracks
   service_->AcceptCall(peer1, messaging::HistoryEntryKind::videoCall);

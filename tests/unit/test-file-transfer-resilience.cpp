@@ -11,8 +11,8 @@
 #include "eillance/identity/contact_manager.hpp"
 #include "eillance/services/file_transfer_service.hpp"
 #include "eillance/services/messaging_service.hpp"
+#include "mock_data_transport.hpp"
 #include "mock_persistent_storage.hpp"
-#include "mock_transport.hpp"
 
 using namespace eillance;
 
@@ -32,9 +32,10 @@ class FileTransferResilienceTest : public ::testing::Test {
     auto storage_impl = std::make_unique<storage::MockPersistentStorageImpl>(temp_dir_.string() + "/db.sqlite");
     storage_ = std::make_shared<storage::PersistentStorage>(std::move(storage_impl));
 
-    mock_transport_impl_ = std::make_unique<transport::MockTransport>();
+    mock_log_ = std::make_shared<transport::MockCallLog>();
+    mock_transport_impl_ = std::make_unique<transport::MockDataTransport>(mock_log_);
     mock_transport_ = mock_transport_impl_.get();
-    transport_ = std::make_shared<transport::Transport>(std::move(mock_transport_impl_));
+    transport_ = std::make_shared<transport::DataTransport>(std::move(mock_transport_impl_));
 
     contact_manager_ = std::make_shared<identity::ContactManager>(storage_);
     contact_manager_->AddContact(peer1);
@@ -99,9 +100,10 @@ class FileTransferResilienceTest : public ::testing::Test {
   std::filesystem::path temp_dir_;
   std::filesystem::path attachments_dir_;
   std::shared_ptr<storage::PersistentStorage> storage_;
-  std::unique_ptr<transport::MockTransport> mock_transport_impl_;
-  transport::MockTransport* mock_transport_;
-  std::shared_ptr<transport::Transport> transport_;
+  std::shared_ptr<transport::MockCallLog> mock_log_;
+  std::unique_ptr<transport::MockDataTransport> mock_transport_impl_;
+  transport::MockDataTransport* mock_transport_;
+  std::shared_ptr<transport::DataTransport> transport_;
   std::shared_ptr<identity::ContactManager> contact_manager_;
   std::shared_ptr<services::FileTransferService> file_transfer_service_;
   std::unique_ptr<services::MessagingService> service_;

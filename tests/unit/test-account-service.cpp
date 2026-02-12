@@ -3,8 +3,8 @@
 #include <gtest/gtest.h>
 
 #include "eillance/services/account_service.hpp"
+#include "mock_data_transport.hpp"
 #include "mock_persistent_storage.hpp"
-#include "mock_transport.hpp"
 
 using namespace eillance;
 
@@ -13,21 +13,24 @@ class AccountServiceTest : public ::testing::Test {
   void SetUp() override {
     auto storage_impl = std::make_unique<storage::MockPersistentStorageImpl>();
     storage_ = std::make_shared<storage::PersistentStorage>(std::move(storage_impl));
-    mock_transport_impl_ = std::make_unique<transport::MockTransport>();
-    // Keep a raw pointer to the mock for verification before moving it into the Transport wrapper
-    mock_transport_raw_ = mock_transport_impl_.get();
-    transport_ = std::make_shared<transport::Transport>(std::move(mock_transport_impl_));
 
-    service_ = std::make_unique<services::AccountService>(storage_, transport_);
+    mock_log_ = std::make_shared<transport::MockCallLog>();
+    mock_data_transport_impl_ = std::make_unique<transport::MockDataTransport>(mock_log_);
+    mock_data_transport_raw_ = mock_data_transport_impl_.get();
+
+    data_transport_ = std::make_shared<transport::DataTransport>(std::move(mock_data_transport_impl_));
+
+    service_ = std::make_unique<services::AccountService>(storage_, data_transport_);
 
     // Set callback to prevent invariant violations during identity generation/update
     service_->SetOnMyProfileUpdatedCallback([]() {});
   }
 
   std::shared_ptr<storage::PersistentStorage> storage_;
-  std::unique_ptr<transport::MockTransport> mock_transport_impl_;
-  transport::MockTransport* mock_transport_raw_{};
-  std::shared_ptr<transport::Transport> transport_;
+  std::shared_ptr<transport::MockCallLog> mock_log_;
+  std::unique_ptr<transport::MockDataTransport> mock_data_transport_impl_;
+  transport::MockDataTransport* mock_data_transport_raw_{};
+  std::shared_ptr<transport::DataTransport> data_transport_;
   std::unique_ptr<services::AccountService> service_;
 };
 
@@ -47,7 +50,6 @@ TEST_F(AccountServiceTest, IdentityGeneration) {
 }
 
 TEST_F(AccountServiceTest, RestoreIdentity) {
-  // Generate a valid mnemonic first
   std::string original_mnemonic;
   { auto temp_id = crypto::Identity::CreateNew(original_mnemonic); }
 
@@ -78,15 +80,14 @@ TEST_F(AccountServiceTest, UpdateSignalingUrl) {
 
   EXPECT_EQ(service_->GetSettings()->GetSignalingServerUrl(), new_url);
 
-  ASSERT_EQ(mock_transport_raw_->log.signaling_urls.size(), 1);
-  EXPECT_EQ(mock_transport_raw_->log.signaling_urls[0], new_url);
+  ASSERT_EQ(mock_log_->signaling_urls.size(), 1);
+  EXPECT_EQ(mock_log_->signaling_urls[0], new_url);
 
-  ASSERT_EQ(mock_transport_raw_->log.starts.size(), 1);
-  EXPECT_EQ(mock_transport_raw_->log.starts[0], "Reconnect");
+  ASSERT_EQ(mock_log_->starts.size(), 1);
+  EXPECT_EQ(mock_log_->starts[0], "Reconnect");
 }
 
 TEST_F(AccountServiceTest, Signing) {
-  // Must have identity to sign
   std::ignore = service_->GenerateNewIdentity();
 
   std::string message = "test message";
@@ -101,20 +102,14 @@ TEST_F(AccountServiceTest, RestoreBackupLifecycle) {
   std::string const backup_path = "test_backup.mcr";
   std::string const password = "password";
 
-  // Generate identity so the service is in a valid state "to be backed up".
   std::ignore = service_->GenerateNewIdentity();
 
-  // Ensure DB file exists for BackupManager to read (even if mock storage is in memory/fake path)
-  // The MockPersistentStorage in Setup() has a path, we create a dummy file there so BackupManager doesn't bail.
   {
     std::ofstream db_file(storage_->GetPath(), std::ios::binary);
     db_file << "dummy_content";
   }
 
   ASSERT_TRUE(service_->CreateBackup(backup_path, password));
-
-  // This verifies the Close() -> Restore() -> Open() -> Reload() flow doesn't crash
-  // and returns true if identity exists in the (mock) storage.
   EXPECT_TRUE(service_->RestoreBackup(backup_path, password));
 
   std::filesystem::remove(backup_path);

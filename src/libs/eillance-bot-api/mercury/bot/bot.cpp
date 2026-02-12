@@ -3,7 +3,8 @@
 #include <thread>
 
 #include "eillance/client/client.hpp"
-#include "eillance/rtc/transport_impl_libdatachannel.hpp"
+#include "eillance/rtc/data_transport_impl_libdatachannel.hpp"
+#include "eillance/rtc/media_transport_impl_libdatachannel.hpp"
 #include "eillance/storage/sqlite/persistent_storage_impl_sqlite.hpp"
 
 namespace mercury::bot {
@@ -31,13 +32,17 @@ class Bot::Impl {
   void InitializeClient() {
     auto storage_impl = std::make_unique<eillance::storage::SQLiteStorage>(options_.identity_path / "mercury.db");
     auto storage = std::make_shared<eillance::storage::PersistentStorage>(std::move(storage_impl));
-    auto rtc_transport_impl = std::make_unique<eillance::rtc::RtcTransport>();
-    auto transport = std::make_shared<eillance::transport::Transport>(std::move(rtc_transport_impl));
 
-    client_ = std::make_shared<eillance::Client>(storage, transport);
+    auto data_transport_impl = std::make_unique<eillance::rtc::RtcDataTransport>();
+    auto media_transport_impl = std::make_unique<eillance::rtc::RtcMediaTransport>();
+
+    auto data_transport = std::make_shared<eillance::transport::DataTransport>(std::move(data_transport_impl));
+    auto media_transport = std::make_shared<eillance::transport::MediaTransport>(std::move(media_transport_impl));
+
+    client_ = std::make_shared<eillance::Client>(storage, data_transport, media_transport);
   }
 
-  void SetupCallbacks() const {
+  void SetupCallbacks() {
     if (options_.auto_accept_contacts) {
       client_->GetContactService()->SetContactRequestCallback([this](eillance::ContactID const& peer_id) {
         // Automatically accept friend requests
@@ -126,7 +131,7 @@ void Bot::Stop() const {
 
 void Bot::SendMessage(std::string const& chat_id, std::string const& text) const {
   eillance::ContactID const peer_id(chat_id);
-  impl_->client_->SendChatMessage(peer_id, text);
+  std::ignore = impl_->client_->SendChatMessage(peer_id, text);
 }
 
 void Bot::OnMessage(std::function<void(Message const&)> handler) const {

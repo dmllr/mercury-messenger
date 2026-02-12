@@ -18,8 +18,8 @@
 #include "eillance/services/media_call_service.hpp"
 #include "eillance/services/messaging_service.hpp"
 #include "eillance/services/profile_service.hpp"
+#include "mock_data_transport.hpp"
 #include "mock_persistent_storage.hpp"
-#include "mock_transport.hpp"
 
 using namespace eillance;
 
@@ -100,9 +100,10 @@ class ProtocolSafetyTest : public ::testing::Test {
     mock_storage_ = storage_impl.get();
     storage_ = std::make_shared<storage::PersistentStorage>(std::move(storage_impl));
 
-    mock_transport_impl_ = std::make_unique<transport::MockTransport>();
+    mock_log_ = std::make_shared<transport::MockCallLog>();
+    mock_transport_impl_ = std::make_unique<transport::MockDataTransport>(mock_log_);
     mock_transport_ = mock_transport_impl_.get();
-    transport_ = std::make_shared<transport::Transport>(std::move(mock_transport_impl_));
+    transport_ = std::make_shared<transport::DataTransport>(std::move(mock_transport_impl_));
 
     contact_manager_ = std::make_shared<identity::ContactManager>(storage_);
     account_service_ = std::make_unique<services::AccountService>(storage_, transport_);
@@ -176,11 +177,11 @@ class ProtocolSafetyTest : public ::testing::Test {
   // This is necessary because some operations (like sending attachments) trigger
   // multiple messages (chat + file_resume_request), so .back() is not reliable.
   nlohmann::json GetLastMessageByType(std::string const& type) {
-    if (mock_transport_->log.sent_peer_messages.empty()) {
+    if (mock_transport_->CallLog()->sent_peer_messages.empty()) {
       throw std::runtime_error("No messages sent");
     }
     // Iterate backwards to find the most recent message of the requested type
-    auto const& messages = mock_transport_->log.sent_peer_messages;
+    auto const& messages = mock_transport_->CallLog()->sent_peer_messages;
     for (auto it = messages.rbegin(); it != messages.rend(); ++it) {
       if (it->second.value("type", "") == type) {
         return it->second;
@@ -190,21 +191,22 @@ class ProtocolSafetyTest : public ::testing::Test {
   }
 
   // Decrypts payload from a JSON message using the test verifier cipher
-  std::string DecryptPayload(nlohmann::json const& msg) {
+  std::string DecryptPayload(nlohmann::json const& msg) const {
     // Use .at() to throw if key is missing, preventing assertion failures
     if (!msg.contains("payload")) {
       throw std::runtime_error("Message structure invalid: 'payload' missing in " + msg.dump());
     }
-    auto encrypted_bytes = msg.at("payload").get<std::vector<std::byte>>();
+    auto const encrypted_bytes = msg.at("payload").get<std::vector<std::byte>>();
     return test_verifier_cipher_.Decrypt(encrypted_bytes);
   }
 
   std::filesystem::path temp_dir_;
   storage::MockPersistentStorageImpl* mock_storage_{};
-  std::unique_ptr<transport::MockTransport> mock_transport_impl_;
-  transport::MockTransport* mock_transport_{};
+  std::shared_ptr<transport::MockCallLog> mock_log_;
+  std::unique_ptr<transport::MockDataTransport> mock_transport_impl_;
+  transport::MockDataTransport* mock_transport_{};
   std::shared_ptr<storage::PersistentStorage> storage_;
-  std::shared_ptr<transport::Transport> transport_;
+  std::shared_ptr<transport::DataTransport> transport_;
   std::shared_ptr<identity::ContactManager> contact_manager_;
   std::unique_ptr<services::AccountService> account_service_;
   std::shared_ptr<services::FileTransferService> file_transfer_service_;

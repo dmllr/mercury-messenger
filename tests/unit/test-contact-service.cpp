@@ -3,8 +3,8 @@
 #include "eillance/services/contact_service.hpp"
 #include "eillance/services/file_transfer_service.hpp"
 #include "eillance/services/profile_service.hpp"
+#include "mock_data_transport.hpp"
 #include "mock_persistent_storage.hpp"
-#include "mock_transport.hpp"
 
 using namespace eillance;
 
@@ -14,9 +14,10 @@ class ContactServiceTest : public ::testing::Test {
     auto storage_impl = std::make_unique<storage::MockPersistentStorageImpl>();
     storage_ = std::make_shared<storage::PersistentStorage>(std::move(storage_impl));
 
-    mock_transport_impl_ = std::make_unique<transport::MockTransport>();
+    mock_log_ = std::make_shared<transport::MockCallLog>();
+    mock_transport_impl_ = std::make_unique<transport::MockDataTransport>(mock_log_);
     mock_transport_raw_ = mock_transport_impl_.get();
-    transport_ = std::make_shared<transport::Transport>(std::move(mock_transport_impl_));
+    transport_ = std::make_shared<transport::DataTransport>(std::move(mock_transport_impl_));
 
     account_service_ = std::make_unique<services::AccountService>(storage_, transport_);
     account_service_->SetOnMyProfileUpdatedCallback([]() {});
@@ -77,9 +78,10 @@ class ContactServiceTest : public ::testing::Test {
   }
 
   std::shared_ptr<storage::PersistentStorage> storage_;
-  std::unique_ptr<transport::MockTransport> mock_transport_impl_;
-  transport::MockTransport* mock_transport_raw_{};
-  std::shared_ptr<transport::Transport> transport_;
+  std::shared_ptr<transport::MockCallLog> mock_log_;
+  std::unique_ptr<transport::MockDataTransport> mock_transport_impl_;
+  transport::MockDataTransport* mock_transport_raw_{};
+  std::shared_ptr<transport::DataTransport> transport_;
   std::unique_ptr<services::AccountService> account_service_;
   std::shared_ptr<services::FileTransferService> file_transfer_service_;
   std::unique_ptr<services::MessagingService> messaging_service_;
@@ -154,7 +156,7 @@ TEST_F(ContactServiceTest, ConfirmContact) {
   // Check that confirmation messages were queued/sent
   // "contact_confirm" -> sent via signaling
   bool signaling_sent = false;
-  for (auto const& msg : mock_transport_raw_->log.sent_signaling_messages) {
+  for (auto const& msg : mock_transport_raw_->CallLog()->sent_signaling_messages) {
     if (msg["type"] == "contact_confirm" && msg["to"] == peer1.ToString()) {
       signaling_sent = true;
       break;
@@ -177,7 +179,7 @@ TEST_F(ContactServiceTest, BlockContact) {
 
   // Check if connections were closed
   bool closed = false;
-  for (auto const& pid : mock_transport_raw_->log.closed_connections | std::views::keys) {
+  for (auto const& pid : mock_transport_raw_->CallLog()->closed_connections | std::views::keys) {
     if (pid == peer1) {
       closed = true;
     }
