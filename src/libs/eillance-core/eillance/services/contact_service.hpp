@@ -13,7 +13,7 @@
 #include "eillance/services/messaging_service.hpp"
 #include "eillance/services/profile_service.hpp"
 #include "eillance/storage/persistent_storage.hpp"
-#include "eillance/transport/transport.hpp"
+#include "eillance/transport/data_transport.hpp"
 #include "eillance/utils/invariant.hpp"
 
 namespace eillance::services {
@@ -24,7 +24,7 @@ class ContactService {
 
   explicit ContactService(
       std::shared_ptr<storage::PersistentStorage> storage,
-      std::shared_ptr<transport::Transport> transport,
+      std::shared_ptr<transport::DataTransport> transport,
       std::shared_ptr<identity::ContactManager> contact_manager,
       AccountService* account_service,
       ProfileService* profile_service,
@@ -117,8 +117,12 @@ class ContactService {
       }
     }
 
-    transport_->ClosePeerConnection(peer_id, transport::ConnectionContext::Data);
-    transport_->ClosePeerConnection(peer_id, transport::ConnectionContext::Media);
+    // Connections are closed by Client based on status change or direct call,
+    // but here we mark it blocked. The Client logic handles actual transport teardown
+    // typically when status changes to Rejected or via explicit block logic.
+    // In strict Separation, ContactService manages Logic, Client manages Transport.
+    // However, to ensure immediate effect:
+    transport_->Disconnect(peer_id);
     transport_->RemovePeer(peer_id);
 
     manager_->BlockContact(peer_id);
@@ -319,7 +323,7 @@ class ContactService {
 
  private:
   std::shared_ptr<storage::PersistentStorage> storage_;
-  std::shared_ptr<transport::Transport> transport_;
+  std::shared_ptr<transport::DataTransport> transport_;
   std::shared_ptr<identity::ContactManager> manager_;
 
   AccountService* account_service_;

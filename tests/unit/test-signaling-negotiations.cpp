@@ -16,8 +16,9 @@
 #include "eillance/services/media_call_service.hpp"
 #include "eillance/services/messaging_service.hpp"
 #include "eillance/services/profile_service.hpp"
+#include "mock_data_transport.hpp"
+#include "mock_media_transport.hpp"
 #include "mock_persistent_storage.hpp"
-#include "mock_transport.hpp"
 
 using namespace eillance;
 
@@ -51,9 +52,13 @@ class SignalingNegotiationTest : public ::testing::Test {
     storage_ = std::make_shared<storage::PersistentStorage>(std::move(storage_impl));
 
     // Transport
-    mock_transport_impl_ = std::make_unique<transport::MockTransport>();
+    mock_log_ = std::make_shared<transport::MockCallLog>();
+    mock_transport_impl_ = std::make_unique<transport::MockDataTransport>(mock_log_);
     mock_transport_ = mock_transport_impl_.get();
-    transport_ = std::make_shared<transport::Transport>(std::move(mock_transport_impl_));
+    transport_ = std::make_shared<transport::DataTransport>(std::move(mock_transport_impl_));
+
+    auto media_transport_impl = std::make_unique<transport::MockMediaTransport>(mock_log_);
+    media_transport_ = std::make_shared<transport::MediaTransport>(std::move(media_transport_impl));
 
     // Dependencies
     contact_manager_ = std::make_shared<identity::ContactManager>(storage_);
@@ -79,7 +84,7 @@ class SignalingNegotiationTest : public ::testing::Test {
     messaging_service_->SetChatMessageReceivedCallback([](auto, auto) {});
     messaging_service_->SetMessageStatusChangedCallback([](auto, auto, auto) {});
 
-    media_call_service_ = std::make_shared<services::MediaCallService>(transport_);
+    media_call_service_ = std::make_shared<services::MediaCallService>(transport_, media_transport_);
     media_call_service_->SetVideoCapture(std::make_unique<MockCapture>());
     media_call_service_->SetAudioCapture(std::make_unique<MockCapture>());
 
@@ -104,6 +109,7 @@ class SignalingNegotiationTest : public ::testing::Test {
     // Target: Internal Messaging Service
     internal_service_ = std::make_unique<services::InternalMessagingService>(
         transport_,
+        media_transport_,
         account_service_,
         contact_service_,
         messaging_service_,
@@ -119,10 +125,12 @@ class SignalingNegotiationTest : public ::testing::Test {
   }
 
   storage::MockPersistentStorageImpl* mock_storage_{};
-  std::unique_ptr<transport::MockTransport> mock_transport_impl_;
-  transport::MockTransport* mock_transport_{};
+  std::shared_ptr<transport::MockCallLog> mock_log_;
+  std::unique_ptr<transport::MockDataTransport> mock_transport_impl_;
+  transport::MockDataTransport* mock_transport_{};
   std::shared_ptr<storage::PersistentStorage> storage_;
-  std::shared_ptr<transport::Transport> transport_;
+  std::shared_ptr<transport::DataTransport> transport_;
+  std::shared_ptr<transport::MediaTransport> media_transport_;
   std::shared_ptr<identity::ContactManager> contact_manager_;
   std::shared_ptr<services::AccountService> account_service_;
   std::shared_ptr<services::FileTransferService> file_transfer_service_;
@@ -134,9 +142,6 @@ class SignalingNegotiationTest : public ::testing::Test {
 
   ContactID my_id_;
 };
-
-// With Full ICE, we no longer test for isolated candidate message processing
-// or candidate buffering, as candidates must arrive bundled in the Offer/Answer.
 
 TEST_F(SignalingNegotiationTest, OfferTriggersPeerCreationAndAnswer) {
   // Use a PeerID that is smaller than MyID to ensure we accept the offer
@@ -157,7 +162,7 @@ TEST_F(SignalingNegotiationTest, OfferTriggersPeerCreationAndAnswer) {
   ASSERT_TRUE(mock_transport_->GetPeer(peer_id));
 
   bool answer_created = false;
-  for (auto const& [pid, ctx] : mock_transport_->log.answers) {
+  for (auto const& [pid, ctx] : mock_transport_->CallLog()->answers) {
     if (pid == peer_id && ctx == "data") {
       answer_created = true;
     }
@@ -178,8 +183,8 @@ TEST_F(SignalingNegotiationTest, AnswerDoesNotRecreatePeer) {
   internal_service_->ProcessSignalingMessage(peer_id, "answer", answer_msg);
 
   // Should NOT create new offer or answer
-  EXPECT_TRUE(mock_transport_->log.answers.empty());
-  EXPECT_TRUE(mock_transport_->log.offers.empty());
+  EXPECT_TRUE(mock_transport_->CallLog()->answers.empty());
+  EXPECT_TRUE(mock_transport_->CallLog()->offers.empty());
 
   // Should set remote description
   // Note: MockTransport::SetRemoteDescription log check would confirm this

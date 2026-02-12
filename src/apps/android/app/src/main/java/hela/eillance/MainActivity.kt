@@ -96,7 +96,11 @@ class MainActivity : ComponentActivity() {
     if (isAcceptAction && peerId != null) {
       // Security check: Do not accept if permission is missing.
       // Instead, show the incoming call UI which handles the error state.
-      if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+      if (ContextCompat.checkSelfPermission(
+          this,
+          Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+      ) {
         CallService.instance?.acceptCall()
         viewModel.navigateToPeer(peerId)
       } else {

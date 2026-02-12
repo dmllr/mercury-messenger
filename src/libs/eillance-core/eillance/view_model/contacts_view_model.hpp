@@ -15,6 +15,18 @@
 
 namespace eillance::view_model {
 
+struct ViewContact {
+  ContactID peer_id;
+  std::string display_name;
+  std::optional<std::string> bio;
+  std::optional<std::string> photo;  // base64
+  identity::ContactStatus status;
+  transport::PeerConnectionState connection_state = transport::PeerConnectionState::disconnected;
+  uint32_t unread_count = 0;
+  std::optional<messaging::HistoryEntryRecord> last_message;
+  uint64_t last_activity_timestamp = 0;
+};
+
 class ContactsViewModel {
  public:
   // Observer interface for contact list updates

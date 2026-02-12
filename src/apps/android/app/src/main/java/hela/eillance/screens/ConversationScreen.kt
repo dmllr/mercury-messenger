@@ -384,15 +384,25 @@ fun ConversationScreen(
           onBack = onBack,
           onShowContactProfile = onShowContactProfile,
           onStartVoiceCall = {
-            if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            if (ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.RECORD_AUDIO
+              ) == PackageManager.PERMISSION_GRANTED
+            ) {
               callVM.startVoiceCall(peerId)
             } else {
               requestVoiceCallPermission.launch(Manifest.permission.RECORD_AUDIO)
             }
           },
           onStartVideoCall = {
-            val cam = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
-            val mic = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+            val cam = ContextCompat.checkSelfPermission(
+              context,
+              Manifest.permission.CAMERA
+            ) == PackageManager.PERMISSION_GRANTED
+            val mic = ContextCompat.checkSelfPermission(
+              context,
+              Manifest.permission.RECORD_AUDIO
+            ) == PackageManager.PERMISSION_GRANTED
             if (cam && mic) {
               callVM.startVideoCall(peerId)
             } else {

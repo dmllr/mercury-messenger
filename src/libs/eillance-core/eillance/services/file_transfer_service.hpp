@@ -17,7 +17,7 @@
 #include "eillance/logging/logging.hpp"
 #include "eillance/messaging/types.hpp"
 #include "eillance/storage/persistent_storage.hpp"
-#include "eillance/transport/transport.hpp"
+#include "eillance/transport/data_transport.hpp"
 #include "eillance/utils/invariant.hpp"
 
 namespace eillance::services {
@@ -29,7 +29,7 @@ class FileTransferService {
 
   explicit FileTransferService(
       std::shared_ptr<storage::PersistentStorage> storage,
-      std::shared_ptr<transport::Transport> transport
+      std::shared_ptr<transport::DataTransport> transport
   )
       : storage_(std::move(storage)),
         transport_(std::move(transport)) {
@@ -49,10 +49,6 @@ class FileTransferService {
         std::lock_guard<std::mutex> const lock(transfers_mutex_);
         if (!active_uploads_.contains(attachment.id)) {
           // Check if we should really start.
-          // If connection just established, we don't push until requested or if it was interrupted transferring.
-          // However, for robustness, Uploader stays passive in "resume" scenarios usually.
-          // We rely on "transferring" status to indicate intent, but we wait for request.
-          // EXCEPT if we are fresh sending (handled by QueueUpload).
         }
       } else {
         // We are downloader
@@ -485,7 +481,7 @@ class FileTransferService {
 
       buffer.resize(header_size + bytes_read);
 
-      if (!transport_->SendPeerDataChannelBinaryMessage(peer_id, buffer)) {
+      if (!transport_->SendData(peer_id, buffer)) {
         break;
       }
 
@@ -653,7 +649,7 @@ class FileTransferService {
     if (!payload.empty()) {
       std::memcpy(buf.data() + header_size, payload.data(), payload.size());
     }
-    return transport_->SendPeerDataChannelBinaryMessage(peer_id, buf);
+    return transport_->SendData(peer_id, buf);
   }
 
   void SendResumeRequest(ContactID const& peer_id, std::string const& file_id, std::uint32_t start_seq) {
@@ -681,7 +677,7 @@ class FileTransferService {
   }
 
   std::shared_ptr<storage::PersistentStorage> storage_;
-  std::shared_ptr<transport::Transport> transport_;
+  std::shared_ptr<transport::DataTransport> transport_;
   std::map<std::string, TransferUploadState> active_uploads_;
   std::map<std::string, TransferDownloadState> active_downloads_;
   mutable std::mutex transfers_mutex_;

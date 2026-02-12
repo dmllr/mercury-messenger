@@ -39,7 +39,8 @@ import hela.eillance.telecom.MercuryConnectionService
 import hela.eillance.viewmodels.CallViewModel
 import hela.eillance.viewmodels.ContactsViewModel
 import hela.eillance.viewmodels.SettingsViewModel
-import hela.eillance.webrtc.WebRtcTransport
+import hela.eillance.webrtc.WebRtcDataTransport
+import hela.eillance.webrtc.WebRtcMediaTransport
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -68,7 +69,8 @@ class CallService : Service() {
   private val engineMutex = Mutex()
 
   private var wakeLock: PowerManager.WakeLock? = null
-  private var webRtcTransport: WebRtcTransport? = null
+  private var dataTransport: WebRtcDataTransport? = null
+  private var mediaTransport: WebRtcMediaTransport? = null
 
   // Background ViewModels
   private var backgroundContactsVM: ContactsViewModel? = null
@@ -82,11 +84,9 @@ class CallService : Service() {
   private lateinit var phoneAccountHandle: PhoneAccountHandle
   private val activeTelecomConnections = ConcurrentHashMap<String, MercuryConnection>()
 
-  // Global error stream for UI to consume
   private val _errorEvents = MutableSharedFlow<String>()
   val errorEvents: SharedFlow<String> = _errorEvents.asSharedFlow()
 
-  // Core Health State
   private val _isCoreUnresponsive = MutableStateFlow(false)
   val isCoreUnresponsive = _isCoreUnresponsive.asStateFlow()
 
@@ -98,7 +98,6 @@ class CallService : Service() {
     createNotificationChannels()
     registerPhoneAccount()
 
-    // Initialize Engine on Background thread to avoid ANR.
     serviceScope.launch(Dispatchers.IO) {
       engineMutex.withLock {
         try {
@@ -121,21 +120,14 @@ class CallService : Service() {
   private fun startWatchdog() {
     serviceScope.launch(Dispatchers.IO) {
       while (true) {
-        delay(10000) // Check every 10 seconds
+        delay(10000)
         if (_isEngineReady.value) {
           val isAlive = try {
             withTimeout(2000) { nativePing() }
           } catch (e: Exception) {
-            Log.e(TAG, "Core ping failed or timed out", e)
             false
           }
-
-          if (!isAlive) {
-            Log.e(TAG, "Core detected as unresponsive.")
-            _isCoreUnresponsive.value = true
-          } else {
-            _isCoreUnresponsive.value = false
-          }
+          _isCoreUnresponsive.value = !isAlive
         }
       }
     }
@@ -144,8 +136,6 @@ class CallService : Service() {
   fun restartCore() {
     serviceScope.launch(Dispatchers.IO) {
       engineMutex.withLock {
-        Log.w(TAG, "Restarting Core...")
-        // Ensure media is stopped before restarting core to prevent lingering resources
         stopLocalMedia()
         nativeRestart()
         _isCoreUnresponsive.value = false
@@ -154,10 +144,8 @@ class CallService : Service() {
     }
   }
 
-  // Called from C++ when the internal watchdog detects a hang
   @Keep
   fun onNativeCoreCrash() {
-    Log.e(TAG, "Native Core reported a fatal error. Initiating auto-restart.")
     restartCore()
   }
 
@@ -201,10 +189,10 @@ class CallService : Service() {
     backgroundCallVM?.hangup()
   }
 
-  fun startLocalMedia(isVideo: Boolean) = webRtcTransport?.startLocalMedia(isVideo)
-  fun stopLocalMedia() = webRtcTransport?.stopLocalMedia()
-  fun setLocalVideoSink(sink: VideoSink?) = webRtcTransport?.setLocalSink(sink)
-  fun setRemoteVideoSink(peerId: String, sink: VideoSink?) = webRtcTransport?.setRemoteSink(peerId, sink)
+  fun startLocalMedia(isVideo: Boolean) = mediaTransport?.startLocalMedia(isVideo)
+  fun stopLocalMedia() = mediaTransport?.stopLocalMedia()
+  fun setLocalVideoSink(sink: VideoSink?) = mediaTransport?.setLocalSink(sink)
+  fun setRemoteVideoSink(peerId: String, sink: VideoSink?) = mediaTransport?.setRemoteSink(peerId, sink)
 
   private fun registerPhoneAccount() {
     val componentName = ComponentName(this, MercuryConnectionService::class.java)
@@ -227,7 +215,6 @@ class CallService : Service() {
         val peerId = intent.getStringExtra(EXTRA_PEER_ID)
         if (peerId != null) {
           serviceScope.launch {
-            // Wait for engine init if necessary
             CallService.isEngineReady.first { it }
             backgroundContactsVM?.markAllAsRead(peerId)
             notificationManager.cancel(MESSAGE_NOTIFICATION_ID_BASE + peerId.hashCode())
@@ -242,25 +229,28 @@ class CallService : Service() {
     instance = null
     _isEngineReady.value = false
     soundPlayer.stop()
-
     serviceScope.launch(Dispatchers.IO) {
       engineMutex.withLock {
         terminate()
       }
     }
-
     releaseWakeLock()
     super.onDestroy()
   }
 
   @Suppress("unused")
-  fun setWebRtcTransport(transport: WebRtcTransport) {
-    webRtcTransport = transport
-    // Attach error listener to propagate transport errors to UI
-    webRtcTransport?.onError = { errorMessage ->
-      serviceScope.launch {
-        _errorEvents.emit(errorMessage)
-      }
+  fun setWebRtcDataTransport(transport: WebRtcDataTransport) {
+    dataTransport = transport
+    dataTransport?.onError = { errorMessage ->
+      serviceScope.launch { _errorEvents.emit(errorMessage) }
+    }
+  }
+
+  @Suppress("unused")
+  fun setWebRtcMediaTransport(transport: WebRtcMediaTransport) {
+    mediaTransport = transport
+    mediaTransport?.onSendSignalingMessage = { msg ->
+      dataTransport?.sendSignalingMessage(msg)
     }
   }
 
@@ -270,12 +260,10 @@ class CallService : Service() {
     checkForIncomingCall(lastKnownCallState, callState)
     updateForegroundServiceNotification(callState.isInCall, callState.peerId, ServiceConnectionState.Online)
 
-    // Check for transition from Active -> Inactive to stop media
     val wasActive = lastKnownCallState?.let { it.isConnecting || it.isRinging || it.isInCall } ?: false
     val isActive = callState.isConnecting || callState.isRinging || callState.isInCall
 
     if (wasActive && !isActive) {
-      Log.i(TAG, "Call session ended. Stopping local media.")
       stopLocalMedia()
     }
 
@@ -345,16 +333,8 @@ class CallService : Service() {
         val prefs = getSharedPreferences("mercury_prefs", Context.MODE_PRIVATE)
         val showContent = prefs.getBoolean("show_notifications_content", true)
         val displayName = newContact.name.ifEmpty { newContact.peerId.take(8) }
-
-        // Fetch actual unread messages from history
         val unreadMessages = backgroundContactsVM?.getUnreadMessages(newContact.peerId) ?: emptyList()
-
-        showNewMessageNotification(
-          newContact.peerId,
-          displayName,
-          unreadMessages,
-          showContent
-        )
+        showNewMessageNotification(newContact.peerId, displayName, unreadMessages, showContent)
       }
     }
   }
@@ -382,19 +362,22 @@ class CallService : Service() {
     connectionState: ServiceConnectionState
   ) {
     if (inCall) acquireWakeLock() else releaseWakeLock()
-
     val notification = buildForegroundServiceNotification(inCall, peerId, connectionState)
-
     try {
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         val serviceType = if (inCall) {
           var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
           if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            if (ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.RECORD_AUDIO
+              ) == PackageManager.PERMISSION_GRANTED
+            ) {
               type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
             }
             val isVideo = lastKnownCallState?.callType == HistoryEntryKind.VideoCall
-            val hasCamera = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+            val hasCamera =
+              ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
             if (isVideo && hasCamera) {
               type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
             }
@@ -424,11 +407,9 @@ class CallService : Service() {
       fullScreenIntent,
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
-
     val rejectIntent = Intent(this, CallService::class.java).apply { action = ACTION_REJECT_CALL }
     val rejectPendingIntent =
       PendingIntent.getService(this, 1, rejectIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-
     val acceptIntent = Intent(this, MainActivity::class.java).apply {
       action = ACTION_ACCEPT_CALL
       putExtra(EXTRA_PEER_ID, peerId)
@@ -476,7 +457,6 @@ class CallService : Service() {
       intent,
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
-
     val me = Person.Builder().setName(getString(R.string.app_name)).build()
     val sender = Person.Builder().setName(title).build()
     val style = NotificationCompat.MessagingStyle(me)
@@ -484,26 +464,19 @@ class CallService : Service() {
     if (messages.isNotEmpty()) {
       messages.forEach { msg ->
         val text = if (showContent) {
-          if (!msg.content.isNullOrBlank()) {
-            msg.content
-          } else if (msg.attachments.isNotEmpty()) {
+          if (!msg.content.isNullOrBlank()) msg.content
+          else if (msg.attachments.isNotEmpty()) {
             val att = msg.attachments.first()
             val typeText = when (att.type) {
               AttachmentType.Image -> getString(R.string.file_type_image)
               AttachmentType.Video -> getString(R.string.file_type_video)
-              AttachmentType.File -> {
-                if (att.mime.startsWith("audio/")) getString(R.string.file_type_audio)
-                else if (att.mime == "application/pdf") getString(R.string.file_type_pdf)
-                else getString(R.string.file_type_generic)
-              }
+              AttachmentType.File -> if (att.mime.startsWith("audio/")) getString(R.string.file_type_audio) else getString(
+                R.string.file_type_generic
+              )
             }
             "[$typeText]"
-          } else {
-            getString(R.string.notification_new_message)
-          }
-        } else {
-          getString(R.string.notification_new_message)
-        }
+          } else getString(R.string.notification_new_message)
+        } else getString(R.string.notification_new_message)
         style.addMessage(text, msg.timestamp / 1000, sender)
       }
     } else {
@@ -520,11 +493,8 @@ class CallService : Service() {
       markReadIntent,
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
-    val markReadAction = NotificationCompat.Action.Builder(
-      0,
-      getString(R.string.action_mark_read),
-      markReadPendingIntent
-    ).build()
+    val markReadAction =
+      NotificationCompat.Action.Builder(0, getString(R.string.action_mark_read), markReadPendingIntent).build()
 
     val builder = NotificationCompat.Builder(this, MESSAGES_CHANNEL_ID)
       .setSmallIcon(android.R.drawable.stat_notify_chat)
@@ -582,17 +552,17 @@ class CallService : Service() {
       getString(R.string.notification_channel_foreground_title),
       NotificationManager.IMPORTANCE_MIN
     )
-    // IMPORTANT: High importance + Sound + Vibration for calls
     val callsChannel = NotificationChannel(
       CALLS_CHANNEL_ID,
       getString(R.string.notification_channel_calls_title),
       NotificationManager.IMPORTANCE_HIGH
     ).apply {
       description = getString(R.string.notification_channel_calls_description)
-      setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE), AudioAttributes.Builder()
-        .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
-        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-        .build())
+      setSound(
+        RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE),
+        AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+          .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()
+      )
       enableVibration(true)
       lockscreenVisibility = Notification.VISIBILITY_PUBLIC
     }

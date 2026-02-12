@@ -80,45 +80,59 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     classref.RegisterClass(env, "java/io/File");
     classref.RegisterMethod(env, "java/io/File", "getPath", "()Ljava/lang/String;");
 
-    std::string const webrtc_transport_class = "hela/eillance/webrtc/WebRtcTransport";
-    classref.RegisterClass(env, webrtc_transport_class);
-    classref.RegisterCtor(env, webrtc_transport_class, "(Landroid/content/Context;J)V");
-    classref.RegisterMethod(env, webrtc_transport_class, "connect", "(Ljava/lang/String;Ljava/lang/String;)V");
-    classref.RegisterMethod(env, webrtc_transport_class, "terminate", "()V");
-    classref.RegisterMethod(env, webrtc_transport_class, "reconnect", "(Ljava/lang/String;)V");
-    classref.RegisterMethod(env, webrtc_transport_class, "updateIceServers", "(Ljava/lang/String;)V");
-    classref.RegisterMethod(env, webrtc_transport_class, "getPeerConnectionState", "(Ljava/lang/String;)I");
-    classref.RegisterMethod(env, webrtc_transport_class, "sendSignalingMessage", "(Ljava/lang/String;)V");
+    // DATA TRANSPORT REGISTRATION
+    std::string const data_transport_class = "hela/eillance/webrtc/WebRtcDataTransport";
+    classref.RegisterClass(env, data_transport_class);
+    classref.RegisterCtor(env, data_transport_class, "(Landroid/content/Context;J)V");
+    classref.RegisterMethod(env, data_transport_class, "connect", "(Ljava/lang/String;Ljava/lang/String;)V");
+    classref.RegisterMethod(env, data_transport_class, "terminate", "()V");
+    classref.RegisterMethod(env, data_transport_class, "reconnect", "(Ljava/lang/String;)V");
+    classref.RegisterMethod(env, data_transport_class, "updateIceServers", "(Ljava/lang/String;)V");
+    classref.RegisterMethod(env, data_transport_class, "getPeerConnectionState", "(Ljava/lang/String;)I");
+    classref.RegisterMethod(env, data_transport_class, "sendSignalingMessage", "(Ljava/lang/String;)V");
+    classref.RegisterMethod(env, data_transport_class, "sendDataChannelMessageBinary", "(Ljava/lang/String;[B)Z");
+    classref.RegisterMethod(env, data_transport_class, "disconnectPeer", "(Ljava/lang/String;)V");
+    classref.RegisterMethod(env, data_transport_class, "createOffer", "(Ljava/lang/String;)V");
+    classref.RegisterMethod(env, data_transport_class, "createAnswer", "(Ljava/lang/String;)V");
     classref.RegisterMethod(
         env,
-        webrtc_transport_class,
-        "sendDataChannelMessage",
-        "(Ljava/lang/String;Ljava/lang/String;)Z"
-    );
-    classref.RegisterMethod(env, webrtc_transport_class, "sendDataChannelMessageBinary", "(Ljava/lang/String;[B)Z");
-
-    classref.RegisterMethod(env, webrtc_transport_class, "closePeerConnection", "(Ljava/lang/String;I)V");
-    classref.RegisterMethod(env, webrtc_transport_class, "createOffer", "(Ljava/lang/String;I)V");
-    classref.RegisterMethod(env, webrtc_transport_class, "createAnswer", "(Ljava/lang/String;I)V");
-    classref.RegisterMethod(
-        env,
-        webrtc_transport_class,
+        data_transport_class,
         "setRemoteDescription",
-        "(Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;)V"
+        "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V"
     );
-    classref.RegisterMethod(env, webrtc_transport_class, "addVideoTrack", "(Ljava/lang/String;I)V");
-    classref.RegisterMethod(env, webrtc_transport_class, "addAudioTrack", "(Ljava/lang/String;I)V");
-    classref.RegisterMethod(env, webrtc_transport_class, "createPeerConnection", "(Ljava/lang/String;I)V");
+    classref.RegisterMethod(env, data_transport_class, "connectPeer", "(Ljava/lang/String;)V");
+    classref.RegisterMethod(env, data_transport_class, "nativeOnSignalingConnectionStateChange", "(JI)V");
 
-    classref.RegisterMethod(env, webrtc_transport_class, "createDataChannel", "(Ljava/lang/String;)V");
-    classref.RegisterMethod(env, webrtc_transport_class, "nativeOnSignalingConnectionStateChange", "(JI)V");
+    // MEDIA TRANSPORT REGISTRATION
+    std::string const media_transport_class = "hela/eillance/webrtc/WebRtcMediaTransport";
+    classref.RegisterClass(env, media_transport_class);
+    classref.RegisterCtor(env, media_transport_class, "(Landroid/content/Context;J)V");
+    classref.RegisterMethod(env, media_transport_class, "updateIceServers", "(Ljava/lang/String;)V");
+    classref.RegisterMethod(env, media_transport_class, "disconnectPeer", "(Ljava/lang/String;)V");
+    classref.RegisterMethod(env, media_transport_class, "createOffer", "(Ljava/lang/String;)V");
+    classref.RegisterMethod(env, media_transport_class, "createAnswer", "(Ljava/lang/String;)V");
+    classref.RegisterMethod(
+        env,
+        media_transport_class,
+        "setRemoteDescription",
+        "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V"
+    );
+    classref.RegisterMethod(env, media_transport_class, "addVideoTrack", "(Ljava/lang/String;)V");
+    classref.RegisterMethod(env, media_transport_class, "addAudioTrack", "(Ljava/lang/String;)V");
+    classref.RegisterMethod(env, media_transport_class, "connectPeer", "(Ljava/lang/String;)V");
 
     classref.RegisterClass(env, "hela/eillance/CallService");
     classref.RegisterMethod(
         env,
         "hela/eillance/CallService",
-        "setWebRtcTransport",
-        "(Lhela/eillance/webrtc/WebRtcTransport;)V"
+        "setWebRtcDataTransport",
+        "(Lhela/eillance/webrtc/WebRtcDataTransport;)V"
+    );
+    classref.RegisterMethod(
+        env,
+        "hela/eillance/CallService",
+        "setWebRtcMediaTransport",
+        "(Lhela/eillance/webrtc/WebRtcMediaTransport;)V"
     );
 
     classref.RegisterClass(env, "hela/eillance/viewmodels/NativeContactsObserver");

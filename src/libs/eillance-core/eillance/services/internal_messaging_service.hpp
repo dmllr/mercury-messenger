@@ -1,3 +1,5 @@
+#pragma once
+
 #include <map>
 #include <memory>
 #include <mutex>
@@ -15,7 +17,7 @@
 #include "eillance/services/media_call_service.hpp"
 #include "eillance/services/messaging_service.hpp"
 #include "eillance/services/profile_service.hpp"
-#include "eillance/transport/transport.hpp"
+#include "eillance/transport/data_transport.hpp"
 #include "eillance/utils/time.hpp"
 
 namespace eillance::services {
@@ -26,7 +28,8 @@ class InternalMessagingService {
   using IceConfigCallback = std::function<void(Json const&)>;
 
   InternalMessagingService(
-      std::shared_ptr<transport::Transport> transport,
+      std::shared_ptr<transport::DataTransport> data_transport,
+      std::shared_ptr<transport::MediaTransport> media_transport,
       std::shared_ptr<AccountService> account_service,
       std::shared_ptr<ContactService> contact_service,
       std::shared_ptr<MessagingService> messaging_service,
@@ -34,7 +37,8 @@ class InternalMessagingService {
       std::shared_ptr<FileTransferService> file_transfer_service,
       std::shared_ptr<ProfileService> profile_service
   )
-      : transport_(std::move(transport)),
+      : data_transport_(std::move(data_transport)),
+        media_transport_(std::move(media_transport)),
         account_service_(std::move(account_service)),
         contact_service_(std::move(contact_service)),
         messaging_service_(std::move(messaging_service)),
@@ -61,7 +65,7 @@ class InternalMessagingService {
             {"id", account_service_->GetId().ToString()},
             {"signature", crypto::ToHex(signature)}
         };
-        transport_->SendSignalingMessage(response);
+        data_transport_->SendSignalingMessage(response);
       }
     } else if (type == "login_success") {
       messaging_service_->StartDeliveryService();
@@ -97,7 +101,7 @@ class InternalMessagingService {
 
   void SetupPeerHandlers(std::shared_ptr<transport::Peer> const& peer, ContactID const& peer_id) {
     peer->on_data_channel_message = [this, peer_id](std::span<std::byte const> msg) {
-      if (auto p = transport_->GetPeer(peer_id)) {
+      if (auto p = data_transport_->GetPeer(peer_id)) {
         p->last_activity_time = Time::Now();
       }
 
@@ -165,7 +169,7 @@ class InternalMessagingService {
     } else if (type == "profile_request") {
       profile_service_->SyncProfile(peer_id);
     } else if (type == "termination") {
-      transport_->RemovePeer(peer_id);
+      data_transport_->RemovePeer(peer_id);
     } else if (type == "file_cancel") {
       std::string const file_id = message.value("file_id", "");
       if (!file_id.empty()) {
@@ -175,7 +179,7 @@ class InternalMessagingService {
   }
 
   void OnDataChannelOpen(ContactID const& peer_id) {
-    auto peer = transport_->GetPeer(peer_id);
+    auto peer = data_transport_->GetPeer(peer_id);
     if (!peer) {
       return;
     }
@@ -198,7 +202,7 @@ class InternalMessagingService {
           {"key", std::vector<std::byte>(my_pub_key.begin(), my_pub_key.end())},
           {"is_reply", false}
       };
-      transport_->SendPeerDataChannelMessage(peer_id, key_msg);
+      data_transport_->SendJson(peer_id, key_msg);
     }
 
     messaging_service_->UnsuspendAndDeliver(peer_id);
@@ -206,56 +210,55 @@ class InternalMessagingService {
 
  private:
   void HandleSdp(ContactID const& peer_id, std::string const& type, Json const& message) {
-    auto context = transport::ToContext(message.value("context", "data"));
+    std::string context_str = message.value("context", "data");
+    bool is_media = (context_str == "media");
 
-    auto peer = transport_->GetPeer(peer_id);
+    auto peer = data_transport_->GetPeer(peer_id);
     if (!peer) {
       if (type == "offer") {
         peer = std::make_shared<transport::Peer>(peer_id);
-        transport_->AddPeer(peer_id, peer);
+        data_transport_->AddPeer(peer_id, peer);
+        SetupPeerHandlers(peer, peer_id);
+        media_transport_->AttachToPeer(peer_id, peer);
       } else {
         // Generally this shouldn't happen.
-        INVARIANT_UNREACHABLE();
+        return;
       }
-    }
-
-    // Essential the case where peers created via MediaCallService
-    if (peer && !peer->on_data_channel_message) {
+    } else if (!peer->on_data_channel_message) {
       SetupPeerHandlers(peer, peer_id);
     }
 
     if (type == "offer") {
-      // Context-aware connection setup
-      transport_->EnsurePeerConnection(peer_id, context);
+      if (is_media) {
+        auto const sdp = message["sdp"].get<std::string>();
+        bool const is_video = sdp.find("m=video") != std::string::npos;
 
-      // IMPORTANT: Do NOT CreateDataChannel here.
-      // We are the Answerer. The Offerer creates the channel.
-      // We will receive it via the onDataChannel event in the transport layer.
-
-      auto const sdp = message["sdp"].get<std::string>();
-      bool const is_video = sdp.find("m=video") != std::string::npos;
-      bool const is_audio = sdp.find("m=audio") != std::string::npos;
-
-      if (context == transport::ConnectionContext::Media && (is_video || is_audio)) {
+        media_transport_->Connect(peer_id);
         peer->has_media_peer_connection = true;
+
         media_call_service_->OnCallRequest(
             peer_id,
             is_video ? messaging::HistoryEntryKind::videoCall : messaging::HistoryEntryKind::voiceCall
         );
-        transport_->SetRemoteDescription(peer_id, context, sdp, "offer");
-      } else {
-        // Data-only offer (connection establishment). Auto-answer.
-        transport_->SetRemoteDescription(peer_id, context, sdp, "offer");
-        transport_->CreateAnswer(peer_id, context);
-      }
 
+        media_transport_->SetRemoteDescription(peer_id, sdp, "offer");
+      } else {
+        // Data offer
+        data_transport_->Connect(peer_id);
+        data_transport_->SetRemoteDescription(peer_id, message["sdp"].get<std::string>(), "offer");
+        data_transport_->CreateAnswer(peer_id);
+      }
     } else if (type == "answer") {
-      transport_->SetRemoteDescription(peer_id, context, message["sdp"].get<std::string>(), "answer");
+      if (is_media) {
+        media_transport_->SetRemoteDescription(peer_id, message["sdp"].get<std::string>(), "answer");
+      } else {
+        data_transport_->SetRemoteDescription(peer_id, message["sdp"].get<std::string>(), "answer");
+      }
     }
   }
 
   void HandleKeyExchange(ContactID const& peer_id, Json const& message) {
-    auto const peer = transport_->GetPeer(peer_id);
+    auto const peer = data_transport_->GetPeer(peer_id);
     if (!peer) {
       return;
     }
@@ -264,7 +267,7 @@ class InternalMessagingService {
     if (peer->session_cipher->ComputeSharedSecret(pub_key)) {
       if (!message.value("is_reply", false)) {
         auto my_key = peer->session_cipher->GetPublicKey();
-        transport_->SendPeerDataChannelMessage(
+        data_transport_->SendJson(
             peer_id,
             {{"type", "key_exchange"}, {"key", std::vector<std::byte>(my_key.begin(), my_key.end())}, {"is_reply", true}
             }
@@ -302,7 +305,8 @@ class InternalMessagingService {
     messaging_service_->OnChatMessageReceived(peer_id, payload, msg_id, is_sys, attachments);
   }
 
-  std::shared_ptr<transport::Transport> transport_;
+  std::shared_ptr<transport::DataTransport> data_transport_;
+  std::shared_ptr<transport::MediaTransport> media_transport_;
   std::shared_ptr<AccountService> account_service_;
   std::shared_ptr<ContactService> contact_service_;
   std::shared_ptr<MessagingService> messaging_service_;

@@ -9,13 +9,14 @@
 #include <jni.h>
 #include <sys/system_properties.h>
 
+#include "data_transport_impl_libwebrtc.hpp"
 #include "eillance/capture/video_config.hpp"
 #include "eillance/client/client.hpp"
 #include "eillance/logging/logging.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/storage/sqlite/persistent_storage_impl_sqlite.hpp"
 #include "eillance/view_model/client_event_router.hpp"
-#include "transport_impl_libwebrtc.hpp"
+#include "media_transport_impl_libwebrtc.hpp"
 #include "utils/class_refs.hpp"
 
 namespace eillance {
@@ -32,7 +33,6 @@ class ClientEngine {
     service_ref_ = env->NewGlobalRef(context);
 
     auto& class_refs = ClassRefs::Instance();
-    // Get the app's private files directory for the database
     jmethodID get_files_dir_method = class_refs.Class("android/content/Context").GetMethod("getFilesDir");
     jobject file_object = env->CallObjectMethod(context, get_files_dir_method);
 
@@ -44,19 +44,23 @@ class ClientEngine {
 
     auto storage = std::make_shared<storage::PersistentStorage>(std::make_unique<storage::SQLiteStorage>(db_path));
 
-    auto rtc_transport_impl = std::make_unique<transport::AndroidRtcTransport>(jvm, context);
-    auto transport = std::make_shared<transport::Transport>(std::move(rtc_transport_impl));
+    auto data_transport = std::make_unique<transport::AndroidDataTransport>(jvm, context);
+    auto media_transport = std::make_unique<transport::AndroidMediaTransport>(jvm, context);
 
-    // Pass a fatal error callback to the Client
-    client_ = std::make_shared<Client>(storage, transport, [this]() {
-      jni::ScopedJniEnv env_scope(jvm_);
-      if (auto* env = env_scope.Get()) {
-        auto& cls = ClassRefs::Instance().Class("hela/eillance/CallService");
-        jmethodID method = cls.GetMethod("onNativeCoreCrash");
-        // Call into Java to trigger restart logic
-        env->CallVoidMethod(service_ref_, method);
-      }
-    });
+    // Pass separate transports to Client
+    client_ = std::make_shared<Client>(
+        storage,
+        std::make_shared<transport::DataTransport>(std::move(data_transport)),
+        std::make_shared<transport::MediaTransport>(std::move(media_transport)),
+        [this]() {
+          jni::ScopedJniEnv env_scope(jvm_);
+          if (auto* env = env_scope.Get()) {
+            auto& cls = ClassRefs::Instance().Class("hela/eillance/CallService");
+            jmethodID method = cls.GetMethod("onNativeCoreCrash");
+            env->CallVoidMethod(service_ref_, method);
+          }
+        }
+    );
 
     router_ = std::make_shared<view_model::ClientEventRouter>(client_);
 

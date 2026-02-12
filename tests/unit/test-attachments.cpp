@@ -8,15 +8,14 @@
 #include "eillance/messaging/history.hpp"
 #include "eillance/services/file_transfer_service.hpp"
 #include "eillance/services/messaging_service.hpp"
+#include "mock_data_transport.hpp"
 #include "mock_persistent_storage.hpp"
-#include "mock_transport.hpp"
 
 using namespace eillance;
 
 class AttachmentTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    // Setup temp file for hashing tests
     temp_file_path_ = "test_image.jpg";
     std::ofstream ofs(temp_file_path_, std::ios::binary);
     ofs << "fake image data";
@@ -25,29 +24,28 @@ class AttachmentTest : public ::testing::Test {
     auto storage_impl = std::make_unique<storage::MockPersistentStorageImpl>();
     storage_ = std::make_shared<storage::PersistentStorage>(std::move(storage_impl));
 
-    mock_transport_impl_ = std::make_unique<transport::MockTransport>();
-    mock_transport_ = mock_transport_impl_.get();
-    transport_ = std::make_shared<transport::Transport>(std::move(mock_transport_impl_));
+    mock_log_ = std::make_shared<transport::MockCallLog>();
+    mock_data_transport_impl_ = std::make_unique<transport::MockDataTransport>(mock_log_);
+    mock_data_transport_raw_ = mock_data_transport_impl_.get();
+    data_transport_ = std::make_shared<transport::DataTransport>(std::move(mock_data_transport_impl_));
 
     auto contact_manager = std::make_shared<identity::ContactManager>(storage_);
     auto conn_handler = [](ContactID const&) {};
 
-    file_transfer_service_ = std::make_shared<services::FileTransferService>(storage_, transport_);
+    file_transfer_service_ = std::make_shared<services::FileTransferService>(storage_, data_transport_);
 
-    // Set callbacks on file_transfer_service_ BEFORE passing to messaging_service_
     file_transfer_service_->SetAttachmentStatusChangedCallback([](auto, auto, auto) {});
     file_transfer_service_->SetTransferProgressCallback([](auto, auto, auto) {});
     file_transfer_service_->SetAttachmentDownloadedCallback([](auto, auto) {});
 
     service_ = std::make_unique<services::MessagingService>(
         storage_,
-        transport_,
+        data_transport_,
         contact_manager,
         file_transfer_service_,
         conn_handler
     );
 
-    // Satisfy invariants required by MessagingService
     service_->SetMessageStatusChangedCallback([](auto, auto, auto) {});
     service_->SetChatMessageReceivedCallback([](auto, auto) {});
 
@@ -55,19 +53,19 @@ class AttachmentTest : public ::testing::Test {
   }
 
   void TearDown() override {
-    service_.reset();                // Destroy MessagingService
-    file_transfer_service_.reset();  // Destroy FileTransferService to close open file handles
+    service_.reset();
+    file_transfer_service_.reset();
     std::filesystem::remove(temp_file_path_);
-    // Cleanup any extra files
     if (std::filesystem::exists("test_bad_file")) {
       std::filesystem::remove("test_bad_file");
     }
   }
 
   std::shared_ptr<storage::PersistentStorage> storage_;
-  std::unique_ptr<transport::MockTransport> mock_transport_impl_;
-  transport::MockTransport* mock_transport_;
-  std::shared_ptr<transport::Transport> transport_;
+  std::shared_ptr<transport::MockCallLog> mock_log_;
+  std::unique_ptr<transport::MockDataTransport> mock_data_transport_impl_;
+  transport::MockDataTransport* mock_data_transport_raw_;
+  std::shared_ptr<transport::DataTransport> data_transport_;
   std::shared_ptr<services::FileTransferService> file_transfer_service_;
   std::unique_ptr<services::MessagingService> service_;
   std::string temp_file_path_;
@@ -77,7 +75,6 @@ class AttachmentTest : public ::testing::Test {
 
 TEST_F(AttachmentTest, SendMessageCalculatesHash) {
   std::vector<services::AttachmentRequest> attachments;
-  // Initialize with mime_type
   attachments.push_back({temp_file_path_, messaging::AttachmentType::image, "base64thumb", "image/jpeg"});
 
   auto const record = service_->SendChatMessage(peer1, "Check this out", attachments);
@@ -104,14 +101,13 @@ TEST_F(AttachmentTest, PersistenceStoresHash) {
       .kind = messaging::HistoryEntryKind::textMessage,
       .timestamp = 1000,
       .direction = messaging::MessageDirection::sent,
-      .status = messaging::MessageStatus::delivered,  // Ensure visible
+      .status = messaging::MessageStatus::delivered,
       .data = msg_data,
       .peer_id = peer1
   };
 
   (void)storage_->AddHistoryEntry(record);
 
-  // Retrieve
   auto page = storage_->GetHistoryPage(peer1, 0, 10);
   ASSERT_EQ(page.messages.size(), 1);
 
@@ -126,20 +122,18 @@ TEST_F(AttachmentTest, PersistenceStoresHash) {
 }
 
 TEST_F(AttachmentTest, SendQueuedMessagesSerializesHash) {
-  // Setup peer with open data channel
   auto peer = std::make_shared<transport::Peer>(peer1);
   peer->data_channel_is_open = true;
   peer->session_cipher->ComputeSharedSecret(eillance::crypto::SessionCipher().GetPublicKey());
-  transport_->AddPeer(peer1, peer);
+  data_transport_->AddPeer(peer1, peer);
 
   std::vector<services::AttachmentRequest> attachments;
   attachments.push_back({temp_file_path_, messaging::AttachmentType::image, "", "image/jpeg"});
 
   service_->SendChatMessage(peer1, "Text", attachments);
 
-  // Check transport log for the CHAT message (ignoring file chunks)
   bool found_chat_message = false;
-  for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
+  for (auto const& [pid, msg] : mock_log_->sent_peer_messages) {
     if (msg.contains("type") && msg["type"] == "chat" && msg.contains("attachments")) {
       auto hash = msg["attachments"][0]["hash"].get<std::string>();
       EXPECT_FALSE(hash.empty());
@@ -152,10 +146,7 @@ TEST_F(AttachmentTest, SendQueuedMessagesSerializesHash) {
 }
 
 TEST_F(AttachmentTest, AttachmentWithComputationFailureIsSkipped) {
-  // Use a non-existent file to force processing failure.
   std::string const bad_file = "non_existent_file_guid_12345.dat";
-
-  // Ensure it doesn't exist
   if (std::filesystem::exists(bad_file)) {
     std::filesystem::remove(bad_file);
   }
@@ -168,7 +159,6 @@ TEST_F(AttachmentTest, AttachmentWithComputationFailureIsSkipped) {
   ASSERT_TRUE(std::holds_alternative<messaging::MessageEntry>(record.data));
   auto const& entry = std::get<messaging::MessageEntry>(record.data);
 
-  // Attachment should be skipped because file_size throws or hash calculation fails
   EXPECT_TRUE(entry.attachments.empty());
 }
 
@@ -195,7 +185,6 @@ TEST_F(AttachmentTest, AttachmentPersistenceAcrossRestarts) {
   msg_data.content = "Image";
   msg_data.attachments.push_back(att);
 
-  // Explicitly set status to delivered/read so it's not filtered out as "none/deleted"
   messaging::HistoryEntryRecord record{
       .kind = messaging::HistoryEntryKind::textMessage,
       .timestamp = 1000,
@@ -209,11 +198,11 @@ TEST_F(AttachmentTest, AttachmentPersistenceAcrossRestarts) {
 
   auto contact_manager = std::make_shared<identity::ContactManager>(storage_);
   auto conn_handler = [](ContactID const&) {};
-  auto file_transfer_service = std::make_shared<services::FileTransferService>(storage_, transport_);
+  auto file_transfer_service = std::make_shared<services::FileTransferService>(storage_, data_transport_);
 
   auto new_service = std::make_unique<services::MessagingService>(
       storage_,
-      transport_,
+      data_transport_,
       contact_manager,
       file_transfer_service,
       conn_handler

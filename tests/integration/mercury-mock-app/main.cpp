@@ -9,7 +9,8 @@
 
 #include "eillance/client/client.hpp"
 #include "eillance/logging/logging.hpp"
-#include "eillance/rtc/transport_impl_libdatachannel.hpp"
+#include "eillance/rtc/data_transport_impl_libdatachannel.hpp"
+#include "eillance/rtc/media_transport_impl_libdatachannel.hpp"
 #include "eillance/storage/sqlite/persistent_storage_impl_sqlite.hpp"
 #include "eillance/utils/args_parser.hpp"
 
@@ -38,35 +39,22 @@ auto main(int argc, char** argv) -> int {
 
   // --- Utility Mode: Generate Identity ---
   if (args.Has("--gen-identity")) {
-    // Use a temp file path instead of :memory: to avoid potential directory creation issues
-    // on some filesystem implementations when parent path is empty.
     auto storage_impl = std::make_unique<eillance::storage::SQLiteStorage>("/tmp/identity_gen.db");
     auto storage = std::make_shared<eillance::storage::PersistentStorage>(std::move(storage_impl));
-    // Ignore errors, just need it open
     std::ignore = storage->Open();
 
-    auto rtc_transport_impl = std::make_unique<eillance::rtc::RtcTransport>();
-    auto transport = std::make_shared<eillance::transport::Transport>(std::move(rtc_transport_impl));
+    auto data_transport_impl = std::make_unique<eillance::rtc::RtcDataTransport>();
+    auto media_transport_impl = std::make_unique<eillance::rtc::RtcMediaTransport>();
 
-    // Client must not be const
-    eillance::Client client(storage, transport);
+    auto data_transport = std::make_shared<eillance::transport::DataTransport>(std::move(data_transport_impl));
+    auto media_transport = std::make_shared<eillance::transport::MediaTransport>(std::move(media_transport_impl));
+
+    eillance::Client client(storage, data_transport, media_transport);
+
+    // Set dummy callbacks to prevent crashes if any internals trigger them
     client.SetStatusCallback([](auto&&, auto, auto) {});
     client.SetDataReloadedCallback([]() {});
     client.GetAccountService()->SetOnMyProfileUpdatedCallback([]() {});
-    client.GetMessagingService()->SetChatMessageReceivedCallback([](auto&&, auto&&) {});
-    client.GetMessagingService()->SetMessageStatusChangedCallback([](auto&&, auto, auto) {});
-    client.GetMessagingService()->SetAttachmentDownloadedCallback([](auto&&, auto&&) {});
-    client.GetMessagingService()->SetTransferProgressCallback([](auto&&, auto&&, auto) {});
-    client.GetMessagingService()->SetAttachmentStatusChangedCallback([](auto&&, auto&&, auto) {});
-    client.GetContactService()->SetContactRequestCallback([](auto&&) {});
-    client.GetContactService()->SetContactStatusChangedCallback([](auto&&, auto) {});
-    client.GetContactService()->SetContactRemovedCallback([](auto&&) {});
-    client.GetProfileService()->SetContactProfileUpdatedCallback([](auto&&) {});
-    client.GetMediaCallService()->SetFrameReceivedCallback([](auto&&) {});
-    client.GetMediaCallService()->SetIncomingCallCallback([](auto&&, auto) {});
-    client.GetMediaCallService()->SetCallRingingCallback([](auto&&) {});
-    client.GetMediaCallService()->SetCallAcceptedCallback([](auto&&) {});
-    client.GetMediaCallService()->SetCallTerminatedCallback([](auto&&) {});
 
     auto mnemonic = client.GenerateNewIdentity();
     auto id = client.GetId().ToString();
@@ -96,17 +84,24 @@ auto main(int argc, char** argv) -> int {
     return 1;
   }
 
-  auto rtc_transport_impl = std::make_unique<eillance::rtc::RtcTransport>();
-  auto transport = std::make_shared<eillance::transport::Transport>(std::move(rtc_transport_impl));
-  auto client = std::make_shared<eillance::Client>(storage, transport);
+  auto data_transport_impl = std::make_unique<eillance::rtc::RtcDataTransport>();
+  auto media_transport_impl = std::make_unique<eillance::rtc::RtcMediaTransport>();
+
+  auto data_transport = std::make_shared<eillance::transport::DataTransport>(std::move(data_transport_impl));
+  auto media_transport = std::make_shared<eillance::transport::MediaTransport>(std::move(media_transport_impl));
+
+  auto client = std::make_shared<eillance::Client>(storage, data_transport, media_transport);
 
   client->UpdateSignalingUrl(*signaling_url);
-  client->SetStatusCallback(
+
+  // Set minimal callbacks for functional test reporting
+  data_transport->SetStatusCallback(
       [](eillance::ContactID const& peer, eillance::EventSource const source, int const state) -> void {
         std::cout << "[mock] " << peer.ToString() << " Status change " << static_cast<int>(source) << ":" << state
                   << std::endl;
       }
   );
+
   client->GetMessagingService()->SetChatMessageReceivedCallback(
       [](eillance::ContactID const& peer, eillance::messaging::HistoryEntryRecord const& record) -> void {
         if (std::holds_alternative<eillance::messaging::MessageEntry>(record.data)) {
@@ -122,6 +117,8 @@ auto main(int argc, char** argv) -> int {
         }
       }
   );
+
+  // Set dummy callbacks
   client->GetAccountService()->SetOnMyProfileUpdatedCallback([]() {});
   client->GetMessagingService()->SetAttachmentDownloadedCallback([](auto&&, auto&&) {});
   client->GetMessagingService()->SetTransferProgressCallback([](auto&&, auto&&, auto) {});
@@ -171,10 +168,6 @@ auto main(int argc, char** argv) -> int {
       } else {
         LGE << "Invalid message command format: " << cmd;
       }
-    } else if (cmd == "allow-p2p") {
-      LGI << "Allowing P2P connections (mock action so far)";
-    } else if (cmd == "disallow-p2p") {
-      LGI << "Disallowing P2P connections (mock action so far)";
     } else {
       LGE << "Unknown command: " << cmd;
     }

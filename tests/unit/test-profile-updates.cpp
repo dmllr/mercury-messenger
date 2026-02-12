@@ -6,8 +6,9 @@
 
 #include "eillance/client/client.hpp"
 #include "eillance/view_model/client_event_router.hpp"
+#include "mock_data_transport.hpp"
+#include "mock_media_transport.hpp"
 #include "mock_persistent_storage.hpp"
-#include "mock_transport.hpp"
 
 using namespace eillance;
 
@@ -18,11 +19,15 @@ class ProfileUpdatesTest : public ::testing::Test {
     mock_storage_ = storage_impl.get();
     storage_ = std::make_shared<storage::PersistentStorage>(std::move(storage_impl));
 
-    mock_transport_impl_ = std::make_unique<transport::MockTransport>();
+    mock_log_ = std::make_shared<transport::MockCallLog>();
+    mock_transport_impl_ = std::make_unique<transport::MockDataTransport>(mock_log_);
     mock_transport_ = mock_transport_impl_.get();
-    transport_ = std::make_shared<transport::Transport>(std::move(mock_transport_impl_));
+    transport_ = std::make_shared<transport::DataTransport>(std::move(mock_transport_impl_));
 
-    client_ = std::make_shared<Client>(storage_, transport_);
+    auto media_transport_impl = std::make_unique<transport::MockMediaTransport>(mock_log_);
+    auto media_transport = std::make_shared<transport::MediaTransport>(std::move(media_transport_impl));
+
+    client_ = std::make_shared<Client>(storage_, transport_, media_transport);
     router_ = std::make_shared<view_model::ClientEventRouter>(client_);
 
     (void)client_->GetAccountService()->GenerateNewIdentity();
@@ -39,10 +44,11 @@ class ProfileUpdatesTest : public ::testing::Test {
   }
 
   storage::MockPersistentStorageImpl* mock_storage_{};
-  std::unique_ptr<transport::MockTransport> mock_transport_impl_;
-  transport::MockTransport* mock_transport_{};
+  std::shared_ptr<transport::MockCallLog> mock_log_;
+  std::unique_ptr<transport::MockDataTransport> mock_transport_impl_;
+  transport::MockDataTransport* mock_transport_{};
   std::shared_ptr<storage::PersistentStorage> storage_;
-  std::shared_ptr<transport::Transport> transport_;
+  std::shared_ptr<transport::DataTransport> transport_;
   std::shared_ptr<Client> client_;
   std::shared_ptr<view_model::ClientEventRouter> router_;
 
@@ -67,13 +73,13 @@ TEST_F(ProfileUpdatesTest, BroadcastOnProfileUpdate) {
   peer->data_channel_is_open = true;
 
   // Update my profile
-  mock_transport_->log.sent_peer_messages.clear();  // Clear history
+  mock_transport_->CallLog()->sent_peer_messages.clear();  // Clear history
   client_->UpdateMyProfile("New Name", "New Bio", "NewPhoto");
   FlushClientQueue();
 
   // Verify "profile_info" message was sent
   bool profile_sent = false;
-  for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
+  for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
     if (pid == peer1 && msg["type"] == "profile_info") {
       EXPECT_EQ(msg["display_name"], "New Name");
       EXPECT_EQ(msg["bio"], "New Bio");
@@ -101,7 +107,7 @@ TEST_F(ProfileUpdatesTest, SendProfileOnConnect) {
   ASSERT_TRUE(peer);
 
   // Clear log before simulating open
-  mock_transport_->log.sent_peer_messages.clear();
+  mock_transport_->CallLog()->sent_peer_messages.clear();
 
   // Simulate DataChannel open
   ASSERT_TRUE(mock_transport_->delegate);
@@ -110,7 +116,7 @@ TEST_F(ProfileUpdatesTest, SendProfileOnConnect) {
 
   // Verify profile sent
   bool profile_sent = false;
-  for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
+  for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
     if (pid == peer1 && msg["type"] == "profile_info") {
       EXPECT_EQ(msg["display_name"], "My Name");
       profile_sent = true;
@@ -126,7 +132,7 @@ TEST_F(ProfileUpdatesTest, NoProfileSendForPendingContact) {
 
   client_->Connect(peer1);
   FlushClientQueue();
-  mock_transport_->log.sent_peer_messages.clear();
+  mock_transport_->CallLog()->sent_peer_messages.clear();
 
   // Trigger OnDataChannelOpen
   ASSERT_TRUE(mock_transport_->delegate);
@@ -135,7 +141,7 @@ TEST_F(ProfileUpdatesTest, NoProfileSendForPendingContact) {
 
   // Verify NO profile sent
   bool profile_sent = false;
-  for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
+  for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
     if (pid == peer1 && msg["type"] == "profile_info") {
       profile_sent = true;
     }
@@ -153,7 +159,7 @@ TEST_F(ProfileUpdatesTest, TriggerConnectForDisconnectedConfirmedPeer) {
   // Ensure disconnected
   mock_transport_->RemovePeer(peer1);
   ASSERT_FALSE(mock_transport_->GetPeer(peer1));
-  mock_transport_->log.offers.clear();
+  mock_transport_->CallLog()->offers.clear();
 
   // Update Profile
   client_->UpdateMyProfile("Conn Name", "Conn Bio", "NewPhoto");
@@ -164,7 +170,7 @@ TEST_F(ProfileUpdatesTest, TriggerConnectForDisconnectedConfirmedPeer) {
   ASSERT_TRUE(mock_transport_->GetPeer(peer1));
 
   bool offer_sent = false;
-  for (auto const& [pid, ctx] : mock_transport_->log.offers) {
+  for (auto const& [pid, ctx] : mock_transport_->CallLog()->offers) {
     if (pid == peer1 && ctx == "data") {
       offer_sent = true;
     }
@@ -189,7 +195,7 @@ TEST_F(ProfileUpdatesTest, ConfirmContactTriggersProfileSend) {
   mock_storage_->UpdateContact({peer1, identity::ContactStatus::awaitingApproval});
   client_->GetContactService()->ReloadCache();
 
-  mock_transport_->log.sent_peer_messages.clear();
+  mock_transport_->CallLog()->sent_peer_messages.clear();
 
   // Confirm
   client_->ConfirmContact(peer1);
@@ -197,7 +203,7 @@ TEST_F(ProfileUpdatesTest, ConfirmContactTriggersProfileSend) {
 
   // Check profile sent
   bool profile_sent = false;
-  for (auto const& [pid, msg] : mock_transport_->log.sent_peer_messages) {
+  for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
     if (pid == peer1 && msg["type"] == "profile_info") {
       EXPECT_EQ(msg["display_name"], "Approver");
       profile_sent = true;

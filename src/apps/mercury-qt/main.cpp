@@ -14,7 +14,7 @@
 #include "eillance/capture/video_capture.hpp"
 #include "eillance/client/client.hpp"
 #include "eillance/logging/logging.h"
-#include "eillance/rtc/transport_impl_libdatachannel.hpp"
+#include "eillance/rtc/data_transport_impl_libdatachannel.hpp"
 #include "eillance/storage/sqlite/persistent_storage_impl_sqlite.hpp"
 #include "eillance/view_model/client_event_router.hpp"
 #include "eillance/view_model/contacts_view_model.hpp"
