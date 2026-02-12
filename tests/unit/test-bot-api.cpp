@@ -107,7 +107,7 @@ TEST_F(BotApiTest, AutoAcceptContacts) {
   mock_data_transport_raw_->SimulatePeerMessage(peer1, req_msg);
   FlushClientQueue();
 
-  auto contact = client_->GetContactService()->GetContact(peer1);
+  auto const contact = client_->GetContactService()->GetContact(peer1);
   ASSERT_TRUE(contact.has_value());
   EXPECT_EQ(contact->status, identity::ContactStatus::confirmed);
 

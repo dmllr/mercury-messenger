@@ -20,6 +20,7 @@
 #include "eillance/identity/contact_id.hpp"
 #include "eillance/logging/logging.hpp"
 #include "eillance/rtc/data_transport_impl_libdatachannel.hpp"
+#include "eillance/rtc/media_transport_impl_libdatachannel.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/storage/sqlite/persistent_storage_impl_sqlite.hpp"
 #include "eillance/transport/peer_connection_state.hpp"
@@ -204,9 +205,9 @@ auto main(int argc, char** argv) -> int {
   auto storage_impl = std::make_unique<eillance::storage::SQLiteStorage>(config_path / "mercury.db");
   auto storage = std::make_shared<eillance::storage::PersistentStorage>(std::move(storage_impl));
 
-  auto rtc_transport_impl = std::make_unique<eillance::rtc::RtcTransport>();
-  auto transport = std::make_shared<eillance::transport::Transport>(std::move(rtc_transport_impl));
-  auto client = std::make_shared<eillance::Client>(storage, transport);
+  auto data_transport = std::make_shared<eillance::transport::DataTransport>(std::move(std::make_unique<eillance::rtc::RtcDataTransport>()));
+  auto media_transport = std::make_shared<eillance::transport::MediaTransport>(std::move(std::make_unique<eillance::rtc::RtcMediaTransport>()));
+  auto client = std::make_shared<eillance::Client>(storage, data_transport, media_transport);
 
   client->SetVideoCapture(std::make_unique<eillance::VideoCaptureCli>());
   client->SetAudioCapture(std::make_unique<eillance::AudioCaptureCli>());
@@ -296,7 +297,13 @@ auto main(int argc, char** argv) -> int {
     void OnCallStateChanged(eillance::view_model::CallState const&) override {
       screen.Post(ftxui::Event::Custom);
     }
-    void OnSettingsUpdated(std::optional<std::string> const&, int) override {
+    void OnSettingsUpdated(
+        const std::optional<std::string>&,
+        int,
+        const std::optional<std::string>&,
+        const std::optional<std::string>&,
+        const std::optional<std::string>&,
+        const std::optional<std::string>&) override {
       screen.Post(ftxui::Event::Custom);
     }
     void OnConnectionStateChanged(eillance::ServiceConnectionState) override {
