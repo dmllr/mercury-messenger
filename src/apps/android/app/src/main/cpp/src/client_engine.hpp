@@ -55,7 +55,7 @@ class ClientEngine {
         [this]() {
           jni::ScopedJniEnv env_scope(jvm_);
           if (auto* env = env_scope.Get()) {
-            auto& cls = ClassRefs::Instance().Class("hela/eillance/CallService");
+            auto const& cls = ClassRefs::Instance().Class("hela/eillance/CallService");
             jmethodID method = cls.GetMethod("onNativeCoreCrash");
             env->CallVoidMethod(service_ref_, method);
           }
@@ -63,20 +63,6 @@ class ClientEngine {
     );
 
     router_ = std::make_shared<view_model::ClientEventRouter>(client_);
-
-    std::string device_name;
-    auto stored_name = storage->GetSetting("device_name");
-    if (stored_name) {
-      device_name = *stored_name;
-    }
-
-    if (device_name.empty()) {
-      char model_string[PROP_VALUE_MAX + 1];
-      __system_property_get("ro.product.model", model_string);
-      device_name = std::string(model_string);
-      storage->SetSetting("device_name", device_name);
-    }
-    client_->SetName(device_name);
   }
 
   ClientEngine(ClientEngine&&) = delete;

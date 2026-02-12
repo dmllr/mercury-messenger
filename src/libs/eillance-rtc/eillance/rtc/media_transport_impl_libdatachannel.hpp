@@ -84,40 +84,7 @@ class RtcMediaTransport : public transport::MediaTransport::Interface {
     pc->onGatheringStateChange([this, peer_id, pc_ptr = pc](::rtc::PeerConnection::GatheringState state) {
       if (state == ::rtc::PeerConnection::GatheringState::Complete) {
         if (auto localDesc = pc_ptr->localDescription()) {
-          // We need to signal this back.
-          // But MediaTransport interface doesn't have SendSignaling.
-          // It relies on Core knowing when offer is ready via completion?
-          // Actually, `InternalMessagingService` sets up handlers via `AttachToPeer` in `DataTransport`.
-          // Wait, `MediaTransport` interface doesn't know about `InternalMessagingService`.
-          //
-          // Solution: MediaCallService uses the generated SDP from CreateOffer/Answer.
-          // libdatachannel's gathering is async.
-          // The only way to get the FULL SDP (with candidates) is waiting for GatheringComplete.
-          // We need a callback `OnLocalDescriptionReady(sdp, type)` in `MediaTransport`.
-          // But existing interface doesn't have it.
-          // However, `RtcTransport` (unified) used to send WsMessage directly.
-          //
-          // We can assume Client handles signaling if we expose a way.
-          // OR we add `SetSignalingSender` to `MediaTransport`.
-          //
-          // FOR NOW: We will cheat and assume `AttachToPeer` provided a shared Peer object
-          // which we can populate with `pending_offer_sdp`? No.
-          //
-          // Let's modify `MediaTransport` interface to include a callback for signaling out?
-          // Or rely on the fact that `CreateOffer` returns (async/sync)?
-          // libdatachannel is async gathering.
-          //
-          // We will emit a custom status event or rely on `pending_offer_sdp`.
-          //
-          // Actually, since `RtcMediaTransport` is used in `mercury-mock-app`,
-          // we can use a dirty hack or just not support full ICE in this specific mock implementation
-          // if it's only used for basic testing.
-          //
-          // BUT `mock-app` links `eillance-rtc`. So this IS the implementation.
-          //
-          // We'll store the pending candidate/SDP in a map and let `CreateOffer` block? No.
-          //
-          // We will add `OnLocalSdpReady` callback to `MediaTransport`.
+          // TODO: implement
         }
       }
     });

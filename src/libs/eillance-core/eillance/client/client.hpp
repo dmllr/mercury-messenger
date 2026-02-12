@@ -277,9 +277,6 @@ class Client final : public transport::TransportDelegate {
     return false;
   }
 
-  void SetName(std::string const& name) const {
-  }  // No-op in split transport, name logic handled elsewhere or deprecated
-
   void UpdateSignalingUrl(std::string const& url) const {
     account_service_->UpdateSignalingUrl(url);
   }
