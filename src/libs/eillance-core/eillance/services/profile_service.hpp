@@ -27,8 +27,8 @@ class ProfileService {
       std::shared_ptr<storage::PersistentStorage> storage,
       std::shared_ptr<transport::DataTransport> transport,
       std::shared_ptr<identity::ContactManager> contact_manager,
-      AccountService* account_service,
-      MessagingService* messaging_service,
+      std::shared_ptr<AccountService> account_service,
+      std::shared_ptr<MessagingService> messaging_service,
       ConnectionRequestHandler connection_handler
   )
       : storage_(std::move(storage)),
@@ -137,8 +137,8 @@ class ProfileService {
   std::shared_ptr<transport::DataTransport> transport_;
   std::shared_ptr<identity::ContactManager> manager_;
 
-  AccountService* account_service_;
-  MessagingService* messaging_service_;
+  std::shared_ptr<AccountService> account_service_;
+  std::shared_ptr<MessagingService> messaging_service_;
   ConnectionRequestHandler connection_handler_;
 
   OnContactProfileUpdatedCallback on_contact_profile_updated_;

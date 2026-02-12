@@ -47,8 +47,8 @@ class ProfileServiceTest : public ::testing::Test {
         storage_,
         transport_,
         contact_manager,
-        account_service_.get(),
-        messaging_service_.get(),
+        account_service_,
+        messaging_service_,
         conn_handler
     );
 
@@ -64,10 +64,10 @@ class ProfileServiceTest : public ::testing::Test {
   std::unique_ptr<transport::MockDataTransport> mock_transport_impl_;
   transport::MockDataTransport* mock_transport_raw_{};
   std::shared_ptr<transport::DataTransport> transport_;
-  std::unique_ptr<services::AccountService> account_service_;
+  std::shared_ptr<services::AccountService> account_service_;
   std::shared_ptr<services::FileTransferService> file_transfer_service_;
-  std::unique_ptr<services::MessagingService> messaging_service_;
-  std::unique_ptr<services::ProfileService> profile_service_;
+  std::shared_ptr<services::MessagingService> messaging_service_;
+  std::shared_ptr<services::ProfileService> profile_service_;
 
   ContactID const peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
 };
@@ -75,7 +75,9 @@ class ProfileServiceTest : public ::testing::Test {
 TEST_F(ProfileServiceTest, UpdateProfileTriggersSystemMessage) {
   bool update_cb_called = false;
   profile_service_->SetContactProfileUpdatedCallback([&](auto const& id) {
-    if (id == peer1) update_cb_called = true;
+    if (id == peer1) {
+      update_cb_called = true;
+    }
   });
 
   nlohmann::json profile_data;

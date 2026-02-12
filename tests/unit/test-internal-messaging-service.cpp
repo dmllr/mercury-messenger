@@ -76,7 +76,8 @@ class InternalMessagingServiceTest : public ::testing::Test {
     messaging_service_->SetMessageStatusChangedCallback([](auto const&, auto, auto) {});
     messaging_service_->SetChatMessageReceivedCallback([](auto const&, auto const&) {});
 
-    media_call_service_ = std::make_shared<services::MediaCallService>(transport_, media_transport_);
+    media_call_service_ =
+        std::make_shared<services::MediaCallService>(storage_, transport_, media_transport_, account_service_);
     media_call_service_->SetVideoCapture(std::make_unique<MockCapture>());
     media_call_service_->SetAudioCapture(std::make_unique<MockCapture>());
 
@@ -84,8 +85,8 @@ class InternalMessagingServiceTest : public ::testing::Test {
         storage_,
         transport_,
         contact_manager_,
-        account_service_.get(),
-        messaging_service_.get(),
+        account_service_,
+        messaging_service_,
         conn_handler
     );
 
@@ -93,16 +94,16 @@ class InternalMessagingServiceTest : public ::testing::Test {
         storage_,
         transport_,
         contact_manager_,
-        account_service_.get(),
-        profile_service_.get(),
+        account_service_,
+        profile_service_,
         conn_handler
     );
 
     // Wire up circular dependencies roughly
     messaging_service_->SetContactRestoredCallback([&](auto id) { contact_service_->OnContactRestored(id); });
     messaging_service_->SetMessageStatusChangedCallback([](auto const&, auto, auto) {});
-    contact_service_->SetMessagingService(messaging_service_.get());
-    media_call_service_->SetMessagingService(messaging_service_.get());
+    contact_service_->SetMessagingService(messaging_service_);
+    media_call_service_->SetMessagingService(messaging_service_);
 
     // Satisfy invariants
     std::ignore = account_service_->GenerateNewIdentity();

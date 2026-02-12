@@ -305,17 +305,23 @@ class WebRtcMediaTransport(private val context: Context, private val nativePoint
     }, SessionDescription(canonicalType, sdp))
   }
 
+  @Suppress("unused")
   fun disconnectPeer(peerId: String) {
-    sessions.remove(peerId)?.dispose()
+    val session = sessions.remove(peerId)
+    if (session != null) {
+      scope.launch { session.dispose() }
+    }
     remoteVideoTracks.remove(peerId)
     remoteSinks.remove(peerId)
   }
 
+  @Suppress("unused")
   fun addVideoTrack(peerId: String) {
     startLocalMedia(true)
     sessions[peerId]?.let { attachLocalMedia(it) }
   }
 
+  @Suppress("unused")
   fun addAudioTrack(peerId: String) {
     startLocalMedia(false)
     sessions[peerId]?.let { attachLocalMedia(it) }
@@ -354,20 +360,49 @@ class WebRtcMediaTransport(private val context: Context, private val nativePoint
   }
 
   fun stopLocalMedia() {
-    sessions.values.forEach { session ->
-      if (!session.isDisposed) {
-        val senders = session.pc.senders
-        for (sender in senders) {
-          if (sender.track() != null) session.pc.removeTrack(sender)
+    // Capture references to dispose in background
+    val videoTrackToDispose = localVideoTrack
+    val capturerToDispose = videoCapturer
+    val textureHelperToDispose = surfaceTextureHelper
+    val videoSourceToDispose = videoSource
+    val audioTrackToDispose = localAudioTrack
+    val audioSourceToDispose = audioSource
+    val activeSessions = sessions.values.toList()
+
+    // Null out immediately to prevent re-use
+    localVideoTrack = null
+    videoCapturer = null
+    surfaceTextureHelper = null
+    videoSource = null
+    localAudioTrack = null
+    audioSource = null
+
+    scope.launch {
+      activeSessions.forEach { session ->
+        try {
+          if (!session.isDisposed) {
+            val senders = session.pc.senders
+            for (sender in senders) {
+              if (sender.track() != null) session.pc.removeTrack(sender)
+            }
+          }
+        } catch (e: Exception) {
+          // Ignore errors during track removal on closing sessions
         }
       }
+
+      try {
+        videoTrackToDispose?.dispose()
+        capturerToDispose?.stopCapture()
+        capturerToDispose?.dispose()
+        textureHelperToDispose?.dispose()
+        videoSourceToDispose?.dispose()
+        audioTrackToDispose?.dispose()
+        audioSourceToDispose?.dispose()
+      } catch (e: Exception) {
+        // Ignore cleanup errors
+      }
     }
-    localVideoTrack?.dispose(); localVideoTrack = null
-    videoCapturer?.stopCapture(); videoCapturer?.dispose(); videoCapturer = null
-    surfaceTextureHelper?.dispose(); surfaceTextureHelper = null
-    videoSource?.dispose(); videoSource = null
-    localAudioTrack?.dispose(); localAudioTrack = null
-    audioSource?.dispose(); audioSource = null
   }
 
   fun setLocalSink(sink: VideoSink?) {

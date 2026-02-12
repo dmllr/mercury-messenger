@@ -319,11 +319,24 @@ class WebRtcDataTransport(private val context: Context, private val nativePointe
 
   @Suppress("unused")
   fun disconnectPeer(peerId: String) {
-    sessions.remove(peerId)?.dispose()
+    val session = sessions.remove(peerId)
+    if (session != null) {
+      scope.launch { session.dispose() }
+    }
   }
 
   fun sendSignalingMessage(message: String) {
     signalingClient.send(JSONObject(message))
+  }
+
+  fun sendDataChannelMessage(peerId: String, message: String): Boolean {
+    val session = sessions[peerId] ?: return false
+    val dc = session.dataChannel ?: return false
+    if (dc.state() == DataChannel.State.OPEN) {
+      val buffer = ByteBuffer.wrap(message.toByteArray())
+      return dc.send(DataChannel.Buffer(buffer, false))
+    }
+    return false
   }
 
   @Suppress("unused")
@@ -335,6 +348,12 @@ class WebRtcDataTransport(private val context: Context, private val nativePointe
       return dc.send(DataChannel.Buffer(buffer, true))
     }
     return false
+  }
+
+  fun isDataChannelOpen(peerId: String): Boolean {
+    val session = sessions[peerId] ?: return false
+    val dc = session.dataChannel ?: return false
+    return dc.state() == DataChannel.State.OPEN
   }
 
   @Suppress("unused")

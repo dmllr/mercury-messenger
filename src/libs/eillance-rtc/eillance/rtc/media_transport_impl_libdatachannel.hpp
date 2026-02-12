@@ -72,19 +72,29 @@ class RtcMediaTransport : public transport::MediaTransport::Interface {
     }
     auto pc = std::make_shared<::rtc::PeerConnection>(config);
 
-    pc->onStateChange([this, peer_id](::rtc::PeerConnection::State state) {
-      if (status_callback_)
+    pc->onStateChange([this, peer_id](::rtc::PeerConnection::State const state) -> void {
+      if (status_callback_) {
         (*status_callback_)(
             peer_id,
             EventSource::mediaConnectionState,
             static_cast<int>(transport::ToEillanceState(state))
         );
+      }
     });
 
-    pc->onGatheringStateChange([this, peer_id, pc_ptr = pc](::rtc::PeerConnection::GatheringState state) {
+    pc->onGatheringStateChange([this, peer_id, pc](::rtc::PeerConnection::GatheringState const state) {
       if (state == ::rtc::PeerConnection::GatheringState::Complete) {
-        if (auto localDesc = pc_ptr->localDescription()) {
-          // TODO: implement
+        if (auto const desc = pc->localDescription()) {
+          nlohmann::json const msg = {
+              {"type", desc->typeString()},
+              {"sdp", std::string(*desc)},
+              {"context", "media"},
+              {"to", peer_id.ToString()}
+          };
+          {
+            std::lock_guard<std::mutex> const lock(configMutex_);
+            // TODO: implement send
+          }
         }
       }
     });

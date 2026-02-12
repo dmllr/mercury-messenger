@@ -84,7 +84,8 @@ class SignalingNegotiationTest : public ::testing::Test {
     messaging_service_->SetChatMessageReceivedCallback([](auto, auto) {});
     messaging_service_->SetMessageStatusChangedCallback([](auto, auto, auto) {});
 
-    media_call_service_ = std::make_shared<services::MediaCallService>(transport_, media_transport_);
+    media_call_service_ =
+        std::make_shared<services::MediaCallService>(storage_, transport_, media_transport_, account_service_);
     media_call_service_->SetVideoCapture(std::make_unique<MockCapture>());
     media_call_service_->SetAudioCapture(std::make_unique<MockCapture>());
 
@@ -92,8 +93,8 @@ class SignalingNegotiationTest : public ::testing::Test {
         storage_,
         transport_,
         contact_manager_,
-        account_service_.get(),
-        messaging_service_.get(),
+        account_service_,
+        messaging_service_,
         conn_handler
     );
 
@@ -101,8 +102,8 @@ class SignalingNegotiationTest : public ::testing::Test {
         storage_,
         transport_,
         contact_manager_,
-        account_service_.get(),
-        profile_service_.get(),
+        account_service_,
+        profile_service_,
         conn_handler
     );
 

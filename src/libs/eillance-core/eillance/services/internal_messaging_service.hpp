@@ -12,6 +12,7 @@
 
 #include "eillance/logging/logging.hpp"
 #include "eillance/services/account_service.hpp"
+#include "eillance/services/call_id.hpp"
 #include "eillance/services/contact_service.hpp"
 #include "eillance/services/file_transfer_service.hpp"
 #include "eillance/services/media_call_service.hpp"
@@ -149,11 +150,19 @@ class InternalMessagingService {
     } else if (type == "message_read") {
       messaging_service_->OnMessagesRead(peer_id, message["message_ids"].get<std::vector<uint64_t>>());
     } else if (type == "hangup") {
-      media_call_service_->Hangup(peer_id, false);
+      media_call_service_->OnHangupSignal(peer_id, message.value("call_id", ""));
+    } else if (type == "call_request") {
+      auto kind = static_cast<messaging::HistoryEntryKind>(message.value("kind", 0));
+      media_call_service_->OnCallRequest(peer_id, message.value("call_id", ""), kind);
+    } else if (type == "call_reject") {
+      media_call_service_->OnCallReject(peer_id, message.value("call_id", ""));
     } else if (type == "call_accept") {
-      // Handled by Transport
+      media_call_service_->OnCallAccepted(peer_id, message.value("call_id", ""));
     } else if (type == "call_ringing") {
-      media_call_service_->OnCallRinging(peer_id);
+      media_call_service_->OnCallRinging(peer_id, message.value("call_id", ""));
+    } else if (type == "offer" || type == "answer") {
+      // Media Signaling over Data Channel
+      ProcessSignalingMessage(peer_id, type, message);
     } else if (type == "contact_removed") {
       contact_service_->OnContactRemoved(peer_id);
     } else if (type == "reconfirm_request") {
@@ -229,26 +238,16 @@ class InternalMessagingService {
     if (type == "offer") {
       if (is_media) {
         auto const sdp = message["sdp"].get<std::string>();
-        bool const is_video = sdp.find("m=video") != std::string::npos;
-
-        media_transport_->Connect(peer_id);
-        peer->has_media_peer_connection = true;
-
-        media_call_service_->OnCallRequest(
-            peer_id,
-            is_video ? messaging::HistoryEntryKind::videoCall : messaging::HistoryEntryKind::voiceCall
-        );
-
-        media_transport_->SetRemoteDescription(peer_id, sdp, "offer");
+        media_call_service_->OnMediaOffer(peer_id, sdp);
       } else {
         // Data offer
         data_transport_->Connect(peer_id);
         data_transport_->SetRemoteDescription(peer_id, message["sdp"].get<std::string>(), "offer");
         data_transport_->CreateAnswer(peer_id);
       }
-    } else if (type == "answer") {
+    } else if (type == "answer" || type == "pranswer") {
       if (is_media) {
-        media_transport_->SetRemoteDescription(peer_id, message["sdp"].get<std::string>(), "answer");
+        media_call_service_->OnMediaAnswer(peer_id, message["sdp"].get<std::string>());
       } else {
         data_transport_->SetRemoteDescription(peer_id, message["sdp"].get<std::string>(), "answer");
       }

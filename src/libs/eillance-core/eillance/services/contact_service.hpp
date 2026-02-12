@@ -26,20 +26,20 @@ class ContactService {
       std::shared_ptr<storage::PersistentStorage> storage,
       std::shared_ptr<transport::DataTransport> transport,
       std::shared_ptr<identity::ContactManager> contact_manager,
-      AccountService* account_service,
-      ProfileService* profile_service,
+      std::shared_ptr<AccountService> account_service,
+      std::shared_ptr<ProfileService> profile_service,
       ConnectionRequestHandler connection_handler
   )
       : storage_(std::move(storage)),
         transport_(std::move(transport)),
         manager_(std::move(contact_manager)),
-        account_service_(account_service),
-        profile_service_(profile_service),
+        account_service_(std::move(account_service)),
+        profile_service_(std::move(profile_service)),
         connection_handler_(std::move(connection_handler)) {
   }
 
-  void SetMessagingService(MessagingService* messaging_service) {
-    messaging_service_ = messaging_service;
+  void SetMessagingService(std::shared_ptr<MessagingService> messaging_service) {
+    messaging_service_ = std::move(messaging_service);
   }
 
   // Actions
@@ -326,9 +326,9 @@ class ContactService {
   std::shared_ptr<transport::DataTransport> transport_;
   std::shared_ptr<identity::ContactManager> manager_;
 
-  AccountService* account_service_;
-  ProfileService* profile_service_;
-  MessagingService* messaging_service_{nullptr};
+  std::shared_ptr<AccountService> account_service_;
+  std::shared_ptr<ProfileService> profile_service_;
+  std::shared_ptr<MessagingService> messaging_service_{nullptr};
   ConnectionRequestHandler connection_handler_;
 
   OnContactRequestCallback on_contact_request_;
