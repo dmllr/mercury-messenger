@@ -124,6 +124,7 @@ class WebRtcMediaTransport(private val context: Context, private val nativePoint
       .createPeerConnectionFactory()
   }
 
+  @Suppress("unused")
   fun updateIceServers(jsonConfig: String) {
     try {
       val servers = mutableListOf<PeerConnection.IceServer>()

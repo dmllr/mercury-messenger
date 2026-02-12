@@ -107,6 +107,7 @@ class WebRtcDataTransport(private val context: Context, private val nativePointe
     peerConnectionFactory = null
   }
 
+  @Suppress("unused")
   fun reconnect(newUrl: String) {
     scope.launch {
       localPeerId?.let { peerId ->
@@ -120,6 +121,7 @@ class WebRtcDataTransport(private val context: Context, private val nativePointe
     }
   }
 
+  @Suppress("unused")
   fun updateIceServers(jsonConfig: String) {
     try {
       val servers = mutableListOf<PeerConnection.IceServer>()
@@ -145,6 +147,7 @@ class WebRtcDataTransport(private val context: Context, private val nativePointe
     }
   }
 
+  @Suppress("unused")
   fun connectPeer(peerId: String) {
     if (sessions.containsKey(peerId)) return
     val factory = peerConnectionFactory ?: return
@@ -198,6 +201,7 @@ class WebRtcDataTransport(private val context: Context, private val nativePointe
     sessions[peerId] = ConnectionSession(pc)
   }
 
+  @Suppress("unused")
   fun createOffer(peerId: String) {
     val session = sessions[peerId] ?: return
     val init = DataChannel.Init()
@@ -313,6 +317,7 @@ class WebRtcDataTransport(private val context: Context, private val nativePointe
     }
   }
 
+  @Suppress("unused")
   fun disconnectPeer(peerId: String) {
     sessions.remove(peerId)?.dispose()
   }
@@ -321,6 +326,7 @@ class WebRtcDataTransport(private val context: Context, private val nativePointe
     signalingClient.send(JSONObject(message))
   }
 
+  @Suppress("unused")
   fun sendDataChannelMessageBinary(peerId: String, data: ByteArray): Boolean {
     val session = sessions[peerId] ?: return false
     val dc = session.dataChannel ?: return false
@@ -331,6 +337,7 @@ class WebRtcDataTransport(private val context: Context, private val nativePointe
     return false
   }
 
+  @Suppress("unused")
   fun getPeerConnectionState(peerId: String): Int {
     val state = sessions[peerId]?.pc?.connectionState()
     return when (state) {
