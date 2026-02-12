@@ -2,7 +2,9 @@
 
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -29,7 +31,7 @@ class Client final : public transport::TransportDelegate {
   using Json = nlohmann::json;
   using FatalErrorCallback = std::function<void()>;
 
-  explicit Client(
+  Client(
       std::shared_ptr<storage::PersistentStorage> storage,
       std::shared_ptr<transport::DataTransport> data_transport,
       std::shared_ptr<transport::MediaTransport> media_transport,
@@ -219,6 +221,8 @@ class Client final : public transport::TransportDelegate {
 
   void Terminate() {
     is_running_ = false;
+    StopWatchdog();
+    background_queue_.RemovePending();
     messaging_service_->StopDeliveryService();
     data_transport_->Terminate();
   }
@@ -577,14 +581,21 @@ class Client final : public transport::TransportDelegate {
     watchdog_running_ = true;
     watchdog_thread_ = std::thread([this] {
       while (watchdog_running_) {
-        std::this_thread::sleep_for(std::chrono::seconds(5));
-        if (!watchdog_running_) break;
+        {
+          std::unique_lock<std::mutex> lock(watchdog_mutex_);
+          if (watchdog_cv_.wait_for(lock, std::chrono::seconds(5), [this] { return !watchdog_running_; })) {
+            break;
+          }
+        }
         auto const now = Time::Now();
         background_queue_.Dispatch([this] { last_heartbeat_ = Time::Now(); });
         if (now > last_heartbeat_.load() + 15000000) {
           LGE << "Core Watchdog: Main queue stalled. Triggering fatal error.";
           if (on_fatal_error_) on_fatal_error_();
-          std::this_thread::sleep_for(std::chrono::seconds(10));
+          std::unique_lock<std::mutex> lock(watchdog_mutex_);
+          if (watchdog_cv_.wait_for(lock, std::chrono::seconds(10), [this] { return !watchdog_running_; })) {
+            break;
+          }
         }
       }
     });
@@ -592,6 +603,7 @@ class Client final : public transport::TransportDelegate {
 
   void StopWatchdog() {
     watchdog_running_ = false;
+    watchdog_cv_.notify_all();
     if (watchdog_thread_.joinable()) watchdog_thread_.join();
   }
 
@@ -653,6 +665,8 @@ class Client final : public transport::TransportDelegate {
 
   std::thread watchdog_thread_;
   std::atomic<bool> watchdog_running_{false};
+  std::condition_variable watchdog_cv_;
+  std::mutex watchdog_mutex_;
   std::atomic<uint64_t> last_heartbeat_{0};
   FatalErrorCallback on_fatal_error_;
 
