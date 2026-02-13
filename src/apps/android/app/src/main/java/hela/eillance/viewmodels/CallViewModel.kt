@@ -16,6 +16,12 @@ class CallViewModel(application: Application) : AndroidViewModel(application), N
   private val _callState = MutableStateFlow(CallState())
   val callState = _callState.asStateFlow()
 
+  private val _isMuted = MutableStateFlow(false)
+  val isMuted = _isMuted.asStateFlow()
+
+  private val _isSpeakerOn = MutableStateFlow(false)
+  val isSpeakerOn = _isSpeakerOn.asStateFlow()
+
   // We need direct access to CallService for WebRTC sinks and Transport interactions
   // which are still bound to the Service context for now.
   private val callService: CallService?
@@ -78,7 +84,10 @@ class CallViewModel(application: Application) : AndroidViewModel(application), N
   }
 
   fun stopCallMedia() {
+    _isMuted.value = false
+    _isSpeakerOn.value = false
     callService?.stopLocalMedia()
+    callService?.setSpeakerphoneOn(false)
   }
 
   fun setLocalVideoSink(sink: VideoSink?) {
@@ -87,6 +96,18 @@ class CallViewModel(application: Application) : AndroidViewModel(application), N
 
   fun setRemoteVideoSink(peerId: String, sink: VideoSink?) {
     callService?.setRemoteVideoSink(peerId, sink)
+  }
+
+  fun toggleMute() {
+    val newMuted = !_isMuted.value
+    _isMuted.value = newMuted
+    callService?.setMicrophoneMute(newMuted)
+  }
+
+  fun toggleSpeaker() {
+    val newSpeaker = !_isSpeakerOn.value
+    _isSpeakerOn.value = newSpeaker
+    callService?.setSpeakerphoneOn(newSpeaker)
   }
 
   private external fun nativeCreate(observer: NativeCallObserver): Long

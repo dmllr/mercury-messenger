@@ -145,7 +145,7 @@ fun IncomingCallScreen(
         if (callerName != null && callerId != callerName) {
           Spacer(modifier = Modifier.height(4.dp))
           Text(
-            text = callerId,
+            text = callerId.take(8),
             fontSize = 14.sp,
             color = Color.White.copy(alpha = 0.6f)
           )

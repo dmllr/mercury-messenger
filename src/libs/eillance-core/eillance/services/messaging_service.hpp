@@ -411,7 +411,20 @@ class MessagingService {
       -> messaging::HistoryPage {
     auto page = history_->GetHistoryPage(peer_id, page_index, page_size);
     std::erase_if(page.messages, [](auto const& entry) {
-      return entry.status == messaging::MessageStatus::none && entry.kind != messaging::HistoryEntryKind::systemMessage;
+      if (entry.status == messaging::MessageStatus::none && entry.kind != messaging::HistoryEntryKind::systemMessage &&
+          entry.kind != messaging::HistoryEntryKind::voiceCall &&
+          entry.kind != messaging::HistoryEntryKind::videoCall) {
+        return true;
+      }
+      if (entry.kind == messaging::HistoryEntryKind::systemMessage &&
+          std::holds_alternative<messaging::MessageEntry>(entry.data)) {
+        auto const& content = std::get<messaging::MessageEntry>(entry.data).content;
+        if (content.find("\"action\":\"call_request\"") != std::string::npos ||
+            content.find("\"action\":\"call_accept\"") != std::string::npos) {
+          return true;
+        }
+      }
+      return false;
     });
 
     for (auto& entry : page.messages) {
@@ -500,7 +513,10 @@ class MessagingService {
       messaging::CallStatus const status,
       uint32_t const duration
   ) {
-    history_->AddCallEntry(peer_id, kind, direction, status, duration);
+    auto const entry = history_->AddCallEntry(peer_id, kind, direction, status, duration);
+    if (on_message_received_) {
+      on_message_received_(peer_id, entry);
+    }
   }
 
   void OnChatMessageReceived(

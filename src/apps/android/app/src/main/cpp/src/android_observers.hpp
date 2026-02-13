@@ -74,6 +74,7 @@ class AndroidContactsObserver final
       jint lm_status = 0;
       jstring lm_att_path = nullptr;
       jint lm_att_type = -1;
+      jint lm_duration = 0;
 
       if (contact_cpp.last_message) {
         lm_kind = static_cast<jint>(contact_cpp.last_message->kind);
@@ -87,6 +88,11 @@ class AndroidContactsObserver final
             lm_att_path = env->NewStringUTF(txt.attachments.front().file_path.c_str());
             lm_att_type = static_cast<jint>(txt.attachments.front().type);
           }
+        }
+
+        auto const* call = std::get_if<messaging::CallEntry>(&contact_cpp.last_message->data);
+        if (call) {
+          lm_duration = static_cast<jint>(call->duration_seconds);
         }
       }
 
@@ -105,7 +111,8 @@ class AndroidContactsObserver final
           lm_status,
           static_cast<jlong>(contact_cpp.last_activity_timestamp),
           lm_att_path,
-          lm_att_type
+          lm_att_type,
+          lm_duration
       );
       env->CallBooleanMethod(contact_list, list_add_method, contact_java);
 

@@ -126,6 +126,8 @@ msgid "incoming_call_mic_missing"
 msgstr "전화를 받으려면 마이크 권한이 필요합니다."
 msgid "incoming_call_cam_missing"
 msgstr "카메라 권한이 없습니다. 오디오 전용."
+msgid "call_duration_format_short"
+msgstr " (%02d:%02d)"
 
 # System Messages
 msgid "sys_contact_req"

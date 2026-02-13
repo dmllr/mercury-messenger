@@ -13,28 +13,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.CallMade
-import androidx.compose.material.icons.automirrored.filled.CallMissed
-import androidx.compose.material.icons.automirrored.filled.CallReceived
-import androidx.compose.material.icons.filled.Call
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import hela.eillance.camera.R
-import hela.eillance.ndkio.CallDirection
-import hela.eillance.ndkio.CallStatus
 import hela.eillance.ndkio.HistoryEntry
-import hela.eillance.ndkio.HistoryEntryKind
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import java.util.concurrent.TimeUnit
 
 @Composable
 fun CallLogBubble(
@@ -43,63 +32,20 @@ fun CallLogBubble(
   formatters: Triple<DateTimeFormatter, DateTimeFormatter, DateTimeFormatter>,
   isUnread: Boolean = false
 ) {
-  val (icon, color, text) = when (entry.callDirection) {
-    CallDirection.Outgoing -> when (entry.callStatus) {
-      CallStatus.Answered -> Triple(
-        Icons.AutoMirrored.Filled.CallMade,
-        MaterialTheme.colorScheme.primary,
-        if (entry.kind == HistoryEntryKind.VideoCall) stringResource(R.string.call_outgoing_video) else stringResource(
-          R.string.call_outgoing_voice
-        )
-      )
+  val context = LocalContext.current
 
-      else -> Triple(
-        Icons.AutoMirrored.Filled.CallMade,
-        Color.Red,
-        if (entry.kind == HistoryEntryKind.VideoCall) stringResource(R.string.call_outgoing_video) else stringResource(
-          R.string.call_outgoing_voice
-        )
-      )
-    }
+  val (icon, isError, _) = CallUtils.getCallIconInfo(entry.callDirection, entry.callStatus)
+  val color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
 
-    CallDirection.Incoming -> when (entry.callStatus) {
-      CallStatus.Answered -> Triple(
-        Icons.AutoMirrored.Filled.CallReceived,
-        MaterialTheme.colorScheme.primary,
-        if (entry.kind == HistoryEntryKind.VideoCall) stringResource(R.string.call_incoming_video) else stringResource(
-          R.string.call_incoming_voice
-        )
-      )
-
-      CallStatus.Missed -> Triple(
-        Icons.AutoMirrored.Filled.CallMissed,
-        Color.Red,
-        stringResource(R.string.call_missed)
-      )
-
-      else -> Triple(
-        Icons.AutoMirrored.Filled.CallReceived,
-        Color.Red,
-        stringResource(R.string.call_rejected)
-      )
-    }
-
-    null -> Triple(
-      Icons.Default.Call,
-      MaterialTheme.colorScheme.onSurfaceVariant,
-      stringResource(R.string.call_generic)
-    )
-  }
+  val text = CallUtils.formatCallText(
+    context,
+    entry.kind,
+    entry.callDirection,
+    entry.callStatus,
+    entry.durationSeconds
+  )
 
   val formattedTime = formatTimestamp(entry.timestamp, zoneId, formatters)
-
-  val duration = entry.durationSeconds
-  val durationText = if (entry.callStatus == CallStatus.Answered && duration > 0) {
-    val minutes = TimeUnit.SECONDS.toMinutes(duration.toLong())
-    val seconds =
-      duration - TimeUnit.MINUTES.toSeconds(duration.toLong() - TimeUnit.MINUTES.toSeconds(minutes))
-    stringResource(id = R.string.call_duration_format, minutes, seconds)
-  } else ""
 
   Row(
     modifier = Modifier
@@ -110,12 +56,12 @@ fun CallLogBubble(
   ) {
     Icon(
       imageVector = icon,
-      contentDescription = text,
+      contentDescription = null,
       tint = color,
       modifier = Modifier.padding(end = 8.dp)
     )
     Text(
-      text = "$text - $formattedTime$durationText",
+      text = "$text • $formattedTime",
       style = MaterialTheme.typography.bodySmall,
       color = MaterialTheme.colorScheme.onSurfaceVariant
     )

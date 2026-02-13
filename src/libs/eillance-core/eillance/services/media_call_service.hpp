@@ -98,12 +98,7 @@ class MediaCallService {
       }
     }
 
-    // Persist system message
-    INVARIANT(messaging_service_);
-    messaging::HistoryEntryKind call_kind =
-        current_call_->is_video ? messaging::HistoryEntryKind::videoCall : messaging::HistoryEntryKind::voiceCall;
-    nlohmann::json const msg = {{"action", "call_accept"}, {"kind", call_kind}};
-    messaging_service_->AddSystemEntry(peer_id, msg.dump(), messaging::MessageDirection::sent);
+    // Note: We used to add a system message here, but it's redundant with the final call log entry.
 
     if (on_call_accepted_) {
       on_call_accepted_(peer_id);
@@ -366,6 +361,7 @@ class MediaCallService {
     bool is_outgoing;
     bool is_video;
     CallState state = CallState::idle;
+    std::chrono::steady_clock::time_point connected_at{};
   };
 
   std::optional<CallSession> current_call_;
@@ -391,6 +387,9 @@ class MediaCallService {
   void SetCallState(CallState state) {
     if (current_call_) {
       current_call_->state = state;
+      if (state == CallState::active) {
+        current_call_->connected_at = std::chrono::steady_clock::now();
+      }
     }
   }
 
@@ -517,6 +516,27 @@ class MediaCallService {
     std::lock_guard<std::recursive_mutex> const lock(mutex_);
 
     if (current_call_ && current_call_->peer_id == peer_id) {
+      // Log the call if it was active or at least established
+      if (messaging_service_) {
+        uint32_t duration = 0;
+        if (current_call_->state == CallState::active) {
+          auto now = std::chrono::steady_clock::now();
+          duration = static_cast<uint32_t>(
+              std::chrono::duration_cast<std::chrono::seconds>(now - current_call_->connected_at).count()
+          );
+        }
+
+        messaging_service_->AddCallEntry(
+            peer_id,
+            current_call_->is_video ? messaging::HistoryEntryKind::videoCall : messaging::HistoryEntryKind::voiceCall,
+            current_call_->is_outgoing ? messaging::CallDirection::outgoing : messaging::CallDirection::incoming,
+            (duration > 0) ? messaging::CallStatus::answered : messaging::CallStatus::missed,
+            duration
+        );
+      }
+    }
+
+    if (current_call_ && current_call_->peer_id == peer_id) {
       current_call_.reset();
     }
 
@@ -567,10 +587,6 @@ class MediaCallService {
       // This relies on data channel. If closed, it might drop or fallback.
       std::ignore = data_transport_->SendJson(peer_id, req);
     }
-
-    INVARIANT(messaging_service_);
-    nlohmann::json const msg = {{"action", "call_request"}, {"kind", call_kind}};
-    messaging_service_->AddSystemEntry(peer_id, msg.dump(), messaging::MessageDirection::sent);
   }
 
   void SendSampleToPeers(std::vector<std::byte> const& sample, Stream::Source::Type const type, uint64_t const time)
