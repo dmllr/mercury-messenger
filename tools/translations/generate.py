@@ -60,7 +60,6 @@ def escape_xml_string(value):
     """Escapes characters for Android XML."""
     value = value.replace("'", "\\'")
     value = value.replace('"', '\\"')
-    value = value.replace('&', '&amp;')
     value = value.replace('<', '&lt;')
     value = value.replace('>', '&gt;')
     # Handle printf-style formatting if needed, typically %s is fine
