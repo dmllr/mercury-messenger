@@ -86,8 +86,8 @@ class MercuryConnectionService : ConnectionService() {
       connection.setDialing()
     }
 
-    // Register this connection with the CallService to synchronize state with the C++ engine
-    service.registerTelecomConnection(peerId, connection)
+    // Register this connection with the CallService
+    service.onConnectionCreated(connection, peerId)
 
     Log.i(TAG, "Created new ${if (incoming) "incoming" else "outgoing"} connection for $peerId")
     return connection

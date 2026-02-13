@@ -420,6 +420,20 @@ class Client final : public transport::TransportDelegate {
     media_call_service_->Hangup(id, n);
   }
 
+  [[nodiscard]] auto GetCurrentCallState() const -> view_model::CallState {
+    auto session = media_call_service_->GetCurrentSession();
+    if (!session) return {};
+
+    return {
+        .is_connecting = !session->is_active && !session->is_ringing,
+        .is_in_call = session->is_active,
+        .is_ringing = session->is_ringing,
+        .call_direction = session->is_outgoing ? messaging::CallDirection::outgoing : messaging::CallDirection::incoming,
+        .peer_id = session->peer_id,
+        .call_type = session->is_video ? messaging::HistoryEntryKind::videoCall : messaging::HistoryEntryKind::voiceCall
+    };
+  }
+
   [[nodiscard]] auto GetPeerConnectionState(ContactID const& id) const -> transport::PeerConnectionState {
     return data_transport_->GetConnectionState(id);
   }

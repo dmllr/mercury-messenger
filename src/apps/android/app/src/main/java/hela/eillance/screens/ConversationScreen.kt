@@ -204,17 +204,8 @@ fun ConversationScreen(
   var systemMessageToShowDetails by remember { mutableStateOf<HistoryEntry?>(null) }
   var tappedTruncatedMessageId by remember { mutableStateOf<Long?>(null) }
 
-  // Auto-navigation to call screen
-  LaunchedEffect(
-    callState.isConnecting,
-    callState.isRinging,
-    callState.isInCall,
-    callState.peerId
-  ) {
-    if ((callState.isConnecting || callState.isRinging || callState.isInCall) && callState.peerId == peerId) {
-      onNavigateToCall(peerId)
-    }
-  }
+  // Auto-navigation removed: Global navigation in MercuryApp handles this.
+  // Keeping this here causes a navigation loop when pressing Back from the Call Screen.
 
   LaunchedEffect(targetMessageId) {
     targetMessageId?.let { msgId ->

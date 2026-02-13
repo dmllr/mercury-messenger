@@ -28,6 +28,15 @@ class MediaCallService {
  public:
   using ConnectionRequestHandler = std::function<void(ContactID const&)>;
 
+  struct CallSessionInfo {
+    CallID call_id;
+    ContactID peer_id;
+    bool is_outgoing;
+    bool is_video;
+    bool is_ringing;
+    bool is_active;
+  };
+
   explicit MediaCallService(
       std::shared_ptr<storage::PersistentStorage> storage,
       std::shared_ptr<transport::DataTransport> data_transport,
@@ -71,6 +80,19 @@ class MediaCallService {
     }
   }
 
+  [[nodiscard]] auto GetCurrentSession() const -> std::optional<CallSessionInfo> {
+    std::lock_guard<std::recursive_mutex> const lock(mutex_);
+    if (!current_call_) return std::nullopt;
+    return CallSessionInfo{
+        .call_id = current_call_->call_id,
+        .peer_id = current_call_->peer_id,
+        .is_outgoing = current_call_->is_outgoing,
+        .is_video = current_call_->is_video,
+        .is_ringing = (current_call_->state == CallState::ringing),
+        .is_active = (current_call_->state == CallState::active)
+    };
+  }
+
   // --- User Actions ---
 
   void StartVoiceCall(ContactID const& peer_id) {
@@ -107,7 +129,7 @@ class MediaCallService {
 
   void RejectCall(ContactID const& peer_id) {
     std::lock_guard<std::recursive_mutex> const lock(mutex_);
-    if (!current_call_ || current_call_->peer_id != peer_id) {
+    if (!current_call_) {
       return;
     }
 
@@ -120,6 +142,10 @@ class MediaCallService {
     }
 
     TeardownCallInternal(peer_id);
+
+    if (on_call_terminated_) {
+      on_call_terminated_(peer_id);
+    }
   }
 
   void Hangup(ContactID const& peer_id, bool notify_peer) {
@@ -365,7 +391,7 @@ class MediaCallService {
   };
 
   std::optional<CallSession> current_call_;
-  std::recursive_mutex mutex_;
+  mutable std::recursive_mutex mutex_;
 
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<transport::DataTransport> data_transport_;
@@ -515,8 +541,11 @@ class MediaCallService {
     // Note: Mutex is recursive, so we can lock here safely even if caller holds it.
     std::lock_guard<std::recursive_mutex> const lock(mutex_);
 
-    if (current_call_ && current_call_->peer_id == peer_id) {
-      // Log the call if it was active or at least established
+    // Force clear the session if it exists, regardless of peer_id match if we are forcing teardown.
+    // However, to avoid killing a *new* call by rejecting an *old* one, we typically check peer_id.
+    // But in this single-session architecture, stickiness causes bugs.
+    // We check if the current call involves this peer.
+    if (current_call_) {
       if (messaging_service_) {
         uint32_t duration = 0;
         if (current_call_->state == CallState::active) {
@@ -526,17 +555,18 @@ class MediaCallService {
           );
         }
 
-        messaging_service_->AddCallEntry(
-            peer_id,
-            current_call_->is_video ? messaging::HistoryEntryKind::videoCall : messaging::HistoryEntryKind::voiceCall,
-            current_call_->is_outgoing ? messaging::CallDirection::outgoing : messaging::CallDirection::incoming,
-            (duration > 0) ? messaging::CallStatus::answered : messaging::CallStatus::missed,
-            duration
-        );
+        // Only log if it matches the peer we are tearing down, otherwise it's a no-op log
+        if (current_call_->peer_id == peer_id) {
+          messaging_service_->AddCallEntry(
+              peer_id,
+              current_call_->is_video ? messaging::HistoryEntryKind::videoCall : messaging::HistoryEntryKind::voiceCall,
+              current_call_->is_outgoing ? messaging::CallDirection::outgoing : messaging::CallDirection::incoming,
+              (duration > 0) ? messaging::CallStatus::answered : messaging::CallStatus::missed,
+              duration
+          );
+        }
       }
-    }
-
-    if (current_call_ && current_call_->peer_id == peer_id) {
+      // Unconditionally reset the call session to prevent "stuck" UI states.
       current_call_.reset();
     }
 

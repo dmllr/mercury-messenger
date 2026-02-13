@@ -10,6 +10,9 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -136,7 +139,6 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
   val navigateToPeerId by viewModel.navigateToPeerId.collectAsState()
   val navigateToScanner by viewModel.navigateToScanner.collectAsState()
   val navigateToContacts by viewModel.navigateToContacts.collectAsState()
-  val incomingCallUiVisible by viewModel.incomingCallUiVisible.collectAsState()
   val isCoreUnresponsive by viewModel.isCoreUnresponsive.collectAsState()
 
   // -- Global State Observations --
@@ -157,18 +159,8 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
     }
   }
 
-  // Global Navigation: Call
-  LaunchedEffect(callState) {
-    if (callState.isInCall || callState.isConnecting || (callState.isRinging && callState.callDirection == CallDirection.Outgoing)) {
-      val route = Route.Call.createRoute(callState.peerId)
-      val currentRoute = navController.currentDestination?.route
-      if (currentRoute != Route.Call.route && currentRoute?.startsWith(Route.Call.route.substringBefore("{")) != true) {
-        navController.navigate(route) {
-          launchSingleTop = true
-        }
-      }
-    }
-    // Orchestrate incoming call UI visibility
+  // Orchestrate incoming call UI visibility
+  LaunchedEffect(callState.isRinging) {
     if (!callState.isRinging) {
       viewModel.hideIncomingCallUi()
     }
@@ -187,10 +179,8 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
   // Global Navigation: Chat
   LaunchedEffect(navigateToPeerId) {
     navigateToPeerId?.let { (peerId, msgId) ->
-      if (!callState.isConnecting && !callState.isInCall && !callState.isRinging) {
-        navController.navigate(Route.Interaction.createRoute(peerId, msgId)) {
-          launchSingleTop = true
-        }
+      navController.navigate(Route.Interaction.createRoute(peerId, msgId)) {
+        launchSingleTop = true
       }
       viewModel.onNavigationHandled()
     }
@@ -204,7 +194,12 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
     }
   }
 
-  if (callState.isRinging && callState.callDirection == CallDirection.Incoming && incomingCallUiVisible) {
+  // Determine Call Status for Prioritized UI
+  val isIncomingCall = callState.isRinging && callState.callDirection == CallDirection.Incoming
+  val isActiveCall = callState.isConnecting || callState.isInCall ||
+      (callState.isRinging && callState.callDirection == CallDirection.Outgoing)
+
+  if (isIncomingCall) {
     val callerContact = contacts.find { it.peerId == callState.peerId }
     val callerName = callerContact?.name
     val callerPhoto = callerContact?.photo
@@ -217,6 +212,18 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
       callVM = callVM,
       onAccept = { callVM.acceptCall() },
       onReject = { callVM.rejectCall() }
+    )
+  } else if (isActiveCall) {
+    // Resolve contact info for active call
+    val activeContact = contacts.find { it.peerId == callState.peerId }
+    val contactName = activeContact?.name
+    val contactPhoto = activeContact?.photo
+
+    CallScreen(
+      callVM = callVM,
+      callState = callState,
+      contactName = contactName,
+      contactPhoto = contactPhoto
     )
   } else {
     NavHost(
@@ -246,6 +253,7 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
           isLoading = isLoading,
           connectionState = connectionState,
           isCoreUnresponsive = isCoreUnresponsive,
+          isInCall = isActiveCall, // Although covered by the if/else, this supports the snackbar logic
           onResetCore = viewModel::resetCore,
           onCheckPermissions = viewModel::checkAllPermissions,
           onContactClick = { peerId, msgId -> viewModel.navigateToPeer(peerId, msgId) },
@@ -340,26 +348,11 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
           callState = callState,
           connectionState = connectionState,
           onBack = { navController.safePopBackStack() },
-          onNavigateToCall = { navController.navigate(Route.Call.createRoute(it)) },
+          onNavigateToCall = { /* No-op, handled by global state */ },
           onShowContactProfile = { contactsVM.onShowContactProfile(it) },
           onMediaClick = { attachments, index ->
             navController.navigate(Route.FullScreenMedia.createRoute(peerId, attachments, index))
           }
-        )
-      }
-
-      composable(Route.Call.route) {
-        // Resolve contact info for active call
-        val activeContact = contacts.find { it.peerId == callState.peerId }
-        val contactName = activeContact?.name
-        val contactPhoto = activeContact?.photo
-
-        CallScreen(
-          callVM = callVM,
-          callState = callState,
-          contactName = contactName,
-          contactPhoto = contactPhoto,
-          onNavigateBack = { navController.safePopBackStack() }
         )
       }
 

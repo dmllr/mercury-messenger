@@ -23,7 +23,6 @@ class CallViewModel(application: Application) : AndroidViewModel(application), N
   val isSpeakerOn = _isSpeakerOn.asStateFlow()
 
   // We need direct access to CallService for WebRTC sinks and Transport interactions
-  // which are still bound to the Service context for now.
   private val callService: CallService?
     get() = CallService.instance
 
@@ -49,7 +48,6 @@ class CallViewModel(application: Application) : AndroidViewModel(application), N
   fun startVoiceCall(peerId: String? = null) {
     val target = peerId ?: _callState.value.peerId
     if (target.isNotEmpty() && nativePtr != 0L) {
-      // Trigger Telecom in CallService (Android specific), then call native
       callService?.startVoiceCallViaTelecom(target)
       callService?.startLocalMedia(false)
       nativeStartVoice(nativePtr, target)
@@ -66,21 +64,29 @@ class CallViewModel(application: Application) : AndroidViewModel(application), N
   }
 
   fun hangup() {
-    if (nativePtr != 0L) nativeHangup(nativePtr)
-    stopCallMedia()
+    // Delegate to Service for proper cleanup (Telecom, Sound, Notification)
+    callService?.hangup() ?: run {
+      // Fallback if service not bound (unlikely in active call)
+      if (nativePtr != 0L) nativeHangup(nativePtr)
+    }
   }
 
   fun acceptCall() {
-    if (nativePtr != 0L) {
-      val isVideo = _callState.value.callType == HistoryEntryKind.VideoCall
-      callService?.startLocalMedia(isVideo)
-      nativeAccept(nativePtr)
+    // Delegate to Service
+    callService?.acceptCall() ?: run {
+      if (nativePtr != 0L) {
+        val isVideo = _callState.value.callType == HistoryEntryKind.VideoCall
+        // Fallback
+        nativeAccept(nativePtr)
+      }
     }
   }
 
   fun rejectCall() {
-    if (nativePtr != 0L) nativeReject(nativePtr)
-    stopCallMedia()
+    // Delegate to Service to stop ringing and kill notification
+    callService?.rejectCall() ?: run {
+      if (nativePtr != 0L) nativeReject(nativePtr)
+    }
   }
 
   fun stopCallMedia() {
@@ -108,6 +114,19 @@ class CallViewModel(application: Application) : AndroidViewModel(application), N
     val newSpeaker = !_isSpeakerOn.value
     _isSpeakerOn.value = newSpeaker
     callService?.setSpeakerphoneOn(newSpeaker)
+  }
+
+  // Exposed for CallService to call into C++
+  fun nativeAcceptCallBridge() {
+    if (nativePtr != 0L) nativeAccept(nativePtr)
+  }
+
+  fun nativeRejectCallBridge() {
+    if (nativePtr != 0L) nativeReject(nativePtr)
+  }
+
+  fun nativeHangupBridge() {
+    if (nativePtr != 0L) nativeHangup(nativePtr)
   }
 
   private external fun nativeCreate(observer: NativeCallObserver): Long
