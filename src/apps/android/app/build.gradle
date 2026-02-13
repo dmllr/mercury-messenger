@@ -170,8 +170,8 @@ dependencies {
     implementation("com.squareup.okhttp3:logging-interceptor")
 
     // Compose
-    implementation platform('androidx.compose:compose-bom:2026.01.01')
-    implementation 'androidx.activity:activity-compose:1.12.3'
+    implementation platform('androidx.compose:compose-bom:2026.02.00')
+    implementation 'androidx.activity:activity-compose:1.12.4'
     implementation 'androidx.compose.ui:ui'
     implementation 'androidx.compose.ui:ui-graphics'
     implementation 'androidx.compose.ui:ui-tooling-preview'
@@ -188,7 +188,7 @@ dependencies {
     // Image Loading
     implementation "io.coil-kt:coil-compose:2.7.0"
     implementation "io.coil-kt:coil-video:2.7.0"
-    implementation 'androidx.compose.ui:ui:1.10.2'
+    implementation 'androidx.compose.ui:ui:1.10.3'
 
     // Media3 (ExoPlayer)
     implementation "androidx.media3:media3-exoplayer:1.9.2"
@@ -204,7 +204,7 @@ dependencies {
 
     androidTestImplementation 'androidx.test.ext:junit:1.3.0'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.7.0'
-    androidTestImplementation platform('androidx.compose:compose-bom:2026.01.01')
+    androidTestImplementation platform('androidx.compose:compose-bom:2026.02.00')
     androidTestImplementation 'androidx.compose.ui:ui-test-junit4'
     debugImplementation 'androidx.compose.ui:ui-tooling'
     debugImplementation 'androidx.compose.ui:ui-test-manifest'
@@ -225,19 +225,19 @@ tasks.register('generateTranslations', Exec) {
     // Outputs: The Android values directories.
     // Listing each language dir is not strictly required, but helps Gradle verify integrity.
     // Gradle checks timestamps; if inputs haven't changed, this task is SKIPPED.
-    outputs.dir file("values")
-    outputs.dir file("values-ar")
-    outputs.dir file("values-de")
-    outputs.dir file("values-es")
-    outputs.dir file("values-fr")
-    outputs.dir file("values-id")
-    outputs.dir file("values-it")
-    outputs.dir file("values-ja")
-    outputs.dir file("values-ko")
-    outputs.dir file("values-pt")
-    outputs.dir file("values-ru")
-    outputs.dir file("values-tr")
-    outputs.dir file("values-zh")
+    outputs.dir file("res/values")
+    outputs.dir file("res/values-ar")
+    outputs.dir file("res/values-de")
+    outputs.dir file("res/values-es")
+    outputs.dir file("res/values-fr")
+    outputs.dir file("res/values-id")
+    outputs.dir file("res/values-it")
+    outputs.dir file("res/values-ja")
+    outputs.dir file("res/values-ko")
+    outputs.dir file("res/values-pt")
+    outputs.dir file("res/values-ru")
+    outputs.dir file("res/values-tr")
+    outputs.dir file("res/values-zh")
 
     executable 'python3'
     doFirst {
