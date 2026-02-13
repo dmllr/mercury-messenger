@@ -126,6 +126,8 @@ msgid "incoming_call_mic_missing"
 msgstr "Microphone permission is required to accept the call."
 msgid "incoming_call_cam_missing"
 msgstr "Camera permission is missing. Audio only."
+msgid "call_duration_format_short"
+msgstr " (%02d:%02d)"
 
 # System Messages (Actions from Core)
 msgid "sys_contact_req"

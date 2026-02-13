@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
@@ -27,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
@@ -43,6 +45,7 @@ import hela.eillance.components.VideoRenderer
 import hela.eillance.ndkio.CallDirection
 import hela.eillance.ndkio.CallState
 import hela.eillance.ndkio.HistoryEntryKind
+import hela.eillance.theme.extendedColors
 import hela.eillance.viewmodels.CallViewModel
 import hela.eillance.webrtc.WebRtcTransport
 import kotlinx.coroutines.delay
@@ -67,6 +70,9 @@ fun CallScreen(
       callVM.stopCallMedia()
     }
   }
+
+  val isMuted by callVM.isMuted.collectAsState()
+  val isSpeakerOn by callVM.isSpeakerOn.collectAsState()
 
   var callDurationSeconds by remember { mutableLongStateOf(0L) }
 
@@ -183,11 +189,11 @@ fun CallScreen(
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically
       ) {
-        IconButton(onClick = { /* TODO */ }) {
+        IconButton(onClick = { callVM.toggleMute() }) {
           Icon(
-            Icons.Default.Mic,
+            if (isMuted) Icons.Default.MicOff else Icons.Default.Mic,
             contentDescription = stringResource(id = R.string.action_mute),
-            tint = Color.White,
+            tint = if (isMuted) MaterialTheme.extendedColors.warning else Color.White,
             modifier = Modifier.size(32.dp)
           )
         }
@@ -205,11 +211,11 @@ fun CallScreen(
           )
         }
 
-        IconButton(onClick = { /* TODO */ }) {
+        IconButton(onClick = { callVM.toggleSpeaker() }) {
           Icon(
             Icons.AutoMirrored.Filled.VolumeUp,
             contentDescription = stringResource(id = R.string.action_speaker),
-            tint = Color.White,
+            tint = if (isSpeakerOn) MaterialTheme.extendedColors.warning else Color.White,
             modifier = Modifier.size(32.dp)
           )
         }

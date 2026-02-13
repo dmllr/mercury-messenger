@@ -378,6 +378,8 @@ class WebRtcMediaTransport(private val context: Context, private val nativePoint
     audioSource = null
 
     scope.launch {
+      localAudioTrack?.setEnabled(false) // Mute immediately
+      
       activeSessions.forEach { session ->
         try {
           if (!session.isDisposed) {
@@ -421,6 +423,10 @@ class WebRtcMediaTransport(private val context: Context, private val nativePoint
     } else {
       remoteSinks.remove(peerId)
     }
+  }
+
+  fun setAudioEnabled(enabled: Boolean) {
+    localAudioTrack?.setEnabled(enabled)
   }
 
   private fun attachLocalMedia(session: MediaSession) {

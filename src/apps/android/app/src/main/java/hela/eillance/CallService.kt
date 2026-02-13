@@ -11,6 +11,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
 import android.media.AudioAttributes
 import android.media.RingtoneManager
 import android.net.Uri
@@ -66,6 +68,7 @@ class CallService : Service() {
   private val binder = CallServiceBinder()
   private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
   private val notificationManager by lazy { getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager }
+  private val audioManager by lazy { getSystemService(Context.AUDIO_SERVICE) as AudioManager }
   private val telecomManager by lazy { getSystemService(Context.TELECOM_SERVICE) as TelecomManager }
   private val engineMutex = Mutex()
 
@@ -195,6 +198,33 @@ class CallService : Service() {
   fun setLocalVideoSink(sink: VideoSink?) = mediaTransport?.setLocalSink(sink)
   fun setRemoteVideoSink(peerId: String, sink: VideoSink?) = mediaTransport?.setRemoteSink(peerId, sink)
 
+  fun setMicrophoneMute(muted: Boolean) {
+    mediaTransport?.setAudioEnabled(!muted)
+  }
+
+  fun setSpeakerphoneOn(on: Boolean) {
+    Log.i(TAG, "setSpeakerphoneOn: $on (SDK: ${Build.VERSION.SDK_INT})")
+
+    // Ensure we are in communication mode for WebRTC audio routing
+    audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+      val devices = audioManager.availableCommunicationDevices
+      val targetType = if (on) AudioDeviceInfo.TYPE_BUILTIN_SPEAKER else AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
+
+      val device = devices.find { it.type == targetType }
+      if (device != null) {
+        val result = audioManager.setCommunicationDevice(device)
+        Log.i(TAG, "setCommunicationDevice result: $result for device ${device.type}")
+      } else {
+        Log.w(TAG, "Target audio device type not found. Clearing communication device.")
+        audioManager.clearCommunicationDevice()
+      }
+    } else {
+      audioManager.isSpeakerphoneOn = on
+    }
+  }
+
   private fun registerPhoneAccount() {
     val componentName = ComponentName(this, MercuryConnectionService::class.java)
     phoneAccountHandle = PhoneAccountHandle(componentName, getString(R.string.telecom_account_name))
@@ -274,6 +304,14 @@ class CallService : Service() {
 
     if (wasActive && !isActive) {
       stopLocalMedia()
+      // Reset audio routing on call end
+      audioManager.mode = AudioManager.MODE_NORMAL
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        audioManager.clearCommunicationDevice()
+      } else {
+        @Suppress("DEPRECATION")
+        audioManager.isSpeakerphoneOn = false
+      }
     }
 
     lastKnownCallState = callState

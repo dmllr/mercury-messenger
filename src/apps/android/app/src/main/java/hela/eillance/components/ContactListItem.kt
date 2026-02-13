@@ -30,12 +30,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import hela.eillance.camera.R
+import hela.eillance.ndkio.CallDirection
+import hela.eillance.ndkio.CallStatus
 import hela.eillance.ndkio.Contact
 import hela.eillance.ndkio.ContactStatus
 import hela.eillance.ndkio.HistoryEntryKind
 import hela.eillance.ndkio.MessageDirection
 import hela.eillance.ndkio.MessageStatus
 import hela.eillance.ndkio.PeerConnectionState
+import hela.eillance.screens.conversation.CallUtils
 import hela.eillance.theme.extendedColors
 import hela.eillance.ui.LocalizationMapping
 import org.json.JSONObject
@@ -203,11 +206,15 @@ private fun getSnippetText(contact: Contact, context: Context): String {
     }
 
     HistoryEntryKind.VoiceCall, HistoryEntryKind.VideoCall -> {
-      context.getString(
-        LocalizationMapping.getCallDescriptionResId(
-          kind,
-          contact.lastMessageDirection
-        )
+      val direction = if (contact.lastMessageDirection == 0) CallDirection.Outgoing else CallDirection.Incoming
+      val status = CallStatus.fromInt(contact.lastMessageStatus) // Using messageStatus field to store CallStatus in DB mapping
+
+      CallUtils.formatCallText(
+        context,
+        kind,
+        direction,
+        status, // Fallback for safety if mapping is tricky, but usually DB maps call_status to lastMessageStatus column
+        contact.lastMessageDuration
       )
     }
 

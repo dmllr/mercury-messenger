@@ -195,7 +195,7 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
         env,
         "hela/eillance/ndkio/Contact",
         "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IIIILjava/lang/String;IIJLjava/lang/"
-        "String;I)V"
+        "String;II)V"
     );
     classref.RegisterCtor(env, "hela/eillance/ndkio/CallState", "(ZZZILjava/lang/String;I)V");
     classref.RegisterCtor(env, "hela/eillance/ndkio/HistoryEntry", "(JIJLjava/lang/String;IIIIIZLjava/util/List;)V");

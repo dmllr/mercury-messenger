@@ -126,6 +126,8 @@ msgid "incoming_call_mic_missing"
 msgstr "Для ответа на звонок требуется разрешение на использование микрофона."
 msgid "incoming_call_cam_missing"
 msgstr "Нет разрешения на камеру. Только звук."
+msgid "call_duration_format_short"
+msgstr " (%02d:%02d)"
 
 # System Messages
 msgid "sys_contact_req"
