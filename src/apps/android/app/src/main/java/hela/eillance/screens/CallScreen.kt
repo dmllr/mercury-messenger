@@ -1,5 +1,6 @@
 package hela.eillance.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -56,14 +57,10 @@ fun CallScreen(
   callVM: CallViewModel,
   callState: CallState,
   contactName: String?,
-  contactPhoto: String?,
-  onNavigateBack: () -> Unit
+  contactPhoto: String?
 ) {
-  LaunchedEffect(callState) {
-    if (!callState.isInCall && !callState.isConnecting && !callState.isRinging) {
-      onNavigateBack()
-    }
-  }
+  // Prevent back navigation to ensure call screen stays prioritized
+  BackHandler { }
 
   DisposableEffect(Unit) {
     onDispose {

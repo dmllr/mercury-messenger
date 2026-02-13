@@ -13,16 +13,16 @@ import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
-import android.media.AudioAttributes
-import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
 import android.os.PowerManager
+import android.telecom.Connection
 import android.telecom.PhoneAccount
 import android.telecom.PhoneAccountHandle
 import android.telecom.TelecomManager
+import android.telecom.VideoProfile
 import android.util.Log
 import androidx.annotation.Keep
 import androidx.core.app.NotificationCompat
@@ -43,7 +43,6 @@ import hela.eillance.viewmodels.ContactsViewModel
 import hela.eillance.viewmodels.SettingsViewModel
 import hela.eillance.webrtc.WebRtcDataTransport
 import hela.eillance.webrtc.WebRtcMediaTransport
-import org.json.JSONObject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -58,8 +57,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
+import org.json.JSONObject
 import org.webrtc.VideoSink
-import java.util.concurrent.ConcurrentHashMap
 
 class CallService : Service() {
 
@@ -78,7 +77,8 @@ class CallService : Service() {
 
   // Background ViewModels
   private var backgroundContactsVM: ContactsViewModel? = null
-  private var backgroundCallVM: CallViewModel? = null
+  var backgroundCallVM: CallViewModel? = null
+    private set
   private var backgroundSettingsVM: SettingsViewModel? = null
 
   private var lastKnownCallState: CallState? = null
@@ -86,7 +86,9 @@ class CallService : Service() {
 
   private val soundPlayer: CallSoundPlayer by lazy { CallSoundPlayer(this) }
   private lateinit var phoneAccountHandle: PhoneAccountHandle
-  private val activeTelecomConnections = ConcurrentHashMap<String, MercuryConnection>()
+
+  // Track active telecom connection
+  private var activeConnection: MercuryConnection? = null
 
   private val _errorEvents = MutableSharedFlow<String>()
   val errorEvents: SharedFlow<String> = _errorEvents.asSharedFlow()
@@ -179,18 +181,74 @@ class CallService : Service() {
     }
   }
 
+  // --- Telecom & Call Logic ---
+
   fun acceptCall() {
-    notificationManager.cancel(INCOMING_CALL_NOTIFICATION_ID)
-    backgroundCallVM?.acceptCall()
+    // Stop ringing immediately
+    soundPlayer.stop()
+    cancelIncomingCallNotification()
+
+    // Notify Telecom if valid
+    activeConnection?.let {
+      if (it.state == Connection.STATE_RINGING) {
+        it.setActive()
+      }
+    }
+
+    // Trigger Native Logic via bridge to avoid loop
+    backgroundCallVM?.nativeAcceptCallBridge()
+
+    // Ensure local media starts
+    val isVideo = lastKnownCallState?.callType == HistoryEntryKind.VideoCall
+    startLocalMedia(isVideo)
   }
 
   fun rejectCall() {
-    notificationManager.cancel(INCOMING_CALL_NOTIFICATION_ID)
-    backgroundCallVM?.rejectCall()
+    Log.i(TAG, "rejectCall requested")
+    soundPlayer.stop()
+    cancelIncomingCallNotification()
+
+    activeConnection?.let {
+      if (it.state != Connection.STATE_DISCONNECTED) {
+        it.setDisconnected(android.telecom.DisconnectCause(android.telecom.DisconnectCause.REJECTED))
+        it.destroy()
+      }
+    }
+    activeConnection = null
+
+    backgroundCallVM?.nativeRejectCallBridge()
   }
 
   fun hangup() {
-    backgroundCallVM?.hangup()
+    Log.i(TAG, "hangup requested")
+    soundPlayer.stop()
+
+    activeConnection?.let {
+      if (it.state != Connection.STATE_DISCONNECTED) {
+        it.setDisconnected(android.telecom.DisconnectCause(android.telecom.DisconnectCause.LOCAL))
+        it.destroy()
+      }
+    }
+    activeConnection = null
+
+    backgroundCallVM?.nativeHangupBridge()
+  }
+
+  // Called from MercuryConnection when Telecom initiates the disconnect
+  fun onTelecomDisconnect(connection: MercuryConnection) {
+    if (activeConnection == connection) {
+      activeConnection = null
+      soundPlayer.stop()
+      // If we are still in call natively, hangup
+      val currentState = lastKnownCallState
+      if (currentState != null && (currentState.isRinging || currentState.isInCall || currentState.isConnecting)) {
+        if (currentState.isRinging) {
+          backgroundCallVM?.nativeRejectCallBridge()
+        } else {
+          backgroundCallVM?.nativeHangupBridge()
+        }
+      }
+    }
   }
 
   fun startLocalMedia(isVideo: Boolean) = mediaTransport?.startLocalMedia(isVideo)
@@ -203,24 +261,18 @@ class CallService : Service() {
   }
 
   fun setSpeakerphoneOn(on: Boolean) {
-    Log.i(TAG, "setSpeakerphoneOn: $on (SDK: ${Build.VERSION.SDK_INT})")
-
-    // Ensure we are in communication mode for WebRTC audio routing
     audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
       val devices = audioManager.availableCommunicationDevices
       val targetType = if (on) AudioDeviceInfo.TYPE_BUILTIN_SPEAKER else AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
-
       val device = devices.find { it.type == targetType }
       if (device != null) {
-        val result = audioManager.setCommunicationDevice(device)
-        Log.i(TAG, "setCommunicationDevice result: $result for device ${device.type}")
+        audioManager.setCommunicationDevice(device)
       } else {
-        Log.w(TAG, "Target audio device type not found. Clearing communication device.")
         audioManager.clearCommunicationDevice()
       }
     } else {
+      @Suppress("DEPRECATION")
       audioManager.isSpeakerphoneOn = on
     }
   }
@@ -293,18 +345,34 @@ class CallService : Service() {
     }
   }
 
+  // --- State Handling ---
+
   private fun handleCallStateChange(callState: CallState) {
-    syncTelecomState(callState)
+    // 1. Update Sound
     soundPlayer.updateCallState(callState)
-    checkForIncomingCall(lastKnownCallState, callState)
+
+    // 2. Incoming Call?
+    val wasRinging = lastKnownCallState?.isRinging == true
+    if (!wasRinging && callState.isRinging && callState.callDirection == CallDirection.Incoming) {
+      processIncomingCall(callState)
+    }
+
+    // 3. Update Telecom State
+    syncTelecomState(callState)
+
+    // 4. Update Notifications
+    if (!callState.isRinging) {
+      // If we stopped ringing (Accepted or Rejected), kill the incoming notification
+      cancelIncomingCallNotification()
+    }
     updateForegroundServiceNotification(callState.isInCall, callState.peerId, ServiceConnectionState.Online)
 
+    // 5. Cleanup if call ended
     val wasActive = lastKnownCallState?.let { it.isConnecting || it.isRinging || it.isInCall } ?: false
     val isActive = callState.isConnecting || callState.isRinging || callState.isInCall
 
     if (wasActive && !isActive) {
       stopLocalMedia()
-      // Reset audio routing on call end
       audioManager.mode = AudioManager.MODE_NORMAL
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         audioManager.clearCommunicationDevice()
@@ -317,58 +385,53 @@ class CallService : Service() {
     lastKnownCallState = callState
   }
 
+  private fun processIncomingCall(callState: CallState) {
+    try {
+      val extras = Bundle()
+      extras.putString(MercuryConnectionService.EXTRA_PEER_ID, callState.peerId)
+      val uri = Uri.fromParts(PhoneAccount.SCHEME_SIP, callState.peerId, null)
+      extras.putParcelable(TelecomManager.EXTRA_INCOMING_CALL_ADDRESS, uri)
+
+      // Android Telecom wraps extras sometimes
+      val nestedExtras = Bundle()
+      nestedExtras.putString(MercuryConnectionService.EXTRA_PEER_ID, callState.peerId)
+      extras.putBundle(TelecomManager.EXTRA_INCOMING_CALL_EXTRAS, nestedExtras)
+
+      telecomManager.addNewIncomingCall(phoneAccountHandle, extras)
+    } catch (e: Exception) {
+      Log.e(TAG, "Failed to add incoming call to Telecom", e)
+      // Fallback if Telecom fails
+      showIncomingCallNotification(callState.peerId)
+    }
+  }
+
   private fun syncTelecomState(callState: CallState) {
-    val currentActivePeerId = if (callState.isConnecting || callState.isRinging || callState.isInCall) {
-      callState.peerId.takeIf { it.isNotEmpty() }
-    } else {
-      null
-    }
+    // If we are in a call but Telecom is not active/ringing, we might need to sync up.
+    // However, usually Telecom drives us or we drive Telecom via accept/reject methods.
+    // This method ensures we kill Telecom if C++ hangs up remotely.
 
-    val iterator = activeTelecomConnections.iterator()
-    while (iterator.hasNext()) {
-      val entry = iterator.next()
-      val trackedPeerId = entry.key
-      val connection = entry.value
+    val isActiveCall = callState.isConnecting || callState.isRinging || callState.isInCall
 
-      if (trackedPeerId == currentActivePeerId) {
-        if (callState.isInCall) {
-          if (connection.state != android.telecom.Connection.STATE_ACTIVE) {
-            connection.onEstablished()
-          }
-        }
-      } else {
-        connection.onRemoteHangup()
-        iterator.remove()
-      }
+    if (!isActiveCall && activeConnection != null) {
+      // C++ says idle, but Telecom is active -> Remote Hangup
+      Log.i(TAG, "Sync: C++ idle, disconnecting Telecom")
+      activeConnection?.setDisconnected(android.telecom.DisconnectCause(android.telecom.DisconnectCause.REMOTE))
+      activeConnection?.destroy()
+      activeConnection = null
+    } else if (callState.isInCall && activeConnection?.state == Connection.STATE_RINGING) {
+      // C++ says Connected, Telecom says Ringing -> We accepted via UI/Auto
+      Log.i(TAG, "Sync: C++ connected, setting Telecom active")
+      activeConnection?.setActive()
     }
   }
 
-  fun registerTelecomConnection(peerId: String, connection: MercuryConnection) {
-    val existing = activeTelecomConnections.put(peerId, connection)
-    existing?.onRemoteHangup()
+  // Called by MercuryConnectionService when a new connection is created
+  fun onConnectionCreated(connection: MercuryConnection, peerId: String) {
+    activeConnection = connection
   }
 
-  fun unregisterTelecomConnection(peerId: String) {
-    activeTelecomConnections.remove(peerId)
-  }
-
-  private fun checkForIncomingCall(oldState: CallState?, newState: CallState) {
-    val wasRinging = oldState?.isRinging ?: false
-    if (!wasRinging && newState.isRinging && newState.callDirection == CallDirection.Incoming) {
-      try {
-        val extras = Bundle()
-        extras.putString(MercuryConnectionService.EXTRA_PEER_ID, newState.peerId)
-        val uri = Uri.fromParts(PhoneAccount.SCHEME_SIP, newState.peerId, null)
-        extras.putParcelable(TelecomManager.EXTRA_INCOMING_CALL_ADDRESS, uri)
-        val nestedExtras = Bundle()
-        nestedExtras.putString(MercuryConnectionService.EXTRA_PEER_ID, newState.peerId)
-        extras.putBundle(TelecomManager.EXTRA_INCOMING_CALL_EXTRAS, nestedExtras)
-        telecomManager.addNewIncomingCall(phoneAccountHandle, extras)
-      } catch (e: Exception) {
-        Log.e(TAG, "Failed to add incoming call to Telecom", e)
-        showIncomingCallNotification(newState.peerId)
-      }
-    }
+  private fun cancelIncomingCallNotification() {
+    notificationManager.cancel(INCOMING_CALL_NOTIFICATION_ID)
   }
 
   private fun checkForNewMessages(oldContacts: List<Contact>?, newContacts: List<Contact>) {
@@ -442,7 +505,13 @@ class CallService : Service() {
     }
   }
 
-  private fun showIncomingCallNotification(peerId: String) {
+  fun showIncomingCallNotification(peerId: String) {
+    // If the app is in the foreground, we let the UI handle the incoming call screen directly
+    // to avoid heads-up notification clutter.
+    if (MercuryApplication.isAppInForeground) {
+      return
+    }
+
     val fullScreenIntent = Intent(this, MainActivity::class.java).apply {
       flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
       action = ACTION_SHOW_INCOMING_CALL
@@ -450,7 +519,7 @@ class CallService : Service() {
     }
     val fullScreenPendingIntent = PendingIntent.getActivity(
       this,
-      0,
+      12345,
       fullScreenIntent,
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
@@ -479,13 +548,11 @@ class CallService : Service() {
       .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
       .addAction(0, getString(R.string.action_reject), rejectPendingIntent)
       .addAction(0, getString(R.string.action_accept), acceptPendingIntent)
-      .setAutoCancel(true)
+      .setAutoCancel(false) // Important: Don't auto cancel on tap
       .setOngoing(true)
 
     notificationManager.notify(INCOMING_CALL_NOTIFICATION_ID, builder.build())
-    if (MercuryApplication.isAppInForeground) {
-      startActivity(fullScreenIntent)
-    }
+    // Note: Activity is launched via fullScreenIntent if background
   }
 
   private fun showNewMessageNotification(
@@ -599,17 +666,15 @@ class CallService : Service() {
       getString(R.string.notification_channel_foreground_title),
       NotificationManager.IMPORTANCE_MIN
     )
+    // IMPORTANT: Changed ID to force reset of channel settings on device
     val callsChannel = NotificationChannel(
       CALLS_CHANNEL_ID,
       getString(R.string.notification_channel_calls_title),
       NotificationManager.IMPORTANCE_HIGH
     ).apply {
       description = getString(R.string.notification_channel_calls_description)
-      setSound(
-        RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE),
-        AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
-          .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()
-      )
+      // Set sound to null to manage manually via CallSoundPlayer and avoid double ringing
+      setSound(null, null)
       enableVibration(true)
       lockscreenVisibility = Notification.VISIBILITY_PUBLIC
     }
@@ -646,7 +711,7 @@ class CallService : Service() {
   }
 
   private fun placeTelecomCall(targetId: String, isVideo: Boolean) {
-    if (activeTelecomConnections.containsKey(targetId)) return
+    if (activeConnection != null) return // Already active
     try {
       val extras = Bundle()
       extras.putString(MercuryConnectionService.EXTRA_PEER_ID, targetId)
@@ -657,7 +722,7 @@ class CallService : Service() {
       if (isVideo) {
         extrasBundle.putInt(
           TelecomManager.EXTRA_START_CALL_WITH_VIDEO_STATE,
-          android.telecom.VideoProfile.STATE_BIDIRECTIONAL
+          VideoProfile.STATE_BIDIRECTIONAL
         )
       }
       telecomManager.placeCall(uri, extrasBundle)
@@ -685,11 +750,12 @@ class CallService : Service() {
     const val INCOMING_CALL_NOTIFICATION_ID = 102
     const val MESSAGE_NOTIFICATION_ID_BASE = 1000
     private const val FOREGROUND_CHANNEL_ID = "foreground_service_channel"
-    private const val CALLS_CHANNEL_ID = "incoming_calls_channel"
+    // Bumped version to reset channel settings
+    const val CALLS_CHANNEL_ID = "incoming_calls_channel_v3"
     private const val MESSAGES_CHANNEL_ID = "messages_channel"
     private const val ACTION_HANGUP = "hela.eillance.ACTION_HANGUP"
     const val ACTION_ACCEPT_CALL = "hela.eillance.ACTION_ACCEPT_CALL"
-    private const val ACTION_REJECT_CALL = "hela.eillance.ACTION_REJECT_CALL"
+    const val ACTION_REJECT_CALL = "hela.eillance.ACTION_REJECT_CALL"
     const val ACTION_SHOW_INCOMING_CALL = "hela.eillance.ACTION_SHOW_INCOMING_CALL"
     private const val ACTION_MARK_READ = "hela.eillance.ACTION_MARK_READ"
     const val EXTRA_PEER_ID = "hela.eillance.EXTRA_PEER_ID"

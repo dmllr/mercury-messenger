@@ -100,6 +100,7 @@ fun ContactsScreen(
   isLoading: Boolean,
   connectionState: ServiceConnectionState,
   isCoreUnresponsive: Boolean,
+  isInCall: Boolean,
   onResetCore: () -> Unit,
   onCheckPermissions: () -> Unit,
   onContactClick: (String, Long?) -> Unit,
@@ -304,7 +305,7 @@ fun ContactsScreen(
                     modifier = Modifier.padding(start = 12.dp)
                   )
                   Text(
-                    text = " • " + formatTimestamp(result.entry.timestamp, zoneId, formatters),
+                    text = " ΓÇó " + formatTimestamp(result.entry.timestamp, zoneId, formatters),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                   )
@@ -327,6 +328,21 @@ fun ContactsScreen(
         val globalError by contactsVM.errorMessage.collectAsState(initial = null)
         if (globalError != null) {
           StatusSnackbar(text = globalError!!, isError = true)
+        }
+
+        // Active Call Snackbar
+        // Note: The main app logic forces the call screen to top, so this is defensively implemented
+        // in case navigation allows reaching contacts screen during call in future.
+        if (isInCall) {
+          StatusSnackbar(
+            text = stringResource(id = R.string.return_to_call),
+            actionLabel = stringResource(id = R.string.action_open),
+            onAction = {
+              // Action is handled by global state: MainViewModel will trigger nav or CallScreen will show.
+              // Here we can just ensure we don't block.
+            },
+            isError = false
+          )
         }
 
         val isConnectionIssue = !isCoreUnresponsive &&

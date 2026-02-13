@@ -88,6 +88,7 @@ class CallViewModel {
     Impl(std::shared_ptr<Client> client, std::shared_ptr<ClientEventRouter> router)
         : client(std::move(client)),
           router(std::move(router)) {
+      state = this->client->GetCurrentCallState();
     }
 
     void SetObserver(std::shared_ptr<Observer> obs) {
@@ -146,9 +147,6 @@ class CallViewModel {
       ContactID peer_id_to_hangup;
       {
         std::lock_guard<std::mutex> const lock(mutex);
-        if (!state.is_connecting && !state.is_in_call && !state.is_ringing) {
-          return;
-        }
         peer_id_to_hangup = state.peer_id;
         state = {};
       }
@@ -162,9 +160,6 @@ class CallViewModel {
       ContactID peer_id;
       {
         std::lock_guard<std::mutex> const lock(mutex);
-        if (!state.is_ringing) {
-          return;
-        }
         peer_id = state.peer_id;
         state.is_connecting = false;
         state.is_in_call = true;
@@ -180,9 +175,6 @@ class CallViewModel {
       ContactID peer_id;
       {
         std::lock_guard<std::mutex> const lock(mutex);
-        if (!state.is_ringing) {
-          return;
-        }
         peer_id = state.peer_id;
         state = {};
       }
