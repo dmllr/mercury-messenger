@@ -30,6 +30,9 @@ class CallViewModel {
     Subscribe<EventIncomingCall>(queue, [impl](auto const& event) {
       impl->OnIncomingCall(event.peer_id, event.call_type);
     });
+    Subscribe<EventOutgoingCall>(queue, [impl](auto const& event) {
+      impl->OnOutgoingCall(event.peer_id, event.call_type);
+    });
     Subscribe<EventCallRinging>(queue, [impl](auto const& event) { impl->OnCallRinging(event.peer_id); });
     Subscribe<EventCallAccepted>(queue, [impl](auto const& event) { impl->OnCallAccepted(event.peer_id); });
     Subscribe<EventCallTerminated>(queue, [impl](auto const& event) { impl->OnCallTerminated(event.peer_id); });
@@ -200,6 +203,20 @@ class CallViewModel {
       if (should_notify) {
         Notify();
       }
+    }
+
+    void OnOutgoingCall(ContactID const& peer_id, messaging::HistoryEntryKind call_type) {
+      {
+        std::lock_guard<std::mutex> const lock(mutex);
+        state = {
+            .is_connecting = true,
+            .is_in_call = false,
+            .is_ringing = false,
+            .call_direction = messaging::CallDirection::outgoing,
+            .peer_id = peer_id,
+            .call_type = call_type};
+      }
+      Notify();
     }
 
     void OnCallRinging(ContactID const& peer_id) {
