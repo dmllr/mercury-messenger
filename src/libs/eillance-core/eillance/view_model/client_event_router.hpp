@@ -163,7 +163,9 @@ class ClientEventRouter {
     media->SetFrameReceivedCallback([this](auto const& frame) { eventQueue_.Push(EventFrameReceived{frame}); });
     media->SetIncomingCallCallback([this](auto const& id, auto type) { eventQueue_.Push(EventIncomingCall{id, type}); }
     );
-    media->SetOutgoingCallStartedCallback([this](auto const& id, auto type) { eventQueue_.Push(EventOutgoingCall{id, type}); });
+    media->SetOutgoingCallStartedCallback([this](auto const& id, auto type) {
+      eventQueue_.Push(EventOutgoingCall{id, type});
+    });
     media->SetCallRingingCallback([this](auto const& id) { eventQueue_.Push(EventCallRinging{id}); });
     media->SetCallAcceptedCallback([this](auto const& id) { eventQueue_.Push(EventCallAccepted{id}); });
     media->SetCallTerminatedCallback([this](auto const& id) { eventQueue_.Push(EventCallTerminated{id}); });

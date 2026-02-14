@@ -43,6 +43,7 @@ class WebRtcMediaTransport(private val context: Context, private val nativePoint
 
   private class MediaSession(val pc: PeerConnection) {
     var iceGatheringComplete: CompletableDeferred<Unit>? = null
+
     @Volatile
     var isDisposed = false
     fun dispose() {
