@@ -6,6 +6,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -50,7 +51,7 @@ class MediaCallService {
   }
 
   void SetMessagingService(std::shared_ptr<MessagingService> messaging_service) {
-    messaging_service_ = messaging_service;
+    messaging_service_ = std::move(messaging_service);
   }
 
   void SetConnectionHandler(ConnectionRequestHandler handler) {
