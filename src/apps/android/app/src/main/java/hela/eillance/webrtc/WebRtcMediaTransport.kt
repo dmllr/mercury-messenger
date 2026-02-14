@@ -76,27 +76,6 @@ class WebRtcMediaTransport(private val context: Context, private val nativePoint
 
   private var currentIceServers: List<PeerConnection.IceServer> = listOf()
 
-  // Must call into DataTransport to send signaling
-  // We can't do it directly, so we rely on Core logic via callbacks,
-  // but wait, creating offer/answer generates SDP which Core gets via callback too?
-  // No, Core calls `CreateOffer`, we return SDP? No, traditionally this class sent it via SignalingClient.
-  // BUT now we are split. The MediaTransport generates SDP, but how does it send it?
-  // Answer: Core calls CreateOffer, and we should likely have a callback to core "OnOfferCreated(sdp)".
-  // However, existing architecture was `sendSignalingMessage` from transport.
-  // We will simply require CallService to facilitate signaling, OR we assume Core orchestrates.
-  // Actually, `MediaCallService` (Core) calls `transport_->CreateOffer`.
-  // Then `AndroidMediaTransport` (C++) calls Java `createOffer`.
-  // Java `createOffer` generates SDP. It needs to send it.
-  // We don't have reference to DataTransport here.
-  // We will expose a callback or event.
-  // Actually, we can just send the JSON string via JNI back to C++?
-  // No, the previous implementation sent directly via `SignalingClient`.
-  // Solution: We will use a shared static bus or injected callback to send signaling message via DataTransport.
-  // BETTER: Inject a "SignalingSender" interface?
-  // EASIEST: Just emit a "LocalDescriptionGenerated" event to C++, and C++ routes it to DataTransport.
-  // BUT refactoring C++ side completely to change flow is risky.
-  // COMPROMISE: CallService holds both. Pass a lambda to MediaTransport to send signaling.
-
   var onSendSignalingMessage: ((String) -> Unit)? = null
 
   private external fun nativeOnPeerConnectionStateChange(nativePointer: Long, peerId: String, context: Int, state: Int)
@@ -334,6 +313,7 @@ class WebRtcMediaTransport(private val context: Context, private val nativePoint
         val audioConstraints = MediaConstraints()
         audioSource = peerConnectionFactory!!.createAudioSource(audioConstraints)
         localAudioTrack = peerConnectionFactory!!.createAudioTrack("ARDAMSa0", audioSource)
+        localAudioTrack?.setEnabled(false) // CRITICAL: Start disabled to prevent hot mic before accept
       }
       if (isVideo && localVideoTrack == null) {
         if (ContextCompat.checkSelfPermission(
@@ -352,6 +332,7 @@ class WebRtcMediaTransport(private val context: Context, private val nativePoint
           videoCapturer!!.initialize(surfaceTextureHelper, context, source.capturerObserver)
           videoCapturer!!.startCapture(640, 480, 30)
           localVideoTrack = peerConnectionFactory!!.createVideoTrack("ARDAMSv0", source)
+          localVideoTrack?.setEnabled(false) // CRITICAL: Start disabled
           localSink?.let { localVideoTrack?.addSink(it) }
         }
       }
@@ -379,7 +360,7 @@ class WebRtcMediaTransport(private val context: Context, private val nativePoint
 
     scope.launch {
       localAudioTrack?.setEnabled(false) // Mute immediately
-      
+
       activeSessions.forEach { session ->
         try {
           if (!session.isDisposed) {
@@ -427,6 +408,10 @@ class WebRtcMediaTransport(private val context: Context, private val nativePoint
 
   fun setAudioEnabled(enabled: Boolean) {
     localAudioTrack?.setEnabled(enabled)
+  }
+
+  fun setVideoEnabled(enabled: Boolean) {
+    localVideoTrack?.setEnabled(enabled)
   }
 
   private fun attachLocalMedia(session: MediaSession) {
