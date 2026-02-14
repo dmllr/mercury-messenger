@@ -2,6 +2,7 @@ package hela.eillance.screens
 
 import android.Manifest
 import android.content.pm.PackageManager
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -60,6 +61,9 @@ fun IncomingCallScreen(
   onAccept: () -> Unit,
   onReject: () -> Unit
 ) {
+  // Disable back navigation to ensure the user explicitly Accepts or Rejects
+  BackHandler { }
+
   val context = LocalContext.current
   val isVideoCall = callType == HistoryEntryKind.VideoCall
 
