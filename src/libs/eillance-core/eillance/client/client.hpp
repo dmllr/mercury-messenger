@@ -123,6 +123,8 @@ class Client final : public transport::TransportDelegate {
         auto const state = static_cast<ServiceConnectionState>(state_val);
         if (state == ServiceConnectionState::failure || state == ServiceConnectionState::noNetwork ||
             state == ServiceConnectionState::disconnected) {
+          messaging_service_->StopDeliveryService();
+
           for (auto const& [id, peer] : data_transport_->GetPeers()) {
             auto const pc_state = data_transport_->GetConnectionState(id);
             if (pc_state == transport::PeerConnectionState::newConnection ||
@@ -215,7 +217,6 @@ class Client final : public transport::TransportDelegate {
 
     data_transport_->SetId(account_service_->GetId());
     data_transport_->Start();
-    messaging_service_->StartDeliveryService();
 
     StartWatchdog();
     background_queue_.Dispatch([this] { CheckForInactivePeers(); });
