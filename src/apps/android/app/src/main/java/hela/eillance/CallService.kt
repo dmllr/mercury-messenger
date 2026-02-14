@@ -198,7 +198,7 @@ class CallService : Service() {
     // Trigger Native Logic via bridge to avoid loop
     backgroundCallVM?.nativeAcceptCallBridge()
 
-    // Ensure local media starts
+    // Ensure local media starts and is ENABLED
     val isVideo = lastKnownCallState?.callType == HistoryEntryKind.VideoCall
     startLocalMedia(isVideo)
   }
@@ -251,7 +251,10 @@ class CallService : Service() {
     }
   }
 
-  fun startLocalMedia(isVideo: Boolean) = mediaTransport?.startLocalMedia(isVideo)
+  fun startLocalMedia(isVideo: Boolean) {
+    mediaTransport?.startLocalMedia(isVideo)
+  }
+
   fun stopLocalMedia() = mediaTransport?.stopLocalMedia()
   fun setLocalVideoSink(sink: VideoSink?) = mediaTransport?.setLocalSink(sink)
   fun setRemoteVideoSink(peerId: String, sink: VideoSink?) = mediaTransport?.setRemoteSink(peerId, sink)
@@ -367,7 +370,23 @@ class CallService : Service() {
     }
     updateForegroundServiceNotification(callState.isInCall, callState.peerId, ServiceConnectionState.Online)
 
-    // 5. Cleanup if call ended
+    // 5. Strict Media Security Enforcement
+    // Ensure absolutely NO media flows unless the call is active (accepted).
+    val wasInCall = lastKnownCallState?.isInCall == true
+    val isInCall = callState.isInCall
+
+    if (!wasInCall && isInCall) {
+      // Transition to Active: Unmute media to allow communication
+      val isVideo = callState.callType == HistoryEntryKind.VideoCall
+      mediaTransport?.setAudioEnabled(true)
+      if (isVideo) mediaTransport?.setVideoEnabled(true)
+    } else if (!isInCall) {
+      // Not active (Connecting, Ringing, Ended): FORCE DISABLE MEDIA
+      // This prevents "hot mic" during ringing or connection setup.
+      mediaTransport?.setAudioEnabled(false)
+      mediaTransport?.setVideoEnabled(false)
+    }
+
     val wasActive = lastKnownCallState?.let { it.isConnecting || it.isRinging || it.isInCall } ?: false
     val isActive = callState.isConnecting || callState.isRinging || callState.isInCall
 
