@@ -38,7 +38,6 @@ import hela.eillance.ndkio.HistoryEntryKind
 import hela.eillance.ndkio.MessageDirection
 import hela.eillance.ndkio.MessageStatus
 import hela.eillance.ndkio.PeerConnectionState
-import hela.eillance.screens.conversation.CallUtils
 import hela.eillance.theme.extendedColors
 import hela.eillance.ui.LocalizationMapping
 import org.json.JSONObject
@@ -108,50 +107,66 @@ fun ContactListItem(
           }
         }
       } else {
-        val snippet = getSnippetText(contact, context)
-        if (snippet.isNotBlank()) {
-          Row(verticalAlignment = Alignment.CenterVertically) {
-            if (contact.lastMessageDirection == MessageDirection.Sent.value &&
-              contact.lastMsgKindEnum == HistoryEntryKind.TextMessage
-            ) {
-              val statusIcon = when (contact.lastMsgStatusEnum) {
-                MessageStatus.Read -> Icons.Filled.DoneAll
-                MessageStatus.Delivered -> Icons.Filled.Done
-                MessageStatus.Sending -> Icons.Filled.Schedule
-                else -> Icons.Filled.Schedule
-              }
-              val statusTint = if (contact.lastMsgStatusEnum == MessageStatus.Read) {
-                MaterialTheme.extendedColors.success
-              } else {
-                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+        val lastKind = contact.lastMsgKindEnum
+
+        if (lastKind == HistoryEntryKind.VoiceCall || lastKind == HistoryEntryKind.VideoCall) {
+          val direction = if (contact.lastMessageDirection == 0) CallDirection.Outgoing else CallDirection.Incoming
+          val status = CallStatus.fromInt(contact.lastMessageStatus)
+
+          CallEntryDisplay(
+            kind = lastKind,
+            direction = direction,
+            status = status,
+            durationSeconds = contact.lastMessageDuration,
+            textStyle = MaterialTheme.typography.bodyMedium,
+            baseColor = MaterialTheme.colorScheme.onSurfaceVariant
+          )
+        } else {
+          val snippet = getSnippetText(contact, context)
+          if (snippet.isNotBlank()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              if (contact.lastMessageDirection == MessageDirection.Sent.value &&
+                lastKind == HistoryEntryKind.TextMessage
+              ) {
+                val statusIcon = when (contact.lastMsgStatusEnum) {
+                  MessageStatus.Read -> Icons.Filled.DoneAll
+                  MessageStatus.Delivered -> Icons.Filled.Done
+                  MessageStatus.Sending -> Icons.Filled.Schedule
+                  else -> Icons.Filled.Schedule
+                }
+                val statusTint = if (contact.lastMsgStatusEnum == MessageStatus.Read) {
+                  MaterialTheme.extendedColors.success
+                } else {
+                  MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                }
+
+                Icon(
+                  imageVector = statusIcon,
+                  contentDescription = null,
+                  modifier = Modifier
+                    .size(16.dp)
+                    .padding(end = 4.dp),
+                  tint = statusTint
+                )
               }
 
-              Icon(
-                imageVector = statusIcon,
-                contentDescription = null,
-                modifier = Modifier
-                  .size(16.dp)
-                  .padding(end = 4.dp),
-                tint = statusTint
+              Text(
+                text = snippet,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
               )
             }
-
+          } else if (!contact.bio.isNullOrBlank()) {
             Text(
-              text = snippet,
+              text = contact.bio,
               style = MaterialTheme.typography.bodyMedium,
               maxLines = 1,
               overflow = TextOverflow.Ellipsis,
               color = MaterialTheme.colorScheme.onSurfaceVariant
             )
           }
-        } else if (!contact.bio.isNullOrBlank()) {
-          Text(
-            text = contact.bio,
-            style = MaterialTheme.typography.bodyMedium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-          )
         }
       }
     },
@@ -204,20 +219,6 @@ private fun getSnippetText(contact: Contact, context: Context): String {
     HistoryEntryKind.TextMessage -> {
       contact.lastMessageContent ?: ""
     }
-
-    HistoryEntryKind.VoiceCall, HistoryEntryKind.VideoCall -> {
-      val direction = if (contact.lastMessageDirection == 0) CallDirection.Outgoing else CallDirection.Incoming
-      val status = CallStatus.fromInt(contact.lastMessageStatus) // Using messageStatus field to store CallStatus in DB mapping
-
-      CallUtils.formatCallText(
-        context,
-        kind,
-        direction,
-        status, // Fallback for safety if mapping is tricky, but usually DB maps call_status to lastMessageStatus column
-        contact.lastMessageDuration
-      )
-    }
-
     HistoryEntryKind.SystemMessage -> {
       val action = try {
         val content = contact.lastMessageContent
@@ -231,5 +232,6 @@ private fun getSnippetText(contact: Contact, context: Context): String {
       }
       context.getString(LocalizationMapping.getSystemMessageResId(action))
     }
+    else -> ""
   }
 }
