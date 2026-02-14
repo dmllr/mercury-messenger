@@ -219,6 +219,7 @@ private fun getSnippetText(contact: Contact, context: Context): String {
     HistoryEntryKind.TextMessage -> {
       contact.lastMessageContent ?: ""
     }
+
     HistoryEntryKind.SystemMessage -> {
       val action = try {
         val content = contact.lastMessageContent
@@ -232,6 +233,7 @@ private fun getSnippetText(contact: Contact, context: Context): String {
       }
       context.getString(LocalizationMapping.getSystemMessageResId(action))
     }
+
     else -> ""
   }
 }

@@ -34,6 +34,7 @@ class WebRtcDataTransport(private val context: Context, private val nativePointe
   private class ConnectionSession(val pc: PeerConnection) {
     var dataChannel: DataChannel? = null
     var iceGatheringComplete: CompletableDeferred<Unit>? = null
+
     @Volatile
     var isDisposed = false
     val dataChannelOpenReported = AtomicBoolean(false)

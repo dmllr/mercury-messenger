@@ -26,11 +26,13 @@ object CallUtils {
         CallStatus.Answered -> Triple(Icons.AutoMirrored.Filled.CallMade, false, R.string.call_outgoing_voice)
         else -> Triple(Icons.AutoMirrored.Filled.CallMade, true, R.string.call_outgoing_voice)
       }
+
       CallDirection.Incoming -> when (status) {
         CallStatus.Missed -> Triple(Icons.AutoMirrored.Filled.CallMissed, true, R.string.call_missed)
         CallStatus.Answered -> Triple(Icons.AutoMirrored.Filled.CallReceived, false, R.string.call_incoming_voice)
         else -> Triple(Icons.AutoMirrored.Filled.CallReceived, false, R.string.call_rejected)
       }
+
       null -> Triple(Icons.Default.Call, false, R.string.call_generic)
     }
   }

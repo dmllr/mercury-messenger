@@ -1,6 +1,5 @@
 package hela.eillance.telecom
 
-import android.content.Intent
 import android.net.Uri
 import android.telecom.CallAudioState
 import android.telecom.Connection

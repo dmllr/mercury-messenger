@@ -214,7 +214,8 @@ class CallViewModel {
             .is_ringing = false,
             .call_direction = messaging::CallDirection::outgoing,
             .peer_id = peer_id,
-            .call_type = call_type};
+            .call_type = call_type
+        };
       }
       Notify();
     }

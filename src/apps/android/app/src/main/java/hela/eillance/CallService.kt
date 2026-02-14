@@ -790,6 +790,7 @@ class CallService : Service() {
     const val INCOMING_CALL_NOTIFICATION_ID = 102
     const val MESSAGE_NOTIFICATION_ID_BASE = 1000
     private const val FOREGROUND_CHANNEL_ID = "foreground_service_channel"
+
     // Bumped version to reset channel settings
     const val CALLS_CHANNEL_ID = "incoming_calls_channel_v3"
     private const val MESSAGES_CHANNEL_ID = "messages_channel"

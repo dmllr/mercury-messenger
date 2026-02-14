@@ -96,6 +96,7 @@ fun CallScreen(
       val seconds = callDurationSeconds - TimeUnit.MINUTES.toSeconds(minutes)
       String.format("%02d:%02d", minutes, seconds)
     }
+
     else -> ""
   }
 

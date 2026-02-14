@@ -429,7 +429,8 @@ class Client final : public transport::TransportDelegate {
         .is_connecting = !session->is_active && !session->is_ringing,
         .is_in_call = session->is_active,
         .is_ringing = session->is_ringing,
-        .call_direction = session->is_outgoing ? messaging::CallDirection::outgoing : messaging::CallDirection::incoming,
+        .call_direction =
+            session->is_outgoing ? messaging::CallDirection::outgoing : messaging::CallDirection::incoming,
         .peer_id = session->peer_id,
         .call_type = session->is_video ? messaging::HistoryEntryKind::videoCall : messaging::HistoryEntryKind::voiceCall
     };
