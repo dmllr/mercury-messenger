@@ -425,6 +425,16 @@ class CallService : Service() {
     }
   }
 
+  // Called by MainActivity.onStop to ensure notification is shown if the user leaves the app
+  // while a call is incoming.
+  fun onActivityStopped() {
+    val currentState = lastKnownCallState ?: backgroundCallVM?.callState?.value
+    if (currentState != null && currentState.isRinging && currentState.callDirection == CallDirection.Incoming) {
+      // Post notification immediately since UI is no longer visible
+      showIncomingCallNotification(currentState.peerId)
+    }
+  }
+
   // Called by MercuryConnectionService when a new connection is created
   fun onConnectionCreated(connection: MercuryConnection, peerId: String) {
     activeConnection = connection
@@ -506,8 +516,9 @@ class CallService : Service() {
   }
 
   fun showIncomingCallNotification(peerId: String) {
-    // If the app is in the foreground, we let the UI handle the incoming call screen directly
-    // to avoid heads-up notification clutter.
+    // If the app is already in the foreground, the IncomingCallScreen is visible.
+    // We suppress the notification to avoid clutter.
+    // If the user navigates away (onStop), this method will be called again with isAppInForeground = false.
     if (MercuryApplication.isAppInForeground) {
       return
     }
@@ -551,8 +562,18 @@ class CallService : Service() {
       .setAutoCancel(false) // Important: Don't auto cancel on tap
       .setOngoing(true)
 
+    // CRITICAL: Explicitly start the activity to force it to the front if the device is unlocked.
+    // We can do this because we are a bound ConnectionService (Background Activity Start Exemption).
+    // We only do this if we aren't already in the foreground to avoid lifecycle thrashing.
+    if (!MercuryApplication.isAppInForeground) {
+      try {
+        startActivity(fullScreenIntent)
+      } catch (e: Exception) {
+        Log.e(TAG, "Failed to force start incoming call activity", e)
+      }
+    }
+
     notificationManager.notify(INCOMING_CALL_NOTIFICATION_ID, builder.build())
-    // Note: Activity is launched via fullScreenIntent if background
   }
 
   private fun showNewMessageNotification(
