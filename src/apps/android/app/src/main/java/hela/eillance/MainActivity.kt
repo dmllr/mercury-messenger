@@ -12,6 +12,7 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import hela.eillance.ndkio.CallDirection
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -79,6 +80,9 @@ class MainActivity : ComponentActivity() {
   override fun onStop() {
     super.onStop()
     MercuryApplication.isAppInForeground = false
+    // If the app goes background while ringing, ensure the notification is visible
+    // so the user can return to the call screen.
+    CallService.instance?.onActivityStopped()
   }
 
   override fun onNewIntent(intent: Intent) {
