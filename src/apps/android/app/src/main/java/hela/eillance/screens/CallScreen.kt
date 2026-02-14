@@ -155,7 +155,7 @@ fun CallScreen(
         }
       }
 
-      if (callState.isConnecting || (callState.isRinging && callState.callDirection == CallDirection.Outgoing)) {
+      if (callState.isConnecting) {
         CircularProgressIndicator(modifier = Modifier.size(64.dp))
       } else if (isVideoCall && callState.isInCall) {
         Box(
