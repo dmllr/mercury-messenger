@@ -19,13 +19,11 @@ import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -39,9 +37,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import hela.eillance.camera.R
+import hela.eillance.components.CallUserInfo
 import hela.eillance.components.VideoRenderer
 import hela.eillance.ndkio.CallDirection
 import hela.eillance.ndkio.CallState
@@ -86,8 +84,20 @@ fun CallScreen(
   val isVideoCall = callState.callType == HistoryEntryKind.VideoCall
   val eglBaseContext = remember { WebRtcTransport.eglBase.eglBaseContext }
 
-  val displayName = contactName ?: callState.peerId.take(8)
-  val displayId = if (contactName != null) callState.peerId.take(8) else ""
+  // Determine if we show the video UI or the standard "profile" UI
+  val showVideoUI = isVideoCall && callState.isInCall
+
+  // Status Text Logic
+  val statusText = when {
+    callState.isConnecting -> "Connecting..." // Matches requirement
+    callState.isRinging && callState.callDirection == CallDirection.Outgoing -> stringResource(id = R.string.call_status_ringing)
+    callState.isInCall -> {
+      val minutes = TimeUnit.SECONDS.toMinutes(callDurationSeconds)
+      val seconds = callDurationSeconds - TimeUnit.MINUTES.toSeconds(minutes)
+      String.format("%02d:%02d", minutes, seconds)
+    }
+    else -> ""
+  }
 
   Box(
     modifier = Modifier
@@ -95,7 +105,8 @@ fun CallScreen(
       .background(Color.Black)
   ) {
 
-    if (isVideoCall && callState.isInCall) {
+    // --- VIDEO LAYER (Only if Active Video) ---
+    if (showVideoUI) {
       // Remote Video (Full Screen)
       VideoRenderer(
         eglBaseContext = eglBaseContext,
@@ -105,66 +116,55 @@ fun CallScreen(
       )
     }
 
+    // --- INFO & CONTROLS LAYER ---
     Column(
-      modifier = Modifier.fillMaxSize(),
+      modifier = Modifier
+        .fillMaxSize()
+        .padding(bottom = 48.dp),
       horizontalAlignment = Alignment.CenterHorizontally,
       verticalArrangement = Arrangement.SpaceBetween
     ) {
-      Column(
-        modifier = Modifier.padding(top = 48.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-      ) {
-        Text(
-          text = displayName,
-          style = MaterialTheme.typography.headlineSmall,
-          color = Color.White,
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis
+
+      // Top Section: Info
+      if (!showVideoUI) {
+        CallUserInfo(
+          name = contactName,
+          peerId = callState.peerId,
+          photo = contactPhoto,
+          statusText = statusText,
+          showPulse = callState.isConnecting || (callState.isRinging && callState.callDirection == CallDirection.Outgoing),
+          modifier = Modifier.padding(top = 100.dp)
         )
-        if (displayId.isNotEmpty()) {
-          Text(
-            text = displayId,
+      } else {
+        Column(
+          modifier = Modifier.padding(top = 48.dp),
+          horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+          // Replicating CallUserInfo text style for consistency
+          androidx.compose.material3.Text(
+            text = contactName ?: stringResource(id = R.string.unknown),
+            style = MaterialTheme.typography.headlineSmall, // Similar to CallUserInfo but Small to save space
+            color = Color.White,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+          )
+          androidx.compose.material3.Text(
+            text = statusText,
             style = MaterialTheme.typography.bodyMedium,
-            color = Color.White.copy(alpha = 0.7f)
-          )
-        }
-        if (callState.isConnecting) {
-          Spacer(modifier = Modifier.padding(4.dp))
-          Text(
-            text = "Connection...", // Matches requirement for establishing phase
-            style = MaterialTheme.typography.bodyLarge,
-            color = Color.White.copy(alpha = 0.7f)
-          )
-        } else if (callState.isRinging && callState.callDirection == CallDirection.Outgoing) {
-          Spacer(modifier = Modifier.padding(4.dp))
-          Text(
-            text = stringResource(id = R.string.call_status_ringing),
-            style = MaterialTheme.typography.bodyLarge,
-            color = Color.White.copy(alpha = 0.7f)
-          )
-        } else if (callState.isInCall) {
-          Spacer(modifier = Modifier.padding(4.dp))
-          val minutes = TimeUnit.SECONDS.toMinutes(callDurationSeconds)
-          val seconds = callDurationSeconds - TimeUnit.MINUTES.toSeconds(minutes)
-          val timerText = String.format("%02d:%02d", minutes, seconds)
-          Text(
-            text = timerText,
-            style = MaterialTheme.typography.bodyLarge,
-            color = Color.White.copy(alpha = 0.7f)
+            color = Color.White.copy(alpha = 0.8f)
           )
         }
       }
 
-      if (callState.isConnecting) {
-        CircularProgressIndicator(modifier = Modifier.size(64.dp))
-      } else if (isVideoCall && callState.isInCall) {
+      // Center: PIP (Only for Video)
+      if (showVideoUI) {
         Box(
           modifier = Modifier
             .fillMaxWidth()
+            .weight(1f) // Take up remaining space to push controls down
             .padding(16.dp),
           contentAlignment = Alignment.TopEnd
         ) {
-          // Local Video (PIP)
           VideoRenderer(
             eglBaseContext = eglBaseContext,
             modifier = Modifier
@@ -177,12 +177,16 @@ fun CallScreen(
             onRelease = { callVM.setLocalVideoSink(null) }
           )
         }
+      } else {
+        // Spacer for Audio mode to push controls to bottom
+        Spacer(modifier = Modifier.weight(1f))
       }
 
+      // Bottom: Controls
       Row(
         modifier = Modifier
           .fillMaxWidth()
-          .padding(bottom = 48.dp, start = 24.dp, end = 24.dp),
+          .padding(horizontal = 48.dp), // Align with IncomingScreen horizontal padding
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically
       ) {
@@ -198,13 +202,14 @@ fun CallScreen(
         FloatingActionButton(
           onClick = { callVM.hangup() },
           containerColor = MaterialTheme.colorScheme.error,
-          elevation = FloatingActionButtonDefaults.elevation(0.dp)
+          elevation = FloatingActionButtonDefaults.elevation(0.dp),
+          modifier = Modifier.size(72.dp) // Match Incoming Reject button size
         ) {
           Icon(
             Icons.Default.CallEnd,
             contentDescription = stringResource(id = R.string.action_hangup),
             tint = Color.White,
-            modifier = Modifier.size(36.dp)
+            modifier = Modifier.size(32.dp)
           )
         }
 
