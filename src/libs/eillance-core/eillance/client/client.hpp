@@ -528,8 +528,11 @@ class Client final : public transport::TransportDelegate {
       LGW << "Connection attempt failed for peer " << peer_id.ToString() << " (not online).";
       messaging_service_->OnConnectionAttemptFinished(peer_id);
       if (data_transport_->GetPeer(peer_id)) {
-        data_transport_->Disconnect(peer_id);
+        // Disconnect media first to clear the has_media_peer_connection flag on the shared peer.
+        // This prevents the data transport disconnection callback from triggering an immediate
+        // reconnect loop thinking media is still active.
         media_transport_->Disconnect(peer_id);
+        data_transport_->Disconnect(peer_id);
       }
     }
   }
