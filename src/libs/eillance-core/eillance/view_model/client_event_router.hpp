@@ -51,6 +51,10 @@ struct EventIncomingCall {
   ContactID peer_id;
   messaging::HistoryEntryKind call_type;
 };
+struct EventOutgoingCall {
+  ContactID peer_id;
+  messaging::HistoryEntryKind call_type;
+};
 struct EventCallRinging {
   ContactID peer_id;
 };
@@ -112,6 +116,7 @@ class ClientEventRouter {
 
     media->SetFrameReceivedCallback([](auto&&) {});
     media->SetIncomingCallCallback([](auto&&, auto) {});
+    media->SetOutgoingCallStartedCallback([](auto&&, auto) {});
     media->SetCallRingingCallback([](auto&&) {});
     media->SetCallAcceptedCallback([](auto&&) {});
     media->SetCallTerminatedCallback([](auto&&) {});
@@ -158,6 +163,7 @@ class ClientEventRouter {
     media->SetFrameReceivedCallback([this](auto const& frame) { eventQueue_.Push(EventFrameReceived{frame}); });
     media->SetIncomingCallCallback([this](auto const& id, auto type) { eventQueue_.Push(EventIncomingCall{id, type}); }
     );
+    media->SetOutgoingCallStartedCallback([this](auto const& id, auto type) { eventQueue_.Push(EventOutgoingCall{id, type}); });
     media->SetCallRingingCallback([this](auto const& id) { eventQueue_.Push(EventCallRinging{id}); });
     media->SetCallAcceptedCallback([this](auto const& id) { eventQueue_.Push(EventCallAccepted{id}); });
     media->SetCallTerminatedCallback([this](auto const& id) { eventQueue_.Push(EventCallTerminated{id}); });

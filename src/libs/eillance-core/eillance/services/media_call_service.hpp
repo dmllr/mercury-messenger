@@ -361,6 +361,7 @@ class MediaCallService {
   using OnCallAcceptedCallback = std::function<void(ContactID const&)>;
   using OnCallTerminatedCallback = std::function<void(ContactID const&)>;
   using OnFrameReceivedCallback = std::function<void(std::vector<std::byte> const&)>;
+  using OnOutgoingCallStartedCallback = std::function<void(ContactID const&, messaging::HistoryEntryKind)>;
 
   void SetIncomingCallCallback(OnIncomingCallCallback cb) {
     on_incoming_call_ = std::move(cb);
@@ -376,6 +377,9 @@ class MediaCallService {
   }
   void SetFrameReceivedCallback(OnFrameReceivedCallback cb) {
     on_frame_received_ = std::move(cb);
+  }
+  void SetOutgoingCallStartedCallback(OnOutgoingCallStartedCallback cb) {
+    on_outgoing_call_started_ = std::move(cb);
   }
 
  private:
@@ -409,6 +413,7 @@ class MediaCallService {
   OnCallAcceptedCallback on_call_accepted_;
   OnCallTerminatedCallback on_call_terminated_;
   OnFrameReceivedCallback on_frame_received_;
+  OnOutgoingCallStartedCallback on_outgoing_call_started_;
 
   void SetCallState(CallState state) {
     if (current_call_) {
@@ -491,6 +496,11 @@ class MediaCallService {
     };
 
     // Ensure Data Connection. If not open, we wait for OnDataChannelOpen event.
+    if (on_outgoing_call_started_) {
+      auto const kind = is_video ? messaging::HistoryEntryKind::videoCall : messaging::HistoryEntryKind::voiceCall;
+      on_outgoing_call_started_(peer_id, kind);
+    }
+
     auto const peer = data_transport_->GetPeer(peer_id);
     if (!peer || !peer->data_channel_is_open) {
       connection_handler_(peer_id);
