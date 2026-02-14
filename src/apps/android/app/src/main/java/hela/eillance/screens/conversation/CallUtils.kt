@@ -6,7 +6,6 @@ import androidx.compose.material.icons.automirrored.filled.CallMade
 import androidx.compose.material.icons.automirrored.filled.CallMissed
 import androidx.compose.material.icons.automirrored.filled.CallReceived
 import androidx.compose.material.icons.filled.Call
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import hela.eillance.camera.R
 import hela.eillance.ndkio.CallDirection
@@ -16,13 +15,6 @@ import hela.eillance.ui.LocalizationMapping
 import java.util.concurrent.TimeUnit
 
 object CallUtils {
-
-  data class CallDisplayInfo(
-    val icon: ImageVector,
-    val iconTint: Color, // We pass a lambda or predefined types usually, but here we'll map to theme colors in UI
-    val isErrorColor: Boolean,
-    val text: String
-  )
 
   fun getCallIconInfo(
     direction: CallDirection?,
@@ -35,9 +27,9 @@ object CallUtils {
         else -> Triple(Icons.AutoMirrored.Filled.CallMade, true, R.string.call_outgoing_voice)
       }
       CallDirection.Incoming -> when (status) {
-        CallStatus.Answered -> Triple(Icons.AutoMirrored.Filled.CallReceived, false, R.string.call_incoming_voice)
         CallStatus.Missed -> Triple(Icons.AutoMirrored.Filled.CallMissed, true, R.string.call_missed)
-        else -> Triple(Icons.AutoMirrored.Filled.CallReceived, true, R.string.call_rejected)
+        CallStatus.Answered -> Triple(Icons.AutoMirrored.Filled.CallReceived, false, R.string.call_incoming_voice)
+        else -> Triple(Icons.AutoMirrored.Filled.CallReceived, false, R.string.call_rejected)
       }
       null -> Triple(Icons.Default.Call, false, R.string.call_generic)
     }
@@ -50,8 +42,6 @@ object CallUtils {
     status: CallStatus?,
     durationSeconds: Int
   ): String {
-    val arrow = if (direction == CallDirection.Outgoing) "↗" else "↙"
-
     val baseDescription = if (status == CallStatus.Missed) {
       context.getString(R.string.call_missed)
     } else if (status == CallStatus.Rejected) {
@@ -65,9 +55,9 @@ object CallUtils {
       val duration = durationSeconds.toLong()
       val minutes = TimeUnit.SECONDS.toMinutes(duration)
       val seconds = duration - TimeUnit.MINUTES.toSeconds(minutes)
-      context.getString(R.string.call_duration_format_short, minutes, seconds)
+      " " + context.getString(R.string.call_duration_format_short, minutes, seconds)
     } else ""
 
-    return "$arrow $baseDescription$durationText"
+    return "$baseDescription$durationText"
   }
 }

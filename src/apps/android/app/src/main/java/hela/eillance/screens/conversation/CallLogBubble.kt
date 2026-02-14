@@ -13,14 +13,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import hela.eillance.components.CallEntryDisplay
 import hela.eillance.ndkio.HistoryEntry
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -32,19 +31,6 @@ fun CallLogBubble(
   formatters: Triple<DateTimeFormatter, DateTimeFormatter, DateTimeFormatter>,
   isUnread: Boolean = false
 ) {
-  val context = LocalContext.current
-
-  val (icon, isError, _) = CallUtils.getCallIconInfo(entry.callDirection, entry.callStatus)
-  val color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-
-  val text = CallUtils.formatCallText(
-    context,
-    entry.kind,
-    entry.callDirection,
-    entry.callStatus,
-    entry.durationSeconds
-  )
-
   val formattedTime = formatTimestamp(entry.timestamp, zoneId, formatters)
 
   Row(
@@ -54,17 +40,22 @@ fun CallLogBubble(
     horizontalArrangement = Arrangement.Center,
     verticalAlignment = Alignment.CenterVertically
   ) {
-    Icon(
-      imageVector = icon,
-      contentDescription = null,
-      tint = color,
-      modifier = Modifier.padding(end = 8.dp)
+    CallEntryDisplay(
+      kind = entry.kind,
+      direction = entry.callDirection,
+      status = entry.callStatus,
+      durationSeconds = entry.durationSeconds,
+      textStyle = MaterialTheme.typography.bodySmall,
+      // For bubble: Use Primary color for normal calls, Error for missed/rejected
+      baseColor = MaterialTheme.colorScheme.primary
     )
+
     Text(
-      text = "$text • $formattedTime",
+      text = " ΓÇó $formattedTime",
       style = MaterialTheme.typography.bodySmall,
       color = MaterialTheme.colorScheme.onSurfaceVariant
     )
+
     AnimatedVisibility(
       visible = isUnread,
       enter = scaleIn() + fadeIn(),
