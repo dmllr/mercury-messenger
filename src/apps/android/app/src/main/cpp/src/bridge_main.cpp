@@ -8,19 +8,19 @@
 
 // NOLINTBEGIN(readability-identifier-naming)
 
-extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_initEngine(JNIEnv* env, jobject instance) {
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_MessengerService_initEngine(JNIEnv* env, jobject instance) {
   if (g_clientEngine == nullptr) {
     g_clientEngine = std::make_unique<eillance::ClientEngine>(g_javaVm, env, instance);
   }
 }
 
-extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_start(JNIEnv* /*env*/, jobject /*instance*/) {
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_MessengerService_start(JNIEnv* /*env*/, jobject /*instance*/) {
   if (g_clientEngine) {
     g_clientEngine->Start();
   }
 }
 
-extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_terminate(JNIEnv* /*env*/, jobject /*instance*/) {
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_MessengerService_terminate(JNIEnv* /*env*/, jobject /*instance*/) {
   if (g_clientEngine) {
     g_clientEngine->Terminate();
     g_clientEngine.reset();
@@ -28,7 +28,7 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_terminate(JNIEn
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
-Java_hela_eillance_CallService_identityExists(JNIEnv* /*env*/, jobject /*instance*/) {
+Java_hela_eillance_MessengerService_identityExists(JNIEnv* /*env*/, jobject /*instance*/) {
   if (g_clientEngine) {
     return g_clientEngine->GetClient()->IdentityExists();
   }
@@ -36,7 +36,7 @@ Java_hela_eillance_CallService_identityExists(JNIEnv* /*env*/, jobject /*instanc
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_hela_eillance_CallService_configureVideoCapture(JNIEnv* env, jobject /*instance*/, jobject video_config) {
+Java_hela_eillance_MessengerService_configureVideoCapture(JNIEnv* env, jobject /*instance*/, jobject video_config) {
   if (g_clientEngine) {
     auto& video_config_holder = ClassRefs::Instance().Class("hela/eillance/ndkio/VideoConfig");
     auto conf = eillance::VideoConfig{};
@@ -49,11 +49,12 @@ Java_hela_eillance_CallService_configureVideoCapture(JNIEnv* env, jobject /*inst
   }
 }
 
-extern "C" JNIEXPORT jboolean JNICALL Java_hela_eillance_CallService_nativePing(JNIEnv* /*env*/, jobject /*instance*/) {
+extern "C" JNIEXPORT jboolean JNICALL
+Java_hela_eillance_MessengerService_nativePing(JNIEnv* /*env*/, jobject /*instance*/) {
   return g_clientEngine != nullptr;
 }
 
-extern "C" JNIEXPORT void JNICALL Java_hela_eillance_CallService_nativeRestart(JNIEnv* env, jobject instance) {
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_MessengerService_nativeRestart(JNIEnv* env, jobject instance) {
   if (g_clientEngine) {
     g_clientEngine->Terminate();
     g_clientEngine.reset();
@@ -121,16 +122,16 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     classref.RegisterMethod(env, media_transport_class, "addAudioTrack", "(Ljava/lang/String;)V");
     classref.RegisterMethod(env, media_transport_class, "connectPeer", "(Ljava/lang/String;)V");
 
-    classref.RegisterClass(env, "hela/eillance/CallService");
+    classref.RegisterClass(env, "hela/eillance/MessengerService");
     classref.RegisterMethod(
         env,
-        "hela/eillance/CallService",
+        "hela/eillance/MessengerService",
         "setWebRtcDataTransport",
         "(Lhela/eillance/webrtc/WebRtcDataTransport;)V"
     );
     classref.RegisterMethod(
         env,
-        "hela/eillance/CallService",
+        "hela/eillance/MessengerService",
         "setWebRtcMediaTransport",
         "(Lhela/eillance/webrtc/WebRtcMediaTransport;)V"
     );

@@ -6,7 +6,7 @@ import android.telecom.ConnectionService
 import android.telecom.PhoneAccountHandle
 import android.telecom.TelecomManager
 import android.util.Log
-import hela.eillance.CallService
+import hela.eillance.MessengerService
 import hela.eillance.camera.R
 
 class MercuryConnectionService : ConnectionService() {
@@ -66,7 +66,7 @@ class MercuryConnectionService : ConnectionService() {
       )
     }
 
-    val service = CallService.instance
+    val service = MessengerService.instance
     if (service == null) {
       Log.e(TAG, "CallService instance is not available. Cannot create connection.")
       return Connection.createFailedConnection(

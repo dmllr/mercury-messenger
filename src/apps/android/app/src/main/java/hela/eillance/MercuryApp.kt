@@ -60,7 +60,7 @@ fun MercuryApp(viewModel: MainViewModel) {
   val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
 
   // Wait for the service to initialize the engine.
-  val isEngineReady by CallService.isEngineReady.collectAsState()
+  val isEngineReady by MessengerService.isEngineReady.collectAsState()
 
   DisposableEffect(lifecycleOwner) {
     val observer = LifecycleEventObserver { _, event ->
