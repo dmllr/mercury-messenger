@@ -3,7 +3,7 @@ package hela.eillance.viewmodels
 import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
-import hela.eillance.CallService
+import hela.eillance.MessengerService
 import hela.eillance.ndkio.CallState
 import hela.eillance.ndkio.HistoryEntryKind
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,8 +23,8 @@ class CallViewModel(application: Application) : AndroidViewModel(application), N
   val isSpeakerOn = _isSpeakerOn.asStateFlow()
 
   // We need direct access to CallService for WebRTC sinks and Transport interactions
-  private val callService: CallService?
-    get() = CallService.instance
+  private val messengerService: MessengerService?
+    get() = MessengerService.instance
 
   init {
     nativePtr = nativeCreate(this)
@@ -48,8 +48,8 @@ class CallViewModel(application: Application) : AndroidViewModel(application), N
   fun startVoiceCall(peerId: String? = null) {
     val target = peerId ?: _callState.value.peerId
     if (target.isNotEmpty() && nativePtr != 0L) {
-      callService?.startVoiceCallViaTelecom(target)
-      callService?.startLocalMedia(false)
+      messengerService?.startVoiceCallViaTelecom(target)
+      messengerService?.startLocalMedia(false)
       nativeStartVoice(nativePtr, target)
     }
   }
@@ -57,15 +57,15 @@ class CallViewModel(application: Application) : AndroidViewModel(application), N
   fun startVideoCall(peerId: String? = null) {
     val target = peerId ?: _callState.value.peerId
     if (target.isNotEmpty() && nativePtr != 0L) {
-      callService?.startVideoCallViaTelecom(target)
-      callService?.startLocalMedia(true)
+      messengerService?.startVideoCallViaTelecom(target)
+      messengerService?.startLocalMedia(true)
       nativeStartVideo(nativePtr, target)
     }
   }
 
   fun hangup() {
     // Delegate to Service for proper cleanup (Telecom, Sound, Notification)
-    callService?.hangup() ?: run {
+    messengerService?.hangup() ?: run {
       // Fallback if service not bound (unlikely in active call)
       if (nativePtr != 0L) nativeHangup(nativePtr)
     }
@@ -73,7 +73,7 @@ class CallViewModel(application: Application) : AndroidViewModel(application), N
 
   fun acceptCall() {
     // Delegate to Service
-    callService?.acceptCall() ?: run {
+    messengerService?.acceptCall() ?: run {
       if (nativePtr != 0L) {
         val isVideo = _callState.value.callType == HistoryEntryKind.VideoCall
         // Fallback
@@ -84,7 +84,7 @@ class CallViewModel(application: Application) : AndroidViewModel(application), N
 
   fun rejectCall() {
     // Delegate to Service to stop ringing and kill notification
-    callService?.rejectCall() ?: run {
+    messengerService?.rejectCall() ?: run {
       if (nativePtr != 0L) nativeReject(nativePtr)
     }
   }
@@ -92,28 +92,28 @@ class CallViewModel(application: Application) : AndroidViewModel(application), N
   fun stopCallMedia() {
     _isMuted.value = false
     _isSpeakerOn.value = false
-    callService?.stopLocalMedia()
-    callService?.setSpeakerphoneOn(false)
+    messengerService?.stopLocalMedia()
+    messengerService?.setSpeakerphoneOn(false)
   }
 
   fun setLocalVideoSink(sink: VideoSink?) {
-    callService?.setLocalVideoSink(sink)
+    messengerService?.setLocalVideoSink(sink)
   }
 
   fun setRemoteVideoSink(peerId: String, sink: VideoSink?) {
-    callService?.setRemoteVideoSink(peerId, sink)
+    messengerService?.setRemoteVideoSink(peerId, sink)
   }
 
   fun toggleMute() {
     val newMuted = !_isMuted.value
     _isMuted.value = newMuted
-    callService?.setMicrophoneMute(newMuted)
+    messengerService?.setMicrophoneMute(newMuted)
   }
 
   fun toggleSpeaker() {
     val newSpeaker = !_isSpeakerOn.value
     _isSpeakerOn.value = newSpeaker
-    callService?.setSpeakerphoneOn(newSpeaker)
+    messengerService?.setSpeakerphoneOn(newSpeaker)
   }
 
   // Exposed for CallService to call into C++

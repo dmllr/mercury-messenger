@@ -19,7 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import hela.eillance.theme.EillanceTheme
 
-class MainActivity : ComponentActivity() {
+class MessengerActivity : ComponentActivity() {
 
   private val viewModel: MainViewModel by viewModels()
 
@@ -81,7 +81,7 @@ class MainActivity : ComponentActivity() {
     MercuryApplication.isAppInForeground = false
     // If the app goes background while ringing, ensure the notification is visible
     // so the user can return to the call screen.
-    CallService.instance?.onActivityStopped()
+    MessengerService.instance?.onActivityStopped()
   }
 
   override fun onNewIntent(intent: Intent) {
@@ -92,9 +92,9 @@ class MainActivity : ComponentActivity() {
   }
 
   private fun handleIntent(intent: Intent?) {
-    val peerId = intent?.getStringExtra(CallService.EXTRA_PEER_ID)
-    val isAcceptAction = intent?.action == CallService.ACTION_ACCEPT_CALL
-    val isShowIncomingCall = intent?.action == CallService.ACTION_SHOW_INCOMING_CALL
+    val peerId = intent?.getStringExtra(MessengerService.EXTRA_PEER_ID)
+    val isAcceptAction = intent?.action == MessengerService.ACTION_ACCEPT_CALL
+    val isShowIncomingCall = intent?.action == MessengerService.ACTION_SHOW_INCOMING_CALL
 
     if (isAcceptAction && peerId != null) {
       // Security check: Do not accept if permission is missing.
@@ -104,7 +104,7 @@ class MainActivity : ComponentActivity() {
           Manifest.permission.RECORD_AUDIO
         ) == PackageManager.PERMISSION_GRANTED
       ) {
-        CallService.instance?.acceptCall()
+        MessengerService.instance?.acceptCall()
         viewModel.navigateToPeer(peerId)
       } else {
         configureWindowForLockScreen()
@@ -119,7 +119,7 @@ class MainActivity : ComponentActivity() {
   }
 
   private fun startService() {
-    Intent(this, CallService::class.java).also { intent ->
+    Intent(this, MessengerService::class.java).also { intent ->
       startForegroundService(intent)
     }
   }

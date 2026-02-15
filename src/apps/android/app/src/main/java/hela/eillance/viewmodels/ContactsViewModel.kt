@@ -4,7 +4,7 @@ import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import hela.eillance.CallService
+import hela.eillance.MessengerService
 import hela.eillance.camera.R
 import hela.eillance.ndkio.Contact
 import hela.eillance.ndkio.GlobalSearchResult
@@ -48,12 +48,12 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
       // initialized before identity creation, so start() wasn't called yet.
       // Starting the engine now ensures the repository loads and notifies observers
       // via the onContactsUpdated callback, clearing the loading state.
-      CallService.instance?.start()
+      MessengerService.instance?.start()
     }
 
     // Listen for global errors reported by CallService (e.g., Transport parsing errors)
     viewModelScope.launch {
-      CallService.instance?.errorEvents?.collect { error ->
+      MessengerService.instance?.errorEvents?.collect { error ->
         _errorMessage.emit(error)
       }
     }

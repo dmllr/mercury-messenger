@@ -35,7 +35,7 @@
         >
 
         <activity
-            android:name="hela.eillance.MainActivity"
+            android:name="hela.eillance.MessengerActivity"
             android:exported="true"
             android:configChanges="orientation|screenSize"
             android:windowSoftInputMode="adjustResize"
@@ -65,7 +65,7 @@
             </intent-filter>
         </activity>
         <service
-            android:name="hela.eillance.CallService"
+            android:name="hela.eillance.MessengerService"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="camera|microphone|connectedDevice">

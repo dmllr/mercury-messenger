@@ -74,7 +74,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
   // Monitor Core Health. Defaults to false if service isn't bound yet.
   // The UI observes this to show the "Reset" banner.
-  val isCoreUnresponsive: StateFlow<Boolean> = CallService.instance?.isCoreUnresponsive
+  val isCoreUnresponsive: StateFlow<Boolean> = MessengerService.instance?.isCoreUnresponsive
     ?: MutableStateFlow(false)
 
   // Computed state for the profile "Red Dot" (issues exist, even if ignored)
@@ -193,7 +193,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
   }
 
   fun resetCore() {
-    CallService.instance?.restartCore()
+    MessengerService.instance?.restartCore()
   }
 
   companion object {

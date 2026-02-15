@@ -53,7 +53,7 @@ class AndroidDataTransport final : public DataTransport::Interface {
     transportJavaRef_ = env->NewGlobalRef(transport_local_ref);
     env->DeleteLocalRef(transport_local_ref);
 
-    auto& call_service_holder = ClassRefs::Instance().Class("hela/eillance/CallService");
+    auto& call_service_holder = ClassRefs::Instance().Class("hela/eillance/MessengerService");
     jmethodID const set_transport_method = call_service_holder.GetMethod("setWebRtcDataTransport");
     env->CallVoidMethod(context, set_transport_method, transportJavaRef_);
   }

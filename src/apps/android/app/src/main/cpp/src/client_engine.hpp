@@ -55,7 +55,7 @@ class ClientEngine {
         [this]() {
           jni::ScopedJniEnv env_scope(jvm_);
           if (auto* env = env_scope.Get()) {
-            auto const& cls = ClassRefs::Instance().Class("hela/eillance/CallService");
+            auto const& cls = ClassRefs::Instance().Class("hela/eillance/MessengerService");
             jmethodID method = cls.GetMethod("onNativeCoreCrash");
             env->CallVoidMethod(service_ref_, method);
           }
