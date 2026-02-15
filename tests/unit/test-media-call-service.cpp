@@ -117,19 +117,19 @@ TEST_F(MediaCallServiceTest, StartVoiceCall) {
   service_->StartVoiceCall(peer1);
 
   // Simulate media transport connection success (transitions to MediaConnected -> Negotiating)
-  // This triggers SendCallRequest which adds the system message
+  // This triggers SendCallRequest
   service_->OnMediaPeerConnectionStateChange(peer1, transport::PeerConnectionState::connected);
 
-  // Verify that a system message was added to history
-  auto const history = messaging_service_->GetHistoryPage(peer1, 0, 10);
-  ASSERT_FALSE(history.messages.empty());
-  auto const& entry = history.messages[0];
-  EXPECT_EQ(entry.kind, messaging::HistoryEntryKind::systemMessage);
-  EXPECT_EQ(entry.direction, messaging::MessageDirection::sent);
-
-  // Content check (approximate)
-  auto const& data = std::get<messaging::MessageEntry>(entry.data);
-  EXPECT_NE(data.content.find("call_request"), std::string::npos);
+  // Verify that a call request message was sent via transport
+  // Note: We no longer check history as intermediate system messages were removed.
+  bool call_req_sent = false;
+  for (auto const& [pid, msg] : mock_log_->sent_peer_messages) {
+    if (pid == peer1 && msg.value("type", "") == "call_request") {
+      call_req_sent = true;
+      break;
+    }
+  }
+  EXPECT_TRUE(call_req_sent);
 }
 
 TEST_F(MediaCallServiceTest, AcceptCall) {
@@ -143,8 +143,6 @@ TEST_F(MediaCallServiceTest, AcceptCall) {
   service_->OnCallRequest(peer1, "call_id_1", messaging::HistoryEntryKind::voiceCall);
 
   // 2. Simulate Media Connection Establishment (Transitions to Ringing)
-  // In a real app, Client receives the transport callback and forwards it.
-  // Here we call the service method directly to simulate that event.
   service_->OnMediaPeerConnectionStateChange(peer1, transport::PeerConnectionState::connected);
 
   bool accepted_cb = false;
@@ -160,22 +158,15 @@ TEST_F(MediaCallServiceTest, AcceptCall) {
   EXPECT_TRUE(accepted_cb);
   EXPECT_TRUE(peer->has_media_peer_connection);
 
-  // Verify system message sent (call_accept)
-  auto history = messaging_service_->GetHistoryPage(peer1, 0, 10);
-  // History will contain [0]=Accept, [1]=Request (from OnCallRequest entry)
-  ASSERT_FALSE(history.messages.empty());
-
-  bool found_accept = false;
-  for (auto const& msg : history.messages) {
-    if (std::holds_alternative<messaging::MessageEntry>(msg.data)) {
-      auto const& content = std::get<messaging::MessageEntry>(msg.data).content;
-      if (content.find("call_accept") != std::string::npos) {
-        found_accept = true;
-        break;
-      }
+  // Verify accept message sent via transport
+  bool accept_sent = false;
+  for (auto const& [pid, msg] : mock_log_->sent_peer_messages) {
+    if (pid == peer1 && msg.value("type", "") == "call_accept") {
+      accept_sent = true;
+      break;
     }
   }
-  EXPECT_TRUE(found_accept);
+  EXPECT_TRUE(accept_sent);
 }
 
 TEST_F(MediaCallServiceTest, Hangup) {
