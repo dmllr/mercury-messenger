@@ -11,7 +11,7 @@ import hela.eillance.camera.R
 import hela.eillance.ndkio.CallDirection
 import hela.eillance.ndkio.CallStatus
 import hela.eillance.ndkio.HistoryEntryKind
-import hela.eillance.ui.LocalizationMapping
+import hela.eillance.localization.LocalizationMapping
 import java.util.concurrent.TimeUnit
 
 object CallUtils {
