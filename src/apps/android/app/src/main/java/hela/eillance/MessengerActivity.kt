@@ -46,17 +46,16 @@ class MessengerActivity : ComponentActivity() {
   }
 
   private fun configureWindowForLockScreen() {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-      setShowWhenLocked(true)
-      setTurnScreenOn(true)
-    } else {
-      @Suppress("DEPRECATION")
-      window.addFlags(
-        WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-            WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
-            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
-      )
-    }
+    setShowWhenLocked(true)
+    setTurnScreenOn(true)
+
+    // Still might be required on some device models
+    @Suppress("DEPRECATION")
+    window.addFlags(
+      WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+          WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+          WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+    )
 
     val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
     if (keyguardManager.isKeyguardLocked) {
