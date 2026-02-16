@@ -434,36 +434,15 @@ class MediaCallService {
   }
 
   [[nodiscard]] auto GenerateCallId(ContactID const& remote) const -> CallID {
-    std::array<char, CallID::callIdSize> buffer{};
+    auto const local_id = account_service_->GetId().ToString().substr(0, 8);
+    auto const remote_id = remote.ToString().substr(0, 8);
 
-    auto const local_id = account_service_->GetId().ToString();
-    auto const remote_id = remote.ToString();
+    auto const& [first, second] = (local_id <= remote_id)
+      ? std::tie(local_id, remote_id)
+      : std::tie(remote_id, local_id);
 
-    std::string_view const l_view = std::string_view(local_id).substr(0, 8);
-    std::string_view const r_view = std::string_view(remote_id).substr(0, 8);
-
-    // Determine order
-    std::string_view first = l_view;
-    std::string_view second = r_view;
-    if (l_view > r_view) {
-      first = r_view;
-      second = l_view;
-    }
-
-    // Build directly in buffer
-    char* ptr = buffer.data();
-    std::memcpy(ptr, first.data(), first.size());
-    ptr += first.size();
-    *ptr++ = '-';
-    std::memcpy(ptr, second.data(), second.size());
-    ptr += second.size();
-    *ptr++ = '-';
-
-    auto const timestamp = Time::Now();
-    auto const [end_ptr, ec] = std::to_chars(ptr, buffer.data() + buffer.size(), timestamp);
-    *end_ptr = '\0';
-
-    return CallID(std::string_view(buffer.data(), end_ptr - buffer.data()));
+    auto const timestamp = static_cast<uint64_t>(Time::Now());
+    return CallID(first + "-" + second + "-" + std::to_string(timestamp));
   }
 
   void InitializeAvStream() {
