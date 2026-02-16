@@ -79,11 +79,18 @@ class MercuryNotifications(private val service: MessengerService) {
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
 
+    val contact = service.resolveContactInfo(peerId)
+    val displayName = if (!contact?.name.isNullOrBlank()) {
+      "${contact.name} (${peerId.take(8)}...)"
+    } else {
+      "${peerId.take(8)}..."
+    }
+
     @SuppressLint("FullScreenIntentPolicy")
     val builder = NotificationCompat.Builder(service, MessengerService.CALLS_CHANNEL_ID)
       .setSmallIcon(R.drawable.ic_status_attention)
       .setContentTitle(service.getString(R.string.notification_incoming_call_title))
-      .setContentText(peerId)
+      .setContentText(displayName)
       .setPriority(NotificationCompat.PRIORITY_MAX)
       .setCategory(NotificationCompat.CATEGORY_CALL)
       .setFullScreenIntent(fullScreenPendingIntent, true)
