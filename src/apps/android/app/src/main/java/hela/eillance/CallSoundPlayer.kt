@@ -2,8 +2,14 @@ package hela.eillance
 
 import android.content.Context
 import android.media.AudioAttributes
+import android.media.AudioManager
 import android.media.MediaPlayer
 import android.media.RingtoneManager
+import android.os.Build
+import android.os.VibrationAttributes
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.util.Log
 import hela.eillance.camera.R
 import hela.eillance.ndkio.CallDirection
@@ -12,6 +18,14 @@ import hela.eillance.ndkio.CallState
 class CallSoundPlayer(private val context: Context) {
   private var mediaPlayer: MediaPlayer? = null
   private var currentSoundState: SoundState = SoundState.None
+
+  private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+  private val vibrator: Vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+    (context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
+  } else {
+    @Suppress("DEPRECATION")
+    context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+  }
 
   private enum class SoundState {
     None,
@@ -40,6 +54,14 @@ class CallSoundPlayer(private val context: Context) {
     if (state == SoundState.None) return
 
     try {
+      if (state == SoundState.Ringing) {
+        startVibration()
+      }
+
+      if (state == SoundState.Ringing && audioManager.ringerMode != AudioManager.RINGER_MODE_NORMAL) {
+        return
+      }
+
       mediaPlayer = MediaPlayer()
 
       when (state) {
@@ -58,7 +80,7 @@ class CallSoundPlayer(private val context: Context) {
         }
 
         SoundState.Ringback -> {
-          // Play ringback tone (standard phone ring) on voice stream
+          // Play ringback tone (standard phone ring) on voice stream (earpiece)
           val afd = context.resources.openRawResourceFd(R.raw.ringing) ?: return
           mediaPlayer?.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
           afd.close()
@@ -104,6 +126,25 @@ class CallSoundPlayer(private val context: Context) {
     }
   }
 
+  private fun startVibration() {
+    if (audioManager.ringerMode == AudioManager.RINGER_MODE_SILENT) return
+
+    // Standard call vibration pattern: Wait 0, Vibrate 1s, Sleep 1s
+    val pattern = longArrayOf(0, 1000, 1000)
+
+    try {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        val attributes = VibrationAttributes.createForUsage(VibrationAttributes.USAGE_RINGTONE)
+        vibrator.vibrate(VibrationEffect.createWaveform(pattern, 0), attributes)
+      } else {
+        val effect = VibrationEffect.createWaveform(pattern, 0)
+        vibrator.vibrate(effect)
+      }
+    } catch (e: Exception) {
+      Log.e(TAG, "Failed to start vibration", e)
+    }
+  }
+
   fun stop() {
     try {
       if (mediaPlayer?.isPlaying == true) {
@@ -115,6 +156,12 @@ class CallSoundPlayer(private val context: Context) {
     } finally {
       mediaPlayer = null
       currentSoundState = SoundState.None
+    }
+
+    try {
+      vibrator.cancel()
+    } catch (e: Exception) {
+      Log.e(TAG, "Error stopping vibration", e)
     }
   }
 

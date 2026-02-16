@@ -308,7 +308,7 @@ class MessengerService : Service() {
     private const val TAG = "CallService"
     const val INCOMING_CALL_NOTIFICATION_ID = 102
     const val MESSAGE_NOTIFICATION_ID_BASE = 1000
-    const val CALLS_CHANNEL_ID = "incoming_calls_channel_v6"
+    const val CALLS_CHANNEL_ID = "incoming_calls_channel_v7"
     const val ACTION_HANGUP = "hela.eillance.ACTION_HANGUP"
     const val ACTION_ACCEPT_CALL = "hela.eillance.ACTION_ACCEPT_CALL"
     const val ACTION_REJECT_CALL = "hela.eillance.ACTION_REJECT_CALL"

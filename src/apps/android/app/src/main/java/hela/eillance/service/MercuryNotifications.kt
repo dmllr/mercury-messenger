@@ -99,9 +99,7 @@ class MercuryNotifications(private val service: MessengerService) {
       )
       .setAutoCancel(false)
       .setOngoing(true)
-      // IMPORTANT: Add vibration to ensure the system treats this as a "Noisy" notification
-      // capable of triggering a Heads-Up or Full Screen Intent.
-      .setVibrate(longArrayOf(0, 500, 500))
+      .setVibrate(longArrayOf(0, 1000, 1000))
       .setLights(Color.WHITE, 500, 500)
 
     // Attempt to start activity directly if not in foreground (Telecom bypass fallback)
@@ -291,14 +289,14 @@ class MercuryNotifications(private val service: MessengerService) {
       NotificationManager.IMPORTANCE_MIN
     )
 
-    // v6: Force update to ensure Vibration/Lights settings are applied
     val callsChannel = NotificationChannel(
       MessengerService.CALLS_CHANNEL_ID,
       service.getString(R.string.notification_channel_calls_title),
       NotificationManager.IMPORTANCE_HIGH
     ).apply {
       description = service.getString(R.string.notification_channel_calls_description)
-      // Sound handled by CallSoundPlayer, but vibration here helps system rank importance
+      // Sound and Vibration handled by CallSoundPlayer,
+      // but vibration here helps system rank importance
       setSound(null, null)
       enableVibration(true)
       vibrationPattern = longArrayOf(0, 500, 500)
