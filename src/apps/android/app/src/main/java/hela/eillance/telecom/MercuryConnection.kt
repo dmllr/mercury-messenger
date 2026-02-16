@@ -22,7 +22,13 @@ class MercuryConnection(
 
     connectionCapabilities = CAPABILITY_MUTE or CAPABILITY_SUPPORT_HOLD or CAPABILITY_HOLD
 
-    setCallerDisplayName(peerId, TelecomManager.PRESENTATION_ALLOWED)
+    val contact = messengerService.resolveContactInfo(peerId)
+    val displayName = if (!contact?.name.isNullOrBlank()) {
+      "${contact.name} (${peerId.take(8)}...)"
+    } else {
+      "${peerId.take(8)}..."
+    }
+    setCallerDisplayName(displayName, TelecomManager.PRESENTATION_ALLOWED)
     setAddress(
       Uri.fromParts(PhoneAccount.SCHEME_SIP, peerId, null),
       TelecomManager.PRESENTATION_ALLOWED
