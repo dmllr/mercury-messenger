@@ -67,11 +67,12 @@ class MercuryNotifications(private val service: MessengerService) {
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
 
-    val acceptIntent = Intent(service, MessengerService::class.java).apply {
+    val acceptIntent = Intent(service, MessengerActivity::class.java).apply {
       action = MessengerService.ACTION_ACCEPT_CALL
       putExtra(MessengerService.EXTRA_PEER_ID, peerId)
+      flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
     }
-    val acceptPendingIntent = PendingIntent.getService(
+    val acceptPendingIntent = PendingIntent.getActivity(
       service,
       2,
       acceptIntent,

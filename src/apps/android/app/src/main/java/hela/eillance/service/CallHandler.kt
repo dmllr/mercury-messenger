@@ -136,11 +136,15 @@ class CallHandler(
       val peerId = lastKnownCallState?.peerId
       // Ensure we don't double-open activity if IncomingCallActivity is already visible on lock screen
       if (peerId != null && !service.isIncomingUIVisible) {
-        // Launch Main Activity to show call screen (CallScreen handles in-call UI)
-        service.startActivity(Intent(service, MessengerActivity::class.java).apply {
-          flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
-          putExtra(MessengerService.EXTRA_PEER_ID, peerId)
-        })
+        try {
+          // Launch Main Activity to show call screen (CallScreen handles in-call UI)
+          service.startActivity(Intent(service, MessengerActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra(MessengerService.EXTRA_PEER_ID, peerId)
+          })
+        } catch (e: Exception) {
+          Log.e(TAG, "Failed to start MessengerActivity from acceptCall", e)
+        }
       }
     }
   }
