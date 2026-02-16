@@ -19,7 +19,7 @@ namespace {
 // Global flag for signal handling
 std::sig_atomic_t volatile gSignalStatus = 0;  // NOLINT(*-avoid-non-const-global-variables)
 
-void SignalHandler(int signal) {
+void SignalHandler(int const signal) {
   gSignalStatus = signal;
 }
 
@@ -87,7 +87,7 @@ auto main(int argc, char** argv) -> int {
     LGI << "Bot initialized with ID: " << bot.GetId();
 
     // --- MESSAGE HANDLER ---
-    bot.OnMessage([&output_path](mercury::bot::Message const& message) {
+    bot.OnMessage([&output_path](mercury::bot::Message const& message) -> void {
       std::string const sender_prefix = message.from.id.substr(0, 8);
       LGI << "Received message from " << sender_prefix << "...: \"" << message.text << "\"";
 

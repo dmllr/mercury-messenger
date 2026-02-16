@@ -5,35 +5,61 @@ set -euo pipefail
 readonly PROJECT_ROOT="$(git rev-parse --show-toplevel)"
 readonly APP_DIR="${PROJECT_ROOT}/src/apps/mercury-bot"
 readonly BUILD_DIR="build-deploy"
+readonly VERSION_FILE="${PROJECT_ROOT}/version.properties"
 
-# Devenv configuration matches tools/code-health.sh
+# Devenv configuration
 readonly DEVENV_IMAGE_NAME="project-mercury-devenv"
-readonly DEVENV_DOCKERFILE="${PROJECT_ROOT}/devenv/Dockerfile"
-readonly FINAL_IMAGE_NAME="mercury-bot"
+# We assume the Dockerfile is strictly inside this directory
+readonly DEVENV_CONTEXT_DIR="${PROJECT_ROOT}/devenv"
+readonly IMAGE_NAME_BASE="mercury-bot"
 
 # --- Colors ---
 readonly COLOR_BLUE='\033[1;34m'
 readonly COLOR_GREEN='\033[0;32m'
+readonly COLOR_RED='\033[0;31m'
 readonly COLOR_NONE='\033[0m'
 
 # --- Helpers ---
 info() { echo -e "${COLOR_BLUE}INFO:${COLOR_NONE} $1"; }
 success() { echo -e "${COLOR_GREEN}SUCCESS:${COLOR_NONE} $1"; }
+error() { echo -e "${COLOR_RED}ERROR:${COLOR_NONE} $1"; }
 
 run_in_devenv() {
-  # Mounts project root to /work and runs command as current user
-  # We pass 'bash' as $0 to the inline script so arguments start at $1
+  # Mounts project root to /workspace (matching your manual habits)
+  # Mounts SSH keys for git operations
   docker run --rm \
     --user "$(id -u):$(id -g)" \
-    -v "${PROJECT_ROOT}:/work" \
-    -w /work \
+    -v "${PROJECT_ROOT}:/workspace" \
+    -v "${HOME}/.ssh:/workspace/.ssh" \
+    -w /workspace \
     "${DEVENV_IMAGE_NAME}" \
     bash -c '
-      export GIT_CONFIG_GLOBAL=/work/.gitconfig.tmp
-      git config --global --add safe.directory /work
+      # Fix git safety and config inside container
+      export GIT_CONFIG_GLOBAL=/workspace/.gitconfig.tmp
+      git config --global --add safe.directory /workspace
       exec "$@"
     ' bash "$@"
 }
+
+# --- Version Parsing ---
+if [[ ! -f "${VERSION_FILE}" ]]; then
+  error "Version file not found at ${VERSION_FILE}"
+  exit 1
+fi
+
+# Extract number after VERSION_CODE=, removing whitespace
+VERSION_CODE=$(grep "^VERSION_CODE=" "${VERSION_FILE}" | cut -d'=' -f2 | tr -d '[:space:]')
+
+if [[ -z "${VERSION_CODE}" ]]; then
+  error "Could not parse VERSION_CODE from ${VERSION_FILE}"
+  exit 1
+fi
+
+info "Detected Version Code: ${VERSION_CODE}"
+
+# Define final tags
+readonly FINAL_IMAGE_LATEST="${IMAGE_NAME_BASE}:latest"
+readonly FINAL_IMAGE_VERSIONED="${IMAGE_NAME_BASE}:${VERSION_CODE}"
 
 # --- Argument Parsing ---
 PACK_IMAGE=false
@@ -55,13 +81,15 @@ done
 # --- Main Flow ---
 
 # 1. Prepare Build Environment
+# CHANGE: Context is set to 'devenv' dir only.
+# This prevents copying the whole repo (gigabytes) into the docker daemon context.
 info "Checking/Building development environment image..."
-docker build -t "${DEVENV_IMAGE_NAME}" -f "${DEVENV_DOCKERFILE}" "${PROJECT_ROOT}"
+docker build -t "${DEVENV_IMAGE_NAME}" "${DEVENV_CONTEXT_DIR}"
 
 info "Building mercury-bot in Release mode..."
 
 # 2. Build the bot binary
-# Note: The build system outputs the binary to 'bin/mercury-bot' inside the build directory
+# The source code is now available via the volume mount in run_in_devenv
 run_in_devenv bash -c "
   cmake -S . -B ${BUILD_DIR} -G Ninja -DCMAKE_BUILD_TYPE=Release \
   && cmake --build ${BUILD_DIR} --target mercury-bot \
@@ -71,31 +99,37 @@ success "Build complete."
 
 # 3. Stage binary for Docker build
 info "Staging binary..."
+# Note: Since the build happened in a volume, the artifacts are on your host drive
 BIN_SOURCE="${PROJECT_ROOT}/${BUILD_DIR}/bin/mercury-bot"
 BIN_DEST="${APP_DIR}/mercury-bot-bin"
 
 if [[ ! -f "${BIN_SOURCE}" ]]; then
-  echo "Error: Binary not found at ${BIN_SOURCE}"
+  error "Binary not found at ${BIN_SOURCE}"
   exit 1
 fi
 
 cp "${BIN_SOURCE}" "${BIN_DEST}"
 
 # 4. Build the final runtime Docker image
-info "Building runtime Docker image '${FINAL_IMAGE_NAME}'..."
-docker build -t "${FINAL_IMAGE_NAME}" -f "${APP_DIR}/Dockerfile" "${APP_DIR}"
+info "Building runtime Docker image '${FINAL_IMAGE_VERSIONED}'..."
+
+# We use APP_DIR as context here, assuming it only contains the Dockerfile and the binary
+docker build \
+  -t "${FINAL_IMAGE_LATEST}" \
+  -t "${FINAL_IMAGE_VERSIONED}" \
+  -f "${APP_DIR}/Dockerfile" \
+  "${APP_DIR}"
 
 # 5. Cleanup
 rm "${BIN_DEST}"
-success "Docker image '${FINAL_IMAGE_NAME}' created successfully."
+success "Docker image '${FINAL_IMAGE_VERSIONED}' created successfully."
 
 # 6. Pack (if requested)
 if [[ "${PACK_IMAGE}" == "true" ]]; then
-  EXPORT_FILE="${PROJECT_ROOT}/mercury-bot.tar.gz"
+  EXPORT_FILE="${PROJECT_ROOT}/mercury-bot-${VERSION_CODE}.tar.gz"
   info "Packing image for Synology NAS (saving to ${EXPORT_FILE})..."
 
-  # docker save outputs a tar archive, gzip compresses it
-  docker save "${FINAL_IMAGE_NAME}" | gzip > "${EXPORT_FILE}"
+  docker save "${FINAL_IMAGE_VERSIONED}" | gzip > "${EXPORT_FILE}"
 
   success "Image packed successfully."
   info "To deploy on Synology NAS:"
@@ -105,4 +139,4 @@ if [[ "${PACK_IMAGE}" == "true" ]]; then
 fi
 
 info "You can run the bot locally:"
-info "  docker run -it --rm -v \$(pwd)/identity:/data/identity -v \$(pwd)/output:/data/output ${FINAL_IMAGE_NAME}"
+info "  docker run -it --rm -v \$(pwd)/identity:/data/identity -v \$(pwd)/output:/data/output ${FINAL_IMAGE_VERSIONED}"
