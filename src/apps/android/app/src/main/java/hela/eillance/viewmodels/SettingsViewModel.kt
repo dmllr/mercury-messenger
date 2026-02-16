@@ -8,7 +8,8 @@ import hela.eillance.ndkio.ServiceConnectionState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-class SettingsViewModel(application: Application) : AndroidViewModel(application), NativeSettingsObserver {
+class SettingsViewModel(application: Application) : AndroidViewModel(application),
+  NativeSettingsObserver {
 
   private var nativePtr: Long = 0
   private val _connectionState = MutableStateFlow(ServiceConnectionState.Unknown)
@@ -33,7 +34,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
   val customTurnPass = _customTurnPass.asStateFlow()
 
   private val prefs = application.getSharedPreferences("mercury_prefs", Context.MODE_PRIVATE)
-  private val _showNotificationContent = MutableStateFlow(prefs.getBoolean("show_notifications_content", true))
+  private val _showNotificationContent =
+    MutableStateFlow(prefs.getBoolean("show_notifications_content", true))
   val showNotificationContent = _showNotificationContent.asStateFlow()
 
   init {
@@ -118,5 +120,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
   private external fun nativeDestroy(ptr: Long)
   private external fun nativeUpdateUrl(ptr: Long, url: String)
   private external fun nativeSetTimeout(ptr: Long, seconds: Int)
-  private external fun nativeUpdateIceConfig(ptr: Long, stun: String, turn: String, user: String, pass: String)
+  private external fun nativeUpdateIceConfig(
+    ptr: Long,
+    stun: String,
+    turn: String,
+    user: String,
+    pass: String
+  )
 }

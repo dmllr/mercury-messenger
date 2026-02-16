@@ -7,9 +7,9 @@ import android.media.AudioManager
 import android.os.Build
 import android.telecom.Connection
 import android.util.Log
-import hela.eillance.MessengerService
 import hela.eillance.CallSoundPlayer
 import hela.eillance.MessengerActivity
+import hela.eillance.MessengerService
 import hela.eillance.ndkio.CallDirection
 import hela.eillance.ndkio.CallState
 import hela.eillance.ndkio.HistoryEntryKind
@@ -27,6 +27,8 @@ class CallHandler(
 ) {
   private val audioManager = service.getSystemService(Context.AUDIO_SERVICE) as AudioManager
   private val soundPlayer = CallSoundPlayer(service)
+  private val telecomIntegration = TelecomIntegration(service)
+
   var activeConnection: MercuryConnection? = null
   var mediaTransport: WebRtcMediaTransport? = null
   var callViewModel: CallViewModel? = null
@@ -34,7 +36,6 @@ class CallHandler(
   private var lastKnownCallState: CallState? = null
 
   fun init() {
-    // Reset audio mode
     audioManager.mode = AudioManager.MODE_NORMAL
   }
 
@@ -43,7 +44,19 @@ class CallHandler(
   }
 
   fun handleCallStateChange(callState: CallState) {
-    // Audio Mode Logic
+    // 1. Detect New Incoming Call
+    val wasRinging = lastKnownCallState?.isRinging == true
+    if (callState.isRinging && callState.callDirection == CallDirection.Incoming && !wasRinging) {
+      Log.i(TAG, "Incoming call detected from ${callState.peerId}")
+      try {
+        telecomIntegration.processIncomingCall(callState.peerId)
+      } catch (e: Exception) {
+        Log.e(TAG, "Telecom failed, falling back to notification", e)
+        notifications.showIncomingCallNotification(callState.peerId)
+      }
+    }
+
+    // 2. Audio Mode Logic
     if (callState.isRinging && callState.callDirection == CallDirection.Incoming) {
       if (audioManager.mode != AudioManager.MODE_NORMAL) {
         audioManager.mode = AudioManager.MODE_NORMAL
@@ -56,7 +69,7 @@ class CallHandler(
 
     soundPlayer.updateCallState(callState)
 
-    // Media Logic
+    // 3. Media Logic
     val wasInCall = lastKnownCallState?.isInCall == true
     val isInCall = callState.isInCall
 
@@ -69,7 +82,8 @@ class CallHandler(
       mediaTransport?.setVideoEnabled(false)
     }
 
-    val wasActive = lastKnownCallState?.let { it.isConnecting || it.isRinging || it.isInCall } ?: false
+    val wasActive =
+      lastKnownCallState?.let { it.isConnecting || it.isRinging || it.isInCall } ?: false
     val isActive = callState.isConnecting || callState.isRinging || callState.isInCall
 
     if (wasActive && !isActive) {
@@ -120,7 +134,9 @@ class CallHandler(
       startLocalMedia(isVideo)
 
       val peerId = lastKnownCallState?.peerId
-      if (peerId != null) {
+      // Ensure we don't double-open activity if IncomingCallActivity is already visible on lock screen
+      if (peerId != null && !service.isIncomingUIVisible) {
+        // Launch Main Activity to show call screen (CallScreen handles in-call UI)
         service.startActivity(Intent(service, MessengerActivity::class.java).apply {
           flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
           putExtra(MessengerService.EXTRA_PEER_ID, peerId)
@@ -185,7 +201,8 @@ class CallHandler(
 
   fun stopLocalMedia() = mediaTransport?.stopLocalMedia()
   fun setLocalVideoSink(sink: VideoSink?) = mediaTransport?.setLocalSink(sink)
-  fun setRemoteVideoSink(peerId: String, sink: VideoSink?) = mediaTransport?.setRemoteSink(peerId, sink)
+  fun setRemoteVideoSink(peerId: String, sink: VideoSink?) =
+    mediaTransport?.setRemoteSink(peerId, sink)
 
   fun setMicrophoneMute(muted: Boolean) {
     mediaTransport?.setAudioEnabled(!muted)
@@ -198,7 +215,8 @@ class CallHandler(
     audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
       val devices = audioManager.availableCommunicationDevices
-      val targetType = if (on) AudioDeviceInfo.TYPE_BUILTIN_SPEAKER else AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
+      val targetType =
+        if (on) AudioDeviceInfo.TYPE_BUILTIN_SPEAKER else AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
       val device = devices.find { it.type == targetType }
       if (device != null) {
         audioManager.setCommunicationDevice(device)

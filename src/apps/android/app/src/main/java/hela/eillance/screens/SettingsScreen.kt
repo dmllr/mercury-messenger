@@ -46,7 +46,10 @@ fun SettingsScreen(
         title = { Text(stringResource(id = R.string.screen_title_settings)) },
         navigationIcon = {
           IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(id = R.string.action_back))
+            Icon(
+              Icons.AutoMirrored.Filled.ArrowBack,
+              contentDescription = stringResource(id = R.string.action_back)
+            )
           }
         }
       )
@@ -86,7 +89,10 @@ fun SettingsScreen(
         headlineContent = { Text(stringResource(id = R.string.settings_show_content_title)) },
         supportingContent = { Text(stringResource(id = R.string.settings_show_content_description)) },
         trailingContent = {
-          Switch(checked = showNotificationContent, onCheckedChange = settingsVM::onShowNotificationContentChange)
+          Switch(
+            checked = showNotificationContent,
+            onCheckedChange = settingsVM::onShowNotificationContentChange
+          )
         }
       )
 

@@ -61,7 +61,9 @@ enum class AttachmentType(val value: Int) {
 
 @Serializable
 enum class AttachmentStatus(val value: Int) {
-  Pending(0), Transferring(1), Done(2), Failed(3), Canceled(4), Discarded(5), Paused(6), PeerCanceled(7);
+  Pending(0), Transferring(1), Done(2), Failed(3), Canceled(4), Discarded(5), Paused(6), PeerCanceled(
+    7
+  );
 
   companion object {
     fun fromInt(value: Int) = entries.firstOrNull { it.value == value } ?: Pending
@@ -101,7 +103,10 @@ data class HistoryEntry(
   val kind: HistoryEntryKind get() = HistoryEntryKind.fromInt(kindValue)
   val direction: MessageDirection get() = MessageDirection.fromInt(directionValue)
   val status: MessageStatus get() = MessageStatus.fromInt(statusValue)
-  val callDirection: CallDirection? get() = if (callDirectionValue != -1) CallDirection.fromInt(callDirectionValue) else null
+  val callDirection: CallDirection?
+    get() = if (callDirectionValue != -1) CallDirection.fromInt(
+      callDirectionValue
+    ) else null
   val callStatus: CallStatus? get() = if (callStatusValue != -1) CallStatus.fromInt(callStatusValue) else null
 }
 
@@ -128,7 +133,10 @@ data class Contact(
   val lastMessageDuration: Int
 ) {
   val status: ContactStatus get() = ContactStatus.fromInt(statusValue)
-  val lastMsgKindEnum: HistoryEntryKind? get() = if (lastMessageKind != -1) HistoryEntryKind.fromInt(lastMessageKind) else null
+  val lastMsgKindEnum: HistoryEntryKind?
+    get() = if (lastMessageKind != -1) HistoryEntryKind.fromInt(
+      lastMessageKind
+    ) else null
   val lastMsgStatusEnum: MessageStatus get() = MessageStatus.fromInt(lastMessageStatus)
 }
 

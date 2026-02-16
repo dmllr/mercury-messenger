@@ -46,7 +46,10 @@ fun DebugMenuScreen(
         title = { Text(stringResource(id = R.string.screen_title_debug_menu)) },
         navigationIcon = {
           IconButton(onClick = onNavigateBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(id = R.string.action_back))
+            Icon(
+              Icons.AutoMirrored.Filled.ArrowBack,
+              contentDescription = stringResource(id = R.string.action_back)
+            )
           }
         }
       )

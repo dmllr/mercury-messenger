@@ -1,6 +1,7 @@
 package hela.eillance.service
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -9,14 +10,16 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.graphics.Color
 import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.Person
 import androidx.core.content.ContextCompat
-import hela.eillance.MessengerService
-import hela.eillance.MessengerActivity
+import hela.eillance.IncomingCallActivity
 import hela.eillance.MercuryApplication
+import hela.eillance.MessengerActivity
+import hela.eillance.MessengerService
 import hela.eillance.camera.R
 import hela.eillance.ndkio.AttachmentType
 import hela.eillance.ndkio.HistoryEntry
@@ -24,7 +27,8 @@ import hela.eillance.ndkio.ServiceConnectionState
 
 class MercuryNotifications(private val service: MessengerService) {
 
-  private val notificationManager = service.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+  private val notificationManager =
+    service.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
   init {
     createNotificationChannels()
@@ -39,11 +43,13 @@ class MercuryNotifications(private val service: MessengerService) {
       return
     }
 
-    val fullScreenIntent = Intent(service, MessengerActivity::class.java).apply {
-      flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+    val fullScreenIntent = Intent(service, IncomingCallActivity::class.java).apply {
+      flags =
+        Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NO_USER_ACTION
       action = MessengerService.ACTION_SHOW_INCOMING_CALL
       putExtra(MessengerService.EXTRA_PEER_ID, peerId)
     }
+
     val fullScreenPendingIntent = PendingIntent.getActivity(
       service,
       12345,
@@ -51,7 +57,9 @@ class MercuryNotifications(private val service: MessengerService) {
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
 
-    val rejectIntent = Intent(service, MessengerService::class.java).apply { action = MessengerService.ACTION_REJECT_CALL }
+    val rejectIntent = Intent(service, MessengerService::class.java).apply {
+      action = MessengerService.ACTION_REJECT_CALL
+    }
     val rejectPendingIntent = PendingIntent.getService(
       service,
       1,
@@ -70,29 +78,45 @@ class MercuryNotifications(private val service: MessengerService) {
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
 
+    @SuppressLint("FullScreenIntentPolicy")
     val builder = NotificationCompat.Builder(service, MessengerService.CALLS_CHANNEL_ID)
-      .setSmallIcon(android.R.drawable.stat_notify_chat)
+      .setSmallIcon(R.drawable.ic_status_attention)
       .setContentTitle(service.getString(R.string.notification_incoming_call_title))
       .setContentText(peerId)
       .setPriority(NotificationCompat.PRIORITY_MAX)
       .setCategory(NotificationCompat.CATEGORY_CALL)
       .setFullScreenIntent(fullScreenPendingIntent, true)
       .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-      .addAction(0, service.getString(R.string.action_reject), rejectPendingIntent)
-      .addAction(0, service.getString(R.string.action_accept), acceptPendingIntent)
+      .addAction(
+        R.drawable.ic_status_attention,
+        service.getString(R.string.action_reject),
+        rejectPendingIntent
+      )
+      .addAction(
+        R.drawable.ic_status_standby,
+        service.getString(R.string.action_accept),
+        acceptPendingIntent
+      )
       .setAutoCancel(false)
       .setOngoing(true)
+      // IMPORTANT: Add vibration to ensure the system treats this as a "Noisy" notification
+      // capable of triggering a Heads-Up or Full Screen Intent.
+      .setVibrate(longArrayOf(0, 500, 500))
+      .setLights(Color.WHITE, 500, 500)
 
+    // Attempt to start activity directly if not in foreground (Telecom bypass fallback)
     if (!MercuryApplication.isAppInForeground) {
       try {
         service.startActivity(fullScreenIntent)
       } catch (e: Exception) {
-        Log.e(TAG, "Failed to force start incoming call activity", e)
+        Log.e(TAG, "Failed to force start incoming call activity (background restriction)", e)
       }
     }
 
     notificationManager.notify(MessengerService.INCOMING_CALL_NOTIFICATION_ID, builder.build())
   }
+
+  // ... (Rest of file unchanged) ...
 
   fun showNewMessageNotification(
     peerId: String,
@@ -151,7 +175,11 @@ class MercuryNotifications(private val service: MessengerService) {
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
     val markReadAction =
-      NotificationCompat.Action.Builder(0, service.getString(R.string.action_mark_read), markReadPendingIntent).build()
+      NotificationCompat.Action.Builder(
+        0,
+        service.getString(R.string.action_mark_read),
+        markReadPendingIntent
+      ).build()
 
     val builder = NotificationCompat.Builder(service, MESSAGES_CHANNEL_ID)
       .setSmallIcon(android.R.drawable.stat_notify_chat)
@@ -160,7 +188,10 @@ class MercuryNotifications(private val service: MessengerService) {
       .setContentIntent(pendingIntent)
       .addAction(markReadAction)
       .setAutoCancel(true)
-    notificationManager.notify(MessengerService.MESSAGE_NOTIFICATION_ID_BASE + peerId.hashCode(), builder.build())
+    notificationManager.notify(
+      MessengerService.MESSAGE_NOTIFICATION_ID_BASE + peerId.hashCode(),
+      builder.build()
+    )
   }
 
   fun updateForegroundServiceNotification(
@@ -224,7 +255,9 @@ class MercuryNotifications(private val service: MessengerService) {
       .setContentIntent(pendingIntent)
 
     if (inCall) {
-      val hangupIntent = Intent(service, MessengerService::class.java).apply { action = MessengerService.ACTION_HANGUP }
+      val hangupIntent = Intent(service, MessengerService::class.java).apply {
+        action = MessengerService.ACTION_HANGUP
+      }
       val hangupPendingIntent = PendingIntent.getService(
         service,
         3,
@@ -257,16 +290,21 @@ class MercuryNotifications(private val service: MessengerService) {
       service.getString(R.string.notification_channel_foreground_title),
       NotificationManager.IMPORTANCE_MIN
     )
+
+    // v6: Force update to ensure Vibration/Lights settings are applied
     val callsChannel = NotificationChannel(
       MessengerService.CALLS_CHANNEL_ID,
       service.getString(R.string.notification_channel_calls_title),
       NotificationManager.IMPORTANCE_HIGH
     ).apply {
       description = service.getString(R.string.notification_channel_calls_description)
+      // Sound handled by CallSoundPlayer, but vibration here helps system rank importance
       setSound(null, null)
       enableVibration(true)
+      vibrationPattern = longArrayOf(0, 500, 500)
       lockscreenVisibility = Notification.VISIBILITY_PUBLIC
     }
+
     val messagesChannel = NotificationChannel(
       MESSAGES_CHANNEL_ID,
       service.getString(R.string.notification_channel_messages_title),

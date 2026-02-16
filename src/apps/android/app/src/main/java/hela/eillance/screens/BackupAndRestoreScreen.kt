@@ -155,7 +155,10 @@ fun BackupAndRestoreScreen(
         title = { Text(stringResource(id = R.string.screen_title_backup_restore)) },
         navigationIcon = {
           IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(id = R.string.action_back))
+            Icon(
+              Icons.AutoMirrored.Filled.ArrowBack,
+              contentDescription = stringResource(id = R.string.action_back)
+            )
           }
         }
       )
@@ -167,7 +170,10 @@ fun BackupAndRestoreScreen(
         .padding(padding)
         .padding(16.dp)
     ) {
-      Text(stringResource(id = R.string.backup_create_title), style = MaterialTheme.typography.titleLarge)
+      Text(
+        stringResource(id = R.string.backup_create_title),
+        style = MaterialTheme.typography.titleLarge
+      )
       Text(
         stringResource(id = R.string.backup_create_description),
         style = MaterialTheme.typography.bodyMedium,
@@ -181,7 +187,10 @@ fun BackupAndRestoreScreen(
 
       HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
 
-      Text(stringResource(id = R.string.backup_restore_title), style = MaterialTheme.typography.titleLarge)
+      Text(
+        stringResource(id = R.string.backup_restore_title),
+        style = MaterialTheme.typography.titleLarge
+      )
       Text(
         stringResource(id = R.string.backup_restore_description),
         style = MaterialTheme.typography.bodyMedium,
@@ -193,7 +202,10 @@ fun BackupAndRestoreScreen(
 
       HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
 
-      Text(stringResource(id = R.string.backup_view_phrase_title), style = MaterialTheme.typography.titleLarge)
+      Text(
+        stringResource(id = R.string.backup_view_phrase_title),
+        style = MaterialTheme.typography.titleLarge
+      )
       Text(
         stringResource(id = R.string.backup_view_phrase_description),
         style = MaterialTheme.typography.bodyMedium,
@@ -218,7 +230,10 @@ private fun BackupPasswordDialog(onDismiss: () -> Unit, onConfirm: (String) -> U
   Dialog(onDismissRequest = onDismiss) {
     Card {
       Column(modifier = Modifier.padding(24.dp)) {
-        Text(stringResource(id = R.string.backup_password_dialog_title), style = MaterialTheme.typography.headlineSmall)
+        Text(
+          stringResource(id = R.string.backup_password_dialog_title),
+          style = MaterialTheme.typography.headlineSmall
+        )
         Spacer(modifier = Modifier.height(16.dp))
         OutlinedTextField(
           value = password,

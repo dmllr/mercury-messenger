@@ -217,13 +217,19 @@ class ConversationViewModel(
     return null
   }
 
-  private fun resolveUniqueFile(dir: File, fileName: String, contentResolver: ContentResolver, sourceUri: Uri): File {
+  private fun resolveUniqueFile(
+    dir: File,
+    fileName: String,
+    contentResolver: ContentResolver,
+    sourceUri: Uri
+  ): File {
     var file = File(dir, fileName)
     if (!file.exists()) return file
 
     // Deduplication check: If name exists, check if content is identical
     try {
-      val sourceSize = contentResolver.openFileDescriptor(sourceUri, "r")?.use { it.statSize } ?: -1L
+      val sourceSize =
+        contentResolver.openFileDescriptor(sourceUri, "r")?.use { it.statSize } ?: -1L
       if (sourceSize != -1L && file.length() == sourceSize) {
         val sourceHash = calculateStreamHash(contentResolver.openInputStream(sourceUri))
         val targetHash = calculateStreamHash(FileInputStream(file))
@@ -296,7 +302,8 @@ class ConversationViewModel(
 
       for (draft in drafts) {
         try {
-          val destFile = resolveUniqueFile(attachmentsDir, draft.name, context.contentResolver, draft.uri)
+          val destFile =
+            resolveUniqueFile(attachmentsDir, draft.name, context.contentResolver, draft.uri)
 
           // Only copy if we aren't reusing an existing file
           if (!destFile.exists() || destFile.length() == 0L) {
@@ -357,14 +364,22 @@ class ConversationViewModel(
   }
 
   @Suppress("DEPRECATION")
-  private fun generateThumbnail(resolver: ContentResolver, uri: Uri, file: File, type: AttachmentType): Bitmap? {
+  private fun generateThumbnail(
+    resolver: ContentResolver,
+    uri: Uri,
+    file: File,
+    type: AttachmentType
+  ): Bitmap? {
     val size = Size(320, 320)
     return try {
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         resolver.loadThumbnail(uri, size, CancellationSignal())
       } else {
         if (type == AttachmentType.Video) {
-          ThumbnailUtils.createVideoThumbnail(file.absolutePath, MediaStore.Images.Thumbnails.MINI_KIND)
+          ThumbnailUtils.createVideoThumbnail(
+            file.absolutePath,
+            MediaStore.Images.Thumbnails.MINI_KIND
+          )
         } else if (type == AttachmentType.Image) {
           val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
           BitmapFactory.decodeFile(file.absolutePath, options)
@@ -380,7 +395,11 @@ class ConversationViewModel(
     }
   }
 
-  private fun calculateInSampleSize(options: BitmapFactory.Options, reqWidth: Int, reqHeight: Int): Int {
+  private fun calculateInSampleSize(
+    options: BitmapFactory.Options,
+    reqWidth: Int,
+    reqHeight: Int
+  ): Int {
     val (height: Int, width: Int) = options.outHeight to options.outWidth
     var inSampleSize = 1
     if (height > reqHeight || width > reqWidth) {
@@ -402,7 +421,10 @@ class ConversationViewModel(
   }
 
   fun markMessagesAsRead(messageIds: List<Long>) {
-    if (nativePtr != 0L && messageIds.isNotEmpty()) nativeMarkRead(nativePtr, messageIds.toLongArray())
+    if (nativePtr != 0L && messageIds.isNotEmpty()) nativeMarkRead(
+      nativePtr,
+      messageIds.toLongArray()
+    )
   }
 
   fun search(query: String) {
@@ -441,7 +463,11 @@ class ConversationViewModel(
   private external fun nativeResumeTransfer(ptr: Long, attachmentId: String, isUpload: Boolean)
   private external fun nativeDiscardAttachment(ptr: Long, attachmentId: String)
   private external fun nativeGetAttachment(ptr: Long, attachmentId: String): Attachment?
-  private external fun nativeSearchMessages(ptr: Long, peerId: String, query: String): List<HistoryEntry>
+  private external fun nativeSearchMessages(
+    ptr: Long,
+    peerId: String,
+    query: String
+  ): List<HistoryEntry>
 
   class Factory(
     private val application: Application,

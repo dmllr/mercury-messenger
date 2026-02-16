@@ -38,7 +38,10 @@ fun RejectedContactsScreen(contactsVM: ContactsViewModel, onBack: () -> Unit) {
         title = { Text(stringResource(id = R.string.screen_title_rejected_contacts)) },
         navigationIcon = {
           IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(id = R.string.action_back))
+            Icon(
+              Icons.AutoMirrored.Filled.ArrowBack,
+              contentDescription = stringResource(id = R.string.action_back)
+            )
           }
         }
       )
@@ -57,7 +60,13 @@ fun RejectedContactsScreen(contactsVM: ContactsViewModel, onBack: () -> Unit) {
             headlineContent = { Text(contact.name) },
             supportingContent = { Text(contact.peerId) },
             trailingContent = {
-              Button(onClick = { contactsVM.unblockContact(contact.peerId) }) { Text(stringResource(id = R.string.action_unblock)) }
+              Button(onClick = { contactsVM.unblockContact(contact.peerId) }) {
+                Text(
+                  stringResource(
+                    id = R.string.action_unblock
+                  )
+                )
+              }
             }
           )
           HorizontalDivider()

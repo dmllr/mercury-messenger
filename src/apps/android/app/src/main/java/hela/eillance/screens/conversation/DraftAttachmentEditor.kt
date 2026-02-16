@@ -114,7 +114,12 @@ fun DraftAttachmentEditor(
               val model = if (isVideo) {
                 ImageRequest.Builder(context)
                   .data(draft.uri)
-                  .decoderFactory { result, options, _ -> VideoFrameDecoder(result.source, options) }
+                  .decoderFactory { result, options, _ ->
+                    VideoFrameDecoder(
+                      result.source,
+                      options
+                    )
+                  }
                   .videoFrameMillis(1000)
                   .build()
               } else draft.uri

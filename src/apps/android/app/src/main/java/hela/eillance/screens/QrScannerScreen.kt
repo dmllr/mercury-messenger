@@ -162,7 +162,11 @@ fun QrScannerScreen(
                 imageAnalyzer
               )
             } catch (e: Exception) {
-              Toast.makeText(context, context.getString(R.string.qr_camera_fail, e.message), Toast.LENGTH_LONG).show()
+              Toast.makeText(
+                context,
+                context.getString(R.string.qr_camera_fail, e.message),
+                Toast.LENGTH_LONG
+              ).show()
             }
           }, ContextCompat.getMainExecutor(ctx))
           previewView
@@ -173,7 +177,10 @@ fun QrScannerScreen(
         }
       )
     } else {
-      Text(stringResource(id = R.string.qr_permission_required), modifier = Modifier.align(Alignment.Center))
+      Text(
+        stringResource(id = R.string.qr_permission_required),
+        modifier = Modifier.align(Alignment.Center)
+      )
     }
 
     IconButton(

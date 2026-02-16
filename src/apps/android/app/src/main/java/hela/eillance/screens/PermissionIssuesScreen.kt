@@ -50,12 +50,14 @@ fun PermissionIssuesScreen(
   val hasCalls by mainViewModel.hasCallPermissions.collectAsState()
 
   // Launchers
-  val notifLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
-    mainViewModel.checkAllPermissions()
-  }
-  val callLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
-    mainViewModel.checkAllPermissions()
-  }
+  val notifLauncher =
+    rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+      mainViewModel.checkAllPermissions()
+    }
+  val callLauncher =
+    rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+      mainViewModel.checkAllPermissions()
+    }
 
   Scaffold(
     topBar = {
@@ -63,7 +65,10 @@ fun PermissionIssuesScreen(
         title = { Text(stringResource(id = R.string.screen_title_permission_issues)) },
         navigationIcon = {
           IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(id = R.string.action_back))
+            Icon(
+              Icons.AutoMirrored.Filled.ArrowBack,
+              contentDescription = stringResource(id = R.string.action_back)
+            )
           }
         }
       )
@@ -151,7 +156,11 @@ private fun PermissionItem(
     supportingContent = { Text(description) },
     leadingContent = {
       if (isGranted) {
-        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.extendedColors.success)
+        Icon(
+          Icons.Default.CheckCircle,
+          contentDescription = null,
+          tint = MaterialTheme.extendedColors.success
+        )
       } else {
         Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.error)
       }

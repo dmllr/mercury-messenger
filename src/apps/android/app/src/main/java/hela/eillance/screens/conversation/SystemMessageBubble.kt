@@ -24,9 +24,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import hela.eillance.localization.LocalizationMapping
 import hela.eillance.ndkio.HistoryEntry
 import hela.eillance.ndkio.MessageDirection
-import hela.eillance.localization.LocalizationMapping
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 

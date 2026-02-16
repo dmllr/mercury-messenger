@@ -10,7 +10,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
 import java.io.FileOutputStream
 
-class ProfileViewModel(application: Application) : AndroidViewModel(application), NativeProfileObserver {
+class ProfileViewModel(application: Application) : AndroidViewModel(application),
+  NativeProfileObserver {
 
   private var nativePtr: Long = 0
   private val _myProfile = MutableStateFlow(MyProfileInfo(identityExists = false))
@@ -54,7 +55,8 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
   fun createBackupToTemp(password: String): String? {
     if (nativePtr == 0L) return null
     return try {
-      val tempFile = File.createTempFile("mercury-backup-", ".mcr", getApplication<Application>().cacheDir)
+      val tempFile =
+        File.createTempFile("mercury-backup-", ".mcr", getApplication<Application>().cacheDir)
       val success = nativeCreateBackup(nativePtr, tempFile.absolutePath, password)
       if (success) tempFile.absolutePath else {
         tempFile.delete()
@@ -78,8 +80,10 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
   fun restoreBackup(uri: Uri, password: String): Boolean {
     if (nativePtr == 0L) return false
     return try {
-      val inputStream = getApplication<Application>().contentResolver.openInputStream(uri) ?: return false
-      val tempFile = File.createTempFile("restore_temp", ".mcr", getApplication<Application>().cacheDir)
+      val inputStream =
+        getApplication<Application>().contentResolver.openInputStream(uri) ?: return false
+      val tempFile =
+        File.createTempFile("restore_temp", ".mcr", getApplication<Application>().cacheDir)
       FileOutputStream(tempFile).use { output ->
         inputStream.use { input -> input.copyTo(output) }
       }

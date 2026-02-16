@@ -71,28 +71,32 @@ fun MessageInputArea(
   val context = LocalContext.current
 
   // Media Pickers
-  val pickMedia = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris ->
-    if (uris.isNotEmpty()) onAddDrafts(uris)
-  }
-  val pickDocs = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-    if (uris.isNotEmpty()) onAddDrafts(uris)
-  }
+  val pickMedia =
+    rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris ->
+      if (uris.isNotEmpty()) onAddDrafts(uris)
+    }
+  val pickDocs =
+    rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+      if (uris.isNotEmpty()) onAddDrafts(uris)
+    }
 
   // Camera Photo
   var cameraPhotoUri by remember { mutableStateOf<Uri?>(null) }
-  val takePicture = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
-    if (success && cameraPhotoUri != null) {
-      onAddDrafts(listOf(cameraPhotoUri!!))
+  val takePicture =
+    rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+      if (success && cameraPhotoUri != null) {
+        onAddDrafts(listOf(cameraPhotoUri!!))
+      }
     }
-  }
 
   // Camera Video
   var cameraVideoUri by remember { mutableStateOf<Uri?>(null) }
-  val captureVideo = rememberLauncherForActivityResult(ActivityResultContracts.CaptureVideo()) { success ->
-    if (success && cameraVideoUri != null) {
-      onAddDrafts(listOf(cameraVideoUri!!))
+  val captureVideo =
+    rememberLauncherForActivityResult(ActivityResultContracts.CaptureVideo()) { success ->
+      if (success && cameraVideoUri != null) {
+        onAddDrafts(listOf(cameraVideoUri!!))
+      }
     }
-  }
 
   val authority = "${context.packageName}.provider"
   var pendingCameraAction by remember { mutableStateOf<CameraAction?>(null) }
@@ -125,7 +129,11 @@ fun MessageInputArea(
   }
 
   fun checkAndLaunch(action: CameraAction) {
-    if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+    if (ContextCompat.checkSelfPermission(
+        context,
+        Manifest.permission.CAMERA
+      ) == PackageManager.PERMISSION_GRANTED
+    ) {
       when (action) {
         CameraAction.Photo -> launchCameraPhoto()
         CameraAction.Video -> launchCameraVideo()

@@ -1,12 +1,10 @@
 package hela.eillance
 
 import android.Manifest
-import android.app.KeyguardManager
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
@@ -26,7 +24,7 @@ class MessengerActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
 
-    configureWindowForLockScreen()
+    updateLockScreenPolicy()
     handleIntent(intent)
     viewModel.handleShareIntent(intent)
 
@@ -42,24 +40,6 @@ class MessengerActivity : ComponentActivity() {
           MercuryApp(viewModel = viewModel)
         }
       }
-    }
-  }
-
-  private fun configureWindowForLockScreen() {
-    setShowWhenLocked(true)
-    setTurnScreenOn(true)
-
-    // Still might be required on some device models
-    @Suppress("DEPRECATION")
-    window.addFlags(
-      WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-          WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
-          WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
-    )
-
-    val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
-    if (keyguardManager.isKeyguardLocked) {
-      keyguardManager.requestDismissKeyguard(this, null)
     }
   }
 
@@ -90,6 +70,19 @@ class MessengerActivity : ComponentActivity() {
     viewModel.handleShareIntent(intent)
   }
 
+  private fun updateLockScreenPolicy() {
+    val callState = MessengerService.instance?.backgroundCallVM?.callState?.value
+    val isActiveCall = callState?.isInCall == true || callState?.isConnecting == true
+
+    setShowWhenLocked(isActiveCall)
+    setTurnScreenOn(isActiveCall)
+    if (isActiveCall) {
+      window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    } else {
+      window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    }
+  }
+
   private fun handleIntent(intent: Intent?) {
     val peerId = intent?.getStringExtra(MessengerService.EXTRA_PEER_ID)
     val isAcceptAction = intent?.action == MessengerService.ACTION_ACCEPT_CALL
@@ -105,12 +98,11 @@ class MessengerActivity : ComponentActivity() {
       ) {
         MessengerService.instance?.acceptCall()
         viewModel.navigateToPeer(peerId)
+        updateLockScreenPolicy()
       } else {
-        configureWindowForLockScreen()
         viewModel.showIncomingCallUi()
       }
     } else if (isShowIncomingCall && peerId != null) {
-      configureWindowForLockScreen()
       viewModel.showIncomingCallUi()
     } else if (peerId != null) {
       viewModel.navigateToPeer(peerId)

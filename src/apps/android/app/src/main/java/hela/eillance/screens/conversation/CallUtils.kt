@@ -8,10 +8,10 @@ import androidx.compose.material.icons.automirrored.filled.CallReceived
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.ui.graphics.vector.ImageVector
 import hela.eillance.camera.R
+import hela.eillance.localization.LocalizationMapping
 import hela.eillance.ndkio.CallDirection
 import hela.eillance.ndkio.CallStatus
 import hela.eillance.ndkio.HistoryEntryKind
-import hela.eillance.localization.LocalizationMapping
 import java.util.concurrent.TimeUnit
 
 object CallUtils {
@@ -23,13 +23,28 @@ object CallUtils {
     // Returns <Icon, IsErrorColor, DescriptionResId>
     return when (direction) {
       CallDirection.Outgoing -> when (status) {
-        CallStatus.Answered -> Triple(Icons.AutoMirrored.Filled.CallMade, false, R.string.call_outgoing_voice)
+        CallStatus.Answered -> Triple(
+          Icons.AutoMirrored.Filled.CallMade,
+          false,
+          R.string.call_outgoing_voice
+        )
+
         else -> Triple(Icons.AutoMirrored.Filled.CallMade, true, R.string.call_outgoing_voice)
       }
 
       CallDirection.Incoming -> when (status) {
-        CallStatus.Missed -> Triple(Icons.AutoMirrored.Filled.CallMissed, true, R.string.call_missed)
-        CallStatus.Answered -> Triple(Icons.AutoMirrored.Filled.CallReceived, false, R.string.call_incoming_voice)
+        CallStatus.Missed -> Triple(
+          Icons.AutoMirrored.Filled.CallMissed,
+          true,
+          R.string.call_missed
+        )
+
+        CallStatus.Answered -> Triple(
+          Icons.AutoMirrored.Filled.CallReceived,
+          false,
+          R.string.call_incoming_voice
+        )
+
         else -> Triple(Icons.AutoMirrored.Filled.CallReceived, false, R.string.call_rejected)
       }
 

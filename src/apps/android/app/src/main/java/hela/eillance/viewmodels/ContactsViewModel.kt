@@ -17,7 +17,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class ContactsViewModel(application: Application) : AndroidViewModel(application), NativeContactsObserver {
+class ContactsViewModel(application: Application) : AndroidViewModel(application),
+  NativeContactsObserver {
 
   private var nativePtr: Long = 0
   private val _contacts = MutableStateFlow<List<Contact>>(emptyList())

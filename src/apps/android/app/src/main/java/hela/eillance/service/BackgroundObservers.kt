@@ -3,8 +3,8 @@ package hela.eillance.service
 import android.app.Application
 import android.content.Context
 import hela.eillance.MercuryApplication
-import hela.eillance.ndkio.CallDirection
 import hela.eillance.ndkio.Contact
+import hela.eillance.ndkio.HistoryEntryKind
 import hela.eillance.ndkio.ServiceConnectionState
 import hela.eillance.viewmodels.CallViewModel
 import hela.eillance.viewmodels.ContactsViewModel
@@ -25,13 +25,13 @@ class BackgroundObservers(
   var settingsVM: SettingsViewModel? = null
 
   private var lastKnownContacts: List<Contact>? = null
+  private var lastConnectionState: ServiceConnectionState = ServiceConnectionState.Unknown
 
   fun setup(app: Application) {
     contactsVM = ContactsViewModel(app)
     callVM = CallViewModel(app)
     settingsVM = SettingsViewModel(app)
 
-    // Link CallVM to Handler
     callHandler.callViewModel = callVM
 
     scope.launch {
@@ -45,28 +45,35 @@ class BackgroundObservers(
         callVM?.callState?.collect { state ->
           callHandler.handleCallStateChange(state)
 
-          // Trigger incoming call logic via notifications if needed,
-          // though typically CallService triggers this via state changes logic too.
-          val wasRinging = callHandler.getLastCallState()?.isRinging == true
-          if (!wasRinging && state.isRinging && state.callDirection == CallDirection.Incoming) {
-            // Signal to Service to process incoming call logic (Telecom)
-            // This is handled by CallService observing state or CallHandler directly?
-            // CallHandler.handleCallStateChange calls logic.
-          }
+          // Force update foreground notification/wakelock
+          // We treat Ringing as "In Call" for the purpose of holding a WakeLock
+          val isActive = state.isInCall || state.isRinging
+          onServiceStatusChanged(
+            isActive,
+            state.peerId,
+            lastConnectionState,
+            state.callType == HistoryEntryKind.VideoCall
+          )
         }
       }
       launch {
         settingsVM?.connectionState?.collect { state ->
+          lastConnectionState = state
           val callState = callHandler.getLastCallState()
+          val isActive = callState?.isInCall == true || callState?.isRinging == true
           onServiceStatusChanged(
-            callState?.isInCall == true,
+            isActive,
             callState?.peerId,
             state,
-            false // isVideo unknown here, updated elsewhere or assumed false for background
+            callState?.callType == HistoryEntryKind.VideoCall
           )
         }
       }
     }
+  }
+
+  fun getContact(peerId: String): Contact? {
+    return lastKnownContacts?.find { it.peerId == peerId }
   }
 
   private fun checkForNewMessages(oldContacts: List<Contact>?, newContacts: List<Contact>) {
@@ -79,7 +86,12 @@ class BackgroundObservers(
         val showContent = prefs.getBoolean("show_notifications_content", true)
         val displayName = newContact.name.ifEmpty { newContact.peerId.take(8) }
         val unreadMessages = contactsVM?.getUnreadMessages(newContact.peerId) ?: emptyList()
-        notifications.showNewMessageNotification(newContact.peerId, displayName, unreadMessages, showContent)
+        notifications.showNewMessageNotification(
+          newContact.peerId,
+          displayName,
+          unreadMessages,
+          showContent
+        )
       }
     }
   }

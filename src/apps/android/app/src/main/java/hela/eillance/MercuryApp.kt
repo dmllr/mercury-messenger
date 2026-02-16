@@ -320,14 +320,17 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
         route = Route.Interaction.route,
         arguments = listOf(
           navArgument("peerId") { type = NavType.StringType },
-          navArgument("messageId") { type = NavType.StringType; nullable = true; defaultValue = null }
+          navArgument("messageId") {
+            type = NavType.StringType; nullable = true; defaultValue = null
+          }
         )
       ) { backStackEntry ->
         val peerId = backStackEntry.arguments?.getString("peerId") ?: return@composable
         val messageIdStr = backStackEntry.arguments?.getString("messageId")
         val messageId = messageIdStr?.toLongOrNull()
         val app = LocalContext.current.applicationContext as Application
-        val chatVM: ConversationViewModel = viewModel(factory = ConversationViewModel.Factory(app, peerId))
+        val chatVM: ConversationViewModel =
+          viewModel(factory = ConversationViewModel.Factory(app, peerId))
         val historyPage by chatVM.interactionHistoryPage.collectAsState()
         val contactsList by contactsVM.contacts.collectAsState()
         val contact = contactsList.find { it.peerId == peerId }

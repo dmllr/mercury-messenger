@@ -72,10 +72,26 @@ class WebRtcDataTransport(private val context: Context, private val nativePointe
   private external fun nativeOnPeerMessage(nativePointer: Long, message: String)
   private external fun nativeOnSystemMessage(nativePointer: Long, type: String, message: String)
   private external fun nativeOnSignalingError(nativePointer: Long, peerId: String, error: String)
-  private external fun nativeOnDataChannelMessage(nativePointer: Long, peerId: String, message: String)
-  private external fun nativeOnDataChannelMessageBinary(nativePointer: Long, peerId: String, data: ByteArray)
+  private external fun nativeOnDataChannelMessage(
+    nativePointer: Long,
+    peerId: String,
+    message: String
+  )
+
+  private external fun nativeOnDataChannelMessageBinary(
+    nativePointer: Long,
+    peerId: String,
+    data: ByteArray
+  )
+
   private external fun nativeOnDataChannelOpen(nativePointer: Long, peerId: String)
-  private external fun nativeOnPeerConnectionStateChange(nativePointer: Long, peerId: String, context: Int, state: Int)
+  private external fun nativeOnPeerConnectionStateChange(
+    nativePointer: Long,
+    peerId: String,
+    context: Int,
+    state: Int
+  )
+
   private external fun nativeOnSignalingConnectionStateChange(nativePointer: Long, state: Int)
 
   init {
@@ -152,7 +168,12 @@ class WebRtcDataTransport(private val context: Context, private val nativePointe
   fun connectPeer(peerId: String) {
     if (sessions.containsKey(peerId)) return
     val factory = peerConnectionFactory ?: return
-    nativeOnPeerConnectionStateChange(nativePointer, peerId, 0, PeerConnectionState.New.value) // 0=Data
+    nativeOnPeerConnectionStateChange(
+      nativePointer,
+      peerId,
+      0,
+      PeerConnectionState.New.value
+    ) // 0=Data
 
     val rtcConfig = RTCConfiguration(currentIceServers).apply {
       sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
@@ -180,7 +201,9 @@ class WebRtcDataTransport(private val context: Context, private val nativePointe
       override fun onStandardizedIceConnectionChange(state: PeerConnection.IceConnectionState?) {}
       override fun onIceConnectionReceivingChange(receiving: Boolean) {}
       override fun onIceGatheringChange(state: PeerConnection.IceGatheringState?) {
-        if (state == PeerConnection.IceGatheringState.COMPLETE) sessions[peerId]?.iceGatheringComplete?.complete(Unit)
+        if (state == PeerConnection.IceGatheringState.COMPLETE) sessions[peerId]?.iceGatheringComplete?.complete(
+          Unit
+        )
       }
 
       override fun onIceCandidate(candidate: IceCandidate?) {}
@@ -301,7 +324,11 @@ class WebRtcDataTransport(private val context: Context, private val nativePointe
     dc.registerObserver(object : DataChannel.Observer {
       override fun onBufferedAmountChange(amount: Long) {}
       override fun onStateChange() {
-        if (dc.state() == DataChannel.State.OPEN && session.dataChannelOpenReported.compareAndSet(false, true)) {
+        if (dc.state() == DataChannel.State.OPEN && session.dataChannelOpenReported.compareAndSet(
+            false,
+            true
+          )
+        ) {
           nativeOnDataChannelOpen(nativePointer, peerId)
         }
       }
@@ -313,7 +340,11 @@ class WebRtcDataTransport(private val context: Context, private val nativePointe
         else nativeOnDataChannelMessage(nativePointer, peerId, String(data))
       }
     })
-    if (dc.state() == DataChannel.State.OPEN && session.dataChannelOpenReported.compareAndSet(false, true)) {
+    if (dc.state() == DataChannel.State.OPEN && session.dataChannelOpenReported.compareAndSet(
+        false,
+        true
+      )
+    ) {
       nativeOnDataChannelOpen(nativePointer, peerId)
     }
   }
@@ -377,8 +408,17 @@ class WebRtcDataTransport(private val context: Context, private val nativePointe
     signalingClient.messages.onEach { message ->
       scope.launch {
         when (message) {
-          is SignalingMessage.PeerMessage -> nativeOnPeerMessage(nativePointer, message.message.toString())
-          is SignalingMessage.Error -> nativeOnSignalingError(nativePointer, message.forPeer ?: "", message.error)
+          is SignalingMessage.PeerMessage -> nativeOnPeerMessage(
+            nativePointer,
+            message.message.toString()
+          )
+
+          is SignalingMessage.Error -> nativeOnSignalingError(
+            nativePointer,
+            message.forPeer ?: "",
+            message.error
+          )
+
           is SignalingMessage.SystemMessage -> nativeOnSystemMessage(
             nativePointer,
             message.type,

@@ -23,12 +23,14 @@ enum class PeerConnectionState(val value: Int) {
 
     @JvmStatic
     fun fromInt(value: Int) =
-      entries.firstOrNull { it.value == value } ?: throw Exception("Invalid PeerConnectionState value: $value")
+      entries.firstOrNull { it.value == value }
+        ?: throw Exception("Invalid PeerConnectionState value: $value")
   }
 
   @Suppress("unused")
   fun getResourceString(context: Context): String {
-    val resourceId = resourceMap[this] ?: throw Exception("Invalid PeerConnectionState value: $this")
+    val resourceId =
+      resourceMap[this] ?: throw Exception("Invalid PeerConnectionState value: $this")
     return context.getString(resourceId)
   }
 }

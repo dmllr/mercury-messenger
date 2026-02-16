@@ -56,7 +56,10 @@ fun ConnectionSettingsScreen(
         title = { Text(stringResource(id = R.string.settings_group_connection)) },
         navigationIcon = {
           IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(id = R.string.action_back))
+            Icon(
+              Icons.AutoMirrored.Filled.ArrowBack,
+              contentDescription = stringResource(id = R.string.action_back)
+            )
           }
         }
       )
@@ -160,7 +163,11 @@ fun ConnectionSettingsScreen(
       Button(
         onClick = {
           settingsVM.saveSettings()
-          Toast.makeText(context, context.getString(R.string.settings_saved_toast), Toast.LENGTH_SHORT).show()
+          Toast.makeText(
+            context,
+            context.getString(R.string.settings_saved_toast),
+            Toast.LENGTH_SHORT
+          ).show()
         },
         modifier = Modifier.align(Alignment.End)
       ) {

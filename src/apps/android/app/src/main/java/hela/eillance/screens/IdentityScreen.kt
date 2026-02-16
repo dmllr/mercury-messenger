@@ -47,7 +47,8 @@ import hela.eillance.navigation.Screen
 import hela.eillance.viewmodels.ProfileViewModel
 import kotlinx.coroutines.launch
 
-private const val URL_IDENTITY = "https://mercury.eillance.com/articles/cryptographic-identity/embed/"
+private const val URL_IDENTITY =
+  "https://mercury.eillance.com/articles/cryptographic-identity/embed/"
 private const val URL_P2P = "https://mercury.eillance.com/articles/peer-to-peer-connections/embed/"
 private const val URL_E2EE = "https://mercury.eillance.com/articles/end-to-end-encryption/embed/"
 
@@ -78,7 +79,11 @@ fun IdentityScreen(navController: NavController, profileVM: ProfileViewModel) {
             // Identity restored, MercuryApp will react to profileVM state change
             showRestoreDialog = null
           } else {
-            Toast.makeText(context, context.getString(R.string.backup_restore_fail), Toast.LENGTH_LONG).show()
+            Toast.makeText(
+              context,
+              context.getString(R.string.backup_restore_fail),
+              Toast.LENGTH_LONG
+            ).show()
           }
         }
       },
@@ -94,7 +99,10 @@ fun IdentityScreen(navController: NavController, profileVM: ProfileViewModel) {
       horizontalAlignment = Alignment.CenterHorizontally,
       verticalArrangement = Arrangement.Center
     ) {
-      Text(stringResource(id = R.string.identity_welcome_title), style = MaterialTheme.typography.headlineLarge)
+      Text(
+        stringResource(id = R.string.identity_welcome_title),
+        style = MaterialTheme.typography.headlineLarge
+      )
       Spacer(modifier = Modifier.height(16.dp))
 
       val linkStyle = SpanStyle(
