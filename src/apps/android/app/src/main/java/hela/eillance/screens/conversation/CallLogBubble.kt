@@ -51,7 +51,7 @@ fun CallLogBubble(
     )
 
     Text(
-      text = " ΓÇó $formattedTime",
+      text = " • $formattedTime",
       style = MaterialTheme.typography.bodySmall,
       color = MaterialTheme.colorScheme.onSurfaceVariant
     )
