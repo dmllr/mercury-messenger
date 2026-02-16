@@ -39,7 +39,7 @@ import hela.eillance.ndkio.MessageDirection
 import hela.eillance.ndkio.MessageStatus
 import hela.eillance.ndkio.PeerConnectionState
 import hela.eillance.theme.extendedColors
-import hela.eillance.ui.LocalizationMapping
+import hela.eillance.localization.LocalizationMapping
 import org.json.JSONObject
 import java.time.Instant
 import java.time.ZoneId

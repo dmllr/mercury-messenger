@@ -1,4 +1,4 @@
-package hela.eillance.ui
+package hela.eillance.localization
 
 import hela.eillance.camera.R
 import hela.eillance.ndkio.CallDirection
