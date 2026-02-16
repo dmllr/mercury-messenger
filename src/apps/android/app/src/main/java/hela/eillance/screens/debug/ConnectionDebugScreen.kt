@@ -62,12 +62,18 @@ fun ConnectionDebugScreen(
         title = { Text(stringResource(id = R.string.screen_title_connections)) },
         navigationIcon = {
           IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(id = R.string.action_back))
+            Icon(
+              Icons.AutoMirrored.Filled.ArrowBack,
+              contentDescription = stringResource(id = R.string.action_back)
+            )
           }
         },
         actions = {
           IconButton(onClick = { refresh() }) {
-            Icon(Icons.Default.Refresh, contentDescription = stringResource(id = R.string.action_refresh))
+            Icon(
+              Icons.Default.Refresh,
+              contentDescription = stringResource(id = R.string.action_refresh)
+            )
           }
         }
       )
@@ -76,7 +82,10 @@ fun ConnectionDebugScreen(
     LazyColumn(modifier = Modifier.padding(padding)) {
       if (infos.isEmpty()) {
         item {
-          Text(stringResource(id = R.string.debug_connections_empty), modifier = Modifier.padding(16.dp))
+          Text(
+            stringResource(id = R.string.debug_connections_empty),
+            modifier = Modifier.padding(16.dp)
+          )
         }
       }
       items(infos) { info ->
@@ -116,7 +125,12 @@ fun ConnectionDebugScreen(
                   )
                 )
               )
-              Text(stringResource(id = R.string.debug_connections_media_conn, info.hasMediaConnection))
+              Text(
+                stringResource(
+                  id = R.string.debug_connections_media_conn,
+                  info.hasMediaConnection
+                )
+              )
             }
           }
         )

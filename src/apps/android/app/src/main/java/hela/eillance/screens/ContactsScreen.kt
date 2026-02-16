@@ -184,7 +184,10 @@ fun ContactsScreen(
               searchQuery = ""
               contactsVM.searchAllMessages("")
             }) {
-              Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
+              Icon(
+                Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = stringResource(R.string.action_back)
+              )
             }
           },
           actions = {
@@ -194,7 +197,10 @@ fun ContactsScreen(
                 contactsVM.searchAllMessages("")
                 focusRequester.requestFocus()
               }) {
-                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.action_close))
+                Icon(
+                  Icons.Default.Close,
+                  contentDescription = stringResource(R.string.action_close)
+                )
               }
             }
           },
@@ -217,7 +223,10 @@ fun ContactsScreen(
           },
           actions = {
             IconButton(onClick = { isSearchActive = true }) {
-              Icon(Icons.Default.Search, contentDescription = stringResource(R.string.action_search))
+              Icon(
+                Icons.Default.Search,
+                contentDescription = stringResource(R.string.action_search)
+              )
             }
             Box {
               IconButton(onClick = onNavigateToProfile) {

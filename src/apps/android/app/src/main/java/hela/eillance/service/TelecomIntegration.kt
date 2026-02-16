@@ -20,9 +20,10 @@ class TelecomIntegration(private val context: Context) {
   fun registerPhoneAccount() {
     val componentName = ComponentName(context, MercuryConnectionService::class.java)
     phoneAccountHandle = PhoneAccountHandle(componentName, TELECOM_ACCOUNT_ID)
-    val builder = PhoneAccount.builder(phoneAccountHandle, context.getString(R.string.telecom_account_name))
-      .setCapabilities(PhoneAccount.CAPABILITY_SELF_MANAGED)
-      .setShortDescription(context.getString(R.string.telecom_account_description))
+    val builder =
+      PhoneAccount.builder(phoneAccountHandle, context.getString(R.string.telecom_account_name))
+        .setCapabilities(PhoneAccount.CAPABILITY_SELF_MANAGED)
+        .setShortDescription(context.getString(R.string.telecom_account_description))
 
     try {
       telecomManager.registerPhoneAccount(builder.build())

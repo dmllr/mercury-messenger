@@ -70,7 +70,8 @@ fun ChatHistory(
       val currentItem = history[history.lastIndex - index]
 
       val newerItem = if (index > 0) history[history.lastIndex - (index - 1)] else null
-      val olderItem = if (index < history.size - 1) history[history.lastIndex - (index + 1)] else null
+      val olderItem =
+        if (index < history.size - 1) history[history.lastIndex - (index + 1)] else null
 
       val isGroupTail = !shouldGroupMessages(currentItem, newerItem)
       val isGroupHead = !shouldGroupMessages(currentItem, olderItem)

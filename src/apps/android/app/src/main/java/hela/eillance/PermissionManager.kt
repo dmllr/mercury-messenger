@@ -10,9 +10,15 @@ import androidx.core.content.ContextCompat
 class PermissionManager(private val context: Context) {
   fun hasCallPermissions(): Boolean {
     val camera =
-      ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+      ContextCompat.checkSelfPermission(
+        context,
+        Manifest.permission.CAMERA
+      ) == PackageManager.PERMISSION_GRANTED
     val audio =
-      ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+      ContextCompat.checkSelfPermission(
+        context,
+        Manifest.permission.RECORD_AUDIO
+      ) == PackageManager.PERMISSION_GRANTED
     val phone = ContextCompat.checkSelfPermission(
       context,
       Manifest.permission.READ_PHONE_STATE

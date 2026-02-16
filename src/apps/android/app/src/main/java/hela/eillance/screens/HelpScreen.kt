@@ -23,7 +23,8 @@ import androidx.navigation.NavController
 import hela.eillance.camera.R
 import hela.eillance.navigation.Route
 
-private const val URL_IDENTITY = "https://mercury.eillance.com/articles/cryptographic-identity/embed/"
+private const val URL_IDENTITY =
+  "https://mercury.eillance.com/articles/cryptographic-identity/embed/"
 private const val URL_P2P = "https://mercury.eillance.com/articles/peer-to-peer-connections/embed/"
 private const val URL_E2EE = "https://mercury.eillance.com/articles/end-to-end-encryption/embed/"
 
@@ -36,7 +37,10 @@ fun HelpScreen(navController: NavController) {
         title = { Text(stringResource(id = R.string.screen_title_help)) },
         navigationIcon = {
           IconButton(onClick = { navController.popBackStack() }) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(id = R.string.action_back))
+            Icon(
+              Icons.AutoMirrored.Filled.ArrowBack,
+              contentDescription = stringResource(id = R.string.action_back)
+            )
           }
         }
       )

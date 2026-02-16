@@ -53,7 +53,10 @@ fun RecoverIdentityScreen(
         title = { Text(stringResource(id = R.string.screen_title_recover_identity)) },
         navigationIcon = {
           IconButton(onClick = { navController.popBackStack() }) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(id = R.string.action_back))
+            Icon(
+              Icons.AutoMirrored.Filled.ArrowBack,
+              contentDescription = stringResource(id = R.string.action_back)
+            )
           }
         }
       )
@@ -102,7 +105,10 @@ fun RecoverIdentityScreen(
         modifier = Modifier.fillMaxWidth()
       ) {
         if (isLoading) {
-          CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
+          CircularProgressIndicator(
+            modifier = Modifier.size(24.dp),
+            color = MaterialTheme.colorScheme.onPrimary
+          )
         } else {
           Text(stringResource(id = R.string.action_recover))
         }

@@ -50,7 +50,10 @@ fun AddContactDialog(
           onClick = onScanQrCode,
           modifier = Modifier.fillMaxWidth()
         ) {
-          Icon(Icons.Default.QrCodeScanner, contentDescription = stringResource(id = R.string.add_contact_scan_qr))
+          Icon(
+            Icons.Default.QrCodeScanner,
+            contentDescription = stringResource(id = R.string.add_contact_scan_qr)
+          )
           Spacer(modifier = Modifier.width(8.dp))
           Text(stringResource(id = R.string.add_contact_scan_qr))
         }

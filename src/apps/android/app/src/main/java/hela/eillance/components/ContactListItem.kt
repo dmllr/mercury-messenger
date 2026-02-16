@@ -30,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import hela.eillance.camera.R
+import hela.eillance.localization.LocalizationMapping
 import hela.eillance.ndkio.CallDirection
 import hela.eillance.ndkio.CallStatus
 import hela.eillance.ndkio.Contact
@@ -39,7 +40,6 @@ import hela.eillance.ndkio.MessageDirection
 import hela.eillance.ndkio.MessageStatus
 import hela.eillance.ndkio.PeerConnectionState
 import hela.eillance.theme.extendedColors
-import hela.eillance.localization.LocalizationMapping
 import org.json.JSONObject
 import java.time.Instant
 import java.time.ZoneId
@@ -110,7 +110,8 @@ fun ContactListItem(
         val lastKind = contact.lastMsgKindEnum
 
         if (lastKind == HistoryEntryKind.VoiceCall || lastKind == HistoryEntryKind.VideoCall) {
-          val direction = if (contact.lastMessageDirection == 0) CallDirection.Outgoing else CallDirection.Incoming
+          val direction =
+            if (contact.lastMessageDirection == 0) CallDirection.Outgoing else CallDirection.Incoming
           val status = CallStatus.fromInt(contact.lastMessageStatus)
 
           CallEntryDisplay(

@@ -73,8 +73,9 @@ class CallSoundPlayer(private val context: Context) {
 
         SoundState.Ringing -> {
           // Play system default ringtone on the ringtone stream (loudspeaker)
-          val ringtoneUri = RingtoneManager.getActualDefaultRingtoneUri(context, RingtoneManager.TYPE_RINGTONE)
-            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+          val ringtoneUri =
+            RingtoneManager.getActualDefaultRingtoneUri(context, RingtoneManager.TYPE_RINGTONE)
+              ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
 
           if (ringtoneUri != null) {
             mediaPlayer?.setDataSource(context, ringtoneUri)

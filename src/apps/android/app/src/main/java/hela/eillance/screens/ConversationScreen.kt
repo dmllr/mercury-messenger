@@ -305,7 +305,10 @@ fun ConversationScreen(
               searchQuery = ""
               chatVM.search("")
             }) {
-              Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
+              Icon(
+                Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = stringResource(R.string.action_back)
+              )
             }
           },
           actions = {
@@ -315,7 +318,10 @@ fun ConversationScreen(
                 chatVM.search("")
                 focusRequester.requestFocus()
               }) {
-                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.action_close))
+                Icon(
+                  Icons.Default.Close,
+                  contentDescription = stringResource(R.string.action_close)
+                )
               }
             }
           },

@@ -58,12 +58,18 @@ fun IncomingCallScreen(
 
   val micGranted by remember {
     mutableStateOf(
-      ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+      ContextCompat.checkSelfPermission(
+        context,
+        Manifest.permission.RECORD_AUDIO
+      ) == PackageManager.PERMISSION_GRANTED
     )
   }
   val cameraGranted by remember {
     mutableStateOf(
-      ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+      ContextCompat.checkSelfPermission(
+        context,
+        Manifest.permission.CAMERA
+      ) == PackageManager.PERMISSION_GRANTED
     )
   }
 
@@ -103,7 +109,10 @@ fun IncomingCallScreen(
         Box(
           modifier = Modifier
             .padding(horizontal = 32.dp)
-            .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.8f), MaterialTheme.shapes.medium)
+            .background(
+              MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.8f),
+              MaterialTheme.shapes.medium
+            )
             .padding(16.dp)
         ) {
           Text(
@@ -117,7 +126,10 @@ fun IncomingCallScreen(
         Box(
           modifier = Modifier
             .padding(horizontal = 32.dp)
-            .background(MaterialTheme.extendedColors.warning.copy(alpha = 0.8f), MaterialTheme.shapes.medium)
+            .background(
+              MaterialTheme.extendedColors.warning.copy(alpha = 0.8f),
+              MaterialTheme.shapes.medium
+            )
             .padding(16.dp)
         ) {
           Text(
@@ -161,7 +173,8 @@ fun IncomingCallScreen(
 
         // Accept Button
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-          val containerColor = if (canAccept) MaterialTheme.extendedColors.success else Color.Gray.copy(alpha = 0.5f)
+          val containerColor =
+            if (canAccept) MaterialTheme.extendedColors.success else Color.Gray.copy(alpha = 0.5f)
           IconButton(
             onClick = { if (canAccept) onAccept() },
             modifier = Modifier.size(72.dp),

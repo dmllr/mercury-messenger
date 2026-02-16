@@ -11,6 +11,7 @@ import android.util.Log
 import androidx.annotation.Keep
 import hela.eillance.camera.R
 import hela.eillance.ndkio.CallDirection
+import hela.eillance.ndkio.Contact
 import hela.eillance.ndkio.ServiceConnectionState
 import hela.eillance.service.BackgroundObservers
 import hela.eillance.service.CallHandler
@@ -60,6 +61,8 @@ class MessengerService : Service() {
   private val _isCoreUnresponsive = MutableStateFlow(false)
   val isCoreUnresponsive = _isCoreUnresponsive.asStateFlow()
 
+  var isIncomingUIVisible: Boolean = false
+
   override fun onBind(intent: Intent?): IBinder = binder
 
   override fun onCreate() {
@@ -70,7 +73,13 @@ class MessengerService : Service() {
     notifications = MercuryNotifications(this)
     telecomIntegration = TelecomIntegration(this)
     callHandler = CallHandler(this, notifications, serviceScope)
-    observers = BackgroundObservers(this, serviceScope, notifications, callHandler, ::updateForegroundServiceNotification)
+    observers = BackgroundObservers(
+      this,
+      serviceScope,
+      notifications,
+      callHandler,
+      ::updateForegroundServiceNotification
+    )
 
     callHandler.init()
     telecomIntegration.registerPhoneAccount()
@@ -112,6 +121,10 @@ class MessengerService : Service() {
     }
   }
 
+  fun resolveContactInfo(peerId: String): Contact? {
+    return observers.getContact(peerId)
+  }
+
   fun restartCore() {
     serviceScope.launch(Dispatchers.IO) {
       engineMutex.withLock {
@@ -134,19 +147,26 @@ class MessengerService : Service() {
   fun rejectCall() = callHandler.rejectCall()
   fun hangup() = callHandler.hangup()
 
-  fun onTelecomDisconnect(connection: MercuryConnection) = callHandler.onTelecomDisconnect(connection)
+  fun onTelecomDisconnect(connection: MercuryConnection) =
+    callHandler.onTelecomDisconnect(connection)
 
   fun startLocalMedia(isVideo: Boolean) = callHandler.startLocalMedia(isVideo)
   fun stopLocalMedia() = callHandler.stopLocalMedia()
   fun setLocalVideoSink(sink: VideoSink?) = callHandler.setLocalVideoSink(sink)
-  fun setRemoteVideoSink(peerId: String, sink: VideoSink?) = callHandler.setRemoteVideoSink(peerId, sink)
+  fun setRemoteVideoSink(peerId: String, sink: VideoSink?) =
+    callHandler.setRemoteVideoSink(peerId, sink)
+
   fun setMicrophoneMute(muted: Boolean) = callHandler.setMicrophoneMute(muted)
   fun setSpeakerphoneOn(on: Boolean) = callHandler.setSpeakerphoneOn(on)
 
-  fun startVoiceCallViaTelecom(targetId: String) = telecomIntegration.placeTelecomCall(targetId, false)
-  fun startVideoCallViaTelecom(targetId: String) = telecomIntegration.placeTelecomCall(targetId, true)
+  fun startVoiceCallViaTelecom(targetId: String) =
+    telecomIntegration.placeTelecomCall(targetId, false)
 
-  fun showIncomingCallNotification(peerId: String) = notifications.showIncomingCallNotification(peerId)
+  fun startVideoCallViaTelecom(targetId: String) =
+    telecomIntegration.placeTelecomCall(targetId, true)
+
+  fun showIncomingCallNotification(peerId: String) =
+    notifications.showIncomingCallNotification(peerId)
 
   // Accessors for Legacy / External Use
   val backgroundCallVM: CallViewModel? get() = observers.callVM
@@ -225,7 +245,8 @@ class MessengerService : Service() {
   }
 
   private fun startForegroundService() {
-    val notification = notifications.buildForegroundServiceNotification(false, null, ServiceConnectionState.Unknown)
+    val notification =
+      notifications.buildForegroundServiceNotification(false, null, ServiceConnectionState.Unknown)
     try {
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         startForeground(
@@ -251,16 +272,6 @@ class MessengerService : Service() {
       inCall, peerId, connectionState, isVideo
     ) { shouldAcquire ->
       if (shouldAcquire) acquireWakeLock() else releaseWakeLock()
-    }
-
-    // Also notify Telecom integration if needed - done in CallHandler via state observation
-    val callState = callHandler.getLastCallState()
-    if (callState?.isRinging == true && callState.callDirection == CallDirection.Incoming) {
-      try {
-        telecomIntegration.processIncomingCall(callState.peerId)
-      } catch(e: Exception) {
-        notifications.showIncomingCallNotification(callState.peerId)
-      }
     }
   }
 
@@ -295,7 +306,7 @@ class MessengerService : Service() {
     private const val TAG = "CallService"
     const val INCOMING_CALL_NOTIFICATION_ID = 102
     const val MESSAGE_NOTIFICATION_ID_BASE = 1000
-    const val CALLS_CHANNEL_ID = "incoming_calls_channel_v3"
+    const val CALLS_CHANNEL_ID = "incoming_calls_channel_v6"
     const val ACTION_HANGUP = "hela.eillance.ACTION_HANGUP"
     const val ACTION_ACCEPT_CALL = "hela.eillance.ACTION_ACCEPT_CALL"
     const val ACTION_REJECT_CALL = "hela.eillance.ACTION_REJECT_CALL"

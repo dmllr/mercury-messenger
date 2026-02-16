@@ -45,7 +45,10 @@ fun PendingActionsScreen(
         title = { Text(stringResource(id = R.string.screen_title_pending_actions)) },
         navigationIcon = {
           IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(id = R.string.action_back))
+            Icon(
+              Icons.AutoMirrored.Filled.ArrowBack,
+              contentDescription = stringResource(id = R.string.action_back)
+            )
           }
         }
       )
@@ -54,7 +57,10 @@ fun PendingActionsScreen(
     LazyColumn(modifier = Modifier.padding(padding)) {
       if (actions.isEmpty()) {
         item {
-          Text(stringResource(id = R.string.debug_pending_actions_empty), modifier = Modifier.padding(16.dp))
+          Text(
+            stringResource(id = R.string.debug_pending_actions_empty),
+            modifier = Modifier.padding(16.dp)
+          )
         }
       }
       items(actions) { action ->
@@ -63,7 +69,14 @@ fun PendingActionsScreen(
           supportingContent = {
             Text(action.payload, style = MaterialTheme.typography.bodySmall, maxLines = 10)
           },
-          overlineContent = { Text(stringResource(id = R.string.debug_pending_action_id, action.id)) }
+          overlineContent = {
+            Text(
+              stringResource(
+                id = R.string.debug_pending_action_id,
+                action.id
+              )
+            )
+          }
         )
         HorizontalDivider()
       }

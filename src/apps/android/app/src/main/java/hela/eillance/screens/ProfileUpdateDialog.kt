@@ -100,7 +100,11 @@ private fun ProfileUpdateDialog(action: ProfileUpdateAction, onDismiss: () -> Un
           action.old?.displayName,
           action.new?.displayName
         )
-        CompareField(stringResource(id = R.string.profile_update_field_bio), action.old?.bio, action.new?.bio)
+        CompareField(
+          stringResource(id = R.string.profile_update_field_bio),
+          action.old?.bio,
+          action.new?.bio
+        )
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
           TextButton(onClick = onDismiss) {
@@ -147,7 +151,11 @@ private fun CompareField(label: String, oldValue: String?, newValue: String?) {
   if (old == new) return
 
   Column(modifier = Modifier.fillMaxWidth()) {
-    Text(label, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+    Text(
+      label,
+      style = MaterialTheme.typography.titleMedium,
+      color = MaterialTheme.colorScheme.primary
+    )
     Spacer(Modifier.height(8.dp))
     DiffText(label = stringResource(id = R.string.from_label), value = old)
     DiffText(label = stringResource(id = R.string.to_label), value = new)

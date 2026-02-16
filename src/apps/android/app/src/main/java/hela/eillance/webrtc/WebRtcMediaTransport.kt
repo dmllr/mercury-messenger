@@ -79,7 +79,12 @@ class WebRtcMediaTransport(private val context: Context, private val nativePoint
 
   var onSendSignalingMessage: ((String) -> Unit)? = null
 
-  private external fun nativeOnPeerConnectionStateChange(nativePointer: Long, peerId: String, context: Int, state: Int)
+  private external fun nativeOnPeerConnectionStateChange(
+    nativePointer: Long,
+    peerId: String,
+    context: Int,
+    state: Int
+  )
 
   init {
     initializeFactory()
@@ -160,7 +165,9 @@ class WebRtcMediaTransport(private val context: Context, private val nativePoint
       override fun onStandardizedIceConnectionChange(state: PeerConnection.IceConnectionState?) {}
       override fun onIceConnectionReceivingChange(receiving: Boolean) {}
       override fun onIceGatheringChange(state: PeerConnection.IceGatheringState?) {
-        if (state == PeerConnection.IceGatheringState.COMPLETE) sessions[peerId]?.iceGatheringComplete?.complete(Unit)
+        if (state == PeerConnection.IceGatheringState.COMPLETE) sessions[peerId]?.iceGatheringComplete?.complete(
+          Unit
+        )
       }
 
       override fun onIceCandidate(candidate: IceCandidate?) {}
@@ -324,12 +331,14 @@ class WebRtcMediaTransport(private val context: Context, private val nativePoint
         ) return
         val enumerator = Camera2Enumerator(context)
         val deviceName =
-          enumerator.deviceNames.firstOrNull { enumerator.isFrontFacing(it) } ?: enumerator.deviceNames.firstOrNull()
+          enumerator.deviceNames.firstOrNull { enumerator.isFrontFacing(it) }
+            ?: enumerator.deviceNames.firstOrNull()
         if (deviceName != null) {
           videoCapturer = enumerator.createCapturer(deviceName, null)
           val source = peerConnectionFactory!!.createVideoSource(videoCapturer!!.isScreencast)
           videoSource = source
-          surfaceTextureHelper = SurfaceTextureHelper.create("CaptureThread", eglBase.eglBaseContext)
+          surfaceTextureHelper =
+            SurfaceTextureHelper.create("CaptureThread", eglBase.eglBaseContext)
           videoCapturer!!.initialize(surfaceTextureHelper, context, source.capturerObserver)
           videoCapturer!!.startCapture(640, 480, 30)
           localVideoTrack = peerConnectionFactory!!.createVideoTrack("ARDAMSv0", source)
@@ -418,10 +427,16 @@ class WebRtcMediaTransport(private val context: Context, private val nativePoint
   private fun attachLocalMedia(session: MediaSession) {
     val senders = session.pc.senders
     localAudioTrack?.let { track ->
-      if (senders.none { it.track()?.id() == "ARDAMSa0" }) session.pc.addTrack(track, listOf("ARDAMS"))
+      if (senders.none { it.track()?.id() == "ARDAMSa0" }) session.pc.addTrack(
+        track,
+        listOf("ARDAMS")
+      )
     }
     localVideoTrack?.let { track ->
-      if (senders.none { it.track()?.id() == "ARDAMSv0" }) session.pc.addTrack(track, listOf("ARDAMS"))
+      if (senders.none { it.track()?.id() == "ARDAMSv0" }) session.pc.addTrack(
+        track,
+        listOf("ARDAMS")
+      )
     }
   }
 }

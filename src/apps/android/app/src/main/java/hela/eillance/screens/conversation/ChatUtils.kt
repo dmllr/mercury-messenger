@@ -47,7 +47,8 @@ fun buildMessageContent(content: String): AnnotatedString {
       val start = matcher.start()
       val end = matcher.end()
       val url = content.substring(start, end)
-      val finalUrl = if (url.startsWith("http://") || url.startsWith("https://")) url else "https://$url"
+      val finalUrl =
+        if (url.startsWith("http://") || url.startsWith("https://")) url else "https://$url"
       addLink(
         LinkAnnotation.Url(
           url = finalUrl,

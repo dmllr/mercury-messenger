@@ -61,7 +61,8 @@ fun AttachmentInfoRow(
   val icon = getFileIcon(attachment.mime)
   val fileSizeStr = Formatter.formatShortFileSize(context, attachment.size)
   val isDone = attachment.status == AttachmentStatus.Done
-  val isCanceled = attachment.status == AttachmentStatus.Canceled || attachment.status == AttachmentStatus.PeerCanceled
+  val isCanceled =
+    attachment.status == AttachmentStatus.Canceled || attachment.status == AttachmentStatus.PeerCanceled
   val isPaused = attachment.status == AttachmentStatus.Paused
   val isPending = attachment.status == AttachmentStatus.Pending
 
@@ -159,7 +160,8 @@ private fun TransferControl(
   val isPending = attachment.status == AttachmentStatus.Pending
   val isDone = attachment.status == AttachmentStatus.Done
   val isFailed = attachment.status == AttachmentStatus.Failed
-  val isCanceled = attachment.status == AttachmentStatus.Canceled || attachment.status == AttachmentStatus.PeerCanceled
+  val isCanceled =
+    attachment.status == AttachmentStatus.Canceled || attachment.status == AttachmentStatus.PeerCanceled
 
   Box(contentAlignment = Alignment.Center) {
     if (isTransferring && progress != null) {

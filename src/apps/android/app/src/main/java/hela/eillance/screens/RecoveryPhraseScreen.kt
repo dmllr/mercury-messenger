@@ -43,7 +43,10 @@ fun RecoveryPhraseScreen(profileVM: ProfileViewModel, onBack: () -> Unit) {
         title = { Text(stringResource(id = R.string.screen_title_recovery_phrase)) },
         navigationIcon = {
           IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(id = R.string.action_back))
+            Icon(
+              Icons.AutoMirrored.Filled.ArrowBack,
+              contentDescription = stringResource(id = R.string.action_back)
+            )
           }
         }
       )

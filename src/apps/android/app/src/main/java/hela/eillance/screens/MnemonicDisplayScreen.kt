@@ -56,7 +56,10 @@ fun MnemonicDisplayScreen(
     ) {
       if (mnemonic == null) {
         CircularProgressIndicator()
-        Text(stringResource(id = R.string.identity_generating_progress), modifier = Modifier.padding(top = 16.dp))
+        Text(
+          stringResource(id = R.string.identity_generating_progress),
+          modifier = Modifier.padding(top = 16.dp)
+        )
       } else {
         Icon(
           imageVector = Icons.Default.Warning,
