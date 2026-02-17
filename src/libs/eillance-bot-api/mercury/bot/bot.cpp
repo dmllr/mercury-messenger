@@ -93,6 +93,21 @@ class Bot::Impl {
           message_handler_(msg);
         }
     );
+
+    client_->GetAccountService()->SetOnMyProfileUpdatedCallback([]() {});
+    client_->GetContactService()->SetContactRequestCallback([](auto const&) {});
+    client_->GetContactService()->SetContactStatusChangedCallback([](auto const&, auto) {});
+    client_->GetContactService()->SetContactRemovedCallback([](auto const&) {});
+    client_->GetProfileService()->SetContactProfileUpdatedCallback([](auto const&) {});
+    client_->GetMediaCallService()->SetIncomingCallCallback([](auto const&, auto) {});
+    client_->GetMediaCallService()->SetCallRingingCallback([](auto const&) {});
+    client_->GetMediaCallService()->SetCallAcceptedCallback([](auto const&) {});
+    client_->GetMediaCallService()->SetCallTerminatedCallback([](auto const&) {});
+    client_->GetMediaCallService()->SetFrameReceivedCallback([](auto const&) {});
+    client_->GetMessagingService()->SetChatMessageReceivedCallback([](auto const&, auto const&) {});
+    client_->GetMessagingService()->SetMessageStatusChangedCallback([](auto const&, auto, auto) {});
+    client_->SetStatusCallback([](auto const&, auto, auto) {});
+
   }
 };
 

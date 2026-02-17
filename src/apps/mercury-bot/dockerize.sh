@@ -9,7 +9,6 @@ readonly VERSION_FILE="${PROJECT_ROOT}/version.properties"
 
 # Devenv configuration
 readonly DEVENV_IMAGE_NAME="project-mercury-devenv"
-# We assume the Dockerfile is strictly inside this directory
 readonly DEVENV_CONTEXT_DIR="${PROJECT_ROOT}/devenv"
 readonly IMAGE_NAME_BASE="mercury-bot"
 
@@ -92,7 +91,7 @@ info "Building mercury-bot in Release mode..."
 # The source code is now available via the volume mount in run_in_devenv
 run_in_devenv bash -c "
   cmake -S . -B ${BUILD_DIR} -G Ninja -DCMAKE_BUILD_TYPE=Release \
-  && cmake --build ${BUILD_DIR} --target mercury-bot \
+  && cmake --build ${BUILD_DIR} -j 20 --target mercury-bot \
   && llvm-strip ${BUILD_DIR}/bin/mercury-bot
 "
 success "Build complete."
@@ -131,12 +130,10 @@ if [[ "${PACK_IMAGE}" == "true" ]]; then
 
   docker save "${FINAL_IMAGE_VERSIONED}" | gzip > "${EXPORT_FILE}"
 
-  success "Image packed successfully."
-  info "To deploy on Synology NAS:"
-  info "1. Open Container Manager."
-  info "2. Go to 'Image' -> 'Import' -> 'Add from File'."
-  info "3. Select '${EXPORT_FILE}'."
-fi
+  EXPORT_FILE="${PROJECT_ROOT}/mercury-bot-latest.tar.gz"
+  info "Packing image for Synology NAS (saving to ${EXPORT_FILE})..."
 
-info "You can run the bot locally:"
-info "  docker run -it --rm -v \$(pwd)/identity:/data/identity -v \$(pwd)/output:/data/output ${FINAL_IMAGE_VERSIONED}"
+  docker save "${FINAL_IMAGE_LATEST}" | gzip > "${EXPORT_FILE}"
+
+  success "Image packed successfully."
+fi
