@@ -437,9 +437,8 @@ class MediaCallService {
     auto const local_id = account_service_->GetId().ToString().substr(0, 8);
     auto const remote_id = remote.ToString().substr(0, 8);
 
-    auto const& [first, second] = (local_id <= remote_id)
-      ? std::tie(local_id, remote_id)
-      : std::tie(remote_id, local_id);
+    auto const& [first, second] =
+        (local_id <= remote_id) ? std::tie(local_id, remote_id) : std::tie(remote_id, local_id);
 
     auto const timestamp = static_cast<uint64_t>(Time::Now());
     return CallID(first + "-" + second + "-" + std::to_string(timestamp));
