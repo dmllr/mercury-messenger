@@ -3,6 +3,11 @@ project(mercury-cli CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+if (MSVC)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /bigobj")
+  add_definitions(-D _CRT_SECURE_NO_WARNINGS)
+endif(MSVC)
+
 execute_process(
   COMMAND git rev-parse --show-toplevel
   OUTPUT_VARIABLE REPO_ROOT
