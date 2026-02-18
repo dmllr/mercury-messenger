@@ -82,7 +82,7 @@ class RtcMediaTransport : public transport::MediaTransport::Interface {
       }
     });
 
-    pc->onGatheringStateChange([this, peer_id, pc](::rtc::PeerConnection::GatheringState const state) {
+    pc->onGatheringStateChange([this, peer_id, pc](::rtc::PeerConnection::GatheringState const state) -> void {
       if (state == ::rtc::PeerConnection::GatheringState::Complete) {
         if (auto const desc = pc->localDescription()) {
           nlohmann::json const msg = {
