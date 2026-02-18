@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -14,7 +15,7 @@ class Client;
 namespace mercury::bot {
 
 class Bot {
- public:
+public:
   struct Options {
     std::filesystem::path identity_path;
     std::string signaling_url;
@@ -43,6 +44,9 @@ class Bot {
   // Sends a text message to the specified chat (user ID).
   void SendMessage(std::string const& chat_id, std::string const& text) const;
 
+  // Marks a specific message as read, sending a read receipt to the sender.
+  void MarkAsRead(std::string const& chat_id, std::uint64_t message_id) const;
+
   // --- Events ---
 
   // Register a callback for incoming text messages.
@@ -53,7 +57,7 @@ class Bot {
   // Returns the bot's own ID.
   [[nodiscard]] auto GetId() const -> std::string;
 
- private:
+private:
   class Impl;
   std::unique_ptr<Impl> impl_;
 };

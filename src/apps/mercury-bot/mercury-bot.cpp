@@ -87,7 +87,7 @@ auto main(int argc, char** argv) -> int {
     LGI << "Bot initialized with ID: " << bot.GetId();
 
     // --- MESSAGE HANDLER ---
-    bot.OnMessage([&output_path](mercury::bot::Message const& message) -> void {
+    bot.OnMessage([&output_path, &bot](mercury::bot::Message const& message) -> void {
       std::string const sender_prefix = message.from.id.substr(0, 8);
       LGI << "Received message from " << sender_prefix << "...: \"" << message.text << "\"";
 
@@ -98,6 +98,7 @@ auto main(int argc, char** argv) -> int {
       if (std::ofstream out_file(file_path); out_file) {
         out_file << message.text;
         LGI << "Saved to " << file_path;
+        bot.MarkAsRead(message.from.id, message.message_id);
       } else {
         LGE << "Failed to write to file: " << file_path;
       }

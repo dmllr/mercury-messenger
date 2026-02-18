@@ -43,8 +43,25 @@ class Bot::Impl {
   }
 
   void SetupCallbacks() {
+    // 1. Set required no-op defaults for all Client invariants
+    client_->SetStatusCallback([](auto const&, auto, auto) -> void {});
+    client_->GetAccountService()->SetOnMyProfileUpdatedCallback([]() -> void {});
+
+    client_->GetContactService()->SetContactStatusChangedCallback([](auto const&, auto) -> void {});
+    client_->GetContactService()->SetContactRemovedCallback([](auto const&) -> void {});
+
+    client_->GetProfileService()->SetContactProfileUpdatedCallback([](auto const&) -> void {});
+
+    client_->GetMediaCallService()->SetCallRingingCallback([](auto const&) -> void {});
+    client_->GetMediaCallService()->SetCallAcceptedCallback([](auto const&) -> void {});
+    client_->GetMediaCallService()->SetCallTerminatedCallback([](auto const&) -> void {});
+    client_->GetMediaCallService()->SetFrameReceivedCallback([](auto const&) -> void {});
+
+    client_->GetMessagingService()->SetMessageStatusChangedCallback([](auto const&, auto, auto) -> void {});
+
+    // 2. Override specific callbacks based on Bot options
     if (options_.auto_accept_contacts) {
-      client_->GetContactService()->SetContactRequestCallback([this](eillance::ContactID const& peer_id) {
+      client_->GetContactService()->SetContactRequestCallback([this](eillance::ContactID const& peer_id) -> void {
         // Automatically accept friend requests
         client_->ConfirmContact(peer_id);
       });
@@ -52,14 +69,14 @@ class Bot::Impl {
 
     if (options_.auto_reject_calls) {
       client_->GetMediaCallService()->SetIncomingCallCallback(
-          [this](eillance::ContactID const& peer_id, eillance::messaging::HistoryEntryKind /*call_type*/) {
+          [this](eillance::ContactID const& peer_id, eillance::messaging::HistoryEntryKind /*call_type*/) -> void {
             client_->RejectCall(peer_id);
           }
       );
     }
 
     client_->GetMessagingService()->SetChatMessageReceivedCallback(
-        [this](eillance::ContactID const& peer_id, eillance::messaging::HistoryEntryRecord const& record) {
+        [this](eillance::ContactID const& peer_id, eillance::messaging::HistoryEntryRecord const& record) -> void {
           if (!message_handler_) {
             return;
           }
@@ -93,21 +110,6 @@ class Bot::Impl {
           message_handler_(msg);
         }
     );
-
-    client_->GetAccountService()->SetOnMyProfileUpdatedCallback([]() {});
-    client_->GetContactService()->SetContactRequestCallback([](auto const&) {});
-    client_->GetContactService()->SetContactStatusChangedCallback([](auto const&, auto) {});
-    client_->GetContactService()->SetContactRemovedCallback([](auto const&) {});
-    client_->GetProfileService()->SetContactProfileUpdatedCallback([](auto const&) {});
-    client_->GetMediaCallService()->SetIncomingCallCallback([](auto const&, auto) {});
-    client_->GetMediaCallService()->SetCallRingingCallback([](auto const&) {});
-    client_->GetMediaCallService()->SetCallAcceptedCallback([](auto const&) {});
-    client_->GetMediaCallService()->SetCallTerminatedCallback([](auto const&) {});
-    client_->GetMediaCallService()->SetFrameReceivedCallback([](auto const&) {});
-    client_->GetMessagingService()->SetChatMessageReceivedCallback([](auto const&, auto const&) {});
-    client_->GetMessagingService()->SetMessageStatusChangedCallback([](auto const&, auto, auto) {});
-    client_->SetStatusCallback([](auto const&, auto, auto) {});
-
   }
 };
 
@@ -135,7 +137,7 @@ void Bot::Start() const {
   // The client starts its own threads.
   // We detach the thread running the client event loop.
   // The lifecycle is managed by the Bot class destructor calling Stop().
-  std::thread([client = impl_->client_] { client->Start(); }).detach();
+  std::thread([client = impl_->client_]() -> void { client->Start(); }).detach();
 }
 
 void Bot::Stop() const {
@@ -147,6 +149,11 @@ void Bot::Stop() const {
 void Bot::SendMessage(std::string const& chat_id, std::string const& text) const {
   eillance::ContactID const peer_id(chat_id);
   std::ignore = impl_->client_->SendChatMessage(peer_id, text);
+}
+
+void Bot::MarkAsRead(std::string const& chat_id, std::uint64_t message_id) const {
+  eillance::ContactID const peer_id(chat_id);
+  impl_->client_->MarkMessagesAsRead(peer_id, {message_id});
 }
 
 void Bot::OnMessage(std::function<void(Message const&)> handler) const {
