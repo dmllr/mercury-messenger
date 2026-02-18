@@ -103,10 +103,11 @@ class TestFramework:
 
     for proc_def in scenario.processes:
       full_command = [proc_def.executable] + proc_def.args
-      print(f"Starting {proc_def.name}...")
+      print(f"Creating {proc_def.name}...")
 
       try:
-        container = docker_utils.run_container(
+        # Create the STOPPED container
+        container = docker_utils.create_container(
           self.client,
           self.image_tag,
           proc_def.name,
@@ -117,11 +118,15 @@ class TestFramework:
         self.active_containers.append(container)
         container_map[proc_def.name] = container
 
-        # Connect to requested networks
+        # Attach all networks
         for net_name, ip in proc_def.networks.items():
           if net_name not in net_map:
             raise ValueError(f"Process {proc_def.name} requests unknown network {net_name}")
           net_map[net_name].connect(container, ipv4_address=ip)
+
+        # Start the container
+        print(f"Starting {proc_def.name}...")
+        container.start()
 
       except Exception as e:
         print(f"Failed to start process {proc_def.name}: {e}")

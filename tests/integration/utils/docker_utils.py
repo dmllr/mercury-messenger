@@ -86,7 +86,7 @@ def run_compile_container(client: docker.DockerClient, image: str, command: str,
   if result['StatusCode'] != 0:
     raise Exception(f"Compilation container exited with code {result['StatusCode']}")
 
-def run_container(
+def create_container(
     client: docker.DockerClient,
     image: str,
     name: str,
@@ -95,7 +95,7 @@ def run_container(
     environment: Optional[dict] = None,
     detach: bool = True,
 ):
-  """Runs a docker container, ensuring any previous instance with the same name is removed."""
+  """Creates a docker container but DOES NOT start it."""
   try:
     existing = client.containers.get(name)
     existing.stop()
@@ -112,7 +112,4 @@ def run_container(
     environment=environment,
     cap_add=["NET_ADMIN", "SYS_NICE"]
   )
-  # Don't connect to network here, let the caller handle multiple network connections
-
-  container.start()
   return container
