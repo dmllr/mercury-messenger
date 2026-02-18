@@ -1,6 +1,5 @@
 #pragma once
 
-#include <map>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -138,7 +137,10 @@ class InternalMessagingService {
   }
 
   void ProcessDataChannelMessage(ContactID const& peer_id, Json const& message) {
-    if (!message.contains("type")) return;
+    if (!message.contains("type")) {
+      return;
+    }
+
     std::string const type = message["type"];
 
     if (type == "key_exchange") {
@@ -161,7 +163,6 @@ class InternalMessagingService {
     } else if (type == "call_ringing") {
       media_call_service_->OnCallRinging(peer_id, message.value("call_id", ""));
     } else if (type == "offer" || type == "answer") {
-      // Media Signaling over Data Channel
       ProcessSignalingMessage(peer_id, type, message);
     } else if (type == "contact_removed") {
       contact_service_->OnContactRemoved(peer_id);
@@ -191,10 +192,15 @@ class InternalMessagingService {
       return;
     }
 
+    // Prevent duplicate Open events (e.g. from connection glare) from resetting the cipher.
+    if (peer->data_channel_is_open.exchange(true)) {
+      LGI << "Data channel with " << peer_id.ToString() << " is already open. Ignoring duplicate event.";
+      return;
+    }
+
     LGI << "Data channel with " << peer_id.ToString() << " opened.";
 
     peer->session_cipher->Reset();
-    peer->data_channel_is_open = true;
     peer->last_activity_time = Time::Now();
 
     {
@@ -209,7 +215,7 @@ class InternalMessagingService {
           {"key", std::vector<std::byte>(my_pub_key.begin(), my_pub_key.end())},
           {"is_reply", false}
       };
-      data_transport_->SendJson(peer_id, key_msg);
+      std::ignore = data_transport_->SendJson(peer_id, key_msg);
     }
 
     messaging_service_->UnsuspendAndDeliver(peer_id);
@@ -217,11 +223,10 @@ class InternalMessagingService {
 
  private:
   void HandleSdp(ContactID const& peer_id, std::string const& type, Json const& message) {
-    std::string context_str = message.value("context", "data");
-    bool is_media = (context_str == "media");
+    std::string const context_str = message.value("context", "data");
+    bool const is_media = (context_str == "media");
 
-    auto peer = data_transport_->GetPeer(peer_id);
-    if (!peer) {
+    if (auto peer = data_transport_->GetPeer(peer_id); !peer) {
       if (type == "offer") {
         peer = std::make_shared<transport::Peer>(peer_id);
         data_transport_->AddPeer(peer_id, peer);
