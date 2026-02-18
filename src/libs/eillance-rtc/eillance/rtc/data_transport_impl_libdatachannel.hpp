@@ -217,8 +217,6 @@ class RtcDataTransport : public transport::DataTransport::Interface {
 
   void Connect(ContactID const& peer_id) override {
     CreatePeerConnection(peer_id);
-    // Explicitly create data channel to ensure one exists for the offer/negotiation
-    CreateDataChannel(peer_id);
   }
 
   void Disconnect(ContactID const& peer_id) override {
@@ -232,44 +230,72 @@ class RtcDataTransport : public transport::DataTransport::Interface {
 
   void CreateOffer(ContactID const& peer_id) override {
     auto peer = GetPeer(peer_id);
-    if (!peer || !peer->data_peer_connection) return;
+    if (!peer || !peer->data_peer_connection) {
+      return;
+    }
+
+    CreateDataChannel(peer_id);
+
     auto pc = std::static_pointer_cast<::rtc::PeerConnection>(peer->data_peer_connection);
     pc->setLocalDescription();
   }
 
   void CreateAnswer(ContactID const& peer_id) override {
     auto peer = GetPeer(peer_id);
-    if (!peer || !peer->data_peer_connection) return;
+    if (!peer || !peer->data_peer_connection) {
+      return;
+    }
+    // We are Answerer: Wait for onDataChannel event
     auto pc = std::static_pointer_cast<::rtc::PeerConnection>(peer->data_peer_connection);
     pc->setLocalDescription(::rtc::Description::Type::Answer);
   }
 
   void SetRemoteDescription(ContactID const& peer_id, std::string const& sdp, std::string const& type) override {
     auto peer = GetPeer(peer_id);
-    if (!peer || !peer->data_peer_connection) return;
+    if (!peer || !peer->data_peer_connection) {
+      return;
+    }
     auto pc = std::static_pointer_cast<::rtc::PeerConnection>(peer->data_peer_connection);
     pc->setRemoteDescription(::rtc::Description(sdp, type));
   }
 
   auto SendData(ContactID const& peer_id, std::span<std::byte const> message) const -> bool override {
-    std::lock_guard<std::mutex> const lock(peersMutex_);
-    auto it = peers_.find(peer_id);
-    if (it == peers_.end() || !it->second->data_channel) return false;
-    auto dc = std::static_pointer_cast<::rtc::DataChannel>(it->second->data_channel);
+    std::shared_ptr<::rtc::DataChannel> dc;
+    {
+      std::lock_guard<std::mutex> const lock(peersMutex_);
+      auto const it = peers_.find(peer_id);
+      if (it == peers_.end() || !it->second->data_channel) {
+        return false;
+      }
+      dc = std::static_pointer_cast<::rtc::DataChannel>(it->second->data_channel);
+    }
+
     if (dc && dc->isOpen()) {
-      return dc->send(reinterpret_cast<std::byte const*>(message.data()), message.size());
+      return dc->send(message.data(), message.size());
     }
     return false;
   }
 
   auto SendJson(ContactID const& peer_id, Json const& message) const -> bool override {
-    std::lock_guard<std::mutex> const lock(peersMutex_);
-    auto it = peers_.find(peer_id);
-    if (it == peers_.end() || !it->second->data_channel) return false;
-    auto dc = std::static_pointer_cast<::rtc::DataChannel>(it->second->data_channel);
-    if (dc && dc->isOpen()) {
-      return dc->send(message.dump());
+    std::shared_ptr<::rtc::DataChannel> dc;
+    {
+      std::lock_guard<std::mutex> const lock(peersMutex_);
+      auto it = peers_.find(peer_id);
+      if (it == peers_.end() || !it->second->data_channel) {
+        LGW << "SendJson failed: Peer not found or no DC for " << peer_id;
+        return false;
+      }
+      dc = std::static_pointer_cast<::rtc::DataChannel>(it->second->data_channel);
     }
+
+    if (dc && dc->isOpen()) {
+      bool const result = dc->send(message.dump());
+      if (!result) {
+        LGE << "SendJson: dc->send() returned false for " << peer_id;
+      }
+      return result;
+    }
+    LGE << "SendJson failed: DC closed for " << peer_id;
     return false;
   }
 
@@ -410,7 +436,7 @@ class RtcDataTransport : public transport::DataTransport::Interface {
     }
     auto pc = std::make_shared<::rtc::PeerConnection>(config);
 
-    pc->onStateChange([this, peer_id](::rtc::PeerConnection::State state) {
+    pc->onStateChange([this, peer_id](::rtc::PeerConnection::State state) -> void {
       INVARIANT(status_callback_);
       (*status_callback_)(
           peer_id,
@@ -419,43 +445,23 @@ class RtcDataTransport : public transport::DataTransport::Interface {
       );
     });
 
-    pc->onGatheringStateChange([this, peer_id](::rtc::PeerConnection::GatheringState state) {
+    pc->onGatheringStateChange([this, peer_id, pc](::rtc::PeerConnection::GatheringState state) {
       if (state == ::rtc::PeerConnection::GatheringState::Complete) {
-        if (auto const peer = GetPeer(peer_id)) {
-          auto const pc_ptr = std::static_pointer_cast<::rtc::PeerConnection>(peer->data_peer_connection);
-          if (pc_ptr && pc_ptr->localDescription()) {
-            Json const message = {
-                {"type", pc_ptr->localDescription()->typeString()},
-                {"sdp", std::string(*pc_ptr->localDescription())},
-                {"context", "data"},
-                {"to", peer_id.ToString()}
-            };
-            WsSendMessage(message);
-          }
+        if (pc && pc->localDescription()) {
+          Json const message = {
+              {"type", pc->localDescription()->typeString()},
+              {"sdp", std::string(*pc->localDescription())},
+              {"context", "data"},
+              {"to", peer_id.ToString()}
+          };
+          WsSendMessage(message);
         }
       }
     });
 
     pc->onDataChannel([this, peer_id](std::shared_ptr<::rtc::DataChannel> const& dc) -> void {
-      LGI << "Data channel received from " << peer_id;
-      auto peer = GetPeer(peer_id);
-      if (!peer) {
-        return;
-      }
-
-      dc->onOpen([this, peer_id]() -> void { delegate_->OnDataChannelOpen(peer_id); });
-      if (peer->on_data_channel_message) {
-        dc->onMessage(nullptr, [cb = peer->on_data_channel_message](::rtc::message_variant const& msg) -> void {
-          if (std::holds_alternative<std::string>(msg)) {
-            auto const& str = std::get<std::string>(msg);
-            cb(std::span<std::byte const>(reinterpret_cast<std::byte const*>(str.data()), str.size()));
-          } else if (std::holds_alternative<::rtc::binary>(msg)) {
-            auto const& bin = std::get<::rtc::binary>(msg);
-            cb(std::span<std::byte const>(bin));
-          }
-        });
-      }
-      peer->data_channel = dc;
+      LGI << "Incoming DataChannel from " << peer_id;
+      ConfigureDataChannel(peer_id, dc);
     });
 
     auto peer = GetPeer(peer_id);
@@ -464,12 +470,8 @@ class RtcDataTransport : public transport::DataTransport::Interface {
       AddPeer(peer_id, peer);
     }
     peer->data_peer_connection = pc;
-
-    // Create data channel immediately if initiating
-    // NOTE: In the previous implementation, CreateDataChannel was called by Client::Connect explicitly.
-    // The transport::DataTransport::Interface exposes CreateOffer which assumes channel exists for DTLS?
-    // Actually, libdatachannel needs at least one channel (or track) to negotiate DTLS.
-    // We will let Client call CreateDataChannel explicitly via the interface.
+    // Reset data channel to ensure we don't use a stale one from a previous connection
+    peer->data_channel = nullptr;
   }
 
   void CreateDataChannel(ContactID const& peer_id) {
@@ -480,19 +482,45 @@ class RtcDataTransport : public transport::DataTransport::Interface {
     auto pc = std::static_pointer_cast<::rtc::PeerConnection>(peer->data_peer_connection);
 
     auto dc = pc->createDataChannel("data");
-    dc->onOpen([this, peer_id]() -> void { delegate_->OnDataChannelOpen(peer_id); });
-    if (peer->on_data_channel_message) {
-      dc->onMessage(nullptr, [cb = peer->on_data_channel_message](::rtc::message_variant const& msg) -> void {
-        if (std::holds_alternative<std::string>(msg)) {
-          auto const& str = std::get<std::string>(msg);
-          cb(std::span<std::byte const>(reinterpret_cast<std::byte const*>(str.data()), str.size()));
-        } else if (std::holds_alternative<::rtc::binary>(msg)) {
-          auto const& bin = std::get<::rtc::binary>(msg);
-          cb(std::span<std::byte const>(bin));
-        }
-      });
+    LGI << "Created DataChannel for " << peer_id;
+    ConfigureDataChannel(peer_id, dc);
+  }
+
+  void ConfigureDataChannel(ContactID const& peer_id, std::shared_ptr<::rtc::DataChannel> const& dc) const {
+    auto peer = GetPeer(peer_id);
+    if (!peer) {
+      return;
     }
+
+    auto on_open_func = [this, peer_id]() {
+      DispatchQueue::MainThread().Dispatch([this, peer_id]() {
+        if (delegate_) delegate_->OnDataChannelOpen(peer_id);
+      });
+    };
+
+    dc->onOpen(on_open_func);
+
+    dc->onMessage(nullptr, [peer, peer_id](::rtc::message_variant const& msg) -> void {
+      if (!peer || !peer->on_data_channel_message) {
+        LGW << "DataChannel message received but no handler set for " << peer_id;
+        return;
+      }
+      auto& cb = peer->on_data_channel_message;
+      if (std::holds_alternative<std::string>(msg)) {
+        auto const& str = std::get<std::string>(msg);
+        cb(std::span<std::byte const>(reinterpret_cast<std::byte const*>(str.data()), str.size()));
+      } else if (std::holds_alternative<::rtc::binary>(msg)) {
+        auto const& bin = std::get<::rtc::binary>(msg);
+        cb(std::span<std::byte const>(bin));
+      }
+    });
+
     peer->data_channel = dc;
+
+    // Check if already open (race condition mitigation)
+    if (dc->isOpen()) {
+      on_open_func();
+    }
   }
 
   ContactID id_{};
