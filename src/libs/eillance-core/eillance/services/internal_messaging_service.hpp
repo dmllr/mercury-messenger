@@ -98,40 +98,35 @@ class InternalMessagingService {
   }
 
   void SetupPeerHandlers(std::shared_ptr<transport::Peer> const& peer, ContactID const& peer_id) {
-    peer->on_data_channel_message = [this, peer_id](std::span<std::byte const> msg) {
+    peer->on_data_channel_message = [this, peer_id](std::span<std::byte const> const msg) -> void {
       if (auto p = data_transport_->GetPeer(peer_id)) {
         p->last_activity_time = Time::Now();
       }
 
-      bool processed = false;
       if (!msg.empty() && msg[0] == std::byte{0xFE}) {
         file_transfer_service_->ProcessBinaryMessage(peer_id, msg);
-        processed = true;
       } else {
         try {
           std::string json_str;
           json_str.resize(msg.size());
           std::memcpy(json_str.data(), msg.data(), msg.size());
           ProcessDataChannelMessage(peer_id, Json::parse(json_str));
-          processed = true;
         } catch (...) {
           LGE << "Failed to parse data channel message from " << peer_id.ToString();
         }
       }
 
-      if (processed) {
-        bool should_unsuspend = false;
-        {
-          auto const now = Time::Now();
-          std::lock_guard<std::mutex> const lock(unsuspend_mutex_);
-          if (now - last_unsuspend_times_[peer_id] >= kUnsuspendInterval) {
-            last_unsuspend_times_[peer_id] = now;
-            should_unsuspend = true;
-          }
+      bool should_unsuspend = false;
+      {
+        auto const now = Time::Now();
+        std::lock_guard<std::mutex> const lock(unsuspend_mutex_);
+        if (now - last_unsuspend_times_[peer_id] >= kUnsuspendInterval) {
+          last_unsuspend_times_[peer_id] = now;
+          should_unsuspend = true;
         }
-        if (should_unsuspend) {
-          messaging_service_->UnsuspendAndDeliver(peer_id);
-        }
+      }
+      if (should_unsuspend) {
+        messaging_service_->UnsuspendAndDeliver(peer_id);
       }
     };
   }

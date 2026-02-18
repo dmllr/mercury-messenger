@@ -419,12 +419,12 @@ class RtcDataTransport : public transport::DataTransport::Interface {
       );
     });
 
-    pc->onGatheringStateChange([this, peer_id, pc_ptr = pc](::rtc::PeerConnection::GatheringState state) {
+    pc->onGatheringStateChange([this, peer_id](::rtc::PeerConnection::GatheringState state) {
       if (state == ::rtc::PeerConnection::GatheringState::Complete) {
-        if (auto peer = GetPeer(peer_id)) {
-          auto pc_ptr = std::static_pointer_cast<::rtc::PeerConnection>(peer->data_peer_connection);
+        if (auto const peer = GetPeer(peer_id)) {
+          auto const pc_ptr = std::static_pointer_cast<::rtc::PeerConnection>(peer->data_peer_connection);
           if (pc_ptr && pc_ptr->localDescription()) {
-            Json message = {
+            Json const message = {
                 {"type", pc_ptr->localDescription()->typeString()},
                 {"sdp", std::string(*pc_ptr->localDescription())},
                 {"context", "data"},
@@ -436,14 +436,16 @@ class RtcDataTransport : public transport::DataTransport::Interface {
       }
     });
 
-    pc->onDataChannel([this, peer_id](std::shared_ptr<::rtc::DataChannel> const& dc) {
+    pc->onDataChannel([this, peer_id](std::shared_ptr<::rtc::DataChannel> const& dc) -> void {
       LGI << "Data channel received from " << peer_id;
       auto peer = GetPeer(peer_id);
-      if (!peer) return;
+      if (!peer) {
+        return;
+      }
 
-      dc->onOpen([this, peer_id]() { delegate_->OnDataChannelOpen(peer_id); });
+      dc->onOpen([this, peer_id]() -> void { delegate_->OnDataChannelOpen(peer_id); });
       if (peer->on_data_channel_message) {
-        dc->onMessage(nullptr, [cb = peer->on_data_channel_message](::rtc::message_variant const& msg) {
+        dc->onMessage(nullptr, [cb = peer->on_data_channel_message](::rtc::message_variant const& msg) -> void {
           if (std::holds_alternative<std::string>(msg)) {
             auto const& str = std::get<std::string>(msg);
             cb(std::span<std::byte const>(reinterpret_cast<std::byte const*>(str.data()), str.size()));
@@ -472,13 +474,15 @@ class RtcDataTransport : public transport::DataTransport::Interface {
 
   void CreateDataChannel(ContactID const& peer_id) {
     auto peer = GetPeer(peer_id);
-    if (!peer || !peer->data_peer_connection) return;
+    if (!peer || !peer->data_peer_connection) {
+      return;
+    }
     auto pc = std::static_pointer_cast<::rtc::PeerConnection>(peer->data_peer_connection);
 
     auto dc = pc->createDataChannel("data");
-    dc->onOpen([this, peer_id]() { delegate_->OnDataChannelOpen(peer_id); });
+    dc->onOpen([this, peer_id]() -> void { delegate_->OnDataChannelOpen(peer_id); });
     if (peer->on_data_channel_message) {
-      dc->onMessage(nullptr, [cb = peer->on_data_channel_message](::rtc::message_variant const& msg) {
+      dc->onMessage(nullptr, [cb = peer->on_data_channel_message](::rtc::message_variant const& msg) -> void {
         if (std::holds_alternative<std::string>(msg)) {
           auto const& str = std::get<std::string>(msg);
           cb(std::span<std::byte const>(reinterpret_cast<std::byte const*>(str.data()), str.size()));

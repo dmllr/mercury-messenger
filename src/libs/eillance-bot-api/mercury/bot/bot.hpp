@@ -15,7 +15,7 @@ class Client;
 namespace mercury::bot {
 
 class Bot {
-public:
+ public:
   struct Options {
     std::filesystem::path identity_path;
     std::string signaling_url;
@@ -57,7 +57,7 @@ public:
   // Returns the bot's own ID.
   [[nodiscard]] auto GetId() const -> std::string;
 
-private:
+ private:
   class Impl;
   std::unique_ptr<Impl> impl_;
 };
