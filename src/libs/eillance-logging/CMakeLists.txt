@@ -15,3 +15,7 @@ target_link_libraries(eillance-logging INTERFACE
 if(ANDROID)
   target_link_libraries(eillance-logging INTERFACE log)
 endif()
+
+target_compile_definitions(eillance-logging INTERFACE
+  $<$<CONFIG:Release>:PLOG_DISABLE_LOGGING>
+)
