@@ -457,3 +457,83 @@ TEST_F(ConversationViewModelTest, LoadUpToMessage_OverridesInitialLoad) {
   // Ensure we have loaded enough history
   EXPECT_GT(final_state.history.size(), 50);
 }
+
+TEST_F(ConversationViewModelTest, EditMessagePropagates) {
+  auto observer = std::make_shared<MockConversationObserver>();
+  vm_->SetObserver(observer);
+
+  vm_->SendText("Typo");
+  WaitFor([&] { return !observer->GetState().history.empty(); });
+
+  auto state = observer->GetState();
+  auto msg = state.history.back();
+  EXPECT_EQ(std::get<messaging::MessageEntry>(msg.data).content, "Typo");
+
+  vm_->EditMessage(msg.id, "Fixed");
+
+  WaitFor([&] {
+    auto s = observer->GetState();
+    if (s.history.empty()) return false;
+    for (auto const& m : s.history) {
+      if (m.id == msg.id && std::get<messaging::MessageEntry>(m.data).content == "Fixed") {
+        return true;
+      }
+    }
+    return false;
+  });
+
+  state = observer->GetState();
+  bool found = false;
+  for (auto const& m : state.history) {
+    if (m.id == msg.id) {
+      EXPECT_TRUE(m.is_edited);
+      found = true;
+    }
+  }
+  EXPECT_TRUE(found);
+}
+
+TEST_F(ConversationViewModelTest, DeleteMessagePropagates) {
+  auto observer = std::make_shared<MockConversationObserver>();
+  vm_->SetObserver(observer);
+
+  vm_->SendText("Mistake");
+  WaitFor([&] { return !observer->GetState().history.empty(); });
+
+  auto msg = observer->GetState().history.back();
+  vm_->DeleteMessage(msg.id);
+
+  WaitFor([&] {
+    auto s = observer->GetState();
+    for (auto const& m : s.history) {
+      if (m.id == msg.id && m.is_deleted) return true;
+    }
+    return false;
+  });
+}
+
+TEST_F(ConversationViewModelTest, ReactMessagePropagates) {
+  auto observer = std::make_shared<MockConversationObserver>();
+  vm_->SetObserver(observer);
+
+  vm_->SendText("React me");
+  WaitFor([&] { return !observer->GetState().history.empty(); });
+
+  auto msg = observer->GetState().history.back();
+  vm_->ReactToMessage(msg.id, messaging::Reaction::heart);
+
+  WaitFor([&] {
+    auto s = observer->GetState();
+    for (auto const& m : s.history) {
+      if (m.id == msg.id && !m.reactions.empty()) return true;
+    }
+    return false;
+  });
+
+  auto state = observer->GetState();
+  for (auto const& m : state.history) {
+    if (m.id == msg.id) {
+      EXPECT_EQ(m.reactions[0].reaction, messaging::Reaction::heart);
+    }
+  }
+}

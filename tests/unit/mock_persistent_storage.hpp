@@ -240,6 +240,62 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
     }
   }
 
+  void UpdateMessageContent(ContactID const& peer_id, uint64_t message_id, std::string const& new_content) override {
+    std::lock_guard const lock(mutex_);
+    if (auto const itr = history_.find(peer_id); itr != history_.end()) {
+      for (auto& entry : itr->second) {
+        if (entry.id == message_id) {
+          if (auto* msg = std::get_if<messaging::MessageEntry>(&entry.data)) {
+            msg->content = new_content;
+            entry.is_edited = true;
+          }
+          return;
+        }
+      }
+    }
+  }
+
+  void MarkMessageDeleted(ContactID const& peer_id, uint64_t message_id) override {
+    std::lock_guard const lock(mutex_);
+    if (auto const itr = history_.find(peer_id); itr != history_.end()) {
+      for (auto& entry : itr->second) {
+        if (entry.id == message_id) {
+          entry.is_deleted = true;
+          if (auto* msg = std::get_if<messaging::MessageEntry>(&entry.data)) {
+            msg->content = "";
+            msg->attachments.clear();
+          }
+          return;
+        }
+      }
+    }
+  }
+
+  void ToggleReaction(
+      ContactID const& peer_id,
+      uint64_t message_id,
+      ContactID const& author_id,
+      messaging::Reaction reaction
+  ) override {
+    std::lock_guard const lock(mutex_);
+    if (auto const itr = history_.find(peer_id); itr != history_.end()) {
+      for (auto& entry : itr->second) {
+        if (entry.id == message_id) {
+          auto& reactions = entry.reactions;
+          auto it = std::ranges::find_if(reactions, [&](auto const& r) {
+            return r.author_id == author_id && r.reaction == reaction;
+          });
+          if (it != reactions.end()) {
+            reactions.erase(it);
+          } else {
+            reactions.push_back({author_id, reaction});
+          }
+          return;
+        }
+      }
+    }
+  }
+
   void UpdateAttachmentStatus(std::string const& attachment_id, messaging::AttachmentStatus status, bool is_downloaded)
       override {
     std::lock_guard const lock(mutex_);
@@ -299,6 +355,19 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
       page.total_messages = 0;
     }
     return page;
+  }
+
+  auto GetHistoryEntry(ContactID const& peer_id, uint64_t const message_id)
+      -> std::optional<messaging::HistoryEntryRecord> override {
+    std::lock_guard const lock(mutex_);
+    if (auto const itr = history_.find(peer_id); itr != history_.end()) {
+      for (auto const& entry : itr->second) {
+        if (entry.id == message_id) {
+          return entry;
+        }
+      }
+    }
+    return std::nullopt;
   }
 
   auto GetFullMessageContent(ContactID const& /*peer_id*/, std::uint64_t const message_id)
@@ -389,6 +458,16 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
       }
     }
     return remote_ids;
+  }
+
+  auto GetMessageIdByRemoteId(ContactID const& peer_id, uint64_t target_id) -> std::optional<uint64_t> override {
+    std::lock_guard const lock(mutex_);
+    if (auto const itr = history_.find(peer_id); itr != history_.end()) {
+      for (auto const& entry : itr->second) {
+        if (entry.remote_id == target_id) return entry.id;
+      }
+    }
+    return std::nullopt;
   }
 
   // --- Search ---

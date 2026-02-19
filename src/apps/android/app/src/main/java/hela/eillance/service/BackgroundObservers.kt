@@ -81,6 +81,10 @@ class BackgroundObservers(
     val oldUnreadCounts = oldContacts.associate { it.peerId to it.unreadCount }
     newContacts.forEach { newContact ->
       val oldUnread = oldUnreadCounts[newContact.peerId] ?: 0
+      // Trigger notification refresh if unread count changed (could be new message OR delete/edit of old one)
+      // Logic: even if count goes down (read elsewhere), we might want to refresh to remove deleted msg content.
+      // But standard path is: new message -> count++ -> notify.
+      // For edits/deletes, the count might remain same, but content changes. Core emits EventMessageUpdated.
       if (newContact.unreadCount > oldUnread && !MercuryApplication.isAppInForeground) {
         val prefs = service.getSharedPreferences("mercury_prefs", Context.MODE_PRIVATE)
         val showContent = prefs.getBoolean("show_notifications_content", true)

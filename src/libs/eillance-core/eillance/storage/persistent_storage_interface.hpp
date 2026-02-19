@@ -63,21 +63,32 @@ class PersistentStorageImpl {
       std::vector<uint64_t> const& message_ids,
       messaging::MessageStatus new_status
   ) = 0;
+  virtual void UpdateMessageContent(ContactID const& peer_id, uint64_t message_id, std::string const& new_content) = 0;
+  virtual void MarkMessageDeleted(ContactID const& peer_id, uint64_t message_id) = 0;
+  virtual void ToggleReaction(
+      ContactID const& peer_id,
+      uint64_t message_id,
+      ContactID const& author_id,
+      messaging::Reaction reaction
+  ) = 0;
+
   virtual void
   UpdateAttachmentStatus(std::string const& attachment_id, messaging::AttachmentStatus status, bool is_downloaded) = 0;
   virtual auto GetAttachment(std::string const& attachment_id) -> std::optional<messaging::Attachment> = 0;
 
   virtual auto GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t page_size)
       -> messaging::HistoryPage = 0;
+  virtual auto GetHistoryEntry(ContactID const& peer_id, uint64_t message_id)
+      -> std::optional<messaging::HistoryEntryRecord> = 0;
   virtual auto GetFullMessageContent(ContactID const& peer_id, std::uint64_t message_id)
       -> std::optional<std::string> = 0;
   virtual auto GetChatSummaries(std::vector<ContactID> const& peer_ids) -> std::vector<messaging::ChatSummary> = 0;
   virtual auto GetMessagesWithStatus(ContactID const& peer_id, messaging::MessageStatus status)
       -> std::vector<messaging::HistoryEntryRecord> = 0;
-  // New method to find messages containing specific attachments that are pending transfer
   virtual auto GetPendingAttachments(ContactID const& peer_id) -> std::vector<messaging::Attachment> = 0;
   virtual auto GetRemoteIds(ContactID const& peer_id, std::vector<uint64_t> const& local_ids)
       -> std::vector<uint64_t> = 0;
+  virtual auto GetMessageIdByRemoteId(ContactID const& peer_id, uint64_t target_id) -> std::optional<uint64_t> = 0;
 
   // --- Search ---
   virtual auto SearchMessages(ContactID const& peer_id, std::string const& query)

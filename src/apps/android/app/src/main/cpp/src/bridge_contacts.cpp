@@ -166,6 +166,7 @@ ConvertHistoryEntries(JNIEnv* env, std::vector<eillance::messaging::HistoryEntry
   jmethodID list_add_method = list_holder.GetMethod("add");
   auto& entry_holder = class_refs.Class("hela/eillance/ndkio/HistoryEntry");
   auto& attachment_holder = class_refs.Class("hela/eillance/ndkio/Attachment");
+  auto& reaction_holder = class_refs.Class("hela/eillance/ndkio/ReactionEntry");
 
   for (auto const& entry_cpp : messages) {
     std::string const* content_str = nullptr;
@@ -181,6 +182,7 @@ ConvertHistoryEntries(JNIEnv* env, std::vector<eillance::messaging::HistoryEntry
     jstring content = content_str ? env->NewStringUTF(content_str->c_str()) : nullptr;
     jint const duration = call_entry ? static_cast<jint>(call_entry->duration_seconds) : 0;
 
+    // Attachments
     jobject j_attachments = list_holder.NewObject(env);
     if (attachments_ptr && !attachments_ptr->empty()) {
       for (auto const& att : *attachments_ptr) {
@@ -209,11 +211,23 @@ ConvertHistoryEntries(JNIEnv* env, std::vector<eillance::messaging::HistoryEntry
         env->DeleteLocalRef(j_id);
         env->DeleteLocalRef(j_path);
         env->DeleteLocalRef(j_mime);
-        if (j_thumb) env->DeleteLocalRef(j_thumb);
+        if (j_thumb != nullptr) {
+          env->DeleteLocalRef(j_thumb);
+        }
         env->DeleteLocalRef(j_note);
         env->DeleteLocalRef(j_name);
         env->DeleteLocalRef(j_att);
       }
+    }
+
+    // Reactions
+    jobject j_reactions = list_holder.NewObject(env);
+    for (auto const& r : entry_cpp.reactions) {
+      jstring r_auth = env->NewStringUTF(r.author_id.ToString().c_str());
+      jobject j_react = reaction_holder.NewObject(env, r_auth, static_cast<jint>(r.reaction));
+      env->CallBooleanMethod(j_reactions, list_add_method, j_react);
+      env->DeleteLocalRef(r_auth);
+      env->DeleteLocalRef(j_react);
     }
 
     jobject entry_java = entry_holder.NewObject(
@@ -228,7 +242,10 @@ ConvertHistoryEntries(JNIEnv* env, std::vector<eillance::messaging::HistoryEntry
         (call_entry != nullptr) ? static_cast<jint>(call_entry->call_status) : -1,
         static_cast<jint>(entry_cpp.status),
         static_cast<jboolean>(entry_cpp.is_truncated),
-        j_attachments
+        static_cast<jboolean>(entry_cpp.is_edited),
+        static_cast<jboolean>(entry_cpp.is_deleted),
+        j_attachments,
+        j_reactions
     );
 
     env->CallBooleanMethod(history_list, list_add_method, entry_java);
@@ -236,6 +253,7 @@ ConvertHistoryEntries(JNIEnv* env, std::vector<eillance::messaging::HistoryEntry
       env->DeleteLocalRef(content);
     }
     env->DeleteLocalRef(j_attachments);
+    env->DeleteLocalRef(j_reactions);
     env->DeleteLocalRef(entry_java);
   }
   return history_list;
@@ -272,18 +290,14 @@ extern "C" JNIEXPORT jobject JNICALL Java_hela_eillance_viewmodels_ContactsViewM
   jmethodID list_add_method = list_holder.GetMethod("add");
   auto& search_result_holder = class_refs.Class("hela/eillance/ndkio/GlobalSearchResult");
 
-  // We can reuse ConvertHistoryEntries logic but we need to wrap each entry
-  // since GlobalSearchResult expects (String peerId, HistoryEntry entry).
-  // Instead of full duplication, let's just get the HistoryEntry objects one by one using a temporary vector.
-
   for (auto const& msg : messages) {
     // Create single-item vector to reuse conversion logic (inefficient but reuses code)
-    std::vector<eillance::messaging::HistoryEntryRecord> single_vec = {msg};
+    auto const single_vec = std::vector<eillance::messaging::HistoryEntryRecord>{msg};
     jobject single_list = ConvertHistoryEntries(env, single_vec);  // ArrayList<HistoryEntry>
 
     // Get the item
-    jmethodID get_method = list_holder.GetMethod("get");
-    jobject entry_java = env->CallObjectMethod(single_list, get_method, 0);
+    auto* get_method = list_holder.GetMethod("get");
+    auto* entry_java = env->CallObjectMethod(single_list, get_method, 0);
 
     jstring peer_id = env->NewStringUTF(msg.peer_id.ToString().c_str());
     jobject global_result = search_result_holder.NewObject(env, peer_id, entry_java);

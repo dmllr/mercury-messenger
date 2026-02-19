@@ -9,6 +9,7 @@
 #include <openssl/sha.h>
 
 #include "eillance/identity/contact_manager.hpp"
+#include "eillance/services/account_service.hpp"
 #include "eillance/services/file_transfer_service.hpp"
 #include "eillance/services/messaging_service.hpp"
 #include "mock_data_transport.hpp"
@@ -41,6 +42,8 @@ class FileTransferResilienceTest : public ::testing::Test {
     contact_manager_->AddContact(peer1);
     contact_manager_->MarkAsConfirmed(peer1);
 
+    account_service_ = std::make_shared<services::AccountService>(storage_, transport_);
+
     file_transfer_service_ = std::make_shared<services::FileTransferService>(storage_, transport_);
 
     auto conn_handler = [](ContactID const&) {};
@@ -49,6 +52,7 @@ class FileTransferResilienceTest : public ::testing::Test {
         storage_,
         transport_,
         contact_manager_,
+        account_service_,
         file_transfer_service_,
         conn_handler
     );
@@ -105,6 +109,7 @@ class FileTransferResilienceTest : public ::testing::Test {
   transport::MockDataTransport* mock_transport_;
   std::shared_ptr<transport::DataTransport> transport_;
   std::shared_ptr<identity::ContactManager> contact_manager_;
+  std::shared_ptr<services::AccountService> account_service_;
   std::shared_ptr<services::FileTransferService> file_transfer_service_;
   std::unique_ptr<services::MessagingService> service_;
 

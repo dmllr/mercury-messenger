@@ -51,6 +51,7 @@ class Client final : public transport::TransportDelegate {
         storage_,
         data_transport_,
         contact_manager,
+        account_service_,
         file_transfer_service_,
         [this](ContactID const& id) { this->Connect(id); }
     );
@@ -363,6 +364,11 @@ class Client final : public transport::TransportDelegate {
 
   [[nodiscard]] auto SearchAllMessages(std::string const& query) const -> std::vector<messaging::HistoryEntryRecord> {
     return messaging_service_->SearchAllMessages(query);
+  }
+
+  [[nodiscard]] auto GetHistoryEntry(ContactID const& peer_id, uint64_t message_id) const
+      -> std::optional<messaging::HistoryEntryRecord> {
+    return storage_->GetHistoryEntry(peer_id, message_id);
   }
 
   void CancelTransfer(ContactID const& peer_id, std::string const& attachment_id, bool is_upload) const {

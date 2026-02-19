@@ -28,6 +28,10 @@ struct EventMessageStatusChanged {
   std::uint64_t message_id{};
   messaging::MessageStatus status;
 };
+struct EventMessageUpdated {
+  ContactID peer_id;
+  std::uint64_t message_id;
+};
 struct EventAttachmentDownloaded {
   ContactID peer_id;
   std::string attachment_id;
@@ -139,6 +143,9 @@ class ClientEventRouter {
     });
     messaging->SetMessageStatusChangedCallback([this](auto const& peer, auto msg_id, auto status) {
       eventQueue_.Push(EventMessageStatusChanged{peer, msg_id, status});
+    });
+    messaging->SetMessageUpdatedCallback([this](auto const& peer, auto msg_id) {
+      eventQueue_.Push(EventMessageUpdated{peer, msg_id});
     });
     messaging->SetAttachmentDownloadedCallback([this](auto const& peer, auto const& att_id) {
       eventQueue_.Push(EventAttachmentDownloaded{peer, att_id});

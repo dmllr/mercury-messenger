@@ -158,3 +158,68 @@ TEST_F(MessageHistoryTest, GetChatSummaries) {
   EXPECT_EQ(std::get<messaging::MessageEntry>(summaries[1].last_message.data).content, "p2m2");
   EXPECT_EQ(summaries[1].unread_count, 2);
 }
+
+TEST_F(MessageHistoryTest, UpdateMessageContent) {
+  auto entry = message_history_->AddTextEntry(
+      peer1,
+      "Original",
+      {},
+      messaging::MessageDirection::sent,
+      messaging::HistoryEntryKind::textMessage
+  );
+
+  message_history_->UpdateMessageContent(peer1, entry.id, "Edited");
+
+  auto loaded = storage_->GetHistoryEntry(peer1, entry.id);
+  ASSERT_TRUE(loaded);
+  EXPECT_EQ(std::get<messaging::MessageEntry>(loaded->data).content, "Edited");
+  EXPECT_TRUE(loaded->is_edited);
+}
+
+TEST_F(MessageHistoryTest, MarkMessageDeleted) {
+  auto entry = message_history_->AddTextEntry(
+      peer1,
+      "Content",
+      {},
+      messaging::MessageDirection::sent,
+      messaging::HistoryEntryKind::textMessage
+  );
+
+  message_history_->MarkMessageDeleted(peer1, entry.id);
+
+  auto loaded = storage_->GetHistoryEntry(peer1, entry.id);
+  ASSERT_TRUE(loaded);
+  EXPECT_TRUE(loaded->is_deleted);
+  // Mock clears content, check behavior consistency
+  EXPECT_EQ(std::get<messaging::MessageEntry>(loaded->data).content, "");
+}
+
+TEST_F(MessageHistoryTest, ToggleReaction) {
+  auto entry = message_history_->AddTextEntry(
+      peer1,
+      "React to this",
+      {},
+      messaging::MessageDirection::sent,
+      messaging::HistoryEntryKind::textMessage
+  );
+
+  ContactID const author = peer1;
+  message_history_->ToggleReaction(peer1, entry.id, author, messaging::Reaction::thumbsUp);
+
+  auto loaded = storage_->GetHistoryEntry(peer1, entry.id);
+  ASSERT_TRUE(loaded);
+  ASSERT_EQ(loaded->reactions.size(), 1);
+  EXPECT_EQ(loaded->reactions[0].reaction, messaging::Reaction::thumbsUp);
+  EXPECT_EQ(loaded->reactions[0].author_id, author);
+
+  // Toggle off
+  message_history_->ToggleReaction(peer1, entry.id, author, messaging::Reaction::thumbsUp);
+  loaded = storage_->GetHistoryEntry(peer1, entry.id);
+  EXPECT_TRUE(loaded->reactions.empty());
+
+  // Toggle different reaction
+  message_history_->ToggleReaction(peer1, entry.id, author, messaging::Reaction::heart);
+  loaded = storage_->GetHistoryEntry(peer1, entry.id);
+  ASSERT_EQ(loaded->reactions.size(), 1);
+  EXPECT_EQ(loaded->reactions[0].reaction, messaging::Reaction::heart);
+}

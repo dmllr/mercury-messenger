@@ -43,6 +43,11 @@ class ConversationViewModel {
         impl->OnMessageStatusChanged(event.peer_id, event.message_id, event.status);
       }
     });
+    Subscribe<EventMessageUpdated>(queue, [impl](EventMessageUpdated const& event) {
+      if (event.peer_id == impl->peer_id) {
+        impl->OnMessageUpdated(event.message_id);
+      }
+    });
     Subscribe<EventAttachmentDownloaded>(queue, [impl](EventAttachmentDownloaded const& event) {
       if (event.peer_id == impl->peer_id) {
         impl->OnAttachmentDownloaded(event.attachment_id);
@@ -99,6 +104,16 @@ class ConversationViewModel {
   void SendMessage(std::string const& content, std::vector<services::AttachmentRequest> const& attachments) const {
     impl_->SendMessage(content, attachments);
   }
+  void DeleteMessage(uint64_t message_id) const {
+    impl_->client->GetMessagingService()->SendDeleteMessage(impl_->peer_id, message_id);
+  }
+  void EditMessage(uint64_t message_id, std::string const& content) const {
+    impl_->client->GetMessagingService()->SendEditMessage(impl_->peer_id, message_id, content);
+  }
+  void ReactToMessage(uint64_t message_id, messaging::Reaction reaction) const {
+    impl_->client->GetMessagingService()->SendReaction(impl_->peer_id, message_id, reaction);
+  }
+
   void LoadOlderMessages() const {
     impl_->LoadOlderMessages();
   }
@@ -331,6 +346,33 @@ class ConversationViewModel {
       if (changed && observer) {
         observer->OnHistoryUpdated(state);
       }
+    }
+
+    void OnMessageUpdated(uint64_t const message_id) {
+      auto const updated_entry = client->GetHistoryEntry(peer_id, message_id);
+      if (!updated_entry) {
+        return;
+      }
+
+      std::lock_guard<std::mutex> const lock(mutex);
+      for (auto& entry : state.history) {
+        if (entry.id == message_id) {
+          entry = *updated_entry;
+
+          // Manually check attachments because DB fetch might have stale attachment status (pending)
+          // while VM knows current transfer state.
+          if (std::holds_alternative<messaging::MessageEntry>(entry.data)) {
+            auto& msg_entry = std::get<messaging::MessageEntry>(entry.data);
+            for (auto& att : msg_entry.attachments) {
+              if (pending_attachment_updates.contains(att.id)) {
+                att.status = pending_attachment_updates[att.id];
+              }
+            }
+          }
+          break;
+        }
+      }
+      if (observer) observer->OnHistoryUpdated(state);
     }
 
     void OnAttachmentDownloaded(std::string const& attachment_id) {

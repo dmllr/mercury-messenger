@@ -41,6 +41,7 @@ fun ChatHistory(
   selectedMessageIds: Set<Long>,
   selectionMode: Boolean,
   onToggleSelection: (Long) -> Unit,
+  onLongClick: (HistoryEntry) -> Unit = {},
   onSystemMessageClick: (HistoryEntry) -> Unit,
   onMediaClick: (List<Attachment>, Int) -> Unit
 ) {
@@ -109,7 +110,8 @@ fun ChatHistory(
           isSelected = selectedMessageIds.contains(currentItem.id),
           isUnread = currentItem.direction == MessageDirection.Received && currentItem.status != MessageStatus.Read,
           selectionMode = selectionMode,
-          onToggleSelection = { onToggleSelection(currentItem.id) }
+          onToggleSelection = { onToggleSelection(currentItem.id) },
+          onLongClick = { onLongClick(currentItem) }
         )
 
         HistoryEntryKind.VoiceCall, HistoryEntryKind.VideoCall -> CallLogBubble(

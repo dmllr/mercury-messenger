@@ -176,6 +176,17 @@ class InternalMessagingService {
       if (!file_id.empty()) {
         file_transfer_service_->HandleCancel(peer_id, file_id);
       }
+    } else if (type == "message_delete") {
+      messaging_service_->OnMessageDelete(peer_id, message["target_id"].get<uint64_t>());
+    } else if (type == "message_edit") {
+      messaging_service_
+          ->OnMessageEdit(peer_id, message["target_id"].get<uint64_t>(), message["content"].get<std::string>());
+    } else if (type == "message_reaction") {
+      messaging_service_->OnMessageReaction(
+          peer_id,
+          message["target_id"].get<uint64_t>(),
+          static_cast<messaging::Reaction>(message["reaction"].get<int>())
+      );
     }
   }
 

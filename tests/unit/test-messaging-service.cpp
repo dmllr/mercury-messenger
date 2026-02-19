@@ -65,12 +65,17 @@ class MessagingServiceTest : public ::testing::Test {
 
     auto conn_handler = [this](ContactID const& id) { connection_requests_.push_back(id); };
 
+    account_service_ = std::make_shared<services::AccountService>(storage_, transport_);
+    account_service_->SetOnMyProfileUpdatedCallback([]() {});
+    std::ignore = account_service_->GenerateNewIdentity();
+
     file_transfer_service_ = std::make_shared<services::FileTransferService>(storage_, transport_);
 
     service_ = std::make_unique<services::MessagingService>(
         storage_,
         transport_,
         contact_manager_,
+        account_service_,
         file_transfer_service_,
         conn_handler
     );
@@ -98,8 +103,12 @@ class MessagingServiceTest : public ::testing::Test {
     packet.push_back(std::byte{0xFE});
     packet.push_back(std::byte{0x01});
     packet.push_back(static_cast<std::byte>(id.size()));
-    for (char c : id) packet.push_back(static_cast<std::byte>(c));
-    for (int i = 0; i < 4; ++i) packet.push_back(static_cast<std::byte>((seq >> (i * 8)) & 0xFF));
+    for (char c : id) {
+      packet.push_back(static_cast<std::byte>(c));
+    }
+    for (int i = 0; i < 4; ++i) {
+      packet.push_back(static_cast<std::byte>((seq >> (i * 8)) & 0xFF));
+    }
     packet.insert(packet.end(), payload.begin(), payload.end());
     return packet;
   }
@@ -109,7 +118,9 @@ class MessagingServiceTest : public ::testing::Test {
     packet.push_back(std::byte{0xFE});
     packet.push_back(std::byte{0x06});
     packet.push_back(static_cast<std::byte>(id.size()));
-    for (char c : id) packet.push_back(static_cast<std::byte>(c));
+    for (char c : id) {
+      packet.push_back(static_cast<std::byte>(c));
+    }
     return packet;
   }
 
@@ -120,6 +131,7 @@ class MessagingServiceTest : public ::testing::Test {
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<transport::DataTransport> transport_;
   std::shared_ptr<identity::ContactManager> contact_manager_;
+  std::shared_ptr<services::AccountService> account_service_;
   std::shared_ptr<services::FileTransferService> file_transfer_service_;
   std::unique_ptr<services::MessagingService> service_;
   std::vector<ContactID> connection_requests_;
@@ -131,7 +143,7 @@ class MessagingServiceTest : public ::testing::Test {
 TEST_F(MessagingServiceTest, SendMessage_ThumbInPayload) {
   auto peer = std::make_shared<transport::Peer>(peer1);
   peer->data_channel_is_open = true;
-  eillance::crypto::SessionCipher other;
+  crypto::SessionCipher const other;
   peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
   transport_->AddPeer(peer1, peer);
 
@@ -165,11 +177,11 @@ TEST_F(MessagingServiceTest, SendMessage_ThumbInPayload) {
 TEST_F(MessagingServiceTest, SendMessage_NoteTruncation) {
   auto peer = std::make_shared<transport::Peer>(peer1);
   peer->data_channel_is_open = true;
-  eillance::crypto::SessionCipher other;
+  crypto::SessionCipher const other;
   peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
   transport_->AddPeer(peer1, peer);
 
-  std::string long_note(200, 'A');
+  std::string const long_note(200, 'A');
   std::vector<services::AttachmentRequest> atts;
   auto const file_path = (temp_dir_ / "test_img.jpg").string();
   std::ofstream(file_path).close();
@@ -180,7 +192,7 @@ TEST_F(MessagingServiceTest, SendMessage_NoteTruncation) {
   bool found = false;
   for (auto const& msg : mock_transport_->CallLog()->sent_peer_messages | std::views::values) {
     if (msg.value("type", "") == "chat") {
-      auto note = msg["attachments"][0]["note"].get<std::string>();
+      auto const note = msg["attachments"][0]["note"].get<std::string>();
       EXPECT_EQ(note.length(), 120);
       found = true;
       break;
@@ -192,18 +204,20 @@ TEST_F(MessagingServiceTest, SendMessage_NoteTruncation) {
 TEST_F(MessagingServiceTest, DownloadTriggersCallback) {
   bool download_cb_called = false;
   service_->SetAttachmentDownloadedCallback([&](auto pid, auto att_id) {
-    if (pid == peer1 && att_id == "att_1") download_cb_called = true;
+    if (pid == peer1 && att_id == "att_1") {
+      download_cb_called = true;
+    }
   });
 
   auto peer = std::make_shared<transport::Peer>(peer1);
   peer->data_channel_is_open = true;
-  eillance::crypto::SessionCipher other_cipher;
+  crypto::SessionCipher other_cipher;
   peer->session_cipher->ComputeSharedSecret(other_cipher.GetPublicKey());
   other_cipher.ComputeSharedSecret(peer->session_cipher->GetPublicKey());
   transport_->AddPeer(peer1, peer);
 
   std::string file_content = "Hello World Data";
-  std::string file_hash = crypto::Sha256Hex(file_content);
+  std::string const file_hash = crypto::Sha256Hex(file_content);
 
   std::string payload_content = "Here is a file";
   nlohmann::json payload_json;
@@ -298,7 +312,7 @@ TEST_F(MessagingServiceTest, SendSystemMessage_UnifiedDelivery) {
   // Connect and flush
   auto peer = std::make_shared<transport::Peer>(peer1);
   peer->data_channel_is_open = true;
-  eillance::crypto::SessionCipher other;
+  crypto::SessionCipher const other;
   peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
   transport_->AddPeer(peer1, peer);
 
@@ -439,4 +453,140 @@ TEST_F(MessagingServiceTest, SearchMessagesFacade) {
   auto res2 = service_->SearchAllMessages("Bread");
   ASSERT_EQ(res2.size(), 1);
   EXPECT_EQ(std::get<messaging::MessageEntry>(res2[0].data).content, "Banana Bread");
+}
+
+TEST_F(MessagingServiceTest, SendEditMessage) {
+  auto peer = std::make_shared<transport::Peer>(peer1);
+  peer->data_channel_is_open = true;
+  peer->session_cipher->ComputeSharedSecret(eillance::crypto::SessionCipher().GetPublicKey());
+  transport_->AddPeer(peer1, peer);
+
+  auto entry = service_->SendChatMessage(peer1, "Original");
+  service_->SendEditMessage(peer1, entry.id, "Edited");
+
+  // Verify local update
+  auto updated = storage_->GetHistoryEntry(peer1, entry.id);
+  ASSERT_TRUE(updated);
+  EXPECT_EQ(std::get<messaging::MessageEntry>(updated->data).content, "Edited");
+  EXPECT_TRUE(updated->is_edited);
+
+  // Verify network message
+  bool edit_sent = false;
+  for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
+    if (pid == peer1 && msg.value("type", "") == "message_edit") {
+      EXPECT_EQ(msg["content"], "Edited");
+      EXPECT_EQ(msg["target_id"], entry.id);  // For sent messages, remote_id might be null/same
+      edit_sent = true;
+    }
+  }
+  EXPECT_TRUE(edit_sent);
+}
+
+TEST_F(MessagingServiceTest, SendDeleteMessage) {
+  auto peer = std::make_shared<transport::Peer>(peer1);
+  peer->data_channel_is_open = true;
+  peer->session_cipher->ComputeSharedSecret(eillance::crypto::SessionCipher().GetPublicKey());
+  transport_->AddPeer(peer1, peer);
+
+  auto entry = service_->SendChatMessage(peer1, "To Delete");
+  service_->SendDeleteMessage(peer1, entry.id);
+
+  auto updated = storage_->GetHistoryEntry(peer1, entry.id);
+  ASSERT_TRUE(updated);
+  EXPECT_TRUE(updated->is_deleted);
+
+  bool delete_sent = false;
+  for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
+    if (pid == peer1 && msg.value("type", "") == "message_delete") {
+      EXPECT_EQ(msg["target_id"], entry.id);
+      delete_sent = true;
+    }
+  }
+  EXPECT_TRUE(delete_sent);
+}
+
+TEST_F(MessagingServiceTest, SendReaction) {
+  auto peer = std::make_shared<transport::Peer>(peer1);
+  peer->data_channel_is_open = true;
+  peer->session_cipher->ComputeSharedSecret(eillance::crypto::SessionCipher().GetPublicKey());
+  transport_->AddPeer(peer1, peer);
+
+  auto entry = service_->SendChatMessage(peer1, "React Me");
+  service_->SendReaction(peer1, entry.id, messaging::Reaction::laugh);
+
+  auto updated = storage_->GetHistoryEntry(peer1, entry.id);
+  ASSERT_TRUE(updated);
+  ASSERT_FALSE(updated->reactions.empty());
+  EXPECT_EQ(updated->reactions[0].reaction, messaging::Reaction::laugh);
+
+  bool reaction_sent = false;
+  for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
+    if (pid == peer1 && msg.value("type", "") == "message_reaction") {
+      EXPECT_EQ(msg["target_id"], entry.id);
+      EXPECT_EQ(msg["reaction"], static_cast<int>(messaging::Reaction::laugh));
+      reaction_sent = true;
+    }
+  }
+  EXPECT_TRUE(reaction_sent);
+}
+
+TEST_F(MessagingServiceTest, IncomingMessageEdit) {
+  auto entry = mock_storage_->AddHistoryEntry(
+      {.remote_id = 500,
+       .kind = messaging::HistoryEntryKind::textMessage,
+       .timestamp = Time::Now(),
+       .direction = messaging::MessageDirection::received,
+       .data = messaging::MessageEntry{"Original"},
+       .peer_id = peer1}
+  );
+
+  bool callback_called = false;
+  service_->SetMessageUpdatedCallback([&](auto pid, auto mid) {
+    if (pid == peer1 && mid == entry.id) {
+      callback_called = true;
+    }
+  });
+
+  service_->OnMessageEdit(peer1, 500, "Edited Content");
+
+  auto updated = storage_->GetHistoryEntry(peer1, entry.id);
+  ASSERT_TRUE(updated);
+  EXPECT_EQ(std::get<messaging::MessageEntry>(updated->data).content, "Edited Content");
+  EXPECT_TRUE(callback_called);
+}
+
+TEST_F(MessagingServiceTest, IncomingMessageDelete) {
+  auto entry = mock_storage_->AddHistoryEntry(
+      {.remote_id = 600,
+       .kind = messaging::HistoryEntryKind::textMessage,
+       .timestamp = Time::Now(),
+       .direction = messaging::MessageDirection::received,
+       .data = messaging::MessageEntry{"To Be Deleted"},
+       .peer_id = peer1}
+  );
+
+  service_->OnMessageDelete(peer1, 600);
+
+  auto updated = storage_->GetHistoryEntry(peer1, entry.id);
+  ASSERT_TRUE(updated);
+  EXPECT_TRUE(updated->is_deleted);
+}
+
+TEST_F(MessagingServiceTest, IncomingReaction) {
+  auto entry = mock_storage_->AddHistoryEntry(
+      {.remote_id = 700,
+       .kind = messaging::HistoryEntryKind::textMessage,
+       .timestamp = Time::Now(),
+       .direction = messaging::MessageDirection::received,
+       .data = messaging::MessageEntry{"Good Job"},
+       .peer_id = peer1}
+  );
+
+  service_->OnMessageReaction(peer1, 700, messaging::Reaction::thumbsUp);
+
+  auto updated = storage_->GetHistoryEntry(peer1, entry.id);
+  ASSERT_TRUE(updated);
+  ASSERT_EQ(updated->reactions.size(), 1);
+  EXPECT_EQ(updated->reactions[0].reaction, messaging::Reaction::thumbsUp);
+  EXPECT_EQ(updated->reactions[0].author_id, peer1);
 }

@@ -70,6 +70,27 @@ enum class AttachmentStatus(val value: Int) {
   }
 }
 
+enum class Reaction(val value: Int, val symbol: String) {
+  ThumbsUp(1, "👍"),
+  ThumbsDown(2, "👎"),
+  Heart(3, "❤️"),
+  Laugh(4, "😂"),
+  Sad(5, "😢"),
+  Angry(6, "😡"),
+  Check(7, "✅");
+
+  companion object {
+    fun fromInt(value: Int) = entries.firstOrNull { it.value == value }
+  }
+}
+
+data class ReactionEntry(
+  val authorId: String,
+  val reactionValue: Int
+) {
+  val reaction: Reaction? get() = Reaction.fromInt(reactionValue)
+}
+
 @Serializable
 data class Attachment(
   val id: String,
@@ -98,7 +119,10 @@ data class HistoryEntry(
   private val callStatusValue: Int,
   private val statusValue: Int,
   val isTruncated: Boolean,
-  val attachments: List<Attachment> = emptyList()
+  val isEdited: Boolean = false,
+  val isDeleted: Boolean = false,
+  val attachments: List<Attachment> = emptyList(),
+  val reactions: List<ReactionEntry> = emptyList()
 ) {
   val kind: HistoryEntryKind get() = HistoryEntryKind.fromInt(kindValue)
   val direction: MessageDirection get() = MessageDirection.fromInt(directionValue)
