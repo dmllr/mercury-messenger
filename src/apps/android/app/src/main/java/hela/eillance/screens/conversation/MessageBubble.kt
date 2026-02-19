@@ -97,9 +97,9 @@ fun MessageBubble(
   }
 
   val colors = if (isFromMe) {
-    MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.onPrimaryContainer
+    MaterialTheme.extendedColors.sentBubbleBackground to MaterialTheme.extendedColors.sentBubbleContent
   } else {
-    MaterialTheme.colorScheme.secondaryContainer to MaterialTheme.colorScheme.onSecondaryContainer
+    MaterialTheme.extendedColors.receivedBubbleBackground to MaterialTheme.extendedColors.receivedBubbleContent
   }
 
   val topStartRadius = if (!isFromMe && !isGroupHead) 4.dp else 16.dp

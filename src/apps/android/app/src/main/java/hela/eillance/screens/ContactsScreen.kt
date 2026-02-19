@@ -1,6 +1,7 @@
 package hela.eillance.screens
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -35,10 +36,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DividerDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -90,6 +89,7 @@ import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
 
+@SuppressLint("BatteryLife")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ContactsScreen(
@@ -250,9 +250,6 @@ fun ContactsScreen(
               }
             }
           },
-          colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer
-          )
         )
       }
     },
@@ -314,7 +311,7 @@ fun ContactsScreen(
                     modifier = Modifier.padding(start = 12.dp)
                   )
                   Text(
-                    text = " ΓÇó " + formatTimestamp(result.entry.timestamp, zoneId, formatters),
+                    text = " • " + formatTimestamp(result.entry.timestamp, zoneId, formatters),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                   )
@@ -328,7 +325,6 @@ fun ContactsScreen(
                   modifier = Modifier.padding(top = 4.dp, start = 44.dp)
                 )
               }
-              HorizontalDivider()
             }
           }
         }
@@ -405,6 +401,7 @@ fun ContactsScreen(
                     actionLabel = stringResource(id = R.string.action_fix_it),
                     onAction = {
                       val intent =
+                        @SuppressLint("BatteryLife")
                         Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
                           data = "package:${context.packageName}".toUri()
                         }
@@ -468,7 +465,7 @@ fun ContactsScreen(
             )
           }
         } else {
-          LazyColumn(modifier = Modifier.weight(1f)) {
+          LazyColumn(modifier = Modifier.padding(2.dp)) {
             items(visibleContacts, key = { it.peerId }) { contact ->
               ContactListItem(
                 contact = contact,
@@ -477,7 +474,6 @@ fun ContactsScreen(
                 zoneId = zoneId,
                 formatters = formatters
               )
-              HorizontalDivider(color = DividerDefaults.color.copy(alpha = 0.5f))
             }
           }
         }
