@@ -8,6 +8,7 @@
 #include <string>
 #include <unordered_map>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -291,7 +292,9 @@ class RtcDataTransport : public transport::DataTransport::Interface {
     }
 
     if (dc && dc->isOpen()) {
-      bool const result = dc->send(message.dump());
+      auto const msg_str = message.dump();
+      // NOLINTNEXTLINE(*-pro-type-reinterpret-cast)
+      bool const result = dc->send(reinterpret_cast<const std::byte*>(msg_str.data()), msg_str.size());
       if (!result) {
         LGE << "SendJson: dc->send() returned false for " << peer_id;
       }
@@ -383,8 +386,7 @@ class RtcDataTransport : public transport::DataTransport::Interface {
   void OnWebSocketMessage(std::string const& data) {
     INVARIANT_NOT_NULL(delegate_);
     auto const message = Json::parse(data);
-    auto const itr = message.find("from");
-    if (itr == message.end()) {
+    if (auto const itr = message.find("from"); itr == message.end()) {
       DispatchQueue::MainThread().Dispatch([this, message]() -> void { OnSystemMessage(message); });
     } else {
       DispatchQueue::MainThread().Dispatch([this, message]() -> void { delegate_->ProcessPeerMessage(message); });
@@ -502,36 +504,46 @@ class RtcDataTransport : public transport::DataTransport::Interface {
       return;
     }
 
-    auto on_open_func = [this, peer_id]() {
-      DispatchQueue::MainThread().Dispatch([this, peer_id]() {
+    dc->onOpen([this, peer_id]() -> void {
+      DispatchQueue::MainThread().Dispatch([this, peer_id]() -> void {
         if (delegate_) {
           delegate_->OnDataChannelOpen(peer_id);
         }
       });
-    };
+    });
 
-    dc->onOpen(on_open_func);
+    dc->onMessage([peer, peer_id](::rtc::message_variant message) -> void {
+      DispatchQueue::MainThread().Dispatch([peer, peer_id, msg = std::move(message)]() -> void {
+        if (!peer || !peer->on_data_channel_message) {
+          LGW << "DataChannel message received but no handler set for " << peer_id;
+          return;
+        }
 
-    dc->onMessage(nullptr, [peer, peer_id](::rtc::message_variant const& msg) -> void {
-      if (!peer || !peer->on_data_channel_message) {
-        LGW << "DataChannel message received but no handler set for " << peer_id;
-        return;
-      }
-      auto& cb = peer->on_data_channel_message;
-      if (std::holds_alternative<std::string>(msg)) {
-        auto const& str = std::get<std::string>(msg);
-        cb(std::span<std::byte const>(reinterpret_cast<std::byte const*>(str.data()), str.size()));
-      } else if (std::holds_alternative<::rtc::binary>(msg)) {
-        auto const& bin = std::get<::rtc::binary>(msg);
-        cb(std::span<std::byte const>(bin));
-      }
+        std::vector<std::byte> payload;
+        if (std::holds_alternative<::rtc::binary>(msg)) {
+          auto const& bin = std::get<::rtc::binary>(msg);
+          payload.assign(bin.begin(), bin.end());
+        } else if (std::holds_alternative<std::string>(msg)) {
+          auto const& str = std::get<std::string>(msg);
+          auto const* data = reinterpret_cast<std::byte const*>(str.data()); // NOLINT(*-pro-type-reinterpret-cast)
+          payload.assign(data, std::next(data, str.size()));
+        }
+
+        if (!payload.empty()) {
+          peer->on_data_channel_message(payload);
+        }
+      });
     });
 
     peer->data_channel = dc;
 
-    // Check if already open (race condition mitigation)
+    // Handle race condition where channel opens before callbacks are attached
     if (dc->isOpen()) {
-      on_open_func();
+      DispatchQueue::MainThread().Dispatch([this, peer_id]() -> void {
+        if (delegate_) {
+          delegate_->OnDataChannelOpen(peer_id);
+        }
+      });
     }
   }
 
