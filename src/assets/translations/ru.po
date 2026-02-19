@@ -80,6 +80,8 @@ msgid "action_mark_read"
 msgstr "Отметить как прочитанное"
 msgid "action_search"
 msgstr "Поиск"
+msgid "action_scroll_to_bottom"
+msgstr "Прокрутить вниз"
 
 # Connection States
 msgid "connection_no_network"
