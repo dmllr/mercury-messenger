@@ -9,7 +9,7 @@ set(ENABLE_WARNINGS_AS_ERRORS OFF)
 
 import_remote("https://github.com/cisco/libsrtp.git"
   TAG "v2.6.0"
-  DST "${CMAKE_SOURCE_DIR}/_imported"
+  DST "${REPO_ROOT}/_imported"
   PATCH "${CMAKE_CURRENT_LIST_DIR}/patches/libsrtp.patch"
   ALIAS libsrtp)
 
