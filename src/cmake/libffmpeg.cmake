@@ -19,8 +19,8 @@ set(FFMPEG_CONFIGURE_EXTRAS --enable-jni)
 set(FFMPEG_VERSION 7.1)
 set(FFMPEG_URL "https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.bz2")
 get_filename_component(FFMPEG_ARCHIVE_NAME ${FFMPEG_URL} NAME)
-set(FFMPEG_PATH "${CMAKE_SOURCE_DIR}/_imported/ffmpeg-${FFMPEG_VERSION}")
-set(FFMPEG_ARCHIVE_PATH "${CMAKE_SOURCE_DIR}/_imported/${FFMPEG_ARCHIVE_NAME}")
+set(FFMPEG_PATH "${REPO_ROOT}/_imported/ffmpeg-${FFMPEG_VERSION}")
+set(FFMPEG_ARCHIVE_PATH "${REPO_ROOT}/_imported/${FFMPEG_ARCHIVE_NAME}")
 set(FFMPEG_WORKDIR ffmpeg)
 
 if (NOT EXISTS "${FFMPEG_PATH}")
@@ -28,7 +28,7 @@ if (NOT EXISTS "${FFMPEG_PATH}")
 
   execute_process(
     COMMAND ${CMAKE_COMMAND} -E tar xzf "${FFMPEG_ARCHIVE_PATH}"
-    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/_imported"
+    WORKING_DIRECTORY "${REPO_ROOT}/_imported"
   )
 
   # We're patching exit just before return in main function of ffmpeg.c because it will crash the application

@@ -8,12 +8,6 @@ add_subdirectory(eillance-capture)
 add_subdirectory(eillance-rtc)
 add_subdirectory(eillance-bot-api)
 
-execute_process(
-  COMMAND git rev-parse --show-toplevel
-  OUTPUT_VARIABLE REPO_ROOT
-  OUTPUT_STRIP_TRAILING_WHITESPACE
-)
-
 # === Localization Generation ===
 # Define paths relative to src/libs (where this file resides)
 set(TRANS_SCRIPT "${REPO_ROOT}/tools/translations/generate.py")
