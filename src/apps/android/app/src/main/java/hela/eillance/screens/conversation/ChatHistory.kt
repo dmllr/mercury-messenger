@@ -22,6 +22,7 @@ import hela.eillance.ndkio.HistoryEntryKind
 import hela.eillance.ndkio.HistoryPage
 import hela.eillance.ndkio.MessageDirection
 import hela.eillance.ndkio.MessageStatus
+import hela.eillance.ndkio.Reaction
 import hela.eillance.viewmodels.ConversationViewModel
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -40,8 +41,18 @@ fun ChatHistory(
   zoneId: ZoneId,
   selectedMessageIds: Set<Long>,
   selectionMode: Boolean,
+  activeMessageActionId: Long?,
+  editingMessageId: Long?,
+  myId: String,
   onToggleSelection: (Long) -> Unit,
-  onLongClick: (HistoryEntry) -> Unit = {},
+  onMessageClick: (HistoryEntry) -> Unit,
+  onDismissMenu: () -> Unit,
+  onActionReact: (Long, Reaction) -> Unit,
+  onActionCopy: (String) -> Unit,
+  onActionEdit: (Long) -> Unit,
+  onActionDelete: (Long) -> Unit,
+  onEditCommit: (Long, String) -> Unit,
+  onEditCancel: () -> Unit,
   onSystemMessageClick: (HistoryEntry) -> Unit,
   onMediaClick: (List<Attachment>, Int) -> Unit
 ) {
@@ -111,7 +122,17 @@ fun ChatHistory(
           isUnread = currentItem.direction == MessageDirection.Received && currentItem.status != MessageStatus.Read,
           selectionMode = selectionMode,
           onToggleSelection = { onToggleSelection(currentItem.id) },
-          onLongClick = { onLongClick(currentItem) }
+          onMessageClick = { onMessageClick(currentItem) },
+          isMenuVisible = activeMessageActionId == currentItem.id,
+          onDismissMenu = onDismissMenu,
+          myId = myId,
+          onActionReact = { r -> onActionReact(currentItem.id, r) },
+          onActionCopy = { content -> onActionCopy(content) },
+          onActionEdit = { onActionEdit(currentItem.id) },
+          onActionDelete = { onActionDelete(currentItem.id) },
+          isEditing = editingMessageId == currentItem.id,
+          onEditCommit = { newText -> onEditCommit(currentItem.id, newText) },
+          onEditCancel = onEditCancel
         )
 
         HistoryEntryKind.VoiceCall, HistoryEntryKind.VideoCall -> CallLogBubble(

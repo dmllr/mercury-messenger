@@ -31,7 +31,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
@@ -42,6 +41,7 @@ import hela.eillance.ndkio.Attachment
 import hela.eillance.ndkio.HistoryEntry
 import hela.eillance.ndkio.MessageDirection
 import hela.eillance.ndkio.MessageStatus
+import hela.eillance.ndkio.Reaction
 import hela.eillance.theme.extendedColors
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -64,7 +64,17 @@ fun MessageBubble(
   isUnread: Boolean = false,
   selectionMode: Boolean = false,
   onToggleSelection: () -> Unit = {},
-  onLongClick: () -> Unit = {}
+  onMessageClick: () -> Unit = {},
+  isMenuVisible: Boolean = false,
+  onDismissMenu: () -> Unit = {},
+  myId: String = "",
+  onActionReact: (Reaction) -> Unit = {},
+  onActionCopy: (String) -> Unit = {},
+  onActionEdit: () -> Unit = {},
+  onActionDelete: () -> Unit = {},
+  isEditing: Boolean = false,
+  onEditCommit: (String) -> Unit = {},
+  onEditCancel: () -> Unit = {}
 ) {
   val isFromMe = entry.direction == MessageDirection.Sent
   val alignment = if (isFromMe) Alignment.CenterEnd else Alignment.CenterStart
@@ -112,9 +122,10 @@ fun MessageBubble(
       .combinedClickable(
         onClick = {
           if (selectionMode) onToggleSelection()
+          else onMessageClick()
         },
         onLongClick = {
-          if (selectionMode) onToggleSelection() else onLongClick()
+          if (!selectionMode) onToggleSelection()
         }
       )
       .background(if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent)
@@ -125,11 +136,28 @@ fun MessageBubble(
       ),
     contentAlignment = alignment
   ) {
+    // Menu Popup Logic
+    if (isMenuVisible) {
+      val myReactions = entry.reactions
+        .filter { it.authorId == myId }
+        .mapNotNull { it.reaction }
+        .toSet()
+
+      MessageActionMenu(
+        onDismiss = onDismissMenu,
+        onCopy = { entry.content?.let { onActionCopy(it) } ?: onDismissMenu() },
+        onDelete = onActionDelete,
+        onEdit = if (isFromMe && !entry.content.isNullOrBlank()) onActionEdit else null,
+        onReact = onActionReact,
+        currentReactions = myReactions,
+        isFromMe = isFromMe
+      )
+    }
+
     val bubbleContent = @Composable {
       Column(
         modifier = Modifier
-          .clip(bubbleShape)
-          .background(colors.first)
+          .background(colors.first, bubbleShape)
           .padding(horizontal = 4.dp, vertical = 4.dp),
         horizontalAlignment = if (isFromMe) Alignment.End else Alignment.Start
       ) {
@@ -154,8 +182,15 @@ fun MessageBubble(
           }
         }
 
-        // Render Text
-        if (!entry.content.isNullOrBlank()) {
+        // Render Text or Editor
+        if (isEditing && !entry.content.isNullOrBlank()) {
+          MessageEditor(
+            initialContent = entry.content,
+            onCommit = onEditCommit,
+            onCancel = onEditCancel,
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)
+          )
+        } else if (!entry.content.isNullOrBlank()) {
           val styledContent = remember(entry.content) {
             buildMessageContent(entry.content!!)
           }
@@ -176,8 +211,8 @@ fun MessageBubble(
           }
         }
 
-        // Edit Label & Reactions
-        if (entry.isEdited || entry.reactions.isNotEmpty()) {
+        // Edit Label & Reactions (Hide if editing)
+        if (!isEditing && (entry.isEdited || entry.reactions.isNotEmpty())) {
           Row(
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -215,7 +250,7 @@ fun MessageBubble(
           }
         }
 
-        if (isGroupTail) {
+        if (isGroupTail && !isEditing) {
           Row(
             modifier = Modifier.padding(top = 4.dp, end = 4.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically
