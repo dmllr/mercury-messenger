@@ -8,6 +8,6 @@ set(PLOG_INSTALL OFF CACHE BOOL "Disable plog install" FORCE)
 
 import_remote("https://github.com/SergiusTheBest/plog.git"
 	TAG "1.1.11"
-	DST "${CMAKE_SOURCE_DIR}/_imported"
+	DST "${REPO_ROOT}/_imported"
 	ALIAS plog
 )

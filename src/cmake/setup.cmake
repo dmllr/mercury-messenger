@@ -1,5 +1,14 @@
 # Setup CMake for the project
 
+execute_process(
+  COMMAND git rev-parse --show-toplevel
+  OUTPUT_VARIABLE REPO_ROOT
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+
+# Export to all directories
+set(REPO_ROOT "${REPO_ROOT}" CACHE INTERNAL "Git repository root")
+
 if(MSVC)
   # Set the desired static runtime library for all targets in the project.
   # This uses a generator expression to select MultiThreadedDebug (/MTd) for Debug builds

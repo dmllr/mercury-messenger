@@ -2,7 +2,7 @@ set(MBEDTLS_VERSION "3.6.2" CACHE INTERNAL "" FORCE)
 set(DISABLE_PACKAGE_CONFIG_AND_INSTALL OFF CACHE INTERNAL "" FORCE)
 import_remote("https://github.com/Mbed-TLS/mbedtls.git"
   TAG "v${MBEDTLS_VERSION}"
-  DST "${CMAKE_SOURCE_DIR}/_imported"
+  DST "${REPO_ROOT}/_imported"
   ALIAS libmbedtls)
 
 target_compile_definitions(mbedtls PUBLIC MBEDTLS_SSL_DTLS_SRTP)
