@@ -1,6 +1,7 @@
 package hela.eillance.screens
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.Context
@@ -13,10 +14,11 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -35,6 +37,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.DividerDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -42,6 +45,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
@@ -50,6 +54,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -153,6 +158,11 @@ fun ConversationScreen(
   var activeMessageActionId by remember { mutableStateOf<Long?>(null) }
   var editingMessageId by remember { mutableStateOf<Long?>(null) }
   var showDeleteDialogId by remember { mutableStateOf<Long?>(null) }
+
+  // Scroll to bottom button visibility (Reverse layout: index 0 is bottom)
+  val showScrollToBottom by remember {
+    derivedStateOf { listState.firstVisibleItemIndex > 5 }
+  }
 
   // Handle Back press to clear selection or search or active action
   BackHandler(enabled = selectionMode || isSearchActive || activeMessageActionId != null || editingMessageId != null) {
@@ -492,7 +502,7 @@ fun ConversationScreen(
 
         val showPermissionBanner = !isConnectionIssue && bannerState != null
 
-        AnimatedVisibility(
+        androidx.compose.animation.AnimatedVisibility(
           visible = isConnectionIssue || showPermissionBanner,
           enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
           exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut()
@@ -529,6 +539,7 @@ fun ConversationScreen(
                     actionLabel = "Fix it",
                     onAction = {
                       val intent =
+                        @SuppressLint("BatteryLife")
                         Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
                           data = Uri.fromParts("package", context.packageName, null)
                         }
@@ -572,87 +583,113 @@ fun ConversationScreen(
           ConnectionStatusBar(contact = it)
         }
 
-        ChatHistory(
-          modifier = Modifier.weight(1f),
-          historyPage = historyPage,
-          listState = listState,
-          chatVM = chatVM,
-          transferProgress = transferProgress,
-          locale = locale,
-          zoneId = zoneId,
-          selectedMessageIds = selectedMessageIds,
-          selectionMode = selectionMode,
-          activeMessageActionId = activeMessageActionId,
-          editingMessageId = editingMessageId,
-          myId = myId,
-          onToggleSelection = { id ->
-            selectedMessageIds = if (id in selectedMessageIds) {
-              selectedMessageIds - id
-            } else {
-              selectedMessageIds + id
-            }
-          },
-          onSystemMessageClick = { clickedEntry ->
-            if (clickedEntry.isTruncated) {
-              tappedTruncatedMessageId = clickedEntry.id
-              chatVM.loadFullMessage(clickedEntry.id)
-            } else {
-              systemMessageToShowDetails = clickedEntry
-            }
-          },
-          onMediaClick = { attachments, index ->
-            val target = attachments[index]
-            if (target.type == AttachmentType.Image || target.type == AttachmentType.Video) {
-              val visuals =
-                attachments.filter { it.type == AttachmentType.Image || it.type == AttachmentType.Video }
-              val visualIndex = visuals.indexOf(target)
-              if (visualIndex != -1) {
-                onMediaClick(visuals, visualIndex)
-              }
-            } else {
-              val file = File(target.path)
-              if (target.isDownloaded && file.exists()) {
-                openFile(context, file, target.mime)
+        Box(modifier = Modifier.weight(1f)) {
+          ChatHistory(
+            modifier = Modifier.fillMaxSize(),
+            historyPage = historyPage,
+            listState = listState,
+            chatVM = chatVM,
+            transferProgress = transferProgress,
+            locale = locale,
+            zoneId = zoneId,
+            selectedMessageIds = selectedMessageIds,
+            selectionMode = selectionMode,
+            activeMessageActionId = activeMessageActionId,
+            editingMessageId = editingMessageId,
+            myId = myId,
+            onToggleSelection = { id ->
+              selectedMessageIds = if (id in selectedMessageIds) {
+                selectedMessageIds - id
               } else {
-                Toast.makeText(
-                  context,
-                  R.string.toast_file_not_downloaded,
-                  Toast.LENGTH_SHORT
-                ).show()
+                selectedMessageIds + id
               }
+            },
+            onSystemMessageClick = { clickedEntry ->
+              if (clickedEntry.isTruncated) {
+                tappedTruncatedMessageId = clickedEntry.id
+                chatVM.loadFullMessage(clickedEntry.id)
+              } else {
+                systemMessageToShowDetails = clickedEntry
+              }
+            },
+            onMediaClick = { attachments, index ->
+              val target = attachments[index]
+              if (target.type == AttachmentType.Image || target.type == AttachmentType.Video) {
+                val visuals =
+                  attachments.filter { it.type == AttachmentType.Image || it.type == AttachmentType.Video }
+                val visualIndex = visuals.indexOf(target)
+                if (visualIndex != -1) {
+                  onMediaClick(visuals, visualIndex)
+                }
+              } else {
+                val file = File(target.path)
+                if (target.isDownloaded && file.exists()) {
+                  openFile(context, file, target.mime)
+                } else {
+                  Toast.makeText(
+                    context,
+                    R.string.toast_file_not_downloaded,
+                    Toast.LENGTH_SHORT
+                  ).show()
+                }
+              }
+            },
+            onMessageClick = { entry ->
+              activeMessageActionId = if (activeMessageActionId == entry.id) null else entry.id
+            },
+            onDismissMenu = { activeMessageActionId = null },
+            onActionReact = { msgId, reaction ->
+              chatVM.reactToMessage(msgId, reaction)
+              activeMessageActionId = null
+            },
+            onActionCopy = { content ->
+              coroutineScope.launch {
+                val clip = ClipData.newPlainText("Message", content)
+                clipboard.setClipEntry(ClipEntry(clip))
+              }
+              activeMessageActionId = null
+            },
+            onActionEdit = { msgId ->
+              activeMessageActionId = null
+              editingMessageId = msgId
+            },
+            onActionDelete = { msgId ->
+              activeMessageActionId = null
+              showDeleteDialogId = msgId
+            },
+            onEditCommit = { msgId, newText ->
+              chatVM.editMessage(msgId, newText)
+              editingMessageId = null
+            },
+            onEditCancel = {
+              editingMessageId = null
             }
-          },
-          onMessageClick = { entry ->
-            activeMessageActionId = if (activeMessageActionId == entry.id) null else entry.id
-          },
-          onDismissMenu = { activeMessageActionId = null },
-          onActionReact = { msgId, reaction ->
-            chatVM.reactToMessage(msgId, reaction)
-            activeMessageActionId = null
-          },
-          onActionCopy = { content ->
-            coroutineScope.launch {
-              val clip = ClipData.newPlainText("Message", content)
-              clipboard.setClipEntry(ClipEntry(clip))
+          )
+
+          androidx.compose.animation.AnimatedVisibility(
+            visible = showScrollToBottom,
+            modifier = Modifier
+              .align(Alignment.BottomEnd)
+              .padding(16.dp),
+            enter = fadeIn() + scaleIn(),
+            exit = fadeOut() + scaleOut()
+          ) {
+            SmallFloatingActionButton(
+              onClick = {
+                coroutineScope.launch {
+                  listState.animateScrollToItem(0)
+                }
+              },
+              containerColor = MaterialTheme.colorScheme.secondaryContainer,
+              contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+            ) {
+              Icon(
+                Icons.Default.KeyboardArrowDown,
+                contentDescription = stringResource(R.string.action_scroll_to_bottom)
+              )
             }
-            activeMessageActionId = null
-          },
-          onActionEdit = { msgId ->
-            activeMessageActionId = null
-            editingMessageId = msgId
-          },
-          onActionDelete = { msgId ->
-            activeMessageActionId = null
-            showDeleteDialogId = msgId
-          },
-          onEditCommit = { msgId, newText ->
-            chatVM.editMessage(msgId, newText)
-            editingMessageId = null
-          },
-          onEditCancel = {
-            editingMessageId = null
           }
-        )
+        }
 
         when (contact?.status) {
           ContactStatus.awaitingApproval -> {
@@ -682,7 +719,12 @@ fun ConversationScreen(
               inputValue = messageText,
               onInputValueChange = chatVM::updateMessageText,
               draftAttachments = draftAttachments,
-              onSendMessage = chatVM::sendMessage,
+              onSendMessage = { text ->
+                chatVM.sendMessage(text)
+                coroutineScope.launch {
+                  listState.animateScrollToItem(0)
+                }
+              },
               onAddDrafts = chatVM::addDraftAttachments,
               onRemoveDraft = chatVM::removeDraft,
               onUpdateNote = chatVM::updateDraftNote

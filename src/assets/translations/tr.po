@@ -80,6 +80,8 @@ msgid "action_mark_read"
 msgstr "Okundu olarak işaretle"
 msgid "action_search"
 msgstr "Ara"
+msgid "action_scroll_to_bottom"
+msgstr "Aşağı kaydır"
 
 # Connection States
 msgid "connection_no_network"
