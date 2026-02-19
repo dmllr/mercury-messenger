@@ -1,7 +1,6 @@
 #pragma once
 
 #include <atomic>
-#include <cassert>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -92,7 +91,7 @@ class RtcDataTransport : public transport::DataTransport::Interface {
   }
 
   void SetId(ContactID const& id) override {
-    assert(!is_logged_in_);
+    INVARIANT(!is_logged_in_);
     id_ = id;
     if (deviceName_.empty()) {
       deviceName_ = id_.ToString();
@@ -104,8 +103,8 @@ class RtcDataTransport : public transport::DataTransport::Interface {
   }
 
   void Start() override {
-    assert(delegate_ != nullptr && "RtcDataTransport delegate must be set before starting");
-    assert(!id_.IsEmpty());
+    INVARIANT_NOT_NULL(delegate_);
+    INVARIANT(!id_.IsEmpty());
     LGI << "The local ID is: " << id_;
     terminate_requested_ = false;
     ConnectWebSocket();
@@ -141,7 +140,9 @@ class RtcDataTransport : public transport::DataTransport::Interface {
 
       ::rtc::Configuration new_config;
       for (auto const& entry : json) {
-        if (!entry.contains("urls")) continue;
+        if (!entry.contains("urls")) {
+          continue;
+        }
 
         auto urls_entry = entry["urls"];
         std::string url;
@@ -152,15 +153,17 @@ class RtcDataTransport : public transport::DataTransport::Interface {
           url = urls_entry.get<std::string>();
         }
 
-        if (url.empty()) continue;
+        if (url.empty()) {
+          continue;
+        }
 
         if (url.rfind("turn", 0) == 0) {
-          std::string username = entry.value("username", "");
-          std::string credential = entry.value("credential", "");
+          std::string const username = entry.value("username", "");
+          std::string const credential = entry.value("credential", "");
           if (!username.empty() && !credential.empty()) {
             auto scheme_end = url.find(":");
             if (scheme_end != std::string::npos) {
-              std::string host_part = url.substr(scheme_end + 1);
+              std::string const host_part = url.substr(scheme_end + 1);
               new_config.iceServers.emplace_back("turn:" + username + ":" + credential + "@" + host_part);
             } else {
               new_config.iceServers.emplace_back(url);
@@ -201,8 +204,7 @@ class RtcDataTransport : public transport::DataTransport::Interface {
 
   auto GetConnectionState(ContactID const& peer_id) const -> transport::PeerConnectionState override {
     std::lock_guard<std::mutex> const lock(peersMutex_);
-    auto const it = peers_.find(peer_id);
-    if (it != peers_.end() && it->second && it->second->data_peer_connection) {
+    if (auto const it = peers_.find(peer_id); it != peers_.end() && it->second && it->second->data_peer_connection) {
       return transport::ToEillanceState(
           std::static_pointer_cast<::rtc::PeerConnection>(it->second->data_peer_connection)->state()
       );
@@ -305,16 +307,17 @@ class RtcDataTransport : public transport::DataTransport::Interface {
 
  private:
   void ConnectWebSocket() {
-    if (ws_ != nullptr && ws_->isOpen()) return;
-    if (terminate_requested_) return;
+    if ((ws_ != nullptr && ws_->isOpen()) || terminate_requested_) {
+      return;
+    }
 
     auto ws_config = ::rtc::WebSocketConfiguration{.disableTlsVerification = true};
     ReportServiceConnectionState(ServiceConnectionState::establishing);
     ws_ = std::make_unique<::rtc::WebSocket>(ws_config);
-    ws_->onOpen([this]() { OnWebSocketOpen(); });
-    ws_->onClosed([this]() { OnWebSocketClosed(); });
-    ws_->onError([this](std::string const& error) { OnWebSocketError(error); });
-    ws_->onMessage(nullptr, [this](std::string const& data) { OnWebSocketMessage(data); });
+    ws_->onOpen([this]() -> void { OnWebSocketOpen(); });
+    ws_->onClosed([this]() -> void { OnWebSocketClosed(); });
+    ws_->onError([this](std::string const& error) -> void { OnWebSocketError(error); });
+    ws_->onMessage(nullptr, [this](std::string const& data) -> void { OnWebSocketMessage(data); });
 
     if (signalingServerUrl_.empty()) {
 #if SERVER_DEBUG
@@ -334,7 +337,9 @@ class RtcDataTransport : public transport::DataTransport::Interface {
     Login();
     std::lock_guard<std::mutex> const lock(messageQueueMutex_);
     if (!message_queue_.empty()) {
-      for (auto const& msg : message_queue_) ws_->send(msg);
+      for (auto const& msg : message_queue_) {
+        ws_->send(msg);
+      }
       message_queue_.clear();
     }
   }
@@ -347,7 +352,7 @@ class RtcDataTransport : public transport::DataTransport::Interface {
       message_queue_.clear();
     }
     auto peers_to_close = GetPeers();
-    for (auto const& [id, peer] : peers_to_close) {
+    for (auto const& peer : peers_to_close | std::views::values) {
       if (peer && peer->data_peer_connection) {
         std::static_pointer_cast<::rtc::PeerConnection>(peer->data_peer_connection)->close();
       }
@@ -363,9 +368,11 @@ class RtcDataTransport : public transport::DataTransport::Interface {
   }
 
   void ScheduleReconnect() {
-    if (terminate_requested_) return;
+    if (terminate_requested_) {
+      return;
+    }
     connectionAttempt_++;
-    DispatchQueue::MainThread().DispatchAfter(std::chrono::seconds(waitBeforeReconnect_), [this]() {
+    DispatchQueue::MainThread().DispatchAfter(std::chrono::seconds(waitBeforeReconnect_), [this]() -> void {
       ConnectWebSocket();
     });
     if (connectionAttempt_ < maxConnectionAttempts) {
@@ -374,13 +381,13 @@ class RtcDataTransport : public transport::DataTransport::Interface {
   }
 
   void OnWebSocketMessage(std::string const& data) {
-    assert(delegate_);
+    INVARIANT_NOT_NULL(delegate_);
     auto const message = Json::parse(data);
     auto const itr = message.find("from");
     if (itr == message.end()) {
-      DispatchQueue::MainThread().Dispatch([this, message]() { OnSystemMessage(message); });
+      DispatchQueue::MainThread().Dispatch([this, message]() -> void { OnSystemMessage(message); });
     } else {
-      DispatchQueue::MainThread().Dispatch([this, message]() { delegate_->ProcessPeerMessage(message); });
+      DispatchQueue::MainThread().Dispatch([this, message]() -> void { delegate_->ProcessPeerMessage(message); });
     }
   }
 
@@ -409,18 +416,21 @@ class RtcDataTransport : public transport::DataTransport::Interface {
   }
 
   void OnSystemMessage(Json const& message) {
-    assert(delegate_);
+    INVARIANT_NOT_NULL(delegate_);
     auto const itr = message.find("type");
-    if (itr == message.end()) return;
-    auto const type = itr->get<std::string>();
+    if (itr == message.end()) {
+      return;
+    }
 
-    if (type == "error") {
+    if (auto const type = itr->get<std::string>(); type == "error") {
       auto const error = message.value("error", "unknown");
       LGE << "Signaling error received: " << error;
       if (auto const for_peer_it = message.find("for_peer"); for_peer_it != message.end()) {
         delegate_->OnSignalingErrorForPeer(for_peer_it->get<ContactID>(), error);
       } else {
-        if (error == "auth_failed") Terminate();
+        if (error == "auth_failed") {
+          Terminate();
+        }
         ReportServiceConnectionState(ServiceConnectionState::failure);
       }
     } else {
@@ -494,7 +504,9 @@ class RtcDataTransport : public transport::DataTransport::Interface {
 
     auto on_open_func = [this, peer_id]() {
       DispatchQueue::MainThread().Dispatch([this, peer_id]() {
-        if (delegate_) delegate_->OnDataChannelOpen(peer_id);
+        if (delegate_) {
+          delegate_->OnDataChannelOpen(peer_id);
+        }
       });
     };
 
