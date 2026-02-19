@@ -80,6 +80,8 @@ msgid "action_mark_read"
 msgstr "읽음으로 표시"
 msgid "action_search"
 msgstr "검색"
+msgid "action_scroll_to_bottom"
+msgstr "맨 아래로 스크롤"
 
 # Connection States
 msgid "connection_no_network"

@@ -80,6 +80,8 @@ msgid "action_mark_read"
 msgstr "标记为已读"
 msgid "action_search"
 msgstr "搜索"
+msgid "action_scroll_to_bottom"
+msgstr "滚动到底部"
 
 # Connection States
 msgid "connection_no_network"

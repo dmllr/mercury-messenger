@@ -80,6 +80,8 @@ msgid "action_mark_read"
 msgstr "Marquer comme lu"
 msgid "action_search"
 msgstr "Rechercher"
+msgid "action_scroll_to_bottom"
+msgstr "Aller en bas"
 
 # Connection States
 msgid "connection_no_network"
