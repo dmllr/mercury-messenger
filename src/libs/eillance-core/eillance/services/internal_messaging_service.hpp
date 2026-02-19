@@ -18,6 +18,7 @@
 #include "eillance/services/messaging_service.hpp"
 #include "eillance/services/profile_service.hpp"
 #include "eillance/transport/data_transport.hpp"
+#include "eillance/transport/protocol.hpp"
 #include "eillance/utils/time.hpp"
 
 namespace eillance::services {
@@ -52,26 +53,23 @@ class InternalMessagingService {
   }
 
   void ProcessSystemMessage(std::string const& type, Json const& message) {
-    if (type == "auth_challenge") {
-      auto const challenge = message.value("challenge", "");
+    if (type == transport::protocol::values::authChallenge) {
+      auto const challenge = message.value(transport::protocol::keys::challenge, "");
       if (!challenge.empty()) {
         std::span<std::byte const> const challenge_bytes(
             reinterpret_cast<std::byte const*>(challenge.data()),
             challenge.size()
         );
         auto const signature = account_service_->Sign(challenge_bytes);
-        Json const response = {
-            {"type", "auth_response"},
-            {"id", account_service_->GetId().ToString()},
-            {"signature", crypto::ToHex(signature)}
-        };
+        auto const response =
+            transport::protocol::CreateAuthResponse(account_service_->GetId(), crypto::ToHex(signature));
         data_transport_->SendSignalingMessage(response);
       }
-    } else if (type == "login_success") {
+    } else if (type == transport::protocol::values::loginSuccess) {
       messaging_service_->StartDeliveryService();
-    } else if (type == "ice_servers") {
-      if (message.contains("servers") && ice_config_callback_) {
-        ice_config_callback_(message["servers"]);
+    } else if (type == transport::protocol::values::iceServers) {
+      if (message.contains(transport::protocol::keys::servers) && ice_config_callback_) {
+        ice_config_callback_(message[transport::protocol::keys::servers]);
       }
     } else {
       LGW << "Received unknown system message of type: " << type;
@@ -80,7 +78,7 @@ class InternalMessagingService {
 
   void ProcessSignalingMessage(ContactID const& peer_id, std::string const& type, Json const& message) {
     // SDP Signaling (Unified)
-    if (type == "offer" || type == "answer") {
+    if (type == transport::protocol::values::offer || type == transport::protocol::values::answer) {
       HandleSdp(peer_id, type, message);
       return;
     }
@@ -157,7 +155,7 @@ class InternalMessagingService {
       media_call_service_->OnCallAccepted(peer_id, message.value("call_id", ""));
     } else if (type == "call_ringing") {
       media_call_service_->OnCallRinging(peer_id, message.value("call_id", ""));
-    } else if (type == "offer" || type == "answer") {
+    } else if (type == transport::protocol::values::offer || type == transport::protocol::values::answer) {
       ProcessSignalingMessage(peer_id, type, message);
     } else if (type == "contact_removed") {
       contact_service_->OnContactRemoved(peer_id);
@@ -218,11 +216,12 @@ class InternalMessagingService {
 
  private:
   void HandleSdp(ContactID const& peer_id, std::string const& type, Json const& message) {
-    std::string const context_str = message.value("context", "data");
-    bool const is_media = (context_str == "media");
+    std::string const context_str =
+        message.value(transport::protocol::keys::context, transport::protocol::values::contextData);
+    bool const is_media = (context_str == transport::protocol::values::contextMedia);
 
     if (auto peer = data_transport_->GetPeer(peer_id); !peer) {
-      if (type == "offer") {
+      if (type == transport::protocol::values::offer) {
         peer = std::make_shared<transport::Peer>(peer_id);
         data_transport_->AddPeer(peer_id, peer);
         SetupPeerHandlers(peer, peer_id);
@@ -235,21 +234,29 @@ class InternalMessagingService {
       SetupPeerHandlers(peer, peer_id);
     }
 
-    if (type == "offer") {
+    if (type == transport::protocol::values::offer) {
       if (is_media) {
-        auto const sdp = message["sdp"].get<std::string>();
+        auto const sdp = message[transport::protocol::keys::sdp].get<std::string>();
         media_call_service_->OnMediaOffer(peer_id, sdp);
       } else {
         // Data offer
         data_transport_->Connect(peer_id);
-        data_transport_->SetRemoteDescription(peer_id, message["sdp"].get<std::string>(), "offer");
+        data_transport_->SetRemoteDescription(
+            peer_id,
+            message[transport::protocol::keys::sdp].get<std::string>(),
+            transport::protocol::values::offer
+        );
         data_transport_->CreateAnswer(peer_id);
       }
-    } else if (type == "answer" || type == "pranswer") {
+    } else if (type == transport::protocol::values::answer || type == transport::protocol::values::prAnswer) {
       if (is_media) {
-        media_call_service_->OnMediaAnswer(peer_id, message["sdp"].get<std::string>());
+        media_call_service_->OnMediaAnswer(peer_id, message[transport::protocol::keys::sdp].get<std::string>());
       } else {
-        data_transport_->SetRemoteDescription(peer_id, message["sdp"].get<std::string>(), "answer");
+        data_transport_->SetRemoteDescription(
+            peer_id,
+            message[transport::protocol::keys::sdp].get<std::string>(),
+            transport::protocol::values::answer
+        );
       }
     }
   }

@@ -18,6 +18,7 @@
 #include "eillance/rtc/connection_state_conversion.hpp"
 #include "eillance/transport/media_transport.hpp"
 #include "eillance/transport/peer.hpp"
+#include "eillance/transport/protocol.hpp"
 
 namespace eillance::rtc {
 
@@ -85,12 +86,12 @@ class RtcMediaTransport : public transport::MediaTransport::Interface {
     pc->onGatheringStateChange([this, peer_id, pc](::rtc::PeerConnection::GatheringState const state) -> void {
       if (state == ::rtc::PeerConnection::GatheringState::Complete) {
         if (auto const desc = pc->localDescription()) {
-          nlohmann::json const msg = {
-              {"type", desc->typeString()},
-              {"sdp", std::string(*desc)},
-              {"context", "media"},
-              {"to", peer_id.ToString()}
-          };
+          auto const msg = transport::protocol::CreateSdp(
+              desc->typeString(),
+              std::string(*desc),
+              transport::protocol::values::contextMedia,
+              peer_id
+          );
           {
             std::lock_guard<std::mutex> const lock(configMutex_);
             // TODO: implement send

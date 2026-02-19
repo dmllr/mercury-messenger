@@ -22,6 +22,7 @@
 #include "eillance/rtc/connection_state_conversion.hpp"
 #include "eillance/transport/data_transport.hpp"
 #include "eillance/transport/peer.hpp"
+#include "eillance/transport/protocol.hpp"
 #include "eillance/transport/transport_delegate.hpp"
 #include "eillance/utils/dispatch_queue.hpp"
 #include "eillance/utils/invariant.hpp"
@@ -294,7 +295,7 @@ class RtcDataTransport : public transport::DataTransport::Interface {
     if (dc && dc->isOpen()) {
       auto const msg_str = message.dump();
       // NOLINTNEXTLINE(*-pro-type-reinterpret-cast)
-      bool const result = dc->send(reinterpret_cast<const std::byte*>(msg_str.data()), msg_str.size());
+      bool const result = dc->send(reinterpret_cast<std::byte const*>(msg_str.data()), msg_str.size());
       if (!result) {
         LGE << "SendJson: dc->send() returned false for " << peer_id;
       }
@@ -413,8 +414,7 @@ class RtcDataTransport : public transport::DataTransport::Interface {
   }
 
   void Login() {
-    Json const message = {{"type", "login"}, {"id", id_}};
-    WsSendMessage(message);
+    WsSendMessage(transport::protocol::CreateLogin(id_));
   }
 
   void OnSystemMessage(Json const& message) {
@@ -460,12 +460,12 @@ class RtcDataTransport : public transport::DataTransport::Interface {
     pc->onGatheringStateChange([this, peer_id, pc](::rtc::PeerConnection::GatheringState state) {
       if (state == ::rtc::PeerConnection::GatheringState::Complete) {
         if (pc && pc->localDescription()) {
-          Json const message = {
-              {"type", pc->localDescription()->typeString()},
-              {"sdp", std::string(*pc->localDescription())},
-              {"context", "data"},
-              {"to", peer_id.ToString()}
-          };
+          auto const message = transport::protocol::CreateSdp(
+              pc->localDescription()->typeString(),
+              std::string(*pc->localDescription()),
+              transport::protocol::values::contextData,
+              peer_id
+          );
           WsSendMessage(message);
         }
       }
@@ -525,7 +525,7 @@ class RtcDataTransport : public transport::DataTransport::Interface {
           payload.assign(bin.begin(), bin.end());
         } else if (std::holds_alternative<std::string>(msg)) {
           auto const& str = std::get<std::string>(msg);
-          auto const* data = reinterpret_cast<std::byte const*>(str.data()); // NOLINT(*-pro-type-reinterpret-cast)
+          auto const* data = reinterpret_cast<std::byte const*>(str.data());  // NOLINT(*-pro-type-reinterpret-cast)
           payload.assign(data, std::next(data, str.size()));
         }
 
