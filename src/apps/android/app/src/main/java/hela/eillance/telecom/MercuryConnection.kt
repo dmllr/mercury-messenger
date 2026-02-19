@@ -1,12 +1,10 @@
 package hela.eillance.telecom
 
 import android.net.Uri
-import android.telecom.CallAudioState
 import android.telecom.Connection
 import android.telecom.DisconnectCause
 import android.telecom.PhoneAccount
 import android.telecom.TelecomManager
-import android.util.Log
 import hela.eillance.MessengerService
 
 class MercuryConnection(

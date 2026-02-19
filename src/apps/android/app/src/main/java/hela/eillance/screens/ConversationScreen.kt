@@ -84,6 +84,7 @@ import hela.eillance.ndkio.CallState
 import hela.eillance.ndkio.Contact
 import hela.eillance.ndkio.ContactStatus
 import hela.eillance.ndkio.HistoryEntry
+import hela.eillance.ndkio.HistoryEntryKind
 import hela.eillance.ndkio.HistoryPage
 import hela.eillance.ndkio.MessageDirection
 import hela.eillance.ndkio.ServiceConnectionState
@@ -91,7 +92,10 @@ import hela.eillance.screens.conversation.ApprovalRequestBar
 import hela.eillance.screens.conversation.ChatHistory
 import hela.eillance.screens.conversation.ConnectionStatusBar
 import hela.eillance.screens.conversation.ConversationDefaultTopBar
+import hela.eillance.screens.conversation.DeleteMessageDialog
+import hela.eillance.screens.conversation.EditMessageDialog
 import hela.eillance.screens.conversation.MessageInputArea
+import hela.eillance.screens.conversation.MessageOptionsSheet
 import hela.eillance.screens.conversation.PendingApprovalBar
 import hela.eillance.screens.conversation.SelectionTopBar
 import hela.eillance.screens.conversation.formatTimestamp
@@ -116,6 +120,7 @@ fun ConversationScreen(
   mainViewModel: MainViewModel,
   peerId: String,
   contact: Contact?,
+  myId: String,
   historyPage: HistoryPage,
   callState: CallState,
   connectionState: ServiceConnectionState,
@@ -144,6 +149,11 @@ fun ConversationScreen(
   val searchResults by chatVM.searchResults.collectAsState()
   val focusRequester = remember { FocusRequester() }
   val focusManager = LocalFocusManager.current
+
+  // Message Actions State
+  var activeMessageActionId by remember { mutableStateOf<Long?>(null) }
+  var showEditDialogId by remember { mutableStateOf<Long?>(null) }
+  var showDeleteDialogId by remember { mutableStateOf<Long?>(null) }
 
   // Handle Back press to clear selection or search
   BackHandler(enabled = selectionMode || isSearchActive) {
@@ -203,9 +213,6 @@ fun ConversationScreen(
 
   var systemMessageToShowDetails by remember { mutableStateOf<HistoryEntry?>(null) }
   var tappedTruncatedMessageId by remember { mutableStateOf<Long?>(null) }
-
-  // Auto-navigation removed: Global navigation in MercuryApp handles this.
-  // Keeping this here causes a navigation loop when pressing Back from the Call Screen.
 
   LaunchedEffect(targetMessageId) {
     targetMessageId?.let { msgId ->
@@ -271,6 +278,72 @@ fun ConversationScreen(
 
   systemMessageToShowDetails?.let { entry ->
     SystemMessageDetailsDialog(entry = entry, onDismiss = { systemMessageToShowDetails = null })
+  }
+
+  // Message Actions Sheets/Dialogs
+  activeMessageActionId?.let { msgId ->
+    val message = historyPage.messages.find { it.id == msgId }
+    if (message != null) {
+      val isFromMe = message.direction == MessageDirection.Sent
+      val canEdit =
+        isFromMe && message.kind == HistoryEntryKind.TextMessage && !message.content.isNullOrBlank()
+      val myReactions =
+        message.reactions.filter { it.authorId == myId }.mapNotNull { it.reaction }.toSet()
+
+      MessageOptionsSheet(
+        onDismiss = { activeMessageActionId = null },
+        onCopy = {
+          message.content?.let { content ->
+            coroutineScope.launch {
+              val clip = ClipData.newPlainText("Message", content)
+              clipboard.setClipEntry(ClipEntry(clip))
+            }
+          }
+        },
+        onDelete = {
+          activeMessageActionId = null
+          showDeleteDialogId = msgId
+        },
+        onEdit = if (canEdit) {
+          {
+            activeMessageActionId = null
+            showEditDialogId = msgId
+          }
+        } else null,
+        onReact = { reaction ->
+          chatVM.reactToMessage(msgId, reaction)
+        },
+        currentReactions = myReactions
+      )
+    } else {
+      activeMessageActionId = null
+    }
+  }
+
+  showEditDialogId?.let { msgId ->
+    val message = historyPage.messages.find { it.id == msgId }
+    if (message != null && message.content != null) {
+      EditMessageDialog(
+        initialContent = message.content,
+        onDismiss = { showEditDialogId = null },
+        onConfirm = { newText ->
+          chatVM.editMessage(msgId, newText)
+          showEditDialogId = null
+        }
+      )
+    } else {
+      showEditDialogId = null
+    }
+  }
+
+  showDeleteDialogId?.let { msgId ->
+    DeleteMessageDialog(
+      onDismiss = { showDeleteDialogId = null },
+      onConfirm = {
+        chatVM.deleteMessage(msgId)
+        showDeleteDialogId = null
+      }
+    )
   }
 
   Scaffold(
@@ -598,6 +671,9 @@ fun ConversationScreen(
                 ).show()
               }
             }
+          },
+          onLongClick = { entry ->
+            activeMessageActionId = entry.id
           }
         )
 

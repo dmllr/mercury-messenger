@@ -145,6 +145,10 @@ class MercuryNotifications(private val service: MessengerService) {
 
     if (messages.isNotEmpty()) {
       messages.forEach { msg ->
+        if (msg.isDeleted) {
+          // Skip deleted messages in notification logic
+          return@forEach
+        }
         val text = if (showContent) {
           if (!msg.content.isNullOrBlank()) msg.content
           else if (msg.attachments.isNotEmpty()) {

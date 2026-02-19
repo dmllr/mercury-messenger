@@ -187,6 +187,16 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     classref.RegisterMethod(env, "java/util/ArrayList", "add", "(Ljava/lang/Object;)Z");
     classref.RegisterMethod(env, "java/util/ArrayList", "get", "(I)Ljava/lang/Object;");
 
+    classref.RegisterClass(env, "hela/eillance/ndkio/ReactionEntry");
+    classref.RegisterCtor(env, "hela/eillance/ndkio/ReactionEntry", "(Ljava/lang/String;I)V");
+
+    classref.RegisterClass(env, "hela/eillance/ndkio/HistoryEntry");
+    classref.RegisterCtor(
+        env,
+        "hela/eillance/ndkio/HistoryEntry",
+        "(JIJLjava/lang/String;IIIIIZZZLjava/util/List;Ljava/util/List;)V"
+    );
+
     classref.RegisterCtor(
         env,
         "hela/eillance/ndkio/MyProfileInfo",
@@ -199,7 +209,6 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
         "String;II)V"
     );
     classref.RegisterCtor(env, "hela/eillance/ndkio/CallState", "(ZZZILjava/lang/String;I)V");
-    classref.RegisterCtor(env, "hela/eillance/ndkio/HistoryEntry", "(JIJLjava/lang/String;IIIIIZLjava/util/List;)V");
     classref.RegisterCtor(env, "hela/eillance/ndkio/HistoryPage", "(Ljava/util/List;Z)V");
     classref.RegisterCtor(
         env,

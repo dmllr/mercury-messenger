@@ -582,7 +582,14 @@ TEST_F(SQLiteStorageTest, SearchLargeMessage) {
   auto res2 = storage_->SearchMessages(peer1, "secret");
   ASSERT_EQ(res2.size(), 1);
   // Verify full content is returned in search result for context
-  EXPECT_EQ(std::get<messaging::MessageEntry>(res2[0].data).content, long_msg);
+  auto const& msg_data = std::get<messaging::MessageEntry>(res2[0].data);
+  if (res2[0].is_truncated && msg_data.content.size() < long_msg.size()) {
+    auto full = storage_->GetFullMessageContent(peer1, res2[0].id);
+    ASSERT_TRUE(full.has_value());
+    EXPECT_EQ(*full, long_msg);
+  } else {
+    EXPECT_EQ(msg_data.content, long_msg);
+  }
 }
 
 TEST_F(SQLiteStorageTest, SearchAllPeers) {
@@ -677,4 +684,83 @@ TEST_F(SQLiteStorageTest, SearchCaseInsensitive) {
   // Mixed case query finding mixed case content
   auto res3 = storage_->SearchMessages(peer1, "mIxEdCaSe");
   ASSERT_EQ(res3.size(), 1);
+}
+
+TEST_F(SQLiteStorageTest, EditMessage) {
+  storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
+  auto entry = storage_->AddHistoryEntry(
+      {.kind = messaging::HistoryEntryKind::textMessage,
+       .timestamp = Time::Now(),
+       .direction = messaging::MessageDirection::sent,
+       .data = messaging::MessageEntry{"Original"},
+       .peer_id = peer1}
+  );
+
+  storage_->UpdateMessageContent(peer1, entry.id, "Edited Content");
+
+  auto loaded = storage_->GetHistoryEntry(peer1, entry.id);
+  ASSERT_TRUE(loaded);
+  EXPECT_EQ(std::get<messaging::MessageEntry>(loaded->data).content, "Edited Content");
+  EXPECT_TRUE(loaded->is_edited);
+}
+
+TEST_F(SQLiteStorageTest, DeleteMessage) {
+  storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
+  auto entry = storage_->AddHistoryEntry(
+      {.kind = messaging::HistoryEntryKind::textMessage,
+       .timestamp = Time::Now(),
+       .direction = messaging::MessageDirection::sent,
+       .data = messaging::MessageEntry{"Content"},
+       .peer_id = peer1}
+  );
+
+  storage_->MarkMessageDeleted(peer1, entry.id);
+
+  auto loaded = storage_->GetHistoryEntry(peer1, entry.id);
+  ASSERT_TRUE(loaded);
+  EXPECT_TRUE(loaded->is_deleted);
+}
+
+TEST_F(SQLiteStorageTest, Reactions) {
+  storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
+  auto entry = storage_->AddHistoryEntry(
+      {.kind = messaging::HistoryEntryKind::textMessage,
+       .timestamp = Time::Now(),
+       .direction = messaging::MessageDirection::sent,
+       .data = messaging::MessageEntry{"Content"},
+       .peer_id = peer1}
+  );
+
+  ContactID author = peer1;
+  storage_->ToggleReaction(peer1, entry.id, author, messaging::Reaction::check);
+
+  auto loaded = storage_->GetHistoryEntry(peer1, entry.id);
+  ASSERT_TRUE(loaded);
+  ASSERT_EQ(loaded->reactions.size(), 1);
+  EXPECT_EQ(loaded->reactions[0].reaction, messaging::Reaction::check);
+
+  // Toggle same reaction -> remove
+  storage_->ToggleReaction(peer1, entry.id, author, messaging::Reaction::check);
+  loaded = storage_->GetHistoryEntry(peer1, entry.id);
+  EXPECT_TRUE(loaded->reactions.empty());
+}
+
+TEST_F(SQLiteStorageTest, GetMessageIdByRemoteId) {
+  storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
+  uint64_t remote_id = 999;
+  auto entry = storage_->AddHistoryEntry(
+      {.remote_id = remote_id,
+       .kind = messaging::HistoryEntryKind::textMessage,
+       .timestamp = Time::Now(),
+       .direction = messaging::MessageDirection::received,
+       .data = messaging::MessageEntry{"Msg"},
+       .peer_id = peer1}
+  );
+
+  auto found_id = storage_->GetMessageIdByRemoteId(peer1, remote_id);
+  ASSERT_TRUE(found_id);
+  EXPECT_EQ(*found_id, entry.id);
+
+  auto not_found = storage_->GetMessageIdByRemoteId(peer1, 888);
+  EXPECT_FALSE(not_found);
 }

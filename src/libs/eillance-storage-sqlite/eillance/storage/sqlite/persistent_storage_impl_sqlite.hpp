@@ -604,6 +604,83 @@ class SQLiteStorage final : public PersistentStorageImpl {
     sqlite3_step(s.Get());
   }
 
+  void UpdateMessageContent(ContactID const& peer_id, uint64_t message_id, std::string const& new_content) override {
+    std::lock_guard const lock(mutex_);
+    INVARIANT(db_);
+    SQLiteStatement const s(
+        db_,
+        "UPDATE messages SET content=?, is_edited=1, is_truncated=0 WHERE peer_id=? AND id=?;"
+    );
+    BindText(s.Get(), 1, new_content);
+    BindText(s.Get(), 2, peer_id.ToString());
+    sqlite3_bind_int64(s.Get(), 3, message_id);
+    sqlite3_step(s.Get());
+
+    // Clear large message record if it exists, as we assume edit fits in inline for simplicity (or should handle large
+    // logic) For robustness: we just delete the large entry. If the new content is huge, we should logic like
+    // AddHistoryEntry. But here we rely on the caller to not send >2KB edits via this path or handle truncation.
+    SQLiteStatement const del_large(db_, "DELETE FROM large_messages WHERE peer_id=? AND message_id=?;");
+    BindText(del_large.Get(), 1, peer_id.ToString());
+    sqlite3_bind_int64(del_large.Get(), 2, message_id);
+    sqlite3_step(del_large.Get());
+  }
+
+  void MarkMessageDeleted(ContactID const& peer_id, uint64_t message_id) override {
+    std::lock_guard const lock(mutex_);
+    INVARIANT(db_);
+    SQLiteStatement const s(
+        db_,
+        "UPDATE messages SET is_deleted=1, content='', is_truncated=0 WHERE peer_id=? AND id=?;"
+    );
+    BindText(s.Get(), 1, peer_id.ToString());
+    sqlite3_bind_int64(s.Get(), 2, message_id);
+    sqlite3_step(s.Get());
+
+    // Clear content details
+    SQLiteStatement const del_large(db_, "DELETE FROM large_messages WHERE peer_id=? AND message_id=?;");
+    BindText(del_large.Get(), 1, peer_id.ToString());
+    sqlite3_bind_int64(del_large.Get(), 2, message_id);
+    sqlite3_step(del_large.Get());
+
+    SQLiteStatement const del_atts(db_, "DELETE FROM message_attachments WHERE peer_id=? AND message_id=?;");
+    BindText(del_atts.Get(), 1, peer_id.ToString());
+    sqlite3_bind_int64(del_atts.Get(), 2, message_id);
+    sqlite3_step(del_atts.Get());
+  }
+
+  void ToggleReaction(
+      ContactID const& peer_id,
+      uint64_t message_id,
+      ContactID const& author_id,
+      messaging::Reaction reaction
+  ) override {
+    std::lock_guard const lock(mutex_);
+    INVARIANT(db_);
+
+    // Check existence
+    SQLiteStatement const check(
+        db_,
+        "SELECT 1 FROM reactions WHERE peer_id=? AND message_id=? AND author_id=? AND reaction=?;"
+    );
+    BindText(check.Get(), 1, peer_id.ToString());
+    sqlite3_bind_int64(check.Get(), 2, message_id);
+    BindText(check.Get(), 3, author_id.ToString());
+    sqlite3_bind_int(check.Get(), 4, static_cast<int>(reaction));
+
+    bool const exists = (sqlite3_step(check.Get()) == SQLITE_ROW);
+
+    std::string const sql =
+        exists ? "DELETE FROM reactions WHERE peer_id=? AND message_id=? AND author_id=? AND reaction=?;"
+               : "INSERT INTO reactions (peer_id, message_id, author_id, reaction) VALUES (?, ?, ?, ?);";
+
+    SQLiteStatement const op(db_, sql);
+    BindText(op.Get(), 1, peer_id.ToString());
+    sqlite3_bind_int64(op.Get(), 2, message_id);
+    BindText(op.Get(), 3, author_id.ToString());
+    sqlite3_bind_int(op.Get(), 4, static_cast<int>(reaction));
+    sqlite3_step(op.Get());
+  }
+
   void UpdateAttachmentStatus(std::string const& attachment_id, messaging::AttachmentStatus status, bool is_downloaded)
       override {
     std::lock_guard const lock(mutex_);
@@ -672,7 +749,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
     }
 
     SQLiteStatement const statement(db_, R"SQL(
-      SELECT id, remote_id, kind, timestamp, direction, status, is_truncated, content
+      SELECT id, remote_id, kind, timestamp, direction, status, is_truncated, content, is_edited, is_deleted
       FROM messages WHERE peer_id = ? ORDER BY timestamp DESC LIMIT ? OFFSET ?;
     )SQL");
     BindText(statement.Get(), 1, peer_id.ToString());
@@ -709,10 +786,82 @@ class SQLiteStorage final : public PersistentStorageImpl {
           );
         }
       }
+
+      // Populate reactions
+      SQLiteStatement const react_stmt(db_, R"SQL(
+        SELECT author_id, reaction FROM reactions WHERE peer_id=? AND message_id=?;
+      )SQL");
+      BindText(react_stmt.Get(), 1, peer_id.ToString());
+      sqlite3_bind_int64(react_stmt.Get(), 2, record.id);
+      while (sqlite3_step(react_stmt.Get()) == SQLITE_ROW) {
+        record.reactions.push_back(
+            {ContactID(ColumnString(react_stmt.Get(), 0)),
+             static_cast<messaging::Reaction>(sqlite3_column_int(react_stmt.Get(), 1))}
+        );
+      }
+
       page.messages.push_back(std::move(record));
     }
     std::ranges::reverse(page.messages);
     return page;
+  }
+
+  auto GetHistoryEntry(ContactID const& peer_id, uint64_t message_id)
+      -> std::optional<messaging::HistoryEntryRecord> override {
+    std::lock_guard const lock(mutex_);
+    INVARIANT(db_);
+
+    SQLiteStatement const statement(db_, R"SQL(
+      SELECT id, remote_id, kind, timestamp, direction, status, is_truncated, content, is_edited, is_deleted
+      FROM messages WHERE peer_id = ? AND id = ?;
+    )SQL");
+    BindText(statement.Get(), 1, peer_id.ToString());
+    sqlite3_bind_int64(statement.Get(), 2, message_id);
+
+    if (sqlite3_step(statement.Get()) != SQLITE_ROW) {
+      return std::nullopt;
+    }
+
+    auto record = ParseHistoryEntry(statement.Get());
+    record.peer_id = peer_id;
+
+    if (auto* msg_entry = std::get_if<messaging::MessageEntry>(&record.data)) {
+      SQLiteStatement const att_stmt(db_, R"SQL(
+        SELECT id, type, file_path, mime_type, size_bytes, thumbnail_base64, hash, is_downloaded, status, note, file_name
+        FROM message_attachments
+        WHERE peer_id = ? AND message_id = ?;
+      )SQL");
+      BindText(att_stmt.Get(), 1, peer_id.ToString());
+      sqlite3_bind_int64(att_stmt.Get(), 2, record.id);
+      while (sqlite3_step(att_stmt.Get()) == SQLITE_ROW) {
+        msg_entry->attachments.push_back(
+            {.id = ColumnString(att_stmt.Get(), 0),
+             .type = static_cast<messaging::AttachmentType>(sqlite3_column_int(att_stmt.Get(), 1)),
+             .file_path = ColumnString(att_stmt.Get(), 2),
+             .mime_type = ColumnString(att_stmt.Get(), 3),
+             .size_bytes = static_cast<uint64_t>(sqlite3_column_int64(att_stmt.Get(), 4)),
+             .thumbnail_base64 = ColumnString(att_stmt.Get(), 5),
+             .hash = ColumnString(att_stmt.Get(), 6),
+             .is_downloaded = (sqlite3_column_int(att_stmt.Get(), 7) != 0),
+             .status = static_cast<messaging::AttachmentStatus>(sqlite3_column_int(att_stmt.Get(), 8)),
+             .note = ColumnString(att_stmt.Get(), 9),
+             .file_name = ColumnString(att_stmt.Get(), 10)}
+        );
+      }
+    }
+    SQLiteStatement const react_stmt(
+        db_,
+        "SELECT author_id, reaction FROM reactions WHERE peer_id=? AND message_id=?;"
+    );
+    BindText(react_stmt.Get(), 1, peer_id.ToString());
+    sqlite3_bind_int64(react_stmt.Get(), 2, record.id);
+    while (sqlite3_step(react_stmt.Get()) == SQLITE_ROW) {
+      record.reactions.push_back(
+          {ContactID(ColumnString(react_stmt.Get(), 0)),
+           static_cast<messaging::Reaction>(sqlite3_column_int(react_stmt.Get(), 1))}
+      );
+    }
+    return record;
   }
 
   auto GetFullMessageContent(ContactID const& peer_id, std::uint64_t const message_id)
@@ -749,7 +898,8 @@ class SQLiteStorage final : public PersistentStorageImpl {
       {
         SQLiteStatement const s(
             db_,
-            "SELECT id, remote_id, kind, timestamp, direction, status, is_truncated, content FROM messages WHERE "
+            "SELECT id, remote_id, kind, timestamp, direction, status, is_truncated, content, is_edited, is_deleted "
+            "FROM messages WHERE "
             "peer_id=? ORDER BY timestamp DESC LIMIT 1;"
         );
         BindText(s.Get(), 1, peer_id.ToString());
@@ -772,7 +922,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
     INVARIANT(db_);
     std::vector<messaging::HistoryEntryRecord> records;
     SQLiteStatement const statement(db_, R"SQL(
-      SELECT id, remote_id, kind, timestamp, direction, status, is_truncated, content
+      SELECT id, remote_id, kind, timestamp, direction, status, is_truncated, content, is_edited, is_deleted
       FROM messages WHERE peer_id = ? AND status = ?;
     )SQL");
     BindText(statement.Get(), 1, peer_id.ToString());
@@ -864,6 +1014,20 @@ class SQLiteStorage final : public PersistentStorageImpl {
     return remote_ids;
   }
 
+  auto GetMessageIdByRemoteId(ContactID const& peer_id, uint64_t target_id) -> std::optional<uint64_t> override {
+    std::lock_guard const lock(mutex_);
+    INVARIANT(db_);
+    SQLiteStatement const s(db_, "SELECT id FROM messages WHERE peer_id=? AND (id=? OR remote_id=?);");
+    BindText(s.Get(), 1, peer_id.ToString());
+    sqlite3_bind_int64(s.Get(), 2, target_id);
+    sqlite3_bind_int64(s.Get(), 3, target_id);
+
+    if (sqlite3_step(s.Get()) == SQLITE_ROW) {
+      return static_cast<uint64_t>(sqlite3_column_int64(s.Get(), 0));
+    }
+    return std::nullopt;
+  }
+
   // --- Search ---
   auto SearchMessages(ContactID const& peer_id, std::string const& query)
       -> std::vector<messaging::HistoryEntryRecord> override {
@@ -877,7 +1041,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
     SQLiteStatement const statement(
         db_,
         R"SQL(
-      SELECT m.id, m.remote_id, m.kind, m.timestamp, m.direction, m.status, m.is_truncated,
+      SELECT m.id, m.remote_id, m.kind, m.timestamp, m.direction, m.status, m.is_truncated, m.content, m.is_edited, m.is_deleted,
              CASE WHEN m.is_truncated = 1 THEN lm.full_content ELSE m.content END
       FROM messages m
       LEFT JOIN large_messages lm ON m.peer_id = lm.peer_id AND m.id = lm.message_id
@@ -914,7 +1078,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
     SQLiteStatement const statement(
         db_,
         R"SQL(
-      SELECT m.id, m.remote_id, m.kind, m.timestamp, m.direction, m.status, m.is_truncated,
+      SELECT m.id, m.remote_id, m.kind, m.timestamp, m.direction, m.status, m.is_truncated, m.content, m.is_edited, m.is_deleted,
              CASE WHEN m.is_truncated = 1 THEN lm.full_content ELSE m.content END,
              m.peer_id
       FROM messages m
@@ -935,8 +1099,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
     std::vector<messaging::HistoryEntryRecord> results;
     while (sqlite3_step(statement.Get()) == SQLITE_ROW) {
       auto record = ParseHistoryEntry(statement.Get());
-      // The 9th column (index 8) is peer_id
-      record.peer_id = ContactID(ColumnString(statement.Get(), 8));
+      record.peer_id = ContactID(ColumnString(statement.Get(), 11));
       results.push_back(std::move(record));
     }
     return results;
@@ -988,6 +1151,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
     if (user_version < 6) migrations::MigrateToV0006(db_);
     if (user_version < 7) migrations::MigrateToV0007(db_);
     if (user_version < 8) migrations::MigrateToV0008(db_);
+    if (user_version < 9) migrations::MigrateToV0009(db_);
     // NOLINTEND(*-braces-around-statements)
   }
 
@@ -999,6 +1163,8 @@ class SQLiteStorage final : public PersistentStorageImpl {
         .direction = static_cast<messaging::MessageDirection>(sqlite3_column_int(stmt, 4)),
         .status = static_cast<messaging::MessageStatus>(sqlite3_column_int(stmt, 5)),
         .is_truncated = (sqlite3_column_int(stmt, 6) == 1),
+        .is_edited = (sqlite3_column_int(stmt, 8) == 1),
+        .is_deleted = (sqlite3_column_int(stmt, 9) == 1),
     };
 
     if (sqlite3_column_type(stmt, 1) != SQLITE_NULL) {

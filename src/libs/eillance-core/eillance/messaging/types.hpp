@@ -80,6 +80,21 @@ enum class HistoryEntryKind : std::uint8_t {
   systemMessage,
 };
 
+enum class Reaction : std::uint8_t {
+  thumbsUp = 1,
+  thumbsDown = 2,
+  heart = 3,
+  laugh = 4,
+  sad = 5,
+  angry = 6,
+  check = 7,
+};
+
+struct ReactionEntry {
+  ContactID author_id;
+  Reaction reaction;
+};
+
 NLOHMANN_JSON_SERIALIZE_ENUM(
     MessageDirection,
     {
@@ -143,8 +158,11 @@ struct HistoryEntryRecord {
   MessageDirection direction{};
   MessageStatus status = MessageStatus::none;
   bool is_truncated = false;
+  bool is_edited = false;
+  bool is_deleted = false;
   HistoryEntryData data;
   ContactID peer_id;
+  std::vector<ReactionEntry> reactions{};
 };
 
 struct ChatSummary {

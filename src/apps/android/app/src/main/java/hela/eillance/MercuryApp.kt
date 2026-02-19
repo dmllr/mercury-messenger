@@ -345,6 +345,7 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
           peerId = peerId,
           contact = contact,
           historyPage = historyPage,
+          myId = myProfile.myId,
           callState = callState,
           connectionState = connectionState,
           onBack = { navController.safePopBackStack() },
