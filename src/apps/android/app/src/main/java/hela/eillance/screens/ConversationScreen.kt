@@ -84,7 +84,6 @@ import hela.eillance.ndkio.CallState
 import hela.eillance.ndkio.Contact
 import hela.eillance.ndkio.ContactStatus
 import hela.eillance.ndkio.HistoryEntry
-import hela.eillance.ndkio.HistoryEntryKind
 import hela.eillance.ndkio.HistoryPage
 import hela.eillance.ndkio.MessageDirection
 import hela.eillance.ndkio.ServiceConnectionState
@@ -93,9 +92,7 @@ import hela.eillance.screens.conversation.ChatHistory
 import hela.eillance.screens.conversation.ConnectionStatusBar
 import hela.eillance.screens.conversation.ConversationDefaultTopBar
 import hela.eillance.screens.conversation.DeleteMessageDialog
-import hela.eillance.screens.conversation.EditMessageDialog
 import hela.eillance.screens.conversation.MessageInputArea
-import hela.eillance.screens.conversation.MessageOptionsSheet
 import hela.eillance.screens.conversation.PendingApprovalBar
 import hela.eillance.screens.conversation.SelectionTopBar
 import hela.eillance.screens.conversation.formatTimestamp
@@ -151,13 +148,19 @@ fun ConversationScreen(
   val focusManager = LocalFocusManager.current
 
   // Message Actions State
+  // Note: activeMessageActionId determines which message shows the POPUP menu.
+  // editingMessageId determines which message shows the IN-PLACE editor.
   var activeMessageActionId by remember { mutableStateOf<Long?>(null) }
-  var showEditDialogId by remember { mutableStateOf<Long?>(null) }
+  var editingMessageId by remember { mutableStateOf<Long?>(null) }
   var showDeleteDialogId by remember { mutableStateOf<Long?>(null) }
 
-  // Handle Back press to clear selection or search
-  BackHandler(enabled = selectionMode || isSearchActive) {
-    if (selectionMode) {
+  // Handle Back press to clear selection or search or active action
+  BackHandler(enabled = selectionMode || isSearchActive || activeMessageActionId != null || editingMessageId != null) {
+    if (activeMessageActionId != null) {
+      activeMessageActionId = null
+    } else if (editingMessageId != null) {
+      editingMessageId = null
+    } else if (selectionMode) {
       selectedMessageIds = emptySet()
     } else {
       isSearchActive = false
@@ -278,62 +281,6 @@ fun ConversationScreen(
 
   systemMessageToShowDetails?.let { entry ->
     SystemMessageDetailsDialog(entry = entry, onDismiss = { systemMessageToShowDetails = null })
-  }
-
-  // Message Actions Sheets/Dialogs
-  activeMessageActionId?.let { msgId ->
-    val message = historyPage.messages.find { it.id == msgId }
-    if (message != null) {
-      val isFromMe = message.direction == MessageDirection.Sent
-      val canEdit =
-        isFromMe && message.kind == HistoryEntryKind.TextMessage && !message.content.isNullOrBlank()
-      val myReactions =
-        message.reactions.filter { it.authorId == myId }.mapNotNull { it.reaction }.toSet()
-
-      MessageOptionsSheet(
-        onDismiss = { activeMessageActionId = null },
-        onCopy = {
-          message.content?.let { content ->
-            coroutineScope.launch {
-              val clip = ClipData.newPlainText("Message", content)
-              clipboard.setClipEntry(ClipEntry(clip))
-            }
-          }
-        },
-        onDelete = {
-          activeMessageActionId = null
-          showDeleteDialogId = msgId
-        },
-        onEdit = if (canEdit) {
-          {
-            activeMessageActionId = null
-            showEditDialogId = msgId
-          }
-        } else null,
-        onReact = { reaction ->
-          chatVM.reactToMessage(msgId, reaction)
-        },
-        currentReactions = myReactions
-      )
-    } else {
-      activeMessageActionId = null
-    }
-  }
-
-  showEditDialogId?.let { msgId ->
-    val message = historyPage.messages.find { it.id == msgId }
-    if (message != null && message.content != null) {
-      EditMessageDialog(
-        initialContent = message.content,
-        onDismiss = { showEditDialogId = null },
-        onConfirm = { newText ->
-          chatVM.editMessage(msgId, newText)
-          showEditDialogId = null
-        }
-      )
-    } else {
-      showEditDialogId = null
-    }
   }
 
   showDeleteDialogId?.let { msgId ->
@@ -635,6 +582,9 @@ fun ConversationScreen(
           zoneId = zoneId,
           selectedMessageIds = selectedMessageIds,
           selectionMode = selectionMode,
+          activeMessageActionId = activeMessageActionId,
+          editingMessageId = editingMessageId,
+          myId = myId,
           onToggleSelection = { id ->
             selectedMessageIds = if (id in selectedMessageIds) {
               selectedMessageIds - id
@@ -672,8 +622,35 @@ fun ConversationScreen(
               }
             }
           },
-          onLongClick = { entry ->
-            activeMessageActionId = entry.id
+          onMessageClick = { entry ->
+            activeMessageActionId = if (activeMessageActionId == entry.id) null else entry.id
+          },
+          onDismissMenu = { activeMessageActionId = null },
+          onActionReact = { msgId, reaction ->
+            chatVM.reactToMessage(msgId, reaction)
+            activeMessageActionId = null
+          },
+          onActionCopy = { content ->
+            coroutineScope.launch {
+              val clip = ClipData.newPlainText("Message", content)
+              clipboard.setClipEntry(ClipEntry(clip))
+            }
+            activeMessageActionId = null
+          },
+          onActionEdit = { msgId ->
+            activeMessageActionId = null
+            editingMessageId = msgId
+          },
+          onActionDelete = { msgId ->
+            activeMessageActionId = null
+            showDeleteDialogId = msgId
+          },
+          onEditCommit = { msgId, newText ->
+            chatVM.editMessage(msgId, newText)
+            editingMessageId = null
+          },
+          onEditCancel = {
+            editingMessageId = null
           }
         )
 
