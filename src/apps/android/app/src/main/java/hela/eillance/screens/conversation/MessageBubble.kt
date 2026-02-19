@@ -34,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import hela.eillance.camera.R
 import hela.eillance.components.MediaBubbleContent
@@ -62,10 +63,29 @@ fun MessageBubble(
   isSelected: Boolean = false,
   isUnread: Boolean = false,
   selectionMode: Boolean = false,
-  onToggleSelection: () -> Unit = {}
+  onToggleSelection: () -> Unit = {},
+  onLongClick: () -> Unit = {}
 ) {
   val isFromMe = entry.direction == MessageDirection.Sent
   val alignment = if (isFromMe) Alignment.CenterEnd else Alignment.CenterStart
+
+  if (entry.isDeleted) {
+    Box(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(vertical = 4.dp, horizontal = 16.dp),
+      contentAlignment = alignment
+    ) {
+      Text(
+        text = stringResource(R.string.message_deleted),
+        style = MaterialTheme.typography.bodySmall,
+        fontStyle = FontStyle.Italic,
+        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+      )
+    }
+    return
+  }
+
   val colors = if (isFromMe) {
     MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.onPrimaryContainer
   } else {
@@ -94,7 +114,7 @@ fun MessageBubble(
           if (selectionMode) onToggleSelection()
         },
         onLongClick = {
-          onToggleSelection()
+          if (selectionMode) onToggleSelection() else onLongClick()
         }
       )
       .background(if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent)
@@ -156,6 +176,45 @@ fun MessageBubble(
           }
         }
 
+        // Edit Label & Reactions
+        if (entry.isEdited || entry.reactions.isNotEmpty()) {
+          Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            if (entry.isEdited) {
+              Text(
+                text = stringResource(R.string.message_edited),
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.second.copy(alpha = 0.6f),
+                modifier = Modifier.padding(end = 6.dp)
+              )
+            }
+            if (entry.reactions.isNotEmpty()) {
+              // Group reactions by type for display
+              val reactionStr = entry.reactions
+                .mapNotNull { it.reaction?.symbol }
+                .distinct()
+                .joinToString(" ")
+
+              if (reactionStr.isNotEmpty()) {
+                Text(
+                  text = reactionStr,
+                  style = MaterialTheme.typography.labelSmall,
+                  color = colors.second
+                )
+                if (entry.reactions.size > 1) {
+                  Text(
+                    text = " ${entry.reactions.size}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.second.copy(alpha = 0.7f)
+                  )
+                }
+              }
+            }
+          }
+        }
+
         if (isGroupTail) {
           Row(
             modifier = Modifier.padding(top = 4.dp, end = 4.dp, bottom = 4.dp),
@@ -164,7 +223,7 @@ fun MessageBubble(
             Text(
               text = formatTimestamp(entry.timestamp, zoneId, formatters),
               style = MaterialTheme.typography.labelSmall,
-              color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+              color = colors.second.copy(alpha = 0.6f)
             )
             if (isFromMe) {
               Icon(
@@ -184,7 +243,7 @@ fun MessageBubble(
                 tint = if (entry.status == MessageStatus.Read) {
                   MaterialTheme.extendedColors.success
                 } else {
-                  MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                  colors.second.copy(alpha = 0.6f)
                 }
               )
             }

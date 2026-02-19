@@ -64,6 +64,7 @@ class MediaCallServiceTest : public ::testing::Test {
         storage_,
         data_transport_,
         contact_manager,
+        account_service_,
         file_transfer_service,
         conn_handler
     );

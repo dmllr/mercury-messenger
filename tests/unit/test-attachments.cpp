@@ -6,6 +6,7 @@
 
 #include "eillance/crypto/crypto.hpp"
 #include "eillance/messaging/history.hpp"
+#include "eillance/services/account_service.hpp"
 #include "eillance/services/file_transfer_service.hpp"
 #include "eillance/services/messaging_service.hpp"
 #include "mock_data_transport.hpp"
@@ -29,6 +30,8 @@ class AttachmentTest : public ::testing::Test {
     mock_data_transport_raw_ = mock_data_transport_impl_.get();
     data_transport_ = std::make_shared<transport::DataTransport>(std::move(mock_data_transport_impl_));
 
+    account_service_ = std::make_shared<services::AccountService>(storage_, data_transport_);
+
     auto contact_manager = std::make_shared<identity::ContactManager>(storage_);
     auto conn_handler = [](ContactID const&) {};
 
@@ -42,6 +45,7 @@ class AttachmentTest : public ::testing::Test {
         storage_,
         data_transport_,
         contact_manager,
+        account_service_,
         file_transfer_service_,
         conn_handler
     );
@@ -66,6 +70,7 @@ class AttachmentTest : public ::testing::Test {
   std::unique_ptr<transport::MockDataTransport> mock_data_transport_impl_;
   transport::MockDataTransport* mock_data_transport_raw_;
   std::shared_ptr<transport::DataTransport> data_transport_;
+  std::shared_ptr<services::AccountService> account_service_;
   std::shared_ptr<services::FileTransferService> file_transfer_service_;
   std::unique_ptr<services::MessagingService> service_;
   std::string temp_file_path_;
@@ -199,11 +204,13 @@ TEST_F(AttachmentTest, AttachmentPersistenceAcrossRestarts) {
   auto contact_manager = std::make_shared<identity::ContactManager>(storage_);
   auto conn_handler = [](ContactID const&) {};
   auto file_transfer_service = std::make_shared<services::FileTransferService>(storage_, data_transport_);
+  auto account_service = std::make_shared<services::AccountService>(storage_, data_transport_);
 
   auto new_service = std::make_unique<services::MessagingService>(
       storage_,
       data_transport_,
       contact_manager,
+      account_service,
       file_transfer_service,
       conn_handler
   );

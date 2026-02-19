@@ -7,7 +7,7 @@
 #include "bridge_context.hpp"
 #include "eillance/view_model/conversation_view_model.hpp"
 
-// NOLINTBEGIN(readability-identifier-naming)
+// NOLINTBEGIN(readability-identifier-naming,*-pro-type-reinterpret-cast)
 
 extern "C" JNIEXPORT jlong JNICALL Java_hela_eillance_viewmodels_ConversationViewModel_nativeCreate(
     JNIEnv* env,
@@ -67,12 +67,12 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationView
     for (int i = 0; i < count; ++i) {
       jobject obj = env->GetObjectArrayElement(attachments, i);
 
-      jstring path = (jstring)env->GetObjectField(obj, cls.GetField("path"));
+      jstring path = static_cast<jstring>(env->GetObjectField(obj, cls.GetField("path")));
       jint const type = env->GetIntField(obj, cls.GetField("type"));
-      jstring thumb = (jstring)env->GetObjectField(obj, cls.GetField("thumbnail"));
-      jstring mime = (jstring)env->GetObjectField(obj, cls.GetField("mimeType"));
-      jstring note = (jstring)env->GetObjectField(obj, cls.GetField("note"));
-      jstring name = (jstring)env->GetObjectField(obj, cls.GetField("fileName"));
+      jstring thumb = static_cast<jstring>(env->GetObjectField(obj, cls.GetField("thumbnail")));
+      jstring mime = static_cast<jstring>(env->GetObjectField(obj, cls.GetField("mimeType")));
+      jstring note = static_cast<jstring>(env->GetObjectField(obj, cls.GetField("note")));
+      jstring name = static_cast<jstring>(env->GetObjectField(obj, cls.GetField("fileName")));
 
       char const* p = env->GetStringUTFChars(path, nullptr);
       char const* t = thumb ? env->GetStringUTFChars(thumb, nullptr) : "";
@@ -90,16 +90,16 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationView
       );
 
       env->ReleaseStringUTFChars(path, p);
-      if (thumb) {
+      if (thumb != nullptr) {
         env->ReleaseStringUTFChars(thumb, t);
       }
-      if (mime) {
+      if (mime != nullptr) {
         env->ReleaseStringUTFChars(mime, m);
       }
-      if (note) {
+      if (note != nullptr) {
         env->ReleaseStringUTFChars(note, n);
       }
-      if (name) {
+      if (name != nullptr) {
         env->ReleaseStringUTFChars(name, fn);
       }
     }
@@ -107,6 +107,40 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationView
 
   vm->SendMessage(msg_chars, atts);
   env->ReleaseStringUTFChars(message, msg_chars);
+}
+
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationViewModel_nativeDeleteMessage(
+    JNIEnv* /*env*/,
+    jobject /*instance*/,
+    jlong ptr,
+    jlong msg_id
+) {
+  auto* vm = reinterpret_cast<eillance::view_model::ConversationViewModel*>(ptr);
+  vm->DeleteMessage(static_cast<uint64_t>(msg_id));
+}
+
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationViewModel_nativeEditMessage(
+    JNIEnv* env,
+    jobject /*instance*/,
+    jlong ptr,
+    jlong msg_id,
+    jstring content
+) {
+  auto* vm = reinterpret_cast<eillance::view_model::ConversationViewModel*>(ptr);
+  char const* chars = env->GetStringUTFChars(content, nullptr);
+  vm->EditMessage(static_cast<uint64_t>(msg_id), chars);
+  env->ReleaseStringUTFChars(content, chars);
+}
+
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationViewModel_nativeReactMessage(
+    JNIEnv* env,
+    jobject /*instance*/,
+    jlong ptr,
+    jlong msg_id,
+    jint reaction
+) {
+  auto* vm = reinterpret_cast<eillance::view_model::ConversationViewModel*>(ptr);
+  vm->ReactToMessage(static_cast<uint64_t>(msg_id), static_cast<eillance::messaging::Reaction>(reaction));
 }
 
 extern "C" JNIEXPORT void JNICALL
@@ -142,12 +176,16 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationView
     jlongArray msg_ids
 ) {
   auto* vm = reinterpret_cast<eillance::view_model::ConversationViewModel*>(ptr);
-  if (!msg_ids) return;
+  if (msg_ids == nullptr) {
+    return;
+  }
   std::vector<std::uint64_t> ids;
   jsize count = env->GetArrayLength(msg_ids);
   jlong* elements = env->GetLongArrayElements(msg_ids, nullptr);
-  if (elements) {
-    for (jsize i = 0; i < count; i++) ids.push_back(static_cast<uint64_t>(elements[i]));
+  if (elements != nullptr) {
+    for (jsize i = 0; i < count; i++) {
+      ids.push_back(static_cast<uint64_t>(elements[i]));
+    }
     env->ReleaseLongArrayElements(msg_ids, elements, JNI_ABORT);
   }
   vm->MarkMessagesAsRead(ids);
@@ -162,7 +200,7 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationView
 ) {
   auto* vm = reinterpret_cast<eillance::view_model::ConversationViewModel*>(ptr);
   char const* chars = env->GetStringUTFChars(attachment_id, nullptr);
-  vm->CancelTransfer(chars, is_upload);
+  vm->CancelTransfer(chars, is_upload != 0U);
   env->ReleaseStringUTFChars(attachment_id, chars);
 }
 
@@ -175,7 +213,7 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationView
 ) {
   auto* vm = reinterpret_cast<eillance::view_model::ConversationViewModel*>(ptr);
   char const* chars = env->GetStringUTFChars(attachment_id, nullptr);
-  vm->ResumeTransfer(chars, is_upload);
+  vm->ResumeTransfer(chars, is_upload != 0U);
   env->ReleaseStringUTFChars(attachment_id, chars);
 }
 
@@ -197,7 +235,9 @@ extern "C" JNIEXPORT jobject JNICALL Java_hela_eillance_viewmodels_ConversationV
     jlong ptr,
     jstring attachment_id
 ) {
-  if (!g_clientEngine) return nullptr;
+  if (!g_clientEngine) {
+    return nullptr;
+  }
 
   char const* chars = env->GetStringUTFChars(attachment_id, nullptr);
   auto attachment_opt = g_clientEngine->GetClient()->GetAttachment(chars);
@@ -249,17 +289,13 @@ extern "C" JNIEXPORT jobject JNICALL Java_hela_eillance_viewmodels_ConversationV
   env->ReleaseStringUTFChars(peer_id, p_chars);
   env->ReleaseStringUTFChars(query, q_chars);
 
-  // Re-implement the list conversion logic inline or reuse logic if refactored.
-  // Copy-pasting logic from bridge_contacts.cpp or using a shared approach is needed.
-  // Since we don't have shared headers for private bridge helpers, we inline the logic again.
-  // It's robust enough.
-
   auto& class_refs = ClassRefs::Instance();
   auto& list_holder = class_refs.Class("java/util/ArrayList");
   jobject history_list = list_holder.NewObject(env);
   jmethodID list_add_method = list_holder.GetMethod("add");
   auto& entry_holder = class_refs.Class("hela/eillance/ndkio/HistoryEntry");
   auto& attachment_holder = class_refs.Class("hela/eillance/ndkio/Attachment");
+  auto& reaction_holder = class_refs.Class("hela/eillance/ndkio/ReactionEntry");
 
   for (auto const& entry_cpp : messages) {
     std::string const* content_str = nullptr;
@@ -271,13 +307,12 @@ extern "C" JNIEXPORT jobject JNICALL Java_hela_eillance_viewmodels_ConversationV
       attachments_ptr = &msg.attachments;
     }
 
-    // Search results are mostly text messages, but handle calls if needed
     auto const* call_entry = std::get_if<eillance::messaging::CallEntry>(&entry_cpp.data);
-    jstring content = content_str ? env->NewStringUTF(content_str->c_str()) : nullptr;
+    jstring content = (content_str != nullptr) ? env->NewStringUTF(content_str->c_str()) : nullptr;
     jint const duration = call_entry ? static_cast<jint>(call_entry->duration_seconds) : 0;
 
     jobject j_attachments = list_holder.NewObject(env);
-    if (attachments_ptr && !attachments_ptr->empty()) {
+    if ((attachments_ptr != nullptr) && !attachments_ptr->empty()) {
       for (auto const& att : *attachments_ptr) {
         jstring j_id = env->NewStringUTF(att.id.c_str());
         jstring j_path = env->NewStringUTF(att.file_path.c_str());
@@ -303,11 +338,23 @@ extern "C" JNIEXPORT jobject JNICALL Java_hela_eillance_viewmodels_ConversationV
         env->DeleteLocalRef(j_id);
         env->DeleteLocalRef(j_path);
         env->DeleteLocalRef(j_mime);
-        if (j_thumb) env->DeleteLocalRef(j_thumb);
+        if (j_thumb != nullptr) {
+          env->DeleteLocalRef(j_thumb);
+        }
         env->DeleteLocalRef(j_note);
         env->DeleteLocalRef(j_name);
         env->DeleteLocalRef(j_att);
       }
+    }
+
+    // Reactions
+    jobject j_reactions = list_holder.NewObject(env);
+    for (auto const& r : entry_cpp.reactions) {
+      jstring r_auth = env->NewStringUTF(r.author_id.ToString().c_str());
+      jobject j_react = reaction_holder.NewObject(env, r_auth, static_cast<jint>(r.reaction));
+      env->CallBooleanMethod(j_reactions, list_add_method, j_react);
+      env->DeleteLocalRef(r_auth);
+      env->DeleteLocalRef(j_react);
     }
 
     jobject entry_java = entry_holder.NewObject(
@@ -322,16 +369,22 @@ extern "C" JNIEXPORT jobject JNICALL Java_hela_eillance_viewmodels_ConversationV
         (call_entry != nullptr) ? static_cast<jint>(call_entry->call_status) : -1,
         static_cast<jint>(entry_cpp.status),
         static_cast<jboolean>(entry_cpp.is_truncated),
-        j_attachments
+        static_cast<jboolean>(entry_cpp.is_edited),
+        static_cast<jboolean>(entry_cpp.is_deleted),
+        j_attachments,
+        j_reactions
     );
 
     env->CallBooleanMethod(history_list, list_add_method, entry_java);
-    if (content) env->DeleteLocalRef(content);
+    if (content != nullptr) {
+      env->DeleteLocalRef(content);
+    }
     env->DeleteLocalRef(j_attachments);
+    env->DeleteLocalRef(j_reactions);
     env->DeleteLocalRef(entry_java);
   }
 
   return history_list;
 }
 
-// NOLINTEND(readability-identifier-naming)
+// NOLINTEND(readability-identifier-naming,*-pro-type-reinterpret-cast)

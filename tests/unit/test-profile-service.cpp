@@ -35,6 +35,7 @@ class ProfileServiceTest : public ::testing::Test {
         storage_,
         transport_,
         contact_manager,
+        account_service_,
         file_transfer_service_,
         conn_handler
     );

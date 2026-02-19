@@ -108,6 +108,20 @@ class PersistentStorage {
   ) const {
     pimpl_->UpdateMessageStatuses(peer_id, message_ids, new_status);
   }
+  virtual void UpdateMessageContent(ContactID const& peer_id, uint64_t message_id, std::string const& new_content) {
+    pimpl_->UpdateMessageContent(peer_id, message_id, new_content);
+  };
+  virtual void MarkMessageDeleted(ContactID const& peer_id, uint64_t message_id) {
+    pimpl_->MarkMessageDeleted(peer_id, message_id);
+  }
+  virtual void ToggleReaction(
+      ContactID const& peer_id,
+      uint64_t message_id,
+      ContactID const& author_id,
+      messaging::Reaction reaction
+  ) {
+    pimpl_->ToggleReaction(peer_id, message_id, author_id, reaction);
+  }
   void UpdateAttachmentStatus(std::string const& attachment_id, messaging::AttachmentStatus status, bool is_downloaded)
       const {
     pimpl_->UpdateAttachmentStatus(attachment_id, status, is_downloaded);
@@ -118,6 +132,11 @@ class PersistentStorage {
   [[nodiscard]] auto GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t page_size) const {
     return pimpl_->GetHistoryPage(peer_id, page_index, page_size);
   }
+  [[nodiscard]] auto GetHistoryEntry(ContactID const& peer_id, uint64_t const message_id) const
+      -> std::optional<messaging::HistoryEntryRecord> {
+    return pimpl_->GetHistoryEntry(peer_id, message_id);
+  }
+
   [[nodiscard]] auto GetFullMessageContent(ContactID const& peer_id, std::uint64_t message_id) const {
     return pimpl_->GetFullMessageContent(peer_id, message_id);
   }
@@ -132,6 +151,9 @@ class PersistentStorage {
   }
   [[nodiscard]] auto GetRemoteIds(ContactID const& peer_id, std::vector<uint64_t> const& local_ids) const {
     return pimpl_->GetRemoteIds(peer_id, local_ids);
+  }
+  virtual auto GetMessageIdByRemoteId(ContactID const& peer_id, uint64_t target_id) -> std::optional<uint64_t> {
+    return pimpl_->GetMessageIdByRemoteId(peer_id, target_id);
   }
 
   // --- Search ---

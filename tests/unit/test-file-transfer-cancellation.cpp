@@ -41,6 +41,8 @@ class FileTransferCancellationTest : public ::testing::Test {
     contact_manager_ = std::make_shared<identity::ContactManager>(storage_);
     contact_manager_->AddContact(peer1);
 
+    account_service_ = std::make_shared<services::AccountService>(storage_, transport_);
+
     file_transfer_service_ = std::make_shared<services::FileTransferService>(storage_, transport_);
 
     auto conn_handler = [](ContactID const&) {};
@@ -48,6 +50,7 @@ class FileTransferCancellationTest : public ::testing::Test {
         storage_,
         transport_,
         contact_manager_,
+        account_service_,
         file_transfer_service_,
         conn_handler
     );
@@ -105,6 +108,7 @@ class FileTransferCancellationTest : public ::testing::Test {
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<transport::DataTransport> transport_;
   std::shared_ptr<identity::ContactManager> contact_manager_;
+  std::shared_ptr<services::AccountService> account_service_;
   std::shared_ptr<services::FileTransferService> file_transfer_service_;
   std::unique_ptr<services::MessagingService> service_;
 

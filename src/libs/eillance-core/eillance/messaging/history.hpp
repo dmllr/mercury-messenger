@@ -89,6 +89,28 @@ class MessageHistory {
     }
   }
 
+  void UpdateMessageContent(ContactID const& peer_id, std::uint64_t message_id, std::string const& content) {
+    storage_->UpdateMessageContent(peer_id, message_id, content);
+  }
+
+  void MarkMessageDeleted(ContactID const& peer_id, std::uint64_t message_id) {
+    storage_->MarkMessageDeleted(peer_id, message_id);
+  }
+
+  void
+  ToggleReaction(ContactID const& peer_id, std::uint64_t message_id, ContactID const& author_id, Reaction reaction) {
+    storage_->ToggleReaction(peer_id, message_id, author_id, reaction);
+  }
+
+  std::optional<uint64_t> FindMessageIdByRemoteOrLocal(ContactID const& peer_id, uint64_t target_id) {
+    return storage_->GetMessageIdByRemoteId(peer_id, target_id);
+  }
+
+  std::optional<uint64_t> GetRemoteId(ContactID const& peer_id, uint64_t local_id) {
+    auto entry = storage_->GetHistoryEntry(peer_id, local_id);
+    return entry ? entry->remote_id : std::nullopt;
+  }
+
   void MarkMessagesAsRead(ContactID const& peer_id, std::vector<uint64_t> const& message_ids) {
     storage_->UpdateMessageStatuses(peer_id, message_ids, MessageStatus::read);
     for (auto const message_id : message_ids) {

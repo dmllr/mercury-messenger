@@ -22,6 +22,7 @@ import hela.eillance.ndkio.AttachmentStatus
 import hela.eillance.ndkio.AttachmentType
 import hela.eillance.ndkio.HistoryEntry
 import hela.eillance.ndkio.HistoryPage
+import hela.eillance.ndkio.Reaction
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -347,6 +348,18 @@ class ConversationViewModel(
     }
   }
 
+  fun deleteMessage(messageId: Long) {
+    if (nativePtr != 0L) nativeDeleteMessage(nativePtr, messageId)
+  }
+
+  fun editMessage(messageId: Long, newContent: String) {
+    if (nativePtr != 0L) nativeEditMessage(nativePtr, messageId, newContent)
+  }
+
+  fun reactToMessage(messageId: Long, reaction: Reaction) {
+    if (nativePtr != 0L) nativeReactMessage(nativePtr, messageId, reaction.value)
+  }
+
   fun cancelTransfer(attachmentId: String, isUpload: Boolean) {
     if (nativePtr != 0L) nativeCancelTransfer(nativePtr, attachmentId, isUpload)
   }
@@ -454,6 +467,10 @@ class ConversationViewModel(
     message: String,
     attachments: Array<AttachmentRequest>
   )
+
+  private external fun nativeDeleteMessage(ptr: Long, messageId: Long)
+  private external fun nativeEditMessage(ptr: Long, messageId: Long, content: String)
+  private external fun nativeReactMessage(ptr: Long, messageId: Long, reaction: Int)
 
   private external fun nativeLoadOlder(ptr: Long)
   private external fun nativeLoadUpTo(ptr: Long, messageId: Long)

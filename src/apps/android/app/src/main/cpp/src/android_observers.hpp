@@ -159,6 +159,7 @@ class AndroidConversationObserver final
     jmethodID list_add_method = list_holder.GetMethod("add");
     auto& entry_holder = class_refs.Class("hela/eillance/ndkio/HistoryEntry");
     auto& attachment_holder = class_refs.Class("hela/eillance/ndkio/Attachment");
+    auto& reaction_holder = class_refs.Class("hela/eillance/ndkio/ReactionEntry");
 
     for (auto const& entry_cpp : state.history) {
       std::string const* content_str = nullptr;
@@ -216,6 +217,16 @@ class AndroidConversationObserver final
         }
       }
 
+      // Handle Reactions
+      jobject j_reactions = list_holder.NewObject(env);
+      for (auto const& r : entry_cpp.reactions) {
+        jstring r_auth = env->NewStringUTF(r.author_id.ToString().c_str());
+        jobject j_react = reaction_holder.NewObject(env, r_auth, static_cast<jint>(r.reaction));
+        env->CallBooleanMethod(j_reactions, list_add_method, j_react);
+        env->DeleteLocalRef(r_auth);
+        env->DeleteLocalRef(j_react);
+      }
+
       jobject entry_java = entry_holder.NewObject(
           env,
           static_cast<jlong>(entry_cpp.id),
@@ -228,7 +239,10 @@ class AndroidConversationObserver final
           (call_entry != nullptr) ? static_cast<jint>(call_entry->call_status) : -1,
           static_cast<jint>(entry_cpp.status),
           static_cast<jboolean>(entry_cpp.is_truncated),
-          j_attachments
+          static_cast<jboolean>(entry_cpp.is_edited),
+          static_cast<jboolean>(entry_cpp.is_deleted),
+          j_attachments,
+          j_reactions
       );
 
       env->CallBooleanMethod(history_list, list_add_method, entry_java);
@@ -236,6 +250,7 @@ class AndroidConversationObserver final
         env->DeleteLocalRef(content);
       }
       env->DeleteLocalRef(j_attachments);
+      env->DeleteLocalRef(j_reactions);
       env->DeleteLocalRef(entry_java);
     }
 
