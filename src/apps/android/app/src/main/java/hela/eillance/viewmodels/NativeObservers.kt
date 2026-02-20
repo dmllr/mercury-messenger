@@ -41,7 +41,9 @@ interface NativeSettingsObserver {
     customStun: String?,
     customTurn: String?,
     customTurnUser: String?,
-    customTurnPass: String?
+    customTurnPass: String?,
+    playSoundOnSend: Boolean,
+    playSoundOnReceive: Boolean
   )
 
   fun onConnectionStateChanged(state: Int)

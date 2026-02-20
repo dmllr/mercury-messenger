@@ -180,7 +180,7 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
         env,
         "hela/eillance/viewmodels/NativeSettingsObserver",
         "onSettingsUpdated",
-        "(Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V"
+        "(Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZ)V"
     );
     classref.RegisterMethod(env, "hela/eillance/viewmodels/NativeSettingsObserver", "onConnectionStateChanged", "(I)V");
 
