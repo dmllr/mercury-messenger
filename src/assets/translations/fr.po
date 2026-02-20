@@ -102,6 +102,8 @@ msgid "contacts_empty_message"
 msgstr "Pas encore de contacts. Ajoutez-en un !"
 msgid "contact_add_error"
 msgstr "Impossible d'ajouter ce contact. Assurez-vous que l'ID est valide et n'est pas le vôtre."
+msgid "add_a_new_contact"
+msgstr "Ajouter un nouveau contact"
 
 # Calls
 msgid "call_incoming_voice"

@@ -4,7 +4,6 @@ import android.app.Activity
 import android.content.Context
 import android.content.res.Configuration
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.material.ripple.RippleAlpha
 import androidx.compose.material3.LocalRippleConfiguration
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RippleConfiguration
@@ -40,9 +39,9 @@ val BrandOrange = Color(0xFFFF6A00)
 val BrandOrangeSoft = Color(0xFFFF8A3D)
 val BrandOrangeDeep = Color(0xFFCC4E00)
 val BrandOrangeSurfaceLight = Color(0xFFE65C00)
-val BrandOrangeSurfaceDark  = Color(0xFF8C3600)
+val BrandOrangeSurfaceDark = Color(0xFF8C3600)
 val OnOrangeLight = Color(0xFFFFFFFF)
-val OnOrangeDark  = Color(0xFFFFE9DD)
+val OnOrangeDark = Color(0xFFFFE9DD)
 
 val LightExtendedColors = ExtendedColors(
   brand = BrandOrange,

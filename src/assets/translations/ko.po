@@ -102,6 +102,8 @@ msgid "contacts_empty_message"
 msgstr "아직 연락처가 없습니다. 추가해보세요!"
 msgid "contact_add_error"
 msgstr "이 연락처를 추가할 수 없습니다. ID가 유효하고 본인의 ID가 아닌지 확인하세요."
+msgid "add_a_new_contact"
+msgstr "새로운 연락처 추가"
 
 # Calls
 msgid "call_incoming_voice"
