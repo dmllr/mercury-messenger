@@ -28,7 +28,7 @@ class MessengerActivity : ComponentActivity() {
     handleIntent(intent)
     viewModel.handleShareIntent(intent)
 
-    // Start service immediately.
+    // Start service immediately to ensure connection is maintained.
     startService()
 
     setContent {
@@ -46,6 +46,8 @@ class MessengerActivity : ComponentActivity() {
   override fun onStart() {
     super.onStart()
     MercuryApplication.isAppInForeground = true
+
+    // Clear any "New Message" or "Missed Call" notifications when user enters the app.
     val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     notificationManager.cancelAll()
   }
@@ -58,9 +60,6 @@ class MessengerActivity : ComponentActivity() {
   override fun onStop() {
     super.onStop()
     MercuryApplication.isAppInForeground = false
-    // If the app goes background while ringing, ensure the notification is visible
-    // so the user can return to the call screen.
-    MessengerService.instance?.onActivityStopped()
   }
 
   override fun onNewIntent(intent: Intent) {
