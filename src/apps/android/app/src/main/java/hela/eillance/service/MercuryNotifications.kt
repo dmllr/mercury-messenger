@@ -110,7 +110,6 @@ class MercuryNotifications(private val service: MessengerService) {
       .setVibrate(longArrayOf(0, 1000, 1000))
       .setLights(Color.WHITE, 500, 500)
 
-    // Attempt to start activity directly if not in foreground (Telecom bypass fallback)
     if (!MercuryApplication.isAppInForeground) {
       try {
         service.startActivity(fullScreenIntent)
@@ -121,7 +120,6 @@ class MercuryNotifications(private val service: MessengerService) {
 
     notificationManager.notify(MessengerService.INCOMING_CALL_NOTIFICATION_ID, builder.build())
   }
-
 
   fun showNewMessageNotification(
     peerId: String,
@@ -145,10 +143,7 @@ class MercuryNotifications(private val service: MessengerService) {
 
     if (messages.isNotEmpty()) {
       messages.forEach { msg ->
-        if (msg.isDeleted) {
-          // Skip deleted messages in notification logic
-          return@forEach
-        }
+        if (msg.isDeleted) return@forEach
         val text = if (showContent) {
           if (!msg.content.isNullOrBlank()) msg.content
           else if (msg.attachments.isNotEmpty()) {
@@ -251,6 +246,13 @@ class MercuryNotifications(private val service: MessengerService) {
     peerId: String?,
     connectionState: ServiceConnectionState
   ): Notification {
+    val isSilent = !inCall && (connectionState == ServiceConnectionState.Online ||
+        connectionState == ServiceConnectionState.Establishing ||
+        connectionState == ServiceConnectionState.Unknown)
+
+    val channelId = if (isSilent) FOREGROUND_CHANNEL_SILENT_ID else FOREGROUND_CHANNEL_ALERT_ID
+    val priority = if (isSilent) NotificationCompat.PRIORITY_MIN else NotificationCompat.PRIORITY_LOW
+
     val notificationIntent = Intent(service, MessengerActivity::class.java)
     val pendingIntent = PendingIntent.getActivity(
       service,
@@ -258,10 +260,12 @@ class MercuryNotifications(private val service: MessengerService) {
       notificationIntent,
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
-    val builder = NotificationCompat.Builder(service, FOREGROUND_CHANNEL_ID)
+    val builder = NotificationCompat.Builder(service, channelId)
       .setContentTitle(service.getString(R.string.app_name))
       .setSmallIcon(R.drawable.ic_status_standby)
       .setContentIntent(pendingIntent)
+      .setPriority(priority)
+      .setSilent(isSilent)
 
     if (inCall) {
       val hangupIntent = Intent(service, MessengerService::class.java).apply {
@@ -294,11 +298,23 @@ class MercuryNotifications(private val service: MessengerService) {
   }
 
   private fun createNotificationChannels() {
-    val foregroundChannel = NotificationChannel(
-      FOREGROUND_CHANNEL_ID,
+    val silentChannel = NotificationChannel(
+      FOREGROUND_CHANNEL_SILENT_ID,
       service.getString(R.string.notification_channel_foreground_title),
       NotificationManager.IMPORTANCE_MIN
-    )
+    ).apply {
+      setShowBadge(false)
+      lockscreenVisibility = Notification.VISIBILITY_SECRET
+    }
+
+    val alertChannel = NotificationChannel(
+      FOREGROUND_CHANNEL_ALERT_ID,
+      service.getString(R.string.service_status_background),
+      NotificationManager.IMPORTANCE_LOW
+    ).apply {
+      setShowBadge(true)
+      lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+    }
 
     val callsChannel = NotificationChannel(
       MessengerService.CALLS_CHANNEL_ID,
@@ -306,8 +322,6 @@ class MercuryNotifications(private val service: MessengerService) {
       NotificationManager.IMPORTANCE_HIGH
     ).apply {
       description = service.getString(R.string.notification_channel_calls_description)
-      // Sound and Vibration handled by CallSoundPlayer,
-      // but vibration here helps system rank importance
       setSound(null, null)
       enableVibration(true)
       vibrationPattern = longArrayOf(0, 500, 500)
@@ -319,7 +333,9 @@ class MercuryNotifications(private val service: MessengerService) {
       service.getString(R.string.notification_channel_messages_title),
       NotificationManager.IMPORTANCE_DEFAULT
     )
-    notificationManager.createNotificationChannel(foregroundChannel)
+
+    notificationManager.createNotificationChannel(silentChannel)
+    notificationManager.createNotificationChannel(alertChannel)
     notificationManager.createNotificationChannel(callsChannel)
     notificationManager.createNotificationChannel(messagesChannel)
   }
@@ -330,7 +346,8 @@ class MercuryNotifications(private val service: MessengerService) {
 
   companion object {
     private const val TAG = "MercuryNotifications"
-    private const val FOREGROUND_CHANNEL_ID = "foreground_service_channel"
+    private const val FOREGROUND_CHANNEL_ALERT_ID = "foreground_service_channel_status"
+    private const val FOREGROUND_CHANNEL_SILENT_ID = "foreground_service_channel"
     private const val MESSAGES_CHANNEL_ID = "messages_channel"
     private const val FOREGROUND_SERVICE_NOTIFICATION_ID = 101
   }
