@@ -33,6 +33,12 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
   private val _customTurnPass = MutableStateFlow("")
   val customTurnPass = _customTurnPass.asStateFlow()
 
+  private val _playSoundOnSend = MutableStateFlow(true)
+  val playSoundOnSend = _playSoundOnSend.asStateFlow()
+
+  private val _playSoundOnReceive = MutableStateFlow(true)
+  val playSoundOnReceive = _playSoundOnReceive.asStateFlow()
+
   private val prefs = application.getSharedPreferences("mercury_prefs", Context.MODE_PRIVATE)
   private val _showNotificationContent =
     MutableStateFlow(prefs.getBoolean("show_notifications_content", true))
@@ -59,7 +65,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     customStun: String?,
     customTurn: String?,
     customTurnUser: String?,
-    customTurnPass: String?
+    customTurnPass: String?,
+    playSoundOnSend: Boolean,
+    playSoundOnReceive: Boolean
   ) {
     _signalingUrl.value = signalingUrl ?: ""
     _peerInactivityTimeout.value = timeout
@@ -67,6 +75,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     _customTurn.value = customTurn ?: ""
     _customTurnUser.value = customTurnUser ?: ""
     _customTurnPass.value = customTurnPass ?: ""
+    _playSoundOnSend.value = playSoundOnSend
+    _playSoundOnReceive.value = playSoundOnReceive
   }
 
   override fun onConnectionStateChanged(state: Int) {
@@ -102,6 +112,14 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     prefs.edit().putBoolean("show_notifications_content", enabled).apply()
   }
 
+  fun onPlaySoundOnSendChange(enabled: Boolean) {
+    if (nativePtr != 0L) nativeSetSoundSettings(nativePtr, enabled, _playSoundOnReceive.value)
+  }
+
+  fun onPlaySoundOnReceiveChange(enabled: Boolean) {
+    if (nativePtr != 0L) nativeSetSoundSettings(nativePtr, _playSoundOnSend.value, enabled)
+  }
+
   fun saveSettings() {
     if (nativePtr != 0L) {
       nativeUpdateUrl(nativePtr, _signalingUrl.value)
@@ -127,4 +145,5 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     user: String,
     pass: String
   )
+  private external fun nativeSetSoundSettings(ptr: Long, send: Boolean, receive: Boolean)
 }

@@ -107,6 +107,7 @@ import hela.eillance.screens.conversation.formatTimestamp
 import hela.eillance.viewmodels.CallViewModel
 import hela.eillance.viewmodels.ContactsViewModel
 import hela.eillance.viewmodels.ConversationViewModel
+import hela.eillance.viewmodels.SettingsViewModel
 import kotlinx.coroutines.launch
 import java.io.File
 import java.time.Instant
@@ -121,6 +122,7 @@ import kotlin.math.abs
 fun ConversationScreen(
   chatVM: ConversationViewModel,
   contactsVM: ContactsViewModel,
+  settingsVM: SettingsViewModel,
   callVM: CallViewModel,
   targetMessageId: Long?,
   mainViewModel: MainViewModel,
@@ -141,6 +143,9 @@ fun ConversationScreen(
   val draftAttachments by chatVM.draftAttachments.collectAsState()
   val messageText by chatVM.messageText.collectAsState()
   val context = LocalContext.current
+  val playSoundOnSend by settingsVM.playSoundOnSend.collectAsState()
+  val playSoundOnReceive by settingsVM.playSoundOnReceive.collectAsState()
+
   val bannerState by mainViewModel.permissionBannerState.collectAsState()
   val clipboard = LocalClipboard.current
   var scrollToMessageId by remember { mutableStateOf(targetMessageId) }
@@ -290,11 +295,11 @@ fun ConversationScreen(
 
       if (isRecent) {
         if (newLastMsg.direction == MessageDirection.Sent) {
-          if (sentSoundId.intValue != 0) {
+          if (sentSoundId.intValue != 0 && playSoundOnSend) {
             soundPool.play(sentSoundId.intValue, 1f, 1f, 0, 0, 1f)
           }
         } else {
-          if (receivedSoundId.intValue != 0) {
+          if (receivedSoundId.intValue != 0 && playSoundOnReceive) {
             soundPool.play(receivedSoundId.intValue, 1f, 1f, 0, 0, 1f)
           }
         }

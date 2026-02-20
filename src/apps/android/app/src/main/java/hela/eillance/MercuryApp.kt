@@ -339,6 +339,7 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
         ConversationScreen(
           chatVM = chatVM,
           contactsVM = contactsVM,
+          settingsVM = settingsVM,
           callVM = callVM,
           targetMessageId = messageId,
           mainViewModel = viewModel,

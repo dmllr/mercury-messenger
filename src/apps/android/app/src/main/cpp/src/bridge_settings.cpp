@@ -70,4 +70,15 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_SettingsViewMode
   env->ReleaseStringUTFChars(pass, p);
 }
 
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_SettingsViewModel_nativeSetSoundSettings(
+    JNIEnv* /*env*/,
+    jobject /*instance*/,
+    jlong ptr,
+    jboolean send,
+    jboolean receive
+) {
+  auto* vm = reinterpret_cast<eillance::view_model::SettingsViewModel*>(ptr);
+  vm->SetSoundSettings(send != 0U, receive != 0U);
+}
+
 // NOLINTEND(readability-identifier-naming)

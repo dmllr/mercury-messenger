@@ -364,7 +364,9 @@ class AndroidSettingsObserver final
       std::optional<std::string> const& custom_stun,
       std::optional<std::string> const& custom_turn,
       std::optional<std::string> const& custom_turn_user,
-      std::optional<std::string> const& custom_turn_pass
+      std::optional<std::string> const& custom_turn_pass,
+      bool play_sound_on_send,
+      bool play_sound_on_receive
   ) override {
     auto env_scope = GetEnv();
     auto* env = env_scope.Get();
@@ -389,7 +391,9 @@ class AndroidSettingsObserver final
         stun_str,
         turn_str,
         user_str,
-        pass_str
+        pass_str,
+        static_cast<jboolean>(play_sound_on_send),
+        static_cast<jboolean>(play_sound_on_receive)
     );
 
     if (url_str) env->DeleteLocalRef(url_str);
