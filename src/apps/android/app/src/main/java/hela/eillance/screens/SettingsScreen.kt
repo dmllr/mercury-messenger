@@ -8,6 +8,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -39,6 +40,8 @@ fun SettingsScreen(
   navController: NavController
 ) {
   val showNotificationContent by settingsVM.showNotificationContent.collectAsState()
+  val playSoundOnSend by settingsVM.playSoundOnSend.collectAsState()
+  val playSoundOnReceive by settingsVM.playSoundOnReceive.collectAsState()
 
   Scaffold(
     topBar = {
@@ -62,6 +65,40 @@ fun SettingsScreen(
         .padding(16.dp)
         .verticalScroll(rememberScrollState())
     ) {
+      // Application Settings (First)
+      ListItem(
+        headlineContent = { Text(stringResource(id = R.string.settings_group_application)) },
+        leadingContent = {
+          Icon(Icons.Default.Settings, contentDescription = null)
+        }
+      )
+      Text(
+        stringResource(id = R.string.settings_header_auditory),
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = 16.dp, bottom = 8.dp)
+      )
+      ListItem(
+        headlineContent = { Text(stringResource(id = R.string.settings_sound_on_send)) },
+        trailingContent = {
+          Switch(
+            checked = playSoundOnSend,
+            onCheckedChange = settingsVM::onPlaySoundOnSendChange
+          )
+        }
+      )
+      ListItem(
+        headlineContent = { Text(stringResource(id = R.string.settings_sound_on_receive)) },
+        trailingContent = {
+          Switch(
+            checked = playSoundOnReceive,
+            onCheckedChange = settingsVM::onPlaySoundOnReceiveChange
+          )
+        }
+      )
+
+      HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
       ListItem(
         headlineContent = { Text(stringResource(id = R.string.settings_group_connection)) },
         supportingContent = { Text(stringResource(id = R.string.settings_connection_description)) },

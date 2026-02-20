@@ -64,6 +64,25 @@ class SettingsManager {
     storage_->SetSetting(kMyPhotoBase64Key, photo);
   }
 
+  // --- Auditory Feedback ---
+  [[nodiscard]] auto GetPlaySoundOnSend() const -> bool {
+    auto val = storage_->GetSetting(kPlaySoundOnSendKey);
+    return !val || (*val == "1");
+  }
+
+  void SetPlaySoundOnSend(bool enabled) {
+    storage_->SetSetting(kPlaySoundOnSendKey, enabled ? "1" : "0");
+  }
+
+  [[nodiscard]] auto GetPlaySoundOnReceive() const -> bool {
+    auto val = storage_->GetSetting(kPlaySoundOnRecvKey);
+    return !val || (*val == "1");
+  }
+
+  void SetPlaySoundOnReceive(bool enabled) {
+    storage_->SetSetting(kPlaySoundOnRecvKey, enabled ? "1" : "0");
+  }
+
   // --- Peer Connection ---
   [[nodiscard]] auto GetPeerInactivityTimeout() -> std::chrono::seconds {
     if (auto str_val = storage_->GetSetting(kPeerInactivityTimeoutKey)) {
@@ -130,6 +149,8 @@ class SettingsManager {
   static constexpr auto kCustomTurnKey = "custom_ice_turn";
   static constexpr auto kCustomTurnUserKey = "custom_ice_turn_user";
   static constexpr auto kCustomTurnPassKey = "custom_ice_turn_pass";
+  static constexpr auto kPlaySoundOnSendKey = "sound_on_send";
+  static constexpr auto kPlaySoundOnRecvKey = "sound_on_recv";
 
   std::shared_ptr<storage::PersistentStorage> storage_;
 

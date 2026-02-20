@@ -30,7 +30,9 @@ class SettingsViewModel {
         std::optional<std::string> const& custom_stun,
         std::optional<std::string> const& custom_turn,
         std::optional<std::string> const& custom_turn_user,
-        std::optional<std::string> const& custom_turn_pass
+        std::optional<std::string> const& custom_turn_pass,
+        bool play_sound_on_send,
+        bool play_sound_on_receive
     ) = 0;
     virtual void OnConnectionStateChanged(ServiceConnectionState state) = 0;
   };
@@ -61,6 +63,8 @@ class SettingsViewModel {
     std::optional<std::string> custom_turn;
     std::optional<std::string> custom_turn_user;
     std::optional<std::string> custom_turn_pass;
+    bool play_sound_on_send = true;
+    bool play_sound_on_receive = true;
   };
 
   [[nodiscard]] auto GetState() const -> State {
@@ -76,6 +80,9 @@ class SettingsViewModel {
   void
   UpdateIceConfig(std::string const& stun, std::string const& turn, std::string const& user, std::string const& pass) {
     impl_->UpdateIceConfig(stun, turn, user, pass);
+  }
+  void SetSoundSettings(bool send, bool receive) {
+    impl_->SetSoundSettings(send, receive);
   }
 
  private:
@@ -103,7 +110,9 @@ class SettingsViewModel {
             state.custom_stun,
             state.custom_turn,
             state.custom_turn_user,
-            state.custom_turn_pass
+            state.custom_turn_pass,
+            state.play_sound_on_send,
+            state.play_sound_on_receive
         );
       }
     }
@@ -148,6 +157,18 @@ class SettingsViewModel {
       }
     }
 
+    void SetSoundSettings(bool send, bool receive) {
+      auto* mgr = client->GetSettingsManager();
+      mgr->SetPlaySoundOnSend(send);
+      mgr->SetPlaySoundOnReceive(receive);
+      {
+        std::lock_guard<std::mutex> const lock(mutex);
+        state.play_sound_on_send = send;
+        state.play_sound_on_receive = receive;
+        NotifySettings();
+      }
+    }
+
     void LoadSettings() {
       std::lock_guard<std::mutex> const lock(mutex);
       LoadSettingsInternal();
@@ -172,7 +193,9 @@ class SettingsViewModel {
             state.custom_stun,
             state.custom_turn,
             state.custom_turn_user,
-            state.custom_turn_pass
+            state.custom_turn_pass,
+            state.play_sound_on_send,
+            state.play_sound_on_receive
         );
       }
     }

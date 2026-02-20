@@ -28,10 +28,12 @@ struct MockSettingsObserver : public SettingsViewModel::Observer {
   void OnSettingsUpdated(
       std::optional<std::string> const& url,
       int t,
-      std::optional<std::string> const& custom_stun,
-      std::optional<std::string> const& custom_turn,
-      std::optional<std::string> const& custom_turn_user,
-      std::optional<std::string> const& custom_turn_pass
+      std::optional<std::string> const& /*custom_stun*/,
+      std::optional<std::string> const& /*custom_turn*/,
+      std::optional<std::string> const& /*custom_turn_user*/,
+      std::optional<std::string> const& /*custom_turn_pass*/,
+      bool,
+      bool
   ) override {
     std::lock_guard<std::mutex> const lock(mutex);
     signaling_url = url;
