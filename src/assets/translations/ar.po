@@ -102,6 +102,8 @@ msgid "contacts_empty_message"
 msgstr "لا توجد جهات اتصال بعد. أضف واحدة!"
 msgid "contact_add_error"
 msgstr "لا يمكن إضافة جهة الاتصال هذه. تأكد من أن المعرف صالح وليس معرفك الخاص."
+msgid "add_a_new_contact"
+msgstr "إضافة جهة اتصال جديدة"
 
 # Calls
 msgid "call_incoming_voice"

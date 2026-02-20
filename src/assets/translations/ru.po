@@ -102,6 +102,8 @@ msgid "contacts_empty_message"
 msgstr "Нет контактов. Добавьте их!"
 msgid "contact_add_error"
 msgstr "Не удалось добавить. Проверьте ID (свой ID добавить нельзя)."
+msgid "add_a_new_contact"
+msgstr "Добавить новый контакт"
 
 # Calls
 msgid "call_incoming_voice"

@@ -145,5 +145,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     user: String,
     pass: String
   )
+
   private external fun nativeSetSoundSettings(ptr: Long, send: Boolean, receive: Boolean)
 }

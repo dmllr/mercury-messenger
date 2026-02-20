@@ -18,16 +18,20 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -35,15 +39,18 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
@@ -105,6 +112,7 @@ fun ContactsScreen(
   onCheckPermissions: () -> Unit,
   onContactClick: (String, Long?) -> Unit,
   onNavigateToProfile: () -> Unit,
+  onNavigateToSettings: () -> Unit,
   onShowContactProfile: (String) -> Unit
 ) {
   val snackbarHostState = remember { SnackbarHostState() }
@@ -222,47 +230,8 @@ fun ContactsScreen(
             )
           },
           actions = {
-            IconButton(onClick = { isSearchActive = true }) {
-              Icon(
-                Icons.Default.Search,
-                contentDescription = stringResource(R.string.action_search)
-              )
-            }
-            Box {
-              IconButton(onClick = onNavigateToProfile) {
-                Box {
-                  UserAvatar(
-                    photoBase64 = myProfile.myPhoto,
-                    modifier = Modifier.size(32.dp)
-                  )
-                }
-              }
-
-              if (hasPermissionIssues || hasConnectionIssues) {
-                Box(
-                  modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 8.dp, end = 8.dp)
-                    .size(10.dp)
-                    .background(MaterialTheme.colorScheme.error, CircleShape)
-                    .border(1.dp, MaterialTheme.colorScheme.surface, CircleShape)
-                )
-              }
-            }
           },
         )
-      }
-    },
-    floatingActionButton = {
-      if (!isSearchActive) {
-        FloatingActionButton(
-          onClick = { contactsVM.onAddContactClicked() }
-        ) {
-          Icon(
-            Icons.Default.Add,
-            contentDescription = stringResource(id = R.string.add_contact_title)
-          )
-        }
       }
     }
   ) { padding ->
@@ -452,28 +421,107 @@ fun ContactsScreen(
           ) {
             CircularProgressIndicator()
           }
-        } else if (visibleContacts.isEmpty()) {
-          Box(
-            modifier = Modifier
-              .weight(1f)
-              .fillMaxWidth(),
-            contentAlignment = Alignment.Center
-          ) {
-            Text(
-              stringResource(R.string.contacts_empty_message),
-              style = MaterialTheme.typography.bodyLarge
-            )
-          }
         } else {
-          LazyColumn(modifier = Modifier.padding(2.dp)) {
-            items(visibleContacts, key = { it.peerId }) { contact ->
-              ContactListItem(
-                contact = contact,
-                onClick = { onContactClick(contact.peerId, null) },
-                onShowProfile = { onShowContactProfile(contact.peerId) },
-                zoneId = zoneId,
-                formatters = formatters
-              )
+          Box(modifier = Modifier
+            .weight(1f)
+            .fillMaxWidth()) {
+            LazyColumn(
+              modifier = Modifier
+                .fillMaxSize()
+                .padding(2.dp),
+              contentPadding = PaddingValues(bottom = 88.dp)
+            ) {
+              items(visibleContacts, key = { it.peerId }) { contact ->
+                ContactListItem(
+                  contact = contact,
+                  onClick = { onContactClick(contact.peerId, null) },
+                  onShowProfile = { onShowContactProfile(contact.peerId) },
+                  zoneId = zoneId,
+                  formatters = formatters
+                )
+              }
+              item {
+                androidx.compose.material3.ListItem(
+                  headlineContent = {
+                    Text(
+                      stringResource(R.string.add_contact_title),
+                      style = MaterialTheme.typography.bodyLarge,
+                      fontWeight = FontWeight.SemiBold
+                    )
+                  },
+                  leadingContent = {
+                    Box(
+                      modifier = Modifier
+                        .size(48.dp)
+                        .background(MaterialTheme.colorScheme.secondaryContainer, CircleShape),
+                      contentAlignment = Alignment.Center
+                    ) {
+                      Icon(
+                        Icons.Default.Add,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSecondaryContainer
+                      )
+                    }
+                  },
+                  modifier = Modifier.clickable { contactsVM.onAddContactClicked() },
+                  colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
+              }
+            }
+
+            if (!isSearchActive) {
+              Surface(
+                modifier = Modifier
+                  .align(Alignment.BottomCenter)
+                  .padding(bottom = 16.dp)
+                  .navigationBarsPadding(),
+                shape = RoundedCornerShape(percent = 50),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                shadowElevation = 6.dp
+              ) {
+                Row(
+                  modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                  verticalAlignment = Alignment.CenterVertically,
+                  horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                  IconButton(onClick = { isSearchActive = true }) {
+                    Icon(Icons.Default.Search, contentDescription = stringResource(R.string.action_search))
+                  }
+                  IconButton(onClick = onNavigateToSettings) {
+                    Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.screen_title_settings))
+                  }
+                  Box {
+                    IconButton(
+                      onClick = onNavigateToProfile,
+                      modifier = Modifier.size(48.dp)
+                    ) {
+                      UserAvatar(photoBase64 = myProfile.myPhoto, modifier = Modifier.size(40.dp))
+                    }
+                    if (hasPermissionIssues || hasConnectionIssues) {
+                      Box(
+                        modifier = Modifier
+                          .align(Alignment.TopEnd)
+                          .padding(top = 4.dp, end = 4.dp)
+                          .size(10.dp)
+                          .background(MaterialTheme.colorScheme.error, CircleShape)
+                          .border(1.dp, MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape)
+                      )
+                    }
+                  }
+                  Box {
+                    var menuExpanded by remember { mutableStateOf(false) }
+                    IconButton(onClick = { menuExpanded = true }) {
+                      Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add_contact_title))
+                    }
+                    DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                      DropdownMenuItem(
+                        text = { Text(stringResource(R.string.add_a_new_contact)) },
+                        onClick = { menuExpanded = false; contactsVM.onAddContactClicked() }
+                      )
+                    }
+                  }
+                }
+              }
             }
           }
         }

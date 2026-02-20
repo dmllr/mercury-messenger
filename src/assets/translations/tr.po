@@ -102,6 +102,8 @@ msgid "contacts_empty_message"
 msgstr "Henüz kişi yok. Bir tane ekle!"
 msgid "contact_add_error"
 msgstr "Bu kişi eklenemiyor. Kimliğin geçerli olduğundan ve size ait olmadığından emin olun."
+msgid "add_a_new_contact"
+msgstr "Yeni kişi ekle"
 
 # Calls
 msgid "call_incoming_voice"

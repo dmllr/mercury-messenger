@@ -23,6 +23,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -60,6 +61,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -70,6 +72,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalConfiguration
@@ -167,6 +170,9 @@ fun ConversationScreen(
   var activeMessageActionId by remember { mutableStateOf<Long?>(null) }
   var editingMessageId by remember { mutableStateOf<Long?>(null) }
   var showDeleteDialogId by remember { mutableStateOf<Long?>(null) }
+
+  var isInputFocused by remember { mutableStateOf(false) }
+  var lastMenuDismissTime by remember { mutableLongStateOf(0L) }
 
   // Scroll to bottom button visibility (Reverse layout: index 0 is bottom)
   val showScrollToBottom by remember {
@@ -640,7 +646,19 @@ fun ConversationScreen(
           ConnectionStatusBar(contact = it)
         }
 
-        Box(modifier = Modifier.weight(1f)) {
+        Box(
+          modifier = Modifier
+            .weight(1f)
+            .pointerInput(Unit) {
+              detectTapGestures(onTap = {
+                if (isInputFocused) focusManager.clearFocus()
+                if (activeMessageActionId != null) {
+                  activeMessageActionId = null
+                  lastMenuDismissTime = System.currentTimeMillis()
+                }
+              })
+            }
+        ) {
           ChatHistory(
             modifier = Modifier.fillMaxSize(),
             historyPage = historyPage,
@@ -655,6 +673,11 @@ fun ConversationScreen(
             editingMessageId = editingMessageId,
             myId = myId,
             onToggleSelection = { id ->
+              if (isInputFocused) focusManager.clearFocus()
+              if (activeMessageActionId != null) {
+                activeMessageActionId = null
+                lastMenuDismissTime = System.currentTimeMillis()
+              }
               selectedMessageIds = if (id in selectedMessageIds) {
                 selectedMessageIds - id
               } else {
@@ -662,42 +685,67 @@ fun ConversationScreen(
               }
             },
             onSystemMessageClick = { clickedEntry ->
-              if (clickedEntry.isTruncated) {
-                tappedTruncatedMessageId = clickedEntry.id
-                chatVM.loadFullMessage(clickedEntry.id)
+              if (isInputFocused) {
+                focusManager.clearFocus()
+              } else if (activeMessageActionId != null) {
+                activeMessageActionId = null
+                lastMenuDismissTime = System.currentTimeMillis()
               } else {
-                systemMessageToShowDetails = clickedEntry
+                if (clickedEntry.isTruncated) {
+                  tappedTruncatedMessageId = clickedEntry.id
+                  chatVM.loadFullMessage(clickedEntry.id)
+                } else {
+                  systemMessageToShowDetails = clickedEntry
+                }
               }
             },
             onMediaClick = { attachments, index ->
-              val target = attachments[index]
-              if (target.type == AttachmentType.Image || target.type == AttachmentType.Video) {
-                val visuals =
-                  attachments.filter { it.type == AttachmentType.Image || it.type == AttachmentType.Video }
-                val visualIndex = visuals.indexOf(target)
-                if (visualIndex != -1) {
-                  onMediaClick(visuals, visualIndex)
-                }
+              if (isInputFocused) {
+                focusManager.clearFocus()
+              } else if (activeMessageActionId != null) {
+                activeMessageActionId = null
+                lastMenuDismissTime = System.currentTimeMillis()
               } else {
-                val file = File(target.path)
-                if (target.isDownloaded && file.exists()) {
-                  openFile(context, file, target.mime)
+                val target = attachments[index]
+                if (target.type == AttachmentType.Image || target.type == AttachmentType.Video) {
+                  val visuals =
+                    attachments.filter { it.type == AttachmentType.Image || it.type == AttachmentType.Video }
+                  val visualIndex = visuals.indexOf(target)
+                  if (visualIndex != -1) {
+                    onMediaClick(visuals, visualIndex)
+                  }
                 } else {
-                  Toast.makeText(
-                    context,
-                    R.string.toast_file_not_downloaded,
-                    Toast.LENGTH_SHORT
-                  ).show()
+                  val file = File(target.path)
+                  if (target.isDownloaded && file.exists()) {
+                    openFile(context, file, target.mime)
+                  } else {
+                    Toast.makeText(
+                      context,
+                      R.string.toast_file_not_downloaded,
+                      Toast.LENGTH_SHORT
+                    ).show()
+                  }
                 }
               }
             },
             onMessageClick = { entry ->
-              activeMessageActionId = if (activeMessageActionId == entry.id) null else entry.id
+              if (isInputFocused) {
+                focusManager.clearFocus()
+              } else if (activeMessageActionId != null) {
+                activeMessageActionId = null
+                lastMenuDismissTime = System.currentTimeMillis()
+              } else if (System.currentTimeMillis() - lastMenuDismissTime > 300L) {
+                activeMessageActionId = entry.id
+              }
             },
-            onDismissMenu = { activeMessageActionId = null },
+            onDismissMenu = {
+              activeMessageActionId = null
+              lastMenuDismissTime = System.currentTimeMillis()
+            },
             onActionReact = { msgId, reaction ->
               chatVM.reactToMessage(msgId, reaction)
               activeMessageActionId = null
+              lastMenuDismissTime = System.currentTimeMillis()
             },
             onActionCopy = { content ->
               coroutineScope.launch {
@@ -705,13 +753,16 @@ fun ConversationScreen(
                 clipboard.setClipEntry(ClipEntry(clip))
               }
               activeMessageActionId = null
+              lastMenuDismissTime = System.currentTimeMillis()
             },
             onActionEdit = { msgId ->
               activeMessageActionId = null
+              lastMenuDismissTime = System.currentTimeMillis()
               editingMessageId = msgId
             },
             onActionDelete = { msgId ->
               activeMessageActionId = null
+              lastMenuDismissTime = System.currentTimeMillis()
               showDeleteDialogId = msgId
             },
             onEditCommit = { msgId, newText ->
@@ -776,6 +827,14 @@ fun ConversationScreen(
               inputValue = messageText,
               onInputValueChange = chatVM::updateMessageText,
               draftAttachments = draftAttachments,
+              isFocused = isInputFocused,
+              onFocusChange = { focused ->
+                isInputFocused = focused
+                if (focused && activeMessageActionId != null) {
+                  activeMessageActionId = null
+                  lastMenuDismissTime = System.currentTimeMillis()
+                }
+              },
               onSendMessage = { text ->
                 chatVM.sendMessage(text)
                 coroutineScope.launch {
