@@ -1,6 +1,5 @@
 package hela.eillance
 
-// ... imports ...
 import android.app.Service
 import android.content.Context
 import android.content.Intent
@@ -40,7 +39,6 @@ import org.json.JSONObject
 import org.webrtc.VideoSink
 
 class MessengerService : Service() {
-  // ... (Class body same as previous patch, except constant below) ...
 
   class CallServiceBinder : android.os.Binder()
 
@@ -51,7 +49,6 @@ class MessengerService : Service() {
   private var wakeLock: PowerManager.WakeLock? = null
   private var dataTransport: WebRtcDataTransport? = null
 
-  // Refactored Components
   private lateinit var notifications: MercuryNotifications
   private lateinit var telecomIntegration: TelecomIntegration
   private lateinit var callHandler: CallHandler
@@ -71,7 +68,6 @@ class MessengerService : Service() {
     super.onCreate()
     instance = this
 
-    // Initialize Components
     notifications = MercuryNotifications(this)
     telecomIntegration = TelecomIntegration(this)
     callHandler = CallHandler(this, notifications, serviceScope)
