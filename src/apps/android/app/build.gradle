@@ -246,3 +246,17 @@ tasks.register('generateTranslations', Exec) {
     }
 }
 preBuild.dependsOn generateTranslations
+
+tasks.register('copySounds', Copy) {
+    description = "Copies sound assets to Android resources"
+    group = "build"
+
+    def gitRoot = providers.exec {
+        commandLine 'git', 'rev-parse', '--show-toplevel'
+    }.standardOutput.asText.map { it.trim() }
+
+    from gitRoot.map { new File(it, "src/assets/sounds") }
+    into "src/main/res/raw"
+    include "*.wav", "*.mp3", "*.ogg"
+}
+preBuild.dependsOn copySounds
