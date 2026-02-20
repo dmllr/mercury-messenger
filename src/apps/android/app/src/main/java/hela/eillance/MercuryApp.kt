@@ -37,7 +37,6 @@ import hela.eillance.screens.MediaPreviewScreen
 import hela.eillance.screens.PermissionIssuesScreen
 import hela.eillance.screens.ProfileScreen
 import hela.eillance.screens.QrScannerScreen
-import hela.eillance.screens.RecoverIdentityScreen
 import hela.eillance.screens.RecoveryPhraseScreen
 import hela.eillance.screens.RejectedContactsScreen
 import hela.eillance.screens.SettingsScreen
@@ -230,6 +229,11 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
           onContactClick = { peerId, msgId -> viewModel.navigateToPeer(peerId, msgId) },
           onNavigateToProfile = {
             navController.navigate(Screen.Profile.route) {
+              launchSingleTop = true
+            }
+          },
+          onNavigateToSettings = {
+            navController.navigate(Screen.Settings.route) {
               launchSingleTop = true
             }
           },

@@ -102,6 +102,8 @@ msgid "contacts_empty_message"
 msgstr "还没有联系人。添加一个！"
 msgid "contact_add_error"
 msgstr "无法添加此联系人。请确保 ID 有效且不是您自己的 ID。"
+msgid "add_a_new_contact"
+msgstr "添加新联系人"
 
 # Calls
 msgid "call_incoming_voice"

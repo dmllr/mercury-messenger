@@ -102,6 +102,8 @@ msgid "contacts_empty_message"
 msgstr "Belum ada kontak. Tambahkan satu!"
 msgid "contact_add_error"
 msgstr "Tidak dapat menambahkan kontak ini. Pastikan ID valid dan bukan milik Anda sendiri."
+msgid "add_a_new_contact"
+msgstr "Tambahkan kontak baru"
 
 # Calls
 msgid "call_incoming_voice"

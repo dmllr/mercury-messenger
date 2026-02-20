@@ -7,12 +7,16 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
@@ -61,12 +65,13 @@ fun MessageInputArea(
   inputValue: String,
   onInputValueChange: (String) -> Unit,
   draftAttachments: List<DraftAttachment>,
+  isFocused: Boolean,
+  onFocusChange: (Boolean) -> Unit,
   onSendMessage: (String) -> Unit,
   onAddDrafts: (List<Uri>) -> Unit,
   onRemoveDraft: (Int) -> Unit,
   onUpdateNote: (Int, String) -> Unit
 ) {
-  var isFocused by remember { mutableStateOf(false) }
   var selectedDraftIndex by remember { mutableStateOf<Int?>(null) }
   val context = LocalContext.current
 
@@ -224,55 +229,63 @@ fun MessageInputArea(
       }
     }
 
+    val canSend = inputValue.isNotBlank() || draftAttachments.isNotEmpty()
+    val showControls = isFocused || canSend
+
     // 3. Text Input & Send
-    Row(
+    TextField(
+      value = inputValue,
+      onValueChange = onInputValueChange,
+      minLines = if (showControls) 2 else 1,
       modifier = Modifier
         .fillMaxWidth()
         .background(MaterialTheme.colorScheme.surface)
-        .padding(horizontal = 8.dp, vertical = 4.dp),
-      verticalAlignment = Alignment.CenterVertically
-    ) {
-      TextField(
-        value = inputValue,
-        onValueChange = onInputValueChange,
-        modifier = Modifier
-          .weight(1f)
-          .onFocusChanged { isFocused = it.isFocused },
-        placeholder = { Text(stringResource(R.string.msg_input_placeholder)) },
-        colors = TextFieldDefaults.colors(
-          focusedIndicatorColor = Color.Transparent,
-          unfocusedIndicatorColor = Color.Transparent,
-          disabledIndicatorColor = Color.Transparent
-        ),
-        keyboardOptions = KeyboardOptions(
-          capitalization = KeyboardCapitalization.Sentences,
-          keyboardType = KeyboardType.Text,
-          imeAction = ImeAction.Default
-        ),
-        maxLines = 4
-      )
-
-      val canSend = inputValue.isNotBlank() || draftAttachments.isNotEmpty()
-      IconButton(
-        modifier = Modifier
-          .background(
-            if (canSend) MaterialTheme.extendedColors.success else MaterialTheme.colorScheme.surfaceVariant,
-            shape = CircleShape
-          ),
-        onClick = {
-          if (canSend) {
-            onSendMessage(inputValue)
-          }
+        .padding(horizontal = 8.dp, vertical = 4.dp)
+        .animateContentSize()
+        .onFocusChanged {
+          onFocusChange(it.isFocused)
         },
-        enabled = canSend
-      ) {
-        Icon(
-          Icons.AutoMirrored.Filled.Send,
-          contentDescription = stringResource(R.string.send_description),
-          tint = if (canSend) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
-        )
+      placeholder = { Text(stringResource(R.string.msg_input_placeholder)) },
+      colors = TextFieldDefaults.colors(
+        focusedIndicatorColor = Color.Transparent,
+        unfocusedIndicatorColor = Color.Transparent,
+        disabledIndicatorColor = Color.Transparent
+      ),
+      keyboardOptions = KeyboardOptions(
+        capitalization = KeyboardCapitalization.Sentences,
+        keyboardType = KeyboardType.Text,
+        imeAction = ImeAction.Default
+      ),
+      maxLines = 4,
+      trailingIcon = {
+        if (showControls) {
+          Column(
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(end = 4.dp)
+          ) {
+            IconButton(
+              onClick = { if (canSend) onSendMessage(inputValue) },
+              enabled = canSend,
+              modifier = Modifier.size(36.dp)
+            ) {
+              Box(
+                modifier = Modifier.fillMaxSize()
+                  .background(if (canSend) MaterialTheme.extendedColors.success else Color.Transparent, CircleShape),
+                contentAlignment = Alignment.Center
+              ) {
+                Icon(
+                  Icons.AutoMirrored.Filled.Send,
+                  contentDescription = stringResource(R.string.send_description),
+                  tint = if (canSend) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                  modifier = Modifier.size(20.dp)
+                )
+              }
+            }
+          }
+        }
       }
-    }
+    )
   }
 
   if (selectedDraftIndex != null && draftAttachments.isNotEmpty()) {
