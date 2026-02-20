@@ -7,6 +7,8 @@ import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioAttributes
+import android.media.SoundPool
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -52,6 +54,7 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
@@ -111,6 +114,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
+import kotlin.math.abs
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -222,7 +226,31 @@ fun ConversationScreen(
     }
   }
 
-  var previousHistorySize by remember(peerId) { mutableIntStateOf(historyPage.messages.size) }
+  // --- Sound Effects Setup ---
+  val soundPool = remember {
+    SoundPool.Builder()
+      .setMaxStreams(1)
+      .setAudioAttributes(
+        AudioAttributes.Builder()
+          .setUsage(AudioAttributes.USAGE_MEDIA) // Use MEDIA for in-app sounds to ensure audibility
+          .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+          .build()
+      )
+      .build()
+  }
+  val sentSoundId = remember { mutableIntStateOf(0) }
+  val receivedSoundId = remember { mutableIntStateOf(0) }
+
+  LaunchedEffect(Unit) {
+    sentSoundId.intValue = soundPool.load(context, R.raw.message_sent, 1)
+    receivedSoundId.intValue = soundPool.load(context, R.raw.message_received, 1)
+  }
+
+  DisposableEffect(Unit) {
+    onDispose { soundPool.release() }
+  }
+
+  var newestMessageId by remember(peerId) { mutableStateOf(historyPage.messages.lastOrNull()?.id) }
 
   var systemMessageToShowDetails by remember { mutableStateOf<HistoryEntry?>(null) }
   var tappedTruncatedMessageId by remember { mutableStateOf<Long?>(null) }
@@ -247,16 +275,40 @@ fun ConversationScreen(
     }
   }
 
-  // Scroll to bottom when new messages arrive
-  LaunchedEffect(historyPage.messages.size) {
-    if (!isSearchActive && historyPage.messages.size > previousHistorySize) {
-      if (listState.firstVisibleItemIndex < 3) {
+  // Detect new messages for Sound and Auto-Scroll
+  LaunchedEffect(historyPage.messages) {
+    val newMessages = historyPage.messages
+    val newLastMsg = newMessages.lastOrNull()
+
+    // If the newest message ID changed, it means a new message was added (sent or received)
+    // ignoring cases where we just loaded older history (pagination).
+    if (newLastMsg != null && newLastMsg.id != newestMessageId) {
+      // Play Sound
+      val msgTime = newLastMsg.timestamp / 1000
+      val now = System.currentTimeMillis()
+      val isRecent = abs(now - msgTime) < 2000
+
+      if (isRecent) {
+        if (newLastMsg.direction == MessageDirection.Sent) {
+          if (sentSoundId.intValue != 0) {
+            soundPool.play(sentSoundId.intValue, 1f, 1f, 0, 0, 1f)
+          }
+        } else {
+          if (receivedSoundId.intValue != 0) {
+            soundPool.play(receivedSoundId.intValue, 1f, 1f, 0, 0, 1f)
+          }
+        }
+      }
+
+      // Scroll to bottom if already near bottom
+      if (!isSearchActive && listState.firstVisibleItemIndex < 3) {
         coroutineScope.launch {
           listState.animateScrollToItem(0)
         }
       }
+
+      newestMessageId = newLastMsg.id
     }
-    previousHistorySize = historyPage.messages.size
   }
 
   LaunchedEffect(scrollToMessageId, historyPage) {
