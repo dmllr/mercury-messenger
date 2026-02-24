@@ -76,7 +76,7 @@ class TestFramework:
         pid = line.replace("ID:", "").strip()
     return pid, mnemonic
 
-  def execute_scenario(self, scenario: Scenario, timeout_seconds: int = 10):
+  def execute_scenario(self, scenario: Scenario, timeout_seconds: int = 10, stop_on_first_exit: bool = True):
     print(f"\n--- Executing Scenario with {len(scenario.processes)} processes ---")
 
     # 1. Setup Networks
@@ -118,6 +118,12 @@ class TestFramework:
         self.active_containers.append(container)
         container_map[proc_def.name] = container
 
+        # Enable routing if needed (for router containers)
+        if "router" in proc_def.name:
+            # We need to set up iptables and ip forwarding
+            # This usually requires the container to be running
+            pass 
+        
         # Attach all networks
         for net_name, ip in proc_def.networks.items():
           if net_name not in net_map:
@@ -133,9 +139,49 @@ class TestFramework:
         self.teardown()
         raise
 
+    # Post-start configuration for Router
+    for proc_def in scenario.processes:
+        if "router" in proc_def.name:
+            print(f"Configuring router {proc_def.name}...")
+            c = container_map[proc_def.name]
+            c.exec_run("sysctl -w net.ipv4.ip_forward=1")
+            # NAT masquerade might be needed or just simple forwarding
+            # Since we set static routes on clients, simple forwarding is enough.
+    
+    # Configure routes on clients
+    # We need to inspect which networks are available and add routes via the router.
+    # This logic is scenario-specific, we'll handle it if we can identify topology.
+    # For now, let's rely on the tests explicitly setting up routes via 'exec_run' 
+    # or assume the test scenarios are simple enough.
+
     # 3. Wait for execution
-    print(f"Waiting {timeout_seconds}s for test execution...")
-    time.sleep(timeout_seconds)
+    print(f"Waiting up to {timeout_seconds}s for test execution...")
+    start_time = time.time()
+    while time.time() - start_time < timeout_seconds:
+      time.sleep(0.5)
+      if stop_on_first_exit:
+        any_exited = False
+        for name, c in container_map.items():
+          try:
+            c.reload()
+            if c.status == 'exited':
+              print(f"Process {name} finished early.")
+              any_exited = True
+              break
+          except docker.errors.NotFound:
+            pass
+        if any_exited:
+          break
+
+    # Gracefully stop remaining processes
+    for name, c in container_map.items():
+      try:
+        c.reload()
+        if c.status == 'running':
+          print(f"Gracefully stopping {name}...")
+          c.stop(timeout=2)
+      except docker.errors.NotFound:
+        pass
 
     # 4. Verify Logs
     print("\n--- Verifying Logs ---")
@@ -158,7 +204,6 @@ class TestFramework:
         if idx == -1:
           failures.append(
             f"Process '{expectation.process_name}': Expected line '{line}' not found "
-            f"(or not found after previous match)."
           )
           break # Stop checking this process
         last_idx = idx
@@ -170,6 +215,41 @@ class TestFramework:
       raise AssertionError(f"Scenario failed with {len(failures)} log mismatches.")
 
     print("Scenario PASSED.")
+
+  def get_container(self, name: str):
+      for c in self.active_containers:
+          if c.name == name:
+              return c
+      return None
+
+  def stop_process(self, name: str):
+      c = self.get_container(name)
+      if c:
+          print(f"Stopping {name}...")
+          c.stop()
+  
+  def start_process(self, name: str):
+      c = self.get_container(name)
+      if c:
+          print(f"Starting {name}...")
+          c.start()
+
+  def restart_process(self, name: str):
+      c = self.get_container(name)
+      if c:
+          print(f"Restarting {name}...")
+          c.restart()
+
+  def add_route(self, container_name: str, target_subnet: str, gateway_ip: str):
+      """Adds a static route inside a container."""
+      c = self.get_container(container_name)
+      if c:
+          print(f"Adding route to {target_subnet} via {gateway_ip} in {container_name}")
+          # Requires NET_ADMIN capability
+          exit_code, output = c.exec_run(f"ip route add {target_subnet} via {gateway_ip}")
+          if exit_code != 0:
+              # Route might exist
+              pass
 
   def teardown(self):
     print("\n--- Teardown ---")

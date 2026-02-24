@@ -74,9 +74,15 @@ class ProfileService {
   void MarkAllContactsProfileSyncNeeded() {
     auto const contacts = manager_->GetContacts();
     for (auto const& contact : contacts) {
-      if (contact.status == identity::ContactStatus::confirmed) {
+      if (contact.status == identity::ContactStatus::confirmed || contact.status == identity::ContactStatus::pendingApproval) {
         SendMyProfile(contact.peer_id);
       }
+    }
+  }
+
+  void NotifyProfileUpdated(ContactID const& peer_id) {
+    if (on_contact_profile_updated_) {
+      on_contact_profile_updated_(peer_id);
     }
   }
 

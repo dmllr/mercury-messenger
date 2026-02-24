@@ -150,6 +150,8 @@ class Client final : public transport::TransportDelegate {
         if (state == transport::PeerConnectionState::failed || state == transport::PeerConnectionState::closed) {
           media_transport_->Disconnect(peer_id);
         }
+      } else if (source == EventSource::gatheringState) {
+        media_call_service_->OnMediaGatheringStateChange(peer_id, state_val);
       }
       INVARIANT(status_callback_);
       (*status_callback_)(peer_id, source, state_val);
@@ -639,7 +641,7 @@ class Client final : public transport::TransportDelegate {
     profile_service_->MarkAllContactsProfileSyncNeeded();
     auto const contacts = contact_service_->GetContacts();
     for (auto const& contact : contacts) {
-      if (contact.status == identity::ContactStatus::confirmed) {
+      if (contact.status == identity::ContactStatus::confirmed || contact.status == identity::ContactStatus::pendingApproval) {
         profile_service_->SyncProfile(contact.peer_id);
         Connect(contact.peer_id);
       }

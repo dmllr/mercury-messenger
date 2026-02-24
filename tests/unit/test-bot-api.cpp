@@ -98,7 +98,7 @@ class BotApiTest : public ::testing::Test {
 };
 
 TEST_F(BotApiTest, AutoAcceptContacts) {
-  nlohmann::json req_msg = {
+  nlohmann::json const req_msg = {
       {"from", peer1.ToString()},
       {"type", "contact_add_request"},
       {"profile", {{"display_name", "Peer One"}}}
@@ -121,7 +121,7 @@ TEST_F(BotApiTest, AutoAcceptContacts) {
 }
 
 TEST_F(BotApiTest, AutoRejectCalls) {
-  nlohmann::json offer_msg =
+  nlohmann::json const offer_msg =
       {{"from", peer1.ToString()}, {"type", "offer"}, {"context", "media"}, {"sdp", "dummy_sdp_media"}};
 
   mock_data_transport_raw_->SimulatePeerMessage(peer1, offer_msg);
@@ -138,7 +138,7 @@ TEST_F(BotApiTest, MessageHandling) {
   bool message_received = false;
   std::string received_text;
 
-  bot_->OnMessage([&](mercury::bot::Message const& msg) {
+  bot_->OnMessage([&](mercury::bot::Message const& msg) -> void {
     message_received = true;
     received_text = msg.text;
   });
@@ -171,7 +171,7 @@ TEST_F(BotApiTest, MessageHandling) {
 
   std::string msg_str = chat_msg.dump();
   std::vector<std::byte> msg_bytes(msg_str.size());
-  std::ranges::transform(msg_str, msg_bytes.begin(), [](char c) { return static_cast<std::byte>(c); });
+  std::ranges::transform(msg_str, msg_bytes.begin(), [](char c) -> std::byte { return static_cast<std::byte>(c); });
 
   peer->on_data_channel_message(msg_bytes);
 
@@ -186,7 +186,7 @@ TEST_F(BotApiTest, SendMessage) {
   client_->Connect(peer1);
   FlushClientQueue();
 
-  auto peer = mock_data_transport_raw_->GetPeer(peer1);
+  auto const peer = mock_data_transport_raw_->GetPeer(peer1);
   ASSERT_TRUE(peer);
 
   peer->data_channel_is_open = true;
