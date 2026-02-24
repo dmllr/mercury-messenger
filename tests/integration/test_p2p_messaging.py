@@ -1,13 +1,12 @@
 import pytest
 from utils.framework import Scenario
 
-def test_p2p_messaging_multi_network(test_environment):
+def test_p2p_messaging_same_network(test_environment):
   """
-  Scenario:
-  1. Signaling Server on Network A.
-  2. Mock-App A on Network A.
-  3. Mock-App B on Network A (simulating same LAN).
-  4. Two independent identities.
+  Scenario: same network simple communication:
+  1. Signaling Server on Network 10.0/24.
+  2. Mock-App A on Network 10.0/24.
+  3. Mock-App B on Network 10.0/24.
   """
 
   # Generate Identities
