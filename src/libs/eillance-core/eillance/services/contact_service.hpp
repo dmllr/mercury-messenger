@@ -194,6 +194,10 @@ class ContactService {
 
     auto status = manager_->ReceiveContactRequest(peer_id, name, bio, photo);
 
+    if (name || bio || photo) {
+      profile_service_->NotifyProfileUpdated(peer_id);
+    }
+
     if (status == identity::RequestStatus::New || status == identity::RequestStatus::duplicate) {
       bool valid_token = false;
       if (token) {
