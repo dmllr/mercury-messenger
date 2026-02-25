@@ -22,7 +22,7 @@ constexpr auto logInstanceId = 454;
 
 struct Log {
   static constexpr auto tag = "eillance";
-  static constexpr auto logLevel = plog::verbose;
+  static constexpr auto logLevel = plog::info;
 
   /**
    * @brief Initializes the logging system with a custom appender.
