@@ -135,6 +135,12 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
         "setWebRtcMediaTransport",
         "(Lhela/eillance/webrtc/WebRtcMediaTransport;)V"
     );
+    classref.RegisterMethod(
+        env,
+        "hela/eillance/MessengerService",
+        "onNativeCoreCrash",
+        "()V"
+    );
 
     classref.RegisterClass(env, "hela/eillance/viewmodels/NativeContactsObserver");
     classref.RegisterMethod(
