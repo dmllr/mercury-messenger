@@ -10,7 +10,7 @@
 namespace eillance::storage::migrations {
 
 inline void MigrateToV0007(sqlite3* db) {
-  LGI << "Migrating database schema to v7 (Pending Actions V2)...";
+  LGV << "Migrating database schema to v7 (Pending Actions V2)...";
   auto const* const schema = R"SQL(
       BEGIN TRANSACTION;
 
@@ -30,7 +30,7 @@ inline void MigrateToV0007(sqlite3* db) {
     sqlite3_free(err_msg);
     throw std::runtime_error(error);
   }
-  LGI << "Database schema updated to v7.";
+  LGD << "Database schema updated to v7.";
 }
 
 }  // namespace eillance::storage::migrations

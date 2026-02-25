@@ -10,7 +10,7 @@
 namespace eillance::storage::migrations {
 
 inline void MigrateToV0008(sqlite3* db) {
-  LGI << "Migrating database schema to v8 (Suspension Logic)...";
+  LGV << "Migrating database schema to v8 (Suspension Logic)...";
   auto const* const schema = R"SQL(
       BEGIN TRANSACTION;
 
@@ -31,7 +31,7 @@ inline void MigrateToV0008(sqlite3* db) {
     sqlite3_free(err_msg);
     throw std::runtime_error(error);
   }
-  LGI << "Database schema updated to v8.";
+  LGD << "Database schema updated to v8.";
 }
 
 }  // namespace eillance::storage::migrations
