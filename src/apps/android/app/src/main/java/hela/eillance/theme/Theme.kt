@@ -38,10 +38,6 @@ data class ExtendedColors(
 val BrandOrange = Color(0xFFFF6A00)
 val BrandOrangeSoft = Color(0xFFFF8A3D)
 val BrandOrangeDeep = Color(0xFFCC4E00)
-val BrandOrangeSurfaceLight = Color(0xFFE65C00)
-val BrandOrangeSurfaceDark = Color(0xFF8C3600)
-val OnOrangeLight = Color(0xFFFFFFFF)
-val OnOrangeDark = Color(0xFFFFE9DD)
 
 val LightExtendedColors = ExtendedColors(
   brand = BrandOrange,
@@ -50,10 +46,10 @@ val LightExtendedColors = ExtendedColors(
   warning = Color(0xFFED6C02),
   offline = Color(0xFF9E9E9E),
 
-  sentBubbleBackground = BrandOrangeSurfaceLight,
-  sentBubbleContent = OnOrangeLight,
+  sentBubbleBackground = Color(0xFFFFFFFF),
+  sentBubbleContent = Color(0xFF000000),
 
-  receivedBubbleBackground = Color(0xFFF1F1F1),
+  receivedBubbleBackground = Color(0xFFDADADA),
   receivedBubbleContent = Color(0xFF1C1C1C),
 )
 
@@ -64,8 +60,8 @@ val DarkExtendedColors = ExtendedColors(
   warning = Color(0xFFFFA726),
   offline = Color(0xFF8A8A8A),
 
-  sentBubbleBackground = BrandOrangeSurfaceDark,
-  sentBubbleContent = OnOrangeDark,
+  sentBubbleBackground = Color(0x338C3600),
+  sentBubbleContent = Color(0xFFFFE9DD),
 
   receivedBubbleBackground = Color(0xFF262626),
   receivedBubbleContent = Color(0xFFEAEAEA),
