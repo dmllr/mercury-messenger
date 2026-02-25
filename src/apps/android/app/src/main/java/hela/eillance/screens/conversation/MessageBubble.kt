@@ -7,6 +7,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,6 +32,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
@@ -119,16 +121,6 @@ fun MessageBubble(
   Box(
     modifier = Modifier
       .fillMaxWidth()
-      .combinedClickable(
-        onClick = {
-          if (selectionMode) onToggleSelection()
-          else onMessageClick()
-        },
-        onLongClick = {
-          if (!selectionMode) onToggleSelection()
-        }
-      )
-      .background(if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent)
       .padding(
         start = if (isFromMe) 48.dp else 8.dp,
         end = if (isFromMe) 8.dp else 48.dp,
@@ -157,7 +149,25 @@ fun MessageBubble(
     val bubbleContent = @Composable {
       Column(
         modifier = Modifier
-          .background(colors.first, bubbleShape)
+          .then(
+            if (isSelected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, bubbleShape)
+            else Modifier
+          )
+          .clip(bubbleShape)
+          .background(colors.first)
+          .then(
+            if (isSelected) Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
+            else Modifier
+          )
+          .combinedClickable(
+            onClick = {
+              if (selectionMode) onToggleSelection()
+              else onMessageClick()
+            },
+            onLongClick = {
+              if (!selectionMode) onToggleSelection()
+            }
+          )
           .padding(horizontal = 4.dp, vertical = 4.dp),
         horizontalAlignment = if (isFromMe) Alignment.End else Alignment.Start
       ) {
