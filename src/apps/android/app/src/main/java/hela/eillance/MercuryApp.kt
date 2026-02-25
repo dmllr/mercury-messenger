@@ -32,11 +32,14 @@ import hela.eillance.screens.ContactProfileDialog
 import hela.eillance.screens.ContactsScreen
 import hela.eillance.screens.ConversationScreen
 import hela.eillance.screens.HelpScreen
+import hela.eillance.screens.IdentityScreen
 import hela.eillance.screens.IncomingCallScreen
 import hela.eillance.screens.MediaPreviewScreen
+import hela.eillance.screens.MnemonicDisplayScreen
 import hela.eillance.screens.PermissionIssuesScreen
 import hela.eillance.screens.ProfileScreen
 import hela.eillance.screens.QrScannerScreen
+import hela.eillance.screens.RecoverIdentityScreen
 import hela.eillance.screens.RecoveryPhraseScreen
 import hela.eillance.screens.RejectedContactsScreen
 import hela.eillance.screens.SettingsScreen
@@ -82,6 +85,30 @@ fun MercuryApp(viewModel: MainViewModel) {
 
     if (myProfile.identityExists) {
       MainAppContent(viewModel = viewModel, profileVM = profileVM)
+    } else {
+      IdentitySetupFlow(profileVM)
+    }
+  }
+}
+
+@Composable
+fun IdentitySetupFlow(profileVM: ProfileViewModel) {
+  val navController = rememberNavController()
+  NavHost(navController = navController, startDestination = Screen.Identity.route) {
+    composable(Screen.Identity.route) { IdentityScreen(navController, profileVM) }
+    composable(Screen.MnemonicDisplay.route) {
+      MnemonicDisplayScreen(profileVM) {
+        // Upon finishing setup, profileVM state updates will trigger navigation in MercuryApp
+      }
+    }
+    composable(Screen.RecoverIdentity.route) { RecoverIdentityScreen(navController, profileVM) }
+    composable(
+      route = Route.WebView.route,
+      arguments = listOf(navArgument("url") { type = NavType.StringType })
+    ) { backStackEntry ->
+      backStackEntry.arguments?.getString("url")?.let {
+        WebViewScreen(navController = navController, url = Uri.decode(it))
+      }
     }
   }
 }
