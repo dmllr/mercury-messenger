@@ -101,53 +101,53 @@ fun IdentityScreen(navController: NavController, profileVM: ProfileViewModel) {
     ) {
       Text(
         stringResource(id = R.string.identity_welcome_title),
-        style = MaterialTheme.typography.headlineLarge
+        style = MaterialTheme.typography.headlineMedium,
+        textAlign = TextAlign.Center
       )
-      Spacer(modifier = Modifier.height(16.dp))
+      Spacer(modifier = Modifier.height(32.dp))
 
-      val linkStyle = SpanStyle(
-        color = MaterialTheme.colorScheme.primary,
-        textDecoration = TextDecoration.Underline
-      )
+      val rawText = stringResource(id = R.string.identity_description)
+      val primaryColor = MaterialTheme.colorScheme.primary
 
-      val annotatedText = buildAnnotatedString {
-        append(stringResource(id = R.string.identity_description_part1))
-        withLink(
-          link = LinkAnnotation.Clickable(
-            tag = URL_IDENTITY,
-            styles = TextLinkStyles(style = linkStyle),
-            linkInteractionListener = {
-              navController.navigate(Route.WebView.createRoute(URL_IDENTITY))
+      val annotatedText = remember(rawText, primaryColor) {
+        val linkStyle = SpanStyle(
+          color = primaryColor,
+          textDecoration = TextDecoration.Underline
+        )
+
+        buildAnnotatedString {
+          // Regex matches [Link Text](tag_name)
+          val regex = Regex("""\[([^\[\]]+)]\(([^()]+)\)""")
+          var lastIndex = 0
+
+          regex.findAll(rawText).forEach { matchResult ->
+            append(rawText.substring(lastIndex, matchResult.range.first))
+
+            val linkText = matchResult.groupValues[1]
+            val tag = matchResult.groupValues[2]
+
+            withLink(
+              link = LinkAnnotation.Clickable(
+                tag = tag,
+                styles = TextLinkStyles(style = linkStyle),
+                linkInteractionListener = {
+                  // Map the tag from translations to your Kotlin URLs
+                  val url = when (tag) {
+                    "url_identity" -> URL_IDENTITY
+                    "url_e2ee" -> URL_E2EE
+                    "url_p2p" -> URL_P2P
+                    else -> tag
+                  }
+                  navController.navigate(Route.WebView.createRoute(url))
+                }
+              )
+            ) {
+              append(linkText)
             }
-          )
-        ) {
-          append(stringResource(id = R.string.identity_description_link1))
+            lastIndex = matchResult.range.last + 1
+          }
+          append(rawText.substring(lastIndex))
         }
-        append(stringResource(id = R.string.identity_description_part2))
-        withLink(
-          link = LinkAnnotation.Clickable(
-            tag = URL_E2EE,
-            styles = TextLinkStyles(style = linkStyle),
-            linkInteractionListener = {
-              navController.navigate(Route.WebView.createRoute(URL_E2EE))
-            }
-          )
-        ) {
-          append(stringResource(id = R.string.identity_description_link2))
-        }
-        append(stringResource(id = R.string.identity_description_part3))
-        withLink(
-          link = LinkAnnotation.Clickable(
-            tag = URL_P2P,
-            styles = TextLinkStyles(style = linkStyle),
-            linkInteractionListener = {
-              navController.navigate(Route.WebView.createRoute(URL_P2P))
-            }
-          )
-        ) {
-          append(stringResource(id = R.string.identity_description_link3))
-        }
-        append(stringResource(id = R.string.identity_description_part4))
       }
 
       SelectionContainer {
@@ -158,7 +158,6 @@ fun IdentityScreen(navController: NavController, profileVM: ProfileViewModel) {
           ),
         )
       }
-
 
       Spacer(modifier = Modifier.height(48.dp))
       Button(
