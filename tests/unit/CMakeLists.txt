@@ -1,11 +1,6 @@
 set(CMAKE_USE_WIN32_THREADS_INIT ON)
 set(gtest_disable_pthreads ON)
 
-if (MSVC)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /bigobj")
-  add_definitions(-D _CRT_SECURE_NO_WARNINGS)
-endif(MSVC)
-
 include(FetchContent)
 FetchContent_Declare(
   googletest

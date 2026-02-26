@@ -11,12 +11,14 @@
 #include <span>
 
 #include "eillance/crypto/crypto.hpp"
+#include "eillance/events/client_events.hpp"
 #include "eillance/events/service_connection_state.hpp"
 #include "eillance/identity/contact_id.hpp"
 #include "eillance/logging/logging.hpp"
 #include "eillance/transport/media_transport.hpp"
 #include "eillance/transport/peer.hpp"
 #include "eillance/transport/peer_connection_state.hpp"
+#include "eillance/utils/event_queue.hpp"
 #include "eillance/utils/invariant.hpp"
 #include "utils/class_refs.hpp"
 #include "utils/jni_utils.hpp"
@@ -33,7 +35,6 @@ class AndroidRtcTrack final : public ITrack {
 class AndroidMediaTransport final : public MediaTransport::Interface {
   JavaVM* jvm_;
   jobject transportJavaRef_{nullptr};
-  std::shared_ptr<MediaTransport::StatusCallbackFunction> statusCallback_{};
 
   std::unordered_map<ContactID, std::shared_ptr<Peer>> peers_;
   mutable std::mutex peersMutex_;
@@ -66,11 +67,8 @@ class AndroidMediaTransport final : public MediaTransport::Interface {
     }
   }
 
-  void SetStatusCallback(MediaTransport::StatusCallbackFunction const& callback) override {
-    statusCallback_ = std::make_shared<MediaTransport::StatusCallbackFunction>(callback);
-  }
   void ReportStateChange(ContactID const& peer_id, EventSource source, int state) {
-    if (statusCallback_) (*statusCallback_)(peer_id, source, state);
+    EventQueue::Instance().Push(EventStatusChanged{peer_id, source, state});
   }
 
   void SetIceServers(std::string const& json_config) override {
@@ -86,7 +84,7 @@ class AndroidMediaTransport final : public MediaTransport::Interface {
 
   void AttachToPeer(ContactID const& peer_id, std::shared_ptr<Peer> const& peer) override {
     std::lock_guard<std::mutex> const lock(peersMutex_);
-    peers_.emplace(peer_id, peer);
+    peers_[peer_id] = peer;
   }
 
   auto GetPeer(ContactID const& peer_id) const -> std::shared_ptr<Peer> {
@@ -162,7 +160,7 @@ class AndroidMediaTransport final : public MediaTransport::Interface {
     env->DeleteLocalRef(j_type);
   }
 
-  auto AddVideo(ContactID const& peer_id, std::function<void(void)> const&) -> std::shared_ptr<ITrack> override {
+  auto AddVideo(ContactID const& peer_id) -> std::shared_ptr<ITrack> override {
     auto env_scope = GetEnv();
     auto* env = env_scope.Get();
     if (!env || (transportJavaRef_ == nullptr)) return nullptr;
@@ -175,7 +173,7 @@ class AndroidMediaTransport final : public MediaTransport::Interface {
     return std::make_shared<AndroidRtcTrack>();
   }
 
-  auto AddAudio(ContactID const& peer_id, std::function<void(void)> const&) -> std::shared_ptr<ITrack> override {
+  auto AddAudio(ContactID const& peer_id) -> std::shared_ptr<ITrack> override {
     auto env_scope = GetEnv();
     auto* env = env_scope.Get();
     if (!env || (transportJavaRef_ == nullptr)) return nullptr;

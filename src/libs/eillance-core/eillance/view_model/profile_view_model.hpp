@@ -7,27 +7,18 @@
 #include <string>
 #include <vector>
 
-#include "client_event_router.hpp"
 #include "eillance/client/client.hpp"
+#include "eillance/events/client_events.hpp"
+#include "eillance/utils/event_queue.hpp"
 #include "view_model_defines.hpp"
 
 namespace eillance::view_model {
 
 class ProfileViewModel {
  public:
-  struct Observer {
-    Observer() = default;
-    Observer(Observer const&) = delete;
-    Observer(Observer&&) = delete;
-    auto operator=(Observer const&) -> Observer& = delete;
-    auto operator=(Observer&&) -> Observer& = delete;
-    virtual ~Observer() = default;
-    virtual void OnProfileUpdated(MyProfile const& profile) = 0;
-  };
-
-  explicit ProfileViewModel(std::shared_ptr<Client> client, std::shared_ptr<ClientEventRouter> router)
-      : impl_(std::make_shared<Impl>(std::move(client), std::move(router))) {
-    auto& queue = impl_->router->Queue();
+  explicit ProfileViewModel(std::shared_ptr<Client> client)
+      : impl_(std::make_shared<Impl>(std::move(client))) {
+    auto& queue = EventQueue::Instance();
     auto impl = impl_;
     Subscribe<EventMyProfileUpdated>(queue, [impl](auto const&) { impl->RefreshFromSettings(); });
     impl_->RefreshFromSettings();
@@ -37,10 +28,6 @@ class ProfileViewModel {
     for (auto const& unsubscribe : eventUnsubscribers_) {
       unsubscribe();
     }
-  }
-
-  void SetObserver(std::shared_ptr<Observer> observer) const {
-    impl_->SetObserver(std::move(observer));
   }
 
   [[nodiscard]] auto GetProfile() const -> MyProfile {
@@ -76,23 +63,12 @@ class ProfileViewModel {
  private:
   struct Impl : public std::enable_shared_from_this<Impl> {
     std::shared_ptr<Client> client;
-    std::shared_ptr<ClientEventRouter> router;
-    std::shared_ptr<Observer> observer;
 
     mutable std::mutex mutex;
     MyProfile profile;
 
-    Impl(std::shared_ptr<Client> client, std::shared_ptr<ClientEventRouter> router)
-        : client(std::move(client)),
-          router(std::move(router)) {
-    }
-
-    void SetObserver(std::shared_ptr<Observer> obs) {
-      std::lock_guard<std::mutex> const lock(mutex);
-      observer = std::move(obs);
-      if (observer) {
-        observer->OnProfileUpdated(profile);
-      }
+    explicit Impl(std::shared_ptr<Client> client)
+        : client(std::move(client)) {
     }
 
     auto GetProfile() const -> MyProfile {
@@ -159,9 +135,7 @@ class ProfileViewModel {
         }
       }
 
-      if (changed && observer) {
-        observer->OnProfileUpdated(profile);
-      }
+      if (changed) EventQueue::Instance().Push(EventProfileStateUpdated{profile});
     }
   };
 

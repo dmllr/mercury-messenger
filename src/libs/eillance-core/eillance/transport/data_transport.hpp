@@ -19,12 +19,10 @@ namespace eillance::transport {
 class DataTransport {
  public:
   using Json = nlohmann::json;
-  using StatusCallbackFunction = std::function<void(ContactID const& peer_id, EventSource, int)>;
 
   struct Interface {
     virtual ~Interface() = default;
     virtual void SetDelegate(TransportDelegate* delegate) = 0;
-    virtual void SetStatusCallback(StatusCallbackFunction const& callback) = 0;
 
     // Config
     virtual void SetId(ContactID const& id) = 0;
@@ -64,9 +62,6 @@ class DataTransport {
   void SetDelegate(TransportDelegate* delegate) const {
     self_->SetDelegate(delegate);
   }
-  void SetStatusCallback(StatusCallbackFunction const& callback) const {
-    self_->SetStatusCallback(callback);
-  }
 
   void SetId(ContactID const& id) const {
     self_->SetId(id);
@@ -88,7 +83,7 @@ class DataTransport {
     self_->Reconnect();
   }
 
-  void AddPeer(ContactID const& peer_id, std::shared_ptr<Peer> const& peer) const {
+  void AddPeer(ContactID const& peer_id, std::shared_ptr<Peer> const& peer) {
     self_->AddPeer(peer_id, peer);
   }
   void RemovePeer(ContactID const& peer_id) const {

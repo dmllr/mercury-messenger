@@ -5,27 +5,18 @@
 #include <mutex>
 #include <vector>
 
-#include "client_event_router.hpp"
 #include "eillance/client/client.hpp"
+#include "eillance/events/client_events.hpp"
+#include "eillance/utils/event_queue.hpp"
 #include "view_model_defines.hpp"
 
 namespace eillance::view_model {
 
 class CallViewModel {
  public:
-  struct Observer {
-    Observer() = default;
-    Observer(Observer const&) = delete;
-    Observer(Observer&&) = delete;
-    auto operator=(Observer const&) -> Observer& = delete;
-    auto operator=(Observer&&) -> Observer& = delete;
-    virtual ~Observer() = default;
-    virtual void OnCallStateChanged(CallState const& state) = 0;
-  };
-
-  explicit CallViewModel(std::shared_ptr<Client> client, std::shared_ptr<ClientEventRouter> router)
-      : impl_(std::make_shared<Impl>(std::move(client), std::move(router))) {
-    auto& queue = impl_->router->Queue();
+  explicit CallViewModel(std::shared_ptr<Client> client)
+      : impl_(std::make_shared<Impl>(std::move(client))) {
+    auto& queue = EventQueue::Instance();
     auto impl = impl_;
     Subscribe<EventIncomingCall>(queue, [impl](auto const& event) {
       impl->OnIncomingCall(event.peer_id, event.call_type);
@@ -55,10 +46,6 @@ class CallViewModel {
     }
   }
 
-  void SetObserver(std::shared_ptr<Observer> observer) const {
-    impl_->SetObserver(std::move(observer));
-  }
-
   [[nodiscard]] auto GetState() const -> CallState {
     return impl_->GetState();
   }
@@ -82,24 +69,13 @@ class CallViewModel {
  private:
   struct Impl : std::enable_shared_from_this<Impl> {
     std::shared_ptr<Client> client;
-    std::shared_ptr<ClientEventRouter> router;
-    std::shared_ptr<Observer> observer;
 
     mutable std::mutex mutex;
     CallState state;
 
-    Impl(std::shared_ptr<Client> client, std::shared_ptr<ClientEventRouter> router)
-        : client(std::move(client)),
-          router(std::move(router)) {
+    explicit Impl(std::shared_ptr<Client> client)
+        : client(std::move(client)) {
       state = this->client->GetCurrentCallState();
-    }
-
-    void SetObserver(std::shared_ptr<Observer> obs) {
-      std::lock_guard<std::mutex> const lock(mutex);
-      observer = std::move(obs);
-      if (observer) {
-        observer->OnCallStateChanged(state);
-      }
     }
 
     auto GetState() const -> CallState {
@@ -109,9 +85,7 @@ class CallViewModel {
 
     void Notify() const {
       std::lock_guard<std::mutex> const lock(mutex);
-      if (observer) {
-        observer->OnCallStateChanged(state);
-      }
+      EventQueue::Instance().Push(EventCallStateChanged{state});
     }
 
     void StartVoiceCall(ContactID const& peer_id) {

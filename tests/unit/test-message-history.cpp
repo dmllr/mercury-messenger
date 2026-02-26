@@ -2,7 +2,9 @@
 
 #include <gtest/gtest.h>
 
+#include "eillance/events/client_events.hpp"
 #include "eillance/messaging/history.hpp"
+#include "eillance/utils/event_queue.hpp"
 #include "mock_persistent_storage.hpp"
 using namespace eillance;
 
@@ -56,16 +58,17 @@ TEST_F(MessageHistoryTest, AddCallEntry) {
 TEST_F(MessageHistoryTest, UpdateMessageStatus) {
   ContactID received_peer_id;
   uint64_t received_msg_id = 0;
-  messaging::MessageStatus received_status = messaging::MessageStatus::none;
+  auto received_status = messaging::MessageStatus::none;
+  bool updated = false;
 
-  message_history_->SetStatusChangedCallback([&](ContactID const& p_id, uint64_t msg_id, messaging::MessageStatus status
-                                             ) {
-    received_peer_id = p_id;
-    received_msg_id = msg_id;
-    received_status = status;
+  auto sub = EventQueue::Instance().Subscribe<EventMessageStatusChanged>([&](auto const& e) {
+    received_peer_id = e.peer_id;
+    received_msg_id = e.message_id;
+    received_status = e.status;
+    updated = true;
   });
 
-  auto entry = message_history_->AddTextEntry(
+  auto const entry = message_history_->AddTextEntry(
       peer1,
       "Test",
       {},  // Attachments
@@ -76,12 +79,15 @@ TEST_F(MessageHistoryTest, UpdateMessageStatus) {
 
   message_history_->UpdateMessageStatus(peer1, entry.id, messaging::MessageStatus::delivered);
 
+  EventQueue::Instance().WaitFor([&] { return updated; }, std::chrono::seconds(1));
+
   EXPECT_EQ(received_peer_id, peer1);
   EXPECT_EQ(received_msg_id, entry.id);
   EXPECT_EQ(received_status, messaging::MessageStatus::delivered);
 
-  auto page = message_history_->GetHistoryPage(peer1, 0, 1);
-  ASSERT_EQ(page.messages[0].status, messaging::MessageStatus::delivered);
+  EventQueue::Instance().Unsubscribe<EventMessageStatusChanged>(sub);
+  auto [messages, total_messages] = message_history_->GetHistoryPage(peer1, 0, 1);
+  ASSERT_EQ(messages[0].status, messaging::MessageStatus::delivered);
 }
 
 TEST_F(MessageHistoryTest, GetHistoryPage) {
@@ -192,6 +198,37 @@ TEST_F(MessageHistoryTest, MarkMessageDeleted) {
   EXPECT_TRUE(loaded->is_deleted);
   // Mock clears content, check behavior consistency
   EXPECT_EQ(std::get<messaging::MessageEntry>(loaded->data).content, "");
+}
+
+TEST_F(MessageHistoryTest, MarkMessagesAsRead) {
+  ContactID received_peer_id;
+  uint64_t received_msg_id = 0;
+  auto received_status = messaging::MessageStatus::none;
+  bool updated = false;
+
+  auto sub = EventQueue::Instance().Subscribe<EventMessageStatusChanged>([&](auto const& e) {
+    received_peer_id = e.peer_id;
+    received_msg_id = e.message_id;
+    received_status = e.status;
+    updated = true;
+  });
+
+  auto const entry = message_history_->AddTextEntry(
+      peer1,
+      "Test Read",
+      {},
+      messaging::MessageDirection::received,
+      messaging::HistoryEntryKind::textMessage
+  );
+
+  message_history_->MarkMessagesAsRead(peer1, {entry.id});
+
+  EventQueue::Instance().WaitFor([&] { return updated; }, std::chrono::seconds(1));
+
+  EXPECT_EQ(received_peer_id, peer1);
+  EXPECT_EQ(received_msg_id, entry.id);
+
+  EventQueue::Instance().Unsubscribe<EventMessageStatusChanged>(sub);
 }
 
 TEST_F(MessageHistoryTest, ToggleReaction) {

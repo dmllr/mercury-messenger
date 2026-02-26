@@ -51,3 +51,8 @@ list(PREPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_LIST_DIR}/modules")
 set(CMAKE_FIND_PACKAGE_PREFER_CONFIG ON)
 # Prevent find_package from finding system OpenSSL
 set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
+
+if (MSVC)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /bigobj")
+  add_definitions(-D _CRT_SECURE_NO_WARNINGS)
+endif(MSVC)

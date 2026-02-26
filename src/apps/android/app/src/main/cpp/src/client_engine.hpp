@@ -15,7 +15,6 @@
 #include "eillance/logging/logging.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/storage/sqlite/persistent_storage_impl_sqlite.hpp"
-#include "eillance/view_model/client_event_router.hpp"
 #include "media_transport_impl_libwebrtc.hpp"
 #include "utils/class_refs.hpp"
 
@@ -23,7 +22,6 @@ namespace eillance {
 
 class ClientEngine {
   std::shared_ptr<Client> client_;
-  std::shared_ptr<view_model::ClientEventRouter> router_;
   JavaVM* jvm_;
   jobject service_ref_;
 
@@ -61,8 +59,6 @@ class ClientEngine {
           }
         }
     );
-
-    router_ = std::make_shared<view_model::ClientEventRouter>(client_);
   }
 
   ClientEngine(ClientEngine&&) = delete;
@@ -79,9 +75,6 @@ class ClientEngine {
 
   [[nodiscard]] auto GetClient() const -> std::shared_ptr<Client> {
     return client_;
-  }
-  [[nodiscard]] auto GetRouter() const -> std::shared_ptr<view_model::ClientEventRouter> {
-    return router_;
   }
 
   void Start() {

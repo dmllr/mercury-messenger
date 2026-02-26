@@ -16,7 +16,6 @@ import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Badge
 import androidx.compose.material3.Icon
-import hela.eillance.theme.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -39,6 +38,7 @@ import hela.eillance.ndkio.HistoryEntryKind
 import hela.eillance.ndkio.MessageDirection
 import hela.eillance.ndkio.MessageStatus
 import hela.eillance.ndkio.PeerConnectionState
+import hela.eillance.theme.ListItem
 import hela.eillance.theme.extendedColors
 import org.json.JSONObject
 import java.time.Instant

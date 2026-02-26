@@ -5,7 +5,6 @@
 #include <nlohmann/json.hpp>
 
 #include "eillance/client/client.hpp"
-#include "eillance/view_model/client_event_router.hpp"
 #include "mock_data_transport.hpp"
 #include "mock_media_transport.hpp"
 #include "mock_persistent_storage.hpp"
@@ -28,14 +27,12 @@ class ProfileUpdatesTest : public ::testing::Test {
     auto media_transport = std::make_shared<transport::MediaTransport>(std::move(media_transport_impl));
 
     client_ = std::make_shared<Client>(storage_, transport_, media_transport);
-    router_ = std::make_shared<view_model::ClientEventRouter>(client_);
 
     (void)client_->GetAccountService()->GenerateNewIdentity();
     client_->Start();
   }
 
   void TearDown() override {
-    if (router_) router_->DetachFromClient();
     client_->Terminate();
   }
 
@@ -50,7 +47,6 @@ class ProfileUpdatesTest : public ::testing::Test {
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<transport::DataTransport> transport_;
   std::shared_ptr<Client> client_;
-  std::shared_ptr<view_model::ClientEventRouter> router_;
 
   ContactID const peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
 };

@@ -13,25 +13,21 @@
 #include <rtc/rtc.hpp>
 
 #include "eillance/crypto/crypto.hpp"
+#include "eillance/events/client_events.hpp"
 #include "eillance/events/event_source.hpp"
 #include "eillance/identity/contact_id.hpp"
 #include "eillance/rtc/connection_state_conversion.hpp"
 #include "eillance/transport/media_transport.hpp"
 #include "eillance/transport/peer.hpp"
 #include "eillance/transport/protocol.hpp"
+#include "eillance/utils/event_queue.hpp"
 
 namespace eillance::rtc {
 
 class RtcMediaTransport : public transport::MediaTransport::Interface {
  public:
-  using StatusCallbackFunction = transport::MediaTransport::StatusCallbackFunction;
-
   RtcMediaTransport() {
     rtcConfig_.iceServers.emplace_back("stun:stun.relay.metered.ca:80");
-  }
-
-  void SetStatusCallback(StatusCallbackFunction const& callback) override {
-    status_callback_ = std::make_shared<StatusCallbackFunction>(callback);
   }
 
   void SetIceServers(std::string const& json_config) override {
@@ -74,13 +70,11 @@ class RtcMediaTransport : public transport::MediaTransport::Interface {
     auto pc = std::make_shared<::rtc::PeerConnection>(config);
 
     pc->onStateChange([this, peer_id](::rtc::PeerConnection::State const state) -> void {
-      if (status_callback_) {
-        (*status_callback_)(
-            peer_id,
-            EventSource::mediaConnectionState,
-            static_cast<int>(transport::ToEillanceState(state))
-        );
-      }
+      EventQueue::Instance().Push(EventStatusChanged{
+          peer_id,
+          EventSource::mediaConnectionState,
+          static_cast<int>(transport::ToEillanceState(state))
+      });
     });
 
     pc->onGatheringStateChange([this, peer_id, pc](::rtc::PeerConnection::GatheringState const state) -> void {
@@ -133,8 +127,7 @@ class RtcMediaTransport : public transport::MediaTransport::Interface {
     }
   }
 
-  auto AddVideo(ContactID const& peer_id, std::function<void(void)> const& on_open)
-      -> std::shared_ptr<transport::ITrack> override {
+  auto AddVideo(ContactID const& peer_id) -> std::shared_ptr<transport::ITrack> override {
     std::lock_guard<std::mutex> const lock(pcsMutex_);
     auto it = pcs_.find(peer_id);
     if (it == pcs_.end()) return nullptr;
@@ -154,12 +147,10 @@ class RtcMediaTransport : public transport::MediaTransport::Interface {
     auto reporter = std::make_shared<::rtc::RtcpSrReporter>(rtp_config);
     packetizer->addToChain(reporter);
     track->setMediaHandler(packetizer);
-    track->onOpen(on_open);
     return std::make_shared<RtcTrack>(track, reporter, rtp_config);
   }
 
-  auto AddAudio(ContactID const& peer_id, std::function<void(void)> const& on_open)
-      -> std::shared_ptr<transport::ITrack> override {
+  auto AddAudio(ContactID const& peer_id) -> std::shared_ptr<transport::ITrack> override {
     std::lock_guard<std::mutex> const lock(pcsMutex_);
     auto it = pcs_.find(peer_id);
     if (it == pcs_.end()) return nullptr;
@@ -179,7 +170,6 @@ class RtcMediaTransport : public transport::MediaTransport::Interface {
     auto reporter = std::make_shared<::rtc::RtcpSrReporter>(rtp_config);
     packetizer->addToChain(reporter);
     track->setMediaHandler(packetizer);
-    track->onOpen(on_open);
     return std::make_shared<RtcTrack>(track, reporter, rtp_config);
   }
 
@@ -198,7 +188,6 @@ class RtcMediaTransport : public transport::MediaTransport::Interface {
  private:
   ::rtc::Configuration rtcConfig_;
   std::mutex configMutex_;
-  std::shared_ptr<StatusCallbackFunction> status_callback_;
 
   std::unordered_map<ContactID, std::shared_ptr<::rtc::PeerConnection>> pcs_;
   mutable std::mutex pcsMutex_;

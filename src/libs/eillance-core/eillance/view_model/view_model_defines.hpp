@@ -1,10 +1,15 @@
 #pragma once
 
 #include <cstdint>
+#include <deque>
 #include <optional>
 #include <string>
+#include <vector>
 
+#include "eillance/events/service_connection_state.hpp"
 #include "eillance/identity/contact_id.hpp"
+#include "eillance/messaging/types.hpp"
+#include "eillance/storage/data_types.hpp"
 #include "eillance/transport/peer_connection_state.hpp"
 
 namespace eillance::view_model {
@@ -44,6 +49,62 @@ struct DebugUnreadInfo {
   ContactID peer_id;
   uint32_t count;
   uint64_t last_msg_timestamp;
+};
+
+struct ViewContact {
+  ContactID peer_id;
+  std::string display_name;
+  std::optional<std::string> bio;
+  std::optional<std::string> photo;
+  identity::ContactStatus status;
+  transport::PeerConnectionState connection_state = transport::PeerConnectionState::disconnected;
+  uint32_t unread_count = 0;
+  std::optional<messaging::HistoryEntryRecord> last_message;
+  uint64_t last_activity_timestamp = 0;
+};
+
+struct ConversationState {
+  ContactID peer_id;
+  std::deque<messaging::HistoryEntryRecord> history{};
+  bool has_older_messages = false;
+};
+
+struct SettingsState {
+  std::optional<std::string> signaling_server_url;
+  int peer_inactivity_timeout_seconds = 120;
+  ServiceConnectionState connection_state = ServiceConnectionState::unknown;
+  std::optional<std::string> custom_stun;
+  std::optional<std::string> custom_turn;
+  std::optional<std::string> custom_turn_user;
+  std::optional<std::string> custom_turn_pass;
+  bool play_sound_on_send = true;
+  bool play_sound_on_receive = true;
+};
+
+// --- ViewModel Events ---
+struct EventContactsStateUpdated {
+  std::vector<ViewContact> contacts;
+};
+struct EventConversationStateUpdated {
+  ContactID peer_id;
+  ConversationState state;
+};
+struct EventTransferProgressUpdated {
+  ContactID peer_id;
+  std::string attachment_id;
+  float progress;
+};
+struct EventCallStateChanged {
+  CallState state;
+};
+struct EventProfileStateUpdated {
+  MyProfile profile;
+};
+struct EventSettingsStateUpdated {
+  SettingsState state;
+};
+struct EventConnectionStateChanged {
+  ServiceConnectionState state;
 };
 
 }  // namespace eillance::view_model

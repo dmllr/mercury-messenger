@@ -13,8 +13,7 @@ struct ArgsParser final {
   ArgsParser(int const& argc, char** argv) {
     for (int i = 1; i < argc; ++i) {
       std::string const token(argv[i]);  // NOLINT(*-pro-bounds-pointer-arithmetic)
-      auto pos = token.find('=');
-      if (pos != std::string::npos) {
+      if (auto const pos = token.find('='); pos != std::string::npos) {
         std::string const key = token.substr(0, pos);
         std::string const value = token.substr(pos + 1);
         key_value_map_[key] = value;
@@ -25,13 +24,12 @@ struct ArgsParser final {
   }
 
   [[nodiscard]] auto Get(std::string const& option) const -> std::optional<std::string> {
-    auto it = key_value_map_.find(option);
-    if (it != key_value_map_.end()) {
+    if (auto const it = key_value_map_.find(option); it != key_value_map_.end()) {
       return it->second;
     }
-    auto itr = std::ranges::find(tokens_, option);
-    if (itr != tokens_.end() && ++itr != tokens_.end()) {  // NOLINT(*-inc-dec-in-conditions)
-      return *itr;
+    if (auto it = std::ranges::find(tokens_, option);
+        it != tokens_.end() && ++it != tokens_.end()) {  // NOLINT(*-inc-dec-in-conditions)
+      return *it;
     }
     return std::nullopt;
   }

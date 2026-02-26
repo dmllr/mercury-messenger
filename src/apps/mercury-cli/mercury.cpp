@@ -16,6 +16,7 @@
 #include "eillance/capture/audio_capture.hpp"
 #include "eillance/capture/video_capture.hpp"
 #include "eillance/client/client.hpp"
+#include "eillance/events/client_events.hpp"
 #include "eillance/events/service_connection_state.hpp"
 #include "eillance/identity/contact_id.hpp"
 #include "eillance/logging/logging.hpp"
@@ -25,9 +26,9 @@
 #include "eillance/storage/sqlite/persistent_storage_impl_sqlite.hpp"
 #include "eillance/transport/peer_connection_state.hpp"
 #include "eillance/utils/args_parser.hpp"
+#include "eillance/utils/event_queue.hpp"
 #include "eillance/utils/time.hpp"
 #include "eillance/view_model/call_view_model.hpp"
-#include "eillance/view_model/client_event_router.hpp"
 #include "eillance/view_model/contacts_view_model.hpp"
 #include "eillance/view_model/conversation_view_model.hpp"
 #include "eillance/view_model/profile_view_model.hpp"
@@ -216,8 +217,6 @@ auto main(int argc, char** argv) -> int {
   client->SetVideoCapture(std::make_unique<eillance::VideoCaptureCli>());
   client->SetAudioCapture(std::make_unique<eillance::AudioCaptureCli>());
 
-  auto router = std::make_shared<eillance::view_model::ClientEventRouter>(client);
-
   // CLI Argument Handling (Backup/Restore)
   if (auto backup_path = args.Get("--backup")) {
     std::cout << "Enter password for backup: ";
@@ -276,54 +275,46 @@ auto main(int argc, char** argv) -> int {
 
   // --- ViewModel Initialization ---
   // In the new architecture, we instantiate specific ViewModels.
-  auto contacts_vm = std::make_shared<eillance::view_model::ContactsViewModel>(client, router);
-  auto call_vm = std::make_shared<eillance::view_model::CallViewModel>(client, router);
-  auto profile_vm = std::make_shared<eillance::view_model::ProfileViewModel>(client, router);
-  auto settings_vm = std::make_shared<eillance::view_model::SettingsViewModel>(client, router);
+  auto contacts_vm = std::make_shared<eillance::view_model::ContactsViewModel>(client);
+  auto call_vm = std::make_shared<eillance::view_model::CallViewModel>(client);
+  auto profile_vm = std::make_shared<eillance::view_model::ProfileViewModel>(client);
+  auto settings_vm = std::make_shared<eillance::view_model::SettingsViewModel>(client);
 
   // For conversation, we dynamically create one when a user selects a contact.
   std::shared_ptr<eillance::view_model::ConversationViewModel> conversation_vm;
 
   // --- Observers ---
-  struct MainObserver
-      : public eillance::view_model::ContactsViewModel::Observer
-      , public eillance::view_model::CallViewModel::Observer
-      , public eillance::view_model::SettingsViewModel::Observer
-      , public eillance::view_model::ConversationViewModel::Observer {
-    ftxui::ScreenInteractive& screen;
-    explicit MainObserver(ftxui::ScreenInteractive& s)
-        : screen(s) {
-    }
+  std::vector<std::function<void()>> event_unsubs;
+  auto& eq = eillance::EventQueue::Instance();
 
-    void OnContactsUpdated(std::vector<eillance::view_model::ViewContact> const&) override {
-      screen.Post(ftxui::Event::Custom);
-    }
-    void OnCallStateChanged(eillance::view_model::CallState const&) override {
-      screen.Post(ftxui::Event::Custom);
-    }
-    void
-    OnSettingsUpdated(std::optional<std::string> const&, int, std::optional<std::string> const&, std::optional<std::string> const&, std::optional<std::string> const&, std::optional<std::string> const&)
-        override {
-      screen.Post(ftxui::Event::Custom);
-    }
-    void OnConnectionStateChanged(eillance::ServiceConnectionState) override {
-      screen.Post(ftxui::Event::Custom);
-    }
-    void OnHistoryUpdated(eillance::view_model::ConversationViewModel::State const&) override {
-      screen.Post(ftxui::Event::Custom);
-    }
-    void OnTransferProgress(std::string const& /*attachment_id*/, float /*progress*/) override {
-      screen.Post(ftxui::Event::Custom);
-    }
-    // Implement Profile Observer requirement if needed or just ignore for CLI main loop
-    // But since we are not observing profile changes in this CLI loop (it's mainly for chat), we can omit or add empty
-    // impl if required by interface.
-  };
+  auto sub1 = eq.Subscribe<eillance::view_model::EventContactsStateUpdated>([&](auto const&) {
+    screen.Post(ftxui::Event::Custom);
+  });
+  event_unsubs.push_back([&, sub1]() { eq.Unsubscribe<eillance::view_model::EventContactsStateUpdated>(sub1); });
 
-  auto observer = std::make_shared<MainObserver>(screen);
-  contacts_vm->SetObserver(observer);
-  call_vm->SetObserver(observer);
-  settings_vm->SetObserver(observer);
+  auto sub2 = eq.Subscribe<eillance::view_model::EventCallStateChanged>([&](auto const&) {
+    screen.Post(ftxui::Event::Custom);
+  });
+  event_unsubs.push_back([&, sub2]() { eq.Unsubscribe<eillance::view_model::EventCallStateChanged>(sub2); });
+
+  auto sub3 = eq.Subscribe<eillance::view_model::EventSettingsStateUpdated>([&](auto const&) {
+    screen.Post(ftxui::Event::Custom);
+  });
+  event_unsubs.push_back([&, sub3]() { eq.Unsubscribe<eillance::view_model::EventSettingsStateUpdated>(sub3); });
+
+  auto sub4 = eq.Subscribe<eillance::view_model::EventConnectionStateChanged>([&](auto const&) {
+    screen.Post(ftxui::Event::Custom);
+  });
+  event_unsubs.push_back([&, sub4]() { eq.Unsubscribe<eillance::view_model::EventConnectionStateChanged>(sub4); });
+
+  auto sub5 = eq.Subscribe<eillance::view_model::EventConversationStateUpdated>([&](auto const&) {
+    screen.Post(ftxui::Event::Custom);
+  });
+  event_unsubs.push_back([&, sub5]() { eq.Unsubscribe<eillance::view_model::EventConversationStateUpdated>(sub5); });
+
+  auto sub6 = eq.Subscribe<eillance::view_model::EventTransferProgressUpdated>([&](auto const&) {
+    screen.Post(ftxui::Event::Custom);
+  });
 
   // --- UI Components ---
   std::vector<std::string> contact_menu_entries;
@@ -473,8 +464,7 @@ auto main(int argc, char** argv) -> int {
     if (contact_menu_selected < contacts.size()) {
       auto const& selected_peer = contacts[contact_menu_selected].peer_id;
       if (!conversation_vm || conversation_vm->GetState().peer_id != selected_peer) {
-        conversation_vm = std::make_shared<eillance::view_model::ConversationViewModel>(selected_peer, client, router);
-        conversation_vm->SetObserver(observer);
+        conversation_vm = std::make_shared<eillance::view_model::ConversationViewModel>(selected_peer, client);
       }
     } else {
       conversation_vm = nullptr;
@@ -501,6 +491,10 @@ auto main(int argc, char** argv) -> int {
   client->Terminate();
   if (client_thread.joinable()) {
     client_thread.join();
+  }
+
+  for (auto& unsub : event_unsubs) {
+    unsub();
   }
 
   return 0;

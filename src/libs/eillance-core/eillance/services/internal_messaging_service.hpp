@@ -9,6 +9,7 @@
 #include <nlohmann/json.hpp>
 #include <span>
 
+#include "eillance/events/client_events.hpp"
 #include "eillance/logging/logging.hpp"
 #include "eillance/services/account_service.hpp"
 #include "eillance/services/call_id.hpp"
@@ -19,6 +20,7 @@
 #include "eillance/services/profile_service.hpp"
 #include "eillance/transport/data_transport.hpp"
 #include "eillance/transport/protocol.hpp"
+#include "eillance/utils/event_queue.hpp"
 #include "eillance/utils/time.hpp"
 
 namespace eillance::services {
@@ -26,7 +28,6 @@ namespace eillance::services {
 class InternalMessagingService {
  public:
   using Json = nlohmann::json;
-  using IceConfigCallback = std::function<void(Json const&)>;
 
   InternalMessagingService(
       std::shared_ptr<transport::DataTransport> data_transport,
@@ -46,10 +47,14 @@ class InternalMessagingService {
         media_call_service_(std::move(media_call_service)),
         file_transfer_service_(std::move(file_transfer_service)),
         profile_service_(std::move(profile_service)) {
+    auto sub1 = EventQueue::Instance().Subscribe<EventDataChannelMessage>([this](auto const& e) {
+      this->HandleDataChannelMessage(e.peer_id, e.message);
+    });
+    event_unsubs_.push_back([sub1]() { EventQueue::Instance().Unsubscribe<EventDataChannelMessage>(sub1); });
   }
 
-  void SetServerIceConfigCallback(IceConfigCallback cb) {
-    ice_config_callback_ = std::move(cb);
+  ~InternalMessagingService() {
+    for (auto const& unsub : event_unsubs_) unsub();
   }
 
   void ProcessSystemMessage(std::string const& type, Json const& message) {
@@ -68,8 +73,8 @@ class InternalMessagingService {
     } else if (type == transport::protocol::values::loginSuccess) {
       messaging_service_->StartDeliveryService();
     } else if (type == transport::protocol::values::iceServers) {
-      if (message.contains(transport::protocol::keys::servers) && ice_config_callback_) {
-        ice_config_callback_(message[transport::protocol::keys::servers]);
+      if (message.contains(transport::protocol::keys::servers)) {
+        EventQueue::Instance().Push(EventServerIceConfig{message[transport::protocol::keys::servers].dump()});
       }
     } else {
       LGW << "Received unknown system message of type: " << type;
@@ -95,38 +100,36 @@ class InternalMessagingService {
     }
   }
 
-  void SetupPeerHandlers(std::shared_ptr<transport::Peer> const& peer, ContactID const& peer_id) {
-    peer->on_data_channel_message = [this, peer_id](std::span<std::byte const> const msg) -> void {
-      if (auto p = data_transport_->GetPeer(peer_id)) {
-        p->last_activity_time = Time::Now();
-      }
+  void HandleDataChannelMessage(ContactID const& peer_id, std::span<std::byte const> const msg) {
+    if (auto p = data_transport_->GetPeer(peer_id)) {
+      p->last_activity_time = Time::Now();
+    }
 
-      if (!msg.empty() && msg[0] == std::byte{0xFE}) {
-        file_transfer_service_->ProcessBinaryMessage(peer_id, msg);
-      } else {
-        try {
-          std::string json_str;
-          json_str.resize(msg.size());
-          std::memcpy(json_str.data(), msg.data(), msg.size());
-          ProcessDataChannelMessage(peer_id, Json::parse(json_str));
-        } catch (...) {
-          LGE << "Failed to parse data channel message from " << peer_id.ToString();
-        }
+    if (!msg.empty() && msg[0] == std::byte{0xFE}) {
+      file_transfer_service_->ProcessBinaryMessage(peer_id, msg);
+    } else {
+      try {
+        std::string json_str;
+        json_str.resize(msg.size());
+        std::memcpy(json_str.data(), msg.data(), msg.size());
+        ProcessDataChannelMessage(peer_id, Json::parse(json_str));
+      } catch (...) {
+        LGE << "Failed to parse data channel message from " << peer_id.ToString();
       }
+    }
 
-      bool should_unsuspend = false;
-      {
-        auto const now = Time::Now();
-        std::lock_guard<std::mutex> const lock(unsuspend_mutex_);
-        if (now - last_unsuspend_times_[peer_id] >= kUnsuspendInterval) {
-          last_unsuspend_times_[peer_id] = now;
-          should_unsuspend = true;
-        }
+    bool should_unsuspend = false;
+    {
+      auto const now = Time::Now();
+      std::lock_guard<std::mutex> const lock(unsuspend_mutex_);
+      if (now - last_unsuspend_times_[peer_id] >= kUnsuspendInterval) {
+        last_unsuspend_times_[peer_id] = now;
+        should_unsuspend = true;
       }
-      if (should_unsuspend) {
-        messaging_service_->UnsuspendAndDeliver(peer_id);
-      }
-    };
+    }
+    if (should_unsuspend) {
+      messaging_service_->UnsuspendAndDeliver(peer_id);
+    }
   }
 
   void ProcessDataChannelMessage(ContactID const& peer_id, Json const& message) {
@@ -235,14 +238,11 @@ class InternalMessagingService {
       if (type == transport::protocol::values::offer) {
         peer = std::make_shared<transport::Peer>(peer_id);
         data_transport_->AddPeer(peer_id, peer);
-        SetupPeerHandlers(peer, peer_id);
         media_transport_->AttachToPeer(peer_id, peer);
       } else {
         // Generally this shouldn't happen.
         return;
       }
-    } else if (!peer->on_data_channel_message) {
-      SetupPeerHandlers(peer, peer_id);
     }
 
     if (type == transport::protocol::values::offer) {
@@ -329,7 +329,7 @@ class InternalMessagingService {
   std::shared_ptr<FileTransferService> file_transfer_service_;
   std::shared_ptr<ProfileService> profile_service_;
 
-  IceConfigCallback ice_config_callback_;
+  std::vector<std::function<void()>> event_unsubs_;
 
   std::unordered_map<ContactID, Time::Unit> last_unsuspend_times_;
   std::mutex unsuspend_mutex_;

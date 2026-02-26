@@ -107,8 +107,6 @@ class ProtocolSafetyTest : public ::testing::Test {
 
     contact_manager_ = std::make_shared<identity::ContactManager>(storage_);
     account_service_ = std::make_unique<services::AccountService>(storage_, transport_);
-    // Prevent invariant crash
-    account_service_->SetOnMyProfileUpdatedCallback([]() {});
     std::ignore = account_service_->GenerateNewIdentity();
 
     file_transfer_service_ = std::make_shared<services::FileTransferService>(storage_, transport_);
@@ -118,24 +116,15 @@ class ProtocolSafetyTest : public ::testing::Test {
         transport_,
         contact_manager_,
         account_service_,
-        file_transfer_service_,
-        [](auto) {}
+        file_transfer_service_
     );
-
-    // Dummy callbacks
-    messaging_service_->SetChatMessageReceivedCallback([](auto, auto) {});
-    messaging_service_->SetMessageStatusChangedCallback([](auto, auto, auto) {});
-    messaging_service_->SetAttachmentStatusChangedCallback([](auto, auto, auto) {});
-    messaging_service_->SetTransferProgressCallback([](auto, auto, auto) {});
-    messaging_service_->SetAttachmentDownloadedCallback([](auto, auto) {});
 
     profile_service_ = std::make_unique<services::ProfileService>(
         storage_,
         transport_,
         contact_manager_,
         account_service_,
-        messaging_service_,
-        [](auto) {}
+        messaging_service_
     );
 
     // Establish a valid peer connection with crypto

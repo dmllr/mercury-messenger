@@ -1,22 +1,22 @@
 #pragma once
 
 #include <chrono>
-#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
 #include <vector>
 
+#include "eillance/events/client_events.hpp"
 #include "eillance/identity/contact_id.hpp"
 #include "eillance/messaging/types.hpp"
 #include "eillance/storage/persistent_storage.hpp"
+#include "eillance/utils/event_queue.hpp"
 #include "eillance/utils/time.hpp"
 
 namespace eillance::messaging {
 
 class MessageHistory {
   std::shared_ptr<storage::PersistentStorage> storage_;
-  std::function<void(ContactID const& peer_id, std::uint64_t message_id, MessageStatus status)> onStatusChanged_;
 
  public:
   explicit MessageHistory(std::shared_ptr<storage::PersistentStorage> storage)
@@ -74,19 +74,13 @@ class MessageHistory {
     });
   }
 
-  void SetStatusChangedCallback(std::function<void(ContactID const&, std::uint64_t, MessageStatus)> cb) {
-    onStatusChanged_ = std::move(cb);
-  }
-
   void UpdateHistoryEntry(HistoryEntryRecord const& entry) {
     storage_->UpdateHistoryEntry(entry);
   }
 
   void UpdateMessageStatus(ContactID const& peer_id, std::uint64_t const message_id, MessageStatus const new_status) {
     storage_->UpdateMessageStatus(peer_id, message_id, new_status);
-    if (onStatusChanged_) {
-      onStatusChanged_(peer_id, message_id, new_status);
-    }
+    EventQueue::Instance().Push(EventMessageStatusChanged{peer_id, message_id, new_status});
   }
 
   void UpdateMessageContent(ContactID const& peer_id, std::uint64_t message_id, std::string const& content) {
@@ -114,9 +108,7 @@ class MessageHistory {
   void MarkMessagesAsRead(ContactID const& peer_id, std::vector<uint64_t> const& message_ids) {
     storage_->UpdateMessageStatuses(peer_id, message_ids, MessageStatus::read);
     for (auto const message_id : message_ids) {
-      if (onStatusChanged_) {
-        onStatusChanged_(peer_id, message_id, MessageStatus::read);
-      }
+      EventQueue::Instance().Push(EventMessageStatusChanged{peer_id, message_id, MessageStatus::read});
     }
   }
 

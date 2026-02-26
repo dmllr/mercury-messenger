@@ -10,7 +10,6 @@
 #include "eillance/client/client.hpp"
 #include "eillance/utils/packet.hpp"
 #include "eillance/utils/time.hpp"
-#include "eillance/view_model/client_event_router.hpp"
 #include "mock_data_transport.hpp"
 #include "mock_media_transport.hpp"
 #include "mock_persistent_storage.hpp"
@@ -53,25 +52,6 @@ class ResilienceTest : public ::testing::Test {
 
     client_->SetVideoCapture(std::make_unique<MockCapture>());
     client_->SetAudioCapture(std::make_unique<MockCapture>());
-
-    client_->GetAccountService()->SetOnMyProfileUpdatedCallback([]() {});
-
-    client_->GetContactService()->SetContactRequestCallback([](auto const&) {});
-    client_->GetContactService()->SetContactStatusChangedCallback([](auto const&, auto) {});
-    client_->GetContactService()->SetContactRemovedCallback([](auto const&) {});
-
-    client_->GetProfileService()->SetContactProfileUpdatedCallback([](auto const&) {});
-
-    client_->GetMediaCallService()->SetIncomingCallCallback([](auto const&, auto) {});
-    client_->GetMediaCallService()->SetCallRingingCallback([](auto const&) {});
-    client_->GetMediaCallService()->SetCallAcceptedCallback([](auto const&) {});
-    client_->GetMediaCallService()->SetCallTerminatedCallback([](auto const&) {});
-    client_->GetMediaCallService()->SetFrameReceivedCallback([](auto const&) {});
-
-    client_->GetMessagingService()->SetChatMessageReceivedCallback([](auto const&, auto const&) {});
-    client_->GetMessagingService()->SetMessageStatusChangedCallback([](auto const&, auto, auto) {});
-
-    client_->SetStatusCallback([](auto const&, auto, auto) {});
 
     (void)client_->GetAccountService()->GenerateNewIdentity();
 
@@ -247,14 +227,12 @@ TEST_F(ResilienceTest, ReinstallRecovery_MessageReceipt) {
       {"payload", std::vector<std::byte>(encrypted.begin(), encrypted.end())}
   };
 
-  ASSERT_TRUE(peer->on_data_channel_message);
-
   // Convert JSON to bytes for binary-capable handler
   std::string msg_str = chat_msg.dump();
   std::vector<std::byte> msg_bytes(msg_str.size());
   std::transform(msg_str.begin(), msg_str.end(), msg_bytes.begin(), [](char c) { return static_cast<std::byte>(c); });
 
-  peer->on_data_channel_message(msg_bytes);
+  eillance::EventQueue::Instance().Push(eillance::EventDataChannelMessage{peer1, msg_bytes});
   FlushClientQueue();
 
   // Verify contact was auto-created and CONFIRMED
@@ -319,8 +297,12 @@ TEST_F(ResilienceTest, MessageRedeliveryDeduplication) {
   payload[services::MessagingService::keyVersion] = services::MessagingService::protocolVersion;
   payload[services::MessagingService::keyContent] = content;
 
+  client_->Connect(peer1);
+  FlushClientQueue();
+
   // Setup crypto context
   auto const peer = mock_transport_->GetPeer(peer1);
+  ASSERT_TRUE(peer);
   eillance::crypto::SessionCipher other;
   peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
   other.ComputeSharedSecret(peer->session_cipher->GetPublicKey());

@@ -9,21 +9,27 @@ class CallViewModelTest : public ViewModelTest {
  protected:
   void SetUp() override {
     ViewModelTest::SetUp();
-    vm_ = std::make_shared<CallViewModel>(client_, router_);
+    vm_ = std::make_shared<CallViewModel>(client_);
   }
 
   std::shared_ptr<CallViewModel> vm_;
 };
 
-struct MockCallObserver : public CallViewModel::Observer {
+struct MockCallObserver {
   CallState state;
   bool updated = false;
   std::mutex mutex;
+  uint64_t sub_id;
 
-  void OnCallStateChanged(CallState const& s) override {
-    std::lock_guard<std::mutex> const lock(mutex);
-    state = s;
-    updated = true;
+  MockCallObserver() {
+    sub_id = EventQueue::Instance().Subscribe<EventCallStateChanged>([this](auto const& e) {
+      std::lock_guard<std::mutex> const lock(mutex);
+      state = e.state;
+      updated = true;
+    });
+  }
+  ~MockCallObserver() {
+    EventQueue::Instance().Unsubscribe<EventCallStateChanged>(sub_id);
   }
 
   auto GetState() -> CallState {
@@ -33,13 +39,12 @@ struct MockCallObserver : public CallViewModel::Observer {
 };
 
 TEST_F(CallViewModelTest, StartCall) {
-  auto observer = std::make_shared<MockCallObserver>();
-  vm_->SetObserver(observer);
+  auto const observer = std::make_shared<MockCallObserver>();
 
   vm_->StartVoiceCall(peer1);
 
-  // StartVoiceCall updates synchronously in VM
-  auto state = observer->GetState();
+  WaitFor([&] { return observer->updated; });
+  auto const state = observer->GetState();
   EXPECT_TRUE(observer->updated);
   EXPECT_TRUE(state.is_connecting);
   EXPECT_EQ(state.peer_id, peer1);
@@ -48,7 +53,6 @@ TEST_F(CallViewModelTest, StartCall) {
 
 TEST_F(CallViewModelTest, IncomingCall) {
   auto observer = std::make_shared<MockCallObserver>();
-  vm_->SetObserver(observer);
 
   // Ensure clean state before test
   {
@@ -59,7 +63,7 @@ TEST_F(CallViewModelTest, IncomingCall) {
   }
 
   // Simulate incoming call event
-  router_->Queue().Push(EventIncomingCall{peer1, messaging::HistoryEntryKind::voiceCall});
+  EventQueue::Instance().Push(EventIncomingCall{peer1, messaging::HistoryEntryKind::voiceCall});
 
   // Wait for state change to ringing
   WaitFor([&] {
@@ -76,13 +80,12 @@ TEST_F(CallViewModelTest, IncomingCall) {
 
 TEST_F(CallViewModelTest, AcceptCall) {
   // Ensure peer exists in transport so AcceptCall doesn't bail out
-  mock_transport_->AddPeer(peer1, std::make_shared<transport::Peer>(peer1));
+  mock_data_transport_->AddPeer(peer1, std::make_shared<transport::Peer>(peer1));
 
   auto observer = std::make_shared<MockCallObserver>();
-  vm_->SetObserver(observer);
 
   // Setup ringing state
-  router_->Queue().Push(EventIncomingCall{peer1, messaging::HistoryEntryKind::voiceCall});
+  EventQueue::Instance().Push(EventIncomingCall{peer1, messaging::HistoryEntryKind::voiceCall});
   WaitFor([&] { return observer->GetState().is_ringing; });
 
   // Now accept
@@ -97,13 +100,12 @@ TEST_F(CallViewModelTest, AcceptCall) {
 
 TEST_F(CallViewModelTest, Hangup) {
   // Ensure peer exists
-  mock_transport_->AddPeer(peer1, std::make_shared<transport::Peer>(peer1));
+  mock_data_transport_->AddPeer(peer1, std::make_shared<transport::Peer>(peer1));
 
   auto observer = std::make_shared<MockCallObserver>();
-  vm_->SetObserver(observer);
 
   // Setup in-call state
-  router_->Queue().Push(EventIncomingCall{peer1, messaging::HistoryEntryKind::voiceCall});
+  EventQueue::Instance().Push(EventIncomingCall{peer1, messaging::HistoryEntryKind::voiceCall});
   WaitFor([&] { return observer->GetState().is_ringing; });
 
   vm_->AcceptCall();

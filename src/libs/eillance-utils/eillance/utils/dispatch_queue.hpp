@@ -127,8 +127,12 @@ class DispatchQueue {
 
       if (next_execute_time > now) {
         condition_.wait_until(lock, next_execute_time, [this, next_execute_time] {
-          if (shutdownRequested_) return true;
-          if (queue_.empty()) return false;
+          if (shutdownRequested_) {
+            return true;
+          }
+          if (queue_.empty()) {
+            return false;
+          }
           // Accessing top() is safe here because we hold the lock when predicate runs
           return queue_.top().execute_time < next_execute_time;
         });
@@ -142,7 +146,9 @@ class DispatchQueue {
       lock.unlock();
 
       try {
-        if (task) task();
+        if (task) {
+          task();
+        }
       } catch (...) {
       }
     }

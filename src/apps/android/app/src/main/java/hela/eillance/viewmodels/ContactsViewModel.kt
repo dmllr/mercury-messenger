@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import hela.eillance.MessengerService
 import hela.eillance.camera.R
+import hela.eillance.events.NativeEventBus
 import hela.eillance.ndkio.Contact
 import hela.eillance.ndkio.GlobalSearchResult
 import hela.eillance.ndkio.HistoryEntry
@@ -17,8 +18,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class ContactsViewModel(application: Application) : AndroidViewModel(application),
-  NativeContactsObserver {
+class ContactsViewModel(application: Application) : AndroidViewModel(application) {
 
   private var nativePtr: Long = 0
   private val _contacts = MutableStateFlow<List<Contact>>(emptyList())
@@ -40,7 +40,7 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
   val searchResults = _searchResults.asStateFlow()
 
   init {
-    nativePtr = nativeCreate(this)
+    nativePtr = nativeCreate()
     if (nativePtr == 0L) {
       Log.e("ContactsViewModel", "Failed to create native ContactsViewModel.")
       _isLoading.value = false
@@ -49,6 +49,13 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
       // initialized before identity creation, so start() wasn't called yet.
       // Starting the engine now ensures the repository loads and notifies observers
       // via the onContactsUpdated callback, clearing the loading state.
+      viewModelScope.launch {
+        NativeEventBus.contacts.collect {
+          _contacts.value = it
+          _isLoading.value = false
+        }
+      }
+
       MessengerService.instance?.start()
     }
 
@@ -66,12 +73,6 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
       nativePtr = 0
     }
     super.onCleared()
-  }
-
-  // --- Observer Callback called from JNI ---
-  override fun onContactsUpdated(contacts: List<Contact>) {
-    _contacts.value = contacts
-    _isLoading.value = false
   }
 
   // --- Actions ---
@@ -161,7 +162,7 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
   }
 
   // --- JNI Definitions ---
-  private external fun nativeCreate(observer: NativeContactsObserver): Long
+  private external fun nativeCreate(): Long
   private external fun nativeDestroy(ptr: Long)
   private external fun nativeAddContact(ptr: Long, peerId: String, token: String?): Boolean
   private external fun nativeAcceptContact(ptr: Long, peerId: String)

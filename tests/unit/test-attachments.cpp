@@ -33,25 +33,16 @@ class AttachmentTest : public ::testing::Test {
     account_service_ = std::make_shared<services::AccountService>(storage_, data_transport_);
 
     auto contact_manager = std::make_shared<identity::ContactManager>(storage_);
-    auto conn_handler = [](ContactID const&) {};
 
     file_transfer_service_ = std::make_shared<services::FileTransferService>(storage_, data_transport_);
-
-    file_transfer_service_->SetAttachmentStatusChangedCallback([](auto, auto, auto) {});
-    file_transfer_service_->SetTransferProgressCallback([](auto, auto, auto) {});
-    file_transfer_service_->SetAttachmentDownloadedCallback([](auto, auto) {});
 
     service_ = std::make_unique<services::MessagingService>(
         storage_,
         data_transport_,
         contact_manager,
         account_service_,
-        file_transfer_service_,
-        conn_handler
+        file_transfer_service_
     );
-
-    service_->SetMessageStatusChangedCallback([](auto, auto, auto) {});
-    service_->SetChatMessageReceivedCallback([](auto, auto) {});
 
     contact_manager->AddContact(peer1);
   }
@@ -202,7 +193,6 @@ TEST_F(AttachmentTest, AttachmentPersistenceAcrossRestarts) {
   (void)storage_->AddHistoryEntry(record);
 
   auto contact_manager = std::make_shared<identity::ContactManager>(storage_);
-  auto conn_handler = [](ContactID const&) {};
   auto file_transfer_service = std::make_shared<services::FileTransferService>(storage_, data_transport_);
   auto account_service = std::make_shared<services::AccountService>(storage_, data_transport_);
 
@@ -211,8 +201,7 @@ TEST_F(AttachmentTest, AttachmentPersistenceAcrossRestarts) {
       data_transport_,
       contact_manager,
       account_service,
-      file_transfer_service,
-      conn_handler
+      file_transfer_service
   );
 
   auto page = new_service->GetHistoryPage(peer1, 0, 10);

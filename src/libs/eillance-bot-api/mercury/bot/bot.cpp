@@ -3,9 +3,11 @@
 #include <thread>
 
 #include "eillance/client/client.hpp"
+#include "eillance/events/client_events.hpp"
 #include "eillance/rtc/data_transport_impl_libdatachannel.hpp"
 #include "eillance/rtc/media_transport_impl_libdatachannel.hpp"
 #include "eillance/storage/sqlite/persistent_storage_impl_sqlite.hpp"
+#include "eillance/utils/event_queue.hpp"
 
 namespace mercury::bot {
 
@@ -15,6 +17,7 @@ class Bot::Impl {
   Options options_;
   std::shared_ptr<eillance::Client> client_;
   std::function<void(Message const&)> message_handler_;
+  std::vector<std::function<void()>> event_unsubs_;
 
  public:
   explicit Impl(Options options)
@@ -27,6 +30,12 @@ class Bot::Impl {
       : options_(std::move(options)),
         client_(std::move(client)) {
     SetupCallbacks();
+  }
+
+  ~Impl() {
+    for (auto const& unsub : event_unsubs_) {
+      unsub();
+    }
   }
 
   void InitializeClient() {
@@ -43,58 +52,43 @@ class Bot::Impl {
   }
 
   void SetupCallbacks() {
-    // 1. Set required no-op defaults for all Client invariants
-    client_->SetStatusCallback([](auto const&, auto, auto) -> void {});
-    client_->GetAccountService()->SetOnMyProfileUpdatedCallback([]() -> void {});
-
-    client_->GetContactService()->SetContactStatusChangedCallback([](auto const&, auto) -> void {});
-    client_->GetContactService()->SetContactRemovedCallback([](auto const&) -> void {});
-
-    client_->GetProfileService()->SetContactProfileUpdatedCallback([](auto const&) -> void {});
-
-    client_->GetMediaCallService()->SetCallRingingCallback([](auto const&) -> void {});
-    client_->GetMediaCallService()->SetCallAcceptedCallback([](auto const&) -> void {});
-    client_->GetMediaCallService()->SetCallTerminatedCallback([](auto const&) -> void {});
-    client_->GetMediaCallService()->SetFrameReceivedCallback([](auto const&) -> void {});
-
-    client_->GetMessagingService()->SetMessageStatusChangedCallback([](auto const&, auto, auto) -> void {});
-
-    // 2. Override specific callbacks based on Bot options
     if (options_.auto_accept_contacts) {
-      client_->GetContactService()->SetContactRequestCallback([this](eillance::ContactID const& peer_id) -> void {
-        // Automatically accept friend requests
-        client_->ConfirmContact(peer_id);
+      auto sub1 =
+          eillance::EventQueue::Instance().Subscribe<eillance::EventContactRequest>([this](auto const& e) -> void {
+            client_->ConfirmContact(e.peer_id);
+          });
+      event_unsubs_.push_back([sub1]() {
+        eillance::EventQueue::Instance().Unsubscribe<eillance::EventContactRequest>(sub1);
       });
     }
 
     if (options_.auto_reject_calls) {
-      client_->GetMediaCallService()->SetIncomingCallCallback(
-          [this](eillance::ContactID const& peer_id, eillance::messaging::HistoryEntryKind /*call_type*/) -> void {
-            client_->RejectCall(peer_id);
-          }
-      );
+      auto sub2 =
+          eillance::EventQueue::Instance().Subscribe<eillance::EventIncomingCall>([this](auto const& e) -> void {
+            client_->RejectCall(e.peer_id);
+          });
+      event_unsubs_.push_back([sub2]() {
+        eillance::EventQueue::Instance().Unsubscribe<eillance::EventIncomingCall>(sub2);
+      });
     }
 
-    client_->GetMessagingService()->SetChatMessageReceivedCallback(
-        [this](eillance::ContactID const& peer_id, eillance::messaging::HistoryEntryRecord const& record) -> void {
+    auto sub3 =
+        eillance::EventQueue::Instance().Subscribe<eillance::EventChatMessageReceived>([this](auto const& e) -> void {
           if (!message_handler_) {
             return;
           }
-
-          if (record.kind != eillance::messaging::HistoryEntryKind::textMessage) {
+          if (e.message.kind != eillance::messaging::HistoryEntryKind::textMessage) {
+            return;
+          }
+          if (!std::holds_alternative<eillance::messaging::MessageEntry>(e.message.data)) {
             return;
           }
 
-          if (!std::holds_alternative<eillance::messaging::MessageEntry>(record.data)) {
-            return;
-          }
+          auto const& [content, attachments] = std::get<eillance::messaging::MessageEntry>(e.message.data);
 
-          auto const& [content, attachments] = std::get<eillance::messaging::MessageEntry>(record.data);
-
-          // Resolve sender info
           User user;
-          user.id = peer_id.ToString();
-          if (auto contact = client_->GetStorage()->GetContact(peer_id)) {
+          user.id = e.peer_id.ToString();
+          if (auto contact = client_->GetStorage()->GetContact(e.peer_id)) {
             user.first_name = contact->display_name.value_or("Unknown");
             user.bio = contact->bio.value_or("");
           } else {
@@ -102,14 +96,16 @@ class Bot::Impl {
           }
 
           Message msg;
-          msg.message_id = record.id;
-          msg.date = record.timestamp;
+          msg.message_id = e.message.id;
+          msg.date = e.message.timestamp;
           msg.text = content;
           msg.from = std::move(user);
 
           message_handler_(msg);
-        }
-    );
+        });
+    event_unsubs_.emplace_back([sub3]() -> void {
+      eillance::EventQueue::Instance().Unsubscribe<eillance::EventChatMessageReceived>(sub3);
+    });
   }
 };
 

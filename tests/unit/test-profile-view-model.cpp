@@ -7,21 +7,27 @@ class ProfileViewModelTest : public ViewModelTest {
  protected:
   void SetUp() override {
     ViewModelTest::SetUp();
-    vm_ = std::make_shared<ProfileViewModel>(client_, router_);
+    vm_ = std::make_shared<ProfileViewModel>(client_);
   }
 
   std::shared_ptr<ProfileViewModel> vm_;
 };
 
-struct MockProfileObserver : public ProfileViewModel::Observer {
+struct MockProfileObserver {
   MyProfile profile;
   bool updated = false;
   std::mutex mutex;
+  uint64_t sub_id;
 
-  void OnProfileUpdated(MyProfile const& p) override {
-    std::lock_guard<std::mutex> const lock(mutex);
-    profile = p;
-    updated = true;
+  MockProfileObserver() {
+    sub_id = EventQueue::Instance().Subscribe<EventProfileStateUpdated>([this](auto const& e) {
+      std::lock_guard<std::mutex> const lock(mutex);
+      profile = e.profile;
+      updated = true;
+    });
+  }
+  ~MockProfileObserver() {
+    EventQueue::Instance().Unsubscribe<EventProfileStateUpdated>(sub_id);
   }
 
   auto GetProfile() -> MyProfile {
@@ -31,17 +37,13 @@ struct MockProfileObserver : public ProfileViewModel::Observer {
 };
 
 TEST_F(ProfileViewModelTest, GetInitialProfile) {
-  auto observer = std::make_shared<MockProfileObserver>();
-  vm_->SetObserver(observer);
-
-  auto p = observer->GetProfile();
+  auto p = vm_->GetProfile();
   EXPECT_TRUE(p.identity_exists);
   EXPECT_EQ(p.my_display_name, "Test User");
 }
 
 TEST_F(ProfileViewModelTest, UpdateProfile) {
   auto observer = std::make_shared<MockProfileObserver>();
-  vm_->SetObserver(observer);
 
   {
     std::lock_guard<std::mutex> const lock(observer->mutex);
@@ -62,15 +64,8 @@ TEST_F(ProfileViewModelTest, UpdateProfile) {
 }
 
 TEST_F(ProfileViewModelTest, GenerateIdentity) {
+  auto old_id = vm_->GetProfile().my_id;
   auto observer = std::make_shared<MockProfileObserver>();
-  vm_->SetObserver(observer);
-
-  auto old_id = observer->GetProfile().my_id;
-
-  {
-    std::lock_guard<std::mutex> const lock(observer->mutex);
-    observer->updated = false;
-  }
 
   (void)vm_->GenerateNewIdentity();
 

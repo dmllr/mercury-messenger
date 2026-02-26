@@ -10,33 +10,31 @@
 
 #include <nlohmann/json.hpp>
 
+#include "eillance/events/client_events.hpp"
 #include "eillance/identity/contact_manager.hpp"
 #include "eillance/services/account_service.hpp"
 #include "eillance/services/messaging_service.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/transport/data_transport.hpp"
+#include "eillance/utils/event_queue.hpp"
 #include "eillance/utils/invariant.hpp"
 
 namespace eillance::services {
 
 class ProfileService {
  public:
-  using ConnectionRequestHandler = std::function<void(ContactID const&)>;
-
   explicit ProfileService(
       std::shared_ptr<storage::PersistentStorage> storage,
       std::shared_ptr<transport::DataTransport> transport,
       std::shared_ptr<identity::ContactManager> contact_manager,
       std::shared_ptr<AccountService> account_service,
-      std::shared_ptr<MessagingService> messaging_service,
-      ConnectionRequestHandler connection_handler
+      std::shared_ptr<MessagingService> messaging_service
   )
       : storage_(std::move(storage)),
         transport_(std::move(transport)),
         manager_(std::move(contact_manager)),
         account_service_(account_service),
-        messaging_service_(messaging_service),
-        connection_handler_(std::move(connection_handler)) {
+        messaging_service_(messaging_service) {
   }
 
   // --- Actions ---
@@ -74,16 +72,15 @@ class ProfileService {
   void MarkAllContactsProfileSyncNeeded() {
     auto const contacts = manager_->GetContacts();
     for (auto const& contact : contacts) {
-      if (contact.status == identity::ContactStatus::confirmed || contact.status == identity::ContactStatus::pendingApproval) {
+      if (contact.status == identity::ContactStatus::confirmed ||
+          contact.status == identity::ContactStatus::pendingApproval) {
         SendMyProfile(contact.peer_id);
       }
     }
   }
 
   void NotifyProfileUpdated(ContactID const& peer_id) {
-    if (on_contact_profile_updated_) {
-      on_contact_profile_updated_(peer_id);
-    }
+    EventQueue::Instance().Push(EventContactProfileUpdated{peer_id});
   }
 
   // --- Incoming Events ---
@@ -127,15 +124,7 @@ class ProfileService {
     }
 
     manager_->UpdateContactProfile(peer_id, name, bio, photo);
-    INVARIANT(on_contact_profile_updated_);
-    on_contact_profile_updated_(peer_id);
-  }
-
-  // --- Callbacks ---
-  using OnContactProfileUpdatedCallback = std::function<void(ContactID const& peer_id)>;
-
-  void SetContactProfileUpdatedCallback(OnContactProfileUpdatedCallback cb) {
-    on_contact_profile_updated_ = std::move(cb);
+    EventQueue::Instance().Push(EventContactProfileUpdated{peer_id});
   }
 
  private:
@@ -145,9 +134,6 @@ class ProfileService {
 
   std::shared_ptr<AccountService> account_service_;
   std::shared_ptr<MessagingService> messaging_service_;
-  ConnectionRequestHandler connection_handler_;
-
-  OnContactProfileUpdatedCallback on_contact_profile_updated_;
 };
 
 }  // namespace eillance::services
