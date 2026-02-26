@@ -118,6 +118,9 @@ class WebRtcDataTransport(private val context: Context, private val nativePointe
 
   fun terminate() {
     signalingClient.disconnect()
+    signalingClient = SignalingClient()
+    isObservingMessages = false
+    isObservingSignalingState = false
     sessions.values.forEach { it.dispose() }
     sessions.clear()
     peerConnectionFactory?.dispose()

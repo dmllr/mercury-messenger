@@ -14,10 +14,12 @@
 #include <span>
 
 #include "eillance/crypto/crypto.hpp"
+#include "eillance/events/client_events.hpp"
 #include "eillance/logging/logging.hpp"
 #include "eillance/messaging/types.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/transport/data_transport.hpp"
+#include "eillance/utils/event_queue.hpp"
 #include "eillance/utils/invariant.hpp"
 
 namespace eillance::services {
@@ -211,9 +213,7 @@ class FileTransferService {
     auto const new_status = (!is_upload) ? messaging::AttachmentStatus::paused : messaging::AttachmentStatus::canceled;
 
     storage_->UpdateAttachmentStatus(attachment_id, new_status, is_upload);
-    if (on_attachment_status_changed_) {
-      on_attachment_status_changed_(peer_id, attachment_id, new_status);
-    }
+    EventQueue::Instance().Push(EventAttachmentStatusChanged{peer_id, attachment_id, new_status});
   }
 
   void ResumeTransfer(ContactID const& peer_id, std::string const& attachment_id, bool const is_upload) {
@@ -222,15 +222,15 @@ class FileTransferService {
       // We do NOT start pumping data immediately to avoid forcing data on a paused receiver.
       // We set status to Transferring so UI reflects readiness.
       storage_->UpdateAttachmentStatus(attachment_id, messaging::AttachmentStatus::transferring, true);
-      if (on_attachment_status_changed_) {
-        on_attachment_status_changed_(peer_id, attachment_id, messaging::AttachmentStatus::transferring);
-      }
+      EventQueue::Instance().Push(
+          EventAttachmentStatusChanged{peer_id, attachment_id, messaging::AttachmentStatus::transferring}
+      );
     } else {
       // Receiver Side Resume:
       storage_->UpdateAttachmentStatus(attachment_id, messaging::AttachmentStatus::transferring, false);
-      if (on_attachment_status_changed_) {
-        on_attachment_status_changed_(peer_id, attachment_id, messaging::AttachmentStatus::transferring);
-      }
+      EventQueue::Instance().Push(
+          EventAttachmentStatusChanged{peer_id, attachment_id, messaging::AttachmentStatus::transferring}
+      );
 
       // Check where we left off
       std::uint32_t start_seq = 0;
@@ -280,30 +280,15 @@ class FileTransferService {
       // Explicitly send CANCEL (0x03) to stop completely
       SendCancel(peer_id, attachment_id);
       storage_->UpdateAttachmentStatus(attachment_id, messaging::AttachmentStatus::canceled, false);
-      if (on_attachment_status_changed_) {
-        on_attachment_status_changed_(peer_id, attachment_id, messaging::AttachmentStatus::canceled);
-      }
+      EventQueue::Instance().Push(
+          EventAttachmentStatusChanged{peer_id, attachment_id, messaging::AttachmentStatus::canceled}
+      );
     } else {
       storage_->UpdateAttachmentStatus(attachment_id, messaging::AttachmentStatus::discarded, false);
-      if (on_attachment_status_changed_) {
-        on_attachment_status_changed_(peer_id, attachment_id, messaging::AttachmentStatus::discarded);
-      }
+      EventQueue::Instance().Push(
+          EventAttachmentStatusChanged{peer_id, attachment_id, messaging::AttachmentStatus::discarded}
+      );
     }
-  }
-
-  using OnAttachmentDownloadedCallback = std::function<void(ContactID const&, std::string const&)>;
-  using OnTransferProgressCallback = std::function<void(ContactID const&, std::string const&, float)>;
-  using OnAttachmentStatusChangedCallback =
-      std::function<void(ContactID const&, std::string const&, messaging::AttachmentStatus)>;
-
-  void SetAttachmentDownloadedCallback(OnAttachmentDownloadedCallback cb) {
-    on_attachment_downloaded_ = std::move(cb);
-  }
-  void SetTransferProgressCallback(OnTransferProgressCallback cb) {
-    on_transfer_progress_ = std::move(cb);
-  }
-  void SetAttachmentStatusChangedCallback(OnAttachmentStatusChangedCallback cb) {
-    on_attachment_status_changed_ = std::move(cb);
   }
 
   // Exposed for InternalMessagingService to route "file_cancel" JSON messages
@@ -324,9 +309,9 @@ class FileTransferService {
     }
 
     storage_->UpdateAttachmentStatus(file_id, messaging::AttachmentStatus::peerCanceled, false);
-    if (on_attachment_status_changed_) {
-      on_attachment_status_changed_(peer_id, file_id, messaging::AttachmentStatus::peerCanceled);
-    }
+    EventQueue::Instance().Push(
+        EventAttachmentStatusChanged{peer_id, file_id, messaging::AttachmentStatus::peerCanceled}
+    );
   }
 
  private:
@@ -376,8 +361,9 @@ class FileTransferService {
       }
 
       storage_->UpdateAttachmentStatus(attachment.id, messaging::AttachmentStatus::transferring, true);
-      INVARIANT(on_attachment_status_changed_);
-      on_attachment_status_changed_(peer_id, attachment.id, messaging::AttachmentStatus::transferring);
+      EventQueue::Instance().Push(
+          EventAttachmentStatusChanged{peer_id, attachment.id, messaging::AttachmentStatus::transferring}
+      );
 
       TransferUploadState state;
       state.file_path = attachment.file_path;
@@ -397,9 +383,7 @@ class FileTransferService {
       active_uploads_.erase(file_id);
     }
     storage_->UpdateAttachmentStatus(file_id, messaging::AttachmentStatus::paused, true);
-    if (on_attachment_status_changed_) {
-      on_attachment_status_changed_(peer_id, file_id, messaging::AttachmentStatus::paused);
-    }
+    EventQueue::Instance().Push(EventAttachmentStatusChanged{peer_id, file_id, messaging::AttachmentStatus::paused});
   }
 
   void HandleResume(ContactID const& peer_id, std::string const& file_id, std::span<std::byte const> const payload) {
@@ -485,9 +469,9 @@ class FileTransferService {
         break;
       }
 
-      if (on_transfer_progress_ && state.total_size > 0) {
+      if (state.total_size > 0) {
         auto const progress = static_cast<float>(offset + bytes_read) / static_cast<float>(state.total_size);
-        on_transfer_progress_(peer_id, file_id, std::min(progress, 1.0F));
+        EventQueue::Instance().Push(EventTransferProgress{peer_id, file_id, std::min(progress, 1.0F)});
       }
 
       state.sequence++;
@@ -497,9 +481,7 @@ class FileTransferService {
       if (SendEnd(peer_id, file_id)) {
         active_uploads_.erase(file_id);
         storage_->UpdateAttachmentStatus(file_id, messaging::AttachmentStatus::done, true);
-        if (on_attachment_status_changed_) {
-          on_attachment_status_changed_(peer_id, file_id, messaging::AttachmentStatus::done);
-        }
+        EventQueue::Instance().Push(EventAttachmentStatusChanged{peer_id, file_id, messaging::AttachmentStatus::done});
       }
     }
   }
@@ -563,12 +545,12 @@ class FileTransferService {
 
       state.bytes_written += chunk_data.size();
 
-      if (on_transfer_progress_ && state.total_size > 0) {
+      if (state.total_size > 0) {
         auto const progress = static_cast<float>(state.bytes_written) / static_cast<float>(state.total_size);
         if (lock.owns_lock()) {
           lock.unlock();
         }
-        on_transfer_progress_(peer_id, file_id, std::min(progress, 1.0F));
+        EventQueue::Instance().Push(EventTransferProgress{peer_id, file_id, std::min(progress, 1.0F)});
         lock.lock();
       }
 
@@ -610,24 +592,16 @@ class FileTransferService {
         LGE << "Failed to rename temp file: " << error_code.message();
       } else {
         storage_->UpdateAttachmentStatus(file_id, messaging::AttachmentStatus::done, true);
-        if (on_attachment_downloaded_) {
-          on_attachment_downloaded_(peer_id, file_id);
-        }
-        if (on_transfer_progress_) {
-          on_transfer_progress_(peer_id, file_id, 1.0F);
-        }
-        if (on_attachment_status_changed_) {
-          on_attachment_status_changed_(peer_id, file_id, messaging::AttachmentStatus::done);
-        }
+        EventQueue::Instance().Push(EventAttachmentDownloaded{peer_id, file_id});
+        EventQueue::Instance().Push(EventTransferProgress{peer_id, file_id, 1.0F});
+        EventQueue::Instance().Push(EventAttachmentStatusChanged{peer_id, file_id, messaging::AttachmentStatus::done});
       }
     } else {
       LGE << "Hash mismatch for " << file_id;
       std::filesystem::remove(temp_path);
       std::filesystem::remove(progress_path);
       storage_->UpdateAttachmentStatus(file_id, messaging::AttachmentStatus::failed, false);
-      if (on_attachment_status_changed_) {
-        on_attachment_status_changed_(peer_id, file_id, messaging::AttachmentStatus::failed);
-      }
+      EventQueue::Instance().Push(EventAttachmentStatusChanged{peer_id, file_id, messaging::AttachmentStatus::failed});
     }
   }
 
@@ -681,10 +655,6 @@ class FileTransferService {
   std::map<std::string, TransferUploadState> active_uploads_;
   std::map<std::string, TransferDownloadState> active_downloads_;
   mutable std::mutex transfers_mutex_;
-
-  OnAttachmentDownloadedCallback on_attachment_downloaded_;
-  OnTransferProgressCallback on_transfer_progress_;
-  OnAttachmentStatusChangedCallback on_attachment_status_changed_;
 };
 
 }  // namespace eillance::services

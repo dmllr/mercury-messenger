@@ -1,8 +1,10 @@
 #include <filesystem>
+#include <thread>
 
 #include <gtest/gtest.h>
 
 #include "eillance/services/account_service.hpp"
+#include "eillance/utils/event_queue.hpp"
 #include "mock_data_transport.hpp"
 #include "mock_persistent_storage.hpp"
 
@@ -21,9 +23,6 @@ class AccountServiceTest : public ::testing::Test {
     data_transport_ = std::make_shared<transport::DataTransport>(std::move(mock_data_transport_impl_));
 
     service_ = std::make_unique<services::AccountService>(storage_, data_transport_);
-
-    // Set callback to prevent invariant violations during identity generation/update
-    service_->SetOnMyProfileUpdatedCallback([]() {});
   }
 
   std::shared_ptr<storage::PersistentStorage> storage_;
@@ -37,14 +36,14 @@ class AccountServiceTest : public ::testing::Test {
 TEST_F(AccountServiceTest, IdentityGeneration) {
   EXPECT_FALSE(service_->IdentityExists());
 
-  std::string mnemonic = service_->GenerateNewIdentity();
+  std::string const mnemonic = service_->GenerateNewIdentity();
   EXPECT_FALSE(mnemonic.empty());
   EXPECT_TRUE(service_->IdentityExists());
 
-  auto id = service_->GetId();
+  auto const id = service_->GetId();
   EXPECT_FALSE(id.IsEmpty());
 
-  auto stored_mnemonic = service_->GetMnemonic();
+  auto const stored_mnemonic = service_->GetMnemonic();
   ASSERT_TRUE(stored_mnemonic.has_value());
   EXPECT_EQ(*stored_mnemonic, mnemonic);
 }
@@ -63,11 +62,15 @@ TEST_F(AccountServiceTest, RestoreIdentity) {
 
 TEST_F(AccountServiceTest, UpdateProfile) {
   bool callback_called = false;
-  service_->SetOnMyProfileUpdatedCallback([&] { callback_called = true; });
+  auto const sub =
+      EventQueue::Instance().Subscribe<EventMyProfileUpdated>([&](auto const&) -> void { callback_called = true; });
 
   service_->UpdateMyProfile("Alice", "Hello World", "base64photo");
 
-  auto* settings = service_->GetSettings();
+  EventQueue::Instance().WaitFor([&] { return callback_called; }, std::chrono::seconds(1));
+
+  EventQueue::Instance().Unsubscribe<EventMyProfileUpdated>(sub);
+  auto const* settings = service_->GetSettings();
   EXPECT_EQ(settings->GetMyDisplayName(), "Alice");
   EXPECT_EQ(settings->GetMyBio(), "Hello World");
   EXPECT_EQ(settings->GetMyPhotoBase64(), "base64photo");
@@ -92,9 +95,9 @@ TEST_F(AccountServiceTest, Signing) {
 
   std::string message = "test message";
   std::vector<std::byte> msg_bytes(message.size());
-  std::ranges::transform(message, msg_bytes.begin(), [](char c) { return std::byte(c); });
+  std::ranges::transform(message, msg_bytes.begin(), [](char c) -> std::byte { return static_cast<std::byte>(c); });
 
-  auto signature = service_->Sign(msg_bytes);
+  auto const signature = service_->Sign(msg_bytes);
   EXPECT_FALSE(signature.empty());
 }
 

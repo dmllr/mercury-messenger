@@ -15,6 +15,7 @@
 #include <rtc/rtc.hpp>
 
 #include "eillance/crypto/crypto.hpp"
+#include "eillance/events/client_events.hpp"
 #include "eillance/events/event_source.hpp"
 #include "eillance/events/service_connection_state.hpp"
 #include "eillance/identity/contact_id.hpp"
@@ -25,6 +26,7 @@
 #include "eillance/transport/protocol.hpp"
 #include "eillance/transport/transport_delegate.hpp"
 #include "eillance/utils/dispatch_queue.hpp"
+#include "eillance/utils/event_queue.hpp"
 #include "eillance/utils/invariant.hpp"
 
 namespace eillance::rtc {
@@ -63,7 +65,6 @@ class RtcDataTransport : public transport::DataTransport::Interface {
  public:
   using Json = nlohmann::json;
   using Peer = transport::Peer;
-  using StatusCallbackFunction = transport::DataTransport::StatusCallbackFunction;
 
   RtcDataTransport() {
     // Default fallback config
@@ -78,10 +79,6 @@ class RtcDataTransport : public transport::DataTransport::Interface {
 
   void SetDelegate(transport::TransportDelegate* delegate) override {
     delegate_ = delegate;
-  }
-
-  void SetStatusCallback(StatusCallbackFunction const& callback) override {
-    status_callback_ = std::make_shared<StatusCallbackFunction>(callback);
   }
 
   auto GetServiceConnectionState() const -> ServiceConnectionState {
@@ -396,8 +393,7 @@ class RtcDataTransport : public transport::DataTransport::Interface {
 
   void ReportServiceConnectionState(ServiceConnectionState state) const {
     serviceConnectionState_ = state;
-    INVARIANT(status_callback_);
-    (*status_callback_)(ContactID(), EventSource::system, static_cast<int>(state));
+    EventQueue::Instance().Push(EventStatusChanged{ContactID(), EventSource::system, static_cast<int>(state)});
   }
 
   void WsSendMessage(Json const& message) const {
@@ -449,12 +445,11 @@ class RtcDataTransport : public transport::DataTransport::Interface {
     auto pc = std::make_shared<::rtc::PeerConnection>(config);
 
     pc->onStateChange([this, peer_id](::rtc::PeerConnection::State state) -> void {
-      INVARIANT(status_callback_);
-      (*status_callback_)(
+      EventQueue::Instance().Push(EventStatusChanged{
           peer_id,
           EventSource::peerConnectionState,
           static_cast<int>(transport::ToEillanceState(state))
-      );
+      });
     });
 
     pc->onGatheringStateChange([this, peer_id, pc](::rtc::PeerConnection::GatheringState state) {
@@ -514,8 +509,8 @@ class RtcDataTransport : public transport::DataTransport::Interface {
 
     dc->onMessage([peer, peer_id](::rtc::message_variant message) -> void {
       DispatchQueue::MainThread().Dispatch([peer, peer_id, msg = std::move(message)]() -> void {
-        if (!peer || !peer->on_data_channel_message) {
-          LGW << "DataChannel message received but no handler set for " << peer_id;
+        if (!peer) {
+          LGW << "DataChannel message received but peer not found for " << peer_id;
           return;
         }
 
@@ -530,7 +525,7 @@ class RtcDataTransport : public transport::DataTransport::Interface {
         }
 
         if (!payload.empty()) {
-          peer->on_data_channel_message(payload);
+          EventQueue::Instance().Push(EventDataChannelMessage{peer_id, std::move(payload)});
         }
       });
     });
@@ -564,7 +559,6 @@ class RtcDataTransport : public transport::DataTransport::Interface {
   mutable std::mutex messageQueueMutex_;
 
   mutable ServiceConnectionState serviceConnectionState_{ServiceConnectionState::unknown};
-  std::shared_ptr<StatusCallbackFunction> status_callback_{};
 
   std::unordered_map<ContactID, std::shared_ptr<Peer>> peers_{};
   mutable std::mutex peersMutex_;

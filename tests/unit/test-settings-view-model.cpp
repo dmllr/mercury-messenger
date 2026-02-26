@@ -7,7 +7,7 @@ class SettingsViewModelTest : public ViewModelTest {
  protected:
   void SetUp() override {
     ViewModelTest::SetUp();
-    vm_ = std::make_shared<SettingsViewModel>(client_, router_);
+    vm_ = std::make_shared<SettingsViewModel>(client_);
   }
 
   void TearDown() override {
@@ -18,50 +18,40 @@ class SettingsViewModelTest : public ViewModelTest {
   std::shared_ptr<SettingsViewModel> vm_;
 };
 
-struct MockSettingsObserver : public SettingsViewModel::Observer {
+struct MockSettingsObserver {
   std::optional<std::string> signaling_url;
   int timeout = 0;
   ServiceConnectionState connection_state = ServiceConnectionState::unknown;
   bool updated = false;
   std::mutex mutex;
+  uint64_t sub1, sub2;
 
-  void OnSettingsUpdated(
-      std::optional<std::string> const& url,
-      int t,
-      std::optional<std::string> const& /*custom_stun*/,
-      std::optional<std::string> const& /*custom_turn*/,
-      std::optional<std::string> const& /*custom_turn_user*/,
-      std::optional<std::string> const& /*custom_turn_pass*/,
-      bool,
-      bool
-  ) override {
-    std::lock_guard<std::mutex> const lock(mutex);
-    signaling_url = url;
-    timeout = t;
-    updated = true;
+  MockSettingsObserver() {
+    sub1 = EventQueue::Instance().Subscribe<EventSettingsStateUpdated>([this](auto const& e) {
+      std::lock_guard<std::mutex> const lock(mutex);
+      signaling_url = e.state.signaling_server_url;
+      timeout = e.state.peer_inactivity_timeout_seconds;
+      updated = true;
+    });
+    sub2 = EventQueue::Instance().Subscribe<EventConnectionStateChanged>([this](auto const& e) {
+      std::lock_guard<std::mutex> const lock(mutex);
+      connection_state = e.state;
+      updated = true;
+    });
   }
-
-  void OnConnectionStateChanged(ServiceConnectionState state) override {
-    std::lock_guard<std::mutex> const lock(mutex);
-    connection_state = state;
-    updated = true;
+  ~MockSettingsObserver() {
+    EventQueue::Instance().Unsubscribe<EventSettingsStateUpdated>(sub1);
+    EventQueue::Instance().Unsubscribe<EventConnectionStateChanged>(sub2);
   }
 };
 
 TEST_F(SettingsViewModelTest, InitialLoad) {
-  auto observer = std::make_shared<MockSettingsObserver>();
-  vm_->SetObserver(observer);
-
-  EXPECT_TRUE(observer->updated);
-  {
-    std::lock_guard<std::mutex> const lock(observer->mutex);
-    EXPECT_EQ(observer->timeout, 120);  // Default
-  }
+  auto state = vm_->GetState();
+  EXPECT_EQ(state.peer_inactivity_timeout_seconds, 120);  // Default
 }
 
 TEST_F(SettingsViewModelTest, UpdateUrl) {
   auto observer = std::make_shared<MockSettingsObserver>();
-  vm_->SetObserver(observer);
 
   {
     std::lock_guard<std::mutex> const lock(observer->mutex);
@@ -82,7 +72,6 @@ TEST_F(SettingsViewModelTest, UpdateUrl) {
 
 TEST_F(SettingsViewModelTest, UpdateTimeout) {
   auto observer = std::make_shared<MockSettingsObserver>();
-  vm_->SetObserver(observer);
 
   {
     std::lock_guard<std::mutex> const lock(observer->mutex);
@@ -102,7 +91,6 @@ TEST_F(SettingsViewModelTest, UpdateTimeout) {
 
 TEST_F(SettingsViewModelTest, ConnectionStateChange) {
   auto observer = std::make_shared<MockSettingsObserver>();
-  vm_->SetObserver(observer);
 
   {
     std::lock_guard<std::mutex> const lock(observer->mutex);
@@ -110,7 +98,7 @@ TEST_F(SettingsViewModelTest, ConnectionStateChange) {
   }
 
   // Simulate transport reporting state change
-  router_->Queue().Push(
+  EventQueue::Instance().Push(
       EventStatusChanged{ContactID(), EventSource::system, static_cast<int>(ServiceConnectionState::online)}
   );
 

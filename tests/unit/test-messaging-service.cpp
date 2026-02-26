@@ -63,10 +63,7 @@ class MessagingServiceTest : public ::testing::Test {
     contact_manager_->AddContact(peer1);
     contact_manager_->MarkAsConfirmed(peer1);
 
-    auto conn_handler = [this](ContactID const& id) { connection_requests_.push_back(id); };
-
     account_service_ = std::make_shared<services::AccountService>(storage_, transport_);
-    account_service_->SetOnMyProfileUpdatedCallback([]() {});
     std::ignore = account_service_->GenerateNewIdentity();
 
     file_transfer_service_ = std::make_shared<services::FileTransferService>(storage_, transport_);
@@ -76,17 +73,16 @@ class MessagingServiceTest : public ::testing::Test {
         transport_,
         contact_manager_,
         account_service_,
-        file_transfer_service_,
-        conn_handler
+        file_transfer_service_
     );
-    service_->SetChatMessageReceivedCallback([](auto, auto) {});
-    service_->SetMessageStatusChangedCallback([](auto, auto, auto) {});
-    service_->SetAttachmentStatusChangedCallback([](auto, auto, auto) {});
-    service_->SetTransferProgressCallback([](auto, auto, auto) {});
-    service_->SetAttachmentDownloadedCallback([](auto, auto) {});
+
+    conn_sub_id_ = EventQueue::Instance().Subscribe<EventConnectionRequested>([this](auto const& e) {
+      connection_requests_.push_back(e.peer_id);
+    });
   }
 
   void TearDown() override {
+    EventQueue::Instance().Unsubscribe<EventConnectionRequested>(conn_sub_id_);
     if (service_) {
       service_->StopDeliveryService();
     }
@@ -136,6 +132,7 @@ class MessagingServiceTest : public ::testing::Test {
   std::unique_ptr<services::MessagingService> service_;
   std::vector<ContactID> connection_requests_;
   std::filesystem::path temp_dir_;
+  uint64_t conn_sub_id_ = 0;
 
   ContactID const peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
 };
@@ -203,8 +200,8 @@ TEST_F(MessagingServiceTest, SendMessage_NoteTruncation) {
 
 TEST_F(MessagingServiceTest, DownloadTriggersCallback) {
   bool download_cb_called = false;
-  service_->SetAttachmentDownloadedCallback([&](auto pid, auto att_id) {
-    if (pid == peer1 && att_id == "att_1") {
+  auto sub = EventQueue::Instance().Subscribe<EventAttachmentDownloaded>([&](auto const& e) {
+    if (e.peer_id == peer1 && e.attachment_id == "att_1") {
       download_cb_called = true;
     }
   });
@@ -252,6 +249,9 @@ TEST_F(MessagingServiceTest, DownloadTriggersCallback) {
   auto end_packet = CreateEndPacket("att_1");
   file_transfer_service_->ProcessBinaryMessage(peer1, end_packet);
 
+  EventQueue::Instance().WaitFor([&] { return download_cb_called; }, std::chrono::seconds(1));
+
+  EventQueue::Instance().Unsubscribe<EventAttachmentDownloaded>(sub);
   EXPECT_TRUE(download_cb_called);
 }
 
@@ -541,13 +541,15 @@ TEST_F(MessagingServiceTest, IncomingMessageEdit) {
   );
 
   bool callback_called = false;
-  service_->SetMessageUpdatedCallback([&](auto pid, auto mid) {
-    if (pid == peer1 && mid == entry.id) {
+  auto sub = EventQueue::Instance().Subscribe<EventMessageUpdated>([&](auto const& e) {
+    if (e.peer_id == peer1 && e.message_id == entry.id) {
       callback_called = true;
     }
   });
 
   service_->OnMessageEdit(peer1, 500, "Edited Content");
+
+  EventQueue::Instance().WaitFor([&] { return callback_called; }, std::chrono::seconds(1));
 
   auto updated = storage_->GetHistoryEntry(peer1, entry.id);
   ASSERT_TRUE(updated);

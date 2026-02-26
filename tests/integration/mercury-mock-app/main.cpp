@@ -10,11 +10,13 @@
 #include <vector>
 
 #include "eillance/client/client.hpp"
+#include "eillance/events/client_events.hpp"
 #include "eillance/logging/logging.hpp"
 #include "eillance/rtc/data_transport_impl_libdatachannel.hpp"
 #include "eillance/rtc/media_transport_impl_libdatachannel.hpp"
 #include "eillance/storage/sqlite/persistent_storage_impl_sqlite.hpp"
 #include "eillance/utils/args_parser.hpp"
+#include "eillance/utils/event_queue.hpp"
 
 struct Command {
   std::string name;
@@ -72,11 +74,6 @@ auto main(int argc, char** argv) -> int {
 
     eillance::Client client(storage, data_transport, media_transport);
 
-    // Set dummy callbacks to prevent crashes if any internals trigger them
-    client.SetStatusCallback([](auto&&, auto, auto) {});
-    client.SetDataReloadedCallback([]() {});
-    client.GetAccountService()->SetOnMyProfileUpdatedCallback([]() {});
-
     auto mnemonic = client.GenerateNewIdentity();
     auto id = client.GetId().ToString();
 
@@ -115,90 +112,76 @@ auto main(int argc, char** argv) -> int {
 
   client->UpdateSignalingUrl(*signaling_url);
 
-  // Set minimal callbacks for functional test reporting
-  client->SetStatusCallback(
-      [](eillance::ContactID const& peer, eillance::EventSource const source, int const state) -> void {
-        std::cout << "[mock] " << peer.ToString() << " Status change " << static_cast<int>(source) << ":" << state
-                  << std::endl;
-      }
-  );
-
-  client->GetMessagingService()->SetChatMessageReceivedCallback(
-      [](eillance::ContactID const& peer, eillance::messaging::HistoryEntryRecord const& record) -> void {
-        if (record.direction == eillance::messaging::MessageDirection::received) {
-          if (std::holds_alternative<eillance::messaging::MessageEntry>(record.data)) {
-            auto const& [content, attachments] = std::get<eillance::messaging::MessageEntry>(record.data);
-            std::cout << "[mock] Message from " << peer.ToString() << " received: " << content << std::endl;
-          }
-        }
-      }
-  );
-  client->GetMessagingService()->SetMessageStatusChangedCallback(
-      [](eillance::ContactID const& peer, uint64_t, eillance::messaging::MessageStatus const status) -> void {
-        if (status == eillance::messaging::MessageStatus::delivered) {
-          std::cout << "[mock] Message to " << peer.ToString() << " delivered" << std::endl;
-        } else if (status == eillance::messaging::MessageStatus::read) {
-          std::cout << "[mock] Message to " << peer.ToString() << " read" << std::endl;
-        }
-      }
-  );
-  client->GetFileTransferService()->SetAttachmentStatusChangedCallback([](eillance::ContactID const&, std::string const&, eillance::messaging::AttachmentStatus status) -> void {
-    std::cout << "[mock] File transfer status changed to " << static_cast<int>(status) << std::endl;
+  // Setup Event Subscriptions for functional test reporting
+  eillance::EventQueue::Instance().Subscribe<eillance::EventStatusChanged>([](auto const& e) {
+    LGI << "[mock] " << e.peer_id.ToString() << " Status change " << static_cast<int>(e.source) << ":" << e.state;
   });
 
-  // Set dummy callbacks
-  client->GetAccountService()->SetOnMyProfileUpdatedCallback([]() -> void {
-    std::cout << "[mock] My profile updated" << std::endl;
-  });
-
-  client->GetMessagingService()->SetAttachmentDownloadedCallback(
-      [](eillance::ContactID const& peer, std::string const& id) -> void {
-        std::cout << "[mock] Attachment " << id << " downloaded from " << peer.ToString() << std::endl;
+  eillance::EventQueue::Instance().Subscribe<eillance::EventChatMessageReceived>([](auto const& e) {
+    if (e.message.direction == eillance::messaging::MessageDirection::received) {
+      if (std::holds_alternative<eillance::messaging::MessageEntry>(e.message.data)) {
+        auto const& [content, attachments] = std::get<eillance::messaging::MessageEntry>(e.message.data);
+        LGI << "[mock] Message from " << e.peer_id.ToString() << " received: " << content;
       }
-  );
-
-  client->GetMessagingService()->SetTransferProgressCallback(
-      [](eillance::ContactID const&, std::string const& id, float const progress) -> void {
-        if (progress > 0.999999999F) {
-          std::cout << "[mock] Transfer " << id << " complete" << std::endl;
-        }
-      }
-  );
-
-  client->GetContactService()->SetContactRequestCallback([](eillance::ContactID const& peer) -> void {
-    std::cout << "[mock] Contact request from " << peer.ToString() << std::endl;
+    }
   });
 
-  client->GetContactService()->SetContactStatusChangedCallback(
-      [](eillance::ContactID const& peer, eillance::identity::ContactStatus status) -> void {
-        std::cout << "[mock] Contact " << peer.ToString() << " status: " << static_cast<int>(status) << std::endl;
-      }
-  );
-
-  client->GetContactService()->SetContactRemovedCallback([](eillance::ContactID const& peer) -> void {
-    std::cout << "[mock] Contact removed: " << peer.ToString() << std::endl;
+  eillance::EventQueue::Instance().Subscribe<eillance::EventMessageStatusChanged>([](auto const& e) {
+    if (e.status == eillance::messaging::MessageStatus::delivered) {
+      LGI << "[mock] Message to " << e.peer_id.ToString() << " delivered";
+    } else if (e.status == eillance::messaging::MessageStatus::read) {
+      LGI << "[mock] Message to " << e.peer_id.ToString() << " read";
+    }
   });
 
-  client->GetProfileService()->SetContactProfileUpdatedCallback([](eillance::ContactID const& peer) -> void {
-    std::cout << "[mock] Profile updated for " << peer.ToString() << std::endl;
+  eillance::EventQueue::Instance().Subscribe<eillance::EventAttachmentStatusChanged>([](auto const& e) {
+    LGI << "[mock] File transfer status changed to " << static_cast<int>(e.status);
   });
 
-  client->GetMediaCallService()->SetIncomingCallCallback(
-      [](eillance::ContactID const& peer, eillance::messaging::HistoryEntryKind kind) -> void {
-        std::cout << "[mock] Incoming call from " << peer.ToString() << std::endl;
-      }
-  );
-
-  client->GetMediaCallService()->SetCallRingingCallback([](eillance::ContactID const& peer) -> void {
-    std::cout << "[mock] Call ringing " << peer.ToString() << std::endl;
+  eillance::EventQueue::Instance().Subscribe<eillance::EventMyProfileUpdated>([](auto const&) {
+    LGI << "[mock] My profile updated";
   });
 
-  client->GetMediaCallService()->SetCallAcceptedCallback([](eillance::ContactID const& peer) -> void {
-    std::cout << "[mock] Call accepted " << peer.ToString() << std::endl;
+  eillance::EventQueue::Instance().Subscribe<eillance::EventAttachmentDownloaded>([](auto const& e) {
+    LGI << "[mock] Attachment " << e.attachment_id << " downloaded from " << e.peer_id.ToString();
   });
 
-  client->GetMediaCallService()->SetCallTerminatedCallback([](eillance::ContactID const& peer) -> void {
-    std::cout << "[mock] Call terminated " << peer.ToString() << std::endl;
+  eillance::EventQueue::Instance().Subscribe<eillance::EventTransferProgress>([](auto const& e) {
+    if (e.progress > 0.999999999F) {
+      LGI << "[mock] Transfer " << e.attachment_id << " complete";
+    }
+  });
+
+  eillance::EventQueue::Instance().Subscribe<eillance::EventContactRequest>([](auto const& e) {
+    LGI << "[mock] Contact request from " << e.peer_id.ToString();
+  });
+
+  eillance::EventQueue::Instance().Subscribe<eillance::EventContactStatusChanged>([](auto const& e) {
+    LGI << "[mock] Contact " << e.peer_id.ToString() << " status: " << static_cast<int>(e.status);
+  });
+
+  eillance::EventQueue::Instance().Subscribe<eillance::EventContactRemoved>([](auto const& e) {
+    LGI << "[mock] Contact removed: " << e.peer_id.ToString();
+  });
+
+  eillance::EventQueue::Instance().Subscribe<eillance::EventContactProfileUpdated>([](auto const& e) {
+    LGI << "[mock] Profile updated for " << e.peer_id.ToString();
+  });
+
+  eillance::EventQueue::Instance().Subscribe<eillance::EventIncomingCall>([](auto const& e) {
+    LGI << "[mock] Incoming call from " << e.peer_id.ToString();
+  });
+
+  eillance::EventQueue::Instance().Subscribe<eillance::EventCallRinging>([](auto const& e) {
+    LGI << "[mock] Call ringing " << e.peer_id.ToString();
+  });
+
+  eillance::EventQueue::Instance().Subscribe<eillance::EventCallAccepted>([](auto const& e) {
+    LGI << "[mock] Call accepted " << e.peer_id.ToString();
+  });
+
+  eillance::EventQueue::Instance().Subscribe<eillance::EventCallTerminated>([](auto const& e) {
+    LGI << "[mock] Call terminated " << e.peer_id.ToString();
   });
 
   if (!client->RestoreIdentity(*key)) {
@@ -214,13 +197,12 @@ auto main(int argc, char** argv) -> int {
   // profile "Name" "Bio"
   std::regex const re_profile(R"(profile\s+\"([^\"]*)\"\s+\"([^\"]*)\")");
   // attach <id> "text" <path1> [<path2> ...]
-  // This simple regex won't handle variable args well, so we'll do manual parsing for attachment commands
 
   // mkfile <path> <size>
   std::regex const re_mkfile(R"(mkfile\s+(\S+)\s+(\d+))");
 
   for (auto const& cmd : commands) {
-    std::cout << "Executing: " << cmd << std::endl;
+    LGI << "Executing: " << cmd;
 
     if (cmd == "connect") {
       client->Start();
@@ -236,12 +218,12 @@ auto main(int argc, char** argv) -> int {
         std::string const path = match[1].str();
         size_t const size = std::stoul(match[2].str());
         GenerateFile(path, size);
-        std::cout << "[mock] Generated file " << path << " (" << size << " bytes)" << std::endl;
+        LGI << "[mock] Generated file " << path << " (" << size << " bytes)";
       }
     } else if (cmd.starts_with("profile")) {
       if (std::smatch match; std::regex_match(cmd, match, re_profile)) {
         client->UpdateMyProfile(match[1].str(), match[2].str(), std::nullopt);
-        std::cout << "[mock] Executed profile update: " << match[1].str() << std::endl;
+        LGI << "[mock] Executed profile update: " << match[1].str();
       }
     } else if (cmd.starts_with("call ")) {
       // call <id>
@@ -295,7 +277,7 @@ auto main(int argc, char** argv) -> int {
         }
 
         std::ignore = client->GetMessagingService()->SendChatMessage(peer_id, content, atts);
-        std::cout << "[mock] Message with " << atts.size() << " attachments sent to " << peer_hex << std::endl;
+        LGI << "[mock] Message with " << atts.size() << " attachments sent to " << peer_hex;
       }
     } else if (cmd.starts_with("message")) {
       if (std::smatch match; std::regex_match(cmd, match, re_msg)) {
@@ -307,7 +289,7 @@ auto main(int argc, char** argv) -> int {
         client->ConfirmContact(peer_id);
 
         std::ignore = client->SendChatMessage(peer_id, content);
-        std::cout << "[mock] Message to " << peer_hex << " sent" << std::endl;
+        LGI << "[mock] Message to " << peer_hex << " sent";
       } else {
         LGE << "Invalid message command format: " << cmd;
       }

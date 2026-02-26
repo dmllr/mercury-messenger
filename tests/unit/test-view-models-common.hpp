@@ -8,7 +8,8 @@
 #include <gtest/gtest.h>
 
 #include "eillance/client/client.hpp"
-#include "eillance/view_model/client_event_router.hpp"
+#include "eillance/events/client_events.hpp"
+#include "eillance/utils/event_queue.hpp"
 #include "mock_data_transport.hpp"
 #include "mock_media_transport.hpp"
 #include "mock_persistent_storage.hpp"
@@ -45,7 +46,6 @@ class ViewModelTest : public ::testing::Test {
 
     // Transports
     auto data_transport_impl = std::make_unique<transport::MockDataTransport>(mock_log_);
-    mock_transport_ = data_transport_impl.get();  // Kept for legacy tests accessing data transport via this pointer
     mock_data_transport_ = data_transport_impl.get();
     auto data_transport = std::make_shared<transport::DataTransport>(std::move(data_transport_impl));
 
@@ -60,9 +60,6 @@ class ViewModelTest : public ::testing::Test {
     client_->SetVideoCapture(std::make_unique<MockCapture>());
     client_->SetAudioCapture(std::make_unique<MockCapture>());
 
-    // Router
-    router_ = std::make_shared<view_model::ClientEventRouter>(client_);
-
     // Identity
     (void)client_->GetAccountService()->GenerateNewIdentity();
     client_->GetAccountService()->UpdateMyProfile("Test User", "Bio", "");
@@ -72,11 +69,6 @@ class ViewModelTest : public ::testing::Test {
   }
 
   void TearDown() override {
-    if (router_) {
-      router_->DetachFromClient();
-    }
-    router_.reset();
-
     if (client_) {
       client_->Terminate();
       client_.reset();
@@ -85,23 +77,15 @@ class ViewModelTest : public ::testing::Test {
 
   template <typename Func>
   static void WaitFor(Func condition, std::chrono::milliseconds timeout = std::chrono::milliseconds(3000)) {
-    auto const start = std::chrono::steady_clock::now();
-    while (!condition()) {
-      if (std::chrono::steady_clock::now() - start > timeout) {
-        break;
-      }
-      std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
+    EventQueue::Instance().WaitFor(condition, timeout);
   }
 
   storage::MockPersistentStorageImpl* mock_storage_{};
   std::shared_ptr<transport::MockCallLog> mock_log_;
-  transport::MockDataTransport* mock_transport_{};  // Alias for mock_data_transport_
   transport::MockDataTransport* mock_data_transport_{};
   transport::MockMediaTransport* mock_media_transport_{};
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<Client> client_;
-  std::shared_ptr<view_model::ClientEventRouter> router_;
 
   ContactID const peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
   ContactID const peer2 = ContactID("0000000000000000000000000000000000000000000000000000000000000002");

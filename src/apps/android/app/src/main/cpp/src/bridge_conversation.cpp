@@ -3,31 +3,20 @@
 
 #include <jni.h>
 
-#include "android_observers.hpp"
 #include "bridge_context.hpp"
 #include "eillance/view_model/conversation_view_model.hpp"
 
 // NOLINTBEGIN(readability-identifier-naming,*-pro-type-reinterpret-cast)
 
-extern "C" JNIEXPORT jlong JNICALL Java_hela_eillance_viewmodels_ConversationViewModel_nativeCreate(
-    JNIEnv* env,
-    jobject /*instance*/,
-    jstring peer_id,
-    jobject observer
-) {
+extern "C" JNIEXPORT jlong JNICALL
+Java_hela_eillance_viewmodels_ConversationViewModel_nativeCreate(JNIEnv* env, jobject /*instance*/, jstring peer_id) {
   if (!g_clientEngine) {
     return 0;
   }
   char const* chars = env->GetStringUTFChars(peer_id, nullptr);
-  auto* vm = new eillance::view_model::ConversationViewModel(
-      eillance::ContactID(chars),
-      g_clientEngine->GetClient(),
-      g_clientEngine->GetRouter()
-  );
+  auto* vm = new eillance::view_model::ConversationViewModel(eillance::ContactID(chars), g_clientEngine->GetClient());
   env->ReleaseStringUTFChars(peer_id, chars);
 
-  auto android_observer = std::make_shared<eillance::AndroidConversationObserver>(g_javaVm, observer);
-  vm->SetObserver(android_observer);
   return reinterpret_cast<jlong>(vm);
 }
 

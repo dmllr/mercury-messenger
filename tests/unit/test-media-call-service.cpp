@@ -51,12 +51,10 @@ class MediaCallServiceTest : public ::testing::Test {
     auto storage_impl = std::make_unique<storage::MockPersistentStorageImpl>();
     storage_ = std::make_shared<storage::PersistentStorage>(std::move(storage_impl));
     auto contact_manager = std::make_shared<identity::ContactManager>(storage_);
-    auto conn_handler = [](ContactID const&) {};
 
     auto file_transfer_service = std::make_shared<services::FileTransferService>(storage_, data_transport_);
 
     account_service_ = std::make_unique<services::AccountService>(storage_, data_transport_);
-    account_service_->SetOnMyProfileUpdatedCallback([]() {});
     std::ignore = account_service_->GenerateNewIdentity();
 
     // Initialize messaging service (needed by MediaCallService)
@@ -65,30 +63,18 @@ class MediaCallServiceTest : public ::testing::Test {
         data_transport_,
         contact_manager,
         account_service_,
-        file_transfer_service,
-        conn_handler
+        file_transfer_service
     );
-    messaging_service_->SetChatMessageReceivedCallback([](auto const&, auto const&) {});
 
     // Initialize MediaCallService with split transports
     service_ =
         std::make_unique<services::MediaCallService>(storage_, data_transport_, media_transport_, account_service_);
     service_->SetMessagingService(messaging_service_);
 
-    // FIX: Set connection handler to prevent std::bad_function_call in StartVoiceCall
-    service_->SetConnectionHandler([](ContactID const&) {});
-
     // Initialize Capture (needed for av_stream_ invariant)
     service_->SetVideoCapture(std::make_unique<MockCaptureImpl>());
     service_->SetAudioCapture(std::make_unique<MockCaptureImpl>());
     service_->Configure({});
-
-    // Set dummy callbacks
-    service_->SetIncomingCallCallback([](auto const&, auto) {});
-    service_->SetCallAcceptedCallback([](auto const&) {});
-    service_->SetCallTerminatedCallback([](auto const&) {});
-    service_->SetCallRingingCallback([](auto const&) {});
-    account_service_->SetOnMyProfileUpdatedCallback([]() {});
   }
 
   std::shared_ptr<transport::MockCallLog> mock_log_;
@@ -147,8 +133,8 @@ TEST_F(MediaCallServiceTest, AcceptCall) {
   service_->OnMediaPeerConnectionStateChange(peer1, transport::PeerConnectionState::connected);
 
   bool accepted_cb = false;
-  service_->SetCallAcceptedCallback([&](auto const& id) {
-    if (id == peer1) {
+  auto sub = EventQueue::Instance().Subscribe<EventCallAccepted>([&](auto const& e) {
+    if (e.peer_id == peer1) {
       accepted_cb = true;
     }
   });
@@ -156,6 +142,9 @@ TEST_F(MediaCallServiceTest, AcceptCall) {
   // 3. Accept the call
   service_->AcceptCall(peer1);
 
+  EventQueue::Instance().WaitFor([&] { return accepted_cb; }, std::chrono::seconds(1));
+
+  EventQueue::Instance().Unsubscribe<EventCallAccepted>(sub);
   EXPECT_TRUE(accepted_cb);
   EXPECT_TRUE(peer->has_media_peer_connection);
 
@@ -181,14 +170,17 @@ TEST_F(MediaCallServiceTest, Hangup) {
   service_->StartVoiceCall(peer1);
 
   bool terminated_cb = false;
-  service_->SetCallTerminatedCallback([&](auto const& id) {
-    if (id == peer1) {
+  auto sub = EventQueue::Instance().Subscribe<EventCallTerminated>([&](auto const& e) {
+    if (e.peer_id == peer1) {
       terminated_cb = true;
     }
   });
 
   service_->Hangup(peer1, true);  // notify_peer = true
 
+  EventQueue::Instance().WaitFor([&] { return terminated_cb; }, std::chrono::seconds(1));
+
+  EventQueue::Instance().Unsubscribe<EventCallTerminated>(sub);
   EXPECT_TRUE(terminated_cb);
   EXPECT_FALSE(peer->has_media_peer_connection);
 
@@ -211,6 +203,27 @@ TEST_F(MediaCallServiceTest, Hangup) {
   EXPECT_TRUE(hangup_sent);
 }
 
+TEST_F(MediaCallServiceTest, RejectCall) {
+  auto const peer = std::make_shared<transport::Peer>(peer1);
+  peer->data_channel_is_open = true;
+  data_transport_->AddPeer(peer1, peer);
+
+  service_->OnCallRequest(peer1, "call_id_1", messaging::HistoryEntryKind::voiceCall);
+
+  bool terminated_cb = false;
+  auto sub = EventQueue::Instance().Subscribe<EventCallTerminated>([&](auto const& e) {
+    if (e.peer_id == peer1) {
+      terminated_cb = true;
+    }
+  });
+
+  service_->RejectCall(peer1);
+
+  EventQueue::Instance().WaitFor([&] { return terminated_cb; }, std::chrono::seconds(1));
+
+  EventQueue::Instance().Unsubscribe<EventCallTerminated>(sub);
+  EXPECT_TRUE(terminated_cb);
+}
 TEST_F(MediaCallServiceTest, MediaSampleRouting) {
   // Setup peer in Ready state
   auto peer = std::make_shared<transport::Peer>(peer1);
@@ -234,13 +247,10 @@ TEST_F(MediaCallServiceTest, MediaSampleRouting) {
 
   // Wait for sample distribution
   // Increased wait time and robust check
-  auto start = std::chrono::steady_clock::now();
-  while (video_track->samples.empty() && audio_track->samples.empty()) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    if (std::chrono::steady_clock::now() - start > std::chrono::milliseconds(3000)) {
-      break;
-    }
-  }
+  EventQueue::Instance().WaitFor(
+      [&] { return !video_track->samples.empty() || !audio_track->samples.empty(); },
+      std::chrono::milliseconds(3000)
+  );
 
   // The mocks should have received samples. We check that AT LEAST ONE has samples
   // because thread scheduling might favor one stream momentarily.

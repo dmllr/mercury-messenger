@@ -7,7 +7,7 @@ class DebugViewModelTest : public ViewModelTest {
  protected:
   void SetUp() override {
     ViewModelTest::SetUp();
-    vm_ = std::make_shared<DebugViewModel>(client_, router_);
+    vm_ = std::make_shared<DebugViewModel>(client_);
   }
 
   std::shared_ptr<DebugViewModel> vm_;

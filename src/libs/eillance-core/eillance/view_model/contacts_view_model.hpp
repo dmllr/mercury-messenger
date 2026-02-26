@@ -8,43 +8,21 @@
 #include <unordered_map>
 #include <vector>
 
-#include "client_event_router.hpp"
 #include "eillance/client/client.hpp"
+#include "eillance/events/client_events.hpp"
 #include "eillance/logging/logging.hpp"
+#include "eillance/utils/event_queue.hpp"
 #include "view_model_defines.hpp"
 
 namespace eillance::view_model {
 
-struct ViewContact {
-  ContactID peer_id;
-  std::string display_name;
-  std::optional<std::string> bio;
-  std::optional<std::string> photo;  // base64
-  identity::ContactStatus status;
-  transport::PeerConnectionState connection_state = transport::PeerConnectionState::disconnected;
-  uint32_t unread_count = 0;
-  std::optional<messaging::HistoryEntryRecord> last_message;
-  uint64_t last_activity_timestamp = 0;
-};
-
 class ContactsViewModel {
  public:
-  // Observer interface for contact list updates
-  struct Observer {
-    Observer() = default;
-    Observer(Observer const&) = delete;
-    Observer(Observer&&) = delete;
-    auto operator=(Observer const&) -> Observer& = delete;
-    auto operator=(Observer&&) -> Observer& = delete;
-    virtual ~Observer() = default;
-    virtual void OnContactsUpdated(std::vector<ViewContact> const& contacts) = 0;
-  };
-
-  explicit ContactsViewModel(std::shared_ptr<Client> client, std::shared_ptr<ClientEventRouter> router)
-      : impl_(std::make_shared<Impl>(std::move(client), std::move(router))) {
+  explicit ContactsViewModel(std::shared_ptr<Client> client)
+      : impl_(std::make_shared<Impl>(std::move(client))) {
     impl_->UpdateContactsList();
 
-    auto& queue = impl_->router->Queue();
+    auto& queue = EventQueue::Instance();
     auto impl = impl_;
     Subscribe<EventContactRequest>(queue, [impl](auto const&) { impl->UpdateContactsList(); });
     Subscribe<EventContactStatusChanged>(queue, [impl](auto const&) { impl->UpdateContactsList(); });
@@ -68,10 +46,6 @@ class ContactsViewModel {
     }
   }
 
-  void SetObserver(std::shared_ptr<Observer> observer) const {
-    impl_->SetObserver(std::move(observer));
-  }
-
   [[nodiscard]] auto GetContacts() const -> std::vector<ViewContact> {
     return impl_->GetContacts();
   }
@@ -81,7 +55,7 @@ class ContactsViewModel {
   }
 
   // Actions
-  auto AddContact(ContactID const& peer_id, std::optional<std::vector<std::byte>> const& token) const -> bool {
+  auto AddContact(ContactID const& peer_id, std::optional<std::vector<std::byte>> const& token) -> bool {
     return impl_->AddContact(peer_id, token);
   }
 
@@ -113,29 +87,12 @@ class ContactsViewModel {
  private:
   struct Impl : public std::enable_shared_from_this<Impl> {
     std::shared_ptr<Client> client;
-    std::shared_ptr<ClientEventRouter> router;
-    std::shared_ptr<Observer> observer;
 
     mutable std::mutex mutex;
     std::vector<ViewContact> contacts;
 
-    Impl(std::shared_ptr<Client> client, std::shared_ptr<ClientEventRouter> router)
-        : client(std::move(client)),
-          router(std::move(router)) {
-    }
-
-    void SetObserver(std::shared_ptr<Observer> obs) {
-      std::shared_ptr<Observer> local_obs;
-      std::vector<ViewContact> current_contacts;
-      {
-        std::lock_guard<std::mutex> const lock(mutex);
-        observer = std::move(obs);
-        local_obs = observer;
-        current_contacts = contacts;
-      }
-      if (local_obs && !current_contacts.empty()) {
-        local_obs->OnContactsUpdated(current_contacts);
-      }
+    explicit Impl(std::shared_ptr<Client> client)
+        : client(std::move(client)) {
     }
 
     [[nodiscard]] auto GetContacts() const -> std::vector<ViewContact> {
@@ -259,19 +216,14 @@ class ContactsViewModel {
         });
       }
 
-      std::shared_ptr<Observer> obs;
       {
         std::lock_guard<std::mutex> const lock(mutex);
         contacts = temp_contacts;
-        obs = observer;
       }
-      if (obs) {
-        obs->OnContactsUpdated(temp_contacts);
-      }
+      EventQueue::Instance().Push(EventContactsStateUpdated{temp_contacts});
     }
 
     void UpdateContactConnectionState(ContactID const& peer_id, transport::PeerConnectionState state) {
-      std::shared_ptr<Observer> obs;
       std::vector<ViewContact> notify_copy;
       bool changed = false;
       {
@@ -287,11 +239,10 @@ class ContactsViewModel {
         }
         if (changed) {
           notify_copy = contacts;
-          obs = observer;
         }
       }
-      if (changed && obs) {
-        obs->OnContactsUpdated(notify_copy);
+      if (changed) {
+        EventQueue::Instance().Push(EventContactsStateUpdated{notify_copy});
       }
     }
   };

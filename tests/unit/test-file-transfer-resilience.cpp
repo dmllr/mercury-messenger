@@ -46,22 +46,13 @@ class FileTransferResilienceTest : public ::testing::Test {
 
     file_transfer_service_ = std::make_shared<services::FileTransferService>(storage_, transport_);
 
-    auto conn_handler = [](ContactID const&) {};
-
     service_ = std::make_unique<services::MessagingService>(
         storage_,
         transport_,
         contact_manager_,
         account_service_,
-        file_transfer_service_,
-        conn_handler
+        file_transfer_service_
     );
-
-    // Default dummy callbacks
-    service_->SetChatMessageReceivedCallback([](auto, auto) {});
-    service_->SetMessageStatusChangedCallback([](auto, auto, auto) {});
-    service_->SetAttachmentDownloadedCallback([](auto, auto) {});
-    service_->SetTransferProgressCallback([](auto, auto, auto) {});
   }
 
   void TearDown() override {
@@ -127,10 +118,16 @@ TEST_F(FileTransferResilienceTest, TransferProgressAndFileCreation) {
 
   // Capture progress events
   std::vector<float> progress_events;
-  service_->SetTransferProgressCallback([&](auto, auto const&, float p) -> auto { progress_events.push_back(p); });
+  auto sub1 = EventQueue::Instance().Subscribe<EventTransferProgress>([&](auto const& e) {
+    progress_events.push_back(e.progress);
+  });
 
   bool completed = false;
-  service_->SetAttachmentDownloadedCallback([&](auto, auto const&) -> auto { completed = true; });
+  auto sub2 = EventQueue::Instance().Subscribe<EventAttachmentDownloaded>([&](auto const& e) {
+    if (e.peer_id == peer1 && e.attachment_id == "test_file_id") {
+      completed = true;
+    }
+  });
 
   // Receive Chat Message with Attachment
   std::string const content = "Here is a large file";
@@ -175,9 +172,14 @@ TEST_F(FileTransferResilienceTest, TransferProgressAndFileCreation) {
   auto end_packet = CreateEndPacket(att_id);
   file_transfer_service_->ProcessBinaryMessage(peer1, end_packet);
 
+  EventQueue::Instance().WaitFor([&] { return completed; }, std::chrono::seconds(2));
+
   // Verify completion
   EXPECT_TRUE(completed);
   EXPECT_FLOAT_EQ(progress_events.back(), 1.0f);
+
+  EventQueue::Instance().Unsubscribe<EventTransferProgress>(sub1);
+  EventQueue::Instance().Unsubscribe<EventAttachmentDownloaded>(sub2);
 
   // Verify final file exists
   std::filesystem::path const final_file = attachments_dir_ / (att_id + ".txt");
@@ -218,11 +220,18 @@ TEST_F(FileTransferResilienceTest, FailsGracefullyIfHashMismatch) {
 
   // Send End
   bool completed = false;
-  service_->SetAttachmentDownloadedCallback([&](auto, auto) { completed = true; });
+  auto sub = EventQueue::Instance().Subscribe<EventAttachmentDownloaded>([&](auto const& e) {
+    if (e.peer_id == peer1 && e.attachment_id == "bad_hash_file") {
+      completed = true;
+    }
+  });
 
   auto end_packet = CreateEndPacket("bad_hash_file");
   file_transfer_service_->ProcessBinaryMessage(peer1, end_packet);
 
+  EventQueue::Instance().WaitFor([&] { return completed; }, std::chrono::milliseconds(500));
+
+  EventQueue::Instance().Unsubscribe<EventAttachmentDownloaded>(sub);
   // Verify
   EXPECT_FALSE(completed);  // Should not trigger callback on failure
 
@@ -243,7 +252,9 @@ TEST_F(FileTransferResilienceTest, StatusUpdateOrder_SmallFile) {
   transport_->AddPeer(peer1, peer);
 
   std::vector<messaging::AttachmentStatus> status_sequence;
-  service_->SetAttachmentStatusChangedCallback([&](auto, auto, auto status) { status_sequence.push_back(status); });
+  auto sub = EventQueue::Instance().Subscribe<EventAttachmentStatusChanged>([&](auto const& e) {
+    status_sequence.push_back(e.status);
+  });
 
   // Create small file
   std::filesystem::path const file_path = temp_dir_ / "small_order_test.dat";
@@ -258,6 +269,8 @@ TEST_F(FileTransferResilienceTest, StatusUpdateOrder_SmallFile) {
   // Send
   service_->SendChatMessage(peer1, "Sequence Test", atts);
 
+  EventQueue::Instance().WaitFor([&] { return status_sequence.size() >= 2; }, std::chrono::seconds(2));
+
   // Expect sequence: Transferring -> Done
   // If bug exists: Done -> Transferring
   ASSERT_GE(status_sequence.size(), 2);
@@ -270,6 +283,8 @@ TEST_F(FileTransferResilienceTest, StatusUpdateOrder_SmallFile) {
       break;
     }
   }
+
+  EventQueue::Instance().Unsubscribe<EventAttachmentStatusChanged>(sub);
 
   EXPECT_TRUE(found_sequence) << "Status sequence should be Transferring -> Done";
   if (!status_sequence.empty()) {

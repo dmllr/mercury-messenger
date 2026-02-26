@@ -12,6 +12,7 @@
 #include <nlohmann/json.hpp>
 
 #include "eillance/capture/capture.hpp"
+#include "eillance/events/client_events.hpp"
 #include "eillance/logging/logging.hpp"
 #include "eillance/rtc/stream.hpp"
 #include "eillance/rtc/stream_source.hpp"
@@ -21,14 +22,13 @@
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/transport/data_transport.hpp"
 #include "eillance/transport/media_transport.hpp"
+#include "eillance/utils/event_queue.hpp"
 #include "eillance/utils/invariant.hpp"
 
 namespace eillance::services {
 
 class MediaCallService {
  public:
-  using ConnectionRequestHandler = std::function<void(ContactID const&)>;
-
   struct CallSessionInfo {
     CallID call_id;
     ContactID peer_id;
@@ -52,10 +52,6 @@ class MediaCallService {
 
   void SetMessagingService(std::shared_ptr<MessagingService> messaging_service) {
     messaging_service_ = std::move(messaging_service);
-  }
-
-  void SetConnectionHandler(ConnectionRequestHandler handler) {
-    connection_handler_ = std::move(handler);
   }
 
   template <typename T>
@@ -130,9 +126,7 @@ class MediaCallService {
 
     // Note: We used to add a system message here, but it's redundant with the final call log entry.
 
-    if (on_call_accepted_) {
-      on_call_accepted_(peer_id);
-    }
+    EventQueue::Instance().Push(EventCallAccepted{peer_id});
   }
 
   void RejectCall(ContactID const& peer_id) {
@@ -156,9 +150,7 @@ class MediaCallService {
 
     TeardownCallInternal(peer_id);
 
-    if (on_call_terminated_) {
-      on_call_terminated_(peer_id);
-    }
+    EventQueue::Instance().Push(EventCallTerminated{peer_id});
   }
 
   void Hangup(ContactID const& peer_id, bool const notify_peer) {
@@ -183,9 +175,7 @@ class MediaCallService {
 
     TeardownCallInternal(peer_id);
 
-    if (on_call_terminated_) {
-      on_call_terminated_(peer_id);
-    }
+    EventQueue::Instance().Push(EventCallTerminated{peer_id});
   }
 
   // --- Signals from Peer ---
@@ -248,9 +238,7 @@ class MediaCallService {
 
     if (current_call_->state == CallState::mediaConnected || current_call_->state == CallState::negotiating) {
       SetCallState(CallState::ringing);
-      if (on_call_ringing_) {
-        on_call_ringing_(peer_id);
-      }
+      EventQueue::Instance().Push(EventCallRinging{peer_id});
     }
   }
 
@@ -261,9 +249,7 @@ class MediaCallService {
     }
 
     SetCallState(CallState::active);
-    if (on_call_accepted_) {
-      on_call_accepted_(peer_id);
-    }
+    EventQueue::Instance().Push(EventCallAccepted{peer_id});
   }
 
   void OnCallReject(ContactID const& peer_id, std::string const& call_id) {
@@ -274,9 +260,7 @@ class MediaCallService {
 
     LGI << "Call " << call_id << " rejected by peer " << peer_id;
     TeardownCallInternal(peer_id);
-    if (on_call_terminated_) {
-      on_call_terminated_(peer_id);
-    }
+    EventQueue::Instance().Push(EventCallTerminated{peer_id});
   }
 
   void OnHangupSignal(ContactID const& peer_id, std::string const& call_id) {
@@ -287,9 +271,7 @@ class MediaCallService {
 
     LGI << "Call " << call_id << " hung up by peer " << peer_id;
     TeardownCallInternal(peer_id);
-    if (on_call_terminated_) {
-      on_call_terminated_(peer_id);
-    }
+    EventQueue::Instance().Push(EventCallTerminated{peer_id});
   }
 
   // --- Media Signaling (Offer/Answer via Data Channel) ---
@@ -337,16 +319,12 @@ class MediaCallService {
 
   void OnMediaGatheringStateChange(ContactID const& peer_id, int state_val) {
     std::lock_guard<std::recursive_mutex> const lock(mutex_);
-    if (state_val == 2) { // Complete
+    if (state_val == 2) {  // Complete
       if (current_call_ && current_call_->peer_id == peer_id) {
         if (auto peer = data_transport_->GetPeer(peer_id)) {
           if (peer->pending_offer_sdp) {
             std::string const type = current_call_->is_outgoing ? "offer" : "answer";
-            nlohmann::json const msg = {
-                {"type", type},
-                {"context", "media"},
-                {"sdp", *peer->pending_offer_sdp}
-            };
+            nlohmann::json const msg = {{"type", type}, {"context", "media"}, {"sdp", *peer->pending_offer_sdp}};
             if (peer->data_channel_is_open) {
               std::ignore = data_transport_->SendJson(peer_id, msg);
             } else {
@@ -370,9 +348,7 @@ class MediaCallService {
       if (current_call_ && current_call_->peer_id == peer_id) {
         LGE << "Media connection dropped for call " << current_call_->call_id.ToString() << ". Forcing hangup.";
         TeardownCallInternal(peer_id);
-        if (on_call_terminated_) {
-          on_call_terminated_(peer_id);
-        }
+        EventQueue::Instance().Push(EventCallTerminated{peer_id});
       }
       return;
     }
@@ -400,37 +376,7 @@ class MediaCallService {
   }
 
   void OnFrameReceived(ContactID const& /*peer_id*/, std::vector<std::byte> const& frame) {
-    if (on_frame_received_) {
-      on_frame_received_(frame);
-    }
-  }
-
-  // --- Callbacks ---
-
-  using OnIncomingCallCallback = std::function<void(ContactID const&, messaging::HistoryEntryKind)>;
-  using OnCallRingingCallback = std::function<void(ContactID const&)>;
-  using OnCallAcceptedCallback = std::function<void(ContactID const&)>;
-  using OnCallTerminatedCallback = std::function<void(ContactID const&)>;
-  using OnFrameReceivedCallback = std::function<void(std::vector<std::byte> const&)>;
-  using OnOutgoingCallStartedCallback = std::function<void(ContactID const&, messaging::HistoryEntryKind)>;
-
-  void SetIncomingCallCallback(OnIncomingCallCallback cb) {
-    on_incoming_call_ = std::move(cb);
-  }
-  void SetCallRingingCallback(OnCallRingingCallback cb) {
-    on_call_ringing_ = std::move(cb);
-  }
-  void SetCallAcceptedCallback(OnCallAcceptedCallback cb) {
-    on_call_accepted_ = std::move(cb);
-  }
-  void SetCallTerminatedCallback(OnCallTerminatedCallback cb) {
-    on_call_terminated_ = std::move(cb);
-  }
-  void SetFrameReceivedCallback(OnFrameReceivedCallback cb) {
-    on_frame_received_ = std::move(cb);
-  }
-  void SetOutgoingCallStartedCallback(OnOutgoingCallStartedCallback cb) {
-    on_outgoing_call_started_ = std::move(cb);
+    EventQueue::Instance().Push(EventFrameReceived{frame});
   }
 
  private:
@@ -453,18 +399,10 @@ class MediaCallService {
   std::shared_ptr<transport::MediaTransport> media_transport_;
   std::shared_ptr<AccountService> account_service_;
   std::shared_ptr<MessagingService> messaging_service_{nullptr};
-  ConnectionRequestHandler connection_handler_;
 
   std::unique_ptr<Capture> video_capture_;
   std::unique_ptr<Capture> audio_capture_;
   std::shared_ptr<Stream> av_stream_;
-
-  OnIncomingCallCallback on_incoming_call_;
-  OnCallRingingCallback on_call_ringing_;
-  OnCallAcceptedCallback on_call_accepted_;
-  OnCallTerminatedCallback on_call_terminated_;
-  OnFrameReceivedCallback on_frame_received_;
-  OnOutgoingCallStartedCallback on_outgoing_call_started_;
 
   void SetCallState(CallState state) {
     if (current_call_) {
@@ -503,9 +441,11 @@ class MediaCallService {
           std::make_shared<StreamSource>(std::move(*video_capture_)),
           std::make_shared<StreamSource>(std::move(*audio_capture_))
       );
-      av_stream_->OnSample([this](Stream::Source::Type const type, uint64_t const time, std::vector<std::byte> const& sample) -> void {
-        SendSampleToPeers(sample, type, time);
-      });
+      av_stream_->OnSample(
+          [this](Stream::Source::Type const type, uint64_t const time, std::vector<std::byte> const& sample) -> void {
+            SendSampleToPeers(sample, type, time);
+          }
+      );
     }
   }
 
@@ -525,14 +465,12 @@ class MediaCallService {
     };
 
     // Ensure Data Connection. If not open, we wait for OnDataChannelOpen event.
-    if (on_outgoing_call_started_) {
-      auto const kind = is_video ? messaging::HistoryEntryKind::videoCall : messaging::HistoryEntryKind::voiceCall;
-      on_outgoing_call_started_(peer_id, kind);
-    }
+    auto const kind = is_video ? messaging::HistoryEntryKind::videoCall : messaging::HistoryEntryKind::voiceCall;
+    EventQueue::Instance().Push(EventOutgoingCall{peer_id, kind});
 
     auto const peer = data_transport_->GetPeer(peer_id);
     if (!peer || !peer->data_channel_is_open) {
-      connection_handler_(peer_id);
+      EventQueue::Instance().Push(EventConnectionRequested{peer_id});
       return;
     }
 
@@ -550,6 +488,10 @@ class MediaCallService {
       data_transport_->AddPeer(peer_id, peer);
     }
 
+    if (auto target_peer = data_transport_->GetPeer(peer_id)) {
+      media_transport_->AttachToPeer(peer_id, target_peer);
+    }
+
     // Force new media connection per call to ensure clean state
     media_transport_->Disconnect(peer_id);
     media_transport_->Connect(peer_id);
@@ -557,18 +499,9 @@ class MediaCallService {
     peer->has_media_peer_connection = true;
     SetCallState(CallState::mediaConnecting);
 
-    peer->audio = media_transport_->AddAudio(peer_id, [this, peer_id]() -> void {
-      if (auto target_peer = data_transport_->GetPeer(peer_id)) {
-        media_transport_->AttachToPeer(peer_id, target_peer);
-      }
-    });
-
+    peer->audio = media_transport_->AddAudio(peer_id);
     if (is_video) {
-      peer->video = media_transport_->AddVideo(peer_id, [this, peer_id]() -> void {
-        if (auto target_peer = data_transport_->GetPeer(peer_id)) {
-          media_transport_->AttachToPeer(peer_id, target_peer);
-        }
-      });
+      peer->video = media_transport_->AddVideo(peer_id);
     }
 
     if (is_initiator) {
@@ -642,9 +575,7 @@ class MediaCallService {
     messaging::HistoryEntryKind const kind =
         current_call_->is_video ? messaging::HistoryEntryKind::videoCall : messaging::HistoryEntryKind::voiceCall;
 
-    if (on_incoming_call_) {
-      on_incoming_call_(peer_id, kind);
-    }
+    EventQueue::Instance().Push(EventIncomingCall{peer_id, kind});
   }
 
   void SendCallRequest(ContactID const& peer_id) {

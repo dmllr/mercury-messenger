@@ -10,6 +10,7 @@
 
 #include "eillance/identity/contact_manager.hpp"
 #include "eillance/messaging/delivery_service.hpp"
+#include "mock_data_transport.hpp"
 #include "mock_persistent_storage.hpp"
 
 using namespace eillance;
@@ -22,17 +23,21 @@ class DeliveryServiceTest : public ::testing::Test {
     storage_ = std::make_shared<storage::PersistentStorage>(std::move(mock_impl));
     contact_manager_ = std::make_shared<identity::ContactManager>(storage_);
 
-    connection_handler_ = [this](ContactID const& peer_id) {
-      std::lock_guard<std::mutex> const lock(mtx_);
-      requested_connections_.push_back(peer_id);
-      cv_.notify_one();
-    };
+    mock_log_ = std::make_shared<transport::MockCallLog>();
+    mock_transport_impl_ = std::make_unique<transport::MockDataTransport>(mock_log_);
+    transport_ = std::make_shared<transport::DataTransport>(std::move(mock_transport_impl_));
 
-    delivery_service_ =
-        std::make_unique<messaging::MessageDeliveryService>(storage_, contact_manager_, connection_handler_);
+    conn_sub_id_ = EventQueue::Instance().Subscribe<EventConnectionRequested>([this](auto const& e) {
+      std::lock_guard<std::mutex> const lock(mtx_);
+      requested_connections_.push_back(e.peer_id);
+      cv_.notify_one();
+    });
+
+    delivery_service_ = std::make_unique<messaging::MessageDeliveryService>(storage_, contact_manager_, transport_);
   }
 
   void TearDown() override {
+    EventQueue::Instance().Unsubscribe<EventConnectionRequested>(conn_sub_id_);
     delivery_service_->Stop();
   }
 
@@ -53,15 +58,20 @@ class DeliveryServiceTest : public ::testing::Test {
     );
 
     // Also add Pending Action to satisfy HasPendingWork logic
-    nlohmann::json action = {{"type", "chat"}, {"message_id", entry.id}};
+    nlohmann::json const action = {{"type", "chat"}, {"message_id", entry.id}};
     mock_storage_impl_->AddPendingAction(peer_id, action.dump(), Time::Now(), entry.id);
   }
 
   storage::MockPersistentStorageImpl* mock_storage_impl_{};
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<identity::ContactManager> contact_manager_;
-  std::function<void(ContactID const&)> connection_handler_;
+
+  std::shared_ptr<transport::MockCallLog> mock_log_;
+  std::unique_ptr<transport::MockDataTransport> mock_transport_impl_;
+  std::shared_ptr<transport::DataTransport> transport_;
+
   std::unique_ptr<messaging::MessageDeliveryService> delivery_service_;
+  uint64_t conn_sub_id_ = 0;
 
   std::vector<ContactID> requested_connections_;
   std::mutex mtx_;

@@ -422,9 +422,11 @@ fun ContactsScreen(
             CircularProgressIndicator()
           }
         } else {
-          Box(modifier = Modifier
-            .weight(1f)
-            .fillMaxWidth()) {
+          Box(
+            modifier = Modifier
+              .weight(1f)
+              .fillMaxWidth()
+          ) {
             LazyColumn(
               modifier = Modifier
                 .fillMaxSize()

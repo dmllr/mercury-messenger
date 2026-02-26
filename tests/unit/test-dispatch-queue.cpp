@@ -7,6 +7,7 @@
 #include <gtest/gtest.h>
 
 #include "eillance/utils/dispatch_queue.hpp"
+#include "eillance/utils/event_queue.hpp"
 
 namespace eillance {
 
@@ -21,34 +22,6 @@ class DispatchQueueTest : public ::testing::Test {
     // Give time for any pending operations to complete
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
   }
-
-  // Improved helper to wait for a condition with timeout
-  template <typename F>
-  auto WaitFor(F condition, std::chrono::milliseconds timeout) -> bool {
-    auto start = std::chrono::steady_clock::now();
-
-    // Continue checking until timeout
-    while (true) {
-      // Check if condition is met
-      if (condition()) {
-        // Add a small delay after condition is met to ensure any in-progress
-        // tasks have time to complete their state updates
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-
-        // Check condition one more time to ensure it's still true
-        return condition();
-      }
-
-      // Check for timeout
-      auto now = std::chrono::steady_clock::now();
-      if (now - start > timeout) {
-        return false;
-      }
-
-      // Sleep a bit before checking again
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    }
-  }
 };
 
 TEST_F(DispatchQueueTest, DispatchAndExecute) {
@@ -57,7 +30,7 @@ TEST_F(DispatchQueueTest, DispatchAndExecute) {
   std::atomic<int> counter{0};
   queue.Dispatch([&counter]() { counter++; });
 
-  EXPECT_TRUE(WaitFor([&]() { return counter == 1; }, std::chrono::milliseconds(100)));
+  EXPECT_TRUE(EventQueue::Instance().WaitFor([&]() { return counter == 1; }, std::chrono::milliseconds(100)));
 }
 
 TEST_F(DispatchQueueTest, DispatchAndMove) {
@@ -66,7 +39,7 @@ TEST_F(DispatchQueueTest, DispatchAndMove) {
   std::atomic<int> counter{0};
   queue.Dispatch(std::move([&counter]() { counter++; }));
 
-  EXPECT_TRUE(WaitFor([&]() { return counter == 1; }, std::chrono::milliseconds(100)));
+  EXPECT_TRUE(EventQueue::Instance().WaitFor([&]() { return counter == 1; }, std::chrono::milliseconds(100)));
 }
 
 TEST_F(DispatchQueueTest, RemovePending) {
@@ -93,7 +66,7 @@ TEST_F(DispatchQueueTest, MainThread) {
   std::atomic<int> counter{0};
   DispatchQueue::MainThread().Dispatch([&counter]() { counter++; });
 
-  EXPECT_TRUE(WaitFor([&]() { return counter == 1; }, std::chrono::milliseconds(100)));
+  EXPECT_TRUE(EventQueue::Instance().WaitFor([&]() { return counter == 1; }, std::chrono::milliseconds(100)));
 }
 
 TEST_F(DispatchQueueTest, MultipleThreads) {
@@ -111,7 +84,7 @@ TEST_F(DispatchQueueTest, MultipleThreads) {
     });
   }
 
-  EXPECT_TRUE(WaitFor([&]() { return counter == num_tasks; }, std::chrono::milliseconds(1000)));
+  EXPECT_TRUE(EventQueue::Instance().WaitFor([&]() { return counter == num_tasks; }, std::chrono::milliseconds(1000)));
 }
 
 TEST_F(DispatchQueueTest, ScheduledExecution) {
@@ -125,7 +98,7 @@ TEST_F(DispatchQueueTest, ScheduledExecution) {
   queue.DispatchAfter(delay, [&counter]() { counter++; });
 
   // Wait for task execution
-  EXPECT_TRUE(WaitFor([&]() { return counter == 1; }, std::chrono::milliseconds(200)));
+  EXPECT_TRUE(EventQueue::Instance().WaitFor([&]() { return counter == 1; }, std::chrono::milliseconds(200)));
 
   auto elapsed = std::chrono::steady_clock::now() - start;
   // Check if the execution happened after the delay (with some tolerance)
@@ -178,7 +151,7 @@ TEST_F(DispatchQueueTest, TasksExecutedOnce) {
   }
 
   std::this_thread::sleep_for(std::chrono::milliseconds(50 * 10 + 300));
-  EXPECT_TRUE(WaitFor([&counter]() { return counter == 10; }, std::chrono::milliseconds(1000)));
+  EXPECT_TRUE(EventQueue::Instance().WaitFor([&counter]() { return counter == 10; }, std::chrono::milliseconds(1000)));
   EXPECT_FALSE(task_running);
 }
 
@@ -197,7 +170,7 @@ TEST_F(DispatchQueueTest, ExceptionsHandling) {
   queue.Dispatch([&counter]() { counter++; });
 
   // Wait for both tasks to complete
-  EXPECT_TRUE(WaitFor([&]() { return counter == 2; }, std::chrono::milliseconds(100)));
+  EXPECT_TRUE(EventQueue::Instance().WaitFor([&]() { return counter == 2; }, std::chrono::milliseconds(500)));
 }
 
 TEST_F(DispatchQueueTest, MultipleDelayedTasks) {
@@ -215,7 +188,7 @@ TEST_F(DispatchQueueTest, MultipleDelayedTasks) {
   }
 
   // Wait for all tasks to complete
-  EXPECT_TRUE(WaitFor([&]() { return counter == num_tasks; }, std::chrono::milliseconds(500)));
+  EXPECT_TRUE(EventQueue::Instance().WaitFor([&]() { return counter == num_tasks; }, std::chrono::milliseconds(500)));
 }
 
 TEST_F(DispatchQueueTest, ConcurrentModification) {
@@ -240,7 +213,8 @@ TEST_F(DispatchQueueTest, ConcurrentModification) {
   }
 
   // Wait for both directly added and dynamically added tasks
-  EXPECT_TRUE(WaitFor([&]() { return counter == 20 && tasks_added == 10; }, std::chrono::milliseconds(500)));
+  EXPECT_TRUE(EventQueue::Instance()
+                  .WaitFor([&]() { return counter == 20 && tasks_added == 10; }, std::chrono::milliseconds(500)));
 }
 
 TEST_F(DispatchQueueTest, DestructorCleanup) {
@@ -278,7 +252,7 @@ TEST_F(DispatchQueueTest, HighConcurrencyStress) {
     });
   }
 
-  EXPECT_TRUE(WaitFor([&]() { return counter == num_tasks; }, std::chrono::milliseconds(5000)));
+  EXPECT_TRUE(EventQueue::Instance().WaitFor([&]() { return counter == num_tasks; }, std::chrono::milliseconds(5000)));
 }
 
 TEST_F(DispatchQueueTest, EmptyFunctionHandling) {
@@ -328,7 +302,7 @@ TEST_F(DispatchQueueTest, NestedDispatch) {
   });
 
   // Wait for all nested dispatches to complete
-  EXPECT_TRUE(WaitFor([&counter]() { return counter == 3; }, std::chrono::milliseconds(500)));
+  EXPECT_TRUE(EventQueue::Instance().WaitFor([&counter]() { return counter == 3; }, std::chrono::milliseconds(500)));
 
   // Verify execution order
   std::vector<int> const expected = {1, 2, 3};

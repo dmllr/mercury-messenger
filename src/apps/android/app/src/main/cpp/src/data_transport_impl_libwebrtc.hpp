@@ -11,6 +11,7 @@
 #include <span>
 
 #include "eillance/crypto/crypto.hpp"
+#include "eillance/events/client_events.hpp"
 #include "eillance/events/service_connection_state.hpp"
 #include "eillance/identity/contact_id.hpp"
 #include "eillance/logging/logging.hpp"
@@ -18,6 +19,7 @@
 #include "eillance/transport/media_transport.hpp"
 #include "eillance/transport/peer.hpp"
 #include "eillance/transport/peer_connection_state.hpp"
+#include "eillance/utils/event_queue.hpp"
 #include "eillance/utils/invariant.hpp"
 #include "utils/class_refs.hpp"
 #include "utils/jni_utils.hpp"
@@ -30,7 +32,6 @@ class AndroidDataTransport final : public DataTransport::Interface {
   JavaVM* jvm_;
   jobject transportJavaRef_{nullptr};
   TransportDelegate* delegate_{nullptr};
-  std::shared_ptr<DataTransport::StatusCallbackFunction> statusCallback_{};
   ContactID id_;
   std::string signalingUrl_;
 
@@ -72,12 +73,8 @@ class AndroidDataTransport final : public DataTransport::Interface {
     return delegate_;
   }
 
-  void SetStatusCallback(DataTransport::StatusCallbackFunction const& callback) override {
-    statusCallback_ = std::make_shared<DataTransport::StatusCallbackFunction>(callback);
-  }
   void ReportStateChange(ContactID const& peer_id, EventSource source, int state) {
-    INVARIANT(statusCallback_);
-    (*statusCallback_)(peer_id, source, state);
+    EventQueue::Instance().Push(EventStatusChanged{peer_id, source, state});
   }
 
   void SetId(ContactID const& id) override {
@@ -133,7 +130,7 @@ class AndroidDataTransport final : public DataTransport::Interface {
 
   void AddPeer(ContactID const& peer_id, std::shared_ptr<Peer> const& peer) override {
     std::lock_guard<std::mutex> const lock(peersMutex_);
-    peers_.emplace(peer_id, peer);
+    peers_[peer_id] = peer;
   }
   auto GetPeer(ContactID const& peer_id) const -> std::shared_ptr<Peer> override {
     std::lock_guard<std::mutex> const lock(peersMutex_);

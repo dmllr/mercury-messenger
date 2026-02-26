@@ -7,6 +7,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "eillance/events/client_events.hpp"
 #include "eillance/identity/contact_manager.hpp"
 #include "eillance/logging/logging.hpp"
 #include "eillance/services/account_service.hpp"
@@ -14,28 +15,25 @@
 #include "eillance/services/profile_service.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/transport/data_transport.hpp"
+#include "eillance/utils/event_queue.hpp"
 #include "eillance/utils/invariant.hpp"
 
 namespace eillance::services {
 
 class ContactService {
  public:
-  using ConnectionRequestHandler = std::function<void(ContactID const&)>;
-
   explicit ContactService(
       std::shared_ptr<storage::PersistentStorage> storage,
       std::shared_ptr<transport::DataTransport> transport,
       std::shared_ptr<identity::ContactManager> contact_manager,
       std::shared_ptr<AccountService> account_service,
-      std::shared_ptr<ProfileService> profile_service,
-      ConnectionRequestHandler connection_handler
+      std::shared_ptr<ProfileService> profile_service
   )
       : storage_(std::move(storage)),
         transport_(std::move(transport)),
         manager_(std::move(contact_manager)),
         account_service_(std::move(account_service)),
-        profile_service_(std::move(profile_service)),
-        connection_handler_(std::move(connection_handler)) {
+        profile_service_(std::move(profile_service)) {
   }
 
   void SetMessagingService(std::shared_ptr<MessagingService> messaging_service) {
@@ -70,8 +68,7 @@ class ContactService {
       INVARIANT(messaging_service_);
       messaging_service_->SendSystemMessage(peer_id, content.dump());
 
-      INVARIANT(on_contact_status_changed_);
-      on_contact_status_changed_(peer_id, identity::ContactStatus::pendingApproval);
+      EventQueue::Instance().Push(EventContactStatusChanged{peer_id, identity::ContactStatus::pendingApproval});
     }
     return true;
   }
@@ -100,11 +97,10 @@ class ContactService {
       // Send our profile and request theirs
       profile_service_->SendMyProfile(peer_id);  // Queues profile action
 
-      INVARIANT(on_contact_status_changed_);
-      on_contact_status_changed_(peer_id, identity::ContactStatus::confirmed);
+      EventQueue::Instance().Push(EventContactStatusChanged{peer_id, identity::ContactStatus::confirmed});
 
       // Ensure connection and flush queue.
-      connection_handler_(peer_id);
+      EventQueue::Instance().Push(EventConnectionRequested{peer_id});
       messaging_service_->SendQueuedMessages(peer_id);
     }
   }
@@ -135,8 +131,7 @@ class ContactService {
 
   void UnblockContact(ContactID const& peer_id) {
     if (manager_->UnblockContact(peer_id)) {
-      INVARIANT(on_contact_status_changed_);
-      on_contact_status_changed_(peer_id, identity::ContactStatus::awaitingApproval);
+      EventQueue::Instance().Push(EventContactStatusChanged{peer_id, identity::ContactStatus::awaitingApproval});
     }
   }
 
@@ -217,8 +212,7 @@ class ContactService {
       messaging_service_->MarkMessagesAsRead(peer_id, {});
 
       if (status == identity::RequestStatus::New) {
-        INVARIANT(on_contact_request_);
-        on_contact_request_(peer_id);
+        EventQueue::Instance().Push(EventContactRequest{peer_id});
       }
     } else {
       // Reinstall recovery: If contact already confirmed, resend proofs.
@@ -233,7 +227,7 @@ class ContactService {
 
         profile_service_->SendMyProfile(peer_id);
 
-        connection_handler_(peer_id);
+        EventQueue::Instance().Push(EventConnectionRequested{peer_id});
         INVARIANT(messaging_service_);
         messaging_service_->SendQueuedMessages(peer_id);
       }
@@ -242,8 +236,7 @@ class ContactService {
 
   void OnContactConfirm(ContactID const& peer_id) {
     if (manager_->MarkAsConfirmed(peer_id)) {
-      INVARIANT(on_contact_status_changed_);
-      on_contact_status_changed_(peer_id, identity::ContactStatus::confirmed);
+      EventQueue::Instance().Push(EventContactStatusChanged{peer_id, identity::ContactStatus::confirmed});
 
       INVARIANT(messaging_service_);
       messaging_service_->SendSystemMessage(peer_id, nlohmann::json{{"action", "send_profile"}}.dump());
@@ -256,13 +249,11 @@ class ContactService {
 
   void OnContactRestored(ContactID const& peer_id) {
     profile_service_->RequestProfile(peer_id);
-    INVARIANT(on_contact_status_changed_);
-    on_contact_status_changed_(peer_id, identity::ContactStatus::confirmed);
+    EventQueue::Instance().Push(EventContactStatusChanged{peer_id, identity::ContactStatus::confirmed});
   }
 
   void OnContactRemoved(ContactID const& peer_id) {
-    INVARIANT(on_contact_removed_);
-    on_contact_removed_(peer_id);
+    EventQueue::Instance().Push(EventContactRemoved{peer_id});
     BlockContact(peer_id, false);
   }
 
@@ -291,8 +282,7 @@ class ContactService {
           nlohmann::json{{"type", "contact_signature"}, {"signature", crypto::ToHex(my_sig)}}.dump()
       );
 
-      INVARIANT(on_contact_status_changed_);
-      on_contact_status_changed_(peer_id, identity::ContactStatus::confirmed);
+      EventQueue::Instance().Push(EventContactStatusChanged{peer_id, identity::ContactStatus::confirmed});
 
       profile_service_->RequestProfile(peer_id);
       INVARIANT(messaging_service_);
@@ -310,21 +300,6 @@ class ContactService {
     }
   }
 
-  // Callbacks
-  using OnContactRequestCallback = std::function<void(ContactID const& peer_id)>;
-  using OnContactStatusChangedCallback = std::function<void(ContactID const& peer_id, identity::ContactStatus status)>;
-  using OnContactRemovedCallback = std::function<void(ContactID const& peer_id)>;
-
-  void SetContactRequestCallback(OnContactRequestCallback cb) {
-    on_contact_request_ = std::move(cb);
-  }
-  void SetContactStatusChangedCallback(OnContactStatusChangedCallback cb) {
-    on_contact_status_changed_ = std::move(cb);
-  }
-  void SetContactRemovedCallback(OnContactRemovedCallback cb) {
-    on_contact_removed_ = std::move(cb);
-  }
-
  private:
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<transport::DataTransport> transport_;
@@ -333,11 +308,6 @@ class ContactService {
   std::shared_ptr<AccountService> account_service_;
   std::shared_ptr<ProfileService> profile_service_;
   std::shared_ptr<MessagingService> messaging_service_{nullptr};
-  ConnectionRequestHandler connection_handler_;
-
-  OnContactRequestCallback on_contact_request_;
-  OnContactStatusChangedCallback on_contact_status_changed_;
-  OnContactRemovedCallback on_contact_removed_;
 };
 
 }  // namespace eillance::services

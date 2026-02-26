@@ -18,13 +18,7 @@ struct TestEvent2 {
 // Helper to wait for a condition
 template <typename Func>
 static void WaitFor(Func condition, std::chrono::milliseconds timeout = std::chrono::milliseconds(1000)) {
-  auto const start = std::chrono::steady_clock::now();
-  while (!condition()) {
-    if (std::chrono::steady_clock::now() - start > timeout) {
-      break;
-    }
-    std::this_thread::sleep_for(std::chrono::milliseconds(1));
-  }
+  eillance::EventQueue::Instance().WaitFor(condition, timeout);
 }
 
 TEST(EventQueueTest, SubscribeAndPush) {

@@ -8,9 +8,13 @@
 
 // NOLINTBEGIN(readability-identifier-naming)
 
+extern void InitEventBridge(JavaVM* jvm);
+extern void UnsubscribeAllEvents();
+
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_MessengerService_initEngine(JNIEnv* env, jobject instance) {
   if (g_clientEngine == nullptr) {
     g_clientEngine = std::make_unique<eillance::ClientEngine>(g_javaVm, env, instance);
+    InitEventBridge(g_javaVm);
   }
 }
 
@@ -24,6 +28,7 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_MessengerService_terminate(
   if (g_clientEngine) {
     g_clientEngine->Terminate();
     g_clientEngine.reset();
+    UnsubscribeAllEvents();
   }
 }
 
@@ -58,8 +63,10 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_MessengerService_nativeRest
   if (g_clientEngine) {
     g_clientEngine->Terminate();
     g_clientEngine.reset();
+    UnsubscribeAllEvents();
   }
   g_clientEngine = std::make_unique<eillance::ClientEngine>(g_javaVm, env, instance);
+  InitEventBridge(g_javaVm);
   g_clientEngine->Start();
 }
 
@@ -135,60 +142,42 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
         "setWebRtcMediaTransport",
         "(Lhela/eillance/webrtc/WebRtcMediaTransport;)V"
     );
-    classref.RegisterMethod(
-        env,
-        "hela/eillance/MessengerService",
-        "onNativeCoreCrash",
-        "()V"
-    );
+    classref.RegisterMethod(env, "hela/eillance/MessengerService", "onNativeCoreCrash", "()V");
 
-    // ... (Existing Observers and Data Classes - No Changes needed there) ...
-    classref.RegisterClass(env, "hela/eillance/viewmodels/NativeContactsObserver");
-    classref.RegisterMethod(
+    classref.RegisterClass(env, "hela/eillance/events/NativeEventBus");
+    classref
+        .RegisterStaticMethod(env, "hela/eillance/events/NativeEventBus", "onContactsUpdated", "(Ljava/util/List;)V");
+    classref.RegisterStaticMethod(
         env,
-        "hela/eillance/viewmodels/NativeContactsObserver",
-        "onContactsUpdated",
-        "(Ljava/util/List;)V"
-    );
-
-    classref.RegisterClass(env, "hela/eillance/viewmodels/NativeConversationObserver");
-    classref.RegisterMethod(
-        env,
-        "hela/eillance/viewmodels/NativeConversationObserver",
+        "hela/eillance/events/NativeEventBus",
         "onHistoryUpdated",
-        "(Lhela/eillance/ndkio/HistoryPage;)V"
+        "(Ljava/lang/String;Lhela/eillance/ndkio/HistoryPage;)V"
     );
-    classref.RegisterMethod(
+    classref.RegisterStaticMethod(
         env,
-        "hela/eillance/viewmodels/NativeConversationObserver",
+        "hela/eillance/events/NativeEventBus",
         "onTransferProgress",
-        "(Ljava/lang/String;F)V"
+        "(Ljava/lang/String;Ljava/lang/String;F)V"
     );
-
-    classref.RegisterClass(env, "hela/eillance/viewmodels/NativeProfileObserver");
-    classref.RegisterMethod(
+    classref.RegisterStaticMethod(
         env,
-        "hela/eillance/viewmodels/NativeProfileObserver",
+        "hela/eillance/events/NativeEventBus",
         "onProfileUpdated",
         "(Lhela/eillance/ndkio/MyProfileInfo;)V"
     );
-
-    classref.RegisterClass(env, "hela/eillance/viewmodels/NativeCallObserver");
-    classref.RegisterMethod(
+    classref.RegisterStaticMethod(
         env,
-        "hela/eillance/viewmodels/NativeCallObserver",
+        "hela/eillance/events/NativeEventBus",
         "onCallStateChanged",
         "(Lhela/eillance/ndkio/CallState;)V"
     );
-
-    classref.RegisterClass(env, "hela/eillance/viewmodels/NativeSettingsObserver");
-    classref.RegisterMethod(
+    classref.RegisterStaticMethod(
         env,
-        "hela/eillance/viewmodels/NativeSettingsObserver",
+        "hela/eillance/events/NativeEventBus",
         "onSettingsUpdated",
         "(Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZ)V"
     );
-    classref.RegisterMethod(env, "hela/eillance/viewmodels/NativeSettingsObserver", "onConnectionStateChanged", "(I)V");
+    classref.RegisterStaticMethod(env, "hela/eillance/events/NativeEventBus", "onConnectionStateChanged", "(I)V");
 
     classref.RegisterCtor(env, "java/util/ArrayList", "()V");
     classref.RegisterMethod(env, "java/util/ArrayList", "add", "(Ljava/lang/Object;)Z");

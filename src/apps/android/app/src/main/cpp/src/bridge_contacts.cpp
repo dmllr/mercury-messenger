@@ -4,20 +4,17 @@
 
 #include <jni.h>
 
-#include "android_observers.hpp"
 #include "bridge_context.hpp"
 #include "eillance/view_model/contacts_view_model.hpp"
 
 // NOLINTBEGIN(readability-identifier-naming)
 
 extern "C" JNIEXPORT jlong JNICALL
-Java_hela_eillance_viewmodels_ContactsViewModel_nativeCreate(JNIEnv* env, jobject /*instance*/, jobject observer) {
+Java_hela_eillance_viewmodels_ContactsViewModel_nativeCreate(JNIEnv* env, jobject /*instance*/) {
   if (!g_clientEngine) {
     return 0;
   }
-  auto* vm = new eillance::view_model::ContactsViewModel(g_clientEngine->GetClient(), g_clientEngine->GetRouter());
-  auto android_observer = std::make_shared<eillance::AndroidContactsObserver>(g_javaVm, observer);
-  vm->SetObserver(android_observer);
+  auto* vm = new eillance::view_model::ContactsViewModel(g_clientEngine->GetClient());
   return reinterpret_cast<jlong>(vm);
 }
 

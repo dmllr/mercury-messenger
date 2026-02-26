@@ -8,38 +8,19 @@
 #include <string>
 #include <vector>
 
-#include "client_event_router.hpp"
 #include "eillance/client/client.hpp"
+#include "eillance/events/client_events.hpp"
 #include "eillance/events/service_connection_state.hpp"
+#include "eillance/utils/event_queue.hpp"
 #include "view_model_defines.hpp"
 
 namespace eillance::view_model {
 
 class SettingsViewModel {
  public:
-  struct Observer {
-    Observer() = default;
-    Observer(Observer const&) = delete;
-    Observer(Observer&&) = delete;
-    auto operator=(Observer const&) -> Observer& = delete;
-    auto operator=(Observer&&) -> Observer& = delete;
-    virtual ~Observer() = default;
-    virtual void OnSettingsUpdated(
-        std::optional<std::string> const& signaling_url,
-        int timeout,
-        std::optional<std::string> const& custom_stun,
-        std::optional<std::string> const& custom_turn,
-        std::optional<std::string> const& custom_turn_user,
-        std::optional<std::string> const& custom_turn_pass,
-        bool play_sound_on_send,
-        bool play_sound_on_receive
-    ) = 0;
-    virtual void OnConnectionStateChanged(ServiceConnectionState state) = 0;
-  };
-
-  explicit SettingsViewModel(std::shared_ptr<Client> client, std::shared_ptr<ClientEventRouter> router)
-      : impl_(std::make_shared<Impl>(std::move(client), std::move(router))) {
-    auto& queue = impl_->router->Queue();
+  explicit SettingsViewModel(std::shared_ptr<Client> client)
+      : impl_(std::make_shared<Impl>(std::move(client))) {
+    auto& queue = EventQueue::Instance();
     auto impl = impl_;
     Subscribe<EventStatusChanged>(queue, [impl](EventStatusChanged const& event) { impl->OnStatusChanged(event); });
     impl_->LoadSettings();
@@ -51,23 +32,7 @@ class SettingsViewModel {
     }
   }
 
-  void SetObserver(std::shared_ptr<Observer> observer) const {
-    impl_->SetObserver(std::move(observer));
-  }
-
-  struct State {
-    std::optional<std::string> signaling_server_url;
-    int peer_inactivity_timeout_seconds = 120;
-    ServiceConnectionState connection_state = ServiceConnectionState::unknown;
-    std::optional<std::string> custom_stun;
-    std::optional<std::string> custom_turn;
-    std::optional<std::string> custom_turn_user;
-    std::optional<std::string> custom_turn_pass;
-    bool play_sound_on_send = true;
-    bool play_sound_on_receive = true;
-  };
-
-  [[nodiscard]] auto GetState() const -> State {
+  [[nodiscard]] auto GetState() const -> SettingsState {
     return impl_->GetState();
   }
 
@@ -88,36 +53,15 @@ class SettingsViewModel {
  private:
   struct Impl : std::enable_shared_from_this<Impl> {
     std::shared_ptr<Client> client;
-    std::shared_ptr<ClientEventRouter> router;
-    std::shared_ptr<Observer> observer;
 
     mutable std::mutex mutex;
-    State state;
+    SettingsState state;
 
-    Impl(std::shared_ptr<Client> client, std::shared_ptr<ClientEventRouter> router)
-        : client(std::move(client)),
-          router(std::move(router)) {
+    explicit Impl(std::shared_ptr<Client> client)
+        : client(std::move(client)) {
     }
 
-    void SetObserver(std::shared_ptr<Observer> obs) {
-      std::lock_guard<std::mutex> const lock(mutex);
-      observer = std::move(obs);
-      if (observer) {
-        observer->OnConnectionStateChanged(state.connection_state);
-        observer->OnSettingsUpdated(
-            state.signaling_server_url,
-            state.peer_inactivity_timeout_seconds,
-            state.custom_stun,
-            state.custom_turn,
-            state.custom_turn_user,
-            state.custom_turn_pass,
-            state.play_sound_on_send,
-            state.play_sound_on_receive
-        );
-      }
-    }
-
-    auto GetState() const -> State {
+    auto GetState() const -> SettingsState {
       std::lock_guard<std::mutex> const lock(mutex);
       return state;
     }
@@ -186,18 +130,7 @@ class SettingsViewModel {
     }
 
     void NotifySettings() {
-      if (observer) {
-        observer->OnSettingsUpdated(
-            state.signaling_server_url,
-            state.peer_inactivity_timeout_seconds,
-            state.custom_stun,
-            state.custom_turn,
-            state.custom_turn_user,
-            state.custom_turn_pass,
-            state.play_sound_on_send,
-            state.play_sound_on_receive
-        );
-      }
+      EventQueue::Instance().Push(EventSettingsStateUpdated{state});
     }
 
     void OnStatusChanged(EventStatusChanged const& event) {
@@ -207,11 +140,9 @@ class SettingsViewModel {
         if (state.connection_state == ServiceConnectionState::online) {
           LoadSettingsInternal();
         }
-        if (observer) {
-          observer->OnConnectionStateChanged(state.connection_state);
-          if (state.connection_state == ServiceConnectionState::online) {
-            NotifySettings();
-          }
+        EventQueue::Instance().Push(EventConnectionStateChanged{state.connection_state});
+        if (state.connection_state == ServiceConnectionState::online) {
+          NotifySettings();
         }
       }
     }

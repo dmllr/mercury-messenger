@@ -13,7 +13,7 @@ Java_hela_eillance_viewmodels_DebugViewModel_nativeCreate(JNIEnv* /*env*/, jobje
   if (!g_clientEngine) {
     return 0;
   }
-  auto* vm = new eillance::view_model::DebugViewModel(g_clientEngine->GetClient(), g_clientEngine->GetRouter());
+  auto* vm = new eillance::view_model::DebugViewModel(g_clientEngine->GetClient());
   return reinterpret_cast<jlong>(vm);
 }
 
