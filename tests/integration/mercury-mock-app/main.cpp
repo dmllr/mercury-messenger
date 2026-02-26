@@ -56,7 +56,7 @@ auto main(int argc, char** argv) -> int {
   // Disable stdout buffering for real-time docker logs
   std::setbuf(stdout, nullptr);
 
-  Log::InitializeDefault(plog::debug);
+  Log::InitializeDefault(plog::info);
 
   eillance::utils::ArgsParser const args(argc, argv);
 
