@@ -236,7 +236,7 @@ fun MessageInputArea(
     TextField(
       value = inputValue,
       onValueChange = onInputValueChange,
-      minLines = if (showControls) 2 else 1,
+      minLines = 1,
       modifier = Modifier
         .fillMaxWidth()
         .background(MaterialTheme.colorScheme.surface)
