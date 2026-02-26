@@ -4,23 +4,28 @@ import android.app.Application
 import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import hela.eillance.events.NativeEventBus
 import hela.eillance.ndkio.MyProfileInfo
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
 
-class ProfileViewModel(application: Application) : AndroidViewModel(application),
-  NativeProfileObserver {
+class ProfileViewModel(application: Application) : AndroidViewModel(application) {
 
   private var nativePtr: Long = 0
   private val _myProfile = MutableStateFlow(MyProfileInfo(identityExists = false))
   val myProfile = _myProfile.asStateFlow()
 
   init {
-    nativePtr = nativeCreate(this)
+    nativePtr = nativeCreate()
     if (nativePtr == 0L) {
       Log.e("ProfileViewModel", "Failed to create native ProfileViewModel.")
+    }
+    viewModelScope.launch {
+      NativeEventBus.profile.collect { _myProfile.value = it }
     }
   }
 
@@ -30,10 +35,6 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
       nativePtr = 0
     }
     super.onCleared()
-  }
-
-  override fun onProfileUpdated(profile: MyProfileInfo) {
-    _myProfile.value = profile
   }
 
   fun updateMyProfile(name: String?, bio: String?, photoBase64: String?) {
@@ -96,7 +97,7 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
     }
   }
 
-  private external fun nativeCreate(observer: NativeProfileObserver): Long
+  private external fun nativeCreate(): Long
   private external fun nativeDestroy(ptr: Long)
   private external fun nativeUpdateProfile(ptr: Long, name: String?, bio: String?, photo: String?)
   private external fun nativeGenerateIdentity(ptr: Long): String

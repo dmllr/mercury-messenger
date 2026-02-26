@@ -13,9 +13,10 @@
 
 #include <ranges>
 
-#include "client_event_router.hpp"
 #include "eillance/client/client.hpp"
+#include "eillance/events/client_events.hpp"
 #include "eillance/logging/logging.hpp"
+#include "eillance/utils/event_queue.hpp"
 #include "eillance/utils/time.hpp"
 #include "view_model_defines.hpp"
 
@@ -23,15 +24,11 @@ namespace eillance::view_model {
 
 class ConversationViewModel {
  public:
-  explicit ConversationViewModel(
-      ContactID const& peer_id,
-      std::shared_ptr<Client> client,
-      std::shared_ptr<ClientEventRouter> router
-  )
-      : impl_(std::make_shared<Impl>(peer_id, std::move(client), std::move(router))) {
+  explicit ConversationViewModel(ContactID const& peer_id, std::shared_ptr<Client> client)
+      : impl_(std::make_shared<Impl>(peer_id, std::move(client))) {
     impl_->StartInitialLoad();
 
-    auto& queue = impl_->router->Queue();
+    auto& queue = EventQueue::Instance();
     auto impl = impl_;
     Subscribe<EventChatMessageReceived>(queue, [impl](EventChatMessageReceived const& event) {
       if (event.peer_id == impl->peer_id) {
@@ -73,28 +70,7 @@ class ConversationViewModel {
     }
   }
 
-  struct State {
-    ContactID peer_id;
-    std::deque<messaging::HistoryEntryRecord> history{};
-    bool has_older_messages = false;
-  };
-
-  struct Observer {
-    Observer() = default;
-    Observer(Observer const&) = delete;
-    Observer(Observer&&) = delete;
-    auto operator=(Observer const&) -> Observer& = delete;
-    auto operator=(Observer&&) -> Observer& = delete;
-    virtual ~Observer() = default;
-    virtual void OnHistoryUpdated(State const& state) = 0;
-    virtual void OnTransferProgress(std::string const& attachment_id, float progress) = 0;
-  };
-
-  void SetObserver(std::shared_ptr<Observer> observer) const {
-    impl_->SetObserver(std::move(observer));
-  }
-
-  [[nodiscard]] auto GetState() const -> State {
+  [[nodiscard]] auto GetState() const -> ConversationState {
     return impl_->GetState();
   }
 
@@ -146,11 +122,9 @@ class ConversationViewModel {
   struct Impl : public std::enable_shared_from_this<Impl> {
     ContactID const peer_id;
     std::shared_ptr<Client> client;
-    std::shared_ptr<ClientEventRouter> router;
-    std::shared_ptr<Observer> observer;
 
     mutable std::mutex mutex;
-    State state;
+    ConversationState state;
     std::size_t chat_pages_loaded = 0;
     std::atomic<int> load_generation{0};
 
@@ -160,22 +134,13 @@ class ConversationViewModel {
     inline static std::atomic<std::uint64_t> nextSystemMsgId{10000000000000000000ULL};
     static constexpr size_t kPageSize = 50;
 
-    Impl(ContactID peer_id, std::shared_ptr<Client> client, std::shared_ptr<ClientEventRouter> router)
+    Impl(ContactID peer_id, std::shared_ptr<Client> client)
         : peer_id(peer_id),
-          client(std::move(client)),
-          router(std::move(router)) {
+          client(std::move(client)) {
       state.peer_id = peer_id;
     }
 
-    void SetObserver(std::shared_ptr<Observer> obs) {
-      std::lock_guard<std::mutex> const lock(mutex);
-      observer = std::move(obs);
-      if (observer) {
-        observer->OnHistoryUpdated(state);
-      }
-    }
-
-    auto GetState() const -> State {
+    auto GetState() const -> ConversationState {
       std::lock_guard<std::mutex> const lock(mutex);
       return state;
     }
@@ -202,9 +167,7 @@ class ConversationViewModel {
       }
 
       state.history.push_back(entry);
-      if (observer) {
-        observer->OnHistoryUpdated(state);
-      }
+      EventQueue::Instance().Push(EventConversationStateUpdated{peer_id, state});
     }
 
     void LoadOlderMessages() {
@@ -217,14 +180,10 @@ class ConversationViewModel {
         }
         chat_pages_loaded++;
         state.has_older_messages = (chat_pages_loaded * kPageSize) < page.total_messages;
-        if (observer) {
-          observer->OnHistoryUpdated(state);
-        }
+        EventQueue::Instance().Push(EventConversationStateUpdated{peer_id, state});
       } else if (state.has_older_messages) {
         state.has_older_messages = false;
-        if (observer) {
-          observer->OnHistoryUpdated(state);
-        }
+        EventQueue::Instance().Push(EventConversationStateUpdated{peer_id, state});
       }
     }
 
@@ -264,9 +223,7 @@ class ConversationViewModel {
         state.has_older_messages = (chat_pages_loaded * kPageSize) < page.total_messages;
       }
 
-      if (observer) {
-        observer->OnHistoryUpdated(state);
-      }
+      EventQueue::Instance().Push(EventConversationStateUpdated{peer_id, state});
     }
 
     void LoadFullMessage(uint64_t message_id) {
@@ -286,8 +243,8 @@ class ConversationViewModel {
           }
         }
       }
-      if (updated && observer) {
-        observer->OnHistoryUpdated(state);
+      if (updated) {
+        EventQueue::Instance().Push(EventConversationStateUpdated{peer_id, state});
       }
     }
 
@@ -310,17 +267,13 @@ class ConversationViewModel {
            .is_truncated = false,
            .data = messaging::MessageEntry{message}}
       );
-      if (observer) {
-        observer->OnHistoryUpdated(state);
-      }
+      EventQueue::Instance().Push(EventConversationStateUpdated{peer_id, state});
     }
 
     void OnMessageReceived(ContactID const&, messaging::HistoryEntryRecord const& message) {
       std::lock_guard<std::mutex> const lock(mutex);
       state.history.push_back(message);
-      if (observer) {
-        observer->OnHistoryUpdated(state);
-      }
+      EventQueue::Instance().Push(EventConversationStateUpdated{peer_id, state});
     }
 
     void OnMessageStatusChanged(ContactID const&, uint64_t const message_id, messaging::MessageStatus const status) {
@@ -329,7 +282,7 @@ class ConversationViewModel {
       // If status is None (0), it means the message was dismissed/deleted. Remove it from the list.
       if (status == messaging::MessageStatus::none) {
         std::erase_if(state.history, [message_id](auto const& e) { return e.id == message_id; });
-        if (observer) observer->OnHistoryUpdated(state);
+        EventQueue::Instance().Push(EventConversationStateUpdated{peer_id, state});
         return;
       }
 
@@ -343,9 +296,7 @@ class ConversationViewModel {
           break;
         }
       }
-      if (changed && observer) {
-        observer->OnHistoryUpdated(state);
-      }
+      if (changed) EventQueue::Instance().Push(EventConversationStateUpdated{peer_id, state});
     }
 
     void OnMessageUpdated(uint64_t const message_id) {
@@ -372,7 +323,7 @@ class ConversationViewModel {
           break;
         }
       }
-      if (observer) observer->OnHistoryUpdated(state);
+      EventQueue::Instance().Push(EventConversationStateUpdated{peer_id, state});
     }
 
     void OnAttachmentDownloaded(std::string const& attachment_id) {
@@ -392,9 +343,7 @@ class ConversationViewModel {
         }
       }
 
-      if (found && observer) {
-        observer->OnHistoryUpdated(state);
-      }
+      if (found) EventQueue::Instance().Push(EventConversationStateUpdated{peer_id, state});
     }
 
     void OnAttachmentStatusChanged(std::string const& attachment_id, messaging::AttachmentStatus status) {
@@ -414,8 +363,7 @@ class ConversationViewModel {
       }
 
       if (found) {
-        INVARIANT(observer);
-        observer->OnHistoryUpdated(state);
+        EventQueue::Instance().Push(EventConversationStateUpdated{peer_id, state});
 
         // If we found it, remove from pending updates just in case it was stuck there
         pending_attachment_updates.erase(attachment_id);
@@ -427,11 +375,7 @@ class ConversationViewModel {
     }
 
     void OnTransferProgress(std::string const& attachment_id, float const progress) const {
-      // Forward progress to observer directly
-      std::lock_guard<std::mutex> const lock(mutex);
-      if (observer) {
-        observer->OnTransferProgress(attachment_id, progress);
-      }
+      EventQueue::Instance().Push(EventTransferProgressUpdated{peer_id, attachment_id, progress});
     }
 
     void LoadInitialHistory(std::shared_ptr<Impl> const&, int const generation) {
@@ -456,9 +400,7 @@ class ConversationViewModel {
         }
       }
 
-      if (observer) {
-        observer->OnHistoryUpdated(state);
-      }
+      EventQueue::Instance().Push(EventConversationStateUpdated{peer_id, state});
     }
 
     void StartInitialLoad() {

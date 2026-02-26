@@ -18,7 +18,7 @@ class ConversationViewModelTest : public ViewModelTest {
     // Give time for AddContact thread to write to storage and generate system message
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-    vm_ = std::make_shared<ConversationViewModel>(peer1, client_, router_);
+    vm_ = std::make_shared<ConversationViewModel>(peer1, client_);
 
     // Give time for InitialLoad thread to complete
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -27,55 +27,55 @@ class ConversationViewModelTest : public ViewModelTest {
   std::shared_ptr<ConversationViewModel> vm_;
 };
 
-struct MockConversationObserver : public ConversationViewModel::Observer {
-  ConversationViewModel::State state;
+struct MockConversationObserver {
+  ConversationState state;
   bool updated = false;
   std::mutex mutex;
   std::map<std::string, float> progress_updates;
+  uint64_t sub1, sub2;
 
-  void OnHistoryUpdated(ConversationViewModel::State const& s) override {
-    std::lock_guard<std::mutex> const lock(mutex);
-    state = s;
-    updated = true;
+  MockConversationObserver(ContactID peer_id) {
+    sub1 = EventQueue::Instance().Subscribe<EventConversationStateUpdated>([this, peer_id](auto const& e) {
+      if (e.peer_id == peer_id) {
+        std::lock_guard<std::mutex> const lock(mutex);
+        state = e.state;
+        updated = true;
+      }
+    });
+    sub2 = EventQueue::Instance().Subscribe<EventTransferProgressUpdated>([this, peer_id](auto const& e) {
+      if (e.peer_id == peer_id) {
+        std::lock_guard<std::mutex> const lock(mutex);
+        progress_updates[e.attachment_id] = e.progress;
+      }
+    });
+  }
+  ~MockConversationObserver() {
+    EventQueue::Instance().Unsubscribe<EventConversationStateUpdated>(sub1);
+    EventQueue::Instance().Unsubscribe<EventTransferProgressUpdated>(sub2);
   }
 
-  void OnTransferProgress(std::string const& attachment_id, float progress) override {
-    std::lock_guard<std::mutex> const lock(mutex);
-    progress_updates[attachment_id] = progress;
-  }
-
-  auto GetState() -> ConversationViewModel::State {
+  auto GetState() -> ConversationState {
     std::lock_guard<std::mutex> const lock(mutex);
     return state;
   }
 
   auto GetProgress(std::string const& id) -> float {
     std::lock_guard<std::mutex> const lock(mutex);
-    if (progress_updates.count(id)) return progress_updates[id];
+    if (progress_updates.contains(id)) {
+      return progress_updates[id];
+    }
     return -1.0f;
   }
 };
 
 TEST_F(ConversationViewModelTest, InitialState) {
-  auto observer = std::make_shared<MockConversationObserver>();
-  vm_->SetObserver(observer);
-
-  // Even if empty, SetObserver triggers an update.
-  WaitFor([&] { return observer->updated; });
-
-  auto state = observer->GetState();
+  auto state = vm_->GetState();
   EXPECT_EQ(state.peer_id, peer1);
 }
 
 TEST_F(ConversationViewModelTest, SendMessage) {
-  auto observer = std::make_shared<MockConversationObserver>();
-  vm_->SetObserver(observer);
+  auto observer = std::make_shared<MockConversationObserver>(peer1);
   WaitFor([&] { return observer->updated; });
-
-  {
-    std::lock_guard<std::mutex> const lock(observer->mutex);
-    observer->updated = false;
-  }
 
   vm_->SendText("Hello World");
 
@@ -108,8 +108,7 @@ TEST_F(ConversationViewModelTest, SendMessage) {
 }
 
 TEST_F(ConversationViewModelTest, ReceiveMessage) {
-  auto observer = std::make_shared<MockConversationObserver>();
-  vm_->SetObserver(observer);
+  auto observer = std::make_shared<MockConversationObserver>(peer1);
   WaitFor([&] { return observer->updated; });
 
   // Simulate receiving a message via the router/client logic.
@@ -122,8 +121,8 @@ TEST_F(ConversationViewModelTest, ReceiveMessage) {
        .peer_id = peer1}
   );
 
-  // Push event to router queue (simulating what Client would do)
-  router_->Queue().Push(EventChatMessageReceived{peer1, entry});
+  // Push event to queue (simulating what Client would do)
+  EventQueue::Instance().Push(EventChatMessageReceived{peer1, entry});
 
   WaitFor([&] {
     auto s = observer->GetState();
@@ -152,9 +151,10 @@ TEST_F(ConversationViewModelTest, ReceiveMessage) {
 }
 
 TEST_F(ConversationViewModelTest, MessageStatusUpdate) {
+  auto observer = std::make_shared<MockConversationObserver>(peer1);
+  WaitFor([&] { return observer->updated; });
+
   vm_->SendText("Status Test");
-  auto observer = std::make_shared<MockConversationObserver>();
-  vm_->SetObserver(observer);
 
   // Wait until the message appears in history
   uint64_t msg_id = 0;
@@ -171,7 +171,7 @@ TEST_F(ConversationViewModelTest, MessageStatusUpdate) {
   });
 
   // Simulate status update event
-  router_->Queue().Push(EventMessageStatusChanged{peer1, msg_id, messaging::MessageStatus::delivered});
+  EventQueue::Instance().Push(EventMessageStatusChanged{peer1, msg_id, messaging::MessageStatus::delivered});
 
   WaitFor([&] {
     auto s = observer->GetState();
@@ -183,7 +183,7 @@ TEST_F(ConversationViewModelTest, MessageStatusUpdate) {
     return false;
   });
 
-  auto state = observer->GetState();
+  auto const state = observer->GetState();
   bool found = false;
   for (auto const& msg : state.history) {
     if (msg.id == msg_id) {
@@ -196,28 +196,28 @@ TEST_F(ConversationViewModelTest, MessageStatusUpdate) {
 }
 
 TEST_F(ConversationViewModelTest, TransferProgressUpdates) {
-  auto observer = std::make_shared<MockConversationObserver>();
-  vm_->SetObserver(observer);
+  auto observer = std::make_shared<MockConversationObserver>(peer1);
+  WaitFor([&] { return observer->updated; });
 
   std::string att_id = "test-att-id";
 
   // Simulate progress events
-  router_->Queue().Push(EventTransferProgress{peer1, att_id, 0.1f});
+  EventQueue::Instance().Push(EventTransferProgress{peer1, att_id, 0.1f});
   WaitFor([&] { return observer->GetProgress(att_id) >= 0.1f; });
   EXPECT_NEAR(observer->GetProgress(att_id), 0.1f, 0.001f);
 
-  router_->Queue().Push(EventTransferProgress{peer1, att_id, 0.5f});
+  EventQueue::Instance().Push(EventTransferProgress{peer1, att_id, 0.5f});
   WaitFor([&] { return observer->GetProgress(att_id) >= 0.5f; });
   EXPECT_NEAR(observer->GetProgress(att_id), 0.5f, 0.001f);
 
-  router_->Queue().Push(EventTransferProgress{peer1, att_id, 1.0f});
+  EventQueue::Instance().Push(EventTransferProgress{peer1, att_id, 1.0f});
   WaitFor([&] { return observer->GetProgress(att_id) >= 1.0f; });
   EXPECT_NEAR(observer->GetProgress(att_id), 1.0f, 0.001f);
 }
 
 TEST_F(ConversationViewModelTest, CancelTransferPropagates) {
-  auto observer = std::make_shared<MockConversationObserver>();
-  vm_->SetObserver(observer);
+  auto observer = std::make_shared<MockConversationObserver>(peer1);
+  WaitFor([&] { return observer->updated; });
 
   // Setup message with attachment
   messaging::Attachment att;
@@ -231,7 +231,7 @@ TEST_F(ConversationViewModelTest, CancelTransferPropagates) {
   auto entry = mock_storage_->AddHistoryEntry({.data = msg_data, .peer_id = peer1});
 
   // Inject into VM (simulate load or receive)
-  router_->Queue().Push(EventChatMessageReceived{peer1, entry});
+  EventQueue::Instance().Push(EventChatMessageReceived{peer1, entry});
   WaitFor([&] { return !observer->GetState().history.empty(); });
 
   entry.direction = messaging::MessageDirection::received;  // Force download scenario
@@ -257,7 +257,7 @@ TEST_F(ConversationViewModelTest, CancelTransferPropagates) {
 
   // Check transport log to confirm PAUSE message sent (Binary 0x04)
   bool pause_sent = false;
-  for (auto const& msg : mock_transport_->CallLog()->sent_binary_messages | std::views::values) {
+  for (auto const& msg : mock_data_transport_->CallLog()->sent_binary_messages | std::views::values) {
     if (msg.size() >= 3 && msg[0] == std::byte{0xFE} && msg[1] == std::byte{0x04}) {  // 0x04 = PAUSE
       if (auto const id_len = static_cast<uint8_t>(msg[2]); msg.size() >= 3 + id_len) {
         std::string id(id_len, '\0');
@@ -272,15 +272,15 @@ TEST_F(ConversationViewModelTest, CancelTransferPropagates) {
 }
 
 TEST_F(ConversationViewModelTest, ResumeTransferPropagates) {
-  auto const observer = std::make_shared<MockConversationObserver>();
-  vm_->SetObserver(observer);
+  auto const observer = std::make_shared<MockConversationObserver>(peer1);
+  WaitFor([&] { return observer->updated; });
 
   // If connection is not open, it might be queued.
   // Connect and simulate data channel open to ensure sending
   client_->Connect(peer1);
   std::this_thread::sleep_for(std::chrono::milliseconds(50));
   // Simulate DC open
-  mock_transport_->delegate->OnDataChannelOpen(peer1);
+  mock_data_transport_->delegate->OnDataChannelOpen(peer1);
   std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
   // Resume download (is_upload=false)
@@ -288,7 +288,7 @@ TEST_F(ConversationViewModelTest, ResumeTransferPropagates) {
   std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
   bool req_sent = false;
-  for (auto const& msg : mock_transport_->CallLog()->sent_binary_messages | std::views::values) {
+  for (auto const& msg : mock_data_transport_->CallLog()->sent_binary_messages | std::views::values) {
     // Check if it's a binary Resume packet (Magic 0xFE, Type 0x05)
     if (msg.size() >= 3 && msg[0] == std::byte{0xFE} && msg[1] == std::byte{0x05}) {
       if (auto const id_len = static_cast<uint8_t>(msg[2]); msg.size() >= 3 + id_len) {
@@ -304,8 +304,8 @@ TEST_F(ConversationViewModelTest, ResumeTransferPropagates) {
 }
 
 TEST_F(ConversationViewModelTest, SendSmallAttachment_UpdatesStatusSynchronously) {
-  auto const observer = std::make_shared<MockConversationObserver>();
-  vm_->SetObserver(observer);
+  auto const observer = std::make_shared<MockConversationObserver>(peer1);
+  WaitFor([&] { return observer->updated; });
 
   // Establish connection so upload starts immediately
   client_->Connect(peer1);
@@ -313,10 +313,10 @@ TEST_F(ConversationViewModelTest, SendSmallAttachment_UpdatesStatusSynchronously
   std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
   // Simulate Data Channel Open to enable sending
-  mock_transport_->delegate->OnDataChannelOpen(peer1);
+  mock_data_transport_->delegate->OnDataChannelOpen(peer1);
   std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-  auto const peer = mock_transport_->GetPeer(peer1);
+  auto const peer = mock_data_transport_->GetPeer(peer1);
   ASSERT_TRUE(peer);
   eillance::crypto::SessionCipher const other;
   peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
@@ -361,7 +361,7 @@ TEST_F(ConversationViewModelTest, SendSmallAttachment_UpdatesStatusSynchronously
 }
 
 TEST_F(ConversationViewModelTest, LoadUpToMessage) {
-  auto observer = std::make_shared<MockConversationObserver>();
+  auto observer = std::make_shared<MockConversationObserver>(peer1);
 
   // Create 150 messages in mock storage
   uint64_t target_id = 0;
@@ -380,8 +380,7 @@ TEST_F(ConversationViewModelTest, LoadUpToMessage) {
   }
 
   // Re-initialize VM to simulate fresh entry
-  auto vm = std::make_shared<ConversationViewModel>(peer1, client_, router_);
-  vm->SetObserver(observer);
+  auto vm = std::make_shared<ConversationViewModel>(peer1, client_);
   WaitFor([&] { return observer->GetState().history.size() > 0; });
 
   // Initially, it should only load 50 messages
@@ -413,7 +412,7 @@ TEST_F(ConversationViewModelTest, LoadUpToMessage) {
 }
 
 TEST_F(ConversationViewModelTest, LoadUpToMessage_OverridesInitialLoad) {
-  auto observer = std::make_shared<MockConversationObserver>();
+  auto observer = std::make_shared<MockConversationObserver>(peer1);
 
   // Setup: Create messages
   uint64_t target_id = 0;
@@ -430,8 +429,7 @@ TEST_F(ConversationViewModelTest, LoadUpToMessage_OverridesInitialLoad) {
   }
 
   // Re-create VM. This triggers StartInitialLoad in a thread.
-  auto vm = std::make_shared<ConversationViewModel>(peer1, client_, router_);
-  vm->SetObserver(observer);
+  auto vm = std::make_shared<ConversationViewModel>(peer1, client_);
 
   // Immediately request loading specific message.
   // This should increment load_generation, causing the StartInitialLoad to abort
@@ -459,8 +457,8 @@ TEST_F(ConversationViewModelTest, LoadUpToMessage_OverridesInitialLoad) {
 }
 
 TEST_F(ConversationViewModelTest, EditMessagePropagates) {
-  auto observer = std::make_shared<MockConversationObserver>();
-  vm_->SetObserver(observer);
+  auto observer = std::make_shared<MockConversationObserver>(peer1);
+  WaitFor([&] { return observer->updated; });
 
   vm_->SendText("Typo");
   WaitFor([&] { return !observer->GetState().history.empty(); });
@@ -494,8 +492,8 @@ TEST_F(ConversationViewModelTest, EditMessagePropagates) {
 }
 
 TEST_F(ConversationViewModelTest, DeleteMessagePropagates) {
-  auto observer = std::make_shared<MockConversationObserver>();
-  vm_->SetObserver(observer);
+  auto observer = std::make_shared<MockConversationObserver>(peer1);
+  WaitFor([&] { return observer->updated; });
 
   vm_->SendText("Mistake");
   WaitFor([&] { return !observer->GetState().history.empty(); });
@@ -513,8 +511,8 @@ TEST_F(ConversationViewModelTest, DeleteMessagePropagates) {
 }
 
 TEST_F(ConversationViewModelTest, ReactMessagePropagates) {
-  auto observer = std::make_shared<MockConversationObserver>();
-  vm_->SetObserver(observer);
+  auto observer = std::make_shared<MockConversationObserver>(peer1);
+  WaitFor([&] { return observer->updated; });
 
   vm_->SendText("React me");
   WaitFor([&] { return !observer->GetState().history.empty(); });

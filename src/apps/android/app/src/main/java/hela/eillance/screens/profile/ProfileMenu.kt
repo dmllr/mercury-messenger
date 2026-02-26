@@ -20,7 +20,6 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import hela.eillance.theme.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -32,6 +31,7 @@ import hela.eillance.camera.BuildConfig
 import hela.eillance.camera.R
 import hela.eillance.components.UserAvatar
 import hela.eillance.ndkio.MyProfileInfo
+import hela.eillance.theme.ListItem
 
 @Composable
 fun ProfileMenu(

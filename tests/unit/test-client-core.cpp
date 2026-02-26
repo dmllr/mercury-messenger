@@ -5,7 +5,6 @@
 #include <nlohmann/json.hpp>
 
 #include "eillance/client/client.hpp"
-#include "eillance/view_model/client_event_router.hpp"
 #include "mock_data_transport.hpp"
 #include "mock_media_transport.hpp"
 #include "mock_persistent_storage.hpp"
@@ -31,9 +30,6 @@ class ClientCoreTest : public ::testing::Test {
 
     client_ = std::make_shared<Client>(storage_, transport_, media_transport);
 
-    // Initialize Event Router to attach callbacks and satisfy invariants
-    router_ = std::make_shared<view_model::ClientEventRouter>(client_);
-
     // Setup Identity
     (void)client_->GetAccountService()->GenerateNewIdentity();
     my_id_ = client_->GetId();
@@ -43,10 +39,8 @@ class ClientCoreTest : public ::testing::Test {
   }
 
   void TearDown() override {
-    if (router_) router_->DetachFromClient();
     client_->Terminate();
     client_.reset();
-    router_.reset();
   }
 
   // Helper to process pending tasks on the client's internal queue
@@ -61,7 +55,6 @@ class ClientCoreTest : public ::testing::Test {
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<transport::DataTransport> transport_;
   std::shared_ptr<Client> client_;
-  std::shared_ptr<view_model::ClientEventRouter> router_;
   ContactID my_id_;
 
   ContactID const peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
@@ -108,13 +101,12 @@ TEST_F(ClientCoreTest, IncomingKeyExchangeTriggersReply) {
 
   // Simulate receiving this message on data channel
   std::string msg_str = key_msg.dump();
-  ASSERT_TRUE(peer->on_data_channel_message) << "Data channel handler not set!";
 
   // Convert to bytes for new interface
   std::vector<std::byte> msg_bytes(msg_str.size());
   std::transform(msg_str.begin(), msg_str.end(), msg_bytes.begin(), [](char c) { return static_cast<std::byte>(c); });
 
-  peer->on_data_channel_message(msg_bytes);
+  eillance::EventQueue::Instance().Push(eillance::EventDataChannelMessage{peer1, msg_bytes});
 
   FlushClientQueue();
 

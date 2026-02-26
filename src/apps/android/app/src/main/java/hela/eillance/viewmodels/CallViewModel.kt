@@ -3,14 +3,17 @@ package hela.eillance.viewmodels
 import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
 import hela.eillance.MessengerService
+import hela.eillance.events.NativeEventBus
 import hela.eillance.ndkio.CallState
 import hela.eillance.ndkio.HistoryEntryKind
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import org.webrtc.VideoSink
 
-class CallViewModel(application: Application) : AndroidViewModel(application), NativeCallObserver {
+class CallViewModel(application: Application) : AndroidViewModel(application) {
 
   private var nativePtr: Long = 0
   private val _callState = MutableStateFlow(CallState())
@@ -27,9 +30,12 @@ class CallViewModel(application: Application) : AndroidViewModel(application), N
     get() = MessengerService.instance
 
   init {
-    nativePtr = nativeCreate(this)
+    nativePtr = nativeCreate()
     if (nativePtr == 0L) {
       Log.e("CallViewModel", "Failed to create native CallViewModel.")
+    }
+    viewModelScope.launch {
+      NativeEventBus.callState.collect { _callState.value = it }
     }
   }
 
@@ -39,10 +45,6 @@ class CallViewModel(application: Application) : AndroidViewModel(application), N
       nativePtr = 0
     }
     super.onCleared()
-  }
-
-  override fun onCallStateChanged(state: CallState) {
-    _callState.value = state
   }
 
   fun startVoiceCall(peerId: String? = null) {
@@ -129,7 +131,7 @@ class CallViewModel(application: Application) : AndroidViewModel(application), N
     if (nativePtr != 0L) nativeHangup(nativePtr)
   }
 
-  private external fun nativeCreate(observer: NativeCallObserver): Long
+  private external fun nativeCreate(): Long
   private external fun nativeDestroy(ptr: Long)
   private external fun nativeStartVoice(ptr: Long, peerId: String)
   private external fun nativeStartVideo(ptr: Long, peerId: String)

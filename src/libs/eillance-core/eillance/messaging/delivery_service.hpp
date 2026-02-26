@@ -11,29 +11,27 @@
 #include "eillance/identity/contact_id.hpp"
 #include "eillance/identity/contact_manager.hpp"
 #include "eillance/logging/logging.hpp"
+#include "eillance/messaging/types.hpp"
 #include "eillance/storage/persistent_storage.hpp"
+#include "eillance/transport/data_transport.hpp"
 #include "eillance/utils/dispatch_queue.hpp"
+#include "eillance/utils/event_queue.hpp"
 #include "eillance/utils/time.hpp"
 
 namespace eillance::messaging {
 
 class MessageDeliveryService {
-  using ConnectionRequestHandler = std::function<void(ContactID const&)>;
-  using HasWorkCallback = std::function<bool(ContactID const&)>;
-  using IsConnectedCallback = std::function<bool(ContactID const&)>;
-
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<identity::ContactManager> contactManager_;
-  ConnectionRequestHandler connectionHandler_;
-  HasWorkCallback hasWorkCallback_;
-  IsConnectedCallback isConnectedCallback_;
-  DispatchQueue dispatchQueue_{"DeliveryService", 1};
+  std::shared_ptr<transport::DataTransport> transport_;
   std::atomic<bool> isRunning_{false};
 
   // Track peers for which we are actively trying to connect to avoid duplicate requests.
   std::unordered_set<ContactID> pendingConnections_{};
   std::unordered_map<ContactID, int> retryDelaysS_{};
   std::recursive_mutex mutex_;
+
+  DispatchQueue dispatchQueue_{"DeliveryService", 1};
 
   static constexpr int initialRetryDelayS = 5;
   static constexpr int maxRetryDelayS = 60;
@@ -44,15 +42,11 @@ class MessageDeliveryService {
   MessageDeliveryService(
       std::shared_ptr<storage::PersistentStorage> storage,
       std::shared_ptr<identity::ContactManager> contacts,
-      ConnectionRequestHandler handler,
-      HasWorkCallback has_work_callback = nullptr,
-      IsConnectedCallback is_connected_callback = nullptr
+      std::shared_ptr<transport::DataTransport> transport
   )
       : storage_(std::move(storage)),
         contactManager_(std::move(contacts)),
-        connectionHandler_(std::move(handler)),
-        hasWorkCallback_(std::move(has_work_callback)),
-        isConnectedCallback_(std::move(is_connected_callback)) {
+        transport_(std::move(transport)) {
   }
 
   void Start() {
@@ -85,19 +79,23 @@ class MessageDeliveryService {
     }
 
     bool has_work = false;
-    if (hasWorkCallback_) {
-      has_work = hasWorkCallback_(peer_id);
+    if (!storage_->GetPendingActions(peer_id).empty()) {
+      has_work = true;
     } else {
-      // Fallback: Check pending actions directly
-      has_work = !storage_->GetPendingActions(peer_id).empty();
+      auto const attachments = storage_->GetPendingAttachments(peer_id);
+      has_work = std::ranges::any_of(attachments, [](auto const& att) {
+        return att.status == AttachmentStatus::pending || att.status == AttachmentStatus::transferring;
+      });
     }
 
     // Check if there are more messages to send.
     if (has_work) {
-      // If we are already connected, we assume the transport is healthy and processing
-      // the queue (e.g., waiting for ACKs). We do NOT schedule a retry loop here,
-      // as that causes duplicate sends and tight loops.
-      if (isConnectedCallback_ && isConnectedCallback_(peer_id)) {
+      bool is_connected = false;
+      if (auto p = transport_->GetPeer(peer_id)) {
+        is_connected = p->data_channel_is_open.load();
+      }
+
+      if (is_connected) {
         retryDelaysS_.erase(peer_id);
         return;
       }
@@ -130,10 +128,13 @@ class MessageDeliveryService {
       }
 
       bool has_work = false;
-      if (hasWorkCallback_) {
-        has_work = hasWorkCallback_(peer_id);
+      if (!storage_->GetPendingActions(peer_id).empty()) {
+        has_work = true;
       } else {
-        has_work = !storage_->GetPendingActions(peer_id).empty();
+        auto const attachments = storage_->GetPendingAttachments(peer_id);
+        has_work = std::ranges::any_of(attachments, [](auto const& att) {
+          return att.status == AttachmentStatus::pending || att.status == AttachmentStatus::transferring;
+        });
       }
 
       // Prevent connection attempts when there's nothing to do.
@@ -144,8 +145,8 @@ class MessageDeliveryService {
       LGI << "Delivery requested for " << peer_id << ". Requesting connection.";
       pendingConnections_.insert(peer_id);
     }
-    // Perform the callback outside the lock to prevent deadlocks
-    connectionHandler_(peer_id);
+
+    EventQueue::Instance().Push(EventConnectionRequested{peer_id});
   }
 
  private:

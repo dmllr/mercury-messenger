@@ -16,6 +16,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import hela.eillance.events.NativeEventBus
 import hela.eillance.ndkio.Attachment
 import hela.eillance.ndkio.AttachmentRequest
 import hela.eillance.ndkio.AttachmentStatus
@@ -48,7 +49,7 @@ data class DraftAttachment(
 class ConversationViewModel(
   application: Application,
   private val peerId: String
-) : AndroidViewModel(application), NativeConversationObserver {
+) : AndroidViewModel(application) {
 
   private var nativePtr: Long = 0
   private val _interactionHistoryPage = MutableStateFlow(HistoryPage())
@@ -98,7 +99,22 @@ class ConversationViewModel(
   }
 
   init {
-    nativePtr = nativeCreate(peerId, this)
+    nativePtr = nativeCreate(peerId)
+
+    viewModelScope.launch {
+      NativeEventBus.historyUpdates.collect { (pid, page) ->
+        if (pid == peerId) {
+          onHistoryUpdated(page)
+        }
+      }
+    }
+    viewModelScope.launch {
+      NativeEventBus.transferProgress.collect { (pid, attId, progress) ->
+        if (pid == peerId) {
+          onTransferProgress(attId, progress)
+        }
+      }
+    }
   }
 
   override fun onCleared() {
@@ -109,7 +125,7 @@ class ConversationViewModel(
     super.onCleared()
   }
 
-  override fun onHistoryUpdated(page: HistoryPage) {
+  private fun onHistoryUpdated(page: HistoryPage) {
     _interactionHistoryPage.value = page
 
     val currentProgress = _transferProgress.value.toMutableMap()
@@ -131,7 +147,7 @@ class ConversationViewModel(
     }
   }
 
-  override fun onTransferProgress(attachmentId: String, progress: Float) {
+  private fun onTransferProgress(attachmentId: String, progress: Float) {
     val currentMap = _transferProgress.value.toMutableMap()
     if (progress >= 1.0f) {
       currentMap.remove(attachmentId)
@@ -459,7 +475,7 @@ class ConversationViewModel(
     }
   }
 
-  private external fun nativeCreate(peerId: String, observer: NativeConversationObserver): Long
+  private external fun nativeCreate(peerId: String): Long
   private external fun nativeDestroy(ptr: Long)
   private external fun nativeSendMessage(ptr: Long, message: String)
   private external fun nativeSendMessageWithAttachments(

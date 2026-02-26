@@ -270,7 +270,8 @@ fun MessageInputArea(
               modifier = Modifier.size(36.dp)
             ) {
               Box(
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier
+                  .fillMaxSize()
                   .background(if (canSend) MaterialTheme.extendedColors.success else Color.Transparent, CircleShape),
                 contentAlignment = Alignment.Center
               ) {

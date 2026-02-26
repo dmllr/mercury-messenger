@@ -65,25 +65,18 @@ class SignalingNegotiationTest : public ::testing::Test {
 
     // Services
     account_service_ = std::make_shared<services::AccountService>(storage_, transport_);
-    account_service_->SetOnMyProfileUpdatedCallback([]() {});
     std::ignore = account_service_->GenerateNewIdentity();
     my_id_ = account_service_->GetId();
 
     file_transfer_service_ = std::make_shared<services::FileTransferService>(storage_, transport_);
-
-    auto conn_handler = [](ContactID const&) {};
 
     messaging_service_ = std::make_shared<services::MessagingService>(
         storage_,
         transport_,
         contact_manager_,
         account_service_,
-        file_transfer_service_,
-        conn_handler
+        file_transfer_service_
     );
-    // Dummy callbacks to avoid bad_function_call
-    messaging_service_->SetChatMessageReceivedCallback([](auto, auto) {});
-    messaging_service_->SetMessageStatusChangedCallback([](auto, auto, auto) {});
 
     media_call_service_ =
         std::make_shared<services::MediaCallService>(storage_, transport_, media_transport_, account_service_);
@@ -95,8 +88,7 @@ class SignalingNegotiationTest : public ::testing::Test {
         transport_,
         contact_manager_,
         account_service_,
-        messaging_service_,
-        conn_handler
+        messaging_service_
     );
 
     contact_service_ = std::make_shared<services::ContactService>(
@@ -104,8 +96,7 @@ class SignalingNegotiationTest : public ::testing::Test {
         transport_,
         contact_manager_,
         account_service_,
-        profile_service_,
-        conn_handler
+        profile_service_
     );
 
     // Target: Internal Messaging Service

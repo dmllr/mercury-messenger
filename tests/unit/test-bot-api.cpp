@@ -52,20 +52,6 @@ class BotApiTest : public ::testing::Test {
     client_->SetVideoCapture(std::make_unique<MockCapture>());
     client_->SetAudioCapture(std::make_unique<MockCapture>());
 
-    client_->GetAccountService()->SetOnMyProfileUpdatedCallback([]() {});
-    client_->GetContactService()->SetContactRequestCallback([](auto const&) {});
-    client_->GetContactService()->SetContactStatusChangedCallback([](auto const&, auto) {});
-    client_->GetContactService()->SetContactRemovedCallback([](auto const&) {});
-    client_->GetProfileService()->SetContactProfileUpdatedCallback([](auto const&) {});
-    client_->GetMediaCallService()->SetIncomingCallCallback([](auto const&, auto) {});
-    client_->GetMediaCallService()->SetCallRingingCallback([](auto const&) {});
-    client_->GetMediaCallService()->SetCallAcceptedCallback([](auto const&) {});
-    client_->GetMediaCallService()->SetCallTerminatedCallback([](auto const&) {});
-    client_->GetMediaCallService()->SetFrameReceivedCallback([](auto const&) {});
-    client_->GetMessagingService()->SetChatMessageReceivedCallback([](auto const&, auto const&) {});
-    client_->GetMessagingService()->SetMessageStatusChangedCallback([](auto const&, auto, auto) {});
-    client_->SetStatusCallback([](auto const&, auto, auto) {});
-
     (void)client_->GetAccountService()->GenerateNewIdentity();
 
     client_->Start();
@@ -167,13 +153,11 @@ TEST_F(BotApiTest, MessageHandling) {
       {"payload", std::vector<std::byte>(encrypted.begin(), encrypted.end())}
   };
 
-  ASSERT_TRUE(peer->on_data_channel_message);
-
   std::string msg_str = chat_msg.dump();
   std::vector<std::byte> msg_bytes(msg_str.size());
   std::ranges::transform(msg_str, msg_bytes.begin(), [](char c) -> std::byte { return static_cast<std::byte>(c); });
 
-  peer->on_data_channel_message(msg_bytes);
+  eillance::EventQueue::Instance().Push(eillance::EventDataChannelMessage{peer1, msg_bytes});
 
   FlushClientQueue();
 

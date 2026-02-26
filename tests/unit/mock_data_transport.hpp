@@ -24,14 +24,10 @@ class MockDataTransport : public DataTransport::Interface {
   }
 
   TransportDelegate* delegate = nullptr;
-  DataTransport::StatusCallbackFunction status_callback;
   std::map<ContactID, std::shared_ptr<Peer>> peers;
 
   void SetDelegate(TransportDelegate* d) override {
     delegate = d;
-  }
-  void SetStatusCallback(DataTransport::StatusCallbackFunction const& cb) override {
-    status_callback = cb;
   }
   void SetName(std::string const&) {
   }  // No-op/Removed from interface but kept for mock compatibility if needed

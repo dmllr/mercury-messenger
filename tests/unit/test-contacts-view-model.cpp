@@ -9,21 +9,27 @@ class ContactsViewModelTest : public ViewModelTest {
  protected:
   void SetUp() override {
     ViewModelTest::SetUp();
-    vm_ = std::make_shared<ContactsViewModel>(client_, router_);
+    vm_ = std::make_shared<ContactsViewModel>(client_);
   }
 
   std::shared_ptr<ContactsViewModel> vm_;
 };
 
-struct MockContactsObserver : public ContactsViewModel::Observer {
+struct MockContactsObserver {
   std::vector<ViewContact> contacts;
   bool updated = false;
   std::mutex mutex;
+  uint64_t sub_id;
 
-  void OnContactsUpdated(std::vector<ViewContact> const& c) override {
-    std::lock_guard<std::mutex> const lock(mutex);
-    contacts = c;
-    updated = true;
+  MockContactsObserver() {
+    sub_id = EventQueue::Instance().Subscribe<EventContactsStateUpdated>([this](auto const& e) {
+      std::lock_guard<std::mutex> const lock(mutex);
+      contacts = e.contacts;
+      updated = true;
+    });
+  }
+  ~MockContactsObserver() {
+    EventQueue::Instance().Unsubscribe<EventContactsStateUpdated>(sub_id);
   }
 
   auto GetContacts() -> std::vector<ViewContact> {
@@ -34,15 +40,15 @@ struct MockContactsObserver : public ContactsViewModel::Observer {
 
 TEST_F(ContactsViewModelTest, InitialLoad) {
   auto observer = std::make_shared<MockContactsObserver>();
-  vm_->SetObserver(observer);
 
+  WaitFor([&] { return observer->updated; });
   // Initially empty
   EXPECT_TRUE(observer->GetContacts().empty());
 }
 
 TEST_F(ContactsViewModelTest, AddContact) {
-  auto observer = std::make_shared<MockContactsObserver>();
-  vm_->SetObserver(observer);
+  auto const observer = std::make_shared<MockContactsObserver>();
+  WaitFor([&]() -> bool { return observer->updated; });
 
   vm_->AddContact(peer1, std::nullopt);
 
@@ -65,10 +71,9 @@ TEST_F(ContactsViewModelTest, AddContact) {
 TEST_F(ContactsViewModelTest, ContactConnectionState) {
   vm_->AddContact(peer1, std::nullopt);
   // Simulate Transport adding the peer
-  mock_transport_->AddPeer(peer1, std::make_shared<transport::Peer>(peer1));
+  mock_data_transport_->AddPeer(peer1, std::make_shared<transport::Peer>(peer1));
 
-  auto observer = std::make_shared<MockContactsObserver>();
-  vm_->SetObserver(observer);
+  auto const observer = std::make_shared<MockContactsObserver>();
 
   // Wait for add to propagate
   WaitFor([&] { return !observer->GetContacts().empty(); }, std::chrono::milliseconds(2000));
@@ -80,13 +85,11 @@ TEST_F(ContactsViewModelTest, ContactConnectionState) {
   }
 
   // Simulate connection state change via MockTransport
-  if (mock_transport_->status_callback) {
-    mock_transport_->status_callback(
-        peer1,
-        EventSource::peerConnectionState,
-        static_cast<int>(transport::PeerConnectionState::connected)
-    );
-  }
+  EventQueue::Instance().Push(EventStatusChanged{
+      peer1,
+      EventSource::peerConnectionState,
+      static_cast<int>(transport::PeerConnectionState::connected)
+  });
 
   // Wait for update and specific state
   WaitFor(
@@ -105,7 +108,6 @@ TEST_F(ContactsViewModelTest, ContactConnectionState) {
 TEST_F(ContactsViewModelTest, BlockAndUnblock) {
   vm_->AddContact(peer1, std::nullopt);
   auto observer = std::make_shared<MockContactsObserver>();
-  vm_->SetObserver(observer);
 
   WaitFor([&] { return !observer->GetContacts().empty(); }, std::chrono::milliseconds(2000));
 

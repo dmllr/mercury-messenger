@@ -9,7 +9,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import hela.eillance.theme.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -22,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import hela.eillance.camera.R
 import hela.eillance.navigation.Route
+import hela.eillance.theme.ListItem
 
 private const val URL_IDENTITY =
   "https://mercury.eillance.com/articles/cryptographic-identity/embed/"

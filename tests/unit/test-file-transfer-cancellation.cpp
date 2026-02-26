@@ -45,22 +45,13 @@ class FileTransferCancellationTest : public ::testing::Test {
 
     file_transfer_service_ = std::make_shared<services::FileTransferService>(storage_, transport_);
 
-    auto conn_handler = [](ContactID const&) {};
     service_ = std::make_unique<services::MessagingService>(
         storage_,
         transport_,
         contact_manager_,
         account_service_,
-        file_transfer_service_,
-        conn_handler
+        file_transfer_service_
     );
-
-    // Satisfy invariants
-    service_->SetMessageStatusChangedCallback([](auto, auto, auto) {});
-    service_->SetChatMessageReceivedCallback([](auto, auto) {});
-    service_->SetAttachmentDownloadedCallback([](auto, auto) {});
-    service_->SetTransferProgressCallback([](auto, auto, auto) {});
-    service_->SetAttachmentStatusChangedCallback([](auto, auto, auto) {});
   }
 
   void TearDown() override {

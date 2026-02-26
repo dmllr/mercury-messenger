@@ -13,11 +13,8 @@ namespace eillance::transport {
 
 class MediaTransport {
  public:
-  using StatusCallbackFunction = std::function<void(ContactID const& peer_id, EventSource, int)>;
-
   struct Interface {
     virtual ~Interface() = default;
-    virtual void SetStatusCallback(StatusCallbackFunction const& callback) = 0;
     virtual void SetIceServers(std::string const& json_config) = 0;
 
     // Actions
@@ -29,10 +26,8 @@ class MediaTransport {
     virtual void SetRemoteDescription(ContactID const& peer_id, std::string const& sdp, std::string const& type) = 0;
 
     // Media
-    virtual auto AddVideo(ContactID const& peer_id, std::function<void(void)> const& on_open)
-        -> std::shared_ptr<ITrack> = 0;
-    virtual auto AddAudio(ContactID const& peer_id, std::function<void(void)> const& on_open)
-        -> std::shared_ptr<ITrack> = 0;
+    virtual auto AddVideo(ContactID const& peer_id) -> std::shared_ptr<ITrack> = 0;
+    virtual auto AddAudio(ContactID const& peer_id) -> std::shared_ptr<ITrack> = 0;
     virtual void AttachToPeer(ContactID const& peer_id, std::shared_ptr<Peer> const& peer) = 0;
   };
 
@@ -41,9 +36,6 @@ class MediaTransport {
       : self_(std::move(impl)) {
   }
 
-  void SetStatusCallback(StatusCallbackFunction const& callback) const {
-    self_->SetStatusCallback(callback);
-  }
   void SetIceServers(std::string const& json_config) const {
     self_->SetIceServers(json_config);
   }
@@ -65,11 +57,11 @@ class MediaTransport {
     self_->SetRemoteDescription(peer_id, sdp, type);
   }
 
-  auto AddVideo(ContactID const& peer_id, std::function<void(void)> const& on_open) const -> std::shared_ptr<ITrack> {
-    return self_->AddVideo(peer_id, on_open);
+  auto AddVideo(ContactID const& peer_id) const -> std::shared_ptr<ITrack> {
+    return self_->AddVideo(peer_id);
   }
-  auto AddAudio(ContactID const& peer_id, std::function<void(void)> const& on_open) const -> std::shared_ptr<ITrack> {
-    return self_->AddAudio(peer_id, on_open);
+  auto AddAudio(ContactID const& peer_id) const -> std::shared_ptr<ITrack> {
+    return self_->AddAudio(peer_id);
   }
   void AttachToPeer(ContactID const& peer_id, std::shared_ptr<Peer> const& peer) const {
     self_->AttachToPeer(peer_id, peer);

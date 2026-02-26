@@ -12,7 +12,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import hela.eillance.theme.ListItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -24,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import hela.eillance.camera.R
 import hela.eillance.ndkio.ContactStatus
+import hela.eillance.theme.ListItem
 import hela.eillance.viewmodels.ContactsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)

@@ -1,3 +1,5 @@
+#include <thread>
+
 #include <gtest/gtest.h>
 
 #include "eillance/services/contact_service.hpp"
@@ -20,12 +22,8 @@ class ProfileServiceTest : public ::testing::Test {
     transport_ = std::make_shared<transport::DataTransport>(std::move(mock_transport_impl_));
 
     account_service_ = std::make_unique<services::AccountService>(storage_, transport_);
-    account_service_->SetOnMyProfileUpdatedCallback([]() {});
     std::ignore = account_service_->GenerateNewIdentity();
     account_service_->UpdateMyProfile("Test User", "", "");
-
-    // Connection handler stub
-    auto conn_handler = [](ContactID const&) {};
 
     auto contact_manager = std::make_shared<identity::ContactManager>(storage_);
 
@@ -36,24 +34,16 @@ class ProfileServiceTest : public ::testing::Test {
         transport_,
         contact_manager,
         account_service_,
-        file_transfer_service_,
-        conn_handler
+        file_transfer_service_
     );
-
-    // Initialize dummy callbacks for MessagingService
-    messaging_service_->SetChatMessageReceivedCallback([](auto const&, auto const&) {});
-    messaging_service_->SetMessageStatusChangedCallback([](auto const&, auto, auto) {});
 
     profile_service_ = std::make_unique<services::ProfileService>(
         storage_,
         transport_,
         contact_manager,
         account_service_,
-        messaging_service_,
-        conn_handler
+        messaging_service_
     );
-
-    profile_service_->SetContactProfileUpdatedCallback([](auto const&) {});
   }
 
   void TearDown() override {
@@ -75,8 +65,8 @@ class ProfileServiceTest : public ::testing::Test {
 
 TEST_F(ProfileServiceTest, UpdateProfileTriggersSystemMessage) {
   bool update_cb_called = false;
-  profile_service_->SetContactProfileUpdatedCallback([&](auto const& id) {
-    if (id == peer1) {
+  auto sub = EventQueue::Instance().Subscribe<EventContactProfileUpdated>([&](auto const& e) {
+    if (e.peer_id == peer1) {
       update_cb_called = true;
     }
   });
@@ -86,6 +76,12 @@ TEST_F(ProfileServiceTest, UpdateProfileTriggersSystemMessage) {
 
   profile_service_->OnProfileUpdate(peer1, profile_data);
 
+  auto const start = std::chrono::steady_clock::now();
+  while (!update_cb_called && std::chrono::steady_clock::now() - start < std::chrono::seconds(1)) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+
+  EventQueue::Instance().Unsubscribe<EventContactProfileUpdated>(sub);
   EXPECT_TRUE(update_cb_called);
 
   // Verify system message (diff) was generated

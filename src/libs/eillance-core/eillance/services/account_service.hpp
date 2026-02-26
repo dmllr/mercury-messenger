@@ -7,9 +7,11 @@
 
 #include "eillance/backup/backup_manager.hpp"
 #include "eillance/client/settings_manager.hpp"
+#include "eillance/events/client_events.hpp"
 #include "eillance/identity/id_manager.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/transport/data_transport.hpp"
+#include "eillance/utils/event_queue.hpp"
 #include "eillance/utils/invariant.hpp"
 
 namespace eillance::services {
@@ -46,16 +48,14 @@ class AccountService {
   [[nodiscard]] auto GenerateNewIdentity() const -> std::string {
     auto mnemonic = id_manager_->GenerateNewIdentity();
     if (!mnemonic.empty()) {
-      INVARIANT(on_profile_updated_);
-      on_profile_updated_();
+      EventQueue::Instance().Push(EventMyProfileUpdated{});
     }
     return mnemonic;
   }
 
   [[nodiscard]] auto RestoreIdentity(std::string const& mnemonic) const -> bool {
     if (id_manager_->RestoreFromMnemonic(mnemonic)) {
-      INVARIANT(on_profile_updated_);
-      on_profile_updated_();
+      EventQueue::Instance().Push(EventMyProfileUpdated{});
       return true;
     }
     return false;
@@ -98,8 +98,7 @@ class AccountService {
         return false;
       }
 
-      INVARIANT(on_profile_updated_);
-      on_profile_updated_();
+      EventQueue::Instance().Push(EventMyProfileUpdated{});
       return true;
     }
     return false;
@@ -125,8 +124,7 @@ class AccountService {
       settings_manager_->SetMyPhotoBase64(*photo);
     }
 
-    INVARIANT(on_profile_updated_);
-    on_profile_updated_();
+    EventQueue::Instance().Push(EventMyProfileUpdated{});
   }
 
   // Updates the signaling URL in settings and triggers transport reconnect
@@ -141,12 +139,6 @@ class AccountService {
     return id_manager_->Sign(message);
   }
 
-  // Callbacks
-  using OnMyProfileUpdatedCallback = std::function<void()>;
-  void SetOnMyProfileUpdatedCallback(OnMyProfileUpdatedCallback callback) {
-    on_profile_updated_ = std::move(callback);
-  }
-
  private:
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<transport::DataTransport> transport_;
@@ -154,8 +146,6 @@ class AccountService {
   std::unique_ptr<identity::IdManager> id_manager_;
   std::unique_ptr<SettingsManager> settings_manager_;
   std::unique_ptr<backup::BackupManager> backup_manager_;
-
-  OnMyProfileUpdatedCallback on_profile_updated_;
 };
 
 }  // namespace eillance::services

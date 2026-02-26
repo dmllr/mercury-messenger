@@ -161,10 +161,7 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcDataTransport_
     std::vector<std::byte> msg_bytes(len);
     std::memcpy(msg_bytes.data(), message_str, len);
 
-    auto peer = transport->GetPeer(peer_id);
-    if (peer && peer->on_data_channel_message) {
-      peer->on_data_channel_message(msg_bytes);
-    }
+    eillance::EventQueue::Instance().Push(eillance::EventDataChannelMessage{peer_id, msg_bytes});
 
     env->ReleaseStringUTFChars(j_peer_id, peer_id_chars);
     env->ReleaseStringUTFChars(j_message, message_chars);
@@ -187,10 +184,7 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcDataTransport_
     std::vector<std::byte> buffer(len);
     env->GetByteArrayRegion(j_data, 0, len, reinterpret_cast<jbyte*>(buffer.data()));
 
-    auto peer = transport->GetPeer(peer_id);
-    if (peer && peer->on_data_channel_message) {
-      peer->on_data_channel_message(buffer);
-    }
+    eillance::EventQueue::Instance().Push(eillance::EventDataChannelMessage{peer_id, buffer});
 
     env->ReleaseStringUTFChars(j_peer_id, peer_id_chars);
   }

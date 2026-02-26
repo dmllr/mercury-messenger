@@ -23,16 +23,12 @@ class MockTrack : public ITrack {
 
 class MockMediaTransport : public MediaTransport::Interface {
   std::shared_ptr<MockCallLog> log_;
-  MediaTransport::StatusCallbackFunction status_callback;
 
  public:
   explicit MockMediaTransport(std::shared_ptr<MockCallLog> log)
       : log_(std::move(log)) {
   }
 
-  void SetStatusCallback(MediaTransport::StatusCallbackFunction const& cb) override {
-    status_callback = cb;
-  }
   void SetIceServers(std::string const&) override {
   }
 
@@ -51,10 +47,10 @@ class MockMediaTransport : public MediaTransport::Interface {
   void SetRemoteDescription(ContactID const&, std::string const&, std::string const&) override {
   }
 
-  auto AddVideo(ContactID const&, std::function<void(void)> const&) -> std::shared_ptr<ITrack> override {
+  auto AddVideo(ContactID const&) -> std::shared_ptr<ITrack> override {
     return std::make_shared<MockTrack>();
   }
-  auto AddAudio(ContactID const&, std::function<void(void)> const&) -> std::shared_ptr<ITrack> override {
+  auto AddAudio(ContactID const&) -> std::shared_ptr<ITrack> override {
     return std::make_shared<MockTrack>();
   }
   void AttachToPeer(ContactID const&, std::shared_ptr<Peer> const&) override {

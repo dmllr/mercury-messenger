@@ -36,9 +36,6 @@ struct Peer {
   std::atomic<bool> has_media_peer_connection{false};
   std::unique_ptr<crypto::SessionCipher> session_cipher{};
 
-  // Callback now receives raw bytes to support binary protocols
-  std::function<void(std::span<std::byte const>)> on_data_channel_message;
-
   std::optional<std::string> pending_offer_sdp;
   std::vector<Candidate> pending_candidates{};
   // NOLINTEND(*-non-private-member-variables-in-classes)

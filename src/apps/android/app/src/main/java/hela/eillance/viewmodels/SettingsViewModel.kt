@@ -4,12 +4,14 @@ import android.app.Application
 import android.content.Context
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import hela.eillance.events.NativeEventBus
 import hela.eillance.ndkio.ServiceConnectionState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
-class SettingsViewModel(application: Application) : AndroidViewModel(application),
-  NativeSettingsObserver {
+class SettingsViewModel(application: Application) : AndroidViewModel(application) {
 
   private var nativePtr: Long = 0
   private val _connectionState = MutableStateFlow(ServiceConnectionState.Unknown)
@@ -45,9 +47,26 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
   val showNotificationContent = _showNotificationContent.asStateFlow()
 
   init {
-    nativePtr = nativeCreate(this)
+    nativePtr = nativeCreate()
     if (nativePtr == 0L) {
       Log.e("SettingsViewModel", "Failed to create native SettingsViewModel.")
+    }
+    viewModelScope.launch {
+      NativeEventBus.settings.collect { s ->
+        if (s != null) {
+          _signalingUrl.value = s.signalingUrl ?: ""
+          _peerInactivityTimeout.value = s.timeout
+          _customStun.value = s.customStun ?: ""
+          _customTurn.value = s.customTurn ?: ""
+          _customTurnUser.value = s.customTurnUser ?: ""
+          _customTurnPass.value = s.customTurnPass ?: ""
+          _playSoundOnSend.value = s.playSoundOnSend
+          _playSoundOnReceive.value = s.playSoundOnReceive
+        }
+      }
+    }
+    viewModelScope.launch {
+      NativeEventBus.connectionState.collect { _connectionState.value = it }
     }
   }
 
@@ -57,30 +76,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
       nativePtr = 0
     }
     super.onCleared()
-  }
-
-  override fun onSettingsUpdated(
-    signalingUrl: String?,
-    timeout: Int,
-    customStun: String?,
-    customTurn: String?,
-    customTurnUser: String?,
-    customTurnPass: String?,
-    playSoundOnSend: Boolean,
-    playSoundOnReceive: Boolean
-  ) {
-    _signalingUrl.value = signalingUrl ?: ""
-    _peerInactivityTimeout.value = timeout
-    _customStun.value = customStun ?: ""
-    _customTurn.value = customTurn ?: ""
-    _customTurnUser.value = customTurnUser ?: ""
-    _customTurnPass.value = customTurnPass ?: ""
-    _playSoundOnSend.value = playSoundOnSend
-    _playSoundOnReceive.value = playSoundOnReceive
-  }
-
-  override fun onConnectionStateChanged(state: Int) {
-    _connectionState.value = ServiceConnectionState.fromInt(state)
   }
 
   fun onSignalingUrlChange(newUrl: String) {
@@ -134,7 +129,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     }
   }
 
-  private external fun nativeCreate(observer: NativeSettingsObserver): Long
+  private external fun nativeCreate(): Long
   private external fun nativeDestroy(ptr: Long)
   private external fun nativeUpdateUrl(ptr: Long, url: String)
   private external fun nativeSetTimeout(ptr: Long, seconds: Int)

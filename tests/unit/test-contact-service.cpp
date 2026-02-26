@@ -1,3 +1,5 @@
+#include <thread>
+
 #include <gtest/gtest.h>
 
 #include "eillance/services/contact_service.hpp"
@@ -20,16 +22,8 @@ class ContactServiceTest : public ::testing::Test {
     transport_ = std::make_shared<transport::DataTransport>(std::move(mock_transport_impl_));
 
     account_service_ = std::make_unique<services::AccountService>(storage_, transport_);
-    account_service_->SetOnMyProfileUpdatedCallback([]() {});
     std::ignore = account_service_->GenerateNewIdentity();
     account_service_->UpdateMyProfile("Test User", "", "");
-
-    // Connection handler stub that forces message queue flushing
-    auto conn_handler = [this](ContactID const& id) {
-      if (messaging_service_) {
-        messaging_service_->SendQueuedMessages(id);
-      }
-    };
 
     auto contact_manager = std::make_shared<identity::ContactManager>(storage_);
 
@@ -40,21 +34,15 @@ class ContactServiceTest : public ::testing::Test {
         transport_,
         contact_manager,
         account_service_,
-        file_transfer_service_,
-        conn_handler
+        file_transfer_service_
     );
-
-    // Initialize dummy callbacks for MessagingService
-    messaging_service_->SetChatMessageReceivedCallback([](auto const&, auto const&) {});
-    messaging_service_->SetMessageStatusChangedCallback([](auto const&, auto, auto) {});
 
     profile_service_ = std::make_unique<services::ProfileService>(
         storage_,
         transport_,
         contact_manager,
         account_service_,
-        messaging_service_,
-        conn_handler
+        messaging_service_
     );
 
     contact_service_ = std::make_unique<services::ContactService>(
@@ -62,14 +50,8 @@ class ContactServiceTest : public ::testing::Test {
         transport_,
         contact_manager,
         account_service_,
-        profile_service_,
-        conn_handler
+        profile_service_
     );
-
-    // Initialize dummy callbacks to avoid invariants
-    contact_service_->SetContactRequestCallback([](auto const&) {});
-    contact_service_->SetContactStatusChangedCallback([](auto const&, auto) {});
-    contact_service_->SetContactRemovedCallback([](auto const&) {});
 
     contact_service_->SetMessagingService(messaging_service_);
   }
@@ -88,6 +70,7 @@ class ContactServiceTest : public ::testing::Test {
   std::shared_ptr<services::MessagingService> messaging_service_;
   std::shared_ptr<services::ProfileService> profile_service_;
   std::unique_ptr<services::ContactService> contact_service_;
+  uint64_t conn_sub_id_ = 0;
 
   ContactID const peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
 };
@@ -119,8 +102,8 @@ TEST_F(ContactServiceTest, AddContact) {
 
 TEST_F(ContactServiceTest, ReceiveContactRequest) {
   bool request_cb_called = false;
-  contact_service_->SetContactRequestCallback([&](auto const& id) {
-    if (id == peer1) {
+  auto sub = EventQueue::Instance().Subscribe<EventContactRequest>([&](auto const& e) {
+    if (e.peer_id == peer1) {
       request_cb_called = true;
     }
   });
@@ -130,6 +113,9 @@ TEST_F(ContactServiceTest, ReceiveContactRequest) {
 
   contact_service_->OnContactAddRequest(peer1, std::nullopt, profile);
 
+  EventQueue::Instance().WaitFor([&] { return request_cb_called; }, std::chrono::seconds(1));
+
+  EventQueue::Instance().Unsubscribe<EventContactRequest>(sub);
   EXPECT_TRUE(request_cb_called);
   auto const contact = contact_service_->GetContact(peer1);
   ASSERT_TRUE(contact.has_value());
@@ -143,14 +129,17 @@ TEST_F(ContactServiceTest, ConfirmContact) {
   contact_service_->OnContactAddRequest(peer1, std::nullopt, profile);
 
   bool status_cb_called = false;
-  contact_service_->SetContactStatusChangedCallback([&](auto const& id, auto status) {
-    if (id == peer1 && status == identity::ContactStatus::confirmed) {
+  auto sub = EventQueue::Instance().Subscribe<EventContactStatusChanged>([&](auto const& e) {
+    if (e.peer_id == peer1 && e.status == identity::ContactStatus::confirmed) {
       status_cb_called = true;
     }
   });
 
   contact_service_->ConfirmContact(peer1);
 
+  EventQueue::Instance().WaitFor([&] { return status_cb_called; }, std::chrono::seconds(1));
+
+  EventQueue::Instance().Unsubscribe<EventContactStatusChanged>(sub);
   EXPECT_TRUE(status_cb_called);
   EXPECT_TRUE(contact_service_->IsConfirmed(peer1));
 
