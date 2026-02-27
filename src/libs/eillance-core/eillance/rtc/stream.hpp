@@ -8,8 +8,10 @@
 #include <utility>
 
 #include "eillance/capture/config.hpp"
+#include "eillance/events/client_events.hpp"
 #include "eillance/transport/peer.hpp"
 #include "eillance/utils/dispatch_queue.hpp"
+#include "eillance/utils/event_queue.hpp"
 #include "eillance/utils/time.hpp"
 
 namespace eillance {
@@ -70,8 +72,6 @@ class Stream : public std::enable_shared_from_this<Stream> {
   }
 
  private:
-  std::function<void(Source::Type, std::uint64_t, std::vector<std::byte> const&)> sampleHandlerFunc_;
-  std::mutex sampleHandlerMutex_;
   DispatchQueue dispatchQueue_ = DispatchQueue("StreamQueue", 1);
 
   [[nodiscard]] auto UnsafePrepareForSample() -> std::pair<std::shared_ptr<Source>, Source::Type> {
@@ -102,27 +102,18 @@ class Stream : public std::enable_shared_from_this<Stream> {
       return;
     }
     auto [source, source_type] = UnsafePrepareForSample();
+    if (!isRunning_) {
+      return;
+    }
     auto const sample = source->GetSample();
 
-    std::function<void(Source::Type, std::uint64_t, std::vector<std::byte> const&)> handler;
-    {
-      std::lock_guard<std::mutex> const lock(sampleHandlerMutex_);
-      handler = sampleHandlerFunc_;
-    }
-    if (handler) {
-      handler(source_type, source->GetSampleTime(), sample);
-    }
+    EventQueue::Instance().Push(EventMediaSample{static_cast<uint8_t>(source_type), source->GetSampleTime(), sample});
 
     source->LoadNextSample();
     dispatchQueue_.Dispatch([this]() { this->SendSample(); });
   }
 
  public:
-  void OnSample(std::function<void(Source::Type, std::uint64_t, std::vector<std::byte> const&)> handler) {
-    std::lock_guard<std::mutex> const lock(sampleHandlerMutex_);
-    sampleHandlerFunc_ = std::move(handler);
-  }
-
   [[nodiscard]] auto IsRunning() const -> bool {
     return isRunning_;
   }

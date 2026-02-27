@@ -239,6 +239,7 @@ TEST_F(InternalMessagingServiceTest, ProcessDataChannelMessage_Chat) {
 TEST_F(InternalMessagingServiceTest, ProcessDataChannelMessage_KeyExchange) {
   auto const peer = std::make_shared<transport::Peer>(peer1);
   transport_->AddPeer(peer1, peer);
+  peer->data_channel_is_open = true;
 
   eillance::crypto::SessionCipher const other;
   auto pub = other.GetPublicKey();

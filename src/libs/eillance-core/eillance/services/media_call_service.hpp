@@ -48,6 +48,24 @@ class MediaCallService {
         data_transport_(std::move(data_transport)),
         media_transport_(std::move(media_transport)),
         account_service_(std::move(account_service)) {
+    auto sub_dco = EventQueue::Instance().Subscribe<EventDataChannelOpen>([this](auto const& e) {
+      this->OnDataChannelOpen(e.peer_id);
+    });
+    event_unsubs_.push_back([sub_dco]() { EventQueue::Instance().Unsubscribe<EventDataChannelOpen>(sub_dco); });
+
+    auto sub_ms = EventQueue::Instance().Subscribe<EventMediaSample>([this](auto const& e) {
+      this->SendSampleToPeers(e.sample, static_cast<Stream::Source::Type>(e.type), e.timestamp);
+    });
+    event_unsubs_.push_back([sub_ms]() { EventQueue::Instance().Unsubscribe<EventMediaSample>(sub_ms); });
+
+    auto sub_fr = EventQueue::Instance().Subscribe<EventFrameReceived>([this](auto const& e) {
+      this->OnFrameReceived(e.peer_id, e.frame);
+    });
+    event_unsubs_.push_back([sub_fr]() { EventQueue::Instance().Unsubscribe<EventFrameReceived>(sub_fr); });
+  }
+
+  ~MediaCallService() {
+    for (auto const& unsub : event_unsubs_) unsub();
   }
 
   void SetMessagingService(std::shared_ptr<MessagingService> messaging_service) {
@@ -375,8 +393,8 @@ class MediaCallService {
     }
   }
 
-  void OnFrameReceived(ContactID const& /*peer_id*/, std::vector<std::byte> const& frame) {
-    EventQueue::Instance().Push(EventFrameReceived{frame});
+  void OnFrameReceived(ContactID const& peer_id, std::vector<std::byte> const& frame) {
+    EventQueue::Instance().Push(EventFrameReceived{peer_id, frame});
   }
 
  private:
@@ -399,6 +417,7 @@ class MediaCallService {
   std::shared_ptr<transport::MediaTransport> media_transport_;
   std::shared_ptr<AccountService> account_service_;
   std::shared_ptr<MessagingService> messaging_service_{nullptr};
+  std::vector<std::function<void()>> event_unsubs_;
 
   std::unique_ptr<Capture> video_capture_;
   std::unique_ptr<Capture> audio_capture_;
@@ -440,11 +459,6 @@ class MediaCallService {
       av_stream_ = std::make_shared<Stream>(
           std::make_shared<StreamSource>(std::move(*video_capture_)),
           std::make_shared<StreamSource>(std::move(*audio_capture_))
-      );
-      av_stream_->OnSample(
-          [this](Stream::Source::Type const type, uint64_t const time, std::vector<std::byte> const& sample) -> void {
-            SendSampleToPeers(sample, type, time);
-          }
       );
     }
   }

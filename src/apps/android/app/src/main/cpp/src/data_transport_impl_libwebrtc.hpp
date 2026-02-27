@@ -31,7 +31,6 @@ class AndroidDataTransport final : public DataTransport::Interface {
 
   JavaVM* jvm_;
   jobject transportJavaRef_{nullptr};
-  TransportDelegate* delegate_{nullptr};
   ContactID id_;
   std::string signalingUrl_;
 
@@ -64,13 +63,6 @@ class AndroidDataTransport final : public DataTransport::Interface {
     if (auto* env = env_scope.Get(); (env != nullptr) && transportJavaRef_ != nullptr) {
       env->DeleteGlobalRef(transportJavaRef_);
     }
-  }
-
-  void SetDelegate(TransportDelegate* delegate) override {
-    delegate_ = delegate;
-  }
-  auto Delegate() -> TransportDelegate* {
-    return delegate_;
   }
 
   void ReportStateChange(ContactID const& peer_id, EventSource source, int state) {
