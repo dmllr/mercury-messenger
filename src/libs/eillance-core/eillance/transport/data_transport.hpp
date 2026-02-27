@@ -1,6 +1,5 @@
 #pragma once
 
-#include <functional>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -8,11 +7,10 @@
 #include <nlohmann/json.hpp>
 #include <span>
 
-#include "eillance/events/event_source.hpp"
 #include "eillance/identity/contact_id.hpp"
+#include "eillance/transport/peer.hpp"
 #include "eillance/transport/peer_connection_state.hpp"
 #include "eillance/transport/track.hpp"
-#include "eillance/transport/transport_delegate.hpp"
 
 namespace eillance::transport {
 
@@ -22,7 +20,6 @@ class DataTransport {
 
   struct Interface {
     virtual ~Interface() = default;
-    virtual void SetDelegate(TransportDelegate* delegate) = 0;
 
     // Config
     virtual void SetId(ContactID const& id) = 0;
@@ -57,10 +54,6 @@ class DataTransport {
   template <typename T>
   explicit DataTransport(std::unique_ptr<T> impl)
       : self_(std::move(impl)) {
-  }
-
-  void SetDelegate(TransportDelegate* delegate) const {
-    self_->SetDelegate(delegate);
   }
 
   void SetId(ContactID const& id) const {

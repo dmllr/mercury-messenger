@@ -20,7 +20,6 @@
 #include "eillance/services/profile_service.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/transport/data_transport.hpp"
-#include "eillance/transport/transport_delegate.hpp"
 #include "eillance/utils/dispatch_queue.hpp"
 #include "eillance/utils/event_queue.hpp"
 #include "eillance/utils/invariant.hpp"
@@ -28,23 +27,18 @@
 
 namespace eillance {
 
-class Client final : public transport::TransportDelegate {
+class Client final {
  public:
   using Json = nlohmann::json;
-  using FatalErrorCallback = std::function<void()>;
 
   Client(
       std::shared_ptr<storage::PersistentStorage> storage,
       std::shared_ptr<transport::DataTransport> data_transport,
-      std::shared_ptr<transport::MediaTransport> media_transport,
-      FatalErrorCallback on_fatal_error = nullptr
+      std::shared_ptr<transport::MediaTransport> media_transport
   )
       : storage_(std::move(storage)),
         data_transport_(std::move(data_transport)),
-        media_transport_(std::move(media_transport)),
-        on_fatal_error_(std::move(on_fatal_error)) {
-    data_transport_->SetDelegate(this);
-
+        media_transport_(std::move(media_transport)) {
     account_service_ = std::make_shared<services::AccountService>(storage_, data_transport_);
     auto contact_manager = std::make_shared<identity::ContactManager>(storage_);
     file_transfer_service_ = std::make_shared<services::FileTransferService>(storage_, data_transport_);
@@ -155,13 +149,25 @@ class Client final : public transport::TransportDelegate {
       ReevaluateIceConfiguration();
     });
     event_unsubs_.push_back([sub4]() { EventQueue::Instance().Unsubscribe<EventServerIceConfig>(sub4); });
+
+    auto sub_sig_err = EventQueue::Instance().Subscribe<EventSignalingError>([this](auto const& e) {
+      if (e.error == "peer_not_found") {
+        LGW << "Connection attempt failed for peer " << e.peer_id.ToString() << " (not online).";
+        messaging_service_->OnConnectionAttemptFinished(e.peer_id);
+        if (data_transport_->GetPeer(e.peer_id)) {
+          media_transport_->Disconnect(e.peer_id);
+          data_transport_->Disconnect(e.peer_id);
+        }
+      }
+    });
+    event_unsubs_.push_back([sub_sig_err]() { EventQueue::Instance().Unsubscribe<EventSignalingError>(sub_sig_err); });
   }
 
   Client(Client const&) = delete;
   Client(Client&&) = delete;
   auto operator=(Client const&) -> Client& = delete;
   auto operator=(Client&&) -> Client& = delete;
-  ~Client() override {
+  ~Client() {
     for (auto const& unsub : event_unsubs_) unsub();
     Terminate();
   }
@@ -516,56 +522,6 @@ class Client final : public transport::TransportDelegate {
   }
 
  private:
-  void OnPeerReady(std::shared_ptr<transport::Peer> const&) override {
-  }
-
-  void OnSignalingErrorForPeer(ContactID const& peer_id, std::string const& error) override {
-    if (error == "peer_not_found") {
-      LGW << "Connection attempt failed for peer " << peer_id.ToString() << " (not online).";
-      messaging_service_->OnConnectionAttemptFinished(peer_id);
-      if (data_transport_->GetPeer(peer_id)) {
-        // Disconnect media first to clear the has_media_peer_connection flag on the shared peer.
-        // This prevents the data transport disconnection callback from triggering an immediate
-        // reconnect loop thinking media is still active.
-        media_transport_->Disconnect(peer_id);
-        data_transport_->Disconnect(peer_id);
-      }
-    }
-  }
-
-  auto Sign(std::span<std::byte const> message) -> std::vector<std::byte> override {
-    return account_service_->Sign(message);
-  }
-
-  void OnLoginSuccess() override {
-    EventQueue::Instance().Push(
-        EventStatusChanged{ContactID(), EventSource::system, static_cast<int>(ServiceConnectionState::online)}
-    );
-    internal_messaging_service_->ProcessSystemMessage("login_success", {});
-  }
-
-  void ProcessPeerMessage(Json message) override {
-    auto const from_it = message.find("from");
-    if (from_it == message.end()) return;
-    ContactID const peer_id(from_it->get<std::string>());
-    auto const type_it = message.find("type");
-    if (type_it == message.end()) return;
-    internal_messaging_service_->ProcessSignalingMessage(peer_id, type_it->get<std::string>(), message);
-  }
-
-  void OnSystemMessage(std::string const& type, Json const& message) override {
-    internal_messaging_service_->ProcessSystemMessage(type, message);
-  }
-
-  void OnDataChannelOpen(ContactID const& peer_id) override {
-    internal_messaging_service_->OnDataChannelOpen(peer_id);
-    media_call_service_->OnDataChannelOpen(peer_id);
-  }
-
-  void OnFrameReceived(ContactID const& peer_id, std::vector<std::byte> const& frame) override {
-    media_call_service_->OnFrameReceived(peer_id, frame);
-  }
-
   void CheckForInactivePeers() {
     if (!is_running_) return;
     auto const now = Time::Now();
@@ -608,7 +564,7 @@ class Client final : public transport::TransportDelegate {
         background_queue_.Dispatch([this] { last_heartbeat_ = Time::Now(); });
         if (now > last_heartbeat_.load() + 15000000) {
           LGE << "Core Watchdog: Main queue stalled. Triggering fatal error.";
-          if (on_fatal_error_) on_fatal_error_();
+          EventQueue::Instance().Push(EventFatalError{});
           std::unique_lock<std::mutex> lock(watchdog_mutex_);
           if (watchdog_cv_.wait_for(lock, std::chrono::seconds(10), [this] { return !watchdog_running_; })) {
             break;
@@ -684,7 +640,6 @@ class Client final : public transport::TransportDelegate {
   std::condition_variable watchdog_cv_;
   std::mutex watchdog_mutex_;
   std::atomic<uint64_t> last_heartbeat_{0};
-  FatalErrorCallback on_fatal_error_;
 
   Json server_ice_config_{Json::array()};
 

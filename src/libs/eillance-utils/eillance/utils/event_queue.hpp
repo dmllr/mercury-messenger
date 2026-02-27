@@ -146,7 +146,7 @@ class EventQueue {
 
         if (type == typeid(TerminationEvent)) {
           terminate_found = true;
-          continue; // Guarantee "all in MUST out" by finishing the current batch processing
+          continue;  // Guarantee "all in MUST out" by finishing the current batch processing
         }
 
         std::vector<std::pair<SubscriberTypeId, std::function<void(std::any const&)>>> current_subs;

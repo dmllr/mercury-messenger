@@ -1,13 +1,10 @@
 #pragma once
 
-#include <functional>
 #include <memory>
 #include <string>
 
-#include "eillance/events/event_source.hpp"
 #include "eillance/identity/contact_id.hpp"
 #include "eillance/transport/track.hpp"
-#include "eillance/transport/transport_delegate.hpp"
 
 namespace eillance::transport {
 

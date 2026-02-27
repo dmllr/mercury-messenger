@@ -24,6 +24,7 @@ class ClientEngine {
   std::shared_ptr<Client> client_;
   JavaVM* jvm_;
   jobject service_ref_;
+  std::vector<uint64_t> event_unsubs_;
 
  public:
   ClientEngine(JavaVM* jvm, JNIEnv* env, jobject context) {
@@ -45,20 +46,21 @@ class ClientEngine {
     auto data_transport = std::make_unique<transport::AndroidDataTransport>(jvm, context);
     auto media_transport = std::make_unique<transport::AndroidMediaTransport>(jvm, context);
 
-    // Pass separate transports to Client
     client_ = std::make_shared<Client>(
         storage,
         std::make_shared<transport::DataTransport>(std::move(data_transport)),
-        std::make_shared<transport::MediaTransport>(std::move(media_transport)),
-        [this]() {
-          jni::ScopedJniEnv env_scope(jvm_);
-          if (auto* env = env_scope.Get()) {
-            auto const& cls = ClassRefs::Instance().Class("hela/eillance/MessengerService");
-            jmethodID method = cls.GetMethod("onNativeCoreCrash");
-            env->CallVoidMethod(service_ref_, method);
-          }
-        }
+        std::make_shared<transport::MediaTransport>(std::move(media_transport))
     );
+
+    auto sub = EventQueue::Instance().Subscribe<EventFatalError>([this](auto const&) {
+      jni::ScopedJniEnv env_scope(jvm_);
+      if (auto* e = env_scope.Get()) {
+        auto const& cls = ClassRefs::Instance().Class("hela/eillance/MessengerService");
+        jmethodID method = cls.GetMethod("onNativeCoreCrash");
+        e->CallVoidMethod(service_ref_, method);
+      }
+    });
+    event_unsubs_.push_back(sub);
   }
 
   ClientEngine(ClientEngine&&) = delete;
@@ -66,6 +68,9 @@ class ClientEngine {
   auto operator=(ClientEngine&&) -> ClientEngine& = delete;
   auto operator=(ClientEngine const&) -> ClientEngine& = delete;
   ~ClientEngine() {
+    for (auto id : event_unsubs_) {
+      EventQueue::Instance().Unsubscribe<EventFatalError>(id);
+    }
     if (service_ref_) {
       jni::ScopedJniEnv env_scope(jvm_);
       if (auto* env = env_scope.Get()) env->DeleteGlobalRef(service_ref_);

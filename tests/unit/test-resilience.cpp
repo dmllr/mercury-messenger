@@ -131,7 +131,7 @@ TEST_F(ResilienceTest, PendingReadReceiptsPersistAndSend) {
   ASSERT_TRUE(peer);
 
   mock_transport_->CallLog()->sent_peer_messages.clear();
-  mock_transport_->delegate->OnDataChannelOpen(peer1);
+  mock_transport_->SimulateDataChannelOpen(peer1);
   FlushClientQueue();
 
   bool receipt_sent = false;
@@ -179,7 +179,7 @@ TEST_F(ResilienceTest, ProfileUpdateSyncsOnConnect) {
   FlushClientQueue();
 
   mock_transport_->CallLog()->sent_peer_messages.clear();
-  mock_transport_->delegate->OnDataChannelOpen(peer1);
+  mock_transport_->SimulateDataChannelOpen(peer1);
   FlushClientQueue();
 
   bool profile_sent = false;
@@ -270,7 +270,7 @@ TEST_F(ResilienceTest, ReinstallRecovery_ContactAdd) {
   }
   EXPECT_TRUE(confirm_sent) << "Should send confirmation via signaling";
 
-  mock_transport_->delegate->OnDataChannelOpen(peer1);
+  mock_transport_->SimulateDataChannelOpen(peer1);
   FlushClientQueue();
 
   bool signature_sent = false;
@@ -385,7 +385,7 @@ TEST_F(ResilienceTest, UnsuspensionOnConnect) {
   mock_transport_->CallLog()->sent_peer_messages.clear();
 
   // Simulate DataChannel open which triggers UnsuspendAndDeliver
-  mock_transport_->delegate->OnDataChannelOpen(peer1);
+  mock_transport_->SimulateDataChannelOpen(peer1);
   FlushClientQueue();
 
   // Action should have been unsuspended and sent

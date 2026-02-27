@@ -87,11 +87,11 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcDataTransport_
     jstring message
 ) {
   auto* transport = reinterpret_cast<eillance::transport::AndroidDataTransport*>(native_ptr);
-  if ((transport != nullptr) && (transport->Delegate() != nullptr)) {
+  if (transport != nullptr) {
     char const* msg_chars = env->GetStringUTFChars(message, nullptr);
     try {
       auto const json_msg = nlohmann::json::parse(msg_chars);
-      transport->Delegate()->ProcessPeerMessage(json_msg);
+      eillance::EventQueue::Instance().Push(eillance::EventPeerMessage{json_msg});
     } catch (std::exception const& e) {
       LGE << "Failed to parse peer message: " << e.what();
     }
@@ -107,7 +107,7 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcDataTransport_
     jstring message
 ) {
   auto* transport = reinterpret_cast<eillance::transport::AndroidDataTransport*>(native_ptr);
-  if ((transport != nullptr) && (transport->Delegate() != nullptr)) {
+  if (transport != nullptr) {
     char const* type_chars = env->GetStringUTFChars(type, nullptr);
     std::string const type_str(type_chars);
     env->ReleaseStringUTFChars(type, type_chars);
@@ -133,10 +133,11 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcDataTransport_
     jstring error
 ) {
   auto* transport = reinterpret_cast<eillance::transport::AndroidDataTransport*>(native_ptr);
-  if ((transport != nullptr) && (transport->Delegate() != nullptr)) {
+  if (transport != nullptr) {
     char const* peer_id_chars = env->GetStringUTFChars(peer_id, nullptr);
     char const* error_chars = env->GetStringUTFChars(error, nullptr);
-    transport->Delegate()->OnSignalingErrorForPeer(eillance::ContactID(peer_id_chars), error_chars);
+    eillance::EventQueue::Instance().Push(eillance::EventSignalingError{eillance::ContactID(peer_id_chars), error_chars}
+    );
     env->ReleaseStringUTFChars(peer_id, peer_id_chars);
     env->ReleaseStringUTFChars(error, error_chars);
   }
@@ -197,10 +198,10 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcDataTransport_
     jstring j_peer_id
 ) {
   auto* transport = reinterpret_cast<eillance::transport::AndroidDataTransport*>(native_ptr);
-  if (transport != nullptr && transport->Delegate() != nullptr) {
+  if (transport != nullptr) {
     char const* peer_id_chars = env->GetStringUTFChars(j_peer_id, nullptr);
     eillance::ContactID const peer_id(peer_id_chars);
-    transport->Delegate()->OnDataChannelOpen(peer_id);
+    eillance::EventQueue::Instance().Push(eillance::EventDataChannelOpen{peer_id});
     env->ReleaseStringUTFChars(j_peer_id, peer_id_chars);
   }
 }

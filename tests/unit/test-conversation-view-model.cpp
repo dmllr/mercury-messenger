@@ -280,7 +280,7 @@ TEST_F(ConversationViewModelTest, ResumeTransferPropagates) {
   client_->Connect(peer1);
   std::this_thread::sleep_for(std::chrono::milliseconds(50));
   // Simulate DC open
-  mock_data_transport_->delegate->OnDataChannelOpen(peer1);
+  mock_data_transport_->SimulateDataChannelOpen(peer1);
   std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
   // Resume download (is_upload=false)
@@ -313,7 +313,7 @@ TEST_F(ConversationViewModelTest, SendSmallAttachment_UpdatesStatusSynchronously
   std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
   // Simulate Data Channel Open to enable sending
-  mock_data_transport_->delegate->OnDataChannelOpen(peer1);
+  mock_data_transport_->SimulateDataChannelOpen(peer1);
   std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
   auto const peer = mock_data_transport_->GetPeer(peer1);
