@@ -30,19 +30,21 @@ class AttachmentTest : public ::testing::Test {
     mock_data_transport_raw_ = mock_data_transport_impl_.get();
     data_transport_ = std::make_shared<transport::DataTransport>(std::move(mock_data_transport_impl_));
 
-    account_service_ = std::make_shared<services::AccountService>(storage_, data_transport_);
+    sm_ = std::make_unique<services::ServiceManager>();
+    sm_->storage = storage_;
+    sm_->data_transport = data_transport_;
 
     auto contact_manager = std::make_shared<identity::ContactManager>(storage_);
+    sm_->contact_manager = contact_manager;
 
-    file_transfer_service_ = std::make_shared<services::FileTransferService>(storage_, data_transport_);
+    account_service_ = std::make_shared<services::AccountService>(sm_.get());
+    sm_->account = account_service_;
 
-    service_ = std::make_unique<services::MessagingService>(
-        storage_,
-        data_transport_,
-        contact_manager,
-        account_service_,
-        file_transfer_service_
-    );
+    file_transfer_service_ = std::make_shared<services::FileTransferService>(sm_.get());
+    sm_->file_transfer = file_transfer_service_;
+
+    service_ = std::make_shared<services::MessagingService>(sm_.get());
+    sm_->messaging = service_;
 
     contact_manager->AddContact(peer1);
   }
@@ -63,14 +65,15 @@ class AttachmentTest : public ::testing::Test {
   std::shared_ptr<transport::DataTransport> data_transport_;
   std::shared_ptr<services::AccountService> account_service_;
   std::shared_ptr<services::FileTransferService> file_transfer_service_;
-  std::unique_ptr<services::MessagingService> service_;
+  std::unique_ptr<services::ServiceManager> sm_;
+  std::shared_ptr<services::MessagingService> service_;
   std::string temp_file_path_;
 
   ContactID const peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
 };
 
 TEST_F(AttachmentTest, SendMessageCalculatesHash) {
-  std::vector<services::AttachmentRequest> attachments;
+  std::vector<messaging::AttachmentRequest> attachments;
   attachments.push_back({temp_file_path_, messaging::AttachmentType::image, "base64thumb", "image/jpeg"});
 
   auto const record = service_->SendChatMessage(peer1, "Check this out", attachments);
@@ -123,7 +126,7 @@ TEST_F(AttachmentTest, SendQueuedMessagesSerializesHash) {
   peer->session_cipher->ComputeSharedSecret(eillance::crypto::SessionCipher().GetPublicKey());
   data_transport_->AddPeer(peer1, peer);
 
-  std::vector<services::AttachmentRequest> attachments;
+  std::vector<messaging::AttachmentRequest> attachments;
   attachments.push_back({temp_file_path_, messaging::AttachmentType::image, "", "image/jpeg"});
 
   service_->SendChatMessage(peer1, "Text", attachments);
@@ -147,7 +150,7 @@ TEST_F(AttachmentTest, AttachmentWithComputationFailureIsSkipped) {
     std::filesystem::remove(bad_file);
   }
 
-  std::vector<services::AttachmentRequest> attachments;
+  std::vector<messaging::AttachmentRequest> attachments;
   attachments.push_back({bad_file, messaging::AttachmentType::file, "", "application/octet-stream"});
 
   auto const record = service_->SendChatMessage(peer1, "msg", attachments);
@@ -192,17 +195,15 @@ TEST_F(AttachmentTest, AttachmentPersistenceAcrossRestarts) {
 
   (void)storage_->AddHistoryEntry(record);
 
-  auto contact_manager = std::make_shared<identity::ContactManager>(storage_);
-  auto file_transfer_service = std::make_shared<services::FileTransferService>(storage_, data_transport_);
-  auto account_service = std::make_shared<services::AccountService>(storage_, data_transport_);
+  auto new_sm = std::make_unique<services::ServiceManager>();
+  new_sm->storage = storage_;
+  new_sm->data_transport = data_transport_;
+  new_sm->contact_manager = std::make_shared<identity::ContactManager>(storage_);
+  new_sm->account = std::make_shared<services::AccountService>(new_sm.get());
+  new_sm->file_transfer = std::make_shared<services::FileTransferService>(new_sm.get());
 
-  auto new_service = std::make_unique<services::MessagingService>(
-      storage_,
-      data_transport_,
-      contact_manager,
-      account_service,
-      file_transfer_service
-  );
+  auto new_service = std::make_shared<services::MessagingService>(new_sm.get());
+  new_sm->messaging = new_service;
 
   auto page = new_service->GetHistoryPage(peer1, 0, 10);
 

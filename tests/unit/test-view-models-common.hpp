@@ -61,8 +61,8 @@ class ViewModelTest : public ::testing::Test {
     client_->SetAudioCapture(std::make_unique<MockCapture>());
 
     // Identity
-    (void)client_->GetAccountService()->GenerateNewIdentity();
-    client_->GetAccountService()->UpdateMyProfile("Test User", "Bio", "");
+    (void)client_->GenerateNewIdentity();
+    client_->UpdateMyProfile("Test User", "Bio", "");
 
     // Start Client
     client_->Start();

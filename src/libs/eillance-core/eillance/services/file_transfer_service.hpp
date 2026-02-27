@@ -17,6 +17,7 @@
 #include "eillance/events/client_events.hpp"
 #include "eillance/logging/logging.hpp"
 #include "eillance/messaging/types.hpp"
+#include "eillance/services/service_manager.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/transport/data_transport.hpp"
 #include "eillance/utils/event_queue.hpp"
@@ -29,12 +30,20 @@ class FileTransferService {
   static constexpr std::size_t chunkSizeBytes = 16ULL * 1024;  // 16KB per chunk
   static constexpr std::size_t windowSizeChunks = 16;
 
-  explicit FileTransferService(
-      std::shared_ptr<storage::PersistentStorage> storage,
-      std::shared_ptr<transport::DataTransport> transport
-  )
-      : storage_(std::move(storage)),
-        transport_(std::move(transport)) {
+  explicit FileTransferService(ServiceManager* sm)
+      : sm_(sm),
+        storage_(sm->storage),
+        transport_(sm->data_transport) {
+    auto sub1 = EventQueue::Instance().Subscribe<EventDataChannelMessage>([this](auto const& e) {
+      if (!e.message.empty() && e.message[0] == std::byte{0xFE}) {
+        ProcessBinaryMessage(e.peer_id, e.message);
+      }
+    });
+    event_unsubs_.push_back([sub1]() { EventQueue::Instance().Unsubscribe<EventDataChannelMessage>(sub1); });
+  }
+
+  ~FileTransferService() {
+    for (auto const& unsub : event_unsubs_) unsub();
   }
 
   void OnConnectionReady(ContactID const& peer_id) {
@@ -650,8 +659,10 @@ class FileTransferService {
     SendPacket(peer_id, file_id, MessageType::ack, payload);
   }
 
+  ServiceManager* sm_;
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<transport::DataTransport> transport_;
+  std::vector<std::function<void()>> event_unsubs_;
   std::map<std::string, TransferUploadState> active_uploads_;
   std::map<std::string, TransferDownloadState> active_downloads_;
   mutable std::mutex transfers_mutex_;

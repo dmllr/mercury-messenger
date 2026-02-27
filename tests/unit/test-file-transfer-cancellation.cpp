@@ -8,10 +8,9 @@
 #include <gtest/gtest.h>
 #include <nlohmann/json.hpp>
 
-#include "eillance/identity/contact_manager.hpp"
-#include "eillance/services/file_transfer_service.hpp"
-#include "eillance/services/messaging_service.hpp"
+#include "eillance/client/client.hpp"
 #include "mock_data_transport.hpp"
+#include "mock_media_transport.hpp"
 #include "mock_persistent_storage.hpp"
 
 using namespace eillance;
@@ -22,11 +21,9 @@ class FileTransferCancellationTest : public ::testing::Test {
     temp_dir_ = std::filesystem::temp_directory_path() / "cancel_tests";
     std::filesystem::create_directories(temp_dir_);
 
-    // Attachments dir relative to mock DB path
     attachments_dir_ = temp_dir_ / "attachments";
     std::filesystem::create_directories(attachments_dir_);
 
-    // Use a DB path that allows the service to find the attachments dir relative to it
     std::filesystem::path db_path = temp_dir_ / "db.sqlite";
 
     auto storage_impl = std::make_unique<storage::MockPersistentStorageImpl>(db_path.string());
@@ -37,31 +34,23 @@ class FileTransferCancellationTest : public ::testing::Test {
     mock_transport_impl_ = std::make_unique<transport::MockDataTransport>(mock_log_);
     mock_transport_ = mock_transport_impl_.get();
     transport_ = std::make_shared<transport::DataTransport>(std::move(mock_transport_impl_));
+    auto media_transport =
+        std::make_shared<transport::MediaTransport>(std::make_unique<transport::MockMediaTransport>(mock_log_));
 
-    contact_manager_ = std::make_shared<identity::ContactManager>(storage_);
-    contact_manager_->AddContact(peer1);
+    client_ = std::make_shared<Client>(storage_, transport_, media_transport);
 
-    account_service_ = std::make_shared<services::AccountService>(storage_, transport_);
-
-    file_transfer_service_ = std::make_shared<services::FileTransferService>(storage_, transport_);
-
-    service_ = std::make_unique<services::MessagingService>(
-        storage_,
-        transport_,
-        contact_manager_,
-        account_service_,
-        file_transfer_service_
-    );
+    std::ignore = client_->GenerateNewIdentity();
+    mock_storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
+    client_->GetContactService()->ReloadCache();
+    client_->Start();
   }
 
   void TearDown() override {
-    service_->StopDeliveryService();
-    service_.reset();
-    file_transfer_service_.reset();  // Ensure files are closed before deletion
+    client_->Terminate();
+    client_.reset();
     std::filesystem::remove_all(temp_dir_);
   }
 
-  // Helpers for binary protocol packet checks
   bool IsBinaryPacket(std::vector<std::byte> const& data, uint8_t type, std::string const& id) {
     if (data.size() < 3 + id.size()) return false;
     if (data[0] != std::byte{0xFE}) return false;
@@ -81,13 +70,16 @@ class FileTransferCancellationTest : public ::testing::Test {
       packet.push_back(static_cast<std::byte>(c));
     }
 
-    // Seq LE
     for (int i = 0; i < 4; ++i) {
       packet.push_back(static_cast<std::byte>((seq >> (i * 8)) & 0xFF));
     }
 
     packet.insert(packet.end(), payload.begin(), payload.end());
     return packet;
+  }
+
+  void FlushClientQueue() {
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
   }
 
   std::filesystem::path temp_dir_;
@@ -98,44 +90,35 @@ class FileTransferCancellationTest : public ::testing::Test {
   transport::MockDataTransport* mock_transport_;
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<transport::DataTransport> transport_;
-  std::shared_ptr<identity::ContactManager> contact_manager_;
-  std::shared_ptr<services::AccountService> account_service_;
-  std::shared_ptr<services::FileTransferService> file_transfer_service_;
-  std::unique_ptr<services::MessagingService> service_;
+  std::shared_ptr<Client> client_;
 
   ContactID const peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
 };
 
 TEST_F(FileTransferCancellationTest, CancelUpload) {
-  // Setup connected peer
   auto peer = std::make_shared<transport::Peer>(peer1);
   peer->data_channel_is_open = true;
   peer->session_cipher->ComputeSharedSecret(eillance::crypto::SessionCipher().GetPublicKey());
   transport_->AddPeer(peer1, peer);
 
-  // Create file to upload
   std::filesystem::path const file_path = temp_dir_ / "large_file.dat";
   {
     std::ofstream ofs(file_path, std::ios::binary);
-    // Write enough data to ensure it doesn't finish immediately
-    std::string const data(
-        services::FileTransferService::windowSizeChunks * services::FileTransferService::chunkSizeBytes * 2,
-        'A'
-    );
+    std::string const data(16 * 16384 * 2, 'A');
     ofs << data;
   }
 
-  // Start Upload
-  std::vector<services::AttachmentRequest> attachments;
+  std::vector<messaging::AttachmentRequest> attachments;
   attachments.push_back({file_path.string(), messaging::AttachmentType::file, "", "application/octet-stream"});
 
-  auto record = service_->SendChatMessage(peer1, "File", attachments);
+  auto record = client_->SendChatMessage(peer1, "File", attachments);
+  FlushClientQueue();
+
   std::string const att_id = std::get<messaging::MessageEntry>(record.data).attachments[0].id;
 
-  // Cancel
-  service_->CancelTransfer(peer1, att_id, true);
+  client_->CancelTransfer(peer1, att_id, true);
+  FlushClientQueue();
 
-  // 5. Verify cancel message sent (Binary protocol: Type 0x03)
   bool cancel_sent = false;
   for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_binary_messages) {
     if (IsBinaryPacket(msg, 0x03, att_id)) {
@@ -144,14 +127,12 @@ TEST_F(FileTransferCancellationTest, CancelUpload) {
   }
   EXPECT_TRUE(cancel_sent);
 
-  // Verify DB status
   auto att_db = storage_->GetAttachment(att_id);
   ASSERT_TRUE(att_db.has_value());
   EXPECT_EQ(att_db->status, messaging::AttachmentStatus::canceled);
 }
 
 TEST_F(FileTransferCancellationTest, CancelDownload_PausesDownload) {
-  // Mock DB state for incoming attachment
   messaging::Attachment att;
   att.id = "down_id";
   att.type = messaging::AttachmentType::file;
@@ -163,7 +144,7 @@ TEST_F(FileTransferCancellationTest, CancelDownload_PausesDownload) {
   messaging::MessageEntry msg_data;
   msg_data.attachments.push_back(att);
 
-  std::ignore = storage_->AddHistoryEntry(
+  auto entry = mock_storage_->AddHistoryEntry(
       {.kind = messaging::HistoryEntryKind::textMessage,
        .timestamp = 100,
        .direction = messaging::MessageDirection::received,
@@ -171,52 +152,44 @@ TEST_F(FileTransferCancellationTest, CancelDownload_PausesDownload) {
        .peer_id = peer1}
   );
 
-  // Start Download by receiving chunk 0
   std::vector<std::byte> const payload = {std::byte{0x00}, std::byte{0x11}, std::byte{0x22}};
   auto chunk = CreateChunkPacket("down_id", 0, payload);
 
-  file_transfer_service_->ProcessBinaryMessage(peer1, chunk);
+  EventQueue::Instance().Push(EventDataChannelMessage{peer1, chunk});
+  FlushClientQueue();
 
-  // Verify temp file exists
   std::filesystem::path const temp_path = attachments_dir_ / "down_id.tmp";
   ASSERT_TRUE(std::filesystem::exists(temp_path));
 
-  // Cancel (is_upload = false) -> This acts as PAUSE for downloads
-  service_->CancelTransfer(peer1, "down_id", false);
+  client_->CancelTransfer(peer1, "down_id", false);
+  FlushClientQueue();
 
-  // Verify PAUSE message sent (Binary Type 0x04)
   bool pause_sent = false;
   for (auto const& msg : mock_transport_->CallLog()->sent_binary_messages | std::views::values) {
-    if (IsBinaryPacket(msg, 0x04, "down_id")) {  // 0x04 = PAUSE
+    if (IsBinaryPacket(msg, 0x04, "down_id")) {
       pause_sent = true;
     }
   }
   EXPECT_TRUE(pause_sent);
-
-  // Verify temp file STILL exists (to allow resume)
   EXPECT_TRUE(std::filesystem::exists(temp_path));
 
-  // Verify DB status is PAUSED
   auto att_db = storage_->GetAttachment("down_id");
   ASSERT_TRUE(att_db.has_value());
   EXPECT_EQ(att_db->status, messaging::AttachmentStatus::paused);
 }
 
 TEST_F(FileTransferCancellationTest, ResumeSendsRequest) {
-  // Setup peer
   auto const peer = std::make_shared<transport::Peer>(peer1);
   peer->data_channel_is_open = true;
   transport_->AddPeer(peer1, peer);
 
-  // Setup attachment in DB (upload)
   messaging::Attachment att;
   att.id = "resume_id";
-  att.is_downloaded = true;  // upload
+  att.is_downloaded = true;
   att.file_path = (temp_dir_ / "upload.dat").string();
   att.size_bytes = 100;
   att.hash = "abc";
 
-  // Create the file
   std::ofstream(att.file_path) << "data";
 
   messaging::MessageEntry msg_data;
@@ -225,10 +198,9 @@ TEST_F(FileTransferCancellationTest, ResumeSendsRequest) {
 
   mock_transport_->CallLog()->sent_binary_messages.clear();
 
-  // Resume
-  service_->ResumeTransfer(peer1, "resume_id", false);
+  client_->ResumeTransfer(peer1, "resume_id", false);
+  FlushClientQueue();
 
-  // Verify resume request sent (Binary Type 0x05)
   bool req_sent = false;
   for (auto const& msg : mock_transport_->CallLog()->sent_binary_messages | std::views::values) {
     if (IsBinaryPacket(msg, 0x05, "resume_id")) {

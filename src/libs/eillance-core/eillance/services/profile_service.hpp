@@ -14,6 +14,7 @@
 #include "eillance/identity/contact_manager.hpp"
 #include "eillance/services/account_service.hpp"
 #include "eillance/services/messaging_service.hpp"
+#include "eillance/services/service_manager.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/transport/data_transport.hpp"
 #include "eillance/utils/event_queue.hpp"
@@ -23,30 +24,26 @@ namespace eillance::services {
 
 class ProfileService {
  public:
-  explicit ProfileService(
-      std::shared_ptr<storage::PersistentStorage> storage,
-      std::shared_ptr<transport::DataTransport> transport,
-      std::shared_ptr<identity::ContactManager> contact_manager,
-      std::shared_ptr<AccountService> account_service,
-      std::shared_ptr<MessagingService> messaging_service
-  )
-      : storage_(std::move(storage)),
-        transport_(std::move(transport)),
-        manager_(std::move(contact_manager)),
-        account_service_(account_service),
-        messaging_service_(messaging_service) {
+  explicit ProfileService(ServiceManager* sm)
+      : sm_(sm),
+        storage_(sm->storage),
+        transport_(sm->data_transport),
+        manager_(sm->contact_manager) {
+  }
+
+  ~ProfileService() {
+    for (auto const& unsub : event_unsubs_) unsub();
   }
 
   // --- Actions ---
 
-  // Sends my profile to the peer. Queues the action.
   void SendMyProfile(ContactID const& peer_id) {
     nlohmann::json msg;
     msg["type"] = "profile_info";
-    msg["display_name"] = account_service_->GetSettings()->GetMyDisplayName().value_or("");
-    msg["bio"] = account_service_->GetSettings()->GetMyBio().value_or("");
+    msg["display_name"] = sm_->account->GetSettings()->GetMyDisplayName().value_or("");
+    msg["bio"] = sm_->account->GetSettings()->GetMyBio().value_or("");
 
-    auto photo = account_service_->GetSettings()->GetMyPhotoBase64();
+    auto photo = sm_->account->GetSettings()->GetMyPhotoBase64();
     if (photo && !photo->empty()) {
       msg["photo"] = *photo;
     } else {
@@ -54,21 +51,18 @@ class ProfileService {
     }
 
     storage_->AddPendingAction(peer_id, msg.dump());
-    messaging_service_->SendQueuedMessages(peer_id);
+    sm_->messaging->SendQueuedMessages(peer_id);
   }
 
-  // Requests the peer to send their profile.
   void RequestProfile(ContactID const& peer_id) {
     storage_->AddPendingAction(peer_id, nlohmann::json{{"type", "profile_request"}}.dump());
-    messaging_service_->SendQueuedMessages(peer_id);
+    sm_->messaging->SendQueuedMessages(peer_id);
   }
 
-  // Flushes pending profile actions. In unified system, this just calls the central flush.
   void SyncProfile(ContactID const& peer_id) {
-    messaging_service_->SendQueuedMessages(peer_id);
+    sm_->messaging->SendQueuedMessages(peer_id);
   }
 
-  // Marks all confirmed contacts as needing a profile update (e.g. after I change my name).
   void MarkAllContactsProfileSyncNeeded() {
     auto const contacts = manager_->GetContacts();
     for (auto const& contact : contacts) {
@@ -77,10 +71,6 @@ class ProfileService {
         SendMyProfile(contact.peer_id);
       }
     }
-  }
-
-  void NotifyProfileUpdated(ContactID const& peer_id) {
-    EventQueue::Instance().Push(EventContactProfileUpdated{peer_id});
   }
 
   // --- Incoming Events ---
@@ -113,14 +103,13 @@ class ProfileService {
     }
 
     if (changed) {
-      INVARIANT(messaging_service_);
       nlohmann::json diff;
       diff["action"] = "profile_update_diff";
       diff["new"] = {{"display_name", name}, {"bio", bio}, {"photo", photo}};
       if (old) {
         diff["old"] = {{"display_name", old->display_name}, {"bio", old->bio}, {"photo", old->photo_base64}};
       }
-      messaging_service_->AddSystemEntry(peer_id, diff.dump(), messaging::MessageDirection::received);
+      sm_->messaging->AddSystemEntry(peer_id, diff.dump(), messaging::MessageDirection::received);
     }
 
     manager_->UpdateContactProfile(peer_id, name, bio, photo);
@@ -128,12 +117,11 @@ class ProfileService {
   }
 
  private:
+  ServiceManager* sm_;
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<transport::DataTransport> transport_;
   std::shared_ptr<identity::ContactManager> manager_;
-
-  std::shared_ptr<AccountService> account_service_;
-  std::shared_ptr<MessagingService> messaging_service_;
+  std::vector<std::function<void()>> event_unsubs_;
 };
 
 }  // namespace eillance::services

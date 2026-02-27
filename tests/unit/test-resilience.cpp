@@ -56,12 +56,9 @@ class ResilienceTest : public ::testing::Test {
     (void)client_->GetAccountService()->GenerateNewIdentity();
 
     // Establish a confirmed contact context
-    std::ignore = client_->AddContact(peer1, std::nullopt);
     mock_storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
     client_->GetContactService()->ReloadCache();
 
-    // Clear side-effects from AddContact (e.g. the initial contact_request action)
-    // to ensure tests start with an empty pending queue.
     auto pending = mock_storage_->GetPendingActions(peer1);
     for (auto const& action : pending) {
       mock_storage_->RemovePendingAction(action.id);
@@ -317,10 +314,9 @@ TEST_F(ResilienceTest, MessageRedeliveryDeduplication) {
 
   // Check History
   auto page = client_->GetMessageHistoryPage(peer1, 0, 10);
-  ASSERT_EQ(page.messages.size(), 2);
-  ASSERT_EQ(page.messages[0].kind, messaging::HistoryEntryKind::systemMessage);
-  ASSERT_EQ(page.messages[1].kind, messaging::HistoryEntryKind::textMessage);
-  ASSERT_EQ(page.messages[1].remote_id, msg_id);
+  ASSERT_EQ(page.messages.size(), 1);
+  ASSERT_EQ(page.messages[0].kind, messaging::HistoryEntryKind::textMessage);
+  ASSERT_EQ(page.messages[0].remote_id, msg_id);
 
   // Clear transport log to check for receipt
   mock_transport_->CallLog()->sent_peer_messages.clear();
@@ -328,12 +324,11 @@ TEST_F(ResilienceTest, MessageRedeliveryDeduplication) {
   // Second Delivery (Duplicate)
   client_->GetMessagingService()->OnChatMessageReceived(peer1, encrypted, msg_id, false);
 
-  // Check History - Should still be 1text message
+  // Check History - Should still be 1 text message
   page = client_->GetMessageHistoryPage(peer1, 0, 10);
-  ASSERT_EQ(page.messages.size(), 2);
-  ASSERT_EQ(page.messages[0].kind, messaging::HistoryEntryKind::systemMessage);
-  ASSERT_EQ(page.messages[1].kind, messaging::HistoryEntryKind::textMessage);
-  ASSERT_EQ(page.messages[1].remote_id, msg_id);
+  ASSERT_EQ(page.messages.size(), 1);
+  ASSERT_EQ(page.messages[0].kind, messaging::HistoryEntryKind::textMessage);
+  ASSERT_EQ(page.messages[0].remote_id, msg_id);
 
   // Check Receipt Sent
   bool receipt_sent = false;

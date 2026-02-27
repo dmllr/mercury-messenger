@@ -26,6 +26,7 @@
 #include "eillance/messaging/history.hpp"
 #include "eillance/services/account_service.hpp"
 #include "eillance/services/file_transfer_service.hpp"
+#include "eillance/services/service_manager.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/transport/data_transport.hpp"
 #include "eillance/utils/event_queue.hpp"
@@ -76,15 +77,6 @@ auto ResolvePathConflict(std::filesystem::path const& dir, std::string const& fi
 
 }  // namespace
 
-struct AttachmentRequest {
-  std::string file_path;
-  messaging::AttachmentType type;
-  std::string thumbnail_base64;
-  std::string mime_type;
-  std::string note;
-  std::string file_name;
-};
-
 class MessagingService {
  public:
   static constexpr std::uint16_t protocolVersion = 2;
@@ -101,21 +93,18 @@ class MessagingService {
     }
   };
 
-  explicit MessagingService(
-      std::shared_ptr<storage::PersistentStorage> storage,
-      std::shared_ptr<transport::DataTransport> transport,
-      std::shared_ptr<identity::ContactManager> contact_manager,
-      std::shared_ptr<AccountService> account_service,
-      std::shared_ptr<FileTransferService> file_transfer_service
-  )
-      : storage_(std::move(storage)),
-        transport_(std::move(transport)),
-        contact_manager_(std::move(contact_manager)),
-        file_transfer_service_(std::move(file_transfer_service)),
-        account_service_(std::move(account_service)) {
+  explicit MessagingService(ServiceManager* sm)
+      : sm_(sm),
+        storage_(sm->storage),
+        transport_(sm->data_transport),
+        contact_manager_(sm->contact_manager) {
     history_ = std::make_unique<messaging::MessageHistory>(storage_);
+    delivery_service_ = std::make_unique<messaging::MessageDeliveryService>(sm_);
+  }
 
-    delivery_service_ = std::make_unique<messaging::MessageDeliveryService>(storage_, contact_manager_, transport_);
+  ~MessagingService() {
+    for (auto const& unsub : event_unsubs_) unsub();
+    StopDeliveryService();
   }
 
   void StartDeliveryService() {
@@ -126,11 +115,10 @@ class MessagingService {
     delivery_service_->Stop();
   }
 
-  // Sending
   auto SendChatMessage(
       ContactID const& peer_id,
       std::string const& message,
-      std::vector<AttachmentRequest> const& attachments = {}
+      std::vector<messaging::AttachmentRequest> const& attachments = {}
   ) -> messaging::HistoryEntryRecord {
     if (!contact_manager_->GetContact(peer_id)) {
       LGE << "Cannot send message to " << peer_id.ToString() << ". Not a contact.";
@@ -231,7 +219,7 @@ class MessagingService {
     } else {
       delivery_service_->AttemptDelivery(peer_id);
     }
-    NotifyMessageUpdate(peer_id, message_id);
+    EventQueue::Instance().Push(EventMessageUpdated{peer_id, message_id});
   }
 
   void SendEditMessage(ContactID const& peer_id, std::uint64_t message_id, std::string const& new_content) {
@@ -249,11 +237,11 @@ class MessagingService {
     } else {
       delivery_service_->AttemptDelivery(peer_id);
     }
-    NotifyMessageUpdate(peer_id, message_id);
+    EventQueue::Instance().Push(EventMessageUpdated{peer_id, message_id});
   }
 
   void SendReaction(ContactID const& peer_id, std::uint64_t message_id, messaging::Reaction reaction) {
-    history_->ToggleReaction(peer_id, message_id, account_service_->GetId(), reaction);
+    history_->ToggleReaction(peer_id, message_id, sm_->account->GetId(), reaction);
 
     auto remote_id = history_->GetRemoteId(peer_id, message_id);
     uint64_t target_id = remote_id ? *remote_id : message_id;
@@ -271,10 +259,10 @@ class MessagingService {
     } else {
       delivery_service_->AttemptDelivery(peer_id);
     }
-    NotifyMessageUpdate(peer_id, message_id);
+    EventQueue::Instance().Push(EventMessageUpdated{peer_id, message_id});
   }
 
-  void SendSystemMessage(ContactID const& peer_id, std::string const& content, bool persist = true) {
+  void SendSystemMessage(ContactID const& peer_id, std::string const& content, bool persist) {
     auto const entry = history_->AddTextEntry(
         peer_id,
         content,
@@ -289,7 +277,6 @@ class MessagingService {
       nlohmann::json const action_payload = {{"type", "chat"}, {"message_id", entry.id}};
       storage_->AddPendingAction(peer_id, action_payload.dump(), Time::Now(), entry.id);
     } else {
-      // Ephemeral: try sending immediately if possible
       if (auto const peer = transport_->GetPeer(peer_id);
           peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
         bool should_remove = false;
@@ -312,15 +299,6 @@ class MessagingService {
     SendQueuedMessages(peer_id);
   }
 
-  void TriggerSend(ContactID const& peer_id) {
-    if (auto const peer = transport_->GetPeer(peer_id);
-        peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
-      SendQueuedMessages(peer_id);
-    } else {
-      delivery_service_->AttemptDelivery(peer_id);
-    }
-  }
-
   void SendQueuedMessages(ContactID const& peer_id) {
     {
       std::lock_guard<std::recursive_mutex> const lock(flushing_mutex_);
@@ -341,7 +319,7 @@ class MessagingService {
 
     auto const peer = transport_->GetPeer(peer_id);
 
-    file_transfer_service_->OnConnectionReady(peer_id);
+    sm_->file_transfer->OnConnectionReady(peer_id);
 
     auto pending_actions = storage_->GetPendingActions(peer_id);
     if (pending_actions.empty()) return;
@@ -370,6 +348,9 @@ class MessagingService {
           if (should_remove) {
             remove_on_success = true;
           }
+        } else if (type == "contact_confirm") {
+          transport_->SendSignalingMessage(json_action);
+          success = true;
         } else {
           if (peer && peer->data_channel_is_open) {
             if (transport_->SendJson(peer_id, json_action)) {
@@ -395,11 +376,7 @@ class MessagingService {
       }
     }
 
-    delivery_service_->ConnectionAttemptFinished(peer_id);
-  }
-
-  void OnConnectionAttemptFinished(ContactID const& peer_id) const {
-    delivery_service_->ConnectionAttemptFinished(peer_id);
+    EventQueue::Instance().Push(EventConnectionAttemptFinished{peer_id});
   }
 
   void CancelTransfer(
@@ -408,7 +385,8 @@ class MessagingService {
       bool const is_upload,
       bool const notify_peer = true
   ) const {
-    file_transfer_service_->CancelTransfer(peer_id, attachment_id, is_upload, notify_peer);
+    sm_->file_transfer->CancelTransfer(peer_id, attachment_id, is_upload, notify_peer);
+
     if (is_upload) {
       auto sending_msgs = storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::sending);
       for (auto const& entry : sending_msgs) {
@@ -439,11 +417,17 @@ class MessagingService {
   }
 
   void ResumeTransfer(ContactID const& peer_id, std::string const& attachment_id, bool const is_upload) {
-    RequestConnection(peer_id);
-    file_transfer_service_->ResumeTransfer(peer_id, attachment_id, is_upload);
+    sm_->file_transfer->ResumeTransfer(peer_id, attachment_id, is_upload);
+    if (auto const peer = transport_->GetPeer(peer_id);
+        peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
+      SendQueuedMessages(peer_id);
+    } else {
+      EventQueue::Instance().Push(EventConnectionRequested{peer_id});
+    }
   }
 
   void DiscardAttachment(ContactID const& peer_id, std::string const& attachment_id) {
+    sm_->file_transfer->DiscardAttachment(peer_id, attachment_id);
     auto const attachment = storage_->GetAttachment(attachment_id);
     bool should_send_cancel = true;
     if (attachment) {
@@ -453,8 +437,6 @@ class MessagingService {
         should_send_cancel = false;
       }
     }
-
-    file_transfer_service_->DiscardAttachment(peer_id, attachment_id);
 
     if (should_send_cancel) {
       nlohmann::json const cancel_msg = {{"type", "file_cancel"}, {"file_id", attachment_id}};
@@ -519,6 +501,7 @@ class MessagingService {
       -> std::optional<std::string> {
     return history_->GetFullMessageContent(peer_id, message_id);
   }
+
   [[nodiscard]] auto GetChatSummaries(std::vector<ContactID> const& peer_ids
   ) const -> std::vector<messaging::ChatSummary> {
     return history_->GetChatSummaries(peer_ids);
@@ -559,7 +542,6 @@ class MessagingService {
   AddSystemEntry(ContactID const& peer_id, std::string const& content, messaging::MessageDirection const direction) {
     auto const entry =
         history_->AddTextEntry(peer_id, content, {}, direction, messaging::HistoryEntryKind::systemMessage);
-
     EventQueue::Instance().Push(EventChatMessageReceived{peer_id, entry});
   }
 
@@ -590,7 +572,10 @@ class MessagingService {
       contact_manager_->MarkAsConfirmed(peer_id);
       EventQueue::Instance().Push(EventContactRestored{peer_id});
     }
-    UpdatePeerActivity(peer_id);
+
+    if (auto const p = transport_->GetPeer(peer_id)) {
+      p->last_activity_time = Time::Now();
+    }
 
     {
       constexpr auto page_size = 50U;
@@ -668,7 +653,7 @@ class MessagingService {
 
     if (!local_attachments.empty()) {
       for (auto const& att : local_attachments) {
-        file_transfer_service_->QueueDownload(peer_id, att, entry.id);
+        sm_->file_transfer->QueueDownload(peer_id, att, entry.id);
       }
     }
 
@@ -690,14 +675,14 @@ class MessagingService {
     }
     history_->UpdateMessageStatus(peer_id, message_id, message_status);
     storage_->RemovePendingActionByRefId(peer_id, message_id);
+    EventQueue::Instance().Push(EventMessageStatusChanged{peer_id, message_id, message_status});
   }
 
-  // Handle Incoming Actions
   void OnMessageDelete(ContactID const& peer_id, uint64_t target_id) {
     auto local_id = history_->FindMessageIdByRemoteOrLocal(peer_id, target_id);
     if (local_id) {
       history_->MarkMessageDeleted(peer_id, *local_id);
-      NotifyMessageUpdate(peer_id, *local_id);
+      EventQueue::Instance().Push(EventMessageUpdated{peer_id, *local_id});
     }
   }
 
@@ -705,7 +690,7 @@ class MessagingService {
     auto local_id = history_->FindMessageIdByRemoteOrLocal(peer_id, target_id);
     if (local_id) {
       history_->UpdateMessageContent(peer_id, *local_id, new_content);
-      NotifyMessageUpdate(peer_id, *local_id);
+      EventQueue::Instance().Push(EventMessageUpdated{peer_id, *local_id});
     }
   }
 
@@ -713,44 +698,18 @@ class MessagingService {
     auto local_id = history_->FindMessageIdByRemoteOrLocal(peer_id, target_id);
     if (local_id) {
       history_->ToggleReaction(peer_id, *local_id, peer_id, reaction);
-      NotifyMessageUpdate(peer_id, *local_id);
+      EventQueue::Instance().Push(EventMessageUpdated{peer_id, *local_id});
     }
-  }
-
-  void NotifyMessageUpdate(ContactID const& peer_id, uint64_t msg_id) {
-    EventQueue::Instance().Push(EventMessageUpdated{peer_id, msg_id});
   }
 
   void OnMessagesRead(ContactID const& peer_id, std::vector<uint64_t> const& message_ids) const {
     for (auto id : message_ids) {
       history_->UpdateMessageStatus(peer_id, id, messaging::MessageStatus::read);
+      EventQueue::Instance().Push(EventMessageStatusChanged{peer_id, id, messaging::MessageStatus::read});
     }
   }
 
  private:
-  void RequestConnection(ContactID const& peer_id) {
-    if (auto const peer = transport_->GetPeer(peer_id);
-        peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
-      SendQueuedMessages(peer_id);
-    } else {
-      EventQueue::Instance().Push(EventConnectionRequested{peer_id});
-    }
-  }
-  void UpdatePeerActivity(ContactID const& peer_id) {
-    if (auto const peer = transport_->GetPeer(peer_id)) {
-      peer->last_activity_time = Time::Now();
-    }
-  }
-  [[nodiscard]] auto HasPendingWork(ContactID const& peer_id) const -> bool {
-    if (!storage_->GetPendingActions(peer_id).empty()) {
-      return true;
-    }
-    auto const attachments = storage_->GetPendingAttachments(peer_id);
-    return std::ranges::any_of(attachments, [](auto const& att) {
-      return att.status == messaging::AttachmentStatus::pending ||
-             att.status == messaging::AttachmentStatus::transferring;
-    });
-  }
   static auto GenerateAttachmentId() -> std::string {
     static std::random_device random_device;
     static std::mt19937 gen(random_device());
@@ -849,7 +808,6 @@ class MessagingService {
     payload_json[keyContent] = content_to_send;
 
     auto encrypted = peer->session_cipher->Encrypt(payload_json.dump());
-    UpdatePeerActivity(peer_id);
 
     if (!encrypted.empty()) {
       nlohmann::json json_msg = {
@@ -880,7 +838,7 @@ class MessagingService {
       if (transport_->SendJson(peer_id, json_msg)) {
         if (!valid_attachments.empty()) {
           for (auto const& att : valid_attachments) {
-            file_transfer_service_->QueueUpload(peer_id, att);
+            sm_->file_transfer->QueueUpload(peer_id, att);
           }
         }
         remove_action = false;
@@ -920,14 +878,14 @@ class MessagingService {
     return false;
   }
 
+  ServiceManager* sm_;
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<transport::DataTransport> transport_;
   std::shared_ptr<identity::ContactManager> contact_manager_;
-  std::shared_ptr<FileTransferService> file_transfer_service_;
-  std::shared_ptr<AccountService> account_service_;
   std::unique_ptr<messaging::MessageHistory> history_;
   std::unique_ptr<messaging::MessageDeliveryService> delivery_service_;
 
+  std::vector<std::function<void()>> event_unsubs_;
   std::unordered_set<ContactID> flushing_peers_;
   std::recursive_mutex flushing_mutex_;
 

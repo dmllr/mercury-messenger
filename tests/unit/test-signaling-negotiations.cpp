@@ -64,52 +64,36 @@ class SignalingNegotiationTest : public ::testing::Test {
     contact_manager_ = std::make_shared<identity::ContactManager>(storage_);
 
     // Services
-    account_service_ = std::make_shared<services::AccountService>(storage_, transport_);
+    sm_ = std::make_unique<services::ServiceManager>();
+    sm_->storage = storage_;
+    sm_->data_transport = transport_;
+    sm_->media_transport = media_transport_;
+    sm_->contact_manager = contact_manager_;
+
+    account_service_ = std::make_shared<services::AccountService>(sm_.get());
+    sm_->account = account_service_;
     std::ignore = account_service_->GenerateNewIdentity();
     my_id_ = account_service_->GetId();
 
-    file_transfer_service_ = std::make_shared<services::FileTransferService>(storage_, transport_);
+    file_transfer_service_ = std::make_shared<services::FileTransferService>(sm_.get());
+    sm_->file_transfer = file_transfer_service_;
 
-    messaging_service_ = std::make_shared<services::MessagingService>(
-        storage_,
-        transport_,
-        contact_manager_,
-        account_service_,
-        file_transfer_service_
-    );
+    messaging_service_ = std::make_shared<services::MessagingService>(sm_.get());
+    sm_->messaging = messaging_service_;
 
-    media_call_service_ =
-        std::make_shared<services::MediaCallService>(storage_, transport_, media_transport_, account_service_);
+    media_call_service_ = std::make_shared<services::MediaCallService>(sm_.get());
+    sm_->media_call = media_call_service_;
     media_call_service_->SetVideoCapture(std::make_unique<MockCapture>());
     media_call_service_->SetAudioCapture(std::make_unique<MockCapture>());
 
-    profile_service_ = std::make_shared<services::ProfileService>(
-        storage_,
-        transport_,
-        contact_manager_,
-        account_service_,
-        messaging_service_
-    );
+    profile_service_ = std::make_shared<services::ProfileService>(sm_.get());
+    sm_->profile = profile_service_;
 
-    contact_service_ = std::make_shared<services::ContactService>(
-        storage_,
-        transport_,
-        contact_manager_,
-        account_service_,
-        profile_service_
-    );
+    contact_service_ = std::make_shared<services::ContactService>(sm_.get());
+    sm_->contact = contact_service_;
 
-    // Target: Internal Messaging Service
-    internal_service_ = std::make_unique<services::InternalMessagingService>(
-        transport_,
-        media_transport_,
-        account_service_,
-        contact_service_,
-        messaging_service_,
-        media_call_service_,
-        file_transfer_service_,
-        profile_service_
-    );
+    internal_service_ = std::make_shared<services::InternalMessagingService>(sm_.get());
+    sm_->internal_messaging = internal_service_;
   }
 
   void TearDown() override {
@@ -131,7 +115,8 @@ class SignalingNegotiationTest : public ::testing::Test {
   std::shared_ptr<services::MediaCallService> media_call_service_;
   std::shared_ptr<services::ProfileService> profile_service_;
   std::shared_ptr<services::ContactService> contact_service_;
-  std::unique_ptr<services::InternalMessagingService> internal_service_;
+  std::unique_ptr<services::ServiceManager> sm_;
+  std::shared_ptr<services::InternalMessagingService> internal_service_;
 
   ContactID my_id_;
 };

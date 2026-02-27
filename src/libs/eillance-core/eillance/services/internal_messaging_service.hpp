@@ -12,14 +12,14 @@
 #include "eillance/events/client_events.hpp"
 #include "eillance/events/service_connection_state.hpp"
 #include "eillance/logging/logging.hpp"
-#include "eillance/services/account_service.hpp"
-#include "eillance/services/call_id.hpp"
 #include "eillance/services/contact_service.hpp"
 #include "eillance/services/file_transfer_service.hpp"
 #include "eillance/services/media_call_service.hpp"
 #include "eillance/services/messaging_service.hpp"
 #include "eillance/services/profile_service.hpp"
+#include "eillance/services/service_manager.hpp"
 #include "eillance/transport/data_transport.hpp"
+#include "eillance/transport/media_transport.hpp"
 #include "eillance/transport/protocol.hpp"
 #include "eillance/utils/event_queue.hpp"
 #include "eillance/utils/time.hpp"
@@ -30,30 +30,16 @@ class InternalMessagingService {
  public:
   using Json = nlohmann::json;
 
-  InternalMessagingService(
-      std::shared_ptr<transport::DataTransport> data_transport,
-      std::shared_ptr<transport::MediaTransport> media_transport,
-      std::shared_ptr<AccountService> account_service,
-      std::shared_ptr<ContactService> contact_service,
-      std::shared_ptr<MessagingService> messaging_service,
-      std::shared_ptr<MediaCallService> media_call_service,
-      std::shared_ptr<FileTransferService> file_transfer_service,
-      std::shared_ptr<ProfileService> profile_service
-  )
-      : data_transport_(std::move(data_transport)),
-        media_transport_(std::move(media_transport)),
-        account_service_(std::move(account_service)),
-        contact_service_(std::move(contact_service)),
-        messaging_service_(std::move(messaging_service)),
-        media_call_service_(std::move(media_call_service)),
-        file_transfer_service_(std::move(file_transfer_service)),
-        profile_service_(std::move(profile_service)) {
-    auto sub1 = EventQueue::Instance().Subscribe<EventDataChannelMessage>([this](auto const& e) {
+  explicit InternalMessagingService(ServiceManager* sm)
+      : sm_(sm),
+        data_transport_(sm->data_transport),
+        media_transport_(sm->media_transport) {
+    auto sub1 = EventQueue::Instance().Subscribe<EventDataChannelMessage>([this](EventDataChannelMessage const& e) {
       this->HandleDataChannelMessage(e.peer_id, e.message);
     });
     event_unsubs_.push_back([sub1]() { EventQueue::Instance().Unsubscribe<EventDataChannelMessage>(sub1); });
 
-    auto sub2 = EventQueue::Instance().Subscribe<EventPeerMessage>([this](auto const& e) {
+    auto sub2 = EventQueue::Instance().Subscribe<EventPeerMessage>([this](EventPeerMessage const& e) {
       auto const from_it = e.message.find("from");
       if (from_it == e.message.end()) return;
       ContactID const peer_id(from_it->get<std::string>());
@@ -63,7 +49,7 @@ class InternalMessagingService {
     });
     event_unsubs_.push_back([sub2]() { EventQueue::Instance().Unsubscribe<EventPeerMessage>(sub2); });
 
-    auto sub3 = EventQueue::Instance().Subscribe<EventSystemMessage>([this](auto const& e) {
+    auto sub3 = EventQueue::Instance().Subscribe<EventSystemMessage>([this](EventSystemMessage const& e) {
       this->ProcessSystemMessage(e.type, e.message);
     });
     event_unsubs_.push_back([sub3]() { EventQueue::Instance().Unsubscribe<EventSystemMessage>(sub3); });
@@ -86,16 +72,14 @@ class InternalMessagingService {
             reinterpret_cast<std::byte const*>(challenge.data()),
             challenge.size()
         );
-        auto const signature = account_service_->Sign(challenge_bytes);
-        auto const response =
-            transport::protocol::CreateAuthResponse(account_service_->GetId(), crypto::ToHex(signature));
+        auto const signature = sm_->account->Sign(challenge_bytes);
+        auto const response = transport::protocol::CreateAuthResponse(sm_->account->GetId(), crypto::ToHex(signature));
         data_transport_->SendSignalingMessage(response);
       }
     } else if (type == transport::protocol::values::loginSuccess) {
       EventQueue::Instance().Push(
           EventStatusChanged{ContactID(), EventSource::system, static_cast<int>(ServiceConnectionState::online)}
       );
-      messaging_service_->StartDeliveryService();
     } else if (type == transport::protocol::values::iceServers) {
       if (message.contains(transport::protocol::keys::servers)) {
         EventQueue::Instance().Push(EventServerIceConfig{message[transport::protocol::keys::servers].dump()});
@@ -106,7 +90,6 @@ class InternalMessagingService {
   }
 
   void ProcessSignalingMessage(ContactID const& peer_id, std::string const& type, Json const& message) {
-    // SDP Signaling (Unified)
     if (type == transport::protocol::values::offer || type == transport::protocol::values::answer) {
       HandleSdp(peer_id, type, message);
       return;
@@ -118,9 +101,9 @@ class InternalMessagingService {
         token = message["token"];
       }
       Json const profile = message.value("profile", Json::object());
-      contact_service_->OnContactAddRequest(peer_id, token, profile);
+      sm_->contact->OnContactAddRequest(peer_id, token, profile);
     } else if (type == "contact_confirm") {
-      contact_service_->OnContactConfirm(peer_id);
+      sm_->contact->OnContactConfirm(peer_id);
     }
   }
 
@@ -130,7 +113,7 @@ class InternalMessagingService {
     }
 
     if (!msg.empty() && msg[0] == std::byte{0xFE}) {
-      file_transfer_service_->ProcessBinaryMessage(peer_id, msg);
+      // Ignored here, FileTransferService subscribes to this directly and checks for 0xFE.
     } else {
       try {
         std::string json_str;
@@ -152,7 +135,7 @@ class InternalMessagingService {
       }
     }
     if (should_unsuspend) {
-      messaging_service_->UnsuspendAndDeliver(peer_id);
+      sm_->messaging->UnsuspendAndDeliver(peer_id);
     }
   }
 
@@ -168,48 +151,48 @@ class InternalMessagingService {
     } else if (type == "chat") {
       HandleChatMessage(peer_id, message);
     } else if (type == "message_receipt") {
-      messaging_service_->OnMessageReceipt(peer_id, message["message_id"], message["status"]);
+      sm_->messaging->OnMessageReceipt(peer_id, message["message_id"], message["status"]);
     } else if (type == "message_read") {
-      messaging_service_->OnMessagesRead(peer_id, message["message_ids"].get<std::vector<uint64_t>>());
+      sm_->messaging->OnMessagesRead(peer_id, message["message_ids"].get<std::vector<uint64_t>>());
     } else if (type == "hangup") {
-      media_call_service_->OnHangupSignal(peer_id, message.value("call_id", ""));
+      sm_->media_call->OnHangupSignal(peer_id, message.value("call_id", ""));
     } else if (type == "call_request") {
       auto kind = static_cast<messaging::HistoryEntryKind>(message.value("kind", 0));
-      media_call_service_->OnCallRequest(peer_id, message.value("call_id", ""), kind);
+      sm_->media_call->OnCallRequest(peer_id, message.value("call_id", ""), kind);
     } else if (type == "call_reject") {
-      media_call_service_->OnCallReject(peer_id, message.value("call_id", ""));
+      sm_->media_call->OnCallReject(peer_id, message.value("call_id", ""));
     } else if (type == "call_accept") {
-      media_call_service_->OnCallAccepted(peer_id, message.value("call_id", ""));
+      sm_->media_call->OnCallAccepted(peer_id, message.value("call_id", ""));
     } else if (type == "call_ringing") {
-      media_call_service_->OnCallRinging(peer_id, message.value("call_id", ""));
+      sm_->media_call->OnCallRinging(peer_id, message.value("call_id", ""));
     } else if (type == transport::protocol::values::offer || type == transport::protocol::values::answer) {
       ProcessSignalingMessage(peer_id, type, message);
     } else if (type == "contact_removed") {
-      contact_service_->OnContactRemoved(peer_id);
+      sm_->contact->OnContactRemoved(peer_id);
     } else if (type == "reconfirm_request") {
-      contact_service_->OnReconfirmRequest(peer_id);
+      sm_->contact->OnReconfirmRequest(peer_id);
     } else if (type == "reconfirm_response") {
-      contact_service_->OnReconfirmResponse(peer_id, message["signature"]);
+      sm_->contact->OnReconfirmResponse(peer_id, message["signature"]);
     } else if (type == "contact_signature") {
-      contact_service_->OnContactSignature(peer_id, message["signature"]);
+      sm_->contact->OnContactSignature(peer_id, message["signature"]);
     } else if (type == "profile_info") {
-      profile_service_->OnProfileUpdate(peer_id, message);
+      sm_->profile->OnProfileUpdate(peer_id, message);
     } else if (type == "profile_request") {
-      profile_service_->SyncProfile(peer_id);
+      sm_->profile->RequestProfile(peer_id);
     } else if (type == "termination") {
       data_transport_->RemovePeer(peer_id);
     } else if (type == "file_cancel") {
       std::string const file_id = message.value("file_id", "");
       if (!file_id.empty()) {
-        file_transfer_service_->HandleCancel(peer_id, file_id);
+        sm_->file_transfer->HandleCancel(peer_id, file_id);
       }
     } else if (type == "message_delete") {
-      messaging_service_->OnMessageDelete(peer_id, message["target_id"].get<uint64_t>());
+      sm_->messaging->OnMessageDelete(peer_id, message["target_id"].get<uint64_t>());
     } else if (type == "message_edit") {
-      messaging_service_
+      sm_->messaging
           ->OnMessageEdit(peer_id, message["target_id"].get<uint64_t>(), message["content"].get<std::string>());
     } else if (type == "message_reaction") {
-      messaging_service_->OnMessageReaction(
+      sm_->messaging->OnMessageReaction(
           peer_id,
           message["target_id"].get<uint64_t>(),
           static_cast<messaging::Reaction>(message["reaction"].get<int>())
@@ -223,7 +206,6 @@ class InternalMessagingService {
       return;
     }
 
-    // Prevent duplicate Open events (e.g. from connection glare) from resetting the cipher.
     if (peer->data_channel_is_open.exchange(true)) {
       LGI << "Data channel with " << peer_id.ToString() << " is already open. Ignoring duplicate event.";
       return;
@@ -239,7 +221,7 @@ class InternalMessagingService {
       last_unsuspend_times_[peer_id] = Time::Now();
     }
 
-    if (account_service_->GetId() > peer_id) {
+    if (sm_->account->GetId() > peer_id) {
       auto my_pub_key = peer->session_cipher->GetPublicKey();
       Json const key_msg = {
           {"type", "key_exchange"},
@@ -249,7 +231,8 @@ class InternalMessagingService {
       std::ignore = data_transport_->SendJson(peer_id, key_msg);
     }
 
-    messaging_service_->UnsuspendAndDeliver(peer_id);
+    sm_->messaging->UnsuspendAndDeliver(peer_id);
+    sm_->file_transfer->OnConnectionReady(peer_id);
   }
 
  private:
@@ -264,7 +247,6 @@ class InternalMessagingService {
         data_transport_->AddPeer(peer_id, peer);
         media_transport_->AttachToPeer(peer_id, peer);
       } else {
-        // Generally this shouldn't happen.
         return;
       }
     }
@@ -272,9 +254,8 @@ class InternalMessagingService {
     if (type == transport::protocol::values::offer) {
       if (is_media) {
         auto const sdp = message[transport::protocol::keys::sdp].get<std::string>();
-        media_call_service_->OnMediaOffer(peer_id, sdp);
+        sm_->media_call->OnMediaOffer(peer_id, sdp);
       } else {
-        // Data offer
         data_transport_->Connect(peer_id);
         data_transport_->SetRemoteDescription(
             peer_id,
@@ -285,7 +266,7 @@ class InternalMessagingService {
       }
     } else if (type == transport::protocol::values::answer || type == transport::protocol::values::prAnswer) {
       if (is_media) {
-        media_call_service_->OnMediaAnswer(peer_id, message[transport::protocol::keys::sdp].get<std::string>());
+        sm_->media_call->OnMediaAnswer(peer_id, message[transport::protocol::keys::sdp].get<std::string>());
       } else {
         data_transport_->SetRemoteDescription(
             peer_id,
@@ -312,7 +293,7 @@ class InternalMessagingService {
             }
         );
       }
-      messaging_service_->SendQueuedMessages(peer_id);
+      sm_->messaging->SendQueuedMessages(peer_id);
     } else {
       LGE << "Failed key exchange with " << peer_id.ToString();
     }
@@ -341,17 +322,12 @@ class InternalMessagingService {
       }
     }
 
-    messaging_service_->OnChatMessageReceived(peer_id, payload, msg_id, is_sys, attachments);
+    sm_->messaging->OnChatMessageReceived(peer_id, payload, msg_id, is_sys, attachments);
   }
 
+  ServiceManager* sm_;
   std::shared_ptr<transport::DataTransport> data_transport_;
   std::shared_ptr<transport::MediaTransport> media_transport_;
-  std::shared_ptr<AccountService> account_service_;
-  std::shared_ptr<ContactService> contact_service_;
-  std::shared_ptr<MessagingService> messaging_service_;
-  std::shared_ptr<MediaCallService> media_call_service_;
-  std::shared_ptr<FileTransferService> file_transfer_service_;
-  std::shared_ptr<ProfileService> profile_service_;
 
   std::vector<std::function<void()>> event_unsubs_;
 

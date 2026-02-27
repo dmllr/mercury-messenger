@@ -22,7 +22,12 @@ class AccountServiceTest : public ::testing::Test {
 
     data_transport_ = std::make_shared<transport::DataTransport>(std::move(mock_data_transport_impl_));
 
-    service_ = std::make_unique<services::AccountService>(storage_, data_transport_);
+    sm_ = std::make_unique<services::ServiceManager>();
+    sm_->storage = storage_;
+    sm_->data_transport = data_transport_;
+
+    service_ = std::make_shared<services::AccountService>(sm_.get());
+    sm_->account = service_;
   }
 
   std::shared_ptr<storage::PersistentStorage> storage_;
@@ -30,7 +35,8 @@ class AccountServiceTest : public ::testing::Test {
   std::unique_ptr<transport::MockDataTransport> mock_data_transport_impl_;
   transport::MockDataTransport* mock_data_transport_raw_{};
   std::shared_ptr<transport::DataTransport> data_transport_;
-  std::unique_ptr<services::AccountService> service_;
+  std::unique_ptr<services::ServiceManager> sm_;
+  std::shared_ptr<services::AccountService> service_;
 };
 
 TEST_F(AccountServiceTest, IdentityGeneration) {

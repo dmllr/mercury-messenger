@@ -49,6 +49,15 @@ struct Attachment {
   std::string file_name;  // Original filename (e.g., "report.pdf")
 };
 
+struct AttachmentRequest {
+  std::string file_path;
+  AttachmentType type;
+  std::string thumbnail_base64;
+  std::string mime_type;
+  std::string note;
+  std::string file_name;
+};
+
 enum class MessageDirection : std::uint8_t {
   sent,
   received,

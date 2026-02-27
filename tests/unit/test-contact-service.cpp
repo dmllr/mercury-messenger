@@ -2,8 +2,10 @@
 
 #include <gtest/gtest.h>
 
+#include "eillance/services/account_service.hpp"
 #include "eillance/services/contact_service.hpp"
 #include "eillance/services/file_transfer_service.hpp"
+#include "eillance/services/messaging_service.hpp"
 #include "eillance/services/profile_service.hpp"
 #include "mock_data_transport.hpp"
 #include "mock_persistent_storage.hpp"
@@ -21,39 +23,28 @@ class ContactServiceTest : public ::testing::Test {
     mock_transport_raw_ = mock_transport_impl_.get();
     transport_ = std::make_shared<transport::DataTransport>(std::move(mock_transport_impl_));
 
-    account_service_ = std::make_unique<services::AccountService>(storage_, transport_);
+    sm_ = std::make_unique<services::ServiceManager>();
+    sm_->storage = storage_;
+    sm_->data_transport = transport_;
+    sm_->contact_manager = std::make_shared<identity::ContactManager>(storage_);
+
+    account_service_ = std::make_shared<services::AccountService>(sm_.get());
+    sm_->account = account_service_;
+
     std::ignore = account_service_->GenerateNewIdentity();
     account_service_->UpdateMyProfile("Test User", "", "");
 
-    auto contact_manager = std::make_shared<identity::ContactManager>(storage_);
+    file_transfer_service_ = std::make_shared<services::FileTransferService>(sm_.get());
+    sm_->file_transfer = file_transfer_service_;
 
-    file_transfer_service_ = std::make_shared<services::FileTransferService>(storage_, transport_);
+    messaging_service_ = std::make_shared<services::MessagingService>(sm_.get());
+    sm_->messaging = messaging_service_;
 
-    messaging_service_ = std::make_unique<services::MessagingService>(
-        storage_,
-        transport_,
-        contact_manager,
-        account_service_,
-        file_transfer_service_
-    );
+    profile_service_ = std::make_shared<services::ProfileService>(sm_.get());
+    sm_->profile = profile_service_;
 
-    profile_service_ = std::make_unique<services::ProfileService>(
-        storage_,
-        transport_,
-        contact_manager,
-        account_service_,
-        messaging_service_
-    );
-
-    contact_service_ = std::make_unique<services::ContactService>(
-        storage_,
-        transport_,
-        contact_manager,
-        account_service_,
-        profile_service_
-    );
-
-    contact_service_->SetMessagingService(messaging_service_);
+    contact_service_ = std::make_shared<services::ContactService>(sm_.get());
+    sm_->contact = contact_service_;
   }
 
   void TearDown() override {
@@ -69,7 +60,8 @@ class ContactServiceTest : public ::testing::Test {
   std::shared_ptr<services::FileTransferService> file_transfer_service_;
   std::shared_ptr<services::MessagingService> messaging_service_;
   std::shared_ptr<services::ProfileService> profile_service_;
-  std::unique_ptr<services::ContactService> contact_service_;
+  std::unique_ptr<services::ServiceManager> sm_;
+  std::shared_ptr<services::ContactService> contact_service_;
   uint64_t conn_sub_id_ = 0;
 
   ContactID const peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
