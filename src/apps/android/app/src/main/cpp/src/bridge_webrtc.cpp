@@ -118,7 +118,7 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcDataTransport_
 
     try {
       auto const json_msg = nlohmann::json::parse(msg_str);
-      transport->Delegate()->OnSystemMessage(type_str, json_msg);
+      eillance::EventQueue::Instance().Push(eillance::EventSystemMessage{type_str, json_msg});
     } catch (std::exception const& e) {
       LGE << "Failed to parse system message: " << e.what();
     }

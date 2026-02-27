@@ -33,7 +33,11 @@ class DeliveryServiceTest : public ::testing::Test {
       cv_.notify_one();
     });
 
-    delivery_service_ = std::make_unique<messaging::MessageDeliveryService>(storage_, contact_manager_, transport_);
+    sm_ = std::make_unique<services::ServiceManager>();
+    sm_->storage = storage_;
+    sm_->contact_manager = contact_manager_;
+    sm_->data_transport = transport_;
+    delivery_service_ = std::make_unique<messaging::MessageDeliveryService>(sm_.get());
   }
 
   void TearDown() override {
@@ -70,6 +74,7 @@ class DeliveryServiceTest : public ::testing::Test {
   std::unique_ptr<transport::MockDataTransport> mock_transport_impl_;
   std::shared_ptr<transport::DataTransport> transport_;
 
+  std::unique_ptr<services::ServiceManager> sm_;
   std::unique_ptr<messaging::MessageDeliveryService> delivery_service_;
   uint64_t conn_sub_id_ = 0;
 

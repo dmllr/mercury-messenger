@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -10,6 +11,7 @@
 #include "eillance/identity/contact_id.hpp"
 #include "eillance/messaging/types.hpp"
 #include "eillance/storage/data_types.hpp"
+#include "eillance/transport/peer_connection_state.hpp"
 
 namespace eillance {
 
@@ -50,6 +52,7 @@ struct EventChatMessageReceived {
   ContactID peer_id;
   messaging::HistoryEntryRecord message;
 };
+
 struct EventContactRequest {
   ContactID peer_id;
 };
@@ -124,5 +127,21 @@ struct EventDataChannelMessage {
 };
 struct EventDebugDataReset {};
 struct EventDataReloaded {};
+
+// Orchestration Events replacing cross-service calls
+struct EventConnectionAttemptFinished {
+  ContactID peer_id;
+};
+struct EventMediaPeerConnectionStateChanged {
+  ContactID peer_id;
+  transport::PeerConnectionState state;
+};
+struct EventMediaGatheringStateChanged {
+  ContactID peer_id;
+  int state_val;
+};
+struct EventStopDeliveryService {};
+struct EventDebugClearContactCache {};
+struct EventReloadContactCache {};
 
 }  // namespace eillance

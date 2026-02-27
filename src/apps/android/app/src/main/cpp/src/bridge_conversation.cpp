@@ -48,7 +48,7 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationView
   auto* vm = reinterpret_cast<eillance::view_model::ConversationViewModel*>(ptr);
   char const* msg_chars = env->GetStringUTFChars(message, nullptr);
 
-  std::vector<eillance::services::AttachmentRequest> atts;
+  std::vector<eillance::messaging::AttachmentRequest> atts;
   if (attachments != nullptr) {
     jsize const count = env->GetArrayLength(attachments);
     auto& cls = ClassRefs::Instance().Class("hela/eillance/ndkio/AttachmentRequest");

@@ -77,7 +77,7 @@ class ConversationViewModel {
   void SendText(std::string const& content) const {
     impl_->SendText(content);
   }
-  void SendMessage(std::string const& content, std::vector<services::AttachmentRequest> const& attachments) const {
+  void SendMessage(std::string const& content, std::vector<messaging::AttachmentRequest> const& attachments) const {
     impl_->SendMessage(content, attachments);
   }
   void DeleteMessage(uint64_t message_id) const {
@@ -149,7 +149,7 @@ class ConversationViewModel {
       SendMessage(content, {});
     }
 
-    void SendMessage(std::string const& content, std::vector<services::AttachmentRequest> const& attachments) {
+    void SendMessage(std::string const& content, std::vector<messaging::AttachmentRequest> const& attachments) {
       // Access MessagingService directly since facade might not have the overload yet
       auto entry = client->GetMessagingService()->SendChatMessage(peer_id, content, attachments);
 
