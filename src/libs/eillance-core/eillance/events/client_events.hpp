@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 
+#include <nlohmann/json.hpp>
+
 #include "eillance/events/event_source.hpp"
 #include "eillance/identity/contact_id.hpp"
 #include "eillance/messaging/types.hpp"
@@ -12,8 +14,38 @@
 namespace eillance {
 
 struct EventFrameReceived {
+  ContactID peer_id;
   std::vector<std::byte> frame;
 };
+
+struct EventSignalingError {
+  ContactID peer_id;
+  std::string error;
+};
+
+struct EventLoginSuccess {};
+
+struct EventPeerMessage {
+  nlohmann::json message;
+};
+
+struct EventSystemMessage {
+  std::string type;
+  nlohmann::json message;
+};
+
+struct EventDataChannelOpen {
+  ContactID peer_id;
+};
+
+struct EventFatalError {};
+
+struct EventMediaSample {
+  uint8_t type;
+  uint64_t timestamp;
+  std::vector<std::byte> sample;
+};
+
 struct EventChatMessageReceived {
   ContactID peer_id;
   messaging::HistoryEntryRecord message;

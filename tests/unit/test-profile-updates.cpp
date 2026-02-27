@@ -106,8 +106,7 @@ TEST_F(ProfileUpdatesTest, SendProfileOnConnect) {
   mock_transport_->CallLog()->sent_peer_messages.clear();
 
   // Simulate DataChannel open
-  ASSERT_TRUE(mock_transport_->delegate);
-  mock_transport_->delegate->OnDataChannelOpen(peer1);
+  mock_transport_->SimulateDataChannelOpen(peer1);
   FlushClientQueue();
 
   // Verify profile sent
@@ -131,8 +130,7 @@ TEST_F(ProfileUpdatesTest, NoProfileSendForPendingContact) {
   mock_transport_->CallLog()->sent_peer_messages.clear();
 
   // Trigger OnDataChannelOpen
-  ASSERT_TRUE(mock_transport_->delegate);
-  mock_transport_->delegate->OnDataChannelOpen(peer1);
+  mock_transport_->SimulateDataChannelOpen(peer1);
   FlushClientQueue();
 
   // Verify NO profile sent

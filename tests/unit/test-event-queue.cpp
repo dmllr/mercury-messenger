@@ -1,9 +1,9 @@
 #include <atomic>
 #include <chrono>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
-#include <mutex>
 
 #include <gtest/gtest.h>
 
@@ -136,7 +136,7 @@ TEST(EventQueueTest, EdgeCases_ExceptionInCallbackDoesNotCrash) {
       [&]() -> bool { return process_count.load(std::memory_order_relaxed) == 2; },
       std::chrono::seconds(3)
   );
-  
+
   EXPECT_TRUE(success);
   EXPECT_EQ(process_count.load(std::memory_order_relaxed), 2);
 }
@@ -204,7 +204,7 @@ TEST(EventQueueTest, Guarantee_AllInMustOut) {
 
   std::lock_guard<std::mutex> const lock(vec_mutex);
   EXPECT_EQ(received_ids.size(), static_cast<std::size_t>(kEventCount));
-  
+
   // Verify single-threaded dispatch ordering matches push ordering exactly, 0 missing.
   for (std::int32_t i = 0; i < kEventCount; ++i) {
     EXPECT_EQ(received_ids[static_cast<std::size_t>(i)], i);
@@ -265,15 +265,31 @@ class EventQueueLoadTest : public ::testing::Test {
   }
 };
 
-TEST_F(EventQueueLoadTest, SingleThread_100) { RunSingleThreadLoadTest(100); }
-TEST_F(EventQueueLoadTest, SingleThread_1K) { RunSingleThreadLoadTest(1000); }
-TEST_F(EventQueueLoadTest, SingleThread_10K) { RunSingleThreadLoadTest(10000); }
-TEST_F(EventQueueLoadTest, SingleThread_100K) { RunSingleThreadLoadTest(100000); }
+TEST_F(EventQueueLoadTest, SingleThread_100) {
+  RunSingleThreadLoadTest(100);
+}
+TEST_F(EventQueueLoadTest, SingleThread_1K) {
+  RunSingleThreadLoadTest(1000);
+}
+TEST_F(EventQueueLoadTest, SingleThread_10K) {
+  RunSingleThreadLoadTest(10000);
+}
+TEST_F(EventQueueLoadTest, SingleThread_100K) {
+  RunSingleThreadLoadTest(100000);
+}
 
-TEST_F(EventQueueLoadTest, MultiThread_100) { RunMultiThreadLoadTest(25, 4); }
-TEST_F(EventQueueLoadTest, MultiThread_1K) { RunMultiThreadLoadTest(250, 4); }
-TEST_F(EventQueueLoadTest, MultiThread_10K) { RunMultiThreadLoadTest(2500, 4); }
-TEST_F(EventQueueLoadTest, MultiThread_100K) { RunMultiThreadLoadTest(25000, 4); }
+TEST_F(EventQueueLoadTest, MultiThread_100) {
+  RunMultiThreadLoadTest(25, 4);
+}
+TEST_F(EventQueueLoadTest, MultiThread_1K) {
+  RunMultiThreadLoadTest(250, 4);
+}
+TEST_F(EventQueueLoadTest, MultiThread_10K) {
+  RunMultiThreadLoadTest(2500, 4);
+}
+TEST_F(EventQueueLoadTest, MultiThread_100K) {
+  RunMultiThreadLoadTest(25000, 4);
+}
 
 // --- SMOKE TEST (Max CPUs) ---
 

@@ -24,7 +24,6 @@
 #include "eillance/transport/data_transport.hpp"
 #include "eillance/transport/peer.hpp"
 #include "eillance/transport/protocol.hpp"
-#include "eillance/transport/transport_delegate.hpp"
 #include "eillance/utils/dispatch_queue.hpp"
 #include "eillance/utils/event_queue.hpp"
 #include "eillance/utils/invariant.hpp"
@@ -77,10 +76,6 @@ class RtcDataTransport : public transport::DataTransport::Interface {
   auto operator=(RtcDataTransport const&) -> RtcDataTransport& = delete;
   ~RtcDataTransport() override = default;
 
-  void SetDelegate(transport::TransportDelegate* delegate) override {
-    delegate_ = delegate;
-  }
-
   auto GetServiceConnectionState() const -> ServiceConnectionState {
     return serviceConnectionState_;
   }
@@ -102,7 +97,6 @@ class RtcDataTransport : public transport::DataTransport::Interface {
   }
 
   void Start() override {
-    INVARIANT_NOT_NULL(delegate_);
     INVARIANT(!id_.IsEmpty());
     LGI << "The local ID is: " << id_;
     terminate_requested_ = false;
@@ -382,12 +376,13 @@ class RtcDataTransport : public transport::DataTransport::Interface {
   }
 
   void OnWebSocketMessage(std::string const& data) {
-    INVARIANT_NOT_NULL(delegate_);
     auto const message = Json::parse(data);
     if (auto const itr = message.find("from"); itr == message.end()) {
       DispatchQueue::MainThread().Dispatch([this, message]() -> void { OnSystemMessage(message); });
     } else {
-      DispatchQueue::MainThread().Dispatch([this, message]() -> void { delegate_->ProcessPeerMessage(message); });
+      DispatchQueue::MainThread().Dispatch([message]() -> void {
+        EventQueue::Instance().Push(EventPeerMessage{message});
+      });
     }
   }
 
@@ -414,7 +409,6 @@ class RtcDataTransport : public transport::DataTransport::Interface {
   }
 
   void OnSystemMessage(Json const& message) {
-    INVARIANT_NOT_NULL(delegate_);
     auto const itr = message.find("type");
     if (itr == message.end()) {
       return;
@@ -424,7 +418,7 @@ class RtcDataTransport : public transport::DataTransport::Interface {
       auto const error = message.value("error", "unknown");
       LGE << "Signaling error received: " << error;
       if (auto const for_peer_it = message.find("for_peer"); for_peer_it != message.end()) {
-        delegate_->OnSignalingErrorForPeer(for_peer_it->get<ContactID>(), error);
+        EventQueue::Instance().Push(EventSignalingError{for_peer_it->get<ContactID>(), error});
       } else {
         if (error == "auth_failed") {
           Terminate();
@@ -432,7 +426,7 @@ class RtcDataTransport : public transport::DataTransport::Interface {
         ReportServiceConnectionState(ServiceConnectionState::failure);
       }
     } else {
-      delegate_->OnSystemMessage(type, message);
+      EventQueue::Instance().Push(EventSystemMessage{type, message});
     }
   }
 
@@ -501,9 +495,7 @@ class RtcDataTransport : public transport::DataTransport::Interface {
 
     dc->onOpen([this, peer_id]() -> void {
       DispatchQueue::MainThread().Dispatch([this, peer_id]() -> void {
-        if (delegate_) {
-          delegate_->OnDataChannelOpen(peer_id);
-        }
+        EventQueue::Instance().Push(EventDataChannelOpen{peer_id});
       });
     });
 
@@ -535,9 +527,7 @@ class RtcDataTransport : public transport::DataTransport::Interface {
     // Handle race condition where channel opens before callbacks are attached
     if (dc->isOpen()) {
       DispatchQueue::MainThread().Dispatch([this, peer_id]() -> void {
-        if (delegate_) {
-          delegate_->OnDataChannelOpen(peer_id);
-        }
+        EventQueue::Instance().Push(EventDataChannelOpen{peer_id});
       });
     }
   }
@@ -564,7 +554,6 @@ class RtcDataTransport : public transport::DataTransport::Interface {
   mutable std::mutex peersMutex_;
 
   std::string signalingServerUrl_;
-  transport::TransportDelegate* delegate_{nullptr};
 
   ::rtc::Configuration rtcConfig_;
   std::mutex configMutex_;

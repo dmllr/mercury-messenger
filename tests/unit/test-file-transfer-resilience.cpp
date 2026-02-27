@@ -247,6 +247,7 @@ TEST_F(FileTransferResilienceTest, StatusUpdateOrder_SmallFile) {
   // Setup peer
   auto peer = std::make_shared<transport::Peer>(peer1);
   peer->data_channel_is_open = true;
+  peer->session_cipher->ComputeSharedSecret(eillance::crypto::SessionCipher().GetPublicKey());
   eillance::crypto::SessionCipher const other;
   peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
   transport_->AddPeer(peer1, peer);

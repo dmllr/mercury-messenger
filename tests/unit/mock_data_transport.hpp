@@ -23,12 +23,8 @@ class MockDataTransport : public DataTransport::Interface {
       : log_(std::move(log)) {
   }
 
-  TransportDelegate* delegate = nullptr;
   std::map<ContactID, std::shared_ptr<Peer>> peers;
 
-  void SetDelegate(TransportDelegate* d) override {
-    delegate = d;
-  }
   void SetName(std::string const&) {
   }  // No-op/Removed from interface but kept for mock compatibility if needed
   void SetId(ContactID const&) override {
@@ -101,7 +97,10 @@ class MockDataTransport : public DataTransport::Interface {
 
   // Helpers for tests
   void SimulatePeerMessage(ContactID const& peer_id, Json const& message) {
-    if (delegate) delegate->ProcessPeerMessage(message);
+    EventQueue::Instance().Push(EventPeerMessage{message});
+  }
+  void SimulateDataChannelOpen(ContactID const& peer_id) {
+    EventQueue::Instance().Push(EventDataChannelOpen{peer_id});
   }
 
   auto CallLog() const -> std::shared_ptr<MockCallLog> {

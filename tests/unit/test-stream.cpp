@@ -96,9 +96,9 @@ TEST_F(StreamTest, AudioVideoSynchronization) {
 
   std::vector<std::pair<Stream::Source::Type, uint64_t>> received_samples;
 
-  stream->OnSample([&](Stream::Source::Type type, uint64_t ts, std::vector<std::byte> const&) {
+  auto sub = EventQueue::Instance().Subscribe<EventMediaSample>([&](auto const& e) {
     std::lock_guard<std::mutex> const lock(mutex_);
-    received_samples.emplace_back(type, ts);
+    received_samples.emplace_back(static_cast<Stream::Source::Type>(e.type), e.timestamp);
     cv_.notify_one();
   });
 
@@ -143,6 +143,8 @@ TEST_F(StreamTest, AudioVideoSynchronization) {
   // 8. A(40)
   EXPECT_EQ(received_samples[7].first, Stream::Source::Type::audio);
   EXPECT_EQ(received_samples[7].second, base_time + 40000);
+
+  EventQueue::Instance().Unsubscribe<EventMediaSample>(sub);
 }
 
 TEST_F(StreamTest, StreamStopStopsDispatching) {
@@ -155,7 +157,7 @@ TEST_F(StreamTest, StreamStopStopsDispatching) {
   auto stream = std::make_shared<Stream>(video_source, audio_source);
 
   std::atomic<int> count = 0;
-  stream->OnSample([&](auto, auto, auto) {
+  auto const sub = EventQueue::Instance().Subscribe<EventMediaSample>([&](auto const&) {
     ++count;
     if (count == 1) {
       stream->Stop();
@@ -169,6 +171,8 @@ TEST_F(StreamTest, StreamStopStopsDispatching) {
 
   // Should have processed the first one, then stopped
   EXPECT_EQ(count, 1);
+
+  EventQueue::Instance().Unsubscribe<EventMediaSample>(sub);
 }
 
 TEST_F(StreamTest, DestructionWhileHandlerBusy) {
@@ -177,11 +181,12 @@ TEST_F(StreamTest, DestructionWhileHandlerBusy) {
   auto audio_source = std::make_shared<MockSource>(Stream::Source::Type::audio, std::vector<uint64_t>{});
   auto video_source = std::make_shared<MockSource>(Stream::Source::Type::video, std::vector<uint64_t>{});
 
+  auto sub = EventQueue::Instance().Subscribe<EventMediaSample>([&](auto const&) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  });
+
   {
     auto stream = std::make_shared<Stream>(video_source, audio_source);
-
-    // Set a handler that holds the lock for a bit
-    stream->OnSample([](auto, auto, auto) { std::this_thread::sleep_for(std::chrono::milliseconds(50)); });
 
     stream->Start();
 
@@ -191,6 +196,7 @@ TEST_F(StreamTest, DestructionWhileHandlerBusy) {
     // Destructor called here. Should block until the handler finishes.
   }
 
+  EventQueue::Instance().Unsubscribe<EventMediaSample>(sub);
   // If we reach here without a crash/TSan error, the test passes.
   SUCCEED();
 }

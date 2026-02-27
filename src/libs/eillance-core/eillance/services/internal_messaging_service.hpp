@@ -10,6 +10,7 @@
 #include <span>
 
 #include "eillance/events/client_events.hpp"
+#include "eillance/events/service_connection_state.hpp"
 #include "eillance/logging/logging.hpp"
 #include "eillance/services/account_service.hpp"
 #include "eillance/services/call_id.hpp"
@@ -51,6 +52,26 @@ class InternalMessagingService {
       this->HandleDataChannelMessage(e.peer_id, e.message);
     });
     event_unsubs_.push_back([sub1]() { EventQueue::Instance().Unsubscribe<EventDataChannelMessage>(sub1); });
+
+    auto sub2 = EventQueue::Instance().Subscribe<EventPeerMessage>([this](auto const& e) {
+      auto const from_it = e.message.find("from");
+      if (from_it == e.message.end()) return;
+      ContactID const peer_id(from_it->get<std::string>());
+      auto const type_it = e.message.find("type");
+      if (type_it == e.message.end()) return;
+      this->ProcessSignalingMessage(peer_id, type_it->get<std::string>(), e.message);
+    });
+    event_unsubs_.push_back([sub2]() { EventQueue::Instance().Unsubscribe<EventPeerMessage>(sub2); });
+
+    auto sub3 = EventQueue::Instance().Subscribe<EventSystemMessage>([this](auto const& e) {
+      this->ProcessSystemMessage(e.type, e.message);
+    });
+    event_unsubs_.push_back([sub3]() { EventQueue::Instance().Unsubscribe<EventSystemMessage>(sub3); });
+
+    auto sub4 = EventQueue::Instance().Subscribe<EventDataChannelOpen>([this](auto const& e) {
+      this->OnDataChannelOpen(e.peer_id);
+    });
+    event_unsubs_.push_back([sub4]() { EventQueue::Instance().Unsubscribe<EventDataChannelOpen>(sub4); });
   }
 
   ~InternalMessagingService() {
@@ -71,6 +92,9 @@ class InternalMessagingService {
         data_transport_->SendSignalingMessage(response);
       }
     } else if (type == transport::protocol::values::loginSuccess) {
+      EventQueue::Instance().Push(
+          EventStatusChanged{ContactID(), EventSource::system, static_cast<int>(ServiceConnectionState::online)}
+      );
       messaging_service_->StartDeliveryService();
     } else if (type == transport::protocol::values::iceServers) {
       if (message.contains(transport::protocol::keys::servers)) {
