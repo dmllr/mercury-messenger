@@ -14,12 +14,10 @@ using namespace eillance;
 class ClientCoreTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    // Setup storage
     auto storage_impl = std::make_unique<storage::MockPersistentStorageImpl>();
     mock_storage_ = storage_impl.get();
     storage_ = std::make_shared<storage::PersistentStorage>(std::move(storage_impl));
 
-    // Setup transport
     mock_log_ = std::make_shared<transport::MockCallLog>();
     mock_transport_impl_ = std::make_unique<transport::MockDataTransport>(mock_log_);
     mock_transport_ = mock_transport_impl_.get();
@@ -30,11 +28,9 @@ class ClientCoreTest : public ::testing::Test {
 
     client_ = std::make_shared<Client>(storage_, transport_, media_transport);
 
-    // Setup Identity
-    (void)client_->GetAccountService()->GenerateNewIdentity();
+    (void)client_->GenerateNewIdentity();
     my_id_ = client_->GetId();
 
-    // Start Client
     client_->Start();
   }
 
@@ -43,7 +39,6 @@ class ClientCoreTest : public ::testing::Test {
     client_.reset();
   }
 
-  // Helper to process pending tasks on the client's internal queue
   void FlushClientQueue() {
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
   }
@@ -61,14 +56,11 @@ class ClientCoreTest : public ::testing::Test {
 };
 
 TEST_F(ClientCoreTest, ConnectSequence) {
-  // Initiate connection
   client_->Connect(peer1);
   FlushClientQueue();
 
-  // Verify peer was added
   ASSERT_TRUE(mock_transport_->GetPeer(peer1));
 
-  // Verify CreateOffer called
   bool offer_created = false;
   for (auto const& [id, ctx] : mock_transport_->CallLog()->offers) {
     if (id == peer1 && ctx == "data") offer_created = true;
@@ -77,19 +69,14 @@ TEST_F(ClientCoreTest, ConnectSequence) {
 }
 
 TEST_F(ClientCoreTest, IncomingKeyExchangeTriggersReply) {
-  // Connect to setup the peer internally in Client
   client_->Connect(peer1);
   FlushClientQueue();
 
   auto peer = mock_transport_->GetPeer(peer1);
   ASSERT_TRUE(peer);
 
-  // Simulate Data Channel Opening manually
-  // This triggers Client::OnDataChannelOpen which resets the cipher and sends our key.
-  // We want to test the RECEPTION of a peer key.
   peer->data_channel_is_open = true;
 
-  // Create a valid peer public key
   crypto::SessionCipher const peer_cipher;
   auto peer_pub_key = peer_cipher.GetPublicKey();
 
@@ -99,10 +86,7 @@ TEST_F(ClientCoreTest, IncomingKeyExchangeTriggersReply) {
       {"is_reply", false}
   };
 
-  // Simulate receiving this message on data channel
   std::string msg_str = key_msg.dump();
-
-  // Convert to bytes for new interface
   std::vector<std::byte> msg_bytes(msg_str.size());
   std::transform(msg_str.begin(), msg_str.end(), msg_bytes.begin(), [](char c) { return static_cast<std::byte>(c); });
 
@@ -110,12 +94,8 @@ TEST_F(ClientCoreTest, IncomingKeyExchangeTriggersReply) {
 
   FlushClientQueue();
 
-  // Verify shared secret computed
   EXPECT_TRUE(peer->session_cipher->IsReady());
 
-  // Verify reply sent
-  // Note: Client::Connect might have already sent an initial key exchange.
-  // We look for one with "is_reply": true.
   bool reply_sent = false;
   for (auto const& [id, msg] : mock_transport_->CallLog()->sent_peer_messages) {
     if (id == peer1 && msg["type"] == "key_exchange" && msg["is_reply"] == true) {
@@ -126,14 +106,12 @@ TEST_F(ClientCoreTest, IncomingKeyExchangeTriggersReply) {
 }
 
 TEST_F(ClientCoreTest, SignalingMessageProcessing_Offer) {
-  // Simulate receiving an OFFER via signaling
   nlohmann::json const offer_msg =
       {{"from", peer1.ToString()}, {"type", "offer"}, {"context", "data"}, {"sdp", "dummy_sdp_offer"}};
 
   mock_transport_->SimulatePeerMessage(peer1, offer_msg);
   FlushClientQueue();
 
-  // Should create peer, set remote desc, create answer
   EXPECT_TRUE(mock_transport_->GetPeer(peer1));
 
   bool answer_created = false;
@@ -144,22 +122,13 @@ TEST_F(ClientCoreTest, SignalingMessageProcessing_Offer) {
 }
 
 TEST_F(ClientCoreTest, SignalingMessageProcessing_MediaOffer) {
-  // Simulate receiving a MEDIA OFFER
-  nlohmann::json const offer_msg = {
-      {"from", peer1.ToString()},
-      {"type", "offer"},
-      {"context", "media"},
-      {"sdp", "dummy_sdp_media_offer_m=audio"}  // implies voice call
-  };
+  nlohmann::json const offer_msg =
+      {{"from", peer1.ToString()}, {"type", "offer"}, {"context", "media"}, {"sdp", "dummy_sdp_media_offer_m=audio"}};
 
   mock_transport_->SimulatePeerMessage(peer1, offer_msg);
   FlushClientQueue();
 
-  // Media offer handling should create the peer if missing and set remote description
   EXPECT_TRUE(mock_transport_->GetPeer(peer1));
-
-  // It also triggers OnCallRequest, which sends a "call_ringing" system message.
-  // We mainly check no crash here (invariant violation fixed).
 }
 
 TEST_F(ClientCoreTest, ContactRequestProcessing) {
@@ -172,8 +141,7 @@ TEST_F(ClientCoreTest, ContactRequestProcessing) {
   mock_transport_->SimulatePeerMessage(peer1, req_msg);
   FlushClientQueue();
 
-  // Verify contact created
-  auto contacts = client_->GetContactService()->GetContacts();
+  auto contacts = client_->GetContacts();
   ASSERT_EQ(contacts.size(), 1);
   EXPECT_EQ(contacts[0].peer_id, peer1);
   EXPECT_EQ(contacts[0].display_name, "Peer One");

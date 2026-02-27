@@ -12,6 +12,7 @@
 #include "eillance/identity/contact_manager.hpp"
 #include "eillance/logging/logging.hpp"
 #include "eillance/messaging/types.hpp"
+#include "eillance/services/service_manager.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/transport/data_transport.hpp"
 #include "eillance/utils/dispatch_queue.hpp"
@@ -26,10 +27,10 @@ class MessageDeliveryService {
   std::shared_ptr<transport::DataTransport> transport_;
   std::atomic<bool> isRunning_{false};
 
-  // Track peers for which we are actively trying to connect to avoid duplicate requests.
   std::unordered_set<ContactID> pendingConnections_{};
   std::unordered_map<ContactID, int> retryDelaysS_{};
   std::recursive_mutex mutex_;
+  std::vector<std::function<void()>> event_unsubs_;
 
   DispatchQueue dispatchQueue_{"DeliveryService", 1};
 
@@ -39,37 +40,42 @@ class MessageDeliveryService {
   static constexpr std::chrono::hours kSuspensionCheckInterval{1};
 
  public:
-  MessageDeliveryService(
-      std::shared_ptr<storage::PersistentStorage> storage,
-      std::shared_ptr<identity::ContactManager> contacts,
-      std::shared_ptr<transport::DataTransport> transport
-  )
-      : storage_(std::move(storage)),
-        contactManager_(std::move(contacts)),
-        transport_(std::move(transport)) {
+  explicit MessageDeliveryService(services::ServiceManager* sm)
+      : storage_(sm->storage),
+        contactManager_(sm->contact_manager),
+        transport_(sm->data_transport) {
+    auto sub1 = EventQueue::Instance().Subscribe<EventConnectionAttemptFinished>([this](auto const& e) {
+      ConnectionAttemptFinished(e.peer_id);
+    });
+    event_unsubs_.push_back([sub1]() { EventQueue::Instance().Unsubscribe<EventConnectionAttemptFinished>(sub1); });
+
+    auto sub2 = EventQueue::Instance().Subscribe<EventStopDeliveryService>([this](auto const&) { Stop(); });
+    event_unsubs_.push_back([sub2]() { EventQueue::Instance().Unsubscribe<EventStopDeliveryService>(sub2); });
+  }
+
+  ~MessageDeliveryService() {
+    for (auto const& unsub : event_unsubs_) unsub();
+    Stop();
   }
 
   void Start() {
     if (isRunning_.exchange(true)) {
-      return;  // Already running.
+      return;
     }
-    // On start, check for any messages that were queued while offline.
     dispatchQueue_.Dispatch([this] {
       CheckForSuspensions();
       CheckForAllQueuedMessages();
     });
-
     ScheduleSuspensionCheck();
   }
 
   void Stop() {
     if (!isRunning_.exchange(false)) {
-      return;  // Already stopped.
+      return;
     }
     dispatchQueue_.RemovePending();
   }
 
-  // Called by Client when a connection attempt is finished (succeeded and messages sent, or failed)
   void ConnectionAttemptFinished(ContactID const& peer_id) {
     std::lock_guard<std::recursive_mutex> const lock(mutex_);
     pendingConnections_.erase(peer_id);
@@ -88,7 +94,6 @@ class MessageDeliveryService {
       });
     }
 
-    // Check if there are more messages to send.
     if (has_work) {
       bool is_connected = false;
       if (auto p = transport_->GetPeer(peer_id)) {
@@ -100,7 +105,6 @@ class MessageDeliveryService {
         return;
       }
 
-      // If not connected, or check not provided, we schedule a retry with backoff.
       int& delay = retryDelaysS_[peer_id];
       if (delay == 0) {
         delay = initialRetryDelayS;
@@ -109,21 +113,16 @@ class MessageDeliveryService {
       LGI << "Connection to " << peer_id << " failed or did not clear queue. Retrying in " << delay << "s.";
 
       dispatchQueue_.DispatchAfter(std::chrono::seconds(delay), [this, peer_id]() { AttemptDelivery(peer_id); });
-
-      // Increase delay for next time (exponential backoff).
       delay = std::min(delay * 2, maxRetryDelayS);
     } else {
-      // All messages for this peer were sent successfully. Reset backoff timer.
       retryDelaysS_.erase(peer_id);
     }
   }
 
-  // Called by Client when queuing a new message or action that requires a connection.
   void AttemptDelivery(ContactID const& peer_id) {
     {
       std::lock_guard<std::recursive_mutex> const lock(mutex_);
       if (pendingConnections_.contains(peer_id)) {
-        // Already trying to connect.
         return;
       }
 
@@ -137,7 +136,6 @@ class MessageDeliveryService {
         });
       }
 
-      // Prevent connection attempts when there's nothing to do.
       if (!has_work) {
         return;
       }
@@ -156,7 +154,6 @@ class MessageDeliveryService {
     }
     auto const all_contacts = contactManager_->GetContacts();
     for (auto const& contact : all_contacts) {
-      // Skip blocked/rejected contacts.
       if (contact.status != identity::ContactStatus::rejected) {
         AttemptDelivery(contact.peer_id);
       }

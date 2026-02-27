@@ -10,25 +10,17 @@
 #include <nlohmann/json.hpp>
 #include <openssl/sha.h>
 
+#include "eillance/client/client.hpp"
 #include "eillance/crypto/crypto.hpp"
-#include "eillance/identity/contact_manager.hpp"
-#include "eillance/services/account_service.hpp"
-#include "eillance/services/contact_service.hpp"
-#include "eillance/services/file_transfer_service.hpp"
-#include "eillance/services/media_call_service.hpp"
-#include "eillance/services/messaging_service.hpp"
-#include "eillance/services/profile_service.hpp"
 #include "mock_data_transport.hpp"
+#include "mock_media_transport.hpp"
 #include "mock_persistent_storage.hpp"
 
 using namespace eillance;
 
 namespace {
 
-// --- Schema Signature Generation ---
-
 // Generates a deterministic signature of the JSON structure (keys and types only).
-// e.g. { "type": "string", "id": "number" } -> "{id:number,type:string}"
 std::string GenerateTypeSignature(nlohmann::json const& j) {
   if (j.is_object()) {
     std::vector<std::string> keys;
@@ -40,7 +32,6 @@ std::string GenerateTypeSignature(nlohmann::json const& j) {
     std::stringstream ss;
     ss << "{";
     for (size_t i = 0; i < keys.size(); ++i) {
-      // Use .at() for const-correct access which throws instead of asserting
       ss << keys[i] << ":" << GenerateTypeSignature(j.at(keys[i]));
       if (i < keys.size() - 1) ss << ",";
     }
@@ -50,7 +41,6 @@ std::string GenerateTypeSignature(nlohmann::json const& j) {
     std::stringstream ss;
     ss << "[";
     if (!j.empty()) {
-      // Assume homogeneous array or check just the first one for schema definition
       ss << GenerateTypeSignature(j[0]);
     }
     ss << "]";
@@ -69,33 +59,14 @@ std::string GenerateTypeSignature(nlohmann::json const& j) {
   return "unknown";
 }
 
-// Mock Capture to satisfy MediaCallService invariants
-class MockCapture {
- public:
-  void Configure(Config) {
-  }
-  void Engage() {
-  }
-  void Revoke() {
-  }
-  auto FetchBuffers() -> Packet {
-    return Packet();
-  }
-  auto GetSampleDuration() -> Time::Unit {
-    return 10000;
-  }
-};
-
 }  // namespace
 
 class ProtocolSafetyTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    // Setup Temp Directory for File operations
     temp_dir_ = std::filesystem::temp_directory_path() / "protocol_safety_tests";
     std::filesystem::create_directories(temp_dir_);
 
-    // Setup Services
     auto storage_impl = std::make_unique<storage::MockPersistentStorageImpl>();
     mock_storage_ = storage_impl.get();
     storage_ = std::make_shared<storage::PersistentStorage>(std::move(storage_impl));
@@ -103,74 +74,39 @@ class ProtocolSafetyTest : public ::testing::Test {
     mock_log_ = std::make_shared<transport::MockCallLog>();
     mock_transport_impl_ = std::make_unique<transport::MockDataTransport>(mock_log_);
     mock_transport_ = mock_transport_impl_.get();
-    transport_ = std::make_shared<transport::DataTransport>(std::move(mock_transport_impl_));
+    auto transport = std::make_shared<transport::DataTransport>(std::move(mock_transport_impl_));
+    auto media_transport =
+        std::make_shared<transport::MediaTransport>(std::make_unique<transport::MockMediaTransport>(mock_log_));
 
-    contact_manager_ = std::make_shared<identity::ContactManager>(storage_);
-    account_service_ = std::make_unique<services::AccountService>(storage_, transport_);
-    std::ignore = account_service_->GenerateNewIdentity();
+    client_ = std::make_shared<Client>(storage_, transport, media_transport);
 
-    file_transfer_service_ = std::make_shared<services::FileTransferService>(storage_, transport_);
+    std::ignore = client_->GenerateNewIdentity();
 
-    messaging_service_ = std::make_unique<services::MessagingService>(
-        storage_,
-        transport_,
-        contact_manager_,
-        account_service_,
-        file_transfer_service_
-    );
-
-    profile_service_ = std::make_unique<services::ProfileService>(
-        storage_,
-        transport_,
-        contact_manager_,
-        account_service_,
-        messaging_service_
-    );
+    client_->Start();
 
     // Establish a valid peer connection with crypto
-    contact_manager_->AddContact(peer_id_);
+    mock_storage_->UpdateContact({peer_id_, identity::ContactStatus::confirmed});
+    client_->GetContactService()->ReloadCache();
     auto peer = std::make_shared<transport::Peer>(peer_id_);
-    transport_->AddPeer(peer_id_, peer);
+    transport->AddPeer(peer_id_, peer);
 
-    // Perform handshake so we can decrypt what the service sends
     peer->data_channel_is_open = true;
     peer->session_cipher->ComputeSharedSecret(test_verifier_cipher_.GetPublicKey());
     test_verifier_cipher_.ComputeSharedSecret(peer->session_cipher->GetPublicKey());
   }
 
   void TearDown() override {
-    if (messaging_service_) {
-      messaging_service_->StopDeliveryService();
-    }
-
-    // Explicitly release services to ensure all file handles are closed
-    // before attempting to remove the temporary directory.
-    // FileTransferService keeps file streams open in 'active_uploads_'.
-    profile_service_.reset();
-    messaging_service_.reset();
-    file_transfer_service_.reset();
-    account_service_.reset();
-    contact_manager_.reset();
-    transport_.reset();
-    storage_.reset();
+    client_->Terminate();
+    client_.reset();
 
     std::error_code ec;
     std::filesystem::remove_all(temp_dir_, ec);
-    if (ec) {
-      // Fallback: try to remove just the known file if directory removal fails (e.g. Windows latency)
-      std::filesystem::remove(temp_dir_ / "image.jpg", ec);
-      std::filesystem::remove(temp_dir_, ec);
-    }
   }
 
-  // Helper to extract the last message of a specific type sent to the peer.
-  // This is necessary because some operations (like sending attachments) trigger
-  // multiple messages (chat + file_resume_request), so .back() is not reliable.
   nlohmann::json GetLastMessageByType(std::string const& type) {
     if (mock_transport_->CallLog()->sent_peer_messages.empty()) {
       throw std::runtime_error("No messages sent");
     }
-    // Iterate backwards to find the most recent message of the requested type
     auto const& messages = mock_transport_->CallLog()->sent_peer_messages;
     for (auto it = messages.rbegin(); it != messages.rend(); ++it) {
       if (it->second.value("type", "") == type) {
@@ -180,9 +116,7 @@ class ProtocolSafetyTest : public ::testing::Test {
     throw std::runtime_error("Message of type '" + type + "' not found in transport log");
   }
 
-  // Decrypts payload from a JSON message using the test verifier cipher
   std::string DecryptPayload(nlohmann::json const& msg) const {
-    // Use .at() to throw if key is missing, preventing assertion failures
     if (!msg.contains("payload")) {
       throw std::runtime_error("Message structure invalid: 'payload' missing in " + msg.dump());
     }
@@ -196,12 +130,7 @@ class ProtocolSafetyTest : public ::testing::Test {
   std::unique_ptr<transport::MockDataTransport> mock_transport_impl_;
   transport::MockDataTransport* mock_transport_{};
   std::shared_ptr<storage::PersistentStorage> storage_;
-  std::shared_ptr<transport::DataTransport> transport_;
-  std::shared_ptr<identity::ContactManager> contact_manager_;
-  std::shared_ptr<services::AccountService> account_service_;
-  std::shared_ptr<services::FileTransferService> file_transfer_service_;
-  std::shared_ptr<services::MessagingService> messaging_service_;
-  std::shared_ptr<services::ProfileService> profile_service_;
+  std::shared_ptr<Client> client_;
 
   eillance::crypto::SessionCipher test_verifier_cipher_;
   ContactID const peer_id_ = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
@@ -215,11 +144,11 @@ TEST_F(ProtocolSafetyTest, VerifyRealMessageSignatures) {
   std::stringstream combined_signatures;
 
   // Text Message (Encrypted)
-  messaging_service_->SendChatMessage(peer_id_, "Hello Protocol");
+  client_->SendChatMessage(peer_id_, "Hello Protocol");
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
   auto msg_chat = GetLastMessageByType("chat");
   std::string const sig_chat = GenerateTypeSignature(msg_chat);
 
-  // Decrypt inner payload to verify E2EE structure
   auto plain_chat = DecryptPayload(msg_chat);
   auto json_chat = nlohmann::json::parse(plain_chat);
   std::string const sig_chat_inner = GenerateTypeSignature(json_chat);
@@ -227,22 +156,19 @@ TEST_F(ProtocolSafetyTest, VerifyRealMessageSignatures) {
   combined_signatures << "CHAT_OUTER:" << sig_chat << "|CHAT_INNER:" << sig_chat_inner << "\n";
 
   // Attachment Message
-  //   Create dummy file
   std::filesystem::path const file_path = temp_dir_ / "image.jpg";
   {
     std::ofstream ofs(file_path, std::ios::binary);
     ofs << "dummy_content";
   }
-  std::vector<services::AttachmentRequest> atts;
+  std::vector<messaging::AttachmentRequest> atts;
   atts.push_back({file_path.string(), messaging::AttachmentType::image, "thumb_base64", "image/jpeg"});
 
-  messaging_service_->SendChatMessage(peer_id_, "File Attached", atts);
-  //   Get the CHAT message explicitly. The operation also sends a 'file_resume_request'
-  //   which we skip here by filtering for 'chat'.
+  client_->SendChatMessage(peer_id_, "File Attached", atts);
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
   auto msg_att = GetLastMessageByType("chat");
   std::string const sig_att = GenerateTypeSignature(msg_att);
 
-  //   Inner payload is just text content, attachments are outer.
   auto plain_att = DecryptPayload(msg_att);
   auto json_att = nlohmann::json::parse(plain_att);
   std::string const sig_att_inner = GenerateTypeSignature(json_att);
@@ -250,22 +176,20 @@ TEST_F(ProtocolSafetyTest, VerifyRealMessageSignatures) {
   combined_signatures << "ATT_OUTER:" << sig_att << "|ATT_INNER:" << sig_att_inner << "\n";
 
   // Message Receipt (Delivery)
-  //   Simulate receiving a message to trigger receipt
-  //   We manually construct the event to trigger the service logic
-  //   (OnChatMessageReceived calls SendPeerDataChannelMessage)
   nlohmann::json payload;
   payload[services::MessagingService::keyVersion] = services::MessagingService::protocolVersion;
   payload[services::MessagingService::keyContent] = "Incoming";
   auto encrypted = test_verifier_cipher_.Encrypt(payload.dump());
 
-  messaging_service_->OnChatMessageReceived(peer_id_, encrypted, 999, false);
+  client_->GetMessagingService()->OnChatMessageReceived(peer_id_, encrypted, 999, false, {});
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
   auto msg_receipt = GetLastMessageByType("message_receipt");
   std::string const sig_receipt = GenerateTypeSignature(msg_receipt);
 
   combined_signatures << "RECEIPT:" << sig_receipt << "\n";
 
   // Message Read Status
-  //   Mock DB needs to know about the message to map IDs
   auto entry = mock_storage_->AddHistoryEntry(
       {.remote_id = 999,
        .kind = messaging::HistoryEntryKind::textMessage,
@@ -275,9 +199,8 @@ TEST_F(ProtocolSafetyTest, VerifyRealMessageSignatures) {
        .peer_id = peer_id_}
   );
 
-  messaging_service_->MarkMessagesAsRead(peer_id_, {entry.id});
-  //   MarkMessagesAsRead queues the action. We must flush the queue.
-  messaging_service_->SendQueuedMessages(peer_id_);
+  client_->MarkMessagesAsRead(peer_id_, {entry.id});
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
   auto msg_read = GetLastMessageByType("message_read");
   std::string const sig_read = GenerateTypeSignature(msg_read);
@@ -285,24 +208,20 @@ TEST_F(ProtocolSafetyTest, VerifyRealMessageSignatures) {
   combined_signatures << "READ:" << sig_read << "\n";
 
   // Profile Update
-  //   Queue a profile send
-  profile_service_->SendMyProfile(peer_id_);
+  client_->GetProfileService()->SendMyProfile(peer_id_);
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
   auto msg_profile = GetLastMessageByType("profile_info");
   std::string const sig_profile = GenerateTypeSignature(msg_profile);
 
   combined_signatures << "PROFILE:" << sig_profile << "\n";
 
-  // System Message via Data Channel
-  //   Queue a generic system message (e.g. call_request) that should go over data channel
-  messaging_service_->SendSystemMessage(peer_id_, R"({"action": "call_request"})");
-  //   Flush queue
-  messaging_service_->SendQueuedMessages(peer_id_);
+  // System Message
+  client_->GetMessagingService()->SendSystemMessage(peer_id_, R"({"action": "call_request"})", true);
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-  //   It should be sent as 'chat' type with is_system=true
   auto msg_sys = GetLastMessageByType("chat");
   std::string const sig_sys = GenerateTypeSignature(msg_sys);
 
-  //   Inner payload structure
   auto plain_sys = DecryptPayload(msg_sys);
   auto json_sys = nlohmann::json::parse(plain_sys);
   std::string const sig_sys_inner = GenerateTypeSignature(json_sys);
@@ -312,19 +231,6 @@ TEST_F(ProtocolSafetyTest, VerifyRealMessageSignatures) {
   // Verification
   std::string const final_signature_blob = combined_signatures.str();
   std::string const current_hash = crypto::Sha256Hex(final_signature_blob);
-
-  // If you change the protocol format, update this hash and the version number.
-  // Current Hash calculation based on implementation:
-  // CHAT_OUTER: {is_system:boolean,message_id:number,payload:binary,type:string}
-  // CHAT_INNER: {c:string,v:number}
-  // ATT_OUTER:
-  // {attachments:[{file_name:string,hash:string,id:string,mime:string,note:string,size:number,thumb:string,type:number}],is_system:boolean,message_id:number,payload:binary,type:string}
-  // ATT_INNER:  {c:string,v:number}
-  // RECEIPT:    {message_id:number,status:string,type:string}
-  // READ:       {message_ids:[number],type:string}
-  // PROFILE:    {bio:string,display_name:string,photo:null,type:string}
-  // SYS_OUTER:  {is_system:boolean,message_id:number,payload:binary,type:string}
-  // SYS_INNER:  {c:string,v:number}
 
   std::string const expected_hash = "f7dae8a6b699a76919a46bb7c4d298127c9697ac30e11a663a3dbb6715433c1b";
 

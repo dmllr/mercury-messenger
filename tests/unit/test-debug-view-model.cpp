@@ -45,6 +45,7 @@ TEST_F(DebugViewModelTest, EraseAllContacts) {
   vm_->EraseAllContacts();
 
   // Verify deletion
+  WaitFor([&] { return client_->GetContacts().empty(); });
   EXPECT_TRUE(client_->GetContacts().empty());
 }
 
@@ -70,6 +71,10 @@ TEST_F(DebugViewModelTest, RevokeAllApprovals) {
   vm_->RevokeAllApprovals();
 
   // Verify status change
+  WaitFor([&] {
+    auto c = client_->GetContactService()->GetContact(peer1);
+    return c && c->status == identity::ContactStatus::pendingApproval;
+  });
   auto contact1 = client_->GetContactService()->GetContact(peer1);
   auto contact2 = client_->GetContactService()->GetContact(peer2);
 

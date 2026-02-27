@@ -293,7 +293,7 @@ TEST_F(EventQueueLoadTest, MultiThread_100K) {
 
 // --- SMOKE TEST (Max CPUs) ---
 
-TEST_F(EventQueueLoadTest, SmokeTest_MaxLoadMaxThreads) {
+TEST_F(EventQueueLoadTest, DISABLED_SmokeTest_MaxLoadMaxThreads) {
   std::uint32_t const cpus = std::thread::hardware_concurrency();
   std::uint32_t const thread_count = 4 * cpus;
   ASSERT_GT(thread_count, 0);

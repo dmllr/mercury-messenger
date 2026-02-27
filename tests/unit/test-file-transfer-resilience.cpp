@@ -8,29 +8,24 @@
 #include <gtest/gtest.h>
 #include <openssl/sha.h>
 
-#include "eillance/identity/contact_manager.hpp"
-#include "eillance/services/account_service.hpp"
-#include "eillance/services/file_transfer_service.hpp"
-#include "eillance/services/messaging_service.hpp"
+#include "eillance/client/client.hpp"
 #include "mock_data_transport.hpp"
+#include "mock_media_transport.hpp"
 #include "mock_persistent_storage.hpp"
 
 using namespace eillance;
 
-// A test class specifically for file transfer scenarios, including error cases
 class FileTransferResilienceTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    // Setup temporary directory for file tests
     temp_dir_ = std::filesystem::temp_directory_path() / "ft_resilience_tests";
     std::filesystem::create_directories(temp_dir_);
 
-    // We need a separate attachments dir
     attachments_dir_ = temp_dir_ / "attachments";
     std::filesystem::create_directories(attachments_dir_);
 
-    // Mock storage that points to real temp directory
     auto storage_impl = std::make_unique<storage::MockPersistentStorageImpl>(temp_dir_.string() + "/db.sqlite");
+    mock_storage_ = storage_impl.get();
     storage_ = std::make_shared<storage::PersistentStorage>(std::move(storage_impl));
 
     mock_log_ = std::make_shared<transport::MockCallLog>();
@@ -38,31 +33,31 @@ class FileTransferResilienceTest : public ::testing::Test {
     mock_transport_ = mock_transport_impl_.get();
     transport_ = std::make_shared<transport::DataTransport>(std::move(mock_transport_impl_));
 
-    contact_manager_ = std::make_shared<identity::ContactManager>(storage_);
-    contact_manager_->AddContact(peer1);
-    contact_manager_->MarkAsConfirmed(peer1);
+    auto media_transport =
+        std::make_shared<transport::MediaTransport>(std::make_unique<transport::MockMediaTransport>(mock_log_));
 
-    account_service_ = std::make_shared<services::AccountService>(storage_, transport_);
+    client_ = std::make_shared<Client>(storage_, transport_, media_transport);
 
-    file_transfer_service_ = std::make_shared<services::FileTransferService>(storage_, transport_);
+    (void)client_->GenerateNewIdentity();
 
-    service_ = std::make_unique<services::MessagingService>(
-        storage_,
-        transport_,
-        contact_manager_,
-        account_service_,
-        file_transfer_service_
-    );
+    client_->AddContact(peer1, std::nullopt);
+    mock_storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
+    client_->GetContactService()->ReloadCache();
+
+    auto pending = mock_storage_->GetPendingActions(peer1);
+    for (auto const& action : pending) {
+      mock_storage_->RemovePendingAction(action.id);
+    }
+
+    client_->Start();
   }
 
   void TearDown() override {
-    service_->StopDeliveryService();
-    service_.reset();
-    file_transfer_service_.reset();  // Ensure files are closed before deletion
+    client_->Terminate();
+    client_.reset();
     std::filesystem::remove_all(temp_dir_);
   }
 
-  // Helper to convert std::string to std::vector<std::byte>
   static auto StringToBytes(std::string const& str) -> std::vector<std::byte> {
     std::vector<std::byte> bytes(str.size());
     std::ranges::transform(str, bytes.begin(), [](char c) { return static_cast<std::byte>(c); });
@@ -76,7 +71,6 @@ class FileTransferResilienceTest : public ::testing::Test {
     packet.push_back(static_cast<std::byte>(id.size()));
     for (char c : id) packet.push_back(static_cast<std::byte>(c));
 
-    // Seq LE
     for (int i = 0; i < 4; ++i) packet.push_back(static_cast<std::byte>((seq >> (i * 8)) & 0xFF));
 
     packet.insert(packet.end(), payload.begin(), payload.end());
@@ -92,23 +86,24 @@ class FileTransferResilienceTest : public ::testing::Test {
     return packet;
   }
 
+  void FlushClientQueue() {
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  }
+
   std::filesystem::path temp_dir_;
   std::filesystem::path attachments_dir_;
-  std::shared_ptr<storage::PersistentStorage> storage_;
+  storage::MockPersistentStorageImpl* mock_storage_{};
   std::shared_ptr<transport::MockCallLog> mock_log_;
   std::unique_ptr<transport::MockDataTransport> mock_transport_impl_;
-  transport::MockDataTransport* mock_transport_;
+  transport::MockDataTransport* mock_transport_{};
+  std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<transport::DataTransport> transport_;
-  std::shared_ptr<identity::ContactManager> contact_manager_;
-  std::shared_ptr<services::AccountService> account_service_;
-  std::shared_ptr<services::FileTransferService> file_transfer_service_;
-  std::unique_ptr<services::MessagingService> service_;
+  std::shared_ptr<Client> client_;
 
   ContactID const peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
 };
 
 TEST_F(FileTransferResilienceTest, TransferProgressAndFileCreation) {
-  // Setup peer with crypto
   auto peer = std::make_shared<transport::Peer>(peer1);
   peer->data_channel_is_open = true;
   eillance::crypto::SessionCipher other_cipher;
@@ -116,7 +111,6 @@ TEST_F(FileTransferResilienceTest, TransferProgressAndFileCreation) {
   other_cipher.ComputeSharedSecret(peer->session_cipher->GetPublicKey());
   transport_->AddPeer(peer1, peer);
 
-  // Capture progress events
   std::vector<float> progress_events;
   auto sub1 = EventQueue::Instance().Subscribe<EventTransferProgress>([&](auto const& e) {
     progress_events.push_back(e.progress);
@@ -129,7 +123,6 @@ TEST_F(FileTransferResilienceTest, TransferProgressAndFileCreation) {
     }
   });
 
-  // Receive Chat Message with Attachment
   std::string const content = "Here is a large file";
   nlohmann::json payload_json;
   payload_json[services::MessagingService::keyVersion] = services::MessagingService::protocolVersion;
@@ -137,7 +130,7 @@ TEST_F(FileTransferResilienceTest, TransferProgressAndFileCreation) {
 
   auto encrypted = other_cipher.Encrypt(payload_json.dump());
 
-  std::string const file_data(20000, 'A');  // Larger than one chunk (16KB)
+  std::string const file_data(20000, 'A');
   std::string const file_hash = crypto::Sha256Hex(file_data);
   std::string att_id = "test_file_id";
 
@@ -149,15 +142,13 @@ TEST_F(FileTransferResilienceTest, TransferProgressAndFileCreation) {
   att.hash = file_hash;
   att.is_downloaded = false;
 
-  // This should create the temp file and reserve space
-  service_->OnChatMessageReceived(peer1, encrypted, 9001, false, {att});
+  client_->GetMessagingService()->OnChatMessageReceived(peer1, encrypted, 9001, false, {att});
+  FlushClientQueue();
 
-  // Verify temp file created
   std::filesystem::path const temp_file = attachments_dir_ / (att_id + ".tmp");
   ASSERT_TRUE(std::filesystem::exists(temp_file));
   EXPECT_EQ(std::filesystem::file_size(temp_file), file_data.size());
 
-  // Process Chunks using Binary Protocol
   constexpr auto chunk_size = services::FileTransferService::chunkSizeBytes;
   size_t const total_chunks = (file_data.size() + chunk_size - 1) / chunk_size;
 
@@ -165,23 +156,20 @@ TEST_F(FileTransferResilienceTest, TransferProgressAndFileCreation) {
     size_t const offset = seq * chunk_size;
     std::string const chunk_str = file_data.substr(offset, chunk_size);
     auto packet = CreateChunkPacket(att_id, seq, StringToBytes(chunk_str));
-    file_transfer_service_->ProcessBinaryMessage(peer1, packet);
+    EventQueue::Instance().Push(EventDataChannelMessage{peer1, packet});
   }
 
-  // End
   auto end_packet = CreateEndPacket(att_id);
-  file_transfer_service_->ProcessBinaryMessage(peer1, end_packet);
+  EventQueue::Instance().Push(EventDataChannelMessage{peer1, end_packet});
 
   EventQueue::Instance().WaitFor([&] { return completed; }, std::chrono::seconds(2));
 
-  // Verify completion
   EXPECT_TRUE(completed);
   EXPECT_FLOAT_EQ(progress_events.back(), 1.0f);
 
   EventQueue::Instance().Unsubscribe<EventTransferProgress>(sub1);
   EventQueue::Instance().Unsubscribe<EventAttachmentDownloaded>(sub2);
 
-  // Verify final file exists
   std::filesystem::path const final_file = attachments_dir_ / (att_id + ".txt");
   ASSERT_TRUE(std::filesystem::exists(final_file));
   EXPECT_FALSE(std::filesystem::exists(temp_file));
@@ -195,12 +183,11 @@ TEST_F(FileTransferResilienceTest, FailsGracefullyIfHashMismatch) {
   peer->session_cipher->ComputeSharedSecret(other_cipher.GetPublicKey());
   transport_->AddPeer(peer1, peer);
 
-  // Receive Chat Message
   messaging::Attachment att;
   att.id = "bad_hash_file";
   att.type = messaging::AttachmentType::file;
   att.size_bytes = 10;
-  att.hash = "deadbeef";  // Wrong hash
+  att.hash = "deadbeef";
   att.is_downloaded = false;
   att.mime_type = "application/octet-stream";
 
@@ -211,14 +198,13 @@ TEST_F(FileTransferResilienceTest, FailsGracefullyIfHashMismatch) {
 
   auto encrypted = other_cipher.Encrypt(payload_json.dump());
 
-  service_->OnChatMessageReceived(peer1, encrypted, 9002, false, {att});
+  client_->GetMessagingService()->OnChatMessageReceived(peer1, encrypted, 9002, false, {att});
+  FlushClientQueue();
 
-  // Send Data
   std::string const data = "0123456789";
   auto chunk = CreateChunkPacket("bad_hash_file", 0, StringToBytes(data));
-  file_transfer_service_->ProcessBinaryMessage(peer1, chunk);
+  EventQueue::Instance().Push(EventDataChannelMessage{peer1, chunk});
 
-  // Send End
   bool completed = false;
   auto sub = EventQueue::Instance().Subscribe<EventAttachmentDownloaded>([&](auto const& e) {
     if (e.peer_id == peer1 && e.attachment_id == "bad_hash_file") {
@@ -227,24 +213,21 @@ TEST_F(FileTransferResilienceTest, FailsGracefullyIfHashMismatch) {
   });
 
   auto end_packet = CreateEndPacket("bad_hash_file");
-  file_transfer_service_->ProcessBinaryMessage(peer1, end_packet);
+  EventQueue::Instance().Push(EventDataChannelMessage{peer1, end_packet});
 
   EventQueue::Instance().WaitFor([&] { return completed; }, std::chrono::milliseconds(500));
 
   EventQueue::Instance().Unsubscribe<EventAttachmentDownloaded>(sub);
-  // Verify
-  EXPECT_FALSE(completed);  // Should not trigger callback on failure
+  EXPECT_FALSE(completed);
 
   std::filesystem::path const final_file = attachments_dir_ / ("bad_hash_file.dat");
   std::filesystem::path const temp_file = attachments_dir_ / ("bad_hash_file.tmp");
 
-  // Neither file should exist (temp is deleted on failure)
   EXPECT_FALSE(std::filesystem::exists(final_file));
   EXPECT_FALSE(std::filesystem::exists(temp_file));
 }
 
 TEST_F(FileTransferResilienceTest, StatusUpdateOrder_SmallFile) {
-  // Setup peer
   auto peer = std::make_shared<transport::Peer>(peer1);
   peer->data_channel_is_open = true;
   peer->session_cipher->ComputeSharedSecret(eillance::crypto::SessionCipher().GetPublicKey());
@@ -257,23 +240,19 @@ TEST_F(FileTransferResilienceTest, StatusUpdateOrder_SmallFile) {
     status_sequence.push_back(e.status);
   });
 
-  // Create small file
   std::filesystem::path const file_path = temp_dir_ / "small_order_test.dat";
   {
     std::ofstream ofs(file_path);
     ofs << "tiny";
   }
 
-  std::vector<services::AttachmentRequest> atts;
+  std::vector<messaging::AttachmentRequest> atts;
   atts.push_back({file_path.string(), messaging::AttachmentType::file, "", "text/plain"});
 
-  // Send
-  service_->SendChatMessage(peer1, "Sequence Test", atts);
+  client_->SendChatMessage(peer1, "Sequence Test", atts);
 
   EventQueue::Instance().WaitFor([&] { return status_sequence.size() >= 2; }, std::chrono::seconds(2));
 
-  // Expect sequence: Transferring -> Done
-  // If bug exists: Done -> Transferring
   ASSERT_GE(status_sequence.size(), 2);
 
   bool found_sequence = false;

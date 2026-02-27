@@ -52,29 +52,25 @@ class MediaCallServiceTest : public ::testing::Test {
     storage_ = std::make_shared<storage::PersistentStorage>(std::move(storage_impl));
     auto contact_manager = std::make_shared<identity::ContactManager>(storage_);
 
-    auto file_transfer_service = std::make_shared<services::FileTransferService>(storage_, data_transport_);
+    sm_ = std::make_unique<services::ServiceManager>();
+    sm_->storage = storage_;
+    sm_->data_transport = data_transport_;
+    sm_->media_transport = media_transport_;
+    sm_->contact_manager = contact_manager;
 
-    account_service_ = std::make_unique<services::AccountService>(storage_, data_transport_);
-    std::ignore = account_service_->GenerateNewIdentity();
+    sm_->account = std::make_shared<services::AccountService>(sm_.get());
 
-    // Initialize messaging service (needed by MediaCallService)
-    messaging_service_ = std::make_unique<services::MessagingService>(
-        storage_,
-        data_transport_,
-        contact_manager,
-        account_service_,
-        file_transfer_service
-    );
+    std::ignore = sm_->account->GenerateNewIdentity();
 
-    // Initialize MediaCallService with split transports
-    service_ =
-        std::make_unique<services::MediaCallService>(storage_, data_transport_, media_transport_, account_service_);
-    service_->SetMessagingService(messaging_service_);
+    sm_->file_transfer = std::make_shared<services::FileTransferService>(sm_.get());
+    sm_->messaging = std::make_shared<services::MessagingService>(sm_.get());
+
+    sm_->media_call = std::make_shared<services::MediaCallService>(sm_.get());
 
     // Initialize Capture (needed for av_stream_ invariant)
-    service_->SetVideoCapture(std::make_unique<MockCaptureImpl>());
-    service_->SetAudioCapture(std::make_unique<MockCaptureImpl>());
-    service_->Configure({});
+    sm_->media_call->SetVideoCapture(std::make_unique<MockCaptureImpl>());
+    sm_->media_call->SetAudioCapture(std::make_unique<MockCaptureImpl>());
+    sm_->media_call->Configure({});
   }
 
   std::shared_ptr<transport::MockCallLog> mock_log_;
@@ -88,9 +84,7 @@ class MediaCallServiceTest : public ::testing::Test {
   std::shared_ptr<transport::MediaTransport> media_transport_;
 
   std::shared_ptr<storage::PersistentStorage> storage_;
-  std::shared_ptr<services::AccountService> account_service_;
-  std::shared_ptr<services::MessagingService> messaging_service_;
-  std::unique_ptr<services::MediaCallService> service_;
+  std::unique_ptr<services::ServiceManager> sm_;
 
   ContactID const peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
 };
@@ -101,11 +95,11 @@ TEST_F(MediaCallServiceTest, StartVoiceCall) {
   peer->data_channel_is_open = true;
   data_transport_->AddPeer(peer1, peer);
 
-  service_->StartVoiceCall(peer1);
+  sm_->media_call->StartVoiceCall(peer1);
 
   // Simulate media transport connection success (transitions to MediaConnected -> Negotiating)
   // This triggers SendCallRequest
-  service_->OnMediaPeerConnectionStateChange(peer1, transport::PeerConnectionState::connected);
+  sm_->media_call->OnMediaPeerConnectionStateChange(peer1, transport::PeerConnectionState::connected);
 
   // Verify that a call request message was sent via transport
   // Note: We no longer check history as intermediate system messages were removed.
@@ -127,10 +121,10 @@ TEST_F(MediaCallServiceTest, AcceptCall) {
   data_transport_->AddPeer(peer1, peer);
 
   // 1. Simulate Incoming Call Request
-  service_->OnCallRequest(peer1, "call_id_1", messaging::HistoryEntryKind::voiceCall);
+  sm_->media_call->OnCallRequest(peer1, "call_id_1", messaging::HistoryEntryKind::voiceCall);
 
   // 2. Simulate Media Connection Establishment (Transitions to Ringing)
-  service_->OnMediaPeerConnectionStateChange(peer1, transport::PeerConnectionState::connected);
+  sm_->media_call->OnMediaPeerConnectionStateChange(peer1, transport::PeerConnectionState::connected);
 
   bool accepted_cb = false;
   auto sub = EventQueue::Instance().Subscribe<EventCallAccepted>([&](auto const& e) {
@@ -140,7 +134,7 @@ TEST_F(MediaCallServiceTest, AcceptCall) {
   });
 
   // 3. Accept the call
-  service_->AcceptCall(peer1);
+  sm_->media_call->AcceptCall(peer1);
 
   EventQueue::Instance().WaitFor([&] { return accepted_cb; }, std::chrono::seconds(1));
 
@@ -167,7 +161,7 @@ TEST_F(MediaCallServiceTest, Hangup) {
   data_transport_->AddPeer(peer1, peer);
 
   // 1. Establish a call session so Hangup has something to terminate
-  service_->StartVoiceCall(peer1);
+  sm_->media_call->StartVoiceCall(peer1);
 
   bool terminated_cb = false;
   auto sub = EventQueue::Instance().Subscribe<EventCallTerminated>([&](auto const& e) {
@@ -176,7 +170,7 @@ TEST_F(MediaCallServiceTest, Hangup) {
     }
   });
 
-  service_->Hangup(peer1, true);  // notify_peer = true
+  sm_->media_call->Hangup(peer1, true);  // notify_peer = true
 
   EventQueue::Instance().WaitFor([&] { return terminated_cb; }, std::chrono::seconds(1));
 
@@ -208,7 +202,7 @@ TEST_F(MediaCallServiceTest, RejectCall) {
   peer->data_channel_is_open = true;
   data_transport_->AddPeer(peer1, peer);
 
-  service_->OnCallRequest(peer1, "call_id_1", messaging::HistoryEntryKind::voiceCall);
+  sm_->media_call->OnCallRequest(peer1, "call_id_1", messaging::HistoryEntryKind::voiceCall);
 
   bool terminated_cb = false;
   auto sub = EventQueue::Instance().Subscribe<EventCallTerminated>([&](auto const& e) {
@@ -217,7 +211,7 @@ TEST_F(MediaCallServiceTest, RejectCall) {
     }
   });
 
-  service_->RejectCall(peer1);
+  sm_->media_call->RejectCall(peer1);
 
   EventQueue::Instance().WaitFor([&] { return terminated_cb; }, std::chrono::seconds(1));
 
@@ -231,13 +225,13 @@ TEST_F(MediaCallServiceTest, MediaSampleRouting) {
   data_transport_->AddPeer(peer1, peer);
 
   // 1. Simulate Incoming Call
-  service_->OnCallRequest(peer1, "call_id_123", messaging::HistoryEntryKind::videoCall);
+  sm_->media_call->OnCallRequest(peer1, "call_id_123", messaging::HistoryEntryKind::videoCall);
 
   // 2. Simulate Media Connect -> Ringing
-  service_->OnMediaPeerConnectionStateChange(peer1, transport::PeerConnectionState::connected);
+  sm_->media_call->OnMediaPeerConnectionStateChange(peer1, transport::PeerConnectionState::connected);
 
   // 3. Accept Call -> Active
-  service_->AcceptCall(peer1);
+  sm_->media_call->AcceptCall(peer1);
 
   // Verify tracks are created and attached
   auto video_track = std::dynamic_pointer_cast<transport::MockTrack>(peer->video);

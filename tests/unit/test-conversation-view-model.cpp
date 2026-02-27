@@ -330,7 +330,7 @@ TEST_F(ConversationViewModelTest, SendSmallAttachment_UpdatesStatusSynchronously
   }
 
   // Send
-  std::vector<services::AttachmentRequest> atts;
+  std::vector<messaging::AttachmentRequest> atts;
   atts.push_back({temp_path.string(), messaging::AttachmentType::file, "", "application/octet-stream"});
   vm_->SendMessage("Small File", atts);
 

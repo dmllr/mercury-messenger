@@ -9,6 +9,7 @@
 #include "eillance/client/settings_manager.hpp"
 #include "eillance/events/client_events.hpp"
 #include "eillance/identity/id_manager.hpp"
+#include "eillance/services/service_manager.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/transport/data_transport.hpp"
 #include "eillance/utils/event_queue.hpp"
@@ -18,13 +19,11 @@ namespace eillance::services {
 
 class AccountService {
  public:
-  explicit AccountService(
-      std::shared_ptr<storage::PersistentStorage> storage,
-      std::shared_ptr<transport::DataTransport> transport
-  )
-      : storage_(std::move(storage)),
-        transport_(std::move(transport)) {
-    if (auto db_path = storage_->GetPath(); !db_path.empty()) {
+  explicit AccountService(ServiceManager* sm)
+      : sm_(sm),
+        storage_(sm->storage),
+        transport_(sm->data_transport) {
+    if (auto db_path = sm_->storage->GetPath(); !db_path.empty()) {
       backup_manager_ = std::make_unique<backup::BackupManager>(db_path);
     }
 
@@ -140,6 +139,7 @@ class AccountService {
   }
 
  private:
+  ServiceManager* sm_;
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<transport::DataTransport> transport_;
 

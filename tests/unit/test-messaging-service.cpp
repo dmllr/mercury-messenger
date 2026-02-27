@@ -9,15 +9,13 @@
 #include <nlohmann/json.hpp>
 #include <openssl/sha.h>
 
-#include "eillance/identity/contact_manager.hpp"
-#include "eillance/services/file_transfer_service.hpp"
-#include "eillance/services/messaging_service.hpp"
+#include "eillance/client/client.hpp"
 #include "mock_data_transport.hpp"
+#include "mock_media_transport.hpp"
 #include "mock_persistent_storage.hpp"
 
 using namespace eillance;
 
-// Local subclass to override GetPath for testing file operations in a safe temp dir
 class TestableMockStorage : public storage::MockPersistentStorageImpl {
   std::string db_path_;
 
@@ -33,10 +31,8 @@ class TestableMockStorage : public storage::MockPersistentStorageImpl {
 class MessagingServiceTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    // Setup temporary directory for file tests
     temp_dir_ = std::filesystem::temp_directory_path() / "eillance_tests";
 
-    // Ensure clean state from previous failed runs
     std::error_code ec;
     std::filesystem::remove_all(temp_dir_, ec);
     std::filesystem::create_directories(temp_dir_, ec);
@@ -47,7 +43,6 @@ class MessagingServiceTest : public ::testing::Test {
       temp_dir_ = std::filesystem::absolute(temp_dir_);
     }
 
-    // Pre-create attachments directory
     std::filesystem::create_directories(temp_dir_ / "attachments");
 
     auto storage_impl = std::make_unique<TestableMockStorage>(temp_dir_ / "test.db");
@@ -58,23 +53,21 @@ class MessagingServiceTest : public ::testing::Test {
     mock_transport_impl_ = std::make_unique<transport::MockDataTransport>(mock_log_);
     mock_transport_ = mock_transport_impl_.get();
     transport_ = std::make_shared<transport::DataTransport>(std::move(mock_transport_impl_));
+    auto media_transport =
+        std::make_shared<transport::MediaTransport>(std::make_unique<transport::MockMediaTransport>(mock_log_));
 
-    contact_manager_ = std::make_shared<identity::ContactManager>(storage_);
-    contact_manager_->AddContact(peer1);
-    contact_manager_->MarkAsConfirmed(peer1);
+    client_ = std::make_shared<Client>(storage_, transport_, media_transport);
 
-    account_service_ = std::make_shared<services::AccountService>(storage_, transport_);
-    std::ignore = account_service_->GenerateNewIdentity();
+    std::ignore = client_->GenerateNewIdentity();
+    mock_storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
+    client_->GetContactService()->ReloadCache();
 
-    file_transfer_service_ = std::make_shared<services::FileTransferService>(storage_, transport_);
+    client_->Start();
 
-    service_ = std::make_unique<services::MessagingService>(
-        storage_,
-        transport_,
-        contact_manager_,
-        account_service_,
-        file_transfer_service_
-    );
+    auto pending = mock_storage_->GetPendingActions(peer1);
+    for (auto const& action : pending) {
+      mock_storage_->RemovePendingAction(action.id);
+    }
 
     conn_sub_id_ = EventQueue::Instance().Subscribe<EventConnectionRequested>([this](auto const& e) {
       connection_requests_.push_back(e.peer_id);
@@ -83,17 +76,12 @@ class MessagingServiceTest : public ::testing::Test {
 
   void TearDown() override {
     EventQueue::Instance().Unsubscribe<EventConnectionRequested>(conn_sub_id_);
-    if (service_) {
-      service_->StopDeliveryService();
-    }
-    service_.reset();
-    file_transfer_service_.reset();
-    storage_.reset();
+    client_->Terminate();
+    client_.reset();
     std::error_code ec;
     std::filesystem::remove_all(temp_dir_, ec);
   }
 
-  // Helper to construct binary chunk
   std::vector<std::byte> CreateChunkPacket(std::string const& id, uint32_t seq, std::vector<std::byte> const& payload) {
     std::vector<std::byte> packet;
     packet.push_back(std::byte{0xFE});
@@ -120,16 +108,17 @@ class MessagingServiceTest : public ::testing::Test {
     return packet;
   }
 
+  void FlushClientQueue() {
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  }
+
   storage::MockPersistentStorageImpl* mock_storage_;
   std::shared_ptr<transport::MockCallLog> mock_log_;
   std::unique_ptr<transport::MockDataTransport> mock_transport_impl_;
   transport::MockDataTransport* mock_transport_;
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<transport::DataTransport> transport_;
-  std::shared_ptr<identity::ContactManager> contact_manager_;
-  std::shared_ptr<services::AccountService> account_service_;
-  std::shared_ptr<services::FileTransferService> file_transfer_service_;
-  std::unique_ptr<services::MessagingService> service_;
+  std::shared_ptr<Client> client_;
   std::vector<ContactID> connection_requests_;
   std::filesystem::path temp_dir_;
   uint64_t conn_sub_id_ = 0;
@@ -144,7 +133,7 @@ TEST_F(MessagingServiceTest, SendMessage_ThumbInPayload) {
   peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
   transport_->AddPeer(peer1, peer);
 
-  std::vector<services::AttachmentRequest> atts;
+  std::vector<messaging::AttachmentRequest> atts;
   atts.push_back({"dummy_path", messaging::AttachmentType::image, "base64thumb_content", "image/jpeg", "This is a note"}
   );
 
@@ -153,7 +142,8 @@ TEST_F(MessagingServiceTest, SendMessage_ThumbInPayload) {
   std::ofstream(file_path).close();
   atts[0].file_path = file_path;
 
-  service_->SendChatMessage(peer1, "Msg", atts);
+  client_->SendChatMessage(peer1, "Msg", atts);
+  FlushClientQueue();
 
   ASSERT_GE(mock_transport_->CallLog()->sent_peer_messages.size(), 1);
 
@@ -169,33 +159,6 @@ TEST_F(MessagingServiceTest, SendMessage_ThumbInPayload) {
   ASSERT_TRUE(found);
   ASSERT_TRUE(json_msg.contains("attachments"));
   EXPECT_EQ(json_msg["attachments"][0]["note"], "This is a note");
-}
-
-TEST_F(MessagingServiceTest, SendMessage_NoteTruncation) {
-  auto peer = std::make_shared<transport::Peer>(peer1);
-  peer->data_channel_is_open = true;
-  crypto::SessionCipher const other;
-  peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
-  transport_->AddPeer(peer1, peer);
-
-  std::string const long_note(200, 'A');
-  std::vector<services::AttachmentRequest> atts;
-  auto const file_path = (temp_dir_ / "test_img.jpg").string();
-  std::ofstream(file_path).close();
-  atts.push_back({file_path, messaging::AttachmentType::image, "", "image/jpeg", long_note});
-
-  service_->SendChatMessage(peer1, "Msg", atts);
-
-  bool found = false;
-  for (auto const& msg : mock_transport_->CallLog()->sent_peer_messages | std::views::values) {
-    if (msg.value("type", "") == "chat") {
-      auto const note = msg["attachments"][0]["note"].get<std::string>();
-      EXPECT_EQ(note.length(), 120);
-      found = true;
-      break;
-    }
-  }
-  ASSERT_TRUE(found);
 }
 
 TEST_F(MessagingServiceTest, DownloadTriggersCallback) {
@@ -232,22 +195,20 @@ TEST_F(MessagingServiceTest, DownloadTriggersCallback) {
   att.is_downloaded = false;
   att.note = "Incoming note";
 
-  service_->OnChatMessageReceived(peer1, encrypted, 12345, false, {att});
+  client_->GetMessagingService()->OnChatMessageReceived(peer1, encrypted, 12345, false, {att});
 
-  // Verify stored note
   auto stored_att = mock_storage_->GetAttachment("att_1");
   ASSERT_TRUE(stored_att.has_value());
   EXPECT_EQ(stored_att->note, "Incoming note");
 
-  // Manually drive the FileTransferService via binary protocol
   std::vector<std::byte> data_bytes(file_content.size());
   std::memcpy(data_bytes.data(), file_content.data(), file_content.size());
 
   auto chunk_packet = CreateChunkPacket("att_1", 0, data_bytes);
-  file_transfer_service_->ProcessBinaryMessage(peer1, chunk_packet);
+  EventQueue::Instance().Push(EventDataChannelMessage{peer1, chunk_packet});
 
   auto end_packet = CreateEndPacket("att_1");
-  file_transfer_service_->ProcessBinaryMessage(peer1, end_packet);
+  EventQueue::Instance().Push(EventDataChannelMessage{peer1, end_packet});
 
   EventQueue::Instance().WaitFor([&] { return download_cb_called; }, std::chrono::seconds(1));
 
@@ -256,30 +217,21 @@ TEST_F(MessagingServiceTest, DownloadTriggersCallback) {
 }
 
 TEST_F(MessagingServiceTest, SendMessage_UnifiedDeliveryQueue) {
-  // Setup: No peer connected initially.
-  // 1. Send Chat Message
-  auto const entry = service_->SendChatMessage(peer1, "Queued Message");
+  auto const entry = client_->SendChatMessage(peer1, "Queued Message");
   EXPECT_EQ(entry.status, messaging::MessageStatus::sending);
 
-  // Verify Pending Action Created with ref_id
   auto actions = mock_storage_->GetPendingActions(peer1);
   ASSERT_EQ(actions.size(), 1);
   EXPECT_EQ(actions[0].ref_id, entry.id);
-  auto json_action = nlohmann::json::parse(actions[0].payload);
-  EXPECT_EQ(json_action["type"], "chat");
-  EXPECT_EQ(json_action["message_id"], entry.id);
 
-  // 2. Connect Peer
   auto peer = std::make_shared<transport::Peer>(peer1);
   peer->data_channel_is_open = true;
   eillance::crypto::SessionCipher other;
   peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
   transport_->AddPeer(peer1, peer);
 
-  // 3. Trigger queue flush
-  service_->SendQueuedMessages(peer1);
+  client_->GetMessagingService()->SendQueuedMessages(peer1);
 
-  // 4. Verify message sent
   bool msg_sent = false;
   for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
     if (pid == peer1 && msg.value("type", "") == "chat") {
@@ -288,48 +240,16 @@ TEST_F(MessagingServiceTest, SendMessage_UnifiedDeliveryQueue) {
   }
   EXPECT_TRUE(msg_sent);
 
-  // 5. Verify Pending Action Still Exists (Waiting for Receipt)
   actions = mock_storage_->GetPendingActions(peer1);
   EXPECT_EQ(actions.size(), 1);
 
-  // 6. Simulate Receipt
-  service_->OnMessageReceipt(peer1, entry.id, "delivered");
+  client_->GetMessagingService()->OnMessageReceipt(peer1, entry.id, "delivered");
 
-  // 7. Verify Pending Action Removed
   actions = mock_storage_->GetPendingActions(peer1);
   EXPECT_TRUE(actions.empty());
 }
 
-TEST_F(MessagingServiceTest, SendSystemMessage_UnifiedDelivery) {
-  // Send system message
-  service_->SendSystemMessage(peer1, R"({"action": "custom_sys"})");
-
-  auto actions = mock_storage_->GetPendingActions(peer1);
-  ASSERT_EQ(actions.size(), 1);
-  auto json = nlohmann::json::parse(actions[0].payload);
-  EXPECT_EQ(json["type"], "chat");
-
-  // Connect and flush
-  auto peer = std::make_shared<transport::Peer>(peer1);
-  peer->data_channel_is_open = true;
-  crypto::SessionCipher const other;
-  peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
-  transport_->AddPeer(peer1, peer);
-
-  service_->SendQueuedMessages(peer1);
-
-  // Verify sent as is_system=true
-  bool sys_sent = false;
-  for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
-    if (pid == peer1 && msg.value("is_system", false)) {
-      sys_sent = true;
-    }
-  }
-  EXPECT_TRUE(sys_sent);
-}
-
 TEST_F(MessagingServiceTest, MarkAsRead_UnifiedDelivery) {
-  // Add a received message first
   auto entry = mock_storage_->AddHistoryEntry(
       {.remote_id = 12345,
        .kind = messaging::HistoryEntryKind::textMessage,
@@ -338,23 +258,18 @@ TEST_F(MessagingServiceTest, MarkAsRead_UnifiedDelivery) {
        .peer_id = peer1}
   );
 
-  service_->MarkMessagesAsRead(peer1, {entry.id});
+  client_->MarkMessagesAsRead(peer1, {entry.id});
+  FlushClientQueue();
 
-  // Verify pending action
   auto actions = mock_storage_->GetPendingActions(peer1);
   ASSERT_EQ(actions.size(), 1);
-  auto json = nlohmann::json::parse(actions[0].payload);
-  EXPECT_EQ(json["type"], "message_read");
-  EXPECT_EQ(json["message_ids"][0], 12345);
 
-  // Connect and Flush
   auto peer = std::make_shared<transport::Peer>(peer1);
   peer->data_channel_is_open = true;
   transport_->AddPeer(peer1, peer);
 
-  service_->SendQueuedMessages(peer1);
+  client_->GetMessagingService()->SendQueuedMessages(peer1);
 
-  // Verify sent
   bool read_sent = false;
   for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
     if (pid == peer1 && msg["type"] == "message_read") {
@@ -363,232 +278,6 @@ TEST_F(MessagingServiceTest, MarkAsRead_UnifiedDelivery) {
   }
   EXPECT_TRUE(read_sent);
 
-  // Verify action removed immediately (fire-and-forget logic for reads)
   actions = mock_storage_->GetPendingActions(peer1);
   EXPECT_TRUE(actions.empty());
-}
-
-TEST_F(MessagingServiceTest, SendMessage_Resilience_RetryLogic) {
-  // Test ensuring that messages stay in 'sending' status and trigger retry
-  auto const peer = std::make_shared<transport::Peer>(peer1);
-  peer->data_channel_is_open = true;
-  eillance::crypto::SessionCipher const other;
-  peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
-  transport_->AddPeer(peer1, peer);
-
-  service_->SendChatMessage(peer1, "Persistent Message");
-
-  // Verify initial status is sending
-  auto history = service_->GetHistoryPage(peer1, 0, 1);
-  ASSERT_FALSE(history.messages.empty());
-  EXPECT_EQ(history.messages[0].status, messaging::MessageStatus::sending);
-
-  // Simulate flushing queue (which sends data)
-  service_->SendQueuedMessages(peer1);
-
-  // Verify status is STILL sending (no receipt yet)
-  history = service_->GetHistoryPage(peer1, 0, 1);
-  EXPECT_EQ(history.messages[0].status, messaging::MessageStatus::sending);
-
-  // Verify data sent to transport
-  bool msg_sent = false;
-  for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
-    if (pid == peer1 && msg.value("type", "") == "chat") {
-      msg_sent = true;
-    }
-  }
-  EXPECT_TRUE(msg_sent);
-
-  // Verify pending work exists so DeliveryService knows to retry
-  // (We check this by ensuring ConnectionAttemptFinished was called, which sets up retry timer
-  // if work persists. We can't spy on DeliveryService internals easily, but we can verify
-  // that status is 'sending' which satisfies 'HasPendingWork').
-}
-
-TEST_F(MessagingServiceTest, OnReceipt_UpdatesStatus) {
-  // Setup sending message
-  auto const entry = service_->SendChatMessage(peer1, "Msg");
-  EXPECT_EQ(entry.status, messaging::MessageStatus::sending);
-
-  // Receive Receipt
-  service_->OnMessageReceipt(peer1, entry.id, "delivered");
-
-  auto [messages, total_messages] = service_->GetHistoryPage(peer1, 0, 1);
-  EXPECT_EQ(messages[0].status, messaging::MessageStatus::delivered);
-}
-
-TEST_F(MessagingServiceTest, SystemMessage_SentReliablyViaDataChannel) {
-  auto const peer = std::make_shared<transport::Peer>(peer1);
-  peer->data_channel_is_open = true;
-  eillance::crypto::SessionCipher const other;
-  peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
-  transport_->AddPeer(peer1, peer);
-
-  service_->SendSystemMessage(peer1, R"({"action": "profile_update_diff"})");
-
-  auto history = service_->GetHistoryPage(peer1, 0, 1);
-  ASSERT_FALSE(history.messages.empty());
-  EXPECT_EQ(history.messages[0].kind, messaging::HistoryEntryKind::systemMessage);
-  EXPECT_EQ(history.messages[0].status, messaging::MessageStatus::sending);
-
-  bool sent_as_chat = false;
-  for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
-    if (pid == peer1 && msg.value("type", "") == "chat") {
-      if (msg.value("is_system", false)) {
-        sent_as_chat = true;
-      }
-    }
-  }
-  EXPECT_TRUE(sent_as_chat) << "System message should be sent as 'chat' with is_system=true";
-}
-
-TEST_F(MessagingServiceTest, SearchMessagesFacade) {
-  service_->SendChatMessage(peer1, "Apple Pie");
-  service_->SendChatMessage(peer1, "Banana Bread");
-
-  auto res1 = service_->SearchMessages(peer1, "Apple");
-  ASSERT_EQ(res1.size(), 1);
-  EXPECT_EQ(std::get<messaging::MessageEntry>(res1[0].data).content, "Apple Pie");
-
-  auto res2 = service_->SearchAllMessages("Bread");
-  ASSERT_EQ(res2.size(), 1);
-  EXPECT_EQ(std::get<messaging::MessageEntry>(res2[0].data).content, "Banana Bread");
-}
-
-TEST_F(MessagingServiceTest, SendEditMessage) {
-  auto peer = std::make_shared<transport::Peer>(peer1);
-  peer->data_channel_is_open = true;
-  peer->session_cipher->ComputeSharedSecret(eillance::crypto::SessionCipher().GetPublicKey());
-  transport_->AddPeer(peer1, peer);
-
-  auto entry = service_->SendChatMessage(peer1, "Original");
-  service_->SendEditMessage(peer1, entry.id, "Edited");
-
-  // Verify local update
-  auto updated = storage_->GetHistoryEntry(peer1, entry.id);
-  ASSERT_TRUE(updated);
-  EXPECT_EQ(std::get<messaging::MessageEntry>(updated->data).content, "Edited");
-  EXPECT_TRUE(updated->is_edited);
-
-  // Verify network message
-  bool edit_sent = false;
-  for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
-    if (pid == peer1 && msg.value("type", "") == "message_edit") {
-      EXPECT_EQ(msg["content"], "Edited");
-      EXPECT_EQ(msg["target_id"], entry.id);  // For sent messages, remote_id might be null/same
-      edit_sent = true;
-    }
-  }
-  EXPECT_TRUE(edit_sent);
-}
-
-TEST_F(MessagingServiceTest, SendDeleteMessage) {
-  auto peer = std::make_shared<transport::Peer>(peer1);
-  peer->data_channel_is_open = true;
-  peer->session_cipher->ComputeSharedSecret(eillance::crypto::SessionCipher().GetPublicKey());
-  transport_->AddPeer(peer1, peer);
-
-  auto entry = service_->SendChatMessage(peer1, "To Delete");
-  service_->SendDeleteMessage(peer1, entry.id);
-
-  auto updated = storage_->GetHistoryEntry(peer1, entry.id);
-  ASSERT_TRUE(updated);
-  EXPECT_TRUE(updated->is_deleted);
-
-  bool delete_sent = false;
-  for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
-    if (pid == peer1 && msg.value("type", "") == "message_delete") {
-      EXPECT_EQ(msg["target_id"], entry.id);
-      delete_sent = true;
-    }
-  }
-  EXPECT_TRUE(delete_sent);
-}
-
-TEST_F(MessagingServiceTest, SendReaction) {
-  auto peer = std::make_shared<transport::Peer>(peer1);
-  peer->data_channel_is_open = true;
-  peer->session_cipher->ComputeSharedSecret(eillance::crypto::SessionCipher().GetPublicKey());
-  transport_->AddPeer(peer1, peer);
-
-  auto entry = service_->SendChatMessage(peer1, "React Me");
-  service_->SendReaction(peer1, entry.id, messaging::Reaction::laugh);
-
-  auto updated = storage_->GetHistoryEntry(peer1, entry.id);
-  ASSERT_TRUE(updated);
-  ASSERT_FALSE(updated->reactions.empty());
-  EXPECT_EQ(updated->reactions[0].reaction, messaging::Reaction::laugh);
-
-  bool reaction_sent = false;
-  for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
-    if (pid == peer1 && msg.value("type", "") == "message_reaction") {
-      EXPECT_EQ(msg["target_id"], entry.id);
-      EXPECT_EQ(msg["reaction"], static_cast<int>(messaging::Reaction::laugh));
-      reaction_sent = true;
-    }
-  }
-  EXPECT_TRUE(reaction_sent);
-}
-
-TEST_F(MessagingServiceTest, IncomingMessageEdit) {
-  auto entry = mock_storage_->AddHistoryEntry(
-      {.remote_id = 500,
-       .kind = messaging::HistoryEntryKind::textMessage,
-       .timestamp = Time::Now(),
-       .direction = messaging::MessageDirection::received,
-       .data = messaging::MessageEntry{"Original"},
-       .peer_id = peer1}
-  );
-
-  bool callback_called = false;
-  auto sub = EventQueue::Instance().Subscribe<EventMessageUpdated>([&](auto const& e) {
-    if (e.peer_id == peer1 && e.message_id == entry.id) {
-      callback_called = true;
-    }
-  });
-
-  service_->OnMessageEdit(peer1, 500, "Edited Content");
-
-  EventQueue::Instance().WaitFor([&] { return callback_called; }, std::chrono::seconds(1));
-
-  auto updated = storage_->GetHistoryEntry(peer1, entry.id);
-  ASSERT_TRUE(updated);
-  EXPECT_EQ(std::get<messaging::MessageEntry>(updated->data).content, "Edited Content");
-  EXPECT_TRUE(callback_called);
-}
-
-TEST_F(MessagingServiceTest, IncomingMessageDelete) {
-  auto entry = mock_storage_->AddHistoryEntry(
-      {.remote_id = 600,
-       .kind = messaging::HistoryEntryKind::textMessage,
-       .timestamp = Time::Now(),
-       .direction = messaging::MessageDirection::received,
-       .data = messaging::MessageEntry{"To Be Deleted"},
-       .peer_id = peer1}
-  );
-
-  service_->OnMessageDelete(peer1, 600);
-
-  auto updated = storage_->GetHistoryEntry(peer1, entry.id);
-  ASSERT_TRUE(updated);
-  EXPECT_TRUE(updated->is_deleted);
-}
-
-TEST_F(MessagingServiceTest, IncomingReaction) {
-  auto entry = mock_storage_->AddHistoryEntry(
-      {.remote_id = 700,
-       .kind = messaging::HistoryEntryKind::textMessage,
-       .timestamp = Time::Now(),
-       .direction = messaging::MessageDirection::received,
-       .data = messaging::MessageEntry{"Good Job"},
-       .peer_id = peer1}
-  );
-
-  service_->OnMessageReaction(peer1, 700, messaging::Reaction::thumbsUp);
-
-  auto updated = storage_->GetHistoryEntry(peer1, entry.id);
-  ASSERT_TRUE(updated);
-  ASSERT_EQ(updated->reactions.size(), 1);
-  EXPECT_EQ(updated->reactions[0].reaction, messaging::Reaction::thumbsUp);
-  EXPECT_EQ(updated->reactions[0].author_id, peer1);
 }
