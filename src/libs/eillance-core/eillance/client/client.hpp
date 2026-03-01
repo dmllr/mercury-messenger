@@ -89,6 +89,10 @@ class Client final {
               sm_->media_transport->Disconnect(id);
             }
           }
+        } else if (state == ServiceConnectionState::online) {
+          if (this->is_running_.load()) {
+            sm_->messaging->StartDeliveryService();
+          }
         }
       } else if (event.source == EventSource::mediaConnectionState) {
         auto const state = static_cast<transport::PeerConnectionState>(event.state);
@@ -178,6 +182,7 @@ class Client final {
     }
     sm_->data_transport->SetId(sm_->account->GetId());
     sm_->data_transport->Start();
+    sm_->messaging->StartDeliveryService();
     StartWatchdog();
     background_queue_.Dispatch([this] { CheckForInactivePeers(); });
   }

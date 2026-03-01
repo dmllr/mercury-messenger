@@ -73,6 +73,10 @@ class MessageDeliveryService {
     if (!isRunning_.exchange(false)) {
       return;
     }
+    {
+      std::lock_guard<std::recursive_mutex> const lock(mutex_);
+      pendingConnections_.clear();
+    }
     dispatchQueue_.RemovePending();
   }
 
