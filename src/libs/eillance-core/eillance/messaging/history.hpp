@@ -23,54 +23,47 @@ class MessageHistory {
       : storage_(std::move(storage)) {
   }
 
-  auto AddTextEntry(
-      ContactID const& peer_id,
-      std::string const& content,
-      std::vector<Attachment> const& attachments,
-      MessageDirection direction,
-      HistoryEntryKind kind,
-      std::optional<uint64_t> remote_id = std::nullopt
-  ) -> HistoryEntryRecord {
+  auto AddTextEntry(TextEntryParams const& params) -> HistoryEntryRecord {
     // Received messages are by definition delivered. Sent messages start as sending.
     // We avoid MessageStatus::none for received messages to ensure they are visible in history queries immediately.
     MessageStatus const initial_status =
-        (direction == MessageDirection::sent) ? MessageStatus::sending : MessageStatus::delivered;
+        (params.direction == MessageDirection::sent) ? MessageStatus::sending : MessageStatus::delivered;
 
     return storage_->AddHistoryEntry({
         .id = 0,  // DB will assign ID
-        .remote_id = remote_id,
-        .kind = kind,
+        .remote_id = params.remote_id,
+        .kind = params.kind,
         .timestamp = static_cast<Time::Unit>(
             std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch())
                 .count()
         ),
-        .direction = direction,
+        .direction = params.direction,
         .status = initial_status,
         .is_truncated = false,
-        .data = MessageEntry{content, attachments},
-        .peer_id = peer_id,
+        .data = MessageEntry{params.content, params.attachments},
+        .peer_id = params.peer_id,
     });
   }
 
-  auto AddCallEntry(
-      ContactID const& peer_id,
-      HistoryEntryKind const kind,
-      CallDirection const direction,
-      CallStatus const status,
-      uint32_t duration
-  ) -> HistoryEntryRecord {
+  auto AddCallEntry(CallEntryParams const& params) -> HistoryEntryRecord {
     return storage_->AddHistoryEntry({
         .id = 0,
-        .kind = kind,
+        .kind = params.kind,
         .timestamp = static_cast<Time::Unit>(
             std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch())
                 .count()
         ),
-        .direction = (direction == CallDirection::incoming) ? MessageDirection::received : MessageDirection::sent,
+        .direction =
+            (params.direction == CallDirection::incoming) ? MessageDirection::received : MessageDirection::sent,
         .status = MessageStatus::none,
         .is_truncated = false,
-        .data = CallEntry{.duration_seconds = duration, .call_direction = direction, .call_status = status},
-        .peer_id = peer_id,
+        .data =
+            CallEntry{
+                .duration_seconds = params.duration_seconds,
+                .call_direction = params.direction,
+                .call_status = params.status
+            },
+        .peer_id = params.peer_id,
     });
   }
 

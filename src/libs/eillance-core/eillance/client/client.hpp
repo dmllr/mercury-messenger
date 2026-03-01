@@ -254,18 +254,13 @@ class Client final {
     sm_->account->UpdateSignalingUrl(url);
   }
 
-  void UpdateMyProfile(
-      std::optional<std::string> const& n,
-      std::optional<std::string> const& b,
-      std::optional<std::string> const& p
-  ) {
-    sm_->account->UpdateMyProfile(n, b, p);
+  void UpdateMyProfile(identity::ProfileUpdate const& profile) {
+    sm_->account->UpdateMyProfile(profile);
     BroadcastProfileUpdate();
   }
 
-  void
-  UpdateIceConfig(std::string const& stun, std::string const& turn, std::string const& user, std::string const& pass) {
-    sm_->account->GetSettings()->SetCustomIceConfig(stun, turn, user, pass);
+  void UpdateIceConfig(IceConfigParams const& params) {
+    sm_->account->GetSettings()->SetCustomIceConfig(params);
     ReevaluateIceConfiguration();
   }
 

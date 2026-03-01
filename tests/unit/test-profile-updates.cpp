@@ -70,7 +70,7 @@ TEST_F(ProfileUpdatesTest, BroadcastOnProfileUpdate) {
 
   // Update my profile
   mock_transport_->CallLog()->sent_peer_messages.clear();  // Clear history
-  client_->UpdateMyProfile("New Name", "New Bio", "NewPhoto");
+  client_->UpdateMyProfile({.display_name = "New Name", .bio = "New Bio", .photo_base64 = "NewPhoto"});
   eillance::EventQueue::Instance().WaitFor(
       [&]() {
         std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
@@ -102,7 +102,7 @@ TEST_F(ProfileUpdatesTest, SendProfileOnConnect) {
   client_->Contacts()->ReloadCache();
 
   // Set my profile. This will queue a profile action for the confirmed contact
-  client_->UpdateMyProfile("My Name", "My Bio", "");
+  client_->UpdateMyProfile({.display_name = "My Name", .bio = "My Bio", .photo_base64 = ""});
 
   // Connect (simulate incoming or outgoing)
   client_->Connect(peer1);
@@ -180,7 +180,7 @@ TEST_F(ProfileUpdatesTest, TriggerConnectForDisconnectedConfirmedPeer) {
   mock_transport_->CallLog()->offers.clear();
 
   // Update Profile
-  client_->UpdateMyProfile("Conn Name", "Conn Bio", "NewPhoto");
+  client_->UpdateMyProfile({.display_name = "Conn Name", .bio = "Conn Bio", .photo_base64 = "NewPhoto"});
   eillance::EventQueue::Instance().WaitFor(
       [&]() {
         std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
@@ -207,7 +207,7 @@ TEST_F(ProfileUpdatesTest, TriggerConnectForDisconnectedConfirmedPeer) {
 
 // Test ensuring the confirmer sends their profile immediately upon confirmation if connection is open.
 TEST_F(ProfileUpdatesTest, ConfirmContactTriggersProfileSend) {
-  client_->UpdateMyProfile("Approver", "Bio", "");
+  client_->UpdateMyProfile({.display_name = "Approver", .bio = "Bio", .photo_base64 = ""});
 
   // Setup peer connection (e.g. request phase established connection)
   client_->Connect(peer1);

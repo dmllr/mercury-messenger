@@ -316,12 +316,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
   }
 
   // --- Resilience ---
-  void AddPendingAction(
-      ContactID const& peer_id,
-      std::string const& payload,
-      uint64_t timestamp,
-      std::optional<int64_t> ref_id
-  ) override {
+  void AddPendingAction(PendingActionParams const& params) override {
     std::lock_guard const lock(mutex_);
     INVARIANT(db_);
     SQLiteStatement const statement(
@@ -329,15 +324,15 @@ class SQLiteStorage final : public PersistentStorageImpl {
         "INSERT INTO pending_actions (peer_id, payload, created_at, ref_id, is_suspended, window_start_at) VALUES (?, "
         "?, ?, ?, 0, ?);"
     );
-    BindText(statement.Get(), 1, peer_id.ToString());
-    BindText(statement.Get(), 2, payload);
-    sqlite3_bind_int64(statement.Get(), 3, static_cast<sqlite3_int64>(timestamp));
-    if (ref_id) {
-      sqlite3_bind_int64(statement.Get(), 4, static_cast<sqlite3_int64>(*ref_id));
+    BindText(statement.Get(), 1, params.peer_id.ToString());
+    BindText(statement.Get(), 2, params.payload);
+    sqlite3_bind_int64(statement.Get(), 3, static_cast<sqlite3_int64>(params.timestamp));
+    if (params.ref_id) {
+      sqlite3_bind_int64(statement.Get(), 4, static_cast<sqlite3_int64>(*params.ref_id));
     } else {
       sqlite3_bind_null(statement.Get(), 4);
     }
-    sqlite3_bind_int64(statement.Get(), 5, static_cast<sqlite3_int64>(timestamp));
+    sqlite3_bind_int64(statement.Get(), 5, static_cast<sqlite3_int64>(params.timestamp));
     sqlite3_step(statement.Get());
   }
 

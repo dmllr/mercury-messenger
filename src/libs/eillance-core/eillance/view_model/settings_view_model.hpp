@@ -42,9 +42,8 @@ class SettingsViewModel {
   void SetPeerInactivityTimeout(int seconds) {
     impl_->SetPeerInactivityTimeout(seconds);
   }
-  void
-  UpdateIceConfig(std::string const& stun, std::string const& turn, std::string const& user, std::string const& pass) {
-    impl_->UpdateIceConfig(stun, turn, user, pass);
+  void UpdateIceConfig(IceConfigParams const& params) {
+    impl_->UpdateIceConfig(params);
   }
   void SetSoundSettings(bool send, bool receive) {
     impl_->SetSoundSettings(send, receive);
@@ -84,19 +83,14 @@ class SettingsViewModel {
       }
     }
 
-    void UpdateIceConfig(
-        std::string const& stun,
-        std::string const& turn,
-        std::string const& user,
-        std::string const& pass
-    ) {
-      client->UpdateIceConfig(stun, turn, user, pass);
+    void UpdateIceConfig(IceConfigParams const& params) {
+      client->UpdateIceConfig(params);
       {
         std::lock_guard<std::mutex> const lock(mutex);
-        state.custom_stun = stun;
-        state.custom_turn = turn;
-        state.custom_turn_user = user;
-        state.custom_turn_pass = pass;
+        state.custom_stun = params.stun;
+        state.custom_turn = params.turn;
+        state.custom_turn_user = params.turn_user;
+        state.custom_turn_pass = params.turn_pass;
         NotifySettings();
       }
     }

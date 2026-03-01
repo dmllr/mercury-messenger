@@ -32,7 +32,7 @@ class ProfileServiceTest : public ::testing::Test {
     sm_->account = account_service_;
 
     std::ignore = account_service_->GenerateNewIdentity();
-    account_service_->UpdateMyProfile("Test User", "", "");
+    account_service_->UpdateMyProfile({.display_name = "Test User", .bio = "", .photo_base64 = ""});
 
     file_transfer_service_ = std::make_shared<services::FileTransferService>(sm_.get());
     sm_->file_transfer = file_transfer_service_;

@@ -10,6 +10,13 @@
 
 namespace eillance {
 
+struct IceConfigParams {
+  std::string stun;
+  std::string turn;
+  std::string turn_user;
+  std::string turn_pass;
+};
+
 class SettingsManager {
  public:
   explicit SettingsManager(std::shared_ptr<storage::PersistentStorage> storage)
@@ -111,21 +118,15 @@ class SettingsManager {
     return customTurnPass_;
   }
 
-  void SetCustomIceConfig(
-      std::string const& stun,
-      std::string const& turn,
-      std::string const& user,
-      std::string const& pass
-  ) {
-    customStun_ = stun;
-    customTurn_ = turn;
-    customTurnUser_ = user;
-    customTurnPass_ = pass;
+  void SetCustomIceConfig(IceConfigParams const& params) {
+    customStun_ = params.stun;
+    customTurn_ = params.turn;
+    customTurnUser_ = params.turn_user;
+    customTurnPass_ = params.turn_pass;
 
-    storage_->SetSetting(kCustomStunKey, stun);
-    storage_->SetSetting(kCustomTurnKey, turn);
-    storage_->SetSetting(kCustomTurnUserKey, user);
-    storage_->SetSetting(kCustomTurnPassKey, pass);
+    storage_->SetSetting(kCustomStunKey, params.stun);
+    storage_->SetSetting(kCustomTurnKey, params.turn);
+    storage_->SetSetting(kCustomTurnUserKey, params.turn_user);
   }
 
  private:
