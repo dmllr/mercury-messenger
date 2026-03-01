@@ -19,10 +19,10 @@
 #include <variant>
 #include <vector>
 
+#include "delivery_service.hpp"
 #include "eillance/crypto/crypto.hpp"
 #include "eillance/events/client_events.hpp"
 #include "eillance/logging/logging.hpp"
-#include "eillance/messaging/delivery_service.hpp"
 #include "eillance/messaging/history.hpp"
 #include "eillance/services/account_service.hpp"
 #include "eillance/services/file_transfer_service.hpp"
@@ -99,7 +99,7 @@ class MessagingService {
         transport_(sm->data_transport),
         contact_manager_(sm->contact_manager) {
     history_ = std::make_unique<messaging::MessageHistory>(storage_);
-    delivery_service_ = std::make_unique<messaging::MessageDeliveryService>(sm_);
+    delivery_service_ = std::make_unique<messaging::DeliveryService>(sm_);
 
     auto sub1 = EventQueue::Instance().Subscribe<EventSendQueuedMessages>([this](auto const& e) {
       this->SendQueuedMessages(e.peer_id);
@@ -896,7 +896,7 @@ class MessagingService {
   std::shared_ptr<transport::DataTransport> transport_;
   std::shared_ptr<identity::ContactManager> contact_manager_;
   std::unique_ptr<messaging::MessageHistory> history_;
-  std::unique_ptr<messaging::MessageDeliveryService> delivery_service_;
+  std::unique_ptr<messaging::DeliveryService> delivery_service_;
 
   std::vector<std::function<void()>> event_unsubs_;
   std::unordered_set<ContactID> flushing_peers_;

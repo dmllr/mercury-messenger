@@ -41,7 +41,7 @@ class FileTransferCancellationTest : public ::testing::Test {
 
     std::ignore = client_->GenerateNewIdentity();
     mock_storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
-    client_->GetContactService()->ReloadCache();
+    client_->Contacts()->ReloadCache();
     client_->Start();
   }
 

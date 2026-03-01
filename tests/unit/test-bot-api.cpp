@@ -52,7 +52,7 @@ class BotApiTest : public ::testing::Test {
     client_->SetVideoCapture(std::make_unique<MockCapture>());
     client_->SetAudioCapture(std::make_unique<MockCapture>());
 
-    (void)client_->GetAccountService()->GenerateNewIdentity();
+    (void)client_->Account()->GenerateNewIdentity();
 
     client_->Start();
 
@@ -98,7 +98,7 @@ TEST_F(BotApiTest, AutoAcceptContacts) {
       std::chrono::milliseconds(2000)
   );
 
-  auto const contact = client_->GetContactService()->GetContact(peer1);
+  auto const contact = client_->Contacts()->GetContact(peer1);
   ASSERT_TRUE(contact.has_value());
   EXPECT_EQ(contact->status, identity::ContactStatus::confirmed);
 

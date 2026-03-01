@@ -21,7 +21,7 @@
 
 namespace eillance::messaging {
 
-class MessageDeliveryService {
+class DeliveryService {
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<identity::ContactManager> contactManager_;
   std::shared_ptr<transport::DataTransport> transport_;
@@ -40,7 +40,7 @@ class MessageDeliveryService {
   static constexpr std::chrono::hours kSuspensionCheckInterval{1};
 
  public:
-  explicit MessageDeliveryService(services::ServiceManager* sm)
+  explicit DeliveryService(services::ServiceManager* sm)
       : storage_(sm->storage),
         contactManager_(sm->contact_manager),
         transport_(sm->data_transport) {
@@ -53,7 +53,7 @@ class MessageDeliveryService {
     event_unsubs_.push_back([sub2]() { EventQueue::Instance().Unsubscribe<EventStopDeliveryService>(sub2); });
   }
 
-  ~MessageDeliveryService() {
+  ~DeliveryService() {
     for (auto const& unsub : event_unsubs_) unsub();
     Stop();
   }
