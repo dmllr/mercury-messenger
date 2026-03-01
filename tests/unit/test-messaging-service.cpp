@@ -60,7 +60,7 @@ class MessagingServiceTest : public ::testing::Test {
 
     std::ignore = client_->GenerateNewIdentity();
     mock_storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
-    client_->GetContactService()->ReloadCache();
+    client_->Contacts()->ReloadCache();
 
     client_->Start();
 
@@ -200,7 +200,7 @@ TEST_F(MessagingServiceTest, DownloadTriggersCallback) {
   att.is_downloaded = false;
   att.note = "Incoming note";
 
-  client_->GetMessagingService()->OnChatMessageReceived(peer1, encrypted, 12345, false, {att});
+  client_->Messaging()->OnChatMessageReceived(peer1, encrypted, 12345, false, {att});
 
   auto stored_att = mock_storage_->GetAttachment("att_1");
   ASSERT_TRUE(stored_att.has_value());
@@ -266,7 +266,7 @@ TEST_F(MessagingServiceTest, SendMessage_UnifiedDeliveryQueue) {
   actions = mock_storage_->GetPendingActions(peer1);
   EXPECT_EQ(actions.size(), 1);
 
-  client_->GetMessagingService()->OnMessageReceipt(peer1, entry.id, "delivered");
+  client_->Messaging()->OnMessageReceipt(peer1, entry.id, "delivered");
 
   actions = mock_storage_->GetPendingActions(peer1);
   EXPECT_TRUE(actions.empty());

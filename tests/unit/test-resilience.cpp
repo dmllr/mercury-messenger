@@ -53,11 +53,11 @@ class ResilienceTest : public ::testing::Test {
     client_->SetVideoCapture(std::make_unique<MockCapture>());
     client_->SetAudioCapture(std::make_unique<MockCapture>());
 
-    (void)client_->GetAccountService()->GenerateNewIdentity();
+    (void)client_->Account()->GenerateNewIdentity();
 
     // Establish a confirmed contact context
     mock_storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
-    client_->GetContactService()->ReloadCache();
+    client_->Contacts()->ReloadCache();
 
     auto pending = mock_storage_->GetPendingActions(peer1);
     for (auto const& action : pending) {
@@ -200,7 +200,7 @@ TEST_F(ResilienceTest, ReinstallRecovery_MessageReceipt) {
   // Simulate "wipe" by removing peer1 from contacts.
   client_->DeleteContact(peer1);
   eillance::EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(50));
-  ASSERT_FALSE(client_->GetContactService()->GetContact(peer1));
+  ASSERT_FALSE(client_->Contacts()->GetContact(peer1));
 
   // Connect (as if A connected to B)
   client_->Connect(peer1);
@@ -239,14 +239,14 @@ TEST_F(ResilienceTest, ReinstallRecovery_MessageReceipt) {
   eillance::EventQueue::Instance().Push(eillance::EventDataChannelMessage{peer1, msg_bytes});
   eillance::EventQueue::Instance().WaitFor(
       [&]() {
-        auto contact = client_->GetContactService()->GetContact(peer1);
+        auto contact = client_->Contacts()->GetContact(peer1);
         return contact && contact->status == identity::ContactStatus::confirmed;
       },
       std::chrono::milliseconds(2000)
   );
 
   // Verify contact was auto-created and CONFIRMED
-  auto contact = client_->GetContactService()->GetContact(peer1);
+  auto contact = client_->Contacts()->GetContact(peer1);
   ASSERT_TRUE(contact.has_value());
   EXPECT_EQ(contact->status, identity::ContactStatus::confirmed);
 
@@ -258,7 +258,7 @@ TEST_F(ResilienceTest, ReinstallRecovery_MessageReceipt) {
 }
 
 TEST_F(ResilienceTest, ReinstallRecovery_ContactAdd) {
-  ASSERT_TRUE(client_->GetContactService()->IsConfirmed(peer1));
+  ASSERT_TRUE(client_->Contacts()->IsConfirmed(peer1));
 
   nlohmann::json const req_msg = {
       {"from", peer1.ToString()},
@@ -341,7 +341,7 @@ TEST_F(ResilienceTest, MessageRedeliveryDeduplication) {
   constexpr uint64_t msg_id = 9999;
 
   // First Delivery
-  client_->GetMessagingService()->OnChatMessageReceived(peer1, encrypted, msg_id, false);
+  client_->Messaging()->OnChatMessageReceived(peer1, encrypted, msg_id, false);
 
   // Wait for the first receipt to be sent to avoid race conditions when clearing logs
   eillance::EventQueue::Instance().WaitFor(
@@ -367,7 +367,7 @@ TEST_F(ResilienceTest, MessageRedeliveryDeduplication) {
   mock_transport_->CallLog()->sent_peer_messages.clear();
 
   // Second Delivery (Duplicate)
-  client_->GetMessagingService()->OnChatMessageReceived(peer1, encrypted, msg_id, false);
+  client_->Messaging()->OnChatMessageReceived(peer1, encrypted, msg_id, false);
 
   bool receipt_sent = false;
   eillance::EventQueue::Instance().WaitFor(

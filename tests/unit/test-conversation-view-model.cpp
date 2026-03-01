@@ -16,7 +16,7 @@ class ConversationViewModelTest : public ViewModelTest {
     client_->AddContact(peer1, std::nullopt);
 
     EventQueue::Instance().WaitFor(
-        [&] { return client_->GetContactService()->GetContact(peer1).has_value(); },
+        [&] { return client_->Contacts()->GetContact(peer1).has_value(); },
         std::chrono::milliseconds(2000)
     );
 

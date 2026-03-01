@@ -276,7 +276,7 @@ auto main(int argc, char** argv) -> int {
           );
         }
 
-        std::ignore = client->GetMessagingService()->SendChatMessage(peer_id, content, atts);
+        std::ignore = client->Messaging()->SendChatMessage(peer_id, content, atts);
         LGI << "[mock] Message with " << atts.size() << " attachments sent to " << peer_hex;
       }
     } else if (cmd.starts_with("message")) {

@@ -81,13 +81,13 @@ class ConversationViewModel {
     impl_->SendMessage(content, attachments);
   }
   void DeleteMessage(uint64_t message_id) const {
-    impl_->client->GetMessagingService()->SendDeleteMessage(impl_->peer_id, message_id);
+    impl_->client->Messaging()->SendDeleteMessage(impl_->peer_id, message_id);
   }
   void EditMessage(uint64_t message_id, std::string const& content) const {
-    impl_->client->GetMessagingService()->SendEditMessage(impl_->peer_id, message_id, content);
+    impl_->client->Messaging()->SendEditMessage(impl_->peer_id, message_id, content);
   }
   void ReactToMessage(uint64_t message_id, messaging::Reaction reaction) const {
-    impl_->client->GetMessagingService()->SendReaction(impl_->peer_id, message_id, reaction);
+    impl_->client->Messaging()->SendReaction(impl_->peer_id, message_id, reaction);
   }
 
   void LoadOlderMessages() const {
@@ -151,7 +151,7 @@ class ConversationViewModel {
 
     void SendMessage(std::string const& content, std::vector<messaging::AttachmentRequest> const& attachments) {
       // Access MessagingService directly since facade might not have the overload yet
-      auto entry = client->GetMessagingService()->SendChatMessage(peer_id, content, attachments);
+      auto entry = client->Messaging()->SendChatMessage(peer_id, content, attachments);
 
       std::lock_guard<std::mutex> const lock(mutex);
 

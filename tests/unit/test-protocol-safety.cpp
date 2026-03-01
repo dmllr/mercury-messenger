@@ -86,7 +86,7 @@ class ProtocolSafetyTest : public ::testing::Test {
 
     // Establish a valid peer connection with crypto
     mock_storage_->UpdateContact({peer_id_, identity::ContactStatus::confirmed});
-    client_->GetContactService()->ReloadCache();
+    client_->Contacts()->ReloadCache();
     auto peer = std::make_shared<transport::Peer>(peer_id_);
     transport->AddPeer(peer_id_, peer);
 
@@ -197,7 +197,7 @@ TEST_F(ProtocolSafetyTest, VerifyRealMessageSignatures) {
   payload[services::MessagingService::keyContent] = "Incoming";
   auto encrypted = test_verifier_cipher_.Encrypt(payload.dump());
 
-  client_->GetMessagingService()->OnChatMessageReceived(peer_id_, encrypted, 999, false, {});
+  client_->Messaging()->OnChatMessageReceived(peer_id_, encrypted, 999, false, {});
   eillance::EventQueue::Instance().WaitFor(
       [&]() {
         std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
@@ -242,7 +242,7 @@ TEST_F(ProtocolSafetyTest, VerifyRealMessageSignatures) {
   combined_signatures << "READ:" << sig_read << "\n";
 
   // Profile Update
-  client_->GetProfileService()->SendMyProfile(peer_id_);
+  client_->Profile()->SendMyProfile(peer_id_);
   eillance::EventQueue::Instance().WaitFor(
       [&]() {
         std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
@@ -260,7 +260,7 @@ TEST_F(ProtocolSafetyTest, VerifyRealMessageSignatures) {
 
   // System Message
   current_msg_count = mock_transport_->CallLog()->sent_peer_messages.size();
-  client_->GetMessagingService()->SendSystemMessage(peer_id_, R"({"action": "call_request"})", true);
+  client_->Messaging()->SendSystemMessage(peer_id_, R"({"action": "call_request"})", true);
   eillance::EventQueue::Instance().WaitFor(
       [&]() {
         std::lock_guard<std::mutex> const lock(mock_log_->mutex_);

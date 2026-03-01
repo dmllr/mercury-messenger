@@ -15,8 +15,8 @@ class DebugViewModelTest : public ViewModelTest {
 
 TEST_F(DebugViewModelTest, EraseAllHistory) {
   // Add some history
-  client_->GetMessagingService()->AddSystemEntry(peer1, "sys", messaging::MessageDirection::received);
-  client_->GetMessagingService()->AddSystemEntry(peer2, "sys", messaging::MessageDirection::received);
+  client_->Messaging()->AddSystemEntry(peer1, "sys", messaging::MessageDirection::received);
+  client_->Messaging()->AddSystemEntry(peer2, "sys", messaging::MessageDirection::received);
 
   // Verify addition
   EXPECT_FALSE(client_->GetMessageHistoryPage(peer1, 0, 10).messages.empty());
@@ -62,21 +62,21 @@ TEST_F(DebugViewModelTest, RevokeAllApprovals) {
   mock_storage_->UpdateContact({peer2, identity::ContactStatus::confirmed});
 
   // Force reload the cache in ContactManager so it sees the updates
-  client_->GetContactService()->ReloadCache();
+  client_->Contacts()->ReloadCache();
 
-  EXPECT_TRUE(client_->GetContactService()->IsConfirmed(peer1));
-  EXPECT_TRUE(client_->GetContactService()->IsConfirmed(peer2));
+  EXPECT_TRUE(client_->Contacts()->IsConfirmed(peer1));
+  EXPECT_TRUE(client_->Contacts()->IsConfirmed(peer2));
 
   // Revoke
   vm_->RevokeAllApprovals();
 
   // Verify status change
   WaitFor([&] {
-    auto c = client_->GetContactService()->GetContact(peer1);
+    auto c = client_->Contacts()->GetContact(peer1);
     return c && c->status == identity::ContactStatus::pendingApproval;
   });
-  auto contact1 = client_->GetContactService()->GetContact(peer1);
-  auto contact2 = client_->GetContactService()->GetContact(peer2);
+  auto contact1 = client_->Contacts()->GetContact(peer1);
+  auto contact2 = client_->Contacts()->GetContact(peer2);
 
   ASSERT_TRUE(contact1);
   ASSERT_TRUE(contact2);
