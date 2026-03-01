@@ -145,7 +145,7 @@ TEST_F(ResilienceTest, ProfileUpdateSyncsOnConnect) {
   mock_transport_->RemovePeer(peer1);
   ASSERT_FALSE(mock_transport_->GetPeer(peer1));
 
-  client_->UpdateMyProfile("New Name", "Bio", "");
+  client_->UpdateMyProfile({.display_name = "New Name", .bio = "Bio", .photo_base64 = ""});
   eillance::EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(50));
 
   auto actions = mock_storage_->GetPendingActions(peer1);
@@ -398,7 +398,7 @@ TEST_F(ResilienceTest, MessageRedeliveryDeduplication) {
 TEST_F(ResilienceTest, SuspensionTimeout) {
   // Add a pending action with a very old timestamp (older than 2 days)
   uint64_t const old_time = Time::Now() - (48 * 3600 * 1000000ULL + 1000ULL);
-  mock_storage_->AddPendingAction(peer1, "old_action", old_time, std::nullopt);
+  mock_storage_->AddPendingAction({.peer_id = peer1, .payload = "old_action", .timestamp = old_time});
 
   // Verify it exists initially
   auto actions = mock_storage_->GetPendingActions(peer1);
@@ -418,7 +418,7 @@ TEST_F(ResilienceTest, UnsuspensionOnConnect) {
   // Setup suspended action
   // Use absolute small timestamp to guarantee it is older than threshold
   constexpr uint64_t old_time = 1000;
-  mock_storage_->AddPendingAction(peer1, R"({"type": "test_suspend"})", old_time, std::nullopt);
+  mock_storage_->AddPendingAction({.peer_id = peer1, .payload = R"({"type": "test_suspend"})", .timestamp = old_time});
 
   // Manually suspend it to simulate expired state
   // Threshold 2000 > 1000, so it will suspend

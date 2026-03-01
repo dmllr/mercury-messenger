@@ -146,9 +146,9 @@ TEST_F(SQLiteStorageTest, Contacts) {
 // Test suite for pending actions management
 TEST_F(SQLiteStorageTest, PendingActions) {
   uint64_t const ts = Time::Now();
-  storage_->AddPendingAction(peer1, "action1", ts, 100);
-  storage_->AddPendingAction(peer1, "action2", ts + 100, 101);
-  storage_->AddPendingAction(peer2, "action3", ts + 200, std::nullopt);
+  storage_->AddPendingAction({.peer_id = peer1, .payload = "action1", .timestamp = ts, .ref_id = 100});
+  storage_->AddPendingAction({.peer_id = peer1, .payload = "action2", .timestamp = ts + 100, .ref_id = 101});
+  storage_->AddPendingAction({.peer_id = peer2, .payload = "action3", .timestamp = ts + 200, .ref_id = std::nullopt});
 
   auto actions1 = storage_->GetPendingActions(peer1);
   ASSERT_EQ(actions1.size(), 2);

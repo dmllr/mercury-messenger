@@ -63,7 +63,9 @@ class DeliveryServiceTest : public ::testing::Test {
 
     // Also add Pending Action to satisfy HasPendingWork logic
     nlohmann::json const action = {{"type", "chat"}, {"message_id", entry.id}};
-    mock_storage_impl_->AddPendingAction(peer_id, action.dump(), Time::Now(), entry.id);
+    mock_storage_impl_->AddPendingAction(
+        {.peer_id = peer_id, .payload = action.dump(), .timestamp = Time::Now(), .ref_id = entry.id}
+    );
   }
 
   storage::MockPersistentStorageImpl* mock_storage_impl_{};

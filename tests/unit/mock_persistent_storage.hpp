@@ -127,14 +127,11 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
   }
 
   // --- Resilience ---
-  void AddPendingAction(
-      ContactID const& peer_id,
-      std::string const& payload,
-      uint64_t timestamp,
-      std::optional<int64_t> ref_id
-  ) override {
+  void AddPendingAction(PendingActionParams const& params) override {
     std::lock_guard const lock(mutex_);
-    pending_actions_.push_back({next_action_id_++, peer_id, payload, timestamp, ref_id, false, timestamp});
+    pending_actions_.push_back(
+        {next_action_id_++, params.peer_id, params.payload, params.timestamp, params.ref_id, false, params.timestamp}
+    );
   }
 
   auto GetPendingActions(ContactID const& peer_id) -> std::vector<PendingAction> override {

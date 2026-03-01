@@ -35,12 +35,8 @@ class ProfileViewModel {
   }
 
   // Actions
-  void UpdateProfile(
-      std::optional<std::string> const& name,
-      std::optional<std::string> const& bio,
-      std::optional<std::string> const& photo
-  ) {
-    impl_->UpdateProfile(name, bio, photo);
+  void UpdateProfile(identity::ProfileUpdate const& profile) {
+    impl_->UpdateProfile(profile);
   }
 
   // Creation/Restore
@@ -76,12 +72,8 @@ class ProfileViewModel {
       return profile;
     }
 
-    void UpdateProfile(
-        std::optional<std::string> const& name,
-        std::optional<std::string> const& bio,
-        std::optional<std::string> const& photo
-    ) {
-      client->UpdateMyProfile(name, bio, photo);
+    void UpdateProfile(identity::ProfileUpdate const& profile) {
+      client->UpdateMyProfile(profile);
     }
 
     auto GenerateNewIdentity() -> std::string {

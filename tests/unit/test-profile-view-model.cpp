@@ -50,7 +50,7 @@ TEST_F(ProfileViewModelTest, UpdateProfile) {
     observer->updated = false;
   }
 
-  vm_->UpdateProfile("New Name", "New Bio", "NewPhoto");
+  vm_->UpdateProfile({.display_name = "New Name", .bio = "New Bio", .photo_base64 = "NewPhoto"});
 
   WaitFor([&] {
     auto p = observer->GetProfile();

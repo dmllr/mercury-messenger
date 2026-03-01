@@ -90,8 +90,8 @@ class ContactService {
       );
 
       storage_->AddPendingAction(
-          peer_id,
-          nlohmann::json{{"type", "contact_signature"}, {"signature", crypto::ToHex(signature)}}.dump()
+          {.peer_id = peer_id,
+           .payload = nlohmann::json{{"type", "contact_signature"}, {"signature", crypto::ToHex(signature)}}.dump()}
       );
 
       // This system message is just for local history.
@@ -107,7 +107,7 @@ class ContactService {
 
   void BlockContact(ContactID const& peer_id, bool notify_peer) {
     if (notify_peer) {
-      storage_->AddPendingAction(peer_id, nlohmann::json{{"type", "contact_removed"}}.dump());
+      storage_->AddPendingAction({.peer_id = peer_id, .payload = nlohmann::json{{"type", "contact_removed"}}.dump()});
       EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
     }
 
@@ -166,22 +166,20 @@ class ContactService {
       std::optional<std::string> const& token,
       nlohmann::json const& profile_json
   ) {
-    std::optional<std::string> name;
-    std::optional<std::string> bio;
-    std::optional<std::string> photo;
+    identity::ProfileUpdate profile;
     if (profile_json.contains("display_name") && !profile_json["display_name"].is_null()) {
-      name = profile_json["display_name"];
+      profile.display_name = profile_json["display_name"];
     }
     if (profile_json.contains("bio") && !profile_json["bio"].is_null()) {
-      bio = profile_json["bio"];
+      profile.bio = profile_json["bio"];
     }
     if (profile_json.contains("photo") && !profile_json["photo"].is_null()) {
-      photo = profile_json["photo"];
+      profile.photo_base64 = profile_json["photo"];
     }
 
-    auto status = manager_->ReceiveContactRequest(peer_id, name, bio, photo);
+    auto status = manager_->ReceiveContactRequest(peer_id, profile);
 
-    if (name || bio || photo) {
+    if (profile.display_name || profile.bio || profile.photo_base64) {
       EventQueue::Instance().Push(EventContactProfileUpdated{peer_id});
     }
 
@@ -212,12 +210,12 @@ class ContactService {
         // Send directly since this is low-level signaling bypass
         // Actually, best to queue it up properly via action
         nlohmann::json const msg = {{"type", "contact_confirm"}, {"to", peer_id.ToString()}};
-        storage_->AddPendingAction(peer_id, msg.dump());
+        storage_->AddPendingAction({.peer_id = peer_id, .payload = msg.dump()});
 
         auto const signature = sm_->account->Sign(peer_id.Span());
         storage_->AddPendingAction(
-            peer_id,
-            nlohmann::json{{"type", "contact_signature"}, {"signature", crypto::ToHex(signature)}}.dump()
+            {.peer_id = peer_id,
+             .payload = nlohmann::json{{"type", "contact_signature"}, {"signature", crypto::ToHex(signature)}}.dump()}
         );
 
         sm_->profile->SendMyProfile(peer_id);
@@ -251,7 +249,7 @@ class ContactService {
           {"type", "reconfirm_response"},
           {"signature", crypto::ToHex(*contact->my_signature_for_them)}
       };
-      storage_->AddPendingAction(peer_id, resp.dump());
+      storage_->AddPendingAction({.peer_id = peer_id, .payload = resp.dump()});
       EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
     }
   }
@@ -266,8 +264,8 @@ class ContactService {
       manager_->StoreMySignatureFor(peer_id, my_sig);
 
       storage_->AddPendingAction(
-          peer_id,
-          nlohmann::json{{"type", "contact_signature"}, {"signature", crypto::ToHex(my_sig)}}.dump()
+          {.peer_id = peer_id,
+           .payload = nlohmann::json{{"type", "contact_signature"}, {"signature", crypto::ToHex(my_sig)}}.dump()}
       );
 
       EventQueue::Instance().Push(EventContactStatusChanged{peer_id, identity::ContactStatus::confirmed});

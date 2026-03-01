@@ -38,9 +38,9 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ProfileViewModel
   char const* p = photo ? env->GetStringUTFChars(photo, nullptr) : nullptr;
 
   vm->UpdateProfile(
-      n ? std::optional<std::string>(n) : std::nullopt,
-      b ? std::optional<std::string>(b) : std::nullopt,
-      p ? std::optional<std::string>(p) : std::nullopt
+      {.display_name = n ? std::optional<std::string>(n) : std::nullopt,
+       .bio = b ? std::optional<std::string>(b) : std::nullopt,
+       .photo_base64 = p ? std::optional<std::string>(p) : std::nullopt}
   );
 
   if (n) env->ReleaseStringUTFChars(name, n);

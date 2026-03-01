@@ -59,7 +59,7 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_SettingsViewMode
   char const* u = env->GetStringUTFChars(user, nullptr);
   char const* p = env->GetStringUTFChars(pass, nullptr);
 
-  vm->UpdateIceConfig(s, t, u, p);
+  vm->UpdateIceConfig({.stun = s ? s : "", .turn = t ? t : "", .turn_user = u ? u : "", .turn_pass = p ? p : ""});
 
   env->ReleaseStringUTFChars(stun, s);
   env->ReleaseStringUTFChars(turn, t);
