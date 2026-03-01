@@ -3,6 +3,7 @@
 
 #include <gtest/gtest.h>
 
+#include "eillance/utils/event_queue.hpp"
 #include "eillance/utils/time.hpp"
 
 TEST(TimeTest, Constants) {

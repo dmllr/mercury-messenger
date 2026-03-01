@@ -69,10 +69,6 @@ class BotApiTest : public ::testing::Test {
     if (client_) client_->Terminate();
   }
 
-  void FlushClientQueue() {
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-  }
-
   storage::MockPersistentStorageImpl* mock_storage_{};
   std::shared_ptr<transport::MockCallLog> mock_log_;
   std::unique_ptr<transport::MockDataTransport> mock_data_transport_impl_;
@@ -91,7 +87,16 @@ TEST_F(BotApiTest, AutoAcceptContacts) {
   };
 
   mock_data_transport_raw_->SimulatePeerMessage(peer1, req_msg);
-  FlushClientQueue();
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() {
+        std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
+        for (auto const& msg : mock_log_->sent_signaling_messages) {
+          if (msg.value("type", "") == "contact_confirm" && msg.value("to", "") == peer1.ToString()) return true;
+        }
+        return false;
+      },
+      std::chrono::milliseconds(2000)
+  );
 
   auto const contact = client_->GetContactService()->GetContact(peer1);
   ASSERT_TRUE(contact.has_value());
@@ -111,7 +116,16 @@ TEST_F(BotApiTest, AutoRejectCalls) {
       {{"from", peer1.ToString()}, {"type", "offer"}, {"context", "media"}, {"sdp", "dummy_sdp_media"}};
 
   mock_data_transport_raw_->SimulatePeerMessage(peer1, offer_msg);
-  FlushClientQueue();
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() {
+        std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
+        for (auto const& [pid, ctx] : mock_log_->closed_connections) {
+          if (pid == peer1 && ctx == "media") return true;
+        }
+        return false;
+      },
+      std::chrono::milliseconds(2000)
+  );
 
   bool media_closed = false;
   for (auto const& [pid, ctx] : mock_log_->closed_connections) {
@@ -130,7 +144,10 @@ TEST_F(BotApiTest, MessageHandling) {
   });
 
   client_->Connect(peer1);
-  FlushClientQueue();
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() { return mock_data_transport_raw_->GetPeer(peer1) != nullptr; },
+      std::chrono::milliseconds(2000)
+  );
 
   auto peer = mock_data_transport_raw_->GetPeer(peer1);
   ASSERT_TRUE(peer);
@@ -159,7 +176,7 @@ TEST_F(BotApiTest, MessageHandling) {
 
   eillance::EventQueue::Instance().Push(eillance::EventDataChannelMessage{peer1, msg_bytes});
 
-  FlushClientQueue();
+  eillance::EventQueue::Instance().WaitFor([&]() { return message_received; }, std::chrono::milliseconds(2000));
 
   EXPECT_TRUE(message_received);
   EXPECT_EQ(received_text, "Hello Bot");
@@ -168,20 +185,40 @@ TEST_F(BotApiTest, MessageHandling) {
 TEST_F(BotApiTest, SendMessage) {
   client_->AddContact(peer1, std::nullopt);
   client_->Connect(peer1);
-  FlushClientQueue();
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() { return mock_data_transport_raw_->GetPeer(peer1) != nullptr; },
+      std::chrono::milliseconds(2000)
+  );
 
   auto const peer = mock_data_transport_raw_->GetPeer(peer1);
   ASSERT_TRUE(peer);
 
   peer->data_channel_is_open = true;
+  mock_data_transport_raw_->SimulateDataChannelOpen(peer1);
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() { return peer->data_channel_is_open.load(); },
+      std::chrono::milliseconds(2000)
+  );
+
   peer->session_cipher->ComputeSharedSecret(eillance::crypto::SessionCipher().GetPublicKey());
 
   bot_->SendMessage(peer1.ToString(), "Reply from Bot");
-  FlushClientQueue();
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() {
+        std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
+        for (auto const& [pid, msg] : mock_log_->sent_peer_messages) {
+          if (pid == peer1 && msg.value("type", "") == "chat") {
+            return true;
+          }
+        }
+        return false;
+      },
+      std::chrono::milliseconds(2000)
+  );
 
   bool sent = false;
   for (auto const& [pid, msg] : mock_log_->sent_peer_messages) {
-    if (pid == peer1 && msg["type"] == "chat") {
+    if (pid == peer1 && msg.value("type", "") == "chat") {
       sent = true;
     }
   }

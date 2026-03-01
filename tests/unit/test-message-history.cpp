@@ -128,7 +128,7 @@ TEST_F(MessageHistoryTest, GetChatSummaries) {
       messaging::MessageDirection::sent,
       messaging::HistoryEntryKind::textMessage
   );
-  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  eillance::EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(10));
   message_history_->AddTextEntry(
       peer2,
       "p2m1",
@@ -143,7 +143,7 @@ TEST_F(MessageHistoryTest, GetChatSummaries) {
       messaging::MessageDirection::received,
       messaging::HistoryEntryKind::textMessage
   );  // unread
-  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  eillance::EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(10));
   message_history_->AddTextEntry(
       peer1,
       "p1m2",

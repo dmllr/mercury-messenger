@@ -97,9 +97,6 @@ class ContactService {
       // This system message is just for local history.
       sm_->messaging->SendSystemMessage(peer_id, nlohmann::json{{"action", "send_profile"}}.dump(), true);
 
-      // Send our profile and request theirs
-      sm_->profile->SendMyProfile(peer_id);
-
       EventQueue::Instance().Push(EventContactStatusChanged{peer_id, identity::ContactStatus::confirmed});
 
       // Ensure connection and flush queue.
@@ -236,15 +233,10 @@ class ContactService {
       EventQueue::Instance().Push(EventContactStatusChanged{peer_id, identity::ContactStatus::confirmed});
 
       sm_->messaging->SendSystemMessage(peer_id, nlohmann::json{{"action", "send_profile"}}.dump(), true);
-      sm_->messaging->SendSystemMessage(peer_id, nlohmann::json{{"action", "request_profile"}}.dump(), true);
-
-      sm_->profile->SendMyProfile(peer_id);
-      sm_->profile->RequestProfile(peer_id);
     }
   }
 
   void OnContactRestored(ContactID const& peer_id) {
-    sm_->profile->RequestProfile(peer_id);
     EventQueue::Instance().Push(EventContactStatusChanged{peer_id, identity::ContactStatus::confirmed});
   }
 
@@ -280,11 +272,9 @@ class ContactService {
 
       EventQueue::Instance().Push(EventContactStatusChanged{peer_id, identity::ContactStatus::confirmed});
 
-      sm_->profile->RequestProfile(peer_id);
       sm_->messaging->SendSystemMessage(peer_id, nlohmann::json{{"action", "send_profile"}}.dump(), true);
 
       manager_->ReloadContacts();
-      sm_->profile->SendMyProfile(peer_id);
     }
   }
 

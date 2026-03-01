@@ -145,7 +145,16 @@ TEST_F(ProtocolSafetyTest, VerifyRealMessageSignatures) {
 
   // Text Message (Encrypted)
   client_->SendChatMessage(peer_id_, "Hello Protocol");
-  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() {
+        std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
+        for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
+          if (msg.value("type", "") == "chat") return true;
+        }
+        return false;
+      },
+      std::chrono::milliseconds(2000)
+  );
   auto msg_chat = GetLastMessageByType("chat");
   std::string const sig_chat = GenerateTypeSignature(msg_chat);
 
@@ -164,8 +173,15 @@ TEST_F(ProtocolSafetyTest, VerifyRealMessageSignatures) {
   std::vector<messaging::AttachmentRequest> atts;
   atts.push_back({file_path.string(), messaging::AttachmentType::image, "thumb_base64", "image/jpeg"});
 
+  size_t current_msg_count = mock_transport_->CallLog()->sent_peer_messages.size();
   client_->SendChatMessage(peer_id_, "File Attached", atts);
-  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() {
+        std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
+        return mock_transport_->CallLog()->sent_peer_messages.size() > current_msg_count;
+      },
+      std::chrono::milliseconds(2000)
+  );
   auto msg_att = GetLastMessageByType("chat");
   std::string const sig_att = GenerateTypeSignature(msg_att);
 
@@ -182,7 +198,16 @@ TEST_F(ProtocolSafetyTest, VerifyRealMessageSignatures) {
   auto encrypted = test_verifier_cipher_.Encrypt(payload.dump());
 
   client_->GetMessagingService()->OnChatMessageReceived(peer_id_, encrypted, 999, false, {});
-  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() {
+        std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
+        for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
+          if (msg.value("type", "") == "message_receipt") return true;
+        }
+        return false;
+      },
+      std::chrono::milliseconds(2000)
+  );
 
   auto msg_receipt = GetLastMessageByType("message_receipt");
   std::string const sig_receipt = GenerateTypeSignature(msg_receipt);
@@ -200,7 +225,16 @@ TEST_F(ProtocolSafetyTest, VerifyRealMessageSignatures) {
   );
 
   client_->MarkMessagesAsRead(peer_id_, {entry.id});
-  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() {
+        std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
+        for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
+          if (msg.value("type", "") == "message_read") return true;
+        }
+        return false;
+      },
+      std::chrono::milliseconds(2000)
+  );
 
   auto msg_read = GetLastMessageByType("message_read");
   std::string const sig_read = GenerateTypeSignature(msg_read);
@@ -209,15 +243,31 @@ TEST_F(ProtocolSafetyTest, VerifyRealMessageSignatures) {
 
   // Profile Update
   client_->GetProfileService()->SendMyProfile(peer_id_);
-  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() {
+        std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
+        for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
+          if (msg.value("type", "") == "profile_info") return true;
+        }
+        return false;
+      },
+      std::chrono::milliseconds(2000)
+  );
   auto msg_profile = GetLastMessageByType("profile_info");
   std::string const sig_profile = GenerateTypeSignature(msg_profile);
 
   combined_signatures << "PROFILE:" << sig_profile << "\n";
 
   // System Message
+  current_msg_count = mock_transport_->CallLog()->sent_peer_messages.size();
   client_->GetMessagingService()->SendSystemMessage(peer_id_, R"({"action": "call_request"})", true);
-  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() {
+        std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
+        return mock_transport_->CallLog()->sent_peer_messages.size() > current_msg_count;
+      },
+      std::chrono::milliseconds(2000)
+  );
 
   auto msg_sys = GetLastMessageByType("chat");
   std::string const sig_sys = GenerateTypeSignature(msg_sys);
