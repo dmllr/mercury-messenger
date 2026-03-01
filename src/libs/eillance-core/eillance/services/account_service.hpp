@@ -108,19 +108,15 @@ class AccountService {
     return settings_manager_.get();
   }
 
-  void UpdateMyProfile(
-      std::optional<std::string> const& name,
-      std::optional<std::string> const& bio,
-      std::optional<std::string> const& photo
-  ) const {
-    if (name) {
-      settings_manager_->SetMyDisplayName(*name);
+  void UpdateMyProfile(identity::ProfileUpdate const& profile) const {
+    if (profile.display_name) {
+      settings_manager_->SetMyDisplayName(*profile.display_name);
     }
-    if (bio) {
-      settings_manager_->SetMyBio(*bio);
+    if (profile.bio) {
+      settings_manager_->SetMyBio(*profile.bio);
     }
-    if (photo) {
-      settings_manager_->SetMyPhotoBase64(*photo);
+    if (profile.photo_base64) {
+      settings_manager_->SetMyPhotoBase64(*profile.photo_base64);
     }
 
     EventQueue::Instance().Push(EventMyProfileUpdated{});

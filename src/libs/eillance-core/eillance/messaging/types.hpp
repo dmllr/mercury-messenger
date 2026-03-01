@@ -146,6 +146,23 @@ NLOHMANN_JSON_SERIALIZE_ENUM(
     }
 )
 
+struct TextEntryParams {
+  ContactID peer_id;
+  std::string content;
+  std::vector<Attachment> attachments{};
+  MessageDirection direction = MessageDirection::sent;
+  HistoryEntryKind kind = HistoryEntryKind::textMessage;
+  std::optional<std::uint64_t> remote_id = std::nullopt;
+};
+
+struct CallEntryParams {
+  ContactID peer_id;
+  HistoryEntryKind kind;
+  CallDirection direction;
+  CallStatus status;
+  std::uint32_t duration_seconds = 0;
+};
+
 struct MessageEntry {
   std::string content;
   std::vector<Attachment> attachments{};

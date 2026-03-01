@@ -82,12 +82,7 @@ class ContactManager {
   }
 
   // Marks that we have received a request from a peer.
-  auto ReceiveContactRequest(
-      ContactID const& peer_id,
-      std::optional<std::string> const& name,
-      std::optional<std::string> const& bio,
-      std::optional<std::string> const& photo
-  ) -> RequestStatus {
+  auto ReceiveContactRequest(ContactID const& peer_id, ProfileUpdate const& profile) -> RequestStatus {
     std::lock_guard<std::mutex> const lock(mutex_);
     auto it = contacts_.find(peer_id);
     if (it != contacts_.end()) {
@@ -95,37 +90,37 @@ class ContactManager {
         return RequestStatus::ignored;
       }
       if (it->second.status == ContactStatus::awaitingApproval) {
-        if (name) {
-          it->second.display_name = name;
+        if (profile.display_name) {
+          it->second.display_name = profile.display_name;
         }
-        if (bio) {
-          it->second.bio = bio;
+        if (profile.bio) {
+          it->second.bio = profile.bio;
         }
-        if (photo) {
-          it->second.photo_base64 = photo;
+        if (profile.photo_base64) {
+          it->second.photo_base64 = profile.photo_base64;
         }
         storage_->UpdateContact(it->second);
         return RequestStatus::duplicate;
       }
 
       it->second.status = ContactStatus::awaitingApproval;
-      if (name) {
-        it->second.display_name = name;
+      if (profile.display_name) {
+        it->second.display_name = profile.display_name;
       }
-      if (bio) {
-        it->second.bio = bio;
+      if (profile.bio) {
+        it->second.bio = profile.bio;
       }
-      if (photo) {
-        it->second.photo_base64 = photo;
+      if (profile.photo_base64) {
+        it->second.photo_base64 = profile.photo_base64;
       }
       storage_->UpdateContact(it->second);
     } else {
       contacts_[peer_id] = {
           .peer_id = peer_id,
           .status = ContactStatus::awaitingApproval,
-          .display_name = name,
-          .bio = bio,
-          .photo_base64 = photo
+          .display_name = profile.display_name,
+          .bio = profile.bio,
+          .photo_base64 = profile.photo_base64
       };
       storage_->UpdateContact(contacts_[peer_id]);
     }
@@ -207,26 +202,21 @@ class ContactManager {
     return result;
   }
 
-  void UpdateContactProfile(
-      ContactID const& peer_id,
-      std::optional<std::string> const& name,
-      std::optional<std::string> const& bio,
-      std::optional<std::string> const& photo
-  ) {
+  void UpdateContactProfile(ContactID const& peer_id, ProfileUpdate const& profile) {
     std::lock_guard<std::mutex> const lock(mutex_);
     auto const it = contacts_.find(peer_id);
     if (it == contacts_.end()) {
       LGW << "Cannot update profile for non-existent contact: " << peer_id.ToString();
       return;
     }
-    if (name) {
-      it->second.display_name = name;
+    if (profile.display_name) {
+      it->second.display_name = profile.display_name;
     }
-    if (bio) {
-      it->second.bio = bio;
+    if (profile.bio) {
+      it->second.bio = profile.bio;
     }
-    if (photo) {
-      it->second.photo_base64 = photo;
+    if (profile.photo_base64) {
+      it->second.photo_base64 = profile.photo_base64;
     }
     storage_->UpdateContact(it->second);
   }

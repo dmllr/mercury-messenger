@@ -26,11 +26,10 @@ class MessageHistoryTest : public ::testing::Test {
 
 TEST_F(MessageHistoryTest, AddTextEntry) {
   auto entry = message_history_->AddTextEntry(
-      peer1,
-      "Hello",
-      {},  // Attachments
-      messaging::MessageDirection::sent,
-      messaging::HistoryEntryKind::textMessage
+      {.peer_id = peer1,
+       .content = "Hello",
+       .direction = messaging::MessageDirection::sent,
+       .kind = messaging::HistoryEntryKind::textMessage}
   );
   EXPECT_EQ(entry.kind, messaging::HistoryEntryKind::textMessage);
   EXPECT_EQ(std::get<messaging::MessageEntry>(entry.data).content, "Hello");
@@ -40,11 +39,11 @@ TEST_F(MessageHistoryTest, AddTextEntry) {
 
 TEST_F(MessageHistoryTest, AddCallEntry) {
   message_history_->AddCallEntry(
-      peer1,
-      messaging::HistoryEntryKind::voiceCall,
-      messaging::CallDirection::incoming,
-      messaging::CallStatus::missed,
-      0
+      {.peer_id = peer1,
+       .kind = messaging::HistoryEntryKind::voiceCall,
+       .direction = messaging::CallDirection::incoming,
+       .status = messaging::CallStatus::missed,
+       .duration_seconds = 0}
   );
   auto page = message_history_->GetHistoryPage(peer1, 0, 1);
   ASSERT_EQ(page.messages.size(), 1);
@@ -69,11 +68,10 @@ TEST_F(MessageHistoryTest, UpdateMessageStatus) {
   });
 
   auto const entry = message_history_->AddTextEntry(
-      peer1,
-      "Test",
-      {},  // Attachments
-      messaging::MessageDirection::sent,
-      messaging::HistoryEntryKind::textMessage
+      {.peer_id = peer1,
+       .content = "Test",
+       .direction = messaging::MessageDirection::sent,
+       .kind = messaging::HistoryEntryKind::textMessage}
   );
   ASSERT_EQ(entry.status, messaging::MessageStatus::sending);
 
@@ -93,11 +91,10 @@ TEST_F(MessageHistoryTest, UpdateMessageStatus) {
 TEST_F(MessageHistoryTest, GetHistoryPage) {
   for (int i = 0; i < 10; ++i) {
     message_history_->AddTextEntry(
-        peer1,
-        "Message " + std::to_string(i),
-        {},  // Attachments
-        messaging::MessageDirection::received,
-        messaging::HistoryEntryKind::textMessage
+        {.peer_id = peer1,
+         .content = "Message " + std::to_string(i),
+         .direction = messaging::MessageDirection::received,
+         .kind = messaging::HistoryEntryKind::textMessage}
     );
   }
 
@@ -122,34 +119,30 @@ TEST_F(MessageHistoryTest, GetHistoryPage) {
 
 TEST_F(MessageHistoryTest, GetChatSummaries) {
   message_history_->AddTextEntry(
-      peer1,
-      "p1m1",
-      {},  // Attachments
-      messaging::MessageDirection::sent,
-      messaging::HistoryEntryKind::textMessage
+      {.peer_id = peer1,
+       .content = "p1m1",
+       .direction = messaging::MessageDirection::sent,
+       .kind = messaging::HistoryEntryKind::textMessage}
   );
   eillance::EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(10));
   message_history_->AddTextEntry(
-      peer2,
-      "p2m1",
-      {},  // Attachments
-      messaging::MessageDirection::received,
-      messaging::HistoryEntryKind::textMessage
+      {.peer_id = peer2,
+       .content = "p2m1",
+       .direction = messaging::MessageDirection::received,
+       .kind = messaging::HistoryEntryKind::textMessage}
   );
   message_history_->AddTextEntry(
-      peer2,
-      "p2m2",
-      {},  // Attachments
-      messaging::MessageDirection::received,
-      messaging::HistoryEntryKind::textMessage
+      {.peer_id = peer2,
+       .content = "p2m2",
+       .direction = messaging::MessageDirection::received,
+       .kind = messaging::HistoryEntryKind::textMessage}
   );  // unread
   eillance::EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(10));
   message_history_->AddTextEntry(
-      peer1,
-      "p1m2",
-      {},  // Attachments
-      messaging::MessageDirection::received,
-      messaging::HistoryEntryKind::textMessage
+      {.peer_id = peer1,
+       .content = "p1m2",
+       .direction = messaging::MessageDirection::received,
+       .kind = messaging::HistoryEntryKind::textMessage}
   );  // unread
 
   auto summaries = message_history_->GetChatSummaries({peer1, peer2});
@@ -167,11 +160,10 @@ TEST_F(MessageHistoryTest, GetChatSummaries) {
 
 TEST_F(MessageHistoryTest, UpdateMessageContent) {
   auto entry = message_history_->AddTextEntry(
-      peer1,
-      "Original",
-      {},
-      messaging::MessageDirection::sent,
-      messaging::HistoryEntryKind::textMessage
+      {.peer_id = peer1,
+       .content = "Original",
+       .direction = messaging::MessageDirection::sent,
+       .kind = messaging::HistoryEntryKind::textMessage}
   );
 
   message_history_->UpdateMessageContent(peer1, entry.id, "Edited");
@@ -184,11 +176,10 @@ TEST_F(MessageHistoryTest, UpdateMessageContent) {
 
 TEST_F(MessageHistoryTest, MarkMessageDeleted) {
   auto entry = message_history_->AddTextEntry(
-      peer1,
-      "Content",
-      {},
-      messaging::MessageDirection::sent,
-      messaging::HistoryEntryKind::textMessage
+      {.peer_id = peer1,
+       .content = "Content",
+       .direction = messaging::MessageDirection::sent,
+       .kind = messaging::HistoryEntryKind::textMessage}
   );
 
   message_history_->MarkMessageDeleted(peer1, entry.id);
@@ -214,11 +205,10 @@ TEST_F(MessageHistoryTest, MarkMessagesAsRead) {
   });
 
   auto const entry = message_history_->AddTextEntry(
-      peer1,
-      "Test Read",
-      {},
-      messaging::MessageDirection::received,
-      messaging::HistoryEntryKind::textMessage
+      {.peer_id = peer1,
+       .content = "Test Read",
+       .direction = messaging::MessageDirection::received,
+       .kind = messaging::HistoryEntryKind::textMessage}
   );
 
   message_history_->MarkMessagesAsRead(peer1, {entry.id});
@@ -233,11 +223,10 @@ TEST_F(MessageHistoryTest, MarkMessagesAsRead) {
 
 TEST_F(MessageHistoryTest, ToggleReaction) {
   auto entry = message_history_->AddTextEntry(
-      peer1,
-      "React to this",
-      {},
-      messaging::MessageDirection::sent,
-      messaging::HistoryEntryKind::textMessage
+      {.peer_id = peer1,
+       .content = "React to this",
+       .direction = messaging::MessageDirection::sent,
+       .kind = messaging::HistoryEntryKind::textMessage}
   );
 
   ContactID const author = peer1;

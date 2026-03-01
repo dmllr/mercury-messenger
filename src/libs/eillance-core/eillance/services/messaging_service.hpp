@@ -199,15 +199,17 @@ class MessagingService {
     }
 
     auto entry = history_->AddTextEntry(
-        peer_id,
-        message,
-        domain_attachments,
-        messaging::MessageDirection::sent,
-        messaging::HistoryEntryKind::textMessage
+        {.peer_id = peer_id,
+         .content = message,
+         .attachments = domain_attachments,
+         .direction = messaging::MessageDirection::sent,
+         .kind = messaging::HistoryEntryKind::textMessage}
     );
 
     nlohmann::json const action = {{"type", "chat"}, {"message_id", entry.id}};
-    storage_->AddPendingAction(peer_id, action.dump(), Time::Now(), entry.id);
+    storage_->AddPendingAction(
+        {.peer_id = peer_id, .payload = action.dump(), .timestamp = Time::Now(), .ref_id = entry.id}
+    );
 
     if (auto const peer = transport_->GetPeer(peer_id);
         peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
@@ -227,7 +229,7 @@ class MessagingService {
 
     nlohmann::json const action = {{"type", "message_delete"}, {"target_id", target_id}};
 
-    storage_->AddPendingAction(peer_id, action.dump(), Time::Now());
+    storage_->AddPendingAction({.peer_id = peer_id, .payload = action.dump(), .timestamp = Time::Now()});
     if (auto const peer = transport_->GetPeer(peer_id);
         peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
       EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
@@ -245,7 +247,7 @@ class MessagingService {
 
     nlohmann::json const action = {{"type", "message_edit"}, {"target_id", target_id}, {"content", new_content}};
 
-    storage_->AddPendingAction(peer_id, action.dump(), Time::Now());
+    storage_->AddPendingAction({.peer_id = peer_id, .payload = action.dump(), .timestamp = Time::Now()});
     if (auto const peer = transport_->GetPeer(peer_id);
         peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
       EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
@@ -267,7 +269,7 @@ class MessagingService {
         {"reaction", static_cast<int>(reaction)}
     };
 
-    storage_->AddPendingAction(peer_id, action.dump(), Time::Now());
+    storage_->AddPendingAction({.peer_id = peer_id, .payload = action.dump(), .timestamp = Time::Now()});
     if (auto const peer = transport_->GetPeer(peer_id);
         peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
       EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
@@ -279,18 +281,19 @@ class MessagingService {
 
   void SendSystemMessage(ContactID const& peer_id, std::string const& content, bool persist) {
     auto const entry = history_->AddTextEntry(
-        peer_id,
-        content,
-        {},
-        messaging::MessageDirection::sent,
-        messaging::HistoryEntryKind::systemMessage
+        {.peer_id = peer_id,
+         .content = content,
+         .direction = messaging::MessageDirection::sent,
+         .kind = messaging::HistoryEntryKind::systemMessage}
     );
 
     EventQueue::Instance().Push(EventChatMessageReceived{peer_id, entry});
 
     if (persist) {
       nlohmann::json const action_payload = {{"type", "chat"}, {"message_id", entry.id}};
-      storage_->AddPendingAction(peer_id, action_payload.dump(), Time::Now(), entry.id);
+      storage_->AddPendingAction(
+          {.peer_id = peer_id, .payload = action_payload.dump(), .timestamp = Time::Now(), .ref_id = entry.id}
+      );
     } else {
       if (auto const peer = transport_->GetPeer(peer_id);
           peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
@@ -453,7 +456,7 @@ class MessagingService {
 
     if (should_send_cancel) {
       nlohmann::json const cancel_msg = {{"type", "file_cancel"}, {"file_id", attachment_id}};
-      storage_->AddPendingAction(peer_id, cancel_msg.dump());
+      storage_->AddPendingAction({.peer_id = peer_id, .payload = cancel_msg.dump()});
       if (auto const peer = transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
         EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
       }
@@ -543,7 +546,7 @@ class MessagingService {
       return;
     }
     nlohmann::json const msg = {{"type", "message_read"}, {"message_ids", remote_ids}};
-    storage_->AddPendingAction(peer_id, msg.dump());
+    storage_->AddPendingAction({.peer_id = peer_id, .payload = msg.dump()});
     if (auto const peer = transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
       EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
     } else {
@@ -553,20 +556,18 @@ class MessagingService {
 
   void
   AddSystemEntry(ContactID const& peer_id, std::string const& content, messaging::MessageDirection const direction) {
-    auto const entry =
-        history_->AddTextEntry(peer_id, content, {}, direction, messaging::HistoryEntryKind::systemMessage);
+    auto const entry = history_->AddTextEntry(
+        {.peer_id = peer_id,
+         .content = content,
+         .direction = direction,
+         .kind = messaging::HistoryEntryKind::systemMessage}
+    );
     EventQueue::Instance().Push(EventChatMessageReceived{peer_id, entry});
   }
 
-  void AddCallEntry(
-      ContactID const& peer_id,
-      messaging::HistoryEntryKind const kind,
-      messaging::CallDirection const direction,
-      messaging::CallStatus const status,
-      uint32_t const duration
-  ) {
-    auto const entry = history_->AddCallEntry(peer_id, kind, direction, status, duration);
-    EventQueue::Instance().Push(EventChatMessageReceived{peer_id, entry});
+  void AddCallEntry(messaging::CallEntryParams const& params) {
+    auto const entry = history_->AddCallEntry(params);
+    EventQueue::Instance().Push(EventChatMessageReceived{params.peer_id, entry});
   }
 
   void OnChatMessageReceived(
@@ -600,7 +601,7 @@ class MessagingService {
               {"status", "delivered"},
               {"message_id", message_id}
           };
-          storage_->AddPendingAction(peer_id, receipt.dump());
+          storage_->AddPendingAction({.peer_id = peer_id, .payload = receipt.dump()});
           EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
           return;
         }
@@ -623,15 +624,14 @@ class MessagingService {
     } catch (std::exception const&) {
       nlohmann::json const error_json = {{"action", "unsupported_format"}};
       auto entry = history_->AddTextEntry(
-          peer_id,
-          error_json.dump(),
-          {},
-          messaging::MessageDirection::received,
-          messaging::HistoryEntryKind::systemMessage,
-          std::make_optional(message_id)
+          {.peer_id = peer_id,
+           .content = error_json.dump(),
+           .direction = messaging::MessageDirection::received,
+           .kind = messaging::HistoryEntryKind::systemMessage,
+           .remote_id = message_id}
       );
       nlohmann::json const receipt = {{"type", "message_receipt"}, {"status", "delivered"}, {"message_id", message_id}};
-      storage_->AddPendingAction(peer_id, receipt.dump());
+      storage_->AddPendingAction({.peer_id = peer_id, .payload = receipt.dump()});
       SendQueuedMessages(peer_id);
       EventQueue::Instance().Push(EventChatMessageReceived{peer_id, entry});
       return;
@@ -656,12 +656,12 @@ class MessagingService {
     }
 
     auto entry = history_->AddTextEntry(
-        peer_id,
-        content,
-        local_attachments,
-        messaging::MessageDirection::received,
-        is_system ? messaging::HistoryEntryKind::systemMessage : messaging::HistoryEntryKind::textMessage,
-        std::make_optional(message_id)
+        {.peer_id = peer_id,
+         .content = content,
+         .attachments = local_attachments,
+         .direction = messaging::MessageDirection::received,
+         .kind = is_system ? messaging::HistoryEntryKind::systemMessage : messaging::HistoryEntryKind::textMessage,
+         .remote_id = message_id}
     );
 
     if (!local_attachments.empty()) {
@@ -671,7 +671,7 @@ class MessagingService {
     }
 
     nlohmann::json const receipt = {{"type", "message_receipt"}, {"status", "delivered"}, {"message_id", message_id}};
-    storage_->AddPendingAction(peer_id, receipt.dump());
+    storage_->AddPendingAction({.peer_id = peer_id, .payload = receipt.dump()});
     EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
 
     EventQueue::Instance().Push(EventChatMessageReceived{peer_id, entry});

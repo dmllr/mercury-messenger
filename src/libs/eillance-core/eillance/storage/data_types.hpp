@@ -27,10 +27,10 @@ struct Contact {
   std::optional<std::vector<std::byte>> my_signature_for_them{};
 };
 
-struct ProfileInfo {
-  std::string display_name;
-  std::string bio;
-  std::string photo_base64;
+struct ProfileUpdate {
+  std::optional<std::string> display_name;
+  std::optional<std::string> bio;
+  std::optional<std::string> photo_base64;
 };
 
 }  // namespace eillance::identity
@@ -45,6 +45,13 @@ struct PendingAction {
   std::optional<int64_t> ref_id;  // Reference ID (e.g. message_id), optional
   bool is_suspended = false;
   uint64_t window_start_at = 0;
+};
+
+struct PendingActionParams {
+  ContactID peer_id;
+  std::string payload;
+  uint64_t timestamp = 0;
+  std::optional<int64_t> ref_id = std::nullopt;
 };
 
 }  // namespace eillance::storage

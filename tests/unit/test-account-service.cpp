@@ -71,7 +71,7 @@ TEST_F(AccountServiceTest, UpdateProfile) {
   auto const sub =
       EventQueue::Instance().Subscribe<EventMyProfileUpdated>([&](auto const&) -> void { callback_called = true; });
 
-  service_->UpdateMyProfile("Alice", "Hello World", "base64photo");
+  service_->UpdateMyProfile({.display_name = "Alice", .bio = "Hello World", .photo_base64 = "base64photo"});
 
   EventQueue::Instance().WaitFor([&] { return callback_called; }, std::chrono::seconds(1));
 

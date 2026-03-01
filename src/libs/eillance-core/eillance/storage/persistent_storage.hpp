@@ -66,13 +66,8 @@ class PersistentStorage {
   }
 
   // --- Resilience ---
-  void AddPendingAction(
-      ContactID const& peer_id,
-      std::string const& payload,
-      uint64_t timestamp = 0,
-      std::optional<int64_t> ref_id = std::nullopt
-  ) const {
-    pimpl_->AddPendingAction(peer_id, payload, timestamp, ref_id);
+  void AddPendingAction(PendingActionParams const& params) const {
+    pimpl_->AddPendingAction(params);
   }
   [[nodiscard]] auto GetPendingActions(ContactID const& peer_id) const {
     return pimpl_->GetPendingActions(peer_id);

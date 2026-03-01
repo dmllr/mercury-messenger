@@ -57,12 +57,12 @@ class ProfileService {
       msg["photo"] = nullptr;
     }
 
-    storage_->AddPendingAction(peer_id, msg.dump());
+    storage_->AddPendingAction({.peer_id = peer_id, .payload = msg.dump()});
     EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
   }
 
   void RequestProfile(ContactID const& peer_id) {
-    storage_->AddPendingAction(peer_id, nlohmann::json{{"type", "profile_request"}}.dump());
+    storage_->AddPendingAction({.peer_id = peer_id, .payload = nlohmann::json{{"type", "profile_request"}}.dump()});
     EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
   }
 
@@ -93,33 +93,29 @@ class ProfileService {
       return profile_json[key].get<std::string>();
     };
 
-    auto name = get_opt("display_name");
-    auto bio = get_opt("bio");
-    auto photo = get_opt("photo");
+    identity::ProfileUpdate profile_update{get_opt("display_name"), get_opt("bio"), get_opt("photo")};
 
     auto old = manager_->GetContact(peer_id);
     bool changed = false;
-    if (name && (!old || old->display_name != name)) {
-      changed = true;
-    }
-    if (bio && (!old || old->bio != bio)) {
-      changed = true;
-    }
-    if (photo && (!old || old->photo_base64 != photo)) {
-      changed = true;
-    }
+    if (profile_update.display_name && (!old || old->display_name != profile_update.display_name)) changed = true;
+    if (profile_update.bio && (!old || old->bio != profile_update.bio)) changed = true;
+    if (profile_update.photo_base64 && (!old || old->photo_base64 != profile_update.photo_base64)) changed = true;
 
     if (changed) {
       nlohmann::json diff;
       diff["action"] = "profile_update_diff";
-      diff["new"] = {{"display_name", name}, {"bio", bio}, {"photo", photo}};
+      diff["new"] = {
+          {"display_name", profile_update.display_name},
+          {"bio", profile_update.bio},
+          {"photo", profile_update.photo_base64}
+      };
       if (old) {
         diff["old"] = {{"display_name", old->display_name}, {"bio", old->bio}, {"photo", old->photo_base64}};
       }
       sm_->messaging->AddSystemEntry(peer_id, diff.dump(), messaging::MessageDirection::received);
     }
 
-    manager_->UpdateContactProfile(peer_id, name, bio, photo);
+    manager_->UpdateContactProfile(peer_id, profile_update);
     EventQueue::Instance().Push(EventContactProfileUpdated{peer_id});
   }
 

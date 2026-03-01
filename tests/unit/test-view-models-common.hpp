@@ -62,7 +62,7 @@ class ViewModelTest : public ::testing::Test {
 
     // Identity
     (void)client_->GenerateNewIdentity();
-    client_->UpdateMyProfile("Test User", "Bio", "");
+    client_->UpdateMyProfile({.display_name = "Test User", .bio = "Bio", .photo_base64 = ""});
 
     // Start Client
     client_->Start();

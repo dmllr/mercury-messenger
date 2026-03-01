@@ -39,12 +39,7 @@ class PersistentStorageImpl {
   virtual void Checkpoint() = 0;
 
   // --- Resilience (Pending Actions) ---
-  virtual void AddPendingAction(
-      ContactID const& peer_id,
-      std::string const& payload,
-      uint64_t timestamp,
-      std::optional<int64_t> ref_id
-  ) = 0;
+  virtual void AddPendingAction(PendingActionParams const& params) = 0;
   virtual auto GetPendingActions(ContactID const& peer_id) -> std::vector<PendingAction> = 0;
   virtual void RemovePendingAction(int64_t id) = 0;
   virtual void RemovePendingActionByRefId(ContactID const& peer_id, int64_t ref_id) = 0;
