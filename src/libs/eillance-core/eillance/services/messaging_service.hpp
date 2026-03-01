@@ -218,6 +218,8 @@ class MessagingService {
       delivery_service_->AttemptDelivery(peer_id);
     }
 
+    EventQueue::Instance().Push(EventMessageUpdated{peer_id, entry.id});
+
     return entry;
   }
 
