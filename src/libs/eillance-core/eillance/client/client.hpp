@@ -356,7 +356,7 @@ class Client final {
   void Connect(ContactID const& peer_id) const {
     auto const peer = sm_->data_transport->GetPeer(peer_id);
     if (peer && peer->data_channel_is_open) {
-      sm_->messaging->SendQueuedMessages(peer_id);
+      EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
       return;
     }
     auto const state = sm_->data_transport->GetConnectionState(peer_id);

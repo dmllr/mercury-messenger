@@ -129,17 +129,24 @@ TEST_F(ResilienceTest, PendingReadReceiptsPersistAndSend) {
 
   mock_transport_->CallLog()->sent_peer_messages.clear();
   mock_transport_->SimulateDataChannelOpen(peer1);
-  FlushClientQueue();
 
   bool receipt_sent = false;
-  for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
-    if (pid == peer1 && msg["type"] == "message_read") {
-      auto ids = msg["message_ids"].get<std::vector<uint64_t>>();
-      if (ids.size() == 1 && ids[0] == 999) {
-        receipt_sent = true;
-      }
-    }
-  }
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() {
+        std::lock_guard<std::mutex> const lock(mock_transport_->CallLog()->mutex_);
+        for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
+          if (pid == peer1 && msg.value("type", "") == "message_read") {
+            auto ids = msg["message_ids"].get<std::vector<uint64_t>>();
+            if (ids.size() == 1 && ids[0] == 999) {
+              receipt_sent = true;
+              return true;
+            }
+          }
+        }
+        return false;
+      },
+      std::chrono::milliseconds(2000)
+  );
   EXPECT_TRUE(receipt_sent);
 
   pending = mock_storage_->GetPendingActions(peer1);
@@ -177,15 +184,22 @@ TEST_F(ResilienceTest, ProfileUpdateSyncsOnConnect) {
 
   mock_transport_->CallLog()->sent_peer_messages.clear();
   mock_transport_->SimulateDataChannelOpen(peer1);
-  FlushClientQueue();
 
   bool profile_sent = false;
-  for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
-    if (pid == peer1 && msg["type"] == "profile_info") {
-      EXPECT_EQ(msg["display_name"], "New Name");
-      profile_sent = true;
-    }
-  }
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() {
+        std::lock_guard<std::mutex> const lock(mock_transport_->CallLog()->mutex_);
+        for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
+          if (pid == peer1 && msg.value("type", "") == "profile_info") {
+            EXPECT_EQ(msg["display_name"], "New Name");
+            profile_sent = true;
+            return true;
+          }
+        }
+        return false;
+      },
+      std::chrono::milliseconds(2000)
+  );
   EXPECT_TRUE(profile_sent);
 
   actions = mock_storage_->GetPendingActions(peer1);
@@ -268,20 +282,26 @@ TEST_F(ResilienceTest, ReinstallRecovery_ContactAdd) {
   EXPECT_TRUE(confirm_sent) << "Should send confirmation via signaling";
 
   mock_transport_->SimulateDataChannelOpen(peer1);
-  FlushClientQueue();
 
   bool signature_sent = false;
   bool profile_sent = false;
-  for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
-    if (pid == peer1) {
-      if (msg["type"] == "contact_signature") {
-        signature_sent = true;
-      }
-      if (msg["type"] == "profile_info") {
-        profile_sent = true;
-      }
-    }
-  }
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() {
+        std::lock_guard<std::mutex> const lock(mock_transport_->CallLog()->mutex_);
+        for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
+          if (pid == peer1) {
+            if (msg.value("type", "") == "contact_signature") {
+              signature_sent = true;
+            }
+            if (msg.value("type", "") == "profile_info") {
+              profile_sent = true;
+            }
+          }
+        }
+        return signature_sent && profile_sent;
+      },
+      std::chrono::milliseconds(2000)
+  );
   EXPECT_TRUE(signature_sent) << "Should send signature via data channel";
   EXPECT_TRUE(profile_sent) << "Should send profile via data channel";
 }
@@ -312,6 +332,20 @@ TEST_F(ResilienceTest, MessageRedeliveryDeduplication) {
   // First Delivery
   client_->GetMessagingService()->OnChatMessageReceived(peer1, encrypted, msg_id, false);
 
+  // Wait for the first receipt to be sent to avoid race conditions when clearing logs
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() {
+        std::lock_guard<std::mutex> const lock(mock_transport_->CallLog()->mutex_);
+        for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
+          if (pid == peer1 && msg.value("type", "") == "message_receipt") {
+            return true;
+          }
+        }
+        return false;
+      },
+      std::chrono::milliseconds(2000)
+  );
+
   // Check History
   auto page = client_->GetMessageHistoryPage(peer1, 0, 10);
   ASSERT_EQ(page.messages.size(), 1);
@@ -324,21 +358,29 @@ TEST_F(ResilienceTest, MessageRedeliveryDeduplication) {
   // Second Delivery (Duplicate)
   client_->GetMessagingService()->OnChatMessageReceived(peer1, encrypted, msg_id, false);
 
+  bool receipt_sent = false;
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() {
+        std::lock_guard<std::mutex> const lock(mock_transport_->CallLog()->mutex_);
+        for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
+          if (pid == peer1 && msg.value("type", "") == "message_receipt") {
+            if (msg.value("message_id", 0ULL) == msg_id) {
+              receipt_sent = true;
+              return true;
+            }
+          }
+        }
+        return false;
+      },
+      std::chrono::milliseconds(2000)
+  );
+
   // Check History - Should still be 1 text message
   page = client_->GetMessageHistoryPage(peer1, 0, 10);
   ASSERT_EQ(page.messages.size(), 1);
   ASSERT_EQ(page.messages[0].kind, messaging::HistoryEntryKind::textMessage);
   ASSERT_EQ(page.messages[0].remote_id, msg_id);
 
-  // Check Receipt Sent
-  bool receipt_sent = false;
-  for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
-    if (pid == peer1 && msg.value("type", "") == "message_receipt") {
-      if (msg.value("message_id", 0ULL) == msg_id) {
-        receipt_sent = true;
-      }
-    }
-  }
   EXPECT_TRUE(receipt_sent);
 }
 
@@ -381,15 +423,22 @@ TEST_F(ResilienceTest, UnsuspensionOnConnect) {
 
   // Simulate DataChannel open which triggers UnsuspendAndDeliver
   mock_transport_->SimulateDataChannelOpen(peer1);
-  FlushClientQueue();
 
   // Action should have been unsuspended and sent
   bool action_sent = false;
-  for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
-    if (pid == peer1 && msg.value("type", "") == "test_suspend") {
-      action_sent = true;
-    }
-  }
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() {
+        std::lock_guard<std::mutex> const lock(mock_transport_->CallLog()->mutex_);
+        for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
+          if (pid == peer1 && msg.value("type", "") == "test_suspend") {
+            action_sent = true;
+            return true;
+          }
+        }
+        return false;
+      },
+      std::chrono::milliseconds(2000)
+  );
   ASSERT_TRUE(action_sent) << "Action was not sent after unsuspension";
 
   // And removed from pending

@@ -51,16 +51,16 @@ class ProfileService {
     }
 
     storage_->AddPendingAction(peer_id, msg.dump());
-    sm_->messaging->SendQueuedMessages(peer_id);
+    EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
   }
 
   void RequestProfile(ContactID const& peer_id) {
     storage_->AddPendingAction(peer_id, nlohmann::json{{"type", "profile_request"}}.dump());
-    sm_->messaging->SendQueuedMessages(peer_id);
+    EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
   }
 
   void SyncProfile(ContactID const& peer_id) {
-    sm_->messaging->SendQueuedMessages(peer_id);
+    EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
   }
 
   void MarkAllContactsProfileSyncNeeded() {
