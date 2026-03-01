@@ -115,6 +115,9 @@ struct EventContactProfileUpdated {
 struct EventContactRemoved {
   ContactID peer_id;
 };
+struct EventPeerActivity {
+  ContactID peer_id;
+};
 struct EventConnectionRequested {
   ContactID peer_id;
 };

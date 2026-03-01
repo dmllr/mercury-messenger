@@ -135,7 +135,7 @@ class InternalMessagingService {
       }
     }
     if (should_unsuspend) {
-      sm_->messaging->UnsuspendAndDeliver(peer_id);
+      EventQueue::Instance().Push(EventPeerActivity{peer_id});
     }
   }
 
@@ -230,9 +230,6 @@ class InternalMessagingService {
       };
       std::ignore = data_transport_->SendJson(peer_id, key_msg);
     }
-
-    sm_->messaging->UnsuspendAndDeliver(peer_id);
-    sm_->file_transfer->OnConnectionReady(peer_id);
   }
 
  private:

@@ -167,7 +167,7 @@ TEST_F(StreamTest, StreamStopStopsDispatching) {
   stream->Start();
 
   // Give enough time for potentially more samples if stop failed
-  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  eillance::EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(50));
 
   // Should have processed the first one, then stopped
   EXPECT_EQ(count, 1);
@@ -182,7 +182,7 @@ TEST_F(StreamTest, DestructionWhileHandlerBusy) {
   auto video_source = std::make_shared<MockSource>(Stream::Source::Type::video, std::vector<uint64_t>{});
 
   auto sub = EventQueue::Instance().Subscribe<EventMediaSample>([&](auto const&) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    eillance::EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(50));
   });
 
   {
@@ -191,7 +191,7 @@ TEST_F(StreamTest, DestructionWhileHandlerBusy) {
     stream->Start();
 
     // Let the stream start processing
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    eillance::EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(10));
 
     // Destructor called here. Should block until the handler finishes.
   }

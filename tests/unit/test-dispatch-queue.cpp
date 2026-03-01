@@ -15,12 +15,12 @@ class DispatchQueueTest : public ::testing::Test {
  protected:
   void SetUp() override {
     // Give time for any previous tests to clean up
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    eillance::EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(50));
   }
 
   void TearDown() override {
     // Give time for any pending operations to complete
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    eillance::EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(50));
   }
 };
 
@@ -48,7 +48,7 @@ TEST_F(DispatchQueueTest, RemovePending) {
   std::atomic<int> counter{0};
 
   // Add a short delay to ensure the task gets queued but not executed immediately
-  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  eillance::EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(10));
 
   // Dispatch with slight delay to ensure it's still in the queue when we remove
   queue.DispatchAfter(std::chrono::milliseconds(50), [&counter]() { counter++; });
@@ -57,7 +57,7 @@ TEST_F(DispatchQueueTest, RemovePending) {
   queue.RemovePending();
 
   // Wait to ensure the operation had time to execute if it wasn't removed
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  eillance::EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(100));
 
   EXPECT_EQ(counter, 0);
 }
@@ -120,7 +120,7 @@ TEST_F(DispatchQueueTest, PriorityOrdering) {
   }
 
   // Wait for all tasks to complete
-  std::this_thread::sleep_for(std::chrono::milliseconds(200));
+  eillance::EventQueue::Instance().WaitFor([&] { return execution_order.size() == 5; }, std::chrono::milliseconds(200));
 
   // Verify execution order
   std::vector<int> const expected_order = {1, 2, 3, 4, 5};
@@ -150,8 +150,8 @@ TEST_F(DispatchQueueTest, TasksExecutedOnce) {
     queue.Dispatch(task);
   }
 
-  std::this_thread::sleep_for(std::chrono::milliseconds(50 * 10 + 300));
-  EXPECT_TRUE(EventQueue::Instance().WaitFor([&counter]() { return counter == 10; }, std::chrono::milliseconds(1000)));
+  EXPECT_TRUE(EventQueue::Instance()
+                  .WaitFor([&]() { return counter == 10 && !task_running.load(); }, std::chrono::milliseconds(1000)));
   EXPECT_FALSE(task_running);
 }
 
@@ -231,7 +231,7 @@ TEST_F(DispatchQueueTest, DestructorCleanup) {
   }
 
   // Task should not execute after queue destruction
-  std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+  eillance::EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(100));
   EXPECT_EQ(counter, 0);
 }
 
@@ -262,7 +262,7 @@ TEST_F(DispatchQueueTest, EmptyFunctionHandling) {
   queue.Dispatch(std::function<void()>());
 
   // Wait to ensure no crashes occur
-  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  eillance::EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(50));
 
   // Test passed if no crash occurred
   SUCCEED();

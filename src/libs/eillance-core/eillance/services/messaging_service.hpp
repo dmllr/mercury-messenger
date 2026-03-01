@@ -105,6 +105,16 @@ class MessagingService {
       this->SendQueuedMessages(e.peer_id);
     });
     event_unsubs_.push_back([sub1]() { EventQueue::Instance().Unsubscribe<EventSendQueuedMessages>(sub1); });
+
+    auto sub2 = EventQueue::Instance().Subscribe<EventDataChannelOpen>([this](auto const& e) {
+      this->UnsuspendAndDeliver(e.peer_id);
+    });
+    event_unsubs_.push_back([sub2]() { EventQueue::Instance().Unsubscribe<EventDataChannelOpen>(sub2); });
+
+    auto sub3 = EventQueue::Instance().Subscribe<EventPeerActivity>([this](auto const& e) {
+      this->UnsuspendAndDeliver(e.peer_id);
+    });
+    event_unsubs_.push_back([sub3]() { EventQueue::Instance().Unsubscribe<EventPeerActivity>(sub3); });
   }
 
   ~MessagingService() {
@@ -323,8 +333,6 @@ class MessagingService {
     } guard{*this, peer_id};
 
     auto const peer = transport_->GetPeer(peer_id);
-
-    sm_->file_transfer->OnConnectionReady(peer_id);
 
     auto pending_actions = storage_->GetPendingActions(peer_id);
     if (pending_actions.empty()) return;

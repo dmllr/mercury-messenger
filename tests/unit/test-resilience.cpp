@@ -71,22 +71,6 @@ class ResilienceTest : public ::testing::Test {
     client_->Terminate();
   }
 
-  void FlushClientQueue() {
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-  }
-
-  // Helper to wait for a condition to be true (polling with timeout)
-  template <typename Func>
-  static void WaitFor(Func condition, std::chrono::milliseconds timeout = std::chrono::milliseconds(2000)) {
-    auto const start = std::chrono::steady_clock::now();
-    while (!condition()) {
-      if (std::chrono::steady_clock::now() - start > timeout) {
-        break;
-      }
-      std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-  }
-
   storage::MockPersistentStorageImpl* mock_storage_{};
   std::shared_ptr<transport::MockCallLog> mock_log_;
   std::unique_ptr<transport::MockDataTransport> mock_transport_impl_;
@@ -113,7 +97,7 @@ TEST_F(ResilienceTest, PendingReadReceiptsPersistAndSend) {
   ASSERT_FALSE(mock_transport_->GetPeer(peer1));
 
   client_->MarkMessagesAsRead(peer1, {entry.id});
-  FlushClientQueue();
+  eillance::EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(50));
 
   auto pending = mock_storage_->GetPendingActions(peer1);
   ASSERT_EQ(pending.size(), 1);
@@ -122,7 +106,10 @@ TEST_F(ResilienceTest, PendingReadReceiptsPersistAndSend) {
   EXPECT_EQ(json["message_ids"][0], 999);
 
   client_->Connect(peer1);
-  FlushClientQueue();
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() { return mock_transport_->GetPeer(peer1) != nullptr; },
+      std::chrono::milliseconds(2000)
+  );
 
   auto peer = mock_transport_->GetPeer(peer1);
   ASSERT_TRUE(peer);
@@ -159,7 +146,7 @@ TEST_F(ResilienceTest, ProfileUpdateSyncsOnConnect) {
   ASSERT_FALSE(mock_transport_->GetPeer(peer1));
 
   client_->UpdateMyProfile("New Name", "Bio", "");
-  FlushClientQueue();
+  eillance::EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(50));
 
   auto actions = mock_storage_->GetPendingActions(peer1);
 
@@ -180,7 +167,10 @@ TEST_F(ResilienceTest, ProfileUpdateSyncsOnConnect) {
   EXPECT_TRUE(found_profile);
 
   client_->Connect(peer1);
-  FlushClientQueue();
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() { return mock_transport_->GetPeer(peer1) != nullptr; },
+      std::chrono::milliseconds(2000)
+  );
 
   mock_transport_->CallLog()->sent_peer_messages.clear();
   mock_transport_->SimulateDataChannelOpen(peer1);
@@ -209,12 +199,15 @@ TEST_F(ResilienceTest, ProfileUpdateSyncsOnConnect) {
 TEST_F(ResilienceTest, ReinstallRecovery_MessageReceipt) {
   // Simulate "wipe" by removing peer1 from contacts.
   client_->DeleteContact(peer1);
-  FlushClientQueue();
+  eillance::EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(50));
   ASSERT_FALSE(client_->GetContactService()->GetContact(peer1));
 
   // Connect (as if A connected to B)
   client_->Connect(peer1);
-  FlushClientQueue();
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() { return mock_transport_->GetPeer(peer1) != nullptr; },
+      std::chrono::milliseconds(2000)
+  );
   auto peer = mock_transport_->GetPeer(peer1);
   ASSERT_TRUE(peer);
 
@@ -244,7 +237,13 @@ TEST_F(ResilienceTest, ReinstallRecovery_MessageReceipt) {
   std::transform(msg_str.begin(), msg_str.end(), msg_bytes.begin(), [](char c) { return static_cast<std::byte>(c); });
 
   eillance::EventQueue::Instance().Push(eillance::EventDataChannelMessage{peer1, msg_bytes});
-  FlushClientQueue();
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() {
+        auto contact = client_->GetContactService()->GetContact(peer1);
+        return contact && contact->status == identity::ContactStatus::confirmed;
+      },
+      std::chrono::milliseconds(2000)
+  );
 
   // Verify contact was auto-created and CONFIRMED
   auto contact = client_->GetContactService()->GetContact(peer1);
@@ -271,7 +270,16 @@ TEST_F(ResilienceTest, ReinstallRecovery_ContactAdd) {
   mock_transport_->CallLog()->sent_peer_messages.clear();
 
   mock_transport_->SimulatePeerMessage(peer1, req_msg);
-  FlushClientQueue();
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() {
+        std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
+        for (auto const& msg : mock_log_->sent_signaling_messages) {
+          if (msg.value("type", "") == "contact_confirm" && msg.value("to", "") == peer1.ToString()) return true;
+        }
+        return false;
+      },
+      std::chrono::milliseconds(2000)
+  );
 
   bool confirm_sent = false;
   for (auto const& msg : mock_transport_->CallLog()->sent_signaling_messages) {
@@ -315,7 +323,10 @@ TEST_F(ResilienceTest, MessageRedeliveryDeduplication) {
   payload[services::MessagingService::keyContent] = content;
 
   client_->Connect(peer1);
-  FlushClientQueue();
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() { return mock_transport_->GetPeer(peer1) != nullptr; },
+      std::chrono::milliseconds(2000)
+  );
 
   // Setup crypto context
   auto const peer = mock_transport_->GetPeer(peer1);
@@ -418,7 +429,10 @@ TEST_F(ResilienceTest, UnsuspensionOnConnect) {
 
   // Connect
   client_->Connect(peer1);
-  FlushClientQueue();
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() { return mock_transport_->GetPeer(peer1) != nullptr; },
+      std::chrono::milliseconds(2000)
+  );
   mock_transport_->CallLog()->sent_peer_messages.clear();
 
   // Simulate DataChannel open which triggers UnsuspendAndDeliver

@@ -36,10 +36,6 @@ class ProfileUpdatesTest : public ::testing::Test {
     client_->Terminate();
   }
 
-  void FlushClientQueue() {
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-  }
-
   storage::MockPersistentStorageImpl* mock_storage_{};
   std::shared_ptr<transport::MockCallLog> mock_log_;
   std::unique_ptr<transport::MockDataTransport> mock_transport_impl_;
@@ -63,15 +59,28 @@ TEST_F(ProfileUpdatesTest, BroadcastOnProfileUpdate) {
 
   // Connect
   client_->Connect(peer1);
-  FlushClientQueue();
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() { return mock_transport_->GetPeer(peer1) != nullptr; },
+      std::chrono::milliseconds(2000)
+  );
   auto peer = mock_transport_->GetPeer(peer1);
   ASSERT_TRUE(peer);
   peer->data_channel_is_open = true;
+  mock_transport_->SimulateDataChannelOpen(peer1);
 
   // Update my profile
   mock_transport_->CallLog()->sent_peer_messages.clear();  // Clear history
   client_->UpdateMyProfile("New Name", "New Bio", "NewPhoto");
-  FlushClientQueue();
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() {
+        std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
+        for (auto const& msg : mock_transport_->CallLog()->sent_peer_messages | std::views::values) {
+          if (msg.value("type", "") == "profile_info") return true;
+        }
+        return false;
+      },
+      std::chrono::milliseconds(2000)
+  );
 
   // Verify "profile_info" message was sent
   bool profile_sent = false;
@@ -97,7 +106,10 @@ TEST_F(ProfileUpdatesTest, SendProfileOnConnect) {
 
   // Connect (simulate incoming or outgoing)
   client_->Connect(peer1);
-  FlushClientQueue();
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() { return mock_transport_->GetPeer(peer1) != nullptr; },
+      std::chrono::milliseconds(2000)
+  );
 
   auto const peer = mock_transport_->GetPeer(peer1);
   ASSERT_TRUE(peer);
@@ -107,7 +119,16 @@ TEST_F(ProfileUpdatesTest, SendProfileOnConnect) {
 
   // Simulate DataChannel open
   mock_transport_->SimulateDataChannelOpen(peer1);
-  FlushClientQueue();
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() {
+        std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
+        for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
+          if (msg.value("type", "") == "profile_info") return true;
+        }
+        return false;
+      },
+      std::chrono::milliseconds(2000)
+  );
 
   // Verify profile sent
   bool profile_sent = false;
@@ -126,12 +147,15 @@ TEST_F(ProfileUpdatesTest, NoProfileSendForPendingContact) {
   std::ignore = client_->AddContact(peer1, std::nullopt);
 
   client_->Connect(peer1);
-  FlushClientQueue();
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() { return mock_transport_->GetPeer(peer1) != nullptr; },
+      std::chrono::milliseconds(2000)
+  );
   mock_transport_->CallLog()->sent_peer_messages.clear();
 
   // Trigger OnDataChannelOpen
   mock_transport_->SimulateDataChannelOpen(peer1);
-  FlushClientQueue();
+  eillance::EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(50));
 
   // Verify NO profile sent
   bool profile_sent = false;
@@ -157,7 +181,16 @@ TEST_F(ProfileUpdatesTest, TriggerConnectForDisconnectedConfirmedPeer) {
 
   // Update Profile
   client_->UpdateMyProfile("Conn Name", "Conn Bio", "NewPhoto");
-  FlushClientQueue();
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() {
+        std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
+        for (auto const& [pid, ctx] : mock_transport_->CallLog()->offers) {
+          if (pid == peer1 && ctx == "data") return true;
+        }
+        return false;
+      },
+      std::chrono::milliseconds(2000)
+  );
 
   // Verify connection attempt
   // Connect() should have created the peer and sent an offer
@@ -178,7 +211,10 @@ TEST_F(ProfileUpdatesTest, ConfirmContactTriggersProfileSend) {
 
   // Setup peer connection (e.g. request phase established connection)
   client_->Connect(peer1);
-  FlushClientQueue();
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() { return mock_transport_->GetPeer(peer1) != nullptr; },
+      std::chrono::milliseconds(2000)
+  );
   auto const peer = mock_transport_->GetPeer(peer1);
   ASSERT_TRUE(peer);
   peer->data_channel_is_open = true;
@@ -193,7 +229,16 @@ TEST_F(ProfileUpdatesTest, ConfirmContactTriggersProfileSend) {
 
   // Confirm
   client_->ConfirmContact(peer1);
-  FlushClientQueue();
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() {
+        std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
+        for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
+          if (msg.value("type", "") == "profile_info") return true;
+        }
+        return false;
+      },
+      std::chrono::milliseconds(2000)
+  );
 
   // Check profile sent
   bool profile_sent = false;

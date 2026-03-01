@@ -75,7 +75,7 @@ TEST(EventQueueTest, Unsubscribe) {
   queue.Push(TestEvent1{100});
 
   // Wait a bit to ensure it *doesn't* receive
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  queue.WaitFor([] { return false; }, std::chrono::milliseconds(100));
 
   EXPECT_FALSE(received.load());
 }

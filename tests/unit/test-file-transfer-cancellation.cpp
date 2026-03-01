@@ -78,10 +78,6 @@ class FileTransferCancellationTest : public ::testing::Test {
     return packet;
   }
 
-  void FlushClientQueue() {
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-  }
-
   std::filesystem::path temp_dir_;
   std::filesystem::path attachments_dir_;
   storage::MockPersistentStorageImpl* mock_storage_;
@@ -112,12 +108,29 @@ TEST_F(FileTransferCancellationTest, CancelUpload) {
   attachments.push_back({file_path.string(), messaging::AttachmentType::file, "", "application/octet-stream"});
 
   auto record = client_->SendChatMessage(peer1, "File", attachments);
-  FlushClientQueue();
-
   std::string const att_id = std::get<messaging::MessageEntry>(record.data).attachments[0].id;
+  EventQueue::Instance().WaitFor(
+      [&]() {
+        std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
+        for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_binary_messages) {
+          if (IsBinaryPacket(msg, 0x01, att_id)) return true;
+        }
+        return false;
+      },
+      std::chrono::milliseconds(2000)
+  );
 
   client_->CancelTransfer(peer1, att_id, true);
-  FlushClientQueue();
+  EventQueue::Instance().WaitFor(
+      [&]() {
+        std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
+        for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_binary_messages) {
+          if (IsBinaryPacket(msg, 0x03, att_id)) return true;
+        }
+        return false;
+      },
+      std::chrono::milliseconds(2000)
+  );
 
   bool cancel_sent = false;
   for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_binary_messages) {
@@ -156,13 +169,13 @@ TEST_F(FileTransferCancellationTest, CancelDownload_PausesDownload) {
   auto chunk = CreateChunkPacket("down_id", 0, payload);
 
   EventQueue::Instance().Push(EventDataChannelMessage{peer1, chunk});
-  FlushClientQueue();
+  EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(50));
 
   std::filesystem::path const temp_path = attachments_dir_ / "down_id.tmp";
   ASSERT_TRUE(std::filesystem::exists(temp_path));
 
   client_->CancelTransfer(peer1, "down_id", false);
-  FlushClientQueue();
+  EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(50));
 
   bool pause_sent = false;
   for (auto const& msg : mock_transport_->CallLog()->sent_binary_messages | std::views::values) {
@@ -199,7 +212,16 @@ TEST_F(FileTransferCancellationTest, ResumeSendsRequest) {
   mock_transport_->CallLog()->sent_binary_messages.clear();
 
   client_->ResumeTransfer(peer1, "resume_id", false);
-  FlushClientQueue();
+  EventQueue::Instance().WaitFor(
+      [&] {
+        std::lock_guard<std::mutex> const lock(mock_transport_->CallLog()->mutex_);
+        for (auto const& msg : mock_transport_->CallLog()->sent_binary_messages | std::views::values) {
+          if (IsBinaryPacket(msg, 0x05, "resume_id")) return true;
+        }
+        return false;
+      },
+      std::chrono::milliseconds(2000)
+  );
 
   bool req_sent = false;
   for (auto const& msg : mock_transport_->CallLog()->sent_binary_messages | std::views::values) {
