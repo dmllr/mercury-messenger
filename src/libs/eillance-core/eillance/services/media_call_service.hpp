@@ -140,7 +140,7 @@ class MediaCallService {
         std::ignore = data_transport_->SendJson(peer_id, msg);
       } else {
         storage_->AddPendingAction(peer_id, msg.dump());
-        sm_->messaging->SendQueuedMessages(peer_id);
+        EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
       }
     }
 
@@ -159,7 +159,7 @@ class MediaCallService {
         std::ignore = data_transport_->SendJson(peer_id, msg);
       } else {
         storage_->AddPendingAction(peer_id, msg.dump());
-        sm_->messaging->SendQueuedMessages(peer_id);
+        EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
       }
     }
 
@@ -181,7 +181,7 @@ class MediaCallService {
           std::ignore = data_transport_->SendJson(peer_id, msg);
         } else {
           storage_->AddPendingAction(peer_id, msg.dump());
-          sm_->messaging->SendQueuedMessages(peer_id);
+          EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
         }
       }
     }
@@ -215,7 +215,7 @@ class MediaCallService {
           std::ignore = data_transport_->SendJson(peer_id, msg);
         } else {
           storage_->AddPendingAction(peer_id, msg.dump());
-          sm_->messaging->SendQueuedMessages(peer_id);
+          EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
         }
       }
       return;
@@ -328,7 +328,7 @@ class MediaCallService {
               std::ignore = data_transport_->SendJson(peer_id, msg);
             } else {
               storage_->AddPendingAction(peer_id, msg.dump());
-              sm_->messaging->SendQueuedMessages(peer_id);
+              EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
             }
             peer->pending_offer_sdp.reset();
           }
@@ -538,7 +538,7 @@ class MediaCallService {
         std::ignore = data_transport_->SendJson(peer_id, msg);
       } else {
         storage_->AddPendingAction(peer_id, msg.dump());
-        sm_->messaging->SendQueuedMessages(peer_id);
+        EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
       }
     }
 
@@ -563,7 +563,7 @@ class MediaCallService {
         std::ignore = data_transport_->SendJson(peer_id, msg);
       } else {
         storage_->AddPendingAction(peer_id, msg.dump());
-        sm_->messaging->SendQueuedMessages(peer_id);
+        EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
       }
     }
   }

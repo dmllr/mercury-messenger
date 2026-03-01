@@ -132,15 +132,22 @@ TEST_F(AttachmentTest, SendQueuedMessagesSerializesHash) {
   service_->SendChatMessage(peer1, "Text", attachments);
 
   bool found_chat_message = false;
-  for (auto const& [pid, msg] : mock_log_->sent_peer_messages) {
-    if (msg.contains("type") && msg["type"] == "chat" && msg.contains("attachments")) {
-      auto hash = msg["attachments"][0]["hash"].get<std::string>();
-      EXPECT_FALSE(hash.empty());
-      EXPECT_EQ(hash.length(), 64);
-      found_chat_message = true;
-      break;
-    }
-  }
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() {
+        std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
+        for (auto const& [pid, msg] : mock_log_->sent_peer_messages) {
+          if (msg.contains("type") && msg.at("type") == "chat" && msg.contains("attachments")) {
+            auto hash = msg["attachments"][0]["hash"].get<std::string>();
+            if (!hash.empty() && hash.length() == 64) {
+              found_chat_message = true;
+              return true;
+            }
+          }
+        }
+        return false;
+      },
+      std::chrono::milliseconds(2000)
+  );
   ASSERT_TRUE(found_chat_message) << "Chat message with attachments not found in transport log";
 }
 
