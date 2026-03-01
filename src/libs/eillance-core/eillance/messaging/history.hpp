@@ -89,12 +89,13 @@ class MessageHistory {
     storage_->ToggleReaction(peer_id, message_id, author_id, reaction);
   }
 
-  std::optional<uint64_t> FindMessageIdByRemoteOrLocal(ContactID const& peer_id, uint64_t target_id) {
+  [[nodiscard]] auto FindMessageIdByRemoteOrLocal(ContactID const& peer_id, uint64_t target_id) const
+      -> std::optional<uint64_t> {
     return storage_->GetMessageIdByRemoteId(peer_id, target_id);
   }
 
-  std::optional<uint64_t> GetRemoteId(ContactID const& peer_id, uint64_t local_id) {
-    auto entry = storage_->GetHistoryEntry(peer_id, local_id);
+  [[nodiscard]] auto GetRemoteId(ContactID const& peer_id, uint64_t local_id) const -> std::optional<uint64_t> {
+    auto const entry = storage_->GetHistoryEntry(peer_id, local_id);
     return entry ? entry->remote_id : std::nullopt;
   }
 
@@ -105,15 +106,17 @@ class MessageHistory {
     }
   }
 
-  auto GetHistoryPage(ContactID const& peer_id, size_t const page_index, size_t const page_size) -> HistoryPage {
+  [[nodiscard]] auto GetHistoryPage(ContactID const& peer_id, size_t const page_index, size_t const page_size) const
+      -> HistoryPage {
     return storage_->GetHistoryPage(peer_id, page_index, page_size);
   }
 
-  auto GetFullMessageContent(ContactID const& peer_id, std::uint64_t message_id) -> std::optional<std::string> {
+  [[nodiscard]] auto GetFullMessageContent(ContactID const& peer_id, std::uint64_t message_id) const
+      -> std::optional<std::string> {
     return storage_->GetFullMessageContent(peer_id, message_id);
   }
 
-  auto GetChatSummaries(std::vector<std::string> const& peer_ids_str) -> std::vector<ChatSummary> {
+  [[nodiscard]] auto GetChatSummaries(std::vector<std::string> const& peer_ids_str) const -> std::vector<ChatSummary> {
     std::vector<ContactID> peer_ids;
     peer_ids.reserve(peer_ids_str.size());
     for (auto const& peer_id : peer_ids_str) {
@@ -122,15 +125,16 @@ class MessageHistory {
     return storage_->GetChatSummaries(peer_ids);
   }
 
-  auto GetChatSummaries(std::vector<ContactID> const& peer_ids) -> std::vector<ChatSummary> {
+  [[nodiscard]] auto GetChatSummaries(std::vector<ContactID> const& peer_ids) const -> std::vector<ChatSummary> {
     return storage_->GetChatSummaries(peer_ids);
   }
 
-  auto SearchMessages(ContactID const& peer_id, std::string const& query) -> std::vector<HistoryEntryRecord> {
+  [[nodiscard]] auto SearchMessages(ContactID const& peer_id, std::string const& query) const
+      -> std::vector<HistoryEntryRecord> {
     return storage_->SearchMessages(peer_id, query);
   }
 
-  auto SearchAllMessages(std::string const& query) -> std::vector<HistoryEntryRecord> {
+  [[nodiscard]] auto SearchAllMessages(std::string const& query) const -> std::vector<HistoryEntryRecord> {
     return storage_->SearchAllMessages(query);
   }
 };
