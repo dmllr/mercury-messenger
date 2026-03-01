@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import hela.eillance.camera.R
 import hela.eillance.localization.LocalizationMapping
 import hela.eillance.ndkio.CallDirection
+import hela.eillance.ndkio.AttachmentType
 import hela.eillance.ndkio.CallStatus
 import hela.eillance.ndkio.Contact
 import hela.eillance.ndkio.ContactStatus
@@ -218,7 +219,19 @@ private fun getSnippetText(contact: Contact, context: Context): String {
   val kind = contact.lastMsgKindEnum ?: return ""
   return when (kind) {
     HistoryEntryKind.TextMessage -> {
-      contact.lastMessageContent ?: ""
+      val content = contact.lastMessageContent
+      if (!content.isNullOrBlank()) {
+        content
+      } else if (contact.lastMessageAttachmentType != -1) {
+        val typeText = when (contact.lastMessageAttachmentType) {
+          AttachmentType.Image.value -> context.getString(R.string.file_type_image)
+          AttachmentType.Video.value -> context.getString(R.string.file_type_video)
+          else -> context.getString(R.string.file_type_generic)
+        }
+        "[$typeText]"
+      } else {
+        ""
+      }
     }
 
     HistoryEntryKind.SystemMessage -> {
