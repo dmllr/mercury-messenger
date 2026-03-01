@@ -139,22 +139,22 @@ class Client final {
   }
 
   // Backwards compatibility for Android/CLI
-  [[nodiscard]] auto GetAccountService() const -> std::shared_ptr<services::AccountService> {
+  [[nodiscard]] auto Account() const -> std::shared_ptr<services::AccountService> {
     return sm_->account;
   }
-  [[nodiscard]] auto GetContactService() const -> std::shared_ptr<services::ContactService> {
+  [[nodiscard]] auto Contacts() const -> std::shared_ptr<services::ContactService> {
     return sm_->contact;
   }
-  [[nodiscard]] auto GetMessagingService() const -> std::shared_ptr<services::MessagingService> {
+  [[nodiscard]] auto Messaging() const -> std::shared_ptr<services::MessagingService> {
     return sm_->messaging;
   }
-  [[nodiscard]] auto GetMediaCallService() const -> std::shared_ptr<services::MediaCallService> {
+  [[nodiscard]] auto Calls() const -> std::shared_ptr<services::MediaCallService> {
     return sm_->media_call;
   }
-  [[nodiscard]] auto GetFileTransferService() const -> std::shared_ptr<services::FileTransferService> {
+  [[nodiscard]] auto Attachments() const -> std::shared_ptr<services::FileTransferService> {
     return sm_->file_transfer;
   }
-  [[nodiscard]] auto GetProfileService() const -> std::shared_ptr<services::ProfileService> {
+  [[nodiscard]] auto Profile() const -> std::shared_ptr<services::ProfileService> {
     return sm_->profile;
   }
 

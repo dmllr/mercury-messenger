@@ -42,7 +42,7 @@ class FileTransferResilienceTest : public ::testing::Test {
 
     client_->AddContact(peer1, std::nullopt);
     mock_storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
-    client_->GetContactService()->ReloadCache();
+    client_->Contacts()->ReloadCache();
 
     auto pending = mock_storage_->GetPendingActions(peer1);
     for (auto const& action : pending) {
@@ -138,7 +138,7 @@ TEST_F(FileTransferResilienceTest, TransferProgressAndFileCreation) {
   att.hash = file_hash;
   att.is_downloaded = false;
 
-  client_->GetMessagingService()->OnChatMessageReceived(peer1, encrypted, 9001, false, {att});
+  client_->Messaging()->OnChatMessageReceived(peer1, encrypted, 9001, false, {att});
   EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(50));
 
   std::filesystem::path const temp_file = attachments_dir_ / (att_id + ".tmp");
@@ -194,7 +194,7 @@ TEST_F(FileTransferResilienceTest, FailsGracefullyIfHashMismatch) {
 
   auto encrypted = other_cipher.Encrypt(payload_json.dump());
 
-  client_->GetMessagingService()->OnChatMessageReceived(peer1, encrypted, 9002, false, {att});
+  client_->Messaging()->OnChatMessageReceived(peer1, encrypted, 9002, false, {att});
   EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(50));
 
   std::string const data = "0123456789";

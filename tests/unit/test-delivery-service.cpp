@@ -8,8 +8,8 @@
 #include <gtest/gtest.h>
 #include <nlohmann/json.hpp>
 
+#include "../../src/libs/eillance-core/eillance/services/delivery_service.hpp"
 #include "eillance/identity/contact_manager.hpp"
-#include "eillance/messaging/delivery_service.hpp"
 #include "mock_data_transport.hpp"
 #include "mock_persistent_storage.hpp"
 
@@ -37,7 +37,7 @@ class DeliveryServiceTest : public ::testing::Test {
     sm_->storage = storage_;
     sm_->contact_manager = contact_manager_;
     sm_->data_transport = transport_;
-    delivery_service_ = std::make_unique<messaging::MessageDeliveryService>(sm_.get());
+    delivery_service_ = std::make_unique<messaging::DeliveryService>(sm_.get());
   }
 
   void TearDown() override {
@@ -75,7 +75,7 @@ class DeliveryServiceTest : public ::testing::Test {
   std::shared_ptr<transport::DataTransport> transport_;
 
   std::unique_ptr<services::ServiceManager> sm_;
-  std::unique_ptr<messaging::MessageDeliveryService> delivery_service_;
+  std::unique_ptr<messaging::DeliveryService> delivery_service_;
   uint64_t conn_sub_id_ = 0;
 
   std::vector<ContactID> requested_connections_;

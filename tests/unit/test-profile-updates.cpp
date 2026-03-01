@@ -28,7 +28,7 @@ class ProfileUpdatesTest : public ::testing::Test {
 
     client_ = std::make_shared<Client>(storage_, transport_, media_transport);
 
-    (void)client_->GetAccountService()->GenerateNewIdentity();
+    (void)client_->Account()->GenerateNewIdentity();
     client_->Start();
   }
 
@@ -55,7 +55,7 @@ TEST_F(ProfileUpdatesTest, BroadcastOnProfileUpdate) {
   // Directly update storage to confirm it, ensuring the rest of the fields are compliant
   // We use the storage interface directly to simulate the DB state change
   mock_storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
-  client_->GetContactService()->ReloadCache();
+  client_->Contacts()->ReloadCache();
 
   // Connect
   client_->Connect(peer1);
@@ -99,7 +99,7 @@ TEST_F(ProfileUpdatesTest, SendProfileOnConnect) {
   // Setup a confirmed contact
   std::ignore = client_->AddContact(peer1, std::nullopt);
   mock_storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
-  client_->GetContactService()->ReloadCache();
+  client_->Contacts()->ReloadCache();
 
   // Set my profile. This will queue a profile action for the confirmed contact
   client_->UpdateMyProfile("My Name", "My Bio", "");
@@ -172,7 +172,7 @@ TEST_F(ProfileUpdatesTest, TriggerConnectForDisconnectedConfirmedPeer) {
   // Add confirmed contact
   std::ignore = client_->AddContact(peer1, std::nullopt);
   mock_storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
-  client_->GetContactService()->ReloadCache();
+  client_->Contacts()->ReloadCache();
 
   // Ensure disconnected
   mock_transport_->RemovePeer(peer1);
@@ -223,7 +223,7 @@ TEST_F(ProfileUpdatesTest, ConfirmContactTriggersProfileSend) {
   std::ignore = client_->AddContact(peer1, std::nullopt);  // starts pendingApproval, simulating request
   // Simulate receiving request to move to awaitingApproval
   mock_storage_->UpdateContact({peer1, identity::ContactStatus::awaitingApproval});
-  client_->GetContactService()->ReloadCache();
+  client_->Contacts()->ReloadCache();
 
   mock_transport_->CallLog()->sent_peer_messages.clear();
 
