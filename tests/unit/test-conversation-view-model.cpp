@@ -15,13 +15,15 @@ class ConversationViewModelTest : public ViewModelTest {
     // Pre-add contact so we can chat. Wait for it to propagate to storage.
     client_->AddContact(peer1, std::nullopt);
 
-    // Give time for AddContact thread to write to storage and generate system message
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    EventQueue::Instance().WaitFor(
+        [&] { return client_->GetContactService()->GetContact(peer1).has_value(); },
+        std::chrono::milliseconds(2000)
+    );
 
     vm_ = std::make_shared<ConversationViewModel>(peer1, client_);
 
-    // Give time for InitialLoad thread to complete
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    // Wait for the background initial load to finish and apply to state
+    EventQueue::Instance().WaitFor([&] { return !vm_->GetState().history.empty(); }, std::chrono::milliseconds(2000));
   }
 
   std::shared_ptr<ConversationViewModel> vm_;
@@ -232,7 +234,12 @@ TEST_F(ConversationViewModelTest, CancelTransferPropagates) {
 
   // Inject into VM (simulate load or receive)
   EventQueue::Instance().Push(EventChatMessageReceived{peer1, entry});
-  WaitFor([&] { return !observer->GetState().history.empty(); });
+  WaitFor([&] {
+    for (auto const& m : observer->GetState().history) {
+      if (m.id == entry.id) return true;
+    }
+    return false;
+  });
 
   entry.direction = messaging::MessageDirection::received;  // Force download scenario
   mock_storage_->UpdateHistoryEntry(entry);                 // Update DB state just in case
@@ -278,14 +285,32 @@ TEST_F(ConversationViewModelTest, ResumeTransferPropagates) {
   // If connection is not open, it might be queued.
   // Connect and simulate data channel open to ensure sending
   client_->Connect(peer1);
-  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  EventQueue::Instance().WaitFor(
+      [&] { return mock_data_transport_->GetPeer(peer1) != nullptr; },
+      std::chrono::milliseconds(2000)
+  );
   // Simulate DC open
   mock_data_transport_->SimulateDataChannelOpen(peer1);
-  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  EventQueue::Instance().WaitFor(
+      [&] {
+        auto p = mock_data_transport_->GetPeer(peer1);
+        return p && p->data_channel_is_open.load();
+      },
+      std::chrono::milliseconds(2000)
+  );
 
   // Resume download (is_upload=false)
   vm_->ResumeTransfer("resume-test-id", false);
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  EventQueue::Instance().WaitFor(
+      [&] {
+        std::lock_guard<std::mutex> const lock(mock_data_transport_->CallLog()->mutex_);
+        for (auto const& msg : mock_data_transport_->CallLog()->sent_binary_messages | std::views::values) {
+          if (msg.size() >= 3 && msg[0] == std::byte{0xFE} && msg[1] == std::byte{0x05}) return true;
+        }
+        return false;
+      },
+      std::chrono::milliseconds(2000)
+  );
 
   bool req_sent = false;
   for (auto const& msg : mock_data_transport_->CallLog()->sent_binary_messages | std::views::values) {
@@ -309,12 +334,20 @@ TEST_F(ConversationViewModelTest, SendSmallAttachment_UpdatesStatusSynchronously
 
   // Establish connection so upload starts immediately
   client_->Connect(peer1);
-  // Yield to let connection setup (AddPeer etc.)
-  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  EventQueue::Instance().WaitFor(
+      [&] { return mock_data_transport_->GetPeer(peer1) != nullptr; },
+      std::chrono::milliseconds(2000)
+  );
 
   // Simulate Data Channel Open to enable sending
   mock_data_transport_->SimulateDataChannelOpen(peer1);
-  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  EventQueue::Instance().WaitFor(
+      [&] {
+        auto p = mock_data_transport_->GetPeer(peer1);
+        return p && p->data_channel_is_open.load();
+      },
+      std::chrono::milliseconds(2000)
+  );
 
   auto const peer = mock_data_transport_->GetPeer(peer1);
   ASSERT_TRUE(peer);
@@ -380,8 +413,9 @@ TEST_F(ConversationViewModelTest, LoadUpToMessage) {
   }
 
   // Re-initialize VM to simulate fresh entry
+  vm_.reset();  // Destroy the old VM so it doesn't push conflicting events!
   auto vm = std::make_shared<ConversationViewModel>(peer1, client_);
-  WaitFor([&] { return observer->GetState().history.size() > 0; });
+  WaitFor([&] { return observer->GetState().history.size() >= 50; }, std::chrono::milliseconds(2000));
 
   // Initially, it should only load 50 messages
   auto initial_state = observer->GetState();
@@ -429,6 +463,7 @@ TEST_F(ConversationViewModelTest, LoadUpToMessage_OverridesInitialLoad) {
   }
 
   // Re-create VM. This triggers StartInitialLoad in a thread.
+  vm_.reset();
   auto vm = std::make_shared<ConversationViewModel>(peer1, client_);
 
   // Immediately request loading specific message.
@@ -461,7 +496,14 @@ TEST_F(ConversationViewModelTest, EditMessagePropagates) {
   WaitFor([&] { return observer->updated; });
 
   vm_->SendText("Typo");
-  WaitFor([&] { return !observer->GetState().history.empty(); });
+  WaitFor([&] {
+    auto s = observer->GetState();
+    if (s.history.empty()) return false;
+    if (std::holds_alternative<messaging::MessageEntry>(s.history.back().data)) {
+      return std::get<messaging::MessageEntry>(s.history.back().data).content == "Typo";
+    }
+    return false;
+  });
 
   auto state = observer->GetState();
   auto msg = state.history.back();
@@ -496,7 +538,14 @@ TEST_F(ConversationViewModelTest, DeleteMessagePropagates) {
   WaitFor([&] { return observer->updated; });
 
   vm_->SendText("Mistake");
-  WaitFor([&] { return !observer->GetState().history.empty(); });
+  WaitFor([&] {
+    auto s = observer->GetState();
+    if (s.history.empty()) return false;
+    if (std::holds_alternative<messaging::MessageEntry>(s.history.back().data)) {
+      return std::get<messaging::MessageEntry>(s.history.back().data).content == "Mistake";
+    }
+    return false;
+  });
 
   auto msg = observer->GetState().history.back();
   vm_->DeleteMessage(msg.id);
@@ -515,7 +564,14 @@ TEST_F(ConversationViewModelTest, ReactMessagePropagates) {
   WaitFor([&] { return observer->updated; });
 
   vm_->SendText("React me");
-  WaitFor([&] { return !observer->GetState().history.empty(); });
+  WaitFor([&] {
+    auto s = observer->GetState();
+    if (s.history.empty()) return false;
+    if (std::holds_alternative<messaging::MessageEntry>(s.history.back().data)) {
+      return std::get<messaging::MessageEntry>(s.history.back().data).content == "React me";
+    }
+    return false;
+  });
 
   auto msg = observer->GetState().history.back();
   vm_->ReactToMessage(msg.id, messaging::Reaction::heart);

@@ -108,10 +108,6 @@ class MessagingServiceTest : public ::testing::Test {
     return packet;
   }
 
-  void FlushClientQueue() {
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-  }
-
   storage::MockPersistentStorageImpl* mock_storage_;
   std::shared_ptr<transport::MockCallLog> mock_log_;
   std::unique_ptr<transport::MockDataTransport> mock_transport_impl_;
@@ -143,7 +139,16 @@ TEST_F(MessagingServiceTest, SendMessage_ThumbInPayload) {
   atts[0].file_path = file_path;
 
   client_->SendChatMessage(peer1, "Msg", atts);
-  FlushClientQueue();
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() {
+        std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
+        for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
+          if (msg.value("type", "") == "chat") return true;
+        }
+        return false;
+      },
+      std::chrono::milliseconds(2000)
+  );
 
   ASSERT_GE(mock_transport_->CallLog()->sent_peer_messages.size(), 1);
 
@@ -231,7 +236,16 @@ TEST_F(MessagingServiceTest, SendMessage_UnifiedDeliveryQueue) {
   transport_->AddPeer(peer1, peer);
 
   eillance::EventQueue::Instance().Push(eillance::EventSendQueuedMessages{peer1});
-  FlushClientQueue();
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() {
+        std::lock_guard<std::mutex> const lock(mock_transport_->CallLog()->mutex_);
+        for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
+          if (pid == peer1 && msg.value("type", "") == "chat") return true;
+        }
+        return false;
+      },
+      std::chrono::milliseconds(2000)
+  );
 
   bool msg_sent = false;
   eillance::EventQueue::Instance().WaitFor(
@@ -268,7 +282,7 @@ TEST_F(MessagingServiceTest, MarkAsRead_UnifiedDelivery) {
   );
 
   client_->MarkMessagesAsRead(peer1, {entry.id});
-  FlushClientQueue();
+  eillance::EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(50));
 
   auto actions = mock_storage_->GetPendingActions(peer1);
   ASSERT_EQ(actions.size(), 1);
@@ -278,7 +292,16 @@ TEST_F(MessagingServiceTest, MarkAsRead_UnifiedDelivery) {
   transport_->AddPeer(peer1, peer);
 
   eillance::EventQueue::Instance().Push(eillance::EventSendQueuedMessages{peer1});
-  FlushClientQueue();
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() {
+        std::lock_guard<std::mutex> const lock(mock_transport_->CallLog()->mutex_);
+        for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
+          if (pid == peer1 && msg.value("type", "") == "message_read") return true;
+        }
+        return false;
+      },
+      std::chrono::milliseconds(2000)
+  );
 
   bool read_sent = false;
   eillance::EventQueue::Instance().WaitFor(

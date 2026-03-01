@@ -29,6 +29,13 @@ class ProfileService {
         storage_(sm->storage),
         transport_(sm->data_transport),
         manager_(sm->contact_manager) {
+    auto sub1 = EventQueue::Instance().Subscribe<EventContactStatusChanged>([this](auto const& e) {
+      if (e.status == identity::ContactStatus::confirmed) {
+        this->SendMyProfile(e.peer_id);
+        this->RequestProfile(e.peer_id);
+      }
+    });
+    event_unsubs_.push_back([sub1]() { EventQueue::Instance().Unsubscribe<EventContactStatusChanged>(sub1); });
   }
 
   ~ProfileService() {

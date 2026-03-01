@@ -55,10 +55,6 @@ class InternalMessagingServiceTest : public ::testing::Test {
     client_.reset();
   }
 
-  void FlushClientQueue() {
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-  }
-
   storage::MockPersistentStorageImpl* mock_storage_;
   std::shared_ptr<transport::MockCallLog> mock_log_;
   std::unique_ptr<transport::MockDataTransport> mock_transport_impl_;
@@ -75,7 +71,13 @@ TEST_F(InternalMessagingServiceTest, ProcessSystemMessage_AuthChallenge) {
   nlohmann::json const msg = {{"challenge", challenge}};
 
   EventQueue::Instance().Push(EventSystemMessage{"auth_challenge", msg});
-  FlushClientQueue();
+  EventQueue::Instance().WaitFor(
+      [&]() {
+        std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
+        return mock_log_->sent_signaling_messages.size() > 0;
+      },
+      std::chrono::milliseconds(2000)
+  );
 
   ASSERT_EQ(mock_transport_->CallLog()->sent_signaling_messages.size(), 1);
   auto sent = mock_transport_->CallLog()->sent_signaling_messages[0];
@@ -87,7 +89,16 @@ TEST_F(InternalMessagingServiceTest, ProcessSignalingMessage_DataOffer) {
   nlohmann::json const offer =
       {{"from", peer1.ToString()}, {"type", "offer"}, {"context", "data"}, {"sdp", "fake_sdp"}};
   EventQueue::Instance().Push(EventPeerMessage{offer});
-  FlushClientQueue();
+  EventQueue::Instance().WaitFor(
+      [&]() {
+        std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
+        for (auto const& [pid, ctx] : mock_log_->answers) {
+          if (pid == peer1 && ctx == "data") return true;
+        }
+        return false;
+      },
+      std::chrono::milliseconds(2000)
+  );
 
   bool answer_created = false;
   for (auto const& [pid, ctx] : mock_transport_->CallLog()->answers) {

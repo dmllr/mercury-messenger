@@ -88,7 +88,7 @@ class DeliveryServiceTest : public ::testing::Test {
 TEST_F(DeliveryServiceTest, NoActionWhenNoQueuedMessages) {
   contact_manager_->AddContact(peer1);
   delivery_service_->Start();
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));  // Wait a bit to ensure checks could have run
+  EXPECT_FALSE(WaitForRequests(1, std::chrono::milliseconds(500)));
   EXPECT_TRUE(requested_connections_.empty());
 }
 
@@ -105,8 +105,7 @@ TEST_F(DeliveryServiceTest, AttemptDeliveryIsDebounced) {
   delivery_service_->AttemptDelivery(peer1);
   delivery_service_->AttemptDelivery(peer1);  // This one should be ignored
   ASSERT_TRUE(WaitForRequests(1, std::chrono::milliseconds(100)));
-  // Wait a bit more to ensure no second call comes through
-  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  EXPECT_FALSE(WaitForRequests(2, std::chrono::milliseconds(100)));
   EXPECT_EQ(requested_connections_.size(), 1);
 }
 
@@ -143,6 +142,6 @@ TEST_F(DeliveryServiceTest, StopPreventsFurtherChecks) {
   AddPendingMessage(peer1);
 
   // Wait and check that nothing happened
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  EXPECT_FALSE(WaitForRequests(1, std::chrono::milliseconds(100)));
   EXPECT_TRUE(requested_connections_.empty());
 }

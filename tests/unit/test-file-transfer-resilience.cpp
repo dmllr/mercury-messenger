@@ -86,10 +86,6 @@ class FileTransferResilienceTest : public ::testing::Test {
     return packet;
   }
 
-  void FlushClientQueue() {
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-  }
-
   std::filesystem::path temp_dir_;
   std::filesystem::path attachments_dir_;
   storage::MockPersistentStorageImpl* mock_storage_{};
@@ -143,7 +139,7 @@ TEST_F(FileTransferResilienceTest, TransferProgressAndFileCreation) {
   att.is_downloaded = false;
 
   client_->GetMessagingService()->OnChatMessageReceived(peer1, encrypted, 9001, false, {att});
-  FlushClientQueue();
+  EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(50));
 
   std::filesystem::path const temp_file = attachments_dir_ / (att_id + ".tmp");
   ASSERT_TRUE(std::filesystem::exists(temp_file));
@@ -199,7 +195,7 @@ TEST_F(FileTransferResilienceTest, FailsGracefullyIfHashMismatch) {
   auto encrypted = other_cipher.Encrypt(payload_json.dump());
 
   client_->GetMessagingService()->OnChatMessageReceived(peer1, encrypted, 9002, false, {att});
-  FlushClientQueue();
+  EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(50));
 
   std::string const data = "0123456789";
   auto chunk = CreateChunkPacket("bad_hash_file", 0, StringToBytes(data));

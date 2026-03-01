@@ -40,6 +40,16 @@ class FileTransferService {
       }
     });
     event_unsubs_.push_back([sub1]() { EventQueue::Instance().Unsubscribe<EventDataChannelMessage>(sub1); });
+
+    auto sub2 = EventQueue::Instance().Subscribe<EventDataChannelOpen>([this](auto const& e) {
+      this->OnConnectionReady(e.peer_id);
+    });
+    event_unsubs_.push_back([sub2]() { EventQueue::Instance().Unsubscribe<EventDataChannelOpen>(sub2); });
+
+    auto sub3 = EventQueue::Instance().Subscribe<EventSendQueuedMessages>([this](auto const& e) {
+      this->OnConnectionReady(e.peer_id);
+    });
+    event_unsubs_.push_back([sub3]() { EventQueue::Instance().Unsubscribe<EventSendQueuedMessages>(sub3); });
   }
 
   ~FileTransferService() {

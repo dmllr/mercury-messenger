@@ -39,10 +39,6 @@ class ClientCoreTest : public ::testing::Test {
     client_.reset();
   }
 
-  void FlushClientQueue() {
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-  }
-
   storage::MockPersistentStorageImpl* mock_storage_{};
   std::shared_ptr<transport::MockCallLog> mock_log_;
   std::unique_ptr<transport::MockDataTransport> mock_transport_impl_;
@@ -57,7 +53,18 @@ class ClientCoreTest : public ::testing::Test {
 
 TEST_F(ClientCoreTest, ConnectSequence) {
   client_->Connect(peer1);
-  FlushClientQueue();
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() {
+        std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
+        for (auto const& [id, ctx] : mock_log_->offers) {
+          if (id == peer1 && ctx == "data") {
+            return true;
+          }
+        }
+        return false;
+      },
+      std::chrono::milliseconds(2000)
+  );
 
   ASSERT_TRUE(mock_transport_->GetPeer(peer1));
 
@@ -70,7 +77,10 @@ TEST_F(ClientCoreTest, ConnectSequence) {
 
 TEST_F(ClientCoreTest, IncomingKeyExchangeTriggersReply) {
   client_->Connect(peer1);
-  FlushClientQueue();
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() { return mock_transport_->GetPeer(peer1) != nullptr; },
+      std::chrono::milliseconds(2000)
+  );
 
   auto peer = mock_transport_->GetPeer(peer1);
   ASSERT_TRUE(peer);
@@ -92,7 +102,18 @@ TEST_F(ClientCoreTest, IncomingKeyExchangeTriggersReply) {
 
   eillance::EventQueue::Instance().Push(eillance::EventDataChannelMessage{peer1, msg_bytes});
 
-  FlushClientQueue();
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() {
+        std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
+        for (auto const& [id, msg] : mock_log_->sent_peer_messages) {
+          if (id == peer1 && msg.value("type", "") == "key_exchange" && msg.value("is_reply", false) == true) {
+            return true;
+          }
+        }
+        return false;
+      },
+      std::chrono::milliseconds(2000)
+  );
 
   EXPECT_TRUE(peer->session_cipher->IsReady());
 
@@ -110,7 +131,18 @@ TEST_F(ClientCoreTest, SignalingMessageProcessing_Offer) {
       {{"from", peer1.ToString()}, {"type", "offer"}, {"context", "data"}, {"sdp", "dummy_sdp_offer"}};
 
   mock_transport_->SimulatePeerMessage(peer1, offer_msg);
-  FlushClientQueue();
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() {
+        std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
+        for (auto const& [id, ctx] : mock_log_->answers) {
+          if (id == peer1 && ctx == "data") {
+            return true;
+          }
+        }
+        return false;
+      },
+      std::chrono::milliseconds(2000)
+  );
 
   EXPECT_TRUE(mock_transport_->GetPeer(peer1));
 
@@ -126,7 +158,10 @@ TEST_F(ClientCoreTest, SignalingMessageProcessing_MediaOffer) {
       {{"from", peer1.ToString()}, {"type", "offer"}, {"context", "media"}, {"sdp", "dummy_sdp_media_offer_m=audio"}};
 
   mock_transport_->SimulatePeerMessage(peer1, offer_msg);
-  FlushClientQueue();
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() { return mock_transport_->GetPeer(peer1) != nullptr; },
+      std::chrono::milliseconds(2000)
+  );
 
   EXPECT_TRUE(mock_transport_->GetPeer(peer1));
 }
@@ -139,7 +174,13 @@ TEST_F(ClientCoreTest, ContactRequestProcessing) {
   };
 
   mock_transport_->SimulatePeerMessage(peer1, req_msg);
-  FlushClientQueue();
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() {
+        auto const contacts = client_->GetContacts();
+        return !contacts.empty() && contacts[0].peer_id == peer1;
+      },
+      std::chrono::milliseconds(2000)
+  );
 
   auto contacts = client_->GetContacts();
   ASSERT_EQ(contacts.size(), 1);
