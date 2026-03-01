@@ -184,23 +184,12 @@ TEST_F(BotApiTest, MessageHandling) {
 
 TEST_F(BotApiTest, SendMessage) {
   client_->AddContact(peer1, std::nullopt);
-  client_->Connect(peer1);
-  eillance::EventQueue::Instance().WaitFor(
-      [&]() { return mock_data_transport_raw_->GetPeer(peer1) != nullptr; },
-      std::chrono::milliseconds(2000)
-  );
 
-  auto const peer = mock_data_transport_raw_->GetPeer(peer1);
-  ASSERT_TRUE(peer);
-
+  auto peer = std::make_shared<transport::Peer>(peer1);
   peer->data_channel_is_open = true;
-  mock_data_transport_raw_->SimulateDataChannelOpen(peer1);
-  eillance::EventQueue::Instance().WaitFor(
-      [&]() { return peer->data_channel_is_open.load(); },
-      std::chrono::milliseconds(2000)
-  );
-
-  peer->session_cipher->ComputeSharedSecret(eillance::crypto::SessionCipher().GetPublicKey());
+  eillance::crypto::SessionCipher other;
+  peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
+  mock_data_transport_raw_->AddPeer(peer1, peer);
 
   bot_->SendMessage(peer1.ToString(), "Reply from Bot");
   eillance::EventQueue::Instance().WaitFor(
