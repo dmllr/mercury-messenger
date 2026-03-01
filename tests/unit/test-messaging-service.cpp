@@ -230,14 +230,23 @@ TEST_F(MessagingServiceTest, SendMessage_UnifiedDeliveryQueue) {
   peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
   transport_->AddPeer(peer1, peer);
 
-  client_->GetMessagingService()->SendQueuedMessages(peer1);
+  eillance::EventQueue::Instance().Push(eillance::EventSendQueuedMessages{peer1});
+  FlushClientQueue();
 
   bool msg_sent = false;
-  for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
-    if (pid == peer1 && msg.value("type", "") == "chat") {
-      msg_sent = true;
-    }
-  }
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() {
+        std::lock_guard<std::mutex> const lock(mock_transport_->CallLog()->mutex_);
+        for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
+          if (pid == peer1 && msg.value("type", "") == "chat") {
+            msg_sent = true;
+            return true;
+          }
+        }
+        return false;
+      },
+      std::chrono::milliseconds(2000)
+  );
   EXPECT_TRUE(msg_sent);
 
   actions = mock_storage_->GetPendingActions(peer1);
@@ -268,14 +277,23 @@ TEST_F(MessagingServiceTest, MarkAsRead_UnifiedDelivery) {
   peer->data_channel_is_open = true;
   transport_->AddPeer(peer1, peer);
 
-  client_->GetMessagingService()->SendQueuedMessages(peer1);
+  eillance::EventQueue::Instance().Push(eillance::EventSendQueuedMessages{peer1});
+  FlushClientQueue();
 
   bool read_sent = false;
-  for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
-    if (pid == peer1 && msg["type"] == "message_read") {
-      read_sent = true;
-    }
-  }
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() {
+        std::lock_guard<std::mutex> const lock(mock_transport_->CallLog()->mutex_);
+        for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
+          if (pid == peer1 && msg.value("type", "") == "message_read") {
+            read_sent = true;
+            return true;
+          }
+        }
+        return false;
+      },
+      std::chrono::milliseconds(2000)
+  );
   EXPECT_TRUE(read_sent);
 
   actions = mock_storage_->GetPendingActions(peer1);

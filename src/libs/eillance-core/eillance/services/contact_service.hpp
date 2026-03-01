@@ -104,14 +104,14 @@ class ContactService {
 
       // Ensure connection and flush queue.
       EventQueue::Instance().Push(EventConnectionRequested{peer_id});
-      sm_->messaging->SendQueuedMessages(peer_id);
+      EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
     }
   }
 
   void BlockContact(ContactID const& peer_id, bool notify_peer) {
     if (notify_peer) {
       storage_->AddPendingAction(peer_id, nlohmann::json{{"type", "contact_removed"}}.dump());
-      sm_->messaging->SendQueuedMessages(peer_id);
+      EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
     }
 
     transport_->Disconnect(peer_id);
@@ -226,7 +226,7 @@ class ContactService {
         sm_->profile->SendMyProfile(peer_id);
 
         EventQueue::Instance().Push(EventConnectionRequested{peer_id});
-        sm_->messaging->SendQueuedMessages(peer_id);
+        EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
       }
     }
   }
@@ -260,7 +260,7 @@ class ContactService {
           {"signature", crypto::ToHex(*contact->my_signature_for_them)}
       };
       storage_->AddPendingAction(peer_id, resp.dump());
-      sm_->messaging->SendQueuedMessages(peer_id);
+      EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
     }
   }
 

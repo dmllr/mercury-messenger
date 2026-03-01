@@ -143,5 +143,8 @@ struct EventMediaGatheringStateChanged {
 struct EventStopDeliveryService {};
 struct EventDebugClearContactCache {};
 struct EventReloadContactCache {};
+struct EventSendQueuedMessages {
+  ContactID peer_id;
+};
 
 }  // namespace eillance

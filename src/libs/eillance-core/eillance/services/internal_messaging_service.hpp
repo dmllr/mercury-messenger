@@ -293,7 +293,7 @@ class InternalMessagingService {
             }
         );
       }
-      sm_->messaging->SendQueuedMessages(peer_id);
+      EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
     } else {
       LGE << "Failed key exchange with " << peer_id.ToString();
     }
