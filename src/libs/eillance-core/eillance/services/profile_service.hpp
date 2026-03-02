@@ -29,17 +29,16 @@ class ProfileService {
         storage_(sm->storage),
         transport_(sm->data_transport),
         manager_(sm->contact_manager) {
-    auto sub1 = EventQueue::Instance().Subscribe<EventContactStatusChanged>([this](auto const& e) {
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventContactStatusChanged>([this](auto const& e) {
       if (e.status == identity::ContactStatus::confirmed) {
         this->SendMyProfile(e.peer_id);
         this->RequestProfile(e.peer_id);
       }
-    });
-    event_unsubs_.push_back([sub1]() { EventQueue::Instance().Unsubscribe<EventContactStatusChanged>(sub1); });
+    }));
   }
 
   ~ProfileService() {
-    for (auto const& unsub : event_unsubs_) unsub();
+    for (auto const id : event_unsubs_) EventQueue::Instance().Unsubscribe(id);
   }
 
   // --- Actions ---
@@ -124,7 +123,7 @@ class ProfileService {
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<transport::DataTransport> transport_;
   std::shared_ptr<identity::ContactManager> manager_;
-  std::vector<std::function<void()>> event_unsubs_;
+  std::vector<EventQueue::SubscriberTypeId> event_unsubs_;
 };
 
 }  // namespace eillance::services

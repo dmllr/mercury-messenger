@@ -507,6 +507,7 @@ class ConversationViewModel(
     peerId: String,
     query: String
   ): List<HistoryEntry>
+
   private external fun nativeGetHistoryEntry(ptr: Long, messageId: Long): HistoryEntry?
 
   class Factory(

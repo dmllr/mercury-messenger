@@ -75,7 +75,7 @@ class MessagingServiceTest : public ::testing::Test {
   }
 
   void TearDown() override {
-    EventQueue::Instance().Unsubscribe<EventConnectionRequested>(conn_sub_id_);
+    EventQueue::Instance().Unsubscribe(conn_sub_id_);
     client_->Terminate();
     client_.reset();
     std::error_code ec;
@@ -217,7 +217,7 @@ TEST_F(MessagingServiceTest, DownloadTriggersCallback) {
 
   EventQueue::Instance().WaitFor([&] { return download_cb_called; }, std::chrono::seconds(1));
 
-  EventQueue::Instance().Unsubscribe<EventAttachmentDownloaded>(sub);
+  EventQueue::Instance().Unsubscribe(sub);
   EXPECT_TRUE(download_cb_called);
 }
 

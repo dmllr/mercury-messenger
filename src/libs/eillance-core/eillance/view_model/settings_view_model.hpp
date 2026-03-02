@@ -27,8 +27,8 @@ class SettingsViewModel {
   }
 
   ~SettingsViewModel() {
-    for (auto const& unsubscribe : eventUnsubscribers_) {
-      unsubscribe();
+    for (auto const id : eventUnsubscribers_) {
+      EventQueue::Instance().Unsubscribe(id);
     }
   }
 
@@ -144,12 +144,12 @@ class SettingsViewModel {
 
   std::shared_ptr<Impl> impl_;
 
-  std::vector<std::function<void()>> eventUnsubscribers_;
+  std::vector<EventQueue::SubscriberTypeId> eventUnsubscribers_;
 
   template <typename EventType>
   void Subscribe(EventQueue& queue, std::function<void(EventType const&)> const& callback) {
     auto event_id = queue.Subscribe<EventType>(std::move(callback));
-    eventUnsubscribers_.emplace_back([&queue, event_id] { queue.Unsubscribe<EventType>(event_id); });
+    eventUnsubscribers_.push_back(event_id);
   }
 };
 

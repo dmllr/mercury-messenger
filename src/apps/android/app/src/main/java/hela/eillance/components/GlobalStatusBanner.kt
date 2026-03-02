@@ -38,14 +38,16 @@ fun GlobalStatusBanner(
   onIgnoreCalls: () -> Unit = {}
 ) {
   val context = LocalContext.current
-  val notifLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { onCheckPermissions() }
-  val callLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { onCheckPermissions() }
+  val notifLauncher =
+    rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { onCheckPermissions() }
+  val callLauncher =
+    rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { onCheckPermissions() }
 
   val isConnectionIssue = !isCoreUnresponsive && (
       connectionState != ServiceConnectionState.Online &&
-      connectionState != ServiceConnectionState.Establishing &&
-      connectionState != ServiceConnectionState.Unknown
-  )
+          connectionState != ServiceConnectionState.Establishing &&
+          connectionState != ServiceConnectionState.Unknown
+      )
   val showPermissionBanner = !isCoreUnresponsive && !isConnectionIssue && bannerState != null
 
   AnimatedVisibility(
@@ -85,14 +87,16 @@ fun GlobalStatusBanner(
               }
             )
           }
+
           BannerType.Battery -> {
             StatusSnackbar(
               text = stringResource(id = R.string.permission_banner_battery),
               actionLabel = stringResource(id = R.string.action_fix_it),
               onAction = {
-                val intent = @SuppressLint("BatteryLife") Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                  data = "package:${context.packageName}".toUri()
-                }
+                val intent =
+                  @SuppressLint("BatteryLife") Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                    data = "package:${context.packageName}".toUri()
+                  }
                 try {
                   context.startActivity(intent)
                 } catch (_: Exception) {
@@ -103,6 +107,7 @@ fun GlobalStatusBanner(
               onDismiss = onIgnoreBattery
             )
           }
+
           BannerType.CallPermissions -> {
             StatusSnackbar(
               text = stringResource(id = R.string.permission_banner_calls),
@@ -121,6 +126,7 @@ fun GlobalStatusBanner(
               onDismiss = onIgnoreCalls
             )
           }
+
           null -> {}
         }
       }

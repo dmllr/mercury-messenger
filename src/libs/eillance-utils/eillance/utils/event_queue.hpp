@@ -6,6 +6,7 @@
 #include <condition_variable>
 #include <deque>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <thread>
 #include <typeindex>
@@ -23,6 +24,21 @@ class EventQueue {
   using SubscriberTypeId = std::size_t;
 
  private:
+  struct Subscriber {
+    SubscriberTypeId id{0};
+    std::function<void(std::any const&)> callback;
+    std::atomic<bool> is_active{true};
+
+    Subscriber() = default;
+    Subscriber(SubscriberTypeId id_val, std::function<void(std::any const&)> cb)
+        : id(id_val),
+          callback(std::move(cb)) {
+    }
+  };
+
+  using SubVector = std::vector<std::shared_ptr<Subscriber>>;
+  using SubVectorPtr = std::shared_ptr<SubVector>;
+
   std::mutex events_mutex_;
   std::mutex subs_mutex_;
   std::mutex wait_mutex_;
@@ -31,8 +47,8 @@ class EventQueue {
   std::condition_variable wait_cv_;
 
   std::deque<std::pair<std::type_index, std::any>> events_{};
-  std::unordered_map<std::type_index, std::vector<std::pair<SubscriberTypeId, std::function<void(std::any const&)>>>>
-      subscribers_{};
+  std::unordered_map<std::type_index, SubVectorPtr> subscribers_{};
+  std::unordered_map<SubscriberTypeId, std::type_index> subscriber_types_{};
 
   DispatchQueue dispatchQueue_ = DispatchQueue("EventQueue", 1);
 
@@ -68,27 +84,56 @@ class EventQueue {
   auto Subscribe(std::function<void(EventType const&)> const& callback) -> SubscriberTypeId {
     auto const lock = std::lock_guard<std::mutex>(subs_mutex_);
     SubscriberTypeId const id = ++nextId_;  // Start IDs from 1 since 0 signifies 'no execution'
-    subscribers_[typeid(EventType)].emplace_back(id, [callback](std::any const& event) -> void {
+
+    auto sub = std::make_shared<Subscriber>(id, [callback](std::any const& event) -> void {
       callback(std::any_cast<EventType>(event));
     });
+
+    auto& subs_ptr = subscribers_[typeid(EventType)];
+    auto new_subs = subs_ptr ? std::make_shared<SubVector>(*subs_ptr) : std::make_shared<SubVector>();
+
+    new_subs->push_back(std::move(sub));
+    subs_ptr = std::move(new_subs);
+    subscriber_types_.emplace(id, typeid(EventType));
+
     return id;
   }
 
-  template <typename EventType>
   void Unsubscribe(SubscriberTypeId id) {
+    std::shared_ptr<Subscriber> removed_sub;
+
     {
-      auto const lock = std::lock_guard<std::mutex>(subs_mutex_);
-      auto& vec = subscribers_[typeid(EventType)];
-      vec.erase(
-          std::remove_if(vec.begin(), vec.end(), [id](auto const& pair) -> bool { return pair.first == id; }),
-          vec.end()
-      );
+      std::lock_guard<std::mutex> const lock(subs_mutex_);
+      auto const type_it = subscriber_types_.find(id);
+      if (type_it != subscriber_types_.end()) {
+        auto& subs_ptr = subscribers_[type_it->second];
+        if (subs_ptr) {
+          // Copy-on-Write (CoW) to avoid mutating the vector actively used by DispatchLoop
+          auto new_subs = std::make_shared<SubVector>(*subs_ptr);
+          for (size_t i = 0; i < new_subs->size(); ++i) {
+            if ((*new_subs)[i]->id == id) {
+              removed_sub = (*new_subs)[i];
+              if (i != new_subs->size() - 1) {
+                std::swap((*new_subs)[i], new_subs->back());
+              }
+              new_subs->pop_back();
+              break;
+            }
+          }
+          subs_ptr = std::move(new_subs);
+        }
+        subscriber_types_.erase(type_it);
+      }
+    }
+
+    if (removed_sub) {
+      removed_sub->is_active.store(false, std::memory_order_seq_cst);
     }
 
     // Prevent race conditions where unsubscription happens while the callback is currently executing.
     // If called from the dispatch thread itself, skipping the block prevents deadlocks.
     if (std::this_thread::get_id() != dispatch_thread_id_.load(std::memory_order_acquire)) {
-      while (executing_subscriber_id_.load(std::memory_order_acquire) == id) {
+      while (executing_subscriber_id_.load(std::memory_order_seq_cst) == id) {
         std::this_thread::yield();
       }
     }
@@ -139,6 +184,7 @@ class EventQueue {
       }
 
       bool terminate_found = false;
+      std::unordered_map<std::type_index, SubVectorPtr> batch_subs_cache;
 
       for (auto& [fst, snd] : local_events) {
         auto const& type = fst;
@@ -149,46 +195,44 @@ class EventQueue {
           continue;  // Guarantee "all in MUST out" by finishing the current batch processing
         }
 
-        std::vector<std::pair<SubscriberTypeId, std::function<void(std::any const&)>>> current_subs;
-        {
+        SubVectorPtr current_subs;
+        if (auto const cache_it = batch_subs_cache.find(type); cache_it != batch_subs_cache.end()) {
+          current_subs = cache_it->second;
+        } else {
           std::lock_guard<std::mutex> const lock(subs_mutex_);
           if (auto const it = subscribers_.find(type); it != subscribers_.end()) {
             current_subs = it->second;
           }
+          batch_subs_cache[type] = current_subs;
         }
 
-        for (auto const& pair : current_subs) {
-          SubscriberTypeId const current_id = pair.first;
+        if (!current_subs) {
+          continue;
+        }
 
-          // Double-check that this subscriber hasn't been removed while we were yielding/executing others
-          bool still_valid = false;
-          {
-            std::lock_guard<std::mutex> const lock(subs_mutex_);
-            if (auto const it = subscribers_.find(type); it != subscribers_.end()) {
-              for (auto const& sub : it->second) {
-                if (sub.first == current_id) {
-                  still_valid = true;
-                  break;
-                }
-              }
-            }
-          }
-
-          if (!still_valid) {
+        for (auto const& sub_ptr : *current_subs) {
+          if (!sub_ptr->is_active.load(std::memory_order_seq_cst)) {
             continue;
           }
 
-          executing_subscriber_id_.store(current_id, std::memory_order_release);
+          executing_subscriber_id_.store(sub_ptr->id, std::memory_order_seq_cst);
+
+          // Double-check to avoid race with Unsubscribe updating is_active and yielding.
+          // Requires seq_cst to act as a proper Dekker's algorithm memory barrier.
+          if (!sub_ptr->is_active.load(std::memory_order_seq_cst)) {
+            executing_subscriber_id_.store(0, std::memory_order_seq_cst);
+            continue;
+          }
 
           try {
-            pair.second(contents);
+            sub_ptr->callback(contents);
           } catch (std::exception const& e) {
-            LGE << "EventQueue dispatch error: " << e.what() << " [Event Type: " << type.name() << "]" << std::endl;
+            LGE << "EventQueue dispatch error: " << e.what() << "[Event Type: " << type.name() << "]" << std::endl;
           } catch (...) {
             LGE << "EventQueue dispatch error: Unknown exception [Event Type: " << type.name() << "]" << std::endl;
           }
 
-          executing_subscriber_id_.store(0, std::memory_order_release);
+          executing_subscriber_id_.store(0, std::memory_order_seq_cst);
         }
       }
 

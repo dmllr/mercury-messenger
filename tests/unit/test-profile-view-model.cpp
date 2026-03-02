@@ -27,7 +27,7 @@ struct MockProfileObserver {
     });
   }
   ~MockProfileObserver() {
-    EventQueue::Instance().Unsubscribe<EventProfileStateUpdated>(sub_id);
+    EventQueue::Instance().Unsubscribe(sub_id);
   }
 
   auto GetProfile() -> MyProfile {

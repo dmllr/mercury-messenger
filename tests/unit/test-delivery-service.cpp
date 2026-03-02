@@ -41,7 +41,7 @@ class DeliveryServiceTest : public ::testing::Test {
   }
 
   void TearDown() override {
-    EventQueue::Instance().Unsubscribe<EventConnectionRequested>(conn_sub_id_);
+    EventQueue::Instance().Unsubscribe(conn_sub_id_);
     delivery_service_->Stop();
   }
 

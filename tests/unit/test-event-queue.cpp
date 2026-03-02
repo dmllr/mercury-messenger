@@ -43,7 +43,7 @@ TEST(EventQueueTest, SubscribeAndPush) {
 
   EXPECT_EQ(received_value, 42);
 
-  queue.Unsubscribe<TestEvent1>(sub_id);
+  queue.Unsubscribe(sub_id);
 }
 
 TEST(EventQueueTest, MultipleSubscribers) {
@@ -61,8 +61,8 @@ TEST(EventQueueTest, MultipleSubscribers) {
   EXPECT_EQ(counter1, 10);
   EXPECT_EQ(counter2, 20);
 
-  queue.Unsubscribe<TestEvent1>(sub_id1);
-  queue.Unsubscribe<TestEvent1>(sub_id2);
+  queue.Unsubscribe(sub_id1);
+  queue.Unsubscribe(sub_id2);
 }
 
 TEST(EventQueueTest, Unsubscribe) {
@@ -71,7 +71,7 @@ TEST(EventQueueTest, Unsubscribe) {
 
   auto sub_id = queue.Subscribe<TestEvent1>([&](TestEvent1 const& /*event*/) { received = true; });
 
-  queue.Unsubscribe<TestEvent1>(sub_id);
+  queue.Unsubscribe(sub_id);
   queue.Push(TestEvent1{100});
 
   // Wait a bit to ensure it *doesn't* receive
@@ -97,8 +97,8 @@ TEST(EventQueueTest, DifferentEventTypes) {
   WaitFor([&] { return event2_received.load(); });
   EXPECT_TRUE(event2_received.load());
 
-  queue.Unsubscribe<TestEvent1>(sub_id1);
-  queue.Unsubscribe<TestEvent2>(sub_id2);
+  queue.Unsubscribe(sub_id1);
+  queue.Unsubscribe(sub_id2);
 }
 
 // --- EDGE CASES ---
@@ -106,7 +106,7 @@ TEST(EventQueueTest, DifferentEventTypes) {
 TEST(EventQueueTest, EdgeCases_UnsubscribeInvalid) {
   eillance::EventQueue queue;
   // Attempting to unsubscribe an ID that doesn't exist should be a safe no-op.
-  queue.Unsubscribe<TestEvent1>(999999);
+  queue.Unsubscribe(999999);
   SUCCEED();
 }
 
@@ -163,7 +163,7 @@ TEST(EventQueueTest, ThreadSafety_ConcurrentSubscribeUnsubscribe) {
         processed_events.fetch_add(1, std::memory_order_relaxed);
       });
       std::this_thread::yield();
-      queue.Unsubscribe<LoadEvent>(id);
+      queue.Unsubscribe(id);
     }
     stop.store(true, std::memory_order_relaxed);
   });
