@@ -307,9 +307,10 @@ class Client final {
   auto SendChatMessage(
       ContactID const& id,
       std::string const& msg,
-      std::vector<messaging::AttachmentRequest> const& attachments = {}
+      std::vector<messaging::AttachmentRequest> const& attachments = {},
+      std::uint64_t reply_to_id = 0
   ) const -> messaging::HistoryEntryRecord {
-    return sm_->messaging->SendChatMessage(id, msg, attachments);
+    return sm_->messaging->SendChatMessage(id, msg, attachments, reply_to_id);
   }
   void MarkMessagesAsRead(ContactID const& id, std::vector<std::uint64_t> const& mids) const {
     sm_->messaging->MarkMessagesAsRead(id, mids);

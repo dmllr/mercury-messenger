@@ -153,6 +153,7 @@ struct TextEntryParams {
   MessageDirection direction = MessageDirection::sent;
   HistoryEntryKind kind = HistoryEntryKind::textMessage;
   std::optional<std::uint64_t> remote_id = std::nullopt;
+  std::uint64_t reply_to_id = 0;
 };
 
 struct CallEntryParams {
@@ -166,6 +167,7 @@ struct CallEntryParams {
 struct MessageEntry {
   std::string content;
   std::vector<Attachment> attachments{};
+  std::uint64_t reply_to_id = 0;
 };
 
 struct CallEntry {

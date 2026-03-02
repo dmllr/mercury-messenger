@@ -30,38 +30,38 @@ class ConversationViewModel {
 
     auto& queue = EventQueue::Instance();
     auto impl = impl_;
-    Subscribe<EventChatMessageReceived>(queue, [impl](EventChatMessageReceived const& event) {
+    Subscribe<EventChatMessageReceived>(queue, [impl](EventChatMessageReceived const& event) -> void {
       if (event.peer_id == impl->peer_id) {
         impl->OnMessageReceived(event.peer_id, event.message);
       }
     });
-    Subscribe<EventMessageStatusChanged>(queue, [impl](EventMessageStatusChanged const& event) {
+    Subscribe<EventMessageStatusChanged>(queue, [impl](EventMessageStatusChanged const& event) -> void {
       if (event.peer_id == impl->peer_id) {
         impl->OnMessageStatusChanged(event.peer_id, event.message_id, event.status);
       }
     });
-    Subscribe<EventMessageUpdated>(queue, [impl](EventMessageUpdated const& event) {
+    Subscribe<EventMessageUpdated>(queue, [impl](EventMessageUpdated const& event) -> void {
       if (event.peer_id == impl->peer_id) {
         impl->OnMessageUpdated(event.message_id);
       }
     });
-    Subscribe<EventAttachmentDownloaded>(queue, [impl](EventAttachmentDownloaded const& event) {
+    Subscribe<EventAttachmentDownloaded>(queue, [impl](EventAttachmentDownloaded const& event) -> void {
       if (event.peer_id == impl->peer_id) {
         impl->OnAttachmentDownloaded(event.attachment_id);
       }
     });
-    Subscribe<EventTransferProgress>(queue, [impl](EventTransferProgress const& event) {
+    Subscribe<EventTransferProgress>(queue, [impl](EventTransferProgress const& event) -> void {
       if (event.peer_id == impl->peer_id) {
         impl->OnTransferProgress(event.attachment_id, event.progress);
       }
     });
-    Subscribe<EventAttachmentStatusChanged>(queue, [impl](EventAttachmentStatusChanged const& event) {
+    Subscribe<EventAttachmentStatusChanged>(queue, [impl](EventAttachmentStatusChanged const& event) -> void {
       if (event.peer_id == impl->peer_id) {
         impl->OnAttachmentStatusChanged(event.attachment_id, event.status);
       }
     });
-    Subscribe<EventDebugDataReset>(queue, [impl](auto const&) { impl->StartInitialLoad(); });
-    Subscribe<EventDataReloaded>(queue, [impl](auto const&) { impl->StartInitialLoad(); });
+    Subscribe<EventDebugDataReset>(queue, [impl](auto const&) -> auto { impl->StartInitialLoad(); });
+    Subscribe<EventDataReloaded>(queue, [impl](auto const&) -> auto { impl->StartInitialLoad(); });
   }
 
   ~ConversationViewModel() {
@@ -77,8 +77,12 @@ class ConversationViewModel {
   void SendText(std::string const& content) const {
     impl_->SendText(content);
   }
-  void SendMessage(std::string const& content, std::vector<messaging::AttachmentRequest> const& attachments) const {
-    impl_->SendMessage(content, attachments);
+  void SendMessage(
+      std::string const& content,
+      std::vector<messaging::AttachmentRequest> const& attachments,
+      uint64_t reply_to_id = 0
+  ) const {
+    impl_->SendMessage(content, attachments, reply_to_id);
   }
   void DeleteMessage(uint64_t message_id) const {
     impl_->client->Messaging()->SendDeleteMessage(impl_->peer_id, message_id);
@@ -118,6 +122,10 @@ class ConversationViewModel {
     impl_->client->DiscardAttachment(impl_->peer_id, attachment_id);
   }
 
+  [[nodiscard]] auto GetHistoryEntry(uint64_t message_id) const -> std::optional<messaging::HistoryEntryRecord> {
+    return impl_->client->GetHistoryEntry(impl_->peer_id, message_id);
+  }
+
  private:
   struct Impl : public std::enable_shared_from_this<Impl> {
     ContactID const peer_id;
@@ -146,12 +154,16 @@ class ConversationViewModel {
     }
 
     void SendText(std::string const& content) {
-      SendMessage(content, {});
+      SendMessage(content, {}, 0);
     }
 
-    void SendMessage(std::string const& content, std::vector<messaging::AttachmentRequest> const& attachments) {
+    void SendMessage(
+        std::string const& content,
+        std::vector<messaging::AttachmentRequest> const& attachments,
+        uint64_t reply_to_id
+    ) {
       // Access MessagingService directly since facade might not have the overload yet
-      auto entry = client->Messaging()->SendChatMessage(peer_id, content, attachments);
+      auto entry = client->Messaging()->SendChatMessage(peer_id, content, attachments, reply_to_id);
 
       std::lock_guard<std::mutex> const lock(mutex);
 

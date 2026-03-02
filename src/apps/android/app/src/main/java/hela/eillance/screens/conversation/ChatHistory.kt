@@ -44,6 +44,9 @@ fun ChatHistory(
   activeMessageActionId: Long?,
   editingMessageId: Long?,
   myId: String,
+  contactName: String,
+  onSwipeToReply: (HistoryEntry) -> Unit,
+  onReplyClick: (Long) -> Unit,
   onToggleSelection: (Long) -> Unit,
   onMessageClick: (HistoryEntry) -> Unit,
   onDismissMenu: () -> Unit,
@@ -95,6 +98,12 @@ fun ChatHistory(
         }
       }
 
+      val repliedMessage = remember<HistoryEntry?>(currentItem.replyToId) {
+        currentItem.replyToId?.let { id ->
+          history.find { it.id == id } ?: chatVM.getHistoryEntry(id)
+        }
+      }
+
       when (currentItem.kind) {
         HistoryEntryKind.TextMessage -> MessageBubble(
           entry = currentItem,
@@ -103,6 +112,9 @@ fun ChatHistory(
           zoneId = zoneId,
           formatters = formatters,
           onMediaClick = onMediaClick,
+          repliedMessage = repliedMessage,
+          onSwipeToReply = { onSwipeToReply(currentItem) },
+          onReplyClick = onReplyClick,
           isGroupHead = isGroupHead,
           isGroupTail = isGroupTail,
           onCancelTransfer = { attId ->
@@ -126,6 +138,7 @@ fun ChatHistory(
           isMenuVisible = activeMessageActionId == currentItem.id,
           onDismissMenu = onDismissMenu,
           myId = myId,
+          contactName = contactName,
           onActionReact = { r -> onActionReact(currentItem.id, r) },
           onActionCopy = { content -> onActionCopy(content) },
           onActionEdit = { onActionEdit(currentItem.id) },
