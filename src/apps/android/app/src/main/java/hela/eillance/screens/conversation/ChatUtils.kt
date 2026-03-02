@@ -17,6 +17,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -36,6 +37,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 @Composable
 fun formatTimestamp(
@@ -58,6 +60,35 @@ fun formatTimestamp(
 
     messageTime.year == now.year -> messageTime.format(formatters.second)
     else -> messageTime.format(formatters.third)
+  }
+}
+
+fun isSameDay(timestamp1: Long, timestamp2: Long, zoneId: ZoneId): Boolean {
+  val zdt1 = Instant.ofEpochMilli(timestamp1 / 1000).atZone(zoneId)
+  val zdt2 = Instant.ofEpochMilli(timestamp2 / 1000).atZone(zoneId)
+  return zdt1.toLocalDate().isEqual(zdt2.toLocalDate())
+}
+
+@Composable
+fun formatDateSeparatorText(
+  timestamp: Long,
+  zoneId: ZoneId,
+  locale: Locale
+): String {
+  val messageTime = Instant.ofEpochMilli(timestamp / 1000).atZone(zoneId)
+  val now = ZonedDateTime.now(zoneId)
+
+  val isCurrentYear = messageTime.year == now.year
+
+  val formatter = remember(isCurrentYear, locale) {
+    val skeleton = if (isCurrentYear) "MMMMd" else "yyyyMMMMd"
+    val bestPattern = android.text.format.DateFormat.getBestDateTimePattern(locale, skeleton)
+    DateTimeFormatter.ofPattern(bestPattern, locale)
+  }
+
+  val formattedDate = formatter.format(messageTime)
+  return formattedDate.replaceFirstChar {
+    if (it.isLowerCase()) it.titlecase(locale) else it.toString()
   }
 }
 
