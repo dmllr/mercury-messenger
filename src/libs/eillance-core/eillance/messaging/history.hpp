@@ -40,7 +40,7 @@ class MessageHistory {
         .direction = params.direction,
         .status = initial_status,
         .is_truncated = false,
-        .data = MessageEntry{params.content, params.attachments},
+        .data = MessageEntry{params.content, params.attachments, params.reply_to_id},
         .peer_id = params.peer_id,
     });
   }

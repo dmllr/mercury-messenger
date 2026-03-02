@@ -84,7 +84,7 @@ class Bot::Impl {
             return;
           }
 
-          auto const& [content, attachments] = std::get<eillance::messaging::MessageEntry>(e.message.data);
+          auto const& message = std::get<eillance::messaging::MessageEntry>(e.message.data);
 
           User user;
           user.id = e.peer_id.ToString();
@@ -98,7 +98,7 @@ class Bot::Impl {
           Message msg;
           msg.message_id = e.message.id;
           msg.date = e.message.timestamp;
-          msg.text = content;
+          msg.text = message.content;
           msg.from = std::move(user);
 
           message_handler_(msg);

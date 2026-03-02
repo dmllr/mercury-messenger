@@ -15,19 +15,26 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.SnippetFolder
 import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.filled.FormatQuote
+import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -43,10 +50,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -55,6 +64,7 @@ import androidx.core.content.FileProvider
 import hela.eillance.camera.R
 import hela.eillance.theme.extendedColors
 import hela.eillance.viewmodels.DraftAttachment
+import hela.eillance.ndkio.HistoryEntry
 import java.io.File
 
 private enum class CameraAction { Photo, Video }
@@ -67,6 +77,9 @@ fun MessageInputArea(
   draftAttachments: List<DraftAttachment>,
   isFocused: Boolean,
   onFocusChange: (Boolean) -> Unit,
+  replyingToMessage: HistoryEntry? = null,
+  replyingToName: String? = null,
+  onCancelReply: () -> Unit = {},
   onSendMessage: (String) -> Unit,
   onAddDrafts: (List<Uri>) -> Unit,
   onRemoveDraft: (Int) -> Unit,
@@ -150,6 +163,20 @@ fun MessageInputArea(
   }
 
   Column {
+    AnimatedVisibility(visible = replyingToMessage != null) {
+        Box(modifier = Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) {
+            ReplyPreview(
+                name = replyingToName.orEmpty(),
+                text = replyingToMessage?.content.orEmpty(),
+                hasAttachments = replyingToMessage?.attachments?.isNotEmpty() == true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                onClose = onCancelReply
+            )
+        }
+    }
     // 1. Attachment Action Panel (Visible on Focus)
     AnimatedVisibility(visible = isFocused) {
       Row(

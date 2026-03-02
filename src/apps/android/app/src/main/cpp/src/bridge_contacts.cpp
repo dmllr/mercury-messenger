@@ -168,11 +168,13 @@ ConvertHistoryEntries(JNIEnv* env, std::vector<eillance::messaging::HistoryEntry
   for (auto const& entry_cpp : messages) {
     std::string const* content_str = nullptr;
     std::vector<eillance::messaging::Attachment> const* attachments_ptr = nullptr;
+    jlong j_reply_to_id = 0;
 
     if (std::holds_alternative<eillance::messaging::MessageEntry>(entry_cpp.data)) {
       auto const& msg = std::get<eillance::messaging::MessageEntry>(entry_cpp.data);
       content_str = &msg.content;
       attachments_ptr = &msg.attachments;
+      j_reply_to_id = msg.reply_to_id;
     }
 
     auto const* call_entry = std::get_if<eillance::messaging::CallEntry>(&entry_cpp.data);
@@ -242,7 +244,8 @@ ConvertHistoryEntries(JNIEnv* env, std::vector<eillance::messaging::HistoryEntry
         static_cast<jboolean>(entry_cpp.is_edited),
         static_cast<jboolean>(entry_cpp.is_deleted),
         j_attachments,
-        j_reactions
+        j_reactions,
+        j_reply_to_id
     );
 
     env->CallBooleanMethod(history_list, list_add_method, entry_java);

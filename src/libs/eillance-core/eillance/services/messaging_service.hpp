@@ -133,7 +133,8 @@ class MessagingService {
   auto SendChatMessage(
       ContactID const& peer_id,
       std::string const& message,
-      std::vector<messaging::AttachmentRequest> const& attachments = {}
+      std::vector<messaging::AttachmentRequest> const& attachments = {},
+      std::uint64_t reply_to_id = 0
   ) -> messaging::HistoryEntryRecord {
     if (!contact_manager_->GetContact(peer_id)) {
       LGE << "Cannot send message to " << peer_id.ToString() << ". Not a contact.";
@@ -203,7 +204,8 @@ class MessagingService {
          .content = message,
          .attachments = domain_attachments,
          .direction = messaging::MessageDirection::sent,
-         .kind = messaging::HistoryEntryKind::textMessage}
+         .kind = messaging::HistoryEntryKind::textMessage,
+         .reply_to_id = reply_to_id}
     );
 
     nlohmann::json const action = {{"type", "chat"}, {"message_id", entry.id}};
@@ -411,10 +413,10 @@ class MessagingService {
         if (!std::holds_alternative<messaging::MessageEntry>(entry.data)) {
           continue;
         }
-        auto const& [content, attachments] = std::get<messaging::MessageEntry>(entry.data);
+        auto const& message = std::get<messaging::MessageEntry>(entry.data);
         bool contains_attachment = false;
-        bool has_other_content = !content.empty();
-        for (auto const& att : attachments) {
+        bool has_other_content = !message.content.empty();
+        for (auto const& att : message.attachments) {
           if (att.id == attachment_id) {
             contains_attachment = true;
           } else {
@@ -487,9 +489,9 @@ class MessagingService {
 
     for (auto& entry : page.messages) {
       if (std::holds_alternative<messaging::MessageEntry>(entry.data)) {
-        auto& [content, attachments] = std::get<messaging::MessageEntry>(entry.data);
+        auto& message = std::get<messaging::MessageEntry>(entry.data);
         bool entry_modified = false;
-        for (auto& att : attachments) {
+        for (auto& att : message.attachments) {
           if (att.status == messaging::AttachmentStatus::canceled ||
               att.status == messaging::AttachmentStatus::peerCanceled ||
               att.status == messaging::AttachmentStatus::paused ||
@@ -657,13 +659,26 @@ class MessagingService {
       }
     }
 
+    uint64_t local_reply_to_id = 0;
+    try {
+      auto json_payload = nlohmann::json::parse(decrypted);
+      if (json_payload.contains("reply_to_id")) {
+        uint64_t wire_reply_id = json_payload["reply_to_id"].get<uint64_t>();
+        if (auto local_id = history_->FindMessageIdByRemoteOrLocal(peer_id, wire_reply_id)) {
+          local_reply_to_id = *local_id;
+        }
+      }
+    } catch (...) {
+    }
+
     auto entry = history_->AddTextEntry(
         {.peer_id = peer_id,
          .content = content,
          .attachments = local_attachments,
          .direction = messaging::MessageDirection::received,
          .kind = is_system ? messaging::HistoryEntryKind::systemMessage : messaging::HistoryEntryKind::textMessage,
-         .remote_id = message_id}
+         .remote_id = message_id,
+         .reply_to_id = local_reply_to_id}
     );
 
     if (!local_attachments.empty()) {
@@ -761,7 +776,7 @@ class MessagingService {
       return true;
     }
 
-    auto const& [content, attachments] = std::get<messaging::MessageEntry>(entry->data);
+    auto const& message = std::get<messaging::MessageEntry>(entry->data);
     std::string content_to_send;
 
     if (entry->is_truncated) {
@@ -772,7 +787,19 @@ class MessagingService {
         return true;
       }
     } else {
-      content_to_send = content;
+      content_to_send = message.content;
+    }
+
+    uint64_t wire_reply_id = 0;
+    if (std::holds_alternative<messaging::MessageEntry>(entry->data)) {
+      auto const local_reply_id = std::get<messaging::MessageEntry>(entry->data).reply_to_id;
+      if (local_reply_id > 0) {
+        if (auto replied_msg = storage_->GetHistoryEntry(peer_id, local_reply_id)) {
+          wire_reply_id = (replied_msg->direction == messaging::MessageDirection::received)
+                              ? replied_msg->remote_id.value_or(0)
+                              : replied_msg->id;
+        }
+      }
     }
 
     if (entry->kind == messaging::HistoryEntryKind::systemMessage) {
@@ -802,7 +829,7 @@ class MessagingService {
     }
 
     std::vector<messaging::Attachment> valid_attachments;
-    for (auto const& att : attachments) {
+    for (auto const& att : message.attachments) {
       if (auto stored = storage_->GetAttachment(att.id)) {
         if (stored->status != messaging::AttachmentStatus::canceled &&
             stored->status != messaging::AttachmentStatus::discarded &&
@@ -821,6 +848,9 @@ class MessagingService {
     nlohmann::json payload_json;
     payload_json[keyVersion] = protocolVersion;
     payload_json[keyContent] = content_to_send;
+    if (wire_reply_id > 0) {
+      payload_json["reply_to_id"] = wire_reply_id;
+    }
 
     auto encrypted = peer->session_cipher->Encrypt(payload_json.dump());
 

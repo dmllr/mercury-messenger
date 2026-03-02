@@ -370,13 +370,13 @@ TEST_F(ConversationViewModelTest, SendSmallAttachment_UpdatesStatusSynchronously
   // Wait for Done status
   bool success = false;
   WaitFor(
-      [&] {
+      [&]() -> bool {
         auto state = observer->GetState();
         for (auto const& entry : state.history) {
           if (std::holds_alternative<messaging::MessageEntry>(entry.data)) {
-            auto const& [content, attachments] = std::get<messaging::MessageEntry>(entry.data);
-            if (content == "Small File" && !attachments.empty()) {
-              if (attachments[0].status == messaging::AttachmentStatus::done) {
+            auto const& message = std::get<messaging::MessageEntry>(entry.data);
+            if (message.content == "Small File" && !message.attachments.empty()) {
+              if (message.attachments[0].status == messaging::AttachmentStatus::done) {
                 success = true;
                 return true;
               }
@@ -590,4 +590,35 @@ TEST_F(ConversationViewModelTest, ReactMessagePropagates) {
       EXPECT_EQ(m.reactions[0].reaction, messaging::Reaction::heart);
     }
   }
+}
+
+TEST_F(ConversationViewModelTest, SendReply) {
+  auto observer = std::make_shared<MockConversationObserver>(peer1);
+  WaitFor([&] { return observer->updated; });
+
+  vm_->SendMessage("Reply", {}, 12345);
+
+  WaitFor([&] {
+    auto s = observer->GetState();
+    for (auto const& msg : s.history) {
+      if (std::holds_alternative<messaging::MessageEntry>(msg.data)) {
+        if (std::get<messaging::MessageEntry>(msg.data).content == "Reply") return true;
+      }
+    }
+    return false;
+  });
+
+  auto state = observer->GetState();
+  bool found = false;
+  for (auto const& msg : state.history) {
+    if (std::holds_alternative<messaging::MessageEntry>(msg.data)) {
+      auto const& data = std::get<messaging::MessageEntry>(msg.data);
+      if (data.content == "Reply") {
+        EXPECT_EQ(data.reply_to_id, 12345);
+        found = true;
+        break;
+      }
+    }
+  }
+  EXPECT_TRUE(found);
 }

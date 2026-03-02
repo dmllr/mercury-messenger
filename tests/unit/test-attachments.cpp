@@ -112,16 +112,16 @@ TEST_F(AttachmentTest, PersistenceStoresHash) {
 
   auto const& retrieved = page.messages[0];
   ASSERT_TRUE(std::holds_alternative<messaging::MessageEntry>(retrieved.data));
-  auto const& [content, attachments] = std::get<messaging::MessageEntry>(retrieved.data);
+  auto const& message = std::get<messaging::MessageEntry>(retrieved.data);
 
-  ASSERT_EQ(attachments.size(), 1);
-  EXPECT_EQ(attachments[0].id, "uuid-123");
-  EXPECT_EQ(attachments[0].type, messaging::AttachmentType::video);
-  EXPECT_EQ(attachments[0].hash, "abc123hash");
+  ASSERT_EQ(message.attachments.size(), 1);
+  EXPECT_EQ(message.attachments[0].id, "uuid-123");
+  EXPECT_EQ(message.attachments[0].type, messaging::AttachmentType::video);
+  EXPECT_EQ(message.attachments[0].hash, "abc123hash");
 }
 
 TEST_F(AttachmentTest, SendQueuedMessagesSerializesHash) {
-  auto peer = std::make_shared<transport::Peer>(peer1);
+  auto const peer = std::make_shared<transport::Peer>(peer1);
   peer->data_channel_is_open = true;
   peer->session_cipher->ComputeSharedSecret(eillance::crypto::SessionCipher().GetPublicKey());
   data_transport_->AddPeer(peer1, peer);

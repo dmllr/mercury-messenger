@@ -122,7 +122,8 @@ data class HistoryEntry(
   val isEdited: Boolean = false,
   val isDeleted: Boolean = false,
   val attachments: List<Attachment> = emptyList(),
-  val reactions: List<ReactionEntry> = emptyList()
+  val reactions: List<ReactionEntry> = emptyList(),
+  private val replyToIdValue: Long = 0L
 ) {
   val kind: HistoryEntryKind get() = HistoryEntryKind.fromInt(kindValue)
   val direction: MessageDirection get() = MessageDirection.fromInt(directionValue)
@@ -132,6 +133,7 @@ data class HistoryEntry(
       callDirectionValue
     ) else null
   val callStatus: CallStatus? get() = if (callStatusValue != -1) CallStatus.fromInt(callStatusValue) else null
+  val replyToId: Long? get() = if (replyToIdValue == 0L) null else replyToIdValue
 }
 
 data class HistoryPage(
