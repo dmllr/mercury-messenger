@@ -1,7 +1,8 @@
 package hela.eillance.components
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -14,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import hela.eillance.ndkio.Attachment
 import hela.eillance.ndkio.AttachmentStatus
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun FileAttachmentItem(
   attachment: Attachment,
@@ -21,6 +23,7 @@ fun FileAttachmentItem(
   isFromMe: Boolean,
   selectionMode: Boolean,
   onClick: () -> Unit,
+  onLongClick: (() -> Unit)? = null,
   onCancel: () -> Unit,
   onResume: () -> Unit,
   onDiscard: () -> Unit
@@ -32,7 +35,13 @@ fun FileAttachmentItem(
       .fillMaxWidth()
       .clip(RoundedCornerShape(8.dp))
       .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-      .clickable(enabled = isDone && !selectionMode, onClick = onClick)
+      .combinedClickable(
+        enabled = isDone || selectionMode,
+        onClick = {
+          if (selectionMode) onLongClick?.invoke() else onClick()
+        },
+        onLongClick = { onLongClick?.invoke() }
+      )
       .padding(8.dp)
   ) {
     AttachmentInfoRow(

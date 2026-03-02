@@ -464,6 +464,23 @@ class MessagingService {
     }
   }
 
+  [[nodiscard]] auto GetDownloadedAttachments(ContactID const& peer_id
+  ) const -> std::vector<messaging::AttachmentRecord> {
+    return storage_->GetDownloadedAttachments(peer_id);
+  }
+
+  void DeleteAttachmentLocal(ContactID const& peer_id, std::string const& attachment_id) const {
+    auto att = storage_->GetAttachment(attachment_id);
+    if (att && att->is_downloaded) {
+      std::error_code ec;
+      std::filesystem::remove(att->file_path, ec);
+      storage_->UpdateAttachmentStatus(attachment_id, messaging::AttachmentStatus::discarded, false);
+      EventQueue::Instance().Push(
+          EventAttachmentStatusChanged{peer_id, attachment_id, messaging::AttachmentStatus::discarded}
+      );
+    }
+  }
+
   [[nodiscard]] auto GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t const page_size) const
       -> messaging::HistoryPage {
     auto page = history_->GetHistoryPage(peer_id, page_index, page_size);

@@ -20,11 +20,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
@@ -61,6 +63,8 @@ fun MessageActionMenu(
   onCopy: () -> Unit,
   onDelete: () -> Unit,
   onEdit: (() -> Unit)?,
+  onShare: () -> Unit,
+  onForward: () -> Unit,
   onReact: (Reaction) -> Unit,
   currentReactions: Set<Reaction>,
   isFromMe: Boolean
@@ -118,6 +122,18 @@ fun MessageActionMenu(
             icon = Icons.Default.ContentCopy,
             label = stringResource(R.string.action_copy),
             onClick = onCopy
+          )
+
+          ActionItem(
+            icon = Icons.Default.Share,
+            label = stringResource(R.string.action_share),
+            onClick = onShare
+          )
+
+          ActionItem(
+            icon = Icons.AutoMirrored.Filled.ArrowForward,
+            label = stringResource(R.string.action_forward),
+            onClick = onForward
           )
 
           if (onEdit != null) {

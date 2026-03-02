@@ -1,5 +1,6 @@
 package hela.eillance.components
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculatePan
@@ -16,6 +17,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
@@ -32,6 +34,11 @@ fun ZoomableImage(file: File) {
   var scale by remember { mutableFloatStateOf(1f) }
   var offset by remember { mutableStateOf(Offset.Zero) }
   var size by remember { mutableStateOf(IntSize.Zero) }
+
+  val isGif = file.extension.lowercase() == "gif"
+  val gifBitmap = remember(file.absolutePath) {
+    if (isGif) android.graphics.BitmapFactory.decodeFile(file.absolutePath)?.asImageBitmap() else null
+  }
 
   Box(
     modifier = Modifier
@@ -87,18 +94,29 @@ fun ZoomableImage(file: File) {
         }
       }
   ) {
-    AsyncImage(
-      model = file,
-      contentDescription = stringResource(id = R.string.media_preview_full_image_description),
-      modifier = Modifier
-        .align(Alignment.Center)
-        .graphicsLayer {
-          scaleX = scale
-          scaleY = scale
-          translationX = offset.x
-          translationY = offset.y
-        },
-      contentScale = ContentScale.Fit
-    )
+    val imageModifier = Modifier
+      .align(Alignment.Center)
+      .graphicsLayer {
+        scaleX = scale
+        scaleY = scale
+        translationX = offset.x
+        translationY = offset.y
+      }
+
+    if (gifBitmap != null) {
+      Image(
+        bitmap = gifBitmap,
+        contentDescription = stringResource(id = R.string.media_preview_full_image_description),
+        modifier = imageModifier,
+        contentScale = ContentScale.Fit
+      )
+    } else {
+      AsyncImage(
+        model = file,
+        contentDescription = stringResource(id = R.string.media_preview_full_image_description),
+        modifier = imageModifier,
+        contentScale = ContentScale.Fit
+      )
+    }
   }
 }

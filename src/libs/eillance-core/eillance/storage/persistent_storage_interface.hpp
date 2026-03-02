@@ -70,6 +70,7 @@ class PersistentStorageImpl {
   virtual void
   UpdateAttachmentStatus(std::string const& attachment_id, messaging::AttachmentStatus status, bool is_downloaded) = 0;
   virtual auto GetAttachment(std::string const& attachment_id) -> std::optional<messaging::Attachment> = 0;
+  virtual auto GetDownloadedAttachments(ContactID const& peer_id) -> std::vector<messaging::AttachmentRecord> = 0;
 
   virtual auto GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t page_size)
       -> messaging::HistoryPage = 0;

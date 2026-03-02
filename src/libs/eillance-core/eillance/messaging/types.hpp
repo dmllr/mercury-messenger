@@ -58,6 +58,11 @@ struct AttachmentRequest {
   std::string file_name;
 };
 
+struct AttachmentRecord {
+  Attachment attachment;
+  std::uint64_t timestamp;
+};
+
 enum class MessageDirection : std::uint8_t {
   sent,
   received,

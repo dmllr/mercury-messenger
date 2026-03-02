@@ -126,6 +126,14 @@ class ConversationViewModel {
     return impl_->client->GetHistoryEntry(impl_->peer_id, message_id);
   }
 
+  [[nodiscard]] auto GetDownloadedAttachments() const -> std::vector<messaging::AttachmentRecord> {
+    return impl_->client->GetDownloadedAttachments(impl_->peer_id);
+  }
+
+  void DeleteAttachmentLocal(std::string const& attachment_id) const {
+    impl_->client->DeleteAttachmentLocal(impl_->peer_id, attachment_id);
+  }
+
  private:
   struct Impl : public std::enable_shared_from_this<Impl> {
     ContactID const peer_id;
