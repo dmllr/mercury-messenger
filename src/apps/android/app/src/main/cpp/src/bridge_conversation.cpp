@@ -30,11 +30,12 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationView
     JNIEnv* env,
     jobject /*instance*/,
     jlong ptr,
-    jstring message
+    jstring message,
+    jlong reply_to_id
 ) {
   auto* vm = reinterpret_cast<eillance::view_model::ConversationViewModel*>(ptr);
   char const* chars = env->GetStringUTFChars(message, nullptr);
-  vm->SendText(chars);
+  vm->SendMessage(chars, {}, static_cast<uint64_t>(reply_to_id));
   env->ReleaseStringUTFChars(message, chars);
 }
 
@@ -43,7 +44,8 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationView
     jobject /*instance*/,
     jlong ptr,
     jstring message,
-    jobjectArray attachments
+    jobjectArray attachments,
+    jlong reply_to_id
 ) {
   auto* vm = reinterpret_cast<eillance::view_model::ConversationViewModel*>(ptr);
   char const* msg_chars = env->GetStringUTFChars(message, nullptr);
@@ -94,7 +96,7 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationView
     }
   }
 
-  vm->SendMessage(msg_chars, atts);
+  vm->SendMessage(msg_chars, atts, static_cast<uint64_t>(reply_to_id));
   env->ReleaseStringUTFChars(message, msg_chars);
 }
 
@@ -260,6 +262,98 @@ extern "C" JNIEXPORT jobject JNICALL Java_hela_eillance_viewmodels_ConversationV
   );
 }
 
+static jobject ConvertSingleHistoryEntry(JNIEnv* env, eillance::messaging::HistoryEntryRecord const& entry_cpp) {
+  auto& class_refs = ClassRefs::Instance();
+  auto& list_holder = class_refs.Class("java/util/ArrayList");
+  jmethodID list_add_method = list_holder.GetMethod("add");
+  auto& entry_holder = class_refs.Class("hela/eillance/ndkio/HistoryEntry");
+  auto& attachment_holder = class_refs.Class("hela/eillance/ndkio/Attachment");
+  auto& reaction_holder = class_refs.Class("hela/eillance/ndkio/ReactionEntry");
+
+  std::string const* content_str = nullptr;
+  std::vector<eillance::messaging::Attachment> const* attachments_ptr = nullptr;
+  jlong j_reply_to_id = 0;
+
+  if (std::holds_alternative<eillance::messaging::MessageEntry>(entry_cpp.data)) {
+    auto const& msg = std::get<eillance::messaging::MessageEntry>(entry_cpp.data);
+    content_str = &msg.content;
+    attachments_ptr = &msg.attachments;
+    j_reply_to_id = msg.reply_to_id;
+  }
+
+  auto const* call_entry = std::get_if<eillance::messaging::CallEntry>(&entry_cpp.data);
+  jstring content = (content_str != nullptr) ? env->NewStringUTF(content_str->c_str()) : nullptr;
+  jint const duration = call_entry ? static_cast<jint>(call_entry->duration_seconds) : 0;
+
+  jobject j_attachments = list_holder.NewObject(env);
+  if ((attachments_ptr != nullptr) && !attachments_ptr->empty()) {
+    for (auto const& att : *attachments_ptr) {
+      jstring j_id = env->NewStringUTF(att.id.c_str());
+      jstring j_path = env->NewStringUTF(att.file_path.c_str());
+      jstring j_mime = env->NewStringUTF(att.mime_type.c_str());
+      jstring j_thumb = att.thumbnail_base64.empty() ? nullptr : env->NewStringUTF(att.thumbnail_base64.c_str());
+      jstring j_note = env->NewStringUTF(att.note.c_str());
+      jstring j_name = env->NewStringUTF(att.file_name.c_str());
+
+      jobject j_att = attachment_holder.NewObject(
+          env,
+          j_id,
+          static_cast<jint>(att.type),
+          j_path,
+          j_mime,
+          static_cast<jlong>(att.size_bytes),
+          j_thumb,
+          static_cast<jboolean>(att.is_downloaded),
+          static_cast<jint>(att.status),
+          j_note,
+          j_name
+      );
+      env->CallBooleanMethod(j_attachments, list_add_method, j_att);
+      env->DeleteLocalRef(j_id);
+      env->DeleteLocalRef(j_path);
+      env->DeleteLocalRef(j_mime);
+      if (j_thumb) env->DeleteLocalRef(j_thumb);
+      env->DeleteLocalRef(j_note);
+      env->DeleteLocalRef(j_name);
+      env->DeleteLocalRef(j_att);
+    }
+  }
+
+  jobject j_reactions = list_holder.NewObject(env);
+  for (auto const& r : entry_cpp.reactions) {
+    jstring r_auth = env->NewStringUTF(r.author_id.ToString().c_str());
+    jobject j_react = reaction_holder.NewObject(env, r_auth, static_cast<jint>(r.reaction));
+    env->CallBooleanMethod(j_reactions, list_add_method, j_react);
+    env->DeleteLocalRef(r_auth);
+    env->DeleteLocalRef(j_react);
+  }
+
+  jobject entry_java = entry_holder.NewObject(
+      env,
+      static_cast<jlong>(entry_cpp.id),
+      static_cast<jint>(entry_cpp.kind),
+      static_cast<jlong>(entry_cpp.timestamp),
+      content,
+      static_cast<jint>(entry_cpp.direction),
+      duration,
+      (call_entry != nullptr) ? static_cast<jint>(call_entry->call_direction) : -1,
+      (call_entry != nullptr) ? static_cast<jint>(call_entry->call_status) : -1,
+      static_cast<jint>(entry_cpp.status),
+      static_cast<jboolean>(entry_cpp.is_truncated),
+      static_cast<jboolean>(entry_cpp.is_edited),
+      static_cast<jboolean>(entry_cpp.is_deleted),
+      j_attachments,
+      j_reactions,
+      j_reply_to_id
+  );
+
+  if (content) env->DeleteLocalRef(content);
+  env->DeleteLocalRef(j_attachments);
+  env->DeleteLocalRef(j_reactions);
+
+  return entry_java;
+}
+
 extern "C" JNIEXPORT jobject JNICALL Java_hela_eillance_viewmodels_ConversationViewModel_nativeSearchMessages(
     JNIEnv* env,
     jobject /*instance*/,
@@ -282,98 +376,27 @@ extern "C" JNIEXPORT jobject JNICALL Java_hela_eillance_viewmodels_ConversationV
   auto& list_holder = class_refs.Class("java/util/ArrayList");
   jobject history_list = list_holder.NewObject(env);
   jmethodID list_add_method = list_holder.GetMethod("add");
-  auto& entry_holder = class_refs.Class("hela/eillance/ndkio/HistoryEntry");
-  auto& attachment_holder = class_refs.Class("hela/eillance/ndkio/Attachment");
-  auto& reaction_holder = class_refs.Class("hela/eillance/ndkio/ReactionEntry");
 
   for (auto const& entry_cpp : messages) {
-    std::string const* content_str = nullptr;
-    std::vector<eillance::messaging::Attachment> const* attachments_ptr = nullptr;
-
-    if (std::holds_alternative<eillance::messaging::MessageEntry>(entry_cpp.data)) {
-      auto const& msg = std::get<eillance::messaging::MessageEntry>(entry_cpp.data);
-      content_str = &msg.content;
-      attachments_ptr = &msg.attachments;
-    }
-
-    auto const* call_entry = std::get_if<eillance::messaging::CallEntry>(&entry_cpp.data);
-    jstring content = (content_str != nullptr) ? env->NewStringUTF(content_str->c_str()) : nullptr;
-    jint const duration = call_entry ? static_cast<jint>(call_entry->duration_seconds) : 0;
-
-    jobject j_attachments = list_holder.NewObject(env);
-    if ((attachments_ptr != nullptr) && !attachments_ptr->empty()) {
-      for (auto const& att : *attachments_ptr) {
-        jstring j_id = env->NewStringUTF(att.id.c_str());
-        jstring j_path = env->NewStringUTF(att.file_path.c_str());
-        jstring j_mime = env->NewStringUTF(att.mime_type.c_str());
-        jstring j_thumb = att.thumbnail_base64.empty() ? nullptr : env->NewStringUTF(att.thumbnail_base64.c_str());
-        jstring j_note = env->NewStringUTF(att.note.c_str());
-        jstring j_name = env->NewStringUTF(att.file_name.c_str());
-
-        jobject j_att = attachment_holder.NewObject(
-            env,
-            j_id,
-            static_cast<jint>(att.type),
-            j_path,
-            j_mime,
-            static_cast<jlong>(att.size_bytes),
-            j_thumb,
-            static_cast<jboolean>(att.is_downloaded),
-            static_cast<jint>(att.status),
-            j_note,
-            j_name
-        );
-        env->CallBooleanMethod(j_attachments, list_add_method, j_att);
-        env->DeleteLocalRef(j_id);
-        env->DeleteLocalRef(j_path);
-        env->DeleteLocalRef(j_mime);
-        if (j_thumb != nullptr) {
-          env->DeleteLocalRef(j_thumb);
-        }
-        env->DeleteLocalRef(j_note);
-        env->DeleteLocalRef(j_name);
-        env->DeleteLocalRef(j_att);
-      }
-    }
-
-    // Reactions
-    jobject j_reactions = list_holder.NewObject(env);
-    for (auto const& r : entry_cpp.reactions) {
-      jstring r_auth = env->NewStringUTF(r.author_id.ToString().c_str());
-      jobject j_react = reaction_holder.NewObject(env, r_auth, static_cast<jint>(r.reaction));
-      env->CallBooleanMethod(j_reactions, list_add_method, j_react);
-      env->DeleteLocalRef(r_auth);
-      env->DeleteLocalRef(j_react);
-    }
-
-    jobject entry_java = entry_holder.NewObject(
-        env,
-        static_cast<jlong>(entry_cpp.id),
-        static_cast<jint>(entry_cpp.kind),
-        static_cast<jlong>(entry_cpp.timestamp),
-        content,
-        static_cast<jint>(entry_cpp.direction),
-        duration,
-        (call_entry != nullptr) ? static_cast<jint>(call_entry->call_direction) : -1,
-        (call_entry != nullptr) ? static_cast<jint>(call_entry->call_status) : -1,
-        static_cast<jint>(entry_cpp.status),
-        static_cast<jboolean>(entry_cpp.is_truncated),
-        static_cast<jboolean>(entry_cpp.is_edited),
-        static_cast<jboolean>(entry_cpp.is_deleted),
-        j_attachments,
-        j_reactions
-    );
-
+    jobject entry_java = ConvertSingleHistoryEntry(env, entry_cpp);
     env->CallBooleanMethod(history_list, list_add_method, entry_java);
-    if (content != nullptr) {
-      env->DeleteLocalRef(content);
-    }
-    env->DeleteLocalRef(j_attachments);
-    env->DeleteLocalRef(j_reactions);
     env->DeleteLocalRef(entry_java);
   }
 
   return history_list;
+}
+
+extern "C" JNIEXPORT jobject JNICALL Java_hela_eillance_viewmodels_ConversationViewModel_nativeGetHistoryEntry(
+    JNIEnv* env,
+    jobject /*instance*/,
+    jlong ptr,
+    jlong msg_id
+) {
+  if (!g_clientEngine) return nullptr;
+  auto* vm = reinterpret_cast<eillance::view_model::ConversationViewModel*>(ptr);
+  auto entry_opt = vm->GetHistoryEntry(msg_id);
+  if (!entry_opt) return nullptr;
+  return ConvertSingleHistoryEntry(env, *entry_opt);
 }
 
 // NOLINTEND(readability-identifier-naming,*-pro-type-reinterpret-cast)

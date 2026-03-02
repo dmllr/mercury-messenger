@@ -190,7 +190,7 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     classref.RegisterCtor(
         env,
         "hela/eillance/ndkio/HistoryEntry",
-        "(JIJLjava/lang/String;IIIIIZZZLjava/util/List;Ljava/util/List;)V"
+        "(JIJLjava/lang/String;IIIIIZZZLjava/util/List;Ljava/util/List;J)V"
     );
 
     classref.RegisterCtor(

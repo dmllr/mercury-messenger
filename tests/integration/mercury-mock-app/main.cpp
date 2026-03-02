@@ -120,8 +120,12 @@ auto main(int argc, char** argv) -> int {
   eillance::EventQueue::Instance().Subscribe<eillance::EventChatMessageReceived>([](auto const& e) {
     if (e.message.direction == eillance::messaging::MessageDirection::received) {
       if (std::holds_alternative<eillance::messaging::MessageEntry>(e.message.data)) {
-        auto const& [content, attachments] = std::get<eillance::messaging::MessageEntry>(e.message.data);
+        auto const& message = std::get<eillance::messaging::MessageEntry>(e.message.data);
         LGI << "[mock] Message from " << e.peer_id.ToString() << " received: " << content;
+        if (std::get<eillance::messaging::MessageEntry>(e.message.data).reply_to_id > 0) {
+          LGI << "[mock] Message is a reply to: "
+              << std::get<eillance::messaging::MessageEntry>(e.message.data).reply_to_id;
+        }
       }
     }
   });
@@ -196,6 +200,8 @@ auto main(int argc, char** argv) -> int {
   std::regex const re_msg(R"(message\s+([a-fA-F0-9]+)\s+\"([^\"]*)\")");
   // profile "Name" "Bio"
   std::regex const re_profile(R"(profile\s+\"([^\"]*)\"\s+\"([^\"]*)\")");
+  // reply <id> "text"
+  std::regex const re_reply(R"(reply\s+([a-fA-F0-9]+)\s+\"([^\"]*)\")");
   // attach <id> "text" <path1> [<path2> ...]
 
   // mkfile <path> <size>
@@ -292,6 +298,28 @@ auto main(int argc, char** argv) -> int {
         LGI << "[mock] Message to " << peer_hex << " sent";
       } else {
         LGE << "Invalid message command format: " << cmd;
+      }
+    } else if (cmd.starts_with("reply")) {
+      if (std::smatch match; std::regex_match(cmd, match, re_reply)) {
+        std::string const peer_hex = match[1].str();
+        std::string const content = match[2].str();
+        eillance::ContactID const peer_id(peer_hex);
+
+        std::ignore = client->AddContact(peer_id, std::nullopt);
+        client->ConfirmContact(peer_id);
+
+        auto page = client->GetMessageHistoryPage(peer_id, 0, 10);
+        uint64_t reply_id = 0;
+        for (auto& m : page.messages) {
+          if (m.direction == eillance::messaging::MessageDirection::received) {
+            reply_id = m.id;
+            break;
+          }
+        }
+        std::ignore = client->Messaging()->SendChatMessage(peer_id, content, {}, reply_id);
+        LGI << "[mock] Reply to " << peer_hex << " sent";
+      } else {
+        LGE << "Invalid reply command format: " << cmd;
       }
     } else {
       LGE << "Unknown command: " << cmd;

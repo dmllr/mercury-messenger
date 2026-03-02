@@ -110,12 +110,14 @@ void InitEventBridge(JavaVM* jvm) {
       for (auto const& entry_cpp : e.state.history) {
         std::string const* content_str = nullptr;
         std::vector<messaging::Attachment> const* attachments_ptr = nullptr;
+        jlong j_reply_to_id = 0;
         std::visit(
             [&](auto&& arg) {
               using T = std::decay_t<decltype(arg)>;
               if constexpr (std::is_same_v<T, messaging::MessageEntry>) {
                 content_str = &arg.content;
                 attachments_ptr = &arg.attachments;
+                j_reply_to_id = arg.reply_to_id;
               }
             },
             entry_cpp.data
@@ -179,7 +181,8 @@ void InitEventBridge(JavaVM* jvm) {
             static_cast<jboolean>(entry_cpp.is_edited),
             static_cast<jboolean>(entry_cpp.is_deleted),
             j_attachments,
-            j_reactions
+            j_reactions,
+            j_reply_to_id
         );
         env->CallBooleanMethod(history_list, list_add_method, entry_java);
         if (content) env->DeleteLocalRef(content);

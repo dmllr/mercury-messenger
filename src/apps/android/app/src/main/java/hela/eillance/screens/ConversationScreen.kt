@@ -169,6 +169,7 @@ fun ConversationScreen(
   // editingMessageId determines which message shows the IN-PLACE editor.
   var activeMessageActionId by remember { mutableStateOf<Long?>(null) }
   var editingMessageId by remember { mutableStateOf<Long?>(null) }
+  var replyingToMessage by remember { mutableStateOf<HistoryEntry?>(null) }
   var showDeleteDialogId by remember { mutableStateOf<Long?>(null) }
 
   var isInputFocused by remember { mutableStateOf(false) }
@@ -180,11 +181,13 @@ fun ConversationScreen(
   }
 
   // Handle Back press to clear selection or search or active action
-  BackHandler(enabled = selectionMode || isSearchActive || activeMessageActionId != null || editingMessageId != null) {
+  BackHandler(enabled = selectionMode || isSearchActive || activeMessageActionId != null || editingMessageId != null || replyingToMessage != null) {
     if (activeMessageActionId != null) {
       activeMessageActionId = null
     } else if (editingMessageId != null) {
       editingMessageId = null
+    } else if (replyingToMessage != null) {
+      replyingToMessage = null
     } else if (selectionMode) {
       selectedMessageIds = emptySet()
     } else {
@@ -672,6 +675,9 @@ fun ConversationScreen(
             activeMessageActionId = activeMessageActionId,
             editingMessageId = editingMessageId,
             myId = myId,
+            contactName = contact?.name ?: peerId,
+            onSwipeToReply = { replyingToMessage = it },
+            onReplyClick = { scrollToMessageId = it },
             onToggleSelection = { id ->
               if (isInputFocused) focusManager.clearFocus()
               if (activeMessageActionId != null) {
@@ -835,8 +841,12 @@ fun ConversationScreen(
                   lastMenuDismissTime = System.currentTimeMillis()
                 }
               },
+              replyingToMessage = replyingToMessage,
+              replyingToName = if (replyingToMessage?.direction == MessageDirection.Sent) stringResource(R.string.me) else (contact?.name ?: peerId),
+              onCancelReply = { replyingToMessage = null },
               onSendMessage = { text ->
-                chatVM.sendMessage(text)
+                chatVM.sendMessage(text, replyingToMessage?.id)
+                replyingToMessage = null
                 coroutineScope.launch {
                   listState.animateScrollToItem(0)
                 }

@@ -291,21 +291,22 @@ class ConversationViewModel(
 
   // --- Sending ---
 
-  fun sendMessage(messageText: String) {
+  fun sendMessage(messageText: String, replyToId: Long? = null) {
     val drafts = _draftAttachments.value
+    val rId = replyToId ?: 0L
     if (messageText.isBlank() && drafts.isEmpty()) return
 
     if (drafts.isEmpty()) {
       if (nativePtr != 0L) {
-        nativeSendMessage(nativePtr, messageText)
+        nativeSendMessage(nativePtr, messageText, rId)
       }
       _messageText.value = ""
     } else {
-      processAndSend(messageText, drafts)
+      processAndSend(messageText, drafts, rId)
     }
   }
 
-  private fun processAndSend(text: String, drafts: List<DraftAttachment>) {
+  private fun processAndSend(text: String, drafts: List<DraftAttachment>, replyToId: Long) {
     _draftAttachments.value = emptyList()
     _messageText.value = ""
 
@@ -359,7 +360,7 @@ class ConversationViewModel(
       }
 
       if (nativePtr != 0L) {
-        nativeSendMessageWithAttachments(nativePtr, text, attachmentRequests.toTypedArray())
+        nativeSendMessageWithAttachments(nativePtr, text, attachmentRequests.toTypedArray(), replyToId)
       }
     }
   }
@@ -475,13 +476,18 @@ class ConversationViewModel(
     }
   }
 
+  fun getHistoryEntry(messageId: Long): HistoryEntry? {
+    return if (nativePtr != 0L) nativeGetHistoryEntry(nativePtr, messageId) else null
+  }
+
   private external fun nativeCreate(peerId: String): Long
   private external fun nativeDestroy(ptr: Long)
-  private external fun nativeSendMessage(ptr: Long, message: String)
+  private external fun nativeSendMessage(ptr: Long, message: String, replyToId: Long)
   private external fun nativeSendMessageWithAttachments(
     ptr: Long,
     message: String,
-    attachments: Array<AttachmentRequest>
+    attachments: Array<AttachmentRequest>,
+    replyToId: Long
   )
 
   private external fun nativeDeleteMessage(ptr: Long, messageId: Long)
@@ -501,6 +507,7 @@ class ConversationViewModel(
     peerId: String,
     query: String
   ): List<HistoryEntry>
+  private external fun nativeGetHistoryEntry(ptr: Long, messageId: Long): HistoryEntry?
 
   class Factory(
     private val application: Application,
