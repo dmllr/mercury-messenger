@@ -124,6 +124,9 @@ class PersistentStorage {
   [[nodiscard]] auto GetAttachment(std::string const& attachment_id) const {
     return pimpl_->GetAttachment(attachment_id);
   }
+  [[nodiscard]] auto GetDownloadedAttachments(ContactID const& peer_id) const {
+    return pimpl_->GetDownloadedAttachments(peer_id);
+  }
   [[nodiscard]] auto GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t page_size) const {
     return pimpl_->GetHistoryPage(peer_id, page_index, page_size);
   }

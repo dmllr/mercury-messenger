@@ -2,9 +2,10 @@ package hela.eillance.components
 
 import android.graphics.BitmapFactory
 import android.util.Base64
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -37,6 +38,7 @@ import hela.eillance.ndkio.AttachmentStatus
 import hela.eillance.ndkio.AttachmentType
 import java.io.File
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MediaItem(
   attachment: Attachment,
@@ -44,6 +46,7 @@ fun MediaItem(
   isFromMe: Boolean,
   selectionMode: Boolean,
   onClick: () -> Unit,
+  onLongClick: (() -> Unit)? = null,
   onCancel: () -> Unit,
   onResume: () -> Unit,
   onDiscard: () -> Unit,
@@ -51,13 +54,18 @@ fun MediaItem(
 ) {
   val isDone = attachment.status == AttachmentStatus.Done
   val isVideo = attachment.type == AttachmentType.Video || attachment.mime.startsWith("video/")
+  val file = File(attachment.path)
+  val fileExists = file.exists()
+  val isGif = attachment.mime == "image/gif" || file.extension.lowercase() == "gif"
+  val context = LocalContext.current
 
   Box(
     modifier = modifier
       .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-      .clickable(
-        enabled = isDone && !selectionMode,
-        onClick = onClick
+      .combinedClickable(
+        enabled = isDone || selectionMode,
+        onClick = { if (selectionMode) onLongClick?.invoke() else onClick() },
+        onLongClick = { onLongClick?.invoke() }
       ),
     contentAlignment = Alignment.Center
   ) {

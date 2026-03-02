@@ -18,7 +18,7 @@ void UnsubscribeAllEvents() {
 }
 
 void InitEventBridge(JavaVM* jvm) {
-  auto& q = EventQueue::Instance(); // NOLINT(*-identifier-length)
+  auto& q = EventQueue::Instance();  // NOLINT(*-identifier-length)
 
   g_eventBridgeUnsubs.emplace_back(q.Subscribe<view_model::EventContactsStateUpdated>([jvm](auto const& e) -> void {
     jni::ScopedJniEnv const env_scope(jvm);

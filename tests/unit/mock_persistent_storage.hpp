@@ -327,6 +327,24 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
     return std::nullopt;
   }
 
+  auto GetDownloadedAttachments(ContactID const& peer_id) -> std::vector<messaging::AttachmentRecord> override {
+    std::lock_guard const lock(mutex_);
+    std::vector<messaging::AttachmentRecord> results;
+    if (auto const itr = history_.find(peer_id); itr != history_.end()) {
+      for (auto const& entry : itr->second) {
+        if (auto* msg_entry = std::get_if<messaging::MessageEntry>(&entry.data)) {
+          for (auto const& att : msg_entry->attachments) {
+            if (att.is_downloaded && att.status == messaging::AttachmentStatus::done) {
+              results.push_back({att, entry.timestamp});
+            }
+          }
+        }
+      }
+    }
+    std::ranges::sort(results, [](auto const& left, auto const& right) { return left.timestamp > right.timestamp; });
+    return results;
+  }
+
   auto GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t page_size)
       -> messaging::HistoryPage override {
     std::lock_guard const lock(mutex_);

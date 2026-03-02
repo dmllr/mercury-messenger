@@ -18,6 +18,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import hela.eillance.events.NativeEventBus
 import hela.eillance.ndkio.Attachment
+import hela.eillance.ndkio.AttachmentInfo
 import hela.eillance.ndkio.AttachmentRequest
 import hela.eillance.ndkio.AttachmentStatus
 import hela.eillance.ndkio.AttachmentType
@@ -480,6 +481,14 @@ class ConversationViewModel(
     return if (nativePtr != 0L) nativeGetHistoryEntry(nativePtr, messageId) else null
   }
 
+  suspend fun getDownloadedAttachments(): List<AttachmentInfo> = withContext(Dispatchers.IO) {
+    if (nativePtr != 0L) nativeGetDownloadedAttachments(nativePtr) else emptyList()
+  }
+
+  fun deleteAttachmentLocal(attachmentId: String) {
+    if (nativePtr != 0L) nativeDeleteAttachmentLocal(nativePtr, attachmentId)
+  }
+
   private external fun nativeCreate(peerId: String): Long
   private external fun nativeDestroy(ptr: Long)
   private external fun nativeSendMessage(ptr: Long, message: String, replyToId: Long)
@@ -509,6 +518,8 @@ class ConversationViewModel(
   ): List<HistoryEntry>
 
   private external fun nativeGetHistoryEntry(ptr: Long, messageId: Long): HistoryEntry?
+  private external fun nativeGetDownloadedAttachments(ptr: Long): List<AttachmentInfo>
+  private external fun nativeDeleteAttachmentLocal(ptr: Long, attachmentId: String)
 
   class Factory(
     private val application: Application,

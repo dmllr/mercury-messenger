@@ -732,6 +732,38 @@ class SQLiteStorage final : public PersistentStorageImpl {
     return std::nullopt;
   }
 
+  auto GetDownloadedAttachments(ContactID const& peer_id) -> std::vector<messaging::AttachmentRecord> override {
+    std::lock_guard const lock(mutex_);
+    INVARIANT(db_);
+    std::vector<messaging::AttachmentRecord> results;
+    SQLiteStatement const stmt(db_, R"SQL(
+      SELECT a.id, a.type, a.file_path, a.mime_type, a.size_bytes, a.thumbnail_base64, a.hash, a.is_downloaded, a.status, a.note, a.file_name, m.timestamp
+      FROM message_attachments a
+      JOIN messages m ON a.message_id = m.id AND a.peer_id = m.peer_id
+      WHERE a.peer_id = ? AND a.is_downloaded = 1 AND a.status = 2
+      ORDER BY m.timestamp DESC;
+    )SQL");
+    BindText(stmt.Get(), 1, peer_id.ToString());
+    while (sqlite3_step(stmt.Get()) == SQLITE_ROW) {
+      messaging::Attachment att{
+          .id = ColumnString(stmt.Get(), 0),
+          .type = static_cast<messaging::AttachmentType>(sqlite3_column_int(stmt.Get(), 1)),
+          .file_path = ColumnString(stmt.Get(), 2),
+          .mime_type = ColumnString(stmt.Get(), 3),
+          .size_bytes = static_cast<uint64_t>(sqlite3_column_int64(stmt.Get(), 4)),
+          .thumbnail_base64 = ColumnString(stmt.Get(), 5),
+          .hash = ColumnString(stmt.Get(), 6),
+          .is_downloaded = (sqlite3_column_int(stmt.Get(), 7) != 0),
+          .status = static_cast<messaging::AttachmentStatus>(sqlite3_column_int(stmt.Get(), 8)),
+          .note = ColumnString(stmt.Get(), 9),
+          .file_name = ColumnString(stmt.Get(), 10)
+      };
+      uint64_t ts = static_cast<uint64_t>(sqlite3_column_int64(stmt.Get(), 11));
+      results.push_back({std::move(att), ts});
+    }
+    return results;
+  }
+
   auto GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t page_size)
       -> messaging::HistoryPage override {
     std::lock_guard const lock(mutex_);

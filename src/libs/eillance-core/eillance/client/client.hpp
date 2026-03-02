@@ -351,6 +351,14 @@ class Client final {
   [[nodiscard]] auto GetAttachment(std::string const& attachment_id) const -> std::optional<messaging::Attachment> {
     return sm_->storage->GetAttachment(attachment_id);
   }
+  [[nodiscard]] auto GetDownloadedAttachments(ContactID const& peer_id
+  ) const -> std::vector<messaging::AttachmentRecord> {
+    return sm_->messaging->GetDownloadedAttachments(peer_id);
+  }
+
+  void DeleteAttachmentLocal(ContactID const& peer_id, std::string const& attachment_id) const {
+    sm_->messaging->DeleteAttachmentLocal(peer_id, attachment_id);
+  }
 
   void Connect(ContactID const& peer_id) const {
     auto const peer = sm_->data_transport->GetPeer(peer_id);

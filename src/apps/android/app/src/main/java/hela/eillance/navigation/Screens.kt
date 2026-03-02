@@ -40,6 +40,10 @@ sealed class Route(val route: String) {
       if (messageId != null) "interaction/$peerId?messageId=$messageId" else "interaction/$peerId"
   }
 
+  object ConversationMedia : Route("conversation_media/{peerId}") {
+    fun createRoute(peerId: String) = "conversation_media/$peerId"
+  }
+
   object Call : Route("call/{peerId}") {
     fun createRoute(peerId: String) = "call/$peerId"
   }

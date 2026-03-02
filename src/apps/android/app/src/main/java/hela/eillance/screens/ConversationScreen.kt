@@ -80,6 +80,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.os.ConfigurationCompat
 import hela.eillance.MainViewModel
+import hela.eillance.SharedContent
 import hela.eillance.camera.R
 import hela.eillance.components.GlobalStatusBanner
 import hela.eillance.ndkio.Attachment
@@ -100,6 +101,7 @@ import hela.eillance.screens.conversation.MessageInputArea
 import hela.eillance.screens.conversation.PendingApprovalBar
 import hela.eillance.screens.conversation.SelectionTopBar
 import hela.eillance.screens.conversation.formatTimestamp
+import hela.eillance.utils.shareContent
 import hela.eillance.viewmodels.CallViewModel
 import hela.eillance.viewmodels.ContactsViewModel
 import hela.eillance.viewmodels.ConversationViewModel
@@ -131,6 +133,7 @@ fun ConversationScreen(
   onBack: () -> Unit,
   onNavigateToCall: (String) -> Unit,
   onShowContactProfile: (String) -> Unit,
+  onNavigateToMedia: () -> Unit,
   onMediaClick: (List<Attachment>, Int) -> Unit
 ) {
   val listState = rememberLazyListState()
@@ -492,6 +495,7 @@ fun ConversationScreen(
               )
             }
           },
+          onMediaClick = onNavigateToMedia,
           onSearchClick = { isSearchActive = true }
         )
       }
@@ -679,6 +683,15 @@ fun ConversationScreen(
               }
               activeMessageActionId = null
               lastMenuDismissTime = System.currentTimeMillis()
+            },
+            onActionShare = { entry ->
+              shareContent(context, entry.content, entry.attachments)
+            },
+            onActionForward = { entry ->
+              val uris = entry.attachments.filter { it.isDownloaded }.map {
+                FileProvider.getUriForFile(context, "${context.packageName}.provider", File(it.path))
+              }
+              mainViewModel.setPendingShare(SharedContent(text = entry.content, uris = uris))
             },
             onActionEdit = { msgId ->
               activeMessageActionId = null

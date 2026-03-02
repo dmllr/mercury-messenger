@@ -44,6 +44,7 @@ import hela.eillance.screens.RecoveryPhraseScreen
 import hela.eillance.screens.RejectedContactsScreen
 import hela.eillance.screens.SettingsScreen
 import hela.eillance.screens.WebViewScreen
+import hela.eillance.screens.conversation.ConversationMediaScreen
 import hela.eillance.screens.debug.ConnectionDebugScreen
 import hela.eillance.screens.debug.DebugMenuScreen
 import hela.eillance.screens.debug.PendingActionsScreen
@@ -357,7 +358,26 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
           onBack = { navController.safePopBackStack() },
           onNavigateToCall = { /* No-op, handled by global state */ },
           onShowContactProfile = { contactsVM.onShowContactProfile(it) },
+          onNavigateToMedia = { navController.navigate(Route.ConversationMedia.createRoute(peerId)) },
           onMediaClick = { attachments, index ->
+            navController.navigate(Route.FullScreenMedia.createRoute(peerId, attachments, index))
+          }
+        )
+      }
+
+      composable(
+        route = Route.ConversationMedia.route,
+        arguments = listOf(navArgument("peerId") { type = NavType.StringType })
+      ) { backStackEntry ->
+        val peerId = backStackEntry.arguments?.getString("peerId") ?: return@composable
+        val app = LocalContext.current.applicationContext as Application
+        val chatVM: ConversationViewModel = viewModel(factory = ConversationViewModel.Factory(app, peerId))
+
+        ConversationMediaScreen(
+          peerId = peerId,
+          chatVM = chatVM,
+          onBack = { navController.safePopBackStack() },
+          onNavigateToMediaPreview = { attachments, index ->
             navController.navigate(Route.FullScreenMedia.createRoute(peerId, attachments, index))
           }
         )
