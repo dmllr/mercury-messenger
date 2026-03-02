@@ -34,26 +34,25 @@ class FileTransferService {
       : sm_(sm),
         storage_(sm->storage),
         transport_(sm->data_transport) {
-    auto sub1 = EventQueue::Instance().Subscribe<EventDataChannelMessage>([this](auto const& e) {
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventDataChannelMessage>([this](auto const& e) {
       if (!e.message.empty() && e.message[0] == std::byte{0xFE}) {
         ProcessBinaryMessage(e.peer_id, e.message);
       }
-    });
-    event_unsubs_.push_back([sub1]() { EventQueue::Instance().Unsubscribe<EventDataChannelMessage>(sub1); });
+    }));
 
-    auto sub2 = EventQueue::Instance().Subscribe<EventDataChannelOpen>([this](auto const& e) {
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventDataChannelOpen>([this](auto const& e) {
       this->OnConnectionReady(e.peer_id);
-    });
-    event_unsubs_.push_back([sub2]() { EventQueue::Instance().Unsubscribe<EventDataChannelOpen>(sub2); });
+    }));
 
-    auto sub3 = EventQueue::Instance().Subscribe<EventSendQueuedMessages>([this](auto const& e) {
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventSendQueuedMessages>([this](auto const& e) {
       this->OnConnectionReady(e.peer_id);
-    });
-    event_unsubs_.push_back([sub3]() { EventQueue::Instance().Unsubscribe<EventSendQueuedMessages>(sub3); });
+    }));
   }
 
   ~FileTransferService() {
-    for (auto const& unsub : event_unsubs_) unsub();
+    for (auto const& evnt : event_unsubs_) {
+      EventQueue::Instance().Unsubscribe(evnt);
+    }
   }
 
   void OnConnectionReady(ContactID const& peer_id) {
@@ -672,7 +671,7 @@ class FileTransferService {
   ServiceManager* sm_;
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<transport::DataTransport> transport_;
-  std::vector<std::function<void()>> event_unsubs_;
+  std::vector<EventQueue::SubscriberTypeId> event_unsubs_;
   std::map<std::string, TransferUploadState> active_uploads_;
   std::map<std::string, TransferDownloadState> active_downloads_;
   mutable std::mutex transfers_mutex_;

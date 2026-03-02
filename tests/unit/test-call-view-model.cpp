@@ -29,7 +29,7 @@ struct MockCallObserver {
     });
   }
   ~MockCallObserver() {
-    EventQueue::Instance().Unsubscribe<EventCallStateChanged>(sub_id);
+    EventQueue::Instance().Unsubscribe(sub_id);
   }
 
   auto GetState() -> CallState {

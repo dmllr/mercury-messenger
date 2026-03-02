@@ -27,22 +27,21 @@ class ContactService {
         storage_(sm->storage),
         transport_(sm->data_transport),
         manager_(sm->contact_manager) {
-    auto sub7 =
-        EventQueue::Instance().Subscribe<EventContactRestored>([this](auto const& e) { OnContactRestored(e.peer_id); });
-    event_unsubs_.push_back([sub7]() { EventQueue::Instance().Unsubscribe<EventContactRestored>(sub7); });
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventContactRestored>([this](auto const& e) {
+      OnContactRestored(e.peer_id);
+    }));
 
-    auto sub8 = EventQueue::Instance().Subscribe<EventDebugClearContactCache>([this](auto const&) {
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventDebugClearContactCache>([this](auto const&) {
       manager_->ClearContacts();
-    });
-    event_unsubs_.push_back([sub8]() { EventQueue::Instance().Unsubscribe<EventDebugClearContactCache>(sub8); });
+    }));
 
-    auto sub9 =
-        EventQueue::Instance().Subscribe<EventReloadContactCache>([this](auto const&) { manager_->ReloadContacts(); });
-    event_unsubs_.push_back([sub9]() { EventQueue::Instance().Unsubscribe<EventReloadContactCache>(sub9); });
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventReloadContactCache>([this](auto const&) {
+      manager_->ReloadContacts();
+    }));
   }
 
   ~ContactService() {
-    for (auto const& unsub : event_unsubs_) unsub();
+    for (auto const id : event_unsubs_) EventQueue::Instance().Unsubscribe(id);
   }
 
   // Actions
@@ -288,7 +287,7 @@ class ContactService {
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<transport::DataTransport> transport_;
   std::shared_ptr<identity::ContactManager> manager_;
-  std::vector<std::function<void()>> event_unsubs_;
+  std::vector<EventQueue::SubscriberTypeId> event_unsubs_;
 };
 
 }  // namespace eillance::services

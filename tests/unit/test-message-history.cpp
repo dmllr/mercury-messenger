@@ -83,7 +83,7 @@ TEST_F(MessageHistoryTest, UpdateMessageStatus) {
   EXPECT_EQ(received_msg_id, entry.id);
   EXPECT_EQ(received_status, messaging::MessageStatus::delivered);
 
-  EventQueue::Instance().Unsubscribe<EventMessageStatusChanged>(sub);
+  EventQueue::Instance().Unsubscribe(sub);
   auto [messages, total_messages] = message_history_->GetHistoryPage(peer1, 0, 1);
   ASSERT_EQ(messages[0].status, messaging::MessageStatus::delivered);
 }
@@ -218,7 +218,7 @@ TEST_F(MessageHistoryTest, MarkMessagesAsRead) {
   EXPECT_EQ(received_peer_id, peer1);
   EXPECT_EQ(received_msg_id, entry.id);
 
-  EventQueue::Instance().Unsubscribe<EventMessageStatusChanged>(sub);
+  EventQueue::Instance().Unsubscribe(sub);
 }
 
 TEST_F(MessageHistoryTest, ToggleReaction) {

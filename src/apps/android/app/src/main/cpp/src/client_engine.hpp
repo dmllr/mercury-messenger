@@ -52,15 +52,14 @@ class ClientEngine {
         std::make_shared<transport::MediaTransport>(std::move(media_transport))
     );
 
-    auto sub = EventQueue::Instance().Subscribe<EventFatalError>([this](auto const&) {
-      jni::ScopedJniEnv env_scope(jvm_);
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventFatalError>([this](auto const&) -> void {
+      jni::ScopedJniEnv const env_scope(jvm_);
       if (auto* e = env_scope.Get()) {
         auto const& cls = ClassRefs::Instance().Class("hela/eillance/MessengerService");
         jmethodID method = cls.GetMethod("onNativeCoreCrash");
         e->CallVoidMethod(service_ref_, method);
       }
-    });
-    event_unsubs_.push_back(sub);
+    }));
   }
 
   ClientEngine(ClientEngine&&) = delete;
@@ -69,11 +68,13 @@ class ClientEngine {
   auto operator=(ClientEngine const&) -> ClientEngine& = delete;
   ~ClientEngine() {
     for (auto id : event_unsubs_) {
-      EventQueue::Instance().Unsubscribe<EventFatalError>(id);
+      EventQueue::Instance().Unsubscribe(id);
     }
-    if (service_ref_) {
-      jni::ScopedJniEnv env_scope(jvm_);
-      if (auto* env = env_scope.Get()) env->DeleteGlobalRef(service_ref_);
+    if (service_ref_ != nullptr) {
+      jni::ScopedJniEnv const env_scope(jvm_);
+      if (auto* env = env_scope.Get()) {
+        env->DeleteGlobalRef(service_ref_);
+      }
     }
     Terminate();
   }

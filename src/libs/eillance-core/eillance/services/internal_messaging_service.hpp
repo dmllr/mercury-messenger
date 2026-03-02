@@ -34,34 +34,30 @@ class InternalMessagingService {
       : sm_(sm),
         data_transport_(sm->data_transport),
         media_transport_(sm->media_transport) {
-    auto sub1 = EventQueue::Instance().Subscribe<EventDataChannelMessage>([this](EventDataChannelMessage const& e) {
-      this->HandleDataChannelMessage(e.peer_id, e.message);
-    });
-    event_unsubs_.push_back([sub1]() { EventQueue::Instance().Unsubscribe<EventDataChannelMessage>(sub1); });
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventDataChannelMessage>(
+        [this](EventDataChannelMessage const& e) { this->HandleDataChannelMessage(e.peer_id, e.message); }
+    ));
 
-    auto sub2 = EventQueue::Instance().Subscribe<EventPeerMessage>([this](EventPeerMessage const& e) {
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventPeerMessage>([this](EventPeerMessage const& e) {
       auto const from_it = e.message.find("from");
       if (from_it == e.message.end()) return;
       ContactID const peer_id(from_it->get<std::string>());
       auto const type_it = e.message.find("type");
       if (type_it == e.message.end()) return;
       this->ProcessSignalingMessage(peer_id, type_it->get<std::string>(), e.message);
-    });
-    event_unsubs_.push_back([sub2]() { EventQueue::Instance().Unsubscribe<EventPeerMessage>(sub2); });
+    }));
 
-    auto sub3 = EventQueue::Instance().Subscribe<EventSystemMessage>([this](EventSystemMessage const& e) {
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventSystemMessage>([this](EventSystemMessage const& e) {
       this->ProcessSystemMessage(e.type, e.message);
-    });
-    event_unsubs_.push_back([sub3]() { EventQueue::Instance().Unsubscribe<EventSystemMessage>(sub3); });
+    }));
 
-    auto sub4 = EventQueue::Instance().Subscribe<EventDataChannelOpen>([this](auto const& e) {
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventDataChannelOpen>([this](auto const& e) {
       this->OnDataChannelOpen(e.peer_id);
-    });
-    event_unsubs_.push_back([sub4]() { EventQueue::Instance().Unsubscribe<EventDataChannelOpen>(sub4); });
+    }));
   }
 
   ~InternalMessagingService() {
-    for (auto const& unsub : event_unsubs_) unsub();
+    for (auto const id : event_unsubs_) EventQueue::Instance().Unsubscribe(id);
   }
 
   void ProcessSystemMessage(std::string const& type, Json const& message) {
@@ -326,7 +322,7 @@ class InternalMessagingService {
   std::shared_ptr<transport::DataTransport> data_transport_;
   std::shared_ptr<transport::MediaTransport> media_transport_;
 
-  std::vector<std::function<void()>> event_unsubs_;
+  std::vector<EventQueue::SubscriberTypeId> event_unsubs_;
 
   std::unordered_map<ContactID, Time::Unit> last_unsuspend_times_;
   std::mutex unsuspend_mutex_;

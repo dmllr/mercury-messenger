@@ -1,7 +1,7 @@
 package hela.eillance.screens.conversation
 
-import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -11,28 +11,23 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Reply
-import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.DoneAll
-import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -43,15 +38,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
 import hela.eillance.camera.R
 import hela.eillance.components.MediaBubbleContent
 import hela.eillance.ndkio.Attachment
@@ -60,10 +54,10 @@ import hela.eillance.ndkio.MessageDirection
 import hela.eillance.ndkio.MessageStatus
 import hela.eillance.ndkio.Reaction
 import hela.eillance.theme.extendedColors
+import kotlinx.coroutines.launch
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -150,7 +144,7 @@ fun MessageBubble(
         end = if (isFromMe) 8.dp else 48.dp,
         top = topPadding
       ),
-      contentAlignment = alignment
+    contentAlignment = alignment
   ) {
     if (offsetX.value < -20f) {
       Icon(
@@ -227,24 +221,24 @@ fun MessageBubble(
         horizontalAlignment = if (isFromMe) Alignment.End else Alignment.Start
       ) {
         if (repliedMessage != null) {
-            val repliedName = if (repliedMessage.direction == MessageDirection.Sent) {
-                stringResource(R.string.me)
-            } else {
-                contactName
-            }
-            ReplyPreview(
-                name = repliedName,
-                text = repliedMessage.content.orEmpty(),
-                hasAttachments = repliedMessage.attachments.isNotEmpty(),
-                modifier = Modifier
-                    .padding(bottom = 4.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
-                    .clickable { onReplyClick(repliedMessage.id) },
-                barColor = colors.second.copy(alpha = 0.8f),
-                nameColor = colors.second,
-                textColor = colors.second.copy(alpha = 0.8f)
-            )
+          val repliedName = if (repliedMessage.direction == MessageDirection.Sent) {
+            stringResource(R.string.me)
+          } else {
+            contactName
+          }
+          ReplyPreview(
+            name = repliedName,
+            text = repliedMessage.content.orEmpty(),
+            hasAttachments = repliedMessage.attachments.isNotEmpty(),
+            modifier = Modifier
+              .padding(bottom = 4.dp)
+              .clip(RoundedCornerShape(8.dp))
+              .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+              .clickable { onReplyClick(repliedMessage.id) },
+            barColor = colors.second.copy(alpha = 0.8f),
+            nameColor = colors.second,
+            textColor = colors.second.copy(alpha = 0.8f)
+          )
         }
 
         // Render Attachments

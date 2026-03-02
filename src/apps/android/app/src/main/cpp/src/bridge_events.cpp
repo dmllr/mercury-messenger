@@ -8,18 +8,20 @@
 
 using namespace eillance;
 
-std::vector<std::function<void()>> g_eventBridgeUnsubs;
+std::vector<EventQueue::SubscriberTypeId> g_eventBridgeUnsubs;
 
 void UnsubscribeAllEvents() {
-  for (auto& unsub : g_eventBridgeUnsubs) unsub();
+  for (auto& evnt : g_eventBridgeUnsubs) {
+    EventQueue::Instance().Unsubscribe(evnt);
+  }
   g_eventBridgeUnsubs.clear();
 }
 
 void InitEventBridge(JavaVM* jvm) {
-  auto& q = EventQueue::Instance();
+  auto& q = EventQueue::Instance(); // NOLINT(*-identifier-length)
 
-  auto sub1 = q.Subscribe<view_model::EventContactsStateUpdated>([jvm](auto const& e) {
-    jni::ScopedJniEnv env_scope(jvm);
+  g_eventBridgeUnsubs.emplace_back(q.Subscribe<view_model::EventContactsStateUpdated>([jvm](auto const& e) -> void {
+    jni::ScopedJniEnv const env_scope(jvm);
     if (auto* env = env_scope.Get()) {
       auto& class_refs = ClassRefs::Instance();
       auto& list_holder = class_refs.Class("java/util/ArrayList");
@@ -91,12 +93,8 @@ void InitEventBridge(JavaVM* jvm) {
       env->CallStaticVoidMethod(bus_holder.Class(), bus_holder.GetMethod("onContactsUpdated"), contact_list);
       env->DeleteLocalRef(contact_list);
     }
-  });
-  g_eventBridgeUnsubs.push_back([sub1]() {
-    EventQueue::Instance().Unsubscribe<view_model::EventContactsStateUpdated>(sub1);
-  });
-
-  auto sub2 = q.Subscribe<view_model::EventConversationStateUpdated>([jvm](auto const& e) {
+  }));
+  g_eventBridgeUnsubs.emplace_back(q.Subscribe<view_model::EventConversationStateUpdated>([jvm](auto const& e) -> void {
     jni::ScopedJniEnv env_scope(jvm);
     if (auto* env = env_scope.Get()) {
       auto& class_refs = ClassRefs::Instance();
@@ -199,12 +197,8 @@ void InitEventBridge(JavaVM* jvm) {
       env->DeleteLocalRef(page_java);
       env->DeleteLocalRef(j_peer_id);
     }
-  });
-  g_eventBridgeUnsubs.push_back([sub2]() {
-    EventQueue::Instance().Unsubscribe<view_model::EventConversationStateUpdated>(sub2);
-  });
-
-  auto sub3 = q.Subscribe<view_model::EventTransferProgressUpdated>([jvm](auto const& e) {
+  }));
+  g_eventBridgeUnsubs.emplace_back(q.Subscribe<view_model::EventTransferProgressUpdated>([jvm](auto const& e) -> void {
     jni::ScopedJniEnv env_scope(jvm);
     if (auto* env = env_scope.Get()) {
       auto& class_refs = ClassRefs::Instance();
@@ -221,12 +215,8 @@ void InitEventBridge(JavaVM* jvm) {
       env->DeleteLocalRef(j_peer);
       env->DeleteLocalRef(j_att);
     }
-  });
-  g_eventBridgeUnsubs.push_back([sub3]() {
-    EventQueue::Instance().Unsubscribe<view_model::EventTransferProgressUpdated>(sub3);
-  });
-
-  auto sub4 = q.Subscribe<view_model::EventProfileStateUpdated>([jvm](auto const& e) {
+  }));
+  g_eventBridgeUnsubs.emplace_back(q.Subscribe<view_model::EventProfileStateUpdated>([jvm](auto const& e) -> void {
     jni::ScopedJniEnv env_scope(jvm);
     if (auto* env = env_scope.Get()) {
       auto& class_refs = ClassRefs::Instance();
@@ -245,12 +235,8 @@ void InitEventBridge(JavaVM* jvm) {
       if (photo) env->DeleteLocalRef(photo);
       env->DeleteLocalRef(profile_java);
     }
-  });
-  g_eventBridgeUnsubs.push_back([sub4]() {
-    EventQueue::Instance().Unsubscribe<view_model::EventProfileStateUpdated>(sub4);
-  });
-
-  auto sub5 = q.Subscribe<view_model::EventCallStateChanged>([jvm](auto const& e) {
+  }));
+  g_eventBridgeUnsubs.emplace_back(q.Subscribe<view_model::EventCallStateChanged>([jvm](auto const& e) -> void {
     jni::ScopedJniEnv env_scope(jvm);
     if (auto* env = env_scope.Get()) {
       auto& class_refs = ClassRefs::Instance();
@@ -270,12 +256,8 @@ void InitEventBridge(JavaVM* jvm) {
       env->DeleteLocalRef(peer_id);
       env->DeleteLocalRef(call_state_java);
     }
-  });
-  g_eventBridgeUnsubs.push_back([sub5]() {
-    EventQueue::Instance().Unsubscribe<view_model::EventCallStateChanged>(sub5);
-  });
-
-  auto sub6 = q.Subscribe<view_model::EventSettingsStateUpdated>([jvm](auto const& e) {
+  }));
+  g_eventBridgeUnsubs.emplace_back(q.Subscribe<view_model::EventSettingsStateUpdated>([jvm](auto const& e) -> void {
     jni::ScopedJniEnv env_scope(jvm);
     if (auto* env = env_scope.Get()) {
       auto& class_refs = ClassRefs::Instance();
@@ -304,12 +286,8 @@ void InitEventBridge(JavaVM* jvm) {
       if (user_str) env->DeleteLocalRef(user_str);
       if (pass_str) env->DeleteLocalRef(pass_str);
     }
-  });
-  g_eventBridgeUnsubs.push_back([sub6]() {
-    EventQueue::Instance().Unsubscribe<view_model::EventSettingsStateUpdated>(sub6);
-  });
-
-  auto sub7 = q.Subscribe<view_model::EventConnectionStateChanged>([jvm](auto const& e) {
+  }));
+  g_eventBridgeUnsubs.emplace_back(q.Subscribe<view_model::EventConnectionStateChanged>([jvm](auto const& e) -> void {
     jni::ScopedJniEnv env_scope(jvm);
     if (auto* env = env_scope.Get()) {
       auto& class_refs = ClassRefs::Instance();
@@ -320,8 +298,5 @@ void InitEventBridge(JavaVM* jvm) {
           static_cast<jint>(e.state)
       );
     }
-  });
-  g_eventBridgeUnsubs.push_back([sub7]() {
-    EventQueue::Instance().Unsubscribe<view_model::EventConnectionStateChanged>(sub7);
-  });
+  }));
 }

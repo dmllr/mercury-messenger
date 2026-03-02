@@ -75,7 +75,7 @@ TEST_F(AccountServiceTest, UpdateProfile) {
 
   EventQueue::Instance().WaitFor([&] { return callback_called; }, std::chrono::seconds(1));
 
-  EventQueue::Instance().Unsubscribe<EventMyProfileUpdated>(sub);
+  EventQueue::Instance().Unsubscribe(sub);
   auto const* settings = service_->GetSettings();
   EXPECT_EQ(settings->GetMyDisplayName(), "Alice");
   EXPECT_EQ(settings->GetMyBio(), "Hello World");

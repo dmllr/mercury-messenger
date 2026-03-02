@@ -123,7 +123,7 @@ TEST_F(InternalMessagingServiceTest, ProcessSignalingMessage_ContactAddRequest) 
   EventQueue::Instance().WaitFor([&] { return request_received; }, std::chrono::seconds(1));
   EXPECT_TRUE(request_received);
 
-  EventQueue::Instance().Unsubscribe<EventContactRequest>(sub);
+  EventQueue::Instance().Unsubscribe(sub);
 }
 
 TEST_F(InternalMessagingServiceTest, ProcessDataChannelMessage_Chat) {
@@ -161,5 +161,5 @@ TEST_F(InternalMessagingServiceTest, ProcessDataChannelMessage_Chat) {
   EventQueue::Instance().WaitFor([&] { return msg_received; }, std::chrono::seconds(1));
   EXPECT_TRUE(msg_received);
 
-  EventQueue::Instance().Unsubscribe<EventChatMessageReceived>(sub1);
+  EventQueue::Instance().Unsubscribe(sub1);
 }

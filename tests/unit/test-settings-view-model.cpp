@@ -40,8 +40,8 @@ struct MockSettingsObserver {
     });
   }
   ~MockSettingsObserver() {
-    EventQueue::Instance().Unsubscribe<EventSettingsStateUpdated>(sub1);
-    EventQueue::Instance().Unsubscribe<EventConnectionStateChanged>(sub2);
+    EventQueue::Instance().Unsubscribe(sub1);
+    EventQueue::Instance().Unsubscribe(sub2);
   }
 };
 

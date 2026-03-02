@@ -43,38 +43,29 @@ class MediaCallService {
         storage_(sm->storage),
         data_transport_(sm->data_transport),
         media_transport_(sm->media_transport) {
-    auto sub_dco = EventQueue::Instance().Subscribe<EventDataChannelOpen>([this](auto const& e) {
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventDataChannelOpen>([this](auto const& e) {
       this->OnDataChannelOpen(e.peer_id);
-    });
-    event_unsubs_.push_back([sub_dco]() { EventQueue::Instance().Unsubscribe<EventDataChannelOpen>(sub_dco); });
+    }));
 
-    auto sub_ms = EventQueue::Instance().Subscribe<EventMediaSample>([this](auto const& e) {
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventMediaSample>([this](auto const& e) {
       this->SendSampleToPeers(e.sample, static_cast<Stream::Source::Type>(e.type), e.timestamp);
-    });
-    event_unsubs_.push_back([sub_ms]() { EventQueue::Instance().Unsubscribe<EventMediaSample>(sub_ms); });
+    }));
 
-    auto sub_fr = EventQueue::Instance().Subscribe<EventFrameReceived>([this](auto const& e) {
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventFrameReceived>([this](auto const& e) {
       this->OnFrameReceived(e.peer_id, e.frame);
-    });
-    event_unsubs_.push_back([sub_fr]() { EventQueue::Instance().Unsubscribe<EventFrameReceived>(sub_fr); });
+    }));
 
-    auto sub_mpcsc = EventQueue::Instance().Subscribe<EventMediaPeerConnectionStateChanged>([this](auto const& e) {
-      this->OnMediaPeerConnectionStateChange(e.peer_id, e.state);
-    });
-    event_unsubs_.push_back([sub_mpcsc]() {
-      EventQueue::Instance().Unsubscribe<EventMediaPeerConnectionStateChanged>(sub_mpcsc);
-    });
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventMediaPeerConnectionStateChanged>(
+        [this](auto const& e) { this->OnMediaPeerConnectionStateChange(e.peer_id, e.state); }
+    ));
 
-    auto sub_mgsc = EventQueue::Instance().Subscribe<EventMediaGatheringStateChanged>([this](auto const& e) {
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventMediaGatheringStateChanged>([this](auto const& e) {
       this->OnMediaGatheringStateChange(e.peer_id, e.state_val);
-    });
-    event_unsubs_.push_back([sub_mgsc]() {
-      EventQueue::Instance().Unsubscribe<EventMediaGatheringStateChanged>(sub_mgsc);
-    });
+    }));
   }
 
   ~MediaCallService() {
-    for (auto const& unsub : event_unsubs_) unsub();
+    for (auto const id : event_unsubs_) EventQueue::Instance().Unsubscribe(id);
   }
 
   template <typename T>
@@ -392,7 +383,7 @@ class MediaCallService {
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<transport::DataTransport> data_transport_;
   std::shared_ptr<transport::MediaTransport> media_transport_;
-  std::vector<std::function<void()>> event_unsubs_;
+  std::vector<EventQueue::SubscriberTypeId> event_unsubs_;
 
   std::unique_ptr<Capture> video_capture_;
   std::unique_ptr<Capture> audio_capture_;

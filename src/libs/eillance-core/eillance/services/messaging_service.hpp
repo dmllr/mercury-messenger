@@ -101,24 +101,21 @@ class MessagingService {
     history_ = std::make_unique<messaging::MessageHistory>(storage_);
     delivery_service_ = std::make_unique<messaging::DeliveryService>(sm_);
 
-    auto sub1 = EventQueue::Instance().Subscribe<EventSendQueuedMessages>([this](auto const& e) {
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventSendQueuedMessages>([this](auto const& e) {
       this->SendQueuedMessages(e.peer_id);
-    });
-    event_unsubs_.push_back([sub1]() { EventQueue::Instance().Unsubscribe<EventSendQueuedMessages>(sub1); });
+    }));
 
-    auto sub2 = EventQueue::Instance().Subscribe<EventDataChannelOpen>([this](auto const& e) {
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventDataChannelOpen>([this](auto const& e) {
       this->UnsuspendAndDeliver(e.peer_id);
-    });
-    event_unsubs_.push_back([sub2]() { EventQueue::Instance().Unsubscribe<EventDataChannelOpen>(sub2); });
+    }));
 
-    auto sub3 = EventQueue::Instance().Subscribe<EventPeerActivity>([this](auto const& e) {
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventPeerActivity>([this](auto const& e) {
       this->UnsuspendAndDeliver(e.peer_id);
-    });
-    event_unsubs_.push_back([sub3]() { EventQueue::Instance().Unsubscribe<EventPeerActivity>(sub3); });
+    }));
   }
 
   ~MessagingService() {
-    for (auto const& unsub : event_unsubs_) unsub();
+    for (auto const id : event_unsubs_) EventQueue::Instance().Unsubscribe(id);
     StopDeliveryService();
   }
 
@@ -930,7 +927,7 @@ class MessagingService {
   std::unique_ptr<messaging::MessageHistory> history_;
   std::unique_ptr<messaging::DeliveryService> delivery_service_;
 
-  std::vector<std::function<void()>> event_unsubs_;
+  std::vector<EventQueue::SubscriberTypeId> event_unsubs_;
   std::unordered_set<ContactID> flushing_peers_;
   std::recursive_mutex flushing_mutex_;
 

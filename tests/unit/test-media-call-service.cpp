@@ -138,7 +138,7 @@ TEST_F(MediaCallServiceTest, AcceptCall) {
 
   EventQueue::Instance().WaitFor([&] { return accepted_cb; }, std::chrono::seconds(1));
 
-  EventQueue::Instance().Unsubscribe<EventCallAccepted>(sub);
+  EventQueue::Instance().Unsubscribe(sub);
   EXPECT_TRUE(accepted_cb);
   EXPECT_TRUE(peer->has_media_peer_connection);
 
@@ -174,7 +174,7 @@ TEST_F(MediaCallServiceTest, Hangup) {
 
   EventQueue::Instance().WaitFor([&] { return terminated_cb; }, std::chrono::seconds(1));
 
-  EventQueue::Instance().Unsubscribe<EventCallTerminated>(sub);
+  EventQueue::Instance().Unsubscribe(sub);
   EXPECT_TRUE(terminated_cb);
   EXPECT_FALSE(peer->has_media_peer_connection);
 
@@ -215,7 +215,7 @@ TEST_F(MediaCallServiceTest, RejectCall) {
 
   EventQueue::Instance().WaitFor([&] { return terminated_cb; }, std::chrono::seconds(1));
 
-  EventQueue::Instance().Unsubscribe<EventCallTerminated>(sub);
+  EventQueue::Instance().Unsubscribe(sub);
   EXPECT_TRUE(terminated_cb);
 }
 TEST_F(MediaCallServiceTest, MediaSampleRouting) {

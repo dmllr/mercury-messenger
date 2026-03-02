@@ -52,8 +52,8 @@ struct MockConversationObserver {
     });
   }
   ~MockConversationObserver() {
-    EventQueue::Instance().Unsubscribe<EventConversationStateUpdated>(sub1);
-    EventQueue::Instance().Unsubscribe<EventTransferProgressUpdated>(sub2);
+    EventQueue::Instance().Unsubscribe(sub1);
+    EventQueue::Instance().Unsubscribe(sub2);
   }
 
   auto GetState() -> ConversationState {

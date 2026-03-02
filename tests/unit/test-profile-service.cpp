@@ -80,7 +80,7 @@ TEST_F(ProfileServiceTest, UpdateProfileTriggersSystemMessage) {
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
 
-  EventQueue::Instance().Unsubscribe<EventContactProfileUpdated>(sub);
+  EventQueue::Instance().Unsubscribe(sub);
   EXPECT_TRUE(update_cb_called);
 
   // Verify system message (diff) was generated

@@ -144,7 +144,7 @@ TEST_F(StreamTest, AudioVideoSynchronization) {
   EXPECT_EQ(received_samples[7].first, Stream::Source::Type::audio);
   EXPECT_EQ(received_samples[7].second, base_time + 40000);
 
-  EventQueue::Instance().Unsubscribe<EventMediaSample>(sub);
+  EventQueue::Instance().Unsubscribe(sub);
 }
 
 TEST_F(StreamTest, StreamStopStopsDispatching) {
@@ -172,7 +172,7 @@ TEST_F(StreamTest, StreamStopStopsDispatching) {
   // Should have processed the first one, then stopped
   EXPECT_EQ(count, 1);
 
-  EventQueue::Instance().Unsubscribe<EventMediaSample>(sub);
+  EventQueue::Instance().Unsubscribe(sub);
 }
 
 TEST_F(StreamTest, DestructionWhileHandlerBusy) {
@@ -196,7 +196,7 @@ TEST_F(StreamTest, DestructionWhileHandlerBusy) {
     // Destructor called here. Should block until the handler finishes.
   }
 
-  EventQueue::Instance().Unsubscribe<EventMediaSample>(sub);
+  EventQueue::Instance().Unsubscribe(sub);
   // If we reach here without a crash/TSan error, the test passes.
   SUCCEED();
 }

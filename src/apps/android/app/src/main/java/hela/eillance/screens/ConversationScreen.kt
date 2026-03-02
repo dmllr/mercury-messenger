@@ -761,7 +761,8 @@ fun ConversationScreen(
                 }
               },
               replyingToMessage = replyingToMessage,
-              replyingToName = if (replyingToMessage?.direction == MessageDirection.Sent) stringResource(R.string.me) else (contact?.name ?: peerId),
+              replyingToName = if (replyingToMessage?.direction == MessageDirection.Sent) stringResource(R.string.me) else (contact?.name
+                ?: peerId),
               onCancelReply = { replyingToMessage = null },
               onSendMessage = { text ->
                 chatVM.sendMessage(text, replyingToMessage?.id)
