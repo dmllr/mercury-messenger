@@ -42,8 +42,8 @@ class ContactsViewModel {
   }
 
   ~ContactsViewModel() {
-    for (auto const& unsubscribe : eventUnsubscribers_) {
-      unsubscribe();
+    for (auto const id : eventUnsubscribers_) {
+      EventQueue::Instance().Unsubscribe(id);
     }
   }
 
@@ -251,12 +251,12 @@ class ContactsViewModel {
   std::shared_ptr<Impl> impl_;
 
   // Unsubscribers must be kept in the wrapper to handle event deregistration on destruction
-  std::vector<std::function<void()>> eventUnsubscribers_;
+  std::vector<EventQueue::SubscriberTypeId> eventUnsubscribers_;
 
   template <typename EventType>
   void Subscribe(EventQueue& queue, std::function<void(EventType const&)> const& callback) {
     auto id = queue.Subscribe<EventType>(std::move(callback));
-    eventUnsubscribers_.emplace_back([&queue, id] { queue.Unsubscribe<EventType>(id); });
+    eventUnsubscribers_.push_back(id);
   }
 };
 

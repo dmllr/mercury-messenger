@@ -163,8 +163,8 @@ TEST_F(FileTransferResilienceTest, TransferProgressAndFileCreation) {
   EXPECT_TRUE(completed);
   EXPECT_FLOAT_EQ(progress_events.back(), 1.0f);
 
-  EventQueue::Instance().Unsubscribe<EventTransferProgress>(sub1);
-  EventQueue::Instance().Unsubscribe<EventAttachmentDownloaded>(sub2);
+  EventQueue::Instance().Unsubscribe(sub1);
+  EventQueue::Instance().Unsubscribe(sub2);
 
   std::filesystem::path const final_file = attachments_dir_ / (att_id + ".txt");
   ASSERT_TRUE(std::filesystem::exists(final_file));
@@ -213,7 +213,7 @@ TEST_F(FileTransferResilienceTest, FailsGracefullyIfHashMismatch) {
 
   EventQueue::Instance().WaitFor([&] { return completed; }, std::chrono::milliseconds(500));
 
-  EventQueue::Instance().Unsubscribe<EventAttachmentDownloaded>(sub);
+  EventQueue::Instance().Unsubscribe(sub);
   EXPECT_FALSE(completed);
 
   std::filesystem::path const final_file = attachments_dir_ / ("bad_hash_file.dat");
@@ -260,7 +260,7 @@ TEST_F(FileTransferResilienceTest, StatusUpdateOrder_SmallFile) {
     }
   }
 
-  EventQueue::Instance().Unsubscribe<EventAttachmentStatusChanged>(sub);
+  EventQueue::Instance().Unsubscribe(sub);
 
   EXPECT_TRUE(found_sequence) << "Status sequence should be Transferring -> Done";
   if (!status_sequence.empty()) {

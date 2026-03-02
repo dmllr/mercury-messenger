@@ -29,7 +29,7 @@ struct MockContactsObserver {
     });
   }
   ~MockContactsObserver() {
-    EventQueue::Instance().Unsubscribe<EventContactsStateUpdated>(sub_id);
+    EventQueue::Instance().Unsubscribe(sub_id);
   }
 
   auto GetContacts() -> std::vector<ViewContact> {

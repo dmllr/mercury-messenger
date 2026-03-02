@@ -51,7 +51,7 @@ class Client final {
     sm_->internal_messaging = std::make_shared<services::InternalMessagingService>(sm_.get());
 
     // Core subscriptions for transport-level handling that were formerly inside callbacks
-    auto sub1 = EventQueue::Instance().Subscribe<EventStatusChanged>([this](auto const& event) -> void {
+    event_unsubs_.emplace_back(EventQueue::Instance().Subscribe<EventStatusChanged>([this](auto const& event) -> void {
       if (event.source == EventSource::peerConnectionState) {
         auto const state = static_cast<transport::PeerConnectionState>(event.state);
         if (state == transport::PeerConnectionState::failed || state == transport::PeerConnectionState::closed ||
@@ -102,20 +102,18 @@ class Client final {
       } else if (event.source == EventSource::gatheringState) {
         EventQueue::Instance().Push(EventMediaGatheringStateChanged{event.peer_id, event.state});
       }
-    });
-    event_unsubs_.emplace_back([sub1]() -> void { EventQueue::Instance().Unsubscribe<EventStatusChanged>(sub1); });
+    }));
 
-    auto sub3 =
-        EventQueue::Instance().Subscribe<EventConnectionRequested>([this](auto const& e) -> void { this->Connect(e.peer_id); });
-    event_unsubs_.emplace_back([sub3]() -> void { EventQueue::Instance().Unsubscribe<EventConnectionRequested>(sub3); });
+    event_unsubs_.emplace_back(EventQueue::Instance().Subscribe<EventConnectionRequested>(
+        [this](auto const& e) -> void { this->Connect(e.peer_id); }
+    ));
 
-    auto sub4 = EventQueue::Instance().Subscribe<EventServerIceConfig>([this](auto const& e) -> void {
+    event_unsubs_.emplace_back(EventQueue::Instance().Subscribe<EventServerIceConfig>([this](auto const& e) -> void {
       server_ice_config_ = nlohmann::json::parse(e.config_json);
       ReevaluateIceConfiguration();
-    });
-    event_unsubs_.emplace_back([sub4]() -> void { EventQueue::Instance().Unsubscribe<EventServerIceConfig>(sub4); });
+    }));
 
-    auto sub_sig_err = EventQueue::Instance().Subscribe<EventSignalingError>([this](auto const& e) -> void {
+    event_unsubs_.emplace_back(EventQueue::Instance().Subscribe<EventSignalingError>([this](auto const& e) -> void {
       if (e.error == "peer_not_found") {
         LGW << "Connection attempt failed for peer " << e.peer_id.ToString() << " (not online).";
         EventQueue::Instance().Push(EventConnectionAttemptFinished{e.peer_id});
@@ -124,8 +122,7 @@ class Client final {
           sm_->data_transport->Disconnect(e.peer_id);
         }
       }
-    });
-    event_unsubs_.emplace_back([sub_sig_err]() -> void { EventQueue::Instance().Unsubscribe<EventSignalingError>(sub_sig_err); });
+    }));
   }
 
   Client(Client const&) = delete;
@@ -133,8 +130,8 @@ class Client final {
   auto operator=(Client const&) -> Client& = delete;
   auto operator=(Client&&) -> Client& = delete;
   ~Client() {
-    for (auto const& unsub : event_unsubs_) {
-      unsub();
+    for (auto const& evnt : event_unsubs_) {
+      EventQueue::Instance().Unsubscribe(evnt);
     }
     Terminate();
   }
@@ -310,7 +307,7 @@ class Client final {
       std::string const& msg,
       std::vector<messaging::AttachmentRequest> const& attachments = {},
       std::uint64_t reply_to_id = 0
-  ) const -> messaging::HistoryEntryRecord {
+  ) -> messaging::HistoryEntryRecord {
     return sm_->messaging->SendChatMessage(id, msg, attachments, reply_to_id);
   }
   void MarkMessagesAsRead(ContactID const& id, std::vector<std::uint64_t> const& mids) const {
@@ -550,7 +547,7 @@ class Client final {
   std::unique_ptr<services::ServiceManager> sm_;
 
   std::atomic<bool> is_running_{false};
-  std::vector<std::function<void()>> event_unsubs_;
+  std::vector<EventQueue::SubscriberTypeId> event_unsubs_;
 
   std::unique_ptr<utils::Watchdog> watchdog_;
 

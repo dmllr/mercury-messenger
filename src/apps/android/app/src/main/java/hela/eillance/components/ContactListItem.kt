@@ -30,8 +30,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import hela.eillance.camera.R
 import hela.eillance.localization.LocalizationMapping
-import hela.eillance.ndkio.CallDirection
 import hela.eillance.ndkio.AttachmentType
+import hela.eillance.ndkio.CallDirection
 import hela.eillance.ndkio.CallStatus
 import hela.eillance.ndkio.Contact
 import hela.eillance.ndkio.ContactStatus

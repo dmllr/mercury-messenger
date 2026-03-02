@@ -107,7 +107,7 @@ TEST_F(ContactServiceTest, ReceiveContactRequest) {
 
   EventQueue::Instance().WaitFor([&] { return request_cb_called; }, std::chrono::seconds(1));
 
-  EventQueue::Instance().Unsubscribe<EventContactRequest>(sub);
+  EventQueue::Instance().Unsubscribe(sub);
   EXPECT_TRUE(request_cb_called);
   auto const contact = contact_service_->GetContact(peer1);
   ASSERT_TRUE(contact.has_value());
@@ -131,7 +131,7 @@ TEST_F(ContactServiceTest, ConfirmContact) {
 
   EventQueue::Instance().WaitFor([&] { return status_cb_called; }, std::chrono::seconds(1));
 
-  EventQueue::Instance().Unsubscribe<EventContactStatusChanged>(sub);
+  EventQueue::Instance().Unsubscribe(sub);
   EXPECT_TRUE(status_cb_called);
   EXPECT_TRUE(contact_service_->IsConfirmed(peer1));
 

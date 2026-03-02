@@ -30,7 +30,7 @@ class DeliveryService {
   std::unordered_set<ContactID> pendingConnections_{};
   std::unordered_map<ContactID, int> retryDelaysS_{};
   std::recursive_mutex mutex_;
-  std::vector<std::function<void()>> event_unsubs_;
+  std::vector<EventQueue::SubscriberTypeId> event_unsubs_;
 
   DispatchQueue dispatchQueue_{"DeliveryService", 1};
 
@@ -44,17 +44,16 @@ class DeliveryService {
       : storage_(sm->storage),
         contactManager_(sm->contact_manager),
         transport_(sm->data_transport) {
-    auto sub1 = EventQueue::Instance().Subscribe<EventConnectionAttemptFinished>([this](auto const& e) {
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventConnectionAttemptFinished>([this](auto const& e) {
       ConnectionAttemptFinished(e.peer_id);
-    });
-    event_unsubs_.push_back([sub1]() { EventQueue::Instance().Unsubscribe<EventConnectionAttemptFinished>(sub1); });
+    }));
 
-    auto sub2 = EventQueue::Instance().Subscribe<EventStopDeliveryService>([this](auto const&) { Stop(); });
-    event_unsubs_.push_back([sub2]() { EventQueue::Instance().Unsubscribe<EventStopDeliveryService>(sub2); });
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventStopDeliveryService>([this](auto const&) { Stop(); })
+    );
   }
 
   ~DeliveryService() {
-    for (auto const& unsub : event_unsubs_) unsub();
+    for (auto const id : event_unsubs_) EventQueue::Instance().Unsubscribe(id);
     Stop();
   }
 

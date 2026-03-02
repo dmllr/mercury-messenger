@@ -17,7 +17,7 @@ class Bot::Impl {
   Options options_;
   std::shared_ptr<eillance::Client> client_;
   std::function<void(Message const&)> message_handler_;
-  std::vector<std::function<void()>> event_unsubs_;
+  std::vector<eillance::EventQueue::SubscriberTypeId> event_unsubs_;
 
  public:
   explicit Impl(Options options)
@@ -33,8 +33,8 @@ class Bot::Impl {
   }
 
   ~Impl() {
-    for (auto const& unsub : event_unsubs_) {
-      unsub();
+    for (auto const& evnt : event_unsubs_) {
+      eillance::EventQueue::Instance().Unsubscribe(evnt);
     }
   }
 
@@ -53,26 +53,18 @@ class Bot::Impl {
 
   void SetupCallbacks() {
     if (options_.auto_accept_contacts) {
-      auto sub1 =
-          eillance::EventQueue::Instance().Subscribe<eillance::EventContactRequest>([this](auto const& e) -> void {
-            client_->ConfirmContact(e.peer_id);
-          });
-      event_unsubs_.push_back([sub1]() {
-        eillance::EventQueue::Instance().Unsubscribe<eillance::EventContactRequest>(sub1);
-      });
+      event_unsubs_.emplace_back(eillance::EventQueue::Instance().Subscribe<eillance::EventContactRequest>(
+          [this](auto const& e) -> void { client_->ConfirmContact(e.peer_id); }
+      ));
     }
 
     if (options_.auto_reject_calls) {
-      auto sub2 =
-          eillance::EventQueue::Instance().Subscribe<eillance::EventIncomingCall>([this](auto const& e) -> void {
-            client_->RejectCall(e.peer_id);
-          });
-      event_unsubs_.push_back([sub2]() {
-        eillance::EventQueue::Instance().Unsubscribe<eillance::EventIncomingCall>(sub2);
-      });
+      event_unsubs_.emplace_back(eillance::EventQueue::Instance().Subscribe<eillance::EventIncomingCall>(
+          [this](auto const& e) -> void { client_->RejectCall(e.peer_id); }
+      ));
     }
 
-    auto sub3 =
+    event_unsubs_.emplace_back(
         eillance::EventQueue::Instance().Subscribe<eillance::EventChatMessageReceived>([this](auto const& e) -> void {
           if (!message_handler_) {
             return;
@@ -102,10 +94,8 @@ class Bot::Impl {
           msg.from = std::move(user);
 
           message_handler_(msg);
-        });
-    event_unsubs_.emplace_back([sub3]() -> void {
-      eillance::EventQueue::Instance().Unsubscribe<eillance::EventChatMessageReceived>(sub3);
-    });
+        })
+    );
   }
 };
 
