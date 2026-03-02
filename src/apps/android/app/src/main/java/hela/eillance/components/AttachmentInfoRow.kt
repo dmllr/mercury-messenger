@@ -65,6 +65,7 @@ fun AttachmentInfoRow(
     attachment.status == AttachmentStatus.Canceled || attachment.status == AttachmentStatus.PeerCanceled
   val isPaused = attachment.status == AttachmentStatus.Paused
   val isPending = attachment.status == AttachmentStatus.Pending
+  val isDeleted = isDone && !java.io.File(attachment.path).exists()
 
   val hasNote = attachment.note.isNotEmpty()
   val displayName = attachment.fileName.ifEmpty { getGenericFileName(attachment.mime) }
@@ -115,10 +116,11 @@ fun AttachmentInfoRow(
           isCanceled -> stringResource(id = R.string.file_status_canceled)
           isPaused -> stringResource(id = R.string.file_status_paused)
           isPending -> stringResource(id = R.string.file_status_waiting)
+          isDeleted -> "Deleted"
           else -> fileSizeStr
         }
 
-        val statusColor = if (isCanceled) MaterialTheme.colorScheme.error else subTextColor
+        val statusColor = if (isCanceled || isDeleted) MaterialTheme.colorScheme.error else subTextColor
 
         Text(
           text = statusText,

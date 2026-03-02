@@ -399,4 +399,71 @@ extern "C" JNIEXPORT jobject JNICALL Java_hela_eillance_viewmodels_ConversationV
   return ConvertSingleHistoryEntry(env, *entry_opt);
 }
 
+extern "C" JNIEXPORT jobject JNICALL Java_hela_eillance_viewmodels_ConversationViewModel_nativeGetDownloadedAttachments(
+    JNIEnv* env,
+    jobject /*instance*/,
+    jlong ptr
+) {
+  if (!g_clientEngine) return nullptr;
+  auto* vm = reinterpret_cast<eillance::view_model::ConversationViewModel*>(ptr);
+  auto records = vm->GetDownloadedAttachments();
+
+  auto& class_refs = ClassRefs::Instance();
+  auto& list_holder = class_refs.Class("java/util/ArrayList");
+  jobject result_list = list_holder.NewObject(env);
+  jmethodID list_add = list_holder.GetMethod("add");
+
+  auto& info_holder = class_refs.Class("hela/eillance/ndkio/AttachmentInfo");
+  auto& att_holder = class_refs.Class("hela/eillance/ndkio/Attachment");
+
+  for (auto const& rec : records) {
+    auto const& att = rec.attachment;
+    jstring j_id = env->NewStringUTF(att.id.c_str());
+    jstring j_path = env->NewStringUTF(att.file_path.c_str());
+    jstring j_mime = env->NewStringUTF(att.mime_type.c_str());
+    jstring j_thumb = att.thumbnail_base64.empty() ? nullptr : env->NewStringUTF(att.thumbnail_base64.c_str());
+    jstring j_note = env->NewStringUTF(att.note.c_str());
+    jstring j_name = env->NewStringUTF(att.file_name.c_str());
+
+    jobject j_att = att_holder.NewObject(
+        env,
+        j_id,
+        static_cast<jint>(att.type),
+        j_path,
+        j_mime,
+        static_cast<jlong>(att.size_bytes),
+        j_thumb,
+        static_cast<jboolean>(att.is_downloaded),
+        static_cast<jint>(att.status),
+        j_note,
+        j_name
+    );
+    jobject j_info = info_holder.NewObject(env, j_att, static_cast<jlong>(rec.timestamp));
+    env->CallBooleanMethod(result_list, list_add, j_info);
+
+    env->DeleteLocalRef(j_id);
+    env->DeleteLocalRef(j_path);
+    env->DeleteLocalRef(j_mime);
+    if (j_thumb) env->DeleteLocalRef(j_thumb);
+    env->DeleteLocalRef(j_note);
+    env->DeleteLocalRef(j_name);
+    env->DeleteLocalRef(j_att);
+    env->DeleteLocalRef(j_info);
+  }
+  return result_list;
+}
+
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationViewModel_nativeDeleteAttachmentLocal(
+    JNIEnv* env,
+    jobject /*instance*/,
+    jlong ptr,
+    jstring attachment_id
+) {
+  if (!g_clientEngine) return;
+  auto* vm = reinterpret_cast<eillance::view_model::ConversationViewModel*>(ptr);
+  char const* chars = env->GetStringUTFChars(attachment_id, nullptr);
+  vm->DeleteAttachmentLocal(chars);
+  env->ReleaseStringUTFChars(attachment_id, chars);
+}
+
 // NOLINTEND(readability-identifier-naming,*-pro-type-reinterpret-cast)

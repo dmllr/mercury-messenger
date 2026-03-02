@@ -1,8 +1,13 @@
 package hela.eillance.screens
 
 import android.app.Application
+import android.content.Context
+import android.content.Intent
 import android.graphics.BitmapFactory
 import android.util.Base64
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -13,7 +18,10 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -28,6 +36,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,7 +54,11 @@ import hela.eillance.components.VideoPlayer
 import hela.eillance.components.ZoomableImage
 import hela.eillance.ndkio.Attachment
 import hela.eillance.ndkio.AttachmentType
+import hela.eillance.utils.shareContent
 import hela.eillance.viewmodels.ConversationViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import java.io.File
 import java.util.Locale
@@ -66,20 +79,69 @@ fun MediaPreviewScreen(
   )
   val transferProgress by conversationVM.transferProgress.collectAsState()
 
-  val attachments = remember(attachmentsJson) {
-    try {
-      Json.decodeFromString<List<Attachment>>(attachmentsJson)
-    } catch (e: Exception) {
-      emptyList()
-    }
+  var attachmentsList by remember(attachmentsJson) {
+    mutableStateOf(
+      try {
+        Json.decodeFromString<List<Attachment>>(attachmentsJson)
+      } catch (e: Exception) {
+        emptyList()
+      }
+    )
   }
 
-  if (attachments.isEmpty()) {
-    onBack()
+  if (attachmentsList.isEmpty()) {
+    LaunchedEffect(Unit) { onBack() }
     return
   }
 
-  val pagerState = rememberPagerState(initialPage = initialIndex, pageCount = { attachments.size })
+  val pagerState = rememberPagerState(
+    initialPage = initialIndex.coerceIn(0, maxOf(0, attachmentsList.size - 1)),
+    pageCount = { attachmentsList.size }
+  )
+
+  var showMenu by remember { mutableStateOf(false) }
+  var pendingActionAttachment by remember { mutableStateOf<Attachment?>(null) }
+  var isMoveAction by remember { mutableStateOf(false) }
+  val coroutineScope = rememberCoroutineScope()
+
+  val exportContract = object : ActivityResultContracts.CreateDocument("*/*") {
+    override fun createIntent(context: Context, input: String): Intent {
+      val parts = input.split("|", limit = 2)
+      val mime = parts[0].ifEmpty { "*/*" }
+      val name = parts.getOrNull(1) ?: "file"
+      return super.createIntent(context, name).setType(mime)
+    }
+  }
+
+  val exportLauncher = rememberLauncherForActivityResult(exportContract) { uri ->
+    if (uri != null && pendingActionAttachment != null) {
+      val att = pendingActionAttachment!!
+      coroutineScope.launch(Dispatchers.IO) {
+        try {
+          val file = File(att.path)
+          if (file.exists()) {
+            context.contentResolver.openOutputStream(uri)?.use { out ->
+              file.inputStream().use { input ->
+                input.copyTo(out)
+              }
+            }
+            withContext(Dispatchers.Main) {
+              Toast.makeText(context, "Saved", Toast.LENGTH_SHORT).show()
+              if (isMoveAction) {
+                conversationVM.deleteAttachmentLocal(att.id)
+                attachmentsList = attachmentsList.filter { it.id != att.id }
+              }
+            }
+          }
+        } catch (e: Exception) {
+          withContext(Dispatchers.Main) {
+            Toast.makeText(context, "Failed to save", Toast.LENGTH_SHORT).show()
+          }
+        }
+      }
+    }
+    pendingActionAttachment = null
+  }
 
   Scaffold(
     containerColor = Color.Black,
@@ -87,7 +149,7 @@ fun MediaPreviewScreen(
       TopAppBar(
         title = {
           Text(
-            text = "${pagerState.currentPage + 1} / ${attachments.size}",
+            text = "${pagerState.currentPage + 1} / ${attachmentsList.size}",
             style = MaterialTheme.typography.titleMedium,
             color = Color.White
           )
@@ -98,6 +160,51 @@ fun MediaPreviewScreen(
               imageVector = Icons.AutoMirrored.Filled.ArrowBack,
               contentDescription = stringResource(id = R.string.action_back)
             )
+          }
+        },
+        actions = {
+          Box {
+            IconButton(onClick = { showMenu = true }) {
+              Icon(Icons.Default.MoreVert, contentDescription = "Options", tint = Color.White)
+            }
+            DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+              DropdownMenuItem(
+                text = { Text(stringResource(id = R.string.action_share)) },
+                onClick = {
+                  showMenu = false
+                  shareContent(context, null, listOf(attachmentsList[pagerState.currentPage]))
+                }
+              )
+              DropdownMenuItem(
+                text = { Text(stringResource(id = R.string.action_copy_to)) },
+                onClick = {
+                  showMenu = false
+                  val att = attachmentsList[pagerState.currentPage]
+                  pendingActionAttachment = att
+                  isMoveAction = false
+                  exportLauncher.launch("${att.mime}|${att.fileName.ifEmpty { "file" }}")
+                }
+              )
+              DropdownMenuItem(
+                text = { Text(stringResource(id = R.string.action_move_to)) },
+                onClick = {
+                  showMenu = false
+                  val att = attachmentsList[pagerState.currentPage]
+                  pendingActionAttachment = att
+                  isMoveAction = true
+                  exportLauncher.launch("${att.mime}|${att.fileName.ifEmpty { "file" }}")
+                }
+              )
+              DropdownMenuItem(
+                text = { Text(stringResource(id = R.string.action_delete)) },
+                onClick = {
+                  showMenu = false
+                  val att = attachmentsList[pagerState.currentPage]
+                  conversationVM.deleteAttachmentLocal(att.id)
+                  attachmentsList = attachmentsList.filter { it.id != att.id }
+                }
+              )
+            }
           }
         },
         colors = TopAppBarDefaults.topAppBarColors(
@@ -120,16 +227,16 @@ fun MediaPreviewScreen(
         pageSpacing = 0.dp
       ) { page ->
         MediaPage(
-          attachment = attachments[page],
-          progress = transferProgress[attachments[page].id],
+          attachment = attachmentsList[page],
+          progress = transferProgress[attachmentsList[page].id],
           vm = conversationVM,
           isVisible = pagerState.currentPage == page
         )
       }
 
       // Note Overlay
-      val currentAttachment = attachments[pagerState.currentPage]
-      if (currentAttachment.note.isNotEmpty()) {
+      val currentAttachment = attachmentsList.getOrNull(pagerState.currentPage)
+      if (currentAttachment?.note?.isNotEmpty() == true) {
         Box(
           modifier = Modifier
             .align(Alignment.BottomCenter)

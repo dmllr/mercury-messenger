@@ -31,6 +31,7 @@ fun VisualAttachmentsGrid(
   isFromMe: Boolean,
   selectionMode: Boolean,
   onMediaClick: (Attachment) -> Unit,
+  onLongClick: (() -> Unit)? = null,
   onCancel: (String) -> Unit,
   onResume: (String) -> Unit,
   onDiscard: (String) -> Unit
@@ -46,6 +47,7 @@ fun VisualAttachmentsGrid(
       isFromMe = isFromMe,
       selectionMode = selectionMode,
       onClick = { onMediaClick(att) },
+      onLongClick = onLongClick,
       onCancel = { onCancel(att.id) },
       onResume = { onResume(att.id) },
       onDiscard = { onDiscard(att.id) },

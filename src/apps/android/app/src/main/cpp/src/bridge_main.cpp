@@ -238,6 +238,9 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
         "String;)V"
     );
 
+    classref.RegisterClass(env, "hela/eillance/ndkio/AttachmentInfo");
+    classref.RegisterCtor(env, "hela/eillance/ndkio/AttachmentInfo", "(Lhela/eillance/ndkio/Attachment;J)V");
+
     std::string const debug_action_class = "hela/eillance/ndkio/DebugPendingAction";
     classref.RegisterClass(env, debug_action_class);
     classref.RegisterCtor(env, debug_action_class, "(Ljava/lang/String;JLjava/lang/String;)V");

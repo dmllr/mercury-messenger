@@ -145,6 +145,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     isEngineReady = true
   }
 
+  fun setPendingShare(content: SharedContent) {
+    _pendingShare.value = content
+    _navigateToContacts.value = true
+  }
+
   fun isEngineReady(): Boolean = isEngineReady
 
   fun handleShareIntent(intent: Intent) {

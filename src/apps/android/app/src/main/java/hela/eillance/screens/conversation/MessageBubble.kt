@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.DoneAll
@@ -70,6 +71,7 @@ fun MessageBubble(
   onMediaClick: (List<Attachment>, Int) -> Unit,
   repliedMessage: HistoryEntry? = null,
   onSwipeToReply: () -> Unit = {},
+  onSwipeToForward: () -> Unit = {},
   onReplyClick: (Long) -> Unit = {},
   isGroupHead: Boolean = true,
   isGroupTail: Boolean = true,
@@ -88,6 +90,8 @@ fun MessageBubble(
   onActionCopy: (String) -> Unit = {},
   onActionEdit: () -> Unit = {},
   onActionDelete: () -> Unit = {},
+  onActionShare: () -> Unit = {},
+  onActionForward: () -> Unit = {},
   isEditing: Boolean = false,
   onEditCommit: (String) -> Unit = {},
   onEditCancel: () -> Unit = {},
@@ -159,6 +163,19 @@ fun MessageBubble(
       )
     }
 
+    if (offsetX.value > 20f) {
+      Icon(
+        Icons.AutoMirrored.Filled.ArrowForward,
+        contentDescription = null,
+        tint = MaterialTheme.colorScheme.primary,
+        modifier = Modifier
+          .align(Alignment.CenterStart)
+          .padding(start = 16.dp)
+          .scale((offsetX.value / 100f).coerceIn(0f, 1f))
+          .alpha((offsetX.value / 50f).coerceIn(0f, 1f))
+      )
+    }
+
     // Menu Popup Logic
     if (isMenuVisible) {
       val myReactions = entry.reactions
@@ -171,6 +188,8 @@ fun MessageBubble(
         onCopy = { entry.content?.let { onActionCopy(it) } ?: onDismissMenu() },
         onDelete = onActionDelete,
         onEdit = if (isFromMe && !entry.content.isNullOrBlank()) onActionEdit else null,
+        onShare = onActionShare,
+        onForward = onActionForward,
         onReact = onActionReact,
         currentReactions = myReactions,
         isFromMe = isFromMe
@@ -186,6 +205,8 @@ fun MessageBubble(
               onDragEnd = {
                 if (offsetX.value < -80f) {
                   onSwipeToReply()
+                } else if (offsetX.value > 80f) {
+                  onSwipeToForward()
                 }
                 coroutineScope.launch { offsetX.animateTo(0f) }
               },
@@ -193,7 +214,7 @@ fun MessageBubble(
                 coroutineScope.launch { offsetX.animateTo(0f) }
               },
               onHorizontalDrag = { _, dragAmount ->
-                val newOffset = (offsetX.value + dragAmount).coerceIn(-150f, 0f)
+                val newOffset = (offsetX.value + dragAmount).coerceIn(-150f, 150f)
                 coroutineScope.launch { offsetX.snapTo(newOffset) }
               }
             )
@@ -252,6 +273,7 @@ fun MessageBubble(
               val index = entry.attachments.indexOf(clickedAttachment)
               onMediaClick(entry.attachments, if (index != -1) index else 0)
             },
+            onLongClick = { onToggleSelection() },
             onCancel = onCancelTransfer,
             onResume = onResumeTransfer,
             onDiscard = onDiscardTransfer

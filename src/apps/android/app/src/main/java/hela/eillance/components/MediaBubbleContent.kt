@@ -19,6 +19,7 @@ fun MediaBubbleContent(
   isFromMe: Boolean,
   selectionMode: Boolean = false,
   onMediaClick: (Attachment) -> Unit,
+  onLongClick: (() -> Unit)? = null,
   onCancel: (String) -> Unit,
   onResume: (String) -> Unit,
   onDiscard: (String) -> Unit
@@ -43,6 +44,7 @@ fun MediaBubbleContent(
         isFromMe = isFromMe,
         selectionMode = selectionMode,
         onMediaClick = onMediaClick,
+        onLongClick = onLongClick,
         onCancel = onCancel,
         onResume = onResume,
         onDiscard = onDiscard
@@ -66,6 +68,7 @@ fun MediaBubbleContent(
             isFromMe = isFromMe,
             selectionMode = selectionMode,
             onClick = { onMediaClick(file) },
+            onLongClick = onLongClick,
             onCancel = { onCancel(file.id) },
             onResume = { onResume(file.id) },
             onDiscard = { onDiscard(file.id) }
