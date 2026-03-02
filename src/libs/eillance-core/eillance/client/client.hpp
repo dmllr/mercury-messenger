@@ -4,7 +4,6 @@
 #include <chrono>
 #include <condition_variable>
 #include <memory>
-#include <mutex>
 #include <string>
 #include <vector>
 
@@ -23,7 +22,7 @@
 #include "eillance/transport/data_transport.hpp"
 #include "eillance/utils/dispatch_queue.hpp"
 #include "eillance/utils/event_queue.hpp"
-#include "eillance/utils/invariant.hpp"
+#include "eillance/utils/watchdog.hpp"
 #include "eillance/view_model/view_model_defines.hpp"
 
 namespace eillance {
@@ -52,7 +51,7 @@ class Client final {
     sm_->internal_messaging = std::make_shared<services::InternalMessagingService>(sm_.get());
 
     // Core subscriptions for transport-level handling that were formerly inside callbacks
-    auto sub1 = EventQueue::Instance().Subscribe<EventStatusChanged>([this](auto const& event) {
+    auto sub1 = EventQueue::Instance().Subscribe<EventStatusChanged>([this](auto const& event) -> void {
       if (event.source == EventSource::peerConnectionState) {
         auto const state = static_cast<transport::PeerConnectionState>(event.state);
         if (state == transport::PeerConnectionState::failed || state == transport::PeerConnectionState::closed ||
@@ -104,19 +103,19 @@ class Client final {
         EventQueue::Instance().Push(EventMediaGatheringStateChanged{event.peer_id, event.state});
       }
     });
-    event_unsubs_.push_back([sub1]() { EventQueue::Instance().Unsubscribe<EventStatusChanged>(sub1); });
+    event_unsubs_.emplace_back([sub1]() -> void { EventQueue::Instance().Unsubscribe<EventStatusChanged>(sub1); });
 
     auto sub3 =
-        EventQueue::Instance().Subscribe<EventConnectionRequested>([this](auto const& e) { this->Connect(e.peer_id); });
-    event_unsubs_.push_back([sub3]() { EventQueue::Instance().Unsubscribe<EventConnectionRequested>(sub3); });
+        EventQueue::Instance().Subscribe<EventConnectionRequested>([this](auto const& e) -> void { this->Connect(e.peer_id); });
+    event_unsubs_.emplace_back([sub3]() -> void { EventQueue::Instance().Unsubscribe<EventConnectionRequested>(sub3); });
 
-    auto sub4 = EventQueue::Instance().Subscribe<EventServerIceConfig>([this](auto const& e) {
+    auto sub4 = EventQueue::Instance().Subscribe<EventServerIceConfig>([this](auto const& e) -> void {
       server_ice_config_ = nlohmann::json::parse(e.config_json);
       ReevaluateIceConfiguration();
     });
-    event_unsubs_.push_back([sub4]() { EventQueue::Instance().Unsubscribe<EventServerIceConfig>(sub4); });
+    event_unsubs_.emplace_back([sub4]() -> void { EventQueue::Instance().Unsubscribe<EventServerIceConfig>(sub4); });
 
-    auto sub_sig_err = EventQueue::Instance().Subscribe<EventSignalingError>([this](auto const& e) {
+    auto sub_sig_err = EventQueue::Instance().Subscribe<EventSignalingError>([this](auto const& e) -> void {
       if (e.error == "peer_not_found") {
         LGW << "Connection attempt failed for peer " << e.peer_id.ToString() << " (not online).";
         EventQueue::Instance().Push(EventConnectionAttemptFinished{e.peer_id});
@@ -126,7 +125,7 @@ class Client final {
         }
       }
     });
-    event_unsubs_.push_back([sub_sig_err]() { EventQueue::Instance().Unsubscribe<EventSignalingError>(sub_sig_err); });
+    event_unsubs_.emplace_back([sub_sig_err]() -> void { EventQueue::Instance().Unsubscribe<EventSignalingError>(sub_sig_err); });
   }
 
   Client(Client const&) = delete;
@@ -134,7 +133,9 @@ class Client final {
   auto operator=(Client const&) -> Client& = delete;
   auto operator=(Client&&) -> Client& = delete;
   ~Client() {
-    for (auto const& unsub : event_unsubs_) unsub();
+    for (auto const& unsub : event_unsubs_) {
+      unsub();
+    }
     Terminate();
   }
 
@@ -177,14 +178,14 @@ class Client final {
       return;
     }
     ReevaluateIceConfiguration();
-    if (auto url = sm_->account->GetSettings()->GetSignalingServerUrl()) {
+    if (auto const url = sm_->account->GetSettings()->GetSignalingServerUrl()) {
       sm_->data_transport->SetSignalingUrl(*url);
     }
     sm_->data_transport->SetId(sm_->account->GetId());
     sm_->data_transport->Start();
     sm_->messaging->StartDeliveryService();
     StartWatchdog();
-    background_queue_.Dispatch([this] { CheckForInactivePeers(); });
+    background_queue_.Dispatch([this]() -> void { CheckForInactivePeers(); });
   }
 
   void Terminate() {
@@ -194,7 +195,7 @@ class Client final {
     EventQueue::Instance().Push(EventStopDeliveryService{});
 
     auto peers = sm_->data_transport->GetPeers();
-    for (auto const& [id, peer] : peers) {
+    for (auto const& id : peers | std::views::keys) {
       sm_->media_transport->Disconnect(id);
       sm_->data_transport->Disconnect(id);
       sm_->data_transport->RemovePeer(id);
@@ -500,32 +501,18 @@ class Client final {
   }
 
   void StartWatchdog() {
-    last_heartbeat_ = Time::Now();
-    watchdog_running_ = true;
-    watchdog_thread_ = std::thread([this] {
-      while (watchdog_running_) {
-        {
-          std::unique_lock<std::mutex> lock(watchdog_mutex_);
-          if (watchdog_cv_.wait_for(lock, std::chrono::seconds(5), [this] { return !watchdog_running_; })) {
-            break;
-          }
-        }
-        auto const now = Time::Now();
-        background_queue_.Dispatch([this] { last_heartbeat_ = Time::Now(); });
-        if (now > last_heartbeat_.load() + 15000000) {
-          LGE << "Core Watchdog: Main queue stalled. Triggering fatal error.";
-          EventQueue::Instance().Push(EventFatalError{});
-          std::unique_lock<std::mutex> lock(watchdog_mutex_);
-          if (watchdog_cv_.wait_for(lock, std::chrono::seconds(10), [this] { return !watchdog_running_; })) break;
-        }
-      }
+    watchdog_ = std::make_unique<utils::Watchdog>(background_queue_, std::chrono::seconds(15), []() {
+      LGE << "Core Watchdog: Main queue stalled. Triggering fatal error.";
+      EventQueue::Instance().Push(EventFatalError{});
     });
+    watchdog_->Start();
   }
 
   void StopWatchdog() {
-    watchdog_running_ = false;
-    watchdog_cv_.notify_all();
-    if (watchdog_thread_.joinable()) watchdog_thread_.join();
+    if (watchdog_) {
+      watchdog_->Stop();
+      watchdog_.reset();
+    }
   }
 
   void BroadcastProfileUpdate() {
@@ -565,11 +552,7 @@ class Client final {
   std::atomic<bool> is_running_{false};
   std::vector<std::function<void()>> event_unsubs_;
 
-  std::thread watchdog_thread_;
-  std::atomic<bool> watchdog_running_{false};
-  std::condition_variable watchdog_cv_;
-  std::mutex watchdog_mutex_;
-  std::atomic<uint64_t> last_heartbeat_{0};
+  std::unique_ptr<utils::Watchdog> watchdog_;
 
   Json server_ice_config_{Json::array()};
 
