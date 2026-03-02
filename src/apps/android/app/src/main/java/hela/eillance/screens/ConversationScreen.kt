@@ -1,7 +1,6 @@
 package hela.eillance.screens
 
 import android.Manifest
-import android.annotation.SuppressLint
 import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.Context
@@ -9,19 +8,14 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.AudioAttributes
 import android.media.SoundPool
-import android.net.Uri
-import android.os.Build
-import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
@@ -85,10 +79,9 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.os.ConfigurationCompat
-import hela.eillance.BannerType
 import hela.eillance.MainViewModel
 import hela.eillance.camera.R
-import hela.eillance.components.StatusSnackbar
+import hela.eillance.components.GlobalStatusBanner
 import hela.eillance.ndkio.Attachment
 import hela.eillance.ndkio.AttachmentType
 import hela.eillance.ndkio.CallState
@@ -152,6 +145,7 @@ fun ConversationScreen(
   val bannerState by mainViewModel.permissionBannerState.collectAsState()
   val clipboard = LocalClipboard.current
   var scrollToMessageId by remember { mutableStateOf(targetMessageId) }
+  val isCoreUnresponsive by mainViewModel.isCoreUnresponsive.collectAsState()
 
   // Selection State
   var selectedMessageIds by remember { mutableStateOf(emptySet<Long>()) }
@@ -210,12 +204,6 @@ fun ConversationScreen(
       DateTimeFormatter.ofLocalizedDateTime(FormatStyle.SHORT, FormatStyle.SHORT).withLocale(locale)
     )
   }
-
-  // State for permissions launchers (Banner)
-  val notifLauncher =
-    rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { mainViewModel.checkAllPermissions() }
-  val bannerCallLauncher =
-    rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { mainViewModel.checkAllPermissions() }
 
   // State for Call Action permissions
   val requestVoiceCallPermission = rememberLauncherForActivityResult(
@@ -566,84 +554,15 @@ fun ConversationScreen(
             connectionState != ServiceConnectionState.Establishing &&
             connectionState != ServiceConnectionState.Unknown
 
-        val showPermissionBanner = !isConnectionIssue && bannerState != null
-
-        androidx.compose.animation.AnimatedVisibility(
-          visible = isConnectionIssue || showPermissionBanner,
-          enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
-          exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut()
-        ) {
-          Box(modifier = Modifier.padding(16.dp)) {
-            if (isConnectionIssue) {
-              val (msg, isError) = when (connectionState) {
-                ServiceConnectionState.NoNetwork -> stringResource(R.string.connection_no_network) to false
-                ServiceConnectionState.Failure -> stringResource(R.string.connection_failed) to true
-                ServiceConnectionState.Disconnected -> stringResource(R.string.connection_disconnected) to false
-                ServiceConnectionState.InvalidToken -> stringResource(R.string.connection_auth_error) to true
-                else -> stringResource(R.string.connection_issue) to true
-              }
-              StatusSnackbar(text = msg, isError = isError)
-            } else {
-              when (bannerState) {
-                BannerType.Notification -> {
-                  StatusSnackbar(
-                    text = stringResource(id = R.string.permission_banner_notifications),
-                    actionLabel = stringResource(id = R.string.action_fix_it),
-                    onAction = {
-                      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                      } else {
-                        openAppSettings(context)
-                      }
-                    }
-                  )
-                }
-
-                BannerType.Battery -> {
-                  StatusSnackbar(
-                    text = stringResource(id = R.string.permission_banner_battery),
-                    actionLabel = "Fix it",
-                    onAction = {
-                      val intent =
-                        @SuppressLint("BatteryLife")
-                        Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                          data = Uri.fromParts("package", context.packageName, null)
-                        }
-                      try {
-                        context.startActivity(intent)
-                      } catch (_: Exception) {
-                        openAppSettings(context)
-                      }
-                    },
-                    dismissLabel = stringResource(id = R.string.action_ignore_permission),
-                    onDismiss = { mainViewModel.ignoreBatteryOptimization() }
-                  )
-                }
-
-                BannerType.CallPermissions -> {
-                  StatusSnackbar(
-                    text = stringResource(id = R.string.permission_banner_calls),
-                    actionLabel = "Fix it",
-                    onAction = {
-                      bannerCallLauncher.launch(
-                        arrayOf(
-                          Manifest.permission.CAMERA,
-                          Manifest.permission.RECORD_AUDIO,
-                          Manifest.permission.READ_PHONE_STATE,
-                          Manifest.permission.MANAGE_OWN_CALLS
-                        )
-                      )
-                    },
-                    dismissLabel = stringResource(id = R.string.action_ignore_permission),
-                    onDismiss = { mainViewModel.ignoreCallPermissions() }
-                  )
-                }
-
-                null -> {}
-              }
-            }
-          }
-        }
+        GlobalStatusBanner(
+          isCoreUnresponsive = isCoreUnresponsive,
+          connectionState = connectionState,
+          bannerState = bannerState,
+          onResetCore = { mainViewModel.resetCore() },
+          onCheckPermissions = { mainViewModel.checkAllPermissions() },
+          onIgnoreBattery = { mainViewModel.ignoreBatteryOptimization() },
+          onIgnoreCalls = { mainViewModel.ignoreCallPermissions() }
+        )
 
         contact?.let {
           ConnectionStatusBar(contact = it)
@@ -875,12 +794,4 @@ private fun openFile(context: Context, file: File, mimeType: String) {
     Toast.makeText(context, context.getString(R.string.toast_no_app_for_file), Toast.LENGTH_SHORT)
       .show()
   }
-}
-
-private fun openAppSettings(context: Context) {
-  val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-    data = Uri.fromParts("package", context.packageName, null)
-    flags = Intent.FLAG_ACTIVITY_NEW_TASK
-  }
-  context.startActivity(intent)
 }
