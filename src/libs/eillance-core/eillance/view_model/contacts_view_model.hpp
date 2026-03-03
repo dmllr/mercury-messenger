@@ -34,10 +34,8 @@ class ContactsViewModel {
     Subscribe<EventDebugDataReset>(queue, [impl](auto const&) { impl->UpdateContactsList(); });
     Subscribe<EventDataReloaded>(queue, [impl](auto const&) { impl->UpdateContactsList(); });
 
-    Subscribe<EventStatusChanged>(queue, [impl](EventStatusChanged const& event) {
-      if (event.source == EventSource::peerConnectionState) {
-        impl->UpdateContactConnectionState(event.peer_id, static_cast<transport::PeerConnectionState>(event.state));
-      }
+    Subscribe<EventDataPeerConnectionStateChanged>(queue, [impl](auto const& event) {
+      impl->UpdateContactConnectionState(event.peer_id, event.state);
     });
   }
 

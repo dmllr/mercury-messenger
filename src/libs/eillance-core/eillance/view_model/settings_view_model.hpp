@@ -22,7 +22,7 @@ class SettingsViewModel {
       : impl_(std::make_shared<Impl>(std::move(client))) {
     auto& queue = EventQueue::Instance();
     auto impl = impl_;
-    Subscribe<EventStatusChanged>(queue, [impl](EventStatusChanged const& event) { impl->OnStatusChanged(event); });
+    Subscribe<EventServiceConnectionStateChanged>(queue, [impl](auto const& event) { impl->OnStatusChanged(event); });
     impl_->LoadSettings();
   }
 
@@ -127,17 +127,15 @@ class SettingsViewModel {
       EventQueue::Instance().Push(EventSettingsStateUpdated{state});
     }
 
-    void OnStatusChanged(EventStatusChanged const& event) {
-      if (event.source == EventSource::system) {
-        std::lock_guard<std::mutex> const lock(mutex);
-        state.connection_state = static_cast<ServiceConnectionState>(event.state);
-        if (state.connection_state == ServiceConnectionState::online) {
-          LoadSettingsInternal();
-        }
-        EventQueue::Instance().Push(EventConnectionStateChanged{state.connection_state});
-        if (state.connection_state == ServiceConnectionState::online) {
-          NotifySettings();
-        }
+    void OnStatusChanged(EventServiceConnectionStateChanged const& event) {
+      std::lock_guard<std::mutex> const lock(mutex);
+      state.connection_state = event.state;
+      if (state.connection_state == ServiceConnectionState::online) {
+        LoadSettingsInternal();
+      }
+      EventQueue::Instance().Push(EventConnectionStateChanged{state.connection_state});
+      if (state.connection_state == ServiceConnectionState::online) {
+        NotifySettings();
       }
     }
   };

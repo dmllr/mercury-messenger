@@ -27,15 +27,13 @@ class CallViewModel {
     Subscribe<EventCallRinging>(queue, [impl](auto const& event) { impl->OnCallRinging(event.peer_id); });
     Subscribe<EventCallAccepted>(queue, [impl](auto const& event) { impl->OnCallAccepted(event.peer_id); });
     Subscribe<EventCallTerminated>(queue, [impl](auto const& event) { impl->OnCallTerminated(event.peer_id); });
-    Subscribe<EventStatusChanged>(queue, [impl](auto const& event) {
-      if (event.source == EventSource::peerConnectionState) {
-        auto const state = static_cast<transport::PeerConnectionState>(event.state);
-        if (state == transport::PeerConnectionState::closed || state == transport::PeerConnectionState::disconnected ||
-            state == transport::PeerConnectionState::failed) {
-          impl->OnCallTerminated(event.peer_id);
-        } else if (state == transport::PeerConnectionState::connected) {
-          impl->OnCallConnected(event.peer_id);
-        }
+    Subscribe<EventDataPeerConnectionStateChanged>(queue, [impl](auto const& event) {
+      auto const state = event.state;
+      if (state == transport::PeerConnectionState::closed || state == transport::PeerConnectionState::disconnected ||
+          state == transport::PeerConnectionState::failed) {
+        impl->OnCallTerminated(event.peer_id);
+      } else if (state == transport::PeerConnectionState::connected) {
+        impl->OnCallConnected(event.peer_id);
       }
     });
   }
@@ -264,8 +262,8 @@ class CallViewModel {
 
   template <typename EventType>
   void Subscribe(EventQueue& queue, std::function<void(EventType const&)> const& callback) {
-    auto event_id = queue.Subscribe<EventType>(std::move(callback));
-    eventUnsubscribers_.push_back(event_id);
+    auto id = queue.Subscribe<EventType>(std::move(callback));
+    eventUnsubscribers_.push_back(id);
   }
 };
 

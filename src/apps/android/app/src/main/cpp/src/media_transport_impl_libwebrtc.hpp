@@ -67,8 +67,9 @@ class AndroidMediaTransport final : public MediaTransport::Interface {
     }
   }
 
-  void ReportStateChange(ContactID const& peer_id, EventSource source, int state) {
-    EventQueue::Instance().Push(EventStatusChanged{peer_id, source, state});
+  void ReportPeerStateChange(ContactID const& peer_id, int state) {
+    auto const pc_state = static_cast<PeerConnectionState>(state);
+    EventQueue::Instance().Push(EventMediaPeerConnectionStateChanged{peer_id, pc_state});
   }
 
   void SetIceServers(std::string const& json_config) override {

@@ -112,11 +112,6 @@ auto main(int argc, char** argv) -> int {
 
   client->UpdateSignalingUrl(*signaling_url);
 
-  // Setup Event Subscriptions for functional test reporting
-  eillance::EventQueue::Instance().Subscribe<eillance::EventStatusChanged>([](auto const& e) {
-    LGI << "[mock] " << e.peer_id.ToString() << " Status change " << static_cast<int>(e.source) << ":" << e.state;
-  });
-
   eillance::EventQueue::Instance().Subscribe<eillance::EventChatMessageReceived>([](auto const& e) {
     if (e.message.direction == eillance::messaging::MessageDirection::received) {
       if (std::holds_alternative<eillance::messaging::MessageEntry>(e.message.data)) {
