@@ -284,37 +284,27 @@ auto main(int argc, char** argv) -> int {
   std::shared_ptr<eillance::view_model::ConversationViewModel> conversation_vm;
 
   // --- Observers ---
-  std::vector<std::function<void()>> event_unsubs;
+  std::vector<eillance::EventQueue::SubscriberTypeId> event_unsubs;
   auto& eq = eillance::EventQueue::Instance();
 
-  auto sub1 = eq.Subscribe<eillance::view_model::EventContactsStateUpdated>([&](auto const&) {
+  event_unsubs.emplace_back(eq.Subscribe<eillance::view_model::EventContactsStateUpdated>([&](auto const&) {
     screen.Post(ftxui::Event::Custom);
-  });
-  event_unsubs.push_back([&, sub1]() { eq.Unsubscribe<eillance::view_model::EventContactsStateUpdated>(sub1); });
-
-  auto sub2 = eq.Subscribe<eillance::view_model::EventCallStateChanged>([&](auto const&) {
+  }));
+  event_unsubs.emplace_back(eq.Subscribe<eillance::view_model::EventCallStateChanged>([&](auto const&) {
     screen.Post(ftxui::Event::Custom);
-  });
-  event_unsubs.push_back([&, sub2]() { eq.Unsubscribe<eillance::view_model::EventCallStateChanged>(sub2); });
-
-  auto sub3 = eq.Subscribe<eillance::view_model::EventSettingsStateUpdated>([&](auto const&) {
+  }));
+  event_unsubs.emplace_back(eq.Subscribe<eillance::view_model::EventSettingsStateUpdated>([&](auto const&) {
     screen.Post(ftxui::Event::Custom);
-  });
-  event_unsubs.push_back([&, sub3]() { eq.Unsubscribe<eillance::view_model::EventSettingsStateUpdated>(sub3); });
-
-  auto sub4 = eq.Subscribe<eillance::view_model::EventConnectionStateChanged>([&](auto const&) {
+  }));
+  event_unsubs.emplace_back(eq.Subscribe<eillance::view_model::EventConnectionStateChanged>([&](auto const&) {
     screen.Post(ftxui::Event::Custom);
-  });
-  event_unsubs.push_back([&, sub4]() { eq.Unsubscribe<eillance::view_model::EventConnectionStateChanged>(sub4); });
-
-  auto sub5 = eq.Subscribe<eillance::view_model::EventConversationStateUpdated>([&](auto const&) {
+  }));
+  event_unsubs.emplace_back(eq.Subscribe<eillance::view_model::EventConversationStateUpdated>([&](auto const&) {
     screen.Post(ftxui::Event::Custom);
-  });
-  event_unsubs.push_back([&, sub5]() { eq.Unsubscribe<eillance::view_model::EventConversationStateUpdated>(sub5); });
-
-  auto sub6 = eq.Subscribe<eillance::view_model::EventTransferProgressUpdated>([&](auto const&) {
+  }));
+  event_unsubs.emplace_back(eq.Subscribe<eillance::view_model::EventTransferProgressUpdated>([&](auto const&) {
     screen.Post(ftxui::Event::Custom);
-  });
+  }));
 
   // --- UI Components ---
   std::vector<std::string> contact_menu_entries;
@@ -485,7 +475,7 @@ auto main(int argc, char** argv) -> int {
     return ftxui::window(ftxui::text(status_line), main_view);
   });
 
-  std::thread client_thread([&] { client->Start(); });
+  std::thread client_thread([&]() -> void { client->Start(); });
   screen.Loop(layout);
 
   client->Terminate();
@@ -493,8 +483,8 @@ auto main(int argc, char** argv) -> int {
     client_thread.join();
   }
 
-  for (auto& unsub : event_unsubs) {
-    unsub();
+  for (auto& evnt : event_unsubs) {
+    eillance::EventQueue::Instance().Unsubscribe(evnt);
   }
 
   return 0;
