@@ -121,7 +121,7 @@ auto main(int argc, char** argv) -> int {
     if (e.message.direction == eillance::messaging::MessageDirection::received) {
       if (std::holds_alternative<eillance::messaging::MessageEntry>(e.message.data)) {
         auto const& message = std::get<eillance::messaging::MessageEntry>(e.message.data);
-        LGI << "[mock] Message from " << e.peer_id.ToString() << " received: " << content;
+        LGI << "[mock] Message from " << e.peer_id.ToString() << " received";
         if (std::get<eillance::messaging::MessageEntry>(e.message.data).reply_to_id > 0) {
           LGI << "[mock] Message is a reply to: "
               << std::get<eillance::messaging::MessageEntry>(e.message.data).reply_to_id;
@@ -228,7 +228,11 @@ auto main(int argc, char** argv) -> int {
       }
     } else if (cmd.starts_with("profile")) {
       if (std::smatch match; std::regex_match(cmd, match, re_profile)) {
-        client->UpdateMyProfile(match[1].str(), match[2].str(), std::nullopt);
+        client->UpdateMyProfile(eillance::identity::ProfileUpdate{
+            .display_name = match[1].str(),
+            .bio = match[2].str(),
+            .photo_base64 = std::nullopt
+        });
         LGI << "[mock] Executed profile update: " << match[1].str();
       }
     } else if (cmd.starts_with("call ")) {
@@ -268,7 +272,7 @@ auto main(int argc, char** argv) -> int {
         std::ignore = client->AddContact(peer_id, std::nullopt);
         client->ConfirmContact(peer_id);
 
-        std::vector<eillance::services::AttachmentRequest> atts;
+        std::vector<eillance::messaging::AttachmentRequest> atts;
         std::stringstream paths_ss(paths_str);
         std::string file_path;
         while (paths_ss >> file_path) {
