@@ -7,7 +7,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include "eillance/events/event_source.hpp"
+#include "eillance/events/service_connection_state.hpp"
 #include "eillance/identity/contact_id.hpp"
 #include "eillance/messaging/types.hpp"
 #include "eillance/storage/data_types.hpp"
@@ -86,11 +86,23 @@ struct EventAttachmentStatusChanged {
   std::string attachment_id;
   messaging::AttachmentStatus status;
 };
-struct EventStatusChanged {
+
+struct EventDataPeerConnectionStateChanged {
   ContactID peer_id;
-  EventSource source;
-  int state;
+  transport::PeerConnectionState state;
 };
+struct EventMediaPeerConnectionStateChanged {
+  ContactID peer_id;
+  transport::PeerConnectionState state;
+};
+struct EventServiceConnectionStateChanged {
+  ServiceConnectionState state;
+};
+struct EventMediaGatheringStateChanged {
+  ContactID peer_id;
+  int state_val;
+};
+
 struct EventIncomingCall {
   ContactID peer_id;
   messaging::HistoryEntryKind call_type;
@@ -134,14 +146,6 @@ struct EventDataReloaded {};
 // Orchestration Events replacing cross-service calls
 struct EventConnectionAttemptFinished {
   ContactID peer_id;
-};
-struct EventMediaPeerConnectionStateChanged {
-  ContactID peer_id;
-  transport::PeerConnectionState state;
-};
-struct EventMediaGatheringStateChanged {
-  ContactID peer_id;
-  int state_val;
 };
 struct EventStopDeliveryService {};
 struct EventDebugClearContactCache {};

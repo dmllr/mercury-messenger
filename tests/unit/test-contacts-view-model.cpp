@@ -85,11 +85,7 @@ TEST_F(ContactsViewModelTest, ContactConnectionState) {
   }
 
   // Simulate connection state change via MockTransport
-  EventQueue::Instance().Push(EventStatusChanged{
-      peer1,
-      EventSource::peerConnectionState,
-      static_cast<int>(transport::PeerConnectionState::connected)
-  });
+  EventQueue::Instance().Push(EventDataPeerConnectionStateChanged{peer1, transport::PeerConnectionState::connected});
 
   // Wait for update and specific state
   WaitFor(

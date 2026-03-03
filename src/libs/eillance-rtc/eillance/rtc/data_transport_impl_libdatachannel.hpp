@@ -16,7 +16,6 @@
 
 #include "eillance/crypto/crypto.hpp"
 #include "eillance/events/client_events.hpp"
-#include "eillance/events/event_source.hpp"
 #include "eillance/events/service_connection_state.hpp"
 #include "eillance/identity/contact_id.hpp"
 #include "eillance/logging/logging.hpp"
@@ -388,7 +387,7 @@ class RtcDataTransport : public transport::DataTransport::Interface {
 
   void ReportServiceConnectionState(ServiceConnectionState state) const {
     serviceConnectionState_ = state;
-    EventQueue::Instance().Push(EventStatusChanged{ContactID(), EventSource::system, static_cast<int>(state)});
+    EventQueue::Instance().Push(EventServiceConnectionStateChanged{state});
   }
 
   void WsSendMessage(Json const& message) const {
@@ -439,11 +438,7 @@ class RtcDataTransport : public transport::DataTransport::Interface {
     auto pc = std::make_shared<::rtc::PeerConnection>(config);
 
     pc->onStateChange([this, peer_id](::rtc::PeerConnection::State state) -> void {
-      EventQueue::Instance().Push(EventStatusChanged{
-          peer_id,
-          EventSource::peerConnectionState,
-          static_cast<int>(transport::ToEillanceState(state))
-      });
+      EventQueue::Instance().Push(EventDataPeerConnectionStateChanged{peer_id, transport::ToEillanceState(state)});
     });
 
     pc->onGatheringStateChange([this, peer_id, pc](::rtc::PeerConnection::GatheringState state) {
