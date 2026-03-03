@@ -51,58 +51,63 @@ class Client final {
     sm_->internal_messaging = std::make_shared<services::InternalMessagingService>(sm_.get());
 
     // Core subscriptions for transport-level handling that were formerly inside callbacks
-    event_unsubs_.emplace_back(EventQueue::Instance().Subscribe<EventStatusChanged>([this](auto const& event) -> void {
-      if (event.source == EventSource::peerConnectionState) {
-        auto const state = static_cast<transport::PeerConnectionState>(event.state);
-        if (state == transport::PeerConnectionState::failed || state == transport::PeerConnectionState::closed ||
-            state == transport::PeerConnectionState::disconnected) {
-          EventQueue::Instance().Push(EventConnectionAttemptFinished{event.peer_id});
-          sm_->data_transport->Disconnect(event.peer_id);
+    event_unsubs_.emplace_back(
+        EventQueue::Instance().Subscribe<EventDataPeerConnectionStateChanged>([this](auto const& event) -> void {
+          auto const state = event.state;
+          if (state == transport::PeerConnectionState::failed || state == transport::PeerConnectionState::closed ||
+              state == transport::PeerConnectionState::disconnected) {
+            EventQueue::Instance().Push(EventConnectionAttemptFinished{event.peer_id});
+            sm_->data_transport->Disconnect(event.peer_id);
 
-          bool media_active = false;
-          if (auto peer = sm_->data_transport->GetPeer(event.peer_id)) {
-            media_active = peer->has_media_peer_connection;
-          }
+            bool media_active = false;
+            if (auto peer = sm_->data_transport->GetPeer(event.peer_id)) {
+              media_active = peer->has_media_peer_connection;
+            }
 
-          if (media_active) {
-            LGI << "Data connection lost for " << event.peer_id.ToString()
-                << " but media is active. Reconnecting data.";
-            Connect(event.peer_id);
-          } else {
-            EventQueue::Instance().Push(EventMediaPeerConnectionStateChanged{event.peer_id, state});
-            sm_->media_transport->Disconnect(event.peer_id);
-            sm_->data_transport->RemovePeer(event.peer_id);
-          }
-        }
-      } else if (event.source == EventSource::system) {
-        auto const state = static_cast<ServiceConnectionState>(event.state);
-        if (state == ServiceConnectionState::failure || state == ServiceConnectionState::noNetwork ||
-            state == ServiceConnectionState::disconnected) {
-          EventQueue::Instance().Push(EventStopDeliveryService{});
-          for (auto const& [id, peer] : sm_->data_transport->GetPeers()) {
-            auto const pc_state = sm_->data_transport->GetConnectionState(id);
-            if (pc_state == transport::PeerConnectionState::newConnection ||
-                pc_state == transport::PeerConnectionState::connecting) {
-              EventQueue::Instance().Push(EventConnectionAttemptFinished{id});
-              sm_->data_transport->Disconnect(id);
-              sm_->media_transport->Disconnect(id);
+            if (media_active) {
+              LGI << "Data connection lost for " << event.peer_id.ToString()
+                  << " but media is active. Reconnecting data.";
+              Connect(event.peer_id);
+            } else {
+              EventQueue::Instance().Push(EventMediaPeerConnectionStateChanged{event.peer_id, state});
+              sm_->media_transport->Disconnect(event.peer_id);
+              sm_->data_transport->RemovePeer(event.peer_id);
             }
           }
-        } else if (state == ServiceConnectionState::online) {
-          if (this->is_running_.load()) {
-            sm_->messaging->StartDeliveryService();
+        })
+    );
+
+    event_unsubs_.emplace_back(
+        EventQueue::Instance().Subscribe<EventServiceConnectionStateChanged>([this](auto const& event) -> void {
+          auto const state = event.state;
+          if (state == ServiceConnectionState::failure || state == ServiceConnectionState::noNetwork ||
+              state == ServiceConnectionState::disconnected) {
+            EventQueue::Instance().Push(EventStopDeliveryService{});
+            for (auto const& [id, peer] : sm_->data_transport->GetPeers()) {
+              auto const pc_state = sm_->data_transport->GetConnectionState(id);
+              if (pc_state == transport::PeerConnectionState::newConnection ||
+                  pc_state == transport::PeerConnectionState::connecting) {
+                EventQueue::Instance().Push(EventConnectionAttemptFinished{id});
+                sm_->data_transport->Disconnect(id);
+                sm_->media_transport->Disconnect(id);
+              }
+            }
+          } else if (state == ServiceConnectionState::online) {
+            if (this->is_running_.load()) {
+              sm_->messaging->StartDeliveryService();
+            }
           }
-        }
-      } else if (event.source == EventSource::mediaConnectionState) {
-        auto const state = static_cast<transport::PeerConnectionState>(event.state);
-        EventQueue::Instance().Push(EventMediaPeerConnectionStateChanged{event.peer_id, state});
-        if (state == transport::PeerConnectionState::failed || state == transport::PeerConnectionState::closed) {
-          sm_->media_transport->Disconnect(event.peer_id);
-        }
-      } else if (event.source == EventSource::gatheringState) {
-        EventQueue::Instance().Push(EventMediaGatheringStateChanged{event.peer_id, event.state});
-      }
-    }));
+        })
+    );
+
+    event_unsubs_.emplace_back(
+        EventQueue::Instance().Subscribe<EventMediaPeerConnectionStateChanged>([this](auto const& event) -> void {
+          auto const state = event.state;
+          if (state == transport::PeerConnectionState::failed || state == transport::PeerConnectionState::closed) {
+            sm_->media_transport->Disconnect(event.peer_id);
+          }
+        })
+    );
 
     event_unsubs_.emplace_back(EventQueue::Instance().Subscribe<EventConnectionRequested>(
         [this](auto const& e) -> void { this->Connect(e.peer_id); }

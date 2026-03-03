@@ -23,7 +23,7 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcDataTransport_
   if (transport != nullptr) {
     char const* peer_id_chars = env->GetStringUTFChars(j_peer_id, nullptr);
     eillance::ContactID const peer_id(peer_id_chars);
-    transport->ReportStateChange(peer_id, eillance::EventSource::peerConnectionState, state);
+    transport->ReportPeerStateChange(peer_id, state);
     env->ReleaseStringUTFChars(j_peer_id, peer_id_chars);
   }
 }
@@ -40,7 +40,7 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcMediaTransport
   if (transport != nullptr) {
     char const* peer_id_chars = env->GetStringUTFChars(j_peer_id, nullptr);
     eillance::ContactID const peer_id(peer_id_chars);
-    transport->ReportStateChange(peer_id, eillance::EventSource::mediaConnectionState, state);
+    transport->ReportPeerStateChange(peer_id, state);
     env->ReleaseStringUTFChars(j_peer_id, peer_id_chars);
   }
 }
@@ -74,8 +74,7 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcDataTransport_
         break;
     }
     if (service_state != eillance::ServiceConnectionState::unknown) {
-      transport
-          ->ReportStateChange(eillance::ContactID(), eillance::EventSource::system, static_cast<int>(service_state));
+      transport->ReportServiceStateChange(service_state);
     }
   }
 }

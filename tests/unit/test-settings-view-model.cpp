@@ -98,9 +98,7 @@ TEST_F(SettingsViewModelTest, ConnectionStateChange) {
   }
 
   // Simulate transport reporting state change
-  EventQueue::Instance().Push(
-      EventStatusChanged{ContactID(), EventSource::system, static_cast<int>(ServiceConnectionState::online)}
-  );
+  EventQueue::Instance().Push(EventServiceConnectionStateChanged{ServiceConnectionState::online});
 
   WaitFor([&] {
     std::lock_guard<std::mutex> const lock(observer->mutex);

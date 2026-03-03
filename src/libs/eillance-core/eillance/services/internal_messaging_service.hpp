@@ -73,9 +73,7 @@ class InternalMessagingService {
         data_transport_->SendSignalingMessage(response);
       }
     } else if (type == transport::protocol::values::loginSuccess) {
-      EventQueue::Instance().Push(
-          EventStatusChanged{ContactID(), EventSource::system, static_cast<int>(ServiceConnectionState::online)}
-      );
+      EventQueue::Instance().Push(EventServiceConnectionStateChanged{ServiceConnectionState::online});
     } else if (type == transport::protocol::values::iceServers) {
       if (message.contains(transport::protocol::keys::servers)) {
         EventQueue::Instance().Push(EventServerIceConfig{message[transport::protocol::keys::servers].dump()});

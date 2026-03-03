@@ -14,7 +14,6 @@
 
 #include "eillance/crypto/crypto.hpp"
 #include "eillance/events/client_events.hpp"
-#include "eillance/events/event_source.hpp"
 #include "eillance/identity/contact_id.hpp"
 #include "eillance/rtc/connection_state_conversion.hpp"
 #include "eillance/transport/media_transport.hpp"
@@ -70,28 +69,11 @@ class RtcMediaTransport : public transport::MediaTransport::Interface {
     auto pc = std::make_shared<::rtc::PeerConnection>(config);
 
     pc->onStateChange([this, peer_id](::rtc::PeerConnection::State const state) -> void {
-      EventQueue::Instance().Push(EventStatusChanged{
-          peer_id,
-          EventSource::mediaConnectionState,
-          static_cast<int>(transport::ToEillanceState(state))
-      });
+      EventQueue::Instance().Push(EventMediaPeerConnectionStateChanged{peer_id, transport::ToEillanceState(state)});
     });
 
-    pc->onGatheringStateChange([this, peer_id, pc](::rtc::PeerConnection::GatheringState const state) -> void {
-      if (state == ::rtc::PeerConnection::GatheringState::Complete) {
-        if (auto const desc = pc->localDescription()) {
-          auto const msg = transport::protocol::CreateSdp(
-              desc->typeString(),
-              std::string(*desc),
-              transport::protocol::values::contextMedia,
-              peer_id
-          );
-          {
-            std::lock_guard<std::mutex> const lock(configMutex_);
-            // TODO: implement send
-          }
-        }
-      }
+    pc->onGatheringStateChange([this, peer_id](::rtc::PeerConnection::GatheringState const state) -> void {
+      EventQueue::Instance().Push(EventMediaGatheringStateChanged{peer_id, static_cast<int>(state)});
     });
 
     std::lock_guard<std::mutex> const lock(pcsMutex_);
