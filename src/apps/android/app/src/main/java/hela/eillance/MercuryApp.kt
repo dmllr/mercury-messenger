@@ -1,5 +1,6 @@
 package hela.eillance
 
+import android.app.Activity
 import android.app.Application
 import android.net.Uri
 import androidx.compose.foundation.layout.Box
@@ -138,6 +139,8 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
   val navigateToScanner by viewModel.navigateToScanner.collectAsState()
   val navigateToContacts by viewModel.navigateToContacts.collectAsState()
   val isCoreUnresponsive by viewModel.isCoreUnresponsive.collectAsState()
+  
+  val context = LocalContext.current
 
   // -- Global State Observations --
   val contacts by contactsVM.contacts.collectAsState()
@@ -168,7 +171,7 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
   LaunchedEffect(navigateToContacts) {
     if (navigateToContacts) {
       navController.navigate(Screen.Contacts.route) {
-        popUpTo(0)
+        launchSingleTop = true
       }
       viewModel.onContactsNavigated()
     }
@@ -265,7 +268,13 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
               launchSingleTop = true
             }
           },
-          onShowContactProfile = contactsVM::onShowContactProfile
+          onShowContactProfile = contactsVM::onShowContactProfile,
+          onCancelShare = {
+            viewModel.clearPendingShare()
+            if (!navController.popBackStack()) {
+              (context as? Activity)?.finish()
+            }
+          }
         )
       }
 
