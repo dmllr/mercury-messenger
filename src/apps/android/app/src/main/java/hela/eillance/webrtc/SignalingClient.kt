@@ -38,12 +38,14 @@ class SignalingClient {
     OPEN,
     CLOSED,
     FAILED,
-    NO_NETWORK
+    NO_NETWORK,
+    INVALID_TOKEN
   }
 
   private val clientScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
   private var webSocket: WebSocket? = null
   private val isConnected = AtomicBoolean(false)
+  private val isAuthenticated = AtomicBoolean(false)
 
   private val _messages = MutableSharedFlow<SignalingMessage>()
   val messages: SharedFlow<SignalingMessage> = _messages
@@ -58,7 +60,8 @@ class SignalingClient {
     clientScope.launch {
       var currentBackoffMs = INITIAL_BACKOFF_MS
       _state.tryEmit(State.CONNECTING)
-      while (isActive) {
+      val hasFatalAuthError = AtomicBoolean(false)
+      while (isActive && !hasFatalAuthError.get()) {
         val sessionClosedSignal = CompletableDeferred<Unit>()
 
         if (!isConnected.get()) {
@@ -70,6 +73,7 @@ class SignalingClient {
               Log.i(TAG, "Signaling connection opened.")
               this@SignalingClient.webSocket = webSocket
               isConnected.set(true)
+              isAuthenticated.set(false)
               currentBackoffMs = INITIAL_BACKOFF_MS
               _state.tryEmit(State.OPEN)
 
@@ -79,23 +83,32 @@ class SignalingClient {
                 put("id", peerId)
               }
               webSocket.send(loginMessage.toString())
-
-              // Flush queue
-              while (!messageQueue.isEmpty()) {
-                val msg = messageQueue.poll()
-                if (msg != null) {
-                  webSocket.send(msg)
-                }
-              }
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
               Log.d(TAG, "Received: $text")
               try {
                 val json = JSONObject(text)
+                
+                if (json.has("type") && json.getString("type") == "login_success") {
+                  isAuthenticated.set(true)
+                  while (!messageQueue.isEmpty()) {
+                    val msg = messageQueue.poll()
+                    if (msg != null) {
+                      webSocket.send(msg)
+                    }
+                  }
+                } else if (json.has("type") && json.getString("type") == "error") {
+                  val error = json.getString("error")
+                  if (error == "auth_failed" || error == "invalid_id") {
+                    hasFatalAuthError.set(true)
+                    _state.tryEmit(State.INVALID_TOKEN)
+                  }
+                }
+
                 val signalingMessage = when {
                   json.has("from") -> SignalingMessage.PeerMessage(json)
-                  json.getString("type") == "error" -> {
+                  json.has("type") && json.getString("type") == "error" -> {
                     val forPeer = if (json.has("for_peer")) json.getString("for_peer") else null
                     SignalingMessage.Error(json.getString("error"), forPeer)
                   }
@@ -115,8 +128,11 @@ class SignalingClient {
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
               Log.i(TAG, "Signaling connection closed.")
               isConnected.set(false)
+              isAuthenticated.set(false)
               this@SignalingClient.webSocket = null
-              _state.tryEmit(State.CLOSED)
+              if (!hasFatalAuthError.get()) {
+                _state.tryEmit(State.CLOSED)
+              }
               sessionClosedSignal.complete(Unit)
             }
 
@@ -124,8 +140,11 @@ class SignalingClient {
               val state = determineErrorState(t)
               Log.e(TAG, "Signaling failure: $state. Reason: ${t.message}")
               isConnected.set(false)
+              isAuthenticated.set(false)
               this@SignalingClient.webSocket = null
-              _state.tryEmit(state)
+              if (!hasFatalAuthError.get()) {
+                _state.tryEmit(state)
+              }
               sessionClosedSignal.complete(Unit)
             }
           }
@@ -144,7 +163,7 @@ class SignalingClient {
 
         sessionClosedSignal.await()
 
-        if (isActive) {
+        if (isActive && !hasFatalAuthError.get()) {
           Log.i(TAG, "Will attempt to reconnect in ${currentBackoffMs / 1000} seconds.")
           delay(currentBackoffMs)
           currentBackoffMs = (currentBackoffMs * 2).coerceAtMost(MAX_BACKOFF_MS)
@@ -156,13 +175,17 @@ class SignalingClient {
   fun send(message: JSONObject) {
     val messageString = message.toString()
     val ws = webSocket
-    if (isConnected.get() && ws != null) {
+    
+    // System messages required for handshake must bypass the queue
+    val isAuthMessage = message.optString("type") == "auth_response"
+
+    if (isConnected.get() && ws != null && (isAuthenticated.get() || isAuthMessage)) {
       if (!ws.send(messageString)) {
         Log.e(TAG, "Failed to send message immediately, queuing.")
         messageQueue.add(messageString)
       }
     } else {
-      Log.i(TAG, "Signaling not connected, queuing message: $messageString")
+      Log.i(TAG, "Signaling not ready, queuing message (type: ${message.optString("type")}).")
       messageQueue.add(messageString)
     }
   }
@@ -173,6 +196,7 @@ class SignalingClient {
     webSocket?.close(NORMAL_CLOSURE_STATUS, "Client disconnected")
     webSocket = null
     isConnected.set(false)
+    isAuthenticated.set(false)
     _state.tryEmit(State.CLOSED)
     messageQueue.clear()
   }
