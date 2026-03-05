@@ -17,6 +17,11 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -43,11 +48,22 @@ fun GlobalStatusBanner(
   val callLauncher =
     rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { onCheckPermissions() }
 
-  val isConnectionIssue = !isCoreUnresponsive && (
-      connectionState != ServiceConnectionState.Online &&
-          connectionState != ServiceConnectionState.Establishing &&
-          connectionState != ServiceConnectionState.Unknown
-      )
+  var showConnectionIssue by remember { mutableStateOf(false) }
+
+  LaunchedEffect(connectionState) {
+    val isIssueState = connectionState != ServiceConnectionState.Online &&
+                       connectionState != ServiceConnectionState.Unknown
+    if (isIssueState) {
+      if (!showConnectionIssue) {
+        kotlinx.coroutines.delay(1000) // 1 second grace period to prevent UI flicker on fast reconnects
+        showConnectionIssue = true
+      }
+    } else {
+      showConnectionIssue = false
+    }
+  }
+
+  val isConnectionIssue = !isCoreUnresponsive && showConnectionIssue
   val showPermissionBanner = !isCoreUnresponsive && !isConnectionIssue && bannerState != null
 
   AnimatedVisibility(
@@ -65,13 +81,19 @@ fun GlobalStatusBanner(
         )
       } else if (isConnectionIssue) {
         val (msg, isError) = when (connectionState) {
+          ServiceConnectionState.Establishing -> stringResource(R.string.service_status_connecting) to false
           ServiceConnectionState.NoNetwork -> stringResource(R.string.connection_no_network) to false
           ServiceConnectionState.Failure -> stringResource(R.string.connection_failed) to true
           ServiceConnectionState.Disconnected -> stringResource(R.string.connection_disconnected) to false
           ServiceConnectionState.InvalidToken -> stringResource(R.string.connection_auth_error) to true
           else -> stringResource(R.string.connection_issue) to true
         }
-        StatusSnackbar(text = msg, isError = isError)
+        StatusSnackbar(
+          text = msg,
+          isError = isError,
+          actionLabel = if (isError) stringResource(R.string.action_reset_core) else null,
+          onAction = if (isError) onResetCore else null
+        )
       } else {
         when (bannerState) {
           BannerType.Notification -> {

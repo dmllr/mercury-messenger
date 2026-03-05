@@ -56,10 +56,8 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcDataTransport_
     auto service_state = eillance::ServiceConnectionState::unknown;
     switch (state) {
       case 0:
-        service_state = eillance::ServiceConnectionState::establishing;
-        break;
       case 1:
-        service_state = eillance::ServiceConnectionState::online;
+        service_state = eillance::ServiceConnectionState::establishing;
         break;
       case 2:
         service_state = eillance::ServiceConnectionState::disconnected;
@@ -69,6 +67,9 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcDataTransport_
         break;
       case 4:
         service_state = eillance::ServiceConnectionState::noNetwork;
+        break;
+      case 5:
+        service_state = eillance::ServiceConnectionState::invalidToken;
         break;
       default:
         break;
