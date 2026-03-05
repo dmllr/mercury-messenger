@@ -158,8 +158,8 @@ fun MessageBubble(
         modifier = Modifier
           .align(Alignment.CenterEnd)
           .padding(end = 16.dp)
-          .scale((offsetX.value / -100f).coerceIn(0f, 1f))
-          .alpha((offsetX.value / -50f).coerceIn(0f, 1f))
+          .scale((offsetX.value / -150f).coerceIn(0f, 1f))
+          .alpha((offsetX.value / -100f).coerceIn(0f, 1f))
       )
     }
 
@@ -171,8 +171,8 @@ fun MessageBubble(
         modifier = Modifier
           .align(Alignment.CenterStart)
           .padding(start = 16.dp)
-          .scale((offsetX.value / 100f).coerceIn(0f, 1f))
-          .alpha((offsetX.value / 50f).coerceIn(0f, 1f))
+          .scale((offsetX.value / 150f).coerceIn(0f, 1f))
+          .alpha((offsetX.value / 100f).coerceIn(0f, 1f))
       )
     }
 
@@ -203,9 +203,9 @@ fun MessageBubble(
           .pointerInput(Unit) {
             detectHorizontalDragGestures(
               onDragEnd = {
-                if (offsetX.value < -80f) {
+                if (offsetX.value < -130f) {
                   onSwipeToReply()
-                } else if (offsetX.value > 80f) {
+                } else if (offsetX.value > 130f) {
                   onSwipeToForward()
                 }
                 coroutineScope.launch { offsetX.animateTo(0f) }
@@ -214,7 +214,7 @@ fun MessageBubble(
                 coroutineScope.launch { offsetX.animateTo(0f) }
               },
               onHorizontalDrag = { _, dragAmount ->
-                val newOffset = (offsetX.value + dragAmount).coerceIn(-150f, 150f)
+                val newOffset = (offsetX.value + dragAmount).coerceIn(-200f, 200f)
                 coroutineScope.launch { offsetX.snapTo(newOffset) }
               }
             )
