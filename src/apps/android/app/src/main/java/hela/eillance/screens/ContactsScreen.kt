@@ -99,7 +99,8 @@ fun ContactsScreen(
   onContactClick: (String, Long?) -> Unit,
   onNavigateToProfile: () -> Unit,
   onNavigateToSettings: () -> Unit,
-  onShowContactProfile: (String) -> Unit
+  onShowContactProfile: (String) -> Unit,
+  onCancelShare: () -> Unit
 ) {
   val snackbarHostState = remember { SnackbarHostState() }
   val context = LocalContext.current
@@ -125,6 +126,11 @@ fun ContactsScreen(
     isSearchActive = false
     searchQuery = ""
     contactsVM.searchAllMessages("")
+  }
+
+  // Handle back press to cancel share
+  BackHandler(enabled = !isSearchActive && pendingShare != null) {
+    onCancelShare()
   }
 
   val hasConnectionIssues = connectionState == ServiceConnectionState.Failure ||
@@ -204,13 +210,21 @@ fun ContactsScreen(
               text = if (pendingShare != null) {
                 stringResource(id = R.string.share_with)
               } else {
-                "\uD835\uDCDC\uD835\uDCEE\uD835\uDCFB\uD835\uDCEC\uD835\uDCFE\uD835\uDCFB\uD835\uDD02"
+                stringResource(id = R.string.app_name)
               },
               style = MaterialTheme.typography.titleLarge,
               fontWeight = FontWeight.Bold
             )
           },
           actions = {
+            if (pendingShare != null) {
+              IconButton(onClick = onCancelShare) {
+                Icon(
+                  Icons.Default.Close,
+                  contentDescription = stringResource(R.string.action_cancel)
+                )
+              }
+            }
           },
         )
       }
