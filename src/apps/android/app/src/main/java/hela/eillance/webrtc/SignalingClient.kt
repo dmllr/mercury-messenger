@@ -182,11 +182,15 @@ class SignalingClient {
     if (isConnected.get() && ws != null && (isAuthenticated.get() || isAuthMessage)) {
       if (!ws.send(messageString)) {
         Log.e(TAG, "Failed to send message immediately, queuing.")
-        messageQueue.add(messageString)
+        if (!isAuthMessage) {
+          messageQueue.add(messageString)
+        }
       }
     } else {
-      Log.i(TAG, "Signaling not ready, queuing message (type: ${message.optString("type")}).")
-      messageQueue.add(messageString)
+      if (!isAuthMessage) {
+        Log.i(TAG, "Signaling not ready, queuing message (type: ${message.optString("type")}).")
+        messageQueue.add(messageString)
+      }
     }
   }
 
