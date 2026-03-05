@@ -107,7 +107,11 @@ fun ProfileScreen(
         onNavigateToBetaNotice = onNavigateToBetaNotice,
         onNavigateToBackupAndRestore = onNavigateToBackupAndRestore,
         onNavigateToHelp = onNavigateToHelp,
-        onSendFeedback = { contactsVM.sendFeedback() },
+        onSendFeedback = {
+          contactsVM.sendFeedback { peerId ->
+            mainViewModel.navigateToPeer(peerId)
+          }
+        },
         onNavigateToPermissionIssues = onNavigateToPermissionIssues,
         onNavigateToDebugMenu = onNavigateToDebugMenu
       )

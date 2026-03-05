@@ -135,9 +135,19 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
     return if (nativePtr != 0L) nativeGenerateToken(nativePtr) else null
   }
 
-  fun sendFeedback() {
+  fun sendFeedback(onContactReady: (String) -> Unit) {
     val feedbackId = "ba5fc552e3e16a7604e3ec74ad65370ba1b36345ffcfe7d726e217e85295b382"
-    addContact(feedbackId)
+    val exists = _contacts.value.any { it.peerId == feedbackId }
+    if (!exists) {
+      val success = if (nativePtr != 0L) nativeAddContact(nativePtr, feedbackId, null) else false
+      if (!success) {
+        viewModelScope.launch {
+          _errorMessage.emit(getApplication<Application>().getString(R.string.contact_add_error))
+        }
+        return
+      }
+    }
+    onContactReady(feedbackId)
   }
 
   fun getUnreadMessages(peerId: String): List<HistoryEntry> {
