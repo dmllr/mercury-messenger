@@ -197,6 +197,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     return content
   }
 
+  fun clearPendingShare() {
+    _pendingShare.value = null
+  }
+
   fun resetCore() {
     MessengerService.instance?.restartCore()
   }
