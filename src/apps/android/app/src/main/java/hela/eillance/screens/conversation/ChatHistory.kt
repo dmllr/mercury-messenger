@@ -4,8 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -102,7 +101,9 @@ fun ChatHistory(
   Box(modifier = modifier) {
     LazyColumn(
       state = listState,
-      modifier = Modifier.fillMaxSize(),
+      modifier = Modifier
+        .fillMaxSize()
+        .padding(start = 12.dp, end = 12.dp),
       verticalArrangement = Arrangement.spacedBy(2.dp),
       contentPadding = PaddingValues(vertical = 8.dp),
       reverseLayout = true
@@ -301,6 +302,19 @@ private fun FastScroller(
     val safeMaxHeight = if (maxHeight > 0f) maxHeight else 1f
 
     Box(modifier = Modifier.fillMaxSize()) {
+      // Visual track indicator for the scroll area
+      Box(
+        modifier = Modifier
+          .align(Alignment.CenterEnd)
+          .padding(end = 2.dp)
+          .width(4.dp)
+          .fillMaxHeight(0.95f)
+          .background(
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.15f),
+            shape = RoundedCornerShape(2.dp)
+          )
+      )
+
       AnimatedVisibility(
         visible = isVisible,
         enter = fadeIn(),
@@ -335,10 +349,10 @@ private fun FastScroller(
 
           Box(
             modifier = Modifier
-              .width(8.dp)
-              .height(64.dp)
+              .width(4.dp)
+              .height(48.dp)
               .onSizeChanged { thumbHeight = it.height.toFloat() }
-              .clip(RoundedCornerShape(4.dp))
+              .clip(RoundedCornerShape(2.dp))
               .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.8f))
           )
         }
@@ -347,30 +361,26 @@ private fun FastScroller(
       Box(
         modifier = Modifier
           .align(Alignment.TopEnd)
-          .width(48.dp)
+          .width(16.dp)
           .fillMaxHeight()
           .pointerInput(history.size) {
-            awaitEachGesture {
-              val down = awaitFirstDown()
-              isDragging = true
-              var progress = (down.position.y / safeMaxHeight).coerceIn(0f, 1f)
-              dragProgress = progress
-              var targetIndex = ((1f - progress) * history.lastIndex).roundToInt().coerceIn(0, history.lastIndex)
-              coroutineScope.launch { listState.scrollToItem(targetIndex) }
-
-              do {
-                val event = awaitPointerEvent()
-                val change = event.changes.firstOrNull()
-                if (change != null && change.pressed) {
-                  change.consume()
-                  progress = (change.position.y / safeMaxHeight).coerceIn(0f, 1f)
-                  dragProgress = progress
-                  targetIndex = ((1f - progress) * history.lastIndex).roundToInt().coerceIn(0, history.lastIndex)
+            detectVerticalDragGestures(
+              onDragStart = {
+                dragProgress = displayProgress
+                isDragging = true
+              },
+              onDragEnd = { isDragging = false },
+              onDragCancel = { isDragging = false },
+              onVerticalDrag = { change, dragAmount ->
+                change.consume()
+                val trackHeight = safeMaxHeight - thumbHeight
+                if (trackHeight > 0f) {
+                  dragProgress = (dragProgress + (dragAmount / trackHeight)).coerceIn(0f, 1f)
+                  val targetIndex = ((1f - dragProgress) * history.lastIndex).roundToInt().coerceIn(0, history.lastIndex)
                   coroutineScope.launch { listState.scrollToItem(targetIndex) }
                 }
-              } while (event.changes.any { it.pressed })
-              isDragging = false
-            }
+              }
+            )
           }
       )
     }
