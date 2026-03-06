@@ -27,7 +27,7 @@ class CallViewModel {
     Subscribe<EventCallRinging>(queue, [impl](auto const& event) { impl->OnCallRinging(event.peer_id); });
     Subscribe<EventCallAccepted>(queue, [impl](auto const& event) { impl->OnCallAccepted(event.peer_id); });
     Subscribe<EventCallTerminated>(queue, [impl](auto const& event) { impl->OnCallTerminated(event.peer_id); });
-    Subscribe<EventDataPeerConnectionStateChanged>(queue, [impl](auto const& event) {
+    Subscribe<EventMediaPeerConnectionStateChanged>(queue, [impl](auto const& event) {
       auto const state = event.state;
       if (state == transport::PeerConnectionState::closed || state == transport::PeerConnectionState::disconnected ||
           state == transport::PeerConnectionState::failed) {
@@ -211,7 +211,7 @@ class CallViewModel {
       bool should_notify = false;
       {
         std::lock_guard<std::mutex> const lock(mutex);
-        if ((state.is_connecting || state.is_ringing) && state.peer_id == peer_id) {
+        if ((state.is_connecting || state.is_ringing || !state.is_in_call) && state.peer_id == peer_id) {
           state.is_connecting = false;
           state.is_ringing = false;
           state.is_in_call = true;
@@ -225,11 +225,10 @@ class CallViewModel {
 
     void OnCallConnected(ContactID const& peer_id) {
       bool should_notify = false;
-      // We no longer automatically transition to InCall here.
-      // We wait for Accepted or Ringing updates from MediaCallService logic.
+      // Wait for Accepted or Ringing updates from MediaCallService logic.
       {
         std::lock_guard<std::mutex> const lock(mutex);
-        if ((state.is_connecting || state.is_ringing) && state.peer_id == peer_id &&
+        if (!state.is_in_call && (state.is_connecting || state.is_ringing) && state.peer_id == peer_id &&
             state.call_direction == messaging::CallDirection::outgoing) {
           state.is_connecting = false;
           state.is_ringing = true;  // Connected -> Ringing (waiting for accept)
