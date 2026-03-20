@@ -146,9 +146,14 @@ class WebRtcMediaTransport(private val context: Context, private val nativePoint
       continualGatheringPolicy = PeerConnection.ContinualGatheringPolicy.GATHER_ONCE
     }
 
+    val pcWrapper = arrayOfNulls<PeerConnection>(1)
+
     val observer = object : PeerConnection.Observer {
       override fun onSignalingChange(state: PeerConnection.SignalingState?) {}
       override fun onConnectionChange(newState: PeerConnection.PeerConnectionState?) {
+        val currentSession = sessions[peerId]
+        if (currentSession == null || currentSession.pc != pcWrapper[0]) return
+
         val stateInt = when (newState) {
           PeerConnection.PeerConnectionState.NEW -> PeerConnectionState.New.value
           PeerConnection.PeerConnectionState.CONNECTING -> PeerConnectionState.Connecting.value
@@ -165,9 +170,11 @@ class WebRtcMediaTransport(private val context: Context, private val nativePoint
       override fun onStandardizedIceConnectionChange(state: PeerConnection.IceConnectionState?) {}
       override fun onIceConnectionReceivingChange(receiving: Boolean) {}
       override fun onIceGatheringChange(state: PeerConnection.IceGatheringState?) {
-        if (state == PeerConnection.IceGatheringState.COMPLETE) sessions[peerId]?.iceGatheringComplete?.complete(
-          Unit
-        )
+        val currentSession = sessions[peerId]
+        if (currentSession == null || currentSession.pc != pcWrapper[0]) return
+        if (state == PeerConnection.IceGatheringState.COMPLETE) {
+          currentSession.iceGatheringComplete?.complete(Unit)
+        }
       }
 
       override fun onIceCandidate(candidate: IceCandidate?) {}
@@ -178,6 +185,9 @@ class WebRtcMediaTransport(private val context: Context, private val nativePoint
       override fun onDataChannel(dc: DataChannel?) {}
       override fun onTrack(transceiver: RtpTransceiver?) {}
       override fun onAddTrack(receiver: RtpReceiver, streams: Array<out MediaStream>) {
+        val currentSession = sessions[peerId]
+        if (currentSession == null || currentSession.pc != pcWrapper[0]) return
+
         receiver.track()?.let { track ->
           if (track is VideoTrack) {
             remoteVideoTracks[peerId] = track
@@ -190,6 +200,7 @@ class WebRtcMediaTransport(private val context: Context, private val nativePoint
     }
 
     val pc = factory.createPeerConnection(rtcConfig, observer) ?: return
+    pcWrapper[0] = pc
     sessions[peerId] = MediaSession(pc)
   }
 

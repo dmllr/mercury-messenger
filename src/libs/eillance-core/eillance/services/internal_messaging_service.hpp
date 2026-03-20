@@ -260,6 +260,21 @@ class InternalMessagingService {
         auto const sdp = message[transport::protocol::keys::sdp].get<std::string>();
         sm_->media_call->OnMediaOffer(peer_id, sdp);
       } else {
+        auto const state = data_transport_->GetConnectionState(peer_id);
+        if (state == transport::PeerConnectionState::newConnection || state == transport::PeerConnectionState::connecting) {
+          if (sm_->account->GetId() > peer_id) {
+            LGI << "Resolving SDP glare: Yielding to offer from " << peer_id.ToString();
+            data_transport_->Disconnect(peer_id);
+          } else {
+            LGI << "Resolving SDP glare: Ignoring offer from " << peer_id.ToString();
+            return;
+          }
+        } else if (state == transport::PeerConnectionState::failed || 
+                   state == transport::PeerConnectionState::closed || 
+                   state == transport::PeerConnectionState::disconnected) {
+          data_transport_->Disconnect(peer_id);
+        }
+
         data_transport_->Connect(peer_id);
         data_transport_->SetRemoteDescription(
             peer_id,
