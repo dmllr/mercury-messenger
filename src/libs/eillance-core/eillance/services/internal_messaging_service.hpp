@@ -96,8 +96,29 @@ class InternalMessagingService {
       }
       Json const profile = message.value("profile", Json::object());
       sm_->contact->OnContactAddRequest(peer_id, token, profile);
+
+      Json const ack = {{"type", "contact_add_ack"}, {"to", peer_id.ToString()}};
+      data_transport_->SendSignalingMessage(ack);
+
+    } else if (type == "contact_add_ack") {
+      sm_->contact->OnContactAddAck(peer_id);
     } else if (type == "contact_confirm") {
-      sm_->contact->OnContactConfirm(peer_id);
+      std::string signature_hex = message.value("signature", "");
+      Json const profile = message.value("profile", Json::object());
+      sm_->contact->OnContactConfirm(peer_id, signature_hex, profile);
+
+      Json const ack = {{"type", "contact_confirm_ack"}, {"to", peer_id.ToString()}};
+      data_transport_->SendSignalingMessage(ack);
+
+    } else if (type == "contact_confirm_ack") {
+      sm_->contact->OnContactConfirmAck(peer_id);
+    } else if (type == "contact_removed") {
+      sm_->contact->OnContactRemoved(peer_id);
+      Json const ack = {{"type", "contact_removed_ack"}, {"to", peer_id.ToString()}};
+      data_transport_->SendSignalingMessage(ack);
+
+    } else if (type == "contact_removed_ack") {
+      sm_->contact->OnContactRemovedAck(peer_id);
     }
   }
 
@@ -161,14 +182,6 @@ class InternalMessagingService {
       sm_->media_call->OnCallRinging(peer_id, message.value("call_id", ""));
     } else if (type == transport::protocol::values::offer || type == transport::protocol::values::answer) {
       ProcessSignalingMessage(peer_id, type, message);
-    } else if (type == "contact_removed") {
-      sm_->contact->OnContactRemoved(peer_id);
-    } else if (type == "reconfirm_request") {
-      sm_->contact->OnReconfirmRequest(peer_id);
-    } else if (type == "reconfirm_response") {
-      sm_->contact->OnReconfirmResponse(peer_id, message["signature"]);
-    } else if (type == "contact_signature") {
-      sm_->contact->OnContactSignature(peer_id, message["signature"]);
     } else if (type == "profile_info") {
       sm_->profile->OnProfileUpdate(peer_id, message);
     } else if (type == "profile_request") {

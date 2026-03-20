@@ -342,13 +342,12 @@ class MessagingService {
     if (pending_actions.empty()) return;
 
     auto const now = Time::Now();
+    bool connection_requested = false;
 
     for (auto const& action : pending_actions) {
       if (WasSentRecently(action.id, now)) {
         continue;
       }
-
-      LGI << "Processing pending action " << action.id << " for " << peer_id.ToString();
 
       bool success = false;
       bool remove_on_success = true;
@@ -364,18 +363,28 @@ class MessagingService {
           success = ProcessChatAction(peer_id, msg_id, peer, should_remove);
           if (should_remove) {
             remove_on_success = true;
+            success = true;
           }
-        } else if (type == "contact_confirm") {
+          if (!success) {
+            connection_requested = true;
+            break;
+          }
+        } else if (type == "contact_add_request" || type == "contact_confirm" || type == "contact_removed") {
           transport_->SendSignalingMessage(json_action);
           success = true;
+          remove_on_success = false;
         } else {
           if (peer && peer->data_channel_is_open) {
             if (transport_->SendJson(peer_id, json_action)) {
               success = true;
             } else {
               peer->data_channel_is_open = false;
+              connection_requested = true;
               break;
             }
+          } else {
+            connection_requested = true;
+            break;
           }
         }
       } catch (std::exception const& e) {
@@ -393,7 +402,14 @@ class MessagingService {
       }
     }
 
-    EventQueue::Instance().Push(EventConnectionAttemptFinished{peer_id});
+    if (connection_requested) {
+      EventQueue::Instance().Push(EventConnectionAttemptFinished{peer_id});
+    } else {
+      auto remaining = storage_->GetPendingActions(peer_id);
+      if (!remaining.empty()) {
+        EventQueue::Instance().Push(EventConnectionAttemptFinished{peer_id});
+      }
+    }
   }
 
   void CancelTransfer(
@@ -822,15 +838,6 @@ class MessagingService {
         std::string const action = content_json.value("action", "");
 
         if (action == "contact_request" || action == "contact_confirm") {
-          nlohmann::json msg = {
-              {"type", action == "contact_request" ? "contact_add_request" : "contact_confirm"},
-              {"to", peer_id.ToString()}
-          };
-          if (action == "contact_request") {
-            if (content_json.contains("profile")) msg["profile"] = content_json["profile"];
-            if (content_json.contains("token")) msg["token"] = content_json["token"];
-          }
-          transport_->SendSignalingMessage(msg);
           remove_action = true;
           return true;
         }
