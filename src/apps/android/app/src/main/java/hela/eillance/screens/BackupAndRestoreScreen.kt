@@ -51,7 +51,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import hela.eillance.camera.R
 import hela.eillance.viewmodels.ProfileViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -87,19 +89,25 @@ fun BackupAndRestoreScreen(
     uri?.let { destinationUri ->
       passwordForBackup?.let { password ->
         scope.launch {
-          val tempBackupPath = profileVM.createBackupToTemp(password)
+          val tempBackupPath = withContext(Dispatchers.IO) {
+            profileVM.createBackupToTemp(password)
+          }
           if (tempBackupPath != null) {
             try {
-              context.contentResolver.openOutputStream(destinationUri)?.use { outputStream ->
-                File(tempBackupPath).inputStream().use { inputStream ->
-                  inputStream.copyTo(outputStream)
+              withContext(Dispatchers.IO) {
+                context.contentResolver.openOutputStream(destinationUri)?.use { outputStream ->
+                  File(tempBackupPath).inputStream().use { inputStream ->
+                    inputStream.copyTo(outputStream)
+                  }
                 }
               }
               snackbarHostState.showSnackbar(context.getString(R.string.backup_save_success))
             } catch (e: Exception) {
               snackbarHostState.showSnackbar(context.getString(R.string.backup_save_fail))
             } finally {
-              profileVM.deleteTempBackup(tempBackupPath)
+              withContext(Dispatchers.IO) {
+                profileVM.deleteTempBackup(tempBackupPath)
+              }
             }
           } else {
             snackbarHostState.showSnackbar(context.getString(R.string.backup_create_fail))
@@ -127,7 +135,9 @@ fun BackupAndRestoreScreen(
       onDismiss = { showRestoreConfirmation = null },
       onConfirm = { password ->
         scope.launch {
-          val success = profileVM.restoreBackup(uri, password)
+          val success = withContext(Dispatchers.IO) {
+            profileVM.restoreBackup(uri, password)
+          }
           if (success) {
             onRestoreSuccess()
           } else {
