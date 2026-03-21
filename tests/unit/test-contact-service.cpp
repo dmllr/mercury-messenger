@@ -135,6 +135,19 @@ TEST_F(ContactServiceTest, ConfirmContact) {
   EXPECT_TRUE(status_cb_called);
   EXPECT_TRUE(contact_service_->IsConfirmed(peer1));
 
+  EventQueue::Instance().WaitFor(
+      [&]() {
+        std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
+        for (auto const& msg : mock_transport_raw_->CallLog()->sent_signaling_messages) {
+          if (msg.value("type", "") == "contact_confirm" && msg.value("to", "") == peer1.ToString()) {
+            return true;
+          }
+        }
+        return false;
+      },
+      std::chrono::milliseconds(2000)
+  );
+
   // Check that confirmation messages were queued/sent
   // "contact_confirm" -> sent via signaling
   bool signaling_sent = false;
