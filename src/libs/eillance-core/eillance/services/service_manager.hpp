@@ -32,12 +32,12 @@ struct ServiceManager {
   std::shared_ptr<identity::ContactManager> contact_manager;
 
   std::shared_ptr<AccountService> account;
-  std::shared_ptr<ContactService> contact;
   std::shared_ptr<FileTransferService> file_transfer;
-  std::shared_ptr<InternalMessagingService> internal_messaging;
-  std::shared_ptr<MediaCallService> media_call;
   std::shared_ptr<MessagingService> messaging;
+  std::shared_ptr<MediaCallService> media_call;
   std::shared_ptr<ProfileService> profile;
+  std::shared_ptr<ContactService> contact;
+  std::shared_ptr<InternalMessagingService> internal_messaging;
 };
 
 }  // namespace eillance::services

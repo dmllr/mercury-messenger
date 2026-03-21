@@ -148,7 +148,12 @@ TEST_F(InternalMessagingServiceTest, ProcessDataChannelMessage_Chat) {
       {"payload", enc},
   };
 
-  std::string str = chat_msg.dump();
+  nlohmann::json clean_msg = chat_msg;
+  clean_msg["payload"] = nlohmann::json::array();
+  for(auto b : enc) {
+    clean_msg["payload"].push_back(static_cast<uint8_t>(b));
+  }
+  std::string str = clean_msg.dump();
   std::vector<std::byte> msg_bytes(str.size());
   std::ranges::transform(str, msg_bytes.begin(), [](char c) { return static_cast<std::byte>(c); });
 

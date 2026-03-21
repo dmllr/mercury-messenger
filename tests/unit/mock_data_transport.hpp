@@ -64,8 +64,12 @@ class MockDataTransport : public DataTransport::Interface {
     for (auto const& [k, v] : peers) result[k] = v;
     return result;
   }
-  auto GetConnectionState(ContactID const&) const -> PeerConnectionState override {
-    return PeerConnectionState::connected;
+  auto GetConnectionState(ContactID const& peer_id) const -> PeerConnectionState override {
+    std::lock_guard<std::mutex> const lock(mutex_);
+    if (peers.find(peer_id) != peers.end()) {
+      return PeerConnectionState::connected;
+    }
+    return PeerConnectionState::disconnected;
   }
 
   void Connect(ContactID const&) override {

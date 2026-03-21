@@ -52,6 +52,9 @@ class ClientCoreTest : public ::testing::Test {
 };
 
 TEST_F(ClientCoreTest, ConnectSequence) {
+  mock_storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
+  client_->Contacts()->ReloadCache();
+
   client_->Connect(peer1);
   eillance::EventQueue::Instance().WaitFor(
       [&]() {
@@ -76,6 +79,9 @@ TEST_F(ClientCoreTest, ConnectSequence) {
 }
 
 TEST_F(ClientCoreTest, IncomingKeyExchangeTriggersReply) {
+  mock_storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
+  client_->Contacts()->ReloadCache();
+
   client_->Connect(peer1);
   eillance::EventQueue::Instance().WaitFor(
       [&]() { return mock_transport_->GetPeer(peer1) != nullptr; },
@@ -96,7 +102,14 @@ TEST_F(ClientCoreTest, IncomingKeyExchangeTriggersReply) {
       {"is_reply", false}
   };
 
-  std::string msg_str = key_msg.dump();
+  // Transform the byte array to uint8 array to avoid nlohmann::json dump
+  // implicitly mangling the std::byte arrays when parsed back via string parsing.
+  nlohmann::json clean_msg = key_msg;
+  clean_msg["key"] = nlohmann::json::array();
+  for(auto b : peer_pub_key) {
+    clean_msg["key"].push_back(static_cast<uint8_t>(b));
+  }
+  std::string msg_str = clean_msg.dump();
   std::vector<std::byte> msg_bytes(msg_str.size());
   std::transform(msg_str.begin(), msg_str.end(), msg_bytes.begin(), [](char c) { return static_cast<std::byte>(c); });
 
@@ -127,6 +140,9 @@ TEST_F(ClientCoreTest, IncomingKeyExchangeTriggersReply) {
 }
 
 TEST_F(ClientCoreTest, SignalingMessageProcessing_Offer) {
+  mock_storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
+  client_->Contacts()->ReloadCache();
+
   nlohmann::json const offer_msg =
       {{"from", peer1.ToString()}, {"type", "offer"}, {"context", "data"}, {"sdp", "dummy_sdp_offer"}};
 
@@ -154,6 +170,9 @@ TEST_F(ClientCoreTest, SignalingMessageProcessing_Offer) {
 }
 
 TEST_F(ClientCoreTest, SignalingMessageProcessing_MediaOffer) {
+  mock_storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
+  client_->Contacts()->ReloadCache();
+
   nlohmann::json const offer_msg =
       {{"from", peer1.ToString()}, {"type", "offer"}, {"context", "media"}, {"sdp", "dummy_sdp_media_offer_m=audio"}};
 

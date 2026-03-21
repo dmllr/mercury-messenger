@@ -45,9 +45,9 @@ class Client final {
     sm_->account = std::make_shared<services::AccountService>(sm_.get());
     sm_->file_transfer = std::make_shared<services::FileTransferService>(sm_.get());
     sm_->messaging = std::make_shared<services::MessagingService>(sm_.get());
+    sm_->media_call = std::make_shared<services::MediaCallService>(sm_.get());
     sm_->profile = std::make_shared<services::ProfileService>(sm_.get());
     sm_->contact = std::make_shared<services::ContactService>(sm_.get());
-    sm_->media_call = std::make_shared<services::MediaCallService>(sm_.get());
     sm_->internal_messaging = std::make_shared<services::InternalMessagingService>(sm_.get());
 
     // Core subscriptions for transport-level handling that were formerly inside callbacks
@@ -367,15 +367,15 @@ class Client final {
   }
 
   void Connect(ContactID const& peer_id) const {
+    EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
+
     auto const contact = sm_->contact->GetContact(peer_id);
     if (!contact || contact->status != identity::ContactStatus::confirmed) {
-      EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
       return;
     }
 
     auto const peer = sm_->data_transport->GetPeer(peer_id);
     if (peer && peer->data_channel_is_open) {
-      EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
       return;
     }
     auto const state = sm_->data_transport->GetConnectionState(peer_id);
