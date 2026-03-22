@@ -29,9 +29,6 @@ class CallHandler(
 
   var activeConnection: MercuryConnection? = null
   var mediaTransport: WebRtcMediaTransport? = null
-  var callViewModel: CallViewModel? = null
-
-  private var lastKnownCallState: CallState? = null
 
   fun init() {
     audioManager.mode = AudioManager.MODE_NORMAL
@@ -39,10 +36,6 @@ class CallHandler(
 
   fun onConnectionCreated(connection: MercuryConnection) {
     activeConnection = connection
-  }
-
-  fun updateSoundAndNotification(callState: CallState) {
-    lastKnownCallState = callState
   }
 
   // --- Core-Driven OS Orchestration ---
@@ -119,10 +112,9 @@ class CallHandler(
     serviceScope.launch {
       soundPlayer.stop()
       notifications.cancelIncomingCallNotification()
+      service.nativeAcceptCall()
 
-      callViewModel?.nativeAcceptCallBridge()
-
-      val peerId = lastKnownCallState?.peerId
+      val peerId = getLastCallState()?.peerId
       // Ensure we don't double-open activity if IncomingCallActivity is already visible on lock screen
       if (peerId != null && !service.isIncomingUIVisible) {
         try {
@@ -143,7 +135,7 @@ class CallHandler(
       Log.i(TAG, "rejectCall requested")
       soundPlayer.stop()
       notifications.cancelIncomingCallNotification()
-      callViewModel?.nativeRejectCallBridge()
+      service.nativeRejectCall()
     }
   }
 
@@ -151,7 +143,7 @@ class CallHandler(
     serviceScope.launch {
       Log.i(TAG, "hangup requested")
       soundPlayer.stop()
-      callViewModel?.nativeHangupBridge()
+      service.nativeHangupCall()
     }
   }
 
@@ -160,12 +152,12 @@ class CallHandler(
       if (activeConnection == connection) {
         activeConnection = null
         soundPlayer.stop()
-        val currentState = lastKnownCallState
+        val currentState = getLastCallState()
         if (currentState != null && (currentState.isRinging || currentState.isInCall || currentState.isConnecting)) {
           if (currentState.isRinging) {
-            callViewModel?.nativeRejectCallBridge()
+            service.nativeRejectCall()
           } else {
-            callViewModel?.nativeHangupBridge()
+            service.nativeHangupCall()
           }
         }
       }
@@ -182,7 +174,7 @@ class CallHandler(
   }
 
   fun setSpeakerphoneOn(on: Boolean) {
-    val isInCall = lastKnownCallState?.isInCall == true
+    val isInCall = getLastCallState()?.isInCall == true
     if (!isInCall) return
 
     audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
@@ -211,7 +203,7 @@ class CallHandler(
     notifications.cancelIncomingCallNotification()
   }
 
-  fun getLastCallState(): CallState? = lastKnownCallState
+  fun getLastCallState(): CallState? = hela.eillance.events.NativeEventBus.callState.value
 
   companion object {
     private const val TAG = "CallHandler"

@@ -73,6 +73,40 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_MessengerService_nativeOnAp
   eillance::EventQueue::Instance().Push(eillance::EventAppBackgrounded{});
 }
 
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_MessengerService_nativeAcceptCall(JNIEnv*, jobject) {
+  if (g_clientEngine) {
+    auto state = g_clientEngine->GetClient()->GetCurrentCallState();
+    if (!state.peer_id.IsEmpty()) g_clientEngine->GetClient()->AcceptCall(state.peer_id);
+  }
+}
+
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_MessengerService_nativeRejectCall(JNIEnv*, jobject) {
+  if (g_clientEngine) {
+    auto state = g_clientEngine->GetClient()->GetCurrentCallState();
+    if (!state.peer_id.IsEmpty()) g_clientEngine->GetClient()->RejectCall(state.peer_id);
+  }
+}
+
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_MessengerService_nativeHangupCall(JNIEnv*, jobject) {
+  if (g_clientEngine) {
+    auto state = g_clientEngine->GetClient()->GetCurrentCallState();
+    if (!state.peer_id.IsEmpty()) g_clientEngine->GetClient()->Hangup(state.peer_id, true);
+  }
+}
+
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_MessengerService_nativeMarkAllAsRead(JNIEnv* env, jobject, jstring peer_id) {
+  if (g_clientEngine) {
+    char const* chars = env->GetStringUTFChars(peer_id, nullptr);
+    auto pid = eillance::ContactID(chars);
+    env->ReleaseStringUTFChars(peer_id, chars);
+    auto unread = g_clientEngine->GetClient()->GetUnreadMessages(pid);
+    std::vector<uint64_t> ids;
+    ids.reserve(unread.size());
+    for (auto const& msg : unread) ids.push_back(msg.id);
+    if (!ids.empty()) g_clientEngine->GetClient()->MarkMessagesAsRead(pid, ids);
+  }
+}
+
 // NOLINTEND(readability-identifier-naming)
 
 jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
@@ -192,9 +226,9 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     classref.RegisterStaticMethod(env, "hela/eillance/events/NativeEventBus", "onConnectionStateChanged", "(I)V");
 
     // Explicit Notification Triggers
-    classref.RegisterStaticMethod(env, "hela/eillance/events/NativeEventBus", "onNotifyNewMessage", "(Ljava/lang/String;J)V");
-    classref.RegisterStaticMethod(env, "hela/eillance/events/NativeEventBus", "onNotifyMissedCall", "(Ljava/lang/String;)V");
-    classref.RegisterStaticMethod(env, "hela/eillance/events/NativeEventBus", "onNotifyContactRequest", "(Ljava/lang/String;)V");
+    classref.RegisterStaticMethod(env, "hela/eillance/events/NativeEventBus", "onNotifyNewMessage", "(Ljava/lang/String;Ljava/lang/String;Ljava/util/List;)V");
+    classref.RegisterStaticMethod(env, "hela/eillance/events/NativeEventBus", "onNotifyMissedCall", "(Ljava/lang/String;Ljava/lang/String;)V");
+    classref.RegisterStaticMethod(env, "hela/eillance/events/NativeEventBus", "onNotifyContactRequest", "(Ljava/lang/String;Ljava/lang/String;)V");
 
     // Explicit Hardware / OS Orchestration Commands
     classref.RegisterStaticMethod(env, "hela/eillance/events/NativeEventBus", "onCmdProcessIncomingTelecom", "(Ljava/lang/String;)V");

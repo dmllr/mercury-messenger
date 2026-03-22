@@ -162,12 +162,16 @@ struct EventAppBackgrounded {};
 struct EventNotifyNewMessage {
   ContactID peer_id;
   uint64_t message_id;
+  std::string contact_name;
+  std::vector<messaging::HistoryEntryRecord> unread_messages;
 };
 struct EventNotifyMissedCall {
   ContactID peer_id;
+  std::string contact_name;
 };
 struct EventNotifyContactRequest {
   ContactID peer_id;
+  std::string contact_name;
 };
 
 // Explicit Hardware / OS Orchestration Commands

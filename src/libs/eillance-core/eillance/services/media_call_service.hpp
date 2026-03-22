@@ -525,7 +525,9 @@ class MediaCallService {
         );
         if (!current_call_->is_outgoing && final_status == messaging::CallStatus::missed) {
           if (!sm_->is_foreground) {
-            EventQueue::Instance().Push(EventNotifyMissedCall{peer_id});
+            auto contact = sm_->contact_manager->GetContact(peer_id);
+            std::string name = contact && contact->display_name ? *contact->display_name : peer_id.ToString().substr(0, 8);
+            EventQueue::Instance().Push(EventNotifyMissedCall{peer_id, name});
           }
         }
       }
