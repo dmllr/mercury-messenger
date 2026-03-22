@@ -50,7 +50,14 @@ class Client final {
     sm_->contact = std::make_shared<services::ContactService>(sm_.get());
     sm_->internal_messaging = std::make_shared<services::InternalMessagingService>(sm_.get());
 
-    // Core subscriptions for transport-level handling that were formerly inside callbacks
+    event_unsubs_.emplace_back(EventQueue::Instance().Subscribe<EventAppForegrounded>([this](auto const&) -> void {
+      sm_->is_foreground = true;
+    }));
+
+    event_unsubs_.emplace_back(EventQueue::Instance().Subscribe<EventAppBackgrounded>([this](auto const&) -> void {
+      sm_->is_foreground = false;
+    }));
+
     event_unsubs_.emplace_back(
         EventQueue::Instance().Subscribe<EventDataPeerConnectionStateChanged>([this](auto const& event) -> void {
           auto const state = event.state;

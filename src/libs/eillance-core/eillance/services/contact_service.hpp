@@ -214,6 +214,7 @@ class ContactService {
         sm_->messaging->AddSystemEntry(peer_id, content.dump(), messaging::MessageDirection::received);
         sm_->messaging->MarkMessagesAsRead(peer_id, {});
         EventQueue::Instance().Push(EventContactRequest{peer_id});
+        EventQueue::Instance().Push(EventNotifyContactRequest{peer_id});
       }
     } else {
       if (manager_->IsConfirmedContact(peer_id)) {

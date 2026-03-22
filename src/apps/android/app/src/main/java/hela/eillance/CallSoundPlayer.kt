@@ -2,7 +2,6 @@ package hela.eillance
 
 import android.content.Context
 import android.media.AudioAttributes
-import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.media.MediaPlayer
 import android.media.RingtoneManager
@@ -13,8 +12,6 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.util.Log
 import hela.eillance.camera.R
-import hela.eillance.ndkio.CallDirection
-import hela.eillance.ndkio.CallState
 
 class CallSoundPlayer(private val context: Context) {
   private var mediaPlayer: MediaPlayer? = null
@@ -28,32 +25,19 @@ class CallSoundPlayer(private val context: Context) {
     context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
   }
 
-  private enum class SoundState {
+  enum class SoundState {
     None,
     Connecting, // Outgoing connecting tone
     Ringback,   // Outgoing ringing tone (heard by caller)
     Ringing     // Incoming system ringtone (heard by receiver)
   }
 
-  fun updateCallState(state: CallState?) {
-    val targetState = when {
-      state == null -> SoundState.None
-      // Priority: Incoming Ringing must take precedence over Connecting
-      state.isRinging && state.callDirection == CallDirection.Incoming -> SoundState.Ringing
-      state.isRinging && state.callDirection == CallDirection.Outgoing -> SoundState.Ringback
-      state.isConnecting -> SoundState.Connecting
-      else -> SoundState.None
-    }
-
-    if (targetState != currentSoundState) {
-      stop()
-      currentSoundState = targetState
-      startSound(targetState)
-    }
-  }
-
-  private fun startSound(state: SoundState) {
+  fun startSound(state: SoundState) {
     if (state == SoundState.None) return
+    if (state == currentSoundState) return
+
+    stop()
+    currentSoundState = state
 
     try {
       if (state == SoundState.Ringing) {
@@ -96,26 +80,7 @@ class CallSoundPlayer(private val context: Context) {
         }
 
         SoundState.Ringing -> {
-          // CRITICAL: Force audio mode to NORMAL, to prevent system from routing to earpiece
-          // if it thinks a call is setting up (MODE_IN_COMMUNICATION).
-          audioManager.mode = AudioManager.MODE_NORMAL
-
-          // CRITICAL: Explicitly force speakerphone. This overrides "Voice Call" routing
-          // logic if the system stubbornly stays in a communication mode.
-          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val currentDevice = audioManager.communicationDevice
-            if (currentDevice?.type != AudioDeviceInfo.TYPE_BUILTIN_SPEAKER) {
-              val speakerDevice = audioManager.availableCommunicationDevices.firstOrNull {
-                it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
-              }
-              speakerDevice?.let { audioManager.setCommunicationDevice(it) }
-            }
-          } else {
-            @Suppress("DEPRECATION")
-            if (!audioManager.isSpeakerphoneOn) {
-              audioManager.isSpeakerphoneOn = true
-            }
-          }
+          // Note: CallHandler orchestrates audioManager.mode setting.
 
           // Play system default ringtone
           val ringtoneUri =
@@ -124,8 +89,6 @@ class CallSoundPlayer(private val context: Context) {
 
           if (ringtoneUri != null) {
             mediaPlayer?.setDataSource(context, ringtoneUri)
-            // Explicitly removed deprecated setAudioStreamType.
-            // setAudioAttributes implicitly handles the proper STREAM_RING routing.
             mediaPlayer?.setAudioAttributes(
               AudioAttributes.Builder()
                 .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
@@ -156,7 +119,6 @@ class CallSoundPlayer(private val context: Context) {
   private fun startVibration() {
     if (audioManager.ringerMode == AudioManager.RINGER_MODE_SILENT) return
 
-    // Standard call vibration pattern: Wait 0, Vibrate 1s, Sleep 1s
     val pattern = longArrayOf(0, 1000, 1000)
 
     try {
@@ -183,24 +145,6 @@ class CallSoundPlayer(private val context: Context) {
     } finally {
       mediaPlayer = null
       currentSoundState = SoundState.None
-    }
-
-    // Reset speakerphone if we forced it on for ringing
-    // When the call is answered, CallHandler will set up the correct routing (usually Earpiece initially)
-    try {
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        val currentDevice = audioManager.communicationDevice
-        if (currentDevice?.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER) {
-          audioManager.clearCommunicationDevice()
-        }
-      } else {
-        @Suppress("DEPRECATION")
-        if (audioManager.isSpeakerphoneOn) {
-          audioManager.isSpeakerphoneOn = false
-        }
-      }
-    } catch (e: Exception) {
-      Log.e(TAG, "Error resetting speakerphone", e)
     }
 
     try {

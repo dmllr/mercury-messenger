@@ -47,6 +47,13 @@ class MessengerActivity : ComponentActivity() {
     super.onStart()
     MercuryApplication.isAppInForeground = true
 
+    // Notify Core we are in foreground
+    MessengerService.instance?.let {
+      startService(Intent(this, MessengerService::class.java).apply {
+        action = MessengerService.ACTION_APP_FOREGROUND
+      })
+    }
+
     // Clear any "New Message" or "Missed Call" notifications when user enters the app.
     val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     notificationManager.cancelAll()
@@ -60,6 +67,13 @@ class MessengerActivity : ComponentActivity() {
   override fun onStop() {
     super.onStop()
     MercuryApplication.isAppInForeground = false
+
+    // Notify Core we are in background
+    MessengerService.instance?.let {
+      startService(Intent(this, MessengerService::class.java).apply {
+        action = MessengerService.ACTION_APP_BACKGROUND
+      })
+    }
   }
 
   override fun onNewIntent(intent: Intent) {

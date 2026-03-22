@@ -10,9 +10,7 @@ import android.util.Log
 import hela.eillance.CallSoundPlayer
 import hela.eillance.MessengerActivity
 import hela.eillance.MessengerService
-import hela.eillance.ndkio.CallDirection
 import hela.eillance.ndkio.CallState
-import hela.eillance.ndkio.HistoryEntryKind
 import hela.eillance.telecom.MercuryConnection
 import hela.eillance.viewmodels.CallViewModel
 import hela.eillance.webrtc.WebRtcMediaTransport
@@ -43,96 +41,86 @@ class CallHandler(
     activeConnection = connection
   }
 
-  fun handleCallStateChange(callState: CallState) {
-    // 1. Detect New Incoming Call
-    val wasRinging = lastKnownCallState?.isRinging == true
-    if (callState.isRinging && callState.callDirection == CallDirection.Incoming && !wasRinging) {
-      Log.i(TAG, "Incoming call detected from ${callState.peerId}")
-      try {
-        telecomIntegration.processIncomingCall(callState.peerId)
-      } catch (e: Exception) {
-        Log.e(TAG, "Telecom failed, falling back to notification", e)
-        notifications.showIncomingCallNotification(callState.peerId)
-      }
-    }
-
-    // 2. Audio Mode Logic
-    if (callState.isRinging && callState.callDirection == CallDirection.Incoming) {
-      if (audioManager.mode != AudioManager.MODE_NORMAL) {
-        audioManager.mode = AudioManager.MODE_NORMAL
-      }
-    } else if (callState.isInCall) {
-      if (audioManager.mode != AudioManager.MODE_IN_COMMUNICATION) {
-        audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-      }
-    }
-
-    soundPlayer.updateCallState(callState)
-
-    // 3. Media Logic
-    val wasInCall = lastKnownCallState?.isInCall == true
-    val isInCall = callState.isInCall
-
-    if (!wasInCall && isInCall) {
-      val isVideo = callState.callType == HistoryEntryKind.VideoCall
-      mediaTransport?.setAudioEnabled(true)
-      if (isVideo) mediaTransport?.setVideoEnabled(true)
-    } else if (!isInCall) {
-      mediaTransport?.setAudioEnabled(false)
-      mediaTransport?.setVideoEnabled(false)
-    }
-
-    val wasActive =
-      lastKnownCallState?.let { it.isConnecting || it.isRinging || it.isInCall } ?: false
-    val isActive = callState.isConnecting || callState.isRinging || callState.isInCall
-
-    if (wasActive && !isActive) {
-      stopLocalMedia()
-      audioManager.mode = AudioManager.MODE_NORMAL
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        audioManager.clearCommunicationDevice()
-      } else {
-        @Suppress("DEPRECATION")
-        audioManager.isSpeakerphoneOn = false
-      }
-      notifications.cancelIncomingCallNotification()
-    }
-
-    syncTelecomState(callState)
+  fun updateSoundAndNotification(callState: CallState) {
     lastKnownCallState = callState
   }
 
-  private fun syncTelecomState(callState: CallState) {
-    val isActiveCall = callState.isConnecting || callState.isRinging || callState.isInCall
+  // --- Core-Driven OS Orchestration ---
 
-    if (!isActiveCall && activeConnection != null) {
-      Log.i(TAG, "Sync: C++ idle, disconnecting Telecom")
-      activeConnection?.setDisconnected(android.telecom.DisconnectCause(android.telecom.DisconnectCause.REMOTE))
-      activeConnection?.destroy()
-      activeConnection = null
-    } else if (callState.isInCall && (activeConnection?.state == Connection.STATE_RINGING || activeConnection?.state == Connection.STATE_DIALING)) {
-      Log.i(TAG, "Sync: C++ connected, setting Telecom active")
-      activeConnection?.setActive()
-      activeConnection?.audioModeIsVoip = true
+  fun processIncomingTelecomCall(peerId: String) {
+    try {
+      telecomIntegration.processIncomingCall(peerId)
+    } catch (e: Exception) {
+      Log.e(TAG, "Telecom failed, falling back to notification", e)
+      notifications.showIncomingCallNotification(peerId)
     }
   }
+
+  fun processOutgoingTelecomCall(peerId: String, isVideo: Boolean) {
+    telecomIntegration.placeTelecomCall(peerId, isVideo)
+  }
+
+  fun disconnectTelecomCall(peerId: String) {
+    activeConnection?.let {
+      if (it.state != Connection.STATE_DISCONNECTED) {
+        it.setDisconnected(android.telecom.DisconnectCause(android.telecom.DisconnectCause.LOCAL))
+        it.destroy()
+      }
+    }
+    activeConnection = null
+  }
+
+  fun setTelecomCallActive(peerId: String) {
+    activeConnection?.let {
+      it.setActive()
+      it.audioModeIsVoip = true
+    }
+  }
+
+  fun setAudioMode(mode: Int) {
+    if (mode == 1) {
+      if (audioManager.mode != AudioManager.MODE_IN_COMMUNICATION) {
+        audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+      }
+    } else {
+      if (audioManager.mode != AudioManager.MODE_NORMAL) {
+        audioManager.mode = AudioManager.MODE_NORMAL
+      }
+    }
+  }
+
+  fun clearCommunicationDevice() {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+      audioManager.clearCommunicationDevice()
+    } else {
+      @Suppress("DEPRECATION")
+      audioManager.isSpeakerphoneOn = false
+    }
+  }
+
+  fun playSound(type: Int) {
+    val soundState = when (type) {
+      0 -> CallSoundPlayer.SoundState.Ringing
+      1 -> CallSoundPlayer.SoundState.Ringback
+      2 -> CallSoundPlayer.SoundState.Connecting
+      else -> return
+    }
+    soundPlayer.startSound(soundState)
+  }
+
+  fun stopSound() {
+    soundPlayer.stop()
+    notifications.cancelIncomingCallNotification()
+  }
+
+  // --- End Orchestration ---
 
   fun acceptCall() {
     serviceScope.launch {
       soundPlayer.stop()
       notifications.cancelIncomingCallNotification()
 
-      activeConnection?.let {
-        if (it.state == Connection.STATE_RINGING || it.state == Connection.STATE_INITIALIZING) {
-          it.setActive()
-          it.audioModeIsVoip = true
-        }
-      }
-
       callViewModel?.nativeAcceptCallBridge()
-
-      val isVideo = lastKnownCallState?.callType == HistoryEntryKind.VideoCall
-      startLocalMedia(isVideo)
 
       val peerId = lastKnownCallState?.peerId
       // Ensure we don't double-open activity if IncomingCallActivity is already visible on lock screen
@@ -155,14 +143,6 @@ class CallHandler(
       Log.i(TAG, "rejectCall requested")
       soundPlayer.stop()
       notifications.cancelIncomingCallNotification()
-
-      activeConnection?.let {
-        if (it.state != Connection.STATE_DISCONNECTED) {
-          it.setDisconnected(android.telecom.DisconnectCause(android.telecom.DisconnectCause.REJECTED))
-          it.destroy()
-        }
-      }
-      activeConnection = null
       callViewModel?.nativeRejectCallBridge()
     }
   }
@@ -171,14 +151,6 @@ class CallHandler(
     serviceScope.launch {
       Log.i(TAG, "hangup requested")
       soundPlayer.stop()
-
-      activeConnection?.let {
-        if (it.state != Connection.STATE_DISCONNECTED) {
-          it.setDisconnected(android.telecom.DisconnectCause(android.telecom.DisconnectCause.LOCAL))
-          it.destroy()
-        }
-      }
-      activeConnection = null
       callViewModel?.nativeHangupBridge()
     }
   }
@@ -200,11 +172,7 @@ class CallHandler(
     }
   }
 
-  fun startLocalMedia(isVideo: Boolean) {
-    mediaTransport?.startLocalMedia(isVideo)
-  }
-
-  fun stopLocalMedia() = mediaTransport?.stopLocalMedia()
+  // Expose these for manual UI overrides (e.g. CallScreen swapping sinks)
   fun setLocalVideoSink(sink: VideoSink?) = mediaTransport?.setLocalSink(sink)
   fun setRemoteVideoSink(peerId: String, sink: VideoSink?) =
     mediaTransport?.setRemoteSink(peerId, sink)
@@ -232,6 +200,10 @@ class CallHandler(
       @Suppress("DEPRECATION")
       audioManager.isSpeakerphoneOn = on
     }
+  }
+
+  fun stopLocalMedia() {
+    mediaTransport?.stopLocalMedia()
   }
 
   fun stop() {
