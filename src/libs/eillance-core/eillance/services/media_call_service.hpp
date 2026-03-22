@@ -154,7 +154,7 @@ class MediaCallService {
       }
     }
 
-    TeardownCallInternal(peer_id);
+    TeardownCallInternal(peer_id, messaging::CallStatus::rejected);
 
     EventQueue::Instance().Push(EventCallTerminated{peer_id});
   }
@@ -254,7 +254,7 @@ class MediaCallService {
     }
 
     LGI << "Call " << call_id << " rejected by peer " << peer_id;
-    TeardownCallInternal(peer_id);
+    TeardownCallInternal(peer_id, messaging::CallStatus::rejected);
     EventQueue::Instance().Push(EventCallTerminated{peer_id});
   }
 
@@ -483,7 +483,7 @@ class MediaCallService {
     }
   }
 
-  void TeardownCallInternal(ContactID const& peer_id) {
+  void TeardownCallInternal(ContactID const& peer_id, std::optional<messaging::CallStatus> explicit_status = std::nullopt) {
     std::lock_guard<std::recursive_mutex> const lock(mutex_);
 
     if (current_call_) {
@@ -495,6 +495,13 @@ class MediaCallService {
         );
       }
 
+      messaging::CallStatus final_status = messaging::CallStatus::missed;
+      if (explicit_status) {
+        final_status = *explicit_status;
+      } else if (duration > 0) {
+        final_status = messaging::CallStatus::answered;
+      }
+
       if (current_call_->peer_id == peer_id) {
         sm_->messaging->AddCallEntry(
             {.peer_id = peer_id,
@@ -502,7 +509,7 @@ class MediaCallService {
                                              : messaging::HistoryEntryKind::voiceCall,
              .direction =
                  current_call_->is_outgoing ? messaging::CallDirection::outgoing : messaging::CallDirection::incoming,
-             .status = (duration > 0) ? messaging::CallStatus::answered : messaging::CallStatus::missed,
+             .status = final_status,
              .duration_seconds = duration}
         );
       }

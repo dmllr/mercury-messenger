@@ -79,23 +79,51 @@ class BackgroundObservers(
   private fun checkForNewMessages(oldContacts: List<Contact>?, newContacts: List<Contact>) {
     if (oldContacts == null) return
     val oldUnreadCounts = oldContacts.associate { it.peerId to it.unreadCount }
+    val oldStatuses = oldContacts.associate { it.peerId to it.status }
+    val oldTimestamps = oldContacts.associate { it.peerId to it.lastActivityTimestamp }
+
     newContacts.forEach { newContact ->
-      val oldUnread = oldUnreadCounts[newContact.peerId] ?: 0
-      // Trigger notification refresh if unread count changed (could be new message OR delete/edit of old one)
-      // Logic: even if count goes down (read elsewhere), we might want to refresh to remove deleted msg content.
-      // But standard path is: new message -> count++ -> notify.
-      // For edits/deletes, the count might remain same, but content changes. Core emits EventMessageUpdated.
-      if (newContact.unreadCount > oldUnread && !MercuryApplication.isAppInForeground) {
-        val prefs = service.getSharedPreferences("mercury_prefs", Context.MODE_PRIVATE)
-        val showContent = prefs.getBoolean("show_notifications_content", true)
-        val displayName = newContact.name.ifEmpty { newContact.peerId.take(8) }
+      oldUnreadCounts[newContact.peerId] ?: 0
+      val oldStatus = oldStatuses[newContact.peerId]
+      val oldTimestamp = oldTimestamps[newContact.peerId] ?: 0L
+      val displayName = newContact.name.ifEmpty { newContact.peerId.take(8) }
+
+      // Contact Request Notification
+      val isContactRequest = newContact.status == hela.eillance.ndkio.ContactStatus.awaitingApproval && oldStatus != hela.eillance.ndkio.ContactStatus.awaitingApproval
+      if (isContactRequest) {
+        notifications.showContactRequestNotification(newContact.peerId, displayName)
+      }
+
+      // New Message / Missed Call Notification
+      if (newContact.lastActivityTimestamp > oldTimestamp) {
         val unreadMessages = contactsVM?.getUnreadMessages(newContact.peerId) ?: emptyList()
-        notifications.showNewMessageNotification(
-          newContact.peerId,
-          displayName,
-          unreadMessages,
-          showContent
-        )
+        val newMessages = unreadMessages.filter { it.timestamp > oldTimestamp }
+
+        val missedCalls = newMessages.filter { it.callStatus == hela.eillance.ndkio.CallStatus.Missed }
+        val regularMessages = newMessages.filter { 
+          it.callStatus != hela.eillance.ndkio.CallStatus.Missed && 
+          it.kind != hela.eillance.ndkio.HistoryEntryKind.SystemMessage 
+        }
+
+        if (missedCalls.isNotEmpty()) {
+          notifications.showMissedCallNotification(newContact.peerId, displayName)
+        }
+
+        if (regularMessages.isNotEmpty() && !MercuryApplication.isAppInForeground) {
+          val prefs = service.getSharedPreferences("mercury_prefs", Context.MODE_PRIVATE)
+          val showContent = prefs.getBoolean("show_notifications_content", true)
+          // For the notification, we typically want to pass ALL unread regular messages so they are bundled.
+          val allUnreadRegular = unreadMessages.filter {
+            it.callStatus != hela.eillance.ndkio.CallStatus.Missed &&
+            it.kind != hela.eillance.ndkio.HistoryEntryKind.SystemMessage
+          }
+          notifications.showNewMessageNotification(
+            newContact.peerId,
+            displayName,
+            allUnreadRegular,
+            showContent
+          )
+        }
       }
     }
   }

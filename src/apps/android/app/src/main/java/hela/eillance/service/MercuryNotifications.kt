@@ -198,6 +198,50 @@ class MercuryNotifications(private val service: MessengerService) {
     )
   }
 
+  fun showContactRequestNotification(peerId: String, title: String) {
+    val intent = Intent(service, MessengerActivity::class.java).apply {
+      flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+      putExtra(MessengerService.EXTRA_PEER_ID, peerId)
+    }
+    val pendingIntent = PendingIntent.getActivity(
+      service,
+      MessengerService.MESSAGE_NOTIFICATION_ID_BASE + peerId.hashCode() + 1,
+      intent,
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+
+    val builder = NotificationCompat.Builder(service, MESSAGES_CHANNEL_ID)
+      .setSmallIcon(R.drawable.ic_status_attention)
+      .setContentTitle(service.getString(R.string.sys_contact_req))
+      .setContentText(title)
+      .setAutoCancel(true)
+      .setContentIntent(pendingIntent)
+
+    notificationManager.notify(MessengerService.MESSAGE_NOTIFICATION_ID_BASE + peerId.hashCode() + 10000, builder.build())
+  }
+
+  fun showMissedCallNotification(peerId: String, title: String) {
+    val intent = Intent(service, MessengerActivity::class.java).apply {
+      flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+      putExtra(MessengerService.EXTRA_PEER_ID, peerId)
+    }
+    val pendingIntent = PendingIntent.getActivity(
+      service,
+      MessengerService.MESSAGE_NOTIFICATION_ID_BASE + peerId.hashCode() + 2,
+      intent,
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+
+    val builder = NotificationCompat.Builder(service, MESSAGES_CHANNEL_ID)
+      .setSmallIcon(android.R.drawable.stat_notify_missed_call)
+      .setContentTitle(service.getString(R.string.call_missed))
+      .setContentText(title)
+      .setAutoCancel(true)
+      .setContentIntent(pendingIntent)
+
+    notificationManager.notify(MessengerService.MESSAGE_NOTIFICATION_ID_BASE + peerId.hashCode() + 20000, builder.build())
+  }
+
   fun updateForegroundServiceNotification(
     inCall: Boolean,
     peerId: String?,
@@ -342,6 +386,8 @@ class MercuryNotifications(private val service: MessengerService) {
 
   fun cancelMessageNotification(peerId: String) {
     notificationManager.cancel(MessengerService.MESSAGE_NOTIFICATION_ID_BASE + peerId.hashCode())
+    notificationManager.cancel(MessengerService.MESSAGE_NOTIFICATION_ID_BASE + peerId.hashCode() + 10000)
+    notificationManager.cancel(MessengerService.MESSAGE_NOTIFICATION_ID_BASE + peerId.hashCode() + 20000)
   }
 
   companion object {
