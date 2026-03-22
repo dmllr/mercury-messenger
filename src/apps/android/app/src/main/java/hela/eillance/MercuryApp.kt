@@ -26,6 +26,7 @@ import androidx.navigation.navArgument
 import hela.eillance.navigation.Route
 import hela.eillance.navigation.Screen
 import hela.eillance.ndkio.CallDirection
+import hela.eillance.ndkio.ContactStatus
 import hela.eillance.screens.BackupAndRestoreScreen
 import hela.eillance.screens.CallScreen
 import hela.eillance.screens.ConnectionSettingsScreen
@@ -348,8 +349,15 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
           viewModel(factory = ConversationViewModel.Factory(app, peerId))
         val historyPage by chatVM.interactionHistoryPage.collectAsState()
         val contactsList by contactsVM.contacts.collectAsState()
+        val isLoading by contactsVM.isLoading.collectAsState()
         val contact = contactsList.find { it.peerId == peerId }
         val connectionState by settingsVM.connectionState.collectAsState()
+
+        LaunchedEffect(contact, isLoading) {
+          if (!isLoading && (contact == null || contact.status == ContactStatus.rejected)) {
+            navController.safePopBackStack()
+          }
+        }
 
         ConversationScreen(
           chatVM = chatVM,
