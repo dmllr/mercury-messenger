@@ -56,10 +56,6 @@ class RtcMediaTransport : public transport::MediaTransport::Interface {
     }
   }
 
-  // Not holding own peers map; we rely on attach logic or just lookup via parameter
-  // But Connect/Disconnect need to store the PC somewhere.
-  // We can maintain a map of media PCs locally.
-
   void Connect(ContactID const& peer_id) override {
     ::rtc::Configuration config;
     {
@@ -109,11 +105,26 @@ class RtcMediaTransport : public transport::MediaTransport::Interface {
     }
   }
 
+  void StartLocalMedia(bool /*is_video*/) override {
+    // No-op for CLI / Desktop DataChannel currently.
+    // Media capabilities will be orchestrated differently for native clients.
+  }
+
+  void StopLocalMedia() override {
+    // No-op
+  }
+
+  void SetLocalMediaEnabled(bool /*audio*/, bool /*video*/) override {
+    // No-op
+  }
+
   auto AddVideo(ContactID const& peer_id) -> std::shared_ptr<transport::ITrack> override {
     std::lock_guard<std::mutex> const lock(pcsMutex_);
-    auto it = pcs_.find(peer_id);
-    if (it == pcs_.end()) return nullptr;
-    auto pc = it->second;
+    auto const it = pcs_.find(peer_id);
+    if (it == pcs_.end()) {
+      return nullptr;
+    }
+    auto const pc = it->second;
 
     auto video = ::rtc::Description::Video("video", ::rtc::Description::Direction::SendRecv);
     video.addH264Codec(102);
@@ -125,7 +136,7 @@ class RtcMediaTransport : public transport::MediaTransport::Interface {
         102,
         ::rtc::H264RtpPacketizer::ClockRate
     );
-    auto packetizer = std::make_shared<::rtc::H264RtpPacketizer>(::rtc::NalUnit::Separator::StartSequence, rtp_config);
+    auto const packetizer = std::make_shared<::rtc::H264RtpPacketizer>(::rtc::NalUnit::Separator::StartSequence, rtp_config);
     auto reporter = std::make_shared<::rtc::RtcpSrReporter>(rtp_config);
     packetizer->addToChain(reporter);
     track->setMediaHandler(packetizer);
@@ -134,9 +145,11 @@ class RtcMediaTransport : public transport::MediaTransport::Interface {
 
   auto AddAudio(ContactID const& peer_id) -> std::shared_ptr<transport::ITrack> override {
     std::lock_guard<std::mutex> const lock(pcsMutex_);
-    auto it = pcs_.find(peer_id);
-    if (it == pcs_.end()) return nullptr;
-    auto pc = it->second;
+    auto const it = pcs_.find(peer_id);
+    if (it == pcs_.end()) {
+      return nullptr;
+    }
+    auto const pc = it->second;
 
     auto audio = ::rtc::Description::Audio("audio", ::rtc::Description::Direction::SendRecv);
     audio.addOpusCodec(111);
@@ -148,7 +161,7 @@ class RtcMediaTransport : public transport::MediaTransport::Interface {
         111,
         ::rtc::OpusRtpPacketizer::DefaultClockRate
     );
-    auto packetizer = std::make_shared<::rtc::OpusRtpPacketizer>(rtp_config);
+    auto const packetizer = std::make_shared<::rtc::OpusRtpPacketizer>(rtp_config);
     auto reporter = std::make_shared<::rtc::RtcpSrReporter>(rtp_config);
     packetizer->addToChain(reporter);
     track->setMediaHandler(packetizer);
@@ -156,16 +169,11 @@ class RtcMediaTransport : public transport::MediaTransport::Interface {
   }
 
   void AttachToPeer(ContactID const& peer_id, std::shared_ptr<transport::Peer> const& peer) override {
-    // In libdatachannel implementation, we don't strictly need to attach the PC to the Peer object
-    // if we manage it internally map. But Peer object is used for state tracking in Core.
     std::lock_guard<std::mutex> const lock(pcsMutex_);
     if (auto it = pcs_.find(peer_id); it != pcs_.end()) {
       peer->media_peer_connection = it->second;
     }
   }
-
-  // Need to inject a signaling sender for ICE candidates if we want full functionality
-  // For now, minimal implementation.
 
  private:
   ::rtc::Configuration rtcConfig_;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <memory>
 
 namespace eillance {
@@ -38,6 +39,8 @@ struct ServiceManager {
   std::shared_ptr<ProfileService> profile;
   std::shared_ptr<ContactService> contact;
   std::shared_ptr<InternalMessagingService> internal_messaging;
+
+  std::atomic<bool> is_foreground{false};
 };
 
 }  // namespace eillance::services

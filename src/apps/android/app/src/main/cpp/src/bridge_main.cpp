@@ -54,11 +54,6 @@ Java_hela_eillance_MessengerService_configureVideoCapture(JNIEnv* env, jobject /
   }
 }
 
-extern "C" JNIEXPORT jboolean JNICALL
-Java_hela_eillance_MessengerService_nativePing(JNIEnv* /*env*/, jobject /*instance*/) {
-  return g_clientEngine != nullptr;
-}
-
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_MessengerService_nativeRestart(JNIEnv* env, jobject instance) {
   if (g_clientEngine) {
     g_clientEngine->Terminate();
@@ -68,6 +63,14 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_MessengerService_nativeRest
   g_clientEngine = std::make_unique<eillance::ClientEngine>(g_javaVm, env, instance);
   InitEventBridge(g_javaVm);
   g_clientEngine->Start();
+}
+
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_MessengerService_nativeOnAppForeground(JNIEnv* /*env*/, jobject /*instance*/) {
+  eillance::EventQueue::Instance().Push(eillance::EventAppForegrounded{});
+}
+
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_MessengerService_nativeOnAppBackground(JNIEnv* /*env*/, jobject /*instance*/) {
+  eillance::EventQueue::Instance().Push(eillance::EventAppBackgrounded{});
 }
 
 // NOLINTEND(readability-identifier-naming)
@@ -128,6 +131,10 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     classref.RegisterMethod(env, media_transport_class, "addVideoTrack", "(Ljava/lang/String;)V");
     classref.RegisterMethod(env, media_transport_class, "addAudioTrack", "(Ljava/lang/String;)V");
     classref.RegisterMethod(env, media_transport_class, "connectPeer", "(Ljava/lang/String;)V");
+    classref.RegisterMethod(env, media_transport_class, "startLocalMedia", "(Z)V");
+    classref.RegisterMethod(env, media_transport_class, "stopLocalMedia", "()V");
+    classref.RegisterMethod(env, media_transport_class, "setAudioEnabled", "(Z)V");
+    classref.RegisterMethod(env, media_transport_class, "setVideoEnabled", "(Z)V");
 
     classref.RegisterClass(env, "hela/eillance/MessengerService");
     classref.RegisterMethod(
@@ -145,8 +152,7 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     classref.RegisterMethod(env, "hela/eillance/MessengerService", "onNativeCoreCrash", "()V");
 
     classref.RegisterClass(env, "hela/eillance/events/NativeEventBus");
-    classref
-        .RegisterStaticMethod(env, "hela/eillance/events/NativeEventBus", "onContactsUpdated", "(Ljava/util/List;)V");
+    classref.RegisterStaticMethod(env, "hela/eillance/events/NativeEventBus", "onContactsUpdated", "(Ljava/util/List;)V");
     classref.RegisterStaticMethod(
         env,
         "hela/eillance/events/NativeEventBus",
@@ -178,6 +184,21 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
         "(Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZ)V"
     );
     classref.RegisterStaticMethod(env, "hela/eillance/events/NativeEventBus", "onConnectionStateChanged", "(I)V");
+
+    // Explicit Notification Triggers
+    classref.RegisterStaticMethod(env, "hela/eillance/events/NativeEventBus", "onNotifyNewMessage", "(Ljava/lang/String;J)V");
+    classref.RegisterStaticMethod(env, "hela/eillance/events/NativeEventBus", "onNotifyMissedCall", "(Ljava/lang/String;)V");
+    classref.RegisterStaticMethod(env, "hela/eillance/events/NativeEventBus", "onNotifyContactRequest", "(Ljava/lang/String;)V");
+
+    // Explicit Hardware / OS Orchestration Commands
+    classref.RegisterStaticMethod(env, "hela/eillance/events/NativeEventBus", "onCmdProcessIncomingTelecom", "(Ljava/lang/String;)V");
+    classref.RegisterStaticMethod(env, "hela/eillance/events/NativeEventBus", "onCmdProcessOutgoingTelecom", "(Ljava/lang/String;Z)V");
+    classref.RegisterStaticMethod(env, "hela/eillance/events/NativeEventBus", "onCmdDisconnectTelecom", "(Ljava/lang/String;)V");
+    classref.RegisterStaticMethod(env, "hela/eillance/events/NativeEventBus", "onCmdSetTelecomActive", "(Ljava/lang/String;)V");
+    classref.RegisterStaticMethod(env, "hela/eillance/events/NativeEventBus", "onCmdSetAudioMode", "(I)V");
+    classref.RegisterStaticMethod(env, "hela/eillance/events/NativeEventBus", "onCmdClearCommunicationDevice", "()V");
+    classref.RegisterStaticMethod(env, "hela/eillance/events/NativeEventBus", "onCmdPlaySound", "(I)V");
+    classref.RegisterStaticMethod(env, "hela/eillance/events/NativeEventBus", "onCmdStopSound", "()V");
 
     classref.RegisterCtor(env, "java/util/ArrayList", "()V");
     classref.RegisterMethod(env, "java/util/ArrayList", "add", "(Ljava/lang/Object;)Z");

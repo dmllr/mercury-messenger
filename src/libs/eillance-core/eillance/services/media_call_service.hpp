@@ -123,6 +123,7 @@ class MediaCallService {
       return;
     }
 
+    media_transport_->StartLocalMedia(current_call_->is_video);
     SetCallState(CallState::active);
 
     nlohmann::json const msg = {{"type", "call_accept"}, {"call_id", current_call_->call_id.ToString()}};
@@ -233,6 +234,7 @@ class MediaCallService {
 
     if (current_call_->state == CallState::mediaConnected || current_call_->state == CallState::negotiating) {
       SetCallState(CallState::ringing);
+      EventQueue::Instance().Push(EventCmdPlaySound{SoundType::ringback});
       EventQueue::Instance().Push(EventCallRinging{peer_id});
     }
   }
@@ -244,6 +246,7 @@ class MediaCallService {
     }
 
     SetCallState(CallState::active);
+    EventQueue::Instance().Push(EventCmdStopSound{});
     EventQueue::Instance().Push(EventCallAccepted{peer_id});
   }
 
@@ -394,6 +397,9 @@ class MediaCallService {
       current_call_->state = state;
       if (state == CallState::active) {
         current_call_->connected_at = std::chrono::steady_clock::now();
+        media_transport_->SetLocalMediaEnabled(true, current_call_->is_video);
+        EventQueue::Instance().Push(EventCmdSetTelecomCallActive{current_call_->peer_id});
+        EventQueue::Instance().Push(EventCmdSetAudioMode{AudioRoutingMode::inCall});
       }
     }
   }
@@ -442,6 +448,11 @@ class MediaCallService {
 
     auto const kind = is_video ? messaging::HistoryEntryKind::videoCall : messaging::HistoryEntryKind::voiceCall;
     EventQueue::Instance().Push(EventOutgoingCall{peer_id, kind});
+
+    // Hardware Orchestration Commands
+    media_transport_->StartLocalMedia(is_video);
+    EventQueue::Instance().Push(EventCmdProcessOutgoingTelecomCall{peer_id, is_video});
+    EventQueue::Instance().Push(EventCmdPlaySound{SoundType::connecting});
 
     auto const peer = data_transport_->GetPeer(peer_id);
     if (!peer || !peer->data_channel_is_open) {
@@ -512,9 +523,21 @@ class MediaCallService {
              .status = final_status,
              .duration_seconds = duration}
         );
+        if (!current_call_->is_outgoing && final_status == messaging::CallStatus::missed) {
+          if (!sm_->is_foreground) {
+            EventQueue::Instance().Push(EventNotifyMissedCall{peer_id});
+          }
+        }
       }
       current_call_.reset();
     }
+
+    // Hardware Orchestration Commands (Teardown)
+    media_transport_->StopLocalMedia();
+    EventQueue::Instance().Push(EventCmdDisconnectTelecomCall{peer_id});
+    EventQueue::Instance().Push(EventCmdSetAudioMode{AudioRoutingMode::normal});
+    EventQueue::Instance().Push(EventCmdClearCommunicationDevice{});
+    EventQueue::Instance().Push(EventCmdStopSound{});
 
     if (auto peer = data_transport_->GetPeer(peer_id)) {
       peer->has_media_peer_connection = false;
@@ -541,6 +564,11 @@ class MediaCallService {
         EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
       }
     }
+
+    // Hardware Orchestration
+    EventQueue::Instance().Push(EventCmdProcessIncomingTelecomCall{peer_id});
+    EventQueue::Instance().Push(EventCmdSetAudioMode{AudioRoutingMode::normal});
+    EventQueue::Instance().Push(EventCmdPlaySound{SoundType::ringing});
 
     messaging::HistoryEntryKind const kind =
         current_call_->is_video ? messaging::HistoryEntryKind::videoCall : messaging::HistoryEntryKind::voiceCall;

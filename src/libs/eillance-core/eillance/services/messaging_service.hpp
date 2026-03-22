@@ -722,6 +722,9 @@ class MessagingService {
     EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
 
     EventQueue::Instance().Push(EventChatMessageReceived{peer_id, entry});
+    if (!is_system && !sm_->is_foreground) {
+      EventQueue::Instance().Push(EventNotifyNewMessage{peer_id, entry.id});
+    }
   }
 
   void OnMessageReceipt(ContactID const& peer_id, uint64_t message_id, std::string const& status) const {
