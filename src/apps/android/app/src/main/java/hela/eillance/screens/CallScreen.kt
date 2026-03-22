@@ -66,9 +66,6 @@ fun CallScreen(
     }
   }
 
-  val isMuted by callVM.isMuted.collectAsState()
-  val isSpeakerOn by callVM.isSpeakerOn.collectAsState()
-
   var callDurationSeconds by remember { mutableLongStateOf(0L) }
 
   LaunchedEffect(callState.isInCall) {
@@ -193,9 +190,9 @@ fun CallScreen(
       ) {
         IconButton(onClick = { callVM.toggleMute() }) {
           Icon(
-            if (isMuted) Icons.Default.MicOff else Icons.Default.Mic,
+            if (callState.isMuted) Icons.Default.MicOff else Icons.Default.Mic,
             contentDescription = stringResource(id = R.string.action_mute),
-            tint = if (isMuted) MaterialTheme.extendedColors.warning else Color.White,
+            tint = if (callState.isMuted) MaterialTheme.extendedColors.warning else Color.White,
             modifier = Modifier.size(32.dp)
           )
         }
@@ -218,7 +215,7 @@ fun CallScreen(
           Icon(
             Icons.AutoMirrored.Filled.VolumeUp,
             contentDescription = stringResource(id = R.string.action_speaker),
-            tint = if (isSpeakerOn) MaterialTheme.extendedColors.warning else Color.White,
+            tint = if (callState.isSpeakerOn) MaterialTheme.extendedColors.warning else Color.White,
             modifier = Modifier.size(32.dp)
           )
         }

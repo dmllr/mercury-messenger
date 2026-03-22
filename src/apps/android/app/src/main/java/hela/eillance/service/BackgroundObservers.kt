@@ -74,8 +74,7 @@ class BackgroundObservers(
         NativeEventBus.notifyNewMessage.collect { (peerId, _) ->
           val contact = getContact(peerId)
           val displayName = contact?.name?.ifEmpty { peerId.take(8) } ?: peerId.take(8)
-          val prefs = service.getSharedPreferences("mercury_prefs", Context.MODE_PRIVATE)
-          val showContent = prefs.getBoolean("show_notifications_content", true)
+          val showContent = settingsVM?.showNotificationContent?.value ?: true
 
           val unreadMessages = contactsVM?.getUnreadMessages(peerId) ?: emptyList()
           val allUnreadRegular = unreadMessages.filter {
@@ -145,6 +144,16 @@ class BackgroundObservers(
       launch {
         NativeEventBus.cmdStopSound.collect {
           callHandler.stopSound()
+        }
+      }
+      launch {
+        NativeEventBus.cmdSetMicrophoneMute.collect { isMuted ->
+          callHandler.setMicrophoneMute(isMuted)
+        }
+      }
+      launch {
+        NativeEventBus.cmdSetSpeakerphone.collect { isSpeakerOn ->
+          callHandler.setSpeakerphoneOn(isSpeakerOn)
         }
       }
     }

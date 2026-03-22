@@ -162,6 +162,12 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     classref.RegisterStaticMethod(
         env,
         "hela/eillance/events/NativeEventBus",
+        "onDraftsUpdated",
+        "(Ljava/lang/String;Ljava/util/List;)V"
+    );
+    classref.RegisterStaticMethod(
+        env,
+        "hela/eillance/events/NativeEventBus",
         "onTransferProgress",
         "(Ljava/lang/String;Ljava/lang/String;F)V"
     );
@@ -181,7 +187,7 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
         env,
         "hela/eillance/events/NativeEventBus",
         "onSettingsUpdated",
-        "(Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZ)V"
+        "(Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZZ)V"
     );
     classref.RegisterStaticMethod(env, "hela/eillance/events/NativeEventBus", "onConnectionStateChanged", "(I)V");
 
@@ -199,6 +205,8 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     classref.RegisterStaticMethod(env, "hela/eillance/events/NativeEventBus", "onCmdClearCommunicationDevice", "()V");
     classref.RegisterStaticMethod(env, "hela/eillance/events/NativeEventBus", "onCmdPlaySound", "(I)V");
     classref.RegisterStaticMethod(env, "hela/eillance/events/NativeEventBus", "onCmdStopSound", "()V");
+    classref.RegisterStaticMethod(env, "hela/eillance/events/NativeEventBus", "onCmdSetMicrophoneMute", "(Z)V");
+    classref.RegisterStaticMethod(env, "hela/eillance/events/NativeEventBus", "onCmdSetSpeakerphone", "(Z)V");
 
     classref.RegisterCtor(env, "java/util/ArrayList", "()V");
     classref.RegisterMethod(env, "java/util/ArrayList", "add", "(Ljava/lang/Object;)Z");
@@ -225,8 +233,13 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
         "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IIIILjava/lang/String;IIJLjava/lang/"
         "String;II)V"
     );
-    classref.RegisterCtor(env, "hela/eillance/ndkio/CallState", "(ZZZILjava/lang/String;I)V");
+    classref.RegisterCtor(env, "hela/eillance/ndkio/CallState", "(ZZZILjava/lang/String;IZZ)V");
     classref.RegisterCtor(env, "hela/eillance/ndkio/HistoryPage", "(Ljava/util/List;Z)V");
+
+    std::string const draft_class = "hela/eillance/ndkio/DraftAttachment";
+    classref.RegisterClass(env, draft_class);
+    classref.RegisterCtor(env, draft_class, "(Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
+
     classref.RegisterCtor(
         env,
         "hela/eillance/ndkio/GlobalSearchResult",

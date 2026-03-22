@@ -78,4 +78,14 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_SettingsViewMode
   vm->SetSoundSettings(send != 0U, receive != 0U);
 }
 
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_SettingsViewModel_nativeSetShowNotificationContent(
+    JNIEnv* /*env*/,
+    jobject /*instance*/,
+    jlong ptr,
+    jboolean show
+) {
+  auto* vm = reinterpret_cast<eillance::view_model::SettingsViewModel*>(ptr);
+  vm->SetShowNotificationContent(show != 0U);
+}
+
 // NOLINTEND(readability-identifier-naming)

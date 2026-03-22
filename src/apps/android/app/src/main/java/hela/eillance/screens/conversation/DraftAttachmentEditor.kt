@@ -42,7 +42,8 @@ import coil.decode.VideoFrameDecoder
 import coil.request.ImageRequest
 import coil.request.videoFrameMillis
 import hela.eillance.camera.R
-import hela.eillance.viewmodels.DraftAttachment
+import hela.eillance.ndkio.DraftAttachment
+import java.io.File
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -113,7 +114,7 @@ fun DraftAttachmentEditor(
             if (isImage || isVideo) {
               val model = if (isVideo) {
                 ImageRequest.Builder(context)
-                  .data(draft.uri)
+                  .data(File(draft.path))
                   .decoderFactory { result, options, _ ->
                     VideoFrameDecoder(
                       result.source,
@@ -122,7 +123,7 @@ fun DraftAttachmentEditor(
                   }
                   .videoFrameMillis(1000)
                   .build()
-              } else draft.uri
+              } else File(draft.path)
 
               AsyncImage(
                 model = model,

@@ -3,6 +3,7 @@ package hela.eillance.events
 import hela.eillance.ndkio.CallState
 import hela.eillance.ndkio.Contact
 import hela.eillance.ndkio.HistoryPage
+import hela.eillance.ndkio.DraftAttachment
 import hela.eillance.ndkio.MyProfileInfo
 import hela.eillance.ndkio.ServiceConnectionState
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -15,6 +16,7 @@ object NativeEventBus {
   val connectionState = MutableStateFlow(ServiceConnectionState.Unknown)
 
   val historyUpdates = MutableSharedFlow<Pair<String, HistoryPage>>(extraBufferCapacity = 10)
+  val draftsUpdates = MutableSharedFlow<Pair<String, List<DraftAttachment>>>(extraBufferCapacity = 10)
   val transferProgress = MutableSharedFlow<Triple<String, String, Float>>(extraBufferCapacity = 100)
 
   // Notification Triggers
@@ -31,11 +33,13 @@ object NativeEventBus {
   val cmdClearCommunicationDevice = MutableSharedFlow<Unit>(extraBufferCapacity = 10)
   val cmdPlaySound = MutableSharedFlow<Int>(extraBufferCapacity = 10)
   val cmdStopSound = MutableSharedFlow<Unit>(extraBufferCapacity = 10)
+  val cmdSetMicrophoneMute = MutableSharedFlow<Boolean>(extraBufferCapacity = 10)
+  val cmdSetSpeakerphone = MutableSharedFlow<Boolean>(extraBufferCapacity = 10)
 
   class SettingsWrapper(
     val signalingUrl: String?, val timeout: Int, val customStun: String?,
     val customTurn: String?, val customTurnUser: String?, val customTurnPass: String?,
-    val playSoundOnSend: Boolean, val playSoundOnReceive: Boolean
+    val playSoundOnSend: Boolean, val playSoundOnReceive: Boolean, val showNotificationContent: Boolean
   )
 
   val settings = MutableStateFlow<SettingsWrapper?>(null)
@@ -48,6 +52,11 @@ object NativeEventBus {
   @JvmStatic
   fun onHistoryUpdated(peerId: String, page: HistoryPage) {
     historyUpdates.tryEmit(peerId to page)
+  }
+
+  @JvmStatic
+  fun onDraftsUpdated(peerId: String, drafts: List<DraftAttachment>) {
+    draftsUpdates.tryEmit(peerId to drafts)
   }
 
   @JvmStatic
@@ -73,9 +82,9 @@ object NativeEventBus {
   @JvmStatic
   fun onSettingsUpdated(
     url: String?, t: Int, stun: String?, turn: String?,
-    tUser: String?, tPass: String?, sndS: Boolean, sndR: Boolean
+    tUser: String?, tPass: String?, sndS: Boolean, sndR: Boolean, showNotifContent: Boolean
   ) {
-    settings.value = SettingsWrapper(url, t, stun, turn, tUser, tPass, sndS, sndR)
+    settings.value = SettingsWrapper(url, t, stun, turn, tUser, tPass, sndS, sndR, showNotifContent)
   }
 
   @JvmStatic
@@ -131,5 +140,15 @@ object NativeEventBus {
   @JvmStatic
   fun onCmdStopSound() {
     cmdStopSound.tryEmit(Unit)
+  }
+
+  @JvmStatic
+  fun onCmdSetMicrophoneMute(isMuted: Boolean) {
+    cmdSetMicrophoneMute.tryEmit(isMuted)
+  }
+
+  @JvmStatic
+  fun onCmdSetSpeakerphone(isSpeakerOn: Boolean) {
+    cmdSetSpeakerphone.tryEmit(isSpeakerOn)
   }
 }

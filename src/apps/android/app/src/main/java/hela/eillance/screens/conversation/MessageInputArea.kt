@@ -57,7 +57,7 @@ import androidx.core.content.FileProvider
 import hela.eillance.camera.R
 import hela.eillance.ndkio.HistoryEntry
 import hela.eillance.theme.extendedColors
-import hela.eillance.viewmodels.DraftAttachment
+import hela.eillance.ndkio.DraftAttachment
 import java.io.File
 
 private enum class CameraAction { Photo, Video }

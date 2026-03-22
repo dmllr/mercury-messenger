@@ -138,6 +138,11 @@ class MessagingService {
       return {};
     }
 
+    std::filesystem::path const storage_root(storage_->GetPath());
+    std::filesystem::path const attachments_dir = storage_root.parent_path() / "attachments";
+    std::error_code dir_ec;
+    std::filesystem::create_directories(attachments_dir, dir_ec);
+
     std::vector<messaging::Attachment> domain_attachments;
     for (auto const& req : attachments) {
       std::uint64_t file_size = 0;
@@ -176,6 +181,30 @@ class MessagingService {
         }
       }
 
+      std::string filename = req.file_name;
+      if (filename.empty()) {
+        filename = GenerateAttachmentId() + GetExtensionForMimeType(mime);
+      }
+
+      std::filesystem::path final_path = req.file_path;
+      std::filesystem::path const req_path(req.file_path);
+
+      if (req_path.parent_path() != attachments_dir) {
+        final_path = ResolvePathConflict(attachments_dir, filename);
+        std::filesystem::rename(req_path, final_path, ec);
+        if (ec) {
+          ec.clear();
+          std::filesystem::copy_file(req_path, final_path, std::filesystem::copy_options::overwrite_existing, ec);
+          if (!ec) {
+            std::filesystem::remove(req_path, ec);
+          }
+        }
+        if (ec) {
+          LGW << "Failed to move attachment to persistent dir: " << ec.message();
+          continue;
+        }
+      }
+
       std::string note = req.note;
       if (note.length() > kMaxAttachmentNoteLength) {
         note = note.substr(0, kMaxAttachmentNoteLength);
@@ -184,7 +213,7 @@ class MessagingService {
       domain_attachments.push_back(
           {.id = GenerateAttachmentId(),
            .type = req.type,
-           .file_path = req.file_path,
+           .file_path = final_path.string(),
            .mime_type = mime,
            .size_bytes = file_size,
            .thumbnail_base64 = req.thumbnail_base64,

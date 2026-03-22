@@ -198,6 +198,37 @@ void InitEventBridge(JavaVM* jvm) {
       env->DeleteLocalRef(j_peer_id);
     }
   }));
+
+  g_eventBridgeUnsubs.emplace_back(q.Subscribe<view_model::EventConversationDraftsUpdated>([jvm](auto const& e) -> void {
+    jni::ScopedJniEnv env_scope(jvm);
+    if (auto* env = env_scope.Get()) {
+      auto& class_refs = ClassRefs::Instance();
+      auto& list_holder = class_refs.Class("java/util/ArrayList");
+      jobject drafts_list = list_holder.NewObject(env);
+      jmethodID list_add_method = list_holder.GetMethod("add");
+      auto& draft_holder = class_refs.Class("hela/eillance/ndkio/DraftAttachment");
+
+      for (auto const& draft : e.drafts) {
+        jstring path = env->NewStringUTF(draft.file_path.c_str());
+        jint type = static_cast<jint>(draft.type);
+        jstring mime = env->NewStringUTF(draft.mime_type.c_str());
+        jstring name = env->NewStringUTF(draft.file_name.c_str());
+        jstring thumb = env->NewStringUTF(draft.thumbnail_base64.c_str());
+        jstring note = env->NewStringUTF(draft.note.c_str());
+        jobject draft_java = draft_holder.NewObject(env, path, type, mime, name, thumb, note);
+        env->CallBooleanMethod(drafts_list, list_add_method, draft_java);
+        env->DeleteLocalRef(path); env->DeleteLocalRef(mime); env->DeleteLocalRef(name);
+        env->DeleteLocalRef(thumb); env->DeleteLocalRef(note); env->DeleteLocalRef(draft_java);
+      }
+
+      jstring j_peer_id = env->NewStringUTF(e.peer_id.ToString().c_str());
+      auto& bus_holder = class_refs.Class("hela/eillance/events/NativeEventBus");
+      env->CallStaticVoidMethod(bus_holder.Class(), bus_holder.GetMethod("onDraftsUpdated"), j_peer_id, drafts_list);
+      env->DeleteLocalRef(drafts_list);
+      env->DeleteLocalRef(j_peer_id);
+    }
+  }));
+
   g_eventBridgeUnsubs.emplace_back(q.Subscribe<view_model::EventTransferProgressUpdated>([jvm](auto const& e) -> void {
     jni::ScopedJniEnv env_scope(jvm);
     if (auto* env = env_scope.Get()) {
@@ -249,7 +280,9 @@ void InitEventBridge(JavaVM* jvm) {
           e.state.is_ringing,
           (jint)e.state.call_direction,
           peer_id,
-          (jint)e.state.call_type
+          (jint)e.state.call_type,
+          e.state.is_muted,
+          e.state.is_speaker_on
       );
       auto& bus_holder = class_refs.Class("hela/eillance/events/NativeEventBus");
       env->CallStaticVoidMethod(bus_holder.Class(), bus_holder.GetMethod("onCallStateChanged"), call_state_java);
@@ -278,7 +311,8 @@ void InitEventBridge(JavaVM* jvm) {
           user_str,
           pass_str,
           static_cast<jboolean>(e.state.play_sound_on_send),
-          static_cast<jboolean>(e.state.play_sound_on_receive)
+          static_cast<jboolean>(e.state.play_sound_on_receive),
+          static_cast<jboolean>(e.state.show_notification_content)
       );
       if (url_str) env->DeleteLocalRef(url_str);
       if (stun_str) env->DeleteLocalRef(stun_str);
@@ -412,6 +446,24 @@ void InitEventBridge(JavaVM* jvm) {
       auto& class_refs = ClassRefs::Instance();
       auto& bus_holder = class_refs.Class("hela/eillance/events/NativeEventBus");
       env->CallStaticVoidMethod(bus_holder.Class(), bus_holder.GetMethod("onCmdStopSound"));
+    }
+  }));
+
+  g_eventBridgeUnsubs.emplace_back(q.Subscribe<EventCmdSetMicrophoneMute>([jvm](auto const& e) -> void {
+    jni::ScopedJniEnv env_scope(jvm);
+    if (auto* env = env_scope.Get()) {
+      auto& class_refs = ClassRefs::Instance();
+      auto& bus_holder = class_refs.Class("hela/eillance/events/NativeEventBus");
+      env->CallStaticVoidMethod(bus_holder.Class(), bus_holder.GetMethod("onCmdSetMicrophoneMute"), static_cast<jboolean>(e.is_muted));
+    }
+  }));
+
+  g_eventBridgeUnsubs.emplace_back(q.Subscribe<EventCmdSetSpeakerphone>([jvm](auto const& e) -> void {
+    jni::ScopedJniEnv env_scope(jvm);
+    if (auto* env = env_scope.Get()) {
+      auto& class_refs = ClassRefs::Instance();
+      auto& bus_holder = class_refs.Class("hela/eillance/events/NativeEventBus");
+      env->CallStaticVoidMethod(bus_holder.Class(), bus_holder.GetMethod("onCmdSetSpeakerphone"), static_cast<jboolean>(e.is_speaker_on));
     }
   }));
 }

@@ -41,9 +41,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
   private val _playSoundOnReceive = MutableStateFlow(true)
   val playSoundOnReceive = _playSoundOnReceive.asStateFlow()
 
-  private val prefs = application.getSharedPreferences("mercury_prefs", Context.MODE_PRIVATE)
-  private val _showNotificationContent =
-    MutableStateFlow(prefs.getBoolean("show_notifications_content", true))
+  private val _showNotificationContent = MutableStateFlow(true)
   val showNotificationContent = _showNotificationContent.asStateFlow()
 
   init {
@@ -62,6 +60,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
           _customTurnPass.value = s.customTurnPass ?: ""
           _playSoundOnSend.value = s.playSoundOnSend
           _playSoundOnReceive.value = s.playSoundOnReceive
+          _showNotificationContent.value = s.showNotificationContent
         }
       }
     }
@@ -103,8 +102,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
   }
 
   fun onShowNotificationContentChange(enabled: Boolean) {
-    _showNotificationContent.value = enabled
-    prefs.edit().putBoolean("show_notifications_content", enabled).apply()
+    if (nativePtr != 0L) nativeSetShowNotificationContent(nativePtr, enabled)
   }
 
   fun onPlaySoundOnSendChange(enabled: Boolean) {
@@ -142,4 +140,5 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
   )
 
   private external fun nativeSetSoundSettings(ptr: Long, send: Boolean, receive: Boolean)
+  private external fun nativeSetShowNotificationContent(ptr: Long, show: Boolean)
 }

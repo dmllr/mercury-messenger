@@ -90,6 +90,16 @@ class SettingsManager {
     storage_->SetSetting(kPlaySoundOnRecvKey, enabled ? "1" : "0");
   }
 
+  // --- Notifications ---
+  [[nodiscard]] auto GetShowNotificationContent() const -> bool {
+    auto val = storage_->GetSetting(kShowNotificationContentKey);
+    return !val || (*val == "1");
+  }
+
+  void SetShowNotificationContent(bool enabled) {
+    storage_->SetSetting(kShowNotificationContentKey, enabled ? "1" : "0");
+  }
+
   // --- Peer Connection ---
   [[nodiscard]] auto GetPeerInactivityTimeout() -> std::chrono::seconds {
     if (auto str_val = storage_->GetSetting(kPeerInactivityTimeoutKey)) {
@@ -152,6 +162,7 @@ class SettingsManager {
   static constexpr auto kCustomTurnPassKey = "custom_ice_turn_pass";
   static constexpr auto kPlaySoundOnSendKey = "sound_on_send";
   static constexpr auto kPlaySoundOnRecvKey = "sound_on_recv";
+  static constexpr auto kShowNotificationContentKey = "show_notifications_content";
 
   std::shared_ptr<storage::PersistentStorage> storage_;
 

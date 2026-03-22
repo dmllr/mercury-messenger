@@ -64,4 +64,19 @@ Java_hela_eillance_viewmodels_CallViewModel_nativeReject(JNIEnv* /*env*/, jobjec
   vm->RejectCall();
 }
 
+extern "C" JNIEXPORT void JNICALL
+Java_hela_eillance_viewmodels_CallViewModel_nativeToggleMute(JNIEnv* /*env*/, jobject /*instance*/, jlong ptr) {
+  reinterpret_cast<eillance::view_model::CallViewModel*>(ptr)->ToggleMute();
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_hela_eillance_viewmodels_CallViewModel_nativeToggleSpeaker(JNIEnv* /*env*/, jobject /*instance*/, jlong ptr) {
+  reinterpret_cast<eillance::view_model::CallViewModel*>(ptr)->ToggleSpeaker();
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_hela_eillance_viewmodels_CallViewModel_nativeStopCallMedia(JNIEnv* /*env*/, jobject /*instance*/, jlong ptr) {
+  reinterpret_cast<eillance::view_model::CallViewModel*>(ptr)->StopCallMedia();
+}
+
 // NOLINTEND(readability-identifier-naming)
