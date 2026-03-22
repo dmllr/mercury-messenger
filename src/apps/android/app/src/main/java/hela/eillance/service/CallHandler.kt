@@ -95,6 +95,7 @@ class CallHandler(
         @Suppress("DEPRECATION")
         audioManager.isSpeakerphoneOn = false
       }
+      notifications.cancelIncomingCallNotification()
     }
 
     syncTelecomState(callState)
@@ -235,6 +236,7 @@ class CallHandler(
 
   fun stop() {
     soundPlayer.stop()
+    notifications.cancelIncomingCallNotification()
   }
 
   fun getLastCallState(): CallState? = lastKnownCallState
