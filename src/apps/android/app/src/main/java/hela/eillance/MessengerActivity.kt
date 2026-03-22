@@ -84,7 +84,7 @@ class MessengerActivity : ComponentActivity() {
   }
 
   private fun updateLockScreenPolicy() {
-    val callState = MessengerService.instance?.backgroundCallVM?.callState?.value
+    val callState = hela.eillance.events.NativeEventBus.callState.value
     val isActiveCall = callState?.isInCall == true || callState?.isConnecting == true
 
     setShowWhenLocked(isActiveCall)
