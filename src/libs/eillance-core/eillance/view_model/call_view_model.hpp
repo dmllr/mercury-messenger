@@ -63,6 +63,15 @@ class CallViewModel {
   void RejectCall() {
     impl_->RejectCall();
   }
+  void ToggleMute() {
+    impl_->ToggleMute();
+  }
+  void ToggleSpeaker() {
+    impl_->ToggleSpeaker();
+  }
+  void StopCallMedia() {
+    impl_->StopCallMedia();
+  }
 
  private:
   struct Impl : std::enable_shared_from_this<Impl> {
@@ -95,7 +104,9 @@ class CallViewModel {
             .is_ringing = false,
             .call_direction = messaging::CallDirection::outgoing,
             .peer_id = peer_id,
-            .call_type = messaging::HistoryEntryKind::voiceCall
+            .call_type = messaging::HistoryEntryKind::voiceCall,
+            .is_muted = false,
+            .is_speaker_on = false
         };
       }
       client->StartVoiceCall(peer_id);
@@ -111,7 +122,9 @@ class CallViewModel {
             .is_ringing = false,
             .call_direction = messaging::CallDirection::outgoing,
             .peer_id = peer_id,
-            .call_type = messaging::HistoryEntryKind::videoCall
+            .call_type = messaging::HistoryEntryKind::videoCall,
+            .is_muted = false,
+            .is_speaker_on = false
         };
       }
       client->StartVideoCall(peer_id);
@@ -156,6 +169,28 @@ class CallViewModel {
       if (!peer_id.IsEmpty()) {
         client->RejectCall(peer_id);
       }
+      Notify();
+    }
+
+    void ToggleMute() {
+      std::lock_guard<std::mutex> const lock(mutex);
+      state.is_muted = !state.is_muted;
+      EventQueue::Instance().Push(EventCmdSetMicrophoneMute{state.is_muted});
+      Notify();
+    }
+
+    void ToggleSpeaker() {
+      std::lock_guard<std::mutex> const lock(mutex);
+      state.is_speaker_on = !state.is_speaker_on;
+      EventQueue::Instance().Push(EventCmdSetSpeakerphone{state.is_speaker_on});
+      Notify();
+    }
+
+    void StopCallMedia() {
+      std::lock_guard<std::mutex> const lock(mutex);
+      state.is_muted = false;
+      state.is_speaker_on = false;
+      EventQueue::Instance().Push(EventCmdSetSpeakerphone{false});
       Notify();
     }
 

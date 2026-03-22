@@ -182,5 +182,7 @@ struct EventCmdSetAudioMode { AudioRoutingMode mode; };
 struct EventCmdClearCommunicationDevice {};
 struct EventCmdPlaySound { SoundType type; };
 struct EventCmdStopSound {};
+struct EventCmdSetMicrophoneMute { bool is_muted; };
+struct EventCmdSetSpeakerphone { bool is_speaker_on; };
 
 }  // namespace eillance

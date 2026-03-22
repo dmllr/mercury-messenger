@@ -48,6 +48,9 @@ class SettingsViewModel {
   void SetSoundSettings(bool send, bool receive) {
     impl_->SetSoundSettings(send, receive);
   }
+  void SetShowNotificationContent(bool show) {
+    impl_->SetShowNotificationContent(show);
+  }
 
  private:
   struct Impl : std::enable_shared_from_this<Impl> {
@@ -107,6 +110,15 @@ class SettingsViewModel {
       }
     }
 
+    void SetShowNotificationContent(bool show) {
+      client->GetSettingsManager()->SetShowNotificationContent(show);
+      {
+        std::lock_guard<std::mutex> const lock(mutex);
+        state.show_notification_content = show;
+        NotifySettings();
+      }
+    }
+
     void LoadSettings() {
       std::lock_guard<std::mutex> const lock(mutex);
       LoadSettingsInternal();
@@ -121,6 +133,7 @@ class SettingsViewModel {
       state.custom_turn = mgr->GetCustomTurn();
       state.custom_turn_user = mgr->GetCustomTurnUser();
       state.custom_turn_pass = mgr->GetCustomTurnPass();
+      state.show_notification_content = mgr->GetShowNotificationContent();
     }
 
     void NotifySettings() {
