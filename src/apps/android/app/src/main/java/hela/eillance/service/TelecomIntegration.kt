@@ -15,11 +15,12 @@ import hela.eillance.telecom.MercuryConnectionService
 class TelecomIntegration(private val context: Context) {
 
   private val telecomManager = context.getSystemService(Context.TELECOM_SERVICE) as TelecomManager
-  private lateinit var phoneAccountHandle: PhoneAccountHandle
+  private val phoneAccountHandle = PhoneAccountHandle(
+    ComponentName(context, MercuryConnectionService::class.java),
+    TELECOM_ACCOUNT_ID
+  )
 
   fun registerPhoneAccount() {
-    val componentName = ComponentName(context, MercuryConnectionService::class.java)
-    phoneAccountHandle = PhoneAccountHandle(componentName, TELECOM_ACCOUNT_ID)
     val builder =
       PhoneAccount.builder(phoneAccountHandle, context.getString(R.string.telecom_account_name))
         .setCapabilities(PhoneAccount.CAPABILITY_SELF_MANAGED)
