@@ -133,9 +133,9 @@ class Stream : public std::enable_shared_from_this<Stream> {
       return;
     }
     isRunning_ = false;
-    dispatchQueue_.RemovePending();
     audio_->Stop();
     video_->Stop();
+    dispatchQueue_.RemovePending();
   }
 };
 
