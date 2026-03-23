@@ -136,7 +136,8 @@ class RtcMediaTransport : public transport::MediaTransport::Interface {
         102,
         ::rtc::H264RtpPacketizer::ClockRate
     );
-    auto const packetizer = std::make_shared<::rtc::H264RtpPacketizer>(::rtc::NalUnit::Separator::StartSequence, rtp_config);
+    auto const packetizer =
+        std::make_shared<::rtc::H264RtpPacketizer>(::rtc::NalUnit::Separator::StartSequence, rtp_config);
     auto reporter = std::make_shared<::rtc::RtcpSrReporter>(rtp_config);
     packetizer->addToChain(reporter);
     track->setMediaHandler(packetizer);

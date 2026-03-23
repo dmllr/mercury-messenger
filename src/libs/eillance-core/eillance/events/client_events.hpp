@@ -158,6 +158,12 @@ struct EventSendQueuedMessages {
 struct EventAppForegrounded {};
 struct EventAppBackgrounded {};
 
+// Permissions Integration
+enum class PermissionBannerType : uint8_t { none = 0, notification = 1, battery = 2, callPermissions = 3 };
+struct EventPermissionBannerChanged {
+  PermissionBannerType type;
+};
+
 // Explicit Notification Triggers
 struct EventNotifyNewMessage {
   ContactID peer_id;
@@ -178,15 +184,32 @@ struct EventNotifyContactRequest {
 enum class AudioRoutingMode : uint8_t { normal = 0, inCall = 1 };
 enum class SoundType : uint8_t { ringing = 0, ringback = 1, connecting = 2 };
 
-struct EventCmdProcessIncomingTelecomCall { ContactID peer_id; };
-struct EventCmdProcessOutgoingTelecomCall { ContactID peer_id; bool is_video; };
-struct EventCmdDisconnectTelecomCall { ContactID peer_id; };
-struct EventCmdSetTelecomCallActive { ContactID peer_id; };
-struct EventCmdSetAudioMode { AudioRoutingMode mode; };
+struct EventCmdProcessIncomingTelecomCall {
+  ContactID peer_id;
+};
+struct EventCmdProcessOutgoingTelecomCall {
+  ContactID peer_id;
+  bool is_video;
+};
+struct EventCmdDisconnectTelecomCall {
+  ContactID peer_id;
+};
+struct EventCmdSetTelecomCallActive {
+  ContactID peer_id;
+};
+struct EventCmdSetAudioMode {
+  AudioRoutingMode mode;
+};
 struct EventCmdClearCommunicationDevice {};
-struct EventCmdPlaySound { SoundType type; };
+struct EventCmdPlaySound {
+  SoundType type;
+};
 struct EventCmdStopSound {};
-struct EventCmdSetMicrophoneMute { bool is_muted; };
-struct EventCmdSetSpeakerphone { bool is_speaker_on; };
+struct EventCmdSetMicrophoneMute {
+  bool is_muted;
+};
+struct EventCmdSetSpeakerphone {
+  bool is_speaker_on;
+};
 
 }  // namespace eillance

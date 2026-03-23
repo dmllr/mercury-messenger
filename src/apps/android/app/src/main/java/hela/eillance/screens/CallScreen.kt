@@ -66,18 +66,6 @@ fun CallScreen(
     }
   }
 
-  var callDurationSeconds by remember { mutableLongStateOf(0L) }
-
-  LaunchedEffect(callState.isInCall) {
-    if (callState.isInCall) {
-      val startTime = System.currentTimeMillis()
-      while (true) {
-        callDurationSeconds = (System.currentTimeMillis() - startTime) / 1000
-        delay(1000)
-      }
-    }
-  }
-
   val isVideoCall = callState.callType == HistoryEntryKind.VideoCall
   val eglBaseContext = remember { WebRtcTransport.eglBase.eglBaseContext }
 
@@ -89,8 +77,8 @@ fun CallScreen(
     callState.isConnecting -> "Connecting..." // Matches requirement
     callState.isRinging && callState.callDirection == CallDirection.Outgoing -> stringResource(id = R.string.call_status_ringing)
     callState.isInCall -> {
-      val minutes = TimeUnit.SECONDS.toMinutes(callDurationSeconds)
-      val seconds = callDurationSeconds - TimeUnit.MINUTES.toSeconds(minutes)
+      val minutes = TimeUnit.SECONDS.toMinutes(callState.durationSeconds.toLong())
+      val seconds = callState.durationSeconds.toLong() - TimeUnit.MINUTES.toSeconds(minutes)
       String.format("%02d:%02d", minutes, seconds)
     }
 

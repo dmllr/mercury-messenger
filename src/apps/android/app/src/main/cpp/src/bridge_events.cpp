@@ -199,35 +199,46 @@ void InitEventBridge(JavaVM* jvm) {
     }
   }));
 
-  g_eventBridgeUnsubs.emplace_back(q.Subscribe<view_model::EventConversationDraftsUpdated>([jvm](auto const& e) -> void {
-    jni::ScopedJniEnv env_scope(jvm);
-    if (auto* env = env_scope.Get()) {
-      auto& class_refs = ClassRefs::Instance();
-      auto& list_holder = class_refs.Class("java/util/ArrayList");
-      jobject drafts_list = list_holder.NewObject(env);
-      jmethodID list_add_method = list_holder.GetMethod("add");
-      auto& draft_holder = class_refs.Class("hela/eillance/ndkio/DraftAttachment");
+  g_eventBridgeUnsubs.emplace_back(
+      q.Subscribe<view_model::EventConversationDraftsUpdated>([jvm](auto const& e) -> void {
+        jni::ScopedJniEnv env_scope(jvm);
+        if (auto* env = env_scope.Get()) {
+          auto& class_refs = ClassRefs::Instance();
+          auto& list_holder = class_refs.Class("java/util/ArrayList");
+          jobject drafts_list = list_holder.NewObject(env);
+          jmethodID list_add_method = list_holder.GetMethod("add");
+          auto& draft_holder = class_refs.Class("hela/eillance/ndkio/DraftAttachment");
 
-      for (auto const& draft : e.drafts) {
-        jstring path = env->NewStringUTF(draft.file_path.c_str());
-        jint type = static_cast<jint>(draft.type);
-        jstring mime = env->NewStringUTF(draft.mime_type.c_str());
-        jstring name = env->NewStringUTF(draft.file_name.c_str());
-        jstring thumb = env->NewStringUTF(draft.thumbnail_base64.c_str());
-        jstring note = env->NewStringUTF(draft.note.c_str());
-        jobject draft_java = draft_holder.NewObject(env, path, type, mime, name, thumb, note);
-        env->CallBooleanMethod(drafts_list, list_add_method, draft_java);
-        env->DeleteLocalRef(path); env->DeleteLocalRef(mime); env->DeleteLocalRef(name);
-        env->DeleteLocalRef(thumb); env->DeleteLocalRef(note); env->DeleteLocalRef(draft_java);
-      }
+          for (auto const& draft : e.drafts) {
+            jstring path = env->NewStringUTF(draft.file_path.c_str());
+            jint type = static_cast<jint>(draft.type);
+            jstring mime = env->NewStringUTF(draft.mime_type.c_str());
+            jstring name = env->NewStringUTF(draft.file_name.c_str());
+            jstring thumb = env->NewStringUTF(draft.thumbnail_base64.c_str());
+            jstring note = env->NewStringUTF(draft.note.c_str());
+            jobject draft_java = draft_holder.NewObject(env, path, type, mime, name, thumb, note);
+            env->CallBooleanMethod(drafts_list, list_add_method, draft_java);
+            env->DeleteLocalRef(path);
+            env->DeleteLocalRef(mime);
+            env->DeleteLocalRef(name);
+            env->DeleteLocalRef(thumb);
+            env->DeleteLocalRef(note);
+            env->DeleteLocalRef(draft_java);
+          }
 
-      jstring j_peer_id = env->NewStringUTF(e.peer_id.ToString().c_str());
-      auto& bus_holder = class_refs.Class("hela/eillance/events/NativeEventBus");
-      env->CallStaticVoidMethod(bus_holder.Class(), bus_holder.GetMethod("onDraftsUpdated"), j_peer_id, drafts_list);
-      env->DeleteLocalRef(drafts_list);
-      env->DeleteLocalRef(j_peer_id);
-    }
-  }));
+          jstring j_peer_id = env->NewStringUTF(e.peer_id.ToString().c_str());
+          auto& bus_holder = class_refs.Class("hela/eillance/events/NativeEventBus");
+          env->CallStaticVoidMethod(
+              bus_holder.Class(),
+              bus_holder.GetMethod("onDraftsUpdated"),
+              j_peer_id,
+              drafts_list
+          );
+          env->DeleteLocalRef(drafts_list);
+          env->DeleteLocalRef(j_peer_id);
+        }
+      })
+  );
 
   g_eventBridgeUnsubs.emplace_back(q.Subscribe<view_model::EventTransferProgressUpdated>([jvm](auto const& e) -> void {
     jni::ScopedJniEnv env_scope(jvm);
@@ -282,7 +293,8 @@ void InitEventBridge(JavaVM* jvm) {
           peer_id,
           (jint)e.state.call_type,
           e.state.is_muted,
-          e.state.is_speaker_on
+          e.state.is_speaker_on,
+          (jint)e.state.duration_seconds
       );
       auto& bus_holder = class_refs.Class("hela/eillance/events/NativeEventBus");
       env->CallStaticVoidMethod(bus_holder.Class(), bus_holder.GetMethod("onCallStateChanged"), call_state_java);
@@ -334,6 +346,19 @@ void InitEventBridge(JavaVM* jvm) {
     }
   }));
 
+  g_eventBridgeUnsubs.emplace_back(q.Subscribe<EventPermissionBannerChanged>([jvm](auto const& e) -> void {
+    jni::ScopedJniEnv env_scope(jvm);
+    if (auto* env = env_scope.Get()) {
+      auto& class_refs = ClassRefs::Instance();
+      auto& bus_holder = class_refs.Class("hela/eillance/events/NativeEventBus");
+      env->CallStaticVoidMethod(
+          bus_holder.Class(),
+          bus_holder.GetMethod("onPermissionBannerChanged"),
+          static_cast<jint>(e.type)
+      );
+    }
+  }));
+
   // Setup explicitly requested notification triggers
   g_eventBridgeUnsubs.emplace_back(q.Subscribe<EventNotifyNewMessage>([jvm](auto const& e) -> void {
     jni::ScopedJniEnv env_scope(jvm);
@@ -370,12 +395,26 @@ void InitEventBridge(JavaVM* jvm) {
             jstring j_note = env->NewStringUTF(att.note.c_str());
             jstring j_name = env->NewStringUTF(att.file_name.c_str());
             jobject j_att = attachment_holder.NewObject(
-                env, j_id, static_cast<jint>(att.type), j_path, j_mime, static_cast<jlong>(att.size_bytes),
-                j_thumb, static_cast<jboolean>(att.is_downloaded), static_cast<jint>(att.status), j_note, j_name);
+                env,
+                j_id,
+                static_cast<jint>(att.type),
+                j_path,
+                j_mime,
+                static_cast<jlong>(att.size_bytes),
+                j_thumb,
+                static_cast<jboolean>(att.is_downloaded),
+                static_cast<jint>(att.status),
+                j_note,
+                j_name
+            );
             env->CallBooleanMethod(j_attachments, list_add_method, j_att);
-            env->DeleteLocalRef(j_id); env->DeleteLocalRef(j_path); env->DeleteLocalRef(j_mime);
+            env->DeleteLocalRef(j_id);
+            env->DeleteLocalRef(j_path);
+            env->DeleteLocalRef(j_mime);
             if (j_thumb) env->DeleteLocalRef(j_thumb);
-            env->DeleteLocalRef(j_note); env->DeleteLocalRef(j_name); env->DeleteLocalRef(j_att);
+            env->DeleteLocalRef(j_note);
+            env->DeleteLocalRef(j_name);
+            env->DeleteLocalRef(j_att);
           }
         }
         jobject j_reactions = list_holder.NewObject(env);
@@ -383,25 +422,44 @@ void InitEventBridge(JavaVM* jvm) {
           jstring r_auth = env->NewStringUTF(r.author_id.ToString().c_str());
           jobject j_react = reaction_holder.NewObject(env, r_auth, static_cast<jint>(r.reaction));
           env->CallBooleanMethod(j_reactions, list_add_method, j_react);
-          env->DeleteLocalRef(r_auth); env->DeleteLocalRef(j_react);
+          env->DeleteLocalRef(r_auth);
+          env->DeleteLocalRef(j_react);
         }
         jobject entry_java = entry_holder.NewObject(
-            env, static_cast<jlong>(entry_cpp.id), static_cast<jint>(entry_cpp.kind),
-            static_cast<jlong>(entry_cpp.timestamp), content, static_cast<jint>(entry_cpp.direction),
-            duration, call_entry ? static_cast<jint>(call_entry->call_direction) : -1,
+            env,
+            static_cast<jlong>(entry_cpp.id),
+            static_cast<jint>(entry_cpp.kind),
+            static_cast<jlong>(entry_cpp.timestamp),
+            content,
+            static_cast<jint>(entry_cpp.direction),
+            duration,
+            call_entry ? static_cast<jint>(call_entry->call_direction) : -1,
             call_entry ? static_cast<jint>(call_entry->call_status) : -1,
-            static_cast<jint>(entry_cpp.status), static_cast<jboolean>(entry_cpp.is_truncated),
-            static_cast<jboolean>(entry_cpp.is_edited), static_cast<jboolean>(entry_cpp.is_deleted),
-            j_attachments, j_reactions, j_reply_to_id);
+            static_cast<jint>(entry_cpp.status),
+            static_cast<jboolean>(entry_cpp.is_truncated),
+            static_cast<jboolean>(entry_cpp.is_edited),
+            static_cast<jboolean>(entry_cpp.is_deleted),
+            j_attachments,
+            j_reactions,
+            j_reply_to_id
+        );
         env->CallBooleanMethod(history_list, list_add_method, entry_java);
         if (content) env->DeleteLocalRef(content);
-        env->DeleteLocalRef(j_attachments); env->DeleteLocalRef(j_reactions); env->DeleteLocalRef(entry_java);
+        env->DeleteLocalRef(j_attachments);
+        env->DeleteLocalRef(j_reactions);
+        env->DeleteLocalRef(entry_java);
       }
 
       auto& bus_holder = class_refs.Class("hela/eillance/events/NativeEventBus");
       jstring j_peer = env->NewStringUTF(e.peer_id.ToString().c_str());
       jstring j_name = env->NewStringUTF(e.contact_name.c_str());
-      env->CallStaticVoidMethod(bus_holder.Class(), bus_holder.GetMethod("onNotifyNewMessage"), j_peer, j_name, history_list);
+      env->CallStaticVoidMethod(
+          bus_holder.Class(),
+          bus_holder.GetMethod("onNotifyNewMessage"),
+          j_peer,
+          j_name,
+          history_list
+      );
 
       env->DeleteLocalRef(j_peer);
       env->DeleteLocalRef(j_name);
@@ -453,7 +511,12 @@ void InitEventBridge(JavaVM* jvm) {
       auto& class_refs = ClassRefs::Instance();
       auto& bus_holder = class_refs.Class("hela/eillance/events/NativeEventBus");
       jstring j_peer = env->NewStringUTF(e.peer_id.ToString().c_str());
-      env->CallStaticVoidMethod(bus_holder.Class(), bus_holder.GetMethod("onCmdProcessOutgoingTelecom"), j_peer, static_cast<jboolean>(e.is_video));
+      env->CallStaticVoidMethod(
+          bus_holder.Class(),
+          bus_holder.GetMethod("onCmdProcessOutgoingTelecom"),
+          j_peer,
+          static_cast<jboolean>(e.is_video)
+      );
       env->DeleteLocalRef(j_peer);
     }
   }));
@@ -485,7 +548,11 @@ void InitEventBridge(JavaVM* jvm) {
     if (auto* env = env_scope.Get()) {
       auto& class_refs = ClassRefs::Instance();
       auto& bus_holder = class_refs.Class("hela/eillance/events/NativeEventBus");
-      env->CallStaticVoidMethod(bus_holder.Class(), bus_holder.GetMethod("onCmdSetAudioMode"), static_cast<jint>(e.mode));
+      env->CallStaticVoidMethod(
+          bus_holder.Class(),
+          bus_holder.GetMethod("onCmdSetAudioMode"),
+          static_cast<jint>(e.mode)
+      );
     }
   }));
 
@@ -521,7 +588,11 @@ void InitEventBridge(JavaVM* jvm) {
     if (auto* env = env_scope.Get()) {
       auto& class_refs = ClassRefs::Instance();
       auto& bus_holder = class_refs.Class("hela/eillance/events/NativeEventBus");
-      env->CallStaticVoidMethod(bus_holder.Class(), bus_holder.GetMethod("onCmdSetMicrophoneMute"), static_cast<jboolean>(e.is_muted));
+      env->CallStaticVoidMethod(
+          bus_holder.Class(),
+          bus_holder.GetMethod("onCmdSetMicrophoneMute"),
+          static_cast<jboolean>(e.is_muted)
+      );
     }
   }));
 
@@ -530,7 +601,11 @@ void InitEventBridge(JavaVM* jvm) {
     if (auto* env = env_scope.Get()) {
       auto& class_refs = ClassRefs::Instance();
       auto& bus_holder = class_refs.Class("hela/eillance/events/NativeEventBus");
-      env->CallStaticVoidMethod(bus_holder.Class(), bus_holder.GetMethod("onCmdSetSpeakerphone"), static_cast<jboolean>(e.is_speaker_on));
+      env->CallStaticVoidMethod(
+          bus_holder.Class(),
+          bus_holder.GetMethod("onCmdSetSpeakerphone"),
+          static_cast<jboolean>(e.is_speaker_on)
+      );
     }
   }));
 }
