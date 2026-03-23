@@ -106,7 +106,7 @@ TEST_F(ClientCoreTest, IncomingKeyExchangeTriggersReply) {
   // implicitly mangling the std::byte arrays when parsed back via string parsing.
   nlohmann::json clean_msg = key_msg;
   clean_msg["key"] = nlohmann::json::array();
-  for(auto b : peer_pub_key) {
+  for (auto b : peer_pub_key) {
     clean_msg["key"].push_back(static_cast<uint8_t>(b));
   }
   std::string msg_str = clean_msg.dump();

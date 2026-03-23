@@ -83,7 +83,8 @@ TEST_F(AttachmentTest, SendMessageCalculatesHash) {
   ASSERT_EQ(entry.attachments.size(), 1);
 
   auto const& att = entry.attachments[0];
-  EXPECT_EQ(att.file_path, temp_file_path_);
+  EXPECT_NE(att.file_path, temp_file_path_);
+  EXPECT_TRUE(std::filesystem::exists(att.file_path));
   EXPECT_EQ(att.mime_type, "image/jpeg");
   EXPECT_FALSE(att.hash.empty());
   EXPECT_EQ(att.hash.length(), 64);

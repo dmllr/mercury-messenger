@@ -43,6 +43,7 @@ class CallViewModel {
     for (auto const id : eventUnsubscribers_) {
       EventQueue::Instance().Unsubscribe(id);
     }
+    impl_->StopTicker();
   }
 
   [[nodiscard]] auto GetState() const -> CallState {
@@ -100,7 +101,7 @@ class CallViewModel {
 
     void StartTicker() {
       if (tick_active_.exchange(true)) return;
-      ticker_.DispatchAfter(std::chrono::seconds(1), [this, self = shared_from_this()] { Tick(); });
+      ticker_.DispatchAfter(std::chrono::seconds(1), [this] { Tick(); });
     }
 
     void StopTicker() {
@@ -122,7 +123,7 @@ class CallViewModel {
       }
       if (should_notify) Notify();
       if (tick_active_) {
-        ticker_.DispatchAfter(std::chrono::seconds(1), [this, self = shared_from_this()] { Tick(); });
+        ticker_.DispatchAfter(std::chrono::seconds(1), [this] { Tick(); });
       }
     }
 
