@@ -183,7 +183,8 @@ data class CallState(
   val peerId: String = "",
   private val callTypeValue: Int = HistoryEntryKind.VoiceCall.value,
   val isMuted: Boolean = false,
-  val isSpeakerOn: Boolean = false
+  val isSpeakerOn: Boolean = false,
+  val durationSeconds: Int = 0
 ) {
   val callDirection: CallDirection get() = CallDirection.fromInt(callDirectionValue)
   val callType: HistoryEntryKind get() = HistoryEntryKind.fromInt(callTypeValue)

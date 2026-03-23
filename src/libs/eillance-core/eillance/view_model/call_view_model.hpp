@@ -7,6 +7,7 @@
 
 #include "eillance/client/client.hpp"
 #include "eillance/events/client_events.hpp"
+#include "eillance/utils/dispatch_queue.hpp"
 #include "eillance/utils/event_queue.hpp"
 #include "view_model_defines.hpp"
 
@@ -79,6 +80,8 @@ class CallViewModel {
 
     mutable std::mutex mutex;
     CallState state;
+    DispatchQueue ticker_{"CallTicker", 1};
+    std::atomic<bool> tick_active_{false};
 
     explicit Impl(std::shared_ptr<Client> client)
         : client(std::move(client)) {
@@ -93,6 +96,34 @@ class CallViewModel {
     void Notify() const {
       std::lock_guard<std::mutex> const lock(mutex);
       EventQueue::Instance().Push(EventCallStateChanged{state});
+    }
+
+    void StartTicker() {
+      if (tick_active_.exchange(true)) return;
+      ticker_.DispatchAfter(std::chrono::seconds(1), [this, self = shared_from_this()] { Tick(); });
+    }
+
+    void StopTicker() {
+      tick_active_ = false;
+      ticker_.RemovePending();
+    }
+
+    void Tick() {
+      if (!tick_active_) return;
+      bool should_notify = false;
+      {
+        std::lock_guard<std::mutex> const lock(mutex);
+        if (state.is_in_call) {
+          state.duration_seconds++;
+          should_notify = true;
+        } else {
+          tick_active_ = false;
+        }
+      }
+      if (should_notify) Notify();
+      if (tick_active_) {
+        ticker_.DispatchAfter(std::chrono::seconds(1), [this, self = shared_from_this()] { Tick(); });
+      }
     }
 
     void StartVoiceCall(ContactID const& peer_id) {
@@ -132,6 +163,7 @@ class CallViewModel {
     }
 
     void Hangup() {
+      StopTicker();
       ContactID peer_id_to_hangup;
       {
         std::lock_guard<std::mutex> const lock(mutex);
@@ -152,6 +184,7 @@ class CallViewModel {
         state.is_connecting = false;
         state.is_in_call = true;
         state.is_ringing = false;
+        state.duration_seconds = 0;
       }
       if (!peer_id.IsEmpty()) {
         client->AcceptCall(peer_id);
@@ -160,6 +193,7 @@ class CallViewModel {
     }
 
     void RejectCall() {
+      StopTicker();
       ContactID peer_id;
       {
         std::lock_guard<std::mutex> const lock(mutex);
@@ -209,6 +243,7 @@ class CallViewModel {
       }
       if (should_notify) {
         Notify();
+        StartTicker();
       }
     }
 
@@ -250,6 +285,7 @@ class CallViewModel {
           state.is_connecting = false;
           state.is_ringing = false;
           state.is_in_call = true;
+          state.duration_seconds = 0;
           should_notify = true;
         }
       }
@@ -276,6 +312,7 @@ class CallViewModel {
     }
 
     void OnCallTerminated(ContactID const& peer_id) {
+      StopTicker();
       bool should_notify = false;
       {
         std::lock_guard<std::mutex> const lock(mutex);

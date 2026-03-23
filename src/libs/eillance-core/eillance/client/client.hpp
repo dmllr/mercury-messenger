@@ -279,6 +279,22 @@ class Client final {
     return sm_->account->GetSettings();
   }
 
+  void UpdatePlatformPermissions(bool notif, bool batt, bool calls) const {
+    sm_->account->UpdatePlatformPermissions(notif, batt, calls);
+  }
+
+  void IgnoreBatteryOptimization() const {
+    sm_->account->IgnoreBatteryOptimization();
+  }
+
+  void IgnoreCallPermissions() const {
+    sm_->account->IgnoreCallPermissions();
+  }
+
+  void ResetIgnoredPermissions() const {
+    sm_->account->ResetIgnoredPermissions();
+  }
+
   [[nodiscard]] auto Sign(std::span<std::byte const> const message) const -> std::vector<std::byte> {
     return sm_->account->Sign(message);
   }
@@ -386,8 +402,7 @@ class Client final {
       return;
     }
     auto const state = sm_->data_transport->GetConnectionState(peer_id);
-    if (state == transport::PeerConnectionState::connecting || 
-        state == transport::PeerConnectionState::newConnection || 
+    if (state == transport::PeerConnectionState::connecting || state == transport::PeerConnectionState::newConnection ||
         state == transport::PeerConnectionState::connected) {
       return;
     }

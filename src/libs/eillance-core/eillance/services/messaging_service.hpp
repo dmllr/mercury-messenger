@@ -755,7 +755,16 @@ class MessagingService {
       auto contact = contact_manager_->GetContact(peer_id);
       std::string name = contact && contact->display_name ? *contact->display_name : peer_id.ToString().substr(0, 8);
       auto unread = GetUnreadMessages(peer_id);
-      EventQueue::Instance().Push(EventNotifyNewMessage{peer_id, entry.id, name, std::move(unread)});
+      std::erase_if(unread, [](auto const& msg) {
+        if (msg.kind == messaging::HistoryEntryKind::systemMessage) return true;
+        if (std::holds_alternative<messaging::CallEntry>(msg.data)) {
+          return std::get<messaging::CallEntry>(msg.data).call_status == messaging::CallStatus::missed;
+        }
+        return false;
+      });
+      if (!unread.empty()) {
+        EventQueue::Instance().Push(EventNotifyNewMessage{peer_id, entry.id, name, std::move(unread)});
+      }
     }
   }
 

@@ -134,7 +134,41 @@ class AccountService {
     return id_manager_->Sign(message);
   }
 
+  void UpdatePlatformPermissions(bool has_notif, bool has_battery, bool has_calls) {
+    has_notif_ = has_notif;
+    has_battery_ = has_battery;
+    has_calls_ = has_calls;
+    EvaluatePermissionBanner();
+  }
+
+  void IgnoreBatteryOptimization() {
+    settings_manager_->SetIgnoreBatteryOptimization(true);
+    EvaluatePermissionBanner();
+  }
+
+  void IgnoreCallPermissions() {
+    settings_manager_->SetIgnoreCallPermissions(true);
+    EvaluatePermissionBanner();
+  }
+
+  void ResetIgnoredPermissions() {
+    settings_manager_->SetIgnoreBatteryOptimization(false);
+    settings_manager_->SetIgnoreCallPermissions(false);
+    EvaluatePermissionBanner();
+  }
+
  private:
+  void EvaluatePermissionBanner() {
+    PermissionBannerType banner = PermissionBannerType::none;
+    if (!has_notif_)
+      banner = PermissionBannerType::notification;
+    else if (!has_battery_ && !settings_manager_->GetIgnoreBatteryOptimization())
+      banner = PermissionBannerType::battery;
+    else if (!has_calls_ && !settings_manager_->GetIgnoreCallPermissions())
+      banner = PermissionBannerType::callPermissions;
+    EventQueue::Instance().Push(EventPermissionBannerChanged{banner});
+  }
+
   ServiceManager* sm_;
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<transport::DataTransport> transport_;
@@ -142,6 +176,10 @@ class AccountService {
   std::unique_ptr<identity::IdManager> id_manager_;
   std::unique_ptr<SettingsManager> settings_manager_;
   std::unique_ptr<backup::BackupManager> backup_manager_;
+
+  bool has_notif_{true};
+  bool has_battery_{true};
+  bool has_calls_{true};
 };
 
 }  // namespace eillance::services

@@ -139,6 +139,24 @@ class SettingsManager {
     storage_->SetSetting(kCustomTurnUserKey, params.turn_user);
   }
 
+  [[nodiscard]] auto GetIgnoreBatteryOptimization() const -> bool {
+    auto val = storage_->GetSetting(kIgnoreBatteryKey);
+    return val && (*val == "1");
+  }
+
+  void SetIgnoreBatteryOptimization(bool ignore) {
+    storage_->SetSetting(kIgnoreBatteryKey, ignore ? "1" : "0");
+  }
+
+  [[nodiscard]] auto GetIgnoreCallPermissions() const -> bool {
+    auto val = storage_->GetSetting(kIgnoreCallsKey);
+    return val && (*val == "1");
+  }
+
+  void SetIgnoreCallPermissions(bool ignore) {
+    storage_->SetSetting(kIgnoreCallsKey, ignore ? "1" : "0");
+  }
+
  private:
   void Load() {
     signalingServerUrl_ = storage_->GetSetting(kSignalingServerUrlKey);
@@ -163,6 +181,8 @@ class SettingsManager {
   static constexpr auto kPlaySoundOnSendKey = "sound_on_send";
   static constexpr auto kPlaySoundOnRecvKey = "sound_on_recv";
   static constexpr auto kShowNotificationContentKey = "show_notifications_content";
+  static constexpr auto kIgnoreBatteryKey = "ignore_battery_opt";
+  static constexpr auto kIgnoreCallsKey = "ignore_call_perms";
 
   std::shared_ptr<storage::PersistentStorage> storage_;
 

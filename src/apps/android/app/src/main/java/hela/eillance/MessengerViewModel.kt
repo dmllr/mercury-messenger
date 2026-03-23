@@ -12,7 +12,9 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import hela.eillance.events.NativeEventBus
 
 data class SharedContent(
   val text: String? = null,
@@ -21,7 +23,6 @@ data class SharedContent(
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
-  private val prefs = application.getSharedPreferences("mercury_prefs", Context.MODE_PRIVATE)
   private val pm = PermissionManager(application)
 
   // Real-time permission states
@@ -33,10 +34,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
   private val _hasBatteryExemption = MutableStateFlow(true)
   val hasBatteryExemption = _hasBatteryExemption.asStateFlow()
-
-  // "Ignored" states (User clicked "I don't care")
-  private val _isBatteryIgnored = MutableStateFlow(prefs.getBoolean(KEY_IGNORE_BATTERY, false))
-  private val _isCallPermsIgnored = MutableStateFlow(prefs.getBoolean(KEY_IGNORE_CALLS, false))
 
   // Navigation states
   private val _incomingCallUiVisible = MutableStateFlow(false)
@@ -57,17 +54,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
   private var isEngineReady = false
 
   // Computed state for which permission banner to show (if any)
-  val permissionBannerState: StateFlow<BannerType?> = combine(
-    _hasNotificationPermission,
-    _hasBatteryExemption,
-    _isBatteryIgnored,
-    _hasCallPermissions,
-    _isCallPermsIgnored
-  ) { hasNotif, hasBat, batIgnored, hasCall, callIgnored ->
-    when {
-      !hasNotif -> BannerType.Notification
-      !hasBat && !batIgnored -> BannerType.Battery
-      !hasCall && !callIgnored -> BannerType.CallPermissions
+  val permissionBannerState: StateFlow<BannerType?> = NativeEventBus.permissionBanner.map { type ->
+    when (type) {
+      1 -> BannerType.Notification
+      2 -> BannerType.Battery
+      3 -> BannerType.CallPermissions
       else -> null
     }
   }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
@@ -91,25 +82,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
   }
 
   fun checkAllPermissions() {
-    _hasCallPermissions.value = pm.hasCallPermissions()
-    _hasNotificationPermission.value = pm.hasNotificationPermission()
-    _hasBatteryExemption.value = pm.hasBatteryExemption()
+    val call = pm.hasCallPermissions()
+    val notif = pm.hasNotificationPermission()
+    val bat = pm.hasBatteryExemption()
+    _hasCallPermissions.value = call
+    _hasNotificationPermission.value = notif
+    _hasBatteryExemption.value = bat
+    MessengerService.instance?.nativeUpdatePlatformPermissions(notif, bat, call)
   }
 
   fun ignoreBatteryOptimization() {
-    prefs.edit().putBoolean(KEY_IGNORE_BATTERY, true).apply()
-    _isBatteryIgnored.value = true
+    MessengerService.instance?.nativeIgnoreBattery()
   }
 
   fun ignoreCallPermissions() {
-    prefs.edit().putBoolean(KEY_IGNORE_CALLS, true).apply()
-    _isCallPermsIgnored.value = true
+    MessengerService.instance?.nativeIgnoreCalls()
   }
 
   fun resetIgnoredPermissions() {
-    prefs.edit().remove(KEY_IGNORE_BATTERY).remove(KEY_IGNORE_CALLS).apply()
-    _isBatteryIgnored.value = false
-    _isCallPermsIgnored.value = false
+    MessengerService.instance?.nativeResetIgnoredPermissions()
     checkAllPermissions()
   }
 
@@ -203,11 +194,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
   fun resetCore() {
     MessengerService.instance?.restartCore()
-  }
-
-  companion object {
-    private const val KEY_IGNORE_BATTERY = "ignore_battery_opt"
-    private const val KEY_IGNORE_CALLS = "ignore_call_perms"
   }
 }
 
