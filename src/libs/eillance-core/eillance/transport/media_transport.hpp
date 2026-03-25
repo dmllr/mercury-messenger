@@ -60,7 +60,7 @@ class MediaTransport {
   void SetRemoteDescription(ContactID const& peer_id, std::string const& sdp, std::string const& type) const {
     self_->SetRemoteDescription(peer_id, sdp, type);
   }
-  
+
   [[nodiscard]] auto GetConnectionState(ContactID const& peer_id) const -> PeerConnectionState {
     return self_->GetConnectionState(peer_id);
   }
@@ -68,7 +68,7 @@ class MediaTransport {
   [[nodiscard]] auto GetLocalDescription(ContactID const& peer_id) const -> std::optional<std::string> {
     return self_->GetLocalDescription(peer_id);
   }
-  
+
   void StartLocalMedia(bool is_video) const {
     self_->StartLocalMedia(is_video);
   }

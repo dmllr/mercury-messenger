@@ -19,8 +19,8 @@
 #include "eillance/transport/media_transport.hpp"
 #include "eillance/transport/peer.hpp"
 #include "eillance/transport/protocol.hpp"
-#include "eillance/utils/event_queue.hpp"
 #include "eillance/utils/dispatch_queue.hpp"
+#include "eillance/utils/event_queue.hpp"
 
 namespace eillance::rtc {
 
@@ -231,7 +231,7 @@ class RtcMediaTransport : public transport::MediaTransport::Interface {
         pc = it->second;
       }
     }
-    
+
     if (!pc) return;
 
     if (pc->signalingState() == ::rtc::PeerConnection::SignalingState::HaveRemoteOffer) {
