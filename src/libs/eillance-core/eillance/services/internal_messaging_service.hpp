@@ -270,8 +270,7 @@ class InternalMessagingService {
             LGI << "Resolving SDP glare: Ignoring offer from " << peer_id.ToString();
             return;
           }
-        } else if (state == transport::PeerConnectionState::failed || state == transport::PeerConnectionState::closed ||
-                   state == transport::PeerConnectionState::disconnected) {
+        } else {
           data_transport_->Disconnect(peer_id);
         }
 

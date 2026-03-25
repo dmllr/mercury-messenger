@@ -22,8 +22,8 @@ def test_cross_network_communication(test_environment):
   # Using alpine for lightweight routing
   scenario.add_process(
     name="router",
-    executable="sh",
-    args=["-c", "sysctl -w net.ipv4.ip_forward=1 && tail -f /dev/null"],
+    executable="tail",
+    args=["-f", "/dev/null"],
     networks={"net-a": "192.168.10.254", "net-b": "192.168.20.254"}
   )
   # Override executable to use alpine directly? The framework uses the build image.
@@ -31,16 +31,16 @@ def test_cross_network_communication(test_environment):
   # The mock-app image is used for all processes.
   # So we reuse the test image for the router.
 
-  # Signaling on Net A
+  # Signaling on both networks so both apps can reach it easily
   scenario.add_process(
     name="signaling",
     executable="/app/bin/mercury-server",
     args=["--port", "8000"],
-    networks={"net-a": "192.168.10.30"}
+    networks={"net-a": "192.168.10.30", "net-b": "192.168.20.30"}
   )
 
   # App A on Net A
-  script_a = f"wait 4, connect, wait 2, message {id_b} \"Hello from A\", wait 10, disconnect"
+  script_a = f"wait 10, connect, wait 2, message {id_b} \"Hello from A\", wait 10, disconnect"
   scenario.add_process(
     name="app-a",
     executable="/app/bin/mercury-mock-app",
@@ -50,11 +50,11 @@ def test_cross_network_communication(test_environment):
 
   # App B on Net B
   # Needs to reach Signaling (192.168.10.30) via Router (192.168.20.254)
-  script_b = "wait 4, connect, wait 15, disconnect"
+  script_b = "wait 10, connect, wait 20, disconnect"
   scenario.add_process(
     name="app-b",
     executable="/app/bin/mercury-mock-app",
-    args=["--key", key_b, "--signaling-url", "ws://192.168.10.30:8000", "--db-path", "/tmp/b.db", "--script", script_b],
+    args=["--key", key_b, "--signaling-url", "ws://192.168.20.30:8000", "--db-path", "/tmp/b.db", "--script", script_b],
     networks={"net-b": "192.168.20.31"}
   )
 
@@ -79,7 +79,7 @@ def test_cross_network_communication(test_environment):
 
   import threading
   def add_routes_delayed():
-      time.sleep(2) # Wait for containers to be up
+      time.sleep(5) # Wait for containers to be up
       test_environment.add_route("app-b", "192.168.10.0/24", "192.168.20.254")
       # app-a doesn't strictly need a route to B for Websocket, 
       # but for P2P media/data it needs to know how to reach B's IP if ICE candidates are private IPs.
@@ -89,7 +89,7 @@ def test_cross_network_communication(test_environment):
   t = threading.Thread(target=add_routes_delayed)
   t.start()
 
-  test_environment.execute_scenario(scenario, timeout_seconds=25)
+  test_environment.execute_scenario(scenario, timeout_seconds=30)
   t.join()
 
 

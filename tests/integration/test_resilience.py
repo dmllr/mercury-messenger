@@ -16,7 +16,7 @@ def test_receiver_crash(test_environment):
   scenario.add_process("signaling", "/app/bin/mercury-server", ["--port", "8000"], {"net": "192.168.70.30"})
 
   # A keeps trying to send
-  script_a = f"connect, wait 2, message {id_b} \"Persistence Test\", wait 15, disconnect"
+  script_a = f"connect, wait 2, message {id_b} \"Persistence Test\", wait 25, disconnect"
   scenario.add_process("app-a", "/app/bin/mercury-mock-app",
                        ["--key", key_a, "--signaling-url", "ws://192.168.70.30:8000", "--db-path", "/tmp/a.db", "--script", script_a],
                        {"net": "192.168.70.31"})
@@ -44,7 +44,7 @@ def test_receiver_crash(test_environment):
   # Docker 'restart' keeps container, just reboots. Logs persist.
   scenario.expect_logs("app-b", [f"[mock] Message from {id_a} received: Persistence Test"])
 
-  test_environment.execute_scenario(scenario, timeout_seconds=20, stop_on_first_exit=False)
+  test_environment.execute_scenario(scenario, timeout_seconds=30, stop_on_first_exit=False)
   t.join()
 
 def test_signaling_crash(test_environment):

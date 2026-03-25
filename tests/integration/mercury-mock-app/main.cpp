@@ -116,10 +116,11 @@ auto main(int argc, char** argv) -> int {
     if (e.message.direction == eillance::messaging::MessageDirection::received) {
       if (std::holds_alternative<eillance::messaging::MessageEntry>(e.message.data)) {
         auto const& message = std::get<eillance::messaging::MessageEntry>(e.message.data);
-        LGI << "[mock] Message from " << e.peer_id.ToString() << " received";
-        if (std::get<eillance::messaging::MessageEntry>(e.message.data).reply_to_id > 0) {
-          LGI << "[mock] Message is a reply to: "
-              << std::get<eillance::messaging::MessageEntry>(e.message.data).reply_to_id;
+        if (e.message.kind != eillance::messaging::HistoryEntryKind::systemMessage) {
+          LGI << "[mock] Message from " << e.peer_id.ToString() << " received: " << message.content;
+          if (message.reply_to_id > 0) {
+            LGI << "[mock] Message is a reply to: " << message.reply_to_id;
+          }
         }
       }
     }
@@ -151,8 +152,9 @@ auto main(int argc, char** argv) -> int {
     }
   });
 
-  eillance::EventQueue::Instance().Subscribe<eillance::EventContactRequest>([](auto const& e) {
+  eillance::EventQueue::Instance().Subscribe<eillance::EventContactRequest>([client](auto const& e) {
     LGI << "[mock] Contact request from " << e.peer_id.ToString();
+    client->ConfirmContact(e.peer_id);
   });
 
   eillance::EventQueue::Instance().Subscribe<eillance::EventContactStatusChanged>([](auto const& e) {
@@ -237,6 +239,7 @@ auto main(int argc, char** argv) -> int {
       peer_hex.erase(0, peer_hex.find_first_not_of(' '));
       peer_hex.erase(peer_hex.find_last_not_of(' ') + 1);
       eillance::ContactID const peer_id(peer_hex);
+      std::ignore = client->AddContact(peer_id, std::nullopt);
       client->StartVoiceCall(peer_id);
     } else if (cmd.starts_with("accept ")) {
       auto peer_hex = cmd.substr(7);
@@ -265,7 +268,6 @@ auto main(int argc, char** argv) -> int {
 
         eillance::ContactID const peer_id(peer_hex);
         std::ignore = client->AddContact(peer_id, std::nullopt);
-        client->ConfirmContact(peer_id);
 
         std::vector<eillance::messaging::AttachmentRequest> atts;
         std::stringstream paths_ss(paths_str);
@@ -291,7 +293,6 @@ auto main(int argc, char** argv) -> int {
         eillance::ContactID const peer_id(peer_hex);
 
         std::ignore = client->AddContact(peer_id, std::nullopt);
-        client->ConfirmContact(peer_id);
 
         std::ignore = client->SendChatMessage(peer_id, content);
         LGI << "[mock] Message to " << peer_hex << " sent";
@@ -305,7 +306,6 @@ auto main(int argc, char** argv) -> int {
         eillance::ContactID const peer_id(peer_hex);
 
         std::ignore = client->AddContact(peer_id, std::nullopt);
-        client->ConfirmContact(peer_id);
 
         auto page = client->GetMessageHistoryPage(peer_id, 0, 10);
         uint64_t reply_id = 0;

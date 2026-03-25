@@ -307,6 +307,25 @@ class WebRtcMediaTransport(private val context: Context, private val nativePoint
   }
 
   @Suppress("unused")
+  fun getLocalDescription(peerId: String): String? {
+    return sessions[peerId]?.pc?.localDescription?.description
+  }
+
+  @Suppress("unused")
+  fun getPeerConnectionState(peerId: String): Int {
+    val state = sessions[peerId]?.pc?.connectionState()
+    return when (state) {
+      PeerConnection.PeerConnectionState.NEW -> PeerConnectionState.New.value
+      PeerConnection.PeerConnectionState.CONNECTING -> PeerConnectionState.Connecting.value
+      PeerConnection.PeerConnectionState.CONNECTED -> PeerConnectionState.Connected.value
+      PeerConnection.PeerConnectionState.DISCONNECTED -> PeerConnectionState.Disconnected.value
+      PeerConnection.PeerConnectionState.FAILED -> PeerConnectionState.Failed.value
+      PeerConnection.PeerConnectionState.CLOSED -> PeerConnectionState.Closed.value
+      else -> PeerConnectionState.Closed.value
+    }
+  }
+
+  @Suppress("unused")
   fun disconnectPeer(peerId: String) {
     val session = sessions.remove(peerId)
     if (session != null) {

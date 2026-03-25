@@ -53,6 +53,7 @@ def compile_binaries(docker_client_session, build_image, project_root):
     "git config --global --add safe.directory /src && "
     "mkdir -p /src/build-deploy && "
     "cd /src/build-deploy && "
+    "if [ -f build.ninja ]; then ninja -t clean; fi && "
     "cmake -G Ninja -DCMAKE_BUILD_TYPE=Debug "
     "-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=/src/build-deploy/bin /src && "
     "ninja mercury-mock-app mercury-server && "
@@ -68,7 +69,7 @@ def compile_binaries(docker_client_session, build_image, project_root):
       volumes
     )
   except Exception as e:
-    pytest.fail(f"Compilation inside Docker failed: {e}")
+      pytest.exit(f"Compilation inside Docker failed: {e}")
 
   print("=== COMPILATION COMPLETE ===\n")
 

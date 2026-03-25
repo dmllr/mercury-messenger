@@ -22,6 +22,9 @@ class MediaTransport {
     virtual void CreateAnswer(ContactID const& peer_id) = 0;
     virtual void SetRemoteDescription(ContactID const& peer_id, std::string const& sdp, std::string const& type) = 0;
 
+    virtual auto GetLocalDescription(ContactID const& peer_id) const -> std::optional<std::string> = 0;
+    virtual auto GetConnectionState(ContactID const& peer_id) const -> PeerConnectionState = 0;
+
     // Media Resource Control
     virtual void StartLocalMedia(bool is_video) = 0;
     virtual void StopLocalMedia() = 0;
@@ -57,7 +60,15 @@ class MediaTransport {
   void SetRemoteDescription(ContactID const& peer_id, std::string const& sdp, std::string const& type) const {
     self_->SetRemoteDescription(peer_id, sdp, type);
   }
+  
+  [[nodiscard]] auto GetConnectionState(ContactID const& peer_id) const -> PeerConnectionState {
+    return self_->GetConnectionState(peer_id);
+  }
 
+  [[nodiscard]] auto GetLocalDescription(ContactID const& peer_id) const -> std::optional<std::string> {
+    return self_->GetLocalDescription(peer_id);
+  }
+  
   void StartLocalMedia(bool is_video) const {
     self_->StartLocalMedia(is_video);
   }

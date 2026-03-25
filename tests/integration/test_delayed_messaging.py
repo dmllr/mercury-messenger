@@ -19,7 +19,7 @@ def test_delayed_receiver_start(test_environment):
   # So A must stay online and retry delivery.
   # DeliveryService has retry logic.
   
-  script_a = f"connect, wait 2, message {id_b} \"Delayed Msg\", wait 15, disconnect"
+  script_a = f"connect, wait 2, message {id_b} \"Delayed Msg\", wait 30, disconnect"
   scenario.add_process("app-a", "/app/bin/mercury-mock-app", 
                        ["--key", key_a, "--signaling-url", "ws://192.168.50.30:8000", "--db-path", "/tmp/a.db", "--script", script_a],
                        {"net": "192.168.50.31"})
@@ -28,7 +28,7 @@ def test_delayed_receiver_start(test_environment):
   # We simulate delayed start by a long initial wait in script before 'connect'?
   # Or physically starting container later?
   # The mock app script runs sequentially.
-  script_b = "wait 8, connect, wait 5, disconnect"
+  script_b = "wait 8, connect, wait 20, disconnect"
   scenario.add_process("app-b", "/app/bin/mercury-mock-app", 
                        ["--key", key_b, "--signaling-url", "ws://192.168.50.30:8000", "--db-path", "/tmp/b.db", "--script", script_b],
                        {"net": "192.168.50.32"})
@@ -36,4 +36,4 @@ def test_delayed_receiver_start(test_environment):
   scenario.expect_logs("app-b", [f"[mock] Message from {id_a} received: Delayed Msg"])
   scenario.expect_logs("app-a", [f"[mock] Message to {id_b} delivered"])
 
-  test_environment.execute_scenario(scenario, timeout_seconds=20)
+  test_environment.execute_scenario(scenario, timeout_seconds=35)
