@@ -42,7 +42,7 @@ def test_initial_and_updates_profile(test_environment):
   # Depending on timing, initial contact request carries profile.
   
   scenario.expect_logs("app-b", [
-      f"[mock] Message from {id_a} received",
+      f"[mock] Message from {id_a} received: Hi",
       f"[mock] Profile updated for {id_a}" 
   ])
 

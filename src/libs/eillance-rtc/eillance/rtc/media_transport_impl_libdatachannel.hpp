@@ -20,37 +20,60 @@
 #include "eillance/transport/peer.hpp"
 #include "eillance/transport/protocol.hpp"
 #include "eillance/utils/event_queue.hpp"
+#include "eillance/utils/dispatch_queue.hpp"
 
 namespace eillance::rtc {
 
 class RtcMediaTransport : public transport::MediaTransport::Interface {
  public:
   RtcMediaTransport() {
-    rtcConfig_.iceServers.emplace_back("stun:stun.relay.metered.ca:80");
+    rtc_config_.iceServers.emplace_back("stun:stun.relay.metered.ca:80");
   }
 
   void SetIceServers(std::string const& json_config) override {
     try {
       auto json = nlohmann::json::parse(json_config);
-      if (!json.is_array()) return;
+      if (!json.is_array()) {
+        return;
+      }
 
       ::rtc::Configuration new_config;
       for (auto const& entry : json) {
-        if (!entry.contains("urls")) continue;
+        if (!entry.contains("urls")) {
+          continue;
+        }
         auto urls_entry = entry["urls"];
         std::string url;
-        if (urls_entry.is_array() && !urls_entry.empty())
+        if (urls_entry.is_array() && !urls_entry.empty()) {
           url = urls_entry[0].get<std::string>();
-        else if (urls_entry.is_string())
+        } else if (urls_entry.is_string()) {
           url = urls_entry.get<std::string>();
-        if (url.empty()) continue;
+        }
+        if (url.empty()) {
+          continue;
+        }
 
-        // Basic STUN/TURN handling same as DataTransport
-        new_config.iceServers.emplace_back(url);
+        if (url.rfind("turn", 0) == 0) {
+          std::string const username = entry.value("username", "");
+          std::string const credential = entry.value("credential", "");
+          if (!username.empty() && !credential.empty()) {
+            auto scheme_end = url.find(":");
+            if (scheme_end != std::string::npos) {
+              std::string const host_part = url.substr(scheme_end + 1);
+              new_config.iceServers.emplace_back("turn:" + username + ":" + credential + "@" + host_part);
+            } else {
+              new_config.iceServers.emplace_back(url);
+            }
+          } else {
+            new_config.iceServers.emplace_back(url);
+          }
+        } else {
+          new_config.iceServers.emplace_back(url);
+        }
       }
       if (!new_config.iceServers.empty()) {
         std::lock_guard<std::mutex> const lock(configMutex_);
-        rtcConfig_ = new_config;
+        rtc_config_ = new_config;
       }
     } catch (...) {
     }
@@ -60,7 +83,7 @@ class RtcMediaTransport : public transport::MediaTransport::Interface {
     ::rtc::Configuration config;
     {
       std::lock_guard<std::mutex> const lock(configMutex_);
-      config = rtcConfig_;
+      config = rtc_config_;
     }
     auto pc = std::make_shared<::rtc::PeerConnection>(config);
 
@@ -70,6 +93,10 @@ class RtcMediaTransport : public transport::MediaTransport::Interface {
 
     pc->onGatheringStateChange([this, peer_id](::rtc::PeerConnection::GatheringState const state) -> void {
       EventQueue::Instance().Push(EventMediaGatheringStateChanged{peer_id, static_cast<int>(state)});
+    });
+
+    pc->onLocalDescription([](::rtc::Description) {
+      // Bound just to ensure libdatachannel fires internal mechanisms correctly if required
     });
 
     std::lock_guard<std::mutex> const lock(pcsMutex_);
@@ -92,17 +119,36 @@ class RtcMediaTransport : public transport::MediaTransport::Interface {
   }
 
   void CreateAnswer(ContactID const& peer_id) override {
-    std::lock_guard<std::mutex> const lock(pcsMutex_);
-    if (auto it = pcs_.find(peer_id); it != pcs_.end()) {
-      it->second->setLocalDescription(::rtc::Description::Type::Answer);
-    }
+    TryCreateAnswer(peer_id, 0);
   }
 
   void SetRemoteDescription(ContactID const& peer_id, std::string const& sdp, std::string const& type) override {
     std::lock_guard<std::mutex> const lock(pcsMutex_);
     if (auto it = pcs_.find(peer_id); it != pcs_.end()) {
-      it->second->setRemoteDescription(::rtc::Description(sdp, type));
+      try {
+        it->second->setRemoteDescription(::rtc::Description(sdp, type));
+      } catch (std::exception const& e) {
+        LGE << "Media SetRemoteDescription failed for " << peer_id.ToString() << ": " << e.what();
+      }
     }
+  }
+
+  auto GetLocalDescription(ContactID const& peer_id) const -> std::optional<std::string> override {
+    std::lock_guard<std::mutex> const lock(pcsMutex_);
+    if (auto it = pcs_.find(peer_id); it != pcs_.end()) {
+      if (it->second->localDescription()) {
+        return std::string(*(it->second->localDescription()));
+      }
+    }
+    return std::nullopt;
+  }
+
+  auto GetConnectionState(ContactID const& peer_id) const -> transport::PeerConnectionState override {
+    std::lock_guard<std::mutex> const lock(pcsMutex_);
+    if (auto it = pcs_.find(peer_id); it != pcs_.end()) {
+      return transport::ToEillanceState(it->second->state());
+    }
+    return transport::PeerConnectionState::disconnected;
   }
 
   void StartLocalMedia(bool /*is_video*/) override {
@@ -177,7 +223,33 @@ class RtcMediaTransport : public transport::MediaTransport::Interface {
   }
 
  private:
-  ::rtc::Configuration rtcConfig_;
+  void TryCreateAnswer(ContactID peer_id, int attempt) {
+    std::shared_ptr<::rtc::PeerConnection> pc;
+    {
+      std::lock_guard<std::mutex> const lock(pcsMutex_);
+      if (auto it = pcs_.find(peer_id); it != pcs_.end()) {
+        pc = it->second;
+      }
+    }
+    
+    if (!pc) return;
+
+    if (pc->signalingState() == ::rtc::PeerConnection::SignalingState::HaveRemoteOffer) {
+      try {
+        pc->setLocalDescription();
+      } catch (std::exception const& e) {
+        LGE << "Media CreateAnswer failed for " << peer_id.ToString() << ": " << e.what();
+      }
+    } else if (attempt < 100) {
+      DispatchQueue::MainThread().DispatchAfter(std::chrono::milliseconds(20), [this, peer_id, attempt]() {
+        TryCreateAnswer(peer_id, attempt + 1);
+      });
+    } else {
+      LGE << "Media CreateAnswer timed out waiting for HaveRemoteOffer state for " << peer_id.ToString();
+    }
+  }
+
+  ::rtc::Configuration rtc_config_;
   std::mutex configMutex_;
 
   std::unordered_map<ContactID, std::shared_ptr<::rtc::PeerConnection>> pcs_;

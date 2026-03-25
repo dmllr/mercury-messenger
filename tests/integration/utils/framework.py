@@ -113,7 +113,7 @@ class TestFramework:
           proc_def.name,
           command=full_command,
           volumes=volumes,
-          detach=True
+          detach=True,
         )
         self.active_containers.append(container)
         container_map[proc_def.name] = container
@@ -139,15 +139,6 @@ class TestFramework:
         self.teardown()
         raise
 
-    # Post-start configuration for Router
-    for proc_def in scenario.processes:
-        if "router" in proc_def.name:
-            print(f"Configuring router {proc_def.name}...")
-            c = container_map[proc_def.name]
-            c.exec_run("sysctl -w net.ipv4.ip_forward=1")
-            # NAT masquerade might be needed or just simple forwarding
-            # Since we set static routes on clients, simple forwarding is enough.
-    
     # Configure routes on clients
     # We need to inspect which networks are available and add routes via the router.
     # This logic is scenario-specific, we'll handle it if we can identify topology.
@@ -235,21 +226,16 @@ class TestFramework:
           c.start()
 
   def restart_process(self, name: str):
-      c = self.get_container(name)
-      if c:
-          print(f"Restarting {name}...")
-          c.restart()
+    c = self.get_container(name)
+    if c:
+      print(f"Restarting {name}...")
+      c.restart()
 
-  def add_route(self, container_name: str, target_subnet: str, gateway_ip: str):
-      """Adds a static route inside a container."""
-      c = self.get_container(container_name)
-      if c:
-          print(f"Adding route to {target_subnet} via {gateway_ip} in {container_name}")
-          # Requires NET_ADMIN capability
-          exit_code, output = c.exec_run(f"ip route add {target_subnet} via {gateway_ip}")
-          if exit_code != 0:
-              # Route might exist
-              pass
+  def add_route(self, container_name: str, dest_network: str, via_gateway: str):
+    c = self.get_container(container_name)
+    if c:
+      print(f"Adding route in {container_name}: {dest_network} via {via_gateway}")
+      c.exec_run(f"ip route add {dest_network} via {via_gateway}")
 
   def teardown(self):
     print("\n--- Teardown ---")

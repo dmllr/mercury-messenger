@@ -193,6 +193,8 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     classref.RegisterMethod(env, media_transport_class, "disconnectPeer", "(Ljava/lang/String;)V");
     classref.RegisterMethod(env, media_transport_class, "createOffer", "(Ljava/lang/String;)V");
     classref.RegisterMethod(env, media_transport_class, "createAnswer", "(Ljava/lang/String;)V");
+    classref.RegisterMethod(env, media_transport_class, "getLocalDescription", "(Ljava/lang/String;)Ljava/lang/String;");
+    classref.RegisterMethod(env, media_transport_class, "getPeerConnectionState", "(Ljava/lang/String;)I");
     classref.RegisterMethod(
         env,
         media_transport_class,

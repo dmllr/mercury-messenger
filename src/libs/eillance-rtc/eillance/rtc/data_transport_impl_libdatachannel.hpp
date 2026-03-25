@@ -235,13 +235,7 @@ class RtcDataTransport : public transport::DataTransport::Interface {
   }
 
   void CreateAnswer(ContactID const& peer_id) override {
-    auto peer = GetPeer(peer_id);
-    if (!peer || !peer->data_peer_connection) {
-      return;
-    }
-    // We are Answerer: Wait for onDataChannel event
-    auto pc = std::static_pointer_cast<::rtc::PeerConnection>(peer->data_peer_connection);
-    pc->setLocalDescription(::rtc::Description::Type::Answer);
+    TryCreateAnswer(peer_id, 0);
   }
 
   void SetRemoteDescription(ContactID const& peer_id, std::string const& sdp, std::string const& type) override {
@@ -250,7 +244,12 @@ class RtcDataTransport : public transport::DataTransport::Interface {
       return;
     }
     auto pc = std::static_pointer_cast<::rtc::PeerConnection>(peer->data_peer_connection);
-    pc->setRemoteDescription(::rtc::Description(sdp, type));
+    try {
+      pc->setRemoteDescription(::rtc::Description(sdp, type));
+      LGI << "Applied remote description of type '" << type << "' for " << peer_id.ToString();
+    } catch (std::exception const& e) {
+      LGE << "SetRemoteDescription failed for " << peer_id.ToString() << ": " << e.what();
+    }
   }
 
   auto SendData(ContactID const& peer_id, std::span<std::byte const> message) const -> bool override {
@@ -524,6 +523,27 @@ class RtcDataTransport : public transport::DataTransport::Interface {
       DispatchQueue::MainThread().Dispatch([this, peer_id]() -> void {
         EventQueue::Instance().Push(EventDataChannelOpen{peer_id});
       });
+    }
+  }
+
+  void TryCreateAnswer(ContactID peer_id, int attempt) {
+    auto peer = GetPeer(peer_id);
+    if (!peer || !peer->data_peer_connection) return;
+
+    auto pc = std::static_pointer_cast<::rtc::PeerConnection>(peer->data_peer_connection);
+    if (pc->signalingState() == ::rtc::PeerConnection::SignalingState::HaveRemoteOffer) {
+      try {
+        pc->setLocalDescription();
+        LGI << "Successfully created answer for " << peer_id.ToString();
+      } catch (std::exception const& e) {
+        LGE << "CreateAnswer failed for " << peer_id.ToString() << ": " << e.what();
+      }
+    } else if (attempt < 100) {
+      DispatchQueue::MainThread().DispatchAfter(std::chrono::milliseconds(20), [this, peer_id, attempt]() {
+        TryCreateAnswer(peer_id, attempt + 1);
+      });
+    } else {
+      LGE << "CreateAnswer timed out waiting for HaveRemoteOffer state for " << peer_id.ToString();
     }
   }
 
