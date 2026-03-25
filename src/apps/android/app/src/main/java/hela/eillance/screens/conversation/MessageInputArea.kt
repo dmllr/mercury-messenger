@@ -40,6 +40,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -59,6 +60,7 @@ import hela.eillance.ndkio.HistoryEntry
 import hela.eillance.theme.extendedColors
 import hela.eillance.ndkio.DraftAttachment
 import java.io.File
+import androidx.core.net.toUri
 
 private enum class CameraAction { Photo, Video }
 
@@ -92,20 +94,20 @@ fun MessageInputArea(
     }
 
   // Camera Photo
-  var cameraPhotoUri by remember { mutableStateOf<Uri?>(null) }
+  var cameraPhotoUriString by rememberSaveable { mutableStateOf<String?>(null) }
   val takePicture =
     rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
-      if (success && cameraPhotoUri != null) {
-        onAddDrafts(listOf(cameraPhotoUri!!))
+      if (success && cameraPhotoUriString != null) {
+        onAddDrafts(listOf(cameraPhotoUriString!!.toUri()))
       }
     }
 
   // Camera Video
-  var cameraVideoUri by remember { mutableStateOf<Uri?>(null) }
+  var cameraVideoUriString by rememberSaveable { mutableStateOf<String?>(null) }
   val captureVideo =
     rememberLauncherForActivityResult(ActivityResultContracts.CaptureVideo()) { success ->
-      if (success && cameraVideoUri != null) {
-        onAddDrafts(listOf(cameraVideoUri!!))
+      if (success && cameraVideoUriString != null) {
+        onAddDrafts(listOf(cameraVideoUriString!!.toUri()))
       }
     }
 
@@ -115,14 +117,14 @@ fun MessageInputArea(
   val launchCameraPhoto = {
     val tmpFile = File.createTempFile("cam_photo_", ".jpg", context.cacheDir)
     val uri = FileProvider.getUriForFile(context, authority, tmpFile)
-    cameraPhotoUri = uri
+    cameraPhotoUriString = uri.toString()
     takePicture.launch(uri)
   }
 
   val launchCameraVideo = {
     val tmpFile = File.createTempFile("cam_video_", ".mp4", context.cacheDir)
     val uri = FileProvider.getUriForFile(context, authority, tmpFile)
-    cameraVideoUri = uri
+    cameraVideoUriString = uri.toString()
     captureVideo.launch(uri)
   }
 
