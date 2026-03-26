@@ -54,6 +54,7 @@ class WebRtcMediaTransport(private val context: Context, private val nativePoint
       isDisposed = true
       try {
         pc.close()
+        pc.dispose()
       } catch (_: Exception) {
       }
     }
