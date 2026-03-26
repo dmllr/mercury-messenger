@@ -63,8 +63,7 @@ class ContactService {
           {"to", peer_id.ToString()},
           {"profile",
            {{"display_name", sm_->account->GetSettings()->GetMyDisplayName().value_or("")},
-            {"bio", sm_->account->GetSettings()->GetMyBio().value_or("")},
-            {"photo", sm_->account->GetSettings()->GetMyPhotoBase64()}}},
+            {"bio", sm_->account->GetSettings()->GetMyBio().value_or("")}}},
       };
       if (token) {
         content["token"] = crypto::ToHex(*token);
@@ -114,8 +113,7 @@ class ContactService {
         {"signature", crypto::ToHex(signature)},
         {"profile",
          {{"display_name", sm_->account->GetSettings()->GetMyDisplayName().value_or("")},
-          {"bio", sm_->account->GetSettings()->GetMyBio().value_or("")},
-          {"photo", sm_->account->GetSettings()->GetMyPhotoBase64()}}},
+          {"bio", sm_->account->GetSettings()->GetMyBio().value_or("")}}},
     };
     storage_->AddPendingAction({.peer_id = peer_id, .payload = content.dump()});
 
