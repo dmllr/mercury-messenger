@@ -63,7 +63,6 @@ class WebRtcMediaTransport(private val context: Context, private val nativePoint
   private val eglBase: EglBase = WebRtcTransport.eglBase // Reuse shared EGL
 
   private var peerConnectionFactory: PeerConnectionFactory? = null
-  private var audioDeviceModule: JavaAudioDeviceModule? = null
   private val sessions = ConcurrentHashMap<String, MediaSession>()
 
   // Local Resources
@@ -90,26 +89,7 @@ class WebRtcMediaTransport(private val context: Context, private val nativePoint
   )
 
   init {
-    initializeFactory()
-  }
-
-  private fun initializeFactory() {
-    if (peerConnectionFactory != null) return
-    PeerConnectionFactory.initialize(
-      PeerConnectionFactory.InitializationOptions.builder(context).setEnableInternalTracer(false)
-        .createInitializationOptions()
-    )
-
-    audioDeviceModule = JavaAudioDeviceModule.builder(context)
-      .setUseHardwareAcousticEchoCanceler(true)
-      .setUseHardwareNoiseSuppressor(true)
-      .createAudioDeviceModule()
-
-    peerConnectionFactory = PeerConnectionFactory.builder()
-      .setAudioDeviceModule(audioDeviceModule)
-      .setVideoEncoderFactory(DefaultVideoEncoderFactory(eglBase.eglBaseContext, true, true))
-      .setVideoDecoderFactory(DefaultVideoDecoderFactory(eglBase.eglBaseContext))
-      .createPeerConnectionFactory()
+    peerConnectionFactory = WebRtcTransport.getOrCreateFactory(context)
   }
 
   @Suppress("unused")
@@ -352,7 +332,7 @@ class WebRtcMediaTransport(private val context: Context, private val nativePoint
   }
 
   fun startLocalMedia(isVideo: Boolean) {
-    if (peerConnectionFactory == null) initializeFactory()
+    if (peerConnectionFactory == null) peerConnectionFactory = WebRtcTransport.getOrCreateFactory(context)
     try {
       if (localAudioTrack == null) {
         val audioConstraints = MediaConstraints()
