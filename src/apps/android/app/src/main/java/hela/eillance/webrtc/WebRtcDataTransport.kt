@@ -48,6 +48,7 @@ class WebRtcDataTransport(private val context: Context, private val nativePointe
       }
       try {
         pc.close()
+        pc.dispose()
       } catch (_: Exception) {
       }
     }
