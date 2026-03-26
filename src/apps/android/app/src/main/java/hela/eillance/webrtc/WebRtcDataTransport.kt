@@ -95,20 +95,11 @@ class WebRtcDataTransport(private val context: Context, private val nativePointe
   private external fun nativeOnSignalingConnectionStateChange(nativePointer: Long, state: Int)
 
   init {
-    initializeFactory()
-  }
-
-  private fun initializeFactory() {
-    if (peerConnectionFactory != null) return
-    PeerConnectionFactory.initialize(
-      PeerConnectionFactory.InitializationOptions.builder(context).setEnableInternalTracer(false)
-        .createInitializationOptions()
-    )
-    peerConnectionFactory = PeerConnectionFactory.builder().createPeerConnectionFactory()
+    peerConnectionFactory = WebRtcTransport.getOrCreateFactory(context)
   }
 
   fun connect(peerId: String, signalingUrl: String) {
-    initializeFactory()
+    peerConnectionFactory = WebRtcTransport.getOrCreateFactory(context)
     this.localPeerId = peerId
     this.currentSignalingUrl = signalingUrl
     observeSignalingMessages()
@@ -123,8 +114,6 @@ class WebRtcDataTransport(private val context: Context, private val nativePointe
     isObservingSignalingState = false
     sessions.values.forEach { it.dispose() }
     sessions.clear()
-    peerConnectionFactory?.dispose()
-    peerConnectionFactory = null
   }
 
   @Suppress("unused")
