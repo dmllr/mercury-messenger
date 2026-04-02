@@ -253,6 +253,8 @@ class InternalMessagingService {
       } else {
         return;
       }
+    } else {
+      peer->last_activity_time = Time::Now();
     }
 
     if (type == transport::protocol::values::offer) {
