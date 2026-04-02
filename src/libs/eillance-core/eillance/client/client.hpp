@@ -423,6 +423,8 @@ class Client final {
     if (!peer) {
       auto const new_peer = std::make_shared<transport::Peer>(peer_id);
       sm_->data_transport->AddPeer(peer_id, new_peer);
+    } else {
+      peer->last_activity_time = Time::Now();
     }
     sm_->data_transport->Connect(peer_id);
     sm_->data_transport->CreateOffer(peer_id);
@@ -540,14 +542,22 @@ class Client final {
             .count();
 
     for (auto const& [id, peer] : sm_->data_transport->GetPeers()) {
-      bool const is_data_connected =
-          sm_->data_transport->GetConnectionState(id) == transport::PeerConnectionState::connected;
+      auto const state = sm_->data_transport->GetConnectionState(id);
+      bool const is_data_connected = state == transport::PeerConnectionState::connected;
+      bool const is_connecting = state == transport::PeerConnectionState::connecting || state == transport::PeerConnectionState::newConnection;
+
       if (peer->has_media_peer_connection) {
         peer->last_activity_time = now;
         if (!peer->data_channel_is_open) Connect(id);
       } else if (is_data_connected) {
         if ((now - peer->last_activity_time.load()) > static_cast<uint64_t>(timeout)) {
           LGI << "Peer " << id.ToString() << " inactive. Closing.";
+          sm_->data_transport->Disconnect(id);
+        }
+      } else if (is_connecting) {
+        if ((now - peer->last_activity_time.load()) > 15ULL * 1000000ULL) {
+          LGI << "Peer " << id.ToString() << " stuck in connecting. Closing.";
+          EventQueue::Instance().Push(EventConnectionAttemptFinished{id});
           sm_->data_transport->Disconnect(id);
         }
       }
