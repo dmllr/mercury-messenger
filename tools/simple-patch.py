@@ -5,6 +5,7 @@ This script automatically applies code modifications in a simplyfied patch forma
 To ensure the script works correctly, changes should be in the following strict format:
 
 1. Specify the file being modified using a header line starting with `### ` followed by the file path.
+   (An optional index like `[7] ` before the file path is also supported).
 2. Provide the code changes inside a markdown code block (e.g., ```cpp ... ```).
 3. Use `<<<<` to mark the beginning of the existing code to find.
 4. Use `====` to mark the separator between the existing code and the new code.
@@ -12,7 +13,7 @@ To ensure the script works correctly, changes should be in the following strict 
 
 Example:
 
-### path/to/file.cpp
+### [1] path/to/file.cpp
 ```cpp
 <<<<
     void OldFunction() {
@@ -36,6 +37,36 @@ Get-Clipboard | python3 tools/simple-patch.py
 import sys
 import os
 import re
+import subprocess
+
+def get_git_root():
+    """Find the git root directory by calling git or traversing parent directories."""
+    # 1. Try using git command
+    try:
+        result = subprocess.run(
+            ['git', 'rev-parse', '--show-toplevel'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=True
+        )
+        return result.stdout.strip()
+    except (subprocess.SubprocessError, FileNotFoundError):
+        pass
+
+    # 2. Fallback: Manual traversal looking for .git
+    current_dir = os.path.abspath(os.getcwd())
+    while True:
+        if os.path.isdir(os.path.join(current_dir, '.git')):
+            return current_dir
+        parent_dir = os.path.dirname(current_dir)
+        if parent_dir == current_dir:
+            break # Reached filesystem root
+        current_dir = parent_dir
+
+    # 3. Default to current working directory if not in a git repo
+    print("Warning: Could not detect a git root. Defaulting to current working directory.")
+    return os.getcwd()
 
 def normalize_newlines(text):
     return text.replace('\r\n', '\n')
@@ -47,8 +78,14 @@ def shorten_text(text, max_lines=6):
     return '\n'.join(lines[:3] + ['... [snip] ...'] + lines[-3:])
 
 def apply_patches(patch_content):
-    # Find all file blocks: ### filepath
-    file_pattern = re.compile(r'^### (.+)$', re.MULTILINE)
+    # Apply patches relative to the repository root
+    git_root = get_git_root()
+    os.chdir(git_root)
+    print(f"Applying patches from repo root: {git_root}")
+
+    # Find all file blocks: ### filepath OR ### [index] filepath
+    # The regex ignores an optional `[digits] ` block before capturing the filepath
+    file_pattern = re.compile(r'^###\s*(?:\[\d+\]\s*)?(.+)$', re.MULTILINE)
 
     file_matches = list(file_pattern.finditer(patch_content))
     if not file_matches:
