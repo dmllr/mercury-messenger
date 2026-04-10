@@ -30,7 +30,6 @@ add_executable(h-e-tests
   test-conversation-view-model.cpp
   test-crypto.cpp
   test-debug-view-model.cpp
-  test-delivery-service.cpp
   test-dispatch-queue.cpp
   test-event-queue.cpp
   test-file-transfer-cancellation.cpp
@@ -38,6 +37,7 @@ add_executable(h-e-tests
   test-h264-utils.cpp
   test-id-manager.cpp
   test-internal-messaging-service.cpp
+  test-ledger-projection.cpp
   test-media-call-service.cpp
   test-message-history.cpp
   test-messaging-service.cpp
@@ -55,6 +55,7 @@ add_executable(h-e-tests
   test-sqlite-storage.cpp
   test-stream.cpp
   test-stream-source.cpp
+  test-sync-engine.cpp
   test-time.cpp
   test-transport-peer.cpp
   test-utils-memory.cpp

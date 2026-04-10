@@ -4,8 +4,10 @@
 #include "eillance/capture/config.hpp"
 #include "eillance/identity/contact_manager.hpp"
 #include "eillance/services/file_transfer_service.hpp"
+#include "eillance/services/ledger_projection_service.hpp"
 #include "eillance/services/media_call_service.hpp"
 #include "eillance/services/messaging_service.hpp"
+#include "eillance/services/sync_engine.hpp"
 #include "mock_data_transport.hpp"
 #include "mock_media_transport.hpp"
 #include "mock_persistent_storage.hpp"
@@ -62,6 +64,9 @@ class MediaCallServiceTest : public ::testing::Test {
 
     std::ignore = sm_->account->GenerateNewIdentity();
 
+    sm_->sync_engine = std::make_shared<sync::SyncEngine>(storage_, data_transport_, sm_->account->GetId());
+    sm_->projection_service = std::make_shared<services::LedgerProjectionService>(sm_.get());
+
     sm_->file_transfer = std::make_shared<services::FileTransferService>(sm_.get());
     sm_->messaging = std::make_shared<services::MessagingService>(sm_.get());
 
@@ -71,6 +76,17 @@ class MediaCallServiceTest : public ::testing::Test {
     sm_->media_call->SetVideoCapture(std::make_unique<MockCaptureImpl>());
     sm_->media_call->SetAudioCapture(std::make_unique<MockCaptureImpl>());
     sm_->media_call->Configure({});
+  }
+
+  void TearDown() override {
+    sm_->media_call.reset();
+    sm_->messaging.reset();
+    sm_->file_transfer.reset();
+    sm_->projection_service.reset();
+    sm_->sync_engine.reset();
+    sm_->account.reset();
+    sm_.reset();
+    EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(50));
   }
 
   std::shared_ptr<transport::MockCallLog> mock_log_;
@@ -177,6 +193,9 @@ TEST_F(MediaCallServiceTest, Hangup) {
   EventQueue::Instance().Unsubscribe(sub);
   EXPECT_TRUE(terminated_cb);
   EXPECT_FALSE(peer->has_media_peer_connection);
+
+  // Give the event queue and dispatch queues time to flush
+  EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(50));
 
   // Verify media transport closed connection
   bool media_closed = false;

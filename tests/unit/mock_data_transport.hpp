@@ -87,11 +87,11 @@ class MockDataTransport : public DataTransport::Interface {
   void SetRemoteDescription(ContactID const&, std::string const&, std::string const&) override {
   }
 
-  auto SendData(ContactID const& peer_id, std::span<std::byte const> message) const -> bool override {
+  auto SendData(ContactID const& peer_id, std::span<std::byte const> message) -> bool override {
     log_->LogBinaryMsg(peer_id, {message.begin(), message.end()});
     return true;
   }
-  auto SendJson(ContactID const& peer_id, Json const& message) const -> bool override {
+  auto SendJson(ContactID const& peer_id, Json const& message) -> bool override {
     log_->LogPeerMsg(peer_id, message);
     return true;
   }

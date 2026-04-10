@@ -5,8 +5,10 @@
 #include "eillance/services/account_service.hpp"
 #include "eillance/services/contact_service.hpp"
 #include "eillance/services/file_transfer_service.hpp"
+#include "eillance/services/ledger_projection_service.hpp"
 #include "eillance/services/messaging_service.hpp"
 #include "eillance/services/profile_service.hpp"
+#include "eillance/services/sync_engine.hpp"
 #include "mock_data_transport.hpp"
 #include "mock_persistent_storage.hpp"
 
@@ -34,6 +36,9 @@ class ContactServiceTest : public ::testing::Test {
     std::ignore = account_service_->GenerateNewIdentity();
     account_service_->UpdateMyProfile({.display_name = "Test User", .bio = "", .photo_base64 = ""});
 
+    sm_->sync_engine = std::make_shared<sync::SyncEngine>(storage_, transport_, account_service_->GetId());
+    sm_->projection_service = std::make_shared<services::LedgerProjectionService>(sm_.get());
+
     file_transfer_service_ = std::make_shared<services::FileTransferService>(sm_.get());
     sm_->file_transfer = file_transfer_service_;
 
@@ -48,7 +53,12 @@ class ContactServiceTest : public ::testing::Test {
   }
 
   void TearDown() override {
+    contact_service_.reset();
+    profile_service_.reset();
+    messaging_service_.reset();
     file_transfer_service_.reset();
+    account_service_.reset();
+    sm_.reset();
   }
 
   std::shared_ptr<storage::PersistentStorage> storage_;
@@ -137,22 +147,21 @@ TEST_F(ContactServiceTest, ConfirmContact) {
 
   EventQueue::Instance().WaitFor(
       [&]() {
-        std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
-        for (auto const& msg : mock_transport_raw_->CallLog()->sent_signaling_messages) {
-          if (msg.value("type", "") == "contact_confirm" && msg.value("to", "") == peer1.ToString()) {
+        auto entries = storage_->GetLedgerEntries(TopicID(peer1));
+        for (auto const& entry : entries) {
+          if (entry.type == storage::LedgerActionType::ContactState &&
+              entry.payload.find("contact_confirm") != std::string::npos)
             return true;
-          }
         }
         return false;
       },
       std::chrono::milliseconds(2000)
   );
 
-  // Check that confirmation messages were queued/sent
-  // "contact_confirm" -> sent via signaling
   bool signaling_sent = false;
-  for (auto const& msg : mock_transport_raw_->CallLog()->sent_signaling_messages) {
-    if (msg["type"] == "contact_confirm" && msg["to"] == peer1.ToString()) {
+  for (auto const& entry : storage_->GetLedgerEntries(TopicID(peer1))) {
+    if (entry.type == storage::LedgerActionType::ContactState &&
+        entry.payload.find("contact_confirm") != std::string::npos) {
       signaling_sent = true;
       break;
     }

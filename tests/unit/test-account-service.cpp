@@ -30,6 +30,11 @@ class AccountServiceTest : public ::testing::Test {
     sm_->account = service_;
   }
 
+  void TearDown() override {
+    service_.reset();
+    sm_.reset();
+  }
+
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<transport::MockCallLog> mock_log_;
   std::unique_ptr<transport::MockDataTransport> mock_data_transport_impl_;

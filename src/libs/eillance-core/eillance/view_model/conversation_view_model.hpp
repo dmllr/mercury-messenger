@@ -159,7 +159,8 @@ class ConversationViewModel {
     // Store pending status updates for attachments that might not be in history yet (race condition)
     std::unordered_map<std::string, messaging::AttachmentStatus> pending_attachment_updates;
 
-    inline static std::atomic<std::uint64_t> nextSystemMsgId{10000000000000000000ULL};
+    static constexpr std::uint64_t kMinSystemMessageId = 10000000000000000000ULL;
+    inline static std::atomic<std::uint64_t> nextSystemMsgId{kMinSystemMessageId};
     static constexpr size_t kPageSize = 50;
 
     Impl(ContactID peer_id, std::shared_ptr<Client> client)
@@ -408,7 +409,7 @@ class ConversationViewModel {
     }
 
     void OnMessageShown(uint64_t message_id) {
-      if (message_id > 1000000000000000ULL) return;
+      if (message_id >= kMinSystemMessageId) return;
       std::lock_guard<std::mutex> const lock(mutex);
       read_queue.insert(message_id);
       if (!read_debounce_active) {

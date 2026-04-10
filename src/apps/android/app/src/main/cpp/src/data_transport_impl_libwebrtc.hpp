@@ -291,7 +291,7 @@ class AndroidDataTransport final : public DataTransport::Interface {
     env->DeleteLocalRef(j_type);
   }
 
-  auto SendData(ContactID const& peer_id, std::span<std::byte const> message) const -> bool override {
+  auto SendData(ContactID const& peer_id, std::span<std::byte const> message) -> bool override {
     auto env_scope = GetEnv();
     auto* env = env_scope.Get();
     if ((env == nullptr) || (transportJavaRef_ == nullptr)) {
@@ -308,7 +308,7 @@ class AndroidDataTransport final : public DataTransport::Interface {
     return result == JNI_TRUE;
   }
 
-  auto SendJson(ContactID const& peer_id, Json const& message) const -> bool override {
+  auto SendJson(ContactID const& peer_id, Json const& message) -> bool override {
     auto const msg_str = message.dump();
     auto bytes = std::vector<std::byte>(msg_str.size());
     std::memcpy(bytes.data(), msg_str.data(), msg_str.size());

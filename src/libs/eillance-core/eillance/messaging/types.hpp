@@ -157,8 +157,9 @@ struct TextEntryParams {
   std::vector<Attachment> attachments{};
   MessageDirection direction = MessageDirection::sent;
   HistoryEntryKind kind = HistoryEntryKind::textMessage;
-  std::optional<std::uint64_t> remote_id = std::nullopt;
+  std::uint64_t id = 0;
   std::uint64_t reply_to_id = 0;
+  std::optional<Time::Unit> timestamp = std::nullopt;
 };
 
 struct CallEntryParams {
@@ -167,6 +168,8 @@ struct CallEntryParams {
   CallDirection direction;
   CallStatus status;
   std::uint32_t duration_seconds = 0;
+  std::uint64_t id = 0;
+  std::optional<Time::Unit> timestamp = std::nullopt;
 };
 
 struct MessageEntry {
@@ -185,7 +188,6 @@ using HistoryEntryData = std::variant<MessageEntry, CallEntry>;
 
 struct HistoryEntryRecord {
   std::uint64_t id{};
-  std::optional<std::uint64_t> remote_id{};
   HistoryEntryKind kind{};
   Time::Unit timestamp{};
   MessageDirection direction{};

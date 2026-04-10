@@ -81,18 +81,20 @@ class BotApiTest : public ::testing::Test {
 };
 
 TEST_F(BotApiTest, AutoAcceptContacts) {
-  nlohmann::json const req_msg = {
-      {"from", peer1.ToString()},
-      {"type", "contact_add_request"},
-      {"profile", {{"display_name", "Peer One"}}}
-  };
+  nlohmann::json const req_msg = {{"type", "contact_add_request"}, {"profile", {{"display_name", "Peer One"}}}};
 
-  mock_data_transport_raw_->SimulatePeerMessage(peer1, req_msg);
+  storage::LedgerEntry entry;
+  entry.topic_id = TopicID(peer1);
+  entry.author_id = peer1;
+  entry.type = storage::LedgerActionType::ContactState;
+  entry.payload = req_msg.dump();
+
+  eillance::EventQueue::Instance().Push(EventLedgerAppended{entry});
   eillance::EventQueue::Instance().WaitFor(
       [&]() {
-        std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
-        for (auto const& msg : mock_log_->sent_signaling_messages) {
-          if (msg.value("type", "") == "contact_confirm" && msg.value("to", "") == peer1.ToString()) return true;
+        auto entries = mock_storage_->GetLedgerEntries(TopicID(peer1));
+        for (auto const& msg : entries) {
+          if (msg.payload.find("contact_confirm") != std::string::npos) return true;
         }
         return false;
       },
@@ -104,8 +106,8 @@ TEST_F(BotApiTest, AutoAcceptContacts) {
   EXPECT_EQ(contact->status, identity::ContactStatus::confirmed);
 
   bool confirmed = false;
-  for (auto const& msg : mock_log_->sent_signaling_messages) {
-    if (msg["type"] == "contact_confirm" && msg["to"] == peer1.ToString()) {
+  for (auto const& msg : mock_storage_->GetLedgerEntries(TopicID(peer1))) {
+    if (msg.payload.find("contact_confirm") != std::string::npos) {
       confirmed = true;
     }
   }
@@ -165,26 +167,16 @@ TEST_F(BotApiTest, MessageHandling) {
   payload_json[services::MessagingService::keyVersion] = services::MessagingService::protocolVersion;
   payload_json[services::MessagingService::keyContent] = plain;
 
-  auto encrypted = other.Encrypt(payload_json.dump());
-  nlohmann::json const chat_msg = {
-      {"type", "chat"},
-      {"message_id", 123},
-      {"is_system", false},
-      {"payload", std::vector<std::byte>(encrypted.begin(), encrypted.end())}
-  };
+  nlohmann::json const chat_msg =
+      {{"type", "chat"}, {"message_id", 123}, {"is_system", false}, {"payload", payload_json}};
 
-  // Transform the byte array to uint8 array to avoid nlohmann::json dump
-  // implicitly mangling the std::byte arrays when parsed back via string parsing.
-  nlohmann::json clean_msg = chat_msg;
-  clean_msg["payload"] = nlohmann::json::array();
-  for (auto b : encrypted) {
-    clean_msg["payload"].push_back(static_cast<uint8_t>(b));
-  }
-  std::string msg_str = clean_msg.dump();
-  std::vector<std::byte> msg_bytes(msg_str.size());
-  std::ranges::transform(msg_str, msg_bytes.begin(), [](char c) -> std::byte { return static_cast<std::byte>(c); });
+  storage::LedgerEntry entry;
+  entry.topic_id = TopicID(peer1);
+  entry.author_id = peer1;
+  entry.type = storage::LedgerActionType::Message;
+  entry.payload = chat_msg.dump();
 
-  EventQueue::Instance().Push(eillance::EventDataChannelMessage{peer1, msg_bytes});
+  EventQueue::Instance().Push(EventLedgerAppended{entry});
 
   EventQueue::Instance().WaitFor([&]() { return message_received.load(); }, std::chrono::milliseconds(2000));
 
@@ -197,25 +189,12 @@ TEST_F(BotApiTest, SendMessage) {
   mock_storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
   client_->Contacts()->ReloadCache();
 
-  eillance::EventQueue::Instance().WaitFor(
-      [&]() { return mock_data_transport_raw_->GetPeer(peer1) != nullptr; },
-      std::chrono::milliseconds(2000)
-  );
-  auto peer = mock_data_transport_raw_->GetPeer(peer1);
-  ASSERT_TRUE(peer != nullptr);
-
-  peer->data_channel_is_open = true;
-  crypto::SessionCipher const other;
-  peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
-
   bot_->SendMessage(peer1.ToString(), "Reply from Bot");
   EventQueue::Instance().WaitFor(
       [&]() {
-        std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
-        for (auto const& [pid, msg] : mock_log_->sent_peer_messages) {
-          if (pid == peer1 && msg.value("type", "") == "chat") {
-            return true;
-          }
+        auto entries = mock_storage_->GetLedgerEntries(TopicID(peer1));
+        for (auto const& msg : entries) {
+          if (msg.payload.find("Reply from Bot") != std::string::npos) return true;
         }
         return false;
       },
@@ -223,8 +202,8 @@ TEST_F(BotApiTest, SendMessage) {
   );
 
   bool sent = false;
-  for (auto const& [pid, msg] : mock_log_->sent_peer_messages) {
-    if (pid == peer1 && msg.value("type", "") == "chat") {
+  for (auto const& msg : mock_storage_->GetLedgerEntries(TopicID(peer1))) {
+    if (msg.payload.find("Reply from Bot") != std::string::npos) {
       sent = true;
     }
   }

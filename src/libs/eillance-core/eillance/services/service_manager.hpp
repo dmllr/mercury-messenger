@@ -14,6 +14,9 @@ class MediaTransport;
 namespace identity {
 class ContactManager;
 }
+namespace sync {
+class SyncEngine;
+}
 }  // namespace eillance
 
 namespace eillance::services {
@@ -25,6 +28,7 @@ class InternalMessagingService;
 class MediaCallService;
 class MessagingService;
 class ProfileService;
+class LedgerProjectionService;
 
 struct ServiceManager {
   std::shared_ptr<storage::PersistentStorage> storage;
@@ -39,6 +43,8 @@ struct ServiceManager {
   std::shared_ptr<ProfileService> profile;
   std::shared_ptr<ContactService> contact;
   std::shared_ptr<InternalMessagingService> internal_messaging;
+  std::shared_ptr<sync::SyncEngine> sync_engine;
+  std::shared_ptr<LedgerProjectionService> projection_service;
 
   std::atomic<bool> is_foreground{false};
 };

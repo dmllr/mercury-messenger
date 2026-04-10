@@ -8,7 +8,9 @@
 #include "eillance/messaging/history.hpp"
 #include "eillance/services/account_service.hpp"
 #include "eillance/services/file_transfer_service.hpp"
+#include "eillance/services/ledger_projection_service.hpp"
 #include "eillance/services/messaging_service.hpp"
+#include "eillance/services/sync_engine.hpp"
 #include "mock_data_transport.hpp"
 #include "mock_persistent_storage.hpp"
 
@@ -40,6 +42,11 @@ class AttachmentTest : public ::testing::Test {
     account_service_ = std::make_shared<services::AccountService>(sm_.get());
     sm_->account = account_service_;
 
+    std::ignore = account_service_->GenerateNewIdentity();
+
+    sm_->sync_engine = std::make_shared<sync::SyncEngine>(storage_, data_transport_, account_service_->GetId());
+    sm_->projection_service = std::make_shared<services::LedgerProjectionService>(sm_.get());
+
     file_transfer_service_ = std::make_shared<services::FileTransferService>(sm_.get());
     sm_->file_transfer = file_transfer_service_;
 
@@ -52,6 +59,8 @@ class AttachmentTest : public ::testing::Test {
   void TearDown() override {
     service_.reset();
     file_transfer_service_.reset();
+    account_service_.reset();
+    sm_.reset();
     std::filesystem::remove(temp_file_path_);
     if (std::filesystem::exists("test_bad_file")) {
       std::filesystem::remove("test_bad_file");
@@ -135,10 +144,11 @@ TEST_F(AttachmentTest, SendQueuedMessagesSerializesHash) {
   bool found_chat_message = false;
   eillance::EventQueue::Instance().WaitFor(
       [&]() {
-        std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
-        for (auto const& [pid, msg] : mock_log_->sent_peer_messages) {
-          if (msg.contains("type") && msg.at("type") == "chat" && msg.contains("attachments")) {
-            auto hash = msg["attachments"][0]["hash"].get<std::string>();
+        auto entries = storage_->GetLedgerEntries(TopicID(peer1));
+        if (!entries.empty()) {
+          auto json = nlohmann::json::parse(entries[0].payload);
+          if (json.contains("attachments")) {
+            auto hash = json["attachments"][0]["hash"].get<std::string>();
             if (!hash.empty() && hash.length() == 64) {
               found_chat_message = true;
               return true;

@@ -65,28 +65,55 @@ class PersistentStorage {
     pimpl_->Checkpoint();
   }
 
-  // --- Resilience ---
-  void AddPendingAction(PendingActionParams const& params) const {
-    pimpl_->AddPendingAction(params);
+  // --- Synchronization Ledger ---
+  void AddLedgerEntry(LedgerEntry const& entry) const {
+    pimpl_->AddLedgerEntry(entry);
   }
-  [[nodiscard]] auto GetPendingActions(ContactID const& peer_id) const {
-    return pimpl_->GetPendingActions(peer_id);
+  [[nodiscard]] auto GetLedgerEntriesAfter(TopicID const& topic_id, std::string const& hash) const {
+    return pimpl_->GetLedgerEntriesAfter(topic_id, hash);
   }
-  void RemovePendingAction(int64_t id) const {
-    pimpl_->RemovePendingAction(id);
+  [[nodiscard]] auto GetLedgerEntries(TopicID const& topic_id) const {
+    return pimpl_->GetLedgerEntries(topic_id);
   }
-  void RemovePendingActionByRefId(ContactID const& peer_id, int64_t ref_id) const {
-    pimpl_->RemovePendingActionByRefId(peer_id, ref_id);
+  [[nodiscard]] auto GetLatestLedgerEntry(TopicID const& topic_id) const {
+    return pimpl_->GetLatestLedgerEntry(topic_id);
+  }
+  void DeleteLedgerEntriesAfter(TopicID const& topic_id, std::string const& hash) const {
+    pimpl_->DeleteLedgerEntriesAfter(topic_id, hash);
+  }
+  [[nodiscard]] auto GetRecentLedgerHashes(TopicID const& topic_id) const {
+    return pimpl_->GetRecentLedgerHashes(topic_id);
+  }
+  [[nodiscard]] auto HasLedgerEntry(TopicID const& topic_id, std::string const& hash) const {
+    return pimpl_->HasLedgerEntry(topic_id, hash);
+  }
+  void ReplaceLedgerEntries(
+      TopicID const& topic_id,
+      std::string const& lca_hash,
+      std::vector<LedgerEntry> const& entries
+  ) const {
+    pimpl_->ReplaceLedgerEntries(topic_id, lca_hash, entries);
   }
 
-  void SuspendTimedOutActions(uint64_t threshold_timestamp) const {
-    pimpl_->SuspendTimedOutActions(threshold_timestamp);
+  // --- Sync Requests ---
+  void AddSyncRequest(SyncRequest const& req) const {
+    pimpl_->AddSyncRequest(req);
   }
-  void UnsuspendActionsForPeer(ContactID const& peer_id, uint64_t new_window_start) const {
-    pimpl_->UnsuspendActionsForPeer(peer_id, new_window_start);
+  [[nodiscard]] auto GetSyncRequests() const {
+    return pimpl_->GetSyncRequests();
+  }
+  void RemoveSyncRequest(TopicID const& topic_id, ContactID const& target_peer_id) const {
+    pimpl_->RemoveSyncRequest(topic_id, target_peer_id);
+  }
+  void UpdateSyncRequestAttempt(TopicID const& topic_id, ContactID const& target_peer_id, Timestamp attempt_time)
+      const {
+    pimpl_->UpdateSyncRequestAttempt(topic_id, target_peer_id, attempt_time);
   }
 
   // --- History ---
+  void ClearTopicReadModel(TopicID const& topic_id) const {
+    pimpl_->ClearTopicReadModel(topic_id);
+  }
   [[nodiscard]] auto AddHistoryEntry(messaging::HistoryEntryRecord entry) {
     return pimpl_->AddHistoryEntry(std::move(entry));
   }
@@ -127,6 +154,9 @@ class PersistentStorage {
   [[nodiscard]] auto GetDownloadedAttachments(ContactID const& peer_id) const {
     return pimpl_->GetDownloadedAttachments(peer_id);
   }
+  [[nodiscard]] auto GetAllAttachments(ContactID const& peer_id) const {
+    return pimpl_->GetAllAttachments(peer_id);
+  }
   [[nodiscard]] auto GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t page_size) const {
     return pimpl_->GetHistoryPage(peer_id, page_index, page_size);
   }
@@ -146,12 +176,6 @@ class PersistentStorage {
   }
   [[nodiscard]] auto GetPendingAttachments(ContactID const& peer_id) const {
     return pimpl_->GetPendingAttachments(peer_id);
-  }
-  [[nodiscard]] auto GetRemoteIds(ContactID const& peer_id, std::vector<uint64_t> const& local_ids) const {
-    return pimpl_->GetRemoteIds(peer_id, local_ids);
-  }
-  virtual auto GetMessageIdByRemoteId(ContactID const& peer_id, uint64_t target_id) -> std::optional<uint64_t> {
-    return pimpl_->GetMessageIdByRemoteId(peer_id, target_id);
   }
 
   // --- Search ---

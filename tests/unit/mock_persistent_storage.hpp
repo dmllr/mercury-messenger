@@ -24,9 +24,9 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
   std::unordered_map<ContactID, identity::Contact> contacts_;
   std::unordered_map<ContactID, std::vector<messaging::HistoryEntryRecord>> history_;
   std::unordered_map<uint64_t, std::string> large_messages_;
-  std::vector<PendingAction> pending_actions_;
+  std::vector<storage::LedgerEntry> ledger_;
+  std::vector<storage::SyncRequest> sync_reqs_;
   std::atomic<uint64_t> next_history_id_{1};
-  std::atomic<int64_t> next_action_id_{1};
   std::string db_path_ = "mock_db_path";
 
   static auto ToLower(std::string const& str) -> std::string {
@@ -113,8 +113,6 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
       }
       history_.erase(it);
     }
-
-    std::erase_if(pending_actions_, [&](auto const& action) { return action.peer_id == peer_id; });
   }
 
   // --- Lifecycle ---
@@ -126,61 +124,129 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
   void Checkpoint() override {
   }
 
-  // --- Resilience ---
-  void AddPendingAction(PendingActionParams const& params) override {
+  // --- Synchronization Ledger ---
+  void AddLedgerEntry(storage::LedgerEntry const& entry) override {
     std::lock_guard const lock(mutex_);
-    pending_actions_.push_back(
-        {next_action_id_++, params.peer_id, params.payload, params.timestamp, params.ref_id, false, params.timestamp}
-    );
+    ledger_.push_back(entry);
   }
 
-  auto GetPendingActions(ContactID const& peer_id) -> std::vector<PendingAction> override {
+  auto GetLedgerEntriesAfter(TopicID const& topic_id, std::string const& hash)
+      -> std::vector<storage::LedgerEntry> override {
     std::lock_guard const lock(mutex_);
-    std::vector<PendingAction> result;
-    for (auto const& action : pending_actions_) {
-      if (action.peer_id == peer_id && !action.is_suspended) {
-        result.push_back(action);
+    std::vector<storage::LedgerEntry> res;
+    bool found = (hash == std::string(64, '0'));
+    for (auto const& e : ledger_) {
+      if (e.topic_id == topic_id) {
+        if (found) res.push_back(e);
+        if (e.hash == hash) found = true;
       }
     }
-    return result;
+    return res;
   }
 
-  void RemovePendingAction(int64_t id) override {
-    std::lock_guard const lock(mutex_);
-    std::erase_if(pending_actions_, [id](auto const& action) { return action.id == id; });
+  auto GetLedgerEntries(TopicID const& topic_id) -> std::vector<storage::LedgerEntry> override {
+    return GetLedgerEntriesAfter(topic_id, std::string(64, '0'));
   }
 
-  void RemovePendingActionByRefId(ContactID const& peer_id, int64_t ref_id) override {
+  auto GetLatestLedgerEntry(TopicID const& topic_id) -> std::optional<storage::LedgerEntry> override {
     std::lock_guard const lock(mutex_);
-    std::erase_if(pending_actions_, [&](auto const& action) {
-      return action.peer_id == peer_id && action.ref_id.has_value() && action.ref_id.value() == ref_id;
+    for (auto it = ledger_.rbegin(); it != ledger_.rend(); ++it) {
+      if (it->topic_id == topic_id) return *it;
+    }
+    return std::nullopt;
+  }
+
+  void DeleteLedgerEntriesAfter(TopicID const& topic_id, std::string const& hash) override {
+    std::lock_guard const lock(mutex_);
+    if (hash == std::string(64, '0')) {
+      std::erase_if(ledger_, [&](auto& e) { return e.topic_id == topic_id; });
+      return;
+    }
+    bool found = false;
+    std::erase_if(ledger_, [&](auto& e) {
+      if (e.topic_id == topic_id) {
+        if (found) return true;
+        if (e.hash == hash) found = true;
+      }
+      return false;
     });
   }
 
-  void SuspendTimedOutActions(uint64_t threshold_timestamp) override {
+  auto GetRecentLedgerHashes(TopicID const& topic_id) -> std::vector<std::string> override {
     std::lock_guard const lock(mutex_);
-    for (auto& action : pending_actions_) {
-      if (!action.is_suspended && action.window_start_at < threshold_timestamp) {
-        action.is_suspended = true;
+    std::vector<std::string> res;
+    for (auto it = ledger_.rbegin(); it != ledger_.rend(); ++it) {
+      if (it->topic_id == topic_id) res.push_back(it->hash);
+    }
+    if (res.empty()) return {std::string(64, '0')};
+    return res;
+  }
+
+  auto HasLedgerEntry(TopicID const& topic_id, std::string const& hash) -> bool override {
+    if (hash == std::string(64, '0')) return true;
+    std::lock_guard const lock(mutex_);
+    for (auto const& e : ledger_) {
+      if (e.topic_id == topic_id && e.hash == hash) return true;
+    }
+    return false;
+  }
+
+  void ReplaceLedgerEntries(
+      TopicID const& topic_id,
+      std::string const& lca_hash,
+      std::vector<storage::LedgerEntry> const& entries
+  ) override {
+    DeleteLedgerEntriesAfter(topic_id, lca_hash);
+    std::lock_guard const lock(mutex_);
+    for (auto const& e : entries) {
+      bool exists = false;
+      for (auto const& existing : ledger_) {
+        if (existing.topic_id == e.topic_id && existing.hash == e.hash) {
+          exists = true;
+          break;
+        }
       }
+      if (!exists) ledger_.push_back(e);
     }
   }
 
-  void UnsuspendActionsForPeer(ContactID const& peer_id, uint64_t new_window_start) override {
-    ++unsuspend_call_count;
+  // --- Sync Requests ---
+  void AddSyncRequest(storage::SyncRequest const& req) override {
     std::lock_guard const lock(mutex_);
-    for (auto& action : pending_actions_) {
-      if (action.peer_id == peer_id && action.is_suspended) {
-        action.is_suspended = false;
-        action.window_start_at = new_window_start;
-      }
+    sync_reqs_.push_back(req);
+  }
+
+  auto GetSyncRequests() -> std::vector<storage::SyncRequest> override {
+    std::lock_guard const lock(mutex_);
+    return sync_reqs_;
+  }
+
+  void RemoveSyncRequest(TopicID const& topic_id, ContactID const& target_peer_id) override {
+    std::lock_guard const lock(mutex_);
+    std::erase_if(sync_reqs_, [&](auto& r) { return r.topic_id == topic_id && r.target_peer_id == target_peer_id; });
+  }
+
+  void UpdateSyncRequestAttempt(TopicID const& topic_id, ContactID const& target_peer_id, Timestamp attempt_time)
+      override {
+    std::lock_guard const lock(mutex_);
+    for (auto& r : sync_reqs_) {
+      if (r.topic_id == topic_id && r.target_peer_id == target_peer_id) r.last_attempt = attempt_time;
     }
   }
 
   // --- History ---
+  void ClearTopicReadModel(TopicID const& topic_id) override {
+    std::lock_guard const lock(mutex_);
+    history_.erase(ContactID(topic_id.value.Span()));
+  }
+
   auto AddHistoryEntry(messaging::HistoryEntryRecord entry) -> messaging::HistoryEntryRecord override {
     std::lock_guard const lock(mutex_);
-    entry.id = next_history_id_++;
+    if (entry.id == 0) {
+      entry.id = next_history_id_++;
+    } else {
+      next_history_id_ = std::max(next_history_id_.load(), entry.id + 1);
+    }
 
     constexpr size_t k_max_inline_content_size = 2048;
     if (auto* msg_entry = std::get_if<messaging::MessageEntry>(&entry.data)) {
@@ -345,6 +411,21 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
     return results;
   }
 
+  auto GetAllAttachments(ContactID const& peer_id) -> std::vector<messaging::Attachment> override {
+    std::lock_guard const lock(mutex_);
+    std::vector<messaging::Attachment> attachments;
+    if (auto const itr = history_.find(peer_id); itr != history_.end()) {
+      for (auto const& entry : itr->second) {
+        if (auto* msg_entry = std::get_if<messaging::MessageEntry>(&entry.data)) {
+          for (auto const& att : msg_entry->attachments) {
+            attachments.push_back(att);
+          }
+        }
+      }
+    }
+    return attachments;
+  }
+
   auto GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t page_size)
       -> messaging::HistoryPage override {
     std::lock_guard const lock(mutex_);
@@ -459,32 +540,6 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
     return attachments;
   }
 
-  auto GetRemoteIds(ContactID const& peer_id, std::vector<uint64_t> const& local_ids)
-      -> std::vector<uint64_t> override {
-    std::lock_guard const lock(mutex_);
-    std::vector<uint64_t> remote_ids;
-    if (auto it = history_.find(peer_id); it != history_.end()) {
-      for (auto const& entry : it->second) {
-        if (std::ranges::find(local_ids, entry.id) != local_ids.end()) {
-          if (entry.remote_id) {
-            remote_ids.push_back(*entry.remote_id);
-          }
-        }
-      }
-    }
-    return remote_ids;
-  }
-
-  auto GetMessageIdByRemoteId(ContactID const& peer_id, uint64_t target_id) -> std::optional<uint64_t> override {
-    std::lock_guard const lock(mutex_);
-    if (auto const itr = history_.find(peer_id); itr != history_.end()) {
-      for (auto const& entry : itr->second) {
-        if (entry.remote_id == target_id) return entry.id;
-      }
-    }
-    return std::nullopt;
-  }
-
   // --- Search ---
   auto SearchMessages(ContactID const& peer_id, std::string const& query)
       -> std::vector<messaging::HistoryEntryRecord> override {
@@ -541,7 +596,8 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
     std::lock_guard const lock(mutex_);
     history_.clear();
     large_messages_.clear();
-    pending_actions_.clear();
+    ledger_.clear();
+    sync_reqs_.clear();
   }
 
   void DebugClearAllContacts() override {

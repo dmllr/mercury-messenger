@@ -14,23 +14,22 @@
 #include <optional>
 #include <random>
 #include <string>
-#include <unordered_map>
 #include <unordered_set>
 #include <variant>
 #include <vector>
 
-#include "delivery_service.hpp"
 #include "eillance/crypto/crypto.hpp"
 #include "eillance/events/client_events.hpp"
+#include "eillance/identity/contact_manager.hpp"
 #include "eillance/logging/logging.hpp"
 #include "eillance/messaging/history.hpp"
 #include "eillance/services/account_service.hpp"
 #include "eillance/services/file_transfer_service.hpp"
 #include "eillance/services/service_manager.hpp"
+#include "eillance/services/sync_engine.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/transport/data_transport.hpp"
 #include "eillance/utils/event_queue.hpp"
-#include "eillance/utils/invariant.hpp"
 
 namespace eillance::services {
 
@@ -39,6 +38,7 @@ namespace {
 constexpr size_t kMaxAttachmentNoteLength = 120;
 
 auto GetExtensionForMimeType(std::string_view const mime_type) -> std::string {
+  // NOLINTBEGIN(*-braces-around-statements)
   if (mime_type == "image/jpeg" || mime_type == "image/jpg") return ".jpg";
   if (mime_type == "image/png") return ".png";
   if (mime_type == "image/gif") return ".gif";
@@ -52,6 +52,7 @@ auto GetExtensionForMimeType(std::string_view const mime_type) -> std::string {
   if (mime_type == "audio/wav") return ".wav";
   if (mime_type == "application/pdf") return ".pdf";
   if (mime_type == "text/plain") return ".txt";
+  // NOLINTEND(*-braces-around-statements)
   return ".dat";
 }
 
@@ -99,32 +100,12 @@ class MessagingService {
         transport_(sm->data_transport),
         contact_manager_(sm->contact_manager) {
     history_ = std::make_unique<messaging::MessageHistory>(storage_);
-    delivery_service_ = std::make_unique<messaging::DeliveryService>(sm_);
-
-    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventSendQueuedMessages>([this](auto const& e) {
-      this->SendQueuedMessages(e.peer_id);
-    }));
-
-    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventDataChannelOpen>([this](auto const& e) {
-      this->UnsuspendAndDeliver(e.peer_id);
-    }));
-
-    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventPeerActivity>([this](auto const& e) {
-      this->UnsuspendAndDeliver(e.peer_id);
-    }));
   }
 
   ~MessagingService() {
-    for (auto const id : event_unsubs_) EventQueue::Instance().Unsubscribe(id);
-    StopDeliveryService();
-  }
-
-  void StartDeliveryService() {
-    delivery_service_->Start();
-  }
-
-  void StopDeliveryService() {
-    delivery_service_->Stop();
+    for (auto const id : event_unsubs_) {
+      EventQueue::Instance().Unsubscribe(id);
+    }
   }
 
   auto SendChatMessage(
@@ -234,16 +215,43 @@ class MessagingService {
          .reply_to_id = reply_to_id}
     );
 
-    nlohmann::json const action = {{"type", "chat"}, {"message_id", entry.id}};
-    storage_->AddPendingAction(
-        {.peer_id = peer_id, .payload = action.dump(), .timestamp = Time::Now(), .ref_id = entry.id}
-    );
+    nlohmann::json payload_json;
+    payload_json[keyVersion] = protocolVersion;
+    payload_json[keyContent] = message;
+    if (reply_to_id > 0) {
+      payload_json["reply_to_id"] = reply_to_id;
+    }
 
-    if (auto const peer = transport_->GetPeer(peer_id);
-        peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
-      EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
-    } else {
-      delivery_service_->AttemptDelivery(peer_id);
+    nlohmann::json json_msg = {
+        {"type", "chat"},
+        {"message_id", entry.id},
+        {"timestamp", entry.timestamp},
+        {"is_system", false},
+        {"payload", payload_json}
+    };
+
+    if (!domain_attachments.empty()) {
+      std::vector<nlohmann::json> att_list;
+      att_list.reserve(domain_attachments.size());
+      for (auto const& att : domain_attachments) {
+        att_list.push_back(
+            {{"id", att.id},
+             {"type", att.type},
+             {"mime", att.mime_type},
+             {"size", att.size_bytes},
+             {"thumb", att.thumbnail_base64},
+             {"hash", att.hash},
+             {"note", att.note},
+             {"name", att.file_name}}
+        );
+      }
+      json_msg["attachments"] = att_list;
+    }
+
+    sm_->sync_engine->AppendAction(TopicID(peer_id), storage::LedgerActionType::Message, json_msg);
+
+    for (auto const& att : domain_attachments) {
+      sm_->file_transfer->QueueUpload(peer_id, att);
     }
 
     EventQueue::Instance().Push(EventMessageUpdated{peer_id, entry.id});
@@ -254,58 +262,31 @@ class MessagingService {
   void SendDeleteMessage(ContactID const& peer_id, std::uint64_t message_id) {
     history_->MarkMessageDeleted(peer_id, message_id);
 
-    auto remote_id = history_->GetRemoteId(peer_id, message_id);
-    uint64_t target_id = remote_id ? *remote_id : message_id;
+    nlohmann::json const action = {{"type", "message_delete"}, {"target_id", message_id}};
 
-    nlohmann::json const action = {{"type", "message_delete"}, {"target_id", target_id}};
-
-    storage_->AddPendingAction({.peer_id = peer_id, .payload = action.dump(), .timestamp = Time::Now()});
-    if (auto const peer = transport_->GetPeer(peer_id);
-        peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
-      EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
-    } else {
-      delivery_service_->AttemptDelivery(peer_id);
-    }
+    sm_->sync_engine->AppendAction(TopicID(peer_id), storage::LedgerActionType::MessageDelete, action);
     EventQueue::Instance().Push(EventMessageUpdated{peer_id, message_id});
   }
 
   void SendEditMessage(ContactID const& peer_id, std::uint64_t message_id, std::string const& new_content) {
     history_->UpdateMessageContent(peer_id, message_id, new_content);
 
-    auto remote_id = history_->GetRemoteId(peer_id, message_id);
-    uint64_t target_id = remote_id ? *remote_id : message_id;
+    nlohmann::json const action = {{"type", "message_edit"}, {"target_id", message_id}, {"content", new_content}};
 
-    nlohmann::json const action = {{"type", "message_edit"}, {"target_id", target_id}, {"content", new_content}};
-
-    storage_->AddPendingAction({.peer_id = peer_id, .payload = action.dump(), .timestamp = Time::Now()});
-    if (auto const peer = transport_->GetPeer(peer_id);
-        peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
-      EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
-    } else {
-      delivery_service_->AttemptDelivery(peer_id);
-    }
+    sm_->sync_engine->AppendAction(TopicID(peer_id), storage::LedgerActionType::MessageEdit, action);
     EventQueue::Instance().Push(EventMessageUpdated{peer_id, message_id});
   }
 
   void SendReaction(ContactID const& peer_id, std::uint64_t message_id, messaging::Reaction reaction) {
     history_->ToggleReaction(peer_id, message_id, sm_->account->GetId(), reaction);
 
-    auto remote_id = history_->GetRemoteId(peer_id, message_id);
-    uint64_t target_id = remote_id ? *remote_id : message_id;
-
     nlohmann::json const action = {
         {"type", "message_reaction"},
-        {"target_id", target_id},
+        {"target_id", message_id},
         {"reaction", static_cast<int>(reaction)}
     };
 
-    storage_->AddPendingAction({.peer_id = peer_id, .payload = action.dump(), .timestamp = Time::Now()});
-    if (auto const peer = transport_->GetPeer(peer_id);
-        peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
-      EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
-    } else {
-      delivery_service_->AttemptDelivery(peer_id);
-    }
+    sm_->sync_engine->AppendAction(TopicID(peer_id), storage::LedgerActionType::Reaction, action);
     EventQueue::Instance().Push(EventMessageUpdated{peer_id, message_id});
   }
 
@@ -320,122 +301,14 @@ class MessagingService {
     EventQueue::Instance().Push(EventChatMessageReceived{peer_id, entry});
 
     if (persist) {
-      nlohmann::json const action_payload = {{"type", "chat"}, {"message_id", entry.id}};
-      storage_->AddPendingAction(
-          {.peer_id = peer_id, .payload = action_payload.dump(), .timestamp = Time::Now(), .ref_id = entry.id}
-      );
-    } else {
-      if (auto const peer = transport_->GetPeer(peer_id);
-          peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
-        bool should_remove = false;
-        ProcessChatAction(peer_id, entry.id, peer, should_remove);
-      }
-    }
-
-    if (persist) {
-      if (auto peer = transport_->GetPeer(peer_id);
-          peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
-        EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
-      } else {
-        delivery_service_->AttemptDelivery(peer_id);
-      }
-    }
-  }
-
-  void UnsuspendAndDeliver(ContactID const& peer_id) {
-    storage_->UnsuspendActionsForPeer(peer_id, Time::Now());
-    EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
-  }
-
-  void SendQueuedMessages(ContactID const& peer_id) {
-    {
-      std::lock_guard<std::recursive_mutex> const lock(flushing_mutex_);
-      if (flushing_peers_.contains(peer_id)) {
-        return;
-      }
-      flushing_peers_.insert(peer_id);
-    }
-
-    struct ScopedFlushGuard {
-      MessagingService& svc;
-      ContactID pid;
-      ~ScopedFlushGuard() {
-        std::lock_guard<std::recursive_mutex> const lock(svc.flushing_mutex_);
-        svc.flushing_peers_.erase(pid);
-      }
-    } const guard{*this, peer_id};
-
-    auto const peer = transport_->GetPeer(peer_id);
-
-    auto pending_actions = storage_->GetPendingActions(peer_id);
-    if (pending_actions.empty()) return;
-
-    auto const now = Time::Now();
-    bool connection_requested = false;
-
-    for (auto const& action : pending_actions) {
-      if (WasSentRecently(action.id, now)) {
-        continue;
-      }
-
-      bool success = false;
-      bool remove_on_success = true;
-
-      try {
-        auto json_action = nlohmann::json::parse(action.payload);
-        std::string const type = json_action.value("type", "");
-
-        if (type == "chat") {
-          remove_on_success = false;
-          uint64_t const msg_id = json_action.value("message_id", 0ULL);
-          bool should_remove = false;
-          success = ProcessChatAction(peer_id, msg_id, peer, should_remove);
-          if (should_remove) {
-            remove_on_success = true;
-            success = true;
-          }
-          if (!success) {
-            connection_requested = true;
-            break;
-          }
-        } else if (type == "contact_add_request" || type == "contact_confirm" || type == "contact_removed") {
-          transport_->SendSignalingMessage(json_action);
-          success = true;
-          remove_on_success = false;
-        } else {
-          if (peer && peer->data_channel_is_open) {
-            if (transport_->SendJson(peer_id, json_action)) {
-              success = true;
-            } else {
-              peer->data_channel_is_open = false;
-              connection_requested = true;
-              break;
-            }
-          } else {
-            connection_requested = true;
-            break;
-          }
-        }
-      } catch (std::exception const& e) {
-        LGE << "Failed to process pending action " << action.id << ": " << e.what();
-        storage_->RemovePendingAction(action.id);
-        continue;
-      }
-
-      if (success) {
-        if (remove_on_success) {
-          storage_->RemovePendingAction(action.id);
-        } else {
-          MarkAsSent(action.id, now);
-        }
-      }
-    }
-
-    if (!connection_requested) {
-      auto remaining = storage_->GetPendingActions(peer_id);
-      if (!remaining.empty()) {
-        EventQueue::Instance().Push(EventConnectionAttemptFinished{peer_id});
-      }
+      nlohmann::json const action_payload = {
+          {"type", "chat"},
+          {"message_id", entry.id},
+          {"timestamp", entry.timestamp},
+          {"is_system", true},
+          {"payload", {{"c", content}, {"v", protocolVersion}}}
+      };
+      sm_->sync_engine->AppendAction(TopicID(peer_id), storage::LedgerActionType::Message, action_payload);
     }
   }
 
@@ -448,7 +321,7 @@ class MessagingService {
     sm_->file_transfer->CancelTransfer(peer_id, attachment_id, is_upload, notify_peer);
 
     if (is_upload) {
-      auto sending_msgs = storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::sending);
+      auto const sending_msgs = storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::sending);
       for (auto const& entry : sending_msgs) {
         if (!std::holds_alternative<messaging::MessageEntry>(entry.data)) {
           continue;
@@ -460,7 +333,7 @@ class MessagingService {
           if (att.id == attachment_id) {
             contains_attachment = true;
           } else {
-            if (auto stored = storage_->GetAttachment(att.id);
+            if (auto const stored = storage_->GetAttachment(att.id);
                 stored && stored->status != messaging::AttachmentStatus::canceled &&
                 stored->status != messaging::AttachmentStatus::discarded) {
               has_other_content = true;
@@ -469,7 +342,6 @@ class MessagingService {
         }
         if (contains_attachment && !has_other_content) {
           history_->UpdateMessageStatus(peer_id, entry.id, messaging::MessageStatus::none);
-          storage_->RemovePendingActionByRefId(peer_id, entry.id);
           break;
         }
       }
@@ -478,12 +350,7 @@ class MessagingService {
 
   void ResumeTransfer(ContactID const& peer_id, std::string const& attachment_id, bool const is_upload) {
     sm_->file_transfer->ResumeTransfer(peer_id, attachment_id, is_upload);
-    if (auto const peer = transport_->GetPeer(peer_id);
-        peer && peer->data_channel_is_open && peer->session_cipher->IsReady()) {
-      SendQueuedMessages(peer_id);
-    } else {
-      EventQueue::Instance().Push(EventConnectionRequested{peer_id});
-    }
+    sm_->sync_engine->ProposeSync(TopicID(peer_id), peer_id);
   }
 
   void DiscardAttachment(ContactID const& peer_id, std::string const& attachment_id) {
@@ -500,10 +367,7 @@ class MessagingService {
 
     if (should_send_cancel) {
       nlohmann::json const cancel_msg = {{"type", "file_cancel"}, {"file_id", attachment_id}};
-      storage_->AddPendingAction({.peer_id = peer_id, .payload = cancel_msg.dump()});
-      if (auto const peer = transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
-        EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
-      }
+      sm_->sync_engine->AppendAction(TopicID(peer_id), storage::LedgerActionType::Message, cancel_msg);
     }
   }
 
@@ -586,7 +450,9 @@ class MessagingService {
 
   [[nodiscard]] auto GetUnreadMessages(ContactID const& peer_id) const -> std::vector<messaging::HistoryEntryRecord> {
     auto messages = storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::delivered);
-    std::erase_if(messages, [](auto const& msg) { return msg.direction != messaging::MessageDirection::received; });
+    std::erase_if(messages, [](auto const& msg) -> bool {
+      return msg.direction != messaging::MessageDirection::received;
+    });
     std::ranges::sort(messages, {}, &messaging::HistoryEntryRecord::timestamp);
     return messages;
   }
@@ -602,17 +468,241 @@ class MessagingService {
 
   void MarkMessagesAsRead(ContactID const& peer_id, std::vector<std::uint64_t> const& message_ids) {
     history_->MarkMessagesAsRead(peer_id, message_ids);
-    auto remote_ids = storage_->GetRemoteIds(peer_id, message_ids);
-    if (remote_ids.empty()) {
+    if (message_ids.empty()) {
       return;
     }
-    nlohmann::json const msg = {{"type", "message_read"}, {"message_ids", remote_ids}};
-    storage_->AddPendingAction({.peer_id = peer_id, .payload = msg.dump()});
-    if (auto const peer = transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
-      EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
-    } else {
-      delivery_service_->AttemptDelivery(peer_id);
+    nlohmann::json const msg = {{"type", "message_read"}, {"message_ids", message_ids}};
+    sm_->sync_engine->AppendAction(TopicID(peer_id), storage::LedgerActionType::Message, msg);
+  }
+
+  // --- Read Model Projections ---
+  void ProjectMessage(storage::LedgerEntry const& entry, nlohmann::json const& json, bool is_mine) {
+    if (is_mine) {
+      return;
     }
+
+    ContactID const peer_id(entry.topic_id.value.Span());
+
+    if (!contact_manager_->GetContact(peer_id)) {
+      contact_manager_->MarkAsConfirmed(peer_id);
+      EventQueue::Instance().Push(EventContactRestored{peer_id});
+    }
+
+    std::string const type = json.value("type", "");
+
+    if (type == "message_read") {
+      auto ids = json.value("message_ids", std::vector<uint64_t>{});
+      for (auto target_id : ids) {
+        history_->UpdateMessageStatus(peer_id, target_id, messaging::MessageStatus::read);
+      }
+      return;
+    }
+
+    if (type == "message_receipt") {
+      std::string const status_str = json.value("status", "");
+      uint64_t const target_id = json.value("message_id", 0ULL);
+      auto msg_status = messaging::MessageStatus::sending;
+      if (status_str == "delivered") {
+        msg_status = messaging::MessageStatus::delivered;
+      } else if (status_str == "read") {
+        msg_status = messaging::MessageStatus::read;
+      } else {
+        return;
+      }
+
+      if (history_->GetHistoryEntry(peer_id, target_id)) {
+        history_->UpdateMessageStatus(peer_id, target_id, msg_status);
+      }
+      return;
+    }
+
+    if (type == "file_cancel") {
+      sm_->file_transfer->HandleCancel(peer_id, json.value("file_id", ""));
+      return;
+    }
+
+    if (type != "chat") {
+      return;  // Unsupported message type
+    }
+
+    uint64_t message_id = json.value("message_id", 0ULL);
+
+    auto ledger_ts = static_cast<uint64_t>(entry.created_at.value);
+    if (ledger_ts < 10000000000ULL) {
+      ledger_ts *= 1000000ULL;  // Convert seconds to microseconds
+    } else if (ledger_ts < 10000000000000ULL) {
+      ledger_ts *= 1000ULL;  // Convert milliseconds to microseconds
+    }
+
+    uint64_t msg_timestamp = json.value("timestamp", ledger_ts);
+
+    bool const is_system = json.value("is_system", false);
+    auto payload = json.value("payload", nlohmann::json::object());
+    std::string const content = payload.value(keyContent, "");
+    uint64_t const reply_to_id = payload.value("reply_to_id", 0ULL);
+
+    messaging::HistoryEntryKind const kind =
+        is_system ? messaging::HistoryEntryKind::systemMessage : messaging::HistoryEntryKind::textMessage;
+
+    std::vector<messaging::Attachment> attachments;
+    if (json.contains("attachments")) {
+      std::filesystem::path const storage_root(storage_->GetPath());
+      std::filesystem::path const attachments_dir = storage_root.parent_path() / "attachments";
+      std::error_code err;
+      std::filesystem::create_directories(attachments_dir, err);
+
+      for (auto const& j_att : json["attachments"]) {
+        messaging::Attachment att;
+        att.id = j_att.value("id", "");
+        att.type = j_att.value("type", messaging::AttachmentType::file);
+        att.mime_type = j_att.value("mime", "");
+        att.size_bytes = j_att.value("size", 0ULL);
+        att.thumbnail_base64 = j_att.value("thumb", "");
+        att.hash = j_att.value("hash", "");
+        att.note = j_att.value("note", "");
+        att.file_name = j_att.value("name", "");
+
+        att.is_downloaded = false;
+        att.status = messaging::AttachmentStatus::pending;
+        std::string filename = att.file_name;
+        if (filename.empty()) {
+          filename = att.id + GetExtensionForMimeType(att.mime_type);
+        }
+        att.file_path = ResolvePathConflict(attachments_dir, filename).string();
+        attachments.push_back(att);
+      }
+    }
+
+    auto db_entry = history_->AddTextEntry(
+        {.peer_id = peer_id,
+         .content = content,
+         .attachments = attachments,
+         .direction = messaging::MessageDirection::received,
+         .kind = kind,
+         .id = message_id,
+         .reply_to_id = reply_to_id,
+         .timestamp = msg_timestamp}
+    );
+
+    for (auto const& att : attachments) {
+      if (!att.is_downloaded && att.status != messaging::AttachmentStatus::discarded &&
+          att.status != messaging::AttachmentStatus::canceled) {
+        sm_->file_transfer->QueueDownload(peer_id, att, db_entry.id);
+        sm_->file_transfer->ResumeTransfer(peer_id, att.id, false);
+      }
+    }
+
+    EventQueue::Instance().Push(EventChatMessageReceived{peer_id, db_entry});
+
+    nlohmann::json const receipt = {{"type", "message_receipt"}, {"status", "delivered"}, {"message_id", message_id}};
+    sm_->sync_engine->AppendAction(TopicID(peer_id), storage::LedgerActionType::Message, receipt);
+
+    if (!is_system && !sm_->is_foreground) {
+      auto contact = contact_manager_->GetContact(peer_id);
+      std::string const name =
+          contact && contact->display_name ? *contact->display_name : peer_id.ToString().substr(0, 8);
+      if (auto unread = GetUnreadMessages(peer_id); !unread.empty()) {
+        EventQueue::Instance().Push(EventNotifyNewMessage{peer_id, db_entry.id, name, std::move(unread)});
+      }
+    }
+  }
+
+  void ProjectEdit(storage::LedgerEntry const& entry, nlohmann::json const& json, bool is_mine) {
+    if (is_mine) {
+      return;
+    }
+    ContactID const peer_id(entry.topic_id.value.Span());
+    uint64_t const target_id = json.value("target_id", 0ULL);
+    std::string const content = json.value("content", "");
+    if (history_->GetHistoryEntry(peer_id, target_id)) {
+      history_->UpdateMessageContent(peer_id, target_id, content);
+      EventQueue::Instance().Push(EventMessageUpdated{peer_id, target_id});
+    }
+  }
+
+  void ProjectDelete(storage::LedgerEntry const& entry, nlohmann::json const& json, bool is_mine) {
+    if (is_mine) {
+      return;
+    }
+    ContactID const peer_id(entry.topic_id.value.Span());
+    uint64_t const target_id = json.value("target_id", 0ULL);
+    if (history_->GetHistoryEntry(peer_id, target_id)) {
+      history_->MarkMessageDeleted(peer_id, target_id);
+      EventQueue::Instance().Push(EventMessageUpdated{peer_id, target_id});
+    }
+  }
+
+  void ProjectReaction(storage::LedgerEntry const& entry, nlohmann::json const& json, bool is_mine) {
+    if (is_mine) {
+      return;
+    }
+    ContactID const peer_id(entry.topic_id.value.Span());
+    uint64_t const target_id = json.value("target_id", 0ULL);
+    auto const reaction = static_cast<messaging::Reaction>(json.value("reaction", 0));
+    if (history_->GetHistoryEntry(peer_id, target_id)) {
+      history_->ToggleReaction(peer_id, target_id, entry.author_id, reaction);
+      EventQueue::Instance().Push(EventMessageUpdated{peer_id, target_id});
+    }
+  }
+
+  void ProjectCallLog(storage::LedgerEntry const& entry, nlohmann::json const& json, bool is_mine) {
+    if (is_mine) {
+      return;
+    }
+    ContactID const peer_id(entry.topic_id.value.Span());
+
+    auto ledger_ts = static_cast<uint64_t>(entry.created_at.value);
+    if (ledger_ts < 10000000000ULL) {
+      ledger_ts *= 1000000ULL;
+    } else if (ledger_ts < 10000000000000ULL) {
+      ledger_ts *= 1000ULL;
+    }
+
+    uint64_t msg_timestamp = json.value("timestamp", ledger_ts);
+
+    // Simple deduplication for recent call logs to prevent double-entry for answered calls
+    auto [messages, total_messages] = history_->GetHistoryPage(peer_id, 0, 10);
+    for (auto const& msg : messages) {
+      if (msg.kind == messaging::HistoryEntryKind::voiceCall || msg.kind == messaging::HistoryEntryKind::videoCall) {
+        if (abs(static_cast<std::int64_t>(msg.timestamp - msg_timestamp)) < 30000000ULL) {
+          return;  // Duplicate
+        }
+      }
+    }
+
+    messaging::CallEntryParams const params{
+        .peer_id = peer_id,
+        .kind = json.value("is_video", false) ? messaging::HistoryEntryKind::videoCall
+                                              : messaging::HistoryEntryKind::voiceCall,
+        .direction = messaging::CallDirection::incoming,
+        .status = static_cast<messaging::CallStatus>(json.value("call_status", 0)),
+        .duration_seconds = json.value("duration_seconds", 0U),
+        .id = json.value("message_id", 0ULL),
+        .timestamp = msg_timestamp
+    };
+    auto const db_entry = history_->AddCallEntry(params);
+    EventQueue::Instance().Push(EventChatMessageReceived{peer_id, db_entry});
+
+    if (params.status == messaging::CallStatus::missed && !sm_->is_foreground) {
+      auto const contact = contact_manager_->GetContact(peer_id);
+      std::string const name =
+          contact && contact->display_name ? *contact->display_name : peer_id.ToString().substr(0, 8);
+      EventQueue::Instance().Push(EventNotifyMissedCall{peer_id, name});
+    }
+  }
+
+  void AddCallEntry(messaging::CallEntryParams const& params, bool sync_to_ledger) {
+    auto const entry = history_->AddCallEntry(params);
+    if (sync_to_ledger) {
+      nlohmann::json const payload = {
+          {"is_video", params.kind == messaging::HistoryEntryKind::videoCall},
+          {"duration_seconds", params.duration_seconds},
+          {"call_status", static_cast<int>(params.status)},
+          {"timestamp", entry.timestamp}
+      };
+      sm_->sync_engine->AppendAction(TopicID(params.peer_id), storage::LedgerActionType::CallLog, payload);
+    }
+    EventQueue::Instance().Push(EventChatMessageReceived{params.peer_id, entry});
   }
 
   void
@@ -633,7 +723,7 @@ class MessagingService {
 
   void OnChatMessageReceived(
       ContactID const& peer_id,
-      std::vector<std::byte> const& encrypted_payload,
+      nlohmann::json const& payload,
       uint64_t message_id,
       bool is_system,
       std::vector<messaging::Attachment> const& attachments = {}
@@ -656,44 +746,34 @@ class MessagingService {
       constexpr auto page_size = 50U;
       auto [messages, total_messages] = history_->GetHistoryPage(peer_id, 0, page_size);
       for (auto const& h_entry : messages) {
-        if (h_entry.remote_id.has_value() && h_entry.remote_id.value() == message_id) {
+        if (h_entry.id == message_id) {
           nlohmann::json const receipt = {
               {"type", "message_receipt"},
               {"status", "delivered"},
               {"message_id", message_id}
           };
-          storage_->AddPendingAction({.peer_id = peer_id, .payload = receipt.dump()});
-          EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
+          sm_->sync_engine->AppendAction(TopicID(peer_id), storage::LedgerActionType::Message, receipt);
           return;
         }
       }
     }
 
-    auto decrypted = peer->session_cipher->Decrypt({encrypted_payload.begin(), encrypted_payload.end()});
-    if (decrypted.empty()) {
-      LGE << "Failed to decrypt chat message from " << peer_id.ToString();
-      return;
-    }
-
     std::string content;
     try {
-      auto json_payload = nlohmann::json::parse(decrypted);
-      if (auto const received_version = json_payload.value(keyVersion, 0); received_version < minSupportedVersion) {
+      if (auto const received_version = payload.value(keyVersion, 0); received_version < minSupportedVersion) {
         throw std::runtime_error("Message version too old: " + std::to_string(received_version));
       }
-      content = json_payload.at(keyContent).get<std::string>();
+      content = payload.at(keyContent).get<std::string>();
     } catch (std::exception const&) {
       nlohmann::json const error_json = {{"action", "unsupported_format"}};
       auto entry = history_->AddTextEntry(
           {.peer_id = peer_id,
            .content = error_json.dump(),
            .direction = messaging::MessageDirection::received,
-           .kind = messaging::HistoryEntryKind::systemMessage,
-           .remote_id = message_id}
+           .kind = messaging::HistoryEntryKind::systemMessage}
       );
       nlohmann::json const receipt = {{"type", "message_receipt"}, {"status", "delivered"}, {"message_id", message_id}};
-      storage_->AddPendingAction({.peer_id = peer_id, .payload = receipt.dump()});
-      SendQueuedMessages(peer_id);
+      sm_->sync_engine->AppendAction(TopicID(peer_id), storage::LedgerActionType::Message, receipt);
       EventQueue::Instance().Push(EventChatMessageReceived{peer_id, entry});
       return;
     }
@@ -718,12 +798,8 @@ class MessagingService {
 
     uint64_t local_reply_to_id = 0;
     try {
-      auto json_payload = nlohmann::json::parse(decrypted);
-      if (json_payload.contains("reply_to_id")) {
-        uint64_t wire_reply_id = json_payload["reply_to_id"].get<uint64_t>();
-        if (auto local_id = history_->FindMessageIdByRemoteOrLocal(peer_id, wire_reply_id)) {
-          local_reply_to_id = *local_id;
-        }
+      if (payload.contains("reply_to_id")) {
+        local_reply_to_id = payload["reply_to_id"].get<uint64_t>();
       }
     } catch (...) {
     }
@@ -734,7 +810,7 @@ class MessagingService {
          .attachments = local_attachments,
          .direction = messaging::MessageDirection::received,
          .kind = is_system ? messaging::HistoryEntryKind::systemMessage : messaging::HistoryEntryKind::textMessage,
-         .remote_id = message_id,
+         .id = message_id,
          .reply_to_id = local_reply_to_id}
     );
 
@@ -745,16 +821,18 @@ class MessagingService {
     }
 
     nlohmann::json const receipt = {{"type", "message_receipt"}, {"status", "delivered"}, {"message_id", message_id}};
-    storage_->AddPendingAction({.peer_id = peer_id, .payload = receipt.dump()});
-    EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
+    sm_->sync_engine->AppendAction(TopicID(peer_id), storage::LedgerActionType::Message, receipt);
 
     EventQueue::Instance().Push(EventChatMessageReceived{peer_id, entry});
     if (!is_system && !sm_->is_foreground) {
       auto contact = contact_manager_->GetContact(peer_id);
-      std::string name = contact && contact->display_name ? *contact->display_name : peer_id.ToString().substr(0, 8);
+      std::string const name =
+          contact && contact->display_name ? *contact->display_name : peer_id.ToString().substr(0, 8);
       auto unread = GetUnreadMessages(peer_id);
-      std::erase_if(unread, [](auto const& msg) {
-        if (msg.kind == messaging::HistoryEntryKind::systemMessage) return true;
+      std::erase_if(unread, [](auto const& msg) -> bool {
+        if (msg.kind == messaging::HistoryEntryKind::systemMessage) {
+          return true;
+        }
         if (std::holds_alternative<messaging::CallEntry>(msg.data)) {
           return std::get<messaging::CallEntry>(msg.data).call_status == messaging::CallStatus::missed;
         }
@@ -763,51 +841,6 @@ class MessagingService {
       if (!unread.empty()) {
         EventQueue::Instance().Push(EventNotifyNewMessage{peer_id, entry.id, name, std::move(unread)});
       }
-    }
-  }
-
-  void OnMessageReceipt(ContactID const& peer_id, uint64_t message_id, std::string const& status) const {
-    auto message_status = messaging::MessageStatus::sending;
-    if (status == "delivered") {
-      message_status = messaging::MessageStatus::delivered;
-    } else if (status == "read") {
-      message_status = messaging::MessageStatus::read;
-    } else {
-      return;
-    }
-    history_->UpdateMessageStatus(peer_id, message_id, message_status);
-    storage_->RemovePendingActionByRefId(peer_id, message_id);
-    EventQueue::Instance().Push(EventMessageStatusChanged{peer_id, message_id, message_status});
-  }
-
-  void OnMessageDelete(ContactID const& peer_id, uint64_t target_id) {
-    auto local_id = history_->FindMessageIdByRemoteOrLocal(peer_id, target_id);
-    if (local_id) {
-      history_->MarkMessageDeleted(peer_id, *local_id);
-      EventQueue::Instance().Push(EventMessageUpdated{peer_id, *local_id});
-    }
-  }
-
-  void OnMessageEdit(ContactID const& peer_id, uint64_t target_id, std::string const& new_content) {
-    auto local_id = history_->FindMessageIdByRemoteOrLocal(peer_id, target_id);
-    if (local_id) {
-      history_->UpdateMessageContent(peer_id, *local_id, new_content);
-      EventQueue::Instance().Push(EventMessageUpdated{peer_id, *local_id});
-    }
-  }
-
-  void OnMessageReaction(ContactID const& peer_id, uint64_t target_id, messaging::Reaction reaction) {
-    auto local_id = history_->FindMessageIdByRemoteOrLocal(peer_id, target_id);
-    if (local_id) {
-      history_->ToggleReaction(peer_id, *local_id, peer_id, reaction);
-      EventQueue::Instance().Push(EventMessageUpdated{peer_id, *local_id});
-    }
-  }
-
-  void OnMessagesRead(ContactID const& peer_id, std::vector<uint64_t> const& message_ids) const {
-    for (auto id : message_ids) {
-      history_->UpdateMessageStatus(peer_id, id, messaging::MessageStatus::read);
-      EventQueue::Instance().Push(EventMessageStatusChanged{peer_id, id, messaging::MessageStatus::read});
     }
   }
 
@@ -821,187 +854,13 @@ class MessagingService {
     return sstream.str();
   }
 
-  bool ProcessChatAction(
-      ContactID const& peer_id,
-      uint64_t msg_id,
-      std::shared_ptr<transport::Peer> const& peer,
-      bool& remove_action
-  ) {
-    remove_action = false;
-
-    auto messages = storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::sending);
-    std::optional<messaging::HistoryEntryRecord> entry;
-    for (auto const& m : messages) {
-      if (m.id == msg_id) {
-        entry = m;
-        break;
-      }
-    }
-
-    if (!entry) {
-      remove_action = true;
-      return true;
-    }
-
-    if (!std::holds_alternative<messaging::MessageEntry>(entry->data)) {
-      remove_action = true;
-      return true;
-    }
-
-    auto const& message = std::get<messaging::MessageEntry>(entry->data);
-    std::string content_to_send;
-
-    if (entry->is_truncated) {
-      if (auto full = history_->GetFullMessageContent(peer_id, entry->id)) {
-        content_to_send = *full;
-      } else {
-        remove_action = true;
-        return true;
-      }
-    } else {
-      content_to_send = message.content;
-    }
-
-    uint64_t wire_reply_id = 0;
-    if (std::holds_alternative<messaging::MessageEntry>(entry->data)) {
-      auto const local_reply_id = std::get<messaging::MessageEntry>(entry->data).reply_to_id;
-      if (local_reply_id > 0) {
-        if (auto replied_msg = storage_->GetHistoryEntry(peer_id, local_reply_id)) {
-          wire_reply_id = (replied_msg->direction == messaging::MessageDirection::received)
-                              ? replied_msg->remote_id.value_or(0)
-                              : replied_msg->id;
-        }
-      }
-    }
-
-    if (entry->kind == messaging::HistoryEntryKind::systemMessage) {
-      try {
-        nlohmann::json content_json = nlohmann::json::parse(content_to_send);
-        std::string const action = content_json.value("action", "");
-
-        if (action == "contact_request" || action == "contact_confirm") {
-          remove_action = true;
-          return true;
-        }
-      } catch (...) {
-      }
-    }
-
-    if (!peer || !peer->data_channel_is_open || !peer->session_cipher->IsReady()) {
-      return false;
-    }
-
-    std::vector<messaging::Attachment> valid_attachments;
-    for (auto const& att : message.attachments) {
-      if (auto stored = storage_->GetAttachment(att.id)) {
-        if (stored->status != messaging::AttachmentStatus::canceled &&
-            stored->status != messaging::AttachmentStatus::discarded &&
-            stored->status != messaging::AttachmentStatus::peerCanceled) {
-          valid_attachments.push_back(*stored);
-        }
-      }
-    }
-
-    if (content_to_send.empty() && valid_attachments.empty()) {
-      history_->UpdateMessageStatus(peer_id, entry->id, messaging::MessageStatus::none);
-      remove_action = true;
-      return true;
-    }
-
-    nlohmann::json payload_json;
-    payload_json[keyVersion] = protocolVersion;
-    payload_json[keyContent] = content_to_send;
-    if (wire_reply_id > 0) {
-      payload_json["reply_to_id"] = wire_reply_id;
-    }
-
-    auto encrypted = peer->session_cipher->Encrypt(payload_json.dump());
-
-    if (!encrypted.empty()) {
-      nlohmann::json json_msg = {
-          {"type", "chat"},
-          {"message_id", entry->id},
-          {"is_system", (entry->kind == messaging::HistoryEntryKind::systemMessage)},
-          {"payload", std::vector<std::byte>(encrypted.begin(), encrypted.end())}
-      };
-
-      if (!valid_attachments.empty()) {
-        std::vector<nlohmann::json> att_list;
-        att_list.reserve(valid_attachments.size());
-        for (auto const& att : valid_attachments) {
-          att_list.push_back(
-              {{"id", att.id},
-               {"type", att.type},
-               {"mime", att.mime_type},
-               {"size", att.size_bytes},
-               {"thumb", att.thumbnail_base64},
-               {"hash", att.hash},
-               {"note", att.note},
-               {"name", att.file_name}}
-          );
-        }
-        json_msg["attachments"] = att_list;
-      }
-
-      if (transport_->SendJson(peer_id, json_msg)) {
-        if (!valid_attachments.empty()) {
-          for (auto const& att : valid_attachments) {
-            sm_->file_transfer->QueueUpload(peer_id, att);
-          }
-        }
-        remove_action = false;
-        return true;
-      }
-
-      peer->data_channel_is_open = false;
-      return false;
-    }
-
-    return false;
-  }
-
-  void MarkAsSent(int64_t action_id, Time::Unit timestamp) {
-    std::lock_guard<std::mutex> const lock(sent_cache_mutex_);
-    sent_actions_cache_[action_id] = timestamp;
-
-    if (sent_actions_cache_.size() > cachedActionsSize) {
-      for (auto it = sent_actions_cache_.begin(); it != sent_actions_cache_.end();) {
-        if (timestamp - it->second > debounceTime) {
-          it = sent_actions_cache_.erase(it);
-        } else {
-          ++it;
-        }
-      }
-    }
-  }
-
-  auto WasSentRecently(int64_t action_id, Time::Unit current_time) -> bool {
-    std::lock_guard<std::mutex> const lock(sent_cache_mutex_);
-    if (sent_actions_cache_.contains(action_id)) {
-      if (current_time - sent_actions_cache_[action_id] < debounceTime) {
-        return true;
-      }
-      sent_actions_cache_.erase(action_id);
-    }
-    return false;
-  }
-
   ServiceManager* sm_;
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<transport::DataTransport> transport_;
   std::shared_ptr<identity::ContactManager> contact_manager_;
   std::unique_ptr<messaging::MessageHistory> history_;
-  std::unique_ptr<messaging::DeliveryService> delivery_service_;
 
   std::vector<EventQueue::SubscriberTypeId> event_unsubs_;
-  std::unordered_set<ContactID> flushing_peers_;
-  std::recursive_mutex flushing_mutex_;
-
-  std::unordered_map<int64_t, Time::Unit> sent_actions_cache_;
-  std::mutex sent_cache_mutex_;
-
-  static constexpr std::size_t cachedActionsSize = 100;
-  static constexpr Time::Unit debounceTime = 2000000;  // 2 seconds
 };
 
 }  // namespace eillance::services

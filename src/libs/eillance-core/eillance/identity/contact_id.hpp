@@ -29,6 +29,9 @@ struct ContactID {
 
   // Construct from raw bytes
   explicit ContactID(std::vector<std::byte> const& vec) {
+    if (vec.empty()) {
+      return;
+    }
     if (vec.size() != identitySize) {
       throw std::invalid_argument("ContactID must be 32 bytes");
     }
@@ -36,6 +39,9 @@ struct ContactID {
   }
 
   explicit ContactID(std::span<std::byte const> span) {
+    if (span.empty()) {
+      return;
+    }
     if (span.size() != identitySize) {
       throw std::invalid_argument("ContactID must be 32 bytes");
     }
