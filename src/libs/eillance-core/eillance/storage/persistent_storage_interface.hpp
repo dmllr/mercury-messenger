@@ -38,17 +38,29 @@ class PersistentStorageImpl {
   virtual auto Open() -> bool = 0;
   virtual void Checkpoint() = 0;
 
-  // --- Resilience (Pending Actions) ---
-  virtual void AddPendingAction(PendingActionParams const& params) = 0;
-  virtual auto GetPendingActions(ContactID const& peer_id) -> std::vector<PendingAction> = 0;
-  virtual void RemovePendingAction(int64_t id) = 0;
-  virtual void RemovePendingActionByRefId(ContactID const& peer_id, int64_t ref_id) = 0;
+  // --- Synchronization Ledger ---
+  virtual void AddLedgerEntry(LedgerEntry const& entry) = 0;
+  virtual auto GetLedgerEntriesAfter(TopicID const& topic_id, std::string const& hash) -> std::vector<LedgerEntry> = 0;
+  virtual auto GetLedgerEntries(TopicID const& topic_id) -> std::vector<LedgerEntry> = 0;
+  virtual auto GetLatestLedgerEntry(TopicID const& topic_id) -> std::optional<LedgerEntry> = 0;
+  virtual void DeleteLedgerEntriesAfter(TopicID const& topic_id, std::string const& hash) = 0;
+  virtual auto GetRecentLedgerHashes(TopicID const& topic_id) -> std::vector<std::string> = 0;
+  virtual auto HasLedgerEntry(TopicID const& topic_id, std::string const& hash) -> bool = 0;
+  virtual void ReplaceLedgerEntries(
+      TopicID const& topic_id,
+      std::string const& lca_hash,
+      std::vector<LedgerEntry> const& entries
+  ) = 0;
 
-  // Suspension Logic
-  virtual void SuspendTimedOutActions(uint64_t threshold_timestamp) = 0;
-  virtual void UnsuspendActionsForPeer(ContactID const& peer_id, uint64_t new_window_start) = 0;
+  // --- Sync Requests ---
+  virtual void AddSyncRequest(SyncRequest const& req) = 0;
+  virtual auto GetSyncRequests() -> std::vector<SyncRequest> = 0;
+  virtual void RemoveSyncRequest(TopicID const& topic_id, ContactID const& target_peer_id) = 0;
+  virtual void
+  UpdateSyncRequestAttempt(TopicID const& topic_id, ContactID const& target_peer_id, Timestamp attempt_time) = 0;
 
   // --- History ---
+  virtual void ClearTopicReadModel(TopicID const& topic_id) = 0;
   virtual auto AddHistoryEntry(messaging::HistoryEntryRecord entry) -> messaging::HistoryEntryRecord = 0;
   virtual void UpdateHistoryEntry(messaging::HistoryEntryRecord const& entry) = 0;
   virtual void
@@ -71,6 +83,7 @@ class PersistentStorageImpl {
   UpdateAttachmentStatus(std::string const& attachment_id, messaging::AttachmentStatus status, bool is_downloaded) = 0;
   virtual auto GetAttachment(std::string const& attachment_id) -> std::optional<messaging::Attachment> = 0;
   virtual auto GetDownloadedAttachments(ContactID const& peer_id) -> std::vector<messaging::AttachmentRecord> = 0;
+  virtual auto GetAllAttachments(ContactID const& peer_id) -> std::vector<messaging::Attachment> = 0;
 
   virtual auto GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t page_size)
       -> messaging::HistoryPage = 0;
@@ -82,9 +95,6 @@ class PersistentStorageImpl {
   virtual auto GetMessagesWithStatus(ContactID const& peer_id, messaging::MessageStatus status)
       -> std::vector<messaging::HistoryEntryRecord> = 0;
   virtual auto GetPendingAttachments(ContactID const& peer_id) -> std::vector<messaging::Attachment> = 0;
-  virtual auto GetRemoteIds(ContactID const& peer_id, std::vector<uint64_t> const& local_ids)
-      -> std::vector<uint64_t> = 0;
-  virtual auto GetMessageIdByRemoteId(ContactID const& peer_id, uint64_t target_id) -> std::optional<uint64_t> = 0;
 
   // --- Search ---
   virtual auto SearchMessages(ContactID const& peer_id, std::string const& query)

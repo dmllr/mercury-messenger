@@ -20,6 +20,7 @@
 #include "eillance/services/call_id.hpp"
 #include "eillance/services/messaging_service.hpp"
 #include "eillance/services/service_manager.hpp"
+#include "eillance/services/sync_engine.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/transport/data_transport.hpp"
 #include "eillance/transport/media_transport.hpp"
@@ -127,13 +128,9 @@ class MediaCallService {
     SetCallState(CallState::active);
 
     nlohmann::json const msg = {{"type", "call_accept"}, {"call_id", current_call_->call_id.ToString()}};
-    if (auto peer = data_transport_->GetPeer(peer_id)) {
-      if (peer->data_channel_is_open) {
-        std::ignore = data_transport_->SendJson(peer_id, msg);
-      } else {
-        storage_->AddPendingAction({.peer_id = peer_id, .payload = msg.dump()});
-        EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
-      }
+
+    if (auto peer = data_transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
+      std::ignore = data_transport_->SendJson(peer_id, msg);
     }
 
     EventQueue::Instance().Push(EventCallAccepted{peer_id});
@@ -146,13 +143,8 @@ class MediaCallService {
     }
 
     nlohmann::json const msg = {{"type", "call_reject"}, {"call_id", current_call_->call_id.ToString()}};
-    if (auto const peer = data_transport_->GetPeer(peer_id)) {
-      if (peer->data_channel_is_open) {
-        std::ignore = data_transport_->SendJson(peer_id, msg);
-      } else {
-        storage_->AddPendingAction({.peer_id = peer_id, .payload = msg.dump()});
-        EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
-      }
+    if (auto peer = data_transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
+      std::ignore = data_transport_->SendJson(peer_id, msg);
     }
 
     TeardownCallInternal(peer_id, messaging::CallStatus::rejected);
@@ -168,13 +160,8 @@ class MediaCallService {
 
     if (notify_peer && current_call_) {
       nlohmann::json const msg = {{"type", "hangup"}, {"call_id", current_call_->call_id.ToString()}};
-      if (auto peer = data_transport_->GetPeer(peer_id)) {
-        if (peer->data_channel_is_open) {
-          std::ignore = data_transport_->SendJson(peer_id, msg);
-        } else {
-          storage_->AddPendingAction({.peer_id = peer_id, .payload = msg.dump()});
-          EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
-        }
+      if (auto peer = data_transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
+        std::ignore = data_transport_->SendJson(peer_id, msg);
       }
     }
 
@@ -202,13 +189,8 @@ class MediaCallService {
       }
 
       nlohmann::json const msg = {{"type", "call_reject"}, {"call_id", call_id}, {"reason", "busy"}};
-      if (auto peer = data_transport_->GetPeer(peer_id)) {
-        if (peer->data_channel_is_open) {
-          std::ignore = data_transport_->SendJson(peer_id, msg);
-        } else {
-          storage_->AddPendingAction({.peer_id = peer_id, .payload = msg.dump()});
-          EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
-        }
+      if (auto peer = data_transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
+        std::ignore = data_transport_->SendJson(peer_id, msg);
       }
       return;
     }
@@ -325,9 +307,6 @@ class MediaCallService {
             nlohmann::json const msg = {{"type", type}, {"context", "media"}, {"sdp", *sdp}};
             if (peer->data_channel_is_open) {
               std::ignore = data_transport_->SendJson(peer_id, msg);
-            } else {
-              storage_->AddPendingAction({.peer_id = peer_id, .payload = msg.dump()});
-              EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
             }
             peer->pending_offer_sdp.reset();
           }
@@ -528,15 +507,16 @@ class MediaCallService {
       }
 
       if (current_call_->peer_id == peer_id) {
-        sm_->messaging->AddCallEntry(
-            {.peer_id = peer_id,
-             .kind = current_call_->is_video ? messaging::HistoryEntryKind::videoCall
-                                             : messaging::HistoryEntryKind::voiceCall,
-             .direction =
-                 current_call_->is_outgoing ? messaging::CallDirection::outgoing : messaging::CallDirection::incoming,
-             .status = final_status,
-             .duration_seconds = duration}
-        );
+        messaging::CallEntryParams params{
+            .peer_id = peer_id,
+            .kind = current_call_->is_video ? messaging::HistoryEntryKind::videoCall
+                                            : messaging::HistoryEntryKind::voiceCall,
+            .direction =
+                current_call_->is_outgoing ? messaging::CallDirection::outgoing : messaging::CallDirection::incoming,
+            .status = final_status,
+            .duration_seconds = duration
+        };
+        sm_->messaging->AddCallEntry(params, current_call_->is_outgoing);
         if (!current_call_->is_outgoing && final_status == messaging::CallStatus::missed) {
           if (!sm_->is_foreground) {
             auto const contact = sm_->contact_manager->GetContact(peer_id);
@@ -573,13 +553,8 @@ class MediaCallService {
 
   void TriggerIncomingRing(ContactID const& peer_id) {
     nlohmann::json const msg = {{"type", "call_ringing"}, {"call_id", current_call_->call_id.ToString()}};
-    if (auto const peer = data_transport_->GetPeer(peer_id)) {
-      if (peer->data_channel_is_open) {
-        std::ignore = data_transport_->SendJson(peer_id, msg);
-      } else {
-        storage_->AddPendingAction({.peer_id = peer_id, .payload = msg.dump()});
-        EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
-      }
+    if (auto peer = data_transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
+      std::ignore = data_transport_->SendJson(peer_id, msg);
     }
 
     // Hardware Orchestration
@@ -603,13 +578,8 @@ class MediaCallService {
         {"kind", static_cast<int>(call_kind)}
     };
 
-    if (auto const peer = data_transport_->GetPeer(peer_id)) {
-      if (peer->data_channel_is_open) {
-        std::ignore = data_transport_->SendJson(peer_id, msg);
-      } else {
-        storage_->AddPendingAction({.peer_id = peer_id, .payload = msg.dump()});
-        EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
-      }
+    if (auto peer = data_transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
+      std::ignore = data_transport_->SendJson(peer_id, msg);
     }
   }
 

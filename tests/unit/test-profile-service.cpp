@@ -5,8 +5,10 @@
 #include "eillance/services/account_service.hpp"
 #include "eillance/services/contact_service.hpp"
 #include "eillance/services/file_transfer_service.hpp"
+#include "eillance/services/ledger_projection_service.hpp"
 #include "eillance/services/messaging_service.hpp"
 #include "eillance/services/profile_service.hpp"
+#include "eillance/services/sync_engine.hpp"
 #include "mock_data_transport.hpp"
 #include "mock_persistent_storage.hpp"
 
@@ -34,6 +36,9 @@ class ProfileServiceTest : public ::testing::Test {
     std::ignore = account_service_->GenerateNewIdentity();
     account_service_->UpdateMyProfile({.display_name = "Test User", .bio = "", .photo_base64 = ""});
 
+    sm_->sync_engine = std::make_shared<sync::SyncEngine>(storage_, transport_, account_service_->GetId());
+    sm_->projection_service = std::make_shared<services::LedgerProjectionService>(sm_.get());
+
     file_transfer_service_ = std::make_shared<services::FileTransferService>(sm_.get());
     sm_->file_transfer = file_transfer_service_;
 
@@ -45,7 +50,11 @@ class ProfileServiceTest : public ::testing::Test {
   }
 
   void TearDown() override {
+    profile_service_.reset();
+    messaging_service_.reset();
     file_transfer_service_.reset();
+    account_service_.reset();
+    sm_.reset();
   }
 
   std::shared_ptr<storage::PersistentStorage> storage_;

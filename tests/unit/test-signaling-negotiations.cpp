@@ -97,8 +97,14 @@ class SignalingNegotiationTest : public ::testing::Test {
   }
 
   void TearDown() override {
-    messaging_service_->StopDeliveryService();
+    internal_service_.reset();
+    contact_service_.reset();
+    profile_service_.reset();
+    media_call_service_.reset();
+    messaging_service_.reset();
     file_transfer_service_.reset();
+    account_service_.reset();
+    sm_.reset();
   }
 
   storage::MockPersistentStorageImpl* mock_storage_{};

@@ -1,0 +1,72 @@
+#pragma once
+
+#include <memory>
+#include <vector>
+
+#include <nlohmann/json.hpp>
+
+#include "eillance/events/client_events.hpp"
+#include "eillance/logging/logging.hpp"
+#include "eillance/services/contact_service.hpp"
+#include "eillance/services/media_call_service.hpp"
+#include "eillance/services/messaging_service.hpp"
+#include "eillance/services/profile_service.hpp"
+#include "eillance/services/service_manager.hpp"
+#include "eillance/storage/data_types.hpp"
+#include "eillance/utils/event_queue.hpp"
+
+namespace eillance::services {
+
+class LedgerProjectionService {
+ public:
+  explicit LedgerProjectionService(ServiceManager* sm)
+      : sm_(sm) {
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventLedgerAppended>([this](auto const& e) {
+      this->ProjectEntry(e.entry);
+    }));
+  }
+
+  ~LedgerProjectionService() {
+    for (auto const id : event_unsubs_) EventQueue::Instance().Unsubscribe(id);
+  }
+
+ private:
+  void ProjectEntry(storage::LedgerEntry const& entry) {
+    bool const is_mine = (entry.author_id == sm_->account->GetId());
+
+    try {
+      auto json = nlohmann::json::parse(entry.payload);
+
+      switch (entry.type) {
+        case storage::LedgerActionType::Message:
+          sm_->messaging->ProjectMessage(entry, json, is_mine);
+          break;
+        case storage::LedgerActionType::MessageEdit:
+          sm_->messaging->ProjectEdit(entry, json, is_mine);
+          break;
+        case storage::LedgerActionType::MessageDelete:
+          sm_->messaging->ProjectDelete(entry, json, is_mine);
+          break;
+        case storage::LedgerActionType::Reaction:
+          sm_->messaging->ProjectReaction(entry, json, is_mine);
+          break;
+        case storage::LedgerActionType::CallLog:
+          sm_->messaging->ProjectCallLog(entry, json, is_mine);
+          break;
+        case storage::LedgerActionType::ProfileUpdate:
+          sm_->profile->ProjectProfileUpdate(entry, json, is_mine);
+          break;
+        case storage::LedgerActionType::ContactState:
+          sm_->contact->ProjectContactState(entry, json, is_mine);
+          break;
+      }
+    } catch (std::exception const& e) {
+      LGE << "Failed to parse and project ledger entry: " << e.what();
+    }
+  }
+
+  ServiceManager* sm_;
+  std::vector<EventQueue::SubscriberTypeId> event_unsubs_;
+};
+
+}  // namespace eillance::services

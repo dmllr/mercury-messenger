@@ -16,3 +16,5 @@
 #include "eillance/storage/sqlite/migrations/0008_suspend_actions.hpp"
 #include "eillance/storage/sqlite/migrations/0009_reactions_edits.hpp"
 #include "eillance/storage/sqlite/migrations/0010_reply_to.hpp"
+#include "eillance/storage/sqlite/migrations/0011_sync_ledger.hpp"
+#include "eillance/storage/sqlite/migrations/0012_unify_message_ids.hpp"

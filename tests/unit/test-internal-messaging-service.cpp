@@ -102,69 +102,36 @@ TEST_F(InternalMessagingServiceTest, ProcessSignalingMessage_DataOffer) {
 
   bool answer_created = false;
   for (auto const& [pid, ctx] : mock_transport_->CallLog()->answers) {
-    if (pid == peer1 && ctx == "data") answer_created = true;
+    if (pid == peer1 && ctx == "data") {
+      answer_created = true;
+    }
   }
   EXPECT_TRUE(answer_created);
 }
 
-TEST_F(InternalMessagingServiceTest, ProcessSignalingMessage_ContactAddRequest) {
-  bool request_received = false;
-  auto sub = EventQueue::Instance().Subscribe<EventContactRequest>([&](auto const& e) {
-    if (e.peer_id == peer1) request_received = true;
-  });
-
-  nlohmann::json const msg = {
-      {"from", peer1.ToString()},
-      {"type", "contact_add_request"},
-      {"profile", {{"display_name", "Peer 1"}}}
-  };
-
-  EventQueue::Instance().Push(EventPeerMessage{msg});
-  EventQueue::Instance().WaitFor([&] { return request_received; }, std::chrono::seconds(1));
-  EXPECT_TRUE(request_received);
-
-  EventQueue::Instance().Unsubscribe(sub);
-}
-
-TEST_F(InternalMessagingServiceTest, ProcessDataChannelMessage_Chat) {
-  auto peer = std::make_shared<transport::Peer>(peer1);
-  transport_->AddPeer(peer1, peer);
-
+TEST_F(InternalMessagingServiceTest, ProcessSignalingMessage_SyncPropose) {
+  auto const peer = std::make_shared<transport::Peer>(peer1);
+  peer->data_channel_is_open = true;
   eillance::crypto::SessionCipher other;
   peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
-  other.ComputeSharedSecret(peer->session_cipher->GetPublicKey());
+  transport_->AddPeer(peer1, peer);
 
-  std::string const content = "Hello";
-  nlohmann::json payload_json;
-  payload_json[services::MessagingService::keyVersion] = services::MessagingService::protocolVersion;
-  payload_json[services::MessagingService::keyContent] = content;
-
-  auto enc = other.Encrypt(payload_json.dump());
-
-  nlohmann::json const chat_msg = {
-      {"type", "chat"},
-      {"message_id", 100},
-      {"is_system", false},
-      {"payload", enc},
-  };
-
-  nlohmann::json clean_msg = chat_msg;
-  clean_msg["payload"] = nlohmann::json::array();
-  for (auto b : enc) {
-    clean_msg["payload"].push_back(static_cast<uint8_t>(b));
-  }
-  std::string str = clean_msg.dump();
-  std::vector<std::byte> msg_bytes(str.size());
-  std::ranges::transform(str, msg_bytes.begin(), [](char c) { return static_cast<std::byte>(c); });
-
-  bool msg_received = false;
-  auto sub1 = EventQueue::Instance().Subscribe<EventChatMessageReceived>([&](auto const& e) {
-    if (e.peer_id == peer1) msg_received = true;
-  });
-
-  EventQueue::Instance().Push(EventDataChannelMessage{peer1, msg_bytes});
-  EventQueue::Instance().WaitFor([&] { return msg_received; }, std::chrono::seconds(1));
-  EXPECT_TRUE(msg_received);
-
-  EventQueue::Instance().Unsubscribe(sub1);
+  nlohmann::json const propose =
+      {{"from", peer1.ToString()}, {"type", "sync_propose"}, {"topic", peer1.ToString()}, {"head", "000"}};
+  EventQueue::Instance().Push(EventPeerMessage{propose});
+  // Wait for sync_provide or confirm
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() {
+        std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
+        for (auto const& msg : mock_log_->sent_peer_messages | std::views::values) {
+          if (msg.value("type", "") == "sync_provide" || msg.value("type", "") == "sync_confirm") {
+            return true;
+          }
+        }
+        return false;
+      },
+      std::chrono::milliseconds(2000)
+  );
+  // Assert something was sent
+  EXPECT_GT(mock_transport_->CallLog()->sent_peer_messages.size(), 0);
 }

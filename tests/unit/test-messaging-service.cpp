@@ -64,11 +64,6 @@ class MessagingServiceTest : public ::testing::Test {
 
     client_->Start();
 
-    auto pending = mock_storage_->GetPendingActions(peer1);
-    for (auto const& action : pending) {
-      mock_storage_->RemovePendingAction(action.id);
-    }
-
     conn_sub_id_ = EventQueue::Instance().Subscribe<EventConnectionRequested>([this](auto const& e) {
       connection_requests_.push_back(e.peer_id);
     });
@@ -141,27 +136,15 @@ TEST_F(MessagingServiceTest, SendMessage_ThumbInPayload) {
   client_->SendChatMessage(peer1, "Msg", atts);
   eillance::EventQueue::Instance().WaitFor(
       [&]() {
-        std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
-        for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
-          if (msg.value("type", "") == "chat") return true;
-        }
-        return false;
+        auto entries = storage_->GetLedgerEntries(TopicID(peer1));
+        return !entries.empty();
       },
       std::chrono::milliseconds(2000)
   );
 
-  ASSERT_GE(mock_transport_->CallLog()->sent_peer_messages.size(), 1);
-
-  nlohmann::json json_msg;
-  bool found = false;
-  for (auto const& msg : mock_transport_->CallLog()->sent_peer_messages | std::views::values) {
-    if (msg.value("type", "") == "chat") {
-      json_msg = msg;
-      found = true;
-      break;
-    }
-  }
-  ASSERT_TRUE(found);
+  auto entries = storage_->GetLedgerEntries(TopicID(peer1));
+  ASSERT_GE(entries.size(), 1);
+  nlohmann::json json_msg = nlohmann::json::parse(entries.back().payload);
   ASSERT_TRUE(json_msg.contains("attachments"));
   EXPECT_EQ(json_msg["attachments"][0]["note"], "This is a note");
 }
@@ -189,8 +172,6 @@ TEST_F(MessagingServiceTest, DownloadTriggersCallback) {
   payload_json[services::MessagingService::keyVersion] = services::MessagingService::protocolVersion;
   payload_json[services::MessagingService::keyContent] = payload_content;
 
-  auto encrypted = other_cipher.Encrypt(payload_json.dump());
-
   messaging::Attachment att;
   att.id = "att_1";
   att.type = messaging::AttachmentType::file;
@@ -200,7 +181,7 @@ TEST_F(MessagingServiceTest, DownloadTriggersCallback) {
   att.is_downloaded = false;
   att.note = "Incoming note";
 
-  client_->Messaging()->OnChatMessageReceived(peer1, encrypted, 12345, false, {att});
+  client_->Messaging()->OnChatMessageReceived(peer1, payload_json, 12345, false, {att});
 
   auto stored_att = mock_storage_->GetAttachment("att_1");
   ASSERT_TRUE(stored_att.has_value());
@@ -221,13 +202,14 @@ TEST_F(MessagingServiceTest, DownloadTriggersCallback) {
   EXPECT_TRUE(download_cb_called);
 }
 
-TEST_F(MessagingServiceTest, SendMessage_UnifiedDeliveryQueue) {
-  auto const entry = client_->SendChatMessage(peer1, "Queued Message");
+TEST_F(MessagingServiceTest, SendMessage_AppendsToLedger) {
+  auto const entry = client_->SendChatMessage(peer1, "Ledger Message");
   EXPECT_EQ(entry.status, messaging::MessageStatus::sending);
 
-  auto actions = mock_storage_->GetPendingActions(peer1);
-  ASSERT_EQ(actions.size(), 1);
-  EXPECT_EQ(actions[0].ref_id, entry.id);
+  auto entries = mock_storage_->GetLedgerEntries(TopicID(peer1));
+  ASSERT_EQ(entries.size(), 1);
+  EXPECT_EQ(entries[0].type, storage::LedgerActionType::Message);
+  EXPECT_TRUE(entries[0].payload.find("Ledger Message") != std::string::npos);
 
   auto peer = std::make_shared<transport::Peer>(peer1);
   peer->data_channel_is_open = true;
@@ -240,7 +222,7 @@ TEST_F(MessagingServiceTest, SendMessage_UnifiedDeliveryQueue) {
       [&]() {
         std::lock_guard<std::mutex> const lock(mock_transport_->CallLog()->mutex_);
         for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
-          if (pid == peer1 && msg.value("type", "") == "chat") return true;
+          if (pid == peer1 && msg.value("type", "") == "sync_propose") return true;
         }
         return false;
       },
@@ -252,7 +234,7 @@ TEST_F(MessagingServiceTest, SendMessage_UnifiedDeliveryQueue) {
       [&]() {
         std::lock_guard<std::mutex> const lock(mock_transport_->CallLog()->mutex_);
         for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
-          if (pid == peer1 && msg.value("type", "") == "chat") {
+          if (pid == peer1 && msg.value("type", "") == "sync_propose") {
             msg_sent = true;
             return true;
           }
@@ -262,20 +244,11 @@ TEST_F(MessagingServiceTest, SendMessage_UnifiedDeliveryQueue) {
       std::chrono::milliseconds(2000)
   );
   EXPECT_TRUE(msg_sent);
-
-  actions = mock_storage_->GetPendingActions(peer1);
-  EXPECT_EQ(actions.size(), 1);
-
-  client_->Messaging()->OnMessageReceipt(peer1, entry.id, "delivered");
-
-  actions = mock_storage_->GetPendingActions(peer1);
-  EXPECT_TRUE(actions.empty());
 }
 
-TEST_F(MessagingServiceTest, MarkAsRead_UnifiedDelivery) {
+TEST_F(MessagingServiceTest, MarkAsRead_AppendsToLedger) {
   auto entry = mock_storage_->AddHistoryEntry(
-      {.remote_id = 12345,
-       .kind = messaging::HistoryEntryKind::textMessage,
+      {.kind = messaging::HistoryEntryKind::textMessage,
        .timestamp = Time::Now(),
        .direction = messaging::MessageDirection::received,
        .peer_id = peer1}
@@ -284,8 +257,8 @@ TEST_F(MessagingServiceTest, MarkAsRead_UnifiedDelivery) {
   client_->MarkMessagesAsRead(peer1, {entry.id});
   eillance::EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(50));
 
-  auto actions = mock_storage_->GetPendingActions(peer1);
-  ASSERT_EQ(actions.size(), 1);
+  auto entries = mock_storage_->GetLedgerEntries(TopicID(peer1));
+  ASSERT_GE(entries.size(), 1);
 
   auto peer = std::make_shared<transport::Peer>(peer1);
   peer->data_channel_is_open = true;
@@ -296,7 +269,7 @@ TEST_F(MessagingServiceTest, MarkAsRead_UnifiedDelivery) {
       [&]() {
         std::lock_guard<std::mutex> const lock(mock_transport_->CallLog()->mutex_);
         for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
-          if (pid == peer1 && msg.value("type", "") == "message_read") return true;
+          if (pid == peer1 && msg.value("type", "") == "sync_propose") return true;
         }
         return false;
       },
@@ -308,7 +281,7 @@ TEST_F(MessagingServiceTest, MarkAsRead_UnifiedDelivery) {
       [&]() {
         std::lock_guard<std::mutex> const lock(mock_transport_->CallLog()->mutex_);
         for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
-          if (pid == peer1 && msg.value("type", "") == "message_read") {
+          if (pid == peer1 && msg.value("type", "") == "sync_propose") {
             read_sent = true;
             return true;
           }
@@ -318,7 +291,4 @@ TEST_F(MessagingServiceTest, MarkAsRead_UnifiedDelivery) {
       std::chrono::milliseconds(2000)
   );
   EXPECT_TRUE(read_sent);
-
-  actions = mock_storage_->GetPendingActions(peer1);
-  EXPECT_TRUE(actions.empty());
 }

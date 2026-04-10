@@ -14,6 +14,7 @@
 #include "eillance/services/messaging_service.hpp"
 #include "eillance/services/profile_service.hpp"
 #include "eillance/services/service_manager.hpp"
+#include "eillance/services/sync_engine.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/transport/data_transport.hpp"
 #include "eillance/utils/event_queue.hpp"
@@ -69,7 +70,7 @@ class ContactService {
         content["token"] = crypto::ToHex(*token);
       }
 
-      storage_->AddPendingAction({.peer_id = peer_id, .payload = content.dump()});
+      sm_->sync_engine->AppendAction(TopicID(peer_id), storage::LedgerActionType::ContactState, content);
 
       if (!existing || existing->status != identity::ContactStatus::pendingApproval) {
         sm_->messaging->AddSystemEntry(
@@ -115,7 +116,7 @@ class ContactService {
          {{"display_name", sm_->account->GetSettings()->GetMyDisplayName().value_or("")},
           {"bio", sm_->account->GetSettings()->GetMyBio().value_or("")}}},
     };
-    storage_->AddPendingAction({.peer_id = peer_id, .payload = content.dump()});
+    sm_->sync_engine->AppendAction(TopicID(peer_id), storage::LedgerActionType::ContactState, content);
 
     EventQueue::Instance().Push(EventContactStatusChanged{peer_id, identity::ContactStatus::confirmed});
     EventQueue::Instance().Push(EventConnectionRequested{peer_id});
@@ -123,11 +124,8 @@ class ContactService {
 
   void BlockContact(ContactID const& peer_id, bool notify_peer) {
     if (notify_peer) {
-      storage_->AddPendingAction(
-          {.peer_id = peer_id, .payload = nlohmann::json{{"type", "contact_removed"}, {"to", peer_id.ToString()}}.dump()
-          }
-      );
-      EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
+      nlohmann::json msg = {{"type", "contact_removed"}, {"to", peer_id.ToString()}};
+      sm_->sync_engine->AppendAction(TopicID(peer_id), storage::LedgerActionType::ContactState, msg);
     }
 
     transport_->Disconnect(peer_id);
@@ -138,6 +136,24 @@ class ContactService {
   void DeleteContact(ContactID const& peer_id) {
     BlockContact(peer_id, false);
     manager_->DeleteContact(peer_id);
+  }
+
+  void ProjectContactState(storage::LedgerEntry const& entry, nlohmann::json const& json, bool is_mine) {
+    if (is_mine) return;
+    std::string const type = json.value("type", "");
+    ContactID const peer(entry.topic_id.value.Span());
+
+    if (type == "contact_add_request") {
+      std::optional<std::string> token;
+      if (json.contains("token")) token = json["token"];
+      nlohmann::json profile = json.value("profile", nlohmann::json::object());
+      OnContactAddRequest(peer, token, profile);
+    } else if (type == "contact_confirm") {
+      nlohmann::json profile = json.value("profile", nlohmann::json::object());
+      OnContactConfirm(peer, json.value("signature", ""), profile);
+    } else if (type == "contact_removed") {
+      OnContactRemoved(peer);
+    }
   }
 
   void UnblockContact(ContactID const& peer_id) {
@@ -220,6 +236,7 @@ class ContactService {
         sm_->messaging->AddSystemEntry(peer_id, content.dump(), messaging::MessageDirection::received);
         sm_->messaging->MarkMessagesAsRead(peer_id, {});
         EventQueue::Instance().Push(EventContactRequest{peer_id});
+
         std::string name = profile.display_name ? *profile.display_name : peer_id.ToString().substr(0, 8);
         EventQueue::Instance().Push(EventNotifyContactRequest{peer_id, name});
       }
@@ -231,16 +248,6 @@ class ContactService {
   }
 
   void OnContactAddAck(ContactID const& peer_id) {
-    auto pending_actions = storage_->GetPendingActions(peer_id);
-    for (auto const& action : pending_actions) {
-      try {
-        auto json = nlohmann::json::parse(action.payload);
-        if (json.value("type", "") == "contact_add_request") {
-          storage_->RemovePendingAction(action.id);
-        }
-      } catch (...) {
-      }
-    }
   }
 
   void
@@ -282,16 +289,6 @@ class ContactService {
   }
 
   void OnContactConfirmAck(ContactID const& peer_id) {
-    auto pending_actions = storage_->GetPendingActions(peer_id);
-    for (auto const& action : pending_actions) {
-      try {
-        auto json = nlohmann::json::parse(action.payload);
-        if (json.value("type", "") == "contact_confirm") {
-          storage_->RemovePendingAction(action.id);
-        }
-      } catch (...) {
-      }
-    }
     EventQueue::Instance().Push(EventConnectionRequested{peer_id});
   }
 
@@ -305,16 +302,6 @@ class ContactService {
   }
 
   void OnContactRemovedAck(ContactID const& peer_id) {
-    auto pending_actions = storage_->GetPendingActions(peer_id);
-    for (auto const& action : pending_actions) {
-      try {
-        auto json = nlohmann::json::parse(action.payload);
-        if (json.value("type", "") == "contact_removed") {
-          storage_->RemovePendingAction(action.id);
-        }
-      } catch (...) {
-      }
-    }
   }
 
  private:

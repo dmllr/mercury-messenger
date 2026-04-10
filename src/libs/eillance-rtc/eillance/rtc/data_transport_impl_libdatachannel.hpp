@@ -252,7 +252,7 @@ class RtcDataTransport : public transport::DataTransport::Interface {
     }
   }
 
-  auto SendData(ContactID const& peer_id, std::span<std::byte const> message) const -> bool override {
+  auto SendData(ContactID const& peer_id, std::span<std::byte const> message) -> bool override {
     std::shared_ptr<::rtc::DataChannel> dc;
     {
       std::lock_guard<std::mutex> const lock(peersMutex_);
@@ -269,7 +269,7 @@ class RtcDataTransport : public transport::DataTransport::Interface {
     return false;
   }
 
-  auto SendJson(ContactID const& peer_id, Json const& message) const -> bool override {
+  auto SendJson(ContactID const& peer_id, Json const& message) -> bool override {
     std::shared_ptr<::rtc::DataChannel> dc;
     {
       std::lock_guard<std::mutex> const lock(peersMutex_);

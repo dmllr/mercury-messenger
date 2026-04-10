@@ -59,11 +59,6 @@ class ResilienceTest : public ::testing::Test {
     mock_storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
     client_->Contacts()->ReloadCache();
 
-    auto pending = mock_storage_->GetPendingActions(peer1);
-    for (auto const& action : pending) {
-      mock_storage_->RemovePendingAction(action.id);
-    }
-
     client_->Start();
   }
 
@@ -82,10 +77,9 @@ class ResilienceTest : public ::testing::Test {
   ContactID const peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
 };
 
-TEST_F(ResilienceTest, PendingReadReceiptsPersistAndSend) {
+TEST_F(ResilienceTest, SyncEnginePersistsUnsentReceipts) {
   auto entry = mock_storage_->AddHistoryEntry(
-      {.remote_id = 999,
-       .kind = messaging::HistoryEntryKind::textMessage,
+      {.kind = messaging::HistoryEntryKind::textMessage,
        .timestamp = Time::Now(),
        .direction = messaging::MessageDirection::received,
        .status = messaging::MessageStatus::delivered,
@@ -93,51 +87,17 @@ TEST_F(ResilienceTest, PendingReadReceiptsPersistAndSend) {
        .peer_id = peer1}
   );
 
-  mock_transport_->RemovePeer(peer1);
-  ASSERT_FALSE(mock_transport_->GetPeer(peer1));
-
   client_->MarkMessagesAsRead(peer1, {entry.id});
   eillance::EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(50));
 
-  auto pending = mock_storage_->GetPendingActions(peer1);
-  ASSERT_EQ(pending.size(), 1);
-  nlohmann::json const json = nlohmann::json::parse(pending[0].payload);
+  auto reqs = mock_storage_->GetSyncRequests();
+  ASSERT_EQ(reqs.size(), 1);
+
+  auto entries = storage_->GetLedgerEntries(TopicID(peer1));
+  ASSERT_GE(entries.size(), 1);
+  nlohmann::json const json = nlohmann::json::parse(entries.back().payload);
   EXPECT_EQ(json["type"], "message_read");
-  EXPECT_EQ(json["message_ids"][0], 999);
-
-  client_->Connect(peer1);
-  eillance::EventQueue::Instance().WaitFor(
-      [&]() { return mock_transport_->GetPeer(peer1) != nullptr; },
-      std::chrono::milliseconds(2000)
-  );
-
-  auto peer = mock_transport_->GetPeer(peer1);
-  ASSERT_TRUE(peer);
-
-  mock_transport_->CallLog()->sent_peer_messages.clear();
-  mock_transport_->SimulateDataChannelOpen(peer1);
-
-  bool receipt_sent = false;
-  eillance::EventQueue::Instance().WaitFor(
-      [&]() {
-        std::lock_guard<std::mutex> const lock(mock_transport_->CallLog()->mutex_);
-        for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
-          if (pid == peer1 && msg.value("type", "") == "message_read") {
-            auto ids = msg["message_ids"].get<std::vector<uint64_t>>();
-            if (ids.size() == 1 && ids[0] == 999) {
-              receipt_sent = true;
-              return true;
-            }
-          }
-        }
-        return false;
-      },
-      std::chrono::milliseconds(2000)
-  );
-  EXPECT_TRUE(receipt_sent);
-
-  pending = mock_storage_->GetPendingActions(peer1);
-  EXPECT_TRUE(pending.empty());
+  EXPECT_EQ(json["message_ids"][0], entry.id);
 }
 
 TEST_F(ResilienceTest, ProfileUpdateSyncsOnConnect) {
@@ -148,20 +108,11 @@ TEST_F(ResilienceTest, ProfileUpdateSyncsOnConnect) {
   client_->UpdateMyProfile({.display_name = "New Name", .bio = "Bio", .photo_base64 = ""});
   eillance::EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(50));
 
-  auto actions = mock_storage_->GetPendingActions(peer1);
-
-  // The test failed here previously. We must ensure that UpdateMyProfile actually queues an action.
-  // ProfileService::MarkAllContactsProfileSyncNeeded iterates confirmed contacts and calls SendMyProfile.
-  // SendMyProfile calls AddPendingAction.
-  // If this fails, it means either the contact isn't seen as confirmed or the loop failed.
-  // In SetUp, we marked peer1 as confirmed.
-
-  ASSERT_FALSE(actions.empty()) << "Profile update action was not queued";
-
   bool found_profile = false;
-  for (auto const& act : actions) {
-    if (act.payload.find("profile_info") != std::string::npos) {
+  for (auto const& entry : storage_->GetLedgerEntries(TopicID(peer1))) {
+    if (entry.type == storage::LedgerActionType::ProfileUpdate && entry.payload.find("New Name") != std::string::npos) {
       found_profile = true;
+      break;
     }
   }
   EXPECT_TRUE(found_profile);
@@ -172,7 +123,10 @@ TEST_F(ResilienceTest, ProfileUpdateSyncsOnConnect) {
       std::chrono::milliseconds(2000)
   );
 
-  mock_transport_->CallLog()->sent_peer_messages.clear();
+  {
+    std::lock_guard<std::mutex> const lock(mock_transport_->CallLog()->mutex_);
+    mock_transport_->CallLog()->sent_peer_messages.clear();
+  }
   mock_transport_->SimulateDataChannelOpen(peer1);
 
   bool profile_sent = false;
@@ -180,8 +134,7 @@ TEST_F(ResilienceTest, ProfileUpdateSyncsOnConnect) {
       [&]() {
         std::lock_guard<std::mutex> const lock(mock_transport_->CallLog()->mutex_);
         for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
-          if (pid == peer1 && msg.value("type", "") == "profile_info") {
-            EXPECT_EQ(msg["display_name"], "New Name");
+          if (pid == peer1 && msg.value("type", "") == "sync_propose") {
             profile_sent = true;
             return true;
           }
@@ -191,9 +144,6 @@ TEST_F(ResilienceTest, ProfileUpdateSyncsOnConnect) {
       std::chrono::milliseconds(2000)
   );
   EXPECT_TRUE(profile_sent);
-
-  actions = mock_storage_->GetPendingActions(peer1);
-  EXPECT_TRUE(actions.empty());
 }
 
 TEST_F(ResilienceTest, ReinstallRecovery_MessageReceipt) {
@@ -207,36 +157,17 @@ TEST_F(ResilienceTest, ReinstallRecovery_MessageReceipt) {
   mock_transport_->AddPeer(peer1, peer);
 
   // Simulate receiving a chat message
-  peer->data_channel_is_open = true;
-  eillance::crypto::SessionCipher other;
-  other.ComputeSharedSecret(peer->session_cipher->GetPublicKey());
-  peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
-
   std::string plain = "Recovery Message";
   nlohmann::json payload_json;
-  payload_json[services::MessagingService::keyVersion] = services::MessagingService::protocolVersion;
-  payload_json[services::MessagingService::keyContent] = plain;
+  payload_json["type"] = "chat";
+  payload_json["message_id"] = 100;
+  payload_json["payload"] = {{"c", plain}, {"v", 2}};
 
-  auto encrypted = other.Encrypt(payload_json.dump());
+  storage::LedgerEntry l_entry;
+  l_entry.topic_id = TopicID(peer1);
+  l_entry.author_id = peer1;
+  client_->Messaging()->ProjectMessage(l_entry, payload_json, false);
 
-  nlohmann::json const chat_msg = {
-      {"type", "chat"},
-      {"message_id", 100},
-      {"is_system", false},
-      {"payload", std::vector<std::byte>(encrypted.begin(), encrypted.end())}
-  };
-
-  // Convert JSON to bytes for binary-capable handler
-  nlohmann::json clean_msg = chat_msg;
-  clean_msg["payload"] = nlohmann::json::array();
-  for (auto b : encrypted) {
-    clean_msg["payload"].push_back(static_cast<uint8_t>(b));
-  }
-  std::string msg_str = clean_msg.dump();
-  std::vector<std::byte> msg_bytes(msg_str.size());
-  std::transform(msg_str.begin(), msg_str.end(), msg_bytes.begin(), [](char c) { return static_cast<std::byte>(c); });
-
-  eillance::EventQueue::Instance().Push(eillance::EventDataChannelMessage{peer1, msg_bytes});
   eillance::EventQueue::Instance().WaitFor(
       [&]() {
         auto contact = client_->Contacts()->GetContact(peer1);
@@ -260,21 +191,29 @@ TEST_F(ResilienceTest, ReinstallRecovery_MessageReceipt) {
 TEST_F(ResilienceTest, ReinstallRecovery_ContactAdd) {
   ASSERT_TRUE(client_->Contacts()->IsConfirmed(peer1));
 
-  nlohmann::json const req_msg = {
-      {"from", peer1.ToString()},
-      {"type", "contact_add_request"},
-      {"profile", {{"display_name", "Reinstalled B"}}}
-  };
+  nlohmann::json const req_msg = {{"type", "contact_add_request"}, {"profile", {{"display_name", "Reinstalled B"}}}};
 
-  mock_transport_->CallLog()->sent_signaling_messages.clear();
-  mock_transport_->CallLog()->sent_peer_messages.clear();
+  storage::LedgerEntry entry;
+  entry.topic_id = TopicID(peer1);
+  entry.author_id = peer1;
+  entry.type = storage::LedgerActionType::ContactState;
+  entry.payload = req_msg.dump();
 
-  mock_transport_->SimulatePeerMessage(peer1, req_msg);
+  {
+    std::lock_guard<std::mutex> const lock(mock_transport_->CallLog()->mutex_);
+    mock_transport_->CallLog()->sent_signaling_messages.clear();
+    mock_transport_->CallLog()->sent_peer_messages.clear();
+  }
+
+  EventQueue::Instance().Push(EventLedgerAppended{entry});
+
   eillance::EventQueue::Instance().WaitFor(
       [&]() {
-        std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
-        for (auto const& msg : mock_log_->sent_signaling_messages) {
-          if (msg.value("type", "") == "contact_confirm" && msg.value("to", "") == peer1.ToString()) return true;
+        auto entries = storage_->GetLedgerEntries(TopicID(peer1));
+        for (auto const& e : entries) {
+          if (e.type == storage::LedgerActionType::ContactState &&
+              e.payload.find("contact_confirm") != std::string::npos)
+            return true;
         }
         return false;
       },
@@ -282,8 +221,8 @@ TEST_F(ResilienceTest, ReinstallRecovery_ContactAdd) {
   );
 
   bool confirm_sent = false;
-  for (auto const& msg : mock_transport_->CallLog()->sent_signaling_messages) {
-    if (msg["type"] == "contact_confirm" && msg["to"] == peer1.ToString()) {
+  for (auto const& e : storage_->GetLedgerEntries(TopicID(peer1))) {
+    if (e.type == storage::LedgerActionType::ContactState && e.payload.find("contact_confirm") != std::string::npos) {
       confirm_sent = true;
     }
   }
@@ -297,7 +236,7 @@ TEST_F(ResilienceTest, ReinstallRecovery_ContactAdd) {
         std::lock_guard<std::mutex> const lock(mock_transport_->CallLog()->mutex_);
         for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
           if (pid == peer1) {
-            if (msg.value("type", "") == "profile_info") {
+            if (msg.value("type", "") == "sync_propose") {
               profile_sent = true;
             }
           }
@@ -309,148 +248,16 @@ TEST_F(ResilienceTest, ReinstallRecovery_ContactAdd) {
   EXPECT_TRUE(profile_sent) << "Should send profile via data channel";
 }
 
-TEST_F(ResilienceTest, MessageRedeliveryDeduplication) {
-  // Simulate sender sending message
-  // We manually inject the incoming message to receiver logic
-  std::string content = "Unique Content";
-  nlohmann::json payload;
-  payload[services::MessagingService::keyVersion] = services::MessagingService::protocolVersion;
-  payload[services::MessagingService::keyContent] = content;
+TEST_F(ResilienceTest, LedgerDeduplicatesIdenticalEntries) {
+  storage::LedgerEntry entry;
+  entry.topic_id = TopicID(peer1);
+  entry.author_id = peer1;
+  entry.created_at = Timestamp{123};
+  entry.type = storage::LedgerActionType::Message;
+  entry.payload = "dummy payload";
+  entry.hash = "111";
 
-  client_->Connect(peer1);
-  eillance::EventQueue::Instance().WaitFor(
-      [&]() { return mock_transport_->GetPeer(peer1) != nullptr; },
-      std::chrono::milliseconds(2000)
-  );
-
-  // Setup crypto context
-  auto const peer = mock_transport_->GetPeer(peer1);
-  ASSERT_TRUE(peer);
-  eillance::crypto::SessionCipher other;
-  peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
-  other.ComputeSharedSecret(peer->session_cipher->GetPublicKey());
-  // Ensure the peer is considered "open" so receipt can be sent
-  peer->data_channel_is_open = true;
-
-  auto const encrypted = other.Encrypt(payload.dump());
-  constexpr uint64_t msg_id = 9999;
-
-  // First Delivery
-  client_->Messaging()->OnChatMessageReceived(peer1, encrypted, msg_id, false);
-
-  // Wait for the first receipt to be sent to avoid race conditions when clearing logs
-  eillance::EventQueue::Instance().WaitFor(
-      [&]() {
-        std::lock_guard<std::mutex> const lock(mock_transport_->CallLog()->mutex_);
-        for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
-          if (pid == peer1 && msg.value("type", "") == "message_receipt") {
-            return true;
-          }
-        }
-        return false;
-      },
-      std::chrono::milliseconds(2000)
-  );
-
-  // Check History
-  auto page = client_->GetMessageHistoryPage(peer1, 0, 10);
-  ASSERT_EQ(page.messages.size(), 1);
-  ASSERT_EQ(page.messages[0].kind, messaging::HistoryEntryKind::textMessage);
-  ASSERT_EQ(page.messages[0].remote_id, msg_id);
-
-  // Clear transport log to check for receipt
-  mock_transport_->CallLog()->sent_peer_messages.clear();
-
-  // Second Delivery (Duplicate)
-  client_->Messaging()->OnChatMessageReceived(peer1, encrypted, msg_id, false);
-
-  bool receipt_sent = false;
-  eillance::EventQueue::Instance().WaitFor(
-      [&]() {
-        std::lock_guard<std::mutex> const lock(mock_transport_->CallLog()->mutex_);
-        for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
-          if (pid == peer1 && msg.value("type", "") == "message_receipt") {
-            if (msg.value("message_id", 0ULL) == msg_id) {
-              receipt_sent = true;
-              return true;
-            }
-          }
-        }
-        return false;
-      },
-      std::chrono::milliseconds(2000)
-  );
-
-  // Check History - Should still be 1 text message
-  page = client_->GetMessageHistoryPage(peer1, 0, 10);
-  ASSERT_EQ(page.messages.size(), 1);
-  ASSERT_EQ(page.messages[0].kind, messaging::HistoryEntryKind::textMessage);
-  ASSERT_EQ(page.messages[0].remote_id, msg_id);
-
-  EXPECT_TRUE(receipt_sent);
-}
-
-TEST_F(ResilienceTest, SuspensionTimeout) {
-  // Add a pending action with a very old timestamp (older than 2 days)
-  uint64_t const old_time = Time::Now() - (48 * 3600 * 1000000ULL + 1000ULL);
-  mock_storage_->AddPendingAction({.peer_id = peer1, .payload = "old_action", .timestamp = old_time});
-
-  // Verify it exists initially
-  auto actions = mock_storage_->GetPendingActions(peer1);
-  ASSERT_EQ(actions.size(), 1);
-
-  // Trigger suspension check logic manually
-  // threshold = Now - 2 days
-  uint64_t const threshold = Time::Now() - (48 * 3600 * 1000000ULL);
-  mock_storage_->SuspendTimedOutActions(threshold);
-
-  // Verify it is suspended (filtered out)
-  actions = mock_storage_->GetPendingActions(peer1);
-  EXPECT_TRUE(actions.empty());
-}
-
-TEST_F(ResilienceTest, UnsuspensionOnConnect) {
-  // Setup suspended action
-  // Use absolute small timestamp to guarantee it is older than threshold
-  constexpr uint64_t old_time = 1000;
-  mock_storage_->AddPendingAction({.peer_id = peer1, .payload = R"({"type": "test_suspend"})", .timestamp = old_time});
-
-  // Manually suspend it to simulate expired state
-  // Threshold 2000 > 1000, so it will suspend
-  mock_storage_->SuspendTimedOutActions(2000);
-
-  // Verify it is suspended (should not be returned)
-  ASSERT_TRUE(mock_storage_->GetPendingActions(peer1).empty());
-
-  // Connect
-  client_->Connect(peer1);
-  eillance::EventQueue::Instance().WaitFor(
-      [&]() { return mock_transport_->GetPeer(peer1) != nullptr; },
-      std::chrono::milliseconds(2000)
-  );
-  mock_transport_->CallLog()->sent_peer_messages.clear();
-
-  // Simulate DataChannel open which triggers UnsuspendAndDeliver
-  mock_transport_->SimulateDataChannelOpen(peer1);
-
-  // Action should have been unsuspended and sent
-  bool action_sent = false;
-  eillance::EventQueue::Instance().WaitFor(
-      [&]() {
-        std::lock_guard<std::mutex> const lock(mock_transport_->CallLog()->mutex_);
-        for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
-          if (pid == peer1 && msg.value("type", "") == "test_suspend") {
-            action_sent = true;
-            return true;
-          }
-        }
-        return false;
-      },
-      std::chrono::milliseconds(2000)
-  );
-  ASSERT_TRUE(action_sent) << "Action was not sent after unsuspension";
-
-  // And removed from pending
-  auto const pending = mock_storage_->GetPendingActions(peer1);
-  EXPECT_TRUE(pending.empty()) << "Action remained in pending queue after send";
+  storage_->ReplaceLedgerEntries(TopicID(peer1), std::string(64, '0'), {entry, entry});
+  auto entries = storage_->GetLedgerEntries(TopicID(peer1));
+  EXPECT_EQ(entries.size(), 1);
 }

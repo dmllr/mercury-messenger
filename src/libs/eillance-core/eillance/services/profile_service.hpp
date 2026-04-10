@@ -15,6 +15,7 @@
 #include "eillance/services/account_service.hpp"
 #include "eillance/services/messaging_service.hpp"
 #include "eillance/services/service_manager.hpp"
+#include "eillance/services/sync_engine.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/transport/data_transport.hpp"
 #include "eillance/utils/event_queue.hpp"
@@ -38,7 +39,9 @@ class ProfileService {
   }
 
   ~ProfileService() {
-    for (auto const id : event_unsubs_) EventQueue::Instance().Unsubscribe(id);
+    for (auto const id : event_unsubs_) {
+      EventQueue::Instance().Unsubscribe(id);
+    }
   }
 
   // --- Actions ---
@@ -56,17 +59,16 @@ class ProfileService {
       msg["photo"] = nullptr;
     }
 
-    storage_->AddPendingAction({.peer_id = peer_id, .payload = msg.dump()});
-    EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
+    sm_->sync_engine->AppendAction(TopicID(peer_id), storage::LedgerActionType::ProfileUpdate, msg);
   }
 
   void RequestProfile(ContactID const& peer_id) {
-    storage_->AddPendingAction({.peer_id = peer_id, .payload = nlohmann::json{{"type", "profile_request"}}.dump()});
-    EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
+    nlohmann::json const msg = {{"type", "profile_request"}};
+    sm_->sync_engine->AppendAction(TopicID(peer_id), storage::LedgerActionType::ProfileUpdate, msg);
   }
 
   void SyncProfile(ContactID const& peer_id) {
-    EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
+    sm_->sync_engine->ProposeSync(TopicID(peer_id), peer_id);
   }
 
   void MarkAllContactsProfileSyncNeeded() {
@@ -76,6 +78,21 @@ class ProfileService {
           contact.status == identity::ContactStatus::pendingApproval) {
         SendMyProfile(contact.peer_id);
       }
+    }
+  }
+
+  void ProjectProfileUpdate(storage::LedgerEntry const& entry, nlohmann::json const& json, bool const is_mine) {
+    if (is_mine) {
+      return;
+    }
+
+    std::string const type = json.value("type", "");
+    ContactID const peer(entry.topic_id.value.Span());
+
+    if (type == "profile_info") {
+      OnProfileUpdate(peer, json);
+    } else if (type == "profile_request") {
+      SendMyProfile(peer);
     }
   }
 
@@ -96,9 +113,15 @@ class ProfileService {
 
     auto old = manager_->GetContact(peer_id);
     bool changed = false;
-    if (profile_update.display_name && (!old || old->display_name != profile_update.display_name)) changed = true;
-    if (profile_update.bio && (!old || old->bio != profile_update.bio)) changed = true;
-    if (profile_update.photo_base64 && (!old || old->photo_base64 != profile_update.photo_base64)) changed = true;
+    if (profile_update.display_name && (!old || old->display_name != profile_update.display_name)) {
+      changed = true;
+    }
+    if (profile_update.bio && (!old || old->bio != profile_update.bio)) {
+      changed = true;
+    }
+    if (profile_update.photo_base64 && (!old || old->photo_base64 != profile_update.photo_base64)) {
+      changed = true;
+    }
 
     if (changed) {
       nlohmann::json diff;

@@ -9,6 +9,7 @@
 
 #include "eillance/events/service_connection_state.hpp"
 #include "eillance/identity/contact_id.hpp"
+#include "eillance/identity/topic_id.hpp"
 #include "eillance/messaging/types.hpp"
 #include "eillance/storage/data_types.hpp"
 #include "eillance/transport/peer_connection_state.hpp"
@@ -143,11 +144,15 @@ struct EventDataChannelMessage {
 struct EventDebugDataReset {};
 struct EventDataReloaded {};
 
+// --- Ledger Sync Events ---
+struct EventLedgerAppended {
+  storage::LedgerEntry entry;
+};
+
 // Orchestration Events replacing cross-service calls
 struct EventConnectionAttemptFinished {
   ContactID peer_id;
 };
-struct EventStopDeliveryService {};
 struct EventDebugClearContactCache {};
 struct EventReloadContactCache {};
 struct EventSendQueuedMessages {

@@ -67,9 +67,7 @@ class FileTransferService {
       if (attachment.is_downloaded) {
         // We are uploader
         std::lock_guard<std::mutex> const lock(transfers_mutex_);
-        if (!active_uploads_.contains(attachment.id)) {
-          // Check if we should really start.
-        }
+        StartUploadInternal(peer_id, attachment);
       } else {
         // We are downloader
         ResumeTransfer(peer_id, attachment.id, false);
@@ -365,10 +363,8 @@ class FileTransferService {
   ) {
     if (active_uploads_.contains(attachment.id)) {
       auto& state = active_uploads_[attachment.id];
-      if (start_sequence > 0) {
-        state.sequence = start_sequence;
-        state.window_end = state.sequence + windowSizeChunks;
-      }
+      state.sequence = start_sequence;
+      state.window_end = state.sequence + windowSizeChunks;
       state.paused = false;
       PumpUpload(peer_id, attachment.id, state);
     } else {
@@ -415,10 +411,8 @@ class FileTransferService {
       // Ignored for now
     } else if (active_uploads_.contains(file_id)) {
       auto& state = active_uploads_[file_id];
-      if (requested_seq > 0) {
-        state.sequence = requested_seq;
-        state.window_end = requested_seq + windowSizeChunks;
-      }
+      state.sequence = requested_seq;
+      state.window_end = requested_seq + windowSizeChunks;
       state.paused = false;
       PumpUpload(peer_id, file_id, active_uploads_[file_id]);
     } else {
