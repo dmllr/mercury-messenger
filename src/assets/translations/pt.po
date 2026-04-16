@@ -722,3 +722,8 @@ msgid "sort_name"
 msgstr "Nome"
 msgid "sort_size"
 msgstr "Tamanho"
+
+msgid "version_we_need_update"
+msgstr "Sua versão do Mercury está desatualizada. Por favor, atualize o aplicativo para se comunicar com este contato."
+msgid "version_peer_needs_update"
+msgstr "A outra pessoa está usando uma versão desatualizada do Mercury. As mensagens podem não ser entregues até que ela atualize."

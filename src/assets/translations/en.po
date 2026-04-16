@@ -722,3 +722,8 @@ msgid "sort_name"
 msgstr "Name"
 msgid "sort_size"
 msgstr "Size"
+
+msgid "version_we_need_update"
+msgstr "Your version of Mercury is outdated. Please update the app to communicate with this contact."
+msgid "version_peer_needs_update"
+msgstr "The other person is using an outdated version of Mercury. Messages may not be delivered until they update."

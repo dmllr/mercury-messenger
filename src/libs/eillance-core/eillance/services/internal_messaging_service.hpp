@@ -19,6 +19,7 @@
 #include "eillance/services/profile_service.hpp"
 #include "eillance/services/service_manager.hpp"
 #include "eillance/services/sync_engine.hpp"
+#include "eillance/messaging/history.hpp"
 #include "eillance/transport/data_transport.hpp"
 #include "eillance/transport/media_transport.hpp"
 #include "eillance/transport/protocol.hpp"
@@ -150,7 +151,14 @@ class InternalMessagingService {
     } else if (type == "termination") {
       data_transport_->RemovePeer(peer_id);
     } else if (type == "sync_propose" || type == "sync_provide" || type == "sync_confirm") {
+      CheckPeerVersion(peer_id, message.value("sync_version", currentSyncVersion));
       sm_->sync_engine->ProcessSyncMessage(peer_id, message);
+    } else if (type == "chat" || type == "contact_add_request" || type == "contact_add_ack" ||
+               type == "contact_confirm" || type == "contact_confirm_ack" || type == "contact_removed" ||
+               type == "contact_removed_ack" || type == "profile_info" || type == "profile_request" ||
+               type == "message_read" || type == "message_receipt" || type == "file_cancel" ||
+               type == "message_delete" || type == "message_edit" || type == "message_reaction") {
+      CheckPeerVersion(peer_id, 0);
     }
   }
 
@@ -180,7 +188,8 @@ class InternalMessagingService {
       Json const key_msg = {
           {"type", "key_exchange"},
           {"key", std::vector<std::byte>(my_pub_key.begin(), my_pub_key.end())},
-          {"is_reply", false}
+          {"is_reply", false},
+          {"sync_version", currentSyncVersion}
       };
       std::ignore = data_transport_->SendJson(peer_id, key_msg);
     }
@@ -250,6 +259,9 @@ class InternalMessagingService {
       return;
     }
 
+    int const peer_sync_version = message.value("sync_version", 0);
+    CheckPeerVersion(peer_id, peer_sync_version);
+
     auto pub_key = message["key"].get<std::vector<std::byte>>();
     if (peer->session_cipher->ComputeSharedSecret(pub_key)) {
       if (!message.value("is_reply", false)) {
@@ -264,6 +276,44 @@ class InternalMessagingService {
     } else {
       LGE << "Failed key exchange with " << peer_id.ToString();
     }
+  }
+
+  static constexpr int currentSyncVersion = 1;
+
+  void CheckPeerVersion(ContactID const& peer_id, int peer_sync_version) {
+    if (peer_sync_version < currentSyncVersion) {
+      EventQueue::Instance().Push(EventPeerVersionMismatch{peer_id, false});
+      SendLegacyUpdatePrompt(peer_id);
+    } else if (peer_sync_version > currentSyncVersion) {
+      EventQueue::Instance().Push(EventPeerVersionMismatch{peer_id, true});
+    }
+  }
+
+  void SendLegacyUpdatePrompt(ContactID const& peer_id) {
+    auto peer = data_transport_->GetPeer(peer_id);
+    if (!peer || !peer->session_cipher->IsReady()) {
+      return;
+    }
+    if (peer->legacy_prompt_sent.exchange(true)) {
+      return;
+    }
+
+    nlohmann::json payload_json;
+    payload_json["v"] = services::MessagingService::protocolVersion;
+    payload_json["c"] = nlohmann::json{{"action", "unsupported_format"}}.dump();
+
+    auto encrypted = peer->session_cipher->Encrypt(payload_json.dump());
+    if (encrypted.empty()) {
+      return;
+    }
+
+    nlohmann::json const json_msg = {
+        {"type", "chat"},
+        {"message_id", messaging::GenerateMessageId()},
+        {"is_system", true},
+        {"payload", std::vector<std::byte>(encrypted.begin(), encrypted.end())}
+    };
+    std::ignore = data_transport_->SendJson(peer_id, json_msg);
   }
 
   ServiceManager* sm_;

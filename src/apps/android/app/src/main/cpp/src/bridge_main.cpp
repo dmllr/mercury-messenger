@@ -318,6 +318,7 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     classref.RegisterStaticMethod(env, "hela/eillance/events/NativeEventBus", "onCmdStopSound", "()V");
     classref.RegisterStaticMethod(env, "hela/eillance/events/NativeEventBus", "onCmdSetMicrophoneMute", "(Z)V");
     classref.RegisterStaticMethod(env, "hela/eillance/events/NativeEventBus", "onCmdSetSpeakerphone", "(Z)V");
+    classref.RegisterStaticMethod(env, "hela/eillance/events/NativeEventBus", "onPeerVersionMismatch", "(Ljava/lang/String;Z)V");
 
     classref.RegisterCtor(env, "java/util/ArrayList", "()V");
     classref.RegisterMethod(env, "java/util/ArrayList", "add", "(Ljava/lang/Object;)Z");

@@ -38,6 +38,8 @@ object NativeEventBus {
   val cmdSetMicrophoneMute = MutableSharedFlow<Boolean>(extraBufferCapacity = 10)
   val cmdSetSpeakerphone = MutableSharedFlow<Boolean>(extraBufferCapacity = 10)
 
+  val peerVersionMismatch = MutableSharedFlow<Pair<String, Boolean>>(extraBufferCapacity = 10)
+
   class SettingsWrapper(
     val signalingUrl: String?, val timeout: Int, val customStun: String?,
     val customTurn: String?, val customTurnUser: String?, val customTurnPass: String?,
@@ -157,5 +159,10 @@ object NativeEventBus {
   @JvmStatic
   fun onCmdSetSpeakerphone(isSpeakerOn: Boolean) {
     cmdSetSpeakerphone.tryEmit(isSpeakerOn)
+  }
+
+  @JvmStatic
+  fun onPeerVersionMismatch(peerId: String, weAreOutdated: Boolean) {
+    peerVersionMismatch.tryEmit(peerId to weAreOutdated)
   }
 }
