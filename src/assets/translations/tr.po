@@ -722,3 +722,8 @@ msgid "sort_name"
 msgstr "Ad"
 msgid "sort_size"
 msgstr "Boyut"
+
+msgid "version_we_need_update"
+msgstr "Mercury sürümünüz güncel değil. Bu kişiyle iletişim kurmak için lütfen uygulamayı güncelleyin."
+msgid "version_peer_needs_update"
+msgstr "Diğer kişi Mercury'nin güncel olmayan bir sürümünü kullanıyor. Güncelleme yapana kadar mesajlar iletilemeyebilir."

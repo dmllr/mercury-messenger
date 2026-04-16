@@ -34,6 +34,7 @@ struct Peer {
   std::atomic<bool> data_channel_is_open{false};
   std::atomic<Time::Unit> last_activity_time{0};
   std::atomic<bool> has_media_peer_connection{false};
+  std::atomic<bool> legacy_prompt_sent{false};
   std::unique_ptr<crypto::SessionCipher> session_cipher{};
 
   std::optional<std::string> pending_offer_sdp;

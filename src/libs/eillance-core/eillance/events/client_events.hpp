@@ -144,6 +144,11 @@ struct EventDataChannelMessage {
 struct EventDebugDataReset {};
 struct EventDataReloaded {};
 
+struct EventPeerVersionMismatch {
+  ContactID peer_id;
+  bool we_are_outdated;
+};
+
 // --- Ledger Sync Events ---
 struct EventLedgerAppended {
   storage::LedgerEntry entry;
