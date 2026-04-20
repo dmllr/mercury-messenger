@@ -11,11 +11,8 @@
 
 #include <nlohmann/json.hpp>
 
-#include "eillance/capture/capture.hpp"
 #include "eillance/events/client_events.hpp"
 #include "eillance/logging/logging.hpp"
-#include "eillance/rtc/stream.hpp"
-#include "eillance/rtc/stream_source.hpp"
 #include "eillance/services/account_service.hpp"
 #include "eillance/services/call_id.hpp"
 #include "eillance/services/messaging_service.hpp"
@@ -48,14 +45,6 @@ class MediaCallService {
       this->OnDataChannelOpen(e.peer_id);
     }));
 
-    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventMediaSample>([this](auto const& e) {
-      this->SendSampleToPeers(e.sample, static_cast<Stream::Source::Type>(e.type), e.timestamp);
-    }));
-
-    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventFrameReceived>([this](auto const& e) {
-      this->OnFrameReceived(e.peer_id, e.frame);
-    }));
-
     event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventMediaPeerConnectionStateChanged>(
         [this](auto const& e) { this->OnMediaPeerConnectionStateChange(e.peer_id, e.state); }
     ));
@@ -67,29 +56,6 @@ class MediaCallService {
 
   ~MediaCallService() {
     for (auto const id : event_unsubs_) EventQueue::Instance().Unsubscribe(id);
-  }
-
-  template <typename T>
-  void SetVideoCapture(std::unique_ptr<T> impl) {
-    video_capture_ = std::make_unique<Capture>(std::move(impl));
-    if (audio_capture_) {
-      InitializeAvStream();
-    }
-  }
-
-  template <typename T>
-  void SetAudioCapture(std::unique_ptr<T> impl) {
-    audio_capture_ = std::make_unique<Capture>(std::move(impl));
-    if (video_capture_) {
-      InitializeAvStream();
-    }
-  }
-
-  void Configure(Config const& config) {
-    if (av_stream_) {
-      av_stream_->Video()->Configure(config);
-      av_stream_->Audio()->Configure(config);
-    }
   }
 
   [[nodiscard]] auto GetCurrentSession() const -> std::optional<CallSessionInfo> {
@@ -355,10 +321,6 @@ class MediaCallService {
     }
   }
 
-  void OnFrameReceived(ContactID const& peer_id, std::vector<std::byte> const& frame) {
-    EventQueue::Instance().Push(EventFrameReceived{peer_id, frame});
-  }
-
  private:
   enum class CallState { idle, waitingForData, mediaConnecting, mediaConnected, negotiating, ringing, active };
 
@@ -379,10 +341,6 @@ class MediaCallService {
   std::shared_ptr<transport::DataTransport> data_transport_;
   std::shared_ptr<transport::MediaTransport> media_transport_;
   std::vector<EventQueue::SubscriberTypeId> event_unsubs_;
-
-  std::unique_ptr<Capture> video_capture_;
-  std::unique_ptr<Capture> audio_capture_;
-  std::shared_ptr<Stream> av_stream_;
 
   void SetCallState(CallState state) {
     if (current_call_) {
@@ -411,16 +369,6 @@ class MediaCallService {
         (local_id <= remote_id) ? std::tie(local_id, remote_id) : std::tie(remote_id, local_id);
     auto const timestamp = static_cast<uint64_t>(Time::Now());
     return CallID(first + "-" + second + "-" + std::to_string(timestamp));
-  }
-
-  void InitializeAvStream() {
-    if (av_stream_) return;
-    if (video_capture_ && audio_capture_) {
-      av_stream_ = std::make_shared<Stream>(
-          std::make_shared<StreamSource>(std::move(*video_capture_)),
-          std::make_shared<StreamSource>(std::move(*audio_capture_))
-      );
-    }
   }
 
   void StartCallFlow(ContactID const& peer_id, bool const is_video) {
@@ -456,10 +404,6 @@ class MediaCallService {
   }
 
   void StartMediaConnection(ContactID const& peer_id, bool is_video, bool is_initiator) {
-    if (av_stream_) {
-      av_stream_->Start();
-    }
-
     auto peer = data_transport_->GetPeer(peer_id);
     if (!peer) {
       peer = std::make_shared<transport::Peer>(peer_id);
@@ -469,16 +413,12 @@ class MediaCallService {
     media_transport_->Disconnect(peer_id);
     media_transport_->Connect(peer_id);
 
-    if (auto const target_peer = data_transport_->GetPeer(peer_id)) {
-      media_transport_->AttachToPeer(peer_id, target_peer);
-    }
-
     peer->has_media_peer_connection = true;
     SetCallState(CallState::mediaConnecting);
 
-    peer->audio = media_transport_->AddAudio(peer_id);
+    media_transport_->AddAudio(peer_id);
     if (is_video) {
-      peer->video = media_transport_->AddVideo(peer_id);
+      media_transport_->AddVideo(peer_id);
     }
 
     if (is_initiator) {
@@ -538,17 +478,10 @@ class MediaCallService {
 
     if (auto peer = data_transport_->GetPeer(peer_id)) {
       peer->has_media_peer_connection = false;
-      peer->audio = nullptr;
-      peer->video = nullptr;
       peer->pending_offer_sdp.reset();
-      peer->pending_candidates.clear();
     }
 
     media_transport_->Disconnect(peer_id);
-
-    if (av_stream_) {
-      av_stream_->Stop();
-    }
   }
 
   void TriggerIncomingRing(ContactID const& peer_id) {
@@ -580,18 +513,6 @@ class MediaCallService {
 
     if (auto peer = data_transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
       std::ignore = data_transport_->SendJson(peer_id, msg);
-    }
-  }
-
-  void SendSampleToPeers(std::vector<std::byte> const& sample, Stream::Source::Type const type, uint64_t const time)
-      const {
-    if (current_call_ && current_call_->state == CallState::active) {
-      ContactID const& peer_id = current_call_->peer_id;
-      if (auto const peer = data_transport_->GetPeer(peer_id)) {
-        if (auto const track = (type == Stream::Source::Type::video) ? peer->video : peer->audio) {
-          track->SendSample(sample, time);
-        }
-      }
     }
   }
 };

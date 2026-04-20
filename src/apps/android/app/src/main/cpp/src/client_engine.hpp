@@ -9,7 +9,6 @@
 #include <jni.h>
 #include <sys/system_properties.h>
 
-#include "eillance/capture/video_config.hpp"
 #include "eillance/client/client.hpp"
 #include "eillance/logging/logging.hpp"
 #include "eillance/storage/persistent_storage.hpp"
@@ -87,12 +86,6 @@ class ClientEngine {
 
   void Terminate() {
     client_->Terminate();
-  }
-
-  void ConfigureVideoCapture(VideoConfig const& config) const {
-    Config core_config;
-    core_config.video_config = config;
-    client_->Configure(core_config);
   }
 };
 

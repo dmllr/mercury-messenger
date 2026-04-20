@@ -25,19 +25,9 @@
 
 namespace eillance::transport {
 
-class AndroidRtcTrack final : public ITrack {
- public:
-  void SendSample(std::vector<std::byte> const&, uint64_t) override {
-    // No-op on Android, media is handled by the platform's WebRTC stack
-  }
-};
-
 class AndroidMediaTransport final : public MediaTransport::Interface {
   JavaVM* jvm_;
   jobject transportJavaRef_{nullptr};
-
-  std::unordered_map<ContactID, std::shared_ptr<Peer>> peers_;
-  mutable std::mutex peersMutex_;
 
   [[nodiscard]] auto GetEnv() const -> eillance::jni::ScopedJniEnv {
     return eillance::jni::ScopedJniEnv(jvm_);
@@ -83,17 +73,6 @@ class AndroidMediaTransport final : public MediaTransport::Interface {
     env->DeleteLocalRef(j_json);
   }
 
-  void AttachToPeer(ContactID const& peer_id, std::shared_ptr<Peer> const& peer) override {
-    std::lock_guard<std::mutex> const lock(peersMutex_);
-    peers_[peer_id] = peer;
-  }
-
-  auto GetPeer(ContactID const& peer_id) const -> std::shared_ptr<Peer> {
-    std::lock_guard<std::mutex> const lock(peersMutex_);
-    auto const it = peers_.find(peer_id);
-    return (it != peers_.end()) ? it->second : nullptr;
-  }
-
   void Connect(ContactID const& peer_id) override {
     auto env_scope = GetEnv();
     auto* env = env_scope.Get();
@@ -106,14 +85,6 @@ class AndroidMediaTransport final : public MediaTransport::Interface {
   }
 
   void Disconnect(ContactID const& peer_id) override {
-    {
-      std::lock_guard<std::mutex> const lock(peersMutex_);
-      if (auto peer = peers_.find(peer_id); peer != peers_.end()) {
-        peer->second->has_media_peer_connection = false;
-        peers_.erase(peer);
-      }
-    }
-
     auto env_scope = GetEnv();
     auto* env = env_scope.Get();
     if ((env == nullptr) || (transportJavaRef_ == nullptr)) return;
@@ -228,30 +199,28 @@ class AndroidMediaTransport final : public MediaTransport::Interface {
     env->CallVoidMethod(transportJavaRef_, midVideo, static_cast<jboolean>(video));
   }
 
-  auto AddVideo(ContactID const& peer_id) -> std::shared_ptr<ITrack> override {
+  void AddVideo(ContactID const& peer_id) override {
     auto env_scope = GetEnv();
     auto* env = env_scope.Get();
-    if (!env || (transportJavaRef_ == nullptr)) return nullptr;
+    if (!env || (transportJavaRef_ == nullptr)) return;
     Connect(peer_id);
     auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcMediaTransport");
     auto* mid = transport_holder.GetMethod("addVideoTrack");
     auto* j_peer_id = env->NewStringUTF(peer_id.ToString().c_str());
     env->CallVoidMethod(transportJavaRef_, mid, j_peer_id);
     env->DeleteLocalRef(j_peer_id);
-    return std::make_shared<AndroidRtcTrack>();
   }
 
-  auto AddAudio(ContactID const& peer_id) -> std::shared_ptr<ITrack> override {
+  void AddAudio(ContactID const& peer_id) override {
     auto env_scope = GetEnv();
     auto* env = env_scope.Get();
-    if (!env || (transportJavaRef_ == nullptr)) return nullptr;
+    if (!env || (transportJavaRef_ == nullptr)) return;
     Connect(peer_id);
     auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcMediaTransport");
     auto* mid = transport_holder.GetMethod("addAudioTrack");
     auto* j_peer_id = env->NewStringUTF(peer_id.ToString().c_str());
     env->CallVoidMethod(transportJavaRef_, mid, j_peer_id);
     env->DeleteLocalRef(j_peer_id);
-    return std::make_shared<AndroidRtcTrack>();
   }
 };
 

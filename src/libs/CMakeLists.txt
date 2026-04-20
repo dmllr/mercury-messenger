@@ -2,11 +2,8 @@ add_subdirectory(eillance-utils)
 add_subdirectory(eillance-logging)
 add_subdirectory(eillance-crypto)
 add_subdirectory(eillance-storage-sqlite)
-add_subdirectory(eillance-h264)
 add_subdirectory(eillance-libp2p)
 add_subdirectory(eillance-core)
-add_subdirectory(eillance-capture)
-add_subdirectory(eillance-rtc)
 add_subdirectory(eillance-bot-api)
 
 # === Localization Generation ===

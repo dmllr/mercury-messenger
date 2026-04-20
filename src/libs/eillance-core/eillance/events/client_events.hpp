@@ -27,12 +27,6 @@ struct EventDataChannelOpen {
 
 struct EventFatalError {};
 
-struct EventMediaSample {
-  uint8_t type;
-  uint64_t timestamp;
-  std::vector<std::byte> sample;
-};
-
 struct EventChatMessageReceived {
   ContactID peer_id;
   messaging::HistoryEntryRecord message;

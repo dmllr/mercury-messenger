@@ -45,10 +45,6 @@ class Libp2pDataTransport : public DataTransport::Interface {
     }
   }
 
-  void SetIceServers(std::string const& /*json_config*/) override {
-    // No-op for libp2p data transport.
-  }
-
   void Start() override {
     if (!node_) {
       node_ = std::make_shared<Libp2pNode>(secret_key_);
