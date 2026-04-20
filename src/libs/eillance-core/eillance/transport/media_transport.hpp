@@ -4,6 +4,7 @@
 #include <string>
 
 #include "eillance/identity/contact_id.hpp"
+#include "eillance/transport/peer.hpp"
 #include "eillance/transport/track.hpp"
 
 namespace eillance::transport {

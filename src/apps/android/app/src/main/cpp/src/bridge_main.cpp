@@ -162,29 +162,6 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     classref.RegisterClass(env, "java/io/File");
     classref.RegisterMethod(env, "java/io/File", "getPath", "()Ljava/lang/String;");
 
-    // DATA TRANSPORT REGISTRATION
-    std::string const data_transport_class = "hela/eillance/webrtc/WebRtcDataTransport";
-    classref.RegisterClass(env, data_transport_class);
-    classref.RegisterCtor(env, data_transport_class, "(Landroid/content/Context;J)V");
-    classref.RegisterMethod(env, data_transport_class, "connect", "(Ljava/lang/String;Ljava/lang/String;)V");
-    classref.RegisterMethod(env, data_transport_class, "terminate", "()V");
-    classref.RegisterMethod(env, data_transport_class, "reconnect", "(Ljava/lang/String;)V");
-    classref.RegisterMethod(env, data_transport_class, "updateIceServers", "(Ljava/lang/String;)V");
-    classref.RegisterMethod(env, data_transport_class, "getPeerConnectionState", "(Ljava/lang/String;)I");
-    classref.RegisterMethod(env, data_transport_class, "sendSignalingMessage", "(Ljava/lang/String;)V");
-    classref.RegisterMethod(env, data_transport_class, "sendDataChannelMessageBinary", "(Ljava/lang/String;[B)Z");
-    classref.RegisterMethod(env, data_transport_class, "disconnectPeer", "(Ljava/lang/String;)V");
-    classref.RegisterMethod(env, data_transport_class, "createOffer", "(Ljava/lang/String;)V");
-    classref.RegisterMethod(env, data_transport_class, "createAnswer", "(Ljava/lang/String;)V");
-    classref.RegisterMethod(
-        env,
-        data_transport_class,
-        "setRemoteDescription",
-        "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V"
-    );
-    classref.RegisterMethod(env, data_transport_class, "connectPeer", "(Ljava/lang/String;)V");
-    classref.RegisterMethod(env, data_transport_class, "nativeOnSignalingConnectionStateChange", "(JI)V");
-
     // MEDIA TRANSPORT REGISTRATION
     std::string const media_transport_class = "hela/eillance/webrtc/WebRtcMediaTransport";
     classref.RegisterClass(env, media_transport_class);
@@ -209,14 +186,9 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     classref.RegisterMethod(env, media_transport_class, "stopLocalMedia", "()V");
     classref.RegisterMethod(env, media_transport_class, "setAudioEnabled", "(Z)V");
     classref.RegisterMethod(env, media_transport_class, "setVideoEnabled", "(Z)V");
+    classref.RegisterMethod(env, media_transport_class, "nativeOnSendMediaSignalingMessage", "(JLjava/lang/String;)V");
 
     classref.RegisterClass(env, "hela/eillance/MessengerService");
-    classref.RegisterMethod(
-        env,
-        "hela/eillance/MessengerService",
-        "setWebRtcDataTransport",
-        "(Lhela/eillance/webrtc/WebRtcDataTransport;)V"
-    );
     classref.RegisterMethod(
         env,
         "hela/eillance/MessengerService",

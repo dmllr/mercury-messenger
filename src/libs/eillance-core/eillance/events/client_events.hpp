@@ -222,4 +222,9 @@ struct EventCmdSetSpeakerphone {
   bool is_speaker_on;
 };
 
+// WebRTC Media signaling bridge event
+struct EventSendMediaSignalingMessage {
+  nlohmann::json message;
+};
+
 }  // namespace eillance

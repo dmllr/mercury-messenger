@@ -20,7 +20,6 @@ import hela.eillance.events.NativeEventBus
 import hela.eillance.ndkio.HistoryEntryKind
 import hela.eillance.telecom.MercuryConnection
 import hela.eillance.viewmodels.CallViewModel
-import hela.eillance.webrtc.WebRtcDataTransport
 import hela.eillance.webrtc.WebRtcMediaTransport
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -47,7 +46,6 @@ class MessengerService : Service() {
   private val engineMutex = Mutex()
 
   private var wakeLock: PowerManager.WakeLock? = null
-  private var dataTransport: WebRtcDataTransport? = null
 
   private lateinit var notifications: MercuryNotifications
   private lateinit var telecomIntegration: TelecomIntegration
@@ -221,27 +219,8 @@ class MessengerService : Service() {
   // --- Transport Setters ---
 
   @Suppress("unused")
-  fun setWebRtcDataTransport(transport: WebRtcDataTransport) {
-    dataTransport = transport
-    dataTransport?.onError = { errorMessage ->
-      serviceScope.launch { _errorEvents.emit(errorMessage) }
-    }
-  }
-
-  @Suppress("unused")
   fun setWebRtcMediaTransport(transport: WebRtcMediaTransport) {
     callHandler.mediaTransport = transport
-    transport.onSendSignalingMessage = { msg ->
-      try {
-        val json = JSONObject(msg)
-        val peerId = json.optString("to")
-        if (!peerId.isNullOrEmpty()) {
-          dataTransport?.sendDataChannelMessage(peerId, msg)
-        }
-      } catch (e: Exception) {
-        Log.e(TAG, "Failed to route media signaling message", e)
-      }
-    }
   }
 
   // --- Internal Logic ---

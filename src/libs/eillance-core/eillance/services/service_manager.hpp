@@ -35,7 +35,6 @@ struct ServiceManager {
   std::shared_ptr<storage::PersistentStorage> storage;
   std::shared_ptr<transport::DataTransport> data_transport;
   std::shared_ptr<transport::MediaTransport> media_transport;
-  std::shared_ptr<transport::Libp2pNode> p2p_node;
   std::shared_ptr<identity::ContactManager> contact_manager;
 
   std::shared_ptr<AccountService> account;
