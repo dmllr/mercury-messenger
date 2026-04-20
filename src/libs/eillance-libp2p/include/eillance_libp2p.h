@@ -34,6 +34,7 @@ void eillance_libp2p_node_set_callbacks(
 bool eillance_libp2p_node_send_message(void* node, const char* peer_id_hex, const uint8_t* data, size_t len);
 void eillance_libp2p_node_dial(void* node, const char* peer_id_hex);
 void eillance_libp2p_node_add_bootstrap_node(void* node, const char* multiaddr);
+void eillance_libp2p_node_listen(void* node, const char* multiaddr);
 
 // NOLINTEND(*-identifier-naming)
 

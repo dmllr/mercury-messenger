@@ -1,11 +1,8 @@
-FROM ubuntu:22.04
+FROM ubuntu:24.04
 
-# Update package lists
 RUN apt-get update
-
-# Install essential build tools
 RUN apt-get install -y \
-    wget ninja-build git pkg-config rsync \
+    curl wget ninja-build git pkg-config rsync \
     software-properties-common gnupg lsb-release
 
 # Install CMake 4.0+ from Kitware repository
@@ -28,6 +25,10 @@ RUN wget -qO- https://apt.llvm.org/llvm.sh | bash -s -- 18 && \
 RUN update-alternatives --install /usr/bin/clang clang /usr/bin/clang-18 100 && \
     update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-18 100 && \
     update-alternatives --install /usr/bin/llvm-strip llvm-strip /usr/bin/llvm-strip-18 100
+
+# Rust
+RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
 
 # Install additional dependencies
 RUN apt-get install -y \

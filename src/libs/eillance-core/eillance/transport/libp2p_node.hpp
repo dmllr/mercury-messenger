@@ -115,6 +115,11 @@ class Libp2pNode final {
     eillance_libp2p_node_add_bootstrap_node(node_, multiaddr.c_str());
   }
 
+  void Listen(std::string const& multiaddr) const {
+    if (!node_) return;
+    eillance_libp2p_node_listen(node_, multiaddr.c_str());
+  }
+
   void SetOnConnected(std::function<void(ContactID const&)> cb) { on_connected_ = std::move(cb); }
   void SetOnDisconnected(std::function<void(ContactID const&)> cb) { on_disconnected_ = std::move(cb); }
   void SetOnMessage(std::function<void(ContactID const&, std::span<std::byte const>)> cb) { on_message_ = std::move(cb); }

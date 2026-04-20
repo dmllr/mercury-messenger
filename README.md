@@ -32,7 +32,7 @@ The core business logic is encapsulated within a set of C++ libraries collective
 | `eillance-utils` | `src/libs/eillance-utils` | A collection of common, reusable utilities such as custom dispatch queues, argument parsers, and data structures. |
 | `eillance-logging` | `src/libs/eillance-logging` | A lightweight logging abstraction. |
 | `eillance-h264` | `src/libs/eillance-h264` | Helper utilities for parsing H.264 video streams. |
-| **Signaling Server** | `src/server` | Handles initial peer discovery, serving as an intermediary to help peers find each other and establish a direct connection while minimizing exposure of private metadata. |
+| **Bootstrap Node** | `src/apps/mercury-bootstrap` | A libp2p bootstrap node that provides initial peer discovery and connection relaying across the network. |
 | **Android App** | `src/apps/android` | The mobile presentation layer built upon the Eillance libraries, using Google's official WebRTC library for transport. |
 | **CLI Client** | `src/apps/mercury-cli` | A minimal application useful for robust end-to-end testing and integration verification, using `libdatachannel` for transport. |
 

@@ -4,7 +4,7 @@ This document provides instructions for building, deploying, and running the var
 
 ## 1. Build Environment
 
-Project Mercury relies on a Docker-based development environment to ensure all native components (signaling server, CLI client) are built with a consistent toolchain.
+Project Mercury relies on a Docker-based development environment to ensure all native components are built with a consistent toolchain.
 
 **Build the Docker Image:**
 
@@ -14,16 +14,16 @@ First, build the development environment image from the `devenv` directory (assu
 docker build -t mercury-devenv devenv
 ```
 
-## 2. Signaling Server & CLI Client
+## 2. Bootstrap Node
 
 The native C++ applications can be built and deployed using the following commands.
 
-### Oneliner (Build & Deploy Server)
+### Oneliner (Build & Deploy Bootstrap Node)
 
-This single command configures the project, builds the `mercury-server`, strips the binary for size, and deploys it to the target machine via `scp`.
+This single command configures the project, builds the `mercury-bootstrap`, strips the binary for size, and deploys it to the target machine via `scp`.
 
 ```shell
-docker run --rm -v ${PWD}:/workspace -v ${HOME}/.ssh:/workspace/.ssh -w /workspace mercury-devenv bash -c "git config --global --add safe.directory /workspace && cmake -GNinja -DCMAKE_BUILD_TYPE=Release -B build-deploy && cmake --build build-deploy --target mercury-server --config Release && strip build-deploy/bin/mercury-server && chmod 400 /workspace/.ssh/vm0.ssh.key && scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i /workspace/.ssh/vm0.ssh.key build-deploy/bin/mercury-server ubuntu@vm0.hela.me:/var/app/signaling-server/"
+docker run --rm -v ${PWD}:/workspace -v ${HOME}/.ssh:/workspace/.ssh -w /workspace mercury-devenv bash -c "git config --global --add safe.directory /workspace && cmake -GNinja -DCMAKE_BUILD_TYPE=Release -B build-deploy && cmake --build build-deploy --target mercury-bootstrap --config Release && strip build-deploy/bin/mercury-bootstrap && chmod 400 /workspace/.ssh/vm0.ssh.key && scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i /workspace/.ssh/vm0.ssh.key build-deploy/bin/mercury-bootstrap ubuntu@vm0.hela.me:/var/app/mercury-bootstrap/"
 ```
 
 ### Manual Build Steps
@@ -39,7 +39,7 @@ docker run --rm -v ${PWD}:/workspace -w /workspace mercury-devenv \
 
 #### 2. Build
 
-This command compiles all native targets (`mercury-server` and `mercury-cli`).
+This command compiles `mercury-bootstrap` native target.
 
 ```shell
 docker run --rm -v ${PWD}:/workspace -w /workspace mercury-devenv \
@@ -50,15 +50,15 @@ The compiled binaries will be located at `build-deploy/bin/`.
 
 #### 3. Deploy
 
-Use `scp` to copy the `mercury-server` binary to your deployment machine. This example requires you to have SSH keys configured.
+Use `scp` to copy the `mercury-bootstrap` binary to your deployment machine. This example requires you to have SSH keys configured.
 
 ```shell
-docker run --rm -v ${PWD}:/workspace -v ${HOME}/.ssh:/workspace/.ssh -w /workspace mercury-devenv bash -c "chmod 400 /workspace/.ssh/vm0.ssh.key && scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i /workspace/.ssh/vm0.ssh.key build-deploy/bin/mercury-server ubuntu@vm0.hela.me:/var/app/signaling-server/"
+docker run --rm -v ${PWD}:/workspace -v ${HOME}/.ssh:/workspace/.ssh -w /workspace mercury-devenv bash -c "chmod 400 /workspace/.ssh/vm0.ssh.key && scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i /workspace/.ssh/vm0.ssh.key build-deploy/bin/mercury-bootstrap ubuntu@vm0.hela.me:/var/app/mercury-bootstrap/"
 ```
 
-### Running the Server
+### Running the Bootstrap Node
 
-Connect to your server via SSH and run the executable. It requires arguments for the port and SSL certificate files.
+Connect to your server via SSH and run the executable.
 
 **SSH Configuration (`~/.ssh/config`)**
 
@@ -71,7 +71,16 @@ Host vm0.hela.me
   User ubuntu
 ```
 
-**Execution Command**
+**Launch a bootstrap node**
+
+```shell
+mkdir -p /var/app/mercury-bootstrap \
+&& /var/app/mercury-bootstrap/mercury-bootstrap \
+    --port=807 \
+    --log-level=verbose
+```
+
+**Launch legacy Mercury Server**
 
 ```shell
 mkdir -p /var/app/signaling-server/certs \
