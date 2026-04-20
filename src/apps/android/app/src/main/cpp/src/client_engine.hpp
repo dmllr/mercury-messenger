@@ -43,10 +43,8 @@ class ClientEngine {
 
     auto media_transport = std::make_unique<transport::AndroidMediaTransport>(jvm, context);
 
-    client_ = std::make_shared<Client>(
-        storage,
-        std::make_shared<transport::MediaTransport>(std::move(media_transport))
-    );
+    client_ =
+        std::make_shared<Client>(storage, std::make_shared<transport::MediaTransport>(std::move(media_transport)));
 
     event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventFatalError>([this](auto const&) -> void {
       jni::ScopedJniEnv const env_scope(jvm_);

@@ -10,7 +10,6 @@
 
 // NOLINTBEGIN(readability-identifier-naming)
 
-
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcMediaTransport_nativeOnPeerConnectionStateChange(
     JNIEnv* env,
     jobject,

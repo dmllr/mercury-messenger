@@ -161,14 +161,14 @@ class InternalMessagingService {
     bool const is_media = (context_str == transport::protocol::values::contextMedia);
 
     if (!is_media) {
-      return; // We no longer negotiate DataChannels via SDP, libp2p handles data connections natively
+      return;  // We no longer negotiate DataChannels via SDP, libp2p handles data connections natively
     }
 
     if (auto peer = data_transport_->GetPeer(peer_id); !peer) {
-        if (type == transport::protocol::values::offer) {
-          peer = std::make_shared<transport::Peer>(peer_id);
-          data_transport_->AddPeer(peer_id, peer);
-        } else {
+      if (type == transport::protocol::values::offer) {
+        peer = std::make_shared<transport::Peer>(peer_id);
+        data_transport_->AddPeer(peer_id, peer);
+      } else {
         return;
       }
     } else {

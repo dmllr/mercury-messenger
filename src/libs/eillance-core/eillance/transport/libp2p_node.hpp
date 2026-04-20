@@ -1,16 +1,17 @@
 #pragma once
 
+#include <functional>
 #include <stdexcept>
-#include <utility>
-#include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
-#include <functional>
 
-#include "eillance_libp2p.h"
+#include <span>
+
 #include "eillance/identity/contact_id.hpp"
 #include "eillance/logging/logging.hpp"
+#include "eillance_libp2p.h"
 
 namespace eillance::transport {
 
@@ -120,9 +121,15 @@ class Libp2pNode final {
     eillance_libp2p_node_listen(node_, multiaddr.c_str());
   }
 
-  void SetOnConnected(std::function<void(ContactID const&)> cb) { on_connected_ = std::move(cb); }
-  void SetOnDisconnected(std::function<void(ContactID const&)> cb) { on_disconnected_ = std::move(cb); }
-  void SetOnMessage(std::function<void(ContactID const&, std::span<std::byte const>)> cb) { on_message_ = std::move(cb); }
+  void SetOnConnected(std::function<void(ContactID const&)> cb) {
+    on_connected_ = std::move(cb);
+  }
+  void SetOnDisconnected(std::function<void(ContactID const&)> cb) {
+    on_disconnected_ = std::move(cb);
+  }
+  void SetOnMessage(std::function<void(ContactID const&, std::span<std::byte const>)> cb) {
+    on_message_ = std::move(cb);
+  }
 
  private:
   void* node_;
@@ -131,19 +138,23 @@ class Libp2pNode final {
   std::function<void(ContactID const&)> on_disconnected_;
   std::function<void(ContactID const&, std::span<std::byte const>)> on_message_;
 
-  static void OnPeerConnectedCallback(void* context, const char* peer_id_hex) {
+  static void OnPeerConnectedCallback(void* context, char const* peer_id_hex) {
     auto* self = static_cast<Libp2pNode*>(context);
     if (self->on_connected_) self->on_connected_(ContactID(std::string_view(peer_id_hex)));
   }
 
-  static void OnPeerDisconnectedCallback(void* context, const char* peer_id_hex) {
+  static void OnPeerDisconnectedCallback(void* context, char const* peer_id_hex) {
     auto* self = static_cast<Libp2pNode*>(context);
     if (self->on_disconnected_) self->on_disconnected_(ContactID(std::string_view(peer_id_hex)));
   }
 
-  static void OnMessageCallback(void* context, const char* peer_id_hex, const uint8_t* data, size_t len) {
+  static void OnMessageCallback(void* context, char const* peer_id_hex, uint8_t const* data, size_t len) {
     auto* self = static_cast<Libp2pNode*>(context);
-    if (self->on_message_) self->on_message_(ContactID(std::string_view(peer_id_hex)), std::span<std::byte const>(reinterpret_cast<std::byte const*>(data), len));
+    if (self->on_message_)
+      self->on_message_(
+          ContactID(std::string_view(peer_id_hex)),
+          std::span<std::byte const>(reinterpret_cast<std::byte const*>(data), len)
+      );
   }
 };
 
