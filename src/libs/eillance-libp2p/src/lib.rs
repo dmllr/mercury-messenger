@@ -19,10 +19,24 @@ struct MercuryBehaviour {
 struct Node {
     runtime: Runtime,
     shutdown_tx: Option<oneshot::Sender<()>>,
+    keypair: identity::Keypair,
 }
 
 #[no_mangle]
-pub extern "C" fn eillance_libp2p_node_new() -> *mut c_void {
+pub extern "C" fn eillance_libp2p_node_new(secret_key: *const u8) -> *mut c_void {
+    if secret_key.is_null() {
+        return std::ptr::null_mut();
+    }
+
+    let mut key_bytes = [0u8; 32];
+    key_bytes.copy_from_slice(unsafe { std::slice::from_raw_parts(secret_key, 32) });
+
+    let secret = match identity::ed25519::SecretKey::try_from_bytes(key_bytes) {
+        Ok(s) => s,
+        Err(_) => return std::ptr::null_mut(),
+    };
+    let keypair = identity::Keypair::from(identity::ed25519::Keypair::from(secret));
+
     let rt = match Runtime::new() {
         Ok(rt) => rt,
         Err(_) => return std::ptr::null_mut(),
@@ -30,6 +44,7 @@ pub extern "C" fn eillance_libp2p_node_new() -> *mut c_void {
     let node = Box::new(Node {
         runtime: rt,
         shutdown_tx: None,
+        keypair,
     });
     Box::into_raw(node) as *mut c_void
 }
@@ -43,9 +58,9 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
 
     let (tx, mut rx) = oneshot::channel();
     node.shutdown_tx = Some(tx);
+    let local_key = node.keypair.clone();
 
     node.runtime.spawn(async move {
-        let local_key = identity::Keypair::generate_ed25519();
         let local_peer_id = PeerId::from(local_key.public());
 
         let mut swarm = SwarmBuilder::with_existing_identity(local_key)

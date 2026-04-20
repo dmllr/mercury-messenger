@@ -35,6 +35,11 @@ class AccountService {
     return ContactID(id_manager_->GetPublicKey());
   }
 
+  [[nodiscard]] auto GetPrivateKey() const -> std::vector<std::byte> {
+    INVARIANT(id_manager_->IdentityExists());
+    return id_manager_->GetIdentity()->GetPrivateKey();
+  }
+
   [[nodiscard]] auto IdentityExists() const -> bool {
     return id_manager_->IdentityExists();
   }

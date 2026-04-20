@@ -1,6 +1,8 @@
 #pragma once
 
+#include <stdexcept>
 #include <utility>
+#include <span>
 
 #include "eillance_libp2p.h"
 
@@ -8,8 +10,12 @@ namespace eillance::transport {
 
 class Libp2pNode final {
  public:
-  Libp2pNode()
-      : node_(eillance_libp2p_node_new()) {
+  explicit Libp2pNode(std::span<std::byte const> secret_key) {
+    if (secret_key.size() != 32) {
+      throw std::invalid_argument("Libp2pNode requires exactly a 32-byte Ed25519 secret key");
+    }
+    // NOLINTNEXTLINE(*-reinterpret-cast)
+    node_ = eillance_libp2p_node_new(reinterpret_cast<uint8_t const*>(secret_key.data()));
   }
 
   ~Libp2pNode() {
@@ -38,10 +44,14 @@ class Libp2pNode final {
   }
 
   void Start() const {
-    if (node_ != nullptr) eillance_libp2p_node_start(node_);
+    if (node_ != nullptr) {
+      eillance_libp2p_node_start(node_);
+    }
   }
   void Stop() const {
-    if (node_ != nullptr) eillance_libp2p_node_stop(node_);
+    if (node_ != nullptr) {
+      eillance_libp2p_node_stop(node_);
+    }
   }
 
  private:
