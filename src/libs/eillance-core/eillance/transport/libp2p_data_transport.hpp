@@ -1,19 +1,19 @@
 #pragma once
 
 #include <memory>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
-#include <span>
-#include <mutex>
 
 #include <nlohmann/json.hpp>
+#include <span>
 
+#include "eillance/events/client_events.hpp"
+#include "eillance/logging/logging.hpp"
 #include "eillance/transport/data_transport.hpp"
 #include "eillance/transport/libp2p_node.hpp"
-#include "eillance/events/client_events.hpp"
 #include "eillance/utils/event_queue.hpp"
-#include "eillance/logging/logging.hpp"
 
 namespace eillance::transport {
 
@@ -25,8 +25,9 @@ class Libp2pDataTransport : public DataTransport::Interface {
   std::unordered_map<ContactID, std::shared_ptr<Peer>> peers_;
   mutable std::mutex peersMutex_;
   std::vector<std::byte> secret_key_;
+  std::string bootstrap_url_;
 
-public:
+ public:
   Libp2pDataTransport() = default;
 
   void SetId(ContactID const& id) override {
@@ -38,29 +39,36 @@ public:
   }
 
   void SetSignalingUrl(std::string const& url) override {
-    if (node_ && !url.empty()) {
-      node_->AddBootstrapNode(url);
+    bootstrap_url_ = url;
+    if (node_ && !bootstrap_url_.empty()) {
+      node_->AddBootstrapNode(bootstrap_url_);
     }
   }
 
-  void SetIceServers(std::string const& /*json_config*/) override {}
+  void SetIceServers(std::string const& /*json_config*/) override {
+    // No-op for libp2p data transport.
+  }
 
   void Start() override {
     if (!node_) {
       node_ = std::make_shared<Libp2pNode>(secret_key_);
+
       node_->SetOnConnected([this](ContactID const& peer_id) {
-        EventQueue::Instance().Push(EventDataPeerConnectionStateChanged{peer_id, PeerConnectionState::connected});
-        if (auto p = GetPeer(peer_id)) {
-          p->data_channel_is_open = true;
-          EventQueue::Instance().Push(EventDataChannelOpen{peer_id});
+        auto p = GetPeer(peer_id);
+        if (!p) {
+          p = std::make_shared<Peer>(peer_id);
+          AddPeer(peer_id, p);
         }
+        p->data_channel_is_open = true;
+        EventQueue::Instance().Push(EventDataPeerConnectionStateChanged{peer_id, PeerConnectionState::connected});
+        EventQueue::Instance().Push(EventDataChannelOpen{peer_id});
       });
 
       node_->SetOnDisconnected([this](ContactID const& peer_id) {
-        EventQueue::Instance().Push(EventDataPeerConnectionStateChanged{peer_id, PeerConnectionState::disconnected});
         if (auto p = GetPeer(peer_id)) {
           p->data_channel_is_open = false;
         }
+        EventQueue::Instance().Push(EventDataPeerConnectionStateChanged{peer_id, PeerConnectionState::disconnected});
       });
 
       node_->SetOnMessage([this](ContactID const& peer_id, std::span<std::byte const> data) {
@@ -68,21 +76,26 @@ public:
         EventQueue::Instance().Push(EventDataChannelMessage{peer_id, std::move(payload)});
       });
     }
+
+    if (!bootstrap_url_.empty()) {
+      node_->AddBootstrapNode(bootstrap_url_);
+    }
+
     node_->Start();
     EventQueue::Instance().Push(EventServiceConnectionStateChanged{ServiceConnectionState::online});
   }
 
   void Terminate() override {
     if (node_) {
-        node_->Stop();
+      node_->Stop();
     }
     EventQueue::Instance().Push(EventServiceConnectionStateChanged{ServiceConnectionState::disconnected});
   }
 
   void Reconnect() override {
     if (node_) {
-        node_->Stop();
-        node_->Start();
+      node_->Stop();
+      node_->Start();
     }
   }
 
@@ -116,10 +129,19 @@ public:
   }
 
   void Connect(ContactID const& peer_id) override {
-    if (node_) node_->Dial(peer_id);
+    if (node_) {
+      EventQueue::Instance().Push(EventDataPeerConnectionStateChanged{peer_id, PeerConnectionState::connecting});
+      node_->Dial(peer_id);
+    }
   }
 
-  void Disconnect(ContactID const&) override {}
+  void Disconnect(ContactID const& peer_id) override {
+    if (auto p = GetPeer(peer_id)) {
+      p->data_channel_is_open = false;
+    }
+    EventQueue::Instance().Push(EventDataPeerConnectionStateChanged{peer_id, PeerConnectionState::disconnected});
+  }
+
   void CreateOffer(ContactID const&) override {}
   void CreateAnswer(ContactID const&) override {}
   void SetRemoteDescription(ContactID const&, std::string const&, std::string const&) override {}
@@ -138,10 +160,14 @@ public:
   void SendSignalingMessage(Json const& message) const override {
     std::string to = message.value("to", "");
     if (!to.empty() && node_) {
-      ContactID peer_id(to);
-      auto str = message.dump();
-      std::span<std::byte const> bytes(reinterpret_cast<std::byte const*>(str.data()), str.size());
-      node_->SendMessage(peer_id, bytes);
+      try {
+        ContactID peer_id(to);
+        auto str = message.dump();
+        std::span<std::byte const> bytes(reinterpret_cast<std::byte const*>(str.data()), str.size());
+        node_->SendMessage(peer_id, bytes);
+      } catch (std::exception const& e) {
+        LGE << "Invalid ContactID in signaling message target: " << e.what();
+      }
     }
   }
 };
