@@ -41,7 +41,7 @@ class Client final {
   ) {
     sm_ = std::make_unique<services::ServiceManager>();
     sm_->storage = std::move(storage);
-    
+
     auto libp2p_dt = std::make_unique<transport::Libp2pDataTransport>();
     sm_->data_transport = std::make_shared<transport::DataTransport>(std::move(libp2p_dt));
     sm_->media_transport = std::move(media_transport);

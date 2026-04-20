@@ -306,8 +306,7 @@ void InitEventBridge(JavaVM* jvm) {
     jni::ScopedJniEnv env_scope(jvm);
     if (auto* env = env_scope.Get()) {
       auto& class_refs = ClassRefs::Instance();
-      jstring url_str =
-          e.state.bootstrap_node_url ? env->NewStringUTF(e.state.bootstrap_node_url->c_str()) : nullptr;
+      jstring url_str = e.state.bootstrap_node_url ? env->NewStringUTF(e.state.bootstrap_node_url->c_str()) : nullptr;
       jstring stun_str = e.state.custom_stun ? env->NewStringUTF(e.state.custom_stun->c_str()) : nullptr;
       jstring turn_str = e.state.custom_turn ? env->NewStringUTF(e.state.custom_turn->c_str()) : nullptr;
       jstring user_str = e.state.custom_turn_user ? env->NewStringUTF(e.state.custom_turn_user->c_str()) : nullptr;
@@ -617,7 +616,12 @@ void InitEventBridge(JavaVM* jvm) {
       auto& class_refs = ClassRefs::Instance();
       auto& bus_holder = class_refs.Class("hela/eillance/events/NativeEventBus");
       jstring j_peer = env->NewStringUTF(e.peer_id.ToString().c_str());
-      env->CallStaticVoidMethod(bus_holder.Class(), bus_holder.GetMethod("onPeerVersionMismatch"), j_peer, static_cast<jboolean>(e.we_are_outdated));
+      env->CallStaticVoidMethod(
+          bus_holder.Class(),
+          bus_holder.GetMethod("onPeerVersionMismatch"),
+          j_peer,
+          static_cast<jboolean>(e.we_are_outdated)
+      );
       env->DeleteLocalRef(j_peer);
     }
   }));

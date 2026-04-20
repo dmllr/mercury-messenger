@@ -138,9 +138,12 @@ class Libp2pDataTransport : public DataTransport::Interface {
     EventQueue::Instance().Push(EventDataPeerConnectionStateChanged{peer_id, PeerConnectionState::disconnected});
   }
 
-  void CreateOffer(ContactID const&) override {}
-  void CreateAnswer(ContactID const&) override {}
-  void SetRemoteDescription(ContactID const&, std::string const&, std::string const&) override {}
+  void CreateOffer(ContactID const&) override {
+  }
+  void CreateAnswer(ContactID const&) override {
+  }
+  void SetRemoteDescription(ContactID const&, std::string const&, std::string const&) override {
+  }
 
   auto SendData(ContactID const& peer_id, std::span<std::byte const> message) -> bool override {
     if (node_) return node_->SendMessage(peer_id, message);
