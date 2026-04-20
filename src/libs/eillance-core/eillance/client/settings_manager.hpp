@@ -24,15 +24,15 @@ class SettingsManager {
     Load();
   }
 
-  // Retrieves the custom signaling server URL. Returns an empty optional if not set.
-  [[nodiscard]] auto GetSignalingServerUrl() const -> std::optional<std::string> {
-    return signalingServerUrl_;
+  // Retrieves the libp2p bootstrap node URL. Returns an empty optional if not set.
+  [[nodiscard]] auto GetBootstrapNodeUrl() const -> std::optional<std::string> {
+    return bootstrapNodeUrl_;
   }
 
-  // Sets and persists the custom signaling server URL.
-  void SetSignalingServerUrl(std::string const& url) {
-    signalingServerUrl_ = url;
-    storage_->SetSetting(kSignalingServerUrlKey, url);
+  // Sets and persists the libp2p bootstrap node URL.
+  void SetBootstrapNodeUrl(std::string const& url) {
+    bootstrapNodeUrl_ = url;
+    storage_->SetSetting(kBootstrapNodeUrlKey, url);
   }
 
   // --- User Profile ---
@@ -159,7 +159,16 @@ class SettingsManager {
 
  private:
   void Load() {
-    signalingServerUrl_ = storage_->GetSetting(kSignalingServerUrlKey);
+    bootstrapNodeUrl_ = storage_->GetSetting(kBootstrapNodeUrlKey);
+    if (!bootstrapNodeUrl_) {
+      // Fallback to legacy key to migrate user data seamlessly
+      bootstrapNodeUrl_ = storage_->GetSetting("bootstrap_node_url");
+      if (bootstrapNodeUrl_) {
+        storage_->SetSetting(kBootstrapNodeUrlKey, *bootstrapNodeUrl_);
+        storage_->DeleteSetting("bootstrap_node_url");
+      }
+    }
+
     myDisplayName_ = storage_->GetSetting(kMyDisplayNameKey);
     myBio_ = storage_->GetSetting(kMyBioKey);
     myPhotoBase64_ = storage_->GetSetting(kMyPhotoBase64Key);
@@ -169,7 +178,7 @@ class SettingsManager {
     customTurnPass_ = storage_->GetSetting(kCustomTurnPassKey);
   }
 
-  static constexpr auto kSignalingServerUrlKey = "signaling_server_url";
+  static constexpr auto kBootstrapNodeUrlKey = "bootstrap_node_url";
   static constexpr auto kMyDisplayNameKey = "my_display_name";
   static constexpr auto kMyBioKey = "my_bio";
   static constexpr auto kMyPhotoBase64Key = "my_photo_base64";
@@ -187,7 +196,7 @@ class SettingsManager {
   std::shared_ptr<storage::PersistentStorage> storage_;
 
   // Cached settings
-  std::optional<std::string> signalingServerUrl_;
+  std::optional<std::string> bootstrapNodeUrl_;
   std::optional<std::string> myDisplayName_;
   std::optional<std::string> myBio_;
   std::optional<std::string> myPhotoBase64_;

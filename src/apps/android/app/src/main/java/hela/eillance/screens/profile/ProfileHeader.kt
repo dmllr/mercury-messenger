@@ -55,7 +55,7 @@ fun ProfileHeader(
 ) {
   val context = LocalContext.current
   val connectionState by settingsVM.connectionState.collectAsState()
-  val signalingUrl by settingsVM.signalingUrl.collectAsState()
+  val bootstrapNodeUrl by settingsVM.bootstrapNodeUrl.collectAsState()
 
   var showQrDialog by remember { mutableStateOf(false) }
   val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -159,9 +159,9 @@ fun ProfileHeader(
         Spacer(Modifier.width(8.dp))
         Column {
           Text(text = statusText, style = MaterialTheme.typography.labelLarge, color = statusColor)
-          if (connectionState == ServiceConnectionState.Failure && signalingUrl.isNotEmpty()) {
+          if (connectionState == ServiceConnectionState.Failure && bootstrapNodeUrl.isNotEmpty()) {
             Text(
-              text = stringResource(id = R.string.status_server_url, signalingUrl),
+              text = stringResource(id = R.string.status_server_url, bootstrapNodeUrl),
               style = MaterialTheme.typography.labelSmall,
               color = statusColor
             )

@@ -17,8 +17,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
   private val _connectionState = MutableStateFlow(ServiceConnectionState.Unknown)
   val connectionState = _connectionState.asStateFlow()
 
-  private val _signalingUrl = MutableStateFlow("")
-  val signalingUrl = _signalingUrl.asStateFlow()
+  private val _bootstrapNodeUrl = MutableStateFlow("")
+  val bootstrapNodeUrl = _bootstrapNodeUrl.asStateFlow()
 
   private val _peerInactivityTimeout = MutableStateFlow(120)
   val peerInactivityTimeout = _peerInactivityTimeout.asStateFlow()
@@ -52,7 +52,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     viewModelScope.launch {
       NativeEventBus.settings.collect { s ->
         if (s != null) {
-          _signalingUrl.value = s.signalingUrl ?: ""
+          _bootstrapNodeUrl.value = s.bootstrapNodeUrl ?: ""
           _peerInactivityTimeout.value = s.timeout
           _customStun.value = s.customStun ?: ""
           _customTurn.value = s.customTurn ?: ""
@@ -77,8 +77,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     super.onCleared()
   }
 
-  fun onSignalingUrlChange(newUrl: String) {
-    _signalingUrl.value = newUrl
+  fun onBootstrapNodeUrlChange(newUrl: String) {
+    _bootstrapNodeUrl.value = newUrl
   }
 
   fun onPeerInactivityTimeoutChange(newValue: Int) {
@@ -115,7 +115,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
   fun saveSettings() {
     if (nativePtr != 0L) {
-      nativeUpdateUrl(nativePtr, _signalingUrl.value)
+      nativeUpdateBootstrapNodeUrl(nativePtr, _bootstrapNodeUrl.value)
       nativeSetTimeout(nativePtr, _peerInactivityTimeout.value)
       nativeUpdateIceConfig(
         nativePtr,
@@ -129,7 +129,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
   private external fun nativeCreate(): Long
   private external fun nativeDestroy(ptr: Long)
-  private external fun nativeUpdateUrl(ptr: Long, url: String)
+  private external fun nativeUpdateBootstrapNodeUrl(ptr: Long, url: String)
   private external fun nativeSetTimeout(ptr: Long, seconds: Int)
   private external fun nativeUpdateIceConfig(
     ptr: Long,

@@ -83,7 +83,7 @@ struct ConversationState {
 };
 
 struct SettingsState {
-  std::optional<std::string> signaling_server_url;
+  std::optional<std::string> bootstrap_node_url;
   int peer_inactivity_timeout_seconds = 120;
   ServiceConnectionState connection_state = ServiceConnectionState::unknown;
   std::optional<std::string> custom_stun;

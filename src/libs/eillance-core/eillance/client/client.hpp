@@ -181,8 +181,8 @@ class Client final {
       return;
     }
     ReevaluateIceConfiguration();
-    if (auto const url = sm_->account->GetSettings()->GetSignalingServerUrl()) {
-      sm_->data_transport->SetSignalingUrl(*url);
+    if (auto const url = sm_->account->GetSettings()->GetBootstrapNodeUrl()) {
+      sm_->data_transport->SetBootstrapNodeUrl(*url);
     }
 
     sm_->data_transport->SetId(sm_->account->GetId());
@@ -254,8 +254,8 @@ class Client final {
     return false;
   }
 
-  void UpdateSignalingUrl(std::string const& url) const {
-    sm_->account->UpdateSignalingUrl(url);
+  void UpdateBootstrapNodeUrl(std::string const& url) const {
+    sm_->account->UpdateBootstrapNodeUrl(url);
   }
 
   void UpdateMyProfile(identity::ProfileUpdate const& profile) {

@@ -42,7 +42,7 @@ fun ConnectionSettingsScreen(
   onBack: () -> Unit
 ) {
   val context = LocalContext.current
-  val signalingUrl by settingsVM.signalingUrl.collectAsState()
+  val bootstrapNodeUrl by settingsVM.bootstrapNodeUrl.collectAsState()
   val peerInactivityTimeout by settingsVM.peerInactivityTimeout.collectAsState()
 
   val customStun by settingsVM.customStun.collectAsState()
@@ -72,10 +72,10 @@ fun ConnectionSettingsScreen(
         .padding(16.dp)
         .verticalScroll(rememberScrollState())
     ) {
-      // Setting Item: Custom Server URL
+      // Setting Item: Bootstrap Node URL
       OutlinedTextField(
-        value = signalingUrl,
-        onValueChange = settingsVM::onSignalingUrlChange,
+        value = bootstrapNodeUrl,
+        onValueChange = settingsVM::onBootstrapNodeUrlChange,
         label = { Text(stringResource(id = R.string.settings_server_url_label)) },
         placeholder = { Text(stringResource(id = R.string.settings_server_url_placeholder)) },
         modifier = Modifier.fillMaxWidth(),

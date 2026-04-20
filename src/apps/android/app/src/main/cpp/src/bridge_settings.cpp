@@ -22,7 +22,7 @@ Java_hela_eillance_viewmodels_SettingsViewModel_nativeDestroy(JNIEnv* /*env*/, j
   delete vm;
 }
 
-extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_SettingsViewModel_nativeUpdateUrl(
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_SettingsViewModel_nativeUpdateBootstrapNodeUrl(
     JNIEnv* env,
     jobject /*instance*/,
     jlong ptr,
@@ -30,7 +30,7 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_SettingsViewMode
 ) {
   auto* vm = reinterpret_cast<eillance::view_model::SettingsViewModel*>(ptr);
   char const* chars = env->GetStringUTFChars(url, nullptr);
-  vm->UpdateSignalingUrl(chars);
+  vm->UpdateBootstrapNodeUrl(chars);
   env->ReleaseStringUTFChars(url, chars);
 }
 

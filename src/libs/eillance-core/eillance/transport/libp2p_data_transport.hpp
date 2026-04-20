@@ -38,7 +38,7 @@ class Libp2pDataTransport : public DataTransport::Interface {
     secret_key_.assign(key.begin(), key.end());
   }
 
-  void SetSignalingUrl(std::string const& url) override {
+  void SetBootstrapNodeUrl(std::string const& url) override {
     bootstrap_url_ = url;
     if (node_ && !bootstrap_url_.empty()) {
       node_->AddBootstrapNode(bootstrap_url_);
