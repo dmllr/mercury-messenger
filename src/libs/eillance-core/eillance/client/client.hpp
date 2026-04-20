@@ -22,6 +22,7 @@
 #include "eillance/services/sync_engine.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/transport/data_transport.hpp"
+#include "eillance/transport/libp2p_data_transport.hpp"
 #include "eillance/transport/libp2p_node.hpp"
 #include "eillance/utils/dispatch_queue.hpp"
 #include "eillance/utils/event_queue.hpp"
@@ -36,12 +37,13 @@ class Client final {
 
   Client(
       std::shared_ptr<storage::PersistentStorage> storage,
-      std::shared_ptr<transport::DataTransport> data_transport,
       std::shared_ptr<transport::MediaTransport> media_transport
   ) {
     sm_ = std::make_unique<services::ServiceManager>();
     sm_->storage = std::move(storage);
-    sm_->data_transport = std::move(data_transport);
+    
+    auto libp2p_dt = std::make_unique<transport::Libp2pDataTransport>();
+    sm_->data_transport = std::make_shared<transport::DataTransport>(std::move(libp2p_dt));
     sm_->media_transport = std::move(media_transport);
     sm_->contact_manager = std::make_shared<identity::ContactManager>(sm_->storage);
 
@@ -210,11 +212,8 @@ class Client final {
       sm_->data_transport->SetSignalingUrl(*url);
     }
 
-    if (!sm_->p2p_node) {
-      sm_->p2p_node = std::make_shared<transport::Libp2pNode>(sm_->account->GetPrivateKey());
-    }
-    sm_->p2p_node->Start();
     sm_->data_transport->SetId(sm_->account->GetId());
+    sm_->data_transport->SetSecretKey(sm_->account->GetPrivateKey());
     sm_->data_transport->Start();
     sm_->sync_engine->Start();
     StartWatchdog();
@@ -226,9 +225,6 @@ class Client final {
     StopWatchdog();
     background_queue_.RemovePending();
 
-    if (sm_->p2p_node) {
-      sm_->p2p_node->Stop();
-    }
     sm_->sync_engine->Stop();
 
     auto peers = sm_->data_transport->GetPeers();

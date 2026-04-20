@@ -56,6 +56,10 @@ class InternalMessagingService {
     event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventDataChannelOpen>([this](auto const& e) {
       this->OnDataChannelOpen(e.peer_id);
     }));
+
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventSendMediaSignalingMessage>([this](auto const& e) {
+      data_transport_->SendSignalingMessage(e.message);
+    }));
   }
 
   ~InternalMessagingService() {

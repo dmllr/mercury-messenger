@@ -9,7 +9,6 @@
 #include <jni.h>
 #include <sys/system_properties.h>
 
-#include "data_transport_impl_libwebrtc.hpp"
 #include "eillance/capture/video_config.hpp"
 #include "eillance/client/client.hpp"
 #include "eillance/logging/logging.hpp"
@@ -43,12 +42,10 @@ class ClientEngine {
 
     auto storage = std::make_shared<storage::PersistentStorage>(std::make_unique<storage::SQLiteStorage>(db_path));
 
-    auto data_transport = std::make_unique<transport::AndroidDataTransport>(jvm, context);
     auto media_transport = std::make_unique<transport::AndroidMediaTransport>(jvm, context);
 
     client_ = std::make_shared<Client>(
         storage,
-        std::make_shared<transport::DataTransport>(std::move(data_transport)),
         std::make_shared<transport::MediaTransport>(std::move(media_transport))
     );
 

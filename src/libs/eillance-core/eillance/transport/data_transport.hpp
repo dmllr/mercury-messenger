@@ -23,6 +23,7 @@ class DataTransport {
 
     // Config
     virtual void SetId(ContactID const& id) = 0;
+    virtual void SetSecretKey(std::span<std::byte const> key) { (void)key; }
     virtual void SetSignalingUrl(std::string const& url) = 0;
     virtual void SetIceServers(std::string const& json_config) = 0;
 
@@ -58,6 +59,9 @@ class DataTransport {
 
   void SetId(ContactID const& id) const {
     self_->SetId(id);
+  }
+  void SetSecretKey(std::span<std::byte const> key) const {
+    self_->SetSecretKey(key);
   }
   void SetSignalingUrl(std::string const& url) const {
     self_->SetSignalingUrl(url);
