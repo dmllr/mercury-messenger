@@ -171,16 +171,6 @@ class Client final {
     return sm_->profile;
   }
 
-  template <typename T>
-  void SetVideoCapture(std::unique_ptr<T> impl) {
-    sm_->media_call->SetVideoCapture(std::move(impl));
-  }
-
-  template <typename T>
-  void SetAudioCapture(std::unique_ptr<T> impl) {
-    sm_->media_call->SetAudioCapture(std::move(impl));
-  }
-
   void Start() {
     if (!sm_->account->IdentityExists()) {
       LGE << "Client started without an identity.";
@@ -217,10 +207,6 @@ class Client final {
       sm_->data_transport->RemovePeer(id);
     }
     sm_->data_transport->Terminate();
-  }
-
-  void Configure(Config const& config) const {
-    sm_->media_call->Configure(config);
   }
 
   [[nodiscard]] auto GetId() const -> ContactID {
@@ -592,7 +578,6 @@ class Client final {
 
     if (!final_config.empty()) {
       auto json_str = final_config.dump();
-      sm_->data_transport->SetIceServers(json_str);
       sm_->media_transport->SetIceServers(json_str);
     }
   }

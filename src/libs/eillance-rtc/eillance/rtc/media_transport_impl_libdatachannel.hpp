@@ -164,11 +164,11 @@ class RtcMediaTransport : public transport::MediaTransport::Interface {
     // No-op
   }
 
-  auto AddVideo(ContactID const& peer_id) -> std::shared_ptr<transport::ITrack> override {
+  void AddVideo(ContactID const& peer_id) override {
     std::lock_guard<std::mutex> const lock(pcsMutex_);
     auto const it = pcs_.find(peer_id);
     if (it == pcs_.end()) {
-      return nullptr;
+      return;
     }
     auto const pc = it->second;
 
@@ -187,14 +187,13 @@ class RtcMediaTransport : public transport::MediaTransport::Interface {
     auto reporter = std::make_shared<::rtc::RtcpSrReporter>(rtp_config);
     packetizer->addToChain(reporter);
     track->setMediaHandler(packetizer);
-    return std::make_shared<RtcTrack>(track, reporter, rtp_config);
   }
 
-  auto AddAudio(ContactID const& peer_id) -> std::shared_ptr<transport::ITrack> override {
+  void AddAudio(ContactID const& peer_id) override {
     std::lock_guard<std::mutex> const lock(pcsMutex_);
     auto const it = pcs_.find(peer_id);
     if (it == pcs_.end()) {
-      return nullptr;
+      return;
     }
     auto const pc = it->second;
 
@@ -212,14 +211,6 @@ class RtcMediaTransport : public transport::MediaTransport::Interface {
     auto reporter = std::make_shared<::rtc::RtcpSrReporter>(rtp_config);
     packetizer->addToChain(reporter);
     track->setMediaHandler(packetizer);
-    return std::make_shared<RtcTrack>(track, reporter, rtp_config);
-  }
-
-  void AttachToPeer(ContactID const& peer_id, std::shared_ptr<transport::Peer> const& peer) override {
-    std::lock_guard<std::mutex> const lock(pcsMutex_);
-    if (auto it = pcs_.find(peer_id); it != pcs_.end()) {
-      peer->media_peer_connection = it->second;
-    }
   }
 
  private:

@@ -40,20 +40,6 @@ Java_hela_eillance_MessengerService_identityExists(JNIEnv* /*env*/, jobject /*in
   return false;
 }
 
-extern "C" JNIEXPORT void JNICALL
-Java_hela_eillance_MessengerService_configureVideoCapture(JNIEnv* env, jobject /*instance*/, jobject video_config) {
-  if (g_clientEngine) {
-    auto& video_config_holder = ClassRefs::Instance().Class("hela/eillance/ndkio/VideoConfig");
-    auto conf = eillance::VideoConfig{};
-    conf.camera_id = env->GetIntField(video_config, video_config_holder.GetField("cameraId"));
-    conf.width = env->GetIntField(video_config, video_config_holder.GetField("width"));
-    conf.height = env->GetIntField(video_config, video_config_holder.GetField("height"));
-    conf.frame_rate = env->GetIntField(video_config, video_config_holder.GetField("frameRate"));
-    conf.bitrate = env->GetIntField(video_config, video_config_holder.GetField("bitrate"));
-    g_clientEngine->ConfigureVideoCapture(conf);
-  }
-}
-
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_MessengerService_nativeRestart(JNIEnv* env, jobject instance) {
   if (g_clientEngine) {
     g_clientEngine->Terminate();
@@ -333,14 +319,6 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
         "hela/eillance/ndkio/GlobalSearchResult",
         "(Ljava/lang/String;Lhela/eillance/ndkio/HistoryEntry;)V"
     );
-
-    std::string const video_config_class = "hela/eillance/ndkio/VideoConfig";
-    classref.RegisterClass(env, video_config_class);
-    classref.RegisterField(env, video_config_class, "cameraId", "I");
-    classref.RegisterField(env, video_config_class, "width", "I");
-    classref.RegisterField(env, video_config_class, "height", "I");
-    classref.RegisterField(env, video_config_class, "frameRate", "I");
-    classref.RegisterField(env, video_config_class, "bitrate", "I");
 
     std::string const attachment_req_class = "hela/eillance/ndkio/AttachmentRequest";
     classref.RegisterClass(env, attachment_req_class);

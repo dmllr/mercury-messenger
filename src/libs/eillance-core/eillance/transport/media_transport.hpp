@@ -5,7 +5,6 @@
 
 #include "eillance/identity/contact_id.hpp"
 #include "eillance/transport/peer.hpp"
-#include "eillance/transport/track.hpp"
 
 namespace eillance::transport {
 
@@ -31,9 +30,8 @@ class MediaTransport {
     virtual void StopLocalMedia() = 0;
     virtual void SetLocalMediaEnabled(bool audio, bool video) = 0;
 
-    virtual auto AddVideo(ContactID const& peer_id) -> std::shared_ptr<ITrack> = 0;
-    virtual auto AddAudio(ContactID const& peer_id) -> std::shared_ptr<ITrack> = 0;
-    virtual void AttachToPeer(ContactID const& peer_id, std::shared_ptr<Peer> const& peer) = 0;
+    virtual void AddVideo(ContactID const& peer_id) = 0;
+    virtual void AddAudio(ContactID const& peer_id) = 0;
   };
 
   template <typename T>
@@ -80,14 +78,11 @@ class MediaTransport {
     self_->SetLocalMediaEnabled(audio, video);
   }
 
-  auto AddVideo(ContactID const& peer_id) const -> std::shared_ptr<ITrack> {
-    return self_->AddVideo(peer_id);
+  void AddVideo(ContactID const& peer_id) const {
+    self_->AddVideo(peer_id);
   }
-  auto AddAudio(ContactID const& peer_id) const -> std::shared_ptr<ITrack> {
-    return self_->AddAudio(peer_id);
-  }
-  void AttachToPeer(ContactID const& peer_id, std::shared_ptr<Peer> const& peer) const {
-    self_->AttachToPeer(peer_id, peer);
+  void AddAudio(ContactID const& peer_id) const {
+    self_->AddAudio(peer_id);
   }
 
  private:
