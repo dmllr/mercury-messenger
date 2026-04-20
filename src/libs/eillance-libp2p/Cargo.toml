@@ -8,6 +8,6 @@ crate-type = ["staticlib"]
 
 [dependencies]
 libp2p = { version = "0.53", features = ["tokio", "tcp", "noise", "yamux", "kad", "relay", "macros"] }
-tokio = { version = "1.32", features = ["rt-multi-thread", "macros", "time", "net"] }
+tokio = { version = "1.32", features = ["rt-multi-thread", "macros", "time", "net", "sync"] }
 futures = "0.3"
 
