@@ -16,10 +16,17 @@ target_link_libraries(eillance-core PUBLIC
   eillance-logging
   eillance-crypto
   eillance-storage-sqlite
+  eillance-libp2p
   plog::plog
   nlohmann_json::nlohmann_json
 )
 
 if(ANDROID)
   target_link_libraries(eillance-core PUBLIC log)
+endif()
+
+if(UNIX AND NOT APPLE AND NOT ANDROID)
+  target_link_libraries(eillance-core PUBLIC pthread dl m)
+elseif(WIN32)
+  target_link_libraries(eillance-core PUBLIC ws2_32 userenv bcrypt ntdll)
 endif()
