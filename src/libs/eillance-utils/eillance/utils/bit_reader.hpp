@@ -4,8 +4,6 @@
 #include <climits>
 #include <cstdint>
 
-#include <rtc/rtc.hpp>
-
 namespace eillance {
 
 /// @brief A simple bitstream reader for SPS parsing.

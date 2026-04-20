@@ -127,10 +127,10 @@ class AccountService {
     EventQueue::Instance().Push(EventMyProfileUpdated{});
   }
 
-  // Updates the signaling URL in settings and triggers transport reconnect
-  void UpdateSignalingUrl(std::string const& url) {
-    settings_manager_->SetSignalingServerUrl(url);
-    transport_->SetSignalingUrl(url);
+  // Updates the bootstrap URL in settings and triggers transport reconnect
+  void UpdateBootstrapNodeUrl(std::string const& url) {
+    settings_manager_->SetBootstrapNodeUrl(url);
+    transport_->SetBootstrapNodeUrl(url);
     transport_->Reconnect();
   }
 

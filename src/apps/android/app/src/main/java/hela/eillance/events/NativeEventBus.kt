@@ -41,7 +41,7 @@ object NativeEventBus {
   val peerVersionMismatch = MutableSharedFlow<Pair<String, Boolean>>(extraBufferCapacity = 10)
 
   class SettingsWrapper(
-    val signalingUrl: String?, val timeout: Int, val customStun: String?,
+    val bootstrapNodeUrl: String?, val timeout: Int, val customStun: String?,
     val customTurn: String?, val customTurnUser: String?, val customTurnPass: String?,
     val playSoundOnSend: Boolean, val playSoundOnReceive: Boolean, val showNotificationContent: Boolean
   )

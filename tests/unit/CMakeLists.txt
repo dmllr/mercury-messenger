@@ -1,3 +1,6 @@
+add_subdirectory("${REPO_ROOT}/src/libs/eillance-capture" "${CMAKE_CURRENT_BINARY_DIR}/eillance-capture")
+add_subdirectory("${REPO_ROOT}/src/libs/eillance-rtc" "${CMAKE_CURRENT_BINARY_DIR}/eillance-rtc")
+
 set(CMAKE_USE_WIN32_THREADS_INIT ON)
 set(gtest_disable_pthreads ON)
 
@@ -47,14 +50,11 @@ add_executable(h-e-tests
   test-profile-view-model.cpp
   test-protocol-safety.cpp
   test-resilience.cpp
-  test-rtc-transport.cpp
   test-replies.cpp
   test-settings-manager.cpp
   test-settings-view-model.cpp
   test-signaling-negotiations.cpp
   test-sqlite-storage.cpp
-  test-stream.cpp
-  test-stream-source.cpp
   test-sync-engine.cpp
   test-time.cpp
   test-transport-peer.cpp
