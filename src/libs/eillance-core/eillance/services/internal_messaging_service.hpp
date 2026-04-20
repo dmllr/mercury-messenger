@@ -12,6 +12,7 @@
 #include "eillance/events/client_events.hpp"
 #include "eillance/events/service_connection_state.hpp"
 #include "eillance/logging/logging.hpp"
+#include "eillance/messaging/history.hpp"
 #include "eillance/services/contact_service.hpp"
 #include "eillance/services/file_transfer_service.hpp"
 #include "eillance/services/media_call_service.hpp"
@@ -19,7 +20,6 @@
 #include "eillance/services/profile_service.hpp"
 #include "eillance/services/service_manager.hpp"
 #include "eillance/services/sync_engine.hpp"
-#include "eillance/messaging/history.hpp"
 #include "eillance/transport/data_transport.hpp"
 #include "eillance/transport/media_transport.hpp"
 #include "eillance/transport/protocol.hpp"
@@ -40,19 +40,6 @@ class InternalMessagingService {
         [this](EventDataChannelMessage const& e) { this->HandleDataChannelMessage(e.peer_id, e.message); }
     ));
 
-    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventPeerMessage>([this](EventPeerMessage const& e) {
-      auto const from_it = e.message.find("from");
-      if (from_it == e.message.end()) return;
-      ContactID const peer_id(from_it->get<std::string>());
-      auto const type_it = e.message.find("type");
-      if (type_it == e.message.end()) return;
-      this->ProcessSignalingMessage(peer_id, type_it->get<std::string>(), e.message);
-    }));
-
-    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventSystemMessage>([this](EventSystemMessage const& e) {
-      this->ProcessSystemMessage(e.type, e.message);
-    }));
-
     event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventDataChannelOpen>([this](auto const& e) {
       this->OnDataChannelOpen(e.peer_id);
     }));
@@ -64,38 +51,6 @@ class InternalMessagingService {
 
   ~InternalMessagingService() {
     for (auto const id : event_unsubs_) EventQueue::Instance().Unsubscribe(id);
-  }
-
-  void ProcessSystemMessage(std::string const& type, Json const& message) {
-    if (type == transport::protocol::values::authChallenge) {
-      auto const challenge = message.value(transport::protocol::keys::challenge, "");
-      if (!challenge.empty()) {
-        std::span<std::byte const> const challenge_bytes(
-            reinterpret_cast<std::byte const*>(challenge.data()),
-            challenge.size()
-        );
-        auto const signature = sm_->account->Sign(challenge_bytes);
-        auto const response = transport::protocol::CreateAuthResponse(sm_->account->GetId(), crypto::ToHex(signature));
-        data_transport_->SendSignalingMessage(response);
-      }
-    } else if (type == transport::protocol::values::loginSuccess) {
-      EventQueue::Instance().Push(EventServiceConnectionStateChanged{ServiceConnectionState::online});
-    } else if (type == transport::protocol::values::iceServers) {
-      if (message.contains(transport::protocol::keys::servers)) {
-        EventQueue::Instance().Push(EventServerIceConfig{message[transport::protocol::keys::servers].dump()});
-      }
-    } else {
-      LGW << "Received unknown system message of type: " << type;
-    }
-  }
-
-  void ProcessSignalingMessage(ContactID const& peer_id, std::string const& type, Json const& message) {
-    if (type == transport::protocol::values::offer || type == transport::protocol::values::answer) {
-      HandleSdp(peer_id, type, message);
-      return;
-    } else if (type == "sync_propose" || type == "sync_provide" || type == "sync_confirm") {
-      sm_->sync_engine->ProcessSyncMessage(peer_id, message);
-    }
   }
 
   void HandleDataChannelMessage(ContactID const& peer_id, std::span<std::byte const> const msg) {
@@ -151,7 +106,7 @@ class InternalMessagingService {
     } else if (type == "call_ringing") {
       sm_->media_call->OnCallRinging(peer_id, message.value("call_id", ""));
     } else if (type == transport::protocol::values::offer || type == transport::protocol::values::answer) {
-      ProcessSignalingMessage(peer_id, type, message);
+      HandleSdp(peer_id, type, message);
     } else if (type == "termination") {
       data_transport_->RemovePeer(peer_id);
     } else if (type == "sync_propose" || type == "sync_provide" || type == "sync_confirm") {
@@ -205,6 +160,10 @@ class InternalMessagingService {
         message.value(transport::protocol::keys::context, transport::protocol::values::contextData);
     bool const is_media = (context_str == transport::protocol::values::contextMedia);
 
+    if (!is_media) {
+      return; // We no longer negotiate DataChannels via SDP, libp2p handles data connections natively
+    }
+
     if (auto peer = data_transport_->GetPeer(peer_id); !peer) {
       if (type == transport::protocol::values::offer) {
         peer = std::make_shared<transport::Peer>(peer_id);
@@ -218,42 +177,10 @@ class InternalMessagingService {
     }
 
     if (type == transport::protocol::values::offer) {
-      if (is_media) {
-        auto const sdp = message[transport::protocol::keys::sdp].get<std::string>();
-        sm_->media_call->OnMediaOffer(peer_id, sdp);
-      } else {
-        auto const state = data_transport_->GetConnectionState(peer_id);
-        if (state == transport::PeerConnectionState::newConnection ||
-            state == transport::PeerConnectionState::connecting) {
-          if (sm_->account->GetId() > peer_id) {
-            LGI << "Resolving SDP glare: Yielding to offer from " << peer_id.ToString();
-            data_transport_->Disconnect(peer_id);
-          } else {
-            LGI << "Resolving SDP glare: Ignoring offer from " << peer_id.ToString();
-            return;
-          }
-        } else {
-          data_transport_->Disconnect(peer_id);
-        }
-
-        data_transport_->Connect(peer_id);
-        data_transport_->SetRemoteDescription(
-            peer_id,
-            message[transport::protocol::keys::sdp].get<std::string>(),
-            transport::protocol::values::offer
-        );
-        data_transport_->CreateAnswer(peer_id);
-      }
+      auto const sdp = message[transport::protocol::keys::sdp].get<std::string>();
+      sm_->media_call->OnMediaOffer(peer_id, sdp);
     } else if (type == transport::protocol::values::answer || type == transport::protocol::values::prAnswer) {
-      if (is_media) {
-        sm_->media_call->OnMediaAnswer(peer_id, message[transport::protocol::keys::sdp].get<std::string>());
-      } else {
-        data_transport_->SetRemoteDescription(
-            peer_id,
-            message[transport::protocol::keys::sdp].get<std::string>(),
-            transport::protocol::values::answer
-        );
-      }
+      sm_->media_call->OnMediaAnswer(peer_id, message[transport::protocol::keys::sdp].get<std::string>());
     }
   }
 

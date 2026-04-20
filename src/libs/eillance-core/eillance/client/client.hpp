@@ -139,22 +139,6 @@ class Client final {
     event_unsubs_.emplace_back(EventQueue::Instance().Subscribe<EventConnectionRequested>(
         [this](auto const& e) -> void { this->Connect(e.peer_id); }
     ));
-
-    event_unsubs_.emplace_back(EventQueue::Instance().Subscribe<EventServerIceConfig>([this](auto const& e) -> void {
-      server_ice_config_ = nlohmann::json::parse(e.config_json);
-      ReevaluateIceConfiguration();
-    }));
-
-    event_unsubs_.emplace_back(EventQueue::Instance().Subscribe<EventSignalingError>([this](auto const& e) -> void {
-      if (e.error == "peer_not_found") {
-        LGW << "Connection attempt failed for peer " << e.peer_id.ToString() << " (not online).";
-        EventQueue::Instance().Push(EventConnectionAttemptFinished{e.peer_id});
-        if (sm_->data_transport->GetPeer(e.peer_id)) {
-          sm_->media_transport->Disconnect(e.peer_id);
-          sm_->data_transport->Disconnect(e.peer_id);
-        }
-      }
-    }));
   }
 
   Client(Client const&) = delete;
@@ -168,7 +152,6 @@ class Client final {
     Terminate();
   }
 
-  // Backwards compatibility for Android/CLI
   [[nodiscard]] auto Account() const -> std::shared_ptr<services::AccountService> {
     return sm_->account;
   }
@@ -437,7 +420,6 @@ class Client final {
       peer->last_activity_time = Time::Now();
     }
     sm_->data_transport->Connect(peer_id);
-    sm_->data_transport->CreateOffer(peer_id);
   }
 
   void Disconnect(ContactID const& peer_id) const {
@@ -493,7 +475,6 @@ class Client final {
   }
 
   [[nodiscard]] auto GetAllPendingActions() const -> std::vector<view_model::DebugPendingAction> {
-    // Disabled since pending actions are removed. Used purely for debug view.
     return {};
   }
 
@@ -608,7 +589,7 @@ class Client final {
       if (auto pass = settings->GetCustomTurnPass(); pass && !pass->empty()) turn_server["credential"] = *pass;
       final_config.push_back(turn_server);
     }
-    if (final_config.empty() && !server_ice_config_.empty()) final_config = server_ice_config_;
+
     if (!final_config.empty()) {
       auto json_str = final_config.dump();
       sm_->data_transport->SetIceServers(json_str);
@@ -622,8 +603,6 @@ class Client final {
   std::vector<EventQueue::SubscriberTypeId> event_unsubs_;
 
   std::unique_ptr<utils::Watchdog> watchdog_;
-
-  Json server_ice_config_{Json::array()};
 
   static constexpr std::chrono::seconds peerInactivityCheckInterval{20};
   DispatchQueue background_queue_{"ClientBgQueue", 1};
