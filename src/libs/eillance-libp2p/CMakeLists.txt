@@ -68,4 +68,12 @@ elseif(WIN32)
     target_link_libraries(eillance-libp2p INTERFACE ws2_32 userenv bcrypt ntdll)
 elseif(ANDROID)
     target_link_libraries(eillance-libp2p INTERFACE dl m)
+elseif(APPLE)
+    find_library(CORE_FOUNDATION_FRAMEWORK CoreFoundation REQUIRED)
+    find_library(SYSTEM_CONFIGURATION_FRAMEWORK SystemConfiguration REQUIRED)
+    find_library(SECURITY_FRAMEWORK Security REQUIRED)
+    target_link_libraries(eillance-libp2p INTERFACE
+        ${CORE_FOUNDATION_FRAMEWORK}
+        ${SYSTEM_CONFIGURATION_FRAMEWORK}
+        ${SECURITY_FRAMEWORK})
 endif()
