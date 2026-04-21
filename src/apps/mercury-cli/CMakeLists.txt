@@ -10,6 +10,9 @@ execute_process(
 )
 set(shared_cmake_libs_path "${REPO_ROOT}/src/cmake")
 
+add_subdirectory("${REPO_ROOT}/src/libs/eillance-capture" "${CMAKE_CURRENT_BINARY_DIR}/eillance-capture")
+add_subdirectory("${REPO_ROOT}/src/libs/eillance-rtc" "${CMAKE_CURRENT_BINARY_DIR}/eillance-rtc")
+
 include("${shared_cmake_libs_path}/setup.cmake")
 include("${shared_cmake_libs_path}/import_remote.cmake")
 include("${shared_cmake_libs_path}/libftxui.cmake")
