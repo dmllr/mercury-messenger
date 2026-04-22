@@ -11,7 +11,7 @@ def test_offline_message_sync(test_environment):
 
     scenario = Scenario()
     scenario.add_network("net", "192.168.45.0/24", "192.168.45.1")
-    scenario.add_process("signaling", "/app/bin/mercury-server", ["--port", "8000"], {"net": "192.168.45.30"})
+    scenario.add_process("signaling", "/app/bin/mercury-bootstrap", ["--port", "8000"], {"net": "192.168.45.30"})
 
     # A script:
     # T=0: Sends A1, A2
@@ -27,7 +27,7 @@ def test_offline_message_sync(test_environment):
     )
     scenario.add_process(
         "app-a", "/app/bin/mercury-mock-app",
-        ["--key", key_a, "--signaling-url", "ws://192.168.45.30:8000", "--db-path", "/tmp/a.db", "--script", script_a],
+        ["--key", key_a, "--signaling-url", "/ip4/192.168.45.30/tcp/8000", "--db-path", "/tmp/a.db", "--script", script_a],
         {"net": "192.168.45.31"}
     )
 
@@ -42,7 +42,7 @@ def test_offline_message_sync(test_environment):
     )
     scenario.add_process(
         "app-b", "/app/bin/mercury-mock-app",
-        ["--key", key_b, "--signaling-url", "ws://192.168.45.30:8000", "--db-path", "/tmp/b.db", "--script", script_b],
+        ["--key", key_b, "--signaling-url", "/ip4/192.168.45.30/tcp/8000", "--db-path", "/tmp/b.db", "--script", script_b],
         {"net": "192.168.45.32"}
     )
 

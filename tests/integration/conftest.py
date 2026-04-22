@@ -56,7 +56,7 @@ def compile_binaries(docker_client_session, build_image, project_root):
     "if [ -f build.ninja ]; then ninja -t clean; fi && "
     "cmake -G Ninja -DCMAKE_BUILD_TYPE=Debug "
     "-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=/src/build-deploy/bin /src && "
-    "ninja mercury-mock-app mercury-server && "
+    "ninja mercury-mock-app mercury-bootstrap && "
     "ls -l /src/build-deploy/bin"
     "'"
   )

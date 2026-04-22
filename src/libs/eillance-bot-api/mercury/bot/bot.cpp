@@ -4,7 +4,6 @@
 
 #include "eillance/client/client.hpp"
 #include "eillance/events/client_events.hpp"
-#include "eillance/rtc/data_transport_impl_libdatachannel.hpp"
 #include "eillance/rtc/media_transport_impl_libdatachannel.hpp"
 #include "eillance/storage/sqlite/persistent_storage_impl_sqlite.hpp"
 #include "eillance/utils/event_queue.hpp"
@@ -42,13 +41,10 @@ class Bot::Impl {
     auto storage_impl = std::make_unique<eillance::storage::SQLiteStorage>(options_.identity_path / "mercury.db");
     auto storage = std::make_shared<eillance::storage::PersistentStorage>(std::move(storage_impl));
 
-    auto data_transport_impl = std::make_unique<eillance::rtc::RtcDataTransport>();
     auto media_transport_impl = std::make_unique<eillance::rtc::RtcMediaTransport>();
-
-    auto data_transport = std::make_shared<eillance::transport::DataTransport>(std::move(data_transport_impl));
     auto media_transport = std::make_shared<eillance::transport::MediaTransport>(std::move(media_transport_impl));
 
-    client_ = std::make_shared<eillance::Client>(storage, data_transport, media_transport);
+    client_ = std::make_shared<eillance::Client>(storage, media_transport);
   }
 
   void SetupCallbacks() {
@@ -114,10 +110,6 @@ Bot::~Bot() {
 void Bot::Start() const {
   if (!impl_->client_->IdentityExists()) {
     throw std::runtime_error("Identity not found. Bot requires a pre-existing identity.");
-  }
-
-  if (!impl_->options_.signaling_url.empty()) {
-    impl_->client_->UpdateSignalingUrl(impl_->options_.signaling_url);
   }
 
   // The client starts its own threads.

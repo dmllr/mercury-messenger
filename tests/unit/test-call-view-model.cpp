@@ -52,7 +52,7 @@ TEST_F(CallViewModelTest, StartCall) {
 }
 
 TEST_F(CallViewModelTest, IncomingCall) {
-  auto observer = std::make_shared<MockCallObserver>();
+  auto const observer = std::make_shared<MockCallObserver>();
 
   // Ensure clean state before test
   {
@@ -79,10 +79,7 @@ TEST_F(CallViewModelTest, IncomingCall) {
 }
 
 TEST_F(CallViewModelTest, AcceptCall) {
-  // Ensure peer exists in transport so AcceptCall doesn't bail out
-  mock_data_transport_->AddPeer(peer1, std::make_shared<transport::Peer>(peer1));
-
-  auto observer = std::make_shared<MockCallObserver>();
+  auto const observer = std::make_shared<MockCallObserver>();
 
   // Setup ringing state
   EventQueue::Instance().Push(EventIncomingCall{peer1, messaging::HistoryEntryKind::voiceCall});
@@ -99,10 +96,7 @@ TEST_F(CallViewModelTest, AcceptCall) {
 }
 
 TEST_F(CallViewModelTest, Hangup) {
-  // Ensure peer exists
-  mock_data_transport_->AddPeer(peer1, std::make_shared<transport::Peer>(peer1));
-
-  auto observer = std::make_shared<MockCallObserver>();
+  auto const observer = std::make_shared<MockCallObserver>();
 
   // Setup in-call state
   EventQueue::Instance().Push(EventIncomingCall{peer1, messaging::HistoryEntryKind::voiceCall});
