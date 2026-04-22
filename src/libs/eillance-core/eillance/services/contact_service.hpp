@@ -17,6 +17,7 @@
 #include "eillance/services/sync_engine.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/transport/data_transport.hpp"
+#include "eillance/transport/media_transport.hpp"
 #include "eillance/utils/event_queue.hpp"
 
 namespace eillance::services {
@@ -128,6 +129,7 @@ class ContactService {
       sm_->sync_engine->AppendAction(TopicID(peer_id), storage::LedgerActionType::ContactState, msg);
     }
 
+    sm_->media_transport->Disconnect(peer_id);
     transport_->Disconnect(peer_id);
     transport_->RemovePeer(peer_id);
     manager_->BlockContact(peer_id);

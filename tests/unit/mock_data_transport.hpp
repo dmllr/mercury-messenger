@@ -9,6 +9,8 @@
 #include <nlohmann/json.hpp>
 
 #include "eillance/transport/data_transport.hpp"
+#include "eillance/events/client_events.hpp"
+#include "eillance/utils/event_queue.hpp"
 
 namespace eillance::transport {
 
@@ -62,6 +64,7 @@ class MockDataTransport : public DataTransport::Interface {
       p->data_channel_is_open = false;
       p->is_connecting = false;
     }
+    eillance::EventQueue::Instance().Push(eillance::EventDataPeerConnectionStateChanged{peer_id, eillance::transport::PeerConnectionState::disconnected});
   }
 
   void CreateOffer(ContactID const&) override {}
