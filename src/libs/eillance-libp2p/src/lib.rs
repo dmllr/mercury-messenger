@@ -302,6 +302,9 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
                         }
                     },
                     event = swarm.select_next_some() => match event {
+                        SwarmEvent::NewListenAddr { address, .. } => {
+                            println!("Bootstrap Node Active. Multiaddr: {}", address);
+                        }
                         SwarmEvent::ConnectionEstablished { peer_id, .. } => {
                             pending_dials.remove(&peer_id);
                             notify_connected(&callbacks, &peer_id);
