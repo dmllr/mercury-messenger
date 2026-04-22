@@ -51,6 +51,21 @@ TEST_F(InternalMessagingServiceTest, ProcessSignalingMessage_SyncPropose) {
   // Ensure a sync request exists to be resolved
   storage_->AddSyncRequest({TopicID(peer1), peer1, Timestamp::Now(), Timestamp{0}});
 
+  // Make session cipher ready
+  eillance::EventQueue::Instance().Push(EventDataChannelOpen{peer1});
+  eillance::crypto::SessionCipher dummy_cipher;
+  nlohmann::json const key_msg = {
+      {"type", "key_exchange"},
+      {"key", dummy_cipher.GetPublicKey()},
+      {"is_reply", true},
+      {"sync_version", 2}
+  };
+  std::string key_str = key_msg.dump();
+  std::vector<std::byte> key_bytes(key_str.size());
+  std::transform(key_str.begin(), key_str.end(), key_bytes.begin(), [](char c){ return static_cast<std::byte>(c); });
+  eillance::EventQueue::Instance().Push(EventDataChannelMessage{peer1, key_bytes});
+  eillance::EventQueue::Instance().WaitFor([]{ return false; }, std::chrono::milliseconds(50));
+
   eillance::EventQueue::Instance().Push(EventDataChannelMessage{peer1, bytes});
   eillance::EventQueue::Instance().WaitFor(
       [&]() {

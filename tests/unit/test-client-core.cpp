@@ -67,9 +67,10 @@ TEST_F(ClientCoreTest, IncomingKeyExchangeTriggersReply) {
     if (e.peer_id == peer1) queued_messages_triggered = true;
   });
 
+  eillance::crypto::SessionCipher dummy_cipher;
   nlohmann::json const key_msg = {
       {"type", "key_exchange"},
-      {"key", std::vector<std::byte>(32, std::byte{1})}, // dummy key for event validation
+      {"key", std::vector<std::byte>()},
       {"is_reply", false}
   };
 
@@ -77,8 +78,8 @@ TEST_F(ClientCoreTest, IncomingKeyExchangeTriggersReply) {
   // implicitly mangling the std::byte arrays when parsed back via string parsing.
   nlohmann::json clean_msg = key_msg;
   clean_msg["key"] = nlohmann::json::array();
-  for (int i = 0; i < 32; ++i) {
-    clean_msg["key"].push_back(static_cast<uint8_t>(1));
+  for (auto b : dummy_cipher.GetPublicKey()) {
+    clean_msg["key"].push_back(static_cast<uint8_t>(b));
   }
   std::string msg_str = clean_msg.dump();
   std::vector<std::byte> msg_bytes(msg_str.size());
