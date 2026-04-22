@@ -555,8 +555,7 @@ class Client final {
     sm_->profile->MarkAllContactsProfileSyncNeeded();
     auto const contacts = sm_->contact->GetContacts();
     for (auto const& contact : contacts) {
-      if (contact.status == identity::ContactStatus::confirmed ||
-          contact.status == identity::ContactStatus::pendingApproval) {
+      if (contact.status == identity::ContactStatus::confirmed) {
         Connect(contact.peer_id);
       }
     }

@@ -147,6 +147,8 @@ TEST_F(ContactServiceTest, BlockContact) {
   EXPECT_EQ(contact->status, identity::ContactStatus::rejected);
 
   // Check if connections were closed - Media transport will receive Disconnect
+  EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(50));
+
   bool closed = false;
   for (auto const& [pid, ctx] : mock_log_->closed_connections) {
     if (pid == peer1) {

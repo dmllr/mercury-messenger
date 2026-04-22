@@ -269,6 +269,25 @@ TEST_F(ConversationViewModelTest, ResumeTransferPropagates) {
   auto const observer = std::make_shared<MockConversationObserver>(peer1);
   WaitFor([&] { return observer->updated; });
 
+  // Setup message with attachment
+  messaging::Attachment att;
+  att.id = "resume-test-id";
+  att.status = messaging::AttachmentStatus::paused;
+  att.is_downloaded = false;
+
+  messaging::MessageEntry msg_data;
+  msg_data.attachments.push_back(att);
+
+  auto entry = mock_storage_->AddHistoryEntry({.data = msg_data, .peer_id = peer1});
+
+  EventQueue::Instance().Push(EventChatMessageReceived{peer1, entry});
+  WaitFor([&] {
+    for (auto const& m : observer->GetState().history) {
+      if (m.id == entry.id) return true;
+    }
+    return false;
+  });
+
   // Resume download (is_upload=false)
   vm_->ResumeTransfer("resume-test-id", false);
   EventQueue::Instance().WaitFor(

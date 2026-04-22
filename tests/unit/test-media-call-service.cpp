@@ -66,7 +66,8 @@ TEST_F(MediaCallServiceTest, StartVoiceCall) {
 
 TEST_F(MediaCallServiceTest, AcceptCall) {
   // 1. Simulate Incoming Call Request
-  EventQueue::Instance().Push(EventIncomingCall{peer1, messaging::HistoryEntryKind::voiceCall});
+  client_->Calls()->OnCallRequest(peer1, "call_id_1", messaging::HistoryEntryKind::voiceCall);
+  client_->Calls()->OnCallRinging(peer1, "call_id_1");
   // Also push media state connected to hit the correct accept logic
   EventQueue::Instance().Push(EventMediaPeerConnectionStateChanged{peer1, transport::PeerConnectionState::connected});
 
