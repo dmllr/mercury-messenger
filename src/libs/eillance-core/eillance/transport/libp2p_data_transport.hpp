@@ -28,9 +28,6 @@ class Libp2pDataTransport : public DataTransport::Interface {
   std::string bootstrap_url_;
   bool is_started_ = false;
 
-  // The PeerID of the bootstrap node derived from the hardcoded kBootstrapSeed in mercury-bootstrap.cpp
-  const std::string kLocalBootstrapPeerId = "12D3KooWJ6GrnK86eZ6vVVD7rXNskpYq2zLALoE29C6sU49Y1C2D";
-
  public:
   Libp2pDataTransport() = default;
 
@@ -84,7 +81,7 @@ class Libp2pDataTransport : public DataTransport::Interface {
       LGI << "Connecting to bootstrap: " << bootstrap_url_;
       node_->AddBootstrapNode(bootstrap_url_);
     } else {
-      std::string const fallback_addr = "/ip4/127.0.0.1/tcp/807/p2p/" + kLocalBootstrapPeerId;
+      std::string const fallback_addr = "/ip4/127.0.0.1/tcp/807";
       LGI << "Connecting to fallback bootstrap: " << fallback_addr;
       node_->AddBootstrapNode(fallback_addr);
     }
