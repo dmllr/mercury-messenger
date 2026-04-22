@@ -19,7 +19,7 @@ class SettingsViewModelTest : public ViewModelTest {
 };
 
 struct MockSettingsObserver {
-  std::optional<std::string> signaling_url;
+  std::optional<std::string> bootstrap_node_url;
   int timeout = 0;
   ServiceConnectionState connection_state = ServiceConnectionState::unknown;
   bool updated = false;
@@ -29,7 +29,7 @@ struct MockSettingsObserver {
   MockSettingsObserver() {
     sub1 = EventQueue::Instance().Subscribe<EventSettingsStateUpdated>([this](auto const& e) {
       std::lock_guard<std::mutex> const lock(mutex);
-      signaling_url = e.state.signaling_server_url;
+      bootstrap_node_url = e.state.bootstrap_node_url;
       timeout = e.state.peer_inactivity_timeout_seconds;
       updated = true;
     });
@@ -58,16 +58,16 @@ TEST_F(SettingsViewModelTest, UpdateUrl) {
     observer->updated = false;
   }
 
-  std::string new_url = "wss://test.server";
-  vm_->UpdateSignalingUrl(new_url);
+  std::string new_url = "/ip4/127.0.0.1/tcp/1234";
+  vm_->UpdateBootstrapNodeUrl(new_url);
 
   WaitFor([&] {
     std::lock_guard<std::mutex> const lock(observer->mutex);
-    return observer->signaling_url == new_url;
+    return observer->bootstrap_node_url == new_url;
   });
 
   std::lock_guard<std::mutex> const lock(observer->mutex);
-  EXPECT_EQ(observer->signaling_url, new_url);
+  EXPECT_EQ(observer->bootstrap_node_url, new_url);
 }
 
 TEST_F(SettingsViewModelTest, UpdateTimeout) {

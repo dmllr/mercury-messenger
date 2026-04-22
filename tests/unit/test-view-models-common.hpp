@@ -10,28 +10,10 @@
 #include "eillance/client/client.hpp"
 #include "eillance/events/client_events.hpp"
 #include "eillance/utils/event_queue.hpp"
-#include "mock_data_transport.hpp"
 #include "mock_media_transport.hpp"
 #include "mock_persistent_storage.hpp"
 
 using namespace eillance;
-
-// Mock capture implementation for duck-typing to satisfy MediaCallService invariants
-class MockCapture {
- public:
-  void Configure(Config) {
-  }
-  void Engage() {
-  }
-  void Revoke() {
-  }
-  auto FetchBuffers() -> Packet {
-    return Packet();
-  }
-  auto GetSampleDuration() -> Time::Unit {
-    return 10000;
-  }
-};
 
 class ViewModelTest : public ::testing::Test {
  protected:
@@ -45,20 +27,12 @@ class ViewModelTest : public ::testing::Test {
     mock_log_ = std::make_shared<transport::MockCallLog>();
 
     // Transports
-    auto data_transport_impl = std::make_unique<transport::MockDataTransport>(mock_log_);
-    mock_data_transport_ = data_transport_impl.get();
-    auto data_transport = std::make_shared<transport::DataTransport>(std::move(data_transport_impl));
-
     auto media_transport_impl = std::make_unique<transport::MockMediaTransport>(mock_log_);
     mock_media_transport_ = media_transport_impl.get();
     auto media_transport = std::make_shared<transport::MediaTransport>(std::move(media_transport_impl));
 
     // Client
-    client_ = std::make_shared<Client>(storage_, data_transport, media_transport);
-
-    // Inject Mock Capture
-    client_->SetVideoCapture(std::make_unique<MockCapture>());
-    client_->SetAudioCapture(std::make_unique<MockCapture>());
+    client_ = std::make_shared<Client>(storage_, media_transport);
 
     // Identity
     (void)client_->GenerateNewIdentity();
@@ -82,7 +56,6 @@ class ViewModelTest : public ::testing::Test {
 
   storage::MockPersistentStorageImpl* mock_storage_{};
   std::shared_ptr<transport::MockCallLog> mock_log_;
-  transport::MockDataTransport* mock_data_transport_{};
   transport::MockMediaTransport* mock_media_transport_{};
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<Client> client_;

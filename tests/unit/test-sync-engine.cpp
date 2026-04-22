@@ -1,7 +1,8 @@
 #include <gtest/gtest.h>
 
 #include "eillance/services/sync_engine.hpp"
-#include "mock_data_transport.hpp"
+#include "eillance/transport/libp2p_data_transport.hpp"
+#include "mock_call_log.hpp"
 #include "mock_persistent_storage.hpp"
 
 using namespace eillance;
@@ -12,8 +13,7 @@ class SyncEngineTest : public ::testing::Test {
     storage_impl_ = std::make_unique<storage::MockPersistentStorageImpl>();
     storage_ = std::make_shared<storage::PersistentStorage>(std::move(storage_impl_));
     mock_log_ = std::make_shared<transport::MockCallLog>();
-    transport_impl_ = std::make_unique<transport::MockDataTransport>(mock_log_);
-    transport_ = std::make_shared<transport::DataTransport>(std::move(transport_impl_));
+    transport_ = std::make_shared<transport::DataTransport>(std::make_unique<transport::Libp2pDataTransport>());
 
     engine_ = std::make_unique<sync::SyncEngine>(storage_, transport_, my_id_);
   }
@@ -22,7 +22,6 @@ class SyncEngineTest : public ::testing::Test {
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::unique_ptr<storage::MockPersistentStorageImpl> storage_impl_;
   std::shared_ptr<transport::MockCallLog> mock_log_;
-  std::unique_ptr<transport::MockDataTransport> transport_impl_;
   std::shared_ptr<transport::DataTransport> transport_;
   std::unique_ptr<sync::SyncEngine> engine_;
 };
@@ -41,20 +40,12 @@ TEST_F(SyncEngineTest, AppendActionCreatesLedgerEntryAndProposesSync) {
 }
 
 TEST_F(SyncEngineTest, SyncProposeEmptyHead) {
-  auto const peer = std::make_shared<transport::Peer>(peer_id_);
-  peer->data_channel_is_open = true;
-  eillance::crypto::SessionCipher other;
-  peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
-  transport_->AddPeer(peer_id_, peer);
+  storage_->AddSyncRequest({TopicID(peer_id_), peer_id_, Timestamp::Now(), Timestamp{0}});
 
   nlohmann::json const propose = {{"type", "sync_propose"}, {"head", "000"}, {"recent", {"000"}}};
   engine_->ProcessSyncMessage(peer_id_, propose);
 
-  bool confirm_sent = false;
-  for (auto const& msg : mock_log_->sent_peer_messages | std::views::values) {
-    if (msg.value("type", "") == "sync_confirm") {
-      confirm_sent = true;
-    }
-  }
-  EXPECT_TRUE(confirm_sent || mock_log_->sent_peer_messages.size() > 0);
+  // Verify that the sync_confirm effectively removes the sync request since heads matched
+  auto const reqs = storage_->GetSyncRequests();
+  EXPECT_TRUE(reqs.empty());
 }

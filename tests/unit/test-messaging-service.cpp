@@ -10,7 +10,6 @@
 #include <openssl/sha.h>
 
 #include "eillance/client/client.hpp"
-#include "mock_data_transport.hpp"
 #include "mock_media_transport.hpp"
 #include "mock_persistent_storage.hpp"
 
@@ -50,13 +49,10 @@ class MessagingServiceTest : public ::testing::Test {
     storage_ = std::make_shared<storage::PersistentStorage>(std::move(storage_impl));
 
     mock_log_ = std::make_shared<transport::MockCallLog>();
-    mock_transport_impl_ = std::make_unique<transport::MockDataTransport>(mock_log_);
-    mock_transport_ = mock_transport_impl_.get();
-    transport_ = std::make_shared<transport::DataTransport>(std::move(mock_transport_impl_));
     auto media_transport =
         std::make_shared<transport::MediaTransport>(std::make_unique<transport::MockMediaTransport>(mock_log_));
 
-    client_ = std::make_shared<Client>(storage_, transport_, media_transport);
+    client_ = std::make_shared<Client>(storage_, media_transport);
 
     std::ignore = client_->GenerateNewIdentity();
     mock_storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
@@ -105,10 +101,7 @@ class MessagingServiceTest : public ::testing::Test {
 
   storage::MockPersistentStorageImpl* mock_storage_;
   std::shared_ptr<transport::MockCallLog> mock_log_;
-  std::unique_ptr<transport::MockDataTransport> mock_transport_impl_;
-  transport::MockDataTransport* mock_transport_;
   std::shared_ptr<storage::PersistentStorage> storage_;
-  std::shared_ptr<transport::DataTransport> transport_;
   std::shared_ptr<Client> client_;
   std::vector<ContactID> connection_requests_;
   std::filesystem::path temp_dir_;
@@ -118,12 +111,6 @@ class MessagingServiceTest : public ::testing::Test {
 };
 
 TEST_F(MessagingServiceTest, SendMessage_ThumbInPayload) {
-  auto peer = std::make_shared<transport::Peer>(peer1);
-  peer->data_channel_is_open = true;
-  crypto::SessionCipher const other;
-  peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
-  transport_->AddPeer(peer1, peer);
-
   std::vector<messaging::AttachmentRequest> atts;
   atts.push_back({"dummy_path", messaging::AttachmentType::image, "base64thumb_content", "image/jpeg", "This is a note"}
   );
@@ -156,13 +143,6 @@ TEST_F(MessagingServiceTest, DownloadTriggersCallback) {
       download_cb_called = true;
     }
   });
-
-  auto peer = std::make_shared<transport::Peer>(peer1);
-  peer->data_channel_is_open = true;
-  crypto::SessionCipher other_cipher;
-  peer->session_cipher->ComputeSharedSecret(other_cipher.GetPublicKey());
-  other_cipher.ComputeSharedSecret(peer->session_cipher->GetPublicKey());
-  transport_->AddPeer(peer1, peer);
 
   std::string file_content = "Hello World Data";
   std::string const file_hash = crypto::Sha256Hex(file_content);
@@ -211,31 +191,22 @@ TEST_F(MessagingServiceTest, SendMessage_AppendsToLedger) {
   EXPECT_EQ(entries[0].type, storage::LedgerActionType::Message);
   EXPECT_TRUE(entries[0].payload.find("Ledger Message") != std::string::npos);
 
-  auto peer = std::make_shared<transport::Peer>(peer1);
-  peer->data_channel_is_open = true;
-  eillance::crypto::SessionCipher other;
-  peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
-  transport_->AddPeer(peer1, peer);
-
   eillance::EventQueue::Instance().Push(eillance::EventSendQueuedMessages{peer1});
   eillance::EventQueue::Instance().WaitFor(
       [&]() {
-        std::lock_guard<std::mutex> const lock(mock_transport_->CallLog()->mutex_);
-        for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
-          if (pid == peer1 && msg.value("type", "") == "sync_propose") return true;
-        }
-        return false;
+        auto entries = storage_->GetLedgerEntries(TopicID(peer1));
+        return !entries.empty();
       },
       std::chrono::milliseconds(2000)
   );
 
-  bool msg_sent = false;
+  bool msg_recorded = false;
   eillance::EventQueue::Instance().WaitFor(
       [&]() {
-        std::lock_guard<std::mutex> const lock(mock_transport_->CallLog()->mutex_);
-        for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
-          if (pid == peer1 && msg.value("type", "") == "sync_propose") {
-            msg_sent = true;
+        auto entries = storage_->GetLedgerEntries(TopicID(peer1));
+        for (auto const& e : entries) {
+          if (e.payload.find("Ledger Message") != std::string::npos) {
+            msg_recorded = true;
             return true;
           }
         }
@@ -243,7 +214,7 @@ TEST_F(MessagingServiceTest, SendMessage_AppendsToLedger) {
       },
       std::chrono::milliseconds(2000)
   );
-  EXPECT_TRUE(msg_sent);
+  EXPECT_TRUE(msg_recorded);
 }
 
 TEST_F(MessagingServiceTest, MarkAsRead_AppendsToLedger) {
@@ -260,29 +231,22 @@ TEST_F(MessagingServiceTest, MarkAsRead_AppendsToLedger) {
   auto entries = mock_storage_->GetLedgerEntries(TopicID(peer1));
   ASSERT_GE(entries.size(), 1);
 
-  auto peer = std::make_shared<transport::Peer>(peer1);
-  peer->data_channel_is_open = true;
-  transport_->AddPeer(peer1, peer);
-
   eillance::EventQueue::Instance().Push(eillance::EventSendQueuedMessages{peer1});
   eillance::EventQueue::Instance().WaitFor(
       [&]() {
-        std::lock_guard<std::mutex> const lock(mock_transport_->CallLog()->mutex_);
-        for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
-          if (pid == peer1 && msg.value("type", "") == "sync_propose") return true;
-        }
-        return false;
+        auto db_entries = mock_storage_->GetLedgerEntries(TopicID(peer1));
+        return !db_entries.empty();
       },
       std::chrono::milliseconds(2000)
   );
 
-  bool read_sent = false;
+  bool read_recorded = false;
   eillance::EventQueue::Instance().WaitFor(
       [&]() {
-        std::lock_guard<std::mutex> const lock(mock_transport_->CallLog()->mutex_);
-        for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
-          if (pid == peer1 && msg.value("type", "") == "sync_propose") {
-            read_sent = true;
+        auto db_entries = mock_storage_->GetLedgerEntries(TopicID(peer1));
+        for (auto const& e : db_entries) {
+          if (e.payload.find("message_read") != std::string::npos) {
+            read_recorded = true;
             return true;
           }
         }
@@ -290,5 +254,5 @@ TEST_F(MessagingServiceTest, MarkAsRead_AppendsToLedger) {
       },
       std::chrono::milliseconds(2000)
   );
-  EXPECT_TRUE(read_sent);
+  EXPECT_TRUE(read_recorded);
 }

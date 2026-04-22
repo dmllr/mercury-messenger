@@ -34,7 +34,7 @@ def test_cross_network_communication(test_environment):
   # Signaling on both networks so both apps can reach it easily
   scenario.add_process(
     name="signaling",
-    executable="/app/bin/mercury-server",
+    executable="/app/bin/mercury-bootstrap",
     args=["--port", "8000"],
     networks={"net-a": "192.168.10.30", "net-b": "192.168.20.30"}
   )
@@ -44,7 +44,7 @@ def test_cross_network_communication(test_environment):
   scenario.add_process(
     name="app-a",
     executable="/app/bin/mercury-mock-app",
-    args=["--key", key_a, "--signaling-url", "ws://192.168.10.30:8000", "--db-path", "/tmp/a.db", "--script", script_a],
+    args=["--key", key_a, "--signaling-url", "/ip4/192.168.10.30/tcp/8000", "--db-path", "/tmp/a.db", "--script", script_a],
     networks={"net-a": "192.168.10.31"}
   )
 
@@ -54,7 +54,7 @@ def test_cross_network_communication(test_environment):
   scenario.add_process(
     name="app-b",
     executable="/app/bin/mercury-mock-app",
-    args=["--key", key_b, "--signaling-url", "ws://192.168.20.30:8000", "--db-path", "/tmp/b.db", "--script", script_b],
+    args=["--key", key_b, "--signaling-url", "/ip4/192.168.20.30/tcp/8000", "--db-path", "/tmp/b.db", "--script", script_b],
     networks={"net-b": "192.168.20.31"}
   )
 
@@ -104,11 +104,11 @@ def test_isolated_networks_fail(test_environment):
   scenario.add_network("net-1", "192.168.100.0/24", "192.168.100.1")
   scenario.add_network("net-2", "192.168.200.0/24", "192.168.200.1")
 
-  scenario.add_process("signaling", "/app/bin/mercury-server", ["--port", "8000"], {"net-1": "192.168.100.30"})
+  scenario.add_process("signaling", "/app/bin/mercury-bootstrap", ["--port", "8000"], {"net-1": "192.168.100.30"})
   
   # App B on Net 2 trying to reach Net 1
   scenario.add_process("app-b", "/app/bin/mercury-mock-app", 
-                       ["--key", key_a, "--signaling-url", "ws://192.168.100.30:8000", "--db-path", "/tmp/b.db", "--script", "connect, wait 5"], 
+                       ["--key", key_a, "--signaling-url", "/ip4/192.168.100.30/tcp/8000", "--db-path", "/tmp/b.db", "--script", "connect, wait 5"], 
                        {"net-2": "192.168.200.30"})
 
   # We expect app-b NOT to connect. Logs won't show "login_success".

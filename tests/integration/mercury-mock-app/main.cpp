@@ -12,7 +12,6 @@
 #include "eillance/client/client.hpp"
 #include "eillance/events/client_events.hpp"
 #include "eillance/logging/logging.hpp"
-#include "eillance/rtc/data_transport_impl_libdatachannel.hpp"
 #include "eillance/rtc/media_transport_impl_libdatachannel.hpp"
 #include "eillance/storage/sqlite/persistent_storage_impl_sqlite.hpp"
 #include "eillance/utils/args_parser.hpp"
@@ -66,13 +65,11 @@ auto main(int argc, char** argv) -> int {
     auto storage = std::make_shared<eillance::storage::PersistentStorage>(std::move(storage_impl));
     std::ignore = storage->Open();
 
-    auto data_transport_impl = std::make_unique<eillance::rtc::RtcDataTransport>();
     auto media_transport_impl = std::make_unique<eillance::rtc::RtcMediaTransport>();
 
-    auto data_transport = std::make_shared<eillance::transport::DataTransport>(std::move(data_transport_impl));
     auto media_transport = std::make_shared<eillance::transport::MediaTransport>(std::move(media_transport_impl));
 
-    eillance::Client client(storage, data_transport, media_transport);
+    eillance::Client client(storage, media_transport);
 
     auto mnemonic = client.GenerateNewIdentity();
     auto id = client.GetId().ToString();
@@ -102,15 +99,13 @@ auto main(int argc, char** argv) -> int {
     return 1;
   }
 
-  auto data_transport_impl = std::make_unique<eillance::rtc::RtcDataTransport>();
   auto media_transport_impl = std::make_unique<eillance::rtc::RtcMediaTransport>();
 
-  auto data_transport = std::make_shared<eillance::transport::DataTransport>(std::move(data_transport_impl));
   auto media_transport = std::make_shared<eillance::transport::MediaTransport>(std::move(media_transport_impl));
 
-  auto client = std::make_shared<eillance::Client>(storage, data_transport, media_transport);
+  auto client = std::make_shared<eillance::Client>(storage, media_transport);
 
-  client->UpdateSignalingUrl(*signaling_url);
+  client->UpdateBootstrapNodeUrl(*signaling_url);
 
   eillance::EventQueue::Instance().Subscribe<eillance::EventChatMessageReceived>([](auto const& e) {
     if (e.message.direction == eillance::messaging::MessageDirection::received) {

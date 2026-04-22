@@ -18,7 +18,6 @@ class Bot {
  public:
   struct Options {
     std::filesystem::path identity_path;
-    std::string signaling_url;
     bool auto_accept_contacts = true;
     bool auto_reject_calls = true;
   };

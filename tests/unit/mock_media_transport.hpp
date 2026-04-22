@@ -6,17 +6,8 @@
 
 #include "eillance/transport/media_transport.hpp"
 #include "mock_call_log.hpp"
-#include "rtc/common.hpp"
 
 namespace eillance::transport {
-
-class MockTrack : public ITrack {
- public:
-  std::vector<std::vector<std::byte>> samples;
-  void SendSample(std::vector<std::byte> const& sample, uint64_t /*sample_time*/) override {
-    samples.push_back(sample);
-  }
-};
 
 class MockMediaTransport : public MediaTransport::Interface {
   std::shared_ptr<MockCallLog> log_;
@@ -59,13 +50,9 @@ class MockMediaTransport : public MediaTransport::Interface {
   void SetLocalMediaEnabled(bool /*audio*/, bool /*video*/) override {
   }
 
-  auto AddVideo(ContactID const&) -> std::shared_ptr<ITrack> override {
-    return std::make_shared<MockTrack>();
+  void AddVideo(ContactID const&) override {
   }
-  auto AddAudio(ContactID const&) -> std::shared_ptr<ITrack> override {
-    return std::make_shared<MockTrack>();
-  }
-  void AttachToPeer(ContactID const&, std::shared_ptr<Peer> const&) override {
+  void AddAudio(ContactID const&) override {
   }
 };
 

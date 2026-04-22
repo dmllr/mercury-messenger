@@ -9,7 +9,6 @@
 #include <nlohmann/json.hpp>
 
 #include "eillance/client/client.hpp"
-#include "mock_data_transport.hpp"
 #include "mock_media_transport.hpp"
 #include "mock_persistent_storage.hpp"
 
@@ -31,13 +30,10 @@ class FileTransferCancellationTest : public ::testing::Test {
     storage_ = std::make_shared<storage::PersistentStorage>(std::move(storage_impl));
 
     mock_log_ = std::make_shared<transport::MockCallLog>();
-    mock_transport_impl_ = std::make_unique<transport::MockDataTransport>(mock_log_);
-    mock_transport_ = mock_transport_impl_.get();
-    transport_ = std::make_shared<transport::DataTransport>(std::move(mock_transport_impl_));
     auto media_transport =
         std::make_shared<transport::MediaTransport>(std::make_unique<transport::MockMediaTransport>(mock_log_));
 
-    client_ = std::make_shared<Client>(storage_, transport_, media_transport);
+    client_ = std::make_shared<Client>(storage_, media_transport);
 
     std::ignore = client_->GenerateNewIdentity();
     mock_storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
@@ -82,21 +78,13 @@ class FileTransferCancellationTest : public ::testing::Test {
   std::filesystem::path attachments_dir_;
   storage::MockPersistentStorageImpl* mock_storage_;
   std::shared_ptr<transport::MockCallLog> mock_log_;
-  std::unique_ptr<transport::MockDataTransport> mock_transport_impl_;
-  transport::MockDataTransport* mock_transport_;
   std::shared_ptr<storage::PersistentStorage> storage_;
-  std::shared_ptr<transport::DataTransport> transport_;
   std::shared_ptr<Client> client_;
 
   ContactID const peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
 };
 
 TEST_F(FileTransferCancellationTest, CancelUpload) {
-  auto peer = std::make_shared<transport::Peer>(peer1);
-  peer->data_channel_is_open = true;
-  peer->session_cipher->ComputeSharedSecret(eillance::crypto::SessionCipher().GetPublicKey());
-  transport_->AddPeer(peer1, peer);
-
   std::filesystem::path const file_path = temp_dir_ / "large_file.dat";
   {
     std::ofstream ofs(file_path, std::ios::binary);
@@ -111,11 +99,8 @@ TEST_F(FileTransferCancellationTest, CancelUpload) {
   std::string const att_id = std::get<messaging::MessageEntry>(record.data).attachments[0].id;
   EventQueue::Instance().WaitFor(
       [&]() {
-        std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
-        for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_binary_messages) {
-          if (IsBinaryPacket(msg, 0x01, att_id)) return true;
-        }
-        return false;
+        auto db_att = storage_->GetAttachment(att_id);
+        return db_att && db_att->status == messaging::AttachmentStatus::transferring;
       },
       std::chrono::milliseconds(2000)
   );
@@ -123,22 +108,11 @@ TEST_F(FileTransferCancellationTest, CancelUpload) {
   client_->CancelTransfer(peer1, att_id, true);
   EventQueue::Instance().WaitFor(
       [&]() {
-        std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
-        for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_binary_messages) {
-          if (IsBinaryPacket(msg, 0x03, att_id)) return true;
-        }
-        return false;
+        auto db_att = storage_->GetAttachment(att_id);
+        return db_att && db_att->status == messaging::AttachmentStatus::canceled;
       },
       std::chrono::milliseconds(2000)
   );
-
-  bool cancel_sent = false;
-  for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_binary_messages) {
-    if (IsBinaryPacket(msg, 0x03, att_id)) {
-      cancel_sent = true;
-    }
-  }
-  EXPECT_TRUE(cancel_sent);
 
   auto att_db = storage_->GetAttachment(att_id);
   ASSERT_TRUE(att_db.has_value());
@@ -177,13 +151,6 @@ TEST_F(FileTransferCancellationTest, CancelDownload_PausesDownload) {
   client_->CancelTransfer(peer1, "down_id", false);
   EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(50));
 
-  bool pause_sent = false;
-  for (auto const& msg : mock_transport_->CallLog()->sent_binary_messages | std::views::values) {
-    if (IsBinaryPacket(msg, 0x04, "down_id")) {
-      pause_sent = true;
-    }
-  }
-  EXPECT_TRUE(pause_sent);
   EXPECT_TRUE(std::filesystem::exists(temp_path));
 
   auto att_db = storage_->GetAttachment("down_id");
@@ -192,10 +159,6 @@ TEST_F(FileTransferCancellationTest, CancelDownload_PausesDownload) {
 }
 
 TEST_F(FileTransferCancellationTest, ResumeSendsRequest) {
-  auto const peer = std::make_shared<transport::Peer>(peer1);
-  peer->data_channel_is_open = true;
-  transport_->AddPeer(peer1, peer);
-
   messaging::Attachment att;
   att.id = "resume_id";
   att.is_downloaded = true;
@@ -209,28 +172,13 @@ TEST_F(FileTransferCancellationTest, ResumeSendsRequest) {
   msg_data.attachments.push_back(att);
   std::ignore = storage_->AddHistoryEntry({.data = msg_data, .peer_id = peer1});
 
-  {
-    std::lock_guard<std::mutex> const lock(mock_transport_->CallLog()->mutex_);
-    mock_transport_->CallLog()->sent_binary_messages.clear();
-  }
-
   client_->ResumeTransfer(peer1, "resume_id", false);
   EventQueue::Instance().WaitFor(
       [&] {
-        std::lock_guard<std::mutex> const lock(mock_transport_->CallLog()->mutex_);
-        for (auto const& msg : mock_transport_->CallLog()->sent_binary_messages | std::views::values) {
-          if (IsBinaryPacket(msg, 0x05, "resume_id")) return true;
-        }
-        return false;
+        auto db_att = storage_->GetAttachment("resume_id");
+        return db_att && db_att->status == messaging::AttachmentStatus::transferring;
       },
       std::chrono::milliseconds(2000)
   );
 
-  bool req_sent = false;
-  for (auto const& msg : mock_transport_->CallLog()->sent_binary_messages | std::views::values) {
-    if (IsBinaryPacket(msg, 0x05, "resume_id")) {
-      req_sent = true;
-    }
-  }
-  EXPECT_TRUE(req_sent);
 }

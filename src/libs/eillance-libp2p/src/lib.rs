@@ -50,9 +50,10 @@ struct Node {
     callbacks: Callbacks,
 }
 
-fn pubkey_to_peerid(raw: &[u8; 32]) -> PeerId {
-    let pk = identity::ed25519::PublicKey::try_from_bytes(&raw[..]).expect("Invalid Ed25519 public key");
-    identity::PublicKey::from(pk).to_peer_id()
+fn pubkey_to_peerid(raw: &[u8; 32]) -> Option<PeerId> {
+    identity::ed25519::PublicKey::try_from_bytes(&raw[..])
+        .ok()
+        .map(|pk| identity::PublicKey::from(pk).to_peer_id())
 }
 
 fn peerid_to_pubkey(id: &PeerId) -> Option<[u8; 32]> {
@@ -119,7 +120,10 @@ pub extern "C" fn eillance_libp2p_node_new(secret_key: *const u8) -> *mut c_void
     let mut key_bytes = [0u8; 32];
     unsafe { std::ptr::copy_nonoverlapping(secret_key, key_bytes.as_mut_ptr(), 32) };
 
-    let secret = identity::ed25519::SecretKey::try_from_bytes(key_bytes).expect("Invalid secret key");
+    let secret = match identity::ed25519::SecretKey::try_from_bytes(key_bytes) {
+        Ok(s) => s,
+        Err(_) => return std::ptr::null_mut(),
+    };
     let keypair = identity::Keypair::from(identity::ed25519::Keypair::from(secret));
 
     let rt = Runtime::new().expect("Failed to create Tokio runtime");
@@ -346,7 +350,10 @@ pub extern "C" fn eillance_libp2p_node_send_message(
 
     let mut arr = [0u8; 32];
     arr.copy_from_slice(&peer_bytes);
-    let peer_id = pubkey_to_peerid(&arr);
+    let peer_id = match pubkey_to_peerid(&arr) {
+        Some(id) => id,
+        None => return false,
+    };
     let payload = unsafe { std::slice::from_raw_parts(data, len) }.to_vec();
 
     if let Some(tx) = &node.command_tx {
@@ -368,7 +375,10 @@ pub extern "C" fn eillance_libp2p_node_dial(ptr: *mut c_void, peer_id_hex: *cons
 
     let mut arr = [0u8; 32];
     arr.copy_from_slice(&peer_bytes);
-    let peer_id = pubkey_to_peerid(&arr);
+    let peer_id = match pubkey_to_peerid(&arr) {
+        Some(id) => id,
+        None => return,
+    };
 
     if let Some(tx) = &node.command_tx {
         let _ = tx.send(Command::Dial(peer_id));

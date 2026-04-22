@@ -11,7 +11,7 @@ def test_attachments(test_environment):
 
   scenario = Scenario()
   scenario.add_network("net", "192.168.80.0/24", "192.168.80.1")
-  scenario.add_process("signaling", "/app/bin/mercury-server", ["--port", "8000"], {"net": "192.168.80.30"})
+  scenario.add_process("signaling", "/app/bin/mercury-bootstrap", ["--port", "8000"], {"net": "192.168.80.30"})
 
   # A generates files and sends them
   # mkfile <path> <size>
@@ -34,13 +34,13 @@ def test_attachments(test_environment):
   )
 
   scenario.add_process("app-a", "/app/bin/mercury-mock-app",
-                       ["--key", key_a, "--signaling-url", "ws://192.168.80.30:8000", "--db-path", "/tmp/a.db",
+                       ["--key", key_a, "--signaling-url", "/ip4/192.168.80.30/tcp/8000", "--db-path", "/tmp/a.db",
                         "--script", script_a],
                        {"net": "192.168.80.31"})
 
   script_b = "connect, wait 25, disconnect"
   scenario.add_process("app-b", "/app/bin/mercury-mock-app",
-                       ["--key", key_b, "--signaling-url", "ws://192.168.80.30:8000", "--db-path", "/tmp/b.db",
+                       ["--key", key_b, "--signaling-url", "/ip4/192.168.80.30/tcp/8000", "--db-path", "/tmp/b.db",
                         "--script", script_b],
                        {"net": "192.168.80.32"})
 
@@ -82,7 +82,7 @@ def test_large_attachment(test_environment):
 
   scenario = Scenario()
   scenario.add_network("net", "192.168.81.0/24", "192.168.81.1")
-  scenario.add_process("signaling", "/app/bin/mercury-server", ["--port", "8000"], {"net": "192.168.81.30"})
+  scenario.add_process("signaling", "/app/bin/mercury-bootstrap", ["--port", "8000"], {"net": "192.168.81.30"})
 
   # 5MB file
   script_a = (
@@ -92,12 +92,12 @@ def test_large_attachment(test_environment):
     "wait 15, disconnect"
   )
   scenario.add_process("app-a", "/app/bin/mercury-mock-app",
-                       ["--key", key_a, "--signaling-url", "ws://192.168.81.30:8000", "--db-path", "/tmp/a.db",
+                       ["--key", key_a, "--signaling-url", "/ip4/192.168.81.30/tcp/8000", "--db-path", "/tmp/a.db",
                         "--script", script_a], {"net": "192.168.81.31"})
 
   script_b = "connect, wait 20, disconnect"
   scenario.add_process("app-b", "/app/bin/mercury-mock-app",
-                       ["--key", key_b, "--signaling-url", "ws://192.168.81.30:8000", "--db-path", "/tmp/b.db",
+                       ["--key", key_b, "--signaling-url", "/ip4/192.168.81.30/tcp/8000", "--db-path", "/tmp/b.db",
                         "--script", script_b], {"net": "192.168.81.32"})
 
   scenario.expect_logs("app-b", [

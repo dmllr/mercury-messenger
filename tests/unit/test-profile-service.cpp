@@ -9,7 +9,8 @@
 #include "eillance/services/messaging_service.hpp"
 #include "eillance/services/profile_service.hpp"
 #include "eillance/services/sync_engine.hpp"
-#include "mock_data_transport.hpp"
+#include "eillance/transport/libp2p_data_transport.hpp"
+#include "mock_call_log.hpp"
 #include "mock_persistent_storage.hpp"
 
 using namespace eillance;
@@ -21,9 +22,8 @@ class ProfileServiceTest : public ::testing::Test {
     storage_ = std::make_shared<storage::PersistentStorage>(std::move(storage_impl));
 
     mock_log_ = std::make_shared<transport::MockCallLog>();
-    mock_transport_impl_ = std::make_unique<transport::MockDataTransport>(mock_log_);
-    mock_transport_raw_ = mock_transport_impl_.get();
-    transport_ = std::make_shared<transport::DataTransport>(std::move(mock_transport_impl_));
+    auto libp2p_dt = std::make_unique<transport::Libp2pDataTransport>();
+    transport_ = std::make_shared<transport::DataTransport>(std::move(libp2p_dt));
 
     sm_ = std::make_unique<services::ServiceManager>();
     sm_->storage = storage_;
@@ -59,8 +59,6 @@ class ProfileServiceTest : public ::testing::Test {
 
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<transport::MockCallLog> mock_log_;
-  std::unique_ptr<transport::MockDataTransport> mock_transport_impl_;
-  transport::MockDataTransport* mock_transport_raw_{};
   std::shared_ptr<transport::DataTransport> transport_;
   std::shared_ptr<services::AccountService> account_service_;
   std::shared_ptr<services::FileTransferService> file_transfer_service_;
