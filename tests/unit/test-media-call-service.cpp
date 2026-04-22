@@ -48,7 +48,7 @@ class MediaCallServiceTest : public ::testing::Test {
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<Client> client_;
 
-  ContactID const peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
+  ContactID const peer1 = ContactID("d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a");
 };
 
 TEST_F(MediaCallServiceTest, StartVoiceCall) {

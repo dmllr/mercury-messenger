@@ -76,7 +76,7 @@ class AttachmentTest : public ::testing::Test {
   std::shared_ptr<services::MessagingService> service_;
   std::string temp_file_path_;
 
-  ContactID const peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
+  ContactID const peer1 = ContactID("d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a");
 };
 
 TEST_F(AttachmentTest, SendMessageCalculatesHash) {
