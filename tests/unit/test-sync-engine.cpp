@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "eillance/services/sync_engine.hpp"
-#include "eillance/transport/libp2p_data_transport.hpp"
+#include "mock_data_transport.hpp"
 #include "mock_call_log.hpp"
 #include "mock_persistent_storage.hpp"
 
@@ -13,7 +13,7 @@ class SyncEngineTest : public ::testing::Test {
     storage_impl_ = std::make_unique<storage::MockPersistentStorageImpl>();
     storage_ = std::make_shared<storage::PersistentStorage>(std::move(storage_impl_));
     mock_log_ = std::make_shared<transport::MockCallLog>();
-    transport_ = std::make_shared<transport::DataTransport>(std::make_unique<transport::Libp2pDataTransport>());
+    transport_ = std::make_shared<transport::DataTransport>(std::make_unique<transport::MockDataTransport>());
 
     engine_ = std::make_unique<sync::SyncEngine>(storage_, transport_, my_id_);
   }
