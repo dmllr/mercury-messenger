@@ -7,6 +7,7 @@
 
 #include "eillance/client/client.hpp"
 #include "eillance/crypto/crypto.hpp"
+#include "mock_data_transport.hpp"
 #include "mock_media_transport.hpp"
 #include "mock_persistent_storage.hpp"
 
@@ -23,7 +24,8 @@ class RepliesTest : public ::testing::Test {
     auto media_transport =
         std::make_shared<transport::MediaTransport>(std::make_unique<transport::MockMediaTransport>(mock_log_));
 
-    client_ = std::make_shared<Client>(storage_, media_transport);
+    auto data_transport = std::make_shared<transport::DataTransport>(std::make_unique<transport::MockDataTransport>());
+    client_ = std::make_shared<Client>(storage_, media_transport, data_transport);
 
     std::ignore = client_->GenerateNewIdentity();
     mock_storage_->UpdateContact({peer_id_, identity::ContactStatus::confirmed});

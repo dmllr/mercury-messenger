@@ -5,6 +5,7 @@
 #include "eillance/client/client.hpp"
 #include "eillance/services/account_service.hpp"
 #include "eillance/utils/event_queue.hpp"
+#include "mock_data_transport.hpp"
 #include "mock_media_transport.hpp"
 #include "mock_persistent_storage.hpp"
 
@@ -19,7 +20,8 @@ class AccountServiceTest : public ::testing::Test {
     mock_log_ = std::make_shared<transport::MockCallLog>();
     auto media_transport = std::make_shared<transport::MediaTransport>(std::make_unique<transport::MockMediaTransport>(mock_log_));
 
-    client_ = std::make_shared<Client>(storage_, media_transport);
+    auto data_transport = std::make_shared<transport::DataTransport>(std::make_unique<transport::MockDataTransport>());
+    client_ = std::make_shared<Client>(storage_, media_transport, data_transport);
     service_ = client_->Account();
   }
 

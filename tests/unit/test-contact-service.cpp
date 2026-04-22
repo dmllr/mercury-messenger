@@ -10,6 +10,7 @@
 #include "eillance/services/messaging_service.hpp"
 #include "eillance/services/profile_service.hpp"
 #include "eillance/services/sync_engine.hpp"
+#include "mock_data_transport.hpp"
 #include "mock_media_transport.hpp"
 #include "mock_persistent_storage.hpp"
 
@@ -24,7 +25,8 @@ class ContactServiceTest : public ::testing::Test {
     mock_log_ = std::make_shared<transport::MockCallLog>();
     auto media_transport = std::make_shared<transport::MediaTransport>(std::make_unique<transport::MockMediaTransport>(mock_log_));
 
-    client_ = std::make_shared<Client>(storage_, media_transport);
+    auto data_transport = std::make_shared<transport::DataTransport>(std::make_unique<transport::MockDataTransport>());
+    client_ = std::make_shared<Client>(storage_, media_transport, data_transport);
     std::ignore = client_->GenerateNewIdentity();
     client_->UpdateMyProfile({.display_name = "Test User", .bio = "", .photo_base64 = ""});
     

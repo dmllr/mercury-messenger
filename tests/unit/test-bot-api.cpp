@@ -9,6 +9,7 @@
 #include "eillance/client/client.hpp"
 #include "eillance/utils/packet.hpp"
 #include "mercury/bot/bot.hpp"
+#include "mock_data_transport.hpp"
 #include "mock_media_transport.hpp"
 #include "mock_persistent_storage.hpp"
 
@@ -26,7 +27,8 @@ class BotApiTest : public ::testing::Test {
     auto media_transport =
         std::make_shared<transport::MediaTransport>(std::make_unique<transport::MockMediaTransport>(mock_log_));
 
-    client_ = std::make_shared<Client>(storage, media_transport);
+    auto data_transport = std::make_shared<transport::DataTransport>(std::make_unique<transport::MockDataTransport>());
+    client_ = std::make_shared<Client>(storage, media_transport, data_transport);
 
     (void)client_->Account()->GenerateNewIdentity();
 
