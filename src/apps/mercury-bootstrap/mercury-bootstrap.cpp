@@ -16,7 +16,7 @@ void SignalHandler(int const signum) { signal_received = signum; }
 
 auto main(int argc, char* argv[]) -> int {
   eillance::utils::ArgsParser const args(argc, argv);
-  uint16_t const port = static_cast<uint16_t>(args.GetInt("--port").value_or(807));
+  uint16_t const port = static_cast<uint16_t>(args.GetInt("--port").value_or(10807));
 
   // Generate a random unique identity for each bootstrap node run.
   // This is required if we run multiple instances to avoid DHT routing collisions.

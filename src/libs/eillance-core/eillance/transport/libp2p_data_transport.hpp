@@ -84,7 +84,7 @@ class Libp2pDataTransport : public DataTransport::Interface {
       LGI << "Connecting to bootstrap: " << bootstrap_url_;
       node_->AddBootstrapNode(bootstrap_url_);
     } else {
-      std::string const fallback_addr = "/ip4/127.0.0.1/tcp/807";
+      std::string const fallback_addr = "/ip4/127.0.0.1/tcp/10807";
       LGI << "Connecting to fallback bootstrap: " << fallback_addr;
       node_->AddBootstrapNode(fallback_addr);
     }
