@@ -127,8 +127,8 @@ class InternalMessagingService {
       return;
     }
 
-    if (peer->data_channel_is_open.exchange(true)) {
-      LGI << "Data channel with " << peer_id.ToString() << " is already open. Ignoring duplicate event.";
+    if (peer->data_channel_initialized.exchange(true)) {
+      LGI << "Data channel with " << peer_id.ToString() << " is already initialized. Ignoring duplicate event.";
       return;
     }
 

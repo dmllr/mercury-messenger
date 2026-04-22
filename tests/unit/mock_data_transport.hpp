@@ -60,11 +60,19 @@ class MockDataTransport : public DataTransport::Interface {
     }
   }
   void Disconnect(ContactID const& peer_id) override {
+    bool changed = false;
     if (auto p = GetPeer(peer_id)) {
-      p->data_channel_is_open = false;
-      p->is_connecting = false;
+      if (p->data_channel_is_open || p->is_connecting) {
+        p->data_channel_is_open = false;
+        p->is_connecting = false;
+        p->data_channel_initialized = false;
+        changed = true;
+      }
+      p->data_channel_initialized = false;
     }
-    eillance::EventQueue::Instance().Push(eillance::EventDataPeerConnectionStateChanged{peer_id, eillance::transport::PeerConnectionState::disconnected});
+    if (changed) {
+      eillance::EventQueue::Instance().Push(eillance::EventDataPeerConnectionStateChanged{peer_id, eillance::transport::PeerConnectionState::disconnected});
+    }
   }
 
   void CreateOffer(ContactID const&) override {}
