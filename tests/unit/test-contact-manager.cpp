@@ -19,8 +19,8 @@ class ContactManagerTest : public ::testing::Test {
   storage::MockPersistentStorageImpl* mock_storage_impl_{};
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::unique_ptr<identity::ContactManager> contact_manager_;
-  ContactID const peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
-  ContactID const peer2 = ContactID("0000000000000000000000000000000000000000000000000000000000000002");
+  ContactID const peer1 = ContactID("d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a");
+  ContactID const peer2 = ContactID("3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968ce0eb0f6226252e15");
 };
 
 TEST_F(ContactManagerTest, AddContact) {

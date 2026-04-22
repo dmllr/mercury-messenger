@@ -17,8 +17,8 @@ class SyncEngineTest : public ::testing::Test {
 
     engine_ = std::make_unique<sync::SyncEngine>(storage_, transport_, my_id_);
   }
-  ContactID my_id_{"0000000000000000000000000000000000000000000000000000000000000001"};
-  ContactID peer_id_{"0000000000000000000000000000000000000000000000000000000000000002"};
+  ContactID my_id_{"d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"};
+  ContactID peer_id_{"3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968ce0eb0f6226252e15"};
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::unique_ptr<storage::MockPersistentStorageImpl> storage_impl_;
   std::shared_ptr<transport::MockCallLog> mock_log_;

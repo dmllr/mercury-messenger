@@ -40,7 +40,7 @@ class ClientCoreTest : public ::testing::Test {
   std::shared_ptr<Client> client_;
   ContactID my_id_;
 
-  ContactID const peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
+  ContactID const peer1 = ContactID("d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a");
 };
 
 TEST_F(ClientCoreTest, ConnectSequence) {
@@ -60,6 +60,7 @@ TEST_F(ClientCoreTest, ConnectSequence) {
 TEST_F(ClientCoreTest, IncomingKeyExchangeTriggersReply) {
   mock_storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
   client_->Contacts()->ReloadCache();
+  client_->Connect(peer1);
 
   // Setup sub to track queued messages trigger
   bool queued_messages_triggered = false;

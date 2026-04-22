@@ -52,12 +52,12 @@ TEST_F(ProfileViewModelTest, UpdateProfile) {
 
   vm_->UpdateProfile({.display_name = "New Name", .bio = "New Bio", .photo_base64 = "NewPhoto"});
 
-  WaitFor([&] {
-    auto p = observer->GetProfile();
-    return p.my_display_name == "New Name";
-  });
+      WaitFor([&] {
+        auto p = observer->GetProfile();
+        return p.my_display_name == "New Name" && p.my_bio == "New Bio" && p.my_photo == "NewPhoto";
+      });
 
-  auto p = observer->GetProfile();
+      auto p = observer->GetProfile();
   EXPECT_EQ(p.my_display_name, "New Name");
   EXPECT_EQ(p.my_bio, "New Bio");
   EXPECT_EQ(p.my_photo, "NewPhoto");

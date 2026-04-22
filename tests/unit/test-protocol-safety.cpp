@@ -114,7 +114,7 @@ class ProtocolSafetyTest : public ::testing::Test {
   std::shared_ptr<Client> client_;
 
   eillance::crypto::SessionCipher test_verifier_cipher_;
-  ContactID const peer_id_ = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
+  ContactID const peer_id_ = ContactID("d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a");
 };
 
 // =========================================================================================

@@ -13,7 +13,7 @@ use std::ffi::{CStr, CString};
 use std::str::FromStr;
 use std::time::Duration;
 use std::collections::HashSet;
-use std::panic::catch_unwind;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use tokio::runtime::Runtime;
 use tokio::sync::{mpsc, oneshot};
 
@@ -89,6 +89,8 @@ fn notify_connected(callbacks: &Callbacks, peer_id: &PeerId) {
         if let Some(pk) = peerid_to_pubkey(peer_id) {
             if let Ok(c_str) = CString::new(hex_encode(&pk)) {
                 cb(callbacks.context as *mut c_void, c_str.as_ptr());
+            } else {
+                eprintln!("Failed to create CString from peer public key");
             }
         }
     }
@@ -103,29 +105,59 @@ fn notify_disconnected(callbacks: &Callbacks, swarm: &libp2p::Swarm<MercuryBehav
         if let Some(pk) = peerid_to_pubkey(peer_id) {
             if let Ok(c_str) = CString::new(hex_encode(&pk)) {
                 cb(callbacks.context as *mut c_void, c_str.as_ptr());
+            } else {
+                eprintln!("Failed to create CString from peer public key");
             }
+        }
+    }
+}
+
+fn run_ffi<F, R>(f: F, default: R) -> R
+where
+    F: FnOnce() -> R + std::panic::UnwindSafe,
+{
+    match catch_unwind(f) {
+        Ok(res) => res,
+        Err(err) => {
+            if let Some(s) = err.downcast_ref::<&str>() {
+                eprintln!("Panic in libp2p FFI: {}", s);
+            } else if let Some(s) = err.downcast_ref::<String>() {
+                eprintln!("Panic in libp2p FFI: {}", s);
+            } else {
+                eprintln!("Panic in libp2p FFI: Unknown error type");
+            }
+            default
         }
     }
 }
 
 #[no_mangle]
 pub extern "C" fn eillance_libp2p_node_new(secret_key: *const u8) -> *mut c_void {
-    catch_unwind(|| {
-        if secret_key.is_null() { return std::ptr::null_mut(); }
+    run_ffi(AssertUnwindSafe(|| {
+        if secret_key.is_null() {
+            eprintln!("Null secret_key passed to node_new");
+            return std::ptr::null_mut();
+        }
         let mut key_bytes = [0u8; 32];
         unsafe { std::ptr::copy_nonoverlapping(secret_key, key_bytes.as_mut_ptr(), 32) };
 
         let secret = match identity::ed25519::SecretKey::try_from_bytes(key_bytes) {
             Ok(s) => s,
-            Err(_) => return std::ptr::null_mut(),
+            Err(e) => {
+                eprintln!("Invalid ed25519 secret key: {:?}", e);
+                return std::ptr::null_mut();
+            }
         };
         let keypair = identity::Keypair::from(identity::ed25519::Keypair::from(secret));
 
         let rt = match Runtime::new() {
             Ok(rt) => rt,
-            Err(_) => return std::ptr::null_mut(),
+            Err(e) => {
+                eprintln!("Failed to create tokio runtime: {:?}", e);
+                return std::ptr::null_mut();
+            }
         };
-        
+
         let node = Box::new(Node {
             runtime: rt,
             command_tx: None,
@@ -133,7 +165,7 @@ pub extern "C" fn eillance_libp2p_node_new(secret_key: *const u8) -> *mut c_void
             callbacks: Callbacks::default(),
         });
         Box::into_raw(node) as *mut c_void
-    }).unwrap_or(std::ptr::null_mut())
+    }), std::ptr::null_mut())
 }
 
 #[no_mangle]
@@ -144,8 +176,11 @@ pub extern "C" fn eillance_libp2p_node_set_callbacks(
     on_disconnected: *const c_void,
     on_message: *const c_void,
 ) {
-    let _ = catch_unwind(|| {
-        if ptr.is_null() { return; }
+    run_ffi(AssertUnwindSafe(|| {
+        if ptr.is_null() {
+            eprintln!("Null pointer passed to set_callbacks");
+            return;
+        }
         let node = unsafe { &mut *(ptr as *mut Node) };
         node.callbacks = Callbacks {
             context: context as usize,
@@ -153,15 +188,21 @@ pub extern "C" fn eillance_libp2p_node_set_callbacks(
             on_disconnected: on_disconnected as usize,
             on_message: on_message as usize,
         };
-    });
+    }), ());
 }
 
 #[no_mangle]
 pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
-    let _ = catch_unwind(|| {
-        if ptr.is_null() { return; }
+    run_ffi(AssertUnwindSafe(|| {
+        if ptr.is_null() {
+            eprintln!("Null pointer passed to node_start");
+            return;
+        }
         let node = unsafe { &mut *(ptr as *mut Node) };
-        if node.command_tx.is_some() { return; }
+        if node.command_tx.is_some() {
+            eprintln!("Node already started");
+            return;
+        }
 
         let (tx, mut rx) = mpsc::unbounded_channel();
         node.command_tx = Some(tx);
@@ -173,32 +214,41 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
             let mut swarm = match SwarmBuilder::with_existing_identity(local_key.clone())
                 .with_tokio()
                 .with_tcp(tcp_cfg, noise::Config::new, yamux::Config::default) {
-                    Ok(b) => match b.with_relay_client(noise::Config::new, yamux::Config::default) {
-                        Ok(b) => match b.with_behaviour(|key, relay_client| {
-                            let peer_id = PeerId::from(key.public());
-                            let mut kad_config = KademliaConfig::default();
-                            kad_config.set_record_ttl(Some(Duration::from_secs(60 * 60)));
+                Ok(b) => match b.with_relay_client(noise::Config::new, yamux::Config::default) {
+                    Ok(b) => match b.with_behaviour(|key, relay_client| {
+                        let peer_id = PeerId::from(key.public());
+                        let mut kad_config = KademliaConfig::default();
+                        kad_config.set_record_ttl(Some(Duration::from_secs(60 * 60)));
 
-                            let mut kademlia = Kademlia::with_config(peer_id, MemoryStore::new(peer_id), kad_config);
-                            kademlia.set_mode(Some(kad::Mode::Server));
+                        let mut kademlia = Kademlia::with_config(peer_id, MemoryStore::new(peer_id), kad_config);
+                        kademlia.set_mode(Some(kad::Mode::Server));
 
-                            let mdns = mdns::tokio::Behaviour::new(mdns::Config::default(), peer_id).expect("mDNS valid");
-                            let req_resp = request_response::cbor::Behaviour::new([(StreamProtocol::new("/mercury/1.0.0"), ProtocolSupport::Full)],
-                                                                                  request_response::Config::default(),
-                            );
-                            let identify = identify::Behaviour::new(identify::Config::new(
-                                "/mercury/id/1.0.0".into(),
-                                key.public(),
-                            ));
+                        let mdns = mdns::tokio::Behaviour::new(mdns::Config::default(), peer_id).expect("mDNS valid");
+                        let req_resp = request_response::cbor::Behaviour::new([(StreamProtocol::new("/mercury/1.0.0"), ProtocolSupport::Full)],
+                                                                              request_response::Config::default(),
+                        );
+                        let identify = identify::Behaviour::new(identify::Config::new(
+                            "/mercury/id/1.0.0".into(),
+                            key.public(),
+                        ));
 
-                            MercuryBehaviour { relay_client, kademlia, req_resp, mdns, identify }
-                        }) {
-                            Ok(b) => b.with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60))).build(),
-                            Err(_) => return,
-                        },
-                        Err(_) => return,
+                        MercuryBehaviour { relay_client, kademlia, req_resp, mdns, identify }
+                    }) {
+                        Ok(b) => b.with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60))).build(),
+                        Err(e) => {
+                            eprintln!("Failed to build swarm behaviour: {:?}", e);
+                            return;
+                        }
                     },
-                    Err(_) => return,
+                    Err(e) => {
+                        eprintln!("Failed to configure relay client: {:?}", e);
+                        return;
+                    }
+                },
+                Err(e) => {
+                    eprintln!("Failed to configure tcp transport: {:?}", e);
+                    return;
+                }
             };
 
             let mut pending_dials = HashSet::new();
@@ -218,7 +268,8 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
                                     pending_dials.remove(&peer_id);
                                     notify_connected(&callbacks, &peer_id);
                                 }
-                                Err(_) => {
+                                Err(e) => {
+                                    eprintln!("Failed to dial peer {}: {:?}", peer_id, e);
                                     pending_dials.remove(&peer_id);
                                     notify_disconnected(&callbacks, &swarm, &peer_id);
                                 }
@@ -234,14 +285,20 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
                             if let Some(peer_id) = p2p_peer_id {
                                 swarm.behaviour_mut().kademlia.add_address(&peer_id, addr.clone());
                             }
-                            let _ = swarm.dial(addr);
+                            if let Err(e) = swarm.dial(addr.clone()) {
+                                eprintln!("Failed to dial bootstrap node {}: {:?}", addr, e);
+                            }
                         }
                         Some(Command::Listen(addr)) => {
-                            let _ = swarm.listen_on(addr);
+                            if let Err(e) = swarm.listen_on(addr.clone()) {
+                                eprintln!("Failed to listen on {}: {:?}", addr, e);
+                            }
                         }
                         Some(Command::SendMessage(peer_id, data, resp)) => {
                             swarm.behaviour_mut().req_resp.send_request(&peer_id, data);
-                            let _ = resp.send(true);
+                            if resp.send(true).is_err() {
+                                eprintln!("Failed to send response back to FFI caller");
+                            }
                         }
                     },
                     event = swarm.select_next_some() => match event {
@@ -252,7 +309,8 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
                         SwarmEvent::ConnectionClosed { peer_id, .. } => {
                             notify_disconnected(&callbacks, &swarm, &peer_id);
                         }
-                        SwarmEvent::OutgoingConnectionError { peer_id: Some(peer_id), .. } => {
+                        SwarmEvent::OutgoingConnectionError { peer_id: Some(peer_id), error, .. } => {
+                            eprintln!("Outgoing connection error to {}: {:?}", peer_id, error);
                             pending_dials.remove(&peer_id);
                             notify_disconnected(&callbacks, &swarm, &peer_id);
                         }
@@ -260,16 +318,22 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
                             for addr in info.listen_addrs {
                                 swarm.behaviour_mut().kademlia.add_address(&peer_id, addr);
                             }
-                            let _ = swarm.behaviour_mut().kademlia.bootstrap();
+                            if let Err(e) = swarm.behaviour_mut().kademlia.bootstrap() {
+                                eprintln!("Kademlia bootstrap failed: {:?}", e);
+                            }
                             if pending_dials.contains(&peer_id) {
-                                let _ = swarm.dial(peer_id);
+                                if let Err(e) = swarm.dial(peer_id) {
+                                    eprintln!("Identify dial failed for {}: {:?}", peer_id, e);
+                                }
                             }
                         }
                         SwarmEvent::Behaviour(MercuryBehaviourEvent::Mdns(mdns::Event::Discovered(list))) => {
                             for (peer_id, addr) in list {
                                 swarm.behaviour_mut().kademlia.add_address(&peer_id, addr);
                                 if pending_dials.contains(&peer_id) {
-                                    let _ = swarm.dial(peer_id);
+                                    if let Err(e) = swarm.dial(peer_id) {
+                                        eprintln!("Mdns dial failed for {}: {:?}", peer_id, e);
+                                    }
                                 }
                             }
                         }
@@ -279,13 +343,17 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
                         })) => {
                             for peer in res.peers {
                                 if pending_dials.contains(&peer) {
-                                    let _ = swarm.dial(peer);
+                                    if let Err(e) = swarm.dial(peer) {
+                                        eprintln!("Kademlia dial failed for {}: {:?}", peer, e);
+                                    }
                                 }
                             }
                         }
                         SwarmEvent::Behaviour(MercuryBehaviourEvent::Kademlia(kad::Event::RoutingUpdated { peer, .. })) => {
                             if pending_dials.contains(&peer) {
-                                let _ = swarm.dial(peer);
+                                if let Err(e) = swarm.dial(peer) {
+                                    eprintln!("RoutingUpdated dial failed for {}: {:?}", peer, e);
+                                }
                             }
                         }
                         SwarmEvent::Behaviour(MercuryBehaviourEvent::ReqResp(request_response::Event::Message { peer, message })) => {
@@ -295,10 +363,14 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
                                     if let Some(pk) = peerid_to_pubkey(&peer) {
                                         if let Ok(c_str) = CString::new(hex_encode(&pk)) {
                                             cb(callbacks.context as *mut c_void, c_str.as_ptr(), request.as_ptr(), request.len());
+                                        } else {
+                                            eprintln!("Failed to create CString from peer public key");
                                         }
                                     }
                                 }
-                                let _ = swarm.behaviour_mut().req_resp.send_response(channel, vec![]);
+                                if let Err(e) = swarm.behaviour_mut().req_resp.send_response(channel, vec![]) {
+                                    eprintln!("Failed to send req_resp response: {:?}", e);
+                                }
                             }
                         }
                         _ => {}
@@ -306,26 +378,34 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
                 }
             }
         });
-    });
+    }), ());
 }
 
 #[no_mangle]
 pub extern "C" fn eillance_libp2p_node_stop(ptr: *mut c_void) {
-    let _ = catch_unwind(|| {
-        if ptr.is_null() { return; }
+    run_ffi(AssertUnwindSafe(|| {
+        if ptr.is_null() {
+            eprintln!("Null pointer passed to node_stop");
+            return;
+        }
         let node = unsafe { &mut *(ptr as *mut Node) };
         if let Some(tx) = node.command_tx.take() {
-            let _ = tx.send(Command::Stop);
+            if tx.send(Command::Stop).is_err() {
+                eprintln!("Failed to send Stop command, node might already be stopped");
+            }
         }
-    });
+    }), ());
 }
 
 #[no_mangle]
 pub extern "C" fn eillance_libp2p_node_free(ptr: *mut c_void) {
-    let _ = catch_unwind(|| {
-        if ptr.is_null() { return; }
-        unsafe { let _ = Box::from_raw(ptr as *mut Node); }
-    });
+    run_ffi(AssertUnwindSafe(|| {
+        if ptr.is_null() {
+            eprintln!("Null pointer passed to node_free");
+            return;
+        }
+        unsafe { drop(Box::from_raw(ptr as *mut Node)); }
+    }), ());
 }
 
 #[no_mangle]
@@ -335,18 +415,39 @@ pub extern "C" fn eillance_libp2p_node_send_message(
     data: *const u8,
     len: usize,
 ) -> bool {
-    catch_unwind(|| {
-        if ptr.is_null() || peer_id_hex.is_null() || data.is_null() { return false; }
+    run_ffi(AssertUnwindSafe(|| {
+        if ptr.is_null() || peer_id_hex.is_null() || data.is_null() {
+            eprintln!("Null pointers passed to send_message");
+            return false;
+        }
         let node = unsafe { &mut *(ptr as *mut Node) };
-        let hex_str = unsafe { CStr::from_ptr(peer_id_hex) }.to_str().unwrap_or("");
-        let peer_bytes = hex_decode(hex_str).unwrap_or_default();
-        if peer_bytes.len() != 32 { return false; }
+        let hex_str = match unsafe { CStr::from_ptr(peer_id_hex) }.to_str() {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("Invalid UTF-8 in peer_id_hex: {:?}", e);
+                return false;
+            }
+        };
+        let peer_bytes = match hex_decode(hex_str) {
+            Ok(b) => b,
+            Err(_) => {
+                eprintln!("Invalid hex string for peer_id_hex");
+                return false;
+            }
+        };
+        if peer_bytes.len() != 32 {
+            eprintln!("peer_id_hex must be exactly 32 bytes");
+            return false;
+        }
 
         let mut arr = [0u8; 32];
         arr.copy_from_slice(&peer_bytes);
         let peer_id = match pubkey_to_peerid(&arr) {
             Some(id) => id,
-            None => return false,
+            None => {
+                eprintln!("Failed to parse peer ID from public key bytes");
+                return false;
+            }
         };
         let payload = unsafe { std::slice::from_raw_parts(data, len) }.to_vec();
 
@@ -354,60 +455,121 @@ pub extern "C" fn eillance_libp2p_node_send_message(
             let (resp_tx, resp_rx) = oneshot::channel();
             if tx.send(Command::SendMessage(peer_id, payload, resp_tx)).is_ok() {
                 return node.runtime.block_on(async { resp_rx.await.unwrap_or(false) });
+            } else {
+                eprintln!("Failed to send SendMessage command to node task");
             }
+        } else {
+            eprintln!("Node is not started");
         }
         false
-    }).unwrap_or(false)
+    }), false)
 }
 
 #[no_mangle]
 pub extern "C" fn eillance_libp2p_node_dial(ptr: *mut c_void, peer_id_hex: *const c_char) {
-    let _ = catch_unwind(|| {
-        if ptr.is_null() || peer_id_hex.is_null() { return; }
+    run_ffi(AssertUnwindSafe(|| {
+        if ptr.is_null() || peer_id_hex.is_null() {
+            eprintln!("Null pointers passed to dial");
+            return;
+        }
         let node = unsafe { &mut *(ptr as *mut Node) };
-        let hex_str = unsafe { CStr::from_ptr(peer_id_hex) }.to_str().unwrap_or("");
-        let peer_bytes = hex_decode(hex_str).unwrap_or_default();
-        if peer_bytes.len() != 32 { return; }
+        let hex_str = match unsafe { CStr::from_ptr(peer_id_hex) }.to_str() {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("Invalid UTF-8 in peer_id_hex: {:?}", e);
+                return;
+            }
+        };
+        let peer_bytes = match hex_decode(hex_str) {
+            Ok(b) => b,
+            Err(_) => {
+                eprintln!("Invalid hex string for peer_id_hex");
+                return;
+            }
+        };
+        if peer_bytes.len() != 32 {
+            eprintln!("peer_id_hex must be exactly 32 bytes");
+            return;
+        }
 
         let mut arr = [0u8; 32];
         arr.copy_from_slice(&peer_bytes);
         let peer_id = match pubkey_to_peerid(&arr) {
             Some(id) => id,
-            None => return,
+            None => {
+                eprintln!("Failed to parse peer ID from public key bytes");
+                return;
+            }
         };
 
         if let Some(tx) = &node.command_tx {
-            let _ = tx.send(Command::Dial(peer_id));
+            if let Err(e) = tx.send(Command::Dial(peer_id)) {
+                eprintln!("Failed to send Dial command: {:?}", e);
+            }
+        } else {
+            eprintln!("Node is not started");
         }
-    });
+    }), ());
 }
 
 #[no_mangle]
 pub extern "C" fn eillance_libp2p_node_add_bootstrap_node(ptr: *mut c_void, multiaddr: *const c_char) {
-    let _ = catch_unwind(|| {
-        if ptr.is_null() || multiaddr.is_null() { return; }
-        let node = unsafe { &mut *(ptr as *mut Node) };
-        let addr_str = unsafe { CStr::from_ptr(multiaddr) }.to_str().unwrap_or("");
-        if let Ok(addr) = Multiaddr::from_str(addr_str) {
-            if let Some(tx) = &node.command_tx {
-                let _ = tx.send(Command::AddBootstrap(addr));
-            }
+    run_ffi(AssertUnwindSafe(|| {
+        if ptr.is_null() || multiaddr.is_null() {
+            eprintln!("Null pointers passed to add_bootstrap_node");
+            return;
         }
-    });
+        let node = unsafe { &mut *(ptr as *mut Node) };
+        let addr_str = match unsafe { CStr::from_ptr(multiaddr) }.to_str() {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("Invalid UTF-8 in multiaddr: {:?}", e);
+                return;
+            }
+        };
+        match Multiaddr::from_str(addr_str) {
+            Ok(addr) => {
+                if let Some(tx) = &node.command_tx {
+                    if let Err(e) = tx.send(Command::AddBootstrap(addr)) {
+                        eprintln!("Failed to send AddBootstrap command: {:?}", e);
+                    }
+                } else {
+                    eprintln!("Node is not started");
+                }
+            }
+            Err(e) => eprintln!("Invalid multiaddr: {:?}", e),
+        }
+    }), ());
 }
 
 #[no_mangle]
 pub extern "C" fn eillance_libp2p_node_listen(ptr: *mut c_void, multiaddr: *const c_char) {
-    let _ = catch_unwind(|| {
-        if ptr.is_null() || multiaddr.is_null() { return; }
-        let node = unsafe { &mut *(ptr as *mut Node) };
-        let addr_str = unsafe { CStr::from_ptr(multiaddr) }.to_str().unwrap_or("");
-        if let Ok(addr) = Multiaddr::from_str(addr_str) {
-            if let Some(tx) = &node.command_tx {
-                let _ = tx.send(Command::Listen(addr));
-            }
+    run_ffi(AssertUnwindSafe(|| {
+        if ptr.is_null() || multiaddr.is_null() {
+            eprintln!("Null pointers passed to listen");
+            return;
         }
-    });
+        let node = unsafe { &mut *(ptr as *mut Node) };
+        let addr_str = match unsafe { CStr::from_ptr(multiaddr) }.to_str() {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("Invalid UTF-8 in multiaddr: {:?}", e);
+                return;
+            }
+        };
+        match Multiaddr::from_str(addr_str) {
+            Ok(addr) => {
+                if let Some(tx) = &node.command_tx {
+                    if let Err(e) = tx.send(Command::Listen(addr)) {
+                        eprintln!("Failed to send Listen command: {:?}", e);
+                    }
+                } else {
+                    eprintln!("Node is not started");
+                }
+            }
+            Err(e) => eprintln!("Invalid multiaddr: {:?}", e),
+        }
+    }), ());
 }
 
 #[cfg(test)]
@@ -419,10 +581,10 @@ mod tests {
         let keypair = identity::ed25519::Keypair::generate();
         let pubkey_bytes = keypair.public().to_bytes();
         let peer_id = identity::PublicKey::from(keypair.public()).to_peer_id();
-        
+
         let restored_pubkey = peerid_to_pubkey(&peer_id).unwrap();
         assert_eq!(&restored_pubkey[..], &pubkey_bytes[..]);
-        
+
         let restored_peer_id = pubkey_to_peerid(&restored_pubkey).unwrap();
         assert_eq!(peer_id, restored_peer_id);
     }
@@ -434,7 +596,7 @@ mod tests {
         assert_eq!(hex, "deadbeef");
         let decoded = hex_decode(&hex).unwrap();
         assert_eq!(decoded, bytes);
-        
+
         assert!(hex_decode("invalidhex").is_err());
         assert!(hex_decode("123").is_err());
     }
