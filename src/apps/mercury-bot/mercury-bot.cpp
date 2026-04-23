@@ -75,9 +75,6 @@ auto main(int argc, char** argv) -> int {
   // --- BOT CONFIGURATION ---
   mercury::bot::Bot::Options options;
   options.identity_path = identity_path;
-  if (auto cli_url = args.Get("--signaling-url")) {
-    options.signaling_url = *cli_url;
-  }
   options.auto_accept_contacts = true;
   options.auto_reject_calls = true;
 
