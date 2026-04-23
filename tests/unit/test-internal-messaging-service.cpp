@@ -44,8 +44,12 @@ class InternalMessagingServiceTest : public ::testing::Test {
 };
 
 TEST_F(InternalMessagingServiceTest, ProcessSignalingMessage_SyncPropose) {
-  nlohmann::json const propose =
-      {{"from", peer1.ToString()}, {"type", "sync_propose"}, {"topic", peer1.ToString()}, {"head", std::string(64, '0')}};
+  nlohmann::json const propose = {
+      {"from", peer1.ToString()},
+      {"type", "sync_propose"},
+      {"topic", peer1.ToString()},
+      {"head", std::string(64, '0')}
+  };
   std::string str = propose.dump();
   std::vector<std::byte> bytes(str.size());
   std::memcpy(bytes.data(), str.data(), str.size());
@@ -57,23 +61,17 @@ TEST_F(InternalMessagingServiceTest, ProcessSignalingMessage_SyncPropose) {
   // Make session cipher ready
   eillance::EventQueue::Instance().Push(EventDataChannelOpen{peer1});
   eillance::crypto::SessionCipher dummy_cipher;
-  nlohmann::json const key_msg = {
-      {"type", "key_exchange"},
-      {"key", dummy_cipher.GetPublicKey()},
-      {"is_reply", true},
-      {"sync_version", 2}
-  };
+  nlohmann::json const key_msg =
+      {{"type", "key_exchange"}, {"key", dummy_cipher.GetPublicKey()}, {"is_reply", true}, {"sync_version", 2}};
   std::string key_str = key_msg.dump();
   std::vector<std::byte> key_bytes(key_str.size());
-  std::transform(key_str.begin(), key_str.end(), key_bytes.begin(), [](char c){ return static_cast<std::byte>(c); });
+  std::transform(key_str.begin(), key_str.end(), key_bytes.begin(), [](char c) { return static_cast<std::byte>(c); });
   eillance::EventQueue::Instance().Push(EventDataChannelMessage{peer1, key_bytes});
-  eillance::EventQueue::Instance().WaitFor([]{ return false; }, std::chrono::milliseconds(50));
+  eillance::EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(50));
 
   eillance::EventQueue::Instance().Push(EventDataChannelMessage{peer1, bytes});
   eillance::EventQueue::Instance().WaitFor(
-      [&]() {
-        return storage_->GetSyncRequests().empty();
-      },
+      [&]() { return storage_->GetSyncRequests().empty(); },
       std::chrono::milliseconds(2000)
   );
   // Assert the sync request was resolved (confirmed)

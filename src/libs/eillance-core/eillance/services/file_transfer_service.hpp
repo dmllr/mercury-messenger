@@ -581,7 +581,7 @@ class FileTransferService {
     auto& state = it->second;
     if (sequence < state.received_chunks.size()) {
       if (state.received_chunks[sequence]) {
-        return; // Duplicate chunk
+        return;  // Duplicate chunk
       }
       state.received_chunks[sequence] = true;
     }
@@ -590,7 +590,10 @@ class FileTransferService {
       auto const offset = static_cast<std::size_t>(sequence) * chunkSizeBytes;
 
       state.stream.seekp(static_cast<std::streamoff>(offset));
-      state.stream.write(reinterpret_cast<char const*>(chunk_data.data()), static_cast<std::streamsize>(chunk_data.size()));
+      state.stream.write(
+          reinterpret_cast<char const*>(chunk_data.data()),
+          static_cast<std::streamsize>(chunk_data.size())
+      );
 
       bool advanced = false;
       while (state.contiguous_seq < state.received_chunks.size() && state.received_chunks[state.contiguous_seq]) {

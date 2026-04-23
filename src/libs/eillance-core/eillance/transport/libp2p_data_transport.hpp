@@ -51,16 +51,16 @@ class Libp2pDataTransport : public DataTransport::Interface {
       node_ = std::make_shared<Libp2pNode>(secret_key_);
 
       node_->SetOnConnected([this](ContactID const& peer_id) {
-          auto p = GetPeer(peer_id);
-          if (!p) {
-              p = std::make_shared<Peer>(peer_id);
-              AddPeer(peer_id, p);
-          }
-          p->data_channel_is_open = true;
-          p->is_connecting = false;
-          LGI << "Peer connected: " << peer_id.ToString();
-          EventQueue::Instance().Push(EventDataPeerConnectionStateChanged{peer_id, PeerConnectionState::connected});
-          EventQueue::Instance().Push(EventDataChannelOpen{peer_id});
+        auto p = GetPeer(peer_id);
+        if (!p) {
+          p = std::make_shared<Peer>(peer_id);
+          AddPeer(peer_id, p);
+        }
+        p->data_channel_is_open = true;
+        p->is_connecting = false;
+        LGI << "Peer connected: " << peer_id.ToString();
+        EventQueue::Instance().Push(EventDataPeerConnectionStateChanged{peer_id, PeerConnectionState::connected});
+        EventQueue::Instance().Push(EventDataChannelOpen{peer_id});
       });
 
       node_->SetOnDisconnected([this](ContactID const& peer_id) {
@@ -172,9 +172,12 @@ class Libp2pDataTransport : public DataTransport::Interface {
     }
   }
 
-  void CreateOffer(ContactID const&) override {}
-  void CreateAnswer(ContactID const&) override {}
-  void SetRemoteDescription(ContactID const&, std::string const&, std::string const&) override {}
+  void CreateOffer(ContactID const&) override {
+  }
+  void CreateAnswer(ContactID const&) override {
+  }
+  void SetRemoteDescription(ContactID const&, std::string const&, std::string const&) override {
+  }
 
   auto SendData(ContactID const& peer_id, std::span<std::byte const> message) -> bool override {
     if (node_) return node_->SendMessage(peer_id, message);
@@ -186,7 +189,8 @@ class Libp2pDataTransport : public DataTransport::Interface {
     return SendData(peer_id, {reinterpret_cast<std::byte const*>(str.data()), str.size()});
   }
 
-  void SendSignalingMessage(Json const&) const override {}
+  void SendSignalingMessage(Json const&) const override {
+  }
 };
 
 }  // namespace eillance::transport

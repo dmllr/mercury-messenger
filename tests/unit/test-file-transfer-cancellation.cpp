@@ -182,5 +182,4 @@ TEST_F(FileTransferCancellationTest, ResumeSendsRequest) {
       },
       std::chrono::milliseconds(2000)
   );
-
 }

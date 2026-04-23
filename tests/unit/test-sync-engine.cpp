@@ -1,8 +1,8 @@
 #include <gtest/gtest.h>
 
 #include "eillance/services/sync_engine.hpp"
-#include "mock_data_transport.hpp"
 #include "mock_call_log.hpp"
+#include "mock_data_transport.hpp"
 #include "mock_persistent_storage.hpp"
 
 using namespace eillance;
@@ -42,7 +42,11 @@ TEST_F(SyncEngineTest, AppendActionCreatesLedgerEntryAndProposesSync) {
 TEST_F(SyncEngineTest, SyncProposeEmptyHead) {
   storage_->AddSyncRequest({TopicID(peer_id_), peer_id_, Timestamp::Now(), Timestamp{0}});
 
-  nlohmann::json const propose = {{"type", "sync_propose"}, {"head", std::string(64, '0')}, {"recent", {std::string(64, '0')}}};
+  nlohmann::json const propose = {
+      {"type", "sync_propose"},
+      {"head", std::string(64, '0')},
+      {"recent", {std::string(64, '0')}}
+  };
   engine_->ProcessSyncMessage(peer_id_, propose);
 
   // Verify that the sync_confirm effectively removes the sync request since heads matched

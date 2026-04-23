@@ -26,9 +26,12 @@ RUN update-alternatives --install /usr/bin/clang clang /usr/bin/clang-18 100 && 
     update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-18 100 && \
     update-alternatives --install /usr/bin/llvm-strip llvm-strip /usr/bin/llvm-strip-18 100
 
-# Rust
-RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
-ENV PATH="/root/.cargo/bin:${PATH}"
+# Install Rust globally so any host UID/GID can access and use it
+ENV RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    PATH=/usr/local/cargo/bin:$PATH
+RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --no-modify-path && \
+    chmod -R a+rwX /usr/local/cargo /usr/local/rustup
 
 # Install additional dependencies
 RUN apt-get install -y \
