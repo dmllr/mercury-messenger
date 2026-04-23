@@ -198,8 +198,10 @@ class InternalMessagingService {
         auto my_key = peer->session_cipher->GetPublicKey();
         data_transport_->SendJson(
             peer_id,
-            {{"type", "key_exchange"}, {"key", std::vector<std::byte>(my_key.begin(), my_key.end())}, {"is_reply", true}
-            }
+            {{"type", "key_exchange"},
+             {"key", std::vector<std::byte>(my_key.begin(), my_key.end())},
+             {"is_reply", true},
+             {"sync_version", currentSyncVersion}}
         );
       }
       EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
