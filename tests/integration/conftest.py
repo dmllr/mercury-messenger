@@ -51,13 +51,13 @@ def compile_binaries(docker_client_session, build_image, project_root):
   cmd = (
     "bash -c '"
     "git config --global --add safe.directory /src && "
-    "mkdir -p /src/build-deploy && "
-    "cd /src/build-deploy && "
+    "mkdir -p /src/build-integration-tests && "
+    "cd /src/build-integration-tests && "
     "if [ -f build.ninja ]; then ninja -t clean; fi && "
     "cmake -G Ninja -DCMAKE_BUILD_TYPE=Debug "
-    "-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=/src/build-deploy/bin /src && "
+    "-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=/src/build-integration-tests/bin /src && "
     "ninja mercury-mock-app mercury-bootstrap && "
-    "ls -l /src/build-deploy/bin"
+    "ls -l /src/build-integration-tests/bin"
     "'"
   )
 
@@ -74,7 +74,7 @@ def compile_binaries(docker_client_session, build_image, project_root):
   print("=== COMPILATION COMPLETE ===\n")
 
   # Return the 'bin' folder path
-  return os.path.join(project_root, "build-deploy", "bin")
+  return os.path.join(project_root, "build-integration-tests", "bin")
 
 @pytest.fixture(scope="function")
 def test_environment(docker_client_session, compile_binaries):
