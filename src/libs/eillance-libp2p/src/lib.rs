@@ -39,9 +39,50 @@ unsafe impl Sync for Callbacks {}
 enum Command {
     Dial(PeerId),
     AddBootstrap(Multiaddr),
+    AddBootstrapResolved(Multiaddr),
     Listen(Multiaddr),
     SendMessage(PeerId, Vec<u8>, oneshot::Sender<bool>),
     Stop,
+}
+
+async fn resolve_multiaddr(addr: Multiaddr) -> Option<Multiaddr> {
+    let mut components = addr.iter();
+    let first = components.next()?;
+    
+    let (host, is_dns4, is_dns6) = match first {
+        libp2p::multiaddr::Protocol::Dns(ref h) => (h.to_string(), true, true),
+        libp2p::multiaddr::Protocol::Dns4(ref h) => (h.to_string(), true, false),
+        libp2p::multiaddr::Protocol::Dns6(ref h) => (h.to_string(), false, true),
+        _ => return Some(addr),
+    };
+    
+    let second = components.next()?;
+    let port = match second {
+        libp2p::multiaddr::Protocol::Tcp(p) => p,
+        libp2p::multiaddr::Protocol::Udp(p) => p,
+        _ => return Some(addr),
+    };
+
+    let host_port = format!("{}:{}", host, port);
+    if let Ok(mut addrs) = tokio::net::lookup_host(&host_port).await {
+        while let Some(socket_addr) = addrs.next() {
+            if socket_addr.is_ipv4() && !is_dns4 { continue; }
+            if socket_addr.is_ipv6() && !is_dns6 { continue; }
+            
+            let mut resolved = Multiaddr::empty();
+            match socket_addr.ip() {
+                std::net::IpAddr::V4(ip) => resolved.push(libp2p::multiaddr::Protocol::Ip4(ip)),
+                std::net::IpAddr::V6(ip) => resolved.push(libp2p::multiaddr::Protocol::Ip6(ip)),
+            }
+            resolved.push(second.clone());
+            
+            for remaining in components.by_ref() {
+                resolved.push(remaining);
+            }
+            return Some(resolved);
+        }
+    }
+    None
 }
 
 struct Node {
@@ -205,7 +246,7 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
         }
 
         let (tx, mut rx) = mpsc::unbounded_channel();
-        node.command_tx = Some(tx);
+        node.command_tx = Some(tx.clone());
         let local_key = node.keypair.clone();
         let callbacks = node.callbacks.clone();
 
@@ -221,7 +262,7 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
                         kad_config.set_record_ttl(Some(Duration::from_secs(60 * 60)));
 
                         let mut kademlia = Kademlia::with_config(peer_id, MemoryStore::new(peer_id), kad_config);
-                        kademlia.set_mode(Some(kad::Mode::Server));
+                        kademlia.set_mode(Some(kad::Mode::Client));
 
                         let mdns = mdns::tokio::Behaviour::new(mdns::Config::default(), peer_id).expect("mDNS valid");
                         let req_resp = request_response::cbor::Behaviour::new([(StreamProtocol::new("/mercury/1.0.0"), ProtocolSupport::Full)],
@@ -239,7 +280,7 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
                             eprintln!("Failed to build swarm behaviour: {:?}", e);
                             return;
                         }
-                    },
+                    }
                     Err(e) => {
                         eprintln!("Failed to configure relay client: {:?}", e);
                         return;
@@ -276,6 +317,16 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
                             }
                         }
                         Some(Command::AddBootstrap(addr)) => {
+                            let tx_clone = tx.clone();
+                            tokio::spawn(async move {
+                                if let Some(resolved) = resolve_multiaddr(addr).await {
+                                    let _ = tx_clone.send(Command::AddBootstrapResolved(resolved));
+                                } else {
+                                    eprintln!("Failed to resolve bootstrap node");
+                                }
+                            });
+                        }
+                        Some(Command::AddBootstrapResolved(addr)) => {
                             let mut p2p_peer_id = None;
                             for protocol in addr.iter() {
                                 if let libp2p::multiaddr::Protocol::P2p(peer_id) = protocol {
@@ -305,7 +356,11 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
                         SwarmEvent::NewListenAddr { address, .. } => {
                             println!("Bootstrap Node Active. Multiaddr: {}", address);
                         }
-                        SwarmEvent::ConnectionEstablished { peer_id, .. } => {
+                        SwarmEvent::ConnectionEstablished { peer_id, endpoint, .. } => {
+                            if endpoint.is_dialer() {
+                                swarm.behaviour_mut().kademlia.add_address(&peer_id, endpoint.get_remote_address().clone());
+                                let _ = swarm.behaviour_mut().kademlia.bootstrap();
+                            }
                             pending_dials.remove(&peer_id);
                             notify_connected(&callbacks, &peer_id);
                         }
