@@ -51,9 +51,7 @@ TEST_F(ClientCoreTest, ConnectSequence) {
 
   client_->Connect(peer1);
   eillance::EventQueue::Instance().WaitFor(
-      [&]() {
-        return client_->GetPeerConnectionState(peer1) == transport::PeerConnectionState::connecting;
-      },
+      [&]() { return client_->GetPeerConnectionState(peer1) == transport::PeerConnectionState::connecting; },
       std::chrono::milliseconds(2000)
   );
   EXPECT_EQ(client_->GetPeerConnectionState(peer1), transport::PeerConnectionState::connecting);
@@ -71,11 +69,7 @@ TEST_F(ClientCoreTest, IncomingKeyExchangeTriggersReply) {
   });
 
   eillance::crypto::SessionCipher dummy_cipher;
-  nlohmann::json const key_msg = {
-      {"type", "key_exchange"},
-      {"key", std::vector<std::byte>()},
-      {"is_reply", false}
-  };
+  nlohmann::json const key_msg = {{"type", "key_exchange"}, {"key", std::vector<std::byte>()}, {"is_reply", false}};
 
   // Transform the byte array to uint8 array to avoid nlohmann::json dump
   // implicitly mangling the std::byte arrays when parsed back via string parsing.
@@ -91,8 +85,11 @@ TEST_F(ClientCoreTest, IncomingKeyExchangeTriggersReply) {
   eillance::EventQueue::Instance().Push(eillance::EventDataChannelMessage{peer1, msg_bytes});
 
   // Once the message is parsed, it triggers EventSendQueuedMessages
-  eillance::EventQueue::Instance().WaitFor([&]() { return queued_messages_triggered; }, std::chrono::milliseconds(2000));
-  
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() { return queued_messages_triggered; },
+      std::chrono::milliseconds(2000)
+  );
+
   EXPECT_TRUE(queued_messages_triggered);
   EventQueue::Instance().Unsubscribe(sub);
 }
@@ -114,7 +111,7 @@ TEST_F(ClientCoreTest, SignalingMessageProcessing_MediaOffer) {
       std::chrono::milliseconds(1000)
   );
 
-  SUCCEED() <<" Test passes if it didn't crash parsing an incoming media SDP signaling payload";
+  SUCCEED() << " Test passes if it didn't crash parsing an incoming media SDP signaling payload";
 }
 
 TEST_F(ClientCoreTest, ContactRequestProcessing) {

@@ -8,7 +8,7 @@ readonly BUILD_DIR="build-deploy"
 readonly VERSION_FILE="${PROJECT_ROOT}/version.properties"
 
 # Devenv configuration
-readonly DEVENV_IMAGE_NAME="project-mercury-devenv"
+readonly DEVENV_IMAGE_NAME="mercury-devenv"
 readonly DEVENV_CONTEXT_DIR="${PROJECT_ROOT}/devenv"
 readonly IMAGE_NAME_BASE="mercury-bot"
 
