@@ -92,14 +92,13 @@ info "Building mercury-bot in Release mode..."
 run_in_devenv bash -c "
   cmake -S . -B ${BUILD_DIR} -G Ninja -DCMAKE_BUILD_TYPE=Release \
   && cmake --build ${BUILD_DIR} -j 20 --target mercury-bot \
-  && llvm-strip ${BUILD_DIR}/bin/mercury-bot
+  && llvm-strip ${BUILD_DIR}/src/apps/mercury-bot/mercury-bot
 "
 success "Build complete."
 
 # 3. Stage binary for Docker build
 info "Staging binary..."
-# Note: Since the build happened in a volume, the artifacts are on your host drive
-BIN_SOURCE="${PROJECT_ROOT}/${BUILD_DIR}/bin/mercury-bot"
+BIN_SOURCE="${PROJECT_ROOT}/${BUILD_DIR}/src/apps/mercury-bot/mercury-bot"
 BIN_DEST="${APP_DIR}/mercury-bot-bin"
 
 if [[ ! -f "${BIN_SOURCE}" ]]; then
