@@ -531,7 +531,7 @@ class Client final {
           sm_->data_transport->Disconnect(id);
         }
       } else if (is_connecting) {
-        if ((now - peer->last_activity_time.load()) > 15ULL * 1000000ULL) {
+        if ((now - peer->last_activity_time.load()) > 45ULL * 1000000ULL) {
           LGI << "Peer " << id.ToString() << " stuck in connecting. Closing.";
           EventQueue::Instance().Push(EventConnectionAttemptFinished{id});
           sm_->data_transport->Disconnect(id);

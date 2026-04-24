@@ -7,7 +7,7 @@ edition = "2021"
 crate-type = ["staticlib"]
 
 [dependencies]
-libp2p = { version = "0.53", features = ["tokio", "tcp", "noise", "yamux", "kad", "relay", "macros", "request-response", "cbor", "mdns", "identify"] }
+libp2p = { version = "0.53", features =["tokio", "tcp", "noise", "yamux", "kad", "relay", "macros", "request-response", "cbor", "mdns", "identify", "ping"] }
 tokio = { version = "1.32", features = ["rt-multi-thread", "macros", "time", "net", "sync"] }
 futures = "0.3"
 serde = { version = "1.0", features = ["derive"] }

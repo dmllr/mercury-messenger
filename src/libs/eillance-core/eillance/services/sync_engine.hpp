@@ -381,9 +381,8 @@ class SyncEngine {
       } else {
         EventQueue::Instance().Push(EventConnectionRequested{req.target_peer_id});
       }
+      }
     }
-    dispatchQueue_.DispatchAfter(std::chrono::seconds(10), [this]() -> void { ProcessPendingSyncs(); });
-  }
 };
 
 }  // namespace eillance::sync
