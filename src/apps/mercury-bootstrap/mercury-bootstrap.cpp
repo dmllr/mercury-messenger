@@ -10,15 +10,51 @@
 #include "eillance/utils/args_parser.hpp"
 
 namespace {
-std::sig_atomic_t volatile signal_received = 0;
+
+std::sig_atomic_t volatile signalReceived = 0;
 void SignalHandler(int const signum) {
-  signal_received = signum;
+  signalReceived = signum;
 }
+
+constexpr auto ParseLogLevel(std::string_view const level) -> plog::Severity {
+  if (level == "none") {
+    return plog::none;
+  }
+  if (level == "fatal") {
+    return plog::fatal;
+  }
+  if (level == "error") {
+    return plog::error;
+  }
+  if (level == "warning") {
+    return plog::warning;
+  }
+  if (level == "info") {
+    return plog::info;
+  }
+  if (level == "debug") {
+    return plog::debug;
+  }
+  if (level == "verbose") {
+    return plog::verbose;
+  }
+  return plog::info;
+}
+
 }  // namespace
 
 auto main(int argc, char* argv[]) -> int {
   eillance::utils::ArgsParser const args(argc, argv);
+
+  static plog::ColorConsoleAppender<plog::TxtFormatter> appender;
+  plog::init(plog::warning, &appender);
+  auto const log_level_str = args.Get("--log-level").value_or("info");
+  auto const log_level = ParseLogLevel(log_level_str);
+  plog::init<logInstanceId>(log_level, &appender);
+
   uint16_t const port = static_cast<uint16_t>(args.GetInt("--port").value_or(10807));
+
+  LGD << "Starting bootstrap node on 0.0.0.0:" << port;
 
   // Generate a random unique identity for each bootstrap node run.
   // This is required if we run multiple instances to avoid DHT routing collisions.
@@ -34,7 +70,7 @@ auto main(int argc, char* argv[]) -> int {
     secret_key.push_back(static_cast<std::byte>(b));
   }
 
-  eillance::transport::Libp2pNode const node(secret_key);
+  eillance::transport::Libp2pNode const node(secret_key, true);
   node.Start();
 
   // Listen on the specified port.
@@ -44,7 +80,7 @@ auto main(int argc, char* argv[]) -> int {
 
   LGI << "Bootstrap Node Active. Multiaddr: " << listen_addr;
   std::signal(SIGINT, SignalHandler);
-  while (signal_received == 0) {
+  while (signalReceived == 0) {
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
   }
   node.Stop();

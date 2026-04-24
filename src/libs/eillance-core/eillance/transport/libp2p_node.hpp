@@ -5,31 +5,32 @@
 #include <string>
 #include <string_view>
 #include <utility>
-#include <vector>
 
 #include <span>
 
 #include "eillance/identity/contact_id.hpp"
 #include "eillance/logging/logging.hpp"
+#include "eillance/utils/invariant.hpp"
 #include "eillance_libp2p.h"
 
 namespace eillance::transport {
 
 class Libp2pNode final {
  public:
-  explicit Libp2pNode(std::span<std::byte const> secret_key) {
+  explicit Libp2pNode(std::span<std::byte const> secret_key, bool is_server = false) {
     if (secret_key.size() != 32) {
       throw std::invalid_argument("Libp2pNode requires exactly a 32-byte Ed25519 secret key");
     }
     // NOLINTNEXTLINE(*-reinterpret-cast)
-    node_ = eillance_libp2p_node_new(reinterpret_cast<uint8_t const*>(secret_key.data()));
+    node_ = eillance_libp2p_node_new(reinterpret_cast<uint8_t const*>(secret_key.data()), is_server);
 
     eillance_libp2p_node_set_callbacks(
         node_,
         this,
         OnPeerConnectedCallback,
         OnPeerDisconnectedCallback,
-        OnMessageCallback
+        OnMessageCallback,
+        OnLogCallback
     );
   }
 
@@ -48,13 +49,14 @@ class Libp2pNode final {
         on_connected_(std::move(other.on_connected_)),
         on_disconnected_(std::move(other.on_disconnected_)),
         on_message_(std::move(other.on_message_)) {
-    if (node_) {
+    if (node_ != nullptr) {
       eillance_libp2p_node_set_callbacks(
           node_,
           this,
           OnPeerConnectedCallback,
           OnPeerDisconnectedCallback,
-          OnMessageCallback
+          OnMessageCallback,
+          OnLogCallback
       );
     }
   }
@@ -70,13 +72,14 @@ class Libp2pNode final {
       on_disconnected_ = std::move(other.on_disconnected_);
       on_message_ = std::move(other.on_message_);
 
-      if (node_) {
+      if (node_ != nullptr) {
         eillance_libp2p_node_set_callbacks(
             node_,
             this,
             OnPeerConnectedCallback,
             OnPeerDisconnectedCallback,
-            OnMessageCallback
+            OnMessageCallback,
+            OnLogCallback
         );
       }
     }
@@ -84,9 +87,8 @@ class Libp2pNode final {
   }
 
   void Start() const {
-    if (node_ != nullptr) {
-      eillance_libp2p_node_start(node_);
-    }
+    INVARIANT_NOT_NULL(node_);
+    eillance_libp2p_node_start(node_);
   }
   void Stop() const {
     if (node_ != nullptr) {
@@ -94,9 +96,15 @@ class Libp2pNode final {
     }
   }
 
+  void Disconnect(ContactID const& peer_id) const {
+    INVARIANT_NOT_NULL(node_);
+    std::string const hex = peer_id.ToString();
+    eillance_libp2p_node_disconnect(node_, hex.c_str());
+  }
+
   bool SendMessage(ContactID const& peer_id, std::span<std::byte const> data) const {
-    if (!node_) return false;
-    std::string hex = peer_id.ToString();
+    INVARIANT_NOT_NULL(node_);
+    std::string const hex = peer_id.ToString();
     return eillance_libp2p_node_send_message(
         node_,
         hex.c_str(),
@@ -106,18 +114,18 @@ class Libp2pNode final {
   }
 
   void Dial(ContactID const& peer_id) const {
-    if (!node_) return;
-    std::string hex = peer_id.ToString();
+    INVARIANT_NOT_NULL(node_);
+    std::string const hex = peer_id.ToString();
     eillance_libp2p_node_dial(node_, hex.c_str());
   }
 
   void AddBootstrapNode(std::string const& multiaddr) const {
-    if (!node_) return;
+    INVARIANT_NOT_NULL(node_);
     eillance_libp2p_node_add_bootstrap_node(node_, multiaddr.c_str());
   }
 
   void Listen(std::string const& multiaddr) const {
-    if (!node_) return;
+    INVARIANT_NOT_NULL(node_);
     eillance_libp2p_node_listen(node_, multiaddr.c_str());
   }
 
@@ -140,12 +148,16 @@ class Libp2pNode final {
 
   static void OnPeerConnectedCallback(void* context, char const* peer_id_hex) {
     auto* self = static_cast<Libp2pNode*>(context);
-    if (self->on_connected_) self->on_connected_(ContactID(std::string_view(peer_id_hex)));
+    if (self->on_connected_) {
+      self->on_connected_(ContactID(std::string_view(peer_id_hex)));
+    }
   }
 
   static void OnPeerDisconnectedCallback(void* context, char const* peer_id_hex) {
     auto* self = static_cast<Libp2pNode*>(context);
-    if (self->on_disconnected_) self->on_disconnected_(ContactID(std::string_view(peer_id_hex)));
+    if (self->on_disconnected_) {
+      self->on_disconnected_(ContactID(std::string_view(peer_id_hex)));
+    }
   }
 
   static void OnMessageCallback(void* context, char const* peer_id_hex, uint8_t const* data, size_t len) {
@@ -155,6 +167,23 @@ class Libp2pNode final {
           ContactID(std::string_view(peer_id_hex)),
           std::span<std::byte const>(reinterpret_cast<std::byte const*>(data), len)
       );
+  }
+
+  static void OnLogCallback(void* /*context*/, int level, char const* message) {
+    switch (level) {
+      case 1:
+        LGE << "[libp2p] " << message;
+        break;
+      case 2:
+        LGW << "[libp2p] " << message;
+        break;
+      case 3:
+        LGI << "[libp2p] " << message;
+        break;
+      default:
+        LGD << "[libp2p] " << message;
+        break;
+    }
   }
 };
 

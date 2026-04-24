@@ -3,26 +3,29 @@ use libp2p::{
   Multiaddr, PeerId, StreamProtocol, SwarmBuilder, identify, identity,
   kad::{self, Behaviour as Kademlia, Config as KademliaConfig, store::MemoryStore},
   mdns, noise, relay,
+  ping,
   request_response::{self, ProtocolSupport},
   swarm::{NetworkBehaviour, SwarmEvent},
   tcp, yamux,
 };
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_void};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::str::FromStr;
 use std::time::Duration;
 use tokio::runtime::Runtime;
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::mpsc;
 
 #[derive(NetworkBehaviour)]
 struct MercuryBehaviour {
   relay_client: relay::client::Behaviour,
+  relay_server: relay::Behaviour,
   kademlia: Kademlia<MemoryStore>,
   req_resp: request_response::cbor::Behaviour<Vec<u8>, Vec<u8>>,
   mdns: mdns::tokio::Behaviour,
   identify: identify::Behaviour,
+  ping: ping::Behaviour,
 }
 
 #[derive(Clone, Default)]
@@ -31,6 +34,7 @@ struct Callbacks {
   on_connected: usize,
   on_disconnected: usize,
   on_message: usize,
+  on_log: usize,
 }
 unsafe impl Send for Callbacks {}
 unsafe impl Sync for Callbacks {}
@@ -40,8 +44,23 @@ enum Command {
   AddBootstrap(Multiaddr),
   AddBootstrapResolved(Multiaddr),
   Listen(Multiaddr),
-  SendMessage(PeerId, Vec<u8>, oneshot::Sender<bool>),
+  SendMessage(PeerId, Vec<u8>),
+  Disconnect(PeerId),
   Stop,
+}
+
+macro_rules! node_log {
+    ($callbacks:expr, $level:expr, $($arg:tt)*) => {
+        if $callbacks.on_log != 0 {
+            let msg = format!($($arg)*);
+            if let Ok(c_str) = std::ffi::CString::new(msg) {
+                let cb: extern "C" fn(*mut c_void, i32, *const c_char) = unsafe { std::mem::transmute($callbacks.on_log) };
+                cb($callbacks.context as *mut c_void, $level, c_str.as_ptr());
+            }
+        } else {
+            eprintln!($($arg)*);
+        }
+    }
 }
 
 async fn resolve_multiaddr(addr: Multiaddr) -> Option<Multiaddr> {
@@ -92,6 +111,7 @@ struct Node {
   runtime: Runtime,
   command_tx: Option<mpsc::UnboundedSender<Command>>,
   keypair: identity::Keypair,
+  is_server: bool,
   callbacks: Callbacks,
 }
 
@@ -178,7 +198,33 @@ where
 }
 
 #[no_mangle]
-pub extern "C" fn eillance_libp2p_node_new(secret_key: *const u8) -> *mut c_void {
+pub extern "C" fn eillance_libp2p_node_disconnect(ptr: *mut c_void, peer_id_hex: *const c_char) {
+  run_ffi(
+    AssertUnwindSafe(|| {
+      if ptr.is_null() || peer_id_hex.is_null() {
+        return;
+      }
+      let node = unsafe { &mut *(ptr as *mut Node) };
+      if let Ok(hex_str) = unsafe { CStr::from_ptr(peer_id_hex) }.to_str() {
+        if let Ok(peer_bytes) = hex_decode(hex_str) {
+          if peer_bytes.len() == 32 {
+            let mut arr = [0u8; 32];
+            arr.copy_from_slice(&peer_bytes);
+            if let Some(peer_id) = pubkey_to_peerid(&arr) {
+              if let Some(tx) = &node.command_tx {
+                let _ = tx.send(Command::Disconnect(peer_id));
+              }
+            }
+          }
+        }
+      }
+    }),
+    (),
+  );
+}
+
+#[no_mangle]
+pub extern "C" fn eillance_libp2p_node_new(secret_key: *const u8, is_server: bool) -> *mut c_void {
   run_ffi(
     AssertUnwindSafe(|| {
       if secret_key.is_null() {
@@ -209,6 +255,7 @@ pub extern "C" fn eillance_libp2p_node_new(secret_key: *const u8) -> *mut c_void
         runtime: rt,
         command_tx: None,
         keypair,
+        is_server,
         callbacks: Callbacks::default(),
       });
       Box::into_raw(node) as *mut c_void
@@ -224,6 +271,7 @@ pub extern "C" fn eillance_libp2p_node_set_callbacks(
   on_connected: *const c_void,
   on_disconnected: *const c_void,
   on_message: *const c_void,
+  on_log: *const c_void,
 ) {
   run_ffi(
     AssertUnwindSafe(|| {
@@ -237,6 +285,7 @@ pub extern "C" fn eillance_libp2p_node_set_callbacks(
         on_connected: on_connected as usize,
         on_disconnected: on_disconnected as usize,
         on_message: on_message as usize,
+        on_log: on_log as usize,
       };
     }),
     (),
@@ -261,6 +310,7 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
       node.command_tx = Some(tx.clone());
       let local_key = node.keypair.clone();
       let callbacks = node.callbacks.clone();
+      let is_server = node.is_server;
 
       node.runtime.spawn(async move {
             let tcp_cfg = tcp::Config::default();
@@ -274,7 +324,11 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
                         kad_config.set_record_ttl(Some(Duration::from_secs(60 * 60)));
 
                         let mut kademlia = Kademlia::with_config(peer_id, MemoryStore::new(peer_id), kad_config);
-                        kademlia.set_mode(Some(kad::Mode::Client));
+                        if is_server {
+                            kademlia.set_mode(Some(kad::Mode::Server));
+                        } else {
+                            kademlia.set_mode(Some(kad::Mode::Client));
+                        }
 
                         let mdns = mdns::tokio::Behaviour::new(mdns::Config::default(), peer_id).expect("mDNS valid");
                         let req_resp = request_response::cbor::Behaviour::new([(StreamProtocol::new("/mercury/1.0.0"), ProtocolSupport::Full)],
@@ -285,9 +339,25 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
                             key.public(),
                         ));
 
-                        MercuryBehaviour { relay_client, kademlia, req_resp, mdns, identify }
+                        let relay_config = if is_server {
+                            relay::Config {
+                                max_reservations: 8192,
+                                max_reservations_per_peer: 1024,
+                                reservation_rate_limiters: vec![],
+                                max_circuits: 8192,
+                                max_circuits_per_peer: 1024,
+                                circuit_src_rate_limiters: vec![],
+                                ..Default::default()
+                            }
+                        } else {
+                            relay::Config::default()
+                        };
+                        let relay_server = relay::Behaviour::new(peer_id, relay_config);
+                        let ping = ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(15)));
+
+                        MercuryBehaviour { relay_client, relay_server, kademlia, req_resp, mdns, identify, ping }
                     }) {
-                        Ok(b) => b.with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60))).build(),
+                        Ok(b) => b.with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(3600))).build(),
                         Err(e) => {
                             eprintln!("Failed to build swarm behaviour: {:?}", e);
                             return;
@@ -305,28 +375,88 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
             };
 
             let mut pending_dials = HashSet::new();
+            let mut known_addresses: HashMap<PeerId, HashSet<Multiaddr>> = HashMap::new();
+            let mut explicit_bootstrap_peers: HashSet<PeerId> = HashSet::new();
+            let mut active_relay_peers: HashMap<PeerId, Multiaddr> = HashMap::new();
+            let mut bootstrap_addrs: HashSet<Multiaddr> = HashSet::new();
+            let mut keepalive_interval = tokio::time::interval(Duration::from_secs(30));
+
+            macro_rules! do_dial {
+                ($peer:expr) => {
+                    let peer_val = $peer;
+                    let known = known_addresses.get(&peer_val);
+                    let mut addrs: Vec<_> = known.map(|s| s.iter().cloned().collect()).unwrap_or_default();
+
+                    if addrs.is_empty() {
+                        swarm.behaviour_mut().kademlia.get_closest_peers(peer_val);
+                        pending_dials.insert(peer_val);
+                    }
+
+                    for (_, relay_addr) in &active_relay_peers {
+                        let mut relayed = relay_addr.clone();
+                        relayed.push(libp2p::multiaddr::Protocol::P2pCircuit);
+                        relayed.push(libp2p::multiaddr::Protocol::P2p(peer_val));
+                        if !addrs.contains(&relayed) {
+                            addrs.push(relayed);
+                        }
+                    }
+                    for addr in &addrs {
+                        swarm.behaviour_mut().kademlia.add_address(&peer_val, addr.clone());
+                    }
+                    let opts = if addrs.is_empty() {
+                        libp2p::swarm::dial_opts::DialOpts::peer_id(peer_val).build()
+                    } else {
+                        libp2p::swarm::dial_opts::DialOpts::peer_id(peer_val).addresses(addrs).build()
+                    };
+                    match swarm.dial(opts) {
+                        Ok(_) => {
+                            // Dial initiated. Do not remove from pending_dials here so that if 
+                            // DHT finds direct addresses in the meantime, they can still be processed.
+                        }
+                        Err(libp2p::swarm::DialError::NoAddresses) => {
+                            swarm.behaviour_mut().kademlia.get_closest_peers(peer_val);
+                            pending_dials.insert(peer_val);
+                        }
+                        Err(libp2p::swarm::DialError::DialPeerConditionFalse(_)) => {
+                            // If condition is false, peer might already be connected. If not, it means a dial
+                            // is already inflight. Let libp2p handle the inflight dial naturally.
+                            if swarm.is_connected(&peer_val) {
+                                pending_dials.remove(&peer_val);
+                                notify_connected(&callbacks, &peer_val);
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("Failed to dial peer {}: {:?}", peer_val, e);
+                            pending_dials.remove(&peer_val);
+                            notify_disconnected(&callbacks, &swarm, &peer_val);
+                        }
+                    }
+                }
+            }
 
             loop {
                 tokio::select! {
+                    _ = keepalive_interval.tick() => {
+                        for b_addr in &bootstrap_addrs {
+                            let mut p2p_peer_id = None;
+                            for protocol in b_addr.iter() {
+                                if let libp2p::multiaddr::Protocol::P2p(peer_id) = protocol {
+                                    p2p_peer_id = Some(peer_id);
+                                }
+                            }
+                            if let Some(peer_id) = p2p_peer_id {
+                                if !swarm.is_connected(&peer_id) {
+                                    node_log!(callbacks, 3, "Periodic check: Bootstrap node {} not connected, dialing...", peer_id);
+                                    let _ = swarm.dial(b_addr.clone());
+                                }
+                            }
+                        }
+                    }
                     cmd = rx.recv() => match cmd {
                         Some(Command::Stop) | None => break,
                         Some(Command::Dial(peer_id)) => {
-                            match swarm.dial(peer_id) {
-                                Ok(_) => {}
-                                Err(libp2p::swarm::DialError::NoAddresses) => {
-                                    swarm.behaviour_mut().kademlia.get_closest_peers(peer_id);
-                                    pending_dials.insert(peer_id);
-                                }
-                                Err(libp2p::swarm::DialError::DialPeerConditionFalse(_)) => {
-                                    pending_dials.remove(&peer_id);
-                                    notify_connected(&callbacks, &peer_id);
-                                }
-                                Err(e) => {
-                                    eprintln!("Failed to dial peer {}: {:?}", peer_id, e);
-                                    pending_dials.remove(&peer_id);
-                                    notify_disconnected(&callbacks, &swarm, &peer_id);
-                                }
-                            }
+                            node_log!(callbacks, 4, "Dial command received for {}", peer_id);
+                            do_dial!(peer_id);
                         }
                         Some(Command::AddBootstrap(addr)) => {
                             let tx_clone = tx.clone();
@@ -339,6 +469,7 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
                             });
                         }
                         Some(Command::AddBootstrapResolved(addr)) => {
+                            bootstrap_addrs.insert(addr.clone());
                             let mut p2p_peer_id = None;
                             for protocol in addr.iter() {
                                 if let libp2p::multiaddr::Protocol::P2p(peer_id) = protocol {
@@ -346,64 +477,135 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
                                 }
                             }
                             if let Some(peer_id) = p2p_peer_id {
+                                explicit_bootstrap_peers.insert(peer_id);
+                                known_addresses.entry(peer_id).or_default().insert(addr.clone());
                                 swarm.behaviour_mut().kademlia.add_address(&peer_id, addr.clone());
                             }
                             if let Err(e) = swarm.dial(addr.clone()) {
-                                eprintln!("Failed to dial bootstrap node {}: {:?}", addr, e);
+                                node_log!(callbacks, 1, "Failed to dial bootstrap node {}: {:?}", addr, e);
                             }
                         }
                         Some(Command::Listen(addr)) => {
                             if let Err(e) = swarm.listen_on(addr.clone()) {
-                                eprintln!("Failed to listen on {}: {:?}", addr, e);
+                                node_log!(callbacks, 1, "Failed to listen on {}: {:?}", addr, e);
                             }
                         }
-                        Some(Command::SendMessage(peer_id, data, resp)) => {
+                        Some(Command::SendMessage(peer_id, data)) => {
                             swarm.behaviour_mut().req_resp.send_request(&peer_id, data);
-                            if resp.send(true).is_err() {
-                                eprintln!("Failed to send response back to FFI caller");
-                            }
+                        }
+                        Some(Command::Disconnect(peer_id)) => {
+                            node_log!(callbacks, 4, "Disconnect command received for {}", peer_id);
+                            let _ = swarm.disconnect_peer_id(peer_id);
                         }
                     },
                     event = swarm.select_next_some() => match event {
                         SwarmEvent::NewListenAddr { address, .. } => {
-                            println!("Bootstrap Node Active. Multiaddr: {}", address);
+                            node_log!(callbacks, 3, "Listen Active. Multiaddr: {}", address);
                         }
                         SwarmEvent::ConnectionEstablished { peer_id, endpoint, .. } => {
-                            if endpoint.is_dialer() {
-                                swarm.behaviour_mut().kademlia.add_address(&peer_id, endpoint.get_remote_address().clone());
-                                let _ = swarm.behaviour_mut().kademlia.bootstrap();
+                            let mut remote_addr = endpoint.get_remote_address().clone();
+
+                            // Ensure remote_addr has an IP address for relay listening and dialing
+                            if !remote_addr.iter().any(|p| matches!(p, libp2p::multiaddr::Protocol::Ip4(_) | libp2p::multiaddr::Protocol::Ip6(_))) {
+                                let mut found = false;
+                                if let Some(addrs) = known_addresses.get(&peer_id) {
+                                    if let Some(ip_addr) = addrs.iter().find(|a| a.iter().any(|p| matches!(p, libp2p::multiaddr::Protocol::Ip4(_) | libp2p::multiaddr::Protocol::Ip6(_)))) {
+                                        remote_addr = ip_addr.clone();
+                                        found = true;
+                                    }
+                                }
+                                if !found {
+                                    for b_addr in &bootstrap_addrs {
+                                        if b_addr.iter().any(|p| matches!(p, libp2p::multiaddr::Protocol::P2p(id) if id == peer_id)) {
+                                            if b_addr.iter().any(|p| matches!(p, libp2p::multiaddr::Protocol::Ip4(_) | libp2p::multiaddr::Protocol::Ip6(_))) {
+                                                remote_addr = b_addr.clone();
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
                             }
+                            if !remote_addr.iter().any(|p| matches!(p, libp2p::multiaddr::Protocol::P2p(_))) {
+                                remote_addr.push(libp2p::multiaddr::Protocol::P2p(peer_id));
+                            }
+
+                            known_addresses.entry(peer_id).or_default().insert(remote_addr.clone());
+                            swarm.behaviour_mut().kademlia.add_address(&peer_id, remote_addr.clone());
+                            node_log!(callbacks, 3, "Connection established with {}", peer_id);
+
+                            let mut is_bootstrap = explicit_bootstrap_peers.contains(&peer_id);
+                            if !is_bootstrap {
+                                for b_addr in &bootstrap_addrs {
+                                    let b_addr_len = b_addr.iter().count();
+                                    if remote_addr.iter().take(b_addr_len).eq(b_addr.iter()) {
+                                        is_bootstrap = true;
+                                        explicit_bootstrap_peers.insert(peer_id);
+                                        break;
+                                    }
+                                }
+                            }
+
+                            if endpoint.is_dialer() {
+                                let _ = swarm.behaviour_mut().kademlia.bootstrap();
+
+                                if is_bootstrap {
+                                    let is_circuit = remote_addr.iter().any(|p| matches!(p, libp2p::multiaddr::Protocol::P2pCircuit));
+                                    if !is_circuit {
+                                        let mut relay_listen_addr = remote_addr.clone();
+                                        relay_listen_addr.push(libp2p::multiaddr::Protocol::P2pCircuit);
+
+                                        if let Err(e) = swarm.listen_on(relay_listen_addr) {
+                                            node_log!(callbacks, 2, "Failed to listen on relay: {:?}", e);
+                                        }
+                                        active_relay_peers.insert(peer_id, remote_addr);
+                                    }
+                                }
+                            }
+
                             pending_dials.remove(&peer_id);
-                            notify_connected(&callbacks, &peer_id);
+                            if !is_bootstrap {
+                                notify_connected(&callbacks, &peer_id);
+                            }
                         }
                         SwarmEvent::ConnectionClosed { peer_id, .. } => {
-                            notify_disconnected(&callbacks, &swarm, &peer_id);
+                            node_log!(callbacks, 3, "Connection closed with {}", peer_id);
+                            if !swarm.is_connected(&peer_id) {
+                                active_relay_peers.remove(&peer_id);
+                            }
+                            if !explicit_bootstrap_peers.contains(&peer_id) {
+                                notify_disconnected(&callbacks, &swarm, &peer_id);
+                            }
                         }
                         SwarmEvent::OutgoingConnectionError { peer_id: Some(peer_id), error, .. } => {
-                            eprintln!("Outgoing connection error to {}: {:?}", peer_id, error);
+                            node_log!(callbacks, 1, "Outgoing connection error to {}: {:?}", peer_id, error);
+                            known_addresses.remove(&peer_id);
+                            swarm.behaviour_mut().kademlia.remove_peer(&peer_id);
                             pending_dials.remove(&peer_id);
-                            notify_disconnected(&callbacks, &swarm, &peer_id);
+                            if !explicit_bootstrap_peers.contains(&peer_id) {
+                                notify_disconnected(&callbacks, &swarm, &peer_id);
+                            }
+                        }
+                        SwarmEvent::OutgoingConnectionError { peer_id: None, error, .. } => {
+                            node_log!(callbacks, 1, "Outgoing connection error to unknown peer: {:?}", error);
                         }
                         SwarmEvent::Behaviour(MercuryBehaviourEvent::Identify(identify::Event::Received { peer_id, info })) => {
                             for addr in info.listen_addrs {
+                                known_addresses.entry(peer_id).or_default().insert(addr.clone());
                                 swarm.behaviour_mut().kademlia.add_address(&peer_id, addr);
                             }
                             if let Err(e) = swarm.behaviour_mut().kademlia.bootstrap() {
-                                eprintln!("Kademlia bootstrap failed: {:?}", e);
+                                node_log!(callbacks, 2, "Kademlia bootstrap failed: {:?}", e);
                             }
                             if pending_dials.contains(&peer_id) {
-                                if let Err(e) = swarm.dial(peer_id) {
-                                    eprintln!("Identify dial failed for {}: {:?}", peer_id, e);
-                                }
+                                do_dial!(peer_id);
                             }
                         }
                         SwarmEvent::Behaviour(MercuryBehaviourEvent::Mdns(mdns::Event::Discovered(list))) => {
                             for (peer_id, addr) in list {
+                                known_addresses.entry(peer_id).or_default().insert(addr.clone());
                                 swarm.behaviour_mut().kademlia.add_address(&peer_id, addr);
                                 if pending_dials.contains(&peer_id) {
-                                    if let Err(e) = swarm.dial(peer_id) {
-                                        eprintln!("Mdns dial failed for {}: {:?}", peer_id, e);
-                                    }
+                                    do_dial!(peer_id);
                                 }
                             }
                         }
@@ -413,17 +615,22 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
                         })) => {
                             for peer in res.peers {
                                 if pending_dials.contains(&peer) {
-                                    if let Err(e) = swarm.dial(peer) {
-                                        eprintln!("Kademlia dial failed for {}: {:?}", peer, e);
-                                    }
+                                    do_dial!(peer);
                                 }
                             }
                         }
-                        SwarmEvent::Behaviour(MercuryBehaviourEvent::Kademlia(kad::Event::RoutingUpdated { peer, .. })) => {
+                        SwarmEvent::Behaviour(MercuryBehaviourEvent::Kademlia(kad::Event::OutboundQueryProgressed {
+                            result: kad::QueryResult::GetClosestPeers(Err(e)),
+                            ..
+                        })) => {
+                            node_log!(callbacks, 2, "Kademlia GetClosestPeers failed: {:?}", e);
+                        }
+                        SwarmEvent::Behaviour(MercuryBehaviourEvent::Kademlia(kad::Event::RoutingUpdated { peer, addresses, .. })) => {
+                            for addr in addresses.iter() {
+                                known_addresses.entry(peer).or_default().insert(addr.clone());
+                            }
                             if pending_dials.contains(&peer) {
-                                if let Err(e) = swarm.dial(peer) {
-                                    eprintln!("RoutingUpdated dial failed for {}: {:?}", peer, e);
-                                }
+                                do_dial!(peer);
                             }
                         }
                         SwarmEvent::Behaviour(MercuryBehaviourEvent::ReqResp(request_response::Event::Message { peer, message })) => {
@@ -439,7 +646,7 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
                                     }
                                 }
                                 if let Err(e) = swarm.behaviour_mut().req_resp.send_response(channel, vec![]) {
-                                    eprintln!("Failed to send req_resp response: {:?}", e);
+                                    node_log!(callbacks, 1, "Failed to send req_resp response: {:?}", e);
                                 }
                             }
                         }
@@ -533,9 +740,8 @@ pub extern "C" fn eillance_libp2p_node_send_message(
       let payload = unsafe { std::slice::from_raw_parts(data, len) }.to_vec();
 
       if let Some(tx) = &node.command_tx {
-        let (resp_tx, resp_rx) = oneshot::channel();
-        if tx.send(Command::SendMessage(peer_id, payload, resp_tx)).is_ok() {
-          return node.runtime.block_on(async { resp_rx.await.unwrap_or(false) });
+        if tx.send(Command::SendMessage(peer_id, payload)).is_ok() {
+          return true;
         } else {
           eprintln!("Failed to send SendMessage command to node task");
         }
