@@ -25,6 +25,7 @@ struct Peer {
   std::atomic<bool> data_channel_is_open{false};
   std::atomic<bool> data_channel_initialized{false};
   std::atomic<bool> is_connecting{false};
+  std::atomic<bool> is_circuit{false};
   std::atomic<Time::Unit> last_activity_time{0};
   std::atomic<bool> has_media_peer_connection{false};
   std::atomic<bool> legacy_prompt_sent{false};

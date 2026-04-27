@@ -140,7 +140,7 @@ class Libp2pNode final {
     eillance_libp2p_node_listen(node_, multiaddr.c_str());
   }
 
-  void SetOnConnected(std::function<void(ContactID const&)> cb) {
+  void SetOnConnected(std::function<void(ContactID const&, bool)> cb) {
     on_connected_ = std::move(cb);
   }
   void SetOnDisconnected(std::function<void(ContactID const&)> cb) {
@@ -153,14 +153,14 @@ class Libp2pNode final {
  private:
   void* node_;
 
-  std::function<void(ContactID const&)> on_connected_;
+  std::function<void(ContactID const&, bool)> on_connected_;
   std::function<void(ContactID const&)> on_disconnected_;
   std::function<void(ContactID const&, std::span<std::byte const>)> on_message_;
 
-  static void OnPeerConnectedCallback(void* context, char const* peer_id_hex) {
+  static void OnPeerConnectedCallback(void* context, char const* peer_id_hex, bool is_circuit) {
     auto* self = static_cast<Libp2pNode*>(context);
     if (self->on_connected_) {
-      self->on_connected_(ContactID(std::string_view(peer_id_hex)));
+      self->on_connected_(ContactID(std::string_view(peer_id_hex)), is_circuit);
     }
   }
 

@@ -29,23 +29,23 @@ namespace eillance::services {
 
 class FileTransferService {
  public:
-  static constexpr std::size_t chunkSizeBytes = 256ULL * 1024;  // 256KB per chunk
+  static constexpr std::size_t chunkSizeBytes = 16ULL * 1024;
 
   explicit FileTransferService(ServiceManager* sm)
       : sm_(sm),
         storage_(sm->storage),
         transport_(sm->data_transport) {
-    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventDataChannelMessage>([this](auto const& e) {
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventDataChannelMessage>([this](auto const& e) -> void {
       if (!e.message.empty() && e.message[0] == std::byte{0xFE}) {
         ProcessBinaryMessage(e.peer_id, e.message);
       }
     }));
 
-    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventDataChannelOpen>([this](auto const& e) {
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventDataChannelOpen>([this](auto const& e) -> void {
       this->OnConnectionReady(e.peer_id);
     }));
 
-    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventSendQueuedMessages>([this](auto const& e) {
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventSendQueuedMessages>([this](auto const& e) -> void {
       this->OnConnectionReady(e.peer_id);
     }));
   }
@@ -532,6 +532,11 @@ class FileTransferService {
     auto& state = it->second;
 
     if (state.paused) {
+      state.is_pumping = false;
+      return;
+    }
+
+    if (auto peer = transport_->GetPeer(peer_id); peer && peer->is_circuit) {
       state.is_pumping = false;
       return;
     }
