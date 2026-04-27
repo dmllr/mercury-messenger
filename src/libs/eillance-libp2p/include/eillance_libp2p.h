@@ -10,7 +10,7 @@ extern "C" {
 
 // NOLINTBEGIN(*-identifier-naming)
 
-typedef void (*eillance_libp2p_on_peer_connected_cb)(void* context, char const* peer_id_hex);
+typedef void (*eillance_libp2p_on_peer_connected_cb)(void* context, char const* peer_id_hex, bool is_circuit);
 typedef void (*eillance_libp2p_on_peer_disconnected_cb)(void* context, char const* peer_id_hex);
 typedef void (*eillance_libp2p_on_message_cb)(void* context, char const* peer_id_hex, uint8_t const* data, size_t len);
 typedef void (*eillance_libp2p_log_cb)(void* context, int level, char const* message);
