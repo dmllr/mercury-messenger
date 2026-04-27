@@ -379,6 +379,7 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
             let mut explicit_bootstrap_peers: HashSet<PeerId> = HashSet::new();
             let mut active_relay_peers: HashMap<PeerId, Multiaddr> = HashMap::new();
             let mut bootstrap_addrs: HashSet<Multiaddr> = HashSet::new();
+            let mut active_relay_listeners = HashMap::new();
             let mut keepalive_interval = tokio::time::interval(Duration::from_secs(30));
 
             macro_rules! do_dial {
@@ -451,6 +452,25 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
                                 }
                             }
                         }
+
+                        let mut to_listen = Vec::new();
+                        for (relay_peer_id, relay_addr) in &active_relay_peers {
+                            if swarm.is_connected(relay_peer_id) {
+                                let mut relay_listen_addr = relay_addr.clone();
+                                relay_listen_addr.push(libp2p::multiaddr::Protocol::P2pCircuit);
+                                if !active_relay_listeners.contains_key(&relay_listen_addr) {
+                                    to_listen.push(relay_listen_addr);
+                                }
+                            }
+                        }
+
+                        for relay_listen_addr in to_listen {
+                            node_log!(callbacks, 3, "Periodic check: Re-establishing relay listener on {}", relay_listen_addr);
+                            match swarm.listen_on(relay_listen_addr.clone()) {
+                                Ok(id) => { active_relay_listeners.insert(relay_listen_addr, id); }
+                                Err(e) => { node_log!(callbacks, 2, "Failed to re-listen on relay: {:?}", e); }
+                            }
+                        }
                     }
                     cmd = rx.recv() => match cmd {
                         Some(Command::Stop) | None => break,
@@ -486,8 +506,14 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
                             }
                         }
                         Some(Command::Listen(addr)) => {
-                            if let Err(e) = swarm.listen_on(addr.clone()) {
-                                node_log!(callbacks, 1, "Failed to listen on {}: {:?}", addr, e);
+                            if !active_relay_listeners.contains_key(&addr) {
+                                match swarm.listen_on(addr.clone()) {
+                                    Ok(id) => {
+                                        active_relay_listeners.insert(addr.clone(), id);
+                                        node_log!(callbacks, 3, "Listening on relay: {}", addr);
+                                    }
+                                    Err(e) => { node_log!(callbacks, 1, "Failed to listen on {}: {:?}", addr, e); }
+                                }
                             }
                         }
                         Some(Command::SendMessage(peer_id, data)) => {
@@ -554,10 +580,14 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
                                         let mut relay_listen_addr = remote_addr.clone();
                                         relay_listen_addr.push(libp2p::multiaddr::Protocol::P2pCircuit);
 
-                                        if let Err(e) = swarm.listen_on(relay_listen_addr) {
-                                            node_log!(callbacks, 2, "Failed to listen on relay: {:?}", e);
-                                        }
                                         active_relay_peers.insert(peer_id, remote_addr);
+
+                                        let tx_clone = tx.clone();
+                                        tokio::spawn(async move {
+                                            // Delay listener to ensure the server processed Identify and registered its external address
+                                            tokio::time::sleep(Duration::from_millis(1500)).await;
+                                            let _ = tx_clone.send(Command::Listen(relay_listen_addr));
+                                        });
                                     }
                                 }
                             }
@@ -589,6 +619,7 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
                             node_log!(callbacks, 1, "Outgoing connection error to unknown peer: {:?}", error);
                         }
                         SwarmEvent::Behaviour(MercuryBehaviourEvent::Identify(identify::Event::Received { peer_id, info })) => {
+                            let _ = swarm.add_external_address(info.observed_addr.clone());
                             for addr in info.listen_addrs {
                                 known_addresses.entry(peer_id).or_default().insert(addr.clone());
                                 swarm.behaviour_mut().kademlia.add_address(&peer_id, addr);
@@ -599,6 +630,9 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
                             if pending_dials.contains(&peer_id) {
                                 do_dial!(peer_id);
                             }
+                        }
+                        SwarmEvent::ExternalAddrConfirmed { address } => {
+                            node_log!(callbacks, 3, "External address confirmed: {}", address);
                         }
                         SwarmEvent::Behaviour(MercuryBehaviourEvent::Mdns(mdns::Event::Discovered(list))) => {
                             for (peer_id, addr) in list {
@@ -632,6 +666,23 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
                             if pending_dials.contains(&peer) {
                                 do_dial!(peer);
                             }
+                        }
+                        SwarmEvent::ListenerClosed { listener_id, reason, addresses } => {
+                            node_log!(callbacks, 3, "Listener closed: {:?} {:?}", addresses, reason);
+                            active_relay_listeners.retain(|_, id| *id != listener_id);
+                        }
+                        SwarmEvent::ListenerError { listener_id, error } => {
+                            node_log!(callbacks, 2, "Listener error: {:?}", error);
+                            active_relay_listeners.retain(|_, id| *id != listener_id);
+                        }
+                        SwarmEvent::Behaviour(MercuryBehaviourEvent::RelayClient(event)) => {
+                            node_log!(callbacks, 4, "Relay client event: {:?}", event);
+                        }
+                        SwarmEvent::Behaviour(MercuryBehaviourEvent::RelayServer(event)) => {
+                            node_log!(callbacks, 4, "Relay server event: {:?}", event);
+                        }
+                        SwarmEvent::Behaviour(MercuryBehaviourEvent::Ping(event)) => {
+                            node_log!(callbacks, 4, "Ping event: {:?}", event);
                         }
                         SwarmEvent::Behaviour(MercuryBehaviourEvent::ReqResp(request_response::Event::Message { peer, message })) => {
                             if let request_response::Message::Request { request, channel, .. } = message {
