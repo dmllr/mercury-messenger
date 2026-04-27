@@ -119,7 +119,7 @@ class Libp2pDataTransport : public DataTransport::Interface {
     if (!is_started_) return;
     is_reconnecting_ = true;
     Terminate();
-    
+
     std::vector<ContactID> to_notify;
     {
       std::lock_guard<std::mutex> const lock(peersMutex_);
@@ -135,7 +135,7 @@ class Libp2pDataTransport : public DataTransport::Interface {
     for (auto const& id : to_notify) {
       EventQueue::Instance().Push(EventDataPeerConnectionStateChanged{id, PeerConnectionState::disconnected});
     }
-    
+
     Start();
     is_reconnecting_ = false;
   }

@@ -58,9 +58,7 @@ class DeliveryService {
     if (is_running_.exchange(true)) {
       return;
     }
-    dispatch_queue_.Dispatch([this]() -> void {
-      CheckForAllQueuedMessages();
-    });
+    dispatch_queue_.Dispatch([this]() -> void { CheckForAllQueuedMessages(); });
   }
 
   void Stop() {

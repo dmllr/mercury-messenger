@@ -381,8 +381,8 @@ class SyncEngine {
       } else {
         EventQueue::Instance().Push(EventConnectionRequested{req.target_peer_id});
       }
-      }
     }
+  }
 };
 
 }  // namespace eillance::sync
