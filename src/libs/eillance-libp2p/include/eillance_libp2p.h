@@ -35,7 +35,8 @@ void eillance_libp2p_node_set_callbacks(
 
 void eillance_libp2p_node_disconnect(void* node, char const* peer_id_hex);
 
-auto eillance_libp2p_node_send_message(void* node, char const* peer_id_hex, uint8_t const* data, size_t len) -> bool;
+auto eillance_libp2p_node_send_chat(void* node, char const* peer_id_hex, uint8_t const* data, size_t len) -> bool;
+auto eillance_libp2p_node_send_file(void* node, char const* peer_id_hex, uint8_t const* data, size_t len) -> bool;
 void eillance_libp2p_node_dial(void* node, char const* peer_id_hex);
 void eillance_libp2p_node_add_bootstrap_node(void* node, char const* multiaddr);
 void eillance_libp2p_node_listen(void* node, char const* multiaddr);
