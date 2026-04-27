@@ -12,6 +12,7 @@
 #include "eillance/logging/logging.hpp"
 #include "eillance/services/account_service.hpp"
 #include "eillance/services/contact_service.hpp"
+#include "eillance/services/delivery_service.hpp"
 #include "eillance/services/file_transfer_service.hpp"
 #include "eillance/services/internal_messaging_service.hpp"
 #include "eillance/services/ledger_projection_service.hpp"
@@ -61,6 +62,7 @@ class Client final {
     sm_->internal_messaging = std::make_shared<services::InternalMessagingService>(sm_.get());
     sm_->sync_engine = std::make_shared<sync::SyncEngine>(sm_->storage, sm_->data_transport, sm_->account->GetId());
     sm_->projection_service = std::make_shared<services::LedgerProjectionService>(sm_.get());
+    sm_->delivery_service = std::make_shared<messaging::DeliveryService>(sm_.get());
 
     event_unsubs_.emplace_back(EventQueue::Instance().Subscribe<EventAppForegrounded>([this](auto const&) -> void {
       sm_->is_foreground = true;
@@ -194,6 +196,7 @@ class Client final {
     sm_->data_transport->SetSecretKey(sm_->account->GetPrivateKey());
     sm_->data_transport->Start();
     sm_->sync_engine->Start();
+    sm_->delivery_service->Start();
     StartWatchdog();
     background_queue_.Dispatch([this]() -> void { CheckForInactivePeers(); });
   }
@@ -203,6 +206,7 @@ class Client final {
     StopWatchdog();
     background_queue_.RemovePending();
 
+    sm_->delivery_service->Stop();
     sm_->sync_engine->Stop();
 
     auto peers = sm_->data_transport->GetPeers();
@@ -388,8 +392,6 @@ class Client final {
   }
 
   void Connect(ContactID const& peer_id) const {
-    EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
-
     auto const contact = sm_->contact->GetContact(peer_id);
     if (contact && contact->status == identity::ContactStatus::rejected) {
       return;

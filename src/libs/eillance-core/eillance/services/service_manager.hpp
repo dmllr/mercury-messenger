@@ -18,6 +18,9 @@ class ContactManager;
 namespace sync {
 class SyncEngine;
 }
+namespace messaging {
+class DeliveryService;
+}
 }  // namespace eillance
 
 namespace eillance::services {
@@ -46,6 +49,7 @@ struct ServiceManager {
   std::shared_ptr<InternalMessagingService> internal_messaging;
   std::shared_ptr<sync::SyncEngine> sync_engine;
   std::shared_ptr<LedgerProjectionService> projection_service;
+  std::shared_ptr<messaging::DeliveryService> delivery_service;
 
   std::atomic<bool> is_foreground{false};
 };
