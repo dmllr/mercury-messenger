@@ -334,7 +334,17 @@ class ConversationViewModel {
 
     void OnMessageReceived(ContactID const&, messaging::HistoryEntryRecord const& message) {
       std::lock_guard<std::mutex> const lock(mutex);
-      state.history.push_back(message);
+      auto msg_copy = message;
+      if (std::holds_alternative<messaging::MessageEntry>(msg_copy.data)) {
+        auto& msg_entry = std::get<messaging::MessageEntry>(msg_copy.data);
+        for (auto& att : msg_entry.attachments) {
+          if (pending_attachment_updates.contains(att.id)) {
+            att.status = pending_attachment_updates[att.id];
+            pending_attachment_updates.erase(att.id);
+          }
+        }
+      }
+      state.history.push_back(msg_copy);
       EventQueue::Instance().Push(EventConversationStateUpdated{peer_id, state});
     }
 
