@@ -27,6 +27,7 @@ class Libp2pDataTransport : public DataTransport::Interface {
   std::vector<std::byte> secret_key_;
   std::string bootstrap_url_;
   bool is_started_ = false;
+  bool is_reconnecting_ = false;
 
  public:
   Libp2pDataTransport() = default;
@@ -92,20 +93,43 @@ class Libp2pDataTransport : public DataTransport::Interface {
     node_->Listen("/ip4/0.0.0.0/tcp/0");
     node_->Listen("/ip6/::/tcp/0");
 
-    EventQueue::Instance().Push(EventServiceConnectionStateChanged{ServiceConnectionState::online});
+    if (!is_reconnecting_) {
+      EventQueue::Instance().Push(EventServiceConnectionStateChanged{ServiceConnectionState::online});
+    }
   }
 
   void Terminate() override {
     if (!is_started_) return;
     is_started_ = false;
     if (node_) node_->Stop();
-    EventQueue::Instance().Push(EventServiceConnectionStateChanged{ServiceConnectionState::disconnected});
+    if (!is_reconnecting_) {
+      EventQueue::Instance().Push(EventServiceConnectionStateChanged{ServiceConnectionState::disconnected});
+    }
   }
 
   void Reconnect() override {
     if (!is_started_) return;
+    is_reconnecting_ = true;
     Terminate();
+    
+    std::vector<ContactID> to_notify;
+    {
+      std::lock_guard<std::mutex> const lock(peersMutex_);
+      for (auto& [id, p] : peers_) {
+        if (p->data_channel_is_open || p->is_connecting) {
+          p->data_channel_is_open = false;
+          p->is_connecting = false;
+          p->data_channel_initialized = false;
+          to_notify.push_back(id);
+        }
+      }
+    }
+    for (auto const& id : to_notify) {
+      EventQueue::Instance().Push(EventDataPeerConnectionStateChanged{id, PeerConnectionState::disconnected});
+    }
+    
     Start();
+    is_reconnecting_ = false;
   }
 
   void AddPeer(ContactID const& peer_id, std::shared_ptr<Peer> const& peer) override {
