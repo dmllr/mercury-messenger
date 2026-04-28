@@ -482,11 +482,12 @@ class Client final {
       }
     }
     for (auto const& [id, peer] : peers) {
-      std::erase_if(result, [&](auto const& item) { return item.peer_id == id; });
-      int64_t const ago = std::chrono::duration_cast<std::chrono::seconds>(
-                              std::chrono::microseconds(now - peer->last_activity_time.load())
-      )
-                              .count();
+      std::erase_if(result, [&](auto const& item) -> bool { return item.peer_id == id; });
+      auto const lat = peer->last_activity_time.load();
+      int64_t ago = 0;
+      if (now > lat) {
+        ago = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::microseconds(now - lat)).count();
+      }
       result.push_back(
           {id,
            sm_->data_transport->GetConnectionState(id),
@@ -528,12 +529,14 @@ class Client final {
         peer->last_activity_time = now;
         if (!peer->data_channel_is_open) Connect(id);
       } else if (is_data_connected) {
-        if ((now - peer->last_activity_time.load()) > static_cast<uint64_t>(timeout)) {
+        auto const lat = peer->last_activity_time.load();
+        if (now > lat && (now - lat) > static_cast<uint64_t>(timeout)) {
           LGI << "Peer " << id.ToString() << " inactive. Closing.";
           sm_->data_transport->Disconnect(id);
         }
       } else if (is_connecting) {
-        if ((now - peer->last_activity_time.load()) > 45ULL * 1000000ULL) {
+        auto const lat = peer->last_activity_time.load();
+        if (now > lat && (now - lat) > 45ULL * 1000000ULL) {
           LGI << "Peer " << id.ToString() << " stuck in connecting. Closing.";
           EventQueue::Instance().Push(EventConnectionAttemptFinished{id});
           sm_->data_transport->Disconnect(id);
