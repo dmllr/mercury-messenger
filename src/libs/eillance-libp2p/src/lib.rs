@@ -697,7 +697,7 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
                                             }
 
                                             let opts = libp2p::swarm::dial_opts::DialOpts::peer_id(peer)
-                                                .condition(libp2p::swarm::dial_opts::PeerCondition::NotDialing)
+                                                .condition(libp2p::swarm::dial_opts::PeerCondition::Disconnected)
                                                 .addresses(addrs)
                                                 .build();
                                             match swarm.dial(opts) {
