@@ -75,7 +75,8 @@ class InternalMessagingService {
     {
       auto const now = Time::Now();
       std::lock_guard<std::mutex> const lock(unsuspend_mutex_);
-      if (now - last_unsuspend_times_[peer_id] >= kUnsuspendInterval) {
+      auto const last = last_unsuspend_times_[peer_id];
+      if (now > last && (now - last) >= kUnsuspendInterval) {
         last_unsuspend_times_[peer_id] = now;
         should_unsuspend = true;
       }

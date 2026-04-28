@@ -326,11 +326,8 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
                         kad_config.set_record_ttl(Some(Duration::from_secs(60 * 60)));
 
                         let mut kademlia = Kademlia::with_config(peer_id, MemoryStore::new(peer_id), kad_config);
-                        if is_server {
-                            kademlia.set_mode(Some(kad::Mode::Server));
-                        } else {
-                            kademlia.set_mode(Some(kad::Mode::Client));
-                        }
+                        // Always act as a server to ensure mobile nodes are discoverable in the DHT
+                        kademlia.set_mode(Some(kad::Mode::Server));
 
                         let mdns = mdns::tokio::Behaviour::new(mdns::Config::default(), peer_id).expect("mDNS valid");
                         let chat = request_response::cbor::Behaviour::new(
@@ -399,12 +396,21 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
             macro_rules! do_dial {
                 ($peer:expr) => {
                     let peer_val = $peer;
-                    let known = known_addresses.get(&peer_val);
-                    let mut addrs: Vec<_> = known.map(|s| s.iter().cloned().collect()).unwrap_or_default();
 
-                    if addrs.is_empty() {
+                    if !pending_dials.contains(&peer_val) {
+                        node_log!(callbacks, 4, "Initiating DHT get_closest_peers for {}", peer_val);
                         swarm.behaviour_mut().kademlia.get_closest_peers(peer_val);
                         pending_dials.insert(peer_val);
+                    }
+
+                    let mut addrs = Vec::new();
+                    if let Some(known) = known_addresses.get(&peer_val) {
+                        for addr in known {
+                            swarm.behaviour_mut().kademlia.add_address(&peer_val, addr.clone());
+                            if !addrs.contains(addr) {
+                                addrs.push(addr.clone());
+                            }
+                        }
                     }
 
                     for (_, relay_addr) in &active_relay_peers {
@@ -415,24 +421,19 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
                             addrs.push(relayed);
                         }
                     }
-                    for addr in &addrs {
-                        swarm.behaviour_mut().kademlia.add_address(&peer_val, addr.clone());
-                    }
-                    let opts = if addrs.is_empty() {
-                        libp2p::swarm::dial_opts::DialOpts::peer_id(peer_val).build()
-                    } else {
-                        libp2p::swarm::dial_opts::DialOpts::peer_id(peer_val).addresses(addrs).build()
-                    };
+
+                    node_log!(callbacks, 4, "Dialing {} with addresses: {:?}", peer_val, addrs);
+
+                    let opts = libp2p::swarm::dial_opts::DialOpts::peer_id(peer_val).addresses(addrs).build();
                     match swarm.dial(opts) {
                         Ok(_) => {
-                            // Dial initiated. Do not remove from pending_dials here so that if 
-                            // DHT finds direct addresses in the meantime, they can still be processed.
+                            node_log!(callbacks, 4, "Dial request submitted for {}", peer_val);
                         }
                         Err(libp2p::swarm::DialError::NoAddresses) => {
-                            swarm.behaviour_mut().kademlia.get_closest_peers(peer_val);
-                            pending_dials.insert(peer_val);
+                            node_log!(callbacks, 3, "DialError::NoAddresses for {}, waiting for DHT or relay", peer_val);
                         }
                         Err(libp2p::swarm::DialError::DialPeerConditionFalse(_)) => {
+                            node_log!(callbacks, 4, "DialError::DialPeerConditionFalse for {}", peer_val);
                             // If condition is false, peer might already be connected. If not, it means a dial
                             // is already inflight. Let libp2p handle the inflight dial naturally.
                             if swarm.is_connected(&peer_val) {
@@ -440,7 +441,7 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
                             }
                         }
                         Err(e) => {
-                            eprintln!("Failed to dial peer {}: {:?}", peer_val, e);
+                            node_log!(callbacks, 2, "Failed to dial peer {}: {:?}", peer_val, e);
                             pending_dials.remove(&peer_val);
                             notify_disconnected(&callbacks, &swarm, &peer_val);
                         }
@@ -538,6 +539,7 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
                         Some(Command::Disconnect(peer_id)) => {
                             node_log!(callbacks, 4, "Disconnect command received for {}", peer_id);
                             let _ = swarm.disconnect_peer_id(peer_id);
+                            pending_dials.remove(&peer_id);
                         }
                     },
                     event = swarm.select_next_some() => match event {
@@ -622,17 +624,17 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
                         }
                         SwarmEvent::OutgoingConnectionError { peer_id: Some(peer_id), error, .. } => {
                             node_log!(callbacks, 1, "Outgoing connection error to {}: {:?}", peer_id, error);
-                            known_addresses.remove(&peer_id);
-                            swarm.behaviour_mut().kademlia.remove_peer(&peer_id);
-                            pending_dials.remove(&peer_id);
-                            if !explicit_bootstrap_peers.contains(&peer_id) {
-                                notify_disconnected(&callbacks, &swarm, &peer_id);
+                            if !pending_dials.contains(&peer_id) {
+                                if !explicit_bootstrap_peers.contains(&peer_id) {
+                                    notify_disconnected(&callbacks, &swarm, &peer_id);
+                                }
                             }
                         }
                         SwarmEvent::OutgoingConnectionError { peer_id: None, error, .. } => {
                             node_log!(callbacks, 1, "Outgoing connection error to unknown peer: {:?}", error);
                         }
                         SwarmEvent::Behaviour(MercuryBehaviourEvent::Identify(identify::Event::Received { peer_id, info })) => {
+                            node_log!(callbacks, 4, "Identify received from {}: listen_addrs={:?}", peer_id, info.listen_addrs);
                             let _ = swarm.add_external_address(info.observed_addr.clone());
                             for addr in info.listen_addrs {
                                 known_addresses.entry(peer_id).or_default().insert(addr.clone());
@@ -648,6 +650,14 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
                         SwarmEvent::ExternalAddrConfirmed { address } => {
                             node_log!(callbacks, 3, "External address confirmed: {}", address);
                         }
+                        SwarmEvent::NewExternalAddrOfPeer { peer_id, address } => {
+                            node_log!(callbacks, 4, "NewExternalAddrOfPeer for {}: {}", peer_id, address);
+                            known_addresses.entry(peer_id).or_default().insert(address.clone());
+                            swarm.behaviour_mut().kademlia.add_address(&peer_id, address);
+                            if pending_dials.contains(&peer_id) {
+                                do_dial!(peer_id);
+                            }
+                        }
                         SwarmEvent::Behaviour(MercuryBehaviourEvent::Mdns(mdns::Event::Discovered(list))) => {
                             for (peer_id, addr) in list {
                                 known_addresses.entry(peer_id).or_default().insert(addr.clone());
@@ -658,28 +668,68 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
                             }
                         }
                         SwarmEvent::Behaviour(MercuryBehaviourEvent::Kademlia(kad::Event::OutboundQueryProgressed {
-                            result: kad::QueryResult::GetClosestPeers(Ok(res)),
+                            result: kad::QueryResult::GetClosestPeers(res),
+                            step,
                             ..
                         })) => {
-                            for peer in res.peers {
-                                if pending_dials.contains(&peer) {
-                                    do_dial!(peer);
+                            node_log!(callbacks, 4, "Kademlia GetClosestPeers progressed: step={:?} res={:?}", step, res);
+                            let key = match &res {
+                                Ok(ok) => Some(ok.key.clone()),
+                                Err(kad::GetClosestPeersError::Timeout { key, .. }) => Some(key.clone()),
+                                #[allow(unreachable_patterns)]
+                                _ => None,
+                            };
+                            if let Some(key) = key {
+                                if let Ok(peer) = PeerId::from_bytes(&key) {
+                                    if step.last && pending_dials.remove(&peer) {
+                                        if !swarm.is_connected(&peer) {
+                                            let mut addrs = Vec::new();
+                                            if let Some(known) = known_addresses.get(&peer) {
+                                                addrs.extend(known.iter().cloned());
+                                            }
+                                            for (_, relay_addr) in &active_relay_peers {
+                                                let mut relayed = relay_addr.clone();
+                                                relayed.push(libp2p::multiaddr::Protocol::P2pCircuit);
+                                                relayed.push(libp2p::multiaddr::Protocol::P2p(peer));
+                                                if !addrs.contains(&relayed) {
+                                                    addrs.push(relayed);
+                                                }
+                                            }
+
+                                            let opts = libp2p::swarm::dial_opts::DialOpts::peer_id(peer)
+                                                .condition(libp2p::swarm::dial_opts::PeerCondition::NotDialing)
+                                                .addresses(addrs)
+                                                .build();
+                                            match swarm.dial(opts) {
+                                                Err(libp2p::swarm::DialError::NoAddresses) => {
+                                                    if !explicit_bootstrap_peers.contains(&peer) {
+                                                        node_log!(callbacks, 3, "Failed to discover addresses for {}", peer);
+                                                        notify_disconnected(&callbacks, &swarm, &peer);
+                                                    }
+                                                }
+                                                Err(e) => {
+                                                    node_log!(callbacks, 2, "Fallback dial error for {}: {:?}", peer, e);
+                                                }
+                                                Ok(_) => {
+                                                    node_log!(callbacks, 4, "Fallback dial submitted for {}", peer);
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
-                        SwarmEvent::Behaviour(MercuryBehaviourEvent::Kademlia(kad::Event::OutboundQueryProgressed {
-                            result: kad::QueryResult::GetClosestPeers(Err(e)),
-                            ..
-                        })) => {
-                            node_log!(callbacks, 2, "Kademlia GetClosestPeers failed: {:?}", e);
-                        }
                         SwarmEvent::Behaviour(MercuryBehaviourEvent::Kademlia(kad::Event::RoutingUpdated { peer, addresses, .. })) => {
+                            node_log!(callbacks, 4, "Kademlia RoutingUpdated for {}: {:?}", peer, addresses);
                             for addr in addresses.iter() {
                                 known_addresses.entry(peer).or_default().insert(addr.clone());
                             }
                             if pending_dials.contains(&peer) {
                                 do_dial!(peer);
                             }
+                        }
+                        SwarmEvent::Behaviour(MercuryBehaviourEvent::Kademlia(event)) => {
+                            node_log!(callbacks, 4, "Kademlia other event: {:?}", event);
                         }
                         SwarmEvent::ListenerClosed { listener_id, reason, addresses } => {
                             node_log!(callbacks, 3, "Listener closed: {:?} {:?}", addresses, reason);
@@ -733,7 +783,9 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
                                 }
                             }
                         }
-                        _ => {}
+                        event => {
+                            node_log!(callbacks, 4, "Unhandled SwarmEvent: {:?}", event);
+                        }
                     }
                 }
             }
