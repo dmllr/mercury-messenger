@@ -205,7 +205,12 @@ auto main(int argc, char** argv) -> int {
   auto media_transport = std::make_shared<eillance::transport::MediaTransport>(
       std::move(std::make_unique<eillance::rtc::RtcMediaTransport>())
   );
-  auto client = std::make_shared<eillance::Client>(storage, media_transport);
+  auto client = std::make_shared<eillance::Client>(
+      storage,
+      media_transport,
+      nullptr,
+      eillance::transport::NodeRole::desktopClient
+  );
 
   // CLI Argument Handling (Backup/Restore)
   if (auto backup_path = args.Get("--backup")) {
@@ -349,7 +354,7 @@ auto main(int argc, char** argv) -> int {
           content = std::get<eillance::messaging::MessageEntry>(entry.data).content;
           if (entry.is_truncated) {
             content +=
-                "... [truncated, ID: " + std::to_string(entry.id) + " - use /load " + std::to_string(entry.id) + "]";
+                "...[truncated, ID: " + std::to_string(entry.id) + " - use /load " + std::to_string(entry.id) + "]";
           }
           auto timestamp_str = FormatTimestamp(entry.timestamp);
           elements.push_back(ftxui::text(prefix + content + suffix));

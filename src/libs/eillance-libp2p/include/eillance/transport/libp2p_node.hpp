@@ -15,14 +15,24 @@
 
 namespace eillance::transport {
 
+enum class NodeRole {
+  bootstrapNode = EILLANCE_NODE_ROLE_BOOTSTRAP_NODE,
+  desktopClient = EILLANCE_NODE_ROLE_DESKTOP_CLIENT,
+  mobileClient = EILLANCE_NODE_ROLE_MOBILE_CLIENT,
+  bot = EILLANCE_NODE_ROLE_BOT
+};
+
 class Libp2pNode final {
  public:
-  explicit Libp2pNode(std::span<std::byte const> secret_key, bool is_server = false) {
+  explicit Libp2pNode(std::span<std::byte const> secret_key, NodeRole role = NodeRole::desktopClient) {
     if (secret_key.size() != 32) {
       throw std::invalid_argument("Libp2pNode requires exactly a 32-byte Ed25519 secret key");
     }
     // NOLINTNEXTLINE(*-reinterpret-cast)
-    node_ = eillance_libp2p_node_new(reinterpret_cast<uint8_t const*>(secret_key.data()), is_server);
+    node_ = eillance_libp2p_node_new(
+        reinterpret_cast<uint8_t const*>(secret_key.data()),
+        static_cast<eillance_libp2p_node_role>(role)
+    );
 
     eillance_libp2p_node_set_callbacks(
         node_,

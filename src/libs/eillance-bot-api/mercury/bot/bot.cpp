@@ -44,7 +44,7 @@ class Bot::Impl {
     auto media_transport_impl = std::make_unique<eillance::rtc::RtcMediaTransport>();
     auto media_transport = std::make_shared<eillance::transport::MediaTransport>(std::move(media_transport_impl));
 
-    client_ = std::make_shared<eillance::Client>(storage, media_transport);
+    client_ = std::make_shared<eillance::Client>(storage, media_transport, nullptr, eillance::transport::NodeRole::bot);
   }
 
   void SetupCallbacks() {
