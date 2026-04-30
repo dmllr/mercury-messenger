@@ -39,7 +39,8 @@ class Client final {
   Client(
       std::shared_ptr<storage::PersistentStorage> storage,
       std::shared_ptr<transport::MediaTransport> media_transport,
-      std::shared_ptr<transport::DataTransport> data_transport = nullptr
+      std::shared_ptr<transport::DataTransport> data_transport = nullptr,
+      transport::NodeRole role = transport::NodeRole::desktopClient
   ) {
     sm_ = std::make_unique<services::ServiceManager>();
     sm_->storage = std::move(storage);
@@ -47,7 +48,7 @@ class Client final {
     if (data_transport) {
       sm_->data_transport = std::move(data_transport);
     } else {
-      auto libp2p_dt = std::make_unique<transport::Libp2pDataTransport>();
+      auto libp2p_dt = std::make_unique<transport::Libp2pDataTransport>(role);
       sm_->data_transport = std::make_shared<transport::DataTransport>(std::move(libp2p_dt));
     }
     sm_->media_transport = std::move(media_transport);

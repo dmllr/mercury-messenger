@@ -21,6 +21,7 @@ namespace eillance::transport {
 class Libp2pDataTransport : public DataTransport::Interface {
   using Json = nlohmann::json;
 
+  NodeRole role_;
   DispatchQueue rx_queue_{"Libp2pRx", 1};
   std::shared_ptr<Libp2pNode> node_;
   ContactID id_;
@@ -32,7 +33,9 @@ class Libp2pDataTransport : public DataTransport::Interface {
   bool is_reconnecting_ = false;
 
  public:
-  Libp2pDataTransport() = default;
+  explicit Libp2pDataTransport(NodeRole role = NodeRole::desktopClient)
+      : role_(role) {
+  }
 
   void SetId(ContactID const& id) override {
     id_ = id;
@@ -51,7 +54,7 @@ class Libp2pDataTransport : public DataTransport::Interface {
     is_started_ = true;
 
     if (!node_) {
-      node_ = std::make_shared<Libp2pNode>(secret_key_);
+      node_ = std::make_shared<Libp2pNode>(secret_key_, role_);
 
       node_->SetOnConnected([this](ContactID const& peer_id, bool is_circuit) -> void {
         rx_queue_.Dispatch([this, peer_id, is_circuit]() -> void {
