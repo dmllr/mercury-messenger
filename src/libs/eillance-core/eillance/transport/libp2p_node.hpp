@@ -173,11 +173,12 @@ class Libp2pNode final {
 
   static void OnMessageCallback(void* context, char const* peer_id_hex, uint8_t const* data, size_t len) {
     auto* self = static_cast<Libp2pNode*>(context);
-    if (self->on_message_)
+    if (self->on_message_) {
       self->on_message_(
           ContactID(std::string_view(peer_id_hex)),
           std::span<std::byte const>(reinterpret_cast<std::byte const*>(data), len)
       );
+    }
   }
 
   static void OnLogCallback(void* /*context*/, int level, char const* message) {

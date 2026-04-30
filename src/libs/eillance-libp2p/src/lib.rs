@@ -357,8 +357,10 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
                             }
                         } else {
                             relay::Config {
-                                max_circuit_duration: Duration::from_secs(86400), // 1 day
-                                max_circuit_bytes: u64::MAX,
+                                max_reservations: 0,
+                                max_reservations_per_peer: 0,
+                                max_circuits: 0,
+                                max_circuits_per_peer: 0,
                                 ..Default::default()
                             }
                         };
@@ -406,7 +408,6 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
                     let mut addrs = Vec::new();
                     if let Some(known) = known_addresses.get(&peer_val) {
                         for addr in known {
-                            swarm.behaviour_mut().kademlia.add_address(&peer_val, addr.clone());
                             if !addrs.contains(addr) {
                                 addrs.push(addr.clone());
                             }
@@ -624,10 +625,9 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
                         }
                         SwarmEvent::OutgoingConnectionError { peer_id: Some(peer_id), error, .. } => {
                             node_log!(callbacks, 1, "Outgoing connection error to {}: {:?}", peer_id, error);
-                            if !pending_dials.contains(&peer_id) {
-                                if !explicit_bootstrap_peers.contains(&peer_id) {
-                                    notify_disconnected(&callbacks, &swarm, &peer_id);
-                                }
+                            pending_dials.remove(&peer_id);
+                            if !explicit_bootstrap_peers.contains(&peer_id) {
+                                notify_disconnected(&callbacks, &swarm, &peer_id);
                             }
                         }
                         SwarmEvent::OutgoingConnectionError { peer_id: None, error, .. } => {
@@ -734,6 +734,16 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
                         SwarmEvent::ListenerClosed { listener_id, reason, addresses } => {
                             node_log!(callbacks, 3, "Listener closed: {:?} {:?}", addresses, reason);
                             active_relay_listeners.retain(|_, id| *id != listener_id);
+
+                            for addr in addresses {
+                                if addr.iter().any(|p| matches!(p, libp2p::multiaddr::Protocol::P2pCircuit)) {
+                                    let tx_clone = tx.clone();
+                                    tokio::spawn(async move {
+                                        tokio::time::sleep(Duration::from_millis(2000)).await;
+                                        let _ = tx_clone.send(Command::Listen(addr));
+                                    });
+                                }
+                            }
                         }
                         SwarmEvent::ListenerError { listener_id, error } => {
                             node_log!(callbacks, 2, "Listener error: {:?}", error);
