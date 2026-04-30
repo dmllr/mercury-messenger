@@ -33,7 +33,12 @@ pub fn build_behaviour(
   kad_config.set_record_ttl(Some(Duration::from_secs(60 * 60)));
 
   let mut kademlia = Kademlia::with_config(peer_id, MemoryStore::new(peer_id), kad_config);
-  kademlia.set_mode(Some(kad::Mode::Server));
+  let is_mobile = matches!(role, NodeRole::MobileClient);
+  if is_mobile {
+    kademlia.set_mode(Some(kad::Mode::Client));
+  } else {
+    kademlia.set_mode(Some(kad::Mode::Server));
+  }
 
   let mdns = mdns::tokio::Behaviour::new(mdns::Config::default(), peer_id).expect("mDNS valid");
   let chat = request_response::cbor::Behaviour::new(

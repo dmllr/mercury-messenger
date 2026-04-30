@@ -54,6 +54,7 @@ void eillance_libp2p_node_listen(void* node, char const* multiaddr);
 
 void eillance_libp2p_node_discover_turn_relays(void* node);
 void eillance_libp2p_node_auth_turn_relay(void* node, char const* peer_id_hex);
+void eillance_libp2p_node_set_turn_eligibility(void* node, bool eligible);
 
 // NOLINTEND(*-identifier-naming)
 

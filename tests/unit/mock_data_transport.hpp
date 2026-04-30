@@ -45,7 +45,7 @@ class MockDataTransport : public DataTransport::Interface {
     peers_.erase(peer_id);
   }
   [[nodiscard]] auto GetPeer(ContactID const& peer_id) const -> std::shared_ptr<Peer> override {
-    auto it = peers_.find(peer_id);
+    auto const it = peers_.find(peer_id);
     return it != peers_.end() ? it->second : nullptr;
   }
   [[nodiscard]] auto GetPeers() const -> std::unordered_map<ContactID, std::shared_ptr<Peer>> override {
@@ -53,8 +53,12 @@ class MockDataTransport : public DataTransport::Interface {
   }
   [[nodiscard]] auto GetConnectionState(ContactID const& peer_id) const -> PeerConnectionState override {
     if (auto p = GetPeer(peer_id)) {
-      if (p->data_channel_is_open) return PeerConnectionState::connected;
-      if (p->is_connecting) return PeerConnectionState::connecting;
+      if (p->data_channel_is_open) {
+        return PeerConnectionState::connected;
+      }
+      if (p->is_connecting) {
+        return PeerConnectionState::connecting;
+      }
     }
     return PeerConnectionState::disconnected;
   }
@@ -96,6 +100,12 @@ class MockDataTransport : public DataTransport::Interface {
     return false;
   }
   void SendSignalingMessage(nlohmann::json const&) const override {
+  }
+  void DiscoverTurnRelays() override {
+  }
+  void AuthTurnRelay(ContactID const&) override {
+  }
+  void SetTurnEligibility(bool) override {
   }
 };
 

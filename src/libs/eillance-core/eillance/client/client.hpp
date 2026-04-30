@@ -171,6 +171,12 @@ class Client final {
       }
     }));
 
+    event_unsubs_.emplace_back(
+        EventQueue::Instance().Subscribe<EventTurnEligibilityChanged>([this](auto const& e) -> void {
+          sm_->data_transport->SetTurnEligibility(e.is_eligible);
+        })
+    );
+
     event_unsubs_.emplace_back(EventQueue::Instance().Subscribe<EventConnectionRequested>(
         [this](auto const& e) -> void { this->Connect(e.peer_id); }
     ));

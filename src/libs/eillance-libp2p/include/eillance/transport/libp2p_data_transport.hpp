@@ -251,6 +251,10 @@ class Libp2pDataTransport : public DataTransport::Interface {
   void AuthTurnRelay(ContactID const& peer_id) override {
     if (node_) node_->AuthTurnRelay(peer_id);
   }
+
+  void SetTurnEligibility(bool eligible) override {
+    if (node_) node_->SetTurnEligibility(eligible);
+  }
 };
 
 }  // namespace eillance::transport
