@@ -40,7 +40,9 @@ class Libp2pNode final {
         OnPeerConnectedCallback,
         OnPeerDisconnectedCallback,
         OnMessageCallback,
-        OnLogCallback
+        OnLogCallback,
+        OnTurnRelaysDiscoveredCallback,
+        OnTurnAuthResultCallback
     );
   }
 
@@ -58,7 +60,9 @@ class Libp2pNode final {
       : node_(std::exchange(other.node_, nullptr)),
         on_connected_(std::move(other.on_connected_)),
         on_disconnected_(std::move(other.on_disconnected_)),
-        on_message_(std::move(other.on_message_)) {
+        on_message_(std::move(other.on_message_)),
+        on_turn_relays_discovered_(std::move(other.on_turn_relays_discovered_)),
+        on_turn_auth_result_(std::move(other.on_turn_auth_result_)) {
     if (node_ != nullptr) {
       eillance_libp2p_node_set_callbacks(
           node_,
@@ -66,7 +70,9 @@ class Libp2pNode final {
           OnPeerConnectedCallback,
           OnPeerDisconnectedCallback,
           OnMessageCallback,
-          OnLogCallback
+          OnLogCallback,
+          OnTurnRelaysDiscoveredCallback,
+          OnTurnAuthResultCallback
       );
     }
   }
@@ -81,6 +87,8 @@ class Libp2pNode final {
       on_connected_ = std::move(other.on_connected_);
       on_disconnected_ = std::move(other.on_disconnected_);
       on_message_ = std::move(other.on_message_);
+      on_turn_relays_discovered_ = std::move(other.on_turn_relays_discovered_);
+      on_turn_auth_result_ = std::move(other.on_turn_auth_result_);
 
       if (node_ != nullptr) {
         eillance_libp2p_node_set_callbacks(
@@ -89,7 +97,9 @@ class Libp2pNode final {
             OnPeerConnectedCallback,
             OnPeerDisconnectedCallback,
             OnMessageCallback,
-            OnLogCallback
+            OnLogCallback,
+            OnTurnRelaysDiscoveredCallback,
+            OnTurnAuthResultCallback
         );
       }
     }
@@ -150,6 +160,17 @@ class Libp2pNode final {
     eillance_libp2p_node_listen(node_, multiaddr.c_str());
   }
 
+  void DiscoverTurnRelays() const {
+    INVARIANT_NOT_NULL(node_);
+    eillance_libp2p_node_discover_turn_relays(node_);
+  }
+
+  void AuthTurnRelay(ContactID const& peer_id) const {
+    INVARIANT_NOT_NULL(node_);
+    std::string const hex = peer_id.ToString();
+    eillance_libp2p_node_auth_turn_relay(node_, hex.c_str());
+  }
+
   void SetOnConnected(std::function<void(ContactID const&, bool)> cb) {
     on_connected_ = std::move(cb);
   }
@@ -159,6 +180,12 @@ class Libp2pNode final {
   void SetOnMessage(std::function<void(ContactID const&, std::span<std::byte const>)> cb) {
     on_message_ = std::move(cb);
   }
+  void SetOnTurnRelaysDiscovered(std::function<void(std::vector<ContactID> const&)> cb) {
+    on_turn_relays_discovered_ = std::move(cb);
+  }
+  void SetOnTurnAuthResult(std::function<void(ContactID const&, bool, std::string const&, uint16_t, std::string const&, std::string const&)> cb) {
+    on_turn_auth_result_ = std::move(cb);
+  }
 
  private:
   void* node_;
@@ -166,6 +193,8 @@ class Libp2pNode final {
   std::function<void(ContactID const&, bool)> on_connected_;
   std::function<void(ContactID const&)> on_disconnected_;
   std::function<void(ContactID const&, std::span<std::byte const>)> on_message_;
+  std::function<void(std::vector<ContactID> const&)> on_turn_relays_discovered_;
+  std::function<void(ContactID const&, bool, std::string const&, uint16_t, std::string const&, std::string const&)> on_turn_auth_result_;
 
   static void OnPeerConnectedCallback(void* context, char const* peer_id_hex, bool is_circuit) {
     auto* self = static_cast<Libp2pNode*>(context);
@@ -205,6 +234,37 @@ class Libp2pNode final {
       default:
         LGD << "[libp2p] " << message;
         break;
+    }
+  }
+
+  static void OnTurnRelaysDiscoveredCallback(void* context, char const* providers_csv) {
+    auto* self = static_cast<Libp2pNode*>(context);
+    if (self->on_turn_relays_discovered_ && providers_csv != nullptr) {
+      std::vector<ContactID> relays;
+      std::string csv(providers_csv);
+      size_t start = 0;
+      size_t end = csv.find(',');
+      while (end != std::string::npos) {
+        if (end > start) relays.emplace_back(csv.substr(start, end - start));
+        start = end + 1;
+        end = csv.find(',', start);
+      }
+      if (start < csv.length()) {
+        relays.emplace_back(csv.substr(start));
+      }
+      self->on_turn_relays_discovered_(relays);
+    }
+  }
+
+  static void OnTurnAuthResultCallback(void* context, char const* peer_id_hex, char const* ip, uint16_t port, char const* user, char const* cred) {
+    auto* self = static_cast<Libp2pNode*>(context);
+    if (self->on_turn_auth_result_ && peer_id_hex != nullptr) {
+      ContactID const peer(std::string_view(peer_id_hex));
+      if (ip == nullptr || user == nullptr || cred == nullptr) {
+        self->on_turn_auth_result_(peer, false, "", 0, "", "");
+      } else {
+        self->on_turn_auth_result_(peer, true, ip, port, user, cred);
+      }
     }
   }
 };

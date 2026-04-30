@@ -6,6 +6,7 @@ mod event_loop;
 mod ffi;
 mod node;
 mod types;
+mod turn_server;
 
 #[cfg(test)]
 mod tests {

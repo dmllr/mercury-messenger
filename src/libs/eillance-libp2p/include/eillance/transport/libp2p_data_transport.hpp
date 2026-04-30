@@ -89,6 +89,18 @@ class Libp2pDataTransport : public DataTransport::Interface {
           EventQueue::Instance().Push(EventDataChannelMessage{peer_id, std::move(payload)});
         });
       });
+
+      node_->SetOnTurnRelaysDiscovered([this](std::vector<ContactID> const& relays) -> void {
+        rx_queue_.Dispatch([relays]() -> void {
+          EventQueue::Instance().Push(EventTurnRelaysDiscovered{relays});
+        });
+      });
+
+      node_->SetOnTurnAuthResult([this](ContactID const& peer_id, bool success, std::string const& ip, uint16_t port, std::string const& user, std::string const& cred) -> void {
+        rx_queue_.Dispatch([peer_id, success, ip, port, user, cred]() -> void {
+          EventQueue::Instance().Push(EventTurnAuthResult{peer_id, success, ip, port, user, cred});
+        });
+      });
     }
 
     node_->Start();
@@ -230,6 +242,14 @@ class Libp2pDataTransport : public DataTransport::Interface {
   }
 
   void SendSignalingMessage(Json const&) const override {
+  }
+
+  void DiscoverTurnRelays() override {
+    if (node_) node_->DiscoverTurnRelays();
+  }
+
+  void AuthTurnRelay(ContactID const& peer_id) override {
+    if (node_) node_->AuthTurnRelay(peer_id);
   }
 };
 

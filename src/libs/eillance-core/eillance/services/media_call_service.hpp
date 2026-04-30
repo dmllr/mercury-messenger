@@ -21,6 +21,7 @@
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/transport/data_transport.hpp"
 #include "eillance/transport/media_transport.hpp"
+#include "eillance/utils/dispatch_queue.hpp"
 #include "eillance/utils/event_queue.hpp"
 
 namespace eillance::services {
@@ -170,7 +171,14 @@ class MediaCallService {
     };
 
     TriggerIncomingRing(peer_id);
-    StartMediaConnection(peer_id, is_video, false);
+
+    data_transport_->DiscoverTurnRelays();
+    call_queue_.DispatchAfter(std::chrono::milliseconds(1500), [this, peer_id, is_video]() {
+      std::lock_guard<std::recursive_mutex> const lock(mutex_);
+      if (current_call_ && current_call_->peer_id == peer_id) {
+        StartMediaConnection(peer_id, is_video, false);
+      }
+    });
   }
 
   void OnCallRinging(ContactID const& peer_id, std::string const& call_id) {
@@ -231,7 +239,21 @@ class MediaCallService {
           .is_video = is_video,
           .state = CallState::mediaConnecting
       };
-      StartMediaConnection(peer_id, is_video, false);
+
+      data_transport_->DiscoverTurnRelays();
+      call_queue_.DispatchAfter(std::chrono::milliseconds(1500), [this, peer_id, is_video, sdp]() {
+        std::lock_guard<std::recursive_mutex> const lock(mutex_);
+        if (current_call_ && current_call_->peer_id == peer_id) {
+          StartMediaConnection(peer_id, is_video, false);
+          try {
+            media_transport_->SetRemoteDescription(peer_id, sdp, "offer");
+            media_transport_->CreateAnswer(peer_id);
+          } catch (std::exception const& e) {
+            LGE << "Failed to process media offer: " << e.what();
+          }
+        }
+      });
+      return;
     }
 
     if (current_call_ && current_call_->peer_id == peer_id) {
@@ -258,12 +280,19 @@ class MediaCallService {
   void OnDataChannelOpen(ContactID const& peer_id) {
     std::lock_guard<std::recursive_mutex> const lock(mutex_);
     if (current_call_ && current_call_->peer_id == peer_id && current_call_->state == CallState::waitingForData) {
-      LGI << "Data channel opened for call " << current_call_->call_id.ToString() << ". Proceeding to signaling.";
-      SetCallState(CallState::negotiating);
-      SendCallRequest(peer_id);
-      StartMediaConnection(peer_id, current_call_->is_video, true);
+        LGI << "Data channel opened for call " << current_call_->call_id.ToString() << ". Proceeding to signaling.";
+        SetCallState(CallState::negotiating);
+        SendCallRequest(peer_id);
+
+        data_transport_->DiscoverTurnRelays();
+        call_queue_.DispatchAfter(std::chrono::milliseconds(1500), [this, peer_id, is_video = current_call_->is_video]() {
+          std::lock_guard<std::recursive_mutex> const lock(mutex_);
+          if (current_call_ && current_call_->peer_id == peer_id) {
+            StartMediaConnection(peer_id, is_video, true);
+          }
+        });
+      }
     }
-  }
 
   void OnMediaGatheringStateChange(ContactID const& peer_id, int state_val) {
     std::lock_guard<std::recursive_mutex> const lock(mutex_);
@@ -341,6 +370,8 @@ class MediaCallService {
   std::shared_ptr<transport::MediaTransport> media_transport_;
   std::vector<EventQueue::SubscriberTypeId> event_unsubs_;
 
+  DispatchQueue call_queue_{"MediaCall", 1};
+
   void SetCallState(CallState state) {
     if (current_call_) {
       current_call_->state = state;
@@ -401,7 +432,14 @@ class MediaCallService {
 
     SetCallState(CallState::negotiating);
     SendCallRequest(peer_id);
-    StartMediaConnection(peer_id, is_video, true);
+
+    data_transport_->DiscoverTurnRelays();
+    call_queue_.DispatchAfter(std::chrono::milliseconds(1500), [this, peer_id, is_video]() {
+      std::lock_guard<std::recursive_mutex> const lock(mutex_);
+      if (current_call_ && current_call_->peer_id == peer_id) {
+        StartMediaConnection(peer_id, is_video, true);
+      }
+    });
   }
 
   void StartMediaConnection(ContactID const& peer_id, bool is_video, bool is_initiator) {

@@ -2,7 +2,7 @@ use crate::behaviour::{MercuryBehaviour, MercuryBehaviourEvent};
 use crate::types::{Callbacks, Command};
 use crate::utils::{hex_encode, notify_connected, notify_disconnected, peerid_to_pubkey, resolve_multiaddr};
 use futures::StreamExt;
-use libp2p::{Multiaddr, PeerId, Swarm, identify, kad, mdns, request_response, swarm::SwarmEvent};
+use libp2p::{Multiaddr, PeerId, Swarm, autonat, identify, kad, mdns, request_response, swarm::SwarmEvent};
 use std::collections::{HashMap, HashSet};
 use std::ffi::CString;
 use std::os::raw::{c_char, c_void};
@@ -16,6 +16,9 @@ pub struct EventLoopState {
   pub active_relay_peers: HashMap<PeerId, Multiaddr>,
   pub bootstrap_addrs: HashSet<Multiaddr>,
   pub active_relay_listeners: HashMap<Multiaddr, libp2p::core::transport::ListenerId>,
+  pub turn_auth: std::sync::Arc<crate::turn_server::TurnAuthenticator>,
+  pub turn_port: Option<u16>,
+  pub public_ip: Option<String>,
 }
 
 impl EventLoopState {
@@ -27,6 +30,9 @@ impl EventLoopState {
       active_relay_peers: HashMap::new(),
       bootstrap_addrs: HashSet::new(),
       active_relay_listeners: HashMap::new(),
+      turn_auth: std::sync::Arc::new(crate::turn_server::TurnAuthenticator::new()),
+      turn_port: None,
+      public_ip: None,
     }
   }
 
@@ -222,6 +228,27 @@ fn handle_command(
       node_log!(callbacks, 4, "Disconnect command received for {}", peer_id);
       let _ = swarm.disconnect_peer_id(peer_id);
       state.pending_dials.remove(&peer_id);
+    }
+    Command::TurnServerStarted { port, public_ip } => {
+      state.turn_port = Some(port);
+      state.public_ip = Some(public_ip);
+
+      let record_key = libp2p::kad::RecordKey::new(&"mercury/turn_relays");
+      if let Err(e) = swarm.behaviour_mut().kademlia.start_providing(record_key) {
+        node_log!(callbacks, 2, "Failed to start providing TURN relay record: {:?}", e);
+      } else {
+        node_log!(callbacks, 3, "Announcing as TURN relay to DHT on port {}", port);
+      }
+    }
+    Command::DiscoverTurnRelays => {
+      let key = libp2p::kad::RecordKey::new(&"mercury/turn_relays");
+      swarm.behaviour_mut().kademlia.get_providers(key);
+      node_log!(callbacks, 4, "Discovering TURN relays...");
+    }
+    Command::AuthTurnRelay(peer_id) => {
+      let req = crate::types::TurnAuthRequest { dummy: 0 };
+      let _ = swarm.behaviour_mut().turn_auth.send_request(&peer_id, req);
+      node_log!(callbacks, 4, "Authenticating TURN relay {}...", peer_id);
     }
     _ => {}
   }
@@ -458,6 +485,27 @@ fn handle_swarm_event(
         }
       }
     }
+    SwarmEvent::Behaviour(MercuryBehaviourEvent::Kademlia(kad::Event::OutboundQueryProgressed {
+      result: kad::QueryResult::GetProviders(res),
+      step,
+      ..
+    })) => {
+      if let Ok(ok) = res {
+        if step.last && callbacks.on_turn_relays_discovered != 0 {
+          let mut providers_hex = Vec::new();
+          for peer in ok.providers {
+            if let Some(pk) = peerid_to_pubkey(&peer) {
+              providers_hex.push(crate::utils::hex_encode(&pk));
+            }
+          }
+          let joined = providers_hex.join(",");
+          let cb: extern "C" fn(*mut c_void, *const c_char) = unsafe { std::mem::transmute(callbacks.on_turn_relays_discovered) };
+          if let Ok(c_str) = CString::new(joined) {
+            cb(callbacks.context as *mut c_void, c_str.as_ptr());
+          }
+        }
+      }
+    }
     SwarmEvent::Behaviour(MercuryBehaviourEvent::Kademlia(kad::Event::RoutingUpdated { peer, addresses, .. })) => {
       node_log!(callbacks, 4, "Kademlia RoutingUpdated for {}: {:?}", peer, addresses);
       for addr in addresses.iter() {
@@ -528,6 +576,82 @@ fn handle_swarm_event(
           }
         }
         let _ = swarm.behaviour_mut().file.send_response(channel, vec![]);
+      }
+    }
+    SwarmEvent::Behaviour(MercuryBehaviourEvent::Autonat(autonat::Event::StatusChanged { old, new })) => {
+      node_log!(callbacks, 3, "AutoNAT status changed: {:?} -> {:?}", old, new);
+      if let autonat::NatStatus::Public(addr) = new {
+        if state.turn_port.is_none() {
+          let mut public_ip = String::new();
+          for protocol in addr.iter() {
+            match protocol {
+              libp2p::multiaddr::Protocol::Ip4(ip) => public_ip = ip.to_string(),
+              libp2p::multiaddr::Protocol::Ip6(ip) => public_ip = ip.to_string(),
+              _ => {}
+            }
+          }
+          if !public_ip.is_empty() {
+            let turn_auth = state.turn_auth.clone();
+            let tx_clone = tx.clone();
+            let callbacks_clone = callbacks.clone();
+
+            tokio::spawn(async move {
+              match crate::turn_server::start_turn_server(public_ip.clone(), turn_auth).await {
+                Ok(port) => {
+                  let _ = tx_clone.send(Command::TurnServerStarted { port, public_ip });
+                }
+                Err(e) => {
+                  node_log!(&callbacks_clone, 2, "Failed to start embedded TURN server: {}", e);
+                }
+              }
+            });
+          }
+        }
+      }
+    }
+    SwarmEvent::Behaviour(MercuryBehaviourEvent::TurnAuth(request_response::Event::Message { peer, message })) => {
+      if let request_response::Message::Request { request: _, channel, .. } = message {
+        node_log!(callbacks, 4, "Received TurnAuthRequest from {}", peer);
+
+        let key: [u8; 16] = rand::random();
+        let credential = crate::utils::hex_encode(&key);
+        let username = format!("{}_{}", peer, std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs());
+
+        state.turn_auth.add_user(username.clone(), credential.clone());
+
+        let response = crate::types::TurnAuthResponse {
+          username,
+          credential,
+          port: state.turn_port.unwrap_or(0),
+          public_ip: state.public_ip.clone().unwrap_or_default(),
+        };
+
+        let _ = swarm.behaviour_mut().turn_auth.send_response(channel, response);
+      } else if let request_response::Message::Response { response, .. } = message {
+        if callbacks.on_turn_auth_result != 0 {
+          if let Some(pk) = peerid_to_pubkey(&peer) {
+            if let Ok(peer_c_str) = CString::new(crate::utils::hex_encode(&pk)) {
+              if let Ok(ip_c_str) = CString::new(response.public_ip) {
+                if let Ok(user_c_str) = CString::new(response.username) {
+                  if let Ok(cred_c_str) = CString::new(response.credential) {
+                    let cb: extern "C" fn(*mut c_void, *const c_char, *const c_char, u16, *const c_char, *const c_char) = unsafe { std::mem::transmute(callbacks.on_turn_auth_result) };
+                    cb(callbacks.context as *mut c_void, peer_c_str.as_ptr(), ip_c_str.as_ptr(), response.port, user_c_str.as_ptr(), cred_c_str.as_ptr());
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    SwarmEvent::Behaviour(MercuryBehaviourEvent::TurnAuth(request_response::Event::OutboundFailure { peer, .. })) => {
+      if callbacks.on_turn_auth_result != 0 {
+        if let Some(pk) = peerid_to_pubkey(&peer) {
+          if let Ok(peer_c_str) = CString::new(crate::utils::hex_encode(&pk)) {
+            let cb: extern "C" fn(*mut c_void, *const c_char, *const c_char, u16, *const c_char, *const c_char) = unsafe { std::mem::transmute(callbacks.on_turn_auth_result) };
+            cb(callbacks.context as *mut c_void, peer_c_str.as_ptr(), std::ptr::null(), 0, std::ptr::null(), std::ptr::null());
+          }
+        }
       }
     }
     event => {
