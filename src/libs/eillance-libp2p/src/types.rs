@@ -1,4 +1,5 @@
 use libp2p::{Multiaddr, PeerId};
+use serde::{Deserialize, Serialize};
 
 #[repr(i32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -28,6 +29,8 @@ pub struct Callbacks {
   pub on_disconnected: usize,
   pub on_message: usize,
   pub on_log: usize,
+  pub on_turn_relays_discovered: usize,
+  pub on_turn_auth_result: usize,
 }
 unsafe impl Send for Callbacks {}
 unsafe impl Sync for Callbacks {}
@@ -41,4 +44,20 @@ pub enum Command {
   SendFile(PeerId, Vec<u8>),
   Disconnect(PeerId),
   Stop,
+  TurnServerStarted { port: u16, public_ip: String },
+  DiscoverTurnRelays,
+  AuthTurnRelay(PeerId),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TurnAuthRequest {
+  pub dummy: u8,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TurnAuthResponse {
+  pub username: String,
+  pub credential: String,
+  pub port: u16,
+  pub public_ip: String,
 }

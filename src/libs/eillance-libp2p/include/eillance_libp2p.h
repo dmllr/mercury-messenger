@@ -21,6 +21,8 @@ typedef void (*eillance_libp2p_on_peer_connected_cb)(void* context, char const* 
 typedef void (*eillance_libp2p_on_peer_disconnected_cb)(void* context, char const* peer_id_hex);
 typedef void (*eillance_libp2p_on_message_cb)(void* context, char const* peer_id_hex, uint8_t const* data, size_t len);
 typedef void (*eillance_libp2p_log_cb)(void* context, int level, char const* message);
+typedef void (*eillance_libp2p_on_turn_relays_discovered_cb)(void* context, char const* providers_csv);
+typedef void (*eillance_libp2p_on_turn_auth_result_cb)(void* context, char const* peer_id_hex, char const* ip, uint16_t port, char const* username, char const* credential);
 
 /* Creates a new libp2p node instance using a 32-byte Ed25519 secret key. Returns an opaque pointer. */
 auto eillance_libp2p_node_new(uint8_t const* secret_key_32_bytes, eillance_libp2p_node_role role) -> void*;
@@ -37,7 +39,9 @@ void eillance_libp2p_node_set_callbacks(
     eillance_libp2p_on_peer_connected_cb on_connected,
     eillance_libp2p_on_peer_disconnected_cb on_disconnected,
     eillance_libp2p_on_message_cb on_message,
-    eillance_libp2p_log_cb on_log
+    eillance_libp2p_log_cb on_log,
+    eillance_libp2p_on_turn_relays_discovered_cb on_turn_relays_discovered,
+    eillance_libp2p_on_turn_auth_result_cb on_turn_auth_result
 );
 
 void eillance_libp2p_node_disconnect(void* node, char const* peer_id_hex);
@@ -47,6 +51,9 @@ auto eillance_libp2p_node_send_file(void* node, char const* peer_id_hex, uint8_t
 void eillance_libp2p_node_dial(void* node, char const* peer_id_hex);
 void eillance_libp2p_node_add_bootstrap_node(void* node, char const* multiaddr);
 void eillance_libp2p_node_listen(void* node, char const* multiaddr);
+
+void eillance_libp2p_node_discover_turn_relays(void* node);
+void eillance_libp2p_node_auth_turn_relay(void* node, char const* peer_id_hex);
 
 // NOLINTEND(*-identifier-naming)
 
