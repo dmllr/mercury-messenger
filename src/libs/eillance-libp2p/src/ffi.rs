@@ -149,6 +149,22 @@ pub extern "C" fn eillance_libp2p_node_auth_turn_relay(ptr: *mut c_void, peer_id
 }
 
 #[no_mangle]
+pub extern "C" fn eillance_libp2p_node_set_turn_eligibility(ptr: *mut c_void, eligible: bool) {
+  run_ffi(
+    AssertUnwindSafe(|| {
+      if ptr.is_null() {
+        return;
+      }
+      let node = unsafe { &mut *(ptr as *mut Node) };
+      if let Some(tx) = &node.command_tx {
+        let _ = tx.send(Command::SetTurnEligibility(eligible));
+      }
+    }),
+    (),
+  );
+}
+
+#[no_mangle]
 pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
   run_ffi(
     AssertUnwindSafe(|| {
@@ -195,7 +211,7 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
           }
         };
 
-        run_event_loop(swarm, rx, tx, callbacks).await;
+        run_event_loop(swarm, rx, tx, callbacks, role).await;
       });
     }),
     (),

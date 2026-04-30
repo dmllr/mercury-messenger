@@ -149,6 +149,10 @@ struct EventPermissionBannerChanged {
   PermissionBannerType type;
 };
 
+struct EventTurnEligibilityChanged {
+  bool is_eligible;
+};
+
 // Explicit Notification Triggers
 struct EventNotifyNewMessage {
   ContactID peer_id;

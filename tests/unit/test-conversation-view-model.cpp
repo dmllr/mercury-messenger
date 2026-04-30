@@ -278,7 +278,7 @@ TEST_F(ConversationViewModelTest, ResumeTransferPropagates) {
   messaging::MessageEntry msg_data;
   msg_data.attachments.push_back(att);
 
-  auto entry = mock_storage_->AddHistoryEntry({.data = msg_data, .peer_id = peer1});
+  auto const entry = mock_storage_->AddHistoryEntry({.data = msg_data, .peer_id = peer1});
 
   EventQueue::Instance().Push(EventChatMessageReceived{peer1, entry});
   WaitFor([&] {

@@ -596,12 +596,14 @@ dependencies = [
 name = "eillance_libp2p"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "futures",
  "libp2p",
  "rand 0.10.1",
  "serde",
  "tokio",
  "turn",
+ "webrtc-util",
 ]
 
 [[package]]

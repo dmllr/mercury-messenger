@@ -171,6 +171,11 @@ class Libp2pNode final {
     eillance_libp2p_node_auth_turn_relay(node_, hex.c_str());
   }
 
+  void SetTurnEligibility(bool eligible) const {
+    INVARIANT_NOT_NULL(node_);
+    eillance_libp2p_node_set_turn_eligibility(node_, eligible);
+  }
+
   void SetOnConnected(std::function<void(ContactID const&, bool)> cb) {
     on_connected_ = std::move(cb);
   }
@@ -259,7 +264,7 @@ class Libp2pNode final {
   static void OnTurnAuthResultCallback(void* context, char const* peer_id_hex, char const* ip, uint16_t port, char const* user, char const* cred) {
     auto* self = static_cast<Libp2pNode*>(context);
     if (self->on_turn_auth_result_ && peer_id_hex != nullptr) {
-      ContactID const peer(std::string_view(peer_id_hex));
+      ContactID const peer(peer_id_hex);
       if (ip == nullptr || user == nullptr || cred == nullptr) {
         self->on_turn_auth_result_(peer, false, "", 0, "", "");
       } else {
