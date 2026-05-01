@@ -2,7 +2,7 @@ use crate::behaviour::{MercuryBehaviour, MercuryBehaviourEvent};
 use crate::types::{Callbacks, Command, NodeRole};
 use crate::utils::{hex_encode, notify_connected, notify_disconnected, peerid_to_pubkey, resolve_multiaddr};
 use futures::StreamExt;
-use libp2p::{Multiaddr, PeerId, Swarm, autonat, identify, kad, mdns, request_response, swarm::SwarmEvent};
+use libp2p::{Multiaddr, PeerId, Swarm, autonat, identify, kad, mdns, ping, request_response, swarm::SwarmEvent};
 use std::collections::{HashMap, HashSet};
 use std::ffi::CString;
 use std::os::raw::{c_char, c_void};
@@ -19,6 +19,7 @@ pub struct EventLoopState {
   pub turn_auth: std::sync::Arc<crate::turn_server::TurnAuthenticator>,
   pub turn_port: Option<u16>,
   pub public_ip: Option<String>,
+  pub public_port: Option<u16>,
   pub is_turn_eligible: bool,
   pub is_public: bool,
   pub turn_server_handle: Option<crate::turn_server::TurnServerHandle>,
@@ -36,6 +37,7 @@ impl EventLoopState {
       turn_auth: std::sync::Arc::new(crate::turn_server::TurnAuthenticator::new()),
       turn_port: None,
       public_ip: None,
+      public_port: None,
       is_turn_eligible: matches!(role, NodeRole::BootstrapNode | NodeRole::DesktopClient | NodeRole::Bot),
       is_public: false,
       turn_server_handle: None,
@@ -185,9 +187,10 @@ fn try_start_turn_server(state: &mut EventLoopState, tx: &mpsc::UnboundedSender<
       let turn_auth = state.turn_auth.clone();
       let tx_clone = tx.clone();
       let callbacks_clone = callbacks.clone();
+      let requested_port = state.public_port.unwrap_or(0);
 
       tokio::spawn(async move {
-        match crate::turn_server::start_turn_server(public_ip.clone(), turn_auth).await {
+        match crate::turn_server::start_turn_server(public_ip.clone(), requested_port, turn_auth).await {
           Ok((port, handle)) => {
             let _ = tx_clone.send(Command::TurnServerStarted { port, public_ip, handle });
           }
@@ -315,6 +318,18 @@ fn handle_swarm_event(
   match event {
     SwarmEvent::NewListenAddr { address, .. } => {
       node_log!(callbacks, 3, "Listen Active. Multiaddr: {}", address);
+      if state.public_port.is_none() {
+        for protocol in address.iter() {
+          match protocol {
+            libp2p::multiaddr::Protocol::Tcp(p) | libp2p::multiaddr::Protocol::Udp(p) => {
+              if p != 0 {
+                state.public_port = Some(p);
+              }
+            }
+            _ => {}
+          }
+        }
+      }
       if address.iter().any(|p| matches!(p, libp2p::multiaddr::Protocol::P2pCircuit)) {
         node_log!(callbacks, 3, "Node become relay");
       }
@@ -466,6 +481,11 @@ fn handle_swarm_event(
           match protocol {
             libp2p::multiaddr::Protocol::Ip4(ip) => public_ip = ip.to_string(),
             libp2p::multiaddr::Protocol::Ip6(ip) => public_ip = ip.to_string(),
+            libp2p::multiaddr::Protocol::Tcp(p) | libp2p::multiaddr::Protocol::Udp(p) => {
+              if state.public_port.is_none() && p != 0 {
+                state.public_port = Some(p);
+              }
+            }
             _ => {}
           }
         }
@@ -635,6 +655,9 @@ fn handle_swarm_event(
         }
         let _ = swarm.behaviour_mut().chat.send_response(channel, vec![]);
       }
+      else if let request_response::Message::Response { .. } = message {
+        node_log!(callbacks, 4, "Received Chat Response from {}", peer);
+      }
     }
     SwarmEvent::Behaviour(MercuryBehaviourEvent::File(request_response::Event::Message { peer, message })) => {
       if let request_response::Message::Request { request, channel, .. } = message {
@@ -654,6 +677,27 @@ fn handle_swarm_event(
         }
         let _ = swarm.behaviour_mut().file.send_response(channel, vec![]);
       }
+      else if let request_response::Message::Response { .. } = message {
+        node_log!(callbacks, 4, "Received File Response from {}", peer);
+      }
+    }
+    SwarmEvent::Behaviour(MercuryBehaviourEvent::Chat(request_response::Event::ResponseSent { peer, .. })) => {
+      node_log!(callbacks, 4, "Chat response sent to {}", peer);
+    }
+    SwarmEvent::Behaviour(MercuryBehaviourEvent::Chat(request_response::Event::OutboundFailure { peer, error, .. })) => {
+      node_log!(callbacks, 2, "Chat outbound failure to {}: {:?}", peer, error);
+    }
+    SwarmEvent::Behaviour(MercuryBehaviourEvent::Chat(request_response::Event::InboundFailure { peer, error, .. })) => {
+      node_log!(callbacks, 2, "Chat inbound failure from {}: {:?}", peer, error);
+    }
+    SwarmEvent::Behaviour(MercuryBehaviourEvent::File(request_response::Event::ResponseSent { peer, .. })) => {
+      node_log!(callbacks, 4, "File response sent to {}", peer);
+    }
+    SwarmEvent::Behaviour(MercuryBehaviourEvent::File(request_response::Event::OutboundFailure { peer, error, .. })) => {
+      node_log!(callbacks, 2, "File outbound failure to {}: {:?}", peer, error);
+    }
+    SwarmEvent::Behaviour(MercuryBehaviourEvent::File(request_response::Event::InboundFailure { peer, error, .. })) => {
+      node_log!(callbacks, 2, "File inbound failure from {}: {:?}", peer, error);
     }
     SwarmEvent::Behaviour(MercuryBehaviourEvent::Autonat(autonat::Event::StatusChanged { old, new })) => {
       node_log!(callbacks, 3, "AutoNAT status changed: {:?} -> {:?}", old, new);
@@ -665,6 +709,11 @@ fn handle_swarm_event(
             match protocol {
               libp2p::multiaddr::Protocol::Ip4(ip) => public_ip = ip.to_string(),
               libp2p::multiaddr::Protocol::Ip6(ip) => public_ip = ip.to_string(),
+              libp2p::multiaddr::Protocol::Tcp(p) | libp2p::multiaddr::Protocol::Udp(p) => {
+                if state.public_port.is_none() && p != 0 {
+                  state.public_port = Some(p);
+                }
+              }
               _ => {}
             }
           }
@@ -702,6 +751,7 @@ fn handle_swarm_event(
 
         let _ = swarm.behaviour_mut().turn_auth.send_response(channel, response);
       } else if let request_response::Message::Response { response, .. } = message {
+        node_log!(callbacks, 4, "Received TurnAuthResponse from {}", peer);
         if callbacks.on_turn_auth_result != 0 {
           if let Some(pk) = peerid_to_pubkey(&peer) {
             if let Ok(peer_c_str) = CString::new(crate::utils::hex_encode(&pk)) {
@@ -719,6 +769,7 @@ fn handle_swarm_event(
       }
     }
     SwarmEvent::Behaviour(MercuryBehaviourEvent::TurnAuth(request_response::Event::OutboundFailure { peer, .. })) => {
+      node_log!(callbacks, 2, "TurnAuth request to {} failed", peer);
       if callbacks.on_turn_auth_result != 0 {
         if let Some(pk) = peerid_to_pubkey(&peer) {
           if let Ok(peer_c_str) = CString::new(crate::utils::hex_encode(&pk)) {
@@ -727,6 +778,21 @@ fn handle_swarm_event(
           }
         }
       }
+    }
+    SwarmEvent::Behaviour(MercuryBehaviourEvent::TurnAuth(request_response::Event::InboundFailure { peer, error, .. })) => {
+      node_log!(callbacks, 2, "TurnAuth inbound failure from {}: {:?}", peer, error);
+    }
+    SwarmEvent::Behaviour(MercuryBehaviourEvent::TurnAuth(request_response::Event::ResponseSent { peer, .. })) => {
+      node_log!(callbacks, 4, "TurnAuth response sent to {}", peer);
+    }
+    SwarmEvent::Behaviour(MercuryBehaviourEvent::Ping(ping::Event { peer, result, .. })) => {
+        match result {
+            Ok(rtt) => node_log!(callbacks, 4, "Ping to {} successful, RTT: {:?}", peer, rtt),
+            Err(e) => node_log!(callbacks, 4, "Ping to {} failed: {:?}", peer, e),
+        }
+    }
+    SwarmEvent::Behaviour(MercuryBehaviourEvent::Kademlia(kad::Event::OutboundQueryProgressed { id, step, .. })) => {
+      node_log!(callbacks, 4, "Kademlia OutboundQueryProgressed: id={:?} step={:?}", id, step);
     }
     event => {
       node_log!(callbacks, 4, "Unhandled SwarmEvent: {:?}", event);

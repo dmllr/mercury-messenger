@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tokio::net::UdpSocket;
 use turn::server::{config::{ConnConfig, ServerConfig}, Server};
-use turn::relay::relay_static::RelayAddressGeneratorStatic;
+use turn::relay::relay_range::RelayAddressGeneratorRanges;
 
 pub struct TurnAuthenticator {
   pub users: Mutex<HashMap<String, (String, Instant)>>,
@@ -55,17 +55,24 @@ pub struct TurnServerHandle {
     pub close_tx: tokio::sync::oneshot::Sender<()>,
 }
 
-pub async fn start_turn_server(public_ip: String, auth: Arc<TurnAuthenticator>) -> Result<(u16, TurnServerHandle), String> {
-  let udp_socket = UdpSocket::bind("0.0.0.0:0").await.map_err(|e| e.to_string())?;
+pub async fn start_turn_server(public_ip: String, requested_port: u16, auth: Arc<TurnAuthenticator>) -> Result<(u16, TurnServerHandle), String> {
+  let bind_addr = format!("0.0.0.0:{}", requested_port);
+  let udp_socket = match UdpSocket::bind(&bind_addr).await {
+      Ok(s) => s,
+      Err(_) => UdpSocket::bind("0.0.0.0:0").await.map_err(|e| e.to_string())?,
+  };
   let port = udp_socket.local_addr().map_err(|e| e.to_string())?.port();
   let conn = Arc::new(udp_socket);
 
   let config = ServerConfig {
     conn_configs: vec![ConnConfig {
         conn: conn as std::sync::Arc<dyn webrtc_util::Conn + std::marker::Send + std::marker::Sync>,
-        relay_addr_generator: Box::new(RelayAddressGeneratorStatic {
+        relay_addr_generator: Box::new(RelayAddressGeneratorRanges {
             relay_address: public_ip.parse().unwrap_or(std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0))),
             address: "0.0.0.0".to_string(),
+            min_port: 50000,
+            max_port: 50500,
+            max_retries: 10,
             net: Arc::new(webrtc_util::vnet::net::Net::new(None)),
         }),
     }],
