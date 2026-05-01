@@ -28,6 +28,7 @@ class RtcMediaTransport : public transport::MediaTransport::Interface {
  public:
   RtcMediaTransport() {
     rtc_config_.iceServers.emplace_back("stun:stun.relay.metered.ca:80");
+    rtc_config_.iceServers.emplace_back("stun:stun.l.google.com:19302");
   }
 
   void SetIceServers(std::string const& json_config) override {
@@ -54,11 +55,10 @@ class RtcMediaTransport : public transport::MediaTransport::Interface {
         }
 
         if (url.rfind("turn", 0) == 0) {
-          std::string const username = entry.value("username", "");
-          std::string const credential = entry.value("credential", "");
+          auto const username = entry.value("username", "");
+          auto const credential = entry.value("credential", "");
           if (!username.empty() && !credential.empty()) {
-            auto scheme_end = url.find(":");
-            if (scheme_end != std::string::npos) {
+            if (auto const scheme_end = url.find(':'); scheme_end != std::string::npos) {
               std::string const host_part = url.substr(scheme_end + 1);
               new_config.iceServers.emplace_back("turn:" + username + ":" + credential + "@" + host_part);
             } else {
