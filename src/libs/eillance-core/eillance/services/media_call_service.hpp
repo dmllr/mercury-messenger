@@ -42,7 +42,7 @@ class MediaCallService {
         storage_(sm->storage),
         data_transport_(sm->data_transport),
         media_transport_(sm->media_transport) {
-    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventDataChannelOpen>([this](auto const& e) {
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventDataChannelOpen>([this](auto const& e) -> void {
       this->OnDataChannelOpen(e.peer_id);
     }));
 
@@ -50,13 +50,15 @@ class MediaCallService {
         [this](auto const& e) { this->OnMediaPeerConnectionStateChange(e.peer_id, e.state); }
     ));
 
-    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventMediaGatheringStateChanged>([this](auto const& e) {
-      this->OnMediaGatheringStateChange(e.peer_id, e.state_val);
-    }));
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventMediaGatheringStateChanged>(
+        [this](auto const& e) -> void { this->OnMediaGatheringStateChange(e.peer_id, e.state_val); }
+    ));
   }
 
   ~MediaCallService() {
-    for (auto const id : event_unsubs_) EventQueue::Instance().Unsubscribe(id);
+    for (auto const id : event_unsubs_) {
+      EventQueue::Instance().Unsubscribe(id);
+    }
   }
 
   [[nodiscard]] auto GetCurrentSession() const -> std::optional<CallSessionInfo> {
@@ -229,6 +231,7 @@ class MediaCallService {
 
   void OnMediaOffer(ContactID const& peer_id, std::string const& sdp) {
     std::lock_guard<std::recursive_mutex> const lock(mutex_);
+    LGD << "[WebRTC] Received Remote Offer SDP:\n" << sdp;
 
     if (!current_call_) {
       bool const is_video = sdp.find("m=video") != std::string::npos;
@@ -248,6 +251,9 @@ class MediaCallService {
           try {
             media_transport_->SetRemoteDescription(peer_id, sdp, "offer");
             media_transport_->CreateAnswer(peer_id);
+            call_queue_.DispatchAfter(std::chrono::milliseconds(2500), [this, peer_id]() {
+              ForceSendLocalDescription(peer_id);
+            });
           } catch (std::exception const& e) {
             LGE << "Failed to process media offer: " << e.what();
           }
@@ -256,11 +262,14 @@ class MediaCallService {
       return;
     }
 
-        if (current_call_ && current_call_->peer_id == peer_id) {
-          try {
-            LGI << "[WebRTC] Applying remote offer SDP from " << peer_id.ToString();
-            media_transport_->SetRemoteDescription(peer_id, sdp, "offer");
-            media_transport_->CreateAnswer(peer_id);
+    if (current_call_ && current_call_->peer_id == peer_id) {
+      try {
+        LGI << "[WebRTC] Applying remote offer SDP from " << peer_id.ToString();
+        media_transport_->SetRemoteDescription(peer_id, sdp, "offer");
+        media_transport_->CreateAnswer(peer_id);
+        call_queue_.DispatchAfter(std::chrono::milliseconds(2500), [this, peer_id]() {
+          ForceSendLocalDescription(peer_id);
+        });
       } catch (std::exception const& e) {
         LGE << "Failed to process media offer: " << e.what();
       }
@@ -269,10 +278,12 @@ class MediaCallService {
 
   void OnMediaAnswer(ContactID const& peer_id, std::string const& sdp) {
     std::lock_guard<std::recursive_mutex> const lock(mutex_);
-        if (current_call_ && current_call_->peer_id == peer_id) {
-          try {
-            LGI << "[WebRTC] Applying remote answer SDP from " << peer_id.ToString();
-            media_transport_->SetRemoteDescription(peer_id, sdp, "answer");
+    LGD << "[WebRTC] Received Remote Answer SDP:\n" << sdp;
+
+    if (current_call_ && current_call_->peer_id == peer_id) {
+      try {
+        LGI << "[WebRTC] Applying remote answer SDP from " << peer_id.ToString();
+        media_transport_->SetRemoteDescription(peer_id, sdp, "answer");
       } catch (std::exception const& e) {
         LGE << "Failed to set media answer: " << e.what();
       }
@@ -282,19 +293,19 @@ class MediaCallService {
   void OnDataChannelOpen(ContactID const& peer_id) {
     std::lock_guard<std::recursive_mutex> const lock(mutex_);
     if (current_call_ && current_call_->peer_id == peer_id && current_call_->state == CallState::waitingForData) {
-        LGI << "Data channel opened for call " << current_call_->call_id.ToString() << ". Proceeding to signaling.";
-        SetCallState(CallState::negotiating);
-        SendCallRequest(peer_id);
+      LGI << "Data channel opened for call " << current_call_->call_id.ToString() << ". Proceeding to signaling.";
+      SetCallState(CallState::negotiating);
+      SendCallRequest(peer_id);
 
-        data_transport_->DiscoverTurnRelays();
-        call_queue_.DispatchAfter(std::chrono::milliseconds(1500), [this, peer_id, is_video = current_call_->is_video]() {
-          std::lock_guard<std::recursive_mutex> const lock(mutex_);
-          if (current_call_ && current_call_->peer_id == peer_id) {
-            StartMediaConnection(peer_id, is_video, true);
-          }
-        });
-      }
+      data_transport_->DiscoverTurnRelays();
+      call_queue_.DispatchAfter(std::chrono::milliseconds(1500), [this, peer_id, is_video = current_call_->is_video]() {
+        std::lock_guard<std::recursive_mutex> const lock(mutex_);
+        if (current_call_ && current_call_->peer_id == peer_id) {
+          StartMediaConnection(peer_id, is_video, true);
+        }
+      });
     }
+  }
 
   void OnMediaGatheringStateChange(ContactID const& peer_id, int state_val) {
     LGI << "[WebRTC] ICE Gathering state changed to " << state_val << " for " << peer_id.ToString();
@@ -302,6 +313,10 @@ class MediaCallService {
     if (state_val == 2) {
       if (current_call_ && current_call_->peer_id == peer_id) {
         if (auto peer = data_transport_->GetPeer(peer_id)) {
+          if (peer->pending_offer_sdp && peer->pending_offer_sdp->empty()) {
+            LGI << "[WebRTC] SDP was already sent via timeout. Ignoring late completion.";
+            return;
+          }
           std::optional<std::string> sdp = peer->pending_offer_sdp;
           if (!sdp) {
             try {
@@ -311,14 +326,15 @@ class MediaCallService {
             }
           }
 
-              if (sdp) {
-                std::string const type = current_call_->is_outgoing ? "offer" : "answer";
-                LGI << "[WebRTC] ICE Gathering complete. Sending " << type << " to " << peer_id.ToString();
-                nlohmann::json const msg = {{"type", type}, {"context", "media"}, {"sdp", *sdp}};
+          if (sdp && !sdp->empty()) {
+            std::string const type = current_call_->is_outgoing ? "offer" : "answer";
+            LGI << "[WebRTC] ICE Gathering complete. Sending " << type << " to " << peer_id.ToString();
+            LGD << "[WebRTC] Generated Local SDP:\n" << *sdp;
+            nlohmann::json const msg = {{"type", type}, {"context", "media"}, {"sdp", *sdp}};
             if (peer->data_channel_is_open) {
               std::ignore = data_transport_->SendJson(peer_id, msg);
             }
-            peer->pending_offer_sdp.reset();
+            peer->pending_offer_sdp = "";  // Mark as sent
           }
         }
       }
@@ -340,7 +356,8 @@ class MediaCallService {
       }
 
       if (current_call_ && current_call_->peer_id == peer_id) {
-        LGE << "Media connection dropped for call " << current_call_->call_id.ToString() << ". Forcing hangup.";
+        LGE << "Media connection dropped for call " << current_call_->call_id.ToString()
+            << ". State: " << static_cast<int>(state) << ". Forcing hangup.";
         TeardownCallInternal(peer_id);
         EventQueue::Instance().Push(EventCallTerminated{peer_id});
       }
@@ -439,16 +456,17 @@ class MediaCallService {
     SendCallRequest(peer_id);
 
     data_transport_->DiscoverTurnRelays();
-    call_queue_.DispatchAfter(std::chrono::milliseconds(1500), [this, peer_id, is_video]() {
-      std::lock_guard<std::recursive_mutex> const lock(mutex_);
+    call_queue_.DispatchAfter(std::chrono::milliseconds(1500), [this, peer_id, is_video]() -> void {
+      std::lock_guard<std::recursive_mutex> const dispatch_lock(mutex_);
       if (current_call_ && current_call_->peer_id == peer_id) {
         StartMediaConnection(peer_id, is_video, true);
       }
     });
   }
 
-  void StartMediaConnection(ContactID const& peer_id, bool is_video, bool is_initiator) {
-    LGI << "[MediaCall] Starting WebRTC media connection (video=" << is_video << ", initiator=" << is_initiator << ") for " << peer_id.ToString();
+  void StartMediaConnection(ContactID const& peer_id, bool const is_video, bool const is_initiator) {
+    LGI << "[MediaCall] Starting WebRTC media connection (video=" << is_video << ", initiator=" << is_initiator
+        << ") for " << peer_id.ToString();
 
     auto peer = data_transport_->GetPeer(peer_id);
     if (!peer) {
@@ -460,6 +478,7 @@ class MediaCallService {
     media_transport_->Connect(peer_id);
 
     peer->has_media_peer_connection = true;
+    peer->pending_offer_sdp.reset();
 
     media_transport_->AddAudio(peer_id);
     if (is_video) {
@@ -469,8 +488,40 @@ class MediaCallService {
     if (is_initiator) {
       try {
         media_transport_->CreateOffer(peer_id);
+        call_queue_.DispatchAfter(std::chrono::milliseconds(2500), [this, peer_id]() {
+          ForceSendLocalDescription(peer_id);
+        });
       } catch (std::exception const& e) {
         LGE << "Failed to create offer: " << e.what();
+      }
+    }
+  }
+
+  void ForceSendLocalDescription(ContactID const& peer_id) {
+    std::lock_guard<std::recursive_mutex> const lock(mutex_);
+    if (current_call_ && current_call_->peer_id == peer_id) {
+      if (auto peer = data_transport_->GetPeer(peer_id)) {
+        if (!peer->has_media_peer_connection) {
+          return;
+        }
+        if (!peer->pending_offer_sdp) {
+          std::optional<std::string> sdp;
+          try {
+            sdp = media_transport_->GetLocalDescription(peer_id);
+          } catch (std::exception const& e) {
+            LGE << "Failed to get local description for forced send: " << e.what();
+          }
+          if (sdp && !sdp->empty()) {
+            std::string const type = current_call_->is_outgoing ? "offer" : "answer";
+            LGI << "[WebRTC] Forced sending " << type << " to " << peer_id.ToString() << " after ICE timeout.";
+            LGD << "[WebRTC] Generated Local SDP:\n" << *sdp;
+            nlohmann::json const msg = {{"type", type}, {"context", "media"}, {"sdp", *sdp}};
+            if (peer->data_channel_is_open) {
+              std::ignore = data_transport_->SendJson(peer_id, msg);
+            }
+            peer->pending_offer_sdp = "";  // Mark as sent
+          }
+        }
       }
     }
   }
@@ -496,7 +547,7 @@ class MediaCallService {
       }
 
       if (current_call_->peer_id == peer_id) {
-        messaging::CallEntryParams params{
+        messaging::CallEntryParams const params{
             .peer_id = peer_id,
             .kind = current_call_->is_video ? messaging::HistoryEntryKind::videoCall
                                             : messaging::HistoryEntryKind::voiceCall,

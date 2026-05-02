@@ -146,13 +146,11 @@ class Client final {
         })
     );
 
-    event_unsubs_.emplace_back(
-        EventQueue::Instance().Subscribe<EventDataChannelOpen>([this](auto const& e) -> void {
-          background_queue_.DispatchAfter(std::chrono::seconds(2), [this, peer_id = e.peer_id]() {
-            sm_->data_transport->AuthTurnRelay(peer_id);
-          });
-        })
-    );
+    event_unsubs_.emplace_back(EventQueue::Instance().Subscribe<EventDataChannelOpen>([this](auto const& e) -> void {
+      background_queue_.DispatchAfter(std::chrono::seconds(2), [this, peer_id = e.peer_id]() {
+        sm_->data_transport->AuthTurnRelay(peer_id);
+      });
+    }));
 
     event_unsubs_.emplace_back(
         EventQueue::Instance().Subscribe<EventTurnRelaysDiscovered>([this](auto const& e) -> void {
@@ -169,7 +167,8 @@ class Client final {
 
     event_unsubs_.emplace_back(EventQueue::Instance().Subscribe<EventTurnAuthResult>([this](auto const& e) -> void {
       if (e.success && e.port > 0 && !e.public_ip.empty()) {
-        LGI << "[TURN] Dynamic TURN server discovered and authenticated: " << e.public_ip << ":" << e.port << " user: " << e.username;
+        LGI << "[TURN] Dynamic TURN server discovered and authenticated: " << e.public_ip << ":" << e.port
+            << " user: " << e.username;
         {
           std::lock_guard<std::mutex> const lock(dynamic_turn_mutex_);
           std::erase_if(dynamic_turn_servers_, [&](auto const& s) { return s.peer_id == e.peer_id; });
@@ -182,11 +181,9 @@ class Client final {
       }
     }));
 
-    event_unsubs_.emplace_back(
-        EventQueue::Instance().Subscribe<EventTurnEligibilityChanged>([this](auto const& e) -> void {
-          sm_->data_transport->SetTurnEligibility(e.is_eligible);
-        })
-    );
+    event_unsubs_.emplace_back(EventQueue::Instance().Subscribe<EventTurnEligibilityChanged>(
+        [this](auto const& e) -> void { sm_->data_transport->SetTurnEligibility(e.is_eligible); }
+    ));
 
     event_unsubs_.emplace_back(EventQueue::Instance().Subscribe<EventConnectionRequested>(
         [this](auto const& e) -> void { this->Connect(e.peer_id); }
@@ -243,10 +240,10 @@ class Client final {
     sm_->sync_engine->Start();
     sm_->delivery_service->Start();
     StartWatchdog();
-    
+
     // Immediately initiate relay discovery to prevent ICE config race conditions prior to the first call
     sm_->data_transport->DiscoverTurnRelays();
-    
+
     background_queue_.Dispatch([this]() -> void { CheckForInactivePeers(); });
   }
 
@@ -655,17 +652,14 @@ class Client final {
         }
 
         Json turn_server;
-        turn_server["urls"] = std::vector<std::string>{
-            "turn:" + ip_str + ":" + std::to_string(ts.port) + "?transport=udp"
-        };
+        turn_server["urls"] =
+            std::vector<std::string>{"turn:" + ip_str + ":" + std::to_string(ts.port) + "?transport=udp"};
         turn_server["username"] = ts.username;
         turn_server["credential"] = ts.credential;
         final_config.push_back(turn_server);
 
         Json stun_server;
-        stun_server["urls"] = std::vector<std::string>{
-            "stun:" + ip_str + ":" + std::to_string(ts.port)
-        };
+        stun_server["urls"] = std::vector<std::string>{"stun:" + ip_str + ":" + std::to_string(ts.port)};
         final_config.push_back(stun_server);
       }
     }

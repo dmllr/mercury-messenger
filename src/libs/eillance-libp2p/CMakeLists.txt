@@ -50,7 +50,17 @@ else()
         OUTPUT "${LIBP2P_STATIC_LIB}"
         COMMAND cargo build --release --target-dir "${CARGO_TARGET_DIR}"
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/lib.rs" "${CMAKE_CURRENT_SOURCE_DIR}/Cargo.toml"
+        DEPENDS
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/behaviour.rs"
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/event_loop.rs"
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/ffi.rs"
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/lib.rs"
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/node.rs"
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/turn_server.rs"
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/types.rs"
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/utils.rs"
+            "${CMAKE_CURRENT_SOURCE_DIR}/Cargo.lock"
+            "${CMAKE_CURRENT_SOURCE_DIR}/Cargo.toml"
         COMMENT "Building Rust libp2p crate for host"
     )
 endif()

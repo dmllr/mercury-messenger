@@ -91,16 +91,23 @@ class Libp2pDataTransport : public DataTransport::Interface {
       });
 
       node_->SetOnTurnRelaysDiscovered([this](std::vector<ContactID> const& relays) -> void {
-        rx_queue_.Dispatch([relays]() -> void {
-          EventQueue::Instance().Push(EventTurnRelaysDiscovered{relays});
-        });
+        rx_queue_.Dispatch([relays]() -> void { EventQueue::Instance().Push(EventTurnRelaysDiscovered{relays}); });
       });
 
-      node_->SetOnTurnAuthResult([this](ContactID const& peer_id, bool success, std::string const& ip, uint16_t port, std::string const& user, std::string const& cred) -> void {
-        rx_queue_.Dispatch([peer_id, success, ip, port, user, cred]() -> void {
-          EventQueue::Instance().Push(EventTurnAuthResult{peer_id, success, ip, port, user, cred});
-        });
-      });
+      node_->SetOnTurnAuthResult(
+          [this](
+              ContactID const& peer_id,
+              bool success,
+              std::string const& ip,
+              uint16_t port,
+              std::string const& user,
+              std::string const& cred
+          ) -> void {
+            rx_queue_.Dispatch([peer_id, success, ip, port, user, cred]() -> void {
+              EventQueue::Instance().Push(EventTurnAuthResult{peer_id, success, ip, port, user, cred});
+            });
+          }
+      );
     }
 
     node_->Start();
