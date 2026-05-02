@@ -5,8 +5,8 @@ mod behaviour;
 mod event_loop;
 mod ffi;
 mod node;
-mod types;
 mod turn_server;
+mod types;
 
 #[cfg(test)]
 mod tests {
