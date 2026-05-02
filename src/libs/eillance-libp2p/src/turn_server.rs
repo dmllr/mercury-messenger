@@ -71,12 +71,17 @@ pub async fn start_turn_server(public_ip: String, requested_port: u16, auth: Arc
   let port = udp_socket.local_addr().map_err(|e| e.to_string())?.port();
   crate::node_log!(&auth.callbacks, 3, "[TURN] Successfully bound TURN server to {}:{}", bind_ip, port);
   let conn = Arc::new(udp_socket);
+  
+  let parsed_public_ip = public_ip.parse().unwrap_or_else(|_| {
+      if is_ipv6 { std::net::IpAddr::V6(std::net::Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0)) }
+      else { std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)) }
+  });
 
   let config = ServerConfig {
     conn_configs: vec![ConnConfig {
         conn: conn as std::sync::Arc<dyn webrtc_util::Conn + std::marker::Send + std::marker::Sync>,
         relay_addr_generator: Box::new(RelayAddressGeneratorRanges {
-            relay_address: public_ip.parse().unwrap_or(std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0))),
+            relay_address: parsed_public_ip,
             address: bind_ip.to_string(),
             min_port: 50000,
             max_port: 50500,

@@ -243,6 +243,10 @@ class Client final {
     sm_->sync_engine->Start();
     sm_->delivery_service->Start();
     StartWatchdog();
+    
+    // Immediately initiate relay discovery to prevent ICE config race conditions prior to the first call
+    sm_->data_transport->DiscoverTurnRelays();
+    
     background_queue_.Dispatch([this]() -> void { CheckForInactivePeers(); });
   }
 
