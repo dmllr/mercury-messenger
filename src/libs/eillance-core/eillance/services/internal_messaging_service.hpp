@@ -162,8 +162,10 @@ class InternalMessagingService {
     bool const is_media = (context_str == transport::protocol::values::contextMedia);
 
     if (!is_media) {
+      LGD << "[Signaling] Ignoring non-media SDP " << type << " from " << peer_id.ToString();
       return;  // We no longer negotiate DataChannels via SDP, libp2p handles data connections natively
     }
+    LGI << "[Signaling] Received media SDP " << type << " from " << peer_id.ToString();
 
     if (auto peer = data_transport_->GetPeer(peer_id); !peer) {
       if (type == transport::protocol::values::offer) {

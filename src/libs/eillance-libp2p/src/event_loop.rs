@@ -26,7 +26,7 @@ pub struct EventLoopState {
 }
 
 impl EventLoopState {
-  pub fn new(role: NodeRole) -> Self {
+  pub fn new(role: NodeRole, callbacks: crate::types::Callbacks) -> Self {
     Self {
       pending_dials: HashSet::new(),
       known_addresses: HashMap::new(),
@@ -34,7 +34,7 @@ impl EventLoopState {
       active_relay_peers: HashMap::new(),
       bootstrap_addrs: HashSet::new(),
       active_relay_listeners: HashMap::new(),
-      turn_auth: std::sync::Arc::new(crate::turn_server::TurnAuthenticator::new()),
+      turn_auth: std::sync::Arc::new(crate::turn_server::TurnAuthenticator::new(callbacks)),
       turn_port: None,
       public_ip: None,
       public_port: None,
@@ -104,7 +104,7 @@ pub async fn run_event_loop(
   callbacks: Callbacks,
   role: NodeRole,
 ) {
-  let mut state = EventLoopState::new(role);
+  let mut state = EventLoopState::new(role, callbacks.clone());
   let mut keepalive_interval = tokio::time::interval(Duration::from_secs(30));
 
   loop {
@@ -268,10 +268,10 @@ fn handle_command(
     }
     Command::TurnServerStarted { port, public_ip, handle } => {
       state.turn_port = Some(port);
-      state.public_ip = Some(public_ip);
+      state.public_ip = Some(public_ip.clone());
       state.turn_server_handle = Some(handle);
 
-      node_log!(callbacks, 3, "Node starts a TURN server");
+      node_log!(callbacks, 3, "Node starts a TURN server on {}:{}", public_ip, port);
 
       let record_key = libp2p::kad::RecordKey::new(&"mercury/turn_relays");
       if let Err(e) = swarm.behaviour_mut().kademlia.start_providing(record_key) {
@@ -748,6 +748,8 @@ fn handle_swarm_event(
           port: state.turn_port.unwrap_or(0),
           public_ip: state.public_ip.clone().unwrap_or_default(),
         };
+        
+        node_log!(callbacks, 3, "Sending TurnAuthResponse: ip={}, port={}, user={}", response.public_ip, response.port, response.username);
 
         let _ = swarm.behaviour_mut().turn_auth.send_response(channel, response);
       } else if let request_response::Message::Response { response, .. } = message {

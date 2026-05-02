@@ -169,7 +169,7 @@ class Client final {
 
     event_unsubs_.emplace_back(EventQueue::Instance().Subscribe<EventTurnAuthResult>([this](auto const& e) -> void {
       if (e.success && e.port > 0 && !e.public_ip.empty()) {
-        LGI << "Adding dynamic TURN server " << e.public_ip << ":" << e.port;
+        LGI << "[TURN] Dynamic TURN server discovered and authenticated: " << e.public_ip << ":" << e.port << " user: " << e.username;
         {
           std::lock_guard<std::mutex> const lock(dynamic_turn_mutex_);
           std::erase_if(dynamic_turn_servers_, [&](auto const& s) { return s.peer_id == e.peer_id; });
@@ -667,6 +667,7 @@ class Client final {
     }
 
     auto json_str = final_config.dump();
+    LGI << "[ICE] Final WebRTC Configuration: " << json_str;
     sm_->media_transport->SetIceServers(json_str);
   }
 

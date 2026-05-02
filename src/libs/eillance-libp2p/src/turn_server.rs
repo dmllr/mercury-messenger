@@ -8,12 +8,14 @@ use turn::relay::relay_range::RelayAddressGeneratorRanges;
 
 pub struct TurnAuthenticator {
   pub users: Mutex<HashMap<String, (String, Instant)>>,
+  pub callbacks: crate::types::Callbacks,
 }
 
 impl TurnAuthenticator {
-  pub fn new() -> Self {
+  pub fn new(callbacks: crate::types::Callbacks) -> Self {
     Self {
       users: Mutex::new(HashMap::new()),
+      callbacks,
     }
   }
 
@@ -41,11 +43,13 @@ impl turn::auth::AuthHandler for MercuryAuthHandler {
     &self,
     username: &str,
     realm: &str,
-    _src_addr: std::net::SocketAddr,
+    src_addr: std::net::SocketAddr,
   ) -> Result<Vec<u8>, turn::Error> {
     if let Some(password) = self.auth.get_password(username) {
+        crate::node_log!(&self.auth.callbacks, 3, "[TURN] Auth request SUCCESS for user: {} from {}", username, src_addr);
         Ok(turn::auth::generate_auth_key(username, realm, &password))
     } else {
+        crate::node_log!(&self.auth.callbacks, 2, "[TURN] Auth request FAILED for user: {} from {}", username, src_addr);
         Err(std::io::Error::new(std::io::ErrorKind::PermissionDenied, "unauthorized").into())
     }
   }
@@ -59,11 +63,13 @@ pub async fn start_turn_server(public_ip: String, requested_port: u16, auth: Arc
   let is_ipv6 = public_ip.contains(':');
   let bind_ip = if is_ipv6 { "::" } else { "0.0.0.0" };
   let bind_addr = format!("{}:{}", bind_ip, requested_port);
+  crate::node_log!(&auth.callbacks, 3, "[TURN] Attempting to bind TURN server to {}", bind_addr);
   let udp_socket = match UdpSocket::bind(&bind_addr).await {
       Ok(s) => s,
       Err(_) => UdpSocket::bind(format!("{}:0", bind_ip)).await.map_err(|e| e.to_string())?,
   };
   let port = udp_socket.local_addr().map_err(|e| e.to_string())?.port();
+  crate::node_log!(&auth.callbacks, 3, "[TURN] Successfully bound TURN server to {}:{}", bind_ip, port);
   let conn = Arc::new(udp_socket);
 
   let config = ServerConfig {

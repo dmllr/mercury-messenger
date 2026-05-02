@@ -256,10 +256,11 @@ class MediaCallService {
       return;
     }
 
-    if (current_call_ && current_call_->peer_id == peer_id) {
-      try {
-        media_transport_->SetRemoteDescription(peer_id, sdp, "offer");
-        media_transport_->CreateAnswer(peer_id);
+        if (current_call_ && current_call_->peer_id == peer_id) {
+          try {
+            LGI << "[WebRTC] Applying remote offer SDP from " << peer_id.ToString();
+            media_transport_->SetRemoteDescription(peer_id, sdp, "offer");
+            media_transport_->CreateAnswer(peer_id);
       } catch (std::exception const& e) {
         LGE << "Failed to process media offer: " << e.what();
       }
@@ -268,9 +269,10 @@ class MediaCallService {
 
   void OnMediaAnswer(ContactID const& peer_id, std::string const& sdp) {
     std::lock_guard<std::recursive_mutex> const lock(mutex_);
-    if (current_call_ && current_call_->peer_id == peer_id) {
-      try {
-        media_transport_->SetRemoteDescription(peer_id, sdp, "answer");
+        if (current_call_ && current_call_->peer_id == peer_id) {
+          try {
+            LGI << "[WebRTC] Applying remote answer SDP from " << peer_id.ToString();
+            media_transport_->SetRemoteDescription(peer_id, sdp, "answer");
       } catch (std::exception const& e) {
         LGE << "Failed to set media answer: " << e.what();
       }
@@ -295,6 +297,7 @@ class MediaCallService {
     }
 
   void OnMediaGatheringStateChange(ContactID const& peer_id, int state_val) {
+    LGI << "[WebRTC] ICE Gathering state changed to " << state_val << " for " << peer_id.ToString();
     std::lock_guard<std::recursive_mutex> const lock(mutex_);
     if (state_val == 2) {
       if (current_call_ && current_call_->peer_id == peer_id) {
@@ -308,9 +311,10 @@ class MediaCallService {
             }
           }
 
-          if (sdp) {
-            std::string const type = current_call_->is_outgoing ? "offer" : "answer";
-            nlohmann::json const msg = {{"type", type}, {"context", "media"}, {"sdp", *sdp}};
+              if (sdp) {
+                std::string const type = current_call_->is_outgoing ? "offer" : "answer";
+                LGI << "[WebRTC] ICE Gathering complete. Sending " << type << " to " << peer_id.ToString();
+                nlohmann::json const msg = {{"type", type}, {"context", "media"}, {"sdp", *sdp}};
             if (peer->data_channel_is_open) {
               std::ignore = data_transport_->SendJson(peer_id, msg);
             }
@@ -322,6 +326,7 @@ class MediaCallService {
   }
 
   void OnMediaPeerConnectionStateChange(ContactID const& peer_id, transport::PeerConnectionState state) {
+    LGI << "[WebRTC] PeerConnection state changed to " << static_cast<int>(state) << " for " << peer_id.ToString();
     std::lock_guard<std::recursive_mutex> const lock(mutex_);
 
     if (state == transport::PeerConnectionState::failed || state == transport::PeerConnectionState::closed ||
@@ -443,6 +448,8 @@ class MediaCallService {
   }
 
   void StartMediaConnection(ContactID const& peer_id, bool is_video, bool is_initiator) {
+    LGI << "[MediaCall] Starting WebRTC media connection (video=" << is_video << ", initiator=" << is_initiator << ") for " << peer_id.ToString();
+
     auto peer = data_transport_->GetPeer(peer_id);
     if (!peer) {
       peer = std::make_shared<transport::Peer>(peer_id);
