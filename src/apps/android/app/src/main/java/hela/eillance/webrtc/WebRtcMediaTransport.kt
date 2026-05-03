@@ -18,7 +18,9 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.webrtc.AudioSource
 import org.webrtc.AudioTrack
+import org.webrtc.Camera1Enumerator
 import org.webrtc.Camera2Enumerator
+import org.webrtc.CameraEnumerator
 import org.webrtc.DataChannel
 import org.webrtc.DefaultVideoDecoderFactory
 import org.webrtc.DefaultVideoEncoderFactory
@@ -74,6 +76,8 @@ class WebRtcMediaTransport(private val context: Context, private val nativePoint
   private var videoSource: VideoSource? = null
   private var audioSource: AudioSource? = null
   private var localSink: VideoSink? = null
+
+  private var isCapturing = false
 
   private val remoteSinks = ConcurrentHashMap<String, VideoSink>()
   private val remoteVideoTracks = ConcurrentHashMap<String, VideoTrack>()
@@ -346,7 +350,11 @@ class WebRtcMediaTransport(private val context: Context, private val nativePoint
             Manifest.permission.CAMERA
           ) != PackageManager.PERMISSION_GRANTED
         ) return
-        val enumerator = Camera2Enumerator(context)
+        val enumerator: CameraEnumerator = if (Camera2Enumerator.isSupported(context)) {
+          Camera2Enumerator(context)
+        } else {
+          Camera1Enumerator(true)
+        }
         val deviceName =
           enumerator.deviceNames.firstOrNull { enumerator.isFrontFacing(it) }
             ?: enumerator.deviceNames.firstOrNull()
@@ -354,16 +362,23 @@ class WebRtcMediaTransport(private val context: Context, private val nativePoint
           videoCapturer = enumerator.createCapturer(deviceName, null)
           val source = peerConnectionFactory!!.createVideoSource(videoCapturer!!.isScreencast)
           videoSource = source
-          surfaceTextureHelper =
-            SurfaceTextureHelper.create("CaptureThread", eglBase.eglBaseContext)
-          videoCapturer!!.initialize(surfaceTextureHelper, context, source.capturerObserver)
-          videoCapturer!!.startCapture(640, 480, 30)
-          localVideoTrack = peerConnectionFactory!!.createVideoTrack("ARDAMSv0", source)
-          localVideoTrack?.setEnabled(false) // CRITICAL: Start disabled
-          localSink?.let { localVideoTrack?.addSink(it) }
+            surfaceTextureHelper =
+              SurfaceTextureHelper.create("CaptureThread", eglBase.eglBaseContext)
+            videoCapturer!!.initialize(surfaceTextureHelper, context, source.capturerObserver)
+            
+            localVideoTrack = peerConnectionFactory!!.createVideoTrack("ARDAMSv0", source)
+            localVideoTrack?.setEnabled(false) // CRITICAL: Start disabled
+            localSink?.let { localVideoTrack?.addSink(it) }
+            
+            try {
+              videoCapturer!!.startCapture(640, 480, 30)
+              isCapturing = true
+            } catch (_: Exception) {
+              isCapturing = false
+            }
+          }
         }
-      }
-    } catch (_: Exception) {
+      } catch (_: Exception) {
     }
   }
 
@@ -376,6 +391,8 @@ class WebRtcMediaTransport(private val context: Context, private val nativePoint
     val audioTrackToDispose = localAudioTrack
     val audioSourceToDispose = audioSource
     val activeSessions = sessions.values.toList()
+
+    isCapturing = false
 
     // Null out immediately to prevent re-use
     localVideoTrack = null
@@ -427,12 +444,14 @@ class WebRtcMediaTransport(private val context: Context, private val nativePoint
   }
 
   fun setRemoteSink(peerId: String, sink: VideoSink?) {
-    val track = remoteVideoTracks[peerId] ?: return
+    val track = remoteVideoTracks[peerId]
     val oldSink = remoteSinks[peerId]
-    if (oldSink != null) track.removeSink(oldSink)
+    if (oldSink != null && track != null) {
+      track.removeSink(oldSink)
+    }
     if (sink != null) {
       remoteSinks[peerId] = sink
-      track.addSink(sink)
+      track?.addSink(sink)
     } else {
       remoteSinks.remove(peerId)
     }
@@ -442,8 +461,19 @@ class WebRtcMediaTransport(private val context: Context, private val nativePoint
     localAudioTrack?.setEnabled(enabled)
   }
 
+  @Suppress("unused")
   fun setVideoEnabled(enabled: Boolean) {
     localVideoTrack?.setEnabled(enabled)
+    try {
+      if (enabled && !isCapturing) {
+        videoCapturer?.startCapture(640, 480, 30)
+        isCapturing = true
+      } else if (!enabled && isCapturing) {
+        videoCapturer?.stopCapture()
+        isCapturing = false
+      }
+    } catch (_: Exception) {
+    }
   }
 
   private fun attachLocalMedia(session: MediaSession) {
