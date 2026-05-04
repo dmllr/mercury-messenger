@@ -33,10 +33,6 @@ class ContactService {
       OnContactRestored(e.peer_id);
     }));
 
-    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventDebugClearContactCache>([this](auto const&) {
-      manager_->ClearContacts();
-    }));
-
     event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventReloadContactCache>([this](auto const&) {
       manager_->ReloadContacts();
     }));
@@ -176,11 +172,6 @@ class ContactService {
   auto GenerateContactToken() -> std::vector<std::byte> {
     auto arr = manager_->GenerateContactToken();
     return {arr.begin(), arr.end()};
-  }
-
-  // Debug Actions
-  void DebugClearCache() {
-    manager_->ClearContacts();
   }
   void ReloadCache() {
     manager_->ReloadContacts();

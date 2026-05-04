@@ -186,17 +186,6 @@ class PersistentStorage {
     return pimpl_->SearchAllMessages(query);
   }
 
-  // --- Debug ---
-  void DebugClearAllHistory() const {
-    pimpl_->DebugClearAllHistory();
-  }
-  void DebugClearAllContacts() const {
-    pimpl_->DebugClearAllContacts();
-  }
-  void DebugRevokeAllContactApprovals() const {
-    pimpl_->DebugRevokeAllContactApprovals();
-  }
-
  private:
   std::unique_ptr<PersistentStorageImpl> pimpl_{};
 };

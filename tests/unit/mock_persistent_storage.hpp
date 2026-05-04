@@ -590,29 +590,6 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
     std::ranges::sort(results, [](auto const& left, auto const& right) { return left.timestamp > right.timestamp; });
     return results;
   }
-
-  // --- Debug ---
-  void DebugClearAllHistory() override {
-    std::lock_guard const lock(mutex_);
-    history_.clear();
-    large_messages_.clear();
-    ledger_.clear();
-    sync_reqs_.clear();
-  }
-
-  void DebugClearAllContacts() override {
-    std::lock_guard const lock(mutex_);
-    contacts_.clear();
-  }
-
-  void DebugRevokeAllContactApprovals() override {
-    std::lock_guard const lock(mutex_);
-    for (auto& contact : contacts_ | std::views::values) {
-      if (contact.status == identity::ContactStatus::confirmed) {
-        contact.status = identity::ContactStatus::pendingApproval;
-      }
-    }
-  }
 };
 
 }  // namespace eillance::storage

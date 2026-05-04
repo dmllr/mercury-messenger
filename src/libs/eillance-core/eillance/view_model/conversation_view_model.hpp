@@ -61,7 +61,6 @@ class ConversationViewModel {
         impl->OnAttachmentStatusChanged(event.attachment_id, event.status);
       }
     });
-    Subscribe<EventDebugDataReset>(queue, [impl](auto const&) -> auto { impl->StartInitialLoad(); });
     Subscribe<EventDataReloaded>(queue, [impl](auto const&) -> auto { impl->StartInitialLoad(); });
   }
 
