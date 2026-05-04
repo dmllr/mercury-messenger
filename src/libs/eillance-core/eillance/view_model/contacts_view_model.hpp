@@ -31,7 +31,6 @@ class ContactsViewModel {
     Subscribe<EventChatMessageReceived>(queue, [impl](auto const&) { impl->UpdateContactsList(); });
     Subscribe<EventMessageStatusChanged>(queue, [impl](auto const&) { impl->UpdateContactsList(); });
     Subscribe<EventMessageUpdated>(queue, [impl](auto const&) { impl->UpdateContactsList(); });
-    Subscribe<EventDebugDataReset>(queue, [impl](auto const&) { impl->UpdateContactsList(); });
     Subscribe<EventDataReloaded>(queue, [impl](auto const&) { impl->UpdateContactsList(); });
 
     Subscribe<EventDataPeerConnectionStateChanged>(queue, [impl](auto const& event) {

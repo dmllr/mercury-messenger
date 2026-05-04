@@ -500,63 +500,6 @@ class Client final {
     return sm_->data_transport->GetConnectionState(id);
   }
 
-  void DebugEraseAllHistory() const {
-    sm_->storage->DebugClearAllHistory();
-  }
-  void DebugEraseAllContacts() const {
-    sm_->storage->DebugClearAllContacts();
-    EventQueue::Instance().Push(EventDebugClearContactCache{});
-    sm_->storage->DebugClearAllHistory();
-  }
-  void DebugRevokeAllContactApprovals() const {
-    sm_->storage->DebugRevokeAllContactApprovals();
-    EventQueue::Instance().Push(EventReloadContactCache{});
-  }
-
-  [[nodiscard]] auto GetAllPendingActions() const -> std::vector<view_model::DebugPendingAction> {
-    return {};
-  }
-
-  [[nodiscard]] auto GetConnectionDebugInfo() const -> std::vector<view_model::DebugConnectionInfo> {
-    std::vector<view_model::DebugConnectionInfo> result;
-    auto now = Time::Now();
-    auto peers = sm_->data_transport->GetPeers();
-    auto contacts = sm_->contact->GetContacts();
-    for (auto const& contact : contacts) {
-      if (!peers.contains(contact.peer_id)) {
-        result.push_back({contact.peer_id, transport::PeerConnectionState::disconnected, -1, false, false});
-      }
-    }
-    for (auto const& [id, peer] : peers) {
-      std::erase_if(result, [&](auto const& item) -> bool { return item.peer_id == id; });
-      auto const lat = peer->last_activity_time.load();
-      int64_t ago = 0;
-      if (now > lat) {
-        ago = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::microseconds(now - lat)).count();
-      }
-      result.push_back(
-          {id,
-           sm_->data_transport->GetConnectionState(id),
-           ago,
-           peer->data_channel_is_open.load(),
-           peer->has_media_peer_connection.load()}
-      );
-    }
-    return result;
-  }
-
-  [[nodiscard]] auto GetAllUnreadInfo() const -> std::vector<view_model::DebugUnreadInfo> {
-    std::vector<view_model::DebugUnreadInfo> result;
-    auto contacts = sm_->contact->GetContacts();
-    std::vector<ContactID> ids;
-    for (auto const& c : contacts) ids.push_back(c.peer_id);
-    auto summaries = sm_->messaging->GetChatSummaries(ids);
-    for (auto const& s : summaries) {
-      if (s.unread_count > 0) result.push_back({s.peer_id, s.unread_count, s.last_message.timestamp});
-    }
-    return result;
-  }
-
  private:
   void CheckForInactivePeers() {
     if (!is_running_) return;

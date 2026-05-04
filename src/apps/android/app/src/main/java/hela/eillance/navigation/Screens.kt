@@ -3,7 +3,6 @@ package hela.eillance.navigation
 import android.net.Uri
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Help
-import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
@@ -26,12 +25,6 @@ sealed class Screen(val route: String, val icon: ImageVector? = null) {
   object QrScanner : Screen("qr_scanner")
   object RejectedContacts : Screen("rejected_contacts")
   object PermissionIssues : Screen("permission_issues")
-
-  // Debug
-  object DebugMenu : Screen("debug_menu", Icons.Default.BugReport)
-  object DebugPendingActions : Screen("debug_pending_actions")
-  object DebugConnections : Screen("debug_connections")
-  object DebugUnread : Screen("debug_unread")
 }
 
 sealed class Route(val route: String) {

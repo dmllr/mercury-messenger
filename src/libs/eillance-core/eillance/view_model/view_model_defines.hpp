@@ -34,26 +34,6 @@ struct MyProfile {
   std::optional<std::string> my_photo;  // base64
 };
 
-struct DebugPendingAction {
-  ContactID peer_id;
-  int64_t id;
-  std::string payload;
-};
-
-struct DebugConnectionInfo {
-  ContactID peer_id;
-  eillance::transport::PeerConnectionState state;
-  int64_t last_activity_sec_ago;
-  bool is_data_channel_open;
-  bool has_media_connection;
-};
-
-struct DebugUnreadInfo {
-  ContactID peer_id;
-  uint32_t count;
-  uint64_t last_msg_timestamp;
-};
-
 struct ViewContact {
   ContactID peer_id;
   std::string display_name;

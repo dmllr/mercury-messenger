@@ -80,7 +80,9 @@ TEST_F(ProfileUpdatesTest, SendProfileOnConnect) {
   auto reqs = storage_->GetSyncRequests();
   bool found = false;
   for (auto const& r : reqs) {
-    if (r.target_peer_id == peer1) found = true;
+    if (r.target_peer_id == peer1) {
+      found = true;
+    }
   }
   EXPECT_TRUE(found) << "Sync request should be enqueued when profile updates";
 }
@@ -90,8 +92,6 @@ TEST_F(ProfileUpdatesTest, NoProfileSendForPendingContact) {
   // Add contact but do NOT confirm (remains pendingApproval)
   std::ignore = client_->AddContact(peer1, std::nullopt);
 
-  // Clear ledger
-  mock_storage_->DebugClearAllHistory();
   // Update my profile
   client_->UpdateMyProfile({.display_name = "New Name", .bio = "New Bio", .photo_base64 = "NewPhoto"});
 
@@ -138,7 +138,7 @@ TEST_F(ProfileUpdatesTest, ConfirmContactTriggersProfileSend) {
   client_->ConfirmContact(peer1);
   bool profile_sent = false;
   eillance::EventQueue::Instance().WaitFor(
-      [&]() {
+      [&]() -> bool {
         for (auto const& entry : storage_->GetLedgerEntries(TopicID(peer1))) {
           if (entry.type == storage::LedgerActionType::ProfileUpdate) {
             auto json = nlohmann::json::parse(entry.payload);

@@ -116,7 +116,6 @@ struct EventDataChannelMessage {
   ContactID peer_id;
   std::vector<std::byte> message;
 };
-struct EventDebugDataReset {};
 struct EventDataReloaded {};
 
 struct EventPeerVersionMismatch {
@@ -133,7 +132,6 @@ struct EventLedgerAppended {
 struct EventConnectionAttemptFinished {
   ContactID peer_id;
 };
-struct EventDebugClearContactCache {};
 struct EventReloadContactCache {};
 struct EventSendQueuedMessages {
   ContactID peer_id;

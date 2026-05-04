@@ -1303,36 +1303,6 @@ class SQLiteStorage final : public PersistentStorageImpl {
     return results;
   }
 
-  // --- Debug ---
-  void DebugClearAllHistory() override {
-    std::lock_guard const lock(mutex_);
-    INVARIANT(db_);
-    sqlite3_exec(
-        db_,
-        "BEGIN TRANSACTION; DELETE FROM large_messages; DELETE FROM message_attachments; DELETE FROM sync_requests; "
-        "DELETE FROM ledger_entries; "
-        "DELETE FROM messages; COMMIT;",
-        nullptr,
-        nullptr,
-        nullptr
-    );
-  }
-
-  void DebugClearAllContacts() override {
-    std::lock_guard const lock(mutex_);
-    INVARIANT(db_);
-    sqlite3_exec(db_, "BEGIN TRANSACTION; DELETE FROM contacts; COMMIT;", nullptr, nullptr, nullptr);
-  }
-
-  void DebugRevokeAllContactApprovals() override {
-    std::lock_guard const lock(mutex_);
-    INVARIANT(db_);
-    SQLiteStatement const s(db_, "UPDATE contacts SET status=? WHERE status=?;");
-    sqlite3_bind_int(s.Get(), 1, static_cast<int>(identity::ContactStatus::pendingApproval));
-    sqlite3_bind_int(s.Get(), 2, static_cast<int>(identity::ContactStatus::confirmed));
-    sqlite3_step(s.Get());
-  }
-
  private:
   void RunMigrations() const {
     int user_version = 0;
