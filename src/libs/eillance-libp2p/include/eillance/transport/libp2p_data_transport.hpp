@@ -248,16 +248,6 @@ class Libp2pDataTransport : public DataTransport::Interface {
     return false;
   }
 
-  void SendSignalingMessage(Json const& message) const override {
-    auto const to_str = message.value("to", "");
-    if (to_str.empty()) return;
-    ContactID const peer_id(to_str);
-    if (node_) {
-      auto str = message.dump();
-      node_->SendChat(peer_id, {reinterpret_cast<std::byte const*>(str.data()), str.size()});
-    }
-  }
-
   void DiscoverTurnRelays() override {
     if (node_) node_->DiscoverTurnRelays();
   }

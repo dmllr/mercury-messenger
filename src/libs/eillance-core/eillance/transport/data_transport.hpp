@@ -49,7 +49,6 @@ class DataTransport {
 
     virtual auto SendData(ContactID const& peer_id, std::span<std::byte const> message) -> bool = 0;
     virtual auto SendJson(ContactID const& peer_id, Json const& message) -> bool = 0;
-    virtual void SendSignalingMessage(Json const& message) const = 0;
 
     virtual void DiscoverTurnRelays() = 0;
     virtual void AuthTurnRelay(ContactID const& peer_id) = 0;
@@ -119,9 +118,6 @@ class DataTransport {
   }
   auto SendJson(ContactID const& peer_id, Json const& message) -> bool {
     return self_->SendJson(peer_id, message);
-  }
-  void SendSignalingMessage(Json const& message) const {
-    self_->SendSignalingMessage(message);
   }
 
   void DiscoverTurnRelays() const {
