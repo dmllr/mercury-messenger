@@ -117,7 +117,7 @@ class InternalMessagingService {
       HandleSdp(peer_id, type, message);
     } else if (type == "termination") {
       data_transport_->RemovePeer(peer_id);
-    } else if (type == "sync_propose" || type == "sync_provide" || type == "sync_confirm") {
+    } else if (type.starts_with("sync_")) {
       CheckPeerVersion(peer_id, message.value("sync_version", currentSyncVersion));
       sm_->sync_engine->ProcessSyncMessage(peer_id, message);
     } else if (type == "chat" || type == "contact_add_request" || type == "contact_add_ack" ||

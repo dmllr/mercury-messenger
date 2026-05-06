@@ -78,6 +78,9 @@ class PersistentStorage {
   [[nodiscard]] auto GetLatestLedgerEntry(TopicID const& topic_id) const {
     return pimpl_->GetLatestLedgerEntry(topic_id);
   }
+  [[nodiscard]] auto GetLedgerEntryByHash(TopicID const& topic_id, std::string const& hash) const {
+    return pimpl_->GetLedgerEntryByHash(topic_id, hash);
+  }
   void DeleteLedgerEntriesAfter(TopicID const& topic_id, std::string const& hash) const {
     pimpl_->DeleteLedgerEntriesAfter(topic_id, hash);
   }
