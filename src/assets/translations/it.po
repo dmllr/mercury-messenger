@@ -727,3 +727,6 @@ msgid "version_we_need_update"
 msgstr "La tua versione di Mercury è obsoleta. Aggiorna l'app per comunicare con questo contatto."
 msgid "version_peer_needs_update"
 msgstr "L'altra persona sta utilizzando una versione obsoleta di Mercury. I messaggi potrebbero non essere consegnati finché non viene aggiornata."
+
+msgid "contact_unreachable"
+msgstr "Contatto irraggiungibile. Messaggi non consegnati da oltre 24 ore."

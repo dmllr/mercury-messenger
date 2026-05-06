@@ -727,3 +727,6 @@ msgid "version_we_need_update"
 msgstr "Versi Mercury Anda sudah usang. Harap perbarui aplikasi untuk berkomunikasi dengan kontak ini."
 msgid "version_peer_needs_update"
 msgstr "Orang lain menggunakan versi Mercury yang sudah usang. Pesan mungkin tidak terkirim sampai mereka memperbaruinya."
+
+msgid "contact_unreachable"
+msgstr "Kontak tidak dapat dihubungi. Pesan tidak terkirim selama lebih dari 24 jam."

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <unordered_map>
@@ -17,6 +18,7 @@
 #include "eillance/transport/data_transport.hpp"
 #include "eillance/utils/dispatch_queue.hpp"
 #include "eillance/utils/event_queue.hpp"
+#include "eillance/utils/time.hpp"
 
 namespace eillance::messaging {
 
@@ -29,6 +31,8 @@ class DeliveryService {
   std::unordered_set<ContactID> pending_connections_{};
   std::unordered_map<ContactID, int> retry_delays_s_{};
   std::unordered_set<ContactID> retry_scheduled_{};
+  std::unordered_set<ContactID> unreachable_contacts_{};
+  std::unordered_map<ContactID, Time::Unit> manual_retry_time_{};
   mutable std::recursive_mutex mutex_;
   std::vector<EventQueue::SubscriberTypeId> event_unsubs_;
 
@@ -49,6 +53,9 @@ class DeliveryService {
     event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventDataChannelOpen>([this](auto const& e) -> void {
       std::lock_guard<std::recursive_mutex> const lock(mutex_);
       retry_delays_s_.erase(e.peer_id);
+      if (unreachable_contacts_.erase(e.peer_id)) {
+        EventQueue::Instance().Push(EventContactUnreachable{e.peer_id, false});
+      }
     }));
   }
 
@@ -123,9 +130,33 @@ class DeliveryService {
     }
   }
 
+  [[nodiscard]] auto IsUnreachable(ContactID const& peer_id) const -> bool {
+    std::lock_guard<std::recursive_mutex> const lock(mutex_);
+    return unreachable_contacts_.contains(peer_id);
+  }
+
+  void ManualRetry(ContactID const& peer_id) {
+    {
+      std::lock_guard<std::recursive_mutex> const lock(mutex_);
+      manual_retry_time_[peer_id] = Time::Now();
+      if (unreachable_contacts_.erase(peer_id) != 0U) {
+        EventQueue::Instance().Push(EventContactUnreachable{peer_id, false});
+      }
+    }
+    AttemptDelivery(peer_id);
+  }
+
   void AttemptDelivery(ContactID const& peer_id) {
     {
       std::lock_guard<std::recursive_mutex> const lock(mutex_);
+      if (CheckIfUnreachable(peer_id)) {
+        if (!unreachable_contacts_.contains(peer_id)) {
+          unreachable_contacts_.insert(peer_id);
+          EventQueue::Instance().Push(EventContactUnreachable{peer_id, true});
+        }
+        return;
+      }
+
       if (pending_connections_.contains(peer_id)) {
         return;
       }
@@ -144,7 +175,7 @@ class DeliveryService {
  private:
   [[nodiscard]] auto HasPendingWork(ContactID const& peer_id) const -> bool {
     auto const syncs = storage_->GetSyncRequests();
-    if (std::ranges::any_of(syncs, [&peer_id](auto const& req) { return req.target_peer_id == peer_id; })) {
+    if (std::ranges::any_of(syncs, [&peer_id](auto const& req) -> bool { return req.target_peer_id == peer_id; })) {
       return true;
     }
 
@@ -152,6 +183,28 @@ class DeliveryService {
     return std::ranges::any_of(attachments, [](auto const& att) {
       return att.status == AttachmentStatus::pending || att.status == AttachmentStatus::transferring;
     });
+  }
+
+  [[nodiscard]] auto CheckIfUnreachable(ContactID const& peer_id) const -> bool {
+    auto const sending_msgs = storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::sending);
+    if (sending_msgs.empty()) {
+      return false;
+    }
+
+    Time::Unit oldest = std::numeric_limits<Time::Unit>::max();
+    for (auto const& msg : sending_msgs) {
+      if (msg.timestamp < oldest) {
+        oldest = msg.timestamp;
+      }
+    }
+
+    auto it = manual_retry_time_.find(peer_id);
+    if (it != manual_retry_time_.end() && it->second > oldest) {
+      oldest = it->second;
+    }
+
+    constexpr Time::Unit unreachable_time_threshold = 24ULL * 60 * 60 * Time::uS;
+    return Time::Now() > oldest && (Time::Now() - oldest) > unreachable_time_threshold;
   }
 
   void CheckForAllQueuedMessages() {

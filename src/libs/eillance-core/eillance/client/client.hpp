@@ -437,6 +437,14 @@ class Client final {
     sm_->messaging->DeleteAttachmentLocal(peer_id, attachment_id);
   }
 
+  void RetrySync(ContactID const& peer_id) const {
+    sm_->delivery_service->ManualRetry(peer_id);
+  }
+
+  [[nodiscard]] auto IsUnreachable(ContactID const& peer_id) const -> bool {
+    return sm_->delivery_service->IsUnreachable(peer_id);
+  }
+
   void Connect(ContactID const& peer_id) const {
     auto const contact = sm_->contact->GetContact(peer_id);
     if (contact && contact->status == identity::ContactStatus::rejected) {
@@ -456,7 +464,7 @@ class Client final {
       auto const new_peer = std::make_shared<transport::Peer>(peer_id);
       sm_->data_transport->AddPeer(peer_id, new_peer);
     } else {
-      peer->last_activity_time = Time::Now();
+      peer->last_activity_time = Time::SteadyNow();
     }
     sm_->data_transport->Connect(peer_id);
   }
@@ -503,7 +511,7 @@ class Client final {
  private:
   void CheckForInactivePeers() {
     if (!is_running_) return;
-    auto const now = Time::Now();
+    auto const now = Time::SteadyNow();
     auto const timeout =
         std::chrono::duration_cast<std::chrono::microseconds>(sm_->account->GetSettings()->GetPeerInactivityTimeout())
             .count();

@@ -345,6 +345,10 @@ class ConversationViewModel(
     }
   }
 
+  fun retrySync() {
+    if (nativePtr != 0L) nativeRetrySync(nativePtr)
+  }
+
   fun getHistoryEntry(messageId: Long): HistoryEntry? {
     return if (nativePtr != 0L) nativeGetHistoryEntry(nativePtr, messageId) else null
   }
@@ -377,6 +381,7 @@ class ConversationViewModel(
   private external fun nativeCancelTransfer(ptr: Long, attachmentId: String, isUpload: Boolean)
   private external fun nativeResumeTransfer(ptr: Long, attachmentId: String, isUpload: Boolean)
   private external fun nativeDiscardAttachment(ptr: Long, attachmentId: String)
+  private external fun nativeRetrySync(ptr: Long)
   private external fun nativeGetAttachment(ptr: Long, attachmentId: String): Attachment?
   private external fun nativeSearchMessages(
     ptr: Long,
