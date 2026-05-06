@@ -62,7 +62,7 @@ class InternalMessagingService {
 
   void HandleDataChannelMessage(ContactID const& peer_id, std::span<std::byte const> const msg) {
     if (auto p = data_transport_->GetPeer(peer_id)) {
-      p->last_activity_time = Time::Now();
+      p->last_activity_time = Time::SteadyNow();
     }
 
     if (!msg.empty() && msg[0] == std::byte{0xFE}) {
@@ -80,7 +80,7 @@ class InternalMessagingService {
 
     bool should_unsuspend = false;
     {
-      auto const now = Time::Now();
+      auto const now = Time::SteadyNow();
       std::lock_guard<std::mutex> const lock(unsuspend_mutex_);
       auto const last = last_unsuspend_times_[peer_id];
       if (now > last && (now - last) >= kUnsuspendInterval) {
@@ -143,11 +143,11 @@ class InternalMessagingService {
     LGI << "Data channel with " << peer_id.ToString() << " opened.";
 
     peer->session_cipher->Reset();
-    peer->last_activity_time = Time::Now();
+    peer->last_activity_time = Time::SteadyNow();
 
     {
       std::lock_guard<std::mutex> const lock(unsuspend_mutex_);
-      last_unsuspend_times_[peer_id] = Time::Now();
+      last_unsuspend_times_[peer_id] = Time::SteadyNow();
     }
 
     if (sm_->account->GetId() > peer_id) {
@@ -182,7 +182,7 @@ class InternalMessagingService {
         return;
       }
     } else {
-      peer->last_activity_time = Time::Now();
+      peer->last_activity_time = Time::SteadyNow();
     }
 
     if (type == transport::protocol::values::offer) {

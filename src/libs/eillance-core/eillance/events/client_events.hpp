@@ -123,6 +123,11 @@ struct EventPeerVersionMismatch {
   bool we_are_outdated;
 };
 
+struct EventContactUnreachable {
+  ContactID peer_id;
+  bool is_unreachable;
+};
+
 // --- Ledger Sync Events ---
 struct EventLedgerAppended {
   storage::LedgerEntry entry;

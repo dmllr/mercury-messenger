@@ -61,6 +61,15 @@ class ConversationViewModel {
         impl->OnAttachmentStatusChanged(event.attachment_id, event.status);
       }
     });
+    Subscribe<EventContactUnreachable>(queue, [impl](EventContactUnreachable const& event) -> void {
+      if (event.peer_id == impl->peer_id) {
+        std::lock_guard<std::mutex> const lock(impl->mutex);
+        if (impl->state.is_unreachable != event.is_unreachable) {
+          impl->state.is_unreachable = event.is_unreachable;
+          EventQueue::Instance().Push(EventConversationStateUpdated{impl->peer_id, impl->state});
+        }
+      }
+    });
     Subscribe<EventDataReloaded>(queue, [impl](auto const&) -> auto { impl->StartInitialLoad(); });
   }
 
@@ -122,6 +131,10 @@ class ConversationViewModel {
     impl_->client->CancelTransfer(impl_->peer_id, attachment_id, is_upload);
   }
 
+  void RetrySync() const {
+    impl_->client->RetrySync(impl_->peer_id);
+  }
+
   void ResumeTransfer(std::string const& attachment_id, bool is_upload) const {
     impl_->client->ResumeTransfer(impl_->peer_id, attachment_id, is_upload);
   }
@@ -166,6 +179,7 @@ class ConversationViewModel {
         : peer_id(peer_id),
           client(std::move(client)) {
       state.peer_id = peer_id;
+      state.is_unreachable = this->client->IsUnreachable(peer_id);
     }
 
     auto GetState() const -> ConversationState {

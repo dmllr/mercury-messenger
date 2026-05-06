@@ -60,6 +60,7 @@ struct ConversationState {
   std::deque<messaging::HistoryEntryRecord> history{};
   bool has_older_messages = false;
   std::vector<DraftAttachment> drafts{};
+  bool is_unreachable = false;
 };
 
 struct SettingsState {
