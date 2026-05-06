@@ -21,6 +21,8 @@ class MockDataTransport : public DataTransport::Interface {
   std::vector<std::byte> secret_key_;
   std::string bootstrap_url_;
 
+  std::vector<std::pair<ContactID, nlohmann::json>> sent_jsons;
+
   void SetId(ContactID const& id) override {
     id_ = id;
   }
@@ -96,8 +98,9 @@ class MockDataTransport : public DataTransport::Interface {
   auto SendData(ContactID const&, std::span<std::byte const>) -> bool override {
     return false;
   }
-  auto SendJson(ContactID const&, nlohmann::json const&) -> bool override {
-    return false;
+  auto SendJson(ContactID const& peer_id, nlohmann::json const& msg) -> bool override {
+    sent_jsons.push_back({peer_id, msg});
+    return true;
   }
   void DiscoverTurnRelays() override {
   }

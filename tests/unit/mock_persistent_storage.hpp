@@ -172,6 +172,15 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
     });
   }
 
+  auto GetLedgerEntryByHash(TopicID const& topic_id, std::string const& hash)
+      -> std::optional<storage::LedgerEntry> override {
+    std::lock_guard const lock(mutex_);
+    for (auto const& e : ledger_) {
+      if (e.topic_id == topic_id && e.hash == hash) return e;
+    }
+    return std::nullopt;
+  }
+
   auto GetRecentLedgerHashes(TopicID const& topic_id) -> std::vector<std::string> override {
     std::lock_guard const lock(mutex_);
     std::vector<std::string> res;

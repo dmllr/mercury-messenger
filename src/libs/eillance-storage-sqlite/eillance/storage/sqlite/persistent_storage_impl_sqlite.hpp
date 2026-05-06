@@ -338,6 +338,32 @@ class SQLiteStorage final : public PersistentStorageImpl {
     sqlite3_step(s.Get());
   }
 
+  auto GetLedgerEntryByHash(TopicID const& topic_id, std::string const& hash)
+      -> std::optional<storage::LedgerEntry> override {
+    std::lock_guard const lock(mutex_);
+    INVARIANT(db_);
+    SQLiteStatement const s(
+        db_,
+        "SELECT seq_id, topic_id, author_id, created_at, type, payload, prev_hash, hash FROM ledger_entries WHERE "
+        "topic_id = ? AND hash = ? LIMIT 1;"
+    );
+    BindText(s.Get(), 1, topic_id.ToString());
+    BindText(s.Get(), 2, hash);
+    if (sqlite3_step(s.Get()) == SQLITE_ROW) {
+      return storage::LedgerEntry{
+          static_cast<uint64_t>(sqlite3_column_int64(s.Get(), 0)),
+          TopicID(ColumnString(s.Get(), 1)),
+          ContactID(ColumnString(s.Get(), 2)),
+          Timestamp{static_cast<uint64_t>(sqlite3_column_int64(s.Get(), 3))},
+          static_cast<storage::LedgerActionType>(sqlite3_column_int(s.Get(), 4)),
+          ColumnString(s.Get(), 5),
+          ColumnString(s.Get(), 6),
+          ColumnString(s.Get(), 7)
+      };
+    }
+    return std::nullopt;
+  }
+
   auto GetLedgerEntriesAfter(TopicID const& topic_id, std::string const& hash)
       -> std::vector<storage::LedgerEntry> override {
     std::lock_guard const lock(mutex_);
