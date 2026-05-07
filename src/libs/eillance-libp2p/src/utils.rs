@@ -18,6 +18,28 @@ macro_rules! node_log {
     }
 }
 
+pub fn notify_network_stats(
+  callbacks: &Callbacks,
+  connected_peers: i32,
+  bootstrap_nodes: i32,
+  dht_peers: i32,
+  role: &str,
+) {
+  if callbacks.on_network_stats != 0 {
+    let cb: extern "C" fn(*mut c_void, i32, i32, i32, *const c_char) =
+      unsafe { std::mem::transmute(callbacks.on_network_stats) };
+    if let Ok(c_str) = CString::new(role) {
+      cb(
+        callbacks.context as *mut c_void,
+        connected_peers,
+        bootstrap_nodes,
+        dht_peers,
+        c_str.as_ptr(),
+      );
+    }
+  }
+}
+
 pub fn pubkey_to_peerid(raw: &[u8; 32]) -> Option<PeerId> {
   identity::ed25519::PublicKey::try_from_bytes(&raw[..])
     .ok()

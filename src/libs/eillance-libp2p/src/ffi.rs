@@ -84,6 +84,7 @@ pub extern "C" fn eillance_libp2p_node_set_callbacks(
   on_log: *const c_void,
   on_turn_relays_discovered: *const c_void,
   on_turn_auth_result: *const c_void,
+  on_network_stats: *const c_void,
 ) {
   run_ffi(
     AssertUnwindSafe(|| {
@@ -100,6 +101,7 @@ pub extern "C" fn eillance_libp2p_node_set_callbacks(
         on_log: on_log as usize,
         on_turn_relays_discovered: on_turn_relays_discovered as usize,
         on_turn_auth_result: on_turn_auth_result as usize,
+        on_network_stats: on_network_stats as usize,
       };
     }),
     (),

@@ -42,7 +42,8 @@ class Libp2pNode final {
         OnMessageCallback,
         OnLogCallback,
         OnTurnRelaysDiscoveredCallback,
-        OnTurnAuthResultCallback
+        OnTurnAuthResultCallback,
+        OnNetworkStatsCallback
     );
   }
 
@@ -62,7 +63,8 @@ class Libp2pNode final {
         on_disconnected_(std::move(other.on_disconnected_)),
         on_message_(std::move(other.on_message_)),
         on_turn_relays_discovered_(std::move(other.on_turn_relays_discovered_)),
-        on_turn_auth_result_(std::move(other.on_turn_auth_result_)) {
+        on_turn_auth_result_(std::move(other.on_turn_auth_result_)),
+        on_network_stats_(std::move(other.on_network_stats_)) {
     if (node_ != nullptr) {
       eillance_libp2p_node_set_callbacks(
           node_,
@@ -72,7 +74,8 @@ class Libp2pNode final {
           OnMessageCallback,
           OnLogCallback,
           OnTurnRelaysDiscoveredCallback,
-          OnTurnAuthResultCallback
+          OnTurnAuthResultCallback,
+          OnNetworkStatsCallback
       );
     }
   }
@@ -89,6 +92,7 @@ class Libp2pNode final {
       on_message_ = std::move(other.on_message_);
       on_turn_relays_discovered_ = std::move(other.on_turn_relays_discovered_);
       on_turn_auth_result_ = std::move(other.on_turn_auth_result_);
+      on_network_stats_ = std::move(other.on_network_stats_);
 
       if (node_ != nullptr) {
         eillance_libp2p_node_set_callbacks(
@@ -99,7 +103,8 @@ class Libp2pNode final {
             OnMessageCallback,
             OnLogCallback,
             OnTurnRelaysDiscoveredCallback,
-            OnTurnAuthResultCallback
+            OnTurnAuthResultCallback,
+            OnNetworkStatsCallback
         );
       }
     }
@@ -194,6 +199,9 @@ class Libp2pNode final {
   ) {
     on_turn_auth_result_ = std::move(cb);
   }
+  void SetOnNetworkStats(std::function<void(int, int, int, std::string const&)> cb) {
+    on_network_stats_ = std::move(cb);
+  }
 
  private:
   void* node_;
@@ -204,6 +212,7 @@ class Libp2pNode final {
   std::function<void(std::vector<ContactID> const&)> on_turn_relays_discovered_;
   std::function<void(ContactID const&, bool, std::string const&, uint16_t, std::string const&, std::string const&)>
       on_turn_auth_result_;
+  std::function<void(int, int, int, std::string const&)> on_network_stats_;
 
   static void OnPeerConnectedCallback(void* context, char const* peer_id_hex, bool is_circuit) {
     auto* self = static_cast<Libp2pNode*>(context);
@@ -281,6 +290,19 @@ class Libp2pNode final {
       } else {
         self->on_turn_auth_result_(peer, true, ip, port, user, cred);
       }
+    }
+  }
+
+  static void OnNetworkStatsCallback(
+      void* context,
+      int connected_peers,
+      int bootstrap_nodes_alive,
+      int dht_peers,
+      char const* device_role
+  ) {
+    auto* self = static_cast<Libp2pNode*>(context);
+    if (self->on_network_stats_ && device_role != nullptr) {
+      self->on_network_stats_(connected_peers, bootstrap_nodes_alive, dht_peers, device_role);
     }
   }
 };
