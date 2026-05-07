@@ -108,6 +108,14 @@ class Libp2pDataTransport : public DataTransport::Interface {
             });
           }
       );
+
+      node_->SetOnNetworkStats(
+          [this](int connected_peers, int bootstrap_nodes, int dht_peers, std::string const& role) -> void {
+            rx_queue_.Dispatch([connected_peers, bootstrap_nodes, dht_peers, role]() -> void {
+              EventQueue::Instance().Push(EventNetworkStatsUpdated{connected_peers, bootstrap_nodes, dht_peers, role});
+            });
+          }
+      );
     }
 
     node_->Start();

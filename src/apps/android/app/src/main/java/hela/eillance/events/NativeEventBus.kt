@@ -7,6 +7,7 @@ import hela.eillance.ndkio.DraftAttachment
 import hela.eillance.ndkio.HistoryEntry
 import hela.eillance.ndkio.MyProfileInfo
 import hela.eillance.ndkio.ServiceConnectionState
+import hela.eillance.viewmodels.NetworkStats
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 
@@ -16,6 +17,7 @@ object NativeEventBus {
   val callState = MutableStateFlow(CallState())
   val connectionState = MutableStateFlow(ServiceConnectionState.Unknown)
   val permissionBanner = MutableStateFlow<Int>(0)
+  val networkStats = MutableStateFlow(NetworkStats())
 
   val historyUpdates = MutableSharedFlow<Pair<String, HistoryPage>>(extraBufferCapacity = 10)
   val draftsUpdates = MutableSharedFlow<Pair<String, List<DraftAttachment>>>(extraBufferCapacity = 10)
@@ -94,6 +96,18 @@ object NativeEventBus {
   @JvmStatic
   fun onPermissionBannerChanged(type: Int) {
     permissionBanner.value = type
+  }
+
+  @JvmStatic
+  fun onNetworkStatsUpdated(connectedPeers: Int, bootstrapNodes: Int, dhtPeers: Int, deviceRole: String) {
+    android.util.Log.d("NativeEventBus", "Received network stats from C++: peers=$connectedPeers, role=$deviceRole")
+    networkStats.value = NetworkStats(
+      connectedPeers = connectedPeers,
+      bootstrapNodesAlive = bootstrapNodes,
+      dhtPeers = dhtPeers,
+      deviceRole = deviceRole,
+      lastUpdate = System.currentTimeMillis()
+    )
   }
 
   @JvmStatic

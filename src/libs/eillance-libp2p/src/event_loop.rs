@@ -23,6 +23,7 @@ pub struct EventLoopState {
   pub is_turn_eligible: bool,
   pub is_public: bool,
   pub turn_server_handle: Option<crate::turn_server::TurnServerHandle>,
+  pub tick_counter: u64,
 }
 
 impl EventLoopState {
@@ -41,6 +42,7 @@ impl EventLoopState {
       is_turn_eligible: matches!(role, NodeRole::BootstrapNode),
       is_public: false,
       turn_server_handle: None,
+      tick_counter: 0,
     }
   }
 
@@ -106,11 +108,34 @@ pub async fn run_event_loop(
 ) {
   let mut state = EventLoopState::new(role, callbacks.clone());
   let mut keepalive_interval = tokio::time::interval(Duration::from_secs(30));
+  let mut stats_interval = tokio::time::interval(Duration::from_secs(3));
 
   loop {
     tokio::select! {
         _ = keepalive_interval.tick() => {
             handle_keepalive(&mut state, &mut swarm, &callbacks);
+        }
+        _ = stats_interval.tick() => {
+            let connected_peers = swarm.network_info().connection_counters().num_established();
+            let mut bootstrap_connected = 0;
+            for b in &state.explicit_bootstrap_peers {
+                if swarm.is_connected(b) {
+                    bootstrap_connected += 1;
+                }
+            }
+            let mut role_str = "simple_node";
+            if state.turn_port.is_some() {
+                role_str = "turn_server";
+            } else if !state.active_relay_listeners.is_empty() {
+                role_str = "relay_node";
+            }
+            let mut dht_peers = 0;
+            for bucket in swarm.behaviour_mut().kademlia.kbuckets() {
+                dht_peers += bucket.num_entries();
+            }
+            state.tick_counter = state.tick_counter.wrapping_add(1);
+            node_log!(callbacks, 4, "Emitting network stats: connected={}, bootstrap={}, dht={}, role={}", connected_peers, bootstrap_connected, dht_peers, role_str);
+            crate::utils::notify_network_stats(&callbacks, connected_peers as i32, bootstrap_connected as i32, dht_peers as i32, role_str);
         }
         cmd = rx.recv() => {
             match cmd {
@@ -414,8 +439,12 @@ fn handle_swarm_event(
       let mut is_bootstrap = state.explicit_bootstrap_peers.contains(&peer_id);
       if !is_bootstrap && !is_circuit {
         for b_addr in &state.bootstrap_addrs {
-          let b_addr_len = b_addr.iter().count();
-          if remote_addr.iter().take(b_addr_len).eq(b_addr.iter()) {
+          // A bootstrap address may lack the P2P protocol postfix prior to the first connection
+          let b_addr_len = b_addr
+            .iter()
+            .filter(|p| !matches!(p, libp2p::multiaddr::Protocol::P2p(_)))
+            .count();
+          if remote_addr.iter().take(b_addr_len).eq(b_addr.iter().take(b_addr_len)) {
             is_bootstrap = true;
             state.explicit_bootstrap_peers.insert(peer_id);
             break;

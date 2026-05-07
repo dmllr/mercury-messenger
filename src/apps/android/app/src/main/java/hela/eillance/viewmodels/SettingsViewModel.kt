@@ -8,8 +8,19 @@ import androidx.lifecycle.viewModelScope
 import hela.eillance.events.NativeEventBus
 import hela.eillance.ndkio.ServiceConnectionState
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+
+data class NetworkStats(
+  val connectedPeers: Int = 0,
+  val bootstrapNodesAlive: Int = 0,
+  val dhtPeers: Int = 0,
+  val deviceRole: String = "simple_node",
+  val lastUpdate: Long = 0L
+)
 
 class SettingsViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -44,6 +55,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
   private val _showNotificationContent = MutableStateFlow(true)
   val showNotificationContent = _showNotificationContent.asStateFlow()
 
+  private val _networkStats = MutableStateFlow(NetworkStats())
+  val networkStats = _networkStats.asStateFlow()
+
   init {
     nativePtr = nativeCreate()
     if (nativePtr == 0L) {
@@ -62,6 +76,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
           _playSoundOnReceive.value = s.playSoundOnReceive
           _showNotificationContent.value = s.showNotificationContent
         }
+      }
+    }
+    viewModelScope.launch {
+      NativeEventBus.networkStats.collect { stats ->
+        _networkStats.value = stats
       }
     }
     viewModelScope.launch {

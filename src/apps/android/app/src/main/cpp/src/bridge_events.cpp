@@ -334,7 +334,7 @@ void InitEventBridge(JavaVM* jvm) {
       if (pass_str) env->DeleteLocalRef(pass_str);
     }
   }));
-  g_eventBridgeUnsubs.emplace_back(q.Subscribe<view_model::EventConnectionStateChanged>([jvm](auto const& e) -> void {
+  g_eventBridgeUnsubs.emplace_back(q.Subscribe<EventServiceConnectionStateChanged>([jvm](auto const& e) -> void {
     jni::ScopedJniEnv env_scope(jvm);
     if (auto* env = env_scope.Get()) {
       auto& class_refs = ClassRefs::Instance();
@@ -357,6 +357,28 @@ void InitEventBridge(JavaVM* jvm) {
           bus_holder.GetMethod("onPermissionBannerChanged"),
           static_cast<jint>(e.type)
       );
+    }
+  }));
+
+  g_eventBridgeUnsubs.emplace_back(q.Subscribe<EventNetworkStatsUpdated>([jvm](auto const& e) -> void {
+    jni::ScopedJniEnv env_scope(jvm);
+    if (auto* env = env_scope.Get()) {
+      auto& class_refs = ClassRefs::Instance();
+      auto& bus_holder = class_refs.Class("hela/eillance/events/NativeEventBus");
+
+      jstring j_role = env->NewStringUTF(e.device_role.c_str());
+      jmethodID mid = bus_holder.GetMethod("onNetworkStatsUpdated");
+      if (mid != nullptr) {
+        env->CallStaticVoidMethod(
+            bus_holder.Class(),
+            mid,
+            e.connected_peers,
+            e.bootstrap_nodes_alive,
+            e.dht_peers,
+            j_role
+        );
+      }
+      env->DeleteLocalRef(j_role);
     }
   }));
 
