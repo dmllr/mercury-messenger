@@ -44,7 +44,7 @@ class InternalMessagingService {
       this->OnDataChannelOpen(e.peer_id);
     }));
 
-    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventSendMediaSignalingMessage>([this](auto const& e) {
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventSendMediaNegotiationMessage>([this](auto const& e) {
       std::string const to_str = e.message.value("to", "");
       if (!to_str.empty()) {
         ContactID const peer_id(to_str);
@@ -169,10 +169,10 @@ class InternalMessagingService {
     bool const is_media = (context_str == transport::protocol::values::contextMedia);
 
     if (!is_media) {
-      LGD << "[Signaling] Ignoring non-media SDP " << type << " from " << peer_id.ToString();
+      LGD << "[Media Negotiation] Ignoring non-media SDP " << type << " from " << peer_id.ToString();
       return;  // We no longer negotiate DataChannels via SDP, libp2p handles data connections natively
     }
-    LGI << "[Signaling] Received media SDP " << type << " from " << peer_id.ToString();
+    LGI << "[Media Negotiation] Received media SDP " << type << " from " << peer_id.ToString();
 
     if (auto peer = data_transport_->GetPeer(peer_id); !peer) {
       if (type == transport::protocol::values::offer) {

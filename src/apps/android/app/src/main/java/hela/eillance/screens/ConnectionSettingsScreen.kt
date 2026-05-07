@@ -76,14 +76,14 @@ fun ConnectionSettingsScreen(
       OutlinedTextField(
         value = bootstrapNodeUrl,
         onValueChange = settingsVM::onBootstrapNodeUrlChange,
-        label = { Text(stringResource(id = R.string.settings_server_url_label)) },
-        placeholder = { Text(stringResource(id = R.string.settings_server_url_placeholder)) },
+        label = { Text(stringResource(id = R.string.settings_bootstrap_node_url_label)) },
+        placeholder = { Text(stringResource(id = R.string.settings_bootstrap_node_url_placeholder)) },
         modifier = Modifier.fillMaxWidth(),
         singleLine = true
       )
       Spacer(modifier = Modifier.height(4.dp))
       Text(
-        stringResource(id = R.string.settings_server_url_description),
+        stringResource(id = R.string.settings_bootstrap_node_url_description),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant
       )

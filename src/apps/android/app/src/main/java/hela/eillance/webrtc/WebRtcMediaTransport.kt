@@ -90,7 +90,7 @@ class WebRtcMediaTransport(private val context: Context, private val nativePoint
     context: Int,
     state: Int
   )
-  private external fun nativeOnSendMediaSignalingMessage(nativePointer: Long, message: String)
+  private external fun nativeOnSendMediaNegotiationMessage(nativePointer: Long, message: String)
 
   init {
     peerConnectionFactory = WebRtcTransport.getOrCreateFactory(context)
@@ -225,7 +225,7 @@ class WebRtcMediaTransport(private val context: Context, private val nativePoint
           put("context", "media")
           put("to", peerId)
         }
-        nativeOnSendMediaSignalingMessage(nativePointer, message.toString())
+        nativeOnSendMediaNegotiationMessage(nativePointer, message.toString())
       }
     }
   }
@@ -268,7 +268,7 @@ class WebRtcMediaTransport(private val context: Context, private val nativePoint
           put("context", "media")
           put("to", peerId)
         }
-        nativeOnSendMediaSignalingMessage(nativePointer, message.toString())
+        nativeOnSendMediaNegotiationMessage(nativePointer, message.toString())
       }
     }
   }
