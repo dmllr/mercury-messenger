@@ -723,10 +723,19 @@ msgstr "名前"
 msgid "sort_size"
 msgstr "サイズ"
 
+# Conversation screen
+msgid "contact_unreachable"
+msgstr "連絡先に到達できません。メッセージが24時間以上配信されていません。"
+
+# Versioning
 msgid "version_we_need_update"
 msgstr "お使いのMercuryのバージョンは古くなっています。この連絡先と通信するには、アプリを更新してください。"
 msgid "version_peer_needs_update"
 msgstr "相手は古いバージョンのMercuryを使用しています。更新されるまでメッセージが届かない場合があります。"
 
-msgid "contact_unreachable"
-msgstr "連絡先に到達できません。メッセージが24時間以上配信されていません。"
+msgid "migration_dialog_title"
+msgstr "重要なアップデート"
+msgid "migration_dialog_text"
+msgstr "Project Mercuryは、新しい、より信頼性の高いP2Pネットワークプロトコルにアップグレードされました。\n\n古いバージョンのアプリはこのアップデートと互換性がありません。メッセージの送信や通話を続けるには、連絡先もアプリを最新バージョンにアップデートしていることを確認してください。"
+msgid "migration_action_understood"
+msgstr "理解しました"

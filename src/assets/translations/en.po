@@ -723,10 +723,19 @@ msgstr "Name"
 msgid "sort_size"
 msgstr "Size"
 
+# Conversation screen
+msgid "contact_unreachable"
+msgstr "Contact unreachable. Messages undelivered for over 24 hours."
+
+# Versioning
 msgid "version_we_need_update"
 msgstr "Your version of Mercury is outdated. Please update the app to communicate with this contact."
 msgid "version_peer_needs_update"
 msgstr "The other person is using an outdated version of Mercury. Messages may not be delivered until they update."
 
-msgid "contact_unreachable"
-msgstr "Contact unreachable. Messages undelivered for over 24 hours."
+msgid "migration_dialog_title"
+msgstr "Important Update"
+msgid "migration_dialog_text"
+msgstr "Project Mercury has been upgraded to a new, more reliable P2P network protocol.\n\nOlder versions of the app are not compatible with this update. Please ensure your contacts also update their app to the latest version to continue messaging and calling."
+msgid "migration_action_understood"
+msgstr "Understood"

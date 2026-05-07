@@ -723,10 +723,19 @@ msgstr "名称"
 msgid "sort_size"
 msgstr "大小"
 
+# Conversation screen
+msgid "contact_unreachable"
+msgstr "无法联系到该联系人。消息超过 24 小时未送达。"
+
+# Versioning
 msgid "version_we_need_update"
 msgstr "您的 Mercury 版本已过时。请更新应用程序以便与此联系人通信。"
 msgid "version_peer_needs_update"
 msgstr "对方使用的是过时版本的 Mercury。在他们更新之前，消息可能无法送达。"
 
-msgid "contact_unreachable"
-msgstr "无法联系到该联系人。消息超过 24 小时未送达。"
+msgid "migration_dialog_title"
+msgstr "重要更新"
+msgid "migration_dialog_text"
+msgstr "Project Mercury 已升级为全新且更可靠的 P2P 网络协议。\n\n旧版本的应用与此更新不兼容。请确保您的联系人也将其应用更新到最新版本，以继续收发消息和通话。"
+msgid "migration_action_understood"
+msgstr "明白了"

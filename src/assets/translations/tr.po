@@ -723,10 +723,19 @@ msgstr "Ad"
 msgid "sort_size"
 msgstr "Boyut"
 
+# Conversation screen
+msgid "contact_unreachable"
+msgstr "Kişiye ulaşılamıyor. Mesajlar 24 saatten uzun süredir iletilemedi."
+
+# Versioning
 msgid "version_we_need_update"
 msgstr "Mercury sürümünüz güncel değil. Bu kişiyle iletişim kurmak için lütfen uygulamayı güncelleyin."
 msgid "version_peer_needs_update"
 msgstr "Diğer kişi Mercury'nin güncel olmayan bir sürümünü kullanıyor. Güncelleme yapana kadar mesajlar iletilemeyebilir."
 
-msgid "contact_unreachable"
-msgstr "Kişiye ulaşılamıyor. Mesajlar 24 saatten uzun süredir iletilemedi."
+msgid "migration_dialog_title"
+msgstr "Önemli Güncelleme"
+msgid "migration_dialog_text"
+msgstr "Project Mercury, yeni ve daha güvenilir bir P2P ağ protokolüne yükseltildi.\n\nUygulamanın eski sürümleri bu güncellemeyle uyumlu değildir. Mesajlaşmaya ve arama yapmaya devam etmek için lütfen kişilerinizin de uygulamasını en son sürüme güncellediğinden emin olun."
+msgid "migration_action_understood"
+msgstr "Anladım"
