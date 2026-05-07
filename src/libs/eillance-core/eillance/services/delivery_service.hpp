@@ -186,7 +186,9 @@ class DeliveryService {
   }
 
   [[nodiscard]] auto CheckIfUnreachable(ContactID const& peer_id) const -> bool {
-    auto const sending_msgs = storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::sending);
+    auto sending_msgs = storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::sending);
+    std::erase_if(sending_msgs, [](auto const& msg) { return msg.kind == messaging::HistoryEntryKind::systemMessage; });
+
     if (sending_msgs.empty()) {
       return false;
     }
