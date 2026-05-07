@@ -723,10 +723,19 @@ msgstr "Имя"
 msgid "sort_size"
 msgstr "Размер"
 
+# Conversation screen
+msgid "contact_unreachable"
+msgstr "Контакт недоступен. Сообщения не доставлены более 24 часов."
+
+# Versioning
 msgid "version_we_need_update"
 msgstr "Ваша версия Mercury устарела. Пожалуйста, обновите приложение, чтобы общаться с этим контактом."
 msgid "version_peer_needs_update"
 msgstr "Собеседник использует устаревшую версию Mercury. Сообщения могут не доставляться до тех пор, пока он не обновит приложение."
 
-msgid "contact_unreachable"
-msgstr "Контакт недоступен. Сообщения не доставлены более 24 часов."
+msgid "migration_dialog_title"
+msgstr "Важное обновление"
+msgid "migration_dialog_text"
+msgstr "Project Mercury был обновлен до нового, более надежного сетевого P2P-протокола.\n\nСтарые версии приложения несовместимы с этим обновлением. Пожалуйста, убедитесь, что ваши контакты также обновили приложение до последней версии, чтобы продолжить обмен сообщениями и звонки."
+msgid "migration_action_understood"
+msgstr "Понятно"

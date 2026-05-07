@@ -723,10 +723,19 @@ msgstr "Nombre"
 msgid "sort_size"
 msgstr "Tamaño"
 
+# Conversation screen
+msgid "contact_unreachable"
+msgstr "Contacto inalcanzable. Mensajes no entregados durante más de 24 horas."
+
+# Versioning
 msgid "version_we_need_update"
 msgstr "Tu versión de Mercury está desactualizada. Por favor, actualiza la aplicación para comunicarte con este contacto."
 msgid "version_peer_needs_update"
 msgstr "La otra persona está utilizando una versión desactualizada de Mercury. Es posible que los mensajes no se entreguen hasta que se actualice."
 
-msgid "contact_unreachable"
-msgstr "Contacto inalcanzable. Mensajes no entregados durante más de 24 horas."
+msgid "migration_dialog_title"
+msgstr "Actualización importante"
+msgid "migration_dialog_text"
+msgstr "Project Mercury ha sido actualizado a un nuevo protocolo de red P2P más confiable.\n\nLas versiones anteriores de la aplicación no son compatibles con esta actualización. Asegúrese de que sus contactos también actualicen su aplicación a la última versión para seguir enviando mensajes y llamando."
+msgid "migration_action_understood"
+msgstr "Entendido"

@@ -723,10 +723,19 @@ msgstr "Nama"
 msgid "sort_size"
 msgstr "Ukuran"
 
+# Conversation screen
+msgid "contact_unreachable"
+msgstr "Kontak tidak dapat dihubungi. Pesan tidak terkirim selama lebih dari 24 jam."
+
+# Versioning
 msgid "version_we_need_update"
 msgstr "Versi Mercury Anda sudah usang. Harap perbarui aplikasi untuk berkomunikasi dengan kontak ini."
 msgid "version_peer_needs_update"
 msgstr "Orang lain menggunakan versi Mercury yang sudah usang. Pesan mungkin tidak terkirim sampai mereka memperbaruinya."
 
-msgid "contact_unreachable"
-msgstr "Kontak tidak dapat dihubungi. Pesan tidak terkirim selama lebih dari 24 jam."
+msgid "migration_dialog_title"
+msgstr "Pembaruan Penting"
+msgid "migration_dialog_text"
+msgstr "Project Mercury telah ditingkatkan ke protokol jaringan P2P baru yang lebih andal.\n\nVersi aplikasi yang lebih lama tidak kompatibel dengan pembaruan ini. Harap pastikan kontak Anda juga memperbarui aplikasi mereka ke versi terbaru untuk terus mengirim pesan dan menelepon."
+msgid "migration_action_understood"
+msgstr "Mengerti"

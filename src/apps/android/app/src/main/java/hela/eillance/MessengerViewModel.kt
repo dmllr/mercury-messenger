@@ -35,6 +35,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
   private val _hasBatteryExemption = MutableStateFlow(true)
   val hasBatteryExemption = _hasBatteryExemption.asStateFlow()
 
+  private val prefs = application.getSharedPreferences("mercury_global_prefs", Context.MODE_PRIVATE)
+  private val PREF_MIGRATION_HANDLED = "v200_migration_handled"
+
+  private val _showMigrationDialog = MutableStateFlow(false)
+  val showMigrationDialog = _showMigrationDialog.asStateFlow()
+
   // Navigation states
   private val _incomingCallUiVisible = MutableStateFlow(false)
   val incomingCallUiVisible = _incomingCallUiVisible.asStateFlow()
@@ -130,6 +136,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
   fun onNavigationHandled() {
     _navigateToPeerId.value = null
+  }
+
+  fun evaluateMigrationCondition(contactCount: Int) {
+    if (!prefs.getBoolean(PREF_MIGRATION_HANDLED, false)) {
+      if (contactCount > 0) {
+        _showMigrationDialog.value = true
+      } else {
+        markMigrationHandled()
+      }
+    }
+  }
+
+  fun markMigrationHandled() {
+    prefs.edit().putBoolean(PREF_MIGRATION_HANDLED, true).apply()
+    _showMigrationDialog.value = false
   }
 
   fun onEngineReady() {
