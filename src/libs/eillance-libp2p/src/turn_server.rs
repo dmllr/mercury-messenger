@@ -23,7 +23,7 @@ impl TurnAuthenticator {
 
   pub fn add_user(&self, username: String, password: String) {
     let mut lock = self.users.lock().unwrap();
-    crate::node_log!(&self.callbacks, 3, "[TURN] Adding authorized user: {}", username);
+    crate::node_log!(&self.callbacks, 4, "[TURN] Adding authorized user: {}", username);
     lock.insert(username, (password, Instant::now()));
 
     // Clean up old users (> 24 hours) to prevent memory leaks over time
@@ -45,7 +45,7 @@ impl turn::auth::AuthHandler for MercuryAuthHandler {
   fn auth_handle(&self, username: &str, realm: &str, src_addr: std::net::SocketAddr) -> Result<Vec<u8>, turn::Error> {
     crate::node_log!(
       &self.auth.callbacks,
-      4,
+      5,
       "[TURN] Auth handle requested for user: {} from {}",
       username,
       src_addr
@@ -53,7 +53,7 @@ impl turn::auth::AuthHandler for MercuryAuthHandler {
     if let Some(password) = self.auth.get_password(username) {
       crate::node_log!(
         &self.auth.callbacks,
-        3,
+        4,
         "[TURN] Auth request SUCCESS for user: {} from {}",
         username,
         src_addr
@@ -98,7 +98,7 @@ impl RelayAddressGenerator for MercuryRelayAddressGenerator {
 
     crate::node_log!(
       &self.callbacks,
-      4,
+      5,
       "[TURN] Allocating relay connection: use_ipv4={}, requested_port={}",
       use_ipv4,
       requested_port
@@ -112,7 +112,7 @@ impl RelayAddressGenerator for MercuryRelayAddressGenerator {
           let relay_addr = std::net::SocketAddr::new(self.relay_address, local_addr.port());
           crate::node_log!(
             &self.callbacks,
-            3,
+            4,
             "[TURN] Allocated relay connection on {} mapped to {}",
             local_addr,
             relay_addr

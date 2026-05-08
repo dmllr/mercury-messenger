@@ -342,7 +342,7 @@ class MediaCallService {
   }
 
   void OnMediaPeerConnectionStateChange(ContactID const& peer_id, transport::PeerConnectionState state) {
-    LGI << "[WebRTC] PeerConnection state changed to " << static_cast<int>(state) << " for " << peer_id.ToString();
+    LGD << "[WebRTC] PeerConnection state changed to " << static_cast<int>(state) << " for " << peer_id.ToString();
     std::lock_guard<std::recursive_mutex> const lock(mutex_);
 
     if (state == transport::PeerConnectionState::failed || state == transport::PeerConnectionState::closed ||
@@ -351,7 +351,7 @@ class MediaCallService {
       if (current_state != transport::PeerConnectionState::failed &&
           current_state != transport::PeerConnectionState::closed &&
           current_state != transport::PeerConnectionState::disconnected) {
-        LGI << "Ignoring stale media connection state event for " << peer_id.ToString();
+        LGD << "Ignoring stale media connection state event for " << peer_id.ToString();
         return;
       }
 

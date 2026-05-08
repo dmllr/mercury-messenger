@@ -48,7 +48,7 @@ impl EventLoopState {
 
   pub fn do_dial(&mut self, peer_val: PeerId, swarm: &mut Swarm<MercuryBehaviour>, callbacks: &Callbacks) {
     if !self.pending_dials.contains(&peer_val) {
-      node_log!(callbacks, 4, "Initiating DHT get_closest_peers for {}", peer_val);
+      node_log!(callbacks, 5, "Initiating DHT get_closest_peers for {}", peer_val);
       swarm.behaviour_mut().kademlia.get_closest_peers(peer_val);
       self.pending_dials.insert(peer_val);
     }
@@ -71,21 +71,21 @@ impl EventLoopState {
       }
     }
 
-    node_log!(callbacks, 4, "Dialing {} with addresses: {:?}", peer_val, addrs);
+    node_log!(callbacks, 5, "Dialing {} with addresses: {:?}", peer_val, addrs);
 
     let opts = libp2p::swarm::dial_opts::DialOpts::peer_id(peer_val)
       .addresses(addrs)
       .build();
     match swarm.dial(opts) {
-      Ok(_) => node_log!(callbacks, 4, "Dial request submitted for {}", peer_val),
+      Ok(_) => node_log!(callbacks, 5, "Dial request submitted for {}", peer_val),
       Err(libp2p::swarm::DialError::NoAddresses) => node_log!(
         callbacks,
-        3,
+        4,
         "DialError::NoAddresses for {}, waiting for DHT or relay",
         peer_val
       ),
       Err(libp2p::swarm::DialError::DialPeerConditionFalse(_)) => {
-        node_log!(callbacks, 4, "DialError::DialPeerConditionFalse for {}", peer_val);
+        node_log!(callbacks, 5, "DialError::DialPeerConditionFalse for {}", peer_val);
         if swarm.is_connected(&peer_val) {
           self.pending_dials.remove(&peer_val);
         }
@@ -134,7 +134,7 @@ pub async fn run_event_loop(
                 dht_peers += bucket.num_entries();
             }
             state.tick_counter = state.tick_counter.wrapping_add(1);
-            node_log!(callbacks, 4, "Emitting network stats: connected={}, bootstrap={}, dht={}, role={}", connected_peers, bootstrap_connected, dht_peers, role_str);
+            node_log!(callbacks, 5, "Emitting network stats: connected={}, bootstrap={}, dht={}, role={}", connected_peers, bootstrap_connected, dht_peers, role_str);
             crate::utils::notify_network_stats(&callbacks, connected_peers as i32, bootstrap_connected as i32, dht_peers as i32, role_str);
         }
         cmd = rx.recv() => {
@@ -168,7 +168,7 @@ fn handle_keepalive(state: &mut EventLoopState, swarm: &mut Swarm<MercuryBehavio
       if !swarm.is_connected(&peer_id) {
         node_log!(
           callbacks,
-          3,
+          4,
           "Periodic check: Bootstrap node {} not connected, dialing...",
           peer_id
         );
@@ -191,7 +191,7 @@ fn handle_keepalive(state: &mut EventLoopState, swarm: &mut Swarm<MercuryBehavio
   for relay_listen_addr in to_listen {
     node_log!(
       callbacks,
-      3,
+      4,
       "Periodic check: Re-establishing relay listener on {}",
       relay_listen_addr
     );
@@ -241,7 +241,7 @@ fn handle_command(
 ) {
   match cmd {
     Command::Dial(peer_id) => {
-      node_log!(callbacks, 4, "Dial command received for {}", peer_id);
+      node_log!(callbacks, 5, "Dial command received for {}", peer_id);
       state.do_dial(peer_id, swarm, callbacks);
     }
     Command::AddBootstrap(addr) => {
@@ -291,7 +291,7 @@ fn handle_command(
       swarm.behaviour_mut().file.send_request(&peer_id, data);
     }
     Command::Disconnect(peer_id) => {
-      node_log!(callbacks, 4, "Disconnect command received for {}", peer_id);
+      node_log!(callbacks, 5, "Disconnect command received for {}", peer_id);
       let _ = swarm.disconnect_peer_id(peer_id);
       state.pending_dials.remove(&peer_id);
     }
@@ -316,12 +316,12 @@ fn handle_command(
     Command::DiscoverTurnRelays => {
       let key = libp2p::kad::RecordKey::new(&"mercury/turn_relays");
       swarm.behaviour_mut().kademlia.get_providers(key);
-      node_log!(callbacks, 4, "Discovering TURN relays...");
+      node_log!(callbacks, 5, "Discovering TURN relays...");
     }
     Command::AuthTurnRelay(peer_id) => {
       let req = crate::types::TurnAuthRequest { dummy: 0 };
       let _ = swarm.behaviour_mut().turn_auth.send_request(&peer_id, req);
-      node_log!(callbacks, 4, "Authenticating TURN relay {}...", peer_id);
+      node_log!(callbacks, 5, "Authenticating TURN relay {}...", peer_id);
     }
     Command::SetTurnEligibility(eligible) => {
       state.is_turn_eligible = eligible;
@@ -487,7 +487,7 @@ fn handle_swarm_event(
     } => {
       node_log!(
         callbacks,
-        4,
+        5,
         "IncomingConnection {:?} local: {} remote: {}",
         connection_id,
         local_addr,
@@ -511,14 +511,14 @@ fn handle_swarm_event(
       );
     }
     SwarmEvent::Dialing { peer_id, connection_id } => {
-      node_log!(callbacks, 4, "Dialing {:?} connection_id: {:?}", peer_id, connection_id);
+      node_log!(callbacks, 5, "Dialing {:?} connection_id: {:?}", peer_id, connection_id);
     }
     SwarmEvent::OutgoingConnectionError {
       peer_id: Some(peer_id),
       error,
       ..
     } => {
-      node_log!(callbacks, 1, "Outgoing connection error to {}: {:?}", peer_id, error);
+      node_log!(callbacks, 4, "Outgoing connection error to {}: {:?}", peer_id, error);
       state.pending_dials.remove(&peer_id);
       if !state.explicit_bootstrap_peers.contains(&peer_id) {
         notify_disconnected(callbacks, swarm, &peer_id);
@@ -527,12 +527,12 @@ fn handle_swarm_event(
     SwarmEvent::OutgoingConnectionError {
       peer_id: None, error, ..
     } => {
-      node_log!(callbacks, 1, "Outgoing connection error to unknown peer: {:?}", error);
+      node_log!(callbacks, 4, "Outgoing connection error to unknown peer: {:?}", error);
     }
     SwarmEvent::Behaviour(MercuryBehaviourEvent::Identify(identify::Event::Received { peer_id, info })) => {
       node_log!(
         callbacks,
-        4,
+        5,
         "Identify received from {}: listen_addrs={:?}",
         peer_id,
         info.listen_addrs
@@ -575,7 +575,7 @@ fn handle_swarm_event(
       }
     }
     SwarmEvent::NewExternalAddrCandidate { address } => {
-      node_log!(callbacks, 3, "New external address candidate: {}", address);
+      node_log!(callbacks, 4, "New external address candidate: {}", address);
       if state.public_ip.is_none() {
         let mut public_ip = String::new();
         for protocol in address.iter() {
@@ -600,7 +600,7 @@ fn handle_swarm_event(
       }
     }
     SwarmEvent::NewExternalAddrOfPeer { peer_id, address } => {
-      node_log!(callbacks, 4, "NewExternalAddrOfPeer for {}: {}", peer_id, address);
+      node_log!(callbacks, 5, "NewExternalAddrOfPeer for {}: {}", peer_id, address);
       state
         .known_addresses
         .entry(peer_id)
@@ -627,7 +627,7 @@ fn handle_swarm_event(
     })) => {
       node_log!(
         callbacks,
-        4,
+        5,
         "Kademlia GetClosestPeers progressed: step={:?} res={:?}",
         step,
         res
@@ -661,7 +661,7 @@ fn handle_swarm_event(
               match swarm.dial(opts) {
                 Err(libp2p::swarm::DialError::NoAddresses) => {
                   if !state.explicit_bootstrap_peers.contains(&peer) {
-                    node_log!(callbacks, 3, "Failed to discover addresses for {}", peer);
+                    node_log!(callbacks, 4, "Failed to discover addresses for {}", peer);
                     notify_disconnected(callbacks, swarm, &peer);
                   }
                 }
@@ -701,7 +701,7 @@ fn handle_swarm_event(
       }
     }
     SwarmEvent::Behaviour(MercuryBehaviourEvent::Kademlia(kad::Event::RoutingUpdated { peer, addresses, .. })) => {
-      node_log!(callbacks, 4, "Kademlia RoutingUpdated for {}: {:?}", peer, addresses);
+      node_log!(callbacks, 5, "Kademlia RoutingUpdated for {}: {:?}", peer, addresses);
       for addr in addresses.iter() {
         state.known_addresses.entry(peer).or_default().insert(addr.clone());
       }
@@ -710,7 +710,7 @@ fn handle_swarm_event(
       }
     }
     SwarmEvent::Behaviour(MercuryBehaviourEvent::Kademlia(e)) => {
-      node_log!(callbacks, 4, "Kademlia event: {:?}", e);
+      node_log!(callbacks, 5, "Kademlia event: {:?}", e);
     }
     SwarmEvent::ListenerClosed {
       listener_id,
@@ -743,13 +743,13 @@ fn handle_swarm_event(
       state.active_relay_listeners.retain(|_, id| *id != listener_id);
     }
     SwarmEvent::Behaviour(MercuryBehaviourEvent::RelayServer(e)) => {
-      node_log!(callbacks, 4, "RelayServer event: {:?}", e);
+      node_log!(callbacks, 5, "RelayServer event: {:?}", e);
     }
     SwarmEvent::Behaviour(MercuryBehaviourEvent::RelayClient(e)) => {
-      node_log!(callbacks, 4, "RelayClient event: {:?}", e);
+      node_log!(callbacks, 5, "RelayClient event: {:?}", e);
     }
     SwarmEvent::Behaviour(MercuryBehaviourEvent::Dcutr(e)) => {
-      node_log!(callbacks, 4, "DCUtR event: {:?}", e);
+      node_log!(callbacks, 5, "DCUtR event: {:?}", e);
     }
     SwarmEvent::Behaviour(MercuryBehaviourEvent::Chat(request_response::Event::Message { peer, message })) => {
       if let request_response::Message::Request { request, channel, .. } = message {
@@ -769,7 +769,7 @@ fn handle_swarm_event(
         }
         let _ = swarm.behaviour_mut().chat.send_response(channel, vec![]);
       } else if let request_response::Message::Response { .. } = message {
-        node_log!(callbacks, 4, "Received Chat Response from {}", peer);
+        node_log!(callbacks, 5, "Received Chat Response from {}", peer);
       }
     }
     SwarmEvent::Behaviour(MercuryBehaviourEvent::File(request_response::Event::Message { peer, message })) => {
@@ -790,11 +790,11 @@ fn handle_swarm_event(
         }
         let _ = swarm.behaviour_mut().file.send_response(channel, vec![]);
       } else if let request_response::Message::Response { .. } = message {
-        node_log!(callbacks, 4, "Received File Response from {}", peer);
+        node_log!(callbacks, 5, "Received File Response from {}", peer);
       }
     }
     SwarmEvent::Behaviour(MercuryBehaviourEvent::Chat(request_response::Event::ResponseSent { peer, .. })) => {
-      node_log!(callbacks, 4, "Chat response sent to {}", peer);
+      node_log!(callbacks, 5, "Chat response sent to {}", peer);
     }
     SwarmEvent::Behaviour(MercuryBehaviourEvent::Chat(request_response::Event::OutboundFailure {
       peer,
@@ -809,7 +809,7 @@ fn handle_swarm_event(
       node_log!(callbacks, 2, "Chat inbound failure from {}: {:?}", peer, error);
     }
     SwarmEvent::Behaviour(MercuryBehaviourEvent::File(request_response::Event::ResponseSent { peer, .. })) => {
-      node_log!(callbacks, 4, "File response sent to {}", peer);
+      node_log!(callbacks, 5, "File response sent to {}", peer);
     }
     SwarmEvent::Behaviour(MercuryBehaviourEvent::File(request_response::Event::OutboundFailure {
       peer,
@@ -860,14 +860,14 @@ fn handle_swarm_event(
       }
     }
     SwarmEvent::Behaviour(MercuryBehaviourEvent::Autonat(e)) => {
-      node_log!(callbacks, 4, "AutoNAT event: {:?}", e);
+      node_log!(callbacks, 5, "AutoNAT event: {:?}", e);
     }
     SwarmEvent::Behaviour(MercuryBehaviourEvent::TurnAuth(request_response::Event::Message { peer, message })) => {
       if let request_response::Message::Request {
         request: _, channel, ..
       } = message
       {
-        node_log!(callbacks, 4, "Received TurnAuthRequest from {}", peer);
+        node_log!(callbacks, 5, "Received TurnAuthRequest from {}", peer);
 
         if state.turn_port.is_none() {
           let response = crate::types::TurnAuthResponse {
@@ -902,7 +902,7 @@ fn handle_swarm_event(
 
         node_log!(
           callbacks,
-          3,
+          4,
           "Sending TurnAuthResponse: ip={}, port={}, user={}",
           response.public_ip,
           response.port,
@@ -913,7 +913,7 @@ fn handle_swarm_event(
       } else if let request_response::Message::Response { response, .. } = message {
         node_log!(
           callbacks,
-          3,
+          4,
           "[TURN] Received TurnAuthResponse from {}: ip={}, port={}, user={}",
           peer,
           response.public_ip,
@@ -981,14 +981,14 @@ fn handle_swarm_event(
       node_log!(callbacks, 2, "TurnAuth inbound failure from {}: {:?}", peer, error);
     }
     SwarmEvent::Behaviour(MercuryBehaviourEvent::TurnAuth(request_response::Event::ResponseSent { peer, .. })) => {
-      node_log!(callbacks, 4, "TurnAuth response sent to {}", peer);
+      node_log!(callbacks, 5, "TurnAuth response sent to {}", peer);
     }
     SwarmEvent::Behaviour(MercuryBehaviourEvent::Ping(ping::Event { peer, result, .. })) => match result {
-      Ok(rtt) => node_log!(callbacks, 4, "Ping to {} successful, RTT: {:?}", peer, rtt),
-      Err(e) => node_log!(callbacks, 4, "Ping to {} failed: {:?}", peer, e),
+      Ok(rtt) => node_log!(callbacks, 5, "Ping to {} successful, RTT: {:?}", peer, rtt),
+      Err(e) => node_log!(callbacks, 5, "Ping to {} failed: {:?}", peer, e),
     },
     event => {
-      node_log!(callbacks, 4, "Unhandled SwarmEvent: {:?}", event);
+      node_log!(callbacks, 5, "Unhandled SwarmEvent: {:?}", event);
     }
   }
 }

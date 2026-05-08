@@ -83,7 +83,7 @@ class Client final {
             if (current_state != transport::PeerConnectionState::failed &&
                 current_state != transport::PeerConnectionState::closed &&
                 current_state != transport::PeerConnectionState::disconnected) {
-              LGI << "Ignoring stale data connection state event for " << event.peer_id.ToString();
+              LGD << "Ignoring stale data connection state event for " << event.peer_id.ToString();
               return;
             }
 
@@ -616,7 +616,7 @@ class Client final {
     }
 
     auto json_str = final_config.dump();
-    LGI << "[ICE] Final WebRTC Configuration: " << json_str;
+    LGD << "[ICE] Final WebRTC Configuration: " << json_str;
     sm_->media_transport->SetIceServers(json_str);
   }
 
