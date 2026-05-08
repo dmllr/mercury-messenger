@@ -114,7 +114,7 @@ class DeliveryService {
         delay = initialRetryDelayS;
       }
 
-      LGI << "Connection to " << peer_id.ToString() << " failed or did not clear queue. Retrying in " << delay << "s.";
+      LGD << "Connection to " << peer_id.ToString() << " failed or did not clear queue. Retrying in " << delay << "s.";
 
       retry_scheduled_.insert(peer_id);
       dispatch_queue_.DispatchAfter(std::chrono::seconds(delay), [this, peer_id]() -> void {
@@ -165,7 +165,7 @@ class DeliveryService {
         return;
       }
 
-      LGI << "Delivery requested for " << peer_id.ToString() << ". Requesting connection.";
+      LGD << "Delivery requested for " << peer_id.ToString() << ". Requesting connection.";
       pending_connections_.insert(peer_id);
     }
 

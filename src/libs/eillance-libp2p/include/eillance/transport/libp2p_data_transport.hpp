@@ -209,7 +209,7 @@ class Libp2pDataTransport : public DataTransport::Interface {
         AddPeer(peer_id, p);
       }
       p->is_connecting = true;
-      LGI << "Triggering automated DHT search for: " << peer_id.ToString();
+      LGD << "Triggering automated DHT search for: " << peer_id.ToString();
       EventQueue::Instance().Push(EventDataPeerConnectionStateChanged{peer_id, PeerConnectionState::connecting});
       node_->Dial(peer_id);
     }

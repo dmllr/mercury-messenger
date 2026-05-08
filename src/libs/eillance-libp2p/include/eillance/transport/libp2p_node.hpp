@@ -249,8 +249,11 @@ class Libp2pNode final {
       case 3:
         LGI << "[libp2p] " << message;
         break;
-      default:
+      case 4:
         LGD << "[libp2p] " << message;
+        break;
+      default:
+        LGV << "[libp2p] " << message;
         break;
     }
   }
