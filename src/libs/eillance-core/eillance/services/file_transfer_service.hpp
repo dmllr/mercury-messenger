@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <deque>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -58,6 +59,7 @@ class FileTransferService {
 
   void OnConnectionReady(ContactID const& peer_id) {
     auto const pending_attachments = storage_->GetPendingAttachments(peer_id);
+    std::lock_guard<std::mutex> lock(transfers_mutex_);
     for (auto const& attachment : pending_attachments) {
       if (attachment.status == messaging::AttachmentStatus::paused ||
           attachment.status == messaging::AttachmentStatus::canceled ||
@@ -66,95 +68,94 @@ class FileTransferService {
       }
 
       if (attachment.is_downloaded) {
-        // We are uploader
-        StartUploadInternal(peer_id, attachment);
+        if (!active_uploads_.contains(attachment.id)) {
+          bool found = false;
+          for (auto const& q : upload_queue_) {
+            if (q.attachment_id == attachment.id) {
+              found = true;
+              break;
+            }
+          }
+          if (!found) upload_queue_.push_back({peer_id, attachment.id, 0});
+        }
       } else {
-        // We are downloader
-        ResumeTransfer(peer_id, attachment.id, false);
+        if (!active_downloads_.contains(attachment.id)) {
+          bool found = false;
+          for (auto const& q : download_queue_) {
+            if (q.attachment_id == attachment.id) {
+              found = true;
+              break;
+            }
+          }
+          if (!found) download_queue_.push_back({peer_id, attachment.id, 0});
+        }
       }
     }
+    TriggerNextTransfers();
   }
 
   void QueueUpload(ContactID const& peer_id, messaging::Attachment const& attachment) {
-    StartUploadInternal(peer_id, attachment);
+    std::lock_guard<std::mutex> lock(transfers_mutex_);
+    upload_queue_.push_back({peer_id, attachment.id, 0});
+    TriggerNextTransfers();
   }
 
-  void QueueDownload(ContactID const& /*peer_id*/, messaging::Attachment const& attachment, std::uint64_t message_id) {
-    {
-      std::lock_guard<std::mutex> const lock(transfers_mutex_);
-      if (active_downloads_.contains(attachment.id)) {
-        return;
-      }
-    }
+  void QueueDownload(ContactID const& peer_id, messaging::Attachment const& attachment, std::uint64_t message_id) {
+    std::lock_guard<std::mutex> lock(transfers_mutex_);
+    download_queue_.push_back({peer_id, attachment.id, message_id});
+    TriggerNextTransfers();
+  }
 
-    std::filesystem::path const storage_root(storage_->GetPath());
-    std::filesystem::path const attachments_dir = storage_root.parent_path() / "attachments";
-    std::error_code error_code;
-    std::filesystem::create_directories(attachments_dir, error_code);
-    if (error_code) {
-      LGE << "Failed to create attachments directory: " << error_code.message();
+  void TriggerNextTransfers() {
+    transfer_queue_.Dispatch([this]() {
+      TryStartNextUpload();
+      TryStartNextDownload();
+    });
+  }
+
+  void TryStartNextUpload() {
+    std::unique_lock<std::mutex> lock(transfers_mutex_);
+    if (!active_uploads_.empty()) return;
+
+    while (!upload_queue_.empty()) {
+      auto up = upload_queue_.front();
+      upload_queue_.pop_front();
+
+      auto stored = storage_->GetAttachment(up.attachment_id);
+      if (!stored || stored->status == messaging::AttachmentStatus::canceled ||
+          stored->status == messaging::AttachmentStatus::discarded ||
+          stored->status == messaging::AttachmentStatus::peerCanceled ||
+          stored->status == messaging::AttachmentStatus::paused ||
+          stored->status == messaging::AttachmentStatus::done) {
+        continue;
+      }
+
+      lock.unlock();
+      StartUploadInternal(up.peer_id, *stored);
       return;
     }
+  }
 
-    std::filesystem::path const temp_path = attachments_dir / (attachment.id + ".tmp");
-    std::filesystem::path const progress_path = attachments_dir / (attachment.id + ".progress");
+  void TryStartNextDownload() {
+    std::unique_lock<std::mutex> lock(transfers_mutex_);
+    if (!active_downloads_.empty()) return;
 
-    TransferDownloadState state;
-    state.file_path = std::filesystem::path(attachment.file_path);
-    state.temp_path = temp_path;
-    state.progress_path = progress_path;
-    state.expected_hash = attachment.hash;
-    state.total_size = attachment.size_bytes;
-    state.message_id = message_id;
+    while (!download_queue_.empty()) {
+      auto down = download_queue_.front();
+      download_queue_.pop_front();
 
-    std::size_t const num_chunks = (attachment.size_bytes + chunkSizeBytes - 1) / chunkSizeBytes;
-    state.received_chunks.resize(num_chunks > 0 ? num_chunks : 1, false);
-    state.bytes_written = 0;
-
-    // Try to recover state completely asynchronously
-    if (std::filesystem::exists(progress_path)) {
-      std::ifstream part_file(progress_path, std::ios::binary);
-      if (part_file) {
-        std::vector<std::uint8_t> packed((state.received_chunks.size() + 7) / 8, 0);
-        part_file.read(reinterpret_cast<char*>(packed.data()), packed.size());
-        for (size_t i = 0; i < state.received_chunks.size(); ++i) {
-          state.received_chunks[i] = (packed[i / 8] & (1 << (i % 8))) != 0;
-          if (state.received_chunks[i]) {
-            std::size_t chunk_len = chunkSizeBytes;
-            if (i == state.received_chunks.size() - 1 && attachment.size_bytes > 0) {
-              chunk_len = attachment.size_bytes - (i * chunkSizeBytes);
-            }
-            state.bytes_written += chunk_len;
-          }
-        }
+      auto stored = storage_->GetAttachment(down.attachment_id);
+      if (!stored || stored->status == messaging::AttachmentStatus::canceled ||
+          stored->status == messaging::AttachmentStatus::discarded ||
+          stored->status == messaging::AttachmentStatus::peerCanceled ||
+          stored->status == messaging::AttachmentStatus::paused ||
+          stored->status == messaging::AttachmentStatus::done) {
+        continue;
       }
-    }
 
-    try {
-      if (!std::filesystem::exists(state.temp_path)) {
-        std::ofstream output_stream(state.temp_path, std::ios::binary | std::ios::out | std::ios::trunc);
-        output_stream.close();
-        if (attachment.size_bytes > 0) {
-          std::filesystem::resize_file(state.temp_path, attachment.size_bytes);
-        }
-      } else {
-        if (std::filesystem::file_size(state.temp_path) < attachment.size_bytes) {
-          std::filesystem::resize_file(state.temp_path, attachment.size_bytes);
-        }
-      }
-    } catch (std::exception const& e) {
-      LGE << "Failed to reserve space for attachment " << attachment.id << ": " << e.what();
-    }
-
-    state.stream.open(state.temp_path, std::ios::binary | std::ios::in | std::ios::out);
-    if (!state.stream.is_open()) {
-      LGE << "Failed to open temp file for download: " << state.temp_path.string();
+      lock.unlock();
+      StartDownloadInternal(down.peer_id, *stored, down.message_id, true);
       return;
-    }
-
-    std::lock_guard<std::mutex> const lock(transfers_mutex_);
-    if (!active_downloads_.contains(attachment.id)) {
-      active_downloads_[attachment.id] = std::move(state);
     }
   }
 
@@ -224,14 +225,16 @@ class FileTransferService {
       bool const is_upload,
       bool const notify_peer = true
   ) {
-    std::lock_guard<std::mutex> const lock(transfers_mutex_);
-    if (is_upload) {
-      active_uploads_.erase(attachment_id);
-    } else {
-      if (active_downloads_.contains(attachment_id)) {
-        auto& state = active_downloads_[attachment_id];
-        state.stream.close();
-        active_downloads_.erase(attachment_id);
+    {
+      std::lock_guard<std::mutex> const lock(transfers_mutex_);
+      if (is_upload) {
+        active_uploads_.erase(attachment_id);
+      } else {
+        if (active_downloads_.contains(attachment_id)) {
+          auto& state = active_downloads_[attachment_id];
+          state.stream.close();
+          active_downloads_.erase(attachment_id);
+        }
       }
     }
 
@@ -248,57 +251,26 @@ class FileTransferService {
 
     storage_->UpdateAttachmentStatus(attachment_id, new_status, is_upload);
     EventQueue::Instance().Push(EventAttachmentStatusChanged{peer_id, attachment_id, new_status});
+    TriggerNextTransfers();
   }
 
   void ResumeTransfer(ContactID const& peer_id, std::string const& attachment_id, bool const is_upload) {
     if (is_upload) {
-      // Sender Side Resume:
-      // Status will change to Transferring internally when pumping actually starts
-      storage_->UpdateAttachmentStatus(attachment_id, messaging::AttachmentStatus::transferring, true);
+      storage_->UpdateAttachmentStatus(attachment_id, messaging::AttachmentStatus::pending, true);
       EventQueue::Instance().Push(
-          EventAttachmentStatusChanged{peer_id, attachment_id, messaging::AttachmentStatus::transferring}
+          EventAttachmentStatusChanged{peer_id, attachment_id, messaging::AttachmentStatus::pending}
       );
-      auto attachment = storage_->GetAttachment(attachment_id);
-      if (attachment) {
-        StartUploadInternal(peer_id, *attachment);
-      }
+      std::lock_guard<std::mutex> lock(transfers_mutex_);
+      upload_queue_.push_back({peer_id, attachment_id, 0});
     } else {
-      // Receiver Side Resume:
-      storage_->UpdateAttachmentStatus(attachment_id, messaging::AttachmentStatus::transferring, false);
+      storage_->UpdateAttachmentStatus(attachment_id, messaging::AttachmentStatus::pending, false);
       EventQueue::Instance().Push(
-          EventAttachmentStatusChanged{peer_id, attachment_id, messaging::AttachmentStatus::transferring}
+          EventAttachmentStatusChanged{peer_id, attachment_id, messaging::AttachmentStatus::pending}
       );
-
-      std::filesystem::path const storage_root(storage_->GetPath());
-      std::filesystem::path const progress_path =
-          storage_root.parent_path() / "attachments" / (attachment_id + ".progress");
-
-      std::vector<std::uint32_t> missing;
-
-      auto attachment = storage_->GetAttachment(attachment_id);
-      if (attachment) {
-        std::size_t num_chunks = (attachment->size_bytes + chunkSizeBytes - 1) / chunkSizeBytes;
-        if (num_chunks == 0) num_chunks = 1;
-
-        std::vector<bool> received_chunks(num_chunks, false);
-        if (std::filesystem::exists(progress_path)) {
-          std::ifstream part_file(progress_path, std::ios::binary);
-          if (part_file) {
-            std::vector<std::uint8_t> packed((num_chunks + 7) / 8, 0);
-            part_file.read(reinterpret_cast<char*>(packed.data()), packed.size());
-            for (size_t i = 0; i < num_chunks; ++i) {
-              received_chunks[i] = (packed[i / 8] & (1 << (i % 8))) != 0;
-            }
-          }
-        }
-        for (std::uint32_t i = 0; i < num_chunks; ++i) {
-          if (!received_chunks[i]) missing.push_back(i);
-        }
-      }
-
-      // Automatically request the exact gaps asynchronously
-      SendMissing(peer_id, attachment_id, missing);
+      std::lock_guard<std::mutex> lock(transfers_mutex_);
+      download_queue_.push_back({peer_id, attachment_id, 0});
     }
+    TriggerNextTransfers();
   }
 
   void DiscardAttachment(ContactID const& peer_id, std::string const& attachment_id) {
@@ -340,21 +312,25 @@ class FileTransferService {
           EventAttachmentStatusChanged{peer_id, attachment_id, messaging::AttachmentStatus::discarded}
       );
     }
+    TriggerNextTransfers();
   }
 
   void HandleCancel(ContactID const& peer_id, std::string const& file_id) {
-    std::lock_guard<std::mutex> const lock(transfers_mutex_);
-    if (active_uploads_.contains(file_id)) {
-      active_uploads_.erase(file_id);
-    }
-    if (active_downloads_.contains(file_id)) {
-      auto& state = active_downloads_[file_id];
-      state.stream.close();
-      active_downloads_.erase(file_id);
+    {
+      std::lock_guard<std::mutex> const lock(transfers_mutex_);
+      if (active_uploads_.contains(file_id)) {
+        active_uploads_.erase(file_id);
+      }
+      if (active_downloads_.contains(file_id)) {
+        auto& state = active_downloads_[file_id];
+        state.stream.close();
+        active_downloads_.erase(file_id);
+      }
     }
 
     auto attachment = storage_->GetAttachment(file_id);
     if (attachment && attachment->status == messaging::AttachmentStatus::discarded) {
+      TriggerNextTransfers();
       return;
     }
 
@@ -362,6 +338,7 @@ class FileTransferService {
     EventQueue::Instance().Push(
         EventAttachmentStatusChanged{peer_id, file_id, messaging::AttachmentStatus::peerCanceled}
     );
+    TriggerNextTransfers();
   }
 
  private:
@@ -371,7 +348,11 @@ class FileTransferService {
 
   void FinalizeDownload(ContactID const& peer_id, std::string const& file_id, std::unique_lock<std::mutex>& lock) {
     auto iterator = active_downloads_.find(file_id);
-    if (iterator == active_downloads_.end()) return;
+    if (iterator == active_downloads_.end()) {
+      lock.unlock();
+      TriggerNextTransfers();
+      return;
+    }
 
     auto& state = iterator->second;
     state.stream.close();
@@ -402,6 +383,7 @@ class FileTransferService {
       storage_->UpdateAttachmentStatus(file_id, messaging::AttachmentStatus::failed, false);
       EventQueue::Instance().Push(EventAttachmentStatusChanged{peer_id, file_id, messaging::AttachmentStatus::failed});
     }
+    TriggerNextTransfers();
   }
 
   struct TransferUploadState {
@@ -425,6 +407,106 @@ class FileTransferService {
     std::size_t bytes_written = 0;
   };
 
+  void StartDownloadInternal(
+      ContactID const& peer_id,
+      messaging::Attachment const& attachment,
+      std::uint64_t message_id,
+      bool request_missing
+  ) {
+    {
+      std::lock_guard<std::mutex> const lock(transfers_mutex_);
+      if (active_downloads_.contains(attachment.id)) {
+        return;
+      }
+    }
+
+    std::filesystem::path const storage_root(storage_->GetPath());
+    std::filesystem::path const attachments_dir = storage_root.parent_path() / "attachments";
+    std::error_code error_code;
+    std::filesystem::create_directories(attachments_dir, error_code);
+    if (error_code) {
+      LGE << "Failed to create attachments directory: " << error_code.message();
+      TriggerNextTransfers();
+      return;
+    }
+
+    std::filesystem::path const temp_path = attachments_dir / (attachment.id + ".tmp");
+    std::filesystem::path const progress_path = attachments_dir / (attachment.id + ".progress");
+
+    TransferDownloadState state;
+    state.file_path = std::filesystem::path(attachment.file_path);
+    state.temp_path = temp_path;
+    state.progress_path = progress_path;
+    state.expected_hash = attachment.hash;
+    state.total_size = attachment.size_bytes;
+    state.message_id = message_id;
+
+    std::size_t const num_chunks = (attachment.size_bytes + chunkSizeBytes - 1) / chunkSizeBytes;
+    state.received_chunks.resize(num_chunks > 0 ? num_chunks : 1, false);
+    state.bytes_written = 0;
+
+    if (std::filesystem::exists(progress_path)) {
+      std::ifstream part_file(progress_path, std::ios::binary);
+      if (part_file) {
+        std::vector<std::uint8_t> packed((state.received_chunks.size() + 7) / 8, 0);
+        part_file.read(reinterpret_cast<char*>(packed.data()), packed.size());
+        for (size_t i = 0; i < state.received_chunks.size(); ++i) {
+          state.received_chunks[i] = (packed[i / 8] & (1 << (i % 8))) != 0;
+          if (state.received_chunks[i]) {
+            std::size_t chunk_len = chunkSizeBytes;
+            if (i == state.received_chunks.size() - 1 && attachment.size_bytes > 0) {
+              chunk_len = attachment.size_bytes - (i * chunkSizeBytes);
+            }
+            state.bytes_written += chunk_len;
+          }
+        }
+      }
+    }
+
+    try {
+      if (!std::filesystem::exists(state.temp_path)) {
+        std::ofstream output_stream(state.temp_path, std::ios::binary | std::ios::out | std::ios::trunc);
+        output_stream.close();
+        if (attachment.size_bytes > 0) {
+          std::filesystem::resize_file(state.temp_path, attachment.size_bytes);
+        }
+      } else {
+        if (std::filesystem::file_size(state.temp_path) < attachment.size_bytes) {
+          std::filesystem::resize_file(state.temp_path, attachment.size_bytes);
+        }
+      }
+    } catch (std::exception const& e) {
+      LGE << "Failed to reserve space for attachment " << attachment.id << ": " << e.what();
+    }
+
+    state.stream.open(state.temp_path, std::ios::binary | std::ios::in | std::ios::out);
+    if (!state.stream.is_open()) {
+      LGE << "Failed to open temp file for download: " << state.temp_path.string();
+      TriggerNextTransfers();
+      return;
+    }
+
+    {
+      std::lock_guard<std::mutex> const lock(transfers_mutex_);
+      if (!active_downloads_.contains(attachment.id)) {
+        active_downloads_[attachment.id] = std::move(state);
+      }
+    }
+
+    storage_->UpdateAttachmentStatus(attachment.id, messaging::AttachmentStatus::transferring, false);
+    EventQueue::Instance().Push(
+        EventAttachmentStatusChanged{peer_id, attachment.id, messaging::AttachmentStatus::transferring}
+    );
+
+    if (request_missing) {
+      std::vector<std::uint32_t> missing;
+      for (std::uint32_t i = 0; i < state.received_chunks.size(); ++i) {
+        if (!state.received_chunks[i]) missing.push_back(i);
+      }
+      SendMissing(peer_id, attachment.id, missing);
+    }
+  }
+
   void StartUploadInternal(
       ContactID const& peer_id,
       messaging::Attachment const& attachment,
@@ -447,6 +529,7 @@ class FileTransferService {
       if (!file) {
         lock.unlock();
         storage_->UpdateAttachmentStatus(attachment.id, messaging::AttachmentStatus::failed, true);
+        TriggerNextTransfers();
         return;
       }
 
@@ -481,16 +564,18 @@ class FileTransferService {
   }
 
   void HandlePause(ContactID const& peer_id, std::string const& file_id) {
-    std::lock_guard<std::mutex> const lock(transfers_mutex_);
-    if (active_uploads_.contains(file_id)) {
-      active_uploads_.erase(file_id);
+    {
+      std::lock_guard<std::mutex> const lock(transfers_mutex_);
+      if (active_uploads_.contains(file_id)) {
+        active_uploads_.erase(file_id);
+      }
     }
     storage_->UpdateAttachmentStatus(file_id, messaging::AttachmentStatus::paused, true);
     EventQueue::Instance().Push(EventAttachmentStatusChanged{peer_id, file_id, messaging::AttachmentStatus::paused});
+    TriggerNextTransfers();
   }
 
   void HandleResume(ContactID const& peer_id, std::string const& file_id, std::span<std::byte const> const) {
-    // Treat legacy message identical as a request for retransmission of everything pending
     std::unique_lock<std::mutex> lock(transfers_mutex_);
     if (active_uploads_.contains(file_id)) {
       auto& state = active_uploads_[file_id];
@@ -502,8 +587,9 @@ class FileTransferService {
     } else {
       auto attachment = storage_->GetAttachment(file_id);
       if (attachment && attachment->status != messaging::AttachmentStatus::discarded) {
+        upload_queue_.push_front({peer_id, file_id, 0});
         lock.unlock();
-        StartUploadInternal(peer_id, *attachment, {});
+        TriggerNextTransfers();
       }
     }
   }
@@ -650,7 +736,7 @@ class FileTransferService {
         }
         if (attachment->status != messaging::AttachmentStatus::done) {
           lock.unlock();
-          QueueDownload(peer_id, *attachment, 0);
+          StartDownloadInternal(peer_id, *attachment, 0, false);
           lock.lock();
         }
       } else {
@@ -785,8 +871,10 @@ class FileTransferService {
   }
 
   void HandleDone(ContactID const& peer_id, std::string const& file_id) {
-    std::lock_guard<std::mutex> const lock(transfers_mutex_);
-    active_uploads_.erase(file_id);
+    {
+      std::lock_guard<std::mutex> const lock(transfers_mutex_);
+      active_uploads_.erase(file_id);
+    }
     storage_->UpdateAttachmentStatus(file_id, messaging::AttachmentStatus::done, true);
     EventQueue::Instance().Push(EventAttachmentStatusChanged{peer_id, file_id, messaging::AttachmentStatus::done});
   }
@@ -849,6 +937,15 @@ class FileTransferService {
   std::map<std::string, TransferUploadState> active_uploads_;
   std::map<std::string, TransferDownloadState> active_downloads_;
   mutable std::mutex transfers_mutex_;
+
+  struct QueuedTransfer {
+    ContactID peer_id;
+    std::string attachment_id;
+    std::uint64_t message_id = 0;
+  };
+  std::deque<QueuedTransfer> upload_queue_;
+  std::deque<QueuedTransfer> download_queue_;
+
   DispatchQueue transfer_queue_{"FileTransfer", 1};
 };
 
