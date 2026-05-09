@@ -188,11 +188,19 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
 
       node.runtime.spawn(async move {
         let tcp_cfg = tcp::Config::default();
+        let build_yamux = || {
+          let mut cfg = yamux::Config::default();
+          cfg.set_max_num_streams(2048);
+          #[allow(deprecated)]
+          cfg.set_receive_window_size(4 * 1024 * 1024);
+          cfg
+        };
+
         let swarm = match SwarmBuilder::with_existing_identity(local_key.clone())
           .with_tokio()
-          .with_tcp(tcp_cfg, noise::Config::new, yamux::Config::default)
+          .with_tcp(tcp_cfg, noise::Config::new, build_yamux)
         {
-          Ok(b) => match b.with_relay_client(noise::Config::new, yamux::Config::default) {
+          Ok(b) => match b.with_relay_client(noise::Config::new, build_yamux) {
             Ok(b) => match b.with_behaviour(|key, relay_client| build_behaviour(key, relay_client, role)) {
               Ok(b) => b
                 .with_swarm_config(|c| c.with_idle_connection_timeout(std::time::Duration::from_secs(3600)))
