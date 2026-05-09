@@ -134,7 +134,6 @@ pub async fn run_event_loop(
                 dht_peers += bucket.num_entries();
             }
             state.tick_counter = state.tick_counter.wrapping_add(1);
-            node_log!(callbacks, 5, "Emitting network stats: connected={}, bootstrap={}, dht={}, role={}", connected_peers, bootstrap_connected, dht_peers, role_str);
             crate::utils::notify_network_stats(&callbacks, connected_peers as i32, bootstrap_connected as i32, dht_peers as i32, role_str);
         }
         cmd = rx.recv() => {
