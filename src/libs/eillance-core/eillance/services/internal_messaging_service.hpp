@@ -37,14 +37,14 @@ class InternalMessagingService {
         data_transport_(sm->data_transport),
         media_transport_(sm->media_transport) {
     event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventDataChannelMessage>(
-        [this](EventDataChannelMessage const& e) { this->HandleDataChannelMessage(e.peer_id, e.message); }
+        [this](EventDataChannelMessage const& e) -> void { this->HandleDataChannelMessage(e.peer_id, e.message); }
     ));
 
-    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventDataChannelOpen>([this](auto const& e) {
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventDataChannelOpen>([this](auto const& e) -> void {
       this->OnDataChannelOpen(e.peer_id);
     }));
 
-    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventSendMediaNegotiationMessage>([this](auto const& e) {
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventSendMediaNegotiationMessage>([this](auto const& e) -> void {
       std::string const to_str = e.message.value("to", "");
       if (!to_str.empty()) {
         ContactID const peer_id(to_str);
@@ -57,17 +57,17 @@ class InternalMessagingService {
   }
 
   ~InternalMessagingService() {
-    for (auto const id : event_unsubs_) EventQueue::Instance().Unsubscribe(id);
+    for (auto const id : event_unsubs_) {
+      EventQueue::Instance().Unsubscribe(id);
+    }
   }
 
   void HandleDataChannelMessage(ContactID const& peer_id, std::span<std::byte const> const msg) {
-    if (auto p = data_transport_->GetPeer(peer_id)) {
-      p->last_activity_time = Time::SteadyNow();
+    if (auto peer = data_transport_->GetPeer(peer_id)) {
+      peer->last_activity_time = Time::SteadyNow();
     }
 
-    if (!msg.empty() && msg[0] == std::byte{0xFE}) {
-      // Ignored here, FileTransferService subscribes to this directly and checks for 0xFE.
-    } else {
+    if (msg.empty() || msg[0] != std::byte{0xFE}) {
       try {
         std::string json_str;
         json_str.resize(msg.size());
@@ -118,14 +118,14 @@ class InternalMessagingService {
     } else if (type == "termination") {
       data_transport_->RemovePeer(peer_id);
     } else if (type.starts_with("sync_")) {
-      CheckPeerVersion(peer_id, message.value("sync_version", currentSyncVersion));
+      CheckPeerVersion(peer_id, message.value("sync_version", currentSyncVersion), message.value("ft_version", currentFileTransferVersion));
       sm_->sync_engine->ProcessSyncMessage(peer_id, message);
     } else if (type == "chat" || type == "contact_add_request" || type == "contact_add_ack" ||
                type == "contact_confirm" || type == "contact_confirm_ack" || type == "contact_removed" ||
                type == "contact_removed_ack" || type == "profile_info" || type == "profile_request" ||
                type == "message_read" || type == "message_receipt" || type == "file_cancel" ||
                type == "message_delete" || type == "message_edit" || type == "message_reaction") {
-      CheckPeerVersion(peer_id, 0);
+      CheckPeerVersion(peer_id, 0, 0);
     }
   }
 
@@ -156,7 +156,8 @@ class InternalMessagingService {
           {"type", "key_exchange"},
           {"key", std::vector<std::byte>(my_pub_key.begin(), my_pub_key.end())},
           {"is_reply", false},
-          {"sync_version", currentSyncVersion}
+          {"sync_version", currentSyncVersion},
+          {"ft_version", currentFileTransferVersion}
       };
       std::ignore = data_transport_->SendJson(peer_id, key_msg);
     }
@@ -200,7 +201,8 @@ class InternalMessagingService {
     }
 
     int const peer_sync_version = message.value("sync_version", 0);
-    CheckPeerVersion(peer_id, peer_sync_version);
+    int const peer_ft_version = message.value("ft_version", 0);
+    CheckPeerVersion(peer_id, peer_sync_version, peer_ft_version);
 
     auto pub_key = message["key"].get<std::vector<std::byte>>();
     if (peer->session_cipher->ComputeSharedSecret(pub_key)) {
@@ -211,7 +213,8 @@ class InternalMessagingService {
             {{"type", "key_exchange"},
              {"key", std::vector<std::byte>(my_key.begin(), my_key.end())},
              {"is_reply", true},
-             {"sync_version", currentSyncVersion}}
+             {"sync_version", currentSyncVersion},
+             {"ft_version", currentFileTransferVersion}}
         );
       }
       EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
@@ -220,13 +223,17 @@ class InternalMessagingService {
     }
   }
 
+  // Important! Any breaking change of the sync protocol requires an increment of this constant.
   static constexpr int currentSyncVersion = 1;
 
-  void CheckPeerVersion(ContactID const& peer_id, int peer_sync_version) {
-    if (peer_sync_version < currentSyncVersion) {
+  // Important! Any breaking change of the file transfer protocol requires an increment of this constant.
+  static constexpr int currentFileTransferVersion = 1;
+
+  void CheckPeerVersion(ContactID const& peer_id, int peer_sync_version, int peer_ft_version) {
+    if (peer_sync_version < currentSyncVersion || peer_ft_version < currentFileTransferVersion) {
       EventQueue::Instance().Push(EventPeerVersionMismatch{peer_id, false});
       SendLegacyUpdatePrompt(peer_id);
-    } else if (peer_sync_version > currentSyncVersion) {
+    } else if (peer_sync_version > currentSyncVersion || peer_ft_version > currentFileTransferVersion) {
       EventQueue::Instance().Push(EventPeerVersionMismatch{peer_id, true});
     }
   }
