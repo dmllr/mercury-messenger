@@ -36,8 +36,8 @@ class SettingsViewModel {
     return impl_->GetState();
   }
 
-  void UpdateBootstrapNodeUrl(std::string const& url) {
-    impl_->UpdateBootstrapNodeUrl(url);
+  void UpdateBootstrapNodeUrls(std::string const& urls) {
+    impl_->UpdateBootstrapNodeUrls(urls);
   }
   void SetPeerInactivityTimeout(int seconds) {
     impl_->SetPeerInactivityTimeout(seconds);
@@ -68,11 +68,11 @@ class SettingsViewModel {
       return state;
     }
 
-    void UpdateBootstrapNodeUrl(std::string const& url) {
-      client->UpdateBootstrapNodeUrl(url);
+    void UpdateBootstrapNodeUrls(std::string const& urls) {
+      client->UpdateBootstrapNodeUrls(urls);
       {
         std::lock_guard<std::mutex> const lock(mutex);
-        state.bootstrap_node_url = url;
+        state.bootstrap_node_urls = urls;
         NotifySettings();
       }
     }
@@ -127,7 +127,7 @@ class SettingsViewModel {
     // Helper to load settings without locking, for use when lock is already held
     void LoadSettingsInternal() {
       auto* mgr = client->GetSettingsManager();
-      state.bootstrap_node_url = mgr->GetBootstrapNodeUrl();
+      state.bootstrap_node_urls = mgr->GetBootstrapNodeUrls();
       state.peer_inactivity_timeout_seconds = static_cast<int>(mgr->GetPeerInactivityTimeout().count());
       state.custom_stun = mgr->GetCustomStun();
       state.custom_turn = mgr->GetCustomTurn();

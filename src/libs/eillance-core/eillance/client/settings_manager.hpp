@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "eillance/storage/persistent_storage.hpp"
+#include "eillance/transport/network_config.hpp"
 
 namespace eillance {
 
@@ -24,18 +25,26 @@ class SettingsManager {
     Load();
   }
 
-  // Retrieves the libp2p bootstrap node URL. Returns an empty optional if not set.
-  [[nodiscard]] auto GetBootstrapNodeUrl() const -> std::optional<std::string> {
-    if (!bootstrapNodeUrl_ || bootstrapNodeUrl_->empty()) {
-      return "/dns4/app.hela.me/tcp/10807";
-    }
-    return bootstrapNodeUrl_;
+  [[nodiscard]] static auto GetDefaultBootstrapNodeUrls() -> std::string {
+    return transport::GetDefaultBootstrapNodeUrls();
   }
 
-  // Sets and persists the libp2p bootstrap node URL.
-  void SetBootstrapNodeUrl(std::string const& url) {
-    bootstrapNodeUrl_ = url;
-    storage_->SetSetting(kBootstrapNodeUrlKey, url);
+  [[nodiscard]] static auto ParseUrls(std::string const& input) -> std::vector<std::string> {
+    return transport::ParseUrls(input);
+  }
+
+  // Retrieves the libp2p bootstrap node URLs. Returns an empty optional if not set.
+  [[nodiscard]] auto GetBootstrapNodeUrls() const -> std::optional<std::string> {
+    if (!bootstrapNodeUrls_ || bootstrapNodeUrls_->empty()) {
+      return GetDefaultBootstrapNodeUrls();
+    }
+    return bootstrapNodeUrls_;
+  }
+
+  // Sets and persists the libp2p bootstrap node URLs.
+  void SetBootstrapNodeUrls(std::string const& urls) {
+    bootstrapNodeUrls_ = urls;
+    storage_->SetSetting(kBootstrapNodeUrlsKey, urls);
   }
 
   // --- User Profile ---
@@ -162,12 +171,17 @@ class SettingsManager {
 
  private:
   void Load() {
-    bootstrapNodeUrl_ = storage_->GetSetting(kBootstrapNodeUrlKey);
-    if (!bootstrapNodeUrl_) {
+    bootstrapNodeUrls_ = storage_->GetSetting(kBootstrapNodeUrlsKey);
+    if (!bootstrapNodeUrls_) {
       // Fallback to legacy key to migrate user data seamlessly
-      bootstrapNodeUrl_ = storage_->GetSetting("bootstrap_node_url");
-      if (bootstrapNodeUrl_) {
-        storage_->SetSetting(kBootstrapNodeUrlKey, *bootstrapNodeUrl_);
+      auto legacy = storage_->GetSetting("bootstrap_node_url");
+      if (legacy) {
+        if (*legacy == "/dns4/app.hela.me/tcp/10807") {
+          bootstrapNodeUrls_ = GetDefaultBootstrapNodeUrls();
+        } else {
+          bootstrapNodeUrls_ = *legacy;
+        }
+        storage_->SetSetting(kBootstrapNodeUrlsKey, *bootstrapNodeUrls_);
         storage_->DeleteSetting("bootstrap_node_url");
       }
     }
@@ -181,7 +195,7 @@ class SettingsManager {
     customTurnPass_ = storage_->GetSetting(kCustomTurnPassKey);
   }
 
-  static constexpr auto kBootstrapNodeUrlKey = "bootstrap_node_url";
+  static constexpr auto kBootstrapNodeUrlsKey = "bootstrap_node_urls";
   static constexpr auto kMyDisplayNameKey = "my_display_name";
   static constexpr auto kMyBioKey = "my_bio";
   static constexpr auto kMyPhotoBase64Key = "my_photo_base64";
@@ -199,7 +213,7 @@ class SettingsManager {
   std::shared_ptr<storage::PersistentStorage> storage_;
 
   // Cached settings
-  std::optional<std::string> bootstrapNodeUrl_;
+  std::optional<std::string> bootstrapNodeUrls_;
   std::optional<std::string> myDisplayName_;
   std::optional<std::string> myBio_;
   std::optional<std::string> myPhotoBase64_;

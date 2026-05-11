@@ -22,16 +22,16 @@ Java_hela_eillance_viewmodels_SettingsViewModel_nativeDestroy(JNIEnv* /*env*/, j
   delete vm;
 }
 
-extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_SettingsViewModel_nativeUpdateBootstrapNodeUrl(
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_SettingsViewModel_nativeUpdateBootstrapNodeUrls(
     JNIEnv* env,
     jobject /*instance*/,
     jlong ptr,
-    jstring url
+    jstring urls
 ) {
   auto* vm = reinterpret_cast<eillance::view_model::SettingsViewModel*>(ptr);
-  char const* chars = env->GetStringUTFChars(url, nullptr);
-  vm->UpdateBootstrapNodeUrl(chars);
-  env->ReleaseStringUTFChars(url, chars);
+  char const* chars = env->GetStringUTFChars(urls, nullptr);
+  vm->UpdateBootstrapNodeUrls(chars);
+  env->ReleaseStringUTFChars(urls, chars);
 }
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_SettingsViewModel_nativeSetTimeout(

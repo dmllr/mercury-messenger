@@ -128,9 +128,9 @@ class AccountService {
   }
 
   // Updates the bootstrap URL in settings and triggers transport reconnect
-  void UpdateBootstrapNodeUrl(std::string const& url) {
-    settings_manager_->SetBootstrapNodeUrl(url);
-    transport_->SetBootstrapNodeUrl(url);
+  void UpdateBootstrapNodeUrls(std::string const& urls) {
+    settings_manager_->SetBootstrapNodeUrls(urls);
+    transport_->SetBootstrapNodeUrls(SettingsManager::ParseUrls(urls));
     transport_->Reconnect();
   }
 
