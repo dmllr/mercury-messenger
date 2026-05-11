@@ -308,7 +308,7 @@ void InitEventBridge(JavaVM* jvm) {
     jni::ScopedJniEnv env_scope(jvm);
     if (auto* env = env_scope.Get()) {
       auto& class_refs = ClassRefs::Instance();
-      jstring url_str = e.state.bootstrap_node_url ? env->NewStringUTF(e.state.bootstrap_node_url->c_str()) : nullptr;
+      jstring url_str = e.state.bootstrap_node_urls ? env->NewStringUTF(e.state.bootstrap_node_urls->c_str()) : nullptr;
       jstring stun_str = e.state.custom_stun ? env->NewStringUTF(e.state.custom_stun->c_str()) : nullptr;
       jstring turn_str = e.state.custom_turn ? env->NewStringUTF(e.state.custom_turn->c_str()) : nullptr;
       jstring user_str = e.state.custom_turn_user ? env->NewStringUTF(e.state.custom_turn_user->c_str()) : nullptr;

@@ -28,7 +28,7 @@ class Libp2pDataTransport : public DataTransport::Interface {
   std::unordered_map<ContactID, std::shared_ptr<Peer>> peers_;
   mutable std::mutex peersMutex_;
   std::vector<std::byte> secret_key_;
-  std::string bootstrap_url_;
+  std::vector<std::string> bootstrap_urls_;
   bool is_started_ = false;
   bool is_reconnecting_ = false;
 
@@ -45,8 +45,8 @@ class Libp2pDataTransport : public DataTransport::Interface {
     secret_key_.assign(key.begin(), key.end());
   }
 
-  void SetBootstrapNodeUrl(std::string const& url) override {
-    bootstrap_url_ = url;
+  void SetBootstrapNodeUrls(std::vector<std::string> const& urls) override {
+    bootstrap_urls_ = urls;
   }
 
   void Start() override {
@@ -120,9 +120,11 @@ class Libp2pDataTransport : public DataTransport::Interface {
 
     node_->Start();
 
-    if (!bootstrap_url_.empty()) {
-      LGI << "Connecting to bootstrap: " << bootstrap_url_;
-      node_->AddBootstrapNode(bootstrap_url_);
+    if (!bootstrap_urls_.empty()) {
+      for (auto const& url : bootstrap_urls_) {
+        LGI << "Connecting to bootstrap: " << url;
+        node_->AddBootstrapNode(url);
+      }
     } else {
       std::string const fallback_addr = "/ip4/127.0.0.1/tcp/10807";
       LGI << "Connecting to fallback bootstrap: " << fallback_addr;

@@ -55,7 +55,7 @@ fun ProfileHeader(
 ) {
   val context = LocalContext.current
   val connectionState by settingsVM.connectionState.collectAsState()
-  val bootstrapNodeUrl by settingsVM.bootstrapNodeUrl.collectAsState()
+  val bootstrapNodeUrls by settingsVM.bootstrapNodeUrls.collectAsState()
   val networkStats by settingsVM.networkStats.collectAsState()
 
   var showQrDialog by remember { mutableStateOf(false) }
@@ -168,9 +168,9 @@ fun ProfileHeader(
           Spacer(Modifier.width(8.dp))
           Column {
             Text(text = statusText, style = MaterialTheme.typography.labelLarge, color = statusColor)
-            if (connectionState == ServiceConnectionState.Failure && bootstrapNodeUrl.isNotEmpty()) {
+            if (connectionState == ServiceConnectionState.Failure && bootstrapNodeUrls.isNotEmpty()) {
               Text(
-                text = stringResource(id = R.string.status_bootstrap_url, bootstrapNodeUrl),
+                text = stringResource(id = R.string.status_bootstrap_url, bootstrapNodeUrls.lines().firstOrNull() ?: ""),
                 style = MaterialTheme.typography.labelSmall,
                 color = statusColor
               )

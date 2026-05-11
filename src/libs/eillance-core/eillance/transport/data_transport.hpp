@@ -25,7 +25,7 @@ class DataTransport {
     virtual void SetSecretKey(std::span<std::byte const> key) {
       (void)key;
     }
-    virtual void SetBootstrapNodeUrl(std::string const& url) = 0;
+    virtual void SetBootstrapNodeUrls(std::vector<std::string> const& urls) = 0;
 
     // Lifecycle
     virtual void Start() = 0;
@@ -66,8 +66,8 @@ class DataTransport {
   void SetSecretKey(std::span<std::byte const> key) const {
     self_->SetSecretKey(key);
   }
-  void SetBootstrapNodeUrl(std::string const& url) const {
-    self_->SetBootstrapNodeUrl(url);
+  void SetBootstrapNodeUrls(std::vector<std::string> const& urls) const {
+    self_->SetBootstrapNodeUrls(urls);
   }
 
   void Start() const {

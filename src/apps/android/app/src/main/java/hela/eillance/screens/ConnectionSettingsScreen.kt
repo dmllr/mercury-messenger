@@ -42,7 +42,7 @@ fun ConnectionSettingsScreen(
   onBack: () -> Unit
 ) {
   val context = LocalContext.current
-  val bootstrapNodeUrl by settingsVM.bootstrapNodeUrl.collectAsState()
+  val bootstrapNodeUrls by settingsVM.bootstrapNodeUrls.collectAsState()
   val peerInactivityTimeout by settingsVM.peerInactivityTimeout.collectAsState()
 
   val customStun by settingsVM.customStun.collectAsState()
@@ -74,12 +74,14 @@ fun ConnectionSettingsScreen(
     ) {
       // Setting Item: Bootstrap Node URL
       OutlinedTextField(
-        value = bootstrapNodeUrl,
-        onValueChange = settingsVM::onBootstrapNodeUrlChange,
+        value = bootstrapNodeUrls,
+        onValueChange = settingsVM::onBootstrapNodeUrlsChange,
         label = { Text(stringResource(id = R.string.settings_bootstrap_node_url_label)) },
         placeholder = { Text(stringResource(id = R.string.settings_bootstrap_node_url_placeholder)) },
         modifier = Modifier.fillMaxWidth(),
-        singleLine = true
+        singleLine = false,
+        minLines = 4,
+        maxLines = 10
       )
       Spacer(modifier = Modifier.height(4.dp))
       Text(

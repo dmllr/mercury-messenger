@@ -44,16 +44,18 @@ class InternalMessagingService {
       this->OnDataChannelOpen(e.peer_id);
     }));
 
-    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventSendMediaNegotiationMessage>([this](auto const& e) -> void {
-      std::string const to_str = e.message.value("to", "");
-      if (!to_str.empty()) {
-        ContactID const peer_id(to_str);
-        if (auto p = data_transport_->GetPeer(peer_id)) {
-          p->pending_offer_sdp = "";  // Mark as sent to prevent forced fallback
-        }
-        std::ignore = data_transport_->SendJson(peer_id, e.message);
-      }
-    }));
+    event_unsubs_.push_back(
+        EventQueue::Instance().Subscribe<EventSendMediaNegotiationMessage>([this](auto const& e) -> void {
+          std::string const to_str = e.message.value("to", "");
+          if (!to_str.empty()) {
+            ContactID const peer_id(to_str);
+            if (auto p = data_transport_->GetPeer(peer_id)) {
+              p->pending_offer_sdp = "";  // Mark as sent to prevent forced fallback
+            }
+            std::ignore = data_transport_->SendJson(peer_id, e.message);
+          }
+        })
+    );
   }
 
   ~InternalMessagingService() {
@@ -118,7 +120,11 @@ class InternalMessagingService {
     } else if (type == "termination") {
       data_transport_->RemovePeer(peer_id);
     } else if (type.starts_with("sync_")) {
-      CheckPeerVersion(peer_id, message.value("sync_version", currentSyncVersion), message.value("ft_version", currentFileTransferVersion));
+      CheckPeerVersion(
+          peer_id,
+          message.value("sync_version", currentSyncVersion),
+          message.value("ft_version", currentFileTransferVersion)
+      );
       sm_->sync_engine->ProcessSyncMessage(peer_id, message);
     } else if (type == "chat" || type == "contact_add_request" || type == "contact_add_ack" ||
                type == "contact_confirm" || type == "contact_confirm_ack" || type == "contact_removed" ||

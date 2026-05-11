@@ -264,10 +264,6 @@ auto main(int argc, char** argv) -> int {
     }
   }
 
-  if (auto cli_url = args.Get("--signaling-url")) {
-    client->UpdateBootstrapNodeUrl(*cli_url);
-  }
-
   // --- ViewModel Initialization ---
   // In the new architecture, we instantiate specific ViewModels.
   auto contacts_vm = std::make_shared<eillance::view_model::ContactsViewModel>(client);
