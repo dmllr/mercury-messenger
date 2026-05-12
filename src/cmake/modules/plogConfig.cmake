@@ -9,3 +9,5 @@ endif()
 
 # Set standard find_package variables to indicate success.
 set(PLOG_FOUND TRUE)
+set(PLOG_INCLUDE_DIR "${plog_path}/include")
+set(plog_INCLUDE_DIR "${plog_path}/include")

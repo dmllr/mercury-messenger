@@ -50,15 +50,23 @@ if(ANDROID)
         COMMENT "Building Rust libp2p crate for Android (${RUST_TARGET})"
     )
 else()
-    if (WIN32)
-        set(LIBP2P_STATIC_LIB "${CARGO_TARGET_DIR}/release/eillance_libp2p.lib")
+    if(DEFINED ENV{CARGO_BUILD_TARGET})
+        set(CARGO_TARGET_ARG "--target" "$ENV{CARGO_BUILD_TARGET}")
+        set(TARGET_PATH_PREFIX "$ENV{CARGO_BUILD_TARGET}/")
     else()
-        set(LIBP2P_STATIC_LIB "${CARGO_TARGET_DIR}/release/libeillance_libp2p.a")
+        set(CARGO_TARGET_ARG "")
+        set(TARGET_PATH_PREFIX "")
+    endif()
+
+    if (WIN32)
+        set(LIBP2P_STATIC_LIB "${CARGO_TARGET_DIR}/${TARGET_PATH_PREFIX}release/eillance_libp2p.lib")
+    else()
+        set(LIBP2P_STATIC_LIB "${CARGO_TARGET_DIR}/${TARGET_PATH_PREFIX}release/libeillance_libp2p.a")
     endif()
 
     add_custom_command(
         OUTPUT "${LIBP2P_STATIC_LIB}"
-        COMMAND cargo build --release --target-dir "${CARGO_TARGET_DIR}"
+        COMMAND cargo build --release ${CARGO_TARGET_ARG} --target-dir "${CARGO_TARGET_DIR}"
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
         DEPENDS
             "${CMAKE_CURRENT_SOURCE_DIR}/src/behaviour.rs"
