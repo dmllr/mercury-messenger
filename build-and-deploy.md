@@ -16,66 +16,36 @@ docker build -t mercury-devenv devenv
 
 ## 2. Bootstrap Node
 
-The native C++ applications can be built and deployed using the following commands.
+The native C++ applications can be built and deployed using the included scripts in the development environment.
 
-### Oneliner (Build & Deploy Bootstrap Node)
+### Build
 
-This single command configures the project, builds the `mercury-bootstrap`, strips the binary for size, and deploys it to the target machine via `scp`.
-
-```shell
-docker run --rm -v ${PWD}:/workspace -v ${HOME}/.ssh:/workspace/.ssh -w /workspace mercury-devenv bash -c "git config --global --add safe.directory /workspace && cmake -GNinja -DCMAKE_BUILD_TYPE=Release -B build-deploy && cmake --build build-deploy --target mercury-bootstrap --config Release && strip build-deploy/src/apps/mercury-bootstrap/mercury-bootstrap && chmod 400 /workspace/.ssh/vm0.ssh.key && scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i /workspace/.ssh/vm0.ssh.key build-deploy/src/apps/mercury-bootstrap/mercury-bootstrap ubuntu@vm0.hela.me:/var/app/mercury-bootstrap/"
-```
-
-### Manual Build Steps
-
-#### 1. CMake Configure
-
-This step generates the build files inside a `build-deploy` directory. It only needs to be run once unless you change the `CMakeLists.txt` files.
+Compiles `mercury-bootstrap` native target and strips the binary.
 
 ```shell
-docker run --rm -v ${PWD}:/workspace -w /workspace mercury-devenv bash -c "git config --global --add safe.directory /workspace && cmake -GNinja -DCMAKE_BUILD_TYPE=Release -B build-deploy"
+docker run --rm -v ${PWD}:/workspace -v ${HOME}/.ssh:/workspace/.ssh -w /workspace mercury-devenv /workspace/tools/deploy-bootstrap/build-bootstrap
 ```
 
-#### 2. Build
+### Deploy
 
-This command compiles `mercury-bootstrap` native target.
+Copies the binary to the target nodes listed in `devenv/deploy-nodes.txt` and launches it in a tmux session.
 
 ```shell
-docker run --rm -v ${PWD}:/workspace -w /workspace mercury-devenv bash -c "cmake --build build-deploy --target mercury-bootstrap --config Release"
+docker run --rm -v ${PWD}:/workspace -v ${HOME}/.ssh:/workspace/.ssh -w /workspace mercury-devenv /workspace/tools/deploy-bootstrap/deploy-bootstrap
 ```
 
-The compiled binary will be located at `build-deploy/src/apps/mercury-bootstrap/mercury-bootstrap`.
-
-#### 3. Deploy
-
-Use `scp` to copy the `mercury-bootstrap` binary to your deployment machine. This example requires you to have SSH keys configured.
+*Optional:* Add `--kill-process` to stop the currently running instance before deploying:
 
 ```shell
-docker run --rm -v ${PWD}:/workspace -v ${HOME}/.ssh:/workspace/.ssh -w /workspace mercury-devenv bash -c 'chmod 400 /workspace/.ssh/vm0.ssh.key && SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i /workspace/.ssh/vm0.ssh.key" && SERVERS=(jp-bn-101 jp-bn-102 us-bn-101 us-bn-102); for s in "${SERVERS[@]}"; do echo "Deploying to ${s}.eillance.com..."; ssh $SSH_OPTS ubuntu@${s}.eillance.com "sudo mkdir -p /var/app/mercury-bootstrap/; sudo chown -R ubuntu:ubuntu /var/app"; scp $SSH_OPTS build-deploy/src/apps/mercury-bootstrap/mercury-bootstrap ubuntu@${s}.eillance.com:/var/app/mercury-bootstrap/; done'
+docker run --rm -v ${PWD}:/workspace -v ${HOME}/.ssh:/workspace/.ssh -w /workspace mercury-devenv /workspace/tools/deploy-bootstrap/deploy-bootstrap --kill-process
 ```
 
-### Running the Bootstrap Node
+### Build and Deploy (All-in-one)
 
-Connect to your server via SSH and run the executable.
-
-**SSH Configuration (`~/.ssh/config`)**
-
-For convenience, you can configure an SSH alias on your local machine:
-
-```text
-Host vm0.hela.me
-  HostName vm0.hela.me
-  IdentityFile ~/.ssh/vm0.ssh.key
-  User ubuntu
-```
-
-**Launch a bootstrap node**
+Builds the project and, if successful, automatically deploys it.
 
 ```shell
-mkdir -p /var/app/mercury-bootstrap \
-&& /var/app/mercury-bootstrap/mercury-bootstrap \
-    --port=807 \
-    --log-level=verbose
+docker run --rm -v ${PWD}:/workspace -v ${HOME}/.ssh:/workspace/.ssh -w /workspace mercury-devenv /workspace/tools/deploy-bootstrap/build-deploy-bootstrap --kill-process
 ```
 
 **Launch legacy Mercury Server**

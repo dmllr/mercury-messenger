@@ -1,0 +1,4 @@
+ubuntu@jp-bn-101.eillance.com
+ubuntu@jp-bn-102.eillance.com
+ubuntu@us-bn-101.eillance.com
+ubuntu@us-bn-102.eillance.com

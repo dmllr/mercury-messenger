@@ -1,0 +1,71 @@
+#!/bin/bash
+set -e
+
+KILL_PROCESS=0
+if [[ "$1" == "--kill-process" ]]; then
+    KILL_PROCESS=1
+fi
+
+NODES_FILE="/workspace/tools/deploy-bootstrap/deploy-nodes.txt"
+if [[ ! -f "$NODES_FILE" ]]; then
+    echo "Error: Node list not found at $NODES_FILE"
+    exit 1
+fi
+
+BINARY="build-deploy/src/apps/mercury-bootstrap/mercury-bootstrap"
+if [[ ! -f "$BINARY" ]]; then
+    echo "Error: Binary not found at $BINARY. Did you run build-bootstrap?"
+    exit 1
+fi
+
+SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+
+# Resolve permissions and explicit key usage safely
+if [[ -d "/workspace/.ssh" ]]; then
+    find /workspace/.ssh -type f -exec chmod 600 {} \; 2>/dev/null || true
+
+    if [[ -f "/workspace/.ssh/config" ]]; then
+        SSH_OPTS="$SSH_OPTS -F /workspace/.ssh/config"
+    fi
+
+    # Maintain backwards compatibility with earlier scripts referring to explicit VM keys
+    if [[ -f "/workspace/.ssh/vm0.ssh.key" ]]; then
+        SSH_OPTS="$SSH_OPTS -i /workspace/.ssh/vm0.ssh.key"
+    fi
+fi
+
+TOTAL_NODES=$(grep -cvE '^\s*$|^#' "$NODES_FILE")
+CURRENT_NODE=0
+
+while IFS= read -r NODE || [[ -n "$NODE" ]]; do
+    [[ -z "$NODE" || "$NODE" =~ ^# ]] && continue
+    CURRENT_NODE=$((CURRENT_NODE+1))
+
+    echo "[$CURRENT_NODE/$TOTAL_NODES] Deploying to $NODE..."
+
+    if [[ $KILL_PROCESS -eq 1 ]]; then
+        echo "  Killing existing process..."
+        # 1. Use regex trick [m] to prevent pkill from matching its own SSH shell
+        # 2. Add -n to prevent ssh from slurping stdin
+        ssh -n $SSH_OPTS "$NODE" "pkill -f '[m]ercury-bootstrap' || true"
+    fi
+
+    echo "  Preparing directories..."
+    ssh -n $SSH_OPTS "$NODE" "sudo mkdir -p /var/app/mercury-bootstrap/ && sudo chown -R \$USER:\$USER /var/app"
+
+    echo "  Copying binary..."
+    # scp doesn't normally consume stdin the way ssh does, but it's safe to leave as is
+    scp $SSH_OPTS "$BINARY" "${NODE}:/var/app/mercury-bootstrap/mercury-bootstrap"
+
+    echo "  Launching new process in tmux..."
+    ssh -n $SSH_OPTS "$NODE" "tmux kill-session -t mercury_bootstrap 2>/dev/null || true; tmux new-session -d -s mercury_bootstrap '/var/app/mercury-bootstrap/mercury-bootstrap --port=10807 --log-level=info'"
+
+    # If it's not the last node, wait for the DHT to stabilize
+    if [[ $CURRENT_NODE -lt $TOTAL_NODES ]]; then
+        echo "  Waiting 60 seconds for DHT to stabilize before the next node update..."
+        sleep 60
+    fi
+
+done < "$NODES_FILE"
+
+echo "Deployment completed successfully."
