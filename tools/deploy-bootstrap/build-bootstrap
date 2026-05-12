@@ -4,8 +4,21 @@ set -e
 echo "Configuring workspace..."
 git config --global --add safe.directory /workspace
 
+# Environment for cross-compilation
+export PKG_CONFIG_SYSROOT_DIR=/usr/x86_64-linux-gnu
+export PKG_CONFIG_LIBDIR=/usr/x86_64-linux-gnu/lib/pkgconfig:/usr/x86_64-linux-gnu/share/pkgconfig:/usr/share/pkgconfig
+export CARGO_BUILD_TARGET=x86_64-unknown-linux-gnu
+# Explicitly configure Rust/Cargo to use the correct cross-compiler
+export CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=x86_64-linux-gnu-gcc
+export CC_x86_64_unknown_linux_gnu=x86_64-linux-gnu-gcc
+export CXX_x86_64_unknown_linux_gnu=x86_64-linux-gnu-g++
+
 echo "Configuring CMake..."
-cmake -GNinja -DCMAKE_BUILD_TYPE=Release -B build-deploy
+cmake -GNinja --fresh \
+    --toolchain="${PWD}/src/cmake/toolchains/x86_64-clang.cmake" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DEILLANCE_BUILD_TESTS=OFF \
+    -B build-deploy
 
 echo "Building mercury-bootstrap..."
 cmake --build build-deploy --target mercury-bootstrap --config Release
