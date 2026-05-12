@@ -1,0 +1,16 @@
+#!/bin/bash
+set -e
+
+echo "Configuring workspace..."
+git config --global --add safe.directory /workspace
+
+echo "Configuring CMake..."
+cmake -GNinja -DCMAKE_BUILD_TYPE=Release -B build-deploy
+
+echo "Building mercury-bootstrap..."
+cmake --build build-deploy --target mercury-bootstrap --config Release
+
+echo "Stripping binary..."
+llvm-strip build-deploy/src/apps/mercury-bootstrap/mercury-bootstrap
+
+echo "Build complete."

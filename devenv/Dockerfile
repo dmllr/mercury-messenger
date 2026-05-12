@@ -38,3 +38,4 @@ RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --no-modify-path && \
 # Install additional dependencies
 RUN apt-get install -y \
     libpthread-stubs0-dev \
+    openssh-client
