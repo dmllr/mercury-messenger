@@ -117,6 +117,12 @@ class SyncEngine {
     ContactID const target_peer(topic_id.value.Span());
     storage_->AddSyncRequest({topic_id, target_peer, Timestamp::Now(), Timestamp{0}});
 
+    auto contact = storage_->GetContact(target_peer);
+    if (!contact || contact->status != identity::ContactStatus::confirmed) {
+      LGE << "Sync error/rejection: Contact " << target_peer.ToString() << " is not confirmed.";
+      return;
+    }
+
     if (auto peer = transport_->GetPeer(target_peer); peer && peer->data_channel_is_open) {
       ProposeSync(topic_id, target_peer);
     } else {
@@ -325,6 +331,11 @@ class SyncEngine {
     }
     auto const reqs = storage_->GetSyncRequests();
     for (auto const& req : reqs) {
+      auto contact = storage_->GetContact(req.target_peer_id);
+      if (!contact || contact->status != identity::ContactStatus::confirmed) {
+        LGE << "Sync error/rejection: Contact " << req.target_peer_id.ToString() << " is not confirmed.";
+        continue;
+      }
       if (auto const peer = transport_->GetPeer(req.target_peer_id); peer && peer->data_channel_is_open) {
         if (peer->session_cipher->IsReady()) {
           ProposeSync(req.topic_id, req.target_peer_id);

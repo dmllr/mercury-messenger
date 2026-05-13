@@ -235,8 +235,8 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
     std::erase_if(sync_reqs_, [&](auto& r) { return r.topic_id == topic_id && r.target_peer_id == target_peer_id; });
   }
 
-  void UpdateSyncRequestAttempt(TopicID const& topic_id, ContactID const& target_peer_id, Timestamp attempt_time)
-      override {
+  void
+  UpdateSyncRequestAttempt(TopicID const& topic_id, ContactID const& target_peer_id, Timestamp attempt_time) override {
     std::lock_guard const lock(mutex_);
     for (auto& r : sync_reqs_) {
       if (r.topic_id == topic_id && r.target_peer_id == target_peer_id) r.last_attempt = attempt_time;
@@ -284,8 +284,8 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
     }
   }
 
-  void UpdateMessageStatus(ContactID const& peer_id, uint64_t message_id, messaging::MessageStatus new_status)
-      override {
+  void
+  UpdateMessageStatus(ContactID const& peer_id, uint64_t message_id, messaging::MessageStatus new_status) override {
     std::lock_guard const lock(mutex_);
     if (auto const itr = history_.find(peer_id); itr != history_.end()) {
       for (auto& entry : itr->second) {
@@ -368,8 +368,11 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
     }
   }
 
-  void UpdateAttachmentStatus(std::string const& attachment_id, messaging::AttachmentStatus status, bool is_downloaded)
-      override {
+  void UpdateAttachmentStatus(
+      std::string const& attachment_id,
+      messaging::AttachmentStatus status,
+      bool is_downloaded
+  ) override {
     std::lock_guard const lock(mutex_);
     for (auto& history_vec : history_ | std::views::values) {
       for (auto& entry : history_vec) {

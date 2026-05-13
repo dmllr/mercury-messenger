@@ -36,7 +36,7 @@ def test_p2p_messaging_same_network(test_environment):
   script_a = (
     f"connect, wait 1, "
     f"message {id_b} \"Hello B from A\", "
-    f"wait 5, disconnect"
+    f"wait 15, disconnect"
   )
   scenario.add_process(
     name="mercury-mock-app-a",
@@ -51,7 +51,7 @@ def test_p2p_messaging_same_network(test_environment):
   )
 
   # App B
-  script_b = "connect, wait 6, disconnect"
+  script_b = f"connect, wait 2, confirm {id_a}, wait 15, disconnect"
   scenario.add_process(
     name="mercury-mock-app-b",
     executable="/app/bin/mercury-mock-app",
@@ -82,4 +82,4 @@ def test_p2p_messaging_same_network(test_environment):
   ])
 
   # Execute
-  test_environment.execute_scenario(scenario, timeout_seconds=15)
+  test_environment.execute_scenario(scenario, timeout_seconds=20)

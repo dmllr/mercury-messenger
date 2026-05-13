@@ -107,6 +107,8 @@ auto main(int argc, char** argv) -> int {
 
   client->UpdateBootstrapNodeUrls(*signaling_url);
 
+  bool const auto_confirm = !args.Has("--no-auto-confirm");
+
   eillance::EventQueue::Instance().Subscribe<eillance::EventChatMessageReceived>([](auto const& e) -> void {
     if (e.message.direction == eillance::messaging::MessageDirection::received) {
       if (std::holds_alternative<eillance::messaging::MessageEntry>(e.message.data)) {
@@ -117,6 +119,8 @@ auto main(int argc, char** argv) -> int {
             LGI << "[mock] Message is a reply to: " << message.reply_to_id;
           }
         }
+      } else if (std::holds_alternative<eillance::messaging::CallEntry>(e.message.data)) {
+        LGI << "[mock] Missing call message from " << e.peer_id.ToString();
       }
     }
   });
@@ -147,10 +151,14 @@ auto main(int argc, char** argv) -> int {
     }
   });
 
-  eillance::EventQueue::Instance().Subscribe<eillance::EventContactRequest>([client](auto const& e) -> void {
-    LGI << "[mock] Contact request from " << e.peer_id.ToString();
-    client->ConfirmContact(e.peer_id);
-  });
+  eillance::EventQueue::Instance().Subscribe<eillance::EventContactRequest>(
+      [client, auto_confirm](auto const& e) -> void {
+        LGI << "[mock] Contact request from " << e.peer_id.ToString();
+        if (auto_confirm) {
+          client->ConfirmContact(e.peer_id);
+        }
+      }
+  );
 
   eillance::EventQueue::Instance().Subscribe<eillance::EventContactStatusChanged>([](auto const& e) -> void {
     LGI << "[mock] Contact " << e.peer_id.ToString() << " status: " << static_cast<int>(e.status);
@@ -206,6 +214,35 @@ auto main(int argc, char** argv) -> int {
       client->Start();
     } else if (cmd == "disconnect") {
       client->Terminate();
+    } else if (cmd == "stop") {
+      client->Terminate();
+    } else if (cmd == "start") {
+      client->Start();
+    } else if (cmd == "reconnect") {
+      client->GetSettingsManager()->SetBootstrapNodeUrls(*signaling_url);
+      client->UpdateBootstrapNodeUrls(*signaling_url);
+      LGI << "[mock] Executed reconnect";
+    } else if (cmd.starts_with("confirm ")) {
+      auto peer_hex = cmd.substr(8);
+      peer_hex.erase(0, peer_hex.find_first_not_of(' '));
+      peer_hex.erase(peer_hex.find_last_not_of(' ') + 1);
+      eillance::ContactID const peer_id(peer_hex);
+      client->ConfirmContact(peer_id);
+      LGI << "[mock] Executed confirm: " << peer_hex;
+    } else if (cmd.starts_with("block ")) {
+      auto peer_hex = cmd.substr(6);
+      peer_hex.erase(0, peer_hex.find_first_not_of(' '));
+      peer_hex.erase(peer_hex.find_last_not_of(' ') + 1);
+      eillance::ContactID const peer_id(peer_hex);
+      client->BlockContact(peer_id, true);
+      LGI << "[mock] Executed block: " << peer_hex;
+    } else if (cmd.starts_with("unblock ")) {
+      auto peer_hex = cmd.substr(8);
+      peer_hex.erase(0, peer_hex.find_first_not_of(' '));
+      peer_hex.erase(peer_hex.find_last_not_of(' ') + 1);
+      eillance::ContactID const peer_id(peer_hex);
+      client->UnblockContact(peer_id);
+      LGI << "[mock] Executed unblock: " << peer_hex;
     } else if (cmd.starts_with("wait")) {
       if (std::smatch match; std::regex_match(cmd, match, re_wait)) {
         int const seconds = std::stoi(match[1].str());
@@ -220,11 +257,13 @@ auto main(int argc, char** argv) -> int {
       }
     } else if (cmd.starts_with("profile")) {
       if (std::smatch match; std::regex_match(cmd, match, re_profile)) {
-        client->UpdateMyProfile(eillance::identity::ProfileUpdate{
-            .display_name = match[1].str(),
-            .bio = match[2].str(),
-            .photo_base64 = std::nullopt
-        });
+        client->UpdateMyProfile(
+            eillance::identity::ProfileUpdate{
+                .display_name = match[1].str(),
+                .bio = match[2].str(),
+                .photo_base64 = std::nullopt
+            }
+        );
         LGI << "[mock] Executed profile update: " << match[1].str();
       }
     } else if (cmd.starts_with("call ")) {
