@@ -46,11 +46,9 @@ class DeliveryService {
       : storage_(sm->storage),
         contact_manager_(sm->contact_manager),
         transport_(sm->data_transport) {
-    event_unsubs_.push_back(
-        EventQueue::Instance().Subscribe<EventConnectionAttemptFinished>([this](auto const& e) -> void {
-          ConnectionAttemptFinished(e.peer_id);
-        })
-    );
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventConnectionAttemptFinished>(
+        [this](auto const& e) -> void { ConnectionAttemptFinished(e.peer_id); }
+    ));
 
     event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventDataChannelOpen>([this](auto const& e) -> void {
       std::lock_guard<std::recursive_mutex> const lock(mutex_);

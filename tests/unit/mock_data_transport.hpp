@@ -29,7 +29,7 @@ class MockDataTransport : public DataTransport::Interface {
   void SetSecretKey(std::span<std::byte const> key) override {
     secret_key_.assign(key.begin(), key.end());
   }
-  void SetBootstrapNodeUrl(std::vector<std::string> const& urls) override {
+  void SetBootstrapNodeUrls(std::vector<std::string> const& urls) override {
     bootstrap_urls_ = urls;
   }
 

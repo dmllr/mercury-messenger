@@ -24,12 +24,9 @@ def test_cross_network_communication(test_environment):
     name="router",
     executable="tail",
     args=["-f", "/dev/null"],
-    networks={"net-a": "192.168.10.254", "net-b": "192.168.20.254"}
+    networks={"net-a": "192.168.10.254", "net-b": "192.168.20.254"},
+    sysctls={"net.ipv4.ip_forward": 1}
   )
-  # Override executable to use alpine directly? The framework uses the build image.
-  # The build image is ubuntu based, so it has iproute2.
-  # The mock-app image is used for all processes.
-  # So we reuse the test image for the router.
 
   # Signaling on both networks so both apps can reach it easily
   scenario.add_process(
@@ -40,7 +37,7 @@ def test_cross_network_communication(test_environment):
   )
 
   # App A on Net A
-  script_a = f"stop, wait 5, reconnect, wait 2, message {id_b} \"Hello from A\", wait 15, disconnect"
+  script_a = f"wait 5, connect, wait 5, message {id_b} \"Hello from A\", wait 15, disconnect"
   scenario.add_process(
     name="app-a",
     executable="/app/bin/mercury-mock-app",
@@ -50,7 +47,7 @@ def test_cross_network_communication(test_environment):
 
   # App B on Net B
   # Needs to reach Signaling (192.168.10.30) via Router (192.168.20.254)
-  script_b = "stop, wait 5, reconnect, wait 25, disconnect"
+  script_b = "wait 5, connect, wait 25, disconnect"
   scenario.add_process(
     name="app-b",
     executable="/app/bin/mercury-mock-app",
@@ -61,28 +58,10 @@ def test_cross_network_communication(test_environment):
   scenario.expect_logs("app-a", [f"[mock] Message to {id_b} delivered"])
   scenario.expect_logs("app-b", [f"[mock] Message from {id_a} received: Hello from A"])
 
-  # We need to manually add routes after containers start but before apps try to connect.
-  # Framework's execute_scenario runs everything then waits.
-  # We need to inject the route setup.
-  # However, execute_scenario sleeps immediately. 
-  # We can't intervene easily without modifying framework or using a delayed start in script.
-  # The scripts have 'wait' commands or 'connect' commands.
-  # We can start apps, then add routes, then they connect.
-  # But the apps start immediately.
-  # Let's rely on the framework modification I made (add_route) but I need to call it.
-  # I'll subclass Scenario or just run custom logic?
-  # Better: The framework is simple. I can run the setup part manually or add a callback?
-  # For now, I'll rely on the sleep in the script. app-b waits before connect?
-  # No, args passed to executable start immediately.
-  # We will just hack it: The test logic below can run parallel if I modify framework to yield control?
-  # Or I can just start a background thread in python to add routes.
-
   import threading
   def add_routes_delayed():
-      time.sleep(5) # Wait for containers to be up
+      time.sleep(2) # Wait for containers to be up
       test_environment.add_route("app-b", "192.168.10.0/24", "192.168.20.254")
-      # app-a doesn't strictly need a route to B for Websocket, 
-      # but for P2P media/data it needs to know how to reach B's IP if ICE candidates are private IPs.
       test_environment.add_route("app-a", "192.168.20.0/24", "192.168.10.254")
       test_environment.add_route("signaling", "192.168.20.0/24", "192.168.10.254")
 

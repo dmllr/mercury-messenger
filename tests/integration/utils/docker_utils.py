@@ -98,6 +98,7 @@ def create_container(
     volumes: Optional[dict] = None,
     environment: Optional[dict] = None,
     detach: bool = True,
+    sysctls: Optional[dict] = None,
 ):
   """Creates a docker container but DOES NOT start it."""
   try:
@@ -107,13 +108,17 @@ def create_container(
   except docker.errors.NotFound:
     pass
 
-  container = client.containers.create(
-    image=image,
-    name=name,
-    command=command,
-    detach=detach,
-    volumes=volumes,
-    environment=environment,
-    cap_add=["NET_ADMIN", "SYS_NICE"]
-  )
+  kwargs = {
+    "image": image,
+    "name": name,
+    "command": command,
+    "detach": detach,
+    "volumes": volumes,
+    "environment": environment,
+    "cap_add": ["NET_ADMIN", "SYS_NICE"]
+  }
+  if sysctls:
+    kwargs["sysctls"] = sysctls
+
+  container = client.containers.create(**kwargs)
   return container

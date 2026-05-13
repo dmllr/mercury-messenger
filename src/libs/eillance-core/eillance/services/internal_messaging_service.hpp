@@ -36,11 +36,9 @@ class InternalMessagingService {
       : sm_(sm),
         data_transport_(sm->data_transport),
         media_transport_(sm->media_transport) {
-    event_unsubs_.push_back(
-        EventQueue::Instance().Subscribe<EventDataChannelMessage>([this](EventDataChannelMessage const& e) -> void {
-          this->HandleDataChannelMessage(e.peer_id, e.message);
-        })
-    );
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventDataChannelMessage>(
+        [this](EventDataChannelMessage const& e) -> void { this->HandleDataChannelMessage(e.peer_id, e.message); }
+    ));
 
     event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventDataChannelOpen>([this](auto const& e) -> void {
       this->OnDataChannelOpen(e.peer_id);
@@ -138,15 +136,17 @@ class InternalMessagingService {
       return;
     }
 
-    if (!contact->signature_from_them) {
-      LGE << "CRCP Enforcement: No signature stored for peer: " << peer_id.ToString();
-      return;
-    }
+    if (type != "call_reject" && type != "hangup") {
+      if (!contact->signature_from_them) {
+        LGE << "CRCP Enforcement: No signature stored for peer: " << peer_id.ToString();
+        return;
+      }
 
-    auto const sig = *contact->signature_from_them;
-    if (!crypto::Identity::Verify(peer_id.Span(), sm_->account->GetId().Span(), sig)) {
-      LGE << "CRCP Enforcement: Cryptographic validation failed for peer: " << peer_id.ToString();
-      return;
+      auto const sig = *contact->signature_from_them;
+      if (!crypto::Identity::Verify(peer_id.Span(), sm_->account->GetId().Span(), sig)) {
+        LGE << "CRCP Enforcement: Cryptographic validation failed for peer: " << peer_id.ToString();
+        return;
+      }
     }
 
     if (type == "hangup") {

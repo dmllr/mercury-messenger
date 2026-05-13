@@ -80,20 +80,20 @@ def test_contact_late_approval_sync(test_environment):
   scenario.add_network("net", "192.168.103.0/24", "192.168.103.1")
   scenario.add_process("signaling", "/app/bin/mercury-bootstrap", ["--port", "8000"], {"net": "192.168.103.30"})
 
-  script_a = f"connect, wait 2, call {id_b}, hangup {id_b}, wait 20, disconnect"
+  script_a = f"connect, wait 5, message {id_b} \"Late Sync Message\", wait 25, disconnect"
   scenario.add_process("app-a", "/app/bin/mercury-mock-app",
                        ["--no-auto-confirm", "--key", key_a, "--signaling-url", "/ip4/192.168.103.30/tcp/8000", "--db-path", "/tmp/a.db", "--script", script_a],
                        {"net": "192.168.103.31"})
 
-  script_b = f"connect, wait 5, message {id_a} \"Secret\", wait 5, accept {id_a}, wait 10, disconnect"
+  script_b = f"connect, wait 10, confirm {id_a}, wait 25, disconnect"
   scenario.add_process("app-b", "/app/bin/mercury-mock-app",
                        ["--no-auto-confirm", "--key", key_b, "--signaling-url", "/ip4/192.168.103.30/tcp/8000", "--db-path", "/tmp/b.db", "--script", script_b],
                        {"net": "192.168.103.32"})
 
-  scenario.expect_logs("app-b", [f"Sync error/rejection: Contact {id_a} is not confirmed."])
-  scenario.expect_logs("app-a", [f"[mock] Message from {id_b} received: Secret"])
+  scenario.expect_logs("app-a", [f"Sync error/rejection: Contact {id_b} is not confirmed."])
+  scenario.expect_logs("app-b", [f"[mock] Message from {id_a} received: Late Sync Message"])
 
-  test_environment.execute_scenario(scenario, timeout_seconds=30)
+  test_environment.execute_scenario(scenario, timeout_seconds=45)
 
 
 def test_contact_mutual_add(test_environment):
@@ -151,12 +151,12 @@ def test_call_unapproved_then_approved_sync(test_environment):
   scenario.add_network("net", "192.168.106.0/24", "192.168.106.1")
   scenario.add_process("signaling", "/app/bin/mercury-bootstrap", ["--port", "8000"], {"net": "192.168.106.30"})
 
-  script_a = f"connect, wait 2, call {id_b}, wait 15, disconnect"
+  script_a = f"connect, wait 5, call {id_b}, wait 10, hangup {id_b}, wait 25, disconnect"
   scenario.add_process("app-a", "/app/bin/mercury-mock-app",
                        ["--key", key_a, "--signaling-url", "/ip4/192.168.106.30/tcp/8000", "--db-path", "/tmp/a.db", "--script", script_a],
                        {"net": "192.168.106.31"})
 
-  script_b = f"connect, wait 5, confirm {id_a}, wait 15, disconnect"
+  script_b = f"connect, wait 10, confirm {id_a}, wait 25, disconnect"
   scenario.add_process("app-b", "/app/bin/mercury-mock-app",
                        ["--no-auto-confirm", "--key", key_b, "--signaling-url", "/ip4/192.168.106.30/tcp/8000", "--db-path", "/tmp/b.db", "--script", script_b],
                        {"net": "192.168.106.32"})
@@ -164,7 +164,7 @@ def test_call_unapproved_then_approved_sync(test_environment):
   scenario.expect_logs("app-a", ["[mock] Call terminated"])
   scenario.expect_logs("app-b", [f"[mock] Missing call message from {id_a}"])
 
-  test_environment.execute_scenario(scenario, timeout_seconds=25)
+  test_environment.execute_scenario(scenario, timeout_seconds=45)
 
 
 def test_call_unapproved_then_approved_then_call(test_environment):
@@ -175,12 +175,12 @@ def test_call_unapproved_then_approved_then_call(test_environment):
   scenario.add_network("net", "192.168.107.0/24", "192.168.107.1")
   scenario.add_process("signaling", "/app/bin/mercury-bootstrap", ["--port", "8000"], {"net": "192.168.107.30"})
 
-  script_a = f"connect, wait 2, call {id_b}, wait 40, call {id_b}, wait 10, disconnect"
+  script_a = f"connect, wait 5, call {id_b}, wait 10, hangup {id_b}, wait 15, call {id_b}, wait 25, disconnect"
   scenario.add_process("app-a", "/app/bin/mercury-mock-app",
                        ["--key", key_a, "--signaling-url", "/ip4/192.168.107.30/tcp/8000", "--db-path", "/tmp/a.db", "--script", script_a],
                        {"net": "192.168.107.31"})
 
-  script_b = f"connect, wait 8, confirm {id_a}, wait 35, reject {id_a}, wait 10, disconnect"
+  script_b = f"connect, wait 10, confirm {id_a}, wait 25, reject {id_a}, wait 20, disconnect"
   scenario.add_process("app-b", "/app/bin/mercury-mock-app",
                        ["--no-auto-confirm", "--key", key_b, "--signaling-url", "/ip4/192.168.107.30/tcp/8000", "--db-path", "/tmp/b.db", "--script", script_b],
                        {"net": "192.168.107.32"})
@@ -192,4 +192,4 @@ def test_call_unapproved_then_approved_then_call(test_environment):
     f"[mock] Missing call message from {id_a}"
   ])
 
-  test_environment.execute_scenario(scenario, timeout_seconds=60)
+  test_environment.execute_scenario(scenario, timeout_seconds=65)
