@@ -198,9 +198,11 @@ class BackupManager {
   }
 
  private:
-  static auto
-  DeriveKey(std::string const& password, std::vector<unsigned char> const& salt, std::vector<unsigned char>& key)
-      -> bool {
+  static auto DeriveKey(
+      std::string const& password,
+      std::vector<unsigned char> const& salt,
+      std::vector<unsigned char>& key
+  ) -> bool {
     // NOLINTNEXTLINE(*-reinterpret-cast)
     if (PKCS5_PBKDF2_HMAC(
             password.c_str(),

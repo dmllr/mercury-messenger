@@ -936,9 +936,12 @@ class FileTransferService {
     EventQueue::Instance().Push(EventAttachmentStatusChanged{peer_id, file_id, messaging::AttachmentStatus::done});
   }
 
-  auto
-  SendPacket(ContactID const& peer_id, std::string const& file_id, MessageType type, std::span<std::byte const> payload)
-      -> bool {
+  auto SendPacket(
+      ContactID const& peer_id,
+      std::string const& file_id,
+      MessageType type,
+      std::span<std::byte const> payload
+  ) -> bool {
     std::size_t const id_len = file_id.size();
     std::size_t const header_size = headerMinSize + id_len;
     std::vector<std::byte> buf(header_size + payload.size());

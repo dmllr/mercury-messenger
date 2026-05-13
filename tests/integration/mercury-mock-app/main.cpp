@@ -257,13 +257,11 @@ auto main(int argc, char** argv) -> int {
       }
     } else if (cmd.starts_with("profile")) {
       if (std::smatch match; std::regex_match(cmd, match, re_profile)) {
-        client->UpdateMyProfile(
-            eillance::identity::ProfileUpdate{
-                .display_name = match[1].str(),
-                .bio = match[2].str(),
-                .photo_base64 = std::nullopt
-            }
-        );
+        client->UpdateMyProfile(eillance::identity::ProfileUpdate{
+            .display_name = match[1].str(),
+            .bio = match[2].str(),
+            .photo_base64 = std::nullopt
+        });
         LGI << "[mock] Executed profile update: " << match[1].str();
       }
     } else if (cmd.starts_with("call ")) {

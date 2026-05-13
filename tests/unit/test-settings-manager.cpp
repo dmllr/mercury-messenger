@@ -20,27 +20,27 @@ class SettingsManagerTest : public ::testing::Test {
 };
 
 TEST_F(SettingsManagerTest, GetDefaultUrl) {
-  auto url = settings_manager_->GetBootstrapNodeUrl();
+  auto url = settings_manager_->GetBootstrapNodeUrls();
   EXPECT_TRUE(url.has_value());
   EXPECT_EQ(url.value(), "/dns4/app.hela.me/tcp/10807");
 }
 
 TEST_F(SettingsManagerTest, SetAndGetUrl) {
   std::string const custom_url = "/ip4/127.0.0.1/tcp/8080";
-  settings_manager_->SetBootstrapNodeUrl(custom_url);
+  settings_manager_->SetBootstrapNodeUrls(custom_url);
 
-  auto url = settings_manager_->GetBootstrapNodeUrl();
+  auto url = settings_manager_->GetBootstrapNodeUrls();
   ASSERT_TRUE(url.has_value());
   EXPECT_EQ(url.value(), custom_url);
 }
 
 TEST_F(SettingsManagerTest, Persistence) {
   std::string const custom_url = "/ip4/192.168.1.1/tcp/9000";
-  settings_manager_->SetBootstrapNodeUrl(custom_url);
+  settings_manager_->SetBootstrapNodeUrls(custom_url);
 
   // Create a new manager with the same storage to simulate app restart
   auto new_manager = std::make_unique<SettingsManager>(storage_);
-  auto url = new_manager->GetBootstrapNodeUrl();
+  auto url = new_manager->GetBootstrapNodeUrls();
 
   ASSERT_TRUE(url.has_value());
   EXPECT_EQ(url.value(), custom_url);
