@@ -150,8 +150,10 @@ TEST_F(DispatchQueueTest, TasksExecutedOnce) {
     queue.Dispatch(task);
   }
 
-  EXPECT_TRUE(EventQueue::Instance()
-                  .WaitFor([&]() { return counter == 10 && !task_running.load(); }, std::chrono::milliseconds(1000)));
+  EXPECT_TRUE(
+      EventQueue::Instance()
+          .WaitFor([&]() { return counter == 10 && !task_running.load(); }, std::chrono::milliseconds(1000))
+  );
   EXPECT_FALSE(task_running);
 }
 
@@ -213,8 +215,10 @@ TEST_F(DispatchQueueTest, ConcurrentModification) {
   }
 
   // Wait for both directly added and dynamically added tasks
-  EXPECT_TRUE(EventQueue::Instance()
-                  .WaitFor([&]() { return counter == 20 && tasks_added == 10; }, std::chrono::milliseconds(500)));
+  EXPECT_TRUE(
+      EventQueue::Instance()
+          .WaitFor([&]() { return counter == 20 && tasks_added == 10; }, std::chrono::milliseconds(500))
+  );
 }
 
 TEST_F(DispatchQueueTest, DestructorCleanup) {
