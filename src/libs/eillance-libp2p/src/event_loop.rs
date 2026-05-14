@@ -2,7 +2,7 @@ use crate::behaviour::{MercuryBehaviour, MercuryBehaviourEvent};
 use crate::types::{Callbacks, Command, NodeRole};
 use crate::utils::{hex_encode, notify_connected, notify_disconnected, peerid_to_pubkey, resolve_multiaddr};
 use futures::StreamExt;
-use libp2p::{Multiaddr, PeerId, Swarm, autonat, identify, kad, mdns, ping, request_response, swarm::SwarmEvent};
+use libp2p::{Multiaddr, PeerId, Swarm, autonat, identify, kad, mdns, request_response, swarm::SwarmEvent};
 use std::collections::{HashMap, HashSet};
 use std::ffi::CString;
 use std::os::raw::{c_char, c_void};
@@ -982,10 +982,6 @@ fn handle_swarm_event(
     SwarmEvent::Behaviour(MercuryBehaviourEvent::TurnAuth(request_response::Event::ResponseSent { peer, .. })) => {
       node_log!(callbacks, 5, "TurnAuth response sent to {}", peer);
     }
-    SwarmEvent::Behaviour(MercuryBehaviourEvent::Ping(ping::Event { peer, result, .. })) => match result {
-      Ok(rtt) => node_log!(callbacks, 5, "Ping to {} successful, RTT: {:?}", peer, rtt),
-      Err(e) => node_log!(callbacks, 5, "Ping to {} failed: {:?}", peer, e),
-    },
     event => {
       node_log!(callbacks, 5, "Unhandled SwarmEvent: {:?}", event);
     }
