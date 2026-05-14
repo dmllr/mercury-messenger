@@ -2,7 +2,7 @@ use crate::types::{NodeRole, TurnAuthRequest, TurnAuthResponse};
 use libp2p::{
   PeerId, StreamProtocol, autonat, dcutr, identify,
   kad::{self, Behaviour as Kademlia, Config as KademliaConfig, store::MemoryStore},
-  mdns, ping, relay,
+  mdns, relay,
   request_response::{self, ProtocolSupport},
   swarm::NetworkBehaviour,
 };
@@ -20,7 +20,6 @@ pub struct MercuryBehaviour {
   pub autonat: autonat::Behaviour,
   pub mdns: mdns::tokio::Behaviour,
   pub identify: identify::Behaviour,
-  pub ping: ping::Behaviour,
 }
 
 pub fn build_behaviour(
@@ -80,7 +79,6 @@ pub fn build_behaviour(
     }
   };
   let relay_server = relay::Behaviour::new(peer_id, relay_config);
-  let ping = ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(15)));
   let dcutr = dcutr::Behaviour::new(peer_id);
 
   MercuryBehaviour {
@@ -94,6 +92,5 @@ pub fn build_behaviour(
     autonat,
     mdns,
     identify,
-    ping,
   }
 }
