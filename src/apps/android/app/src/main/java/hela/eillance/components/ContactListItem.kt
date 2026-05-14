@@ -63,9 +63,7 @@ fun ContactListItem(
     Color.Transparent
   }
 
-  val displayName = contact.name.ifEmpty {
-    contact.peerId.take(8)
-  }
+  val displayName = contact.displayName
 
   val timestampText = if (contact.lastActivityTimestamp > 0) {
     formatContactTimestamp(contact.lastActivityTimestamp, zoneId, formatters, context)

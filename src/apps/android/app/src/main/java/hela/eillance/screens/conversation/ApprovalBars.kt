@@ -40,7 +40,7 @@ fun PendingApprovalBar(
       horizontalAlignment = Alignment.CenterHorizontally
     ) {
       Text(
-        text = stringResource(id = R.string.contact_approval_waiting_for_peer, contact.name),
+        text = stringResource(id = R.string.contact_approval_waiting_for_peer, contact.displayName),
         style = MaterialTheme.typography.titleMedium,
         textAlign = TextAlign.Center
       )
@@ -73,7 +73,7 @@ fun ApprovalRequestBar(
       horizontalAlignment = Alignment.CenterHorizontally
     ) {
       Text(
-        text = stringResource(id = R.string.contact_approval_request_from_peer, contact.name),
+        text = stringResource(id = R.string.contact_approval_request_from_peer, contact.displayName),
         style = MaterialTheme.typography.titleMedium,
         textAlign = TextAlign.Center
       )

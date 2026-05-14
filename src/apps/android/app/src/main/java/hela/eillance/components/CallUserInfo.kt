@@ -88,7 +88,7 @@ fun CallUserInfo(
       color = textColor.copy(alpha = 0.8f)
     )
 
-    if (name != null && peerId != name) {
+    if (name != null && !peerId.startsWith(name)) {
       Spacer(modifier = Modifier.height(4.dp))
       Text(
         text = peerId.take(8),
