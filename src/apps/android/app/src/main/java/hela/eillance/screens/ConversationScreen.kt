@@ -768,7 +768,6 @@ fun ConversationScreen(
               onApprove = { contactsVM.acceptContact(peerId) },
               onReject = {
                 contactsVM.blockContact(peerId)
-                onBack()
               }
             )
           }
@@ -778,7 +777,6 @@ fun ConversationScreen(
               contact = contact,
               onCancel = {
                 contactsVM.blockContact(peerId)
-                onBack()
               },
               onResend = { contactsVM.addContact(peerId) }
             )
