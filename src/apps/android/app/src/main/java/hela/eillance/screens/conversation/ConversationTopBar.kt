@@ -87,7 +87,7 @@ fun ConversationDefaultTopBar(
         )
         Spacer(modifier = Modifier.width(8.dp))
         Text(
-          text = contact?.name ?: peerId,
+          text = contact?.displayName ?: peerId.take(8),
           maxLines = 1,
           overflow = TextOverflow.Ellipsis
         )

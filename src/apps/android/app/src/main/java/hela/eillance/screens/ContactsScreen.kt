@@ -259,7 +259,7 @@ fun ContactsScreen(
             items(searchResults) { result ->
               // Find contact for name resolution
               val contact = contacts.find { it.peerId == result.peerId }
-              val name = contact?.name ?: result.peerId
+              val name = contact?.displayName ?: result.peerId.take(8)
 
               Column(
                 modifier = Modifier

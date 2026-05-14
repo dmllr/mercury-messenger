@@ -57,7 +57,7 @@ fun RejectedContactsScreen(contactsVM: ContactsViewModel, onBack: () -> Unit) {
       LazyColumn(modifier = Modifier.padding(padding)) {
         items(rejectedContacts, key = { it.peerId }) { contact ->
           ListItem(
-            headlineContent = { Text(contact.name) },
+            headlineContent = { Text(contact.displayName) },
             supportingContent = { Text(contact.peerId) },
             trailingContent = {
               Button(onClick = { contactsVM.unblockContact(contact.peerId) }) {

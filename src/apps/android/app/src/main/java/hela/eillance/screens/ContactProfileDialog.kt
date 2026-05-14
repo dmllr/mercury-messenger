@@ -92,7 +92,7 @@ fun ContactProfileDialog(
 
           Spacer(modifier = Modifier.height(16.dp))
 
-          Text(text = contact.name, style = MaterialTheme.typography.headlineSmall)
+          Text(text = contact.displayName, style = MaterialTheme.typography.headlineSmall)
           Text(text = contact.peerId, style = MaterialTheme.typography.bodyMedium)
 
           contact.bio?.let {

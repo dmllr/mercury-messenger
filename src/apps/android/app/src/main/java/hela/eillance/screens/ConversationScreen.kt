@@ -622,7 +622,7 @@ fun ConversationScreen(
             activeMessageActionId = activeMessageActionId,
             editingMessageId = editingMessageId,
             myId = myId,
-            contactName = contact?.name ?: peerId,
+            contactName = contact?.displayName ?: peerId.take(8),
             onSwipeToReply = { replyingToMessage = it },
             onReplyClick = { scrollToMessageId = it },
             onToggleSelection = { id ->
@@ -796,8 +796,7 @@ fun ConversationScreen(
                 }
               },
               replyingToMessage = replyingToMessage,
-              replyingToName = if (replyingToMessage?.direction == MessageDirection.Sent) stringResource(R.string.me) else (contact?.name
-                ?: peerId),
+              replyingToName = if (replyingToMessage?.direction == MessageDirection.Sent) stringResource(R.string.me) else (contact?.displayName ?: peerId.take(8)),
               onCancelReply = { replyingToMessage = null },
               onSendMessage = { text ->
                 chatVM.sendMessage(text, replyingToMessage?.id)
