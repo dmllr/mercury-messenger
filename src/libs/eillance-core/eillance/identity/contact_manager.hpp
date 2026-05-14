@@ -301,7 +301,11 @@ class ContactManager {
       return false;
     }
     auto const now = std::chrono::steady_clock::now();
-    return now - itr->second.creation_time <= tokenValidityDuration;
+    if (now - itr->second.creation_time <= tokenValidityDuration) {
+      oneTimeTokens_.erase(itr);
+      return true;
+    }
+    return false;
   }
 
   auto UnblockContact(ContactID const& peer_id) -> bool {
