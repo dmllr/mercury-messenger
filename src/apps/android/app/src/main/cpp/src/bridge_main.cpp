@@ -137,6 +137,14 @@ Java_hela_eillance_MessengerService_nativeSetTurnEligibility(JNIEnv*, jobject, j
   }
 }
 
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_MessengerService_nativeUpdateNetworkState(JNIEnv* /*env*/, jobject /*instance*/, jboolean is_online) {
+  if (g_clientEngine) {
+    eillance::EventQueue::Instance().Push(eillance::EventServiceConnectionStateChanged{
+        (is_online != 0) ? eillance::ServiceConnectionState::online : eillance::ServiceConnectionState::noNetwork
+    });
+  }
+}
+
 // NOLINTEND(readability-identifier-naming)
 
 jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {

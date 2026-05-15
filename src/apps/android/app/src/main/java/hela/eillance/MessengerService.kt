@@ -66,6 +66,20 @@ class MessengerService : Service() {
   var isIncomingUIVisible: Boolean = false
 
   private val networkCallback = object : ConnectivityManager.NetworkCallback() {
+    override fun onAvailable(network: Network) {
+      serviceScope.launch {
+        if (_isEngineReady.value) nativeUpdateNetworkState(true)
+      }
+      checkTurnEligibility()
+    }
+
+    override fun onLost(network: Network) {
+      serviceScope.launch {
+        if (_isEngineReady.value) nativeUpdateNetworkState(false)
+      }
+      checkTurnEligibility()
+    }
+
     override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
       checkTurnEligibility()
     }
@@ -345,6 +359,7 @@ class MessengerService : Service() {
   external fun nativeIgnoreCalls()
   external fun nativeResetIgnoredPermissions()
   external fun nativeSetTurnEligibility(eligible: Boolean)
+  external fun nativeUpdateNetworkState(isOnline: Boolean)
 
   companion object {
     var instance: MessengerService? = null

@@ -34,7 +34,14 @@ class SyncEngine {
   std::vector<EventQueue::SubscriberTypeId> event_unsubs_;
 
   std::unordered_map<std::string, std::vector<storage::LedgerEntry>> pending_sync_chain_;
-  std::unordered_map<std::string, std::string> active_sync_requests_;
+
+  struct SyncRequestState {
+    std::string hash;
+    Time::Unit timestamp;
+  };
+  std::unordered_map<std::string, SyncRequestState> active_sync_requests_;
+  std::unordered_set<std::string> pending_proposals_;
+  std::mutex proposals_mutex_;
 
   static auto ComputeSHA256(std::string const& data) -> std::string {
     unsigned char hash[EVP_MAX_MD_SIZE];
@@ -93,6 +100,8 @@ class SyncEngine {
   void Stop() {
     isRunning_ = false;
     dispatchQueue_.RemovePending();
+    std::lock_guard<std::mutex> const lock(proposals_mutex_);
+    pending_proposals_.clear();
   }
 
   void AppendAction(TopicID const& topic_id, storage::LedgerActionType type, nlohmann::json const& payload) {
@@ -134,14 +143,26 @@ class SyncEngine {
   }
 
   void ProposeSync(TopicID const& topic_id, ContactID const& target_peer) {
-    auto const latest = storage_->GetLatestLedgerEntry(topic_id);
-    std::string const head = latest ? latest->hash : std::string(64, '0');
+    std::string const key = topic_id.ToString() + ":" + target_peer.ToString();
+    {
+      std::lock_guard<std::mutex> const lock(proposals_mutex_);
+      if (pending_proposals_.contains(key)) {
+        return;
+      }
+      pending_proposals_.insert(key);
+    }
 
-    LGI << "[Sync] Proposing sync to " << target_peer.ToString() << " for topic " << topic_id.ToString()
-        << " with head " << head;
-
-    nlohmann::json const msg = {{"type", "sync_propose"}, {"topic", topic_id.ToString()}, {"head", head}};
-    transport_->SendJson(target_peer, msg);
+    dispatchQueue_.DispatchAfter(std::chrono::milliseconds(250), [this, topic_id, target_peer, key]() {
+      {
+        std::lock_guard<std::mutex> const lock(proposals_mutex_);
+        pending_proposals_.erase(key);
+      }
+      auto const latest = storage_->GetLatestLedgerEntry(topic_id);
+      std::string const head = latest ? latest->hash : std::string(64, '0');
+      LGI << "[Sync] Proposing sync to " << target_peer.ToString() << " for topic " << topic_id.ToString() << " with head " << head;
+      nlohmann::json const msg = {{"type", "sync_propose"}, {"topic", topic_id.ToString()}, {"head", head}};
+      transport_->SendJson(target_peer, msg);
+    });
   }
 
   void ProcessSyncMessage(ContactID const& peer_id, nlohmann::json const& msg) {
@@ -174,10 +195,14 @@ class SyncEngine {
           return;
         }
 
-        if (active_sync_requests_[topic_id.ToString()] == peer_head) {
-          return;
+        auto const now = Time::SteadyNow();
+        auto it = active_sync_requests_.find(topic_id.ToString());
+        if (it != active_sync_requests_.end() && it->second.hash == peer_head) {
+          if (now - it->second.timestamp < 5000000ULL) {
+            return;
+          }
         }
-        active_sync_requests_[topic_id.ToString()] = peer_head;
+        active_sync_requests_[topic_id.ToString()] = {peer_head, now};
 
         // Iterative backwards fetch
         pending_sync_chain_[topic_id.ToString()].clear();
@@ -348,6 +373,8 @@ class SyncEngine {
       if (processed.contains(req.target_peer_id)) continue;
       processed.insert(req.target_peer_id);
       
+      if (processed.contains(req.target_peer_id)) continue;
+      processed.insert(req.target_peer_id);
       auto contact = storage_->GetContact(req.target_peer_id);
       if (!contact || contact->status != identity::ContactStatus::confirmed) {
         continue;
