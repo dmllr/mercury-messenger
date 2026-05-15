@@ -1,5 +1,5 @@
 #!/bin/bash
 set -e
 
-build-bootstrap
-deploy-bootstrap "$@"
+bash /workspace/tools/deploy-bootstrap/build-bootstrap
+bash /workspace/tools/deploy-bootstrap/deploy-bootstrap "$@"

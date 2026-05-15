@@ -151,7 +151,6 @@ class Libp2pDataTransport : public DataTransport::Interface {
   void Reconnect() override {
     if (!is_started_) return;
     is_reconnecting_ = true;
-    Terminate();
 
     std::vector<ContactID> to_notify;
     {
@@ -169,7 +168,13 @@ class Libp2pDataTransport : public DataTransport::Interface {
       EventQueue::Instance().Push(EventDataPeerConnectionStateChanged{id, PeerConnectionState::disconnected});
     }
 
-    Start();
+    if (node_) {
+      node_->Reconnect();
+      for (auto const& url : bootstrap_urls_) {
+        LGI << "Re-adding bootstrap node: " << url;
+        node_->AddBootstrapNode(url);
+      }
+    }
     is_reconnecting_ = false;
   }
 
