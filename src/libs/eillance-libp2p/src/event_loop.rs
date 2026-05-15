@@ -533,8 +533,6 @@ fn handle_swarm_event(
       node_log!(callbacks, 3, "Connection closed with {}", peer_id);
       if !swarm.is_connected(&peer_id) {
         state.active_relay_peers.remove(&peer_id);
-      }
-      if !state.explicit_bootstrap_peers.contains(&peer_id) && !state.pending_dials.contains(&peer_id) {
         notify_disconnected(callbacks, swarm, &peer_id);
       }
     }
@@ -578,9 +576,7 @@ fn handle_swarm_event(
     } => {
       node_log!(callbacks, 4, "Outgoing connection error to {}: {:?}", peer_id, error);
       state.pending_dials.remove(&peer_id);
-      if !state.explicit_bootstrap_peers.contains(&peer_id) {
-        notify_disconnected(callbacks, swarm, &peer_id);
-      }
+      notify_disconnected(callbacks, swarm, &peer_id);
     }
     SwarmEvent::OutgoingConnectionError {
       peer_id: None, error, ..
@@ -751,13 +747,12 @@ fn handle_swarm_event(
                 .build();
               match swarm.dial(opts) {
                 Err(libp2p::swarm::DialError::NoAddresses) => {
-                  if !state.explicit_bootstrap_peers.contains(&peer) {
-                    node_log!(callbacks, 4, "Failed to discover addresses for {}", peer);
-                    notify_disconnected(callbacks, swarm, &peer);
-                  }
+                  node_log!(callbacks, 4, "Failed to discover addresses for {}", peer);
+                  notify_disconnected(callbacks, swarm, &peer);
                 }
                 Err(e) => {
                   node_log!(callbacks, 2, "Fallback dial error for {}: {:?}", peer, e);
+                  notify_disconnected(callbacks, swarm, &peer);
                 }
                 Ok(_) => {
                   node_log!(callbacks, 4, "Fallback dial submitted for {}", peer);
