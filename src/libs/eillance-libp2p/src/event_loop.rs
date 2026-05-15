@@ -717,24 +717,26 @@ fn handle_swarm_event(
       addresses,
     } => {
       node_log!(callbacks, 3, "Listener closed: {:?} {:?}", addresses, reason);
+      
+      let mut original_addr = None;
+      for (addr, id) in &state.active_relay_listeners {
+        if *id == listener_id {
+          original_addr = Some(addr.clone());
+          break;
+        }
+      }
+
       state.active_relay_listeners.retain(|_, id| *id != listener_id);
 
-      let mut lost_relay = false;
-      for addr in addresses {
-        if addr
-          .iter()
-          .any(|p| matches!(p, libp2p::multiaddr::Protocol::P2pCircuit))
-        {
-          lost_relay = true;
+      if let Some(orig) = original_addr {
+        if orig.iter().any(|p| matches!(p, libp2p::multiaddr::Protocol::P2pCircuit)) {
+          node_log!(callbacks, 3, "Node lost relay status");
           let tx_clone = tx.clone();
           tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(2000)).await;
-            let _ = tx_clone.send(Command::Listen(addr));
+            let _ = tx_clone.send(Command::Listen(orig));
           });
         }
-      }
-      if lost_relay {
-        node_log!(callbacks, 3, "Node lost relay status");
       }
     }
     SwarmEvent::ListenerError { listener_id, error } => {
