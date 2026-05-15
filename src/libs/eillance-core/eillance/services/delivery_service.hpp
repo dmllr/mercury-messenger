@@ -64,6 +64,7 @@ class DeliveryService {
             std::lock_guard<std::recursive_mutex> const lock(mutex_);
             retry_delays_s_.clear();
           }
+          dispatch_queue_.Dispatch([this]() -> void { CheckForAllQueuedMessages(); });
         })
     );
   }

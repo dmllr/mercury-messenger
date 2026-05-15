@@ -1083,8 +1083,14 @@ fn handle_swarm_event(
     SwarmEvent::Behaviour(MercuryBehaviourEvent::TurnAuth(request_response::Event::ResponseSent { peer, .. })) => {
       node_log!(callbacks, 5, "TurnAuth response sent to {}", peer);
     }
-    SwarmEvent::Behaviour(MercuryBehaviourEvent::Ping(e)) => {
-      node_log!(callbacks, 5, "Ping event: {:?}", e);
+    SwarmEvent::Behaviour(MercuryBehaviourEvent::Ping(ping::Event { peer, result, .. })) => match result {
+      Ok(_) => {
+        node_log!(callbacks, 5, "Ping success for {}", peer);
+      }
+      Err(e) => {
+        node_log!(callbacks, 3, "Ping failure for {}: {:?}", peer, e);
+        let _ = swarm.disconnect_peer_id(peer);
+      }
     }
     event => {
       node_log!(callbacks, 5, "Unhandled SwarmEvent: {:?}", event);
