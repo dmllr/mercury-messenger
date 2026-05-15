@@ -65,8 +65,12 @@ class MessengerService : Service() {
 
   var isIncomingUIVisible: Boolean = false
 
+  private var activeNetwork: Network? = null
+
   private val networkCallback = object : ConnectivityManager.NetworkCallback() {
     override fun onAvailable(network: Network) {
+      if (activeNetwork == network) return
+      activeNetwork = network
       serviceScope.launch {
         if (_isEngineReady.value) nativeUpdateNetworkState(true)
       }
@@ -74,8 +78,11 @@ class MessengerService : Service() {
     }
 
     override fun onLost(network: Network) {
-      serviceScope.launch {
-        if (_isEngineReady.value) nativeUpdateNetworkState(false)
+      if (activeNetwork == network) {
+        activeNetwork = null
+        serviceScope.launch {
+          if (_isEngineReady.value) nativeUpdateNetworkState(false)
+        }
       }
       checkTurnEligibility()
     }
