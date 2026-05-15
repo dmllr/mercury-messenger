@@ -38,15 +38,11 @@ typedef void (*eillance_libp2p_on_network_stats_cb)(
     char const* device_role
 );
 
-/* Creates a new libp2p node instance using a 32-byte Ed25519 secret key. Returns an opaque pointer. */
 auto eillance_libp2p_node_new(uint8_t const* secret_key_32_bytes, eillance_libp2p_node_role role) -> void*;
-/* Starts the libp2p swarm background task. */
 void eillance_libp2p_node_start(void* node);
-/* Signals the node to cleanly shutdown its networking operations. */
 void eillance_libp2p_node_stop(void* node);
-/* Frees the underlying memory and shuts down the runtime. */
 void eillance_libp2p_node_free(void* node);
-
+void eillance_libp2p_node_reconnect(void* node);
 void eillance_libp2p_node_set_callbacks(
     void* node,
     void* context,

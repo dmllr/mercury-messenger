@@ -44,6 +44,7 @@ pub enum Command {
   SendChat(PeerId, Vec<u8>),
   SendFile(PeerId, Vec<u8>),
   Disconnect(PeerId),
+  Reconnect,
   Stop,
   TurnServerStarted {
     port: u16,
