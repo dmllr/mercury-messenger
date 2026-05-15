@@ -53,8 +53,8 @@ pub fn build_behaviour(
   let identify = identify::Behaviour::new(identify::Config::new("/mercury/id/1.0.0".into(), key.public()));
   let ping = ping::Behaviour::new(
     ping::Config::new()
-      .with_interval(Duration::from_secs(15))
-      .with_timeout(Duration::from_secs(20)),
+      .with_interval(Duration::from_secs(5))
+      .with_timeout(Duration::from_secs(5)),
   );
 
   let is_bootstrap = matches!(role, NodeRole::BootstrapNode);

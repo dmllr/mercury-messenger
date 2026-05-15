@@ -16,13 +16,12 @@ fn is_bootstrap_direct_ip(addr: &Multiaddr, bootstrap_addrs: &HashSet<Multiaddr>
   if has_circuit {
     return false;
   }
-  let a_components: Vec<_> = addr.iter().take(2).collect();
-  if a_components.is_empty() {
+  let a_ip = addr.iter().next();
+  if a_ip.is_none() {
     return false;
   }
   for b_addr in bootstrap_addrs {
-    let b_components: Vec<_> = b_addr.iter().take(2).collect();
-    if a_components == b_components {
+    if a_ip == b_addr.iter().next() {
       return true;
     }
   }
@@ -325,6 +324,9 @@ fn handle_command(
       state.pending_dials.clear();
       state.active_relay_listeners.clear();
       state.active_relay_peers.clear();
+      state.bootstrap_addrs.clear();
+      state.explicit_bootstrap_peers.clear();
+      state.known_addresses.clear();
       state.public_ip = None;
       state.public_port = None;
       state.is_public = false;
@@ -656,7 +658,7 @@ fn handle_swarm_event(
       if circuit_count > 1 || is_bootstrap_direct_ip(&address, &state.bootstrap_addrs) {
         return;
       }
-      node_log!(callbacks, 4, "New external address candidate: {}", address);
+      node_log!(callbacks, 5, "New external address candidate: {}", address);
       if circuit_count == 0 && state.public_ip.is_none() {
         let mut public_ip = String::new();
         for protocol in address.iter() {

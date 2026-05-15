@@ -200,19 +200,17 @@ class InternalMessagingService {
       last_unsuspend_times_[peer_id] = Time::SteadyNow();
     }
 
-    if (sm_->account->GetId() > peer_id) {
-      auto my_pub_key = peer->session_cipher->GetPublicKey();
-      auto signature = sm_->account->Sign(peer_id.Span());
-      Json const key_msg = {
-          {"type", "key_exchange"},
-          {"key", std::vector<std::byte>(my_pub_key.begin(), my_pub_key.end())},
-          {"signature", crypto::ToHex(signature)},
-          {"is_reply", false},
-          {"sync_version", currentSyncVersion},
-          {"ft_version", currentFileTransferVersion}
-      };
-      std::ignore = data_transport_->SendJson(peer_id, key_msg);
-    }
+    auto my_pub_key = peer->session_cipher->GetPublicKey();
+    auto signature = sm_->account->Sign(peer_id.Span());
+    Json const key_msg = {
+        {"type", "key_exchange"},
+        {"key", std::vector<std::byte>(my_pub_key.begin(), my_pub_key.end())},
+        {"signature", crypto::ToHex(signature)},
+        {"is_reply", false},
+        {"sync_version", currentSyncVersion},
+        {"ft_version", currentFileTransferVersion}
+    };
+    std::ignore = data_transport_->SendJson(peer_id, key_msg);
   }
 
  private:

@@ -69,6 +69,9 @@ class SyncEngine {
         my_id_(my_id) {
     event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventSendQueuedMessages>([this](auto const& e) -> void {
       dispatchQueue_.Dispatch([this, peer_id = e.peer_id]() -> void {
+        if (auto const peer = transport_->GetPeer(peer_id); !peer || !peer->session_cipher->IsReady() || !peer->crcp_verified) {
+          return;
+        }
         auto const reqs = storage_->GetSyncRequests();
         for (auto const& req : reqs) {
           if (req.target_peer_id == peer_id) {
@@ -373,23 +376,13 @@ class SyncEngine {
       if (processed.contains(req.target_peer_id)) continue;
       processed.insert(req.target_peer_id);
       
-      if (processed.contains(req.target_peer_id)) continue;
-      processed.insert(req.target_peer_id);
       auto contact = storage_->GetContact(req.target_peer_id);
       if (!contact || contact->status != identity::ContactStatus::confirmed) {
         continue;
       }
       if (auto const peer = transport_->GetPeer(req.target_peer_id); peer && peer->data_channel_is_open) {
-        if (peer->session_cipher->IsReady()) {
+        if (peer->session_cipher->IsReady() && peer->crcp_verified) {
           ProposeSync(req.topic_id, req.target_peer_id);
-        } else {
-          auto const my_pub_key = peer->session_cipher->GetPublicKey();
-          nlohmann::json const key_msg = {
-              {"type", "key_exchange"},
-              {"key", std::vector<std::byte>(my_pub_key.begin(), my_pub_key.end())},
-              {"is_reply", false}
-          };
-          transport_->SendJson(req.target_peer_id, key_msg);
         }
       }
     }
