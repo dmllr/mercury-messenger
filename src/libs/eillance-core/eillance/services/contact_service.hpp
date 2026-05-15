@@ -128,11 +128,13 @@ class ContactService {
       return;
     }
 
+    bool newly_confirmed = false;
     if (contact->status == identity::ContactStatus::awaitingApproval ||
         contact->status == identity::ContactStatus::pendingApproval) {
       if (!manager_->ConfirmContact(peer_id)) {
         return;
       }
+      newly_confirmed = true;
       sm_->messaging->AddSystemEntry(
           peer_id,
           nlohmann::json{{"action", "contact_confirm"}}.dump(),
@@ -154,7 +156,9 @@ class ContactService {
       std::ignore = transport_->SendJson(peer_id, content);
     }
 
-    EventQueue::Instance().Push(EventContactStatusChanged{peer_id, identity::ContactStatus::confirmed});
+    if (newly_confirmed) {
+      EventQueue::Instance().Push(EventContactStatusChanged{peer_id, identity::ContactStatus::confirmed});
+    }
     EventQueue::Instance().Push(EventConnectionRequested{peer_id});
     EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
   }
@@ -366,9 +370,9 @@ class ContactService {
             messaging::MessageDirection::received
         );
         sm_->messaging->MarkMessagesAsRead(peer_id, {});
+        EventQueue::Instance().Push(EventContactStatusChanged{peer_id, identity::ContactStatus::confirmed});
       }
 
-      EventQueue::Instance().Push(EventContactStatusChanged{peer_id, identity::ContactStatus::confirmed});
       EventQueue::Instance().Push(EventConnectionRequested{peer_id});
       EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
     }
