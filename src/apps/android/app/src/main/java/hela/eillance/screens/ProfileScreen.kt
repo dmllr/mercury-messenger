@@ -48,7 +48,8 @@ fun ProfileScreen(
   onNavigateToBetaNotice: () -> Unit,
   onNavigateToBackupAndRestore: () -> Unit,
   onNavigateToHelp: () -> Unit,
-  onNavigateToPermissionIssues: () -> Unit
+  onNavigateToPermissionIssues: () -> Unit,
+  onNavigateToLicenses: () -> Unit
 ) {
   var showEditDialog by remember { mutableStateOf(false) }
   val hasPermissionIssues by mainViewModel.hasPermissionIssues.collectAsState()
@@ -109,7 +110,8 @@ fun ProfileScreen(
             mainViewModel.navigateToPeer(peerId)
           }
         },
-        onNavigateToPermissionIssues = onNavigateToPermissionIssues
+        onNavigateToPermissionIssues = onNavigateToPermissionIssues,
+        onNavigateToLicenses = onNavigateToLicenses
       )
     }
   }

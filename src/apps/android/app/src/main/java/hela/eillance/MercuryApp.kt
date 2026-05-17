@@ -36,6 +36,7 @@ import hela.eillance.screens.ConversationScreen
 import hela.eillance.screens.HelpScreen
 import hela.eillance.screens.IdentityScreen
 import hela.eillance.screens.IncomingCallScreen
+import hela.eillance.screens.LicensesScreen
 import hela.eillance.screens.MediaPreviewScreen
 import hela.eillance.screens.MnemonicDisplayScreen
 import hela.eillance.screens.PermissionIssuesScreen
@@ -306,7 +307,8 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
           onNavigateToBetaNotice = { navController.navigate(Route.WebView.createRoute("https://mercury.eillance.com/beta/embed/")) },
           onNavigateToBackupAndRestore = { navController.navigate(Screen.BackupRestore.route) },
           onNavigateToHelp = { navController.navigate(Screen.Help.route) },
-          onNavigateToPermissionIssues = { navController.navigate(Screen.PermissionIssues.route) }
+          onNavigateToPermissionIssues = { navController.navigate(Screen.PermissionIssues.route) },
+          onNavigateToLicenses = { navController.navigate(Screen.Licenses.route) }
         )
       }
 
@@ -435,6 +437,10 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
 
       composable(Screen.Help.route) {
         HelpScreen(navController)
+      }
+
+      composable(Screen.Licenses.route) {
+        LicensesScreen(onBack = { navController.safePopBackStack() })
       }
 
       composable(

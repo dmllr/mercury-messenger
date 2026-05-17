@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.Feedback
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.HorizontalDivider
@@ -42,7 +43,8 @@ fun ProfileMenu(
   onNavigateToBackupAndRestore: () -> Unit,
   onNavigateToHelp: () -> Unit,
   onSendFeedback: () -> Unit,
-  onNavigateToPermissionIssues: () -> Unit
+  onNavigateToPermissionIssues: () -> Unit,
+  onNavigateToLicenses: () -> Unit
 ) {
   Column(modifier = Modifier.padding(horizontal = 8.dp)) {
     ListItem(
@@ -154,6 +156,19 @@ fun ProfileMenu(
       modifier = Modifier
         .clip(MaterialTheme.shapes.medium)
         .clickable(onClick = onNavigateToBackupAndRestore)
+    )
+    ListItem(
+      headlineContent = { Text(stringResource(id = R.string.profile_menu_licenses_title)) },
+      supportingContent = { Text(stringResource(id = R.string.profile_menu_licenses_description)) },
+      leadingContent = {
+        Icon(
+          Icons.Filled.ReceiptLong,
+          contentDescription = stringResource(id = R.string.profile_menu_licenses_title)
+        )
+      },
+      modifier = Modifier
+        .clip(MaterialTheme.shapes.medium)
+        .clickable(onClick = onNavigateToLicenses)
     )
   }
 }

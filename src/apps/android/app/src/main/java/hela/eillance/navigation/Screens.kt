@@ -25,6 +25,7 @@ sealed class Screen(val route: String, val icon: ImageVector? = null) {
   object QrScanner : Screen("qr_scanner")
   object RejectedContacts : Screen("rejected_contacts")
   object PermissionIssues : Screen("permission_issues")
+  object Licenses : Screen("licenses")
 }
 
 sealed class Route(val route: String) {
