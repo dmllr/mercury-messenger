@@ -556,6 +556,12 @@ msgid "settings_sound_on_send"
 msgstr "Putar suara saat pesan terkirim"
 msgid "settings_sound_on_receive"
 msgstr "Putar suara saat pesan diterima"
+msgid "profile_menu_licenses_title"
+msgstr "Lisensi Sumber Terbuka"
+msgid "profile_menu_licenses_description"
+msgstr "Pemberitahuan perangkat lunak pihak ketiga"
+msgid "screen_title_licenses"
+msgstr "Lisensi Sumber Terbuka"
 
 # Debug Screens
 msgid "debug_connections_empty"

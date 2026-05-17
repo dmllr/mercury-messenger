@@ -1095,7 +1095,7 @@ fn handle_swarm_event(
         let _ = swarm.disconnect_peer_id(peer);
         crate::utils::force_notify_disconnected(callbacks, &peer);
       }
-    }
+    },
     event => {
       node_log!(callbacks, 5, "Unhandled SwarmEvent: {:?}", event);
     }

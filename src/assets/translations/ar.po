@@ -556,6 +556,12 @@ msgid "settings_sound_on_send"
 msgstr "تشغيل صوت عند إرسال رسالة"
 msgid "settings_sound_on_receive"
 msgstr "تشغيل صوت عند استلام رسالة"
+msgid "profile_menu_licenses_title"
+msgstr "تراخيص مفتوحة المصدر"
+msgid "profile_menu_licenses_description"
+msgstr "إشعارات برامج الجهات الخارجية"
+msgid "screen_title_licenses"
+msgstr "تراخيص مفتوحة المصدر"
 
 # Debug Screens
 msgid "debug_connections_empty"

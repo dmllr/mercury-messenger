@@ -556,6 +556,12 @@ msgid "settings_sound_on_send"
 msgstr "发送消息时播放声音"
 msgid "settings_sound_on_receive"
 msgstr "收到消息时播放声音"
+msgid "profile_menu_licenses_title"
+msgstr "开源许可证"
+msgid "profile_menu_licenses_description"
+msgstr "第三方软件通知"
+msgid "screen_title_licenses"
+msgstr "开源许可证"
 
 # Debug Screens
 msgid "debug_connections_empty"

@@ -556,6 +556,12 @@ msgid "settings_sound_on_send"
 msgstr "Ton bei Nachrichtensendung abspielen"
 msgid "settings_sound_on_receive"
 msgstr "Ton bei Nachrichtenempfang abspielen"
+msgid "profile_menu_licenses_title"
+msgstr "Open-Source-Lizenzen"
+msgid "profile_menu_licenses_description"
+msgstr "Hinweise zu Drittanbieter-Software"
+msgid "screen_title_licenses"
+msgstr "Open-Source-Lizenzen"
 
 # Debug Screens
 msgid "debug_connections_empty"
