@@ -6,6 +6,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -244,7 +245,9 @@ class SyncEngine {
         }
       } else if (type == "sync_provide_entry") {
         auto peer = transport_->GetPeer(peer_id);
-        if (!peer || !peer->session_cipher->IsReady()) return;
+        if (!peer || !peer->session_cipher->IsReady()) {
+          return;
+        }
 
         auto e_json = msg["entry"];
         storage::LedgerEntry e;
@@ -289,13 +292,13 @@ class SyncEngine {
           combined.insert(combined.end(), my_entries.begin(), my_entries.end());
           combined.insert(combined.end(), peer_entries.begin(), peer_entries.end());
 
-          // Deterministic sort resolving "take both"
-          std::ranges::sort(combined, [](auto const& a, auto const& b) {
+          // Deterministic stable sort resolving "take both"
+          std::ranges::stable_sort(combined, [](auto const& a, auto const& b) {
             if (a.created_at.value != b.created_at.value) return a.created_at.value < b.created_at.value;
-            if (a.author_id.ToString() != b.author_id.ToString())
+            if (a.author_id.ToString() != b.author_id.ToString()) {
               return a.author_id.ToString() < b.author_id.ToString();
-            if (a.type != b.type) return a.type < b.type;
-            return a.payload < b.payload;
+            }
+            return false;
           });
 
           // Unique deduplication

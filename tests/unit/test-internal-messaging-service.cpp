@@ -40,10 +40,15 @@ class InternalMessagingServiceTest : public ::testing::Test {
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<Client> client_;
 
-  ContactID const peer1 = ContactID("d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a");
+  std::unique_ptr<crypto::Identity> peer_ident_;
+  ContactID peer1;
 };
 
 TEST_F(InternalMessagingServiceTest, ProcessSignalingMessage_SyncPropose) {
+  std::string mnemonic;
+  peer_ident_ = eillance::crypto::Identity::CreateNew(mnemonic);
+  peer1 = ContactID(peer_ident_->GetPublicKey());
+
   nlohmann::json const propose = {
       {"from", peer1.ToString()},
       {"type", "sync_propose"},
@@ -56,13 +61,22 @@ TEST_F(InternalMessagingServiceTest, ProcessSignalingMessage_SyncPropose) {
 
   // Ensure a sync request exists to be resolved
   storage_->AddSyncRequest({TopicID(peer1), peer1, Timestamp::Now(), Timestamp{0}});
+
+  auto sig = peer_ident_->Sign(client_->GetId().Span());
+  mock_storage_->UpdateContact({.peer_id = peer1, .status = identity::ContactStatus::confirmed, .signature_from_them = sig});
+  client_->Contacts()->ReloadCache();
+
   client_->Connect(peer1);
 
   // Make session cipher ready
   eillance::EventQueue::Instance().Push(EventDataChannelOpen{peer1});
   eillance::crypto::SessionCipher dummy_cipher;
   nlohmann::json const key_msg =
-      {{"type", "key_exchange"}, {"key", dummy_cipher.GetPublicKey()}, {"is_reply", true}, {"sync_version", 2}};
+      {{"type", "key_exchange"}, 
+       {"key", dummy_cipher.GetPublicKey()}, 
+       {"is_reply", true}, 
+       {"signature", crypto::ToHex(sig)},
+       {"sync_version", 2}};
   std::string key_str = key_msg.dump();
   std::vector<std::byte> key_bytes(key_str.size());
   std::transform(key_str.begin(), key_str.end(), key_bytes.begin(), [](char c) { return static_cast<std::byte>(c); });
