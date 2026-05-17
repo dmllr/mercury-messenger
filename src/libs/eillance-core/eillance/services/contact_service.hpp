@@ -193,7 +193,10 @@ class ContactService {
 
     if (type == "contact_add_request") {
       auto existing = manager_->GetContact(peer);
-      if (existing && existing->status == identity::ContactStatus::confirmed) return;
+      if (existing && existing->status == identity::ContactStatus::confirmed) {
+        ConfirmContact(peer);
+        return;
+      }
       std::optional<std::string> token;
       if (json.contains("token")) token = json["token"];
       nlohmann::json profile = json.value("profile", nlohmann::json::object());

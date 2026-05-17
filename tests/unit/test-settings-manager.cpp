@@ -22,7 +22,7 @@ class SettingsManagerTest : public ::testing::Test {
 TEST_F(SettingsManagerTest, GetDefaultUrl) {
   auto url = settings_manager_->GetBootstrapNodeUrls();
   EXPECT_TRUE(url.has_value());
-  EXPECT_EQ(url.value(), "/dns4/app.hela.me/tcp/10807");
+  EXPECT_EQ(url.value(), SettingsManager::GetDefaultBootstrapNodeUrls());
 }
 
 TEST_F(SettingsManagerTest, SetAndGetUrl) {

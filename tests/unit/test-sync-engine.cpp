@@ -18,8 +18,9 @@ struct PeerNode {
 
   PeerNode(ContactID my_id, ContactID other_id)
       : id(my_id) {
-    storage_impl = std::make_unique<storage::MockPersistentStorageImpl>();
-    storage = std::make_shared<storage::PersistentStorage>(std::move(storage_impl));
+    auto mock_storage = std::make_unique<storage::MockPersistentStorageImpl>();
+    mock_storage->UpdateContact({.peer_id = other_id, .status = identity::ContactStatus::confirmed});
+    storage = std::make_shared<storage::PersistentStorage>(std::move(mock_storage));
     auto mock = std::make_unique<transport::MockDataTransport>();
     transport_mock = mock.get();
     transport = std::make_shared<transport::DataTransport>(std::move(mock));
@@ -52,10 +53,11 @@ class SyncEngineTest : public ::testing::Test {
   }
 
   void PumpMessages() {
-    bool activity = true;
     int guard = 0;
-    while (activity && guard++ < 100) {
-      activity = false;
+    while (guard++ < 100) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+      
+      bool activity = false;
       auto a_msgs = A->transport_mock->sent_jsons;
       A->transport_mock->sent_jsons.clear();
       for (auto& [peer, msg] : a_msgs) {
@@ -70,6 +72,13 @@ class SyncEngineTest : public ::testing::Test {
         if (peer == A->id) {
           A->engine->ProcessSyncMessage(B->id, msg);
           activity = true;
+        }
+      }
+
+      if (!activity) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(250));
+        if (A->transport_mock->sent_jsons.empty() && B->transport_mock->sent_jsons.empty()) {
+          break;
         }
       }
     }

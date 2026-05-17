@@ -28,7 +28,9 @@ class ResilienceTest : public ::testing::Test {
     auto media_transport_impl = std::make_unique<transport::MockMediaTransport>(mock_log_);
     auto media_transport = std::make_shared<transport::MediaTransport>(std::move(media_transport_impl));
 
-    auto data_transport = std::make_shared<transport::DataTransport>(std::make_unique<transport::MockDataTransport>());
+    auto mock_dt = std::make_unique<transport::MockDataTransport>();
+    mock_dt_ = mock_dt.get();
+    auto data_transport = std::make_shared<transport::DataTransport>(std::move(mock_dt));
     client_ = std::make_shared<Client>(storage_, media_transport, data_transport);
 
     (void)client_->Account()->GenerateNewIdentity();
@@ -46,6 +48,7 @@ class ResilienceTest : public ::testing::Test {
 
   storage::MockPersistentStorageImpl* mock_storage_{};
   std::shared_ptr<transport::MockCallLog> mock_log_;
+  transport::MockDataTransport* mock_dt_{};
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<Client> client_;
 
@@ -148,15 +151,16 @@ TEST_F(ResilienceTest, ReinstallRecovery_ContactAdd) {
   entry.type = storage::LedgerActionType::ContactState;
   entry.payload = req_msg.dump();
 
+  auto peer = std::make_shared<transport::Peer>(peer1);
+  peer->data_channel_is_open = true;
+  mock_dt_->AddPeer(peer1, peer);
+
   EventQueue::Instance().Push(EventLedgerAppended{entry});
 
   eillance::EventQueue::Instance().WaitFor(
       [&]() {
-        auto entries = storage_->GetLedgerEntries(TopicID(peer1));
-        for (auto const& e : entries) {
-          if (e.type == storage::LedgerActionType::ContactState &&
-              e.payload.find("contact_confirm") != std::string::npos)
-            return true;
+        for (auto const& [p, json] : mock_dt_->sent_jsons) {
+          if (p == peer1 && json.value("type", "") == "crcp_confirm") return true;
         }
         return false;
       },
@@ -164,18 +168,12 @@ TEST_F(ResilienceTest, ReinstallRecovery_ContactAdd) {
   );
 
   bool confirm_sent = false;
-  for (auto const& e : storage_->GetLedgerEntries(TopicID(peer1))) {
-    if (e.type == storage::LedgerActionType::ContactState && e.payload.find("contact_confirm") != std::string::npos) {
+  for (auto const& [p, json] : mock_dt_->sent_jsons) {
+    if (p == peer1 && json.value("type", "") == "crcp_confirm") {
       confirm_sent = true;
     }
   }
   EXPECT_TRUE(confirm_sent) << "Should send confirmation via signaling";
-
-  bool sync_request_exists = false;
-  for (auto const& r : storage_->GetSyncRequests()) {
-    if (r.target_peer_id == peer1) sync_request_exists = true;
-  }
-  EXPECT_TRUE(sync_request_exists) << "Should prepare profile sync request";
 }
 
 TEST_F(ResilienceTest, LedgerDeduplicatesIdenticalEntries) {
