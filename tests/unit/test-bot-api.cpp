@@ -94,7 +94,9 @@ TEST_F(BotApiTest, AutoRejectCalls) {
   mock_dt_->AddPeer(peer1, peer);
 
   auto sig = peer_ident_->Sign(client_->GetId().Span());
-  mock_storage_->UpdateContact({.peer_id = peer1, .status = identity::ContactStatus::confirmed, .signature_from_them = sig});
+  mock_storage_->UpdateContact(
+      {.peer_id = peer1, .status = identity::ContactStatus::confirmed, .signature_from_them = sig}
+  );
   client_->Contacts()->ReloadCache();
 
   nlohmann::json const offer_msg =

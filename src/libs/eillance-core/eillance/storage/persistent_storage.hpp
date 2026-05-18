@@ -108,8 +108,8 @@ class PersistentStorage {
   void RemoveSyncRequest(TopicID const& topic_id, ContactID const& target_peer_id) const {
     pimpl_->RemoveSyncRequest(topic_id, target_peer_id);
   }
-  void UpdateSyncRequestAttempt(TopicID const& topic_id, ContactID const& target_peer_id, Timestamp attempt_time)
-      const {
+  void
+  UpdateSyncRequestAttempt(TopicID const& topic_id, ContactID const& target_peer_id, Timestamp attempt_time) const {
     pimpl_->UpdateSyncRequestAttempt(topic_id, target_peer_id, attempt_time);
   }
 
@@ -147,8 +147,11 @@ class PersistentStorage {
   ) {
     pimpl_->ToggleReaction(peer_id, message_id, author_id, reaction);
   }
-  void UpdateAttachmentStatus(std::string const& attachment_id, messaging::AttachmentStatus status, bool is_downloaded)
-      const {
+  void UpdateAttachmentStatus(
+      std::string const& attachment_id,
+      messaging::AttachmentStatus status,
+      bool is_downloaded
+  ) const {
     pimpl_->UpdateAttachmentStatus(attachment_id, status, is_downloaded);
   }
   [[nodiscard]] auto GetAttachment(std::string const& attachment_id) const {
