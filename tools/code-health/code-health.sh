@@ -67,7 +67,7 @@ run_format() {
     | grep -z -E "\.(cpp|hpp|h)$" \
     | while IFS= read -r -d "" file; do
       echo "Formatting C/C++: $file..."
-      clang-format-18 -i "$file" -style=file:/work/.clang-format
+      clang-format-20 -i "$file" -style=file:/work/.clang-format
     done
 
     # --- Rust Formatting ---
@@ -97,7 +97,7 @@ run_tidy() {
     # Matches target C/C++ directories
     REGEX_SRC="^/work/(src/(libs|server|apps/(mercury-(bot|cli|qt)|android/app/src/main/cpp/src))|tests)/.*"
 
-    run-clang-tidy-18 \
+    run-clang-tidy-20 \
       -config-file '"/work/.clang-tidy"' \
       -p '"${build_dir}"' \
       -j $(nproc) \

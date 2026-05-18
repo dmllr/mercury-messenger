@@ -56,7 +56,7 @@ class SyncEngineTest : public ::testing::Test {
     int guard = 0;
     while (guard++ < 100) {
       std::this_thread::sleep_for(std::chrono::milliseconds(50));
-      
+
       bool activity = false;
       auto a_msgs = A->transport_mock->sent_jsons;
       A->transport_mock->sent_jsons.clear();

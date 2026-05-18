@@ -203,13 +203,17 @@ class Client final {
       }
     }));
 
-    event_unsubs_.emplace_back(EventQueue::Instance().Subscribe<EventTurnEligibilityChanged>(
-        [this](auto const& e) -> void { sm_->data_transport->SetTurnEligibility(e.is_eligible); }
-    ));
+    event_unsubs_.emplace_back(
+        EventQueue::Instance().Subscribe<EventTurnEligibilityChanged>([this](auto const& e) -> void {
+          sm_->data_transport->SetTurnEligibility(e.is_eligible);
+        })
+    );
 
-    event_unsubs_.emplace_back(EventQueue::Instance().Subscribe<EventConnectionRequested>(
-        [this](auto const& e) -> void { this->Connect(e.peer_id); }
-    ));
+    event_unsubs_.emplace_back(
+        EventQueue::Instance().Subscribe<EventConnectionRequested>([this](auto const& e) -> void {
+          this->Connect(e.peer_id);
+        })
+    );
   }
 
   Client(Client const&) = delete;
@@ -450,8 +454,8 @@ class Client final {
   [[nodiscard]] auto GetAttachment(std::string const& attachment_id) const -> std::optional<messaging::Attachment> {
     return sm_->storage->GetAttachment(attachment_id);
   }
-  [[nodiscard]] auto GetDownloadedAttachments(ContactID const& peer_id
-  ) const -> std::vector<messaging::AttachmentRecord> {
+  [[nodiscard]] auto GetDownloadedAttachments(ContactID const& peer_id) const
+      -> std::vector<messaging::AttachmentRecord> {
     return sm_->messaging->GetDownloadedAttachments(peer_id);
   }
 

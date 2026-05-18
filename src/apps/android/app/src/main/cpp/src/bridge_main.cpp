@@ -143,9 +143,11 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_MessengerService_nativeUpda
     jboolean is_online
 ) {
   if (g_clientEngine) {
-    eillance::EventQueue::Instance().Push(eillance::EventServiceConnectionStateChanged{
-        (is_online != 0) ? eillance::ServiceConnectionState::online : eillance::ServiceConnectionState::noNetwork
-    });
+    eillance::EventQueue::Instance().Push(
+        eillance::EventServiceConnectionStateChanged{
+            (is_online != 0) ? eillance::ServiceConnectionState::online : eillance::ServiceConnectionState::noNetwork
+        }
+    );
   }
 }
 
