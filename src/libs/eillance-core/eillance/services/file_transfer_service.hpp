@@ -49,6 +49,32 @@ class FileTransferService {
     event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventSendQueuedMessages>([this](auto const& e) -> void {
       this->OnConnectionReady(e.peer_id);
     }));
+
+    event_unsubs_.push_back(
+        EventQueue::Instance().Subscribe<EventDataPeerConnectionStateChanged>([this](auto const& e) -> void {
+          if (e.state == transport::PeerConnectionState::disconnected ||
+              e.state == transport::PeerConnectionState::failed || e.state == transport::PeerConnectionState::closed) {
+            std::lock_guard<std::mutex> const lock(transfers_mutex_);
+            for (auto it = active_uploads_.begin(); it != active_uploads_.end();) {
+              if (it->second.peer_id == e.peer_id) {
+                it = active_uploads_.erase(it);
+              } else {
+                ++it;
+              }
+            }
+            for (auto it = active_downloads_.begin(); it != active_downloads_.end();) {
+              if (it->second.peer_id == e.peer_id) {
+                it->second.stream.close();
+                it = active_downloads_.erase(it);
+              } else {
+                ++it;
+              }
+            }
+            std::erase_if(upload_queue_, [&](auto const& q) { return q.peer_id == e.peer_id; });
+            std::erase_if(download_queue_, [&](auto const& q) { return q.peer_id == e.peer_id; });
+          }
+        })
+    );
   }
 
   ~FileTransferService() {
@@ -59,7 +85,7 @@ class FileTransferService {
 
   void OnConnectionReady(ContactID const& peer_id) {
     auto const pending_attachments = storage_->GetPendingAttachments(peer_id);
-    std::lock_guard<std::mutex> lock(transfers_mutex_);
+    std::lock_guard<std::mutex> const lock(transfers_mutex_);
     for (auto const& attachment : pending_attachments) {
       if (attachment.status == messaging::AttachmentStatus::paused ||
           attachment.status == messaging::AttachmentStatus::canceled ||
@@ -101,13 +127,13 @@ class FileTransferService {
   }
 
   void QueueDownload(ContactID const& peer_id, messaging::Attachment const& attachment, std::uint64_t message_id) {
-    std::lock_guard<std::mutex> lock(transfers_mutex_);
+    std::lock_guard<std::mutex> const lock(transfers_mutex_);
     download_queue_.push_back({peer_id, attachment.id, message_id});
     TriggerNextTransfers();
   }
 
   void TriggerNextTransfers() {
-    transfer_queue_.Dispatch([this]() {
+    transfer_queue_.Dispatch([this]() -> void {
       TryStartNextUpload();
       TryStartNextDownload();
     });
@@ -260,14 +286,14 @@ class FileTransferService {
       EventQueue::Instance().Push(
           EventAttachmentStatusChanged{peer_id, attachment_id, messaging::AttachmentStatus::pending}
       );
-      std::lock_guard<std::mutex> lock(transfers_mutex_);
+      std::lock_guard<std::mutex> const lock(transfers_mutex_);
       upload_queue_.push_back({peer_id, attachment_id, 0});
     } else {
       storage_->UpdateAttachmentStatus(attachment_id, messaging::AttachmentStatus::pending, false);
       EventQueue::Instance().Push(
           EventAttachmentStatusChanged{peer_id, attachment_id, messaging::AttachmentStatus::pending}
       );
-      std::lock_guard<std::mutex> lock(transfers_mutex_);
+      std::lock_guard<std::mutex> const lock(transfers_mutex_);
       download_queue_.push_back({peer_id, attachment_id, 0});
     }
     TriggerNextTransfers();
@@ -387,6 +413,7 @@ class FileTransferService {
   }
 
   struct TransferUploadState {
+    ContactID peer_id;
     std::string file_path;
     std::ifstream stream;
     std::vector<std::uint32_t> pending_chunks;
@@ -398,6 +425,7 @@ class FileTransferService {
   };
 
   struct TransferDownloadState {
+    ContactID peer_id;
     std::filesystem::path file_path;
     std::fstream stream;
     std::filesystem::path temp_path;
@@ -437,6 +465,7 @@ class FileTransferService {
     std::filesystem::path const progress_path = attachments_dir / (attachment.id + ".progress");
 
     TransferDownloadState state;
+    state.peer_id = peer_id;
     state.file_path = std::filesystem::path(attachment.file_path);
     state.temp_path = temp_path;
     state.progress_path = progress_path;
@@ -525,7 +554,9 @@ class FileTransferService {
       }
       if (!state.is_pumping) {
         state.is_pumping = true;
-        transfer_queue_.Dispatch([this, peer_id, file_id = attachment.id]() { PumpUploadBatch(peer_id, file_id); });
+        transfer_queue_.Dispatch([this, peer_id, file_id = attachment.id]() -> void {
+          PumpUploadBatch(peer_id, file_id);
+        });
       }
     } else {
       std::ifstream file(attachment.file_path, std::ios::binary);
@@ -544,6 +575,7 @@ class FileTransferService {
       lock.lock();
 
       TransferUploadState state;
+      state.peer_id = peer_id;
       state.file_path = attachment.file_path;
       state.stream = std::move(file);
       state.total_size = attachment.size_bytes;
@@ -567,7 +599,9 @@ class FileTransferService {
       state.is_pumping = true;
       active_uploads_[attachment.id] = std::move(state);
 
-      transfer_queue_.Dispatch([this, peer_id, file_id = attachment.id]() { PumpUploadBatch(peer_id, file_id); });
+      transfer_queue_.Dispatch([this, peer_id, file_id = attachment.id]() -> void {
+        PumpUploadBatch(peer_id, file_id);
+      });
     }
   }
 
@@ -590,7 +624,7 @@ class FileTransferService {
       state.paused = false;
       if (!state.is_pumping) {
         state.is_pumping = true;
-        transfer_queue_.Dispatch([this, peer_id, file_id]() { PumpUploadBatch(peer_id, file_id); });
+        transfer_queue_.Dispatch([this, peer_id, file_id]() -> void { PumpUploadBatch(peer_id, file_id); });
       }
     } else {
       auto attachment = storage_->GetAttachment(file_id);
@@ -609,7 +643,7 @@ class FileTransferService {
     std::uint64_t bytes = 0;
     std::memcpy(&bytes, payload.data(), sizeof(bytes));
 
-    std::unique_lock<std::mutex> lock(transfers_mutex_);
+    std::unique_lock<std::mutex> const lock(transfers_mutex_);
     if (active_uploads_.contains(file_id)) {
       auto& state = active_uploads_[file_id];
       std::size_t const acked = bytes / chunkSizeBytes;
@@ -618,7 +652,7 @@ class FileTransferService {
       }
 
       if (state.total_size > 0) {
-        float progress = static_cast<float>(bytes) / static_cast<float>(state.total_size);
+        float const progress = static_cast<float>(bytes) / static_cast<float>(state.total_size);
         EventQueue::Instance().Push(EventTransferProgress{peer_id, file_id, std::min(progress, 1.0F)});
       }
 
@@ -627,14 +661,14 @@ class FileTransferService {
         if (state.chunks_sent_absolute < state.chunks_acked_absolute ||
             (state.chunks_sent_absolute - state.chunks_acked_absolute) < max_in_flight) {
           state.is_pumping = true;
-          transfer_queue_.Dispatch([this, peer_id, file_id]() { PumpUploadBatch(peer_id, file_id); });
+          transfer_queue_.Dispatch([this, peer_id, file_id]() -> void { PumpUploadBatch(peer_id, file_id); });
         }
       }
     }
   }
 
   void ScheduleEndRetry(ContactID const& peer_id, std::string const& file_id) {
-    transfer_queue_.DispatchAfter(std::chrono::seconds(5), [this, peer_id, file_id]() {
+    transfer_queue_.DispatchAfter(std::chrono::seconds(5), [this, peer_id, file_id]() -> void {
       std::unique_lock<std::mutex> lock(transfers_mutex_);
       if (active_uploads_.contains(file_id)) {
         auto& state = active_uploads_[file_id];
@@ -647,7 +681,7 @@ class FileTransferService {
   }
 
   void ScheduleStuckRetry(ContactID const& peer_id, std::string const& file_id) {
-    transfer_queue_.DispatchAfter(std::chrono::seconds(3), [this, peer_id, file_id]() {
+    transfer_queue_.DispatchAfter(std::chrono::seconds(3), [this, peer_id, file_id]() -> void {
       std::unique_lock<std::mutex> lock(transfers_mutex_);
       if (active_uploads_.contains(file_id)) {
         auto& state = active_uploads_[file_id];
@@ -751,17 +785,27 @@ class FileTransferService {
         state2.chunks_sent_absolute--;
       }
       state2.is_pumping = false;
-      transfer_queue_.DispatchAfter(std::chrono::milliseconds(100), [this, peer_id, file_id]() {
-        {
-          std::lock_guard<std::mutex> const retry_lock(transfers_mutex_);
-          if (active_uploads_.contains(file_id)) {
-            active_uploads_[file_id].is_pumping = true;
+
+      bool is_connected = false;
+      if (auto p = transport_->GetPeer(peer_id)) {
+        is_connected = p->data_channel_is_open.load();
+      }
+
+      if (is_connected) {
+        transfer_queue_.DispatchAfter(std::chrono::milliseconds(100), [this, peer_id, file_id]() -> void {
+          {
+            std::lock_guard<std::mutex> const retry_lock(transfers_mutex_);
+            if (active_uploads_.contains(file_id)) {
+              active_uploads_[file_id].is_pumping = true;
+            }
           }
-        }
-        PumpUploadBatch(peer_id, file_id);
-      });
+          PumpUploadBatch(peer_id, file_id);
+        });
+      } else {
+        active_uploads_.erase(file_id);
+      }
     } else if (more_pending) {
-      transfer_queue_.DispatchAfter(std::chrono::milliseconds(10), [this, peer_id, file_id]() {
+      transfer_queue_.DispatchAfter(std::chrono::milliseconds(10), [this, peer_id, file_id]() -> void {
         PumpUploadBatch(peer_id, file_id);
       });
     } else {
@@ -827,9 +871,9 @@ class FileTransferService {
       state.bytes_written += chunk_data.size();
       state.chunk_counter++;
 
-      bool save_progress = (state.chunk_counter % 8 == 0);
-      bool send_ack = (state.chunk_counter % 16 == 0);
-      bool report_progress = state.total_size > 0;
+      bool const save_progress = (state.chunk_counter % 8 == 0);
+      bool const send_ack = (state.chunk_counter % 16 == 0);
+      bool const report_progress = state.total_size > 0;
 
       std::uint64_t current_bytes = state.bytes_written;
       std::uint64_t total = state.total_size;
@@ -839,7 +883,7 @@ class FileTransferService {
         for (size_t i = 0; i < state.received_chunks.size(); ++i) {
           if (state.received_chunks[i]) packed[i / 8] |= (1 << (i % 8));
         }
-        std::filesystem::path prog_path = state.progress_path;
+        std::filesystem::path const prog_path = state.progress_path;
 
         lock.unlock();  // Drop lock during saving
         if (std::ofstream file_part(prog_path, std::ios::binary | std::ios::trunc); file_part) {
@@ -850,7 +894,7 @@ class FileTransferService {
       }
 
       if (report_progress) {
-        float progress = static_cast<float>(current_bytes) / static_cast<float>(total);
+        float const progress = static_cast<float>(current_bytes) / static_cast<float>(total);
         EventQueue::Instance().Push(EventTransferProgress{peer_id, file_id, std::min(progress, 1.0F)});
       }
 
@@ -878,7 +922,9 @@ class FileTransferService {
 
     std::vector<std::uint32_t> missing;
     for (std::uint32_t i = 0; i < state.received_chunks.size(); ++i) {
-      if (!state.received_chunks[i]) missing.push_back(i);
+      if (!state.received_chunks[i]) {
+        missing.push_back(i);
+      }
     }
 
     lock.unlock();
@@ -921,7 +967,7 @@ class FileTransferService {
 
       if (!state.is_pumping && !state.paused) {
         state.is_pumping = true;
-        transfer_queue_.Dispatch([this, peer_id, file_id]() { PumpUploadBatch(peer_id, file_id); });
+        transfer_queue_.Dispatch([this, peer_id, file_id]() -> void { PumpUploadBatch(peer_id, file_id); });
       }
     } else {
       lock.unlock();
@@ -938,12 +984,9 @@ class FileTransferService {
     EventQueue::Instance().Push(EventAttachmentStatusChanged{peer_id, file_id, messaging::AttachmentStatus::done});
   }
 
-  auto SendPacket(
-      ContactID const& peer_id,
-      std::string const& file_id,
-      MessageType type,
-      std::span<std::byte const> payload
-  ) -> bool {
+  auto
+  SendPacket(ContactID const& peer_id, std::string const& file_id, MessageType type, std::span<std::byte const> payload)
+      -> bool {
     std::size_t const id_len = file_id.size();
     std::size_t const header_size = headerMinSize + id_len;
     std::vector<std::byte> buf(header_size + payload.size());
