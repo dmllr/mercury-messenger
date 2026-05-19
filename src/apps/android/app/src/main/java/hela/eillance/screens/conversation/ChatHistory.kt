@@ -240,6 +240,7 @@ private fun shouldGroupMessages(current: HistoryEntry, other: HistoryEntry?): Bo
   if (current.kind != other.kind) return false
   if (current.kind != HistoryEntryKind.TextMessage) return false
   if (current.direction != other.direction) return false
+  if (current.status != other.status) return false
 
   val diff = abs(current.timestamp - other.timestamp)
   return diff <= GROUPING_THRESHOLD_US
