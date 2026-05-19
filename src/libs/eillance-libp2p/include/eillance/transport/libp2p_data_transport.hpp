@@ -63,18 +63,22 @@ class Libp2pDataTransport : public DataTransport::Interface {
             p = std::make_shared<Peer>(peer_id);
             AddPeer(peer_id, p);
           }
-          {
-            std::lock_guard<std::mutex> const lock(p->queue_mutex);
-            p->tx_seq = 0;
-            p->rx_seq = 0;
-            p->out_of_order_queue.clear();
+          if (!p->data_channel_is_open) {
+            {
+              std::lock_guard<std::mutex> const lock(p->queue_mutex);
+              p->tx_seq = 0;
+              p->rx_seq = 0;
+              p->out_of_order_queue.clear();
+            }
+            p->data_channel_is_open = true;
+            p->is_connecting = false;
+            p->is_circuit = is_circuit;
+            LGI << "Peer connected: " << peer_id.ToString() << (is_circuit ? " (circuit)" : " (direct)");
+            EventQueue::Instance().Push(EventDataPeerConnectionStateChanged{peer_id, PeerConnectionState::connected});
+            EventQueue::Instance().Push(EventDataChannelOpen{peer_id});
+          } else {
+            LGD << "Secondary connection established with " << peer_id.ToString() << ", ignoring seq reset.";
           }
-          p->data_channel_is_open = true;
-          p->is_connecting = false;
-          p->is_circuit = is_circuit;
-          LGI << "Peer connected: " << peer_id.ToString() << (is_circuit ? " (circuit)" : " (direct)");
-          EventQueue::Instance().Push(EventDataPeerConnectionStateChanged{peer_id, PeerConnectionState::connected});
-          EventQueue::Instance().Push(EventDataChannelOpen{peer_id});
         });
       });
 
