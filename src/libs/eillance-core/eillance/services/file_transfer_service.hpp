@@ -835,11 +835,14 @@ class FileTransferService {
             attachment->status == messaging::AttachmentStatus::discarded) {
           return;
         }
-        if (attachment->status != messaging::AttachmentStatus::done) {
+        if (attachment->status == messaging::AttachmentStatus::done) {
           lock.unlock();
-          StartDownloadInternal(peer_id, *attachment, 0, false);
-          lock.lock();
+          SendDone(peer_id, file_id);
+          return;
         }
+        lock.unlock();
+        StartDownloadInternal(peer_id, *attachment, 0, false);
+        lock.lock();
       } else {
         return;
       }
@@ -908,6 +911,11 @@ class FileTransferService {
     std::unique_lock<std::mutex> lock(transfers_mutex_);
     auto const iterator = active_downloads_.find(file_id);
     if (iterator == active_downloads_.end()) {
+      lock.unlock();
+      auto attachment = storage_->GetAttachment(file_id);
+      if (attachment && attachment->status == messaging::AttachmentStatus::done) {
+        SendDone(peer_id, file_id);
+      }
       return;
     }
 
