@@ -43,6 +43,7 @@ pub struct EventLoopState {
   pub is_public: bool,
   pub turn_server_handle: Option<crate::turn_server::TurnServerHandle>,
   pub tick_counter: u64,
+  pub has_bootstrapped: bool,
 }
 
 impl EventLoopState {
@@ -62,6 +63,7 @@ impl EventLoopState {
       is_public: false,
       turn_server_handle: None,
       tick_counter: 0,
+      has_bootstrapped: false,
     }
   }
 
@@ -93,7 +95,7 @@ impl EventLoopState {
     node_log!(callbacks, 5, "Dialing {} with addresses: {:?}", peer_val, addrs);
 
     let opts = libp2p::swarm::dial_opts::DialOpts::peer_id(peer_val)
-      .condition(libp2p::swarm::dial_opts::PeerCondition::Always)
+      .condition(libp2p::swarm::dial_opts::PeerCondition::Disconnected)
       .addresses(addrs)
       .build();
     match swarm.dial(opts) {
@@ -331,6 +333,7 @@ fn handle_command(
       state.public_ip = None;
       state.public_port = None;
       state.is_public = false;
+      state.has_bootstrapped = false;
       if let Some(handle) = state.turn_server_handle.take() {
         let _ = handle.close_tx.send(());
         node_log!(callbacks, 3, "Node switches off a TURN server (network change)");
@@ -514,7 +517,6 @@ fn handle_swarm_event(
       }
 
       if endpoint.is_dialer() {
-        let _ = swarm.behaviour_mut().kademlia.bootstrap();
         if is_bootstrap && !is_circuit && !matches!(role, NodeRole::BootstrapNode) {
           let mut relay_listen_addr = remote_addr.clone();
           relay_listen_addr.push(libp2p::multiaddr::Protocol::P2pCircuit);
@@ -612,8 +614,13 @@ fn handle_swarm_event(
           swarm.behaviour_mut().kademlia.add_address(&peer_id, addr);
         }
       }
-      if let Err(e) = swarm.behaviour_mut().kademlia.bootstrap() {
-        node_log!(callbacks, 2, "Kademlia bootstrap failed: {:?}", e);
+      if !state.has_bootstrapped {
+        if let Err(e) = swarm.behaviour_mut().kademlia.bootstrap() {
+          node_log!(callbacks, 5, "Kademlia bootstrap not ready: {:?}", e);
+        } else {
+          state.has_bootstrapped = true;
+          node_log!(callbacks, 3, "Kademlia bootstrap initiated");
+        }
       }
       if state.pending_dials.contains(&peer_id) {
         state.do_dial(peer_id, swarm, callbacks);
@@ -745,7 +752,7 @@ fn handle_swarm_event(
                 }
               }
               let opts = libp2p::swarm::dial_opts::DialOpts::peer_id(peer)
-                .condition(libp2p::swarm::dial_opts::PeerCondition::Always)
+                .condition(libp2p::swarm::dial_opts::PeerCondition::Disconnected)
                 .addresses(addrs)
                 .build();
               match swarm.dial(opts) {
