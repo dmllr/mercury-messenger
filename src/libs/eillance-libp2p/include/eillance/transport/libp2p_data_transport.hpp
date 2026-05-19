@@ -63,6 +63,12 @@ class Libp2pDataTransport : public DataTransport::Interface {
             p = std::make_shared<Peer>(peer_id);
             AddPeer(peer_id, p);
           }
+          {
+            std::lock_guard<std::mutex> const lock(p->queue_mutex);
+            p->tx_seq = 0;
+            p->rx_seq = 0;
+            p->out_of_order_queue.clear();
+          }
           p->data_channel_is_open = true;
           p->is_connecting = false;
           p->is_circuit = is_circuit;
@@ -85,7 +91,43 @@ class Libp2pDataTransport : public DataTransport::Interface {
 
       node_->SetOnMessage([this](ContactID const& peer_id, std::span<std::byte const> data) -> void {
         std::vector<std::byte> payload(data.begin(), data.end());
-        rx_queue_.Dispatch([peer_id, payload = std::move(payload)]() mutable -> void {
+        rx_queue_.Dispatch([this, peer_id, payload = std::move(payload)]() mutable -> void {
+          if (!payload.empty() && payload[0] != std::byte{0xFE}) {
+            try {
+              std::string const json_str(reinterpret_cast<char const*>(payload.data()), payload.size());
+              auto parsed = Json::parse(json_str);
+              if (parsed.contains("s") && parsed.contains("m")) {
+                uint64_t const seq = parsed["s"];
+                auto inner_msg = parsed["m"];
+                if (auto peer = this->GetPeer(peer_id)) {
+                  std::lock_guard<std::mutex> const lock(peer->queue_mutex);
+                  if (seq >= peer->rx_seq) {
+                    peer->out_of_order_queue[seq] = inner_msg;
+                    while (!peer->out_of_order_queue.empty()) {
+                      auto it = peer->out_of_order_queue.begin();
+                      if (it->first == peer->rx_seq) {
+                        auto msg_to_process = it->second;
+                        peer->rx_seq++;
+                        peer->out_of_order_queue.erase(it);
+
+                        std::string const inner_str = msg_to_process.dump();
+                        std::vector<std::byte> inner_payload(inner_str.size());
+                        std::memcpy(inner_payload.data(), inner_str.data(), inner_str.size());
+                        EventQueue::Instance().Push(EventDataChannelMessage{peer_id, std::move(inner_payload)});
+                      } else {
+                        break;
+                      }
+                    }
+                  } else {
+                    LGE << "Received stale sequence number: " << seq << " (expected >= " << peer->rx_seq << ")";
+                  }
+                  return;
+                }
+              }
+            } catch (...) {
+              // Fallback to direct dispatch for unsequenced/legacy messages
+            }
+          }
           EventQueue::Instance().Push(EventDataChannelMessage{peer_id, std::move(payload)});
         });
       });
@@ -258,8 +300,19 @@ class Libp2pDataTransport : public DataTransport::Interface {
   }
 
   auto SendJson(ContactID const& peer_id, Json const& message) -> bool override {
-    auto str = message.dump();
-    if (node_) return node_->SendChat(peer_id, {reinterpret_cast<std::byte const*>(str.data()), str.size()});
+    uint64_t seq = 0;
+    if (auto peer = GetPeer(peer_id)) {
+      seq = peer->tx_seq++;
+    }
+    Json const envelope = {{"s", seq}, {"m", message}};
+    auto str = envelope.dump();
+    if (node_) {
+      bool const success = node_->SendChat(peer_id, {reinterpret_cast<std::byte const*>(str.data()), str.size()});
+      if (!success) {
+        Disconnect(peer_id);
+      }
+      return success;
+    }
     return false;
   }
 
