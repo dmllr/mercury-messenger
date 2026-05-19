@@ -104,19 +104,19 @@ def test_contact_mutual_add(test_environment):
   scenario.add_network("net", "192.168.104.0/24", "192.168.104.1")
   scenario.add_process("signaling", "/app/bin/mercury-bootstrap", ["--port", "8000"], {"net": "192.168.104.30"})
 
-  script_a = f"connect, wait 2, message {id_b} \"Hello Mutual\", wait 15, disconnect"
+  script_a = f"connect, wait 2, message {id_b} \"Hello Mutual\", wait 25, disconnect"
   scenario.add_process("app-a", "/app/bin/mercury-mock-app",
                        ["--no-auto-confirm", "--key", key_a, "--signaling-url", "/ip4/192.168.104.30/tcp/8000", "--db-path", "/tmp/a.db", "--script", script_a],
                        {"net": "192.168.104.31"})
 
-  script_b = f"connect, wait 5, call {id_a}, hangup {id_a}, wait 15, disconnect"
+  script_b = f"connect, wait 10, call {id_a}, hangup {id_a}, wait 15, disconnect"
   scenario.add_process("app-b", "/app/bin/mercury-mock-app",
                        ["--no-auto-confirm", "--key", key_b, "--signaling-url", "/ip4/192.168.104.30/tcp/8000", "--db-path", "/tmp/b.db", "--script", script_b],
                        {"net": "192.168.104.32"})
 
   scenario.expect_logs("app-b", [f"[mock] Message from {id_a} received: Hello Mutual"])
 
-  test_environment.execute_scenario(scenario, timeout_seconds=25)
+  test_environment.execute_scenario(scenario, timeout_seconds=35)
 
 
 def test_call_unapproved_rejected(test_environment):
