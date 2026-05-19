@@ -909,6 +909,8 @@ fn handle_swarm_event(
       ..
     })) => {
       node_log!(callbacks, 2, "Chat outbound failure to {}: {:?}", peer, error);
+      let _ = swarm.disconnect_peer_id(peer);
+      crate::utils::force_notify_disconnected(callbacks, &peer);
     }
     SwarmEvent::Behaviour(MercuryBehaviourEvent::Chat(request_response::Event::InboundFailure {
       peer, error, ..
@@ -924,6 +926,8 @@ fn handle_swarm_event(
       ..
     })) => {
       node_log!(callbacks, 2, "File outbound failure to {}: {:?}", peer, error);
+      let _ = swarm.disconnect_peer_id(peer);
+      crate::utils::force_notify_disconnected(callbacks, &peer);
     }
     SwarmEvent::Behaviour(MercuryBehaviourEvent::File(request_response::Event::InboundFailure {
       peer, error, ..

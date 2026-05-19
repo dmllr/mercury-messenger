@@ -284,7 +284,7 @@ class InternalMessagingService {
   }
 
   // Important! Any breaking change of the sync protocol requires an increment of this constant.
-  static constexpr int currentSyncVersion = 1;
+  static constexpr int currentSyncVersion = 2;
 
   // Important! Any breaking change of the file transfer protocol requires an increment of this constant.
   static constexpr int currentFileTransferVersion = 1;
