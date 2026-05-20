@@ -129,8 +129,8 @@ pub async fn run_event_loop(
   role: NodeRole,
 ) {
   let mut state = EventLoopState::new(role, callbacks.clone());
-  let mut keepalive_interval = tokio::time::interval(Duration::from_secs(30));
-  let mut stats_interval = tokio::time::interval(Duration::from_secs(3));
+  let mut keepalive_interval = tokio::time::interval(Duration::from_secs(60));
+  let mut stats_interval = tokio::time::interval(Duration::from_secs(15));
 
   loop {
     tokio::select! {
@@ -314,6 +314,15 @@ fn handle_command(
       swarm.behaviour_mut().file.send_request(&peer_id, data);
     }
     Command::Disconnect(peer_id) => {
+      if state.explicit_bootstrap_peers.contains(&peer_id) {
+        node_log!(
+          callbacks,
+          5,
+          "Ignoring disconnect command for bootstrap node {}",
+          peer_id
+        );
+        return;
+      }
       node_log!(callbacks, 5, "Disconnect command received for {}", peer_id);
       let _ = swarm.disconnect_peer_id(peer_id);
       state.pending_dials.remove(&peer_id);
@@ -837,11 +846,6 @@ fn handle_swarm_event(
           .any(|p| matches!(p, libp2p::multiaddr::Protocol::P2pCircuit))
         {
           node_log!(callbacks, 3, "Node lost relay status");
-          let tx_clone = tx.clone();
-          tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_millis(2000)).await;
-            let _ = tx_clone.send(Command::Listen(orig));
-          });
         }
       }
     }
