@@ -30,7 +30,17 @@ pub fn build_behaviour(
 ) -> MercuryBehaviour {
   let peer_id = PeerId::from(key.public());
   let mut kad_config = KademliaConfig::default();
-  kad_config.set_record_ttl(Some(Duration::from_secs(60 * 60)));
+  kad_config.set_record_ttl(Some(Duration::from_secs(24 * 60 * 60)));
+
+  let is_bootstrap = matches!(role, NodeRole::BootstrapNode);
+  if is_bootstrap {
+    kad_config.set_provider_publication_interval(Some(Duration::from_secs(45 * 60)));
+  } else {
+    kad_config.set_provider_publication_interval(None);
+  }
+
+  kad_config.set_replication_factor(std::num::NonZeroUsize::new(4).unwrap());
+  kad_config.set_protocol_names(vec![StreamProtocol::new("/mercury/kad/1.0.0")]);
 
   let mut kademlia = Kademlia::with_config(peer_id, MemoryStore::new(peer_id), kad_config);
 
@@ -41,7 +51,10 @@ pub fn build_behaviour(
     kademlia.set_mode(Some(kad::Mode::Client));
   }
 
-  let mdns = mdns::tokio::Behaviour::new(mdns::Config::default(), peer_id).expect("mDNS valid");
+  let mut mdns_config = mdns::Config::default();
+  mdns_config.query_interval = Duration::from_secs(3600);
+  let mdns = mdns::tokio::Behaviour::new(mdns_config, peer_id).expect("mDNS valid");
+
   let chat = request_response::cbor::Behaviour::new(
     [(StreamProtocol::new("/mercury/chat/1.0.0"), ProtocolSupport::Full)],
     request_response::Config::default(),
@@ -55,15 +68,21 @@ pub fn build_behaviour(
     request_response::Config::default(),
   );
 
-  let autonat = autonat::Behaviour::new(peer_id, autonat::Config::default());
-  let identify = identify::Behaviour::new(identify::Config::new("/mercury/id/1.0.0".into(), key.public()));
+  let mut autonat_config = autonat::Config::default();
+  autonat_config.retry_interval = Duration::from_secs(90);
+  autonat_config.refresh_interval = Duration::from_secs(3600);
+  autonat_config.boot_delay = Duration::from_secs(15);
+  let autonat = autonat::Behaviour::new(peer_id, autonat_config);
+
+  let identify = identify::Behaviour::new(
+    identify::Config::new("/mercury/id/1.0.0".into(), key.public()).with_interval(Duration::from_secs(3600)),
+  );
   let ping = ping::Behaviour::new(
     ping::Config::new()
-      .with_interval(Duration::from_secs(30))
+      .with_interval(Duration::from_secs(120))
       .with_timeout(Duration::from_secs(30)),
   );
 
-  let is_bootstrap = matches!(role, NodeRole::BootstrapNode);
   let relay_config = if is_bootstrap {
     relay::Config {
       max_reservations: 8192,
