@@ -188,6 +188,7 @@ class SyncEngine {
           lock.unlock();
           nlohmann::json const confirm = {{"type", "sync_confirm"}, {"topic", topic_id.ToString()}, {"head", my_head}};
           transport_->SendJson(peer_id, confirm);
+          EventQueue::Instance().Push(EventSyncStateChanged{peer_id, false, 1.0f});
           return;
         }
 
@@ -225,6 +226,7 @@ class SyncEngine {
             {"checkpoints", checkpoints}
         };
         transport_->SendJson(peer_id, req);
+        EventQueue::Instance().Push(EventSyncStateChanged{peer_id, true, -1.0f});
       } else if (type == "sync_request_forward") {
         auto checkpoints = msg.value("checkpoints", std::vector<std::string>{});
         std::unique_lock<std::mutex> lock(ledger_mutex_);
@@ -461,6 +463,7 @@ class SyncEngine {
                     {"checkpoints", checkpoints}
                 };
                 transport_->SendJson(peer_id, req);
+                EventQueue::Instance().Push(EventSyncStateChanged{peer_id, true, -1.0f});
             } else {
                 auto latest = storage_->GetLatestLedgerEntry(topic_id);
                 std::string const my_head = latest ? latest->hash : std::string(64, '0');
@@ -469,6 +472,7 @@ class SyncEngine {
                 nlohmann::json confirm = {{"type", "sync_confirm"}, {"topic", topic_id.ToString()}, {"head", my_head}};
                 transport_->SendJson(peer_id, confirm);
                 storage_->RemoveSyncRequest(topic_id, peer_id);
+                EventQueue::Instance().Push(EventSyncStateChanged{peer_id, false, 1.0f});
             }
         }
       } else if (type == "sync_confirm") {
@@ -478,6 +482,7 @@ class SyncEngine {
         std::string const my_head = latest ? latest->hash : std::string(64, '0');
         if (my_head == peer_head) {
           storage_->RemoveSyncRequest(topic_id, peer_id);
+          EventQueue::Instance().Push(EventSyncStateChanged{peer_id, false, 1.0f});
         } else {
           lock.unlock();
           ProposeSync(topic_id, peer_id);
