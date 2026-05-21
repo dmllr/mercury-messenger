@@ -8,6 +8,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+#include <mutex>
 
 #include <nlohmann/json.hpp>
 
@@ -43,6 +44,7 @@ class SyncEngine {
   std::unordered_map<std::string, SyncRequestState> active_sync_requests_;
   std::unordered_set<std::string> pending_proposals_;
   std::mutex proposals_mutex_;
+  std::mutex ledger_mutex_;
 
   static auto ComputeSHA256(std::string const& data) -> std::string {
     unsigned char hash[EVP_MAX_MD_SIZE];
@@ -117,6 +119,7 @@ class SyncEngine {
     entry.type = type;
     entry.payload = payload.dump();
 
+    std::unique_lock<std::mutex> lock(ledger_mutex_);
     auto latest = storage_->GetLatestLedgerEntry(topic_id);
     entry.prev_hash = latest ? latest->hash : std::string(64, '0');
 
@@ -126,6 +129,8 @@ class SyncEngine {
     entry.hash = ComputeSHA256(data_to_hash);
 
     storage_->AddLedgerEntry(entry);
+    lock.unlock();
+
     EventQueue::Instance().Push(EventLedgerAppended{entry});
 
     // For 1-on-1 chats, the target peer is the TopicID.
@@ -179,17 +184,25 @@ class SyncEngine {
       // topic for this ledger is the remote's peer_id. We map it directly to the sender.
       TopicID const topic_id(peer_id);
 
-      LGI << "[Sync] Received " << type << " from " << peer_id.ToString() << " for topic " << topic_id.ToString();
-
       if (type == "sync_propose") {
         std::string const peer_head = msg.value("head", "");
+
+        std::unique_lock<std::mutex> lock(ledger_mutex_);
         auto latest = storage_->GetLatestLedgerEntry(topic_id);
         std::string const my_head = latest ? latest->hash : std::string(64, '0');
+
+        LGI << "[Sync] Received sync_propose from " << peer_id.ToString() 
+            << " for topic " << topic_id.ToString() 
+            << ". Peer head: " << peer_head 
+            << ", Our head: " << my_head
+            << ", Do we have peer head? " << (storage_->HasLedgerEntry(topic_id, peer_head) ? "YES" : "NO");
 
         if (peer_head == my_head) {
           LGI << "[Sync] Peer head (" << peer_head << ") matches our head. Sync complete.";
           storage_->RemoveSyncRequest(topic_id, peer_id);
           active_sync_requests_.erase(topic_id.ToString());
+          pending_sync_chain_[topic_id.ToString()].clear();
+          lock.unlock();
           nlohmann::json const confirm = {{"type", "sync_confirm"}, {"topic", topic_id.ToString()}, {"head", my_head}};
           transport_->SendJson(peer_id, confirm);
           return;
@@ -198,6 +211,7 @@ class SyncEngine {
         if (storage_->HasLedgerEntry(topic_id, peer_head)) {
           LGI << "[Sync] We already have peer's head (" << peer_head << ") but our head (" << my_head
               << ") is different. Proposing our head.";
+          lock.unlock();
           ProposeSync(topic_id, peer_id);
           return;
         }
@@ -206,13 +220,49 @@ class SyncEngine {
         auto it = active_sync_requests_.find(topic_id.ToString());
         if (it != active_sync_requests_.end()) {
           if (it->second.hash == peer_head) {
+            if (!pending_sync_chain_[topic_id.ToString()].empty() && (now - it->second.timestamp < 15000000ULL)) {
+              LGD << "[Sync] Ignoring redundant sync_propose for head " << peer_head << " (sync in progress)";
+              return;
+            }
             if (now - it->second.timestamp < 5000000ULL) {
               LGD << "[Sync] Ignoring redundant sync_propose for head " << peer_head;
               return;
             }
+            std::string resume_hash = peer_head;
+            if (!pending_sync_chain_[topic_id.ToString()].empty()) {
+                resume_hash = pending_sync_chain_[topic_id.ToString()].back().prev_hash;
+                LGI << "[Sync] Resuming iterative fetch for head " << peer_head << " from hash " << resume_hash;
+            } else {
+                LGI << "[Sync] Restarting iterative fetch for head " << peer_head;
+            }
+            it->second.timestamp = now;
+            lock.unlock();
+            nlohmann::json const req = {
+                {"type", "sync_request_entry"},
+                {"topic", topic_id.ToString()},
+                {"hash", resume_hash}
+            };
+            transport_->SendJson(peer_id, req);
+            return;
           } else {
-            LGI << "[Sync] Peer proposed new head " << peer_head << " while we are syncing " << it->second.hash
-                << ". Resetting sync chain.";
+            if (!pending_sync_chain_[topic_id.ToString()].empty()) {
+              LGI << "[Sync] Peer proposed new head " << peer_head << " while we are actively syncing old head " << it->second.hash << ". Ignoring new head until current sync finishes.";
+              if (now - it->second.timestamp >= 15000000ULL) {
+                  std::string resume_hash = pending_sync_chain_[topic_id.ToString()].back().prev_hash;
+                  LGI << "[Sync] Resuming stalled iterative fetch for old head " << it->second.hash << " from hash " << resume_hash;
+                  it->second.timestamp = now;
+                  lock.unlock();
+                  nlohmann::json const req = {
+                      {"type", "sync_request_entry"},
+                      {"topic", topic_id.ToString()},
+                      {"hash", resume_hash}
+                  };
+                  transport_->SendJson(peer_id, req);
+                  return;
+              }
+              return;
+            }
+            LGI << "[Sync] Peer proposed new head " << peer_head << " replacing old head " << it->second.hash << ". Resetting sync chain.";
             pending_sync_chain_[topic_id.ToString()].clear();
           }
         }
@@ -222,6 +272,7 @@ class SyncEngine {
             << "). Starting iterative fetch.";
         // Iterative backwards fetch
         pending_sync_chain_[topic_id.ToString()].clear();
+        lock.unlock();
         nlohmann::json const req = {
             {"type", "sync_request_entry"},
             {"topic", topic_id.ToString()},
@@ -230,12 +281,18 @@ class SyncEngine {
         transport_->SendJson(peer_id, req);
       } else if (type == "sync_request_entry") {
         std::string const req_hash = msg.value("hash", "");
+        std::unique_lock<std::mutex> lock(ledger_mutex_);
         auto entry_opt = storage_->GetLedgerEntryByHash(topic_id, req_hash);
+        lock.unlock();
         if (entry_opt) {
           auto peer = transport_->GetPeer(peer_id);
           if (peer && peer->session_cipher->IsReady()) {
             auto encrypted = peer->session_cipher->Encrypt(entry_opt->payload);
-            LGD << "[Sync] Providing entry " << req_hash << " to " << peer_id.ToString();
+            LGD << "[Sync] Providing entry " << req_hash 
+                << " (prev_hash: " << entry_opt->prev_hash 
+                << ", author: " << entry_opt->author_id.ToString()
+                << ", type: " << static_cast<int>(entry_opt->type)
+                << ") to " << peer_id.ToString();
             nlohmann::json const reply = {
                 {"type", "sync_provide_entry"},
                 {"topic", topic_id.ToString()},
@@ -269,6 +326,8 @@ class SyncEngine {
           return;
         }
 
+        it->second.timestamp = Time::SteadyNow();
+
         auto& pending = pending_sync_chain_[topic_id.ToString()];
         std::string const expected_hash = pending.empty() ? it->second.hash : pending.back().prev_hash;
 
@@ -297,15 +356,23 @@ class SyncEngine {
           }
         }
 
-        if (pending.size() > 1000) {
+        if (pending.size() > 1000000) {
           LGE << "[Sync] Sync chain too long, aborting iterative sync.";
           pending.clear();
+          active_sync_requests_.erase(topic_id.ToString());
           return;
         }
         pending.push_back(e);
 
-        if (e.prev_hash == std::string(64, '0') || storage_->HasLedgerEntry(topic_id, e.prev_hash)) {
-          // LCA reached!
+        std::unique_lock<std::mutex> lock(ledger_mutex_);
+        bool const lca_reached = (e.prev_hash == std::string(64, '0') || storage_->HasLedgerEntry(topic_id, e.prev_hash));
+
+        LGI << "[Sync] Received entry: " << received_hash 
+            << " (prev_hash: " << e.prev_hash << ")"
+            << " from " << peer_id.ToString()
+            << " for topic " << topic_id.ToString();
+
+        if (lca_reached) {
           LGI << "[Sync] LCA reached at hash: " << e.prev_hash << ". Resolving " << pending.size() << " peer entries.";
           std::string actual_lca = e.prev_hash;
           if (!storage_->HasLedgerEntry(topic_id, actual_lca)) {
@@ -364,6 +431,8 @@ class SyncEngine {
           }
 
           storage_->ReplaceLedgerEntries(topic_id, actual_lca, combined);
+          active_sync_requests_.erase(topic_id.ToString());
+          lock.unlock();
 
           for (auto const& entry : new_entries) {
             EventQueue::Instance().Push(EventLedgerAppended{entry});
@@ -371,6 +440,7 @@ class SyncEngine {
 
           ProposeSync(topic_id, peer_id);
         } else {
+          lock.unlock();
           nlohmann::json const req = {
               {"type", "sync_request_entry"},
               {"topic", topic_id.ToString()},
@@ -384,6 +454,7 @@ class SyncEngine {
       } else if (type == "sync_confirm") {
         std::string const peer_head = msg.value("head", "");
         LGI << "[Sync] Sync confirmed by peer with head: " << peer_head;
+        std::unique_lock<std::mutex> lock(ledger_mutex_);
         auto const latest = storage_->GetLatestLedgerEntry(topic_id);
         std::string const my_head = latest ? latest->hash : std::string(64, '0');
         if (my_head == peer_head) {
@@ -392,6 +463,7 @@ class SyncEngine {
           pending_sync_chain_[topic_id.ToString()].clear();
         } else {
           LGI << "[Sync] Head mismatch after confirm, requesting sync.";
+          lock.unlock();
           ProposeSync(topic_id, peer_id);
         }
       }
