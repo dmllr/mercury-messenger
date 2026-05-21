@@ -511,6 +511,23 @@ fun ConversationScreen(
         .navigationBarsPadding()
         .imePadding()
     ) {
+      androidx.compose.animation.AnimatedVisibility(visible = historyPage.isSyncing) {
+        if (historyPage.syncProgress < 0f) {
+          androidx.compose.material3.LinearProgressIndicator(
+            modifier = Modifier.fillMaxWidth(),
+            color = MaterialTheme.colorScheme.primary,
+            trackColor = Color.Transparent
+          )
+        } else {
+          androidx.compose.material3.LinearProgressIndicator(
+            progress = { historyPage.syncProgress },
+            modifier = Modifier.fillMaxWidth(),
+            color = MaterialTheme.colorScheme.primary,
+            trackColor = Color.Transparent
+          )
+        }
+      }
+
       if (isSearchActive) {
         if (searchResults.isEmpty() && searchQuery.isNotEmpty()) {
           Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
