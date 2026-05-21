@@ -114,6 +114,12 @@ class SyncEngine {
 
     std::unique_lock<std::mutex> lock(ledger_mutex_);
     auto latest = storage_->GetLatestLedgerEntry(topic_id);
+
+    // Enforce strict local monotonicity for ledger timestamps
+    if (latest && entry.created_at.value <= latest->created_at.value) {
+      entry.created_at.value = latest->created_at.value + 1;
+    }
+
     entry.prev_hash = latest ? latest->hash : std::string(64, '0');
 
     std::string const data_to_hash = entry.prev_hash + entry.author_id.ToString() +
