@@ -732,6 +732,8 @@ msgstr "Size"
 # Conversation screen
 msgid "contact_unreachable"
 msgstr "Contact unreachable. Messages undelivered for over 24 hours."
+msgid "contact_unwilling"
+msgstr "Contact rejected communication"
 
 # Versioning
 msgid "version_we_need_update"

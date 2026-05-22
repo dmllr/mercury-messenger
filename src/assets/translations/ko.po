@@ -732,6 +732,8 @@ msgstr "크기"
 # Conversation screen
 msgid "contact_unreachable"
 msgstr "연락처에 연결할 수 없습니다. 24시간 이상 메시지가 전송되지 않았습니다."
+msgid "contact_unwilling"
+msgstr "연락처가 통신을 거부했습니다"
 
 # Versioning
 msgid "version_we_need_update"

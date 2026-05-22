@@ -732,6 +732,8 @@ msgstr "Ukuran"
 # Conversation screen
 msgid "contact_unreachable"
 msgstr "Kontak tidak dapat dihubungi. Pesan tidak terkirim selama lebih dari 24 jam."
+msgid "contact_unwilling"
+msgstr "Kontak menolak komunikasi"
 
 # Versioning
 msgid "version_we_need_update"

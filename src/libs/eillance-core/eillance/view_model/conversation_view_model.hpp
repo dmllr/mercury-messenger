@@ -70,6 +70,15 @@ class ConversationViewModel {
         }
       }
     });
+    Subscribe<EventContactUnwilling>(queue, [impl](EventContactUnwilling const& event) -> void {
+      if (event.peer_id == impl->peer_id) {
+        std::lock_guard<std::mutex> const lock(impl->mutex);
+        if (impl->state.is_unwilling != event.is_unwilling) {
+          impl->state.is_unwilling = event.is_unwilling;
+          EventQueue::Instance().Push(EventConversationStateUpdated{impl->peer_id, impl->state});
+        }
+      }
+    });
     Subscribe<EventSyncStateChanged>(queue, [impl](EventSyncStateChanged const& event) -> void {
       if (event.peer_id == impl->peer_id) {
         std::lock_guard<std::mutex> const lock(impl->mutex);

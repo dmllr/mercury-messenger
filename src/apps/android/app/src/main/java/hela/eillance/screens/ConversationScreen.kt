@@ -607,6 +607,13 @@ fun ConversationScreen(
             onAction = { chatVM.retrySync() },
             isError = true
           )
+        } else if (historyPage.isUnwilling) {
+          StatusSnackbar(
+            text = stringResource(R.string.contact_unwilling),
+            actionLabel = stringResource(R.string.action_retry),
+            onAction = { chatVM.retrySync() },
+            isError = true
+          )
         }
 
         contact?.let {

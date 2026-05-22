@@ -32,6 +32,7 @@ class DeliveryService {
   std::unordered_map<ContactID, int> retry_delays_s_{};
   std::unordered_set<ContactID> retry_scheduled_{};
   std::unordered_set<ContactID> unreachable_contacts_{};
+  std::unordered_set<ContactID> unwilling_contacts_{};
   std::unordered_map<ContactID, Time::Unit> manual_retry_time_{};
   mutable std::recursive_mutex mutex_;
   std::vector<EventQueue::SubscriberTypeId> event_unsubs_;
@@ -57,6 +58,16 @@ class DeliveryService {
       retry_delays_s_.erase(e.peer_id);
       if (unreachable_contacts_.erase(e.peer_id)) {
         EventQueue::Instance().Push(EventContactUnreachable{e.peer_id, false});
+      }
+    }));
+
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventContactUnwilling>([this](auto const& e) -> void {
+      std::lock_guard<std::recursive_mutex> const lock(mutex_);
+      if (e.is_unwilling) {
+        unwilling_contacts_.insert(e.peer_id);
+        transport_->Disconnect(e.peer_id);
+      } else {
+        unwilling_contacts_.erase(e.peer_id);
       }
     }));
 
@@ -154,6 +165,9 @@ class DeliveryService {
       if (unreachable_contacts_.erase(peer_id) != 0U) {
         EventQueue::Instance().Push(EventContactUnreachable{peer_id, false});
       }
+      if (unwilling_contacts_.erase(peer_id) != 0U) {
+        EventQueue::Instance().Push(EventContactUnwilling{peer_id, false});
+      }
     }
     AttemptDelivery(peer_id);
   }
@@ -166,6 +180,10 @@ class DeliveryService {
           unreachable_contacts_.insert(peer_id);
           EventQueue::Instance().Push(EventContactUnreachable{peer_id, true});
         }
+        return;
+      }
+
+      if (unwilling_contacts_.contains(peer_id)) {
         return;
       }
 
