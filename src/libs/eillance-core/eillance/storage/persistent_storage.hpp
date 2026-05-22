@@ -66,10 +66,10 @@ class PersistentStorage {
   }
 
   // --- Synchronization Ledger ---
-  void AddLedgerEntry(LedgerEntry const& entry) const {
+  void AddLedgerEntry(messaging::LedgerEntry const& entry) const {
     pimpl_->AddLedgerEntry(entry);
   }
-  [[nodiscard]] auto GetLedgerEntriesAfter(TopicID const& topic_id, std::string const& hash) const {
+  [[nodiscard]] auto GetLedgerEntriesAfter(TopicID const& topic_id, messaging::LedgerHash const& hash) const {
     return pimpl_->GetLedgerEntriesAfter(topic_id, hash);
   }
   [[nodiscard]] auto GetLedgerEntries(TopicID const& topic_id) const {
@@ -78,28 +78,28 @@ class PersistentStorage {
   [[nodiscard]] auto GetLatestLedgerEntry(TopicID const& topic_id) const {
     return pimpl_->GetLatestLedgerEntry(topic_id);
   }
-  [[nodiscard]] auto GetLedgerEntryByHash(TopicID const& topic_id, std::string const& hash) const {
+  [[nodiscard]] auto GetLedgerEntryByHash(TopicID const& topic_id, messaging::LedgerHash const& hash) const {
     return pimpl_->GetLedgerEntryByHash(topic_id, hash);
   }
-  void DeleteLedgerEntriesAfter(TopicID const& topic_id, std::string const& hash) const {
+  void DeleteLedgerEntriesAfter(TopicID const& topic_id, messaging::LedgerHash const& hash) const {
     pimpl_->DeleteLedgerEntriesAfter(topic_id, hash);
   }
   [[nodiscard]] auto GetRecentLedgerHashes(TopicID const& topic_id) const {
     return pimpl_->GetRecentLedgerHashes(topic_id);
   }
-  [[nodiscard]] auto HasLedgerEntry(TopicID const& topic_id, std::string const& hash) const {
+  [[nodiscard]] auto HasLedgerEntry(TopicID const& topic_id, messaging::LedgerHash const& hash) const {
     return pimpl_->HasLedgerEntry(topic_id, hash);
   }
   void ReplaceLedgerEntries(
       TopicID const& topic_id,
-      std::string const& lca_hash,
-      std::vector<LedgerEntry> const& entries
+      messaging::LedgerHash const& lca_hash,
+      std::vector<messaging::LedgerEntry> const& entries
   ) const {
     pimpl_->ReplaceLedgerEntries(topic_id, lca_hash, entries);
   }
 
   // --- Sync Requests ---
-  void AddSyncRequest(SyncRequest const& req) const {
+  void AddSyncRequest(messaging::SyncRequest const& req) const {
     pimpl_->AddSyncRequest(req);
   }
   [[nodiscard]] auto GetSyncRequests() const {

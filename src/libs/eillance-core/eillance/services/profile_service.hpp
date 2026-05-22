@@ -59,12 +59,12 @@ class ProfileService {
       msg["photo"] = nullptr;
     }
 
-    sm_->sync_engine->AppendAction(TopicID(peer_id), storage::LedgerActionType::ProfileUpdate, msg);
+    sm_->sync_engine->AppendAction(TopicID(peer_id), messaging::LedgerActionType::ProfileUpdate, msg);
   }
 
   void RequestProfile(ContactID const& peer_id) {
     nlohmann::json const msg = {{"type", "profile_request"}};
-    sm_->sync_engine->AppendAction(TopicID(peer_id), storage::LedgerActionType::ProfileUpdate, msg);
+    sm_->sync_engine->AppendAction(TopicID(peer_id), messaging::LedgerActionType::ProfileUpdate, msg);
   }
 
   void SyncProfile(ContactID const& peer_id) {
@@ -80,7 +80,7 @@ class ProfileService {
     }
   }
 
-  void ProjectProfileUpdate(storage::LedgerEntry const& entry, nlohmann::json const& json, bool const is_mine) {
+  void ProjectProfileUpdate(messaging::LedgerEntry const& entry, nlohmann::json const& json, bool const is_mine) {
     if (is_mine) {
       return;
     }

@@ -67,10 +67,10 @@ class BotApiTest : public ::testing::Test {
 TEST_F(BotApiTest, AutoAcceptContacts) {
   nlohmann::json const req_msg = {{"type", "contact_add_request"}, {"profile", {{"display_name", "Peer One"}}}};
 
-  storage::LedgerEntry entry;
+  messaging::LedgerEntry entry;
   entry.topic_id = TopicID(peer1);
   entry.author_id = peer1;
-  entry.type = storage::LedgerActionType::ContactState;
+  entry.type = messaging::LedgerActionType::ContactState;
   entry.payload = req_msg.dump();
 
   eillance::EventQueue::Instance().Push(EventLedgerAppended{entry});
@@ -150,10 +150,10 @@ TEST_F(BotApiTest, MessageHandling) {
   nlohmann::json const chat_msg =
       {{"type", "chat"}, {"message_id", 123}, {"is_system", false}, {"payload", payload_json}};
 
-  storage::LedgerEntry entry;
+  messaging::LedgerEntry entry;
   entry.topic_id = TopicID(peer1);
   entry.author_id = peer1;
-  entry.type = storage::LedgerActionType::Message;
+  entry.type = messaging::LedgerActionType::Message;
   entry.payload = chat_msg.dump();
 
   EventQueue::Instance().Push(EventLedgerAppended{entry});

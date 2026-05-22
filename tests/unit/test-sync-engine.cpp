@@ -37,11 +37,11 @@ struct PeerNode {
   }
 
   void InjectEntry(TopicID const& topic, std::string const& payload, uint64_t ts, ContactID const& author) const {
-    storage::LedgerEntry entry;
+    messaging::LedgerEntry entry;
     entry.topic_id = topic;
     entry.author_id = author;
     entry.created_at = Timestamp{ts};
-    entry.type = storage::LedgerActionType::Message;
+    entry.type = messaging::LedgerActionType::Message;
     entry.payload = nlohmann::json{{"msg", payload}}.dump();
     storage->AddLedgerEntry(entry);
   }
@@ -112,7 +112,7 @@ TEST_F(SyncEngineTest, SyncProposeEmptyHead) {
   nlohmann::json const propose = {
       {"type", "sync_propose"},
       {"topic", TopicID(idB_).ToString()},
-      {"head", std::string(64, '0')}
+      {"head", messaging::LedgerHash().ToString()}
   };
   A->engine->ProcessSyncMessage(idB_, propose);
 
@@ -121,9 +121,9 @@ TEST_F(SyncEngineTest, SyncProposeEmptyHead) {
 }
 
 TEST_F(SyncEngineTest, IterativeSyncMissingEntries) {
-  A->engine->AppendAction(TopicID(idB_), storage::LedgerActionType::Message, {{"msg", "1"}});
-  A->engine->AppendAction(TopicID(idB_), storage::LedgerActionType::Message, {{"msg", "2"}});
-  A->engine->AppendAction(TopicID(idB_), storage::LedgerActionType::Message, {{"msg", "3"}});
+  A->engine->AppendAction(TopicID(idB_), messaging::LedgerActionType::Message, {{"msg", "1"}});
+  A->engine->AppendAction(TopicID(idB_), messaging::LedgerActionType::Message, {{"msg", "2"}});
+  A->engine->AppendAction(TopicID(idB_), messaging::LedgerActionType::Message, {{"msg", "3"}});
 
   PumpMessages();
 
@@ -135,14 +135,14 @@ TEST_F(SyncEngineTest, IterativeSyncMissingEntries) {
 
 TEST_F(SyncEngineTest, ConflictResolutionTakeBoth) {
   // Alice adds common LCA
-  A->engine->AppendAction(TopicID(idB_), storage::LedgerActionType::Message, {{"msg", "LCA"}});
+  A->engine->AppendAction(TopicID(idB_), messaging::LedgerActionType::Message, {{"msg", "LCA"}});
   PumpMessages();
 
   // Concurrent forks
-  A->engine->AppendAction(TopicID(idB_), storage::LedgerActionType::Message, {{"msg", "A1"}});
-  B->engine->AppendAction(TopicID(idA_), storage::LedgerActionType::Message, {{"msg", "B1"}});
-  A->engine->AppendAction(TopicID(idB_), storage::LedgerActionType::Message, {{"msg", "A2"}});
-  B->engine->AppendAction(TopicID(idA_), storage::LedgerActionType::Message, {{"msg", "B2"}});
+  A->engine->AppendAction(TopicID(idB_), messaging::LedgerActionType::Message, {{"msg", "A1"}});
+  B->engine->AppendAction(TopicID(idA_), messaging::LedgerActionType::Message, {{"msg", "B1"}});
+  A->engine->AppendAction(TopicID(idB_), messaging::LedgerActionType::Message, {{"msg", "A2"}});
+  B->engine->AppendAction(TopicID(idA_), messaging::LedgerActionType::Message, {{"msg", "B2"}});
 
   PumpMessages();
 
@@ -161,19 +161,19 @@ TEST_F(SyncEngineTest, ConflictResolutionTakeBoth) {
 }
 
 TEST_F(SyncEngineTest, PeerHasAllHistoryRemoved) {
-  A->engine->AppendAction(TopicID(idB_), storage::LedgerActionType::Message, {{"msg", "1"}});
-  A->engine->AppendAction(TopicID(idB_), storage::LedgerActionType::Message, {{"msg", "2"}});
-  A->engine->AppendAction(TopicID(idB_), storage::LedgerActionType::Message, {{"msg", "3"}});
+  A->engine->AppendAction(TopicID(idB_), messaging::LedgerActionType::Message, {{"msg", "1"}});
+  A->engine->AppendAction(TopicID(idB_), messaging::LedgerActionType::Message, {{"msg", "2"}});
+  A->engine->AppendAction(TopicID(idB_), messaging::LedgerActionType::Message, {{"msg", "3"}});
   PumpMessages();
 
   ASSERT_EQ(B->storage->GetLedgerEntries(TopicID(idA_)).size(), 3);
 
   // Bob removes history
-  B->storage->DeleteLedgerEntriesAfter(TopicID(idA_), std::string(64, '0'));
+  B->storage->DeleteLedgerEntriesAfter(TopicID(idA_), messaging::LedgerHash());
   ASSERT_EQ(B->storage->GetLedgerEntries(TopicID(idA_)).size(), 0);
 
   // Alice appends new message
-  A->engine->AppendAction(TopicID(idB_), storage::LedgerActionType::Message, {{"msg", "4"}});
+  A->engine->AppendAction(TopicID(idB_), messaging::LedgerActionType::Message, {{"msg", "4"}});
 
   PumpMessages();
 
@@ -299,11 +299,11 @@ TEST_F(SyncEngineTest, SyncSameHeadHashDifferInside) {
 
   B->InjectEntry(TopicID(idA_), "msg1", 1000, idA_);
 
-  storage::LedgerEntry forged_3;
+  messaging::LedgerEntry forged_3;
   forged_3.topic_id = TopicID(idA_);
   forged_3.author_id = idA_;
   forged_3.created_at = Timestamp{1002};
-  forged_3.type = storage::LedgerActionType::Message;
+  forged_3.type = messaging::LedgerActionType::Message;
   forged_3.payload = nlohmann::json{{"msg", "msg3"}}.dump();
   forged_3.hash = a_entries[2].hash;
   forged_3.prev_hash = a_entries[2].prev_hash;
@@ -320,4 +320,41 @@ TEST_F(SyncEngineTest, SyncSameHeadHashDifferInside) {
   for (size_t i = 0; i < 3; ++i) {
     EXPECT_EQ(a_entries[i].hash, b_entries[i].hash);
   }
+}
+
+TEST_F(SyncEngineTest, SyncHistoryLargerThanMaxBatchSize) {
+  for (int i = 0; i < 1200; ++i) {
+    A->InjectEntry(TopicID(idB_), "batch_msg_" + std::to_string(i), 1000 + i, idA_);
+  }
+
+  A->engine->ProposeSync(TopicID(idB_), idB_);
+  PumpMessages();
+
+  auto b_entries = B->storage->GetLedgerEntries(TopicID(idA_));
+  EXPECT_EQ(b_entries.size(), 1200);
+
+  EXPECT_GE(total_transferred_A_to_B_, 1200);
+  EXPECT_EQ(total_transferred_B_to_A_, 0);
+}
+
+TEST_F(SyncEngineTest, SyncValidateAndRepairChain) {
+  A->InjectEntry(TopicID(idB_), "msg1", 1000, idA_);
+  A->InjectEntry(TopicID(idB_), "msg2", 1001, idA_);
+
+  // Corrupt hash of msg2
+  auto entries = A->storage->GetLedgerEntries(TopicID(idB_));
+  entries[1].hash = messaging::LedgerHash(std::string(64, 'f'));
+  A->storage->ReplaceLedgerEntries(TopicID(idB_), messaging::LedgerHash(), entries);
+
+  // Proposing sync triggers ValidateAndRepairChain which fixes the corrupted hash
+  A->engine->ProposeSync(TopicID(idB_), idB_);
+  PumpMessages();
+
+  auto repaired = A->storage->GetLedgerEntries(TopicID(idB_));
+  EXPECT_NE(repaired[1].hash.ToString(), std::string(64, 'f'));
+
+  auto b_entries = B->storage->GetLedgerEntries(TopicID(idA_));
+  EXPECT_EQ(b_entries.size(), 2);
+  EXPECT_EQ(repaired[0].hash, b_entries[0].hash);
+  EXPECT_EQ(repaired[1].hash, b_entries[1].hash);
 }
