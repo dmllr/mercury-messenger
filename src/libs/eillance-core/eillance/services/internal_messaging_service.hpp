@@ -63,6 +63,33 @@ class InternalMessagingService {
           }
         })
     );
+
+    event_unsubs_.push_back(
+        EventQueue::Instance().Subscribe<EventDataPeerConnectionStateChanged>([this](auto const& e) {
+          if (e.state == transport::PeerConnectionState::disconnected ||
+              e.state == transport::PeerConnectionState::failed ||
+              e.state == transport::PeerConnectionState::closed) {
+            auto const current_state = data_transport_->GetConnectionState(e.peer_id);
+            if (current_state != transport::PeerConnectionState::failed &&
+                current_state != transport::PeerConnectionState::closed &&
+                current_state != transport::PeerConnectionState::disconnected) {
+              return;
+            }
+            if (auto peer = data_transport_->GetPeer(e.peer_id)) {
+              peer->data_channel_initialized = false;
+              peer->crcp_verified = false;
+              peer->legacy_prompt_sent = false;
+            }
+          } else if (e.state == transport::PeerConnectionState::connecting ||
+                     e.state == transport::PeerConnectionState::newConnection) {
+            if (auto peer = data_transport_->GetPeer(e.peer_id)) {
+              peer->data_channel_initialized = false;
+              peer->crcp_verified = false;
+              peer->legacy_prompt_sent = false;
+            }
+          }
+        })
+    );
   }
 
   ~InternalMessagingService() {
@@ -121,10 +148,17 @@ class InternalMessagingService {
 
     auto peer = data_transport_->GetPeer(peer_id);
     auto contact = sm_->contact_manager->GetContact(peer_id);
-    if (!contact ||
-        (contact->status != identity::ContactStatus::confirmed && type != "call_reject" && type != "hangup") || !peer ||
-        !peer->crcp_verified) {
-      LGE << "CRCP Enforcement: Dropped message from unconfirmed or unverified peer: " << peer_id.ToString()
+
+    if (type == "peer_unwilling") {
+      EventQueue::Instance().Push(EventContactUnwilling{peer_id, true});
+      return;
+    }
+
+    bool const is_rejected = (contact && contact->status == identity::ContactStatus::rejected);
+    bool const is_confirmed = (contact && contact->status == identity::ContactStatus::confirmed);
+
+    if (!is_confirmed && type != "call_reject" && type != "hangup") {
+      LGE << "CRCP Enforcement: Dropped message from unconfirmed peer: " << peer_id.ToString()
           << " type: " << type;
       if (type == "call_request") {
         nlohmann::json const reject_msg = {
@@ -133,15 +167,16 @@ class InternalMessagingService {
             {"reason", "unauthorized"}
         };
         std::ignore = data_transport_->SendJson(peer_id, reject_msg);
-      } else if (type != "peer_unwilling") {
+      } else if (is_rejected) {
         nlohmann::json const reject_msg = {{"type", "peer_unwilling"}};
         std::ignore = data_transport_->SendJson(peer_id, reject_msg);
       }
       return;
     }
 
-    if (type == "peer_unwilling") {
-      EventQueue::Instance().Push(EventContactUnwilling{peer_id, true});
+    if (!peer || !peer->crcp_verified) {
+      LGE << "CRCP Enforcement: Dropped message from unverified connection: " << peer_id.ToString()
+          << " type: " << type;
       return;
     }
 

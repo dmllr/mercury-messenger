@@ -29,6 +29,7 @@
 #include "eillance/services/sync_engine.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/transport/data_transport.hpp"
+#include "eillance/utils/dispatch_queue.hpp"
 #include "eillance/utils/event_queue.hpp"
 
 namespace eillance::services {
@@ -100,6 +101,23 @@ class MessagingService {
         transport_(sm->data_transport),
         contact_manager_(sm->contact_manager) {
     history_ = std::make_unique<messaging::MessageHistory>(storage_);
+
+    event_unsubs_.push_back(
+        EventQueue::Instance().Subscribe<EventSyncStateChanged>([this](auto const& e) -> void {
+          std::lock_guard<std::mutex> const lock(delivery_receipts_mutex_);
+          is_syncing_[e.peer_id] = e.is_syncing;
+          if (!e.is_syncing) {
+            if (pending_delivery_receipts_.contains(e.peer_id) && !pending_delivery_receipts_[e.peer_id].empty()) {
+              if (!delivery_receipts_debounce_active_[e.peer_id]) {
+                delivery_receipts_debounce_active_[e.peer_id] = true;
+                bg_queue_.DispatchAfter(std::chrono::milliseconds(250), [this, peer_id = e.peer_id]() {
+                  FlushDeliveryReceipts(peer_id);
+                });
+              }
+            }
+          }
+        })
+    );
   }
 
   ~MessagingService() {
@@ -501,7 +519,15 @@ class MessagingService {
 
     if (type == "message_receipt") {
       std::string const status_str = json.value("status", "");
-      uint64_t const target_id = json.value("message_id", 0ULL);
+      std::vector<uint64_t> target_ids;
+      if (json.contains("message_ids")) {
+        for (auto const& id_val : json["message_ids"]) {
+          target_ids.push_back(id_val.get<uint64_t>());
+        }
+      } else {
+        target_ids.push_back(json.value("message_id", 0ULL));
+      }
+
       auto msg_status = messaging::MessageStatus::sending;
       if (status_str == "delivered") {
         msg_status = messaging::MessageStatus::delivered;
@@ -511,8 +537,10 @@ class MessagingService {
         return;
       }
 
-      if (history_->GetHistoryEntry(peer_id, target_id)) {
-        history_->UpdateMessageStatus(peer_id, target_id, msg_status);
+      for (auto const target_id : target_ids) {
+        if (history_->GetHistoryEntry(peer_id, target_id)) {
+          history_->UpdateMessageStatus(peer_id, target_id, msg_status);
+        }
       }
       return;
     }
@@ -595,8 +623,7 @@ class MessagingService {
 
     EventQueue::Instance().Push(EventChatMessageReceived{peer_id, db_entry});
 
-    nlohmann::json const receipt = {{"type", "message_receipt"}, {"status", "delivered"}, {"message_id", message_id}};
-    sm_->sync_engine->AppendAction(TopicID(peer_id), messaging::LedgerActionType::Message, receipt);
+    QueueDeliveryReceipt(peer_id, message_id);
 
     if (!is_system && !sm_->is_foreground) {
       auto contact = contact_manager_->GetContact(peer_id);
@@ -748,12 +775,7 @@ class MessagingService {
       auto [messages, total_messages] = history_->GetHistoryPage(peer_id, 0, page_size);
       for (auto const& h_entry : messages) {
         if (h_entry.id == message_id) {
-          nlohmann::json const receipt = {
-              {"type", "message_receipt"},
-              {"status", "delivered"},
-              {"message_id", message_id}
-          };
-          sm_->sync_engine->AppendAction(TopicID(peer_id), messaging::LedgerActionType::Message, receipt);
+          QueueDeliveryReceipt(peer_id, message_id);
           return;
         }
       }
@@ -773,8 +795,7 @@ class MessagingService {
            .direction = messaging::MessageDirection::received,
            .kind = messaging::HistoryEntryKind::systemMessage}
       );
-      nlohmann::json const receipt = {{"type", "message_receipt"}, {"status", "delivered"}, {"message_id", message_id}};
-      sm_->sync_engine->AppendAction(TopicID(peer_id), messaging::LedgerActionType::Message, receipt);
+      QueueDeliveryReceipt(peer_id, message_id);
       EventQueue::Instance().Push(EventChatMessageReceived{peer_id, entry});
       return;
     }
@@ -821,8 +842,7 @@ class MessagingService {
       }
     }
 
-    nlohmann::json const receipt = {{"type", "message_receipt"}, {"status", "delivered"}, {"message_id", message_id}};
-    sm_->sync_engine->AppendAction(TopicID(peer_id), messaging::LedgerActionType::Message, receipt);
+    QueueDeliveryReceipt(peer_id, message_id);
 
     EventQueue::Instance().Push(EventChatMessageReceived{peer_id, entry});
     if (!is_system && !sm_->is_foreground) {
@@ -855,6 +875,34 @@ class MessagingService {
     return sstream.str();
   }
 
+  void FlushDeliveryReceipts(ContactID const& peer_id) {
+    std::vector<uint64_t> ids;
+    {
+      std::lock_guard<std::mutex> const lock(delivery_receipts_mutex_);
+      if (is_syncing_[peer_id]) {
+        delivery_receipts_debounce_active_[peer_id] = false;
+        return;
+      }
+      ids = std::move(pending_delivery_receipts_[peer_id]);
+      pending_delivery_receipts_.erase(peer_id);
+      delivery_receipts_debounce_active_[peer_id] = false;
+    }
+    if (ids.empty()) {
+      return;
+    }
+    nlohmann::json const receipt = {{"type", "message_receipt"}, {"status", "delivered"}, {"message_ids", ids}};
+    sm_->sync_engine->AppendAction(TopicID(peer_id), messaging::LedgerActionType::Message, receipt);
+  }
+
+  void QueueDeliveryReceipt(ContactID const& peer_id, uint64_t message_id) {
+    std::lock_guard<std::mutex> const lock(delivery_receipts_mutex_);
+    pending_delivery_receipts_[peer_id].push_back(message_id);
+    if (!delivery_receipts_debounce_active_[peer_id]) {
+      delivery_receipts_debounce_active_[peer_id] = true;
+      bg_queue_.DispatchAfter(std::chrono::seconds(1), [this, peer_id]() { FlushDeliveryReceipts(peer_id); });
+    }
+  }
+
   ServiceManager* sm_;
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<transport::DataTransport> transport_;
@@ -862,6 +910,12 @@ class MessagingService {
   std::unique_ptr<messaging::MessageHistory> history_;
 
   std::vector<EventQueue::SubscriberTypeId> event_unsubs_;
+
+  std::unordered_map<ContactID, std::vector<uint64_t>> pending_delivery_receipts_;
+  std::unordered_map<ContactID, bool> delivery_receipts_debounce_active_;
+  std::unordered_map<ContactID, bool> is_syncing_;
+  std::mutex delivery_receipts_mutex_;
+  DispatchQueue bg_queue_{"MsgSvcBg", 1};
 };
 
 }  // namespace eillance::services
