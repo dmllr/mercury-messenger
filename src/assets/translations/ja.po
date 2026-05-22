@@ -732,6 +732,8 @@ msgstr "サイズ"
 # Conversation screen
 msgid "contact_unreachable"
 msgstr "連絡先に到達できません。メッセージが24時間以上配信されていません。"
+msgid "contact_unwilling"
+msgstr "連絡先が通信を拒否しました"
 
 # Versioning
 msgid "version_we_need_update"

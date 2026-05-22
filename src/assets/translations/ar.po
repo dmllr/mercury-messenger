@@ -732,6 +732,8 @@ msgstr "الحجم"
 # Conversation screen
 msgid "contact_unreachable"
 msgstr "جهة الاتصال لا يمكن الوصول إليها. لم يتم تسليم الرسائل لأكثر من 24 ساعة."
+msgid "contact_unwilling"
+msgstr "جهة الاتصال رفضت الاتصال"
 
 # Versioning
 msgid "version_we_need_update"

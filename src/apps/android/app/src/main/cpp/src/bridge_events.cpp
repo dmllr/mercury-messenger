@@ -194,6 +194,7 @@ void InitEventBridge(JavaVM* jvm) {
           history_list,
           e.state.has_older_messages,
           static_cast<jboolean>(e.state.is_unreachable),
+          static_cast<jboolean>(e.state.is_unwilling),
           static_cast<jboolean>(e.state.is_syncing),
           e.state.sync_progress
       );

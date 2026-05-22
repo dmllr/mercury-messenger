@@ -136,6 +136,11 @@ struct EventContactUnreachable {
   bool is_unreachable;
 };
 
+struct EventContactUnwilling {
+  ContactID peer_id;
+  bool is_unwilling;
+};
+
 // --- Ledger Sync Events ---
 struct EventLedgerAppended {
   messaging::LedgerEntry entry;
