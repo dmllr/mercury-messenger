@@ -1,3 +1,4 @@
+// src/libs/eillance-core/eillance/services/sync_engine.hpp
 #pragma once
 
 #include <algorithm>
@@ -31,7 +32,7 @@ namespace eillance::sync {
 class SyncEngine {
   using Json = nlohmann::json;
 
-  static constexpr auto maxBatchSize = 25U;
+  static constexpr size_t maxBatchSize = 25;
 
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<transport::DataTransport> transport_;
@@ -41,8 +42,23 @@ class SyncEngine {
   DispatchQueue dispatchQueue_{"SyncEngine", 1};
   std::vector<EventQueue::SubscriberTypeId> event_unsubs_;
 
-  std::unordered_set<std::string> pending_proposals_;
-  std::mutex proposals_mutex_;
+  struct SyncSession {
+    ContactID peer_id;
+    bool active = false;
+    messaging::LedgerHash current_lca;
+
+    int zero_progress_loops = 0;
+    messaging::LedgerHash last_head;
+
+    std::vector<messaging::LedgerEntry> postponed_events;
+
+    std::vector<messaging::LedgerEntry> my_entries_to_send;
+    size_t peer_total_entries = 0;
+    size_t current_batch_index = 0;
+  };
+
+  std::unordered_map<ContactID, SyncSession> sessions_;
+  std::mutex sessions_mutex_;
   std::mutex ledger_mutex_;
 
   static auto ComputeSHA256(std::string const& data) -> messaging::LedgerHash {
@@ -63,6 +79,8 @@ class SyncEngine {
       return {messaging::LedgerHash(), 0};
     }
 
+    size_t const original_size = entries.size();
+
     std::ranges::sort(entries, [](auto const& a, auto const& b) -> bool {
       if (a.created_at.value != b.created_at.value) {
         return a.created_at.value < b.created_at.value;
@@ -77,13 +95,14 @@ class SyncEngine {
     });
 
     auto unique_range = std::ranges::unique(entries, [](auto const& a, auto const& b) -> bool {
-      return a.created_at.value == b.created_at.value && a.author_id == b.author_id && a.type == b.type &&
-             a.payload == b.payload;
+      return a.created_at.value == b.created_at.value && a.author_id.ToString() == b.author_id.ToString() &&
+             a.type == b.type && a.payload == b.payload;
     });
     entries.erase(unique_range.begin(), unique_range.end());
 
+    bool chain_broken = (entries.size() != original_size);
     auto current_hash = messaging::LedgerHash();
-    bool chain_broken = false;
+
     for (auto& entry : entries) {
       if (entry.prev_hash != current_hash) {
         chain_broken = true;
@@ -104,6 +123,85 @@ class SyncEngine {
     }
 
     return {current_hash, entries.size()};
+  }
+
+  auto BuildCheckpoints(messaging::LedgerHash const& head, TopicID const& topic_id) -> std::vector<std::string> {
+    std::vector<messaging::LedgerHash> all_hashes;
+    messaging::LedgerHash curr = head;
+    while (!curr.IsEmpty()) {
+      all_hashes.push_back(curr);
+      auto entry = storage_->GetLedgerEntryByHash(topic_id, curr);
+      if (!entry) {
+        break;
+      }
+      curr = entry->prev_hash;
+    }
+    all_hashes.push_back(messaging::LedgerHash());
+
+    std::vector<std::string> chk;
+    for (size_t i = 0; i < all_hashes.size(); ++i) {
+      if (i < 50 || i % maxBatchSize == 0) {
+        chk.push_back(all_hashes[i].ToString());
+      }
+    }
+    if (chk.back() != all_hashes.back().ToString()) {
+      chk.push_back(all_hashes.back().ToString());
+    }
+    return chk;
+  }
+
+  void FinishSync(ContactID const& peer_id, TopicID const& topic_id) {
+    std::vector<messaging::LedgerEntry> events_to_fire;
+    {
+      std::lock_guard<std::mutex> const lock(sessions_mutex_);
+      auto& session = sessions_[peer_id];
+      session.active = false;
+      events_to_fire = std::move(session.postponed_events);
+      session.postponed_events.clear();
+      session.zero_progress_loops = 0;
+      session.last_head = messaging::LedgerHash();
+    }
+
+    storage_->RemoveSyncRequest(topic_id, peer_id);
+
+    for (auto const& e : events_to_fire) {
+      EventQueue::Instance().Push(EventLedgerAppended{e});
+    }
+
+    EventQueue::Instance().Push(EventSyncStateChanged{peer_id, false, 1.0f});
+    EventQueue::Instance().Push(EventDataReloaded{});
+    LGI << "[Sync] Sync finished with " << peer_id.ToString();
+  }
+
+  auto parse_entries(ContactID const& peer_id, TopicID const& topic_id, Json const& msg_entries)
+      -> std::vector<messaging::LedgerEntry> {
+    std::vector<messaging::LedgerEntry> parsed;
+    auto const peer = transport_->GetPeer(peer_id);
+    if (!peer || !peer->session_cipher->IsReady()) {
+      return parsed;
+    }
+
+    for (auto const& e_json : msg_entries) {
+      messaging::LedgerEntry e;
+      e.topic_id = topic_id;
+      e.author_id = ContactID(e_json["author"].get<std::string>());
+      e.created_at = Timestamp{e_json["created"].get<uint64_t>()};
+      e.type = static_cast<messaging::LedgerActionType>(e_json["type"].get<int>());
+      e.prev_hash = messaging::LedgerHash(e_json.value("prev_hash", ""));
+      e.hash = messaging::LedgerHash(e_json.value("hash", ""));
+
+      auto const encrypted_bytes = crypto::FromHex(e_json["payload"].get<std::string>());
+      if (!encrypted_bytes.empty()) {
+        auto const decrypted = peer->session_cipher->Decrypt(encrypted_bytes);
+        if (!decrypted.empty()) {
+          e.payload = std::string(reinterpret_cast<char const*>(decrypted.data()), decrypted.size());
+          parsed.push_back(e);
+        } else {
+          LGE << "[Sync] Decryption failed for entry " << e.hash.ToString();
+        }
+      }
+    }
+    return parsed;
   }
 
  public:
@@ -129,6 +227,18 @@ class SyncEngine {
         }
       });
     }));
+
+    event_unsubs_.push_back(
+        EventQueue::Instance().Subscribe<EventDataPeerConnectionStateChanged>([this](auto const& e) -> void {
+          if (e.state == transport::PeerConnectionState::disconnected ||
+              e.state == transport::PeerConnectionState::failed || e.state == transport::PeerConnectionState::closed) {
+            std::lock_guard<std::mutex> const lock(sessions_mutex_);
+            if (sessions_.contains(e.peer_id)) {
+              sessions_[e.peer_id].active = false;
+            }
+          }
+        })
+    );
   }
 
   ~SyncEngine() {
@@ -152,8 +262,6 @@ class SyncEngine {
   void Stop() {
     isRunning_ = false;
     dispatchQueue_.RemovePending();
-    std::lock_guard<std::mutex> const lock(proposals_mutex_);
-    pending_proposals_.clear();
   }
 
   void AppendAction(TopicID const& topic_id, messaging::LedgerActionType type, Json const& payload) {
@@ -164,10 +272,11 @@ class SyncEngine {
     entry.type = type;
     entry.payload = payload.dump();
 
+    ContactID const target_peer(topic_id.value.Span());
+
     std::unique_lock<std::mutex> lock(ledger_mutex_);
     auto latest = storage_->GetLatestLedgerEntry(topic_id);
 
-    // Enforce strict local monotonicity for ledger timestamps
     if (latest && entry.created_at.value <= latest->created_at.value) {
       entry.created_at.value = latest->created_at.value + 1;
     }
@@ -182,10 +291,19 @@ class SyncEngine {
     storage_->AddLedgerEntry(entry);
     lock.unlock();
 
-    EventQueue::Instance().Push(EventLedgerAppended{entry});
+    bool is_syncing = false;
+    {
+      std::lock_guard<std::mutex> const slock(sessions_mutex_);
+      if (sessions_[target_peer].active) {
+        is_syncing = true;
+        sessions_[target_peer].postponed_events.push_back(entry);
+      }
+    }
 
-    // For 1-on-1 chats, the target peer is the TopicID.
-    ContactID const target_peer(topic_id.value.Span());
+    if (!is_syncing) {
+      EventQueue::Instance().Push(EventLedgerAppended{entry});
+    }
+
     storage_->AddSyncRequest({topic_id, target_peer, Timestamp::Now(), Timestamp{0}});
 
     auto contact = storage_->GetContact(target_peer);
@@ -203,458 +321,375 @@ class SyncEngine {
     }
   }
 
+  void VerifySyncState(TopicID const& topic_id, ContactID const& target_peer) {
+    messaging::LedgerHash head;
+    size_t size = 0;
+    {
+      std::unique_lock<std::mutex> const lock(ledger_mutex_);
+      auto const [fst, snd] = ValidateAndRepairChain(topic_id);
+      head = fst;
+      size = snd;
+    }
+    LGI << "[Sync] Verifying sync state with " << target_peer.ToString() << " for topic " << topic_id.ToString()
+        << ". Head: " << head.ToString() << " Size: " << size;
+    Json const msg =
+        {{"type", "sync_start"}, {"topic", topic_id.ToString()}, {"head", head.ToString()}, {"size", size}};
+    transport_->SendJson(target_peer, msg);
+  }
+
   void ProposeSync(TopicID const& topic_id, ContactID const& target_peer) {
-    std::string const key = topic_id.ToString() + ":" + target_peer.ToString();
     {
       std::unique_lock<std::mutex> const lock(ledger_mutex_);
       std::ignore = ValidateAndRepairChain(topic_id);
     }
+
     {
-      std::lock_guard<std::mutex> const lock(proposals_mutex_);
-      if (pending_proposals_.contains(key)) {
+      std::lock_guard<std::mutex> const lock(sessions_mutex_);
+      auto& session = sessions_[target_peer];
+      if (session.active) {
         return;
       }
-      pending_proposals_.insert(key);
+      session.peer_id = target_peer;
+      session.active = true;
+      session.current_lca = messaging::LedgerHash();
+      session.zero_progress_loops = 0;
+      session.last_head = messaging::LedgerHash();
+      session.postponed_events.clear();
     }
 
-    dispatchQueue_.DispatchAfter(std::chrono::milliseconds(250), [this, topic_id, target_peer, key]() -> void {
-      {
-        std::lock_guard<std::mutex> const lock(proposals_mutex_);
-        pending_proposals_.erase(key);
-      }
-      messaging::LedgerHash head;
-      size_t size = 0;
-      {
-        std::unique_lock<std::mutex> const lock(ledger_mutex_);
-        auto const [fst, snd] = ValidateAndRepairChain(topic_id);
-        head = fst;
-        size = snd;
-      }
-      LGI << "[Sync] Proposing sync to " << target_peer.ToString() << " for topic " << topic_id.ToString()
-          << " with head " << head.ToString() << " and size " << size;
-      Json const msg =
-          {{"type", "sync_propose"}, {"topic", topic_id.ToString()}, {"head", head.ToString()}, {"size", size}};
-      transport_->SendJson(target_peer, msg);
-    });
+    EventQueue::Instance().Push(EventSyncStateChanged{target_peer, true, 0.0f});
+
+    dispatchQueue_.Dispatch([this, topic_id, target_peer]() -> void { VerifySyncState(topic_id, target_peer); });
   }
 
   void ProcessSyncMessage(ContactID const& peer_id, Json const& msg) {
     try {
       std::string const type = msg.value("type", "");
 
-      // In 1-on-1 P2P chats, the remote peer's "topic" for us is our own ID, but our local
-      // topic for this ledger is the remote's peer_id. We map it directly to the sender.
       TopicID const topic_id(peer_id);
 
-      if (type == "sync_propose") {
-        messaging::LedgerHash const peer_head = msg.value("head", messaging::LedgerHash{});
+      if (type == "sync_start") {
+        LGD << "[Sync] Received sync_start from " << peer_id.ToString() << " with head " << msg.value("head", "");
+        messaging::LedgerHash const peer_head(msg.value("head", ""));
         size_t const peer_size = msg.value("size", static_cast<size_t>(0));
-        std::unique_lock<std::mutex> lock(ledger_mutex_);
 
+        std::unique_lock<std::mutex> lock(ledger_mutex_);
         auto const [my_head, my_size] = ValidateAndRepairChain(topic_id);
 
-        if (peer_head == my_head) {
-          if (peer_size != 0 && peer_size != my_size) {
-            LGE << "[Sync] CRITICAL: Same head but different size! peer_size=" << peer_size << " my_size=" << my_size;
-          } else {
-            storage_->RemoveSyncRequest(topic_id, peer_id);
-            lock.unlock();
-            Json const confirm = {
-                {"type", "sync_confirm"},
-                {"topic", topic_id.ToString()},
-                {"head", my_head.ToString()},
-                {"size", my_size}
-            };
-            transport_->SendJson(peer_id, confirm);
-            EventQueue::Instance().Push(EventSyncStateChanged{peer_id, false, 1.0f});
-            return;
-          }
-        }
-
-        if (storage_->HasLedgerEntry(topic_id, peer_head)) {
+        if (peer_head == my_head && peer_size == my_size) {
+          LGI << "[Sync] Heads and sizes match! Sync complete with " << peer_id.ToString();
+          Json const reply = {{"type", "sync_done"}, {"topic", topic_id.ToString()}};
+          transport_->SendJson(peer_id, reply);
           lock.unlock();
-          ProposeSync(topic_id, peer_id);
+          dispatchQueue_.Dispatch([this, peer_id, topic_id]() -> void { FinishSync(peer_id, topic_id); });
           return;
         }
 
-        auto build_checkpoints = [&](messaging::LedgerHash head) -> std::vector<messaging::LedgerHash> {
-          std::vector<messaging::LedgerHash> all_hashes;
-          messaging::LedgerHash curr = head;
-          while (!curr.IsEmpty()) {
-            all_hashes.push_back(curr);
-            auto entry = storage_->GetLedgerEntryByHash(topic_id, curr);
-            if (!entry) break;
-            curr = entry->prev_hash;
-          }
-          all_hashes.push_back(messaging::LedgerHash());
-          std::vector<messaging::LedgerHash> chk;
-          for (size_t i = 0; i < all_hashes.size(); i += maxBatchSize) {
-            chk.push_back(all_hashes[i]);
-          }
-          if (chk.back() != all_hashes.back()) {
-            chk.push_back(all_hashes.back());
-          }
-          return chk;
-        };
-        std::vector<messaging::LedgerHash> checkpoints = build_checkpoints(my_head);
+        if (peer_head == my_head && peer_size != my_size) {
+          LGE << "[Sync] CRITICAL: Same head but different size! peer_size=" << peer_size << " my_size=" << my_size;
+        }
 
+        auto checkpoints = BuildCheckpoints(my_head, topic_id);
         lock.unlock();
-        Json const req = {
-            {"type", "sync_request_forward"},
-            {"topic", topic_id.ToString()},
-            {"checkpoints", checkpoints}
-        };
+
+        {
+          std::lock_guard<std::mutex> const slock(sessions_mutex_);
+          auto& session = sessions_[peer_id];
+          session.active = true;
+          session.last_head = peer_head;
+        }
+
+        EventQueue::Instance().Push(EventSyncStateChanged{peer_id, true, 0.0f});
+
+        Json const req = {{"type", "sync_checkpoints"}, {"topic", topic_id.ToString()}, {"checkpoints", checkpoints}};
         transport_->SendJson(peer_id, req);
-        EventQueue::Instance().Push(EventSyncStateChanged{peer_id, true, -1.0f});
-      } else if (type == "sync_request_forward") {
-        auto checkpoints = msg.value("checkpoints", std::vector<messaging::LedgerHash>{});
-        std::unique_lock<std::mutex> lock(ledger_mutex_);
+
+      } else if (type == "sync_checkpoints") {
+        LGD << "[Sync] Received sync_checkpoints from " << peer_id.ToString();
+        auto checkpoints = msg.value("checkpoints", std::vector<std::string>{});
         messaging::LedgerHash lca;
-        for (auto const& cp : checkpoints) {
+
+        std::unique_lock<std::mutex> lock(ledger_mutex_);
+        for (auto const& cp_str : checkpoints) {
+          messaging::LedgerHash const cp(cp_str);
           if (cp.IsEmpty() || storage_->HasLedgerEntry(topic_id, cp)) {
             lca = cp;
             break;
           }
         }
+        auto my_entries = storage_->GetLedgerEntriesAfter(topic_id, lca);
+        lock.unlock();
 
-        if (!checkpoints.empty() && lca != checkpoints.front()) {
-          // Fork detected
-          Json const reply = {{"type", "sync_fork_detected"}, {"topic", topic_id.ToString()}, {"lca", lca.ToString()}};
-          transport_->SendJson(peer_id, reply);
+        LGI << "[Sync] Found LCA " << lca.ToString() << " for peer " << peer_id.ToString() << " with "
+            << my_entries.size() << " entries to send.";
 
-          auto entries = storage_->GetLedgerEntriesAfter(topic_id, lca);
-          lock.unlock();
+        std::ranges::sort(my_entries, [](auto const& a, auto const& b) -> bool {
+          if (a.created_at.value != b.created_at.value) return a.created_at.value < b.created_at.value;
+          if (a.author_id != b.author_id) return a.author_id < b.author_id;
+          if (a.type != b.type) return a.type < b.type;
+          return a.payload < b.payload;
+        });
 
-          if (!entries.empty()) {
-            size_t batch_size = maxBatchSize;
-            while (batch_size > 0) {
-              size_t const actual_size = std::min(batch_size, entries.size());
-              Json entries_json = Json::array();
-              auto peer_transport = transport_->GetPeer(peer_id);
-              if (!peer_transport || !peer_transport->session_cipher->IsReady()) {
-                break;
-              }
+        {
+          std::lock_guard<std::mutex> const slock(sessions_mutex_);
+          auto& session = sessions_[peer_id];
+          session.active = true;
 
-              for (size_t i = 0; i < actual_size; ++i) {
-                auto const& entry = entries[i];
-                auto encrypted = peer_transport->session_cipher->Encrypt(entry.payload);
+          if (session.current_lca == lca) {
+            session.zero_progress_loops++;
+            if (session.zero_progress_loops > 3) {
+              LGE << "[Sync] LCA did not change! Stuck in loop with " << peer_id.ToString() << ". Aborting sync.";
+              dispatchQueue_.Dispatch([this, peer_id, topic_id]() -> void { FinishSync(peer_id, topic_id); });
+              return;
+            }
+          } else {
+            session.zero_progress_loops = 0;
+          }
+          session.current_lca = lca;
+          session.my_entries_to_send = my_entries;
+          session.current_batch_index = 0;
+          session.peer_total_entries = 0;
+        }
+
+        size_t const end = std::min<size_t>(maxBatchSize, my_entries.size());
+        std::vector<messaging::LedgerEntry> batch(my_entries.begin(), my_entries.begin() + end);
+
+        Json entries_json = Json::array();
+        if (auto peer = transport_->GetPeer(peer_id); peer && peer->session_cipher->IsReady()) {
+          for (auto const& e : batch) {
+            auto encrypted = peer->session_cipher->Encrypt(e.payload);
+            if (!encrypted.empty()) {
+              entries_json.push_back(
+                  {{"author", e.author_id.ToString()},
+                   {"created", e.created_at.value},
+                   {"type", static_cast<int>(e.type)},
+                   {"payload", crypto::ToHex(encrypted)},
+                   {"prev_hash", e.prev_hash.ToString()},
+                   {"hash", e.hash.ToString()}}
+              );
+            }
+          }
+        }
+
+        Json const req = {
+            {"type", "sync_batch"},
+            {"topic", topic_id.ToString()},
+            {"lca", lca.ToString()},
+            {"batch_index", 0},
+            {"total_entries", my_entries.size()},
+            {"entries", entries_json}
+        };
+        transport_->SendJson(peer_id, req);
+
+      } else if (type == "sync_batch") {
+        messaging::LedgerHash const lca(msg.value("lca", ""));
+        size_t const batch_index = msg.value("batch_index", 0ULL);
+        size_t const peer_total_entries = msg.value("total_entries", 0ULL);
+
+        LGI << "[Sync] Received sync_batch from " << peer_id.ToString() << " batch_index: " << batch_index
+            << " containing " << msg["entries"].size() << " entries.";
+
+        auto peer_entries = parse_entries(peer_id, topic_id, msg["entries"]);
+        std::vector<messaging::LedgerEntry> my_batch;
+        size_t my_total_entries = 0;
+
+        {
+          std::lock_guard<std::mutex> const slock(sessions_mutex_);
+          auto& session = sessions_[peer_id];
+          session.active = true;
+
+          if (batch_index == 0) {
+            std::unique_lock<std::mutex> db_lock(ledger_mutex_);
+            auto my_entries = storage_->GetLedgerEntriesAfter(topic_id, lca);
+            std::ranges::sort(my_entries, [](auto const& a, auto const& b) -> bool {
+              if (a.created_at.value != b.created_at.value) return a.created_at.value < b.created_at.value;
+              if (a.author_id != b.author_id) return a.author_id < b.author_id;
+              if (a.type != b.type) return a.type < b.type;
+              return a.payload < b.payload;
+            });
+            session.my_entries_to_send = my_entries;
+          }
+          session.current_batch_index = batch_index;
+          session.peer_total_entries = peer_total_entries;
+          my_total_entries = session.my_entries_to_send.size();
+
+          size_t start_idx = batch_index * maxBatchSize;
+          if (start_idx < my_total_entries) {
+            size_t end_idx = std::min<size_t>(start_idx + maxBatchSize, my_total_entries);
+            my_batch.assign(
+                session.my_entries_to_send.begin() + start_idx,
+                session.my_entries_to_send.begin() + end_idx
+            );
+          }
+        }
+
+        std::vector<messaging::LedgerEntry> actually_new;
+        if (!peer_entries.empty()) {
+          std::unique_lock<std::mutex> db_lock(ledger_mutex_);
+          auto existing_entries = storage_->GetLedgerEntries(topic_id);
+          std::unordered_set<std::string> existing_signatures;
+          for (auto const& ex : existing_entries) {
+            existing_signatures.insert(
+                ex.author_id.ToString() + std::to_string(ex.created_at.value) +
+                std::to_string(static_cast<int>(ex.type)) + ex.payload
+            );
+          }
+
+          for (auto& e : peer_entries) {
+            std::string sig = e.author_id.ToString() + std::to_string(e.created_at.value) +
+                              std::to_string(static_cast<int>(e.type)) + e.payload;
+            if (!existing_signatures.contains(sig)) {
+              actually_new.push_back(e);
+              storage_->AddLedgerEntry(e);
+            }
+          }
+
+          if (!actually_new.empty()) {
+            std::ignore = ValidateAndRepairChain(topic_id);
+          }
+        }
+
+        {
+          std::lock_guard<std::mutex> const slock(sessions_mutex_);
+          auto& session = sessions_[peer_id];
+          session.active = true;
+          for (auto& e : actually_new) {
+            session.postponed_events.push_back(e);
+          }
+        }
+
+        Json entries_json = Json::array();
+        if (auto peer = transport_->GetPeer(peer_id); peer && peer->session_cipher->IsReady()) {
+          for (auto const& e : my_batch) {
+            auto encrypted = peer->session_cipher->Encrypt(e.payload);
+            if (!encrypted.empty()) {
+              entries_json.push_back(
+                  {{"author", e.author_id.ToString()},
+                   {"created", e.created_at.value},
+                   {"type", static_cast<int>(e.type)},
+                   {"payload", crypto::ToHex(encrypted)},
+                   {"prev_hash", e.prev_hash.ToString()},
+                   {"hash", e.hash.ToString()}}
+              );
+            }
+          }
+        }
+
+        Json const reply = {
+            {"type", "sync_batch_reply"},
+            {"topic", topic_id.ToString()},
+            {"lca", lca.ToString()},
+            {"batch_index", batch_index},
+            {"total_entries", my_total_entries},
+            {"entries", entries_json}
+        };
+        transport_->SendJson(peer_id, reply);
+        EventQueue::Instance().Push(EventSyncStateChanged{peer_id, true, 0.5f});
+
+      } else if (type == "sync_batch_reply") {
+        messaging::LedgerHash const lca(msg.value("lca", ""));
+        size_t const batch_index = msg.value("batch_index", 0ULL);
+        size_t const peer_total_entries = msg.value("total_entries", 0ULL);
+
+        LGI << "[Sync] Received sync_batch_reply from " << peer_id.ToString() << " batch_index: " << batch_index
+            << " containing " << msg["entries"].size() << " entries.";
+
+        auto peer_entries = parse_entries(peer_id, topic_id, msg["entries"]);
+        std::vector<messaging::LedgerEntry> actually_new;
+
+        if (!peer_entries.empty()) {
+          std::unique_lock<std::mutex> const db_lock(ledger_mutex_);
+          auto existing_entries = storage_->GetLedgerEntries(topic_id);
+          std::unordered_set<std::string> existing_signatures;
+          for (auto const& ex : existing_entries) {
+            existing_signatures.insert(
+                ex.author_id.ToString() + std::to_string(ex.created_at.value) +
+                std::to_string(static_cast<int>(ex.type)) + ex.payload
+            );
+          }
+
+          for (auto& e : peer_entries) {
+            std::string const sig = e.author_id.ToString() + std::to_string(e.created_at.value) +
+                                    std::to_string(static_cast<int>(e.type)) + e.payload;
+            if (!existing_signatures.contains(sig)) {
+              actually_new.push_back(e);
+              storage_->AddLedgerEntry(e);
+            }
+          }
+
+          if (!actually_new.empty()) {
+            std::ignore = ValidateAndRepairChain(topic_id);
+          }
+        }
+
+        bool has_more_batches = false;
+        size_t next_batch_index = batch_index + 1;
+        std::vector<messaging::LedgerEntry> my_next_batch;
+        size_t my_total = 0;
+
+        {
+          std::lock_guard<std::mutex> const slock(sessions_mutex_);
+          auto& session = sessions_[peer_id];
+          session.active = true;
+          for (auto& e : actually_new) {
+            session.postponed_events.push_back(e);
+          }
+
+          session.peer_total_entries = peer_total_entries;
+          my_total = session.my_entries_to_send.size();
+
+          if ((next_batch_index * maxBatchSize < my_total) || (next_batch_index * maxBatchSize < peer_total_entries)) {
+            has_more_batches = true;
+            size_t start_idx = next_batch_index * maxBatchSize;
+            if (start_idx < my_total) {
+              size_t end_idx = std::min<size_t>(start_idx + maxBatchSize, my_total);
+              my_next_batch.assign(
+                  session.my_entries_to_send.begin() + start_idx,
+                  session.my_entries_to_send.begin() + end_idx
+              );
+            }
+          }
+        }
+
+        if (has_more_batches) {
+          LGI << "[Sync] Sending next batch " << next_batch_index << " out of approx max(" << (my_total / maxBatchSize)
+              << ", " << (peer_total_entries / maxBatchSize) << ") for peer " << peer_id.ToString();
+
+          Json entries_json = Json::array();
+          if (auto peer = transport_->GetPeer(peer_id); peer && peer->session_cipher->IsReady()) {
+            for (auto const& e : my_next_batch) {
+              auto encrypted = peer->session_cipher->Encrypt(e.payload);
+              if (!encrypted.empty()) {
                 entries_json.push_back(
-                    {{"author", entry.author_id.ToString()},
-                     {"created", entry.created_at.value},
-                     {"type", static_cast<int>(entry.type)},
+                    {{"author", e.author_id.ToString()},
+                     {"created", e.created_at.value},
+                     {"type", static_cast<int>(e.type)},
                      {"payload", crypto::ToHex(encrypted)},
-                     {"prev_hash", entry.prev_hash.ToString()},
-                     {"hash", entry.hash.ToString()}}
+                     {"prev_hash", e.prev_hash.ToString()},
+                     {"hash", e.hash.ToString()}}
                 );
               }
-
-              Json const fork_reply = {
-                  {"type", "sync_provide_fork"},
-                  {"topic", topic_id.ToString()},
-                  {"entries", entries_json}
-              };
-
-              if (transport_->SendJson(peer_id, fork_reply)) {
-                LGI << "[Sync] Sent fork of " << actual_size << " entries.";
-                break;
-              }
-              batch_size /= 2;
             }
           }
-          return;
-        }
 
-        auto entries = storage_->GetLedgerEntriesAfter(topic_id, lca);
-        lock.unlock();
-
-        if (entries.empty()) {
-          return;
-        }
-
-        size_t batch_size = maxBatchSize;
-        while (batch_size > 0) {
-          size_t const actual_size = std::min(batch_size, entries.size());
-          Json entries_json = Json::array();
-          auto peer_transport = transport_->GetPeer(peer_id);
-          if (!peer_transport || !peer_transport->session_cipher->IsReady()) {
-            return;
-          }
-
-          for (size_t i = 0; i < actual_size; ++i) {
-            auto const& e = entries[i];
-            auto encrypted = peer_transport->session_cipher->Encrypt(e.payload);
-            entries_json.push_back(
-                {{"author", e.author_id.ToString()},
-                 {"created", e.created_at.value},
-                 {"type", static_cast<int>(e.type)},
-                 {"payload", crypto::ToHex(encrypted)},
-                 {"prev_hash", e.prev_hash.ToString()},
-                 {"hash", e.hash.ToString()}}
-            );
-          }
-
-          Json const reply = {
-              {"type", "sync_provide_forward_batch"},
+          Json const req = {
+              {"type", "sync_batch"},
               {"topic", topic_id.ToString()},
-              {"entries", entries_json},
-              {"has_more", actual_size < entries.size()}
+              {"lca", lca.ToString()},
+              {"batch_index", next_batch_index},
+              {"total_entries", my_total},
+              {"entries", entries_json}
           };
-
-          if (transport_->SendJson(peer_id, reply)) {
-            LGI << "[Sync] Sent forward batch of " << actual_size << " entries.";
-            break;
-          }
-          batch_size /= 2;
-        }
-      } else if (type == "sync_fork_detected") {
-        messaging::LedgerHash const lca = msg.value("lca", messaging::LedgerHash{});
-        std::unique_lock<std::mutex> lock(ledger_mutex_);
-        auto entries = storage_->GetLedgerEntriesAfter(topic_id, lca);
-        lock.unlock();
-
-        if (entries.empty()) {
-          return;
-        }
-
-        size_t batch_size = maxBatchSize;
-        while (batch_size > 0) {
-          auto const actual_size = std::min(batch_size, entries.size());
-          Json entries_json = Json::array();
-          auto peer_transport = transport_->GetPeer(peer_id);
-          if (!peer_transport || !peer_transport->session_cipher->IsReady()) {
-            return;
-          }
-
-          for (size_t i = 0; i < actual_size; ++i) {
-            auto const& e = entries[i];
-            auto encrypted = peer_transport->session_cipher->Encrypt(e.payload);
-            entries_json.push_back(
-                {{"author", e.author_id.ToString()},
-                 {"created", e.created_at.value},
-                 {"type", static_cast<int>(e.type)},
-                 {"payload", crypto::ToHex(encrypted)},
-                 {"prev_hash", e.prev_hash.ToString()},
-                 {"hash", e.hash.ToString()}}
-            );
-          }
-
-          Json const reply = {{"type", "sync_provide_fork"}, {"topic", topic_id.ToString()}, {"entries", entries_json}};
-
-          if (transport_->SendJson(peer_id, reply)) {
-            LGI << "[Sync] Sent fork of " << actual_size << " entries.";
-            break;
-          }
-          batch_size /= 2;
-        }
-      } else if (type == "sync_provide_fork" || type == "sync_provide_forward_batch") {
-        auto parse_entries = [&](Json const& msg_entries) -> std::vector<messaging::LedgerEntry> {
-          std::vector<messaging::LedgerEntry> parsed;
-          auto const peer = transport_->GetPeer(peer_id);
-          if (!peer || !peer->session_cipher->IsReady()) {
-            return parsed;
-          }
-
-          for (auto const& e_json : msg_entries) {
-            messaging::LedgerEntry e;
-            e.topic_id = topic_id;
-            e.author_id = ContactID(e_json["author"].get<std::string>());
-            e.created_at = Timestamp{e_json["created"].get<uint64_t>()};
-            e.type = static_cast<messaging::LedgerActionType>(e_json["type"].get<int>());
-            e.prev_hash = messaging::LedgerHash(e_json.value("prev_hash", ""));
-            e.hash = messaging::LedgerHash(e_json.value("hash", ""));
-
-            auto const encrypted_bytes = crypto::FromHex(e_json["payload"].get<std::string>());
-            if (!encrypted_bytes.empty()) {
-              auto const decrypted = peer->session_cipher->Decrypt(encrypted_bytes);
-              if (!decrypted.empty()) {
-                e.payload = decrypted;
-                parsed.push_back(e);
-              } else {
-                LGE << "[Sync] Decryption failed for entry " << e.hash.ToString();
-              }
-            }
-          }
-          return parsed;
-        };
-
-        auto merge_entries = [&](std::vector<messaging::LedgerEntry> peer_entries) -> void {
-          if (peer_entries.empty()) {
-            return;
-          }
-          messaging::LedgerHash actual_lca = peer_entries.front().prev_hash;
-          if (!storage_->HasLedgerEntry(topic_id, actual_lca)) {
-            actual_lca = messaging::LedgerHash();
-          }
-
-          auto my_entries = storage_->GetLedgerEntriesAfter(topic_id, actual_lca);
-
-          std::vector<messaging::LedgerEntry> combined;
-          combined.reserve(my_entries.size() + peer_entries.size());
-          combined.insert(combined.end(), my_entries.begin(), my_entries.end());
-          combined.insert(combined.end(), peer_entries.begin(), peer_entries.end());
-
-          std::ranges::sort(combined, [](auto const& a, auto const& b) {
-            if (a.created_at.value != b.created_at.value) {
-              return a.created_at.value < b.created_at.value;
-            }
-            if (a.author_id != b.author_id) {
-              return a.author_id < b.author_id;
-            }
-            if (a.type != b.type) {
-              return a.type < b.type;
-            }
-            return a.payload < b.payload;
-          });
-
-          auto unique_range = std::ranges::unique(combined, [](auto const& a, auto const& b) {
-            return a.created_at.value == b.created_at.value && a.author_id == b.author_id && a.type == b.type &&
-                   a.payload == b.payload;
-          });
-          combined.erase(unique_range.begin(), unique_range.end());
-
-          std::vector<messaging::LedgerEntry> new_entries;
-          for (auto const& ce : combined) {
-            bool found = false;
-            for (auto const& me : my_entries) {
-              if (ce.author_id == me.author_id && ce.created_at.value == me.created_at.value && ce.type == me.type &&
-                  ce.payload == me.payload) {
-                found = true;
-                break;
-              }
-            }
-            if (!found) {
-              new_entries.push_back(ce);
-            }
-          }
-
-          auto current_hash = actual_lca;
-          for (auto& entry : combined) {
-            entry.prev_hash = current_hash;
-            std::string const data_to_hash = entry.prev_hash.ToString() + entry.author_id.ToString() +
-                                             std::to_string(entry.created_at.value) +
-                                             std::to_string(static_cast<int>(entry.type)) + entry.payload;
-            entry.hash = ComputeSHA256(data_to_hash);
-            current_hash = entry.hash;
-          }
-
-          size_t match_count = 0;
-          while (match_count < my_entries.size() && match_count < combined.size()) {
-            auto const& o = my_entries[match_count];
-            auto const& n = combined[match_count];
-            if (o.author_id == n.author_id && o.created_at.value == n.created_at.value && 
-                o.type == n.type && o.payload == n.payload && o.hash == n.hash) {
-              match_count++;
-            } else {
-              break;
-            }
-          }
-
-          messaging::LedgerHash optimal_lca = actual_lca;
-          if (match_count > 0) {
-            optimal_lca = combined[match_count - 1].hash;
-          }
-
-          std::vector<messaging::LedgerEntry> entries_to_write(combined.begin() + match_count, combined.end());
-          
-          if (!entries_to_write.empty() || combined.size() != my_entries.size() || match_count != combined.size()) {
-            storage_->ReplaceLedgerEntries(topic_id, optimal_lca, entries_to_write);
-          }
-
-          for (auto const& entry : new_entries) {
-            EventQueue::Instance().Push(EventLedgerAppended{entry});
-          }
-        };
-
-        if (type == "sync_provide_fork") {
-          auto peer_entries = parse_entries(msg["entries"]);
-          if (peer_entries.empty()) {
-            return;
-          }
-
-          std::unique_lock<std::mutex> lock(ledger_mutex_);
-          merge_entries(peer_entries);
-          lock.unlock();
-
-          ProposeSync(topic_id, peer_id);
-        } else if (type == "sync_provide_forward_batch") {
-          auto peer_entries = parse_entries(msg["entries"]);
-          if (peer_entries.empty()) {
-            storage_->RemoveSyncRequest(topic_id, peer_id);
-            return;
-          }
-
-          std::unique_lock<std::mutex> lock(ledger_mutex_);
-          merge_entries(peer_entries);
-
-          bool const has_more = msg.value("has_more", false);
-          if (has_more) {
-            auto const result = ValidateAndRepairChain(topic_id);
-            messaging::LedgerHash const my_head = result.first;
-
-            auto build_checkpoints = [&](messaging::LedgerHash head) -> std::vector<messaging::LedgerHash> {
-              std::vector<messaging::LedgerHash> all_hashes;
-              messaging::LedgerHash curr = head;
-              while (!curr.IsEmpty()) {
-                all_hashes.push_back(curr);
-                auto entry = storage_->GetLedgerEntryByHash(topic_id, curr);
-                if (!entry) break;
-                curr = entry->prev_hash;
-              }
-              all_hashes.push_back(messaging::LedgerHash());
-              std::vector<messaging::LedgerHash> chk;
-              for (size_t i = 0; i < all_hashes.size(); i += maxBatchSize) {
-                chk.push_back(all_hashes[i]);
-              }
-              if (chk.back() != all_hashes.back()) {
-                chk.push_back(all_hashes.back());
-              }
-              return chk;
-            };
-            std::vector<messaging::LedgerHash> checkpoints = build_checkpoints(my_head);
-            lock.unlock();
-
-            Json const req = {
-                {"type", "sync_request_forward"},
-                {"topic", topic_id.ToString()},
-                {"checkpoints", checkpoints}
-            };
-            transport_->SendJson(peer_id, req);
-            EventQueue::Instance().Push(EventSyncStateChanged{peer_id, true, -1.0f});
-          } else {
-            auto const result = ValidateAndRepairChain(topic_id);
-            messaging::LedgerHash const my_head = result.first;
-            size_t const my_size = result.second;
-            lock.unlock();
-
-            Json const confirm = {
-                {"type", "sync_confirm"},
-                {"topic", topic_id.ToString()},
-                {"head", my_head.ToString()},
-                {"size", my_size}
-            };
-            transport_->SendJson(peer_id, confirm);
-            storage_->RemoveSyncRequest(topic_id, peer_id);
-            EventQueue::Instance().Push(EventSyncStateChanged{peer_id, false, 1.0f});
-          }
-        }
-      } else if (type == "sync_confirm") {
-        messaging::LedgerHash const peer_head = msg.value("head", messaging::LedgerHash{});
-        size_t const peer_size = msg.value("size", static_cast<size_t>(0));
-        std::unique_lock<std::mutex> lock(ledger_mutex_);
-        auto const result = ValidateAndRepairChain(topic_id);
-        messaging::LedgerHash const my_head = result.first;
-        size_t const my_size = result.second;
-
-        if (my_head == peer_head) {
-          if (peer_size != 0 && peer_size != my_size) {
-            LGE << "[Sync] CRITICAL: Same head but different size! peer_size=" << peer_size << " my_size=" << my_size;
-          }
-          storage_->RemoveSyncRequest(topic_id, peer_id);
-          EventQueue::Instance().Push(EventSyncStateChanged{peer_id, false, 1.0f});
+          transport_->SendJson(peer_id, req);
+          EventQueue::Instance().Push(EventSyncStateChanged{peer_id, true, 0.5f});
         } else {
-          lock.unlock();
-          ProposeSync(topic_id, peer_id);
+          LGI << "[Sync] Batch exchange complete for " << peer_id.ToString() << ". Repeating VerifySyncState.";
+          dispatchQueue_.Dispatch([this, peer_id, topic_id]() -> void { VerifySyncState(topic_id, peer_id); });
         }
+
+      } else if (type == "sync_done") {
+        LGI << "[Sync] Received sync_done from " << peer_id.ToString();
+        dispatchQueue_.Dispatch([this, peer_id, topic_id]() -> void { FinishSync(peer_id, topic_id); });
       }
     } catch (std::exception const& e) {
       LGE << "[Sync] Exception in ProcessSyncMessage: " << e.what();
